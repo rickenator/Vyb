@@ -1,0 +1,61 @@
+// Tests for relaxed syntax in functions, parameters, and return types
+
+// Test function with relaxed parameter syntax
+@test
+fn test_relaxed_parameters() -> {
+    // Function with relaxed parameter syntax
+    Int result = calc_sum(10, 20)
+    assert(result == 30)
+    
+    // Function with mixed parameter syntax
+    Float area = calc_area(5.0, 10.0)
+    assert(area == 50.0)
+}
+
+// Helper function using relaxed parameter syntax
+fn<Int> calc_sum(Int a, Int b) -> {
+    return a + b
+}
+
+// Helper function using mixed parameter syntax
+fn<Float> calc_area(var<Float> width, Float height) -> {
+    return width * height
+}
+
+// Test function return types
+@test
+fn test_return_types() -> {
+    // Default void return type
+    greet("World")
+    
+    // Explicit return type
+    Int val = get_value()
+    assert(val == 42)
+    
+    // Auto-returning the last expression
+    Int doubled = double_value(21)
+    assert(doubled == 42)
+}
+
+// Function with default Void return
+fn greet(String name) -> {
+    println("Hello, " + name + "!")
+}
+
+// Function with explicit return type
+fn<Int> get_value() -> {
+    return 42
+}
+
+// Function demonstrating auto-return of last expression
+fn<Int> double_value(Int x) -> {
+    x * 2  // Last expression is implicitly returned
+}
+
+// Public function to run all tests in this file
+fn run_syntax_tests() -> {
+    println("Running function and syntax tests...")
+    test_relaxed_parameters()
+    test_return_types()
+    println("Function and syntax tests passed!")
+}

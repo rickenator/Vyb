@@ -1,0 +1,53 @@
+// Tests for basic relaxed syntax features with variable declarations
+
+// Basic variable declarations with relaxed syntax
+@test
+fn test_basic_relaxed_syntax() -> {
+    // Standard syntax
+    var<Int> a = 10
+    assert(a == 10)
+    
+    // Relaxed syntax
+    Int b = 20
+    assert(b == 20)
+    
+    // Mixed usage
+    const<Int> c = 30
+    const Int d = 40
+    assert(c == 30)
+    assert(d == 40)
+    
+    // Type inference with 'auto'
+    auto e = 50
+    auto f = a + b
+    assert(e == 50)
+    assert(f == 30)
+}
+
+// Test with different primitive types
+@test
+fn test_primitive_types() -> {
+    // Ints with relaxed syntax
+    Int x = 100
+    assert(x == 100)
+    
+    // Floats with relaxed syntax (when implemented)
+    // Float y = 3.14
+    // assert(y > 3.1 && y < 3.2)
+    
+    // Bools with relaxed syntax
+    Bool flag = true
+    assert(flag)
+    
+    // Test with const declarations
+    const Int MAX_VALUE = 1000
+    assert(MAX_VALUE == 1000)
+}
+
+// Public function to run all tests in this file
+fn run_basic_tests() -> {
+    println("Running basic variable declaration tests...")
+    test_basic_relaxed_syntax()
+    test_primitive_types()
+    println("Basic variable declaration tests passed!")
+}

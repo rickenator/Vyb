@@ -1,9 +1,20 @@
 #pragma once
+/**
+ * @file semantic.hpp
+ * @brief This is the primary semantic analysis header for the Vyn compiler.
+ *
+ * IMPORTANT: This file was previously duplicated as include/vyn/vre/semantic.hpp
+ * which was removed during cleanup. Do not create duplicate headers!
+ *
+ * The implementation for this header is in src/vre/semantic.cpp
+ */
+
 #include "vyn/parser/ast.hpp" // Ensure ast.hpp is included
 #include <string>
 #include <unordered_map>
 #include <vector>
 #include <memory>
+#include <unordered_set>
 
 namespace vyn {
 
@@ -59,6 +70,7 @@ class PointerDerefExpression;
 class AddrOfExpression;
 class FromIntToLocExpression;
 class LocationExpression;
+class ConstructionExpression; // Add forward declaration
 
 // Missing forward declarations for declarations
 class VariableDeclaration;
@@ -100,6 +112,7 @@ class Scope {
 public:
     Scope(Scope* parent_scope = nullptr);
     SymbolInfo* find(const std::string& name);
+    SymbolInfo* lookupDirect(const std::string& name); // Added declaration
     void insert(const std::string& name, SymbolInfo* symbol);
     Scope* getParent();
 
@@ -118,6 +131,7 @@ public:
         if (parent) return parent->lookup(name);
         return nullptr;
     }
+    SymbolInfo* lookupDirect(const std::string& name); // Added
     SymbolTable* getParent() { return parent; }
     bool isUnsafeBlock;
     bool isLoop;
@@ -137,6 +151,9 @@ public:
     bool isInLoop();
     bool isInUnsafeBlock();
     bool isIntegerType(ast::TypeNode* type);
+    bool isReservedWord(const std::string& name);
+    bool isLValue(ast::Expression* expr);
+    bool areTypesCompatible(ast::TypeNode* typeA, ast::TypeNode* typeB); // Added
 
     // Statements
     void visit(ast::BlockStatement* node) override;
@@ -154,6 +171,8 @@ public:
     void visit(ast::MatchStatement* node) override;
     void visit(ast::YieldStatement* node) override;
     void visit(ast::YieldReturnStatement* node) override;
+    void visit(ast::ExternStatement* node) override; // Added
+    void visit(ast::ThrowStatement* node) override; // Added
 
     // Expressions
     void visit(ast::Identifier* node) override;
@@ -183,18 +202,28 @@ public:
     void visit(ast::AddrOfExpression* node) override;
     void visit(ast::FromIntToLocExpression* node) override;
     void visit(ast::LocationExpression* node) override;
+    void visit(ast::ConstructionExpression* node) override;
 
     // Declarations
+    void visit(ast::Module* node) override; // Added declaration
     void visit(ast::VariableDeclaration* node) override;
     void visit(ast::FunctionDeclaration* node) override;
+    void visit(ast::ClassDeclaration* node) override; // Add this line
+    void visit(ast::StructDeclaration* node) override;
+    void visit(ast::EnumDeclaration* node) override;
     void visit(ast::TypeAliasDeclaration* node) override;
     void visit(ast::ImportDeclaration* node) override;
-    void visit(ast::StructDeclaration* node) override;
-    void visit(ast::ClassDeclaration* node) override;
-    void visit(ast::EnumDeclaration* node) override;
-    void visit(ast::TraitDeclaration* node) override;
-    void visit(ast::ImplDeclaration* node) override;
-    void visit(ast::NamespaceDeclaration* node) override;
+    void visit(ast::TraitDeclaration* node) override; // Uncommented
+    void visit(ast::ImplDeclaration* node) override; // Ensure this is present
+    void visit(ast::NamespaceDeclaration* node) override; // Uncommented
+    void visit(ast::FieldDeclaration* node) override;
+    void visit(ast::EnumVariant* node) override;
+    void visit(ast::GenericParameter* node) override;
+    void visit(ast::TemplateDeclaration* node) override;
+
+
+    // Other
+    void visit(ast::TypeNode* node) override;
 
     // Types
     void visit(ast::TypeName* node) override;
@@ -202,7 +231,6 @@ public:
     void visit(ast::ArrayType* node) override;
     void visit(ast::FunctionType* node) override;
     void visit(ast::OptionalType* node) override;
-    void visit(ast::GenericParameter* node) override;
 
 private:
     Driver& driver_;
@@ -210,11 +238,12 @@ private:
     std::vector<std::string> errors;
     std::unordered_map<ast::Node*, ast::TypeNode*> expressionTypes;
     std::vector<SymbolTable*> scopes;
+    std::unordered_set<std::string> reservedWords; // Added for isReservedWord
 
     void enterScope();
     void exitScope();
     void addError(const std::string& message, const ast::Node* node);
-    bool isLValue(ast::Expression* expr);
+    // bool isLValue(ast::Expression* expr); // Duplicate declaration removed
     bool isRawLocationType(ast::Expression* expr);
 };
 

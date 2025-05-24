@@ -1,0 +1,249 @@
+// Quicksort implementation in Vyn showcasing templates, functional programming,
+// and advanced language features like ownership semantics and unsafe optimizations.
+
+// ----- Module Metadata -----
+bundle(algorithms, algorithms.sort)
+share(all)
+
+// ----- Import required modules -----
+import vyn::core::traits
+import vyn::core::debug
+
+// ----- Type Constraints -----
+
+// Define a Comparable trait that types must implement to be sorted
+trait Comparable {
+    fn lt(self, other: Self) -> Bool;
+    fn gt(self, other: Self) -> Bool;
+    fn eq(self, other: Self) -> Bool;
+}
+
+// ----- Core Quicksort Algorithm -----
+
+// Template function using generic type T that implements Comparable
+fn<my<[T]>> quicksort(var<my<[T]>> array) -> {
+    if array.len() <= 1 {
+        return array;  // Base case: already sorted
+    }
+
+    // Choose pivot (middle element for better performance on partially sorted arrays)
+    const<Int> pivot_idx = array.len() / 2;
+    const<T> pivot = array[pivot_idx];
+    
+    // Partition using functional approach with filter
+    var<my<[T]>> left = array.filter(|x| x.lt(pivot));
+    var<my<[T]>> right = array.filter(|x| x.gt(pivot));
+    var<my<[T]>> equal = array.filter(|x| x.eq(pivot));
+    
+    // Recursively sort partitions
+    var<my<[T]>> left_sorted = quicksort(left);
+    var<my<[T]>> right_sorted = quicksort(right);
+    
+    // Combine results
+    return left_sorted.concat(equal).concat(right_sorted);
+}
+
+// ----- In-place Version with Memory Optimizations -----
+
+// A more efficient, in-place implementation using Vyn's memory features
+fn<Void> quicksort_inplace(var<their<[T]>> array) -> {
+    quicksort_range(array, 0, array.len() - 1);
+}
+
+fn<Void> quicksort_range(var<their<[T]>> array, var<Int> low, var<Int> high) -> {
+    if low < high {
+        const<Int> p = partition(array, low, high);
+        quicksort_range(array, low, p - 1);
+        quicksort_range(array, p + 1, high);
+    }
+}
+
+fn<Int> partition(var<their<[T]>> array, var<Int> low, var<Int> high) -> {
+    // Use last element as pivot
+    const<T> pivot = array[high];
+    var<Int> i = low - 1;
+    
+    for j in low..high {
+        if array[j].lt(pivot) {
+            i += 1;
+            swap(array, i, j);
+        }
+    }
+    
+    swap(array, i + 1, high);
+    return i + 1;
+}
+
+// Efficient in-place swap using borrowed references
+fn<Void> swap(var<their<[T]>> array, var<Int> i, var<Int> j) -> {
+    if i == j { return; }  // Optimization for identical indices
+    
+    // Regular safe swap
+    const<T> temp = array[i];
+    array[i] = array[j];
+    array[j] = temp;
+}
+
+// ----- Memory-Optimized Version -----
+
+// Higher performance version using unsafe operations for specific scenarios
+// where maximum performance is required
+fn<Void> quicksort_unsafe(var<their<[T]>> array) -> {
+    quicksort_range_unsafe(array, 0, array.len() - 1);
+}
+
+fn<Void> quicksort_range_unsafe(var<their<[T]>> array, var<Int> low, var<Int> high) -> {
+    if low < high {
+        const<Int> p = partition_unsafe(array, low, high);
+        quicksort_range_unsafe(array, low, p - 1);
+        quicksort_range_unsafe(array, p + 1, high);
+    }
+}
+
+fn<Int> partition_unsafe(var<their<[T]>> array, var<Int> low, var<Int> high) -> {
+    const<T> pivot = array[high];
+    var<Int> i = low - 1;
+    
+    unsafe {
+        // Use direct memory access for very large arrays as an optimization
+        var<loc<[T]>> arr_ptr = loc(array);
+        
+        for j in low..high {
+            if at(arr_ptr)[j].lt(pivot) {
+                i += 1;
+                swap_unsafe(arr_ptr, i, j);
+            }
+        }
+        
+        swap_unsafe(arr_ptr, i + 1, high);
+    }
+    
+    return i + 1;
+}
+
+fn<Void> swap_unsafe(var<loc<[T]>> array_ptr, var<Int> i, var<Int> j) -> {
+    if i == j { return; }
+    
+    unsafe {
+        // Direct pointer arithmetic for maximum performance
+        const<Int> elem_size = sizeof<T>();
+        var<loc<T>> base_ptr = from<loc<T>>(addr(array_ptr));
+        var<loc<T>> ptr_i = from<loc<T>>(addr(base_ptr) + i * elem_size);
+        var<loc<T>> ptr_j = from<loc<T>>(addr(base_ptr) + j * elem_size);
+        
+        const<T> temp = at(ptr_i);
+        at(ptr_i) = at(ptr_j);
+        at(ptr_j) = temp;
+    }
+}
+
+// ----- Parallel Version -----
+
+// Multi-threaded quicksort using Vyn's parallel capabilities
+// This implementation switches to sequential sort below a threshold
+fn<my<[T]>> quicksort_parallel(var<my<[T]>> array, var<Int> threshold = 1000) -> {
+    if array.len() <= 1 {
+        return array;
+    }
+    
+    if array.len() < threshold {
+        // Use sequential algorithm for small arrays to avoid thread overhead
+        return quicksort(array);
+    }
+    
+    // Choose pivot (middle element)
+    const<Int> pivot_idx = array.len() / 2;
+    const<T> pivot = array[pivot_idx];
+    
+    // Partition
+    var<my<[T]>> left = array.filter(|x| x.lt(pivot));
+    var<my<[T]>> right = array.filter(|x| x.gt(pivot));
+    var<my<[T]>> equal = array.filter(|x| x.eq(pivot));
+    
+    // Sort partitions in parallel
+    var left_future = async quicksort_parallel(left, threshold);
+    var right_future = async quicksort_parallel(right, threshold);
+    
+    // Wait for both partitions to complete
+    var left_sorted = await left_future;
+    var right_sorted = await right_future;
+    
+    // Combine results
+    return left_sorted.concat(equal).concat(right_sorted);
+}
+
+// ----- Example Usage -----
+
+fn<Int> main() -> {
+    // Create an array of integers
+    var<my<[Int]>> nums = [9, 3, 7, 1, 5, 8, 2, 6, 4];
+    println("Original array: " + nums.to_string());
+    
+    // Use functional approach for small arrays
+    var<my<[Int]>> sorted = quicksort(nums);
+    println("Sorted array (functional): " + sorted.to_string());
+    
+    // Create a new array for in-place sort
+    var<my<[Int]>> nums2 = [9, 3, 7, 1, 5, 8, 2, 6, 4];
+    quicksort_inplace(borrow nums2);
+    println("Sorted array (in-place): " + nums2.to_string());
+    
+    // Test with a larger array for parallel version
+    var<my<[Int]>> large_array = generate_random_array(10000);
+    println("Sorting large array with parallel algorithm...");
+    
+    // Time the parallel sort
+    var<Int> start_time = system::current_time_millis();
+    var<my<[Int]>> large_sorted = quicksort_parallel(large_array);
+    var<Int> end_time = system::current_time_millis();
+    
+    println("Parallel sort completed in " + (end_time - start_time).to_string() + "ms");
+    println("First 10 elements: " + large_sorted.slice(0, 10).to_string());
+    
+    // Verify if array is sorted
+    println("Is sorted: " + is_sorted(view large_sorted).to_string());
+    
+    return 0;
+}
+
+// Helper functions
+
+fn<my<[Int]>> generate_random_array(var<Int> size) -> {
+    var<my<[Int]>> result = [];
+    for i in 0..size {
+        result.push(rand::random_int(0, 1000));
+    }
+    return result;
+}
+
+fn<Bool> is_sorted(const<their<[T] const>> array) -> {
+    for i in 1..array.len() {
+        if array[i].lt(array[i-1]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// ----- Implementations for built-in types -----
+
+// Implement Comparable for Int
+impl Comparable for Int {
+    fn<Bool> lt(var<Int> self, var<Int> other) -> { return self < other; }
+    fn<Bool> gt(var<Int> self, var<Int> other) -> { return self > other; }
+    fn<Bool> eq(var<Int> self, var<Int> other) -> { return self == other; }
+}
+
+// Implement Comparable for Float
+impl Comparable for Float {
+    fn<Bool> lt(var<Float> self, var<Float> other) -> { return self < other; }
+    fn<Bool> gt(var<Float> self, var<Float> other) -> { return self > other; }
+    fn<Bool> eq(var<Float> self, var<Float> other) -> { return self == other; }
+}
+
+// Implement Comparable for String (lexicographic ordering)
+impl Comparable for String {
+    fn<Bool> lt(var<String> self, var<String> other) -> { return self < other; }
+    fn<Bool> gt(var<String> self, var<String> other) -> { return self > other; }
+    fn<Bool> eq(var<String> self, var<String> other) -> { return self == other; }
+}
