@@ -50,6 +50,16 @@ As the Vyn project grows, a more structured directory layout will be beneficial 
 
 ## Future Language & System Considerations
 
+### Type System Implementation
+
+-   **Complete Type Library**: Implement and optimize the full type system including:
+    -   **Core Primitives**: Complete implementation of `Int` variants (`Int8`, `Int16`, `Int32`), `Float` variants (`Float32`, `Float64`), `Char`, `Rune`, `Bool`, `Bytes`, and `Void`.
+    -   **Compound Types**: Complete implementation of tuples `(T1, T2, ...)`, fixed-size arrays `[T; N]`, dynamic vectors `Vec<T>`.
+    -   **String Types**: Complete the `String` implementations, including UTF-8 text type, `String<Char>` for raw code units, and `String<Rune>` for guaranteed Unicode support.
+-   **Performance Optimization**: Investigate performance optimizations for primitive types, particularly in tight loops and math-intensive operations.
+-   **Memory Layout**: Define and document memory layout guarantees for all types, ensuring consistent behavior across platforms.
+-   **FFI Compatibility**: Ensure all primitive types have well-defined mappings to C/C++ equivalents for FFI interoperability.
+
 ### Refinement of Memory Model and Unsafe Operations
 
 -   **Complete LLVM Codegen**: Finish the implementation and refinement of LLVM code generation for `LocationExpression`, `PointerDerefExpression`, `AddrOfExpression`, and `FromIntToLocExpression` in `src/vre/llvm/cgen_expr.cpp`.
@@ -141,6 +151,24 @@ A planned feature to introduce zero-boilerplate JSON serialization for data stru
   - Proper error handling for exceptions and serialization failures
 
 This feature will enable scripts and API-style binaries to return structured data without manual printing logic, enhancing Vyn's utility for data processing and service development.
+
+### Function Syntax Investigation
+
+-   **Function Syntax Relaxation**: Explore potential relaxation of the `fn<T>` syntax for specifying return types. Consider allowing alternative function declaration syntaxes that maintain clarity but reduce verbosity, such as:
+    ```vyn
+    fn example() -> Int { ... }  // Alternative to fn<Int> example() -> { ... }
+    ```
+-   **Casting Operations**: Formalize and implement casting operations, including:
+    -   `cast<T>(expr)`: Explicit casting of expression to type T
+    -   Safe versus unsafe casts, with appropriate compiler warnings or errors
+    -   Rules for implicit conversions between compatible types
+
+### Polymorphism and Type System
+
+-   **Advanced Polymorphism**: Define and implement advanced polymorphic features including:
+    -   Dynamic dispatch mechanisms for trait objects
+    -   Performance considerations for virtual method tables versus monomorphization
+    -   Trait object safety rules
 
 ### Other Language Considerations
 

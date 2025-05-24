@@ -153,7 +153,7 @@ Example:
 
 ```bash
 vyn repl
-> let x = vec![1,2,3]
+> var x = vec![1,2,3]
 > dbg(x.len())        # Will print 3 at line 1:1
 > !for i in x { println(i) }  # Will step through each iteration
 ```
@@ -166,40 +166,42 @@ In this section we cover the core building blocks of Vyn: its syntax, basic type
 
 Vyn uses indentation-sensitive syntax with optional braces and semicolons. Whitespace defines blocks, so consistent indentation is key. Fundamental primitive types include:
 
-* **Int**: Signed integer, 64-bit by default (`Int64`). Aliases `Int32`, `Int16`, `Int8`, and unsigned variants (`UInt*`) are planned for narrower widths.
-* **Float**: Planned 64-bit IEEE 754 (`Float64`) by default. A `Float32` type will be provided when single-precision is sufficient.
+* **Int**: Signed integer, 64-bit by default (`Int64`). Aliases `Int32`, `Int16`, `Int8`, and unsigned variants (`UInt*`) for narrower widths.
+* **Float**: 64-bit IEEE 754 (`Float64`) by default. A `Float32` type is provided when single-precision is sufficient.
 * **Bool**: 1-byte boolean (`true` or `false`).
-* **Char**: Planned 1-byte UTF-8 code unit. For full Unicode code points, use `Rune` (32-bit).
-* **Bytes**: Planned raw sequence of `UInt8` values.
+* **Char**: 1-byte UTF-8 code unit. For full Unicode code points, use `Rune` (32-bit).
+* **Bytes**: Raw sequence of `UInt8` values.
+* **Void**: Special type indicating no value is returned from a function.
 
 Compound types:
 
-* **Tuples**: Planned `(T1, T2, ...)`.
-* **Fixed-size arrays**: Planned `[T; N]`.
-* **Dynamic vectors**: Planned `Vec<T>` (mutable, heap-allocated).
+* **Tuples**: `(T1, T2, ...)`.
+* **Fixed-size arrays**: `[T; N]`.
+* **Dynamic vectors**: `Vec<T>` (mutable, heap-allocated).
 
 Strings:
 
-* **String**: Planned UTF-8 text type built on `Vec<UInt8>`; ideal for general text.
-* **String<Char>**: Planned sequence of 1-byte `Char` elements; useful for raw code units.
-* **String<Rune>**: Planned sequence of 32-bit `Rune` code points; guarantees full Unicode support.
+* **String**: UTF-8 text type built on `Vec<UInt8>`; ideal for general text.
+* **String<Char>**: Sequence of 1-byte `Char` elements; useful for raw code units.
+* **String<Rune>**: Sequence of 32-bit `Rune` code points; guarantees full Unicode support.
 
 Literals follow familiar forms:
 
 ```vyn
-let x: Int = 42                   # 64-bit integer
-let small: Int16 = 123            # Planned 16-bit integer
-let f: Float = 3.14               # Planned 64-bit float
-let s: Float32 = 1.5              # Planned 32-bit float literal
-let flag: Bool = true             # Boolean
-let ch: Char = 'A'                # Planned single byte char
-let rune: Rune = '💡'             # Planned full Unicode point
-let raw: Bytes = [0xDE,0xAD,0xBE] # Planned raw bytes
-let arr: [Int; 3] = [1, 2, 3]     # Planned fixed array
-let list: Vec<Int> = vec![4,5,6]  # Planned dynamic vector
+var<Int> x = 42                  # 64-bit integer (fully qualified syntax)
+var Int y = 42                   # Same as above with relaxed syntax
+var<Int16> small = 123           # 16-bit integer
+var<Float> f = 3.14              # 64-bit float
+var<Float32> s = 1.5             # 32-bit float literal
+var<Bool> flag = true            # Boolean
+var<Char> ch = 'A'               # Single byte char
+var<Rune> rune = '💡'            # Full Unicode point
+var<Bytes> raw = [0xDE,0xAD,0xBE] # Raw bytes
+var<[Int; 3]> arr = [1, 2, 3]    # Fixed array
+var<Vec<Int>> list = vec![4,5,6] # Dynamic vector
 ```
 
-These primitives cover most use cases; additional fixed-width or packed types are planned for future releases.
+These primitives cover most use cases; additional fixed-width or packed types may be added in future releases.
 
 ### 3.2 Variables, Ownership, and Mutability
 
@@ -406,7 +408,7 @@ Vyn supports standard control structures:
 * **`if` expressions** return values:
 
 ```vyn
-let msg = if x > 0 { "pos" } else { "neg" }
+var<String> msg = if x > 0 { "pos" } else { "neg" }
 ```
 
 * **Loops**:
@@ -437,7 +439,27 @@ fn<Int> outer(var<Int> x) -> {
 ```
 
 * **First-class**: Planned ability to pass functions as values, assign to variables, or return them.
-* **Anonymous lambdas**: Planned inline, unnamed functions useful for short callbacks or functional programming patterns. Similar to JavaScript arrow functions or Python lambdas, they will let you define behavior on the fly without declaring a separate named function:
+* **Return Types**: Functions can specify their return type with the `fn<ReturnType>` syntax. When the return type is omitted (`fn` with no type parameter), it defaults to `Void`, indicating the function doesn't return a value:
+  ```vyn
+  fn<Int> add(var<Int> a, var<Int> b) -> {  # Explicitly returns Int
+      return a + b
+  }
+  
+  fn greet(var<String> name) -> {           # Implicitly returns Void
+      println("Hello, " + name)
+  }
+  ```
+
+* **Auto-Return in Indentation Syntax**: When using indentation-based syntax, the last expression in a function block is implicitly returned if no explicit `return` statement is provided:
+  ```vyn
+  fn<Int> square(var<Int> x) ->
+      x * x  # This value is automatically returned
+  
+  fn<String> get_greeting() ->
+      "Hello, world!"  # This string is automatically returned
+  ```
+
+* **Anonymous lambdas**: Planned inline, unnamed functions useful for short callbacks or functional programming patterns. Similar to JavaScript arrow functions or Python lambdas, they will allow you to define behavior on the fly without declaring a separate named function:
 
 ```vyn
 var<Function> sq = fn<Int>(var<Int> v) -> { v * v }  # 'sq' will hold a function that squares its input
@@ -526,7 +548,7 @@ template Pair<T> {
 
     # `swap` mutates both fields; requires `&mut` for exclusive mutable access
     fn swap(self: &mut Pair<T>) {
-        let tmp = self.first
+        var<T> tmp = self.first
         self.first = self.second
         self.second = tmp
     }
