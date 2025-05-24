@@ -25,6 +25,114 @@ extern std::set<std::string> g_verbose_test_specifiers;
 extern bool g_make_all_tests_verbose;
 extern bool g_suppress_all_debug_output; // For --no-debug-output
 
+// Implementation of the run_vyn_code function
+int run_vyn_code(const std::string& source, const std::string& testName, bool generateLLVMIR) {
+    // Initialize LLVM targets for JIT
+    llvm::InitializeNativeTarget();
+    llvm::InitializeNativeTargetAsmPrinter();
+    llvm::InitializeNativeTargetAsmParser();
+
+    try {
+        // Create a driver instance
+        vyn::Driver driver;
+
+        // First tokenize the source code using the Lexer
+        Lexer lexer(source, testName);
+        std::vector<vyn::token::Token> tokens = lexer.tokenize();
+
+        // Parse the tokens into an AST
+        vyn::Parser parser(tokens, testName);
+        auto ast = parser.parse_module();
+        if (!ast) {
+            throw std::runtime_error("Failed to parse source code");
+        }
+
+        // Create concrete implementations of semantic analyzer and code generator
+        class SemanticAnalyzerImpl : public vyn::SemanticAnalyzer {
+        public:
+            SemanticAnalyzerImpl(vyn::Driver& driver) : vyn::SemanticAnalyzer(driver) {}
+            
+            // Implement all pure virtual methods from the Visitor class
+            void visit(vyn::ast::BorrowExpression* node) override {}
+            void visit(vyn::ast::IfExpression* node) override {}
+            void visit(vyn::ast::ArrayInitializationExpression* node) override {}
+            void visit(vyn::ast::TupleTypeNode* node) override {}
+            void visit(vyn::ast::ExternStatement* node) override {}
+            void visit(vyn::ast::YieldStatement* node) override {}
+            void visit(vyn::ast::YieldReturnStatement* node) override {}
+            // Add other required implementations as needed
+        };
+
+        class LLVMCodegenImpl : public vyn::LLVMCodegen {
+        public:
+            LLVMCodegenImpl(vyn::Driver& driver) : vyn::LLVMCodegen(driver) {}
+            
+            // Implement all pure virtual methods from the Visitor class
+            void visit(vyn::ast::ExternStatement* node) override {}
+            void visit(vyn::ast::YieldStatement* node) override {}
+            void visit(vyn::ast::YieldReturnStatement* node) override {}
+            void visit(vyn::ast::BorrowExpression* node) override {}
+            void visit(vyn::ast::IfExpression* node) override {}
+            void visit(vyn::ast::ArrayInitializationExpression* node) override {}
+            void visit(vyn::ast::TupleTypeNode* node) override {}
+            // Add other required implementations as needed
+        };
+
+        // Analyze the AST
+        SemanticAnalyzerImpl semanticAnalyzer(driver);
+        semanticAnalyzer.analyze(ast.get());
+
+        // Generate LLVM IR code
+        LLVMCodegenImpl codegen(driver);
+        codegen.generate(ast.get(), testName + ".ll");
+
+        if (generateLLVMIR) {
+            // Generate LLVM IR to a file if requested
+            std::string irFilename = testName + ".ll";
+            std::error_code EC;
+            llvm::raw_fd_ostream irFile(irFilename, EC);
+            if (EC) {
+                throw std::runtime_error("Failed to open file for IR output: " + EC.message());
+            }
+            codegen.getModule()->print(irFile, nullptr);
+            irFile.flush();
+        }
+
+        // Get the LLVM module from the code generator
+        std::unique_ptr<llvm::Module> module = codegen.releaseModule();
+        
+        // Create an execution engine for JIT compilation
+        std::string errStr;
+        llvm::ExecutionEngine* executionEngine = 
+            llvm::EngineBuilder(std::move(module))
+            .setErrorStr(&errStr)
+            .create();
+        
+        if (!executionEngine) {
+            throw std::runtime_error("Failed to create execution engine: " + errStr);
+        }
+        
+        // Get the main function
+        llvm::Function* mainFunc = executionEngine->FindFunctionNamed("main");
+        if (!mainFunc) {
+            throw std::runtime_error("No 'main' function found in the program");
+        }
+        
+        // Execute the main function
+        std::vector<llvm::GenericValue> noArgs;
+        llvm::GenericValue result = executionEngine->runFunction(mainFunc, noArgs);
+        
+        // Clean up
+        delete executionEngine;
+        
+        // Return the integer result
+        return result.IntVal.getSExtValue();
+    } catch (const std::exception& e) {
+        std::cerr << "Error running Vyn code: " << e.what() << std::endl;
+        throw; // Re-throw the exception to allow test cases to check for failures
+    }
+}
+
 // Helper function to determine if the current test should be verbose
 bool should_current_test_be_verbose() {
     if (g_suppress_all_debug_output) {
