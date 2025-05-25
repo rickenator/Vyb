@@ -115,7 +115,7 @@ def parse_directives(file_path):
         
     return test
 
-def run_test(test, vyn_executable, verbose=False):
+def run_test(test, vyn_executable, verbose=False, execute_jit=False):
     """Run the test and verify results against expectations."""
     cmd = [vyn_executable]
     
@@ -123,6 +123,11 @@ def run_test(test, vyn_executable, verbose=False):
         cmd.append("--parse-only")
     elif test.semantic_only:
         cmd.append("--semantic-only")
+    elif not execute_jit:
+        cmd.append("--no-execute")  # Don't execute if JIT execution is not requested
+    
+    if verbose:
+        cmd.append("--emit-llvm")
     
     cmd.append(test.filename)
     
@@ -217,6 +222,7 @@ Examples:
     parser.add_argument('--verbose', '-v', action='count', default=0, help='Increase verbosity')
     parser.add_argument('--category', help='Only run tests in this category')
     parser.add_argument('--json', help='Save results to JSON file')
+    parser.add_argument('--execute-jit', action='store_true', help='Execute code using the JIT compiler (default)')
     args = parser.parse_args()
     
     # Set default paths relative to the repository root
@@ -245,6 +251,8 @@ Examples:
         print(f"Vyn repository root: {vyn_root}")
         print(f"Using Vyn executable: {vyn_executable}")
         print(f"Using test directory: {test_dir}")
+        if args.execute_jit:
+            print("JIT execution enabled: Code will be executed, not just parsed")
     
     results = []
     pass_count = 0
@@ -264,7 +272,9 @@ Examples:
         if args.category and args.category not in test.category:
             continue
         
-        test_result = run_test(test, vyn_executable, args.verbose > 1)
+        test_result = run_test(test, vyn_executable, 
+                             args.verbose > 1,
+                             args.execute_jit)
         
         # Format and print result
         output = format_result(test_result, test, args.verbose)

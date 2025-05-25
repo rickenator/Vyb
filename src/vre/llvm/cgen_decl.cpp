@@ -216,7 +216,9 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
             namedValues[paramNames[i]] = alloca;
         }
         
+        std::cout << "DEBUG: FunctionDeclaration - about to process function body" << std::endl;
         node->body->accept(*this); // Generate code for the function body
+        std::cout << "DEBUG: FunctionDeclaration - finished processing function body" << std::endl;
 
         // Verify function return: ensure all paths return if non-void, or add implicit void return
         if (returnType->isVoidTy()) {

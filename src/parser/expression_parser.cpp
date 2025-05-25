@@ -112,48 +112,62 @@ namespace vyn {
         // For now, we\\\'ll assume TypeParser is part of `this` parser or can be created.
         // This is a lookahead and backtrack mechanism.
         size_t initial_pos = pos_;
-        try {
-            TypeParser type_parser(tokens_, pos_, current_file_path_, *this); // Pass *this for ExpressionParser reference
-            ast::TypeNodePtr type_node = type_parser.parse(); // Call parse() instead of parse_type_annotation()
-            
-            if (type_node && match(TokenType::LPAREN)) { // Successfully parsed a type and found '(' 
-                std::vector<vyn::ast::ExprPtr> arguments;
-                SourceLocation call_loc = previous_token().location; 
-                if (!match(TokenType::RPAREN)) { 
-                    do {
-                        arguments.push_back(parse_expression());
-                    } while (match(TokenType::COMMA));
-                    expect(TokenType::RPAREN);
-                }
-                // Handle memory intrinsics parsed as type-like calls
-                if (auto tname = dynamic_cast<ast::TypeName*>(type_node.get())) {
-                    std::string name = tname->identifier ? tname->identifier->name : std::string();
-                    if (name == "loc") {
-                        if (arguments.size() != 1) throw error(peek(), "loc() expects 1 argument");
-                        return std::make_unique<ast::LocationExpression>(call_loc, std::move(arguments[0]));
-                    } else if (name == "addr") {
-                        if (arguments.size() != 1) throw error(peek(), "addr() expects 1 argument");
-                        return std::make_unique<ast::AddrOfExpression>(call_loc, std::move(arguments[0]));
-                    } else if (name == "at") {
-                        if (arguments.size() != 1) throw error(peek(), "at() expects 1 argument");
-                        return std::make_unique<ast::PointerDerefExpression>(call_loc, std::move(arguments[0]));
-                    } else if (name == "from") {
-                        if (tname->genericArgs.size() != 1) throw error(peek(), "from<T>() expects a single generic type argument");
-                        if (arguments.size() != 1) throw error(peek(), "from<T>() expects 1 argument");
-                        auto targetType = std::move(tname->genericArgs[0]);
-                        return std::make_unique<ast::FromIntToLocExpression>(call_loc, std::move(arguments[0]), std::move(targetType));
-                    }
-                }
-                // Fallback to regular construction
-                return std::make_unique<ast::ConstructionExpression>(type_node->loc, std::move(type_node), std::move(arguments));
-            } else {
-                // Not a TypeName(...), backtrack
-                pos_ = initial_pos;
+        
+        // Before trying type parsing, check if this is a known function name that should be parsed as a function call
+        bool skip_type_parsing = false;
+        if (peek().type == TokenType::IDENTIFIER) {
+            std::string identifier_name = peek().lexeme;
+            // List of known function names that should not be parsed as types
+            if (identifier_name == "println" || identifier_name == "print" || identifier_name == "debug" || 
+                identifier_name == "error" || identifier_name == "warn" || identifier_name == "info") {
+                skip_type_parsing = true;
             }
-        } catch (const std::runtime_error& e) {
-            // Parsing type failed, or not followed by \\\'(\\\', backtrack
-            pos_ = initial_pos;
-            // Log or handle error if needed, or just proceed to other parsing rules
+        }
+        
+        if (!skip_type_parsing) {
+            try {
+                TypeParser type_parser(tokens_, pos_, current_file_path_, *this); // Pass *this for ExpressionParser reference
+                ast::TypeNodePtr type_node = type_parser.parse(); // Call parse() instead of parse_type_annotation()
+                
+                if (type_node && match(TokenType::LPAREN)) { // Successfully parsed a type and found '(' 
+                    std::vector<vyn::ast::ExprPtr> arguments;
+                    SourceLocation call_loc = previous_token().location; 
+                    if (!match(TokenType::RPAREN)) { 
+                        do {
+                            arguments.push_back(parse_expression());
+                        } while (match(TokenType::COMMA));
+                        expect(TokenType::RPAREN);
+                    }
+                    // Handle memory intrinsics parsed as type-like calls
+                    if (auto tname = dynamic_cast<ast::TypeName*>(type_node.get())) {
+                        std::string name = tname->identifier ? tname->identifier->name : std::string();
+                        if (name == "loc") {
+                            if (arguments.size() != 1) throw error(peek(), "loc() expects 1 argument");
+                            return std::make_unique<ast::LocationExpression>(call_loc, std::move(arguments[0]));
+                        } else if (name == "addr") {
+                            if (arguments.size() != 1) throw error(peek(), "addr() expects 1 argument");
+                            return std::make_unique<ast::AddrOfExpression>(call_loc, std::move(arguments[0]));
+                        } else if (name == "at") {
+                            if (arguments.size() != 1) throw error(peek(), "at() expects 1 argument");
+                            return std::make_unique<ast::PointerDerefExpression>(call_loc, std::move(arguments[0]));
+                        } else if (name == "from") {
+                            if (tname->genericArgs.size() != 1) throw error(peek(), "from<T>() expects a single generic type argument");
+                            if (arguments.size() != 1) throw error(peek(), "from<T>() expects 1 argument");
+                            auto targetType = std::move(tname->genericArgs[0]);
+                            return std::make_unique<ast::FromIntToLocExpression>(call_loc, std::move(arguments[0]), std::move(targetType));
+                        }
+                    }
+                    // Fallback to regular construction
+                    return std::make_unique<ast::ConstructionExpression>(type_node->loc, std::move(type_node), std::move(arguments));
+                } else {
+                    // Not a TypeName(...), backtrack
+                    pos_ = initial_pos;
+                }
+            } catch (const std::runtime_error& e) {
+                // Parsing type failed, or not followed by \\\'(\\\', backtrack
+                pos_ = initial_pos;
+                // Log or handle error if needed, or just proceed to other parsing rules
+            }
         }
         // If it wasn\\\'t a TypeName(...), reset pos_ and try other primary expression forms.
         // Ensure pos_ is correctly managed by TypeParser or reset it manually.

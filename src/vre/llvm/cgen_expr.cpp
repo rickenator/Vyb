@@ -281,37 +281,70 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
     switch (node->op.type) {
         case vyn::TokenType::PLUS: // Reverted to vyn::TokenType::PLUS
             if (isFloatOp) m_currentLLVMValue = builder->CreateFAdd(L, R, "faddtmp");
-            else if (L->getType()->isPointerTy() && leftTypeNode) {
-                 vyn::ast::TypeNode* pointeeAstType = nullptr;
-                 
-                 // Try to get pointee type from different sources
-                 if (auto ptrAstNode = dynamic_cast<vyn::ast::PointerType*>(leftTypeNode)) {
-                    pointeeAstType = ptrAstNode->pointeeType.get(); 
-                 } else if (auto arrayAstNode = dynamic_cast<vyn::ast::ArrayType*>(leftTypeNode)) {
-                    pointeeAstType = arrayAstNode->elementType.get();
-                 } else if (auto typeName = dynamic_cast<vyn::ast::TypeName*>(leftTypeNode)) {
-                    // Check if it's a loc<T> type
-                    if (typeName->identifier->name == "loc" && !typeName->genericArgs.empty()) {
-                        pointeeAstType = typeName->genericArgs[0].get();
+            // Check for string concatenation (string + string)
+            else if (L->getType()->isPointerTy() && R->getType()->isPointerTy() && 
+                     (leftTypeNode && rightTypeNode &&
+                      ((leftTypeNode->getCategory() == vyn::ast::TypeNode::Category::IDENTIFIER &&
+                        rightTypeNode->getCategory() == vyn::ast::TypeNode::Category::IDENTIFIER) ||
+                       (leftTypeNode->getCategory() == vyn::ast::TypeNode::Category::ARRAY &&
+                        rightTypeNode->getCategory() == vyn::ast::TypeNode::Category::ARRAY)))) {
+                
+                // Check if both are string types
+                bool isStringConcatenation = false;
+                
+                if (leftTypeNode->getCategory() == vyn::ast::TypeNode::Category::IDENTIFIER &&
+                    rightTypeNode->getCategory() == vyn::ast::TypeNode::Category::IDENTIFIER) {
+                    auto leftTypeName = dynamic_cast<vyn::ast::TypeName*>(leftTypeNode);
+                    auto rightTypeName = dynamic_cast<vyn::ast::TypeName*>(rightTypeNode);
+                    
+                    if (leftTypeName && rightTypeName && 
+                        leftTypeName->identifier && rightTypeName->identifier) {
+                        std::string leftType = leftTypeName->identifier->name;
+                        std::string rightType = rightTypeName->identifier->name;
+                        
+                        if ((leftType == "String" || leftType == "string") && 
+                            (rightType == "String" || rightType == "string")) {
+                            isStringConcatenation = true;
+                        }
                     }
-                 }
+                }
+                
+                if (isStringConcatenation) {
+                    // Generate call to string concatenation function
+                    m_currentLLVMValue = generateStringConcatenation(L, R, node->loc);
+                }
+                else if (L->getType()->isPointerTy() && leftTypeNode) {
+                    vyn::ast::TypeNode* pointeeAstType = nullptr;
+                    
+                    // Try to get pointee type from different sources
+                    if (auto ptrAstNode = dynamic_cast<vyn::ast::PointerType*>(leftTypeNode)) {
+                        pointeeAstType = ptrAstNode->pointeeType.get(); 
+                    } else if (auto arrayAstNode = dynamic_cast<vyn::ast::ArrayType*>(leftTypeNode)) {
+                        pointeeAstType = arrayAstNode->elementType.get();
+                    } else if (auto typeName = dynamic_cast<vyn::ast::TypeName*>(leftTypeNode)) {
+                        // Check if it's a loc<T> type
+                        if (typeName->identifier->name == "loc" && !typeName->genericArgs.empty()) {
+                            pointeeAstType = typeName->genericArgs[0].get();
+                        }
+                    }
 
-                 if (pointeeAstType) {
-                    llvm::Type* pointeeType = codegenType(pointeeAstType);
-                    if (pointeeType) {
-                         m_currentLLVMValue = builder->CreateGEP(pointeeType, L, R, "ptraddtmp");
+                    if (pointeeAstType) {
+                        llvm::Type* pointeeType = codegenType(pointeeAstType);
+                        if (pointeeType) {
+                            m_currentLLVMValue = builder->CreateGEP(pointeeType, L, R, "ptraddtmp");
+                        } else {
+                            logError(node->left->loc, "Could not determine LLVM pointee type for pointer addition from AST type: " + leftTypeNode->toString());
+                            m_currentLLVMValue = nullptr;
+                        }
                     } else {
-                        logError(node->left->loc, "Could not determine LLVM pointee type for pointer addition from AST type: " + leftTypeNode->toString());
-                        m_currentLLVMValue = nullptr;
+                        // If we can't determine the pointee type from AST, use int64 as a fallback
+                        // This is common in test cases with opaque pointers
+                        if (verbose) {
+                            logWarning(node->left->loc, "Pointer operand for addition lacks specific pointee type information. Using i64 as fallback pointee type.");
+                        }
+                        m_currentLLVMValue = builder->CreateGEP(int64Type, L, R, "ptraddtmp_fallback");
                     }
-                 } else {
-                    // If we can't determine the pointee type from AST, use int64 as a fallback
-                    // This is common in test cases with opaque pointers
-                    if (verbose) {
-                        logWarning(node->left->loc, "Pointer operand for addition lacks specific pointee type information. Using i64 as fallback pointee type.");
-                    }
-                    m_currentLLVMValue = builder->CreateGEP(int64Type, L, R, "ptraddtmp_fallback");
-                 }
+                }
             }
             else m_currentLLVMValue = builder->CreateAdd(L, R, "addtmp");
             break;
@@ -411,9 +444,14 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
 }
 
 void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
+    // Debug output to track CallExpression visits
+    std::cout << "DEBUG: CallExpression visitor called with callee: " << (node->callee ? node->callee->toString() : "null") << std::endl;
+    
     // First, check if this is an intrinsic function call
     auto identCallee = dynamic_cast<vyn::ast::Identifier*>(node->callee.get());
     std::string calleeName = node->callee->toString();
+    
+    std::cout << "DEBUG: CallExpression calleeName: '" << calleeName << "', identCallee: " << (identCallee ? "valid" : "null") << std::endl;
     
     // Special handling for intrinsic functions with potential variable name conflicts
     if (identCallee && node->arguments.size() == 1) {
@@ -592,14 +630,83 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         return;
     }
     
+    // Special handling for println with auto-serialization
+    if (identCallee && identCallee->name == "println" && node->arguments.size() == 1) {
+        std::cout << "DEBUG: Handling println call with auto-serialization" << std::endl;
+        
+        // Get the argument expression
+        node->arguments[0]->accept(*this);
+        llvm::Value* arg = m_currentLLVMValue;
+        if (!arg) {
+            logError(node->arguments[0]->loc, "Argument to println() evaluated to null");
+            return;
+        }
+        
+        std::cout << "DEBUG: println argument evaluated to: " << (void*)arg << ", type: " << getTypeName(arg->getType()) << std::endl;
+        
+        llvm::Value* serializedValue = nullptr;
+        
+        // Check if the argument is already a string (char*)
+        // In LLVM 15+, PointerType no longer has getElementType()
+        if (arg->getType()->isPointerTy() && arg->getType() == int8PtrType) {
+            // It's already a string pointer (char*), use it directly
+            serializedValue = arg;
+        } 
+        else {
+            // Need to serialize the object to a string representation based on its type
+            // Get the serialization function
+            llvm::Function* serializeFunc = getSerializeToJsonFunction();
+            
+            // Determine the type name from AST node if available
+            llvm::Value* typeNameValue = nullptr;
+            std::string typeName = "unknown";
+            
+            if (node->arguments[0]->type) {
+                typeName = node->arguments[0]->type->toString();
+            }
+            
+            // Create a global string for the type name
+            typeNameValue = builder->CreateGlobalStringPtr(typeName, "type_name");
+            
+            // Cast the argument to void* if needed
+            llvm::Value* objPtr = arg;
+            if (!objPtr->getType()->isPointerTy()) {
+                // For scalar types, create an alloca and store the value
+                llvm::AllocaInst* tempAlloca = builder->CreateAlloca(objPtr->getType(), nullptr, "serialize_temp");
+                builder->CreateStore(objPtr, tempAlloca);
+                objPtr = tempAlloca;
+            }
+            
+            // Cast to void* (i8*)
+            objPtr = builder->CreateBitCast(objPtr, llvm::PointerType::getUnqual(int8Type), "obj_to_i8ptr");
+            
+            // Call serialization function
+            std::vector<llvm::Value*> args = {objPtr, typeNameValue};
+            serializedValue = builder->CreateCall(serializeFunc, args, "serialized_json");
+        }
+        
+        // Call println with the serialized string
+        llvm::Function* printlnFunc = getVynPrintlnFunction();
+        std::vector<llvm::Value*> printlnArgs = {serializedValue};
+        builder->CreateCall(printlnFunc, printlnArgs);
+        
+        m_currentLLVMValue = nullptr; // println returns void
+        return;
+    }
+
     // Lookup the function in the module - standard function call handling
     llvm::Function *calleeFunc = module->getFunction(calleeName);
     if (!calleeFunc) {
-        // Try mangled name if it's a method or from a namespace
-        // This part needs a robust name mangling and lookup scheme
-        logError(node->callee->loc, "Function " + calleeName + " not found.");
-        m_currentLLVMValue = nullptr;
-        return;
+        // Try special functions that might not be in the module yet
+        if (identCallee && identCallee->name == "println") {
+            calleeFunc = getPrintlnFunction();
+        } else {
+            // Try mangled name if it's a method or from a namespace
+            // This part needs a robust name mangling and lookup scheme
+            logError(node->callee->loc, "Function " + calleeName + " not found.");
+            m_currentLLVMValue = nullptr;
+            return;
+        }
     }
 
     // Check argument count

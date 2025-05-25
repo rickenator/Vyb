@@ -43,6 +43,7 @@ llvm_map_components_to_libnames(LLVM_LIBS
   MCJIT            # Older JIT API
   OrcJIT           # Modern JIT API
   JITLink          # Helper for OrcJIT
+  Interpreter      # Add Interpreter support
   Object
   X86CodeGen       # X86 backend (was X86)
   RuntimeDyld
@@ -77,6 +78,7 @@ set(PARSER_HEADERS
 set(VRE_SOURCES
     src/vre/value.cpp
     src/vre/semantic.cpp
+    src/vre/intrinsics.cpp
     src/vre/llvm/cgen_main.cpp
     src/vre/llvm/cgen_types.cpp
     src/vre/llvm/cgen_util.cpp
@@ -85,6 +87,9 @@ set(VRE_SOURCES
     src/vre/llvm/cgen_stmt.cpp
     src/vre/llvm/cgen_unimplemented.cpp
     src/vre/llvm/cgen_helpers.cpp
+    src/vre/llvm/cgen_string.cpp
+    src/vre/llvm/cgen_println.cpp
+    src/vre/llvm/cgen_function.cpp
     src/vre/llvm/llvm_codegen_stubs.cpp
 )
 

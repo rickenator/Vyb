@@ -9,6 +9,10 @@
 #include "vyn/vre/llvm/codegen.hpp" // Added for LLVMCodegen
 #include "vyn/driver.hpp" // Added for vyn::Driver
 
+// Declare function for JIT compilation and execution of Vyn code
+// This is implemented in main.cpp
+int run_vyn_code(const std::string& source, const std::string& fileName, bool generateLLVMIR = false);
+
 /* // EBNF Grammar of the Vyn Language  // Uncommented
 //
 // Conventions:

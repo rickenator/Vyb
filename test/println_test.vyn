@@ -1,0 +1,13 @@
+// Simple test for println function
+fn<Int> main() -> {
+    // Simple string println
+    println("Hello, Vyn World!");
+    
+    // Printing an expression
+    println(1 + 2);
+    
+    // String concatenation with number conversion
+    println("The sum is: " + (5 + 7));
+    
+    return 0;
+}

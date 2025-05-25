@@ -128,11 +128,15 @@ void LLVMCodegen::dumpIR() const {
 void LLVMCodegen::visit(vyn::ast::Module* node) {
     if (!node) return;
 
+    std::cout << "DEBUG: Module visitor called with " << node->body.size() << " statements" << std::endl;
+
     vyn::ast::Module* previousModule = m_currentVynModule;
     m_currentVynModule = node;
 
-    for (const auto& stmt : node->body) {
+    for (size_t i = 0; i < node->body.size(); ++i) {
+        const auto& stmt = node->body[i];
         if (stmt) {
+            std::cout << "DEBUG: Processing module statement " << i << ": " << stmt->toString() << std::endl;
             stmt->accept(*this);
         }
     }

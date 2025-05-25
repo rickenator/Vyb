@@ -120,6 +120,14 @@ private:
     llvm::Type* getPointeeTypeInfo(llvm::Value* ptr);
 
     llvm::Value* tryCast(llvm::Value* value, llvm::Type* targetType, const vyn::SourceLocation& loc);
+    
+    // String operations
+    llvm::Value* generateStringConcatenation(llvm::Value* leftStr, llvm::Value* rightStr, SourceLocation loc);
+    
+    // IO operations
+    llvm::Function* getPrintlnFunction();
+    llvm::Function* getVynPrintlnFunction();
+    llvm::Function* getSerializeToJsonFunction();
 
 
     // RTTI (Run-Time Type Information)

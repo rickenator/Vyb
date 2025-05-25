@@ -15,8 +15,13 @@ namespace vyn {
 void LLVMCodegen::visit(vyn::ast::BlockStatement* node) {
     // Save the current namedValues for block scoping
     auto oldNamedValues = namedValues;
-    for (const auto& stmt : node->body) {
-        stmt->accept(*this);
+    std::cout << "DEBUG: BlockStatement visitor called with " << node->body.size() << " statements" << std::endl;
+    for (size_t i = 0; i < node->body.size(); ++i) {
+        const auto& stmt = node->body[i];
+        if (stmt) {
+            std::cout << "DEBUG: Processing block statement " << i << ": " << stmt->toString() << std::endl;
+            stmt->accept(*this);
+        }
         if (builder->GetInsertBlock() && builder->GetInsertBlock()->getTerminator()) {
             // If the block has been terminated (e.g., by a return), stop processing.
             // This can happen if a code path definitely returns.
@@ -37,7 +42,54 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
         llvm::Value *returnValue = m_currentLLVMValue;
 
         if (returnValue) {
-            builder->CreateRet(returnValue);
+            // Check if we're in main function for auto-serialization
+            if (currentFunction && currentFunction->getName() == "main") {
+                // Get the return type of the main function
+                llvm::Type* returnType = currentFunction->getReturnType();
+                
+                // Handle different return types
+                if (returnType == int32Type || returnType == int64Type) {
+                    // If main<Int> - Use original return, use as exit code
+                    builder->CreateRet(returnValue);
+                } else if (returnType->isPointerTy() && returnType == int8PtrType) {
+                    // If main<String> - Print the string
+                    llvm::Function* printlnFunc = getVynPrintlnFunction();
+                    builder->CreateCall(printlnFunc, {returnValue});
+                    builder->CreateRet(llvm::ConstantInt::get(int32Type, 0)); // Return 0 as exit code
+                } else {
+                    // If main returns a complex type - Auto-serialize as JSON
+                    llvm::Function* serializeFunc = getSerializeToJsonFunction();
+                    
+                    // Cast the return value to void* for serialization
+                    llvm::Value* returnValueAsPtr = returnValue;
+                    if (!returnValue->getType()->isPointerTy()) {
+                        // If not a pointer already, create a temporary alloca 
+                        llvm::AllocaInst* tempAlloca = builder->CreateAlloca(returnValue->getType(), nullptr, "ret_temp");
+                        builder->CreateStore(returnValue, tempAlloca);
+                        returnValueAsPtr = tempAlloca;
+                    }
+                    
+                    // Get type name as string (for serialization)
+                    std::string typeName = getTypeName(returnValue->getType());
+                    llvm::Value* typeNameValue = builder->CreateGlobalStringPtr(typeName, "typename");
+                    
+                    // Convert to void* (int8*)
+                    llvm::Value* voidPtr = builder->CreateBitCast(returnValueAsPtr, int8PtrType, "as_void_ptr");
+                    
+                    // Call serialize function
+                    llvm::Value* jsonString = builder->CreateCall(serializeFunc, {voidPtr, typeNameValue}, "json_result");
+                    
+                    // Print the JSON string
+                    llvm::Function* printlnFunc = getVynPrintlnFunction();
+                    builder->CreateCall(printlnFunc, {jsonString});
+                    
+                    // Return 0 as exit code
+                    builder->CreateRet(llvm::ConstantInt::get(int32Type, 0));
+                }
+            } else {
+                // Not in main function - normal return
+                builder->CreateRet(returnValue);
+            }
         } else {
             // Error during argument codegen or argument is null expression (should not happen for valid AST)
             // TODO: Report error (Return argument codegen failed or resulted in null)
@@ -56,6 +108,7 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
 }
 
 void LLVMCodegen::visit(vyn::ast::ExpressionStatement* node) {
+    std::cout << "DEBUG: ExpressionStatement visitor called with expression: " << (node->expression ? node->expression->toString() : "null") << std::endl;
     if (node->expression) {
         node->expression->accept(*this);
         // The value of the expression is m_currentLLVMValue, but it's not used by the statement itself.
