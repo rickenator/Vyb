@@ -78,6 +78,15 @@ llvm::Value* LLVMCodegen::createEntryBlockAlloca(llvm::Function* func, const std
     return tmpB.CreateAlloca(type, nullptr, varName);
 }
 
+llvm::AllocaInst* LLVMCodegen::createEntryBlockAlloca(llvm::Type* type, const std::string& name) {
+    if (!currentFunction) {
+        // No error reporting mechanism available here, just return nullptr
+        return nullptr;
+    }
+    llvm::IRBuilder<> TmpB(&currentFunction->getEntryBlock(), currentFunction->getEntryBlock().begin());
+    return TmpB.CreateAlloca(type, nullptr, name);
+}
+
 void LLVMCodegen::pushLoop(llvm::BasicBlock* header, llvm::BasicBlock* body, llvm::BasicBlock* update, llvm::BasicBlock* exit) {
     loopStack.push_back({header, body, update, exit});
 }

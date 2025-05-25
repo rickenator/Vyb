@@ -13,6 +13,276 @@
 using namespace vyn;
 // Using namespace llvm; // Uncomment if desired for brevity
 
+void LLVMCodegen::visit(ast::PointerType* node) {
+    // PointerType represents a pointer to another type
+    // It generates an LLVM pointer type
+    
+    if (!node->pointeeType) {
+        logError(node->loc, "Pointer type has no pointee type");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Process the pointee type
+    node->pointeeType->accept(*this);
+    
+    // If the pointee type processing gave us a type directly in m_currentLLVMType,
+    // use that, otherwise try to use the type of m_currentLLVMValue
+    llvm::Type* pointeeType = nullptr;
+    if (m_currentLLVMType) {
+        pointeeType = m_currentLLVMType;
+    } else if (m_currentLLVMValue && m_currentLLVMValue->getType()) {
+        pointeeType = m_currentLLVMValue->getType();
+    }
+    
+    if (!pointeeType) {
+        logError(node->loc, "Failed to resolve pointee type");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Create a pointer type to the pointee type
+    unsigned addressSpace = 0; // Use default address space
+    llvm::Type* pointerType = llvm::PointerType::get(pointeeType, addressSpace);
+    
+    // Store the result type
+    m_currentLLVMType = pointerType;
+    m_currentLLVMValue = nullptr; // No value produced
+}
+
+void LLVMCodegen::visit(ast::ArrayType* node) {
+    // ArrayType represents a fixed-size array of elements
+    // It generates an LLVM array type
+    
+    if (!node->elementType) {
+        logError(node->loc, "Array type has no element type");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Process the element type
+    node->elementType->accept(*this);
+    
+    // If the element type processing gave us a type directly in m_currentLLVMType,
+    // use that, otherwise try to use the type of m_currentLLVMValue
+    llvm::Type* elementType = nullptr;
+    if (m_currentLLVMType) {
+        elementType = m_currentLLVMType;
+    } else if (m_currentLLVMValue && m_currentLLVMValue->getType()) {
+        elementType = m_currentLLVMValue->getType();
+    }
+    
+    if (!elementType) {
+        logError(node->loc, "Failed to resolve array element type");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Handle the array size expression if provided
+    llvm::Value* sizeValue = nullptr;
+    uint64_t arraySize = 0;
+    
+    if (node->sizeExpression) {
+        // Evaluate the size expression
+        node->sizeExpression->accept(*this);
+        sizeValue = m_currentLLVMValue;
+        
+        if (!sizeValue) {
+            logError(node->sizeExpression->loc, "Failed to evaluate array size expression");
+            m_currentLLVMValue = nullptr;
+            return;
+        }
+        
+        // Try to get a constant size
+        if (llvm::ConstantInt* constSize = llvm::dyn_cast<llvm::ConstantInt>(sizeValue)) {
+            arraySize = constSize->getZExtValue();
+        } else {
+            // For runtime-sized arrays, we need to use a different approach
+            // We'll represent it as a pointer to the element type for now
+            logWarning(node->loc, "Runtime-sized arrays not fully implemented. Using pointer type instead.");
+            m_currentLLVMType = llvm::PointerType::get(elementType, 0);
+            m_currentLLVMValue = nullptr;
+            return;
+        }
+    } else {
+        // If no size specified, it's likely a slice or a dynamically sized array
+        // For now, represent it as a pointer to the element type
+        logWarning(node->loc, "Dynamically sized array type represented as a pointer.");
+        m_currentLLVMType = llvm::PointerType::get(elementType, 0);
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Create an array type with the determined size
+    llvm::Type* arrayType = llvm::ArrayType::get(elementType, arraySize);
+    
+    // Store the result type
+    m_currentLLVMType = arrayType;
+    m_currentLLVMValue = nullptr; // No value produced
+}
+
+void LLVMCodegen::visit(ast::FunctionType* node) {
+    // FunctionType represents a function pointer type with parameter and return types
+    // It generates an LLVM function type
+    
+    // Process return type
+    llvm::Type* returnType = nullptr;
+    if (node->returnType) {
+        node->returnType->accept(*this);
+        
+        if (m_currentLLVMType) {
+            returnType = m_currentLLVMType;
+        } else if (m_currentLLVMValue && m_currentLLVMValue->getType()) {
+            returnType = m_currentLLVMValue->getType();
+        } else {
+            logError(node->returnType->loc, "Failed to resolve function return type");
+            m_currentLLVMValue = nullptr;
+            return;
+        }
+    } else {
+        // Default to void return type if not specified
+        returnType = llvm::Type::getVoidTy(*context);
+    }
+    
+    // Process parameter types
+    std::vector<llvm::Type*> paramTypes;
+    for (const auto& paramType : node->parameterTypes) {
+        if (paramType) {
+            paramType->accept(*this);
+            
+            llvm::Type* type = nullptr;
+            if (m_currentLLVMType) {
+                type = m_currentLLVMType;
+            } else if (m_currentLLVMValue && m_currentLLVMValue->getType()) {
+                type = m_currentLLVMValue->getType();
+            }
+            
+            if (type) {
+                paramTypes.push_back(type);
+            } else {
+                logError(paramType->loc, "Failed to resolve function parameter type");
+                m_currentLLVMValue = nullptr;
+                return;
+            }
+        }
+    }
+    
+    // Create the function type
+    llvm::FunctionType* funcType = llvm::FunctionType::get(
+        returnType,
+        paramTypes,
+        false // VarArg support - using false as there's no isVarArg in the actual class
+    );
+    
+    // Function types are represented as pointers to the function type
+    llvm::Type* funcPtrType = llvm::PointerType::get(funcType, 0);
+    
+    // Store the result type
+    m_currentLLVMType = funcPtrType;
+    m_currentLLVMValue = nullptr; // No value produced
+}
+
+void LLVMCodegen::visit(ast::OptionalType* node) {
+    // OptionalType represents a value that may be null/none
+    // In LLVM IR, we represent this as a structure containing:
+    // 1. A boolean flag indicating if the value is present
+    // 2. The value itself (if the flag is true)
+    
+    if (!node->containedType) {
+        logError(node->loc, "Optional type has no contained type");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Process the value type
+    node->containedType->accept(*this);
+    
+    // If the value type processing gave us a type directly in m_currentLLVMType,
+    // use that, otherwise try to use the type of m_currentLLVMValue
+    llvm::Type* valueType = nullptr;
+    if (m_currentLLVMType) {
+        valueType = m_currentLLVMType;
+    } else if (m_currentLLVMValue && m_currentLLVMValue->getType()) {
+        valueType = m_currentLLVMValue->getType();
+    }
+    
+    if (!valueType) {
+        logError(node->loc, "Failed to resolve optional value type");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Create a structure type for the optional
+    // [hasValue: bool, value: ValueType]
+    std::vector<llvm::Type*> members = {
+        llvm::Type::getInt1Ty(*context), // hasValue flag
+        valueType                        // The actual value
+    };
+    
+    // Generate a name for the optional type
+    std::string optionalTypeName = "optional." + getTypeName(valueType);
+    
+    // Create the optional type structure 
+    // (note: getTypeByName is not available in LLVM 18.1, using create directly)
+    llvm::StructType* optionalType = llvm::StructType::create(*context, members, optionalTypeName);
+    
+    // Store the result type
+    m_currentLLVMType = optionalType;
+    m_currentLLVMValue = nullptr; // No value produced
+}
+
+void LLVMCodegen::visit(ast::TupleTypeNode* node) {
+    // TupleTypeNode represents a tuple of multiple types
+    // In LLVM IR, we represent this as an anonymous structure
+    
+    // Process each member type
+    std::vector<llvm::Type*> memberTypes;
+    for (const auto& memberType : node->memberTypes) {
+        if (memberType) {
+            memberType->accept(*this);
+            
+            llvm::Type* type = nullptr;
+            if (m_currentLLVMType) {
+                type = m_currentLLVMType;
+            } else if (m_currentLLVMValue && m_currentLLVMValue->getType()) {
+                type = m_currentLLVMValue->getType();
+            }
+            
+            if (type) {
+                memberTypes.push_back(type);
+            } else {
+                logError(memberType->loc, "Failed to resolve tuple member type");
+                m_currentLLVMValue = nullptr;
+                return;
+            }
+        } else {
+            logError(node->loc, "Tuple type contains null member type");
+            m_currentLLVMValue = nullptr;
+            return;
+        }
+    }
+    
+    if (memberTypes.empty()) {
+        logError(node->loc, "Empty tuple type not supported");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Create a name for the tuple type based on its members
+    std::string tupleTypeName = "tuple";
+    for (const auto& type : memberTypes) {
+        tupleTypeName += "." + getTypeName(type);
+    }
+    
+    // Create the tuple type structure
+    // (note: getTypeByName is not available in LLVM 18.1, using create directly)
+    llvm::StructType* tupleType = llvm::StructType::create(*context, memberTypes, tupleTypeName);
+    
+    // Store the result type
+    m_currentLLVMType = tupleType;
+    m_currentLLVMValue = nullptr; // No value produced
+}
+
 // --- Type Mapping Helper ---
 llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
     if (!typeNode) {
@@ -229,4 +499,20 @@ void LLVMCodegen::visit(vyn::ast::TypeNode* node) {
     // This visitor primarily populates m_currentLLVMType.
     // It does not produce a Value for m_currentLLVMValue.
 }
+
+void LLVMCodegen::visit(ast::TypeName* node) {
+    // This visitor is used when a type name appears as an expression (e.g., in a type check)
+    // In most cases, we don't generate any runtime code for type names
+    
+    logWarning(node->loc, "TypeName used as an expression; this might not behave as expected");
+    
+    // For now, we'll just return a null value
+    m_currentLLVMValue = llvm::ConstantPointerNull::get(
+        llvm::PointerType::get(*context, 0));
+}
+
+
+
+
+
 

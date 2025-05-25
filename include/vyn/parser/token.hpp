@@ -61,6 +61,11 @@ namespace token {
 
         Token(vyn::TokenType type, const std::string& lexeme, const vyn::SourceLocation& loc);
         std::string toString() const;
+        
+        // Helper method to safely get the token text
+        std::string getText() const {
+            return lexeme;
+        }
     };
 } // namespace token
 } // namespace vyn

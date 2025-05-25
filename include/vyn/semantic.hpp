@@ -151,6 +151,7 @@ public:
     bool isInLoop();
     bool isInUnsafeBlock();
     bool isIntegerType(ast::TypeNode* type);
+    bool isRawLocationType(ast::TypeNode* type); // Added to support location type checking
     bool isReservedWord(const std::string& name);
     bool isLValue(ast::Expression* expr);
     bool areTypesCompatible(ast::TypeNode* typeA, ast::TypeNode* typeB); // Added
@@ -203,6 +204,9 @@ public:
     void visit(ast::FromIntToLocExpression* node) override;
     void visit(ast::LocationExpression* node) override;
     void visit(ast::ConstructionExpression* node) override;
+    void visit(ast::BorrowExpression* node) override;
+    void visit(ast::IfExpression* node) override;
+    void visit(ast::ArrayInitializationExpression* node) override;
 
     // Declarations
     void visit(ast::Module* node) override; // Added declaration
@@ -231,6 +235,7 @@ public:
     void visit(ast::ArrayType* node) override;
     void visit(ast::FunctionType* node) override;
     void visit(ast::OptionalType* node) override;
+    void visit(ast::TupleTypeNode* node) override; // Added for tuple type support
 
 private:
     Driver& driver_;

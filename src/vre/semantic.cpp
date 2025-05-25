@@ -106,12 +106,30 @@ bool SemanticAnalyzer::isInUnsafeBlock() {
 
 bool SemanticAnalyzer::isIntegerType(ast::TypeNode* type) {
     if (!type) return false;
+    
+    // Handle TypeName nodes (most common case)
     if (auto tn = dynamic_cast<ast::TypeName*>(type)) {
+        if (!tn->identifier) return false;
         const std::string& name = tn->identifier->name;
         return name == "int" || name == "Int" || name == "i8" || name == "i16" || name == "i32" || name == "i64" ||
-               name == "u8" || name == "u16" || name == "u32" || name == "u64";
+               name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "size_t" || 
+               name == "isize" || name == "usize";
     }
-    // Add checks for other integer type representations if necessary
+    
+    // Handle array size expressions which might be integer literals
+    if (auto arrayType = dynamic_cast<ast::ArrayType*>(type)) {
+        // If it has a size expression that's a literal, it might be integer type
+        if (arrayType->sizeExpression) {
+            auto it = expressionTypes.find(arrayType->sizeExpression.get());
+            if (it != expressionTypes.end() && it->second) {
+                return isIntegerType(it->second);
+            }
+        }
+    }
+    
+    // Add any other type checks that could represent integer types
+    // For example, if there are typedef'ed types or alias types
+    
     return false; 
 }
 
@@ -598,19 +616,190 @@ void SemanticAnalyzer::visit(ast::AssignmentExpression* node) {
         return;
     }
 
-    // TODO: Implement proper type compatibility check between leftType and rightType.
-    // For now, we assume they are compatible if both are resolved.
-    // Example: if (!areTypesCompatible(leftType, rightType)) { addError(...); return; }
-
-    // The type of the assignment expression is typically the type of the LHS (or RHS after conversion).
-    expressionTypes[node] = leftType; // Or rightType, depending on language rules for assignment expr type
+    // Check if the types are compatible for assignment
+    if (!areTypesCompatible(leftType, rightType)) { 
+        addError("Type error in assignment: incompatible types - cannot assign '" + rightType->toString() + 
+                "' to '" + leftType->toString() + "'.", node); 
+        // Continue processing to avoid cascading errors, but mark this node as erroneous
+        expressionTypes[node] = leftType; // Still use left type for further analysis
+    } else {
+        // The type of the assignment expression is typically the type of the LHS (or RHS after conversion).
+        expressionTypes[node] = leftType; // Or rightType, depending on language rules for assignment expr type
+    }
+    
     if (leftType) {
       node->type = std::shared_ptr<ast::TypeNode>(leftType->clone());
     }
 }
-void SemanticAnalyzer::visit(ast::LogicalExpression* node) {}
-void SemanticAnalyzer::visit(ast::ConditionalExpression* node) {}
-void SemanticAnalyzer::visit(ast::SequenceExpression* node) {}
+
+void SemanticAnalyzer::visit(ast::LogicalExpression* node) {
+    // Check left and right operands
+    if (node->left) {
+        node->left->accept(*this);
+    } else {
+        addError("Logical expression missing left operand.", node);
+        expressionTypes[node] = nullptr;
+        return;
+    }
+
+    if (node->right) {
+        node->right->accept(*this);
+    } else {
+        addError("Logical expression missing right operand.", node);
+        expressionTypes[node] = nullptr;
+        return;
+    }
+
+    // Get types of operands
+    auto leftTypeIt = expressionTypes.find(node->left.get());
+    auto rightTypeIt = expressionTypes.find(node->right.get());
+    
+    if (leftTypeIt == expressionTypes.end() || rightTypeIt == expressionTypes.end() || 
+        !leftTypeIt->second || !rightTypeIt->second) {
+        addError("Cannot determine types for logical expression operands.", node);
+        expressionTypes[node] = nullptr;
+        return;
+    }
+
+    // Check both operands are boolean or convertible to boolean
+    // For now we'll do a simple check for boolean type
+    bool isLeftBoolean = false;
+    bool isRightBoolean = false;
+    
+    if (auto* typeName = dynamic_cast<ast::TypeName*>(leftTypeIt->second)) {
+        isLeftBoolean = typeName->identifier && typeName->identifier->name == "bool";
+    }
+    
+    if (auto* typeName = dynamic_cast<ast::TypeName*>(rightTypeIt->second)) {
+        isRightBoolean = typeName->identifier && typeName->identifier->name == "bool";
+    }
+    
+    if (!isLeftBoolean) {
+        addError("Left operand of logical expression must be boolean.", node->left.get());
+    }
+    
+    if (!isRightBoolean) {
+        addError("Right operand of logical expression must be boolean.", node->right.get());
+    }
+    
+    // Result type is always boolean
+    // Create a boolean TypeName
+    auto identifier = std::make_unique<ast::Identifier>(node->loc, "bool");
+    auto boolType = std::make_unique<ast::TypeName>(node->loc, std::move(identifier));
+    expressionTypes[node] = boolType.get();
+    node->type = std::move(boolType);
+}
+
+void SemanticAnalyzer::visit(ast::ConditionalExpression* node) {
+    // Check condition
+    if (node->condition) {
+        node->condition->accept(*this);
+    } else {
+        addError("Conditional expression missing condition.", node);
+        expressionTypes[node] = nullptr;
+        return;
+    }
+
+    // Check condition is boolean
+    auto conditionTypeIt = expressionTypes.find(node->condition.get());
+    if (conditionTypeIt == expressionTypes.end() || !conditionTypeIt->second) {
+        addError("Cannot determine type for conditional expression condition.", node);
+        expressionTypes[node] = nullptr;
+        return;
+    }
+    
+    bool isConditionBoolean = false;
+    if (auto* typeName = dynamic_cast<ast::TypeName*>(conditionTypeIt->second)) {
+        isConditionBoolean = typeName->identifier && typeName->identifier->name == "bool";
+    }
+    
+    if (!isConditionBoolean) {
+        addError("Condition of conditional expression must be boolean.", node->condition.get());
+    }
+    
+    // Check then branch
+    if (node->thenExpr) {
+        node->thenExpr->accept(*this);
+    } else {
+        addError("Conditional expression missing 'then' branch.", node);
+        expressionTypes[node] = nullptr;
+        return;
+    }
+    
+    // Check else branch
+    if (node->elseExpr) {
+        node->elseExpr->accept(*this);
+    } else {
+        addError("Conditional expression missing 'else' branch.", node);
+        expressionTypes[node] = nullptr;
+        return;
+    }
+    
+    // Get types of branches
+    auto thenTypeIt = expressionTypes.find(node->thenExpr.get());
+    auto elseTypeIt = expressionTypes.find(node->elseExpr.get());
+    
+    if (thenTypeIt == expressionTypes.end() || elseTypeIt == expressionTypes.end() || 
+        !thenTypeIt->second || !elseTypeIt->second) {
+        addError("Cannot determine types for conditional expression branches.", node);
+        expressionTypes[node] = nullptr;
+        return;
+    }
+    
+    // Check if branch types are compatible
+    if (!areTypesCompatible(thenTypeIt->second, elseTypeIt->second) && 
+        !areTypesCompatible(elseTypeIt->second, thenTypeIt->second)) {
+        addError("Incompatible types in conditional expression: '" + 
+                 thenTypeIt->second->toString() + "' and '" + 
+                 elseTypeIt->second->toString() + "'.", node);
+        // Use then branch type to continue analysis
+        expressionTypes[node] = thenTypeIt->second;
+        if (thenTypeIt->second) {
+            node->type = std::shared_ptr<ast::TypeNode>(thenTypeIt->second->clone());
+        }
+        return;
+    }
+    
+    // The result type is the common type of both branches
+    // For now, use the 'then' branch type as the result type
+    expressionTypes[node] = thenTypeIt->second;
+    if (thenTypeIt->second) {
+        node->type = std::shared_ptr<ast::TypeNode>(thenTypeIt->second->clone());
+    }
+}
+
+void SemanticAnalyzer::visit(ast::SequenceExpression* node) {
+    // Process each expression in the sequence
+    if (node->expressions.empty()) {
+        addError("Empty sequence expression.", node);
+        expressionTypes[node] = nullptr;
+        return;
+    }
+    
+    for (auto& expr : node->expressions) {
+        if (expr) {
+            expr->accept(*this);
+        } else {
+            addError("Null expression in sequence.", node);
+        }
+    }
+    
+    // The type of a sequence expression is the type of its last expression
+    auto& lastExpr = node->expressions.back();
+    if (lastExpr) {
+        auto lastTypeIt = expressionTypes.find(lastExpr.get());
+        if (lastTypeIt != expressionTypes.end() && lastTypeIt->second) {
+            expressionTypes[node] = lastTypeIt->second;
+            node->type = std::shared_ptr<ast::TypeNode>(lastTypeIt->second->clone());
+        } else {
+            addError("Cannot determine type of last expression in sequence.", node);
+            expressionTypes[node] = nullptr;
+        }
+    } else {
+        addError("Last expression in sequence is null.", node);
+        expressionTypes[node] = nullptr;
+    }
+}
 void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
     // Try to determine the type from the typePath field (e.g., Point in Point { ... })
     if (!node || !node->typePath) {
@@ -902,11 +1091,49 @@ void SemanticAnalyzer::visit(ast::UnsafeStatement* node) {
 }
 void SemanticAnalyzer::visit(ast::AssertStatement* node) {}
 void SemanticAnalyzer::visit(ast::MatchStatement* node) {}
-void SemanticAnalyzer::visit(ast::YieldStatement* node) {}
-void SemanticAnalyzer::visit(ast::YieldReturnStatement* node) {}
+void SemanticAnalyzer::visit(ast::YieldStatement* node) {
+    // Check if we're inside a generator function
+    // For now, we'll just check for any yield expression
+    
+    // Analyze the expression being yielded, if any
+    if (node->expression) {
+        node->expression->accept(*this);
+    }
+    
+    // In a full implementation, we would:
+    // 1. Verify we're inside a generator function (function with yield)
+    // 2. Track the yielded type for generator return type inference
+    // 3. Ensure the yielded type is consistent across the function
+}
+
+void SemanticAnalyzer::visit(ast::YieldReturnStatement* node) {
+    // Similar to YieldStatement but specifically for final return from generator
+    
+    // Analyze the expression being returned, if any
+    if (node->expression) {
+        node->expression->accept(*this);
+    }
+    
+    // In a full implementation:
+    // 1. Verify we're inside a generator function
+    // 2. Check that the returned type is compatible with the generator's return type
+    // 3. Mark the generator as having an explicit final return value
+}
 
 // REMOVE DUPLICATE/EMPTY visit methods from here down
 // void SemanticAnalyzer::visit(ast::TypeAliasDeclaration* node) {} // Handled above
+void SemanticAnalyzer::visit(ast::ExternStatement* node) {
+    // In an extern statement, we typically:
+    // 1. Register the extern declaration in the current scope
+    // 2. Don't analyze the body since it's external
+    
+    // For now, we'll just mark the statement as visited
+    // In a full implementation, we would register any external declarations
+    // in the symbol table for later use
+    
+    // No recursive visits needed as extern statements don't have a body to analyze
+}
+
 void SemanticAnalyzer::visit(ast::ImportDeclaration* node) {}
 void SemanticAnalyzer::visit(ast::StructDeclaration* node) {}
 // void SemanticAnalyzer::visit(ast::ClassDeclaration* node) {} // Handled above
@@ -918,7 +1145,6 @@ void SemanticAnalyzer::visit(ast::FieldDeclaration* node) {}
 void SemanticAnalyzer::visit(ast::EnumVariant* node) {}
 // void SemanticAnalyzer::visit(ast::GenericParameter* node) {} // Handled above
 void SemanticAnalyzer::visit(ast::TemplateDeclaration* node) {}
-void SemanticAnalyzer::visit(ast::ExternStatement* node) {}
 void SemanticAnalyzer::visit(ast::ThrowStatement* node) {}
 
 void SemanticAnalyzer::visit(ast::TypeNode* node) {
@@ -1296,5 +1522,116 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
 // then the specific visitors for those AST nodes will be used. The logic for 'addr', 'from', 'at'
 // in ConstructionExpression::visit is a fallback or handles cases where the parser uses
 // ConstructionExpression for these intrinsics.
+
+// --- Consolidated implementations from semantic_*.cpp files ---
+
+// From semantic_tuple_type.cpp
+void SemanticAnalyzer::visit(ast::TupleTypeNode* node) {
+    // Basic implementation - verify each element of the tuple type
+    for (auto& element : node->memberTypes) {
+        if (element) {
+            element->accept(*this);
+        } else {
+            // Report error for null element type
+            errors.push_back("Tuple type contains a null element type at " + 
+                              node->loc.toString());
+        }
+    }
+}
+
+// Additional helpful utility for SemanticAnalyzer (from semantic_tuple_type.cpp)
+// Note: This overload for TypeNode* is added alongside the existing Expression* version
+bool SemanticAnalyzer::isRawLocationType(ast::TypeNode* type) {
+    // Determine if the type is a raw location type (loc<T>)
+    if (auto* typeName = dynamic_cast<ast::TypeName*>(type)) {
+        return typeName->identifier && typeName->identifier->name == "loc" && 
+               !typeName->genericArgs.empty();
+    }
+    return false;
+}
+
+// From semantic_if_expr.cpp
+void SemanticAnalyzer::visit(ast::IfExpression* node) {
+    // Check the condition - must be a boolean expression
+    if (node->condition) {
+        node->condition->accept(*this);
+        // In a full implementation, we would check if the condition's type is boolean
+        // For now, we won't do type checking
+    } else {
+        addError("If expression condition missing", node);
+    }
+    
+    // Check the then branch
+    if (node->thenBranch) {
+        node->thenBranch->accept(*this);
+    } else {
+        addError("If expression then branch missing", node);
+    }
+    
+    // Check the else branch (required in if expressions)
+    if (node->elseBranch) {
+        node->elseBranch->accept(*this);
+    } else {
+        addError("If expression else branch is required", node);
+    }
+    
+    // For a full implementation:
+    // 1. Check that condition has boolean type
+    // 2. Check that then and else branches have compatible types
+    // 3. Set the if-expression's type to the common type of then and else
+    
+    // For now we skip the type checking
+}
+
+// From semantic_borrow_expr.cpp
+void SemanticAnalyzer::visit(ast::BorrowExpression* node) {
+    // First analyze the expression that's being borrowed
+    if (node->expression) {
+        node->expression->accept(*this);
+    }
+    
+    // Ensure that the borrowed expression is valid for borrowing
+    // (it should be an lvalue if it's a mutable borrow)
+    if (node->kind == ast::BorrowKind::MUTABLE_BORROW && !isLValue(node->expression.get())) {
+        addError("Cannot take mutable borrow of non-lvalue expression", node);
+    }
+    
+    // Create a type node that represents the borrowed type
+    // This would normally set expressionTypes[node] to a pointer type
+    // of the underlying expression's type, but we'll just log for now
+    
+    // In a complete implementation, we would:
+    // 1. Get the type of the expression being borrowed
+    // 2. Create a borrowed type (ptr/ref) based on it
+    // 3. Associate that type with this expression
+    
+    // For now, we'll just track that this borrow occurred
+    // expressionTypes[node] = ...;
+}
+
+// From semantic_array_init_expr.cpp
+void SemanticAnalyzer::visit(ast::ArrayInitializationExpression* node) {
+    // Check that the element type is valid
+    if (node->elementType) {
+        node->elementType->accept(*this);
+    } else {
+        addError("Array initialization missing element type", node);
+    }
+    
+    // Check that the size expression is valid
+    if (node->sizeExpression) {
+        node->sizeExpression->accept(*this);
+        // In a full implementation, we would check if the size expression evaluates to an integer type
+        // For now, we won't do type checking
+    } else {
+        addError("Array initialization missing size expression", node);
+    }
+    
+    // For a full implementation:
+    // 1. Check that the size expression is of integer type
+    // 2. Set the array initialization expression's type to an array type with the element type
+    
+    // For now we skip the advanced type checking
+}
 
 } // Added missing closing brace for namespace vyn

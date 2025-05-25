@@ -18,6 +18,88 @@ using namespace vyn;
 
 // --- Declarations ---
 
+void LLVMCodegen::visit(ast::TraitDeclaration* node) {
+    // Traits are interfaces/type constraints that don't generate runtime code by themselves
+    // They're primarily used for compile-time type checking and polymorphism
+    
+    // Verify trait name
+    if (!node->name) {
+        logError(node->loc, "Trait declaration missing name");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    std::string traitName = node->name->name;
+    if (traitName.empty()) {
+        logError(node->loc, "Trait declaration has empty name");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Process generic parameters if any
+    std::vector<std::string> genericParamNames;
+    for (const auto& param : node->genericParams) {
+        if (param && param->name) {
+            genericParamNames.push_back(param->name->name);
+        }
+    }
+    
+    // For now, we just store information about the trait methods without generating actual code
+    // In a full implementation, this information would be used for vtable generation when
+    // types implement this trait
+    
+    // Record method signatures in the trait
+    for (const auto& method : node->methods) {
+        if (method) {
+            method->accept(*this);
+            // We don't actually generate code for trait methods
+            // They're just signatures that implementing types must provide
+        }
+    }
+    
+    // Traits don't produce runtime values
+    m_currentLLVMValue = nullptr;
+    
+    logWarning(node->loc, "TraitDeclaration processed for signature information only. Full trait support requires implementation types to provide concrete methods.");
+}
+
+void LLVMCodegen::visit(ast::NamespaceDeclaration* node) {
+    // Namespaces provide scoping for declarations but don't generate runtime code themselves
+    
+    // Check if namespace name is valid
+    if (!node->name) {
+        logError(node->loc, "Namespace declaration missing name");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    std::string namespaceName = node->name->name;
+    if (namespaceName.empty()) {
+        logError(node->loc, "Namespace declaration has empty name");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Store the current namespace context to restore it later
+    std::string currentNamespacePrefix = ""; // In a full implementation, we would track the current namespace
+    std::string newNamespacePrefix = namespaceName + "::";
+    
+    // Process all declarations in the namespace
+    // For each declaration, we'll mangle its name to include the namespace prefix
+    for (const auto& member : node->members) {
+        if (member) {
+            // Process the declaration
+            member->accept(*this);
+        }
+    }
+    
+    // Restore the previous namespace context
+    // (In a full implementation)
+    
+    // Namespaces don't produce runtime values
+    m_currentLLVMValue = nullptr;
+}
+
 std::unique_ptr<llvm::Module> LLVMCodegen::releaseModule() {
     return std::move(module);
 }
@@ -487,4 +569,6 @@ void LLVMCodegen::visit(vyn::ast::TemplateDeclaration* node) {
     logError(node->loc, "TemplateDeclaration visited. Codegen happens on instantiation, not for the template itself.");
     m_currentLLVMValue = nullptr;
 }
+
+
 

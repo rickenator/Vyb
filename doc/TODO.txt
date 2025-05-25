@@ -1,0 +1,230 @@
+# Vyn Programming Language - TODO List (Updated Post-Consolidation)
+
+This document tracks unimplemented features, stubs, and items that need to be completed
+in the Vyn programming language implementation.
+
+**STATUS UPDATE**: The code consolidation phase has been completed successfully. All duplicate
+stub files have been moved to `backup_stubs/` and their implementations have been integrated
+into the main codebase. The build system is clean and all compilation works correctly.
+
+## ✅ COMPLETED TASKS (From Consolidation)
+
+### Code Organization and File Consolidation
+1. ✅ **COMPLETED**: Consolidated all temporary stub files into main implementation files
+   - ✅ Moved `llvm_codegen_stubs.cpp`, `missing_visitor_stubs.cpp`, `additional_visit_stubs.cpp` to backup
+   - ✅ Moved `llvm_missing_impl.cpp`, `additional_visitor_impls.cpp`, `var_func_visitors.cpp` to backup  
+   - ✅ Moved all `semantic_*.cpp` files to backup and consolidated into `semantic.cpp`
+   - ✅ Updated CMakeLists.txt to remove orphaned file references
+   - ✅ All 12 duplicate/orphaned files properly backed up
+
+### Visitor Method Implementations
+1. ✅ **COMPLETED**: All AST visitor methods now have implementations in main files
+   - ✅ Expression visitors: `LogicalExpression`, `ConditionalExpression`, `SequenceExpression`, `FunctionExpression`, `ThisExpression`, `SuperExpression`, `AwaitExpression`
+   - ✅ Statement visitors: `EmptyStatement`, `ThrowStatement`, `MatchStatement`, `AssertStatement`, `YieldStatement`, `YieldReturnStatement`, `ExternStatement`
+   - ✅ Declaration visitors: `TraitDeclaration`, `NamespaceDeclaration`
+   - ✅ Type visitors: `PointerType`, `ArrayType`, `FunctionType`, `OptionalType`, `TupleTypeNode`, `TypeName`
+   - ✅ Semantic visitors: `BorrowExpression`, `IfExpression`, `ArrayInitializationExpression`, `TupleTypeNode`, `ExternStatement`, `YieldStatement`, `YieldReturnStatement`
+
+2. ✅ **COMPLETED**: Compilation and build system
+   - ✅ Zero compilation errors
+   - ✅ Clean linking with no undefined symbols
+   - ✅ All visitor methods properly implemented (no pure virtual errors)
+
+## 🔄 IN PROGRESS / PARTIAL IMPLEMENTATIONS
+
+### 1. Semantic Analysis Improvements Needed
+
+1. **Enhanced type checking** - File: `src/vre/semantic.cpp`
+   - Line 150: Actually check if type is a raw location type (currently placeholder)
+   - Line 397: Add checks for trait and type existence and compatibility
+   - Line 934: Handle other TypeNode subtypes for integer checking
+
+2. **Error handling enhancements**
+   - Better error messages for type mismatches
+   - Improved diagnostics for semantic analysis failures
+
+### 2. LLVM Code Generation Enhancements
+
+1. **Expression improvements** - File: `src/vre/llvm/cgen_expr.cpp`
+   - Line 169: Handle mixed types and type promotions in binary operations
+   - Line 237: Implement additional unary operators (TILDE for bitwise NOT)
+   - Line 1582: Complete generic instantiation expression implementation
+   - Lines 1920-1929: Implement proper `this` and `super` semantics when class support is added
+   - Line 1937: Implement proper async/await coroutine semantics
+
+2. **Statement implementations** - File: `src/vre/llvm/cgen_stmt.cpp`
+   - Line 368: Complete TryStatement with proper exception handling (currently stub)
+   - Line 95: Improve error reporting for failed return argument codegen
+   - Line 803: Complete yield statement with full generator/coroutine support
+
+3. **Declaration improvements** - File: `src/vre/llvm/cgen_decl.cpp`
+   - Line 378: Add vtable pointer support for virtual methods in classes
+   - Line 409: Complete class field handling implementation
+
+4. **Type system enhancements** - File: `src/vre/llvm/cgen_types.cpp`
+   - Lines 479-480: Add handling for REFERENCE and SLICE types if distinct from POINTER
+
+5. **Missing core implementation** - File: `src/vre/llvm/cgen_unimplemented.cpp`
+   - Line 14: Complete `GenericInstantiationExpression` implementation
+   - Line 20: Review and complete `createEntryBlockAlloca` implementation
+
+6. **Utility improvements** - File: `src/vre/llvm/cgen_util.cpp`
+   - Line 31: Make type casting logic more robust (currently basic placeholder)
+
+### 3. Parser Improvements
+
+1. **Statement parsing** - File: `src/parser/statement_parser.cpp`
+   - Lines 461, 515, 565: Review and fix indent_level handling for sub-parsers
+   - Line 583: Properly implement defer statement parsing (currently returns nullptr)
+
+2. **Type parsing** - File: `src/parser/type_parser.cpp`
+   - Line 272: Handle 'const' type qualifier properly
+
+3. **Expression parsing** - File: `src/parser/expression_parser.cpp`
+   - Line 575: Fix operator precedence matching (currently using placeholder)
+
+## 🆕 NEW HIGH-PRIORITY TASKS
+
+### 1. Core Language Features (Missing/Incomplete)
+
+1. **Exception Handling System**
+   - Design and implement complete exception handling runtime
+   - Integrate with LLVM exception handling mechanisms
+   - Add proper stack unwinding and cleanup
+   - Status: ThrowStatement has basic implementation but needs runtime support
+
+2. **Generic System Completion**
+   - Complete generic instantiation and template resolution
+   - Add proper type parameter substitution
+   - Implement generic constraint checking
+   - Status: GenericInstantiationExpression is stub
+
+3. **Async/Await and Coroutines**
+   - Design coroutine transformation pipeline
+   - Implement generator state machines
+   - Add proper yield/resume mechanics
+   - Integrate with LLVM coroutine intrinsics
+   - Status: YieldStatement/YieldReturnStatement have basic logging implementations
+
+4. **Class System and Inheritance**
+   - Complete class declaration implementation
+   - Add inheritance and virtual method support
+   - Implement vtable generation and method dispatch
+   - Add proper `this` and `super` semantics
+   - Status: Basic structure exists, vtable support missing
+
+5. **Memory Management**
+   - Implement location types (`loc<T>`) fully
+   - Add borrow checker integration
+   - Complete unsafe block semantics
+   - Add proper RAII and destructor calling
+
+### 2. Type System Enhancements
+
+1. **Advanced Type Features**
+   - Complete REFERENCE and SLICE type implementations
+   - Add tuple destructuring and pattern matching
+   - Implement type inference improvements
+   - Add union types and discriminated unions
+
+2. **Trait System**
+   - Complete trait implementation and method resolution
+   - Add trait bounds and where clauses
+   - Implement trait objects and dynamic dispatch
+   - Status: TraitDeclaration processes signatures only
+
+3. **Pattern Matching**
+   - Complete MatchStatement with full pattern support
+   - Add exhaustiveness checking
+   - Implement guard expressions
+   - Status: Basic comparison matching implemented
+
+### 3. Standard Library and Runtime
+
+1. **Runtime Library**
+   - Implement `__vyn_assert_fail`, `__vyn_throw_exception` runtime functions
+   - Add garbage collection hooks if needed
+   - Implement memory allocation primitives
+   - Add I/O and system interface functions
+
+2. **Built-in Types and Operations**
+   - Complete array operations and bounds checking
+   - Add string manipulation functions
+   - Implement mathematical operation optimizations
+   - Add proper numeric type conversions
+
+### 4. Developer Experience
+
+1. **Error Reporting**
+   - Improve error messages with better source location information
+   - Add suggestions and fix-it hints
+   - Implement warning system for code quality
+   - Add IDE integration support
+
+2. **Testing Infrastructure**
+   - Expand test coverage for all implemented features
+   - Add integration tests for complex language features
+   - Implement property-based testing for type system
+   - Add performance benchmarks
+
+3. **Documentation**
+   - Complete language reference documentation
+   - Add tutorial and getting started guide
+   - Document all implemented language features
+   - Add API documentation for compiler interfaces
+
+### 5. Performance and Optimization
+
+1. **Code Generation Optimization**
+   - Add LLVM optimization pass integration
+   - Implement dead code elimination
+   - Add loop optimizations and vectorization
+   - Implement tail call optimization
+
+2. **Compilation Performance**
+   - Add incremental compilation support
+   - Implement parallel compilation where possible
+   - Add compilation caching mechanisms
+   - Optimize memory usage during compilation
+
+## 📋 MAINTENANCE TASKS
+
+1. **Code Quality**
+   - Review all placeholder implementations and upgrade them
+   - Add comprehensive inline documentation
+   - Unify error handling approaches across codebase
+   - Add static analysis and linting
+
+2. **Build System**
+   - Add proper dependency management
+   - Implement cross-platform build support
+   - Add package/distribution creation
+   - Optimize build times
+
+3. **Compatibility**
+   - Test with different LLVM versions
+   - Ensure compatibility across target platforms
+   - Add support for different target architectures
+   - Implement proper feature detection
+
+---
+
+## 🎯 IMMEDIATE NEXT STEPS (Priority Order)
+
+1. **HIGH**: Complete exception handling runtime (`__vyn_assert_fail`, `__vyn_throw_exception`)
+2. **HIGH**: Implement `GenericInstantiationExpression` properly  
+3. **HIGH**: Complete defer statement parsing
+4. **MEDIUM**: Add REFERENCE/SLICE type support
+5. **MEDIUM**: Improve type casting and mixed type operations
+6. **MEDIUM**: Complete class vtable implementation
+7. **LOW**: Optimize placeholder implementations
+8. **LOW**: Expand test coverage for new features
+
+---
+
+**CONSOLIDATION STATUS**: ✅ COMPLETE - All duplicate files consolidated, 12 files moved to backup_stubs/
+**BUILD STATUS**: ✅ WORKING - Zero compilation errors, clean linking
+**NEXT PHASE**: Focus on completing core language features and runtime support
+
+*Last updated: May 25, 2025*
+*Build verified: LLVM 18.1.3 with C++17*

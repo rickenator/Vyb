@@ -426,5 +426,561 @@ void LLVMCodegen::visit(vyn::ast::UnsafeStatement* node) {
     m_currentLLVMValue = nullptr;
 }
 
-} // namespace vyn
+void LLVMCodegen::visit(vyn::ast::EmptyStatement* node) {
+    // EmptyStatement doesn't produce any code or value
+    // It's essentially a no-op in the LLVM IR
+    m_currentLLVMValue = nullptr;
+}
+
+void LLVMCodegen::visit(vyn::ast::ThrowStatement* node) {
+    // Get the current function
+    llvm::Function* function = getCurrentFunction();
+    if (!function) {
+        logError(node->loc, "Throw statement outside function context");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    // Evaluate the expression to throw
+    if (!node->expr) {
+        logError(node->loc, "Throw statement missing expression");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    node->expr->accept(*this);
+    llvm::Value* exceptionValue = m_currentLLVMValue;
+    if (!exceptionValue) {
+        logError(node->expr->loc, "Failed to evaluate throw expression");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    // Get exception object type info if available
+    // For now, we'll assume all exceptions are compatible with a common exception interface
+    
+    // For basic implementation, we'll call a runtime function to handle the exception
+    std::vector<llvm::Type*> throwFuncParamTypes = {
+        llvm::PointerType::get(*context, 0) // Generic pointer to exception object
+    };
+    
+    llvm::FunctionType* throwFuncType = llvm::FunctionType::get(
+        llvm::Type::getVoidTy(*context),
+        throwFuncParamTypes,
+        false
+    );
+    
+    // Get or create the throw function
+    llvm::Function* throwFunc = module->getFunction("__vyn_throw_exception");
+    if (!throwFunc) {
+        throwFunc = llvm::Function::Create(
+            throwFuncType,
+            llvm::Function::ExternalLinkage,
+            "__vyn_throw_exception",
+            module.get()
+        );
+    }
+    
+    // Cast exception value to void* if necessary
+    llvm::Value* exceptionPtr = exceptionValue;
+    if (!exceptionPtr->getType()->isPointerTy()) {
+        // If the exception isn't already a pointer, store it in memory
+        llvm::AllocaInst* temp = builder->CreateAlloca(
+            exceptionValue->getType(),
+            nullptr,
+            "exception.tmp"
+        );
+        builder->CreateStore(exceptionValue, temp);
+        exceptionPtr = temp;
+    }
+    
+    // Cast to i8* (void*)
+    exceptionPtr = builder->CreateBitCast(
+        exceptionPtr,
+        llvm::PointerType::get(*context, 0),
+        "exception.i8ptr"
+    );
+    
+    // Call the throw function
+    builder->CreateCall(throwFunc, { exceptionPtr });
+    
+    // After throwing, execution doesn't continue
+    builder->CreateUnreachable();
+    
+    // Create a new block for any following code (though it will be unreachable)
+    llvm::BasicBlock* unreachableBB = llvm::BasicBlock::Create(*context, "after.throw", function);
+    builder->SetInsertPoint(unreachableBB);
+    
+    // Throw doesn't produce a value
+    m_currentLLVMValue = nullptr;
+    
+    logWarning(node->loc, "ThrowStatement implemented with basic functionality. Full exception handling support requires additional runtime support.");
+}
+
+void LLVMCodegen::visit(vyn::ast::MatchStatement* node) {
+    // Get the current function
+    llvm::Function* function = getCurrentFunction();
+    if (!function) {
+        logError(node->loc, "Match statement outside function context");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    // Evaluate the expression to match
+    if (!node->expr) {
+        logError(node->loc, "Match statement missing expression");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    node->expr->accept(*this);
+    llvm::Value* matchValue = m_currentLLVMValue;
+    if (!matchValue) {
+        logError(node->expr->loc, "Failed to evaluate match expression");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    // Store match value in a temporary variable if not already a simple value
+    // This prevents re-evaluation if the expression has side effects
+    llvm::AllocaInst* matchTemp = nullptr;
+    if (!matchValue->getType()->isIntegerTy() && 
+        !matchValue->getType()->isFloatingPointTy() &&
+        !matchValue->getType()->isPointerTy()) {
+        matchTemp = builder->CreateAlloca(
+            matchValue->getType(),
+            nullptr,
+            "match.value"
+        );
+        builder->CreateStore(matchValue, matchTemp);
+        matchValue = builder->CreateLoad(matchTemp->getAllocatedType(), matchTemp, "match.value.load");
+    }
+
+    // Create basic blocks for each case and the end of match
+    llvm::BasicBlock* defaultBB = nullptr;
+    llvm::BasicBlock* endMatchBB = llvm::BasicBlock::Create(*context, "match.end", function);
+    
+    std::vector<llvm::BasicBlock*> caseBBs;
+    std::vector<llvm::BasicBlock*> caseBodyBBs;
+    
+    // Create basic blocks for all cases
+    for (size_t i = 0; i < node->cases.size(); i++) {
+        llvm::BasicBlock* caseBB = llvm::BasicBlock::Create(
+            *context,
+            "match.case." + std::to_string(i),
+            function
+        );
+        caseBBs.push_back(caseBB);
+        
+        llvm::BasicBlock* caseBodyBB = llvm::BasicBlock::Create(
+            *context,
+            "match.case.body." + std::to_string(i),
+            function
+        );
+        caseBodyBBs.push_back(caseBodyBB);
+    }
+    
+    // Create default case if needed
+    defaultBB = llvm::BasicBlock::Create(*context, "match.default", function);
+    
+    // Build the initial branches for pattern matching
+    llvm::BasicBlock* nextCaseBB = caseBBs[0];
+    builder->CreateBr(nextCaseBB);
+    
+    // Generate code for each case
+    for (size_t i = 0; i < node->cases.size(); i++) {
+        // Set insertion point to this case's pattern matching block
+        builder->SetInsertPoint(caseBBs[i]);
+        
+        // Get the case pattern and body
+        auto& casePattern = node->cases[i].first;
+        auto& caseBody = node->cases[i].second;
+        
+        // Default pattern (underscore/wildcard) just branches to the body
+        if (!casePattern) {
+            builder->CreateBr(caseBodyBBs[i]);
+        } else {
+            // Evaluate the pattern
+            casePattern->accept(*this);
+            llvm::Value* patternValue = m_currentLLVMValue;
+            if (!patternValue) {
+                logError(casePattern->loc, "Failed to evaluate match pattern");
+                m_currentLLVMValue = nullptr;
+                return;
+            }
+            
+            // Compare the pattern with the match value
+            llvm::Value* isMatch = nullptr;
+            
+            // Handle different pattern types
+            if (patternValue->getType()->isIntegerTy() && matchValue->getType()->isIntegerTy()) {
+                // Integer comparison
+                isMatch = builder->CreateICmpEQ(matchValue, patternValue, "match.icmp");
+            } else if (patternValue->getType()->isFloatingPointTy() && matchValue->getType()->isFloatingPointTy()) {
+                // Float comparison
+                isMatch = builder->CreateFCmpOEQ(matchValue, patternValue, "match.fcmp");
+            } else {
+                // For more complex types, we'd need custom comparison logic
+                // For now, just do a pointer comparison if both are pointers
+                if (patternValue->getType()->isPointerTy() && matchValue->getType()->isPointerTy()) {
+                    isMatch = builder->CreateICmpEQ(
+                        builder->CreatePtrToInt(matchValue, llvm::Type::getInt64Ty(*context)),
+                        builder->CreatePtrToInt(patternValue, llvm::Type::getInt64Ty(*context)),
+                        "match.ptrcmp"
+                    );
+                } else {
+                    // If we can't compare, assume no match
+                    isMatch = llvm::ConstantInt::getFalse(*context);
+                    logWarning(casePattern->loc, "Complex pattern matching not fully implemented");
+                }
+            }
+            
+            // Branch based on match result
+            llvm::BasicBlock* nextBlock = (i < node->cases.size() - 1) ? caseBBs[i+1] : defaultBB;
+            builder->CreateCondBr(isMatch, caseBodyBBs[i], nextBlock);
+        }
+        
+        // Generate code for the case body
+        builder->SetInsertPoint(caseBodyBBs[i]);
+        if (caseBody) {
+            caseBody->accept(*this);
+            // Value from the body becomes the match result
+        }
+        
+        // Branch to end of match
+        builder->CreateBr(endMatchBB);
+    }
+    
+    // Generate code for default case (no match)
+    builder->SetInsertPoint(defaultBB);
+    // In a default case, we'll just continue with a null value
+    logWarning(node->loc, "Non-exhaustive match pattern");
+    m_currentLLVMValue = nullptr;
+    builder->CreateBr(endMatchBB);
+    
+    // Set insertion point to end of match
+    builder->SetInsertPoint(endMatchBB);
+    
+    // The match result is determined by the Phi node that combines all case results
+    // But for now, we'll just set the result to null to indicate no value
+    m_currentLLVMValue = nullptr;
+    
+    logWarning(node->loc, "MatchStatement implemented with basic functionality. Complex pattern matching may require additional support.");
+}
+
+void LLVMCodegen::visit(vyn::ast::AssertStatement* node) {
+    // Get the current function
+    llvm::Function* function = getCurrentFunction();
+    if (!function) {
+        logError(node->loc, "Assert statement outside function context");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    // Create basic blocks for assert checking
+    llvm::BasicBlock* assertPassBB = llvm::BasicBlock::Create(*context, "assert.pass", function);
+    llvm::BasicBlock* assertFailBB = llvm::BasicBlock::Create(*context, "assert.fail", function);
+
+    // Evaluate the condition
+    if (!node->condition) {
+        logError(node->loc, "Assert statement missing condition");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    node->condition->accept(*this);
+    llvm::Value* condValue = m_currentLLVMValue;
+    if (!condValue) {
+        logError(node->condition->loc, "Failed to evaluate assert condition");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    // Convert condition to boolean if needed
+    if (condValue->getType() != llvm::Type::getInt1Ty(*context)) {
+        condValue = builder->CreateICmpNE(
+            condValue, 
+            llvm::ConstantInt::get(condValue->getType(), 0),
+            "assert.cond"
+        );
+    }
+
+    // Create conditional branch
+    builder->CreateCondBr(condValue, assertPassBB, assertFailBB);
+
+    // Generate assert failure handling
+    builder->SetInsertPoint(assertFailBB);
+    
+    // Get the message if provided, or create a default one
+    llvm::Value* messageValue;
+    if (node->message) {
+        node->message->accept(*this);
+        messageValue = m_currentLLVMValue;
+        
+        // If the message isn't a string, convert it to a string
+        if (!messageValue || !messageValue->getType()->isPointerTy()) {
+            // Create a default message
+            messageValue = builder->CreateGlobalStringPtr(
+                "Assertion failed at " + node->loc.toString(),
+                "assert.msg"
+            );
+        }
+    } else {
+        // Create a default message
+        messageValue = builder->CreateGlobalStringPtr(
+            "Assertion failed at " + node->loc.toString(),
+            "assert.msg"
+        );
+    }
+
+    // Call the assert failure handler function
+    std::vector<llvm::Type*> handlerParamTypes = {
+        llvm::PointerType::get(*context, 0) // Message as char*
+    };
+    
+    llvm::FunctionType* handlerFuncType = llvm::FunctionType::get(
+        llvm::Type::getVoidTy(*context),
+        handlerParamTypes,
+        false
+    );
+    
+    // Get or create the assert handler function
+    llvm::Function* assertHandlerFunc = module->getFunction("__vyn_assert_fail");
+    if (!assertHandlerFunc) {
+        assertHandlerFunc = llvm::Function::Create(
+            handlerFuncType,
+            llvm::Function::ExternalLinkage,
+            "__vyn_assert_fail",
+            module.get()
+        );
+    }
+    
+    // Call the handler with the message
+    std::vector<llvm::Value*> args = { messageValue };
+    builder->CreateCall(assertHandlerFunc, args);
+    
+    // Terminate execution after assertion failure (this will be unreachable in practice)
+    builder->CreateUnreachable();
+    
+    // Continue normal execution if assertion passes
+    builder->SetInsertPoint(assertPassBB);
+    
+    // Assert statements don't produce a value
+    m_currentLLVMValue = nullptr;
+}
+
+void LLVMCodegen::visit(ast::YieldStatement* node) {
+    // Implementation for YieldStatement
+    // Yield temporarily produces a value and suspends execution until the generator is resumed
+    
+    if (!getCurrentFunction()) {
+        logError(node->loc, "Yield statement outside of function context.");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // For a basic implementation, we need to:
+    // 1. Evaluate the expression to yield (if any)
+    // 2. Save the current state of execution
+    // 3. Create a suspension point
+    
+    llvm::Value* yieldValue = nullptr;
+    if (node->expression) {
+        // Visit the expression to get its value
+        node->expression->accept(*this);
+        yieldValue = m_currentLLVMValue;
+        
+        if (!yieldValue) {
+            logError(node->expression->loc, "Failed to evaluate yield expression.");
+            m_currentLLVMValue = nullptr;
+            return;
+        }
+    } else {
+        // If no expression provided, yield 'undefined' or a default value
+        yieldValue = llvm::UndefValue::get(llvm::Type::getInt32Ty(*context));
+    }
+    
+    // For now, we'll create a placeholder implementation that logs the yield
+    // In a full implementation, this would involve coroutine transformation
+    std::vector<llvm::Type*> paramTypes = { yieldValue->getType() };
+    llvm::FunctionType* logYieldType = llvm::FunctionType::get(
+        llvm::Type::getVoidTy(*context), 
+        paramTypes, 
+        false
+    );
+    
+    // Create or get the debug function for logging yields
+    llvm::Function* logYieldFunc = module->getFunction("__vyn_debug_log_yield");
+    if (!logYieldFunc) {
+        logYieldFunc = llvm::Function::Create(
+            logYieldType,
+            llvm::Function::ExternalLinkage,
+            "__vyn_debug_log_yield",
+            module.get()
+        );
+    }
+    
+    // Call the debug function with our yield value
+    std::vector<llvm::Value*> args = { yieldValue };
+    builder->CreateCall(logYieldFunc, args);
+    
+    logWarning(node->loc, "YieldStatement partially implemented. Full generator functionality requires coroutine support.");
+    
+    m_currentLLVMValue = yieldValue;
+}
+
+void LLVMCodegen::visit(ast::YieldReturnStatement* node) {
+    // Implementation for YieldReturnStatement
+    // This represents the final return from a generator function
+    
+    if (!getCurrentFunction()) {
+        logError(node->loc, "Yield return statement outside of function context.");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    llvm::Value* returnValue = nullptr;
+    llvm::Type* returnType = currentFunction->getReturnType();
+    
+    if (node->expression) {
+        // Visit the expression to get its value
+        node->expression->accept(*this);
+        returnValue = m_currentLLVMValue;
+        
+        if (!returnValue) {
+            logError(node->expression->loc, "Failed to evaluate yield return expression.");
+            m_currentLLVMValue = nullptr;
+            return;
+        }
+        
+        // Check if the types match
+        if (returnValue->getType() != returnType && !returnType->isVoidTy()) {
+            // Try to cast the value to the return type
+            returnValue = tryCast(returnValue, returnType, node->loc);
+            if (!returnValue) {
+                logError(node->expression->loc, "Cannot convert yield return value to the function's return type.");
+                m_currentLLVMValue = nullptr;
+                return;
+            }
+        }
+    } else if (!returnType->isVoidTy()) {
+        // No expression provided but non-void return type required
+        logError(node->loc, "Yield return statement missing expression for non-void return type.");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Create a function for signaling generator completion
+    std::vector<llvm::Type*> paramTypes;
+    if (returnValue) {
+        paramTypes.push_back(returnValue->getType());
+    }
+    
+    llvm::FunctionType* completeGenType = llvm::FunctionType::get(
+        llvm::Type::getVoidTy(*context), 
+        paramTypes, 
+        false
+    );
+    
+    // Create or get the debug function for generator completion
+    llvm::Function* completeGenFunc = module->getFunction("__vyn_debug_complete_generator");
+    if (!completeGenFunc) {
+        completeGenFunc = llvm::Function::Create(
+            completeGenType,
+            llvm::Function::ExternalLinkage,
+            "__vyn_debug_complete_generator",
+            module.get()
+        );
+    }
+    
+    // Call the debug function
+    std::vector<llvm::Value*> args;
+    if (returnValue) {
+        args.push_back(returnValue);
+    }
+    builder->CreateCall(completeGenFunc, args);
+    
+    // Add a normal return statement after the yield return
+    if (returnType->isVoidTy()) {
+        builder->CreateRetVoid();
+    } else if (returnValue) {
+        builder->CreateRet(returnValue);
+    }
+    
+    logWarning(node->loc, "YieldReturnStatement partially implemented. Full generator functionality requires coroutine support.");
+    
+    m_currentLLVMValue = returnValue;
+}
+
+void LLVMCodegen::visit(ast::ExternStatement* node) {
+    // Implementation for ExternStatement to generate LLVM IR for external function declarations
+    
+    if (!node->name) {
+        logError(node->loc, "External declaration missing name.");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    std::vector<llvm::Type*> paramTypes;
+    for (const auto& paramNode : node->parameters) {
+        if (!paramNode.typeNode) {
+            logError(paramNode.name->loc, "Parameter '" + paramNode.name->name + 
+                     "' in external declaration '" + node->name->name + "' is missing a type annotation.");
+            m_currentLLVMValue = nullptr; 
+            return;
+        }
+        
+        llvm::Type* llvmType = codegenType(paramNode.typeNode.get());
+        if (!llvmType) {
+            logError(paramNode.name->loc, "Could not determine LLVM type for parameter '" + 
+                     paramNode.name->name + "' in external declaration '" + node->name->name + "'.");
+            m_currentLLVMValue = nullptr; 
+            return;
+        }
+        paramTypes.push_back(llvmType);
+    }
+
+    llvm::Type* returnType = nullptr;
+    if (node->returnType) {
+        returnType = codegenType(node->returnType.get());
+        if (!returnType) {
+            logError(node->loc, "Could not determine LLVM return type for external declaration '" + 
+                     node->name->name + "'.");
+            m_currentLLVMValue = nullptr; 
+            return;
+        }
+    } else {
+        returnType = llvm::Type::getVoidTy(*context);
+    }
+    
+    llvm::FunctionType* funcType = llvm::FunctionType::get(returnType, paramTypes, false /*isVarArg*/);
+    
+    // Check for existing function
+    llvm::Function* func = module->getFunction(node->name->name);
+    if (func) {
+        if (func->getFunctionType() != funcType) {
+            logError(node->loc, "Redeclaration of external function '" + node->name->name + 
+                     "' with different signature.");
+            m_currentLLVMValue = nullptr; 
+            return;
+        }
+        // Function already declared with matching signature, nothing more to do
+    } else {
+        // Create the external function declaration
+        func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, node->name->name, module.get());
+        
+        // Set parameter names for better IR readability
+        unsigned idx = 0;
+        for (auto &arg : func->args()) {
+            if (idx < node->parameters.size()) {
+                arg.setName(node->parameters[idx].name->name);
+            }
+            idx++;
+        }
+    }
+    
+    m_currentLLVMValue = func;
+}
+
+}  // namespace vyn
 

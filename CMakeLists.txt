@@ -85,12 +85,10 @@ set(VRE_SOURCES
     src/vre/llvm/cgen_expr.cpp
     src/vre/llvm/cgen_decl.cpp
     src/vre/llvm/cgen_stmt.cpp
-    src/vre/llvm/cgen_unimplemented.cpp
     src/vre/llvm/cgen_helpers.cpp
     src/vre/llvm/cgen_string.cpp
     src/vre/llvm/cgen_println.cpp
     src/vre/llvm/cgen_function.cpp
-    src/vre/llvm/llvm_codegen_stubs.cpp
 )
 
 # VRE headers
