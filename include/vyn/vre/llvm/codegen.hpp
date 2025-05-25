@@ -188,6 +188,9 @@ public:
     void visit(vyn::ast::ContinueStatement* node) override;
     void visit(vyn::ast::UnsafeStatement* node) override;
     void visit(vyn::ast::EmptyStatement* node) override;
+    void visit(vyn::ast::ExternStatement* node) override;
+    void visit(vyn::ast::YieldStatement* node) override;
+    void visit(vyn::ast::YieldReturnStatement* node) override;
     void visit(vyn::ast::MatchStatement* node) override; // Added this line
     void visit(vyn::ast::TryStatement* node) override; // Added this line
 

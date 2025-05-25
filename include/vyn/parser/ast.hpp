@@ -1300,6 +1300,49 @@ public:
     std::string toString() const override;
     void accept(Visitor& visitor) override;
 };
+
+// ExternStatement definition
+class ExternStatement : public Statement {
+public:
+    std::unique_ptr<Identifier> name;          // The name of the external entity
+    TypeNodePtr returnType;                    // Optional return type
+    std::vector<FunctionParameter> parameters; // Parameters if this is a function
+
+    ExternStatement(
+        SourceLocation loc,
+        std::unique_ptr<Identifier> name,
+        TypeNodePtr returnType = nullptr,
+        std::vector<FunctionParameter> parameters = {}
+    );
+    ~ExternStatement() override = default;
+    NodeType getType() const override;
+    std::string toString() const override;
+    void accept(Visitor& visitor) override;
+};
+
+// YieldStatement definition
+class YieldStatement : public Statement {
+public:
+    ExprPtr expression; // Optional expression to yield
+
+    YieldStatement(SourceLocation loc, ExprPtr expression = nullptr);
+    ~YieldStatement() override = default;
+    NodeType getType() const override;
+    std::string toString() const override;
+    void accept(Visitor& visitor) override;
+};
+
+// YieldReturnStatement definition
+class YieldReturnStatement : public Statement {
+public:
+    ExprPtr expression; // Optional expression to return
+
+    YieldReturnStatement(SourceLocation loc, ExprPtr expression = nullptr);
+    ~YieldReturnStatement() override = default;
+    NodeType getType() const override;
+    std::string toString() const override;
+    void accept(Visitor& visitor) override;
+};
 } // namespace ast
 } // namespace vyn
 

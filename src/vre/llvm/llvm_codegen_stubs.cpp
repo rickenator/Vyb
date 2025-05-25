@@ -69,5 +69,17 @@ namespace vyn {
     void LLVMCodegen::visit(ast::TypeName* node) {
         // TODO: Implement codegen for TypeName
     }
+    void LLVMCodegen::visit(ast::ExternStatement* node) {
+        logError(node->loc, "ExternStatement codegen not implemented.");
+        m_currentLLVMValue = nullptr;
+    }
+    void LLVMCodegen::visit(ast::YieldStatement* node) {
+        logError(node->loc, "YieldStatement codegen not implemented.");
+        m_currentLLVMValue = nullptr;
+    }
+    void LLVMCodegen::visit(ast::YieldReturnStatement* node) {
+        logError(node->loc, "YieldReturnStatement codegen not implemented.");
+        m_currentLLVMValue = nullptr;
+    }
 
 } // namespace vyn

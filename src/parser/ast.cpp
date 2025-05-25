@@ -1599,5 +1599,98 @@ void AssertStatement::accept(Visitor& visitor) {
     visitor.visit(this);
 }
 
+// --- ExternStatement ---
+ExternStatement::ExternStatement(
+    SourceLocation loc,
+    std::unique_ptr<Identifier> name,
+    TypeNodePtr returnType,
+    std::vector<FunctionParameter> parameters
+) : Statement(loc), 
+    name(std::move(name)), 
+    returnType(std::move(returnType)), 
+    parameters(std::move(parameters)) {}
+
+NodeType ExternStatement::getType() const {
+    return NodeType::EXTERN_STATEMENT;
+}
+
+std::string ExternStatement::toString() const {
+    std::stringstream ss;
+    ss << "extern " << (name ? name->toString() : "");
+    
+    // Add parameters if this is a function declaration
+    if (!parameters.empty()) {
+        ss << "(";
+        for (size_t i = 0; i < parameters.size(); ++i) {
+            if (parameters[i].typeNode) {
+                ss << parameters[i].name->toString() << ": " << parameters[i].typeNode->toString();
+            } else {
+                ss << parameters[i].name->toString();
+            }
+            
+            if (i < parameters.size() - 1) {
+                ss << ", ";
+            }
+        }
+        ss << ")";
+    }
+    
+    // Add return type if specified
+    if (returnType) {
+        ss << " -> " << returnType->toString();
+    }
+    
+    ss << ";";
+    return ss.str();
+}
+
+void ExternStatement::accept(Visitor& visitor) {
+    visitor.visit(this);
+}
+
+// --- YieldStatement ---
+YieldStatement::YieldStatement(SourceLocation loc, ExprPtr expression)
+    : Statement(loc), expression(std::move(expression)) {}
+
+NodeType YieldStatement::getType() const {
+    return NodeType::YIELD_STATEMENT;
+}
+
+std::string YieldStatement::toString() const {
+    std::stringstream ss;
+    ss << "yield";
+    if (expression) {
+        ss << " " << expression->toString();
+    }
+    ss << ";";
+    return ss.str();
+}
+
+void YieldStatement::accept(Visitor& visitor) {
+    visitor.visit(this);
+}
+
+// --- YieldReturnStatement ---
+YieldReturnStatement::YieldReturnStatement(SourceLocation loc, ExprPtr expression)
+    : Statement(loc), expression(std::move(expression)) {}
+
+NodeType YieldReturnStatement::getType() const {
+    return NodeType::YIELD_RETURN_STATEMENT;
+}
+
+std::string YieldReturnStatement::toString() const {
+    std::stringstream ss;
+    ss << "yield return";
+    if (expression) {
+        ss << " " << expression->toString();
+    }
+    ss << ";";
+    return ss.str();
+}
+
+void YieldReturnStatement::accept(Visitor& visitor) {
+    visitor.visit(this);
+}
+
 } // namespace ast
 } // namespace vyn

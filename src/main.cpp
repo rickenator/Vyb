@@ -34,6 +34,7 @@ int main(int argc, char* argv[]) {
     bool test_mode_active = false;
     bool parse_only_mode = false;
     bool semantic_only_mode = false;
+    bool emit_llvm_ir = false;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -46,6 +47,9 @@ int main(int argc, char* argv[]) {
             continue;
         } else if (arg == "--semantic-only") {
             semantic_only_mode = true;
+            continue;
+        } else if (arg == "--emit-llvm") {
+            emit_llvm_ir = true;
             continue;
         } else if (arg == "--debug-verbose") {
             if (i + 1 < argc) {
@@ -120,8 +124,8 @@ int main(int argc, char* argv[]) {
         for (int i = 1; i < argc; i++) {
             std::string arg = argv[i];
             // Skip known option flags and their arguments
-            if (arg == "--debug-verbose" || arg == "--debug-parser-verbose") {
-                i++; // Skip the next argument which is the parameter for this flag
+            if (arg == "--debug-verbose" || arg == "--debug-parser-verbose" || arg == "--emit-llvm") {
+                i++; // Skip the next argument for debug flags, skip for emit-llvm
                 continue;
             }
             // Not an option (doesn't start with --), assume it's the file
@@ -170,8 +174,24 @@ int main(int argc, char* argv[]) {
                 std::cout << "Parse completed successfully" << std::endl;
                 return 0;
             }
-            
-            // Uncomment and update as needed for semantic analysis and code generation
+            // --- LLVM IR EMIT FEATURE ---
+            if (emit_llvm_ir) {
+                // Optionally, add semantic analysis here if needed
+                // vyn::SemanticAnalyzer sema;
+                // sema.analyze(ast.get());
+                // auto errors = sema.getErrors();
+                // if (!errors.empty()) { /* ... */ }
+                vyn::Driver driver;
+                vyn::LLVMCodegen codegen(driver);
+                // Output file: <input>.ll
+                std::string out_ll = filename;
+                size_t dot = out_ll.find_last_of('.');
+                if (dot != std::string::npos) out_ll = out_ll.substr(0, dot);
+                out_ll += ".ll";
+                codegen.generate(ast.get(), out_ll);
+                std::cout << "LLVM IR generated to " << out_ll << std::endl;
+                return 0;
+            }
             /*
             vyn::SemanticAnalyzer sema;
             sema.analyze(ast.get());
