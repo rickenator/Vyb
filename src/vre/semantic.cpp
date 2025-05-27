@@ -53,7 +53,8 @@ SemanticAnalyzer::SemanticAnalyzer(Driver& driver) : driver_(driver), currentSco
         "ptr", "borrow", "view", "unsafe", "pub", "template", "operator", "as", "in", "ref",
         "extern", "import", "smuggle", "module", "use", "mut", "scoped", "bundle",
         "true", "false", "null", "nil",
-        "addr", "at", "loc", "from"
+        "addr", "at", "loc", "from",
+        "lit", "notype", "bare", "deserial"  // Added serialization mode intrinsics
     };
 }
 
@@ -449,15 +450,60 @@ void SemanticAnalyzer::visit(ast::TypeAliasDeclaration* node) {
 void SemanticAnalyzer::visit(ast::UnaryExpression* node) {}
 void SemanticAnalyzer::visit(ast::BinaryExpression* node) {}
 void SemanticAnalyzer::visit(ast::CallExpression* node) {
-    // Visit callee
-    if (node->callee) node->callee->accept(*this);
+    // Check if this is an intrinsic function call before visiting the callee
+    bool isIntrinsic = false;
+    if (auto ident = dynamic_cast<ast::Identifier*>(node->callee.get())) {
+        const std::string& name = ident->name;
+        if (name == "lit" || name == "notype" || name == "bare" || name == "deserial" || 
+            name == "borrow" || name == "view") {
+            isIntrinsic = true;
+        }
+    }
+    
+    // Only visit callee if it's not an intrinsic (intrinsics don't need symbol resolution)
+    if (!isIntrinsic && node->callee) {
+        node->callee->accept(*this);
+    }
+    
     // Visit arguments
     for (auto& arg : node->arguments) {
         if (arg) arg->accept(*this);
     }
-    // Handle borrow()/view() intrinsics
+    
+    // Handle intrinsics
     if (auto ident = dynamic_cast<ast::Identifier*>(node->callee.get())) {
         const std::string& name = ident->name;
+        
+        // Handle serialization intrinsics (lit, notype, bare, deserial)
+        if (name == "lit" || name == "notype" || name == "bare" || name == "deserial") {
+            if (node->arguments.empty()) {
+                addError(name + "() requires at least one argument", node);
+                return;
+            }
+            
+            // Get the argument type
+            ast::Expression* argExpr = node->arguments[0].get();
+            if (argExpr) {
+                // For lit(), the result type is the same as the input type
+                // This ensures the serialization system knows how to handle it
+                if (argExpr->type) {
+                    node->type = std::shared_ptr<ast::TypeNode>(argExpr->type->clone().release());
+                    expressionTypes[node] = argExpr->type.get();
+                } else if (auto argType = expressionTypes[argExpr]) {
+                    node->type = std::shared_ptr<ast::TypeNode>(argType->clone().release());
+                    expressionTypes[node] = argType;
+                } else {
+                    // Fallback to String type if we can't determine the argument type
+                    auto stringId = std::make_unique<ast::Identifier>(node->loc, "String");
+                    ast::TypeNode* stringType = new ast::TypeName(node->loc, std::move(stringId), {});
+                    node->type = std::shared_ptr<ast::TypeNode>(stringType);
+                    expressionTypes[node] = stringType;
+                }
+            }
+            return;
+        }
+        
+        // Handle borrow()/view() intrinsics
         if (name == "borrow" || name == "view") {
             // Must be used within unsafe block
             if (!isInUnsafeBlock()) {
@@ -1546,7 +1592,7 @@ bool SemanticAnalyzer::isRawLocationType(ast::TypeNode* type) {
     if (auto* typeName = dynamic_cast<ast::TypeName*>(type)) {
         return typeName->identifier && typeName->identifier->name == "loc" && 
                !typeName->genericArgs.empty();
-    }
+       }
     return false;
 }
 

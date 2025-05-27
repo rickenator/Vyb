@@ -1,0 +1,10 @@
+// @test: Simple Auto-Serialization Test
+// @description: Tests auto-serialization with single return value
+// @category: json, serialization
+// @expect: pass
+// @expect-output: "hello"
+
+// Test simple auto-serialization with single return
+fn<String> main() -> {
+    return "hello";
+}

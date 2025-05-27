@@ -52,10 +52,8 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                     // If main<Int> - Use original return, use as exit code
                     builder->CreateRet(returnValue);
                 } else if (returnType->isPointerTy() && returnType == int8PtrType) {
-                    // If main<String> - Print the string
-                    llvm::Function* printlnFunc = getVynPrintlnFunction();
-                    builder->CreateCall(printlnFunc, {returnValue});
-                    builder->CreateRet(llvm::ConstantInt::get(int32Type, 0)); // Return 0 as exit code
+                    // If main<String> - Return the string (not print and return 0)
+                    builder->CreateRet(returnValue);
                 } else {
                     // If main returns a complex type - Auto-serialize as JSON
                     llvm::Function* serializeFunc = getSerializeToJsonFunction();

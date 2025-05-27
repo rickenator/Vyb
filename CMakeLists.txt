@@ -89,7 +89,6 @@ set(VRE_SOURCES
     src/vre/llvm/cgen_string.cpp
     src/vre/llvm/cgen_println.cpp
     src/vre/llvm/cgen_function.cpp
-    src/vre/llvm/cgen_semantics.cpp
 )
 
 # VRE headers

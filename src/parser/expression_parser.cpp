@@ -119,7 +119,9 @@ namespace vyn {
             std::string identifier_name = peek().lexeme;
             // List of known function names that should not be parsed as types
             if (identifier_name == "println" || identifier_name == "print" || identifier_name == "debug" || 
-                identifier_name == "error" || identifier_name == "warn" || identifier_name == "info") {
+                identifier_name == "error" || identifier_name == "warn" || identifier_name == "info" ||
+                identifier_name == "lit" || identifier_name == "notype" || identifier_name == "bare" || 
+                identifier_name == "deserial") {
                 skip_type_parsing = true;
             }
         }
@@ -738,26 +740,44 @@ regular_array_literal:
                     auto id = static_cast<ast::Identifier*>(expr.get());
                     std::string name = id->name;
 
-                    // Handle intrinsic-like calls: loc(var), addr(loc_var), at(loc_var)
-                    if (name == "loc" || name == "addr" || name == "at") {
+                    // Handle intrinsic-like calls: loc(var), addr(loc_var), at(loc_var), lit(expr), notype(expr), bare(expr), deserial(expr)
+                    if (name == "loc" || name == "addr" || name == "at" || name == "lit" || name == "notype" || name == "bare" || name == "deserial") {
                         std::vector<vyn::ast::ExprPtr> arguments;
                         if (!check(TokenType::RPAREN)) {
-                            arguments.push_back(parse_expression());
+                            do {
+                                arguments.push_back(parse_expression());
+                            } while (match(TokenType::COMMA));
                         }
                         expect(TokenType::RPAREN);
-                        if (arguments.size() != 1) {
+                        
+                        // Memory intrinsics require exactly 1 argument
+                        if (name == "loc" || name == "addr" || name == "at") {
+                            if (arguments.size() != 1) {
+                                vyn::token::Token intrinsic_token(vyn::TokenType::IDENTIFIER, name, id->loc);
+                                throw error(intrinsic_token,
+                                    std::string("Intrinsic '") + name + "' expects 1 argument, got " + std::to_string(arguments.size()));
+                            }
+                        }
+                        // Serialization intrinsics can have 1 or more arguments
+                        else if (arguments.empty()) {
                             vyn::token::Token intrinsic_token(vyn::TokenType::IDENTIFIER, name, id->loc);
                             throw error(intrinsic_token,
-                                std::string("Intrinsic '") + name + "' expects 1 argument, got " + std::to_string(arguments.size()));
+                                std::string("Intrinsic '") + name + "' expects at least 1 argument, got 0");
                         }
                         // Create specialized AST node for intrinsic
-                        auto& arg0 = arguments[0];
-                        if (name == "loc") {
-                            expr = std::make_unique<ast::LocationExpression>(op_loc, std::move(arg0));
-                        } else if (name == "addr") {
-                            expr = std::make_unique<ast::AddrOfExpression>(op_loc, std::move(arg0));
-                        } else { // at
-                            expr = std::make_unique<ast::PointerDerefExpression>(op_loc, std::move(arg0));
+                        if (name == "loc" || name == "addr" || name == "at") {
+                            // Memory intrinsics use special AST nodes and require exactly 1 argument
+                            auto& arg0 = arguments[0];
+                            if (name == "loc") {
+                                expr = std::make_unique<ast::LocationExpression>(op_loc, std::move(arg0));
+                            } else if (name == "addr") {
+                                expr = std::make_unique<ast::AddrOfExpression>(op_loc, std::move(arg0));
+                            } else { // at
+                                expr = std::make_unique<ast::PointerDerefExpression>(op_loc, std::move(arg0));
+                            }
+                        } else {
+                            // For serialization intrinsics (lit, notype, bare, deserial), use CallExpression with all arguments
+                            expr = std::make_unique<ast::CallExpression>(op_loc, std::move(expr), std::move(arguments));
                         }
                         continue;
                     }
