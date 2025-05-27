@@ -1,0 +1,16 @@
+// @test: Multi-value Function Return
+// @description: Tests the new multi-value function return syntax and auto-serialization to JSON
+// @category: syntax, function, json
+// @expect: pass
+// @expect-output: {"Int":42,"String":"Hello, World!"}
+
+// Function that returns multiple values (Int and String)
+fn<Int, String> get_values() -> {
+    return 42, "Hello, World!";
+}
+
+// Main function that calls get_values and returns the results,
+// which should be automatically serialized to JSON
+fn<Int, String> main() -> {
+    return get_values();
+}

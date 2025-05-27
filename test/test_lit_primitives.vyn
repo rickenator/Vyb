@@ -1,0 +1,10 @@
+// @test: lit() Intrinsic with Raw Primitives
+// @description: Tests the lit() intrinsic for emitting raw JSON primitives
+// @category: intrinsic, json, serialization
+// @expect: pass
+// @expect-output: [42, "hello", 3.14, true]
+
+// Test lit() intrinsic for raw primitives (replaces the old notype primitive usage)
+fn<Int, String, Float, Bool> main() -> {
+    return lit(42, "hello", 3.14, true);
+}

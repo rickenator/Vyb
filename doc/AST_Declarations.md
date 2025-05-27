@@ -43,7 +43,7 @@ public:
 } // namespace vyn::ast
 ```
 
-**Note:** As of v0.3.4, Vyn uses the `var<T>`/`const<T>` declaration syntax, so every `VariableDeclaration` node will have `type` set (no longer optional in practice).
+**Note:** As of v0.3.5, Vyn uses the `var<T>`/`const<T>` declaration syntax, so every `VariableDeclaration` node will have `type` set (no longer optional in practice).
 
 ## 2. Function Parameter (`vyn::ast::FunctionParameter`)
 

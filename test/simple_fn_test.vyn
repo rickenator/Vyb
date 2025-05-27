@@ -1,0 +1,5 @@
+// Simple function test to debug parser issue
+
+fn<String> main() -> {
+    return "hello";
+}

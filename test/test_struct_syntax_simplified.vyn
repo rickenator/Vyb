@@ -1,0 +1,57 @@
+// Test file to demonstrate multi-return values and JSON formatting
+
+struct Point {
+    Int x,     // Type name format
+    Int y
+}
+
+class Rectangle {
+    Int width,   // Type name format  
+    Int height
+}
+
+struct Person {
+    Int id,
+    String name,
+    Float salary
+}
+
+struct Company {
+    String name,
+    Int employeeCount,
+    Bool isPublic
+}
+
+// Function that returns multiple values of the same type
+fn<Point> createPoint() -> {
+    var<Point> p = Point { x=10, y=20 }
+    return p  // Return single value
+}
+
+// Function that returns a rectangle
+fn<Rectangle> createRectangle() -> {
+    var<Rectangle> r = Rectangle { width=100, height=50 }
+    return r
+}
+
+// Main function with standard return type
+fn<Int> main() -> {
+    // Get values from separate function calls
+    var<Point> p = createPoint()
+    var<Rectangle> r = createRectangle()
+    
+    // Modify the received values
+    p.x = p.x * 2      // Double the x coordinate
+    r.height = r.height + 25  // Add 25 to the height
+    
+    // Create entities
+    var<Person> person = Person { id=42, name="Alice", salary=75000.50 }
+    var<Company> company = Company { name="Acme Inc", employeeCount=250, isPublic=true }
+    
+    // Modify these values too
+    person.salary = person.salary * 1.1  // 10% raise
+    company.employeeCount = company.employeeCount + 50  // Company growth
+    
+    // Return standard Int value for main
+    return 0  // Success
+}

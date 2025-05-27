@@ -1,0 +1,10 @@
+// @test: lit() Intrinsic Multiple Test
+// @description: Tests the lit() intrinsic with multiple literals (array output)
+// @category: intrinsic, json, serialization
+// @expect: pass
+// @expect-output: [42, true, null]
+
+// Test lit() intrinsic with multiple literals (array output)
+fn<String> main() -> {
+    return lit("42", "true", "null");
+}

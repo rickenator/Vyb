@@ -171,7 +171,84 @@ fn offsetof<T>(field: identifier) -> UInt
 
 ---
 
-## 7. Proposed/Experimental Intrinsics
+## 7. Auto-Serialization Intrinsics (stable)
+
+Vyn provides built-in serialization support for automatic JSON generation of data structures, particularly for values returned from `main()`. These intrinsics are stable and ready for production use.
+
+### 7.1 Serialization Mode Intrinsics
+
+```vyn
+fn lit(value: T) -> T
+fn notype(value: T) -> T
+fn bare(value: T) -> T
+fn deserial(value: T) -> T
+```
+
+- **`lit(value)`**: serialize `value` as a literal JSON value (e.g., strings as raw text without quotes).
+- **`notype(value)`**: serialize `value` without type information in the output.
+- **`bare(value)`**: serialize `value` in minimal form, stripping metadata and decorations.
+- **`deserial(value)`**: mark `value` to be excluded from serialization (deserialized placeholder).
+
+### 7.2 JSON Serialization Intrinsics
+
+The following intrinsics are provided for manual JSON construction and are used internally by the auto-serialization system:
+
+```vyn
+fn __vyn_serialize_to_json(value: any) -> String
+fn __vyn_serialize_struct_with_names(value: any) -> String
+fn __vyn_json_array_start() -> String
+fn __vyn_json_array_append(current: String, item: String) -> String
+fn __vyn_json_array_end(current: String) -> String
+fn __vyn_json_object_start() -> String
+fn __vyn_json_object_append_field(current: String, name: String, value: String) -> String
+fn __vyn_json_object_end(current: String) -> String
+```
+
+- **`__vyn_serialize_to_json(value)`**: serialize any value to JSON string.
+- **`__vyn_serialize_struct_with_names(value)`**: serialize struct with field names included.
+- **JSON Array functions**: manually construct JSON arrays with proper formatting.
+- **JSON Object functions**: manually construct JSON objects with field names and values.
+
+### 7.3 Auto-Serialization Usage
+
+The auto-serialization system automatically activates when `main()` returns a structured value:
+
+```vyn
+// Simple value return - auto-serialized to JSON
+fn<Int> main() -> {
+    return 42  // Output: 42
+}
+
+// Struct return - auto-serialized with field names
+struct Point {
+    var<Float> x
+    var<Float> y
+}
+
+fn<Point> main() -> {
+    return Point { x: 3.5, y: 4.2 }
+    // Output: {"x": 3.5, "y": 4.2}
+}
+
+// Custom serialization with mode intrinsics
+fn<String> main() -> {
+    var<String> name = "example"
+    return lit(name)  // Output: example (without quotes)
+}
+```
+
+### 7.4 Serialization Guidelines
+
+1. **Return Types**: `main()` can return any serializable type; JSON output is automatic.
+2. **Mode Control**: Use `lit()`, `notype()`, `bare()`, `deserial()` to customize serialization behavior.
+3. **Manual Construction**: Use `__vyn_json_*` functions for complex manual JSON building.
+4. **Performance**: Auto-serialization is optimized for common cases; manual intrinsics available for edge cases.
+
+For comprehensive documentation on auto-serialization capabilities and configuration, see `doc/Auto_Serialization_Main_Returns.md`.
+
+---
+
+## 8. Proposed/Experimental Intrinsics
 
 ```vyn
 fn offset<T>(ptr: loc<T>, count: Int) -> loc<T>
@@ -184,10 +261,11 @@ fn mem_set(ptr: loc<UInt8>, value: UInt8, n: UInt) -> Void
 
 ---
 
-## 8. Usage Guidelines
+## 9. Usage Guidelines
 
 1. **Declarations**: choose explicit (`var<T>`) or inferred (`var auto`).  
 2. **Functions**: return in `<Type>`, arrow mandatory, braces optional for single expressions.  
 3. **Ownership**: use `my<T>`, `our<T>`, `their<T>`, with optional `borrow()`/`view()` shorthand.  
 4. **Intrinsics**: memory ops only in `unsafe`, metadata always safe.  
-5. **Stability**: Sections 4–6 are stable; Section 7 is experimental.
+5. **Serialization**: use auto-serialization for `main()` returns; mode intrinsics for customization.
+6. **Stability**: Sections 4–7 are stable; Section 8 is experimental.

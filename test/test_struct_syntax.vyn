@@ -1,0 +1,58 @@
+// Test file to demonstrate multi-return values and JSON formatting
+
+struct Point {
+    Int x,     // Type name format
+    Int y
+}
+
+class Rectangle {
+    Int width,   // Type name format  
+    Int height
+}
+
+struct Person {
+    Int id,
+    String name,
+    Float salary
+}
+
+struct Company {
+    String name,
+    Int employeeCount,
+    Bool isPublic
+}
+
+// Function that returns multiple values (a Point and a Rectangle)
+fn<Point, Rectangle> createShapes() -> {
+    var<Point> p = Point { x=10, y=20 }
+    var<Rectangle> r = Rectangle { width=100, height=50 }
+    return p, r  // Return multiple values using comma syntax
+}
+
+// Function that returns multiple values (a Person and a Company)
+fn<Person, Company> createEntities() -> {
+    var<Person> person = Person { id=42, name="Alice", salary=75000.50 }
+    var<Company> company = Company { name="Acme Inc", employeeCount=250, isPublic=true }
+    return person, company
+}
+
+// Main function with multiple return values - Vyn runtime will automatically
+// serialize these values to JSON output
+fn<Person, Company> main() -> {
+    // Receive multiple return values from createShapes()
+    var<Point> p, var<Rectangle> r = createShapes()
+    
+    // Modify the received values
+    p.x = p.x * 2      // Double the x coordinate
+    r.height = r.height + 25  // Add 25 to the height
+    
+    // Get another set of multi-return values
+    var<Person> person, var<Company> company = createEntities()
+    
+    // Modify these values too
+    person.salary = person.salary * 1.1  // 10% raise
+    company.employeeCount = company.employeeCount + 50  // Company growth
+    
+    // Return multiple values - the Vyn runtime automatically serializes these to JSON
+    return person, company  // Will produce JSON with Person and Company objects
+}

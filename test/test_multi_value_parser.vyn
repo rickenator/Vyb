@@ -1,0 +1,33 @@
+// @test: Multi-value Function Return Parser Test
+// @description: Tests the parser's ability to handle multi-value function return syntax
+// @category: syntax, function, parser
+// @expect: pass
+// @parse-only: true
+
+// Function declaration with multi-value return type (Int and String)
+fn<Int, String> get_values() -> {
+    return 42, "Hello";
+}
+
+// Function declaration with multi-value return type (Int, Float, and Bool)
+fn<Int, Float, Bool> get_multiple_values() -> {
+    return 42, 3.14, true;
+}
+
+// Function call that captures multi-value return
+fn<Void> test_multi_return() -> {
+    var<Int> x;
+    var<String> y;
+    x, y = get_values();
+    
+    var<Int> a;
+    var<Float> b;
+    var<Bool> c;
+    a, b, c = get_multiple_values();
+}
+
+// Main function (not actually executed because of parse-only)
+fn<Int> main() -> {
+    test_multi_return();
+    return 0;
+}

@@ -6,7 +6,7 @@
 
 ## 1. Introduction
 
-Welcome to the Vyn Programming Guide. This guide walks you through writing, building, and extending Vyn programs, from your first “Hello, Vyn!” to deep dives into the Vyn language internals and runtime. Version 0.3.4 delivers a robust parser with support for advanced constructs like asynchronous programming, generic templates, operator overloading, and class declarations within templates, validated by a comprehensive test suite.
+Welcome to the Vyn Programming Guide. This guide walks you through writing, building, and extending Vyn programs, from your first “Hello, Vyn!” to deep dives into the Vyn language internals and runtime. Version 0.3.5 delivers a robust parser with support for advanced constructs like asynchronous programming, generic templates, operator overloading, class declarations within templates, improved error handling for common syntax mistakes, and comprehensive auto-serialization capabilities, validated by a comprehensive test suite.
 
 ### 1.1 Purpose & Audience
 
@@ -86,7 +86,7 @@ This section guides you through installing Vyn, writing your first programs, and
 
 ### 2.1 Installation & Toolchain Overview
 
-Begin by cloning the Vyn repository and building the parser for version 0.3.4:
+Begin by cloning the Vyn repository and building the parser for version 0.3.5:
 
 ```bash
 git clone https://github.com/rickenator/Vyn.git

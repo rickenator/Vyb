@@ -1,0 +1,10 @@
+// @test: notype() Intrinsic Error Test
+// @description: Tests that notype() intrinsic fails when used with primitives
+// @category: intrinsic, json, serialization, error
+// @expect: fail
+// @expect-error: notype() requires struct input, but got primitive Int
+
+// Test notype() intrinsic error handling - should fail with primitives
+fn<String, Int, String> main() -> {
+    return "hello", notype(42), "world";
+}

@@ -1,0 +1,9 @@
+// Test file for type alias functionality
+type MyInt = Int;
+type MyString = String;
+
+fn<MyInt> main() -> {
+    var<MyInt> x = 47;
+    var<MyString> y = "Hello, world!"
+    return x, y;
+}

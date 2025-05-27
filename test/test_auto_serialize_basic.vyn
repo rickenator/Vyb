@@ -1,0 +1,10 @@
+// @test: Basic Auto-Serialization Test
+// @description: Tests basic auto-serialization without intrinsics
+// @category: json, serialization
+// @expect: pass
+// @expect-output: {"String":"hello","Int":42,"Bool":true}
+
+// Test basic auto-serialization without intrinsics
+fn<String, Int, Bool> main() -> {
+    return "hello", 42, true;
+}

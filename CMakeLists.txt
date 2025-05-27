@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(VynParser VERSION 0.3.4)
+project(VynParser VERSION 0.3.5)
 
 set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_CXX_STANDARD 17)
@@ -89,6 +89,7 @@ set(VRE_SOURCES
     src/vre/llvm/cgen_string.cpp
     src/vre/llvm/cgen_println.cpp
     src/vre/llvm/cgen_function.cpp
+    src/vre/llvm/cgen_semantics.cpp
 )
 
 # VRE headers
