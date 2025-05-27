@@ -76,25 +76,43 @@ namespace vyn::ast {
 
 class FunctionDeclaration : public Declaration {
 public:
-    IdentifierPtr name;
-    std::vector<FunctionParameter> parameters; // Note: stores FunctionParameter objects directly
-    std::optional<TypeNodePtr> returnType;
-    std::optional<BlockStatementPtr> body; // Optional for external/forward declarations
-    std::vector<GenericParameterPtr> genericParameters;
-    bool isExtern; // e.g., extern "C" void printf(...);
-    bool isMember; // True if this is a method within a struct/class/impl
+    std::unique_ptr<Identifier> id;
+    std::vector<FunctionParameter> params;
+    std::unique_ptr<BlockStatement> body;
+    bool isAsync;
+    TypeNodePtr returnTypeNode; // Optional return type annotation
 
-    FunctionDeclaration(SourceLocation loc, IdentifierPtr name,
+    FunctionDeclaration(SourceLocation loc, std::unique_ptr<Identifier> id,
                         std::vector<FunctionParameter> params,
-                        std::optional<TypeNodePtr> returnType,
-                        std::optional<BlockStatementPtr> body,
-                        std::vector<GenericParameterPtr> genericParams,
-                        bool isExtern, bool isMember);
+                        std::unique_ptr<BlockStatement> body,
+                        bool isAsync = false,
+                        TypeNodePtr returnTypeNode = nullptr);
     // ... accept, getType, toString methods ...
 };
 
 } // namespace vyn::ast
 ```
+
+### Multi-Value Returns & Auto-Serialization
+
+Function declarations in Vyn support multi-value return types using the generic syntax `fn<T1, T2, ...>`. When the function name is `main`, the Vyn runtime automatically serializes returned values to JSON format:
+
+```vyn
+// Single return type
+fn<Int> add(var<Int> a, var<Int> b) -> a + b
+
+// Multi-value return type
+fn<Int, String> get_values() -> {
+    return 42, "Hello, World!"
+}
+
+// Auto-serialization in main()
+fn<Int, String> main() -> {
+    return get_values()  // Output: {"Int":42,"String":"Hello, World!"}
+}
+```
+
+For comprehensive documentation on multi-value returns and auto-serialization behavior, see [`Auto_Serialization_Main_Returns.md`](./Auto_Serialization_Main_Returns.md).
 
 ## 4. Type Alias Declaration (`vyn::ast::TypeAliasDeclaration`)
 

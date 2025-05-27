@@ -142,11 +142,11 @@ public:
 } // namespace vyn::ast
 ```
 
-### 2.5. `FunctionTypeNode`
+### 2.5. `FunctionType`
 
-Represents a function type (e.g., `fn(i32, bool) -> string`).
+Represents a function type (e.g., `fn<String>(Int, Bool) ->`).
 
--   **C++ Class**: `vyn::ast::FunctionTypeNode`
+-   **C++ Class**: `vyn::ast::FunctionType`
 -   **`NodeType`**: `FUNCTION_TYPE_NODE`
 -   **Fields**:
     -   `parameterTypes` (`std::vector<TypeNodePtr>`): A vector of types for the function parameters.
@@ -156,17 +156,23 @@ Represents a function type (e.g., `fn(i32, bool) -> string`).
 // From include/vyn/parser/ast.hpp
 namespace vyn::ast {
 
-class FunctionTypeNode : public TypeNode {
+class FunctionType : public TypeNode {
 public:
-    std::vector<TypeNodePtr> parameterTypes;
-    TypeNodePtr returnType; // Could be a special 'void' type node or similar for no return
+    std::vector<TypeNodePtr> parameterTypes; // The types of the function parameters
+    TypeNodePtr returnType;                 // The return type of the function
 
-    FunctionTypeNode(SourceLocation loc, std::vector<TypeNodePtr> parameterTypes, TypeNodePtr returnType);
-    // ... accept, getType, toString, ToSignature methods ...
+    FunctionType(SourceLocation loc, std::vector<TypeNodePtr> params, TypeNodePtr returnType);
+    // ... accept, getType, toString methods ...
 };
 
 } // namespace vyn::ast
 ```
+
+### Multi-Value Return Support
+
+Function types can represent multi-value returns through the `fn<T1, T2, ...>` syntax. In the context of auto-serialization, the return type can specify multiple types that will be automatically serialized to JSON when returned from `main()` functions.
+
+For details on multi-value function syntax and auto-serialization, see [`Auto_Serialization_Main_Returns.md`](./Auto_Serialization_Main_Returns.md).
 
 ### 2.6. `TupleTypeNode`
 
