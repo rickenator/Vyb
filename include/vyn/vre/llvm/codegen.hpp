@@ -118,6 +118,8 @@ private:
     // Type system helpers
     std::string getTypeName(llvm::Type* type);
     llvm::Type* getPointeeTypeInfo(llvm::Value* ptr);
+    std::string extractOriginalTypeNameFromSemantics(vyn::ast::Expression* expr);
+    std::string extractOriginalTypeNameFromAST(vyn::ast::Expression* expr);
 
     llvm::Value* tryCast(llvm::Value* value, llvm::Type* targetType, const vyn::SourceLocation& loc);
     
