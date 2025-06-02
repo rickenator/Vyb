@@ -1,0 +1,13 @@
+// Test file using both angle bracket and colon syntax together
+
+// Struct with both syntaxes
+struct MixedPoint {
+    x<Int>,   // Angle bracket syntax
+    y: Int    // Colon syntax
+}
+
+// Simple test to create and return a point
+fn<MixedPoint> main() -> {
+    var<MixedPoint> p = MixedPoint { x=10, y=20 };
+    return p;
+}

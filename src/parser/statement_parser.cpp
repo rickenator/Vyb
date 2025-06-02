@@ -288,8 +288,25 @@ std::unique_ptr<vyn::ast::ReturnStatement> StatementParser::parse_return() {
     SourceLocation end_loc = return_loc;
 
     if (this->peek().type != vyn::TokenType::SEMICOLON && this->peek().type != vyn::TokenType::NEWLINE && this->peek().type != vyn::TokenType::RBRACE && this->peek().type != vyn::TokenType::DEDENT) {
+        // Parse the first expression
         value = this->expr_parser_.parse_expression();
         end_loc = value->loc; // Use loc member
+        
+        // Check if there are multiple comma-separated expressions
+        if (this->peek().type == vyn::TokenType::COMMA) {
+            std::vector<vyn::ast::ExprPtr> expressions;
+            expressions.push_back(std::move(value)); // Add the first expression
+            
+            // Parse remaining expressions
+            while (this->peek().type == vyn::TokenType::COMMA) {
+                this->consume(); // Consume comma
+                expressions.push_back(this->expr_parser_.parse_expression());
+                end_loc = expressions.back()->loc;
+            }
+            
+            // Create a SequenceExpression to hold all the expressions
+            value = std::make_unique<vyn::ast::SequenceExpression>(return_loc, std::move(expressions));
+        }
     }
 
     if (this->peek().type == vyn::TokenType::SEMICOLON) {

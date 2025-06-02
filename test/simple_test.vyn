@@ -1,0 +1,1 @@
+fn<Int> test() -> { return 42; } fn<Int> main() -> { return test(); }

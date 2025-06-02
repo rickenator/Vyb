@@ -1,0 +1,9 @@
+// Test file with just a struct declaration using angle brackets
+struct SimplePoint {
+    x<Int>,
+    y<Int>
+}
+
+fn<SimplePoint> main() -> {
+    return SimplePoint { x=10, y=20 };
+}

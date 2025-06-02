@@ -1,0 +1,4 @@
+// Simple plain text example
+fn<String> main() -> {
+    return "raw string";
+}

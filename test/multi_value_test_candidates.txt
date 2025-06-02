@@ -1,0 +1,36 @@
+=== MULTI-VALUE RETURN TEST CANDIDATES ===
+
+PRIORITY 1 - Core Multi-Value Tests:
+./test_parser_multi_return.vyn           (✅ WORKING - our main test case)
+./test/test_multi_value_return.vyn        (Test case with Int,String return)
+./test/test_multi_value_parser.vyn        (Parser-only test for syntax)
+./test/test_auto_serialize_simple.vyn     (Simple auto-serialization test)
+
+PRIORITY 2 - Related Return Syntax Tests:
+./test/direct_return.vyn                  (Direct return patterns)
+./test_function_multiple_returns.vyn      (Multiple return patterns)
+./test_multiple_returns_main.vyn          (Main function returns)
+
+PRIORITY 3 - Struct and Type Tests:
+./test/test_struct_syntax.vyn             (Struct syntax compatibility)
+./test/test_type_alias_simple.vyn         (Type alias with returns)
+./test/test_notype_struct.vyn             (No-type struct returns)
+
+PRIORITY 4 - Serialization Tests:
+./test/test_auto_serialize_basic.vyn      (Basic auto-serialization)
+./test/test_lit_intrinsic_simple.vyn      (Literal intrinsics)
+./test/test_lit_intrinsic_multiple.vyn    (Multiple literal intrinsics)
+
+PRIORITY 5 - Integration Tests:
+./test/test_semantic_integration.vyn      (Semantic analysis integration)
+./examples/main.vyn                       (Example main function)
+./examples/relaxed_syntax.vyn             (Relaxed syntax examples)
+
+TOTAL TEST CANDIDATES: 14
+
+=== RECOMMENDED TEST SEQUENCE ===
+1. ./test/test_multi_value_return.vyn     (Basic Int,String case)
+2. ./test/test_multi_value_parser.vyn     (Multi-type parser test)
+3. ./test/test_auto_serialize_simple.vyn  (Auto-serialization)
+4. ./test/direct_return.vyn               (Direct return patterns)
+5. ./test_function_multiple_returns.vyn   (Function return variations)

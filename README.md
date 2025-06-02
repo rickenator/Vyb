@@ -108,7 +108,7 @@ The core components include:
 Create a file `hello.vyn`:
 
 ```vyn
-fn main() {
+fn<Void> main() -> {
   println("Hello, Vyn!")  # Print to stdout
 }
 ```
@@ -445,8 +445,20 @@ fn<Int> outer(var<Int> x) -> {
       return a + b
   }
   
-  fn greet(var<String> name) -> {           # Implicitly returns Void
+  fn<Void> greet(var<String> name) -> {    # Explicitly returns Void
       println("Hello, " + name)
+  }
+  ```
+
+* **Multi-Value Returns**: Functions can return multiple values using comma-separated types in the angle brackets. When the main function returns multiple values, they are automatically serialized to JSON:
+  ```vyn
+  fn<Int, String> get_values() -> {
+      return 42, "Hello, World!"
+  }
+  
+  # Auto-serialization in main()
+  fn<Int, String> main() -> {
+      return get_values()  # Output: {"Int":42,"String":"Hello, World!"}
   }
   ```
 

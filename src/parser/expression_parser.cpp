@@ -113,12 +113,20 @@ namespace vyn {
         // This is a lookahead and backtrack mechanism.
         size_t initial_pos = pos_;
         
-        // Before trying type parsing, check if this is a known function name that should be parsed as a function call
+        // Before trying type parsing, check if this is likely a function call pattern
         bool skip_type_parsing = false;
         if (peek().type == TokenType::IDENTIFIER) {
             std::string identifier_name = peek().lexeme;
-            // List of known function names that should not be parsed as types
-            if (identifier_name == "println" || identifier_name == "print" || identifier_name == "debug" || 
+            
+            // Check if this looks like a function call pattern: identifier followed by ()
+            // This is a lookahead to see if it's identifier() with no arguments
+            if (pos_ + 1 < tokens_.size() && tokens_[pos_ + 1].type == TokenType::LPAREN &&
+                pos_ + 2 < tokens_.size() && tokens_[pos_ + 2].type == TokenType::RPAREN) {
+                // This looks like a parameterless function call, skip type parsing
+                skip_type_parsing = true;
+            }
+            // Also skip for known intrinsic functions
+            else if (identifier_name == "println" || identifier_name == "print" || identifier_name == "debug" || 
                 identifier_name == "error" || identifier_name == "warn" || identifier_name == "info" ||
                 identifier_name == "lit" || identifier_name == "notype" || identifier_name == "bare" || 
                 identifier_name == "deserial") {

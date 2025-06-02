@@ -127,8 +127,28 @@ void LLVMCodegen::visit(vyn::ast::ObjectLiteral* node) {
         builder->CreateStore(fieldValue, fieldPtr);
     }
     
-    // Set the current value to the allocated struct
-    m_currentLLVMValue = allocaInst;
+    // In Vyn, struct initialization can be used both for creating temporary values
+    // and for direct assignment to variables. We need to decide if we should return
+    // the pointer or load the actual struct value.
+    
+    // Store the struct type information in userTypeMap if not already present
+    if (!structName.empty() && structName != "anon") {
+        auto it = userTypeMap.find(structName);
+        if (it == userTypeMap.end() && llvm::isa<llvm::StructType>(structTy)) {
+            UserTypeInfo typeInfo;
+            typeInfo.llvmType = llvm::cast<llvm::StructType>(structTy);
+            typeInfo.isStruct = true;
+            userTypeMap[structName] = typeInfo;
+        }
+    }
+    
+    // For struct initialization in variable assignment or return statements,
+    // we should load the struct value rather than return the pointer.
+    // This ensures type compatibility with value semantics.
+    llvm::Value* structValue = builder->CreateLoad(structTy, allocaInst, structName + "_val");
+    
+    // Return the loaded struct value
+    m_currentLLVMValue = structValue;
 }
 
 void LLVMCodegen::visit(vyn::ast::ArrayLiteral* node) {
@@ -632,8 +652,6 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
     
     // Special handling for println with auto-serialization
     if (identCallee && identCallee->name == "println" && node->arguments.size() == 1) {
-        std::cout << "DEBUG: Handling println call with auto-serialization" << std::endl;
-        
         // Get the argument expression
         node->arguments[0]->accept(*this);
         llvm::Value* arg = m_currentLLVMValue;
@@ -641,8 +659,6 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
             logError(node->arguments[0]->loc, "Argument to println() evaluated to null");
             return;
         }
-        
-        std::cout << "DEBUG: println argument evaluated to: " << (void*)arg << ", type: " << getTypeName(arg->getType()) << std::endl;
         
         llvm::Value* serializedValue = nullptr;
         
@@ -692,6 +708,46 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         
         m_currentLLVMValue = nullptr; // println returns void
         return;
+    }
+
+    // Handle serialization mode intrinsics: lit(), notype(), bare(), deserial()
+    if (identCallee && node->arguments.size() == 1) {
+        if (identCallee->name == "lit") {
+            // lit() intrinsic - convert string literal to raw JSON
+            std::cout << "DEBUG: Processing lit() intrinsic" << std::endl;
+            node->arguments[0]->accept(*this);
+            llvm::Value* arg = m_currentLLVMValue;
+            if (!arg) {
+                logError(node->arguments[0]->loc, "Argument to lit() evaluated to null");
+                return;
+            }
+            
+            // Call the lit conversion function
+            std::cout << "DEBUG: Getting lit conversion function..." << std::endl;
+            llvm::Function* litFunc = getLitConversionFunction();
+            if (!litFunc) {
+                std::cout << "DEBUG: Failed to get lit conversion function!" << std::endl;
+                logError(node->loc, "Failed to get lit conversion function");
+                return;
+            }
+            std::cout << "DEBUG: Got lit conversion function: " << litFunc->getName().str() << std::endl;
+            std::vector<llvm::Value*> args = {arg};
+            m_currentLLVMValue = builder->CreateCall(litFunc, args, "lit_result");
+            std::cout << "DEBUG: Created call to lit conversion function" << std::endl;
+            return;
+        }
+        else if (identCallee->name == "notype" || identCallee->name == "bare") {
+            // notype() and bare() intrinsics - forward the inner value
+            node->arguments[0]->accept(*this);
+            // m_currentLLVMValue is already set to the inner expression's result
+            return;
+        }
+        else if (identCallee->name == "deserial") {
+            // deserial() intrinsic - forward the inner value for now
+            node->arguments[0]->accept(*this);
+            // m_currentLLVMValue is already set to the inner expression's result
+            return;
+        }
     }
 
     // Lookup the function in the module - standard function call handling
@@ -1126,6 +1182,16 @@ void LLVMCodegen::visit(ast::Identifier* node) {
     // Look up the identifier in the named values map
     auto it = namedValues.find(node->name);
     if (it != namedValues.end()) {
+        // Check if this is an AllocaInst (variable) and we're not on the LHS of assignment
+        if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(it->second)) {
+            if (!m_isLHSOfAssignment) {
+                // Load the value from the alloca for variable access
+                llvm::Type* loadType = alloca->getAllocatedType();
+                m_currentLLVMValue = builder->CreateLoad(loadType, alloca, node->name);
+                return;
+            }
+        }
+        // For global variables, functions, or LHS of assignment, return the value directly
         m_currentLLVMValue = it->second;
         return;
     }
@@ -1220,15 +1286,59 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
             m_currentLLVMValue = nullptr;
             return;
         }
+
+        // Get the pointee type - this should be the struct type
+        llvm::Type* pointeeType = nullptr;
         
-        // For now, implement a basic field access
-        // In a full implementation, we'd need struct type information
-        logWarning(node->loc, "Property member access not fully implemented. Requires struct type information.");
+        // First try to get the type from alloca instruction if available
+        if (llvm::AllocaInst* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(objectValue)) {
+            pointeeType = allocaInst->getAllocatedType();
+            std::cerr << "DEBUG: Got type from alloca: " << getTypeName(pointeeType) << std::endl;
+        } else {
+            // For opaque pointers in LLVM 15+, we can't easily get the pointee type
+            // We need to rely on context or type hints
+            std::cerr << "DEBUG: Object is not an alloca, cannot determine pointee type safely" << std::endl;
+            logError(node->loc, "Cannot determine struct type for member access");
+            m_currentLLVMValue = nullptr;
+            return;
+        }
+
+        if (!pointeeType || !pointeeType->isStructTy()) {
+            logError(node->loc, "Cannot access field of non-struct type");
+            m_currentLLVMValue = nullptr;
+            return;
+        }
+
+        llvm::StructType* structType = llvm::cast<llvm::StructType>(pointeeType);
+        std::string fieldName = propIdent->name;
+        int fieldIndex = getStructFieldIndex(structType, fieldName);
+
+        if (fieldIndex < 0) {
+            logError(node->loc, "Field '" + fieldName + "' not found in struct");
+            m_currentLLVMValue = nullptr;
+            return;
+        }
+
+        // Debug output
+        std::cerr << "DEBUG: MemberExpression - Field '" << fieldName << "' at index " << fieldIndex 
+                  << " in struct " << structType->getName().str() << std::endl;
+
+        // Create a GEP to get a pointer to the field
+        llvm::Value* fieldPtr = builder->CreateStructGEP(structType, objectValue, fieldIndex, fieldName + "_ptr");
         
-        // Return a placeholder null value
-        m_currentLLVMValue = llvm::ConstantPointerNull::get(
-            llvm::PointerType::get(*context, 0)
-        );
+        // Debug the field type
+        llvm::Type* fieldType = structType->getElementType(fieldIndex);
+        std::cerr << "DEBUG: Field type: " << getTypeName(fieldType) << std::endl;
+        
+        // For primitive types like Int, automatically load the value
+        if (fieldType->isIntegerTy()) {
+            m_currentLLVMValue = builder->CreateLoad(fieldType, fieldPtr, fieldName + "_val");
+            std::cerr << "DEBUG: Loaded integer field value" << std::endl;
+        } else {
+            // Store the field pointer for now - any access that needs the value can load it
+            m_currentLLVMValue = fieldPtr;
+            std::cerr << "DEBUG: Returning field pointer" << std::endl;
+        }
     }
 }
 
@@ -1901,17 +2011,45 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
 }
 
 void LLVMCodegen::visit(ast::SequenceExpression* node) {
-    // Sequence expression evaluates all expressions in order and returns the last value
-    llvm::Value* lastValue = nullptr;
+    // For multi-value returns, create a struct containing all values
+    std::vector<llvm::Value*> values;
+    std::vector<llvm::Type*> types;
     
+    // Evaluate all expressions and collect their values and types
     for (const auto& expr : node->expressions) {
         expr->accept(*this);
         if (m_currentLLVMValue) {
-            lastValue = m_currentLLVMValue;
+            values.push_back(m_currentLLVMValue);
+            types.push_back(m_currentLLVMValue->getType());
+        } else {
+            logError(expr->loc, "Expression in sequence evaluated to null");
+            m_currentLLVMValue = nullptr;
+            return;
         }
     }
     
-    m_currentLLVMValue = lastValue;
+    if (values.empty()) {
+        logError(node->loc, "Empty sequence expression");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // If only one value, return it directly (single-value return)
+    if (values.size() == 1) {
+        m_currentLLVMValue = values[0];
+        return;
+    }
+    
+    // Create a struct type for multiple values
+    llvm::StructType* tupleType = llvm::StructType::get(*context, types);
+    
+    // Create an undef struct and insert each value
+    llvm::Value* structValue = llvm::UndefValue::get(tupleType);
+    for (size_t i = 0; i < values.size(); ++i) {
+        structValue = builder->CreateInsertValue(structValue, values[i], i, "tuple_insert");
+    }
+    
+    m_currentLLVMValue = structValue;
 }
 
 // Add missing visitor implementations for ThisExpression, SuperExpression, and AwaitExpression

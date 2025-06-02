@@ -1,0 +1,26 @@
+// @test: Employee Struct Example
+// @description: Simple example showing Employee struct initialization and return from main
+// @category: struct, basic, json
+// @expect: pass
+
+struct Employee {
+    String name,
+    Int id,
+    Float salary,
+    Bool isActive
+}
+
+fn<Employee> createEmployee() -> {
+    var<Employee> emp = Employee {
+        name = "John Doe",
+        id = 1001,
+        salary = 75000.0,
+        isActive = true
+    };
+    return emp;
+}
+
+fn<Employee> main() -> {
+    var<Employee> employee = createEmployee();
+    return employee;
+}

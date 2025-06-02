@@ -1,0 +1,14 @@
+// @test: Simple Employee Example (Basic Types Only)
+// @description: Simple example showing basic types that work with current JSON serialization
+// @category: basic, json
+// @expect: pass
+
+// Simple function that returns basic employee data as multiple values
+fn<String, Int, Float, Bool> getEmployeeData() -> {
+    return "John Doe", 1001, 75000.0, true;
+}
+
+// Main function returns employee data directly
+fn<String, Int, Float, Bool> main() -> {
+    return getEmployeeData();
+}

@@ -1,0 +1,10 @@
+// Simple test to show AST output format
+struct Point {
+    x: Int,
+    y: Int
+}
+
+// This function doesn't need to compile, just parse to AST
+fn<Point> test() -> {
+    Point { x=10, y=20 }
+}

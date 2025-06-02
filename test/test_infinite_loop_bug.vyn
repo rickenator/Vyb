@@ -1,0 +1,7 @@
+// Test case for infinite loop bug with incorrect function syntax
+// This should cause an infinite loop in the current parser
+// because it uses C-style function syntax instead of Vyn syntax
+
+fn main() -> Int {
+    return 42;
+}

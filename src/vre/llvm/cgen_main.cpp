@@ -99,6 +99,10 @@ void LLVMCodegen::generate(vyn::ast::Module* astModule, const std::string& outpu
     }
 
     astModule->accept(*this);
+    
+    // Ensure all core intrinsic functions are declared in the module
+    // This prevents JIT runtime errors when functions are not found
+    ensureCoreIntrinsicFunctions();
 
     if (llvm::verifyModule(*module, &llvm::errs())) {
         logError(SourceLocation(), "LLVM module verification failed.");

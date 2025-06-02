@@ -1,0 +1,17 @@
+// Test parsing fix for snake_case function calls
+
+fn<Int> get_number() -> {
+    return 42;
+}
+
+fn<Int> calculate_result() -> {
+    return 100;
+}
+
+fn<Int> process_data() -> {
+    return 200;
+}
+
+fn<Int> main() -> {
+    return get_number();
+}

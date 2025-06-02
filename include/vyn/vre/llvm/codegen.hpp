@@ -118,6 +118,11 @@ private:
     // Type system helpers
     std::string getTypeName(llvm::Type* type);
     llvm::Type* getPointeeTypeInfo(llvm::Value* ptr);
+    llvm::Function* getLitConversionFunction();
+    bool isLitIntrinsicCall(vyn::ast::Expression* expr);
+    bool functionBodyReturnsLitIntrinsic(vyn::ast::BlockStatement* body);
+    std::string extractOriginalTypeNameFromSemantics(vyn::ast::Expression* expr);
+    std::string extractOriginalTypeNameFromAST(vyn::ast::Expression* expr);
 
     llvm::Value* tryCast(llvm::Value* value, llvm::Type* targetType, const vyn::SourceLocation& loc);
     
@@ -129,11 +134,13 @@ private:
     llvm::Function* getVynPrintlnFunction();
     llvm::Function* getSerializeToJsonFunction();
 
+    // Ensure all core intrinsic functions are declared
+    void ensureCoreIntrinsicFunctions();
+
 
     // RTTI (Run-Time Type Information)
     llvm::StructType* getOrCreateRTTIStructType();
     llvm::Value* generateRTTIObject(const std::string& typeName, int typeId); // typeId for distinguishing types
-
 
     // Loop handling
     void pushLoop(llvm::BasicBlock* header, llvm::BasicBlock* body, llvm::BasicBlock* update, llvm::BasicBlock* exit);

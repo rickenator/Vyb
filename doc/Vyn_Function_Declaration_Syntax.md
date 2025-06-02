@@ -8,8 +8,9 @@ This document defines the updated function declaration syntax in Vyn, aligning w
 ## 1. Grammar (EBNF)
 
 ```ebnf
-FunctionDecl ::= "fn" "<" Type ">" Identifier "(" ParamList ")" "->" Body
+FunctionDecl ::= "fn" "<" TypeList ">" Identifier "(" ParamList ")" "->" Body
 
+TypeList     ::= Type { "," Type }  // Single or multiple return types
 ParamList    ::= [ Param { "," Param } ]
 // Standard parameter syntax
 Param        ::= ("var" | "const") "<" Type ">" Identifier
@@ -23,7 +24,8 @@ Block        ::= "{" Statement* [ Expression ] "}"
 Expression   ::= <any single Vyn expression>  // no braces required
 ```
 
-- **Return type** is declared in `<Type>` immediately after `fn`.
+- **Return type(s)** are declared in `<Type>` or `<Type1, Type2, ...>` immediately after `fn`.
+- **Multi-value returns** use comma-separated types: `fn<Int, String, Bool>`.
 - **Parameters** may use either:
   - Standard syntax: `var<T>` or `const<T>` before the parameter name
   - Shorthand syntax: `Type name` (implicitly mutable) or `const Type name` (immutable)
@@ -59,7 +61,30 @@ fn<Int> double(var<Int> x) -> x * 2
 fn<Bool> is_debug(var<our<Config>> cfg) -> view(cfg).debug
 ```
 
-### 2.3 Using Relaxed Parameter Syntax (shorthand)
+### 2.3 Multi-Value Returns
+
+```vyn
+// Function returning multiple values
+fn<Int, String> get_user_info(var<Int> user_id) -> {
+    return 42, "John Doe"
+}
+
+// Multi-value return with auto-serialization in main()
+fn<Int, String, Bool> main() -> {
+    return 42, "Hello, World!", true
+    // Output: {"Int":42,"String":"Hello, World!","Bool":true}
+}
+
+// Calling multi-value function
+fn<String> process_user() -> {
+    var<Int> id;
+    var<String> name;
+    id, name = get_user_info(123);
+    return "User: " + name
+}
+```
+
+### 2.4 Using Relaxed Parameter Syntax (shorthand)
 
 ```vyn
 // Using shorthand syntax (equivalent to var<Int> x, var<Float> y)
@@ -75,6 +100,11 @@ fn<Void> process(my<Task> task, const their<Data const> data) -> {
 
 // With generics
 fn<T> first_element<T>(my<[T]> array) -> array[0]
+
+// Multi-value return with shorthand parameters
+fn<Int, String> parse_input(String input) -> {
+    return input.length(), input.trim()
+}
 ```
 
 ---

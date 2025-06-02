@@ -55,17 +55,17 @@ method_declaration     ::= [ 'pub' ] [ 'static' ] [ 'template' '<' type_paramete
 constructor_declaration::= [ 'pub' ] 'new' [ template_parameters ] '(' [ parameter_list ] ')' [ 'throws' type_list ] ( block_statement | '=>' expression [';'] ) // Added throws, expression body
 
 struct_declaration     ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ] 'struct' IDENTIFIER '{' { struct_field_declaration } '}'
-struct_field_declaration ::= [ 'pub' ] IDENTIFIER ':' type [ '=' expression ] [';'] // Semicolon made optional
+struct_field_declaration ::= [ 'pub' ] IDENTIFIER ( ':' type | '<' type '>' ) [ '=' expression ] [';'] // Support both colon and angle bracket syntax
 
 enum_declaration       ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ] 'enum' IDENTIFIER '{' { enum_variant } '}'
 enum_variant           ::= IDENTIFIER [ '(' type_list ')' ] [ '=' expression ] ','?
 
 impl_declaration       ::= [ 'template' '<' type_parameter_list '>' ] 'impl' type [ 'for' type ] '{' { method_declaration } '}'
 
-function_declaration   ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ] [ 'async' ] 'fn' '<' type '>' IDENTIFIER '(' [ parameter_list ] ')' '->' ( block_statement | expression [';'] | statement ) [ 'throws' type_list ] // Updated for fn<ReturnType> syntax with mandatory arrow separator
+function_declaration   ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ] [ 'async' ] 'fn' '<' type_list '>' IDENTIFIER '(' [ parameter_list ] ')' '->' ( block_statement | expression [';'] | statement ) [ 'throws' type_list ] // Updated for fn<ReturnType1, ReturnType2, ...> syntax with mandatory arrow separator
 
 trait_declaration      ::= [ 'pub' ] 'template' IDENTIFIER [ template_parameters ] '{' { method_signature } '}' // For template Comparable
-method_signature       ::= [ 'async' ] 'fn' '<' type '>' IDENTIFIER '(' [ parameter_list ] ')' '->' ';' [ 'throws' type_list ] // Updated for fn<ReturnType> syntax
+method_signature       ::= [ 'async' ] 'fn' '<' type_list '>' IDENTIFIER '(' [ parameter_list ] ')' '->' ';' [ 'throws' type_list ] // Updated for fn<ReturnType1, ReturnType2, ...> syntax
 
 
 variable_declaration   ::= [ 'pub' ] 'var' '<' type '>' IDENTIFIER [ '=' expression ] [';'] // Standard generic-angled declaration syntax

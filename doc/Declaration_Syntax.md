@@ -4,7 +4,50 @@ Vyn uses a gen---
 
 ## Alternative Declaration Shorthand: `Type name`
 
-Vyn treats bindings as mutable by default. For common local declarations, you can drop the angle-bracket form and write `Type name` instead of `var<Type> name` or `<Type> name`.
+---
+
+## Struct Field Declaration Syntax
+
+Vyn supports two syntaxes for declaring struct fields, which can be used interchangeably or mixed within the same struct:
+
+### Colon Syntax (Original)
+```vyn
+struct Person {
+    id: Int,
+    name: String,
+    age: Int
+}
+```
+
+### Angle Bracket Syntax (New)
+```vyn
+struct Person {
+    id<Int>,
+    name<String>,
+    age<Int>
+}
+```
+
+### Mixed Syntax
+```vyn
+struct MixedExample {
+    id<Int>,      // Angle bracket syntax
+    name: String, // Colon syntax
+    active<Bool>  // Angle bracket syntax
+}
+```
+
+The angle bracket syntax aligns with Vyn's type-first philosophy used in function signatures (`fn<ReturnType>`) and variable declarations (`var<Type>`), providing visual consistency across the language.
+
+---
+
+## Rationale
+
+- **Consistency**: matches the `<T>` style used in intrinsics and generics.
+- **Clarity**: the variable's type is front-and-center, reducing the visual noise of colons.
+- **Uniformity**: single pattern for all bindings (`var<T>` and `const<T>`).
+
+This syntax replaces the older `var name: Type [= expr]` form for all new Vyn code.s bindings as mutable by default. For common local declarations, you can drop the angle-bracket form and write `Type name` instead of `var<Type> name` or `<Type> name`.
 
 ```ebnf
 Declaration ::= [ "const" ] Type Identifier [ "=" Expression ]

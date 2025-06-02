@@ -184,10 +184,74 @@ fn bare(value: T) -> T
 fn deserial(value: T) -> T
 ```
 
-- **`lit(value)`**: serialize `value` as a literal JSON value (e.g., strings as raw text without quotes).
-- **`notype(value)`**: serialize `value` without type information in the output.
-- **`bare(value)`**: serialize `value` in minimal form, stripping metadata and decorations.
-- **`deserial(value)`**: mark `value` to be excluded from serialization (deserialized placeholder).
+- **`lit(value)`**: Emits raw JSON literals without type wrapping. Converts strings to raw JSON values, numbers to unquoted numbers, and booleans to literal true/false. Restricted to primitive values (Int, Float, String, Bool).
+
+- **`notype(value)`**: Removes `<Type>` suffixes from field names in struct serialization. For structs, this produces cleaner JSON field names without type annotations. Only valid for structs.
+
+- **`bare(value)`**: Emits only raw field values as JSON array, removing all type and field metadata. For structs, outputs values in field declaration order as a JSON array. Only valid for structs.
+
+- **`deserial(json_string)`**: Deserializes JSON string back to typed Vyn values. Used for converting JSON input back to Vyn data structures.
+
+#### Examples
+
+**lit() Intrinsic:**
+```vyn
+fn<String> main() -> {
+    return lit("42");     // Output: 42 (number, not string)
+}
+
+fn<String> main() -> {
+    return lit("true");   // Output: true (boolean, not string)
+}
+
+fn<String> main() -> {
+    return lit("hello");  // Output: "hello" (quoted string)
+}
+```
+
+**notype() Intrinsic:**
+```vyn
+struct Person {
+    Int id,
+    String name
+}
+
+fn<Person> main() -> {
+    var<Person> p = Person(id=123, name="Alice");
+    return notype(p);
+    // Output: {"id":123,"name":"Alice"} 
+    // instead of {"id<Int>":123,"name<String>":"Alice"}
+}
+```
+
+**bare() Intrinsic:**
+```vyn
+struct Point {
+    Float x,
+    Float y
+}
+
+fn<Point> main() -> {
+    var<Point> point = Point(x=3.5, y=4.2);
+    return bare(point);
+    // Output: [3.5, 4.2]
+    // instead of {"x<Float>":3.5,"y<Float>":4.2}
+}
+```
+
+**Multi-Value with Mixed Intrinsics:**
+```vyn
+struct Config {
+    String name,
+    Int version
+}
+
+fn<Config, Int> main() -> {
+    var<Config> cfg = Config(name="app", version=1);
+    return notype(cfg), lit("42");
+    // Output: [{"name":"app","version":1}, 42]
+}
+```
 
 ### 7.2 JSON Serialization Intrinsics
 

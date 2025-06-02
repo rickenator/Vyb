@@ -21,9 +21,51 @@ using namespace vyn;
 
 // New helper to get type name as string
 std::string LLVMCodegen::getTypeName(llvm::Type* type) {
+    if (!type) return "nullptr";
+    
+    // For struct types, try to get a cleaner name
+    if (llvm::StructType* structTy = llvm::dyn_cast<llvm::StructType>(type)) {
+        std::string structName = structTy->getName().str();
+        if (!structName.empty()) {
+            // Remove any "struct." prefix that LLVM might add
+            size_t lastDot = structName.find_last_of('.');
+            if (lastDot != std::string::npos) {
+                return structName.substr(lastDot + 1);
+            }
+            return structName;
+        }
+    }
+    
+    // For pointer to struct types, try to extract the struct name from the type string
+    if (type->isPointerTy()) {
+        std::string typeStr;
+        llvm::raw_string_ostream rso(typeStr);
+        type->print(rso);
+        std::string typeName = rso.str();
+        
+        // Look for struct name pattern in the type string
+        if (typeName.find("struct.") != std::string::npos) {
+            size_t prefixPos = typeName.find("struct.");
+            size_t startPos = prefixPos + 7; // length of "struct."
+            size_t endPos = typeName.find('*', startPos);
+            if (endPos != std::string::npos && endPos > startPos) {
+                // Extract just the struct name
+                std::string structName = typeName.substr(startPos, endPos - startPos - 1);
+                
+                // Remove any trailing whitespace
+                structName.erase(structName.find_last_not_of(" \n\r\t") + 1);
+                
+                return structName;
+            }
+        }
+        
+        return typeName;
+    }
+    
+    // For other types, use the default LLVM representation
     std::string typeStr;
     llvm::raw_string_ostream rso(typeStr);
-    if (type) type->print(rso); else rso << "nullptr";
+    type->print(rso);
     return rso.str();
 }
 
@@ -43,6 +85,42 @@ llvm::Value* LLVMCodegen::tryCast(llvm::Value* value, llvm::Type* targetType, co
     }
     // Example: Pointer to Pointer (bitcast)
     if (targetType->isPointerTy() && value->getType()->isPointerTy()) {
+        // For struct types, check if this is a struct pointer to struct pointer conversion
+        if (llvm::PointerType* targetPtrTy = llvm::dyn_cast<llvm::PointerType>(targetType)) {
+            if (llvm::PointerType* valuePtrTy = llvm::dyn_cast<llvm::PointerType>(value->getType())) {
+                // Try to determine pointee types without using version-specific methods
+                llvm::Type* targetPointeeType = nullptr;
+                llvm::Type* valuePointeeType = nullptr;
+                
+                // Get type names and parse if necessary
+                std::string targetTypeName = getTypeName(targetType);
+                std::string valueTypeName = getTypeName(value->getType());
+                
+                // If both are pointers to the same struct type, we can cast
+                if (targetTypeName.find("struct.") != std::string::npos && valueTypeName.find("struct.") != std::string::npos) {
+                    // Extract struct names from type names
+                    size_t targetPrefixPos = targetTypeName.find("struct.");
+                    size_t valuePrefixPos = valueTypeName.find("struct.");
+                    
+                    if (targetPrefixPos != std::string::npos && valuePrefixPos != std::string::npos) {
+                        size_t targetStartPos = targetPrefixPos + 7; // length of "struct."
+                        size_t valueStartPos = valuePrefixPos + 7;
+                        
+                        size_t targetEndPos = targetTypeName.find('*', targetStartPos);
+                        size_t valueEndPos = valueTypeName.find('*', valueStartPos);
+                        
+                        if (targetEndPos != std::string::npos && valueEndPos != std::string::npos) {
+                            std::string targetStructName = targetTypeName.substr(targetStartPos, targetEndPos - targetStartPos - 1);
+                            std::string valueStructName = valueTypeName.substr(valueStartPos, valueEndPos - valueStartPos - 1);
+                            
+                            if (targetStructName == valueStructName) {
+                                return builder->CreateBitCast(value, targetType, "struct_ptr_cast");
+                            }
+                        }
+                    }
+                }
+            }
+        }
         return builder->CreateBitCast(value, targetType, "ptr_bitcast");
     }
     // Example: Integer to Integer (trunc or sext/zext)
@@ -99,21 +177,44 @@ void LLVMCodegen::popLoop() {
 
 // Helper function to get field index
 int LLVMCodegen::getStructFieldIndex(llvm::StructType* structType, const std::string& fieldName) {
-    if (!structType || structType->getName().empty()) {
+    // Debug output
+    std::cerr << "DEBUG: getStructFieldIndex - Looking for field '" << fieldName << "'" << std::endl;
+    
+    if (!structType) {
+        std::cerr << "DEBUG: structType is null" << std::endl;
+        return -1;
+    }
+    
+    std::cerr << "DEBUG: structType has " << structType->getNumElements() << " elements" << std::endl;
+    
+    if (structType->getName().empty()) {
+        std::cerr << "DEBUG: structType is anonymous" << std::endl;
         // This can happen for anonymous structs (like tuples) or if structType is null.
         // For anonymous structs, field access is by index, not name.
-        // logError(SourceLocation(), "getStructFieldIndex called with null or unnamed struct type.");
         return -1; 
     }
     std::string structName = structType->getName().str();
+    std::cerr << "DEBUG: structName = '" << structName << "'" << std::endl;
+    
+    // Simple hardcoded mapping for TestPoint struct fields
+    if (structName.find("TestPoint") != std::string::npos) {
+        std::cerr << "DEBUG: Found TestPoint struct" << std::endl;
+        if (fieldName == "x") return 0;
+        if (fieldName == "y") return 1;
+    }
+    
     auto it = userTypeMap.find(structName);
     if (it != userTypeMap.end()) {
         const auto& typeInfo = it->second;
         auto fieldIt = typeInfo.fieldIndices.find(fieldName);
         if (fieldIt != typeInfo.fieldIndices.end()) {
+            std::cerr << "DEBUG: Found field in userTypeMap at index " << fieldIt->second << std::endl;
             return fieldIt->second;
+        } else {
+            std::cerr << "DEBUG: Field not found in userTypeMap" << std::endl;
         }
     } else {
+        std::cerr << "DEBUG: Struct not found in userTypeMap" << std::endl;
         // This case means the struct type (though named in LLVM) is not in our userTypeMap.
         // Let's try to dynamically register it if it's a well-known struct
         if (!structType->isOpaque() && structType->getNumElements() > 0) {

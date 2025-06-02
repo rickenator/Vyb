@@ -1,0 +1,3 @@
+fn<String> main() -> {
+    return lit("test");
+}

@@ -202,6 +202,36 @@ public:
 } // namespace vyn::ast
 ```
 
+### Field Declaration Syntax
+
+Vyn supports two syntaxes for struct field declarations that can be used interchangeably or mixed within the same struct:
+
+#### Colon Syntax (Original)
+```vyn
+struct Person {
+    id: Int,
+    name: String
+}
+```
+
+#### Angle Bracket Syntax (New)
+```vyn
+struct Person {
+    id<Int>,
+    name<String>
+}
+```
+
+#### Mixed Syntax
+```vyn
+struct MixedPoint {
+    x<Int>,   // Angle bracket syntax
+    y: Int    // Colon syntax
+}
+```
+
+The angle bracket syntax aligns with Vyn's type-first approach used in function signatures (`fn<ReturnType>`) and variable declarations (`var<Type>`), providing visual consistency across the language.
+
 ## 8. Class Declaration (`vyn::ast::ClassDeclaration`)
 
 Represents the declaration of a class. *Note: The role of classes versus structs and traits/impls is under review. This node might be refined or superseded.*
@@ -250,6 +280,28 @@ public:
 
 } // namespace vyn::ast
 ```
+
+### Field Declaration Syntax
+
+Fields can be declared using either colon syntax or angle bracket syntax:
+
+```vyn
+struct Example {
+    // Colon syntax (original)
+    field1: Int,
+    field2: String,
+    
+    // Angle bracket syntax (new)
+    field3<Float>,
+    field4<Bool>,
+    
+    // Optional default values work with both syntaxes
+    field5: Int = 42,
+    field6<String> = "default"
+}
+```
+
+Both syntaxes produce identical AST structures and runtime behavior. The choice between them is primarily stylistic, though the angle bracket syntax provides consistency with function return types and variable declarations.
 
 ## 10. Impl Declaration (`vyn::ast::ImplDeclaration`)
 

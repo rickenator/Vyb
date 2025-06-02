@@ -1,0 +1,4 @@
+// Test multiple return types from main
+fn<String, Int, Bool> main() -> {
+    return "hello", 42, true;
+}

@@ -1,0 +1,15 @@
+// Simple test for a regular function that converts a string to raw JSON
+fn<String> convert_to_raw(var<String> input) -> {
+    // This is a basic implementation that just returns the input
+    // In a real implementation, we would parse the input and convert it
+    return input;
+}
+
+fn<String> main() -> {
+    println("Starting test");
+    println("Regular string: hello");
+    println("Raw string converted:");
+    var<String> raw = convert_to_raw("42");
+    println(raw);
+    return raw;
+}

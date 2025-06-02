@@ -40,3 +40,66 @@ llvm::Type* LLVMCodegen::getPointeeTypeInfo(llvm::Value* ptr) {
     
     return nullptr;
 }
+
+llvm::Function* LLVMCodegen::getLitConversionFunction() {
+    // Check if the function already exists
+    llvm::Function* func = module->getFunction("__vyn_convert_lit_string");
+    if (func) {
+        return func;
+    }
+    
+    // Create the function declaration: char* __vyn_convert_lit_string(const char* str)
+    llvm::FunctionType* funcType = llvm::FunctionType::get(
+        int8PtrType,  // return type: char*
+        {int8PtrType}, // parameter: const char*
+        false // not variadic
+    );
+    
+    func = llvm::Function::Create(
+        funcType,
+        llvm::Function::ExternalLinkage,
+        "__vyn_convert_lit_string",
+        module.get()
+    );
+    
+    return func;
+}
+
+// Helper function to check if an expression is a lit() intrinsic call
+bool LLVMCodegen::isLitIntrinsicCall(vyn::ast::Expression* expr) {
+    if (!expr) return false;
+    
+    auto* callExpr = dynamic_cast<vyn::ast::CallExpression*>(expr);
+    if (!callExpr) return false;
+    
+    auto* identCallee = dynamic_cast<vyn::ast::Identifier*>(callExpr->callee.get());
+    if (!identCallee) return false;
+    
+    return identCallee->name == "lit";
+}
+
+// Helper function to check if a function body returns a lit() intrinsic call
+bool LLVMCodegen::functionBodyReturnsLitIntrinsic(vyn::ast::BlockStatement* body) {
+    if (!body) return false;
+    
+    // Look for return statements in the function body
+    for (const auto& stmt : body->body) {
+        if (auto* returnStmt = dynamic_cast<vyn::ast::ReturnStatement*>(stmt.get())) {
+            if (isLitIntrinsicCall(returnStmt->argument.get())) {
+                return true;
+            }
+        }
+        // Could also check nested blocks, but for now we'll just check top-level returns
+    }
+    
+    return false;
+}
+
+// Ensure all core intrinsic functions are declared in the module
+// This prevents JIT runtime errors when functions are not found
+void LLVMCodegen::ensureCoreIntrinsicFunctions() {
+    // Declare all core intrinsic functions that the JIT runtime expects
+    getVynPrintlnFunction();      // __vyn_println
+    getSerializeToJsonFunction(); // __vyn_serialize_to_json
+    getLitConversionFunction();   // __vyn_convert_lit_string
+}

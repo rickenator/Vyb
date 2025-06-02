@@ -1,0 +1,9 @@
+// Test multiple return types from function to caller
+fn<String, Int> getMultipleValues() -> {
+    return "test", 123;
+}
+
+fn<String, Int> main() -> {
+    var<String> result1, var<Int> result2 = getMultipleValues();
+    return result1,result2;
+}
