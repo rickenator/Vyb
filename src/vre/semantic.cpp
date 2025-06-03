@@ -1225,7 +1225,8 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
                typeNameStr == "u8" || typeNameStr == "u16" || typeNameStr == "u32" || typeNameStr == "u64" ||
                typeNameStr == "f32" || typeNameStr == "f64" ||
                typeNameStr == "bool" || typeNameStr == "string" || typeNameStr == "void" ||
-               typeNameStr == "int" || typeNameStr == "float") { 
+               typeNameStr == "int" || typeNameStr == "float" ||
+               typeNameStr == "Int" || typeNameStr == "String" || typeNameStr == "Int8") { 
         node->type = std::shared_ptr<ast::TypeNode>(node->clone());
     } else {
         SymbolInfo* symbol = currentScope->lookup(typeNameStr); 

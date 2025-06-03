@@ -19,6 +19,32 @@ extern "C" {
     void __vyn_println(const char* str);
     char* __vyn_serialize_to_json(void* obj, const char* type_name);
     char* __vyn_convert_lit_string(const char* str);
+    char* __vyn_string_concat(const char* left, const char* right);
+    
+    // String concatenation intrinsic function
+    char* __vyn_string_concat(const char* left, const char* right);
+    
+    // ToString intrinsic functions for automatic string conversion - all basic types
+    char* __vyn_toString_int(int64_t value);
+    char* __vyn_toString_int8(int8_t value);
+    char* __vyn_toString_int16(int16_t value);
+    char* __vyn_toString_int32(int32_t value);
+    char* __vyn_toString_int64(int64_t value);
+    char* __vyn_toString_uint8(uint8_t value);
+    char* __vyn_toString_uint16(uint16_t value);
+    char* __vyn_toString_uint32(uint32_t value);
+    char* __vyn_toString_uint64(uint64_t value);
+    char* __vyn_toString_float(double value);
+    char* __vyn_toString_float32(float value);
+    char* __vyn_toString_bool(bool value);
+    char* __vyn_toString_string(const char* value);
+    char* __vyn_toString_char(uint8_t value);
+    char* __vyn_toString_rune(uint32_t value);
+    char* __vyn_toString_byte(uint8_t value);
+    
+    // TODO: Future toString functions for compound types:
+    // char* __vyn_toString_vec(void* vec_ptr, const char* element_type);
+    // char* __vyn_toString_tuple(void* tuple_ptr, const char* type_spec);
 }
 
 // LLVM includes for JIT compilation
@@ -117,6 +143,26 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
         llvm::Function* printlnFunc = module->getFunction("__vyn_println");
         llvm::Function* serializeFunc = module->getFunction("__vyn_serialize_to_json");
         llvm::Function* litConvertFunc = module->getFunction("__vyn_convert_lit_string");
+        llvm::Function* stringConcatFunc = module->getFunction("__vyn_string_concat");
+        
+        // Retrieve toString functions
+        llvm::Function* toStringIntFunc = module->getFunction("__vyn_toString_int");
+        llvm::Function* toStringInt8Func = module->getFunction("__vyn_toString_int8");
+        llvm::Function* toStringInt16Func = module->getFunction("__vyn_toString_int16");
+        llvm::Function* toStringInt32Func = module->getFunction("__vyn_toString_int32");
+        llvm::Function* toStringInt64Func = module->getFunction("__vyn_toString_int64");
+        llvm::Function* toStringUInt8Func = module->getFunction("__vyn_toString_uint8");
+        llvm::Function* toStringUInt16Func = module->getFunction("__vyn_toString_uint16");
+        llvm::Function* toStringUInt32Func = module->getFunction("__vyn_toString_uint32");
+        llvm::Function* toStringUInt64Func = module->getFunction("__vyn_toString_uint64");
+        llvm::Function* toStringFloatFunc = module->getFunction("__vyn_toString_float");
+        llvm::Function* toStringFloat32Func = module->getFunction("__vyn_toString_float32");
+        llvm::Function* toStringBoolFunc = module->getFunction("__vyn_toString_bool");
+        llvm::Function* toStringStringFunc = module->getFunction("__vyn_toString_string");
+        llvm::Function* toStringCharFunc = module->getFunction("__vyn_toString_char");
+        llvm::Function* toStringRuneFunc = module->getFunction("__vyn_toString_rune");
+        llvm::Function* toStringByteFunc = module->getFunction("__vyn_toString_byte");
+        
         if (!printlnFunc || !serializeFunc) {
             throw std::runtime_error("Missing required intrinsic functions in module");
         }
@@ -137,6 +183,62 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
         executionEngine->addGlobalMapping(serializeFunc, (void*)&__vyn_serialize_to_json);
         if (litConvertFunc) {
             executionEngine->addGlobalMapping(litConvertFunc, (void*)&__vyn_convert_lit_string);
+        }
+        if (stringConcatFunc) {
+            executionEngine->addGlobalMapping(stringConcatFunc, (void*)&__vyn_string_concat);
+        }
+        if (stringConcatFunc) {
+            executionEngine->addGlobalMapping(stringConcatFunc, (void*)&__vyn_string_concat);
+        }
+        
+        // Register toString functions with the JIT
+        if (toStringIntFunc) {
+            executionEngine->addGlobalMapping(toStringIntFunc, (void*)&__vyn_toString_int);
+        }
+        if (toStringInt8Func) {
+            executionEngine->addGlobalMapping(toStringInt8Func, (void*)&__vyn_toString_int8);
+        }
+        if (toStringInt16Func) {
+            executionEngine->addGlobalMapping(toStringInt16Func, (void*)&__vyn_toString_int16);
+        }
+        if (toStringInt32Func) {
+            executionEngine->addGlobalMapping(toStringInt32Func, (void*)&__vyn_toString_int32);
+        }
+        if (toStringInt64Func) {
+            executionEngine->addGlobalMapping(toStringInt64Func, (void*)&__vyn_toString_int64);
+        }
+        if (toStringUInt8Func) {
+            executionEngine->addGlobalMapping(toStringUInt8Func, (void*)&__vyn_toString_uint8);
+        }
+        if (toStringUInt16Func) {
+            executionEngine->addGlobalMapping(toStringUInt16Func, (void*)&__vyn_toString_uint16);
+        }
+        if (toStringUInt32Func) {
+            executionEngine->addGlobalMapping(toStringUInt32Func, (void*)&__vyn_toString_uint32);
+        }
+        if (toStringUInt64Func) {
+            executionEngine->addGlobalMapping(toStringUInt64Func, (void*)&__vyn_toString_uint64);
+        }
+        if (toStringFloatFunc) {
+            executionEngine->addGlobalMapping(toStringFloatFunc, (void*)&__vyn_toString_float);
+        }
+        if (toStringFloat32Func) {
+            executionEngine->addGlobalMapping(toStringFloat32Func, (void*)&__vyn_toString_float32);
+        }
+        if (toStringBoolFunc) {
+            executionEngine->addGlobalMapping(toStringBoolFunc, (void*)&__vyn_toString_bool);
+        }
+        if (toStringStringFunc) {
+            executionEngine->addGlobalMapping(toStringStringFunc, (void*)&__vyn_toString_string);
+        }
+        if (toStringCharFunc) {
+            executionEngine->addGlobalMapping(toStringCharFunc, (void*)&__vyn_toString_char);
+        }
+        if (toStringRuneFunc) {
+            executionEngine->addGlobalMapping(toStringRuneFunc, (void*)&__vyn_toString_rune);
+        }
+        if (toStringByteFunc) {
+            executionEngine->addGlobalMapping(toStringByteFunc, (void*)&__vyn_toString_byte);
         }
         std::cout << "Execution engine created successfully" << std::endl;
         std::cout << "Finding main function..." << std::endl;

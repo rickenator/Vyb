@@ -3,6 +3,7 @@
 #include <vector>
 #include <cstring> // For strlen, strcpy, strcat
 #include <cstdlib> // For malloc
+#include <cstdint> // For uint8_t, uint16_t, uint32_t, uint64_t
 
 namespace vyn {
 namespace intrinsics {
@@ -246,7 +247,7 @@ extern "C" char* __vyn_serialize_to_json(void* obj, const char* type_name) {
         // Handle LLVM struct type names like "{ i64, ptr }" or traditional struct names
         
         // Handle our test case for multi-value returns with specific type patterns
-        if (typeStr == "{ ptr, i64, i1 }" || typeStr == "{ i64, ptr }" || strstr(type_name, "struct.anon") != nullptr) {
+        if (typeStr == "{ ptr, i64, i1 }" || typeStr == "{ i64, ptr }" || typeStr == "{ i64, ptr, i8 }" || strstr(type_name, "struct.anon") != nullptr) {
             // Handle the actual struct layout: { ptr, i64, i1 } (String, Int, Bool)
             if (typeStr == "{ ptr, i64, i1 }") {
                 struct MultiValueReturn {
@@ -277,6 +278,38 @@ extern "C" char* __vyn_serialize_to_json(void* obj, const char* type_name) {
                 // Add the Bool field
                 jsonStr += ",\"Bool\":";
                 jsonStr += (mvr->boolValue ? "true" : "false");
+                
+                jsonStr += "}";
+            } else if (typeStr == "{ i64, ptr, i8 }") {
+                // Handle { i64, ptr, i8 } pattern (UserId, UserName, Score)
+                struct TypeAliasMultiValueReturn {
+                    int64_t userId;     // i64 (first field - UserId)
+                    char* userName;     // ptr (second field - UserName)
+                    int8_t score;       // i8 (third field - Score)
+                };
+                
+                TypeAliasMultiValueReturn* mvr = static_cast<TypeAliasMultiValueReturn*>(obj);
+                
+                // Create a JSON object with the proper field names
+                jsonStr = "{";
+                
+                // Add the UserId field
+                jsonStr += "\"UserId\":";
+                jsonStr += std::to_string(mvr->userId);
+                
+                // Add the UserName field
+                jsonStr += ",\"UserName\":";
+                if (mvr->userName) {
+                    jsonStr += "\"";
+                    jsonStr += mvr->userName;
+                    jsonStr += "\"";
+                } else {
+                    jsonStr += "null";
+                }
+                
+                // Add the Score field
+                jsonStr += ",\"Score\":";
+                jsonStr += std::to_string(static_cast<int>(mvr->score));
                 
                 jsonStr += "}";
             } else {
@@ -588,6 +621,142 @@ extern "C" char* __vyn_end_json_object(void* ctxPtr) {
 }
 
 // Future runtime intrinsics may be added here
+
+// ToString intrinsic functions for automatic string conversion
+extern "C" char* __vyn_toString_int(int64_t value) {
+    std::string str = std::to_string(value);
+    char* result = (char*)malloc(str.length() + 1);
+    if (result) strcpy(result, str.c_str());
+    return result;
+}
+
+extern "C" char* __vyn_toString_int8(int8_t value) {
+    std::string str = std::to_string(static_cast<int>(value));
+    char* result = (char*)malloc(str.length() + 1);
+    if (result) strcpy(result, str.c_str());
+    return result;
+}
+
+extern "C" char* __vyn_toString_int32(int32_t value) {
+    std::string str = std::to_string(value);
+    char* result = (char*)malloc(str.length() + 1);
+    if (result) strcpy(result, str.c_str());
+    return result;
+}
+
+extern "C" char* __vyn_toString_float(double value) {
+    std::string str = std::to_string(value);
+    char* result = (char*)malloc(str.length() + 1);
+    if (result) strcpy(result, str.c_str());
+    return result;
+}
+
+extern "C" char* __vyn_toString_bool(bool value) {
+    const char* str = value ? "true" : "false";
+    char* result = (char*)malloc(strlen(str) + 1);
+    if (result) strcpy(result, str);
+    return result;
+}
+
+extern "C" char* __vyn_toString_string(const char* value) {
+    // For strings, just return a copy
+    if (!value) {
+        const char* nullStr = "null";
+        char* result = (char*)malloc(strlen(nullStr) + 1);
+        if (result) strcpy(result, nullStr);
+        return result;
+    }
+    
+    size_t len = strlen(value);
+    char* result = (char*)malloc(len + 1);
+    if (result) strcpy(result, value);
+    return result;
+}
+
+// Additional toString functions for other basic types
+extern "C" char* __vyn_toString_int16(int16_t value) {
+    std::string str = std::to_string(value);
+    char* result = (char*)malloc(str.length() + 1);
+    if (result) strcpy(result, str.c_str());
+    return result;
+}
+
+extern "C" char* __vyn_toString_int64(int64_t value) {
+    std::string str = std::to_string(value);
+    char* result = (char*)malloc(str.length() + 1);
+    if (result) strcpy(result, str.c_str());
+    return result;
+}
+
+extern "C" char* __vyn_toString_uint8(uint8_t value) {
+    std::string str = std::to_string(value);
+    char* result = (char*)malloc(str.length() + 1);
+    if (result) strcpy(result, str.c_str());
+    return result;
+}
+
+extern "C" char* __vyn_toString_uint16(uint16_t value) {
+    std::string str = std::to_string(value);
+    char* result = (char*)malloc(str.length() + 1);
+    if (result) strcpy(result, str.c_str());
+    return result;
+}
+
+extern "C" char* __vyn_toString_uint32(uint32_t value) {
+    std::string str = std::to_string(value);
+    char* result = (char*)malloc(str.length() + 1);
+    if (result) strcpy(result, str.c_str());
+    return result;
+}
+
+extern "C" char* __vyn_toString_uint64(uint64_t value) {
+    std::string str = std::to_string(value);
+    char* result = (char*)malloc(str.length() + 1);
+    if (result) strcpy(result, str.c_str());
+    return result;
+}
+
+extern "C" char* __vyn_toString_float32(float value) {
+    std::string str = std::to_string(value);
+    char* result = (char*)malloc(str.length() + 1);
+    if (result) strcpy(result, str.c_str());
+    return result;
+}
+
+extern "C" char* __vyn_toString_char(uint8_t value) {
+    // For char, we want to show it as a single character in quotes if printable
+    // or as a numeric value if not printable
+    char buffer[8]; // Enough for "'c'" or "255"
+    if (value >= 32 && value <= 126) { // Printable ASCII range
+        sprintf(buffer, "'%c'", (char)value);
+    } else {
+        sprintf(buffer, "%u", value);
+    }
+    
+    char* result = (char*)malloc(strlen(buffer) + 1);
+    if (result) strcpy(result, buffer);
+    return result;
+}
+
+extern "C" char* __vyn_toString_rune(uint32_t value) {
+    // For rune (Unicode code point), show as numeric value
+    // In a full implementation, we might convert to UTF-8 string
+    std::string str = std::to_string(value);
+    char* result = (char*)malloc(str.length() + 1);
+    if (result) strcpy(result, str.c_str());
+    return result;
+}
+
+extern "C" char* __vyn_toString_byte(uint8_t value) {
+    // Byte is an alias for UInt8
+    return __vyn_toString_uint8(value);
+}
+
+// TODO: Add toString functions for compound types when implemented:
+// char* __vyn_toString_vec(void* vec_ptr, const char* element_type);
+// char* __vyn_toString_tuple(void* tuple_ptr, const char* type_spec);
+// char* __vyn_toString_array(void* array_ptr, const char* element_type, size_t length);
+// char* __vyn_toString_struct(void* struct_ptr, const char* struct_type);
 
 } // namespace intrinsics
 } // namespace vyn

@@ -300,40 +300,67 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
 
     switch (node->op.type) {
         case vyn::TokenType::PLUS: // Reverted to vyn::TokenType::PLUS
-            if (isFloatOp) m_currentLLVMValue = builder->CreateFAdd(L, R, "faddtmp");
-            // Check for string concatenation (string + string)
-            else if (L->getType()->isPointerTy() && R->getType()->isPointerTy() && 
-                     (leftTypeNode && rightTypeNode &&
-                      ((leftTypeNode->getCategory() == vyn::ast::TypeNode::Category::IDENTIFIER &&
-                        rightTypeNode->getCategory() == vyn::ast::TypeNode::Category::IDENTIFIER) ||
-                       (leftTypeNode->getCategory() == vyn::ast::TypeNode::Category::ARRAY &&
-                        rightTypeNode->getCategory() == vyn::ast::TypeNode::Category::ARRAY)))) {
+            if (isFloatOp) {
+                m_currentLLVMValue = builder->CreateFAdd(L, R, "faddtmp");
+            }
+            // Debug output for string concatenation logic
+            else {
+                if (verbose) {
+                    std::cout << "DEBUG PLUS: leftTypeNode=" << (leftTypeNode ? "yes" : "null") 
+                              << ", rightTypeNode=" << (rightTypeNode ? "yes" : "null") << std::endl;
+                    std::cout << "DEBUG PLUS: Checking LLVM types for string detection..." << std::endl;
+                }
                 
-                // Check if both are string types
-                bool isStringConcatenation = false;
+                // First check for string types using LLVM types directly (more reliable)
+                bool leftIsString = (L->getType() == int8PtrType);
+                bool rightIsString = (R->getType() == int8PtrType);
                 
-                if (leftTypeNode->getCategory() == vyn::ast::TypeNode::Category::IDENTIFIER &&
-                    rightTypeNode->getCategory() == vyn::ast::TypeNode::Category::IDENTIFIER) {
-                    auto leftTypeName = dynamic_cast<vyn::ast::TypeName*>(leftTypeNode);
-                    auto rightTypeName = dynamic_cast<vyn::ast::TypeName*>(rightTypeNode);
-                    
-                    if (leftTypeName && rightTypeName && 
-                        leftTypeName->identifier && rightTypeName->identifier) {
-                        std::string leftType = leftTypeName->identifier->name;
-                        std::string rightType = rightTypeName->identifier->name;
-                        
-                        if ((leftType == "String" || leftType == "string") && 
-                            (rightType == "String" || rightType == "string")) {
-                            isStringConcatenation = true;
-                        }
+                // If at least one operand is a string, treat as string concatenation
+                if (leftIsString || rightIsString) {
+                    if (verbose) {
+                        std::cout << "DEBUG PLUS: Detected string concatenation (leftIsString=" 
+                                  << leftIsString << ", rightIsString=" << rightIsString << ")" << std::endl;
+                    }
+                    m_currentLLVMValue = generateMixedStringConcatenation(L, R, leftTypeNode, rightTypeNode, node->loc);
+                    if (!m_currentLLVMValue) {
+                        logError(node->loc, "Failed to generate mixed string concatenation");
+                        return;
+                    }
+                    break;
+                }
+            }
+            
+            // Check for string concatenation - either pure string + string or mixed types with string
+            if (leftTypeNode && rightTypeNode) {
+                // Resolve type aliases to get base type names
+                std::string leftBaseName = resolveTypeAliasToBaseName(leftTypeNode);
+                std::string rightBaseName = resolveTypeAliasToBaseName(rightTypeNode);
+                
+                // Check if either operand is a string (including string literals)
+                bool leftIsString = (L->getType() == int8PtrType) || (leftBaseName == "String") ||
+                                   (leftTypeNode->getCategory() == vyn::ast::TypeNode::Category::IDENTIFIER &&
+                                    dynamic_cast<vyn::ast::TypeName*>(leftTypeNode) &&
+                                    dynamic_cast<vyn::ast::TypeName*>(leftTypeNode)->identifier &&
+                                    (dynamic_cast<vyn::ast::TypeName*>(leftTypeNode)->identifier->name == "String" ||
+                                     dynamic_cast<vyn::ast::TypeName*>(leftTypeNode)->identifier->name == "string"));
+                                     
+                bool rightIsString = (R->getType() == int8PtrType) || (rightBaseName == "String") ||
+                                    (rightTypeNode->getCategory() == vyn::ast::TypeNode::Category::IDENTIFIER &&
+                                     dynamic_cast<vyn::ast::TypeName*>(rightTypeNode) &&
+                                     dynamic_cast<vyn::ast::TypeName*>(rightTypeNode)->identifier &&
+                                     (dynamic_cast<vyn::ast::TypeName*>(rightTypeNode)->identifier->name == "String" ||
+                                      dynamic_cast<vyn::ast::TypeName*>(rightTypeNode)->identifier->name == "string"));
+                
+                // If at least one operand is a string, treat as string concatenation with auto-conversion
+                if (leftIsString || rightIsString) {
+                    m_currentLLVMValue = generateMixedStringConcatenation(L, R, leftTypeNode, rightTypeNode, node->loc);
+                    if (!m_currentLLVMValue) {
+                        logError(node->loc, "Failed to generate mixed string concatenation");
+                        return;
                     }
                 }
-                
-                if (isStringConcatenation) {
-                    // Generate call to string concatenation function
-                    m_currentLLVMValue = generateStringConcatenation(L, R, node->loc);
-                }
-                else if (L->getType()->isPointerTy() && leftTypeNode) {
+                // Check for pointer arithmetic
+                else if (L->getType()->isPointerTy() && R->getType()->isIntegerTy() && leftTypeNode) {
                     vyn::ast::TypeNode* pointeeAstType = nullptr;
                     
                     // Try to get pointee type from different sources
@@ -358,15 +385,21 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
                         }
                     } else {
                         // If we can't determine the pointee type from AST, use int64 as a fallback
-                        // This is common in test cases with opaque pointers
                         if (verbose) {
                             logWarning(node->left->loc, "Pointer operand for addition lacks specific pointee type information. Using i64 as fallback pointee type.");
                         }
                         m_currentLLVMValue = builder->CreateGEP(int64Type, L, R, "ptraddtmp_fallback");
                     }
                 }
+                // Regular integer/numeric addition
+                else {
+                    m_currentLLVMValue = builder->CreateAdd(L, R, "addtmp");
+                }
             }
-            else m_currentLLVMValue = builder->CreateAdd(L, R, "addtmp");
+            // Fallback to regular addition if no type info
+            else {
+                m_currentLLVMValue = builder->CreateAdd(L, R, "addtmp");
+            }
             break;
         case vyn::TokenType::MINUS: // Reverted to vyn::TokenType::MINUS
             if (isFloatOp) m_currentLLVMValue = builder->CreateFSub(L, R, "fsubtmp");

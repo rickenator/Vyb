@@ -95,6 +95,7 @@ private:
     std::map<std::string, llvm::Value*> namedValues;
     std::map<std::string, UserTypeInfo> userTypeMap;
     std::map<std::string, llvm::Type*> typeParameterMap;
+    std::map<std::string, llvm::Type*> typeAliasMap; // Maps type alias names to their underlying LLVM types
     std::map<vyn::ast::TypeNode*, llvm::Type*> m_typeCache;
     std::map<llvm::Value*, std::shared_ptr<vyn::ast::TypeNode>> valueTypeMap; // Maps LLVM values to AST types
     vyn::ast::TypeNode* m_currentImplTypeNode = nullptr; // Initialize
@@ -128,6 +129,12 @@ private:
     
     // String operations
     llvm::Value* generateStringConcatenation(llvm::Value* leftStr, llvm::Value* rightStr, SourceLocation loc);
+    
+    // ToString conversion helpers for mixed-type string concatenation  
+    llvm::Value* generateToStringCall(llvm::Value* value, llvm::Type* valueType, vyn::ast::TypeNode* astType, SourceLocation loc);
+    llvm::Value* generateMixedStringConcatenation(llvm::Value* leftValue, llvm::Value* rightValue, 
+                                                vyn::ast::TypeNode* leftTypeNode, vyn::ast::TypeNode* rightTypeNode, SourceLocation loc);
+    std::string resolveTypeAliasToBaseName(vyn::ast::TypeNode* typeNode);
     
     // IO operations
     llvm::Function* getPrintlnFunction();

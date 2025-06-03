@@ -329,6 +329,8 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
 
             if (typeNameStr == "Int" || typeNameStr == "int" || typeNameStr == "i64") {
                 llvmType = int64Type;
+            } else if (typeNameStr == "Int8" || typeNameStr == "int8" || typeNameStr == "i8") {
+                llvmType = int8Type;
             } else if (typeNameStr == "Float" || typeNameStr == "float" || typeNameStr == "f64") {
                 llvmType = doubleType;
             } else if (typeNameStr == "Bool" || typeNameStr == "bool") {
@@ -337,25 +339,31 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                 llvmType = voidType;
             } else if (typeNameStr == "String" || typeNameStr == "string") {
                 llvmType = int8PtrType; 
-            } else if (typeNameStr == "char" || typeNameStr == "i8") {
+            } else if (typeNameStr == "char") {
                 llvmType = int8Type;
             } else if (typeNameStr == "i32") {
                 llvmType = int32Type;
             } else {
-                auto userTypeIt = userTypeMap.find(typeNameStr);
-                if (userTypeIt != userTypeMap.end()) {
-                    llvmType = userTypeIt->second.llvmType;
+                // Check type alias map first
+                auto typeAliasIt = typeAliasMap.find(typeNameStr);
+                if (typeAliasIt != typeAliasMap.end()) {
+                    llvmType = typeAliasIt->second;
                 } else {
-                    llvm::StructType* existingType = llvm::StructType::getTypeByName(*context, typeNameStr);
-                    if (existingType) {
-                        llvmType = existingType;
+                    auto userTypeIt = userTypeMap.find(typeNameStr);
+                    if (userTypeIt != userTypeMap.end()) {
+                        llvmType = userTypeIt->second.llvmType;
                     } else {
-                        // This case should ideally be caught by semantic analysis if it\'s an undefined type.
-                        // If it\'s a type that will be defined later (e.g. in a different module or due to ordering),
-                        // creating an opaque struct might be an option, but can be risky.
-                        // llvmType = llvm::StructType::create(*context, typeNameStr);
-                        logError(typeNode->loc, "Unknown type identifier: " + typeNameStr + ". It might be a forward-declared type not yet fully defined or an undeclared type.");
-                        return nullptr;
+                        llvm::StructType* existingType = llvm::StructType::getTypeByName(*context, typeNameStr);
+                        if (existingType) {
+                            llvmType = existingType;
+                        } else {
+                            // This case should ideally be caught by semantic analysis if it\'s an undefined type.
+                            // If it\'s a type that will be defined later (e.g. in a different module or due to ordering),
+                            // creating an opaque struct might be an option, but can be risky.
+                            // llvmType = llvm::StructType::create(*context, typeNameStr);
+                            logError(typeNode->loc, "Unknown type identifier: " + typeNameStr + ". It might be a forward-declared type not yet fully defined or an undeclared type.");
+                            return nullptr;
+                        }
                     }
                 }
             }

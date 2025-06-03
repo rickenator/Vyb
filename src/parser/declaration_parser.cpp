@@ -49,7 +49,7 @@ vyn::ast::DeclPtr DeclarationParser::parse() {
     } else if (current_token.type == vyn::TokenType::KEYWORD_ENUM) {
         auto enum_decl = this->parse_enum_declaration();
         return enum_decl;
-    } else if (current_token.type == vyn::TokenType::IDENTIFIER && current_token.lexeme == "type") { // KEYWORD_TYPE
+    } else if (current_token.type == vyn::TokenType::KEYWORD_TYPE) { // Fixed to use KEYWORD_TYPE
         return this->parse_type_alias_declaration();
     } else if (current_token.type == vyn::TokenType::KEYWORD_LET ||
                current_token.type == vyn::TokenType::KEYWORD_MUT || // Changed from KEYWORD_VAR
@@ -539,23 +539,28 @@ std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_enum_declaration
 
 
 // Returns vyn::TypeAliasDeclaration as per parser.hpp (DeclPtr compatible)
+// New syntax: type<UnderlyingType> AliasName;
 std::unique_ptr<vyn::ast::TypeAliasDeclaration> DeclarationParser::parse_type_alias_declaration() {
     SourceLocation loc = this->current_location();
     this->expect(vyn::TokenType::KEYWORD_TYPE);
 
+    // Expect '<' token for new syntax
+    this->expect(vyn::TokenType::LT);
+
+    // Parse the underlying type
+    auto aliased_type_node = this->type_parser_.parse();
+    if (!aliased_type_node) {
+        throw std::runtime_error("Expected underlying type definition after '<' for type alias at " + location_to_string(this->current_location()));
+    }
+
+    // Expect '>' token
+    this->expect(vyn::TokenType::GT);
+
+    // Parse the alias name
     if (this->peek().type != vyn::TokenType::IDENTIFIER) {
         throw std::runtime_error("Expected type alias name (identifier) at " + location_to_string(this->current_location()));
     }
     auto name = std::make_unique<ast::Identifier>(this->current_location(), this->consume().lexeme);
-
-    auto generic_params = this->parse_generic_params();
-
-    this->expect(vyn::TokenType::EQ);
-
-    auto aliased_type_node = this->type_parser_.parse();
-    if (!aliased_type_node) {
-        throw std::runtime_error("Expected type definition after \'=\' for type alias \'" + name->name + "\' at " + location_to_string(this->current_location()));
-    }
 
     this->expect(vyn::TokenType::SEMICOLON);
     return std::make_unique<vyn::ast::TypeAliasDeclaration>(loc, std::move(name), std::move(aliased_type_node));

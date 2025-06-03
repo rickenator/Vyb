@@ -1,0 +1,28 @@
+// Test file to verify the new type alias syntax works with actual output
+type<Int> UserId;
+type<String> UserName;
+type<Int8> Score;
+
+fn<UserId> getUserId() -> {
+    return 42;
+}
+
+fn<UserName> getUserName() -> {
+    return "Alice";
+}
+
+fn<Score> getScore() -> {
+    return 100;
+}
+
+fn<UserId, UserName, Score> main() -> {
+    var<UserId> id = getUserId();
+    var<UserName> name = getUserName();  
+    var<Score> score = getScore();
+    
+    println("User ID: " + id);
+    println("User Name: " + name);
+    println("Score: " + score);
+    
+    return id,name,score;
+}
