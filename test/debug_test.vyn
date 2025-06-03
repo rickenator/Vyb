@@ -1,0 +1,19 @@
+// @test: Multi-value Function Return Debug
+// @description: Tests the multi-value function return with extra debugging
+// @category: syntax, function, json
+// @expect: pass
+// @expect-output: {"Int":42,"String":"Hello, World!"}
+
+// Function that returns multiple values (Int and String)
+fn<Int, String> get_values() -> {
+    println("DEBUG: Inside get_values()");
+    return 42, "Hello, World!";
+}
+
+// Main function that calls get_values and returns its first value
+fn<Int> main() -> {
+    println("DEBUG: Inside main, getting Int value from get_values()");
+    let (x, y) = get_values();
+    println("DEBUG: Got values from get_values(): " + x + ", " + y);
+    return x;
+}

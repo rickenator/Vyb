@@ -2,7 +2,7 @@
 // @description: Tests the notype() intrinsic for suppressing type metadata in struct field names
 // @category: intrinsic, json, serialization, struct
 // @expect: pass
-// @expect-output: [{"Person":{"id":123,"name":"Alice","salary":88000.0}},{"Company":{"name":"Acme","employeeCount":150}}]
+// @expect-output: [{"Person":{"id":123,"name":"Alice","salary":88000.0}},{"Company":{"name<String>":"Acme","employeeCount<Int>":150}}]
 
 // Test notype() intrinsic with actual structs (proper usage)
 

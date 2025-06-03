@@ -20,7 +20,9 @@ This documentation is split into several parts:
 *   **[Types](./AST_Types.md)**: Focuses on AST nodes related to type representations (`TypeNode`).
 *   **[Patterns](./AST_Patterns.md)**: *(Planned)* Describes AST nodes for pattern matching constructs.
 *   **[Memory Operations](./Memory_Operations.md)**: Explains Vyn's memory model and the operations for low-level memory manipulation.
-*   **[Intrinsics](./Intrinsics.md)**: Details built-in compiler intrinsics, including memory operations like `loc`, `at`, and `from`.
+*   **[Intrinsics](./Intrinsics.md)**: Details built-in compiler intrinsics, including memory operations like `loc`, `at`, and `from`, as well as serialization intrinsics like `lit()`, `notype()`, `bare()`, and `deserial()`.
+*   **[Auto-Serialization](./auto_serialization.md)**: Describes Vyn's auto-serialization system for `main()` function returns and built-in JSON support.
+*   **[Multi-Value Returns & JSON Serialization](./Auto_Serialization_Main_Returns.md)**: Comprehensive specification for multi-value returns with typeful JSON serialization, including serialization mode intrinsics.
 *   **[Design Considerations](./AST_Design_Considerations.md)**: Discusses various design choices, alternatives, and rationale behind the AST structure. This includes topics like memory management, error handling, and potential future enhancements.
 *   **[Roadmap](./AST_Roadmap.md)**: Outlines planned AST nodes and future development directions for the AST.
 

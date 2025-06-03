@@ -1,0 +1,19 @@
+{
+    "files.associations": {
+        "random": "cpp",
+        "array": "cpp",
+        "compare": "cpp",
+        "functional": "cpp",
+        "tuple": "cpp",
+        "type_traits": "cpp",
+        "utility": "cpp",
+        "variant": "cpp",
+        "complex": "cpp",
+        "format": "cpp",
+        "string_view": "cpp",
+        "typeindex": "cpp",
+        "typeinfo": "cpp",
+        "chrono": "cpp",
+        "thread": "cpp"
+    }
+}

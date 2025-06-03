@@ -246,6 +246,17 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
             logError(node->loc, "Could not determine LLVM return type for function '" + node->id->name + "'.");
             m_currentLLVMValue = nullptr; return;
         }
+        
+        // Special handling for main function: if it has a complex return type,
+        // it will use auto-serialization and should return i32 as exit code
+        // BUT if the function body returns a lit() intrinsic, keep the original return type
+        if (node->id->name == "main" && 
+            !returnType->isIntegerTy() && 
+            !returnType->isVoidTy() && 
+            !(returnType->isPointerTy() && returnType == int8PtrType) &&
+            !functionBodyReturnsLitIntrinsic(node->body.get())) {
+            returnType = int32Type; // main returns exit code when auto-serializing
+        }
     } else {
         returnType = llvm::Type::getVoidTy(*context);
     }
@@ -436,37 +447,38 @@ void LLVMCodegen::visit(vyn::ast::ClassDeclaration* node) {
 }
 
 void LLVMCodegen::visit(vyn::ast::TypeAliasDeclaration* node) {
-    // type NewType = OldType;
-    // This primarily affects the type system and semantic analysis.
-    // For codegen, it means NewType is equivalent to OldType\'s LLVM type.
-    // We can record this equivalence if needed, but codegenType should resolve OldType.
-    llvm::Type* originalLlvmType = codegenType(node->typeNode.get()); // Corrected: Was aliasedTypeNode, ast.hpp shows 'typeNode'
-    if (!originalLlvmType) {
-        logError(node->loc, "Could not resolve original type for type alias \'" + node->name->name + "\'."); // ast.hpp shows 'name' for the alias name
+    // type<UnderlyingType> AliasName;
+    // This registers the type alias so that when codegenType encounters the alias name,
+    // it can resolve to the underlying LLVM type.
+    
+    if (!node->name || node->name->name.empty()) {
+        logError(node->loc, "Type alias declaration missing or has empty name");
         m_currentLLVMValue = nullptr;
         return;
     }
-    // Store this alias in a way that codegenType can use it for `aliasName`.
-    // One way is to add it to userTypeMap if it's a struct-like alias, or a specific alias map.
-    // For simplicity, if it's an alias to a struct, we can treat it like defining a new struct type that is identical.
-    // However, LLVM types are structural, so if originalLlvmType is `StructType*`, then `aliasName` just refers to it.
-    // The main thing is that when `codegenType` encounters `aliasName`, it should return `originalLlvmType`.
-    // This is usually handled by the type system before codegen or by adding `aliasName` -> `originalLlvmType` to `m_typeCache` or `userTypeMap`.
-
-    // If the alias name should be a distinct named type in LLVM (even if structurally identical):
-    // llvm::StructType::create(*context, node->aliasName->name)->setBody(originalLlvmType-> ...get fields... );
-    // But this is usually not what's desired for a simple alias.
-
-    // For now, let's ensure that if `codegenType` is called with `aliasName` later,
-    // it can resolve to `originalLlvmType`. This might involve populating `m_typeCache`
-    // or ensuring the parser/semantic analyzer resolves aliases before `codegenType` sees them.
-    // A simple approach for codegen: if `userTypeMap` can store `llvm::Type*` directly:
-    // userTypeMap[node->aliasName->name] = { originalLlvmType, {}, true/false based on original };
-    // This needs UserTypeInfo to be more flexible or a different map for aliases.
-
-    // For now, we assume the type system handles this, and `codegenType(aliasName)` would work.
-    // The value of a type alias declaration itself is not an LLVM value.
-    logError(node->loc, "TypeAliasDeclaration codegen is conceptual. \'" + node->name->name + "\' will resolve to underlying type."); // ast.hpp shows 'name'
+    
+    if (!node->typeNode) {
+        logError(node->loc, "Type alias declaration missing underlying type");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Resolve the underlying type to LLVM type
+    llvm::Type* underlyingLlvmType = codegenType(node->typeNode.get());
+    if (!underlyingLlvmType) {
+        logError(node->loc, "Could not resolve underlying type for type alias '" + node->name->name + "'");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Register the type alias mapping
+    std::string aliasName = node->name->name;
+    typeAliasMap[aliasName] = underlyingLlvmType;
+    
+    // Debug output to verify registration
+    if (verbose) {
+        logWarning(node->loc, "Registered type alias '" + aliasName + "' -> underlying LLVM type");
+    }
     m_currentLLVMValue = nullptr; // No direct LLVM value for an alias declaration itself.
 }
 

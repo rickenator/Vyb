@@ -1,7 +1,7 @@
 // Comprehensive test for semantic-codegen type alias integration
-type UserId = Int;
-type UserName = String;
-type Score = Int;
+type<Int> UserId;
+type<String> UserName;
+type<Int8> Score;
 
 fn<UserId> getUserId() -> {
     return 42;

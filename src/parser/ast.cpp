@@ -1100,7 +1100,14 @@ NodeType FunctionDeclaration::getType() const {
 std::string FunctionDeclaration::toString() const {
     std::stringstream ss;
     if (isAsync) ss << "async ";
-    ss << "fn " << (id ? id->toString() : "") << "(";
+    ss << "fn";
+    
+    // Add return type in angle brackets (correct Vyn syntax)
+    if (returnTypeNode) {
+        ss << "<" << returnTypeNode->toString() << ">";
+    }
+    
+    ss << " " << (id ? id->toString() : "") << "(";
     for (size_t i = 0; i < params.size(); ++i) {
         ss << params[i].name->toString();
         if (params[i].typeNode) {
@@ -1108,11 +1115,7 @@ std::string FunctionDeclaration::toString() const {
         }
         if (i < params.size() - 1) ss << ", ";
     }
-    ss << ")";
-    if (returnTypeNode) {
-        ss << " -> " << returnTypeNode->toString();
-    }
-    ss << " " << (body ? body->toString() : "{}");
+    ss << ") -> " << (body ? body->toString() : "{}");
     return ss.str();
 }
 

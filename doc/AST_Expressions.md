@@ -86,12 +86,28 @@ public:
 } // namespace vyn::ast
 ```
 
-Borrowing Intrinsics (shorthand)
--------------------------------
+Intrinsics Parsed as CallExpression
+----------------------------------
+
+Several types of intrinsics are parsed as CallExpression nodes with specific `callee` identifiers:
+
+### Borrowing Intrinsics (shorthand)
 
 The `borrow(owner)` and `view(owner)` intrinsics are parsed as CallExpression nodes
 with `callee` matching the identifier `borrow` or `view` and a single argument.
 They produce `their<T>` or `their<T const>` respectively.
+
+### Serialization Mode Intrinsics
+
+The following serialization intrinsics are parsed as CallExpression nodes:
+
+- **`lit(value)`**: Emits raw JSON literals without type wrapping. Restricted to primitive values (Int, Float, String, Bool).
+- **`notype(value)`**: Removes `<Type>` suffixes from field names in struct serialization. Only valid for structs.
+- **`bare(value)`**: Emits only raw field values as JSON array, removing all type and field metadata. Only valid for structs.
+- **`deserial(json_string)`**: Deserializes JSON string back to typed Vyn values.
+
+These intrinsics are primarily used for customizing JSON serialization behavior of `main()` function returns.
+See `doc/Auto_Serialization_Main_Returns.md` for comprehensive documentation.
 
 ## 4. `ConstructionExpression`
 

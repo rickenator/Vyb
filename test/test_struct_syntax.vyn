@@ -51,7 +51,7 @@ fn<Person, Company> main() -> {
     
     // Modify these values too
     person.salary = person.salary * 1.1  // 10% raise
-    company.employeeCount = company.employeeCount + 50  // Company growth
+    company.employeeCount += 50          // Company growth
     
     // Return multiple values - the Vyn runtime automatically serializes these to JSON
     return person, company  // Will produce JSON with Person and Company objects

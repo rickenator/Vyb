@@ -76,25 +76,43 @@ namespace vyn::ast {
 
 class FunctionDeclaration : public Declaration {
 public:
-    IdentifierPtr name;
-    std::vector<FunctionParameter> parameters; // Note: stores FunctionParameter objects directly
-    std::optional<TypeNodePtr> returnType;
-    std::optional<BlockStatementPtr> body; // Optional for external/forward declarations
-    std::vector<GenericParameterPtr> genericParameters;
-    bool isExtern; // e.g., extern "C" void printf(...);
-    bool isMember; // True if this is a method within a struct/class/impl
+    std::unique_ptr<Identifier> id;
+    std::vector<FunctionParameter> params;
+    std::unique_ptr<BlockStatement> body;
+    bool isAsync;
+    TypeNodePtr returnTypeNode; // Optional return type annotation
 
-    FunctionDeclaration(SourceLocation loc, IdentifierPtr name,
+    FunctionDeclaration(SourceLocation loc, std::unique_ptr<Identifier> id,
                         std::vector<FunctionParameter> params,
-                        std::optional<TypeNodePtr> returnType,
-                        std::optional<BlockStatementPtr> body,
-                        std::vector<GenericParameterPtr> genericParams,
-                        bool isExtern, bool isMember);
+                        std::unique_ptr<BlockStatement> body,
+                        bool isAsync = false,
+                        TypeNodePtr returnTypeNode = nullptr);
     // ... accept, getType, toString methods ...
 };
 
 } // namespace vyn::ast
 ```
+
+### Multi-Value Returns & Auto-Serialization
+
+Function declarations in Vyn support multi-value return types using the generic syntax `fn<T1, T2, ...>`. When the function name is `main`, the Vyn runtime automatically serializes returned values to JSON format:
+
+```vyn
+// Single return type
+fn<Int> add(var<Int> a, var<Int> b) -> a + b
+
+// Multi-value return type
+fn<Int, String> get_values() -> {
+    return 42, "Hello, World!"
+}
+
+// Auto-serialization in main()
+fn<Int, String> main() -> {
+    return get_values()  // Output: {"Int":42,"String":"Hello, World!"}
+}
+```
+
+For comprehensive documentation on multi-value returns and auto-serialization behavior, see [`Auto_Serialization_Main_Returns.md`](./Auto_Serialization_Main_Returns.md).
 
 ## 4. Type Alias Declaration (`vyn::ast::TypeAliasDeclaration`)
 
@@ -184,6 +202,36 @@ public:
 } // namespace vyn::ast
 ```
 
+### Field Declaration Syntax
+
+Vyn supports two syntaxes for struct field declarations that can be used interchangeably or mixed within the same struct:
+
+#### Colon Syntax (Original)
+```vyn
+struct Person {
+    id: Int,
+    name: String
+}
+```
+
+#### Angle Bracket Syntax (New)
+```vyn
+struct Person {
+    id<Int>,
+    name<String>
+}
+```
+
+#### Mixed Syntax
+```vyn
+struct MixedPoint {
+    x<Int>,   // Angle bracket syntax
+    y: Int    // Colon syntax
+}
+```
+
+The angle bracket syntax aligns with Vyn's type-first approach used in function signatures (`fn<ReturnType>`) and variable declarations (`var<Type>`), providing visual consistency across the language.
+
 ## 8. Class Declaration (`vyn::ast::ClassDeclaration`)
 
 Represents the declaration of a class. *Note: The role of classes versus structs and traits/impls is under review. This node might be refined or superseded.*
@@ -232,6 +280,28 @@ public:
 
 } // namespace vyn::ast
 ```
+
+### Field Declaration Syntax
+
+Fields can be declared using either colon syntax or angle bracket syntax:
+
+```vyn
+struct Example {
+    // Colon syntax (original)
+    field1: Int,
+    field2: String,
+    
+    // Angle bracket syntax (new)
+    field3<Float>,
+    field4<Bool>,
+    
+    // Optional default values work with both syntaxes
+    field5: Int = 42,
+    field6<String> = "default"
+}
+```
+
+Both syntaxes produce identical AST structures and runtime behavior. The choice between them is primarily stylistic, though the angle bracket syntax provides consistency with function return types and variable declarations.
 
 ## 10. Impl Declaration (`vyn::ast::ImplDeclaration`)
 

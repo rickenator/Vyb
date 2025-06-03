@@ -139,20 +139,30 @@ Represents a return statement.
 -   **C++ Class**: `vyn::ast::ReturnStatement`
 -   **`NodeType`**: `RETURN_STATEMENT`
 -   **Fields**:
-    -   `value` (`std::optional<ExprPtr>`): The expression whose value is returned.
+    -   `argument` (`ExprPtr`): The expression whose value is returned (can be nullptr for void returns).
 
 ```cpp
 // From include/vyn/parser/ast.hpp
 namespace vyn::ast {
 class ReturnStatement : public Statement {
 public:
-    std::optional<ExprPtr> value;
+    ExprPtr argument; // Optional, can be nullptr
 
-    ReturnStatement(SourceLocation loc, std::optional<ExprPtr> value);
+    ReturnStatement(SourceLocation loc, ExprPtr argument = nullptr);
     // ... accept, getType, toString methods ...
 };
 } // namespace vyn::ast
 ```
+
+### Auto-Serialization Behavior
+
+When a `ReturnStatement` appears in a `main()` function, the Vyn runtime automatically serializes the returned value(s) to JSON format:
+
+- **Single values**: Serialized directly (e.g., `return 42` → `42`)
+- **Multiple values**: Comma-separated expressions are serialized as a JSON object with type annotations (e.g., `return 42, "hello"` → `{"Int":42,"String":"hello"}`)
+- **Complex types**: Structs and other complex types are serialized with field metadata
+
+For comprehensive documentation on auto-serialization behavior and serialization intrinsics (`lit()`, `notype()`, `bare()`, `deserial()`), see [`Auto_Serialization_Main_Returns.md`](./Auto_Serialization_Main_Returns.md).
 
 ## 7. `BreakStatement`
 

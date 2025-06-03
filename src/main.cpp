@@ -1,6 +1,8 @@
 #include "vyn/vyn.hpp"
 #include "vyn/parser/lexer.hpp"   // For Lexer
 #include "vyn/parser/parser.hpp"  // For vyn::Parser
+#include "vyn/semantic.hpp"       // For vyn::SemanticAnalyzer
+#include "vyn/vre/llvm/codegen.hpp" // For vyn::LLVMCodegen
 #include <catch2/catch_session.hpp>
 #include <fstream>
 #include <iostream>
@@ -16,6 +18,33 @@ extern "C" {
     // This is just a declaration - implementation is in intrinsics.cpp
     void __vyn_println(const char* str);
     char* __vyn_serialize_to_json(void* obj, const char* type_name);
+    char* __vyn_convert_lit_string(const char* str);
+    char* __vyn_string_concat(const char* left, const char* right);
+    
+    // String concatenation intrinsic function
+    char* __vyn_string_concat(const char* left, const char* right);
+    
+    // ToString intrinsic functions for automatic string conversion - all basic types
+    char* __vyn_toString_int(int64_t value);
+    char* __vyn_toString_int8(int8_t value);
+    char* __vyn_toString_int16(int16_t value);
+    char* __vyn_toString_int32(int32_t value);
+    char* __vyn_toString_int64(int64_t value);
+    char* __vyn_toString_uint8(uint8_t value);
+    char* __vyn_toString_uint16(uint16_t value);
+    char* __vyn_toString_uint32(uint32_t value);
+    char* __vyn_toString_uint64(uint64_t value);
+    char* __vyn_toString_float(double value);
+    char* __vyn_toString_float32(float value);
+    char* __vyn_toString_bool(bool value);
+    char* __vyn_toString_string(const char* value);
+    char* __vyn_toString_char(uint8_t value);
+    char* __vyn_toString_rune(uint32_t value);
+    char* __vyn_toString_byte(uint8_t value);
+    
+    // TODO: Future toString functions for compound types:
+    // char* __vyn_toString_vec(void* vec_ptr, const char* element_type);
+    // char* __vyn_toString_tuple(void* tuple_ptr, const char* type_spec);
 }
 
 // LLVM includes for JIT compilation
@@ -40,79 +69,9 @@ namespace vyn {
 }
 
 // Concrete implementation of SemanticAnalyzer
-class SemanticAnalyzerImpl : public vyn::SemanticAnalyzer {
-public:
-    SemanticAnalyzerImpl(vyn::Driver& driver) : vyn::SemanticAnalyzer(driver) {}
-    
-    // Implement all pure virtual methods
-    void visit(vyn::ast::BorrowExpression* node) override {}
-    void visit(vyn::ast::IfExpression* node) override {}
-    void visit(vyn::ast::ArrayInitializationExpression* node) override {}
-    void visit(vyn::ast::TupleTypeNode* node) override {}
-    void visit(vyn::ast::ExternStatement* node) override {}
-    void visit(vyn::ast::YieldStatement* node) override {}
-    void visit(vyn::ast::YieldReturnStatement* node) override {}
-    void visit(vyn::ast::LogicalExpression* node) override {}
-    void visit(vyn::ast::ConditionalExpression* node) override {}
-    void visit(vyn::ast::SequenceExpression* node) override {}
-    void visit(vyn::ast::FunctionExpression* node) override {}
-    void visit(vyn::ast::ThisExpression* node) override {}
-    void visit(vyn::ast::SuperExpression* node) override {}
-    void visit(vyn::ast::AwaitExpression* node) override {}
-    void visit(vyn::ast::MatchStatement* node) override {}
-    void visit(vyn::ast::TraitDeclaration* node) override {}
-    void visit(vyn::ast::NamespaceDeclaration* node) override {}
-    void visit(vyn::ast::TypeName* node) override {}
-    void visit(vyn::ast::PointerType* node) override {}
-    void visit(vyn::ast::ArrayType* node) override {}
-    void visit(vyn::ast::FunctionType* node) override {}
-    void visit(vyn::ast::OptionalType* node) override {}
-    void visit(vyn::ast::AssertStatement* node) override {}
-    void visit(vyn::ast::ConstructionExpression* node) override {}
-    void visit(vyn::ast::ThrowStatement* node) override {}
-    void visit(vyn::ast::FieldDeclaration* node) override {}
-    void visit(vyn::ast::EnumVariant* node) override {}
-    void visit(vyn::ast::TemplateDeclaration* node) override {}
-    void visit(vyn::ast::TypeNode* node) override {}
-};
 
-// Concrete implementation of LLVMCodegen
-class LLVMCodegenImpl : public vyn::LLVMCodegen {
-public:
-    LLVMCodegenImpl(vyn::Driver& driver) : vyn::LLVMCodegen(driver) {}
-    
-    // Implement all pure virtual methods
-    void visit(vyn::ast::ExternStatement* node) override {}
-    void visit(vyn::ast::YieldStatement* node) override {}
-    void visit(vyn::ast::YieldReturnStatement* node) override {}
-    void visit(vyn::ast::BorrowExpression* node) override {}
-    void visit(vyn::ast::IfExpression* node) override {}
-    void visit(vyn::ast::ArrayInitializationExpression* node) override {}
-    void visit(vyn::ast::TupleTypeNode* node) override {}
-    void visit(vyn::ast::LogicalExpression* node) override {}
-    void visit(vyn::ast::ConditionalExpression* node) override {}
-    void visit(vyn::ast::SequenceExpression* node) override {}
-    void visit(vyn::ast::FunctionExpression* node) override {}
-    void visit(vyn::ast::ThisExpression* node) override {}
-    void visit(vyn::ast::SuperExpression* node) override {}
-    void visit(vyn::ast::AwaitExpression* node) override {}
-    void visit(vyn::ast::EmptyStatement* node) override {}
-    void visit(vyn::ast::ThrowStatement* node) override {}
-    void visit(vyn::ast::MatchStatement* node) override {}
-    void visit(vyn::ast::AssertStatement* node) override {}
-    void visit(vyn::ast::TraitDeclaration* node) override {}
-    void visit(vyn::ast::NamespaceDeclaration* node) override {}
-    void visit(vyn::ast::TypeName* node) override {}
-    void visit(vyn::ast::PointerType* node) override {}
-    void visit(vyn::ast::ArrayType* node) override {}
-    void visit(vyn::ast::FunctionType* node) override {}
-    void visit(vyn::ast::OptionalType* node) override {}
-    void visit(vyn::ast::ListComprehension* node) override {}
-    void visit(vyn::ast::FieldDeclaration* node) override {}
-    void visit(vyn::ast::EnumVariant* node) override {}
-    void visit(vyn::ast::TemplateDeclaration* node) override {}
-    void visit(vyn::ast::TypeNode* node) override {}
-};
+
+
 
 // Function to execute Vyn code using LLVM JIT
 int run_vyn_code(const std::string& source, const std::string& fileName, bool generateLLVMIR) {
@@ -153,12 +112,12 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
         std::cout << "AST created successfully" << std::endl;
 
         std::cout << "Running semantic analysis..." << std::endl;
-        SemanticAnalyzerImpl semanticAnalyzer(driver);
+        vyn::SemanticAnalyzer semanticAnalyzer(driver);
         semanticAnalyzer.analyze(ast.get());
         std::cout << "Semantic analysis completed" << std::endl;
 
         std::cout << "Generating LLVM IR code..." << std::endl;
-        LLVMCodegenImpl codegen(driver);
+        vyn::LLVMCodegen codegen(driver);
         codegen.generate(ast.get(), fileName + ".ll");
         std::cout << "LLVM IR generation completed" << std::endl;
 
@@ -177,61 +136,111 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
 
         // Get the LLVM module from the code generator
         std::unique_ptr<llvm::Module> module = codegen.releaseModule();
-        
+
         std::cout << "Setting up execution engine..." << std::endl;
-        std::string errStr;
-        
-        // Print module information
-        std::cout << "Module name: " << module->getName().str() << std::endl;
-        unsigned int funcCount = 0;
-        for(const auto& f : *module) {
-            funcCount++;
-        }
-        std::cout << "Function count: " << funcCount << std::endl;
-        
-        // Print all functions in the module
-        std::cout << "Functions in module:" << std::endl;
-        for (auto &F : module->functions()) {
-            std::cout << "  - " << F.getName().str() << std::endl;
-        }
-        
-        // Check functions before moving the module
+
+        // Retrieve intrinsic functions before moving module into JIT
         llvm::Function* printlnFunc = module->getFunction("__vyn_println");
         llvm::Function* serializeFunc = module->getFunction("__vyn_serialize_to_json");
+        llvm::Function* litConvertFunc = module->getFunction("__vyn_convert_lit_string");
+        llvm::Function* stringConcatFunc = module->getFunction("__vyn_string_concat");
         
-        // Explicitly link in the interpreter and MCJIT
-        std::cout << "Linking Interpreter and MCJIT..." << std::endl;
-        LLVMLinkInInterpreter();
-        LLVMLinkInMCJIT();
+        // Retrieve toString functions
+        llvm::Function* toStringIntFunc = module->getFunction("__vyn_toString_int");
+        llvm::Function* toStringInt8Func = module->getFunction("__vyn_toString_int8");
+        llvm::Function* toStringInt16Func = module->getFunction("__vyn_toString_int16");
+        llvm::Function* toStringInt32Func = module->getFunction("__vyn_toString_int32");
+        llvm::Function* toStringInt64Func = module->getFunction("__vyn_toString_int64");
+        llvm::Function* toStringUInt8Func = module->getFunction("__vyn_toString_uint8");
+        llvm::Function* toStringUInt16Func = module->getFunction("__vyn_toString_uint16");
+        llvm::Function* toStringUInt32Func = module->getFunction("__vyn_toString_uint32");
+        llvm::Function* toStringUInt64Func = module->getFunction("__vyn_toString_uint64");
+        llvm::Function* toStringFloatFunc = module->getFunction("__vyn_toString_float");
+        llvm::Function* toStringFloat32Func = module->getFunction("__vyn_toString_float32");
+        llvm::Function* toStringBoolFunc = module->getFunction("__vyn_toString_bool");
+        llvm::Function* toStringStringFunc = module->getFunction("__vyn_toString_string");
+        llvm::Function* toStringCharFunc = module->getFunction("__vyn_toString_char");
+        llvm::Function* toStringRuneFunc = module->getFunction("__vyn_toString_rune");
+        llvm::Function* toStringByteFunc = module->getFunction("__vyn_toString_byte");
         
-        std::cout << "Creating execution engine..." << std::endl;
-        llvm::ExecutionEngine* executionEngine = 
-            llvm::EngineBuilder(std::move(module))
-            .setErrorStr(&errStr)
-            .create();
-        
+        if (!printlnFunc || !serializeFunc) {
+            throw std::runtime_error("Missing required intrinsic functions in module");
+        }
+
+        // Create the JIT execution engine (MCJIT)
+        std::string engineError;
+        // Use EngineBuilder for MCJIT creation
+        llvm::EngineBuilder engineBuilder(std::move(module));
+        engineBuilder.setErrorStr(&engineError);
+        engineBuilder.setEngineKind(llvm::EngineKind::JIT);
+        llvm::ExecutionEngine* executionEngine = engineBuilder.create();
         if (!executionEngine) {
-            throw std::runtime_error("Failed to create execution engine: " + errStr);
+            throw std::runtime_error("Failed to create ExecutionEngine: " + engineError);
+        }
+
+        // Register the intrinsic functions with the JIT
+        executionEngine->addGlobalMapping(printlnFunc, (void*)&__vyn_println);
+        executionEngine->addGlobalMapping(serializeFunc, (void*)&__vyn_serialize_to_json);
+        if (litConvertFunc) {
+            executionEngine->addGlobalMapping(litConvertFunc, (void*)&__vyn_convert_lit_string);
+        }
+        if (stringConcatFunc) {
+            executionEngine->addGlobalMapping(stringConcatFunc, (void*)&__vyn_string_concat);
+        }
+        if (stringConcatFunc) {
+            executionEngine->addGlobalMapping(stringConcatFunc, (void*)&__vyn_string_concat);
         }
         
-        // Register our intrinsic functions with the execution engine using the function pointers we saved
-        if (printlnFunc) {
-            executionEngine->addGlobalMapping(printlnFunc, reinterpret_cast<void*>(__vyn_println));
-            std::cout << "Successfully registered __vyn_println function" << std::endl;
-        } else {
-            std::cout << "Warning: __vyn_println function not found in module" << std::endl;
+        // Register toString functions with the JIT
+        if (toStringIntFunc) {
+            executionEngine->addGlobalMapping(toStringIntFunc, (void*)&__vyn_toString_int);
         }
-        
-        // Also register the serialization function
-        if (serializeFunc) {
-            executionEngine->addGlobalMapping(serializeFunc, reinterpret_cast<void*>(__vyn_serialize_to_json));
-            std::cout << "Successfully registered __vyn_serialize_to_json function" << std::endl;
-        } else {
-            std::cout << "Warning: __vyn_serialize_to_json function not found in module" << std::endl;
+        if (toStringInt8Func) {
+            executionEngine->addGlobalMapping(toStringInt8Func, (void*)&__vyn_toString_int8);
         }
-        
+        if (toStringInt16Func) {
+            executionEngine->addGlobalMapping(toStringInt16Func, (void*)&__vyn_toString_int16);
+        }
+        if (toStringInt32Func) {
+            executionEngine->addGlobalMapping(toStringInt32Func, (void*)&__vyn_toString_int32);
+        }
+        if (toStringInt64Func) {
+            executionEngine->addGlobalMapping(toStringInt64Func, (void*)&__vyn_toString_int64);
+        }
+        if (toStringUInt8Func) {
+            executionEngine->addGlobalMapping(toStringUInt8Func, (void*)&__vyn_toString_uint8);
+        }
+        if (toStringUInt16Func) {
+            executionEngine->addGlobalMapping(toStringUInt16Func, (void*)&__vyn_toString_uint16);
+        }
+        if (toStringUInt32Func) {
+            executionEngine->addGlobalMapping(toStringUInt32Func, (void*)&__vyn_toString_uint32);
+        }
+        if (toStringUInt64Func) {
+            executionEngine->addGlobalMapping(toStringUInt64Func, (void*)&__vyn_toString_uint64);
+        }
+        if (toStringFloatFunc) {
+            executionEngine->addGlobalMapping(toStringFloatFunc, (void*)&__vyn_toString_float);
+        }
+        if (toStringFloat32Func) {
+            executionEngine->addGlobalMapping(toStringFloat32Func, (void*)&__vyn_toString_float32);
+        }
+        if (toStringBoolFunc) {
+            executionEngine->addGlobalMapping(toStringBoolFunc, (void*)&__vyn_toString_bool);
+        }
+        if (toStringStringFunc) {
+            executionEngine->addGlobalMapping(toStringStringFunc, (void*)&__vyn_toString_string);
+        }
+        if (toStringCharFunc) {
+            executionEngine->addGlobalMapping(toStringCharFunc, (void*)&__vyn_toString_char);
+        }
+        if (toStringRuneFunc) {
+            executionEngine->addGlobalMapping(toStringRuneFunc, (void*)&__vyn_toString_rune);
+        }
+        if (toStringByteFunc) {
+            executionEngine->addGlobalMapping(toStringByteFunc, (void*)&__vyn_toString_byte);
+        }
         std::cout << "Execution engine created successfully" << std::endl;
-        
         std::cout << "Finding main function..." << std::endl;
         llvm::Function* mainFunc = executionEngine->FindFunctionNamed("main");
         if (!mainFunc) {
@@ -435,7 +444,7 @@ int main(int argc, char* argv[]) {
                 auto ast = parser.parse_module();
                 
                 vyn::Driver driver;
-                SemanticAnalyzerImpl semanticAnalyzer(driver);
+                vyn::SemanticAnalyzer semanticAnalyzer(driver);
                 semanticAnalyzer.analyze(ast.get());
                 
                 std::cout << "Semantic analysis completed successfully" << std::endl;

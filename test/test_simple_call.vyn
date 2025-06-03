@@ -1,0 +1,9 @@
+// Test simple function call parsing
+
+fn<Int> simple_function() -> {
+    return 42;
+}
+
+fn<Int> main() -> {
+    return simple_function();
+}

@@ -1,0 +1,9 @@
+// @test: Simple lit() Intrinsic Test
+// @description: Tests the lit() intrinsic for raw JSON literal output
+// @category: intrinsic, json, serialization
+// @expect: pass
+// @expect-output: 42
+
+fn<String> main() -> {
+    return lit("42");
+}

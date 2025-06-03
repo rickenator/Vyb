@@ -1,0 +1,13 @@
+// @test: Debug lit() Intrinsic Test  
+// @description: Tests the lit() intrinsic and prints the result to verify output
+// @category: intrinsic, json, serialization
+// @expect: pass
+
+fn<Int> main() -> {
+    println("Before lit() call...");
+    var<String> result = lit("42");
+    println("After lit() call, result:");
+    println(result);
+    println("Done");
+    return 0;
+}

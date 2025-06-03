@@ -42,23 +42,15 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
         llvm::Value *returnValue = m_currentLLVMValue;
 
         if (returnValue) {
+            // Debug output to see what we're returning
+            std::cerr << "DEBUG: ReturnStatement - Type: " << getTypeName(returnValue->getType()) 
+                << ", Function Return Type: " << (currentFunction ? getTypeName(currentFunction->getReturnType()) : "null") << std::endl;
+            
             // Check if we're in main function for auto-serialization
-            if (currentFunction && currentFunction->getName() == "main") {
-                // Get the return type of the main function
-                llvm::Type* returnType = currentFunction->getReturnType();
-                
-                // Handle different return types
-                if (returnType == int32Type || returnType == int64Type) {
-                    // If main<Int> - Use original return, use as exit code
-                    builder->CreateRet(returnValue);
-                } else if (returnType->isPointerTy() && returnType == int8PtrType) {
-                    // If main<String> - Print the string
-                    llvm::Function* printlnFunc = getVynPrintlnFunction();
-                    builder->CreateCall(printlnFunc, {returnValue});
-                    builder->CreateRet(llvm::ConstantInt::get(int32Type, 0)); // Return 0 as exit code
-                } else {
-                    // If main returns a complex type - Auto-serialize as JSON
-                    llvm::Function* serializeFunc = getSerializeToJsonFunction();
+            // BUT skip auto-serialization if this is a lit() intrinsic call
+            if (currentFunction && currentFunction->getName() == "main" && !isLitIntrinsicCall(node->argument.get())) {
+                // Main function with complex return type - auto-serialize
+                llvm::Function* serializeFunc = getSerializeToJsonFunction();
                     
                     // Cast the return value to void* for serialization
                     llvm::Value* returnValueAsPtr = returnValue;
@@ -71,6 +63,37 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                     
                     // Get type name as string (for serialization)
                     std::string typeName = getTypeName(returnValue->getType());
+                    
+                    // For structs, extract the actual struct type name if possible
+                    if (returnValue->getType()->isPointerTy()) {
+                        // Try to get struct name from the object pointer directly
+                        std::string typeStr = getTypeName(returnValue->getType());
+                        if (typeStr.find("struct.") != std::string::npos) {
+                            // This is a struct pointer, extract the name
+                            size_t prefixPos = typeStr.find("struct.");
+                            size_t startPos = prefixPos + 7; // length of "struct."
+                            size_t endPos = typeStr.find('*', startPos);
+                            if (endPos != std::string::npos && endPos > startPos) {
+                                typeName = typeStr.substr(startPos, endPos - startPos - 1);
+                            }
+                        }
+                        
+                        // If we have a struct name in userTypeMap for this value, use it
+                        for (const auto& entry : userTypeMap) {
+                            if (entry.second.llvmType && returnValue->getType()->isPointerTy()) {
+                                // For opaque pointers in LLVM 15+, we can't easily get element type
+                                // Skip this check for now and rely on type name matching
+                                if (llvm::AllocaInst* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(returnValue)) {
+                                    llvm::Type* elementType = allocaInst->getAllocatedType();
+                                    if (entry.second.llvmType == elementType) {
+                                        typeName = entry.first;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
                     llvm::Value* typeNameValue = builder->CreateGlobalStringPtr(typeName, "typename");
                     
                     // Convert to void* (int8*)
@@ -82,12 +105,39 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                     // Print the JSON string
                     llvm::Function* printlnFunc = getVynPrintlnFunction();
                     builder->CreateCall(printlnFunc, {jsonString});
-                    
-                    // Return 0 as exit code
-                    builder->CreateRet(llvm::ConstantInt::get(int32Type, 0));
-                }
+                         // Return 0 as exit code after auto-serialization
+                builder->CreateRet(llvm::ConstantInt::get(int32Type, 0));
             } else {
                 // Not in main function - normal return
+                std::cerr << "DEBUG: Return value type: " << getTypeName(returnValue->getType())
+                          << ", Function return type: " << getTypeName(currentFunction->getReturnType()) << std::endl;
+                
+                if (returnValue->getType() != currentFunction->getReturnType()) {
+                    // Types don't match, try to cast
+                    llvm::Value* castedValue = tryCast(returnValue, currentFunction->getReturnType(), node->loc);
+                    if (castedValue) {
+                        std::cerr << "DEBUG: Successfully cast return value to " << getTypeName(castedValue->getType()) << std::endl;
+                        returnValue = castedValue;
+                    } else {
+                        // For member expressions (e.g., p.x) load the value if needed
+                        if (returnValue->getType()->isPointerTy() && 
+                            !currentFunction->getReturnType()->isPointerTy()) {
+                            std::cerr << "DEBUG: Loading pointer value for return" << std::endl;
+                            
+                            // For loading, we need to know the element type
+                            llvm::Type* elementType = nullptr;
+                            if (llvm::AllocaInst* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(returnValue)) {
+                                elementType = allocaInst->getAllocatedType();
+                            } else {
+                                // Can't determine element type safely, use function return type
+                                elementType = currentFunction->getReturnType();
+                            }
+                            
+                            returnValue = builder->CreateLoad(elementType, returnValue, "member_load");
+                            std::cerr << "DEBUG: After loading, return value type: " << getTypeName(returnValue->getType()) << std::endl;
+                        }
+                    }
+                }
                 builder->CreateRet(returnValue);
             }
         } else {

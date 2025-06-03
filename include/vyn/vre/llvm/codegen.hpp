@@ -95,6 +95,7 @@ private:
     std::map<std::string, llvm::Value*> namedValues;
     std::map<std::string, UserTypeInfo> userTypeMap;
     std::map<std::string, llvm::Type*> typeParameterMap;
+    std::map<std::string, llvm::Type*> typeAliasMap; // Maps type alias names to their underlying LLVM types
     std::map<vyn::ast::TypeNode*, llvm::Type*> m_typeCache;
     std::map<llvm::Value*, std::shared_ptr<vyn::ast::TypeNode>> valueTypeMap; // Maps LLVM values to AST types
     vyn::ast::TypeNode* m_currentImplTypeNode = nullptr; // Initialize
@@ -118,6 +119,9 @@ private:
     // Type system helpers
     std::string getTypeName(llvm::Type* type);
     llvm::Type* getPointeeTypeInfo(llvm::Value* ptr);
+    llvm::Function* getLitConversionFunction();
+    bool isLitIntrinsicCall(vyn::ast::Expression* expr);
+    bool functionBodyReturnsLitIntrinsic(vyn::ast::BlockStatement* body);
     std::string extractOriginalTypeNameFromSemantics(vyn::ast::Expression* expr);
     std::string extractOriginalTypeNameFromAST(vyn::ast::Expression* expr);
 
@@ -126,16 +130,24 @@ private:
     // String operations
     llvm::Value* generateStringConcatenation(llvm::Value* leftStr, llvm::Value* rightStr, SourceLocation loc);
     
+    // ToString conversion helpers for mixed-type string concatenation  
+    llvm::Value* generateToStringCall(llvm::Value* value, llvm::Type* valueType, vyn::ast::TypeNode* astType, SourceLocation loc);
+    llvm::Value* generateMixedStringConcatenation(llvm::Value* leftValue, llvm::Value* rightValue, 
+                                                vyn::ast::TypeNode* leftTypeNode, vyn::ast::TypeNode* rightTypeNode, SourceLocation loc);
+    std::string resolveTypeAliasToBaseName(vyn::ast::TypeNode* typeNode);
+    
     // IO operations
     llvm::Function* getPrintlnFunction();
     llvm::Function* getVynPrintlnFunction();
     llvm::Function* getSerializeToJsonFunction();
 
+    // Ensure all core intrinsic functions are declared
+    void ensureCoreIntrinsicFunctions();
+
 
     // RTTI (Run-Time Type Information)
     llvm::StructType* getOrCreateRTTIStructType();
     llvm::Value* generateRTTIObject(const std::string& typeName, int typeId); // typeId for distinguishing types
-
 
     // Loop handling
     void pushLoop(llvm::BasicBlock* header, llvm::BasicBlock* body, llvm::BasicBlock* update, llvm::BasicBlock* exit);

@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.6] - 2025-06-02
+
+### Added
+- **Complete ToString Infrastructure**: Implemented comprehensive toString functionality for proper type-aware string concatenation
+  - Added 16 toString intrinsic functions for all basic types (Int, Int8-64, UInt8-64, Float, Float32, Bool, String, Char, Rune, Byte)
+  - Automatic type-aware string concatenation: operations like `"User ID:" + id` now work when `id` is a type alias (e.g., `UserId` which resolves to `Int`)
+  - Type alias resolution system that resolves aliases to base types for proper toString selection
+  - Mixed-type string concatenation with automatic toString conversion for non-string operands
+  - JIT function registration for all toString functions enabling runtime execution
+
+### Improved
+- **Enhanced String Operations**: String concatenation now handles mixed types automatically
+  - Binary expression handler detects when at least one operand is a string and triggers toString conversion
+  - Seamless integration with existing type system and code generation
+- **Better Type Resolution**: Added helper methods for resolving type aliases to base type names
+- **Runtime Integration**: Complete JIT registration system for toString functions
+
+### Fixed
+- **String Concatenation Type Errors**: Fixed issues where mixing string literals with type aliases caused compilation errors
+- **Return Statement Serialization**: Enhanced serialization to handle complex tuple patterns like `{ i64, ptr, i8 }` with meaningful field names
+- **Type-aware Code Generation**: Improved LLVM IR generation for mixed-type operations
+
+### Technical Details
+- **New Intrinsic Functions**: 
+  - `__vyn_toString_int()`, `__vyn_toString_int8()`, `__vyn_toString_int32()`, `__vyn_toString_float()`, `__vyn_toString_bool()`, `__vyn_toString_string()`
+  - Extended support: `__vyn_toString_int16()`, `__vyn_toString_int64()`, `__vyn_toString_uint8-64()`, `__vyn_toString_float32()`, `__vyn_toString_char()`, `__vyn_toString_rune()`, `__vyn_toString_byte()`
+- **New Helper Methods**:
+  - `generateToStringCall()` - converts values to strings based on type
+  - `generateMixedStringConcatenation()` - handles mixed-type concatenation  
+  - `resolveTypeAliasToBaseName()` - resolves type aliases to base type names
+- **Enhanced Code Generation**: Modified binary expression handler in `cgen_expr.cpp` to detect string operations and trigger automatic conversion
+
+### Test Results
+- **String Concatenation**: `"User ID: 42"`, `"User Name: Alice"`, `"Score: 100"`
+- **JSON Serialization**: `{"UserId":42,"UserName":"Alice","Score":100}`
+- **Type Safety**: Maintains type safety while enabling intuitive string operations
+
+### Files Modified
+- `src/vre/intrinsics.cpp` - Added 16 toString functions and enhanced serialization
+- `include/vyn/vre/llvm/codegen.hpp` - Added method declarations for string conversion helpers
+- `src/vre/llvm/cgen_string.cpp` - Implemented helper methods for type resolution and mixed concatenation
+- `src/vre/llvm/cgen_expr.cpp` - Modified PLUS case in binary expression handler
+- `src/main.cpp` - Added comprehensive toString function declarations and JIT registration
+
+---
+
 ## [0.3.5] - 2025-05-26
 
 ### Added

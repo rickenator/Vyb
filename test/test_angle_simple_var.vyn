@@ -1,0 +1,10 @@
+// Test with variable assignment using angle bracket syntax
+struct TestPoint {
+    x<Int>,
+    y<Int>
+}
+
+fn<Int> main() -> {
+    var<TestPoint> p = TestPoint { x=10, y=20 };
+    return p.x;
+}

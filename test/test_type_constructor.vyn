@@ -1,0 +1,12 @@
+// Test that type constructors still work correctly
+
+struct Point {
+    x: Int,
+    y: Int
+}
+
+fn<Int> main() -> {
+    // This should still be parsed as a ConstructionExpression
+    // Using the Point constructor with capitalized name
+    return Point(10, 20).x + Point(10, 20).y;
+}

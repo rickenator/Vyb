@@ -1,6 +1,6 @@
 // Test file for type alias functionality
-type MyInt = Int;
-type MyString = String;
+type<Int> MyInt;
+type<String> MyString;
 
 fn<MyInt> main() -> {
     var<MyInt> x = 47;

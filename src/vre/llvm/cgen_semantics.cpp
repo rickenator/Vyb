@@ -10,43 +10,16 @@ std::string LLVMCodegen::extractOriginalTypeNameFromSemantics(vyn::ast::Expressi
         return "unknown";
     }
     
-    // Get the semantic analyzer from the driver
-    SemanticAnalyzer* semanticAnalyzer = driver_.getSemanticAnalyzer();
-    if (!semanticAnalyzer) {
-        // Fallback to the existing AST-based method
-        return extractOriginalTypeName(expr);
-    }
+    // Note: The current Driver and SemanticAnalyzer classes don't expose
+    // the APIs needed for semantic-based type extraction. For now, we'll
+    // fall back to AST-based analysis in all cases.
+    // 
+    // In a future version, we could:
+    // 1. Add a getSemanticAnalyzer() method to Driver
+    // 2. Add a public getExpressionTypes() method to SemanticAnalyzer
+    // 3. Add a typeAliasMap to track type aliases
     
-    // Look up the expression type in the semantic analyzer's expressionTypes map
-    auto& expressionTypes = semanticAnalyzer->getExpressionTypes();
-    auto it = expressionTypes.find(expr);
-    
-    if (it != expressionTypes.end() && it->second) {
-        ast::TypeNode* typeNode = it->second;
-        
-        // Check if this is a type alias by examining the type node
-        if (auto typeName = dynamic_cast<ast::TypeName*>(typeNode)) {
-            if (typeName->identifier) {
-                // This is an identifier type - could be a type alias
-                std::string typeNameStr = typeName->identifier->name;
-                
-                // Check if this is a type alias by looking in our typeAliasMap
-                auto aliasIt = typeAliasMap.find(typeNameStr);
-                if (aliasIt != typeAliasMap.end()) {
-                    // This is a type alias, return the alias name
-                    return typeNameStr;
-                }
-                
-                // Not a type alias, but still return the identifier name
-                return typeNameStr;
-            }
-        }
-        
-        // For other types, return their string representation
-        return typeNode->toString();
-    }
-    
-    // Fallback to AST-based analysis if semantic information is not available
+    // Fallback to AST-based analysis
     return extractOriginalTypeNameFromAST(expr);
 }
 

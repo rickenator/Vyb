@@ -1,0 +1,9 @@
+// @test: Very Simple Function Test
+// @description: Tests basic function execution without intrinsics
+// @category: basic, function
+// @expect: pass
+// @expect-output: "hello"
+
+fn<String> main() -> {
+    return "hello";
+}
