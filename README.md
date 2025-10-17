@@ -156,11 +156,37 @@ Vyn **v0.3.7** is a **complete systems programming language** ready for producti
 - **I/O**: `println()` for output, works with all data types including vectors
 
 ### ✅ **Advanced Type System**
-- **Multi-value returns**: `fn<Int,String> main() -> return 42, "hello"`
+- **Multi-value returns**: `main()<Int,String> -> return 42, "hello"`
 - **Auto-serialization**: Complex return types automatically output as JSON
 - **Type safety**: Full type checking and inference with modern struct syntax
 - **Generic collections**: `Vec<Int>`, `Vec<String>` with full method support
 - **Member access**: Struct field access (`obj.field`) and array indexing (`arr[index]`)
+
+#### Primitive Types
+
+| Type | Description | Size | Range/Notes | Example |
+|------|-------------|------|-------------|---------|
+| `Int` | Signed integer | 64-bit | -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807 | `x<Int> = 42` |
+| `Float` | Floating point | 64-bit | IEEE 754 double precision | `pi<Float> = 3.14159` |
+| `Bool` | Boolean | 1-bit | `true` or `false` | `flag<Bool> = true` |
+| `String` | UTF-8 string | Variable | Heap-allocated, immutable | `name<String> = "Alice"` |
+| `Void` | No value | 0-bit | Used for functions that don't return | `print()<Void> -> { ... }` |
+
+#### Collection Types
+
+| Type | Description | Mutability | Example |
+|------|-------------|------------|---------|
+| `[T; N]` | Fixed-size array | Mutable elements | `nums<[Int; 5]> = [1, 2, 3, 4, 5]` |
+| `Vec<T>` | Dynamic array | Mutable elements | `items<Vec<String>> = Vec::new()` |
+
+#### Ownership Types
+
+| Type | Description | Use Case | Example |
+|------|-------------|----------|---------|
+| `my<T>` | Unique ownership | Single owner, move semantics | `data<my<Person>> = my(Person{...})` |
+| `our<T>` | Shared ownership | Reference counting | `config<our<Settings>> = our(Settings{...})` |
+| `their<T>` | Borrowed reference | Non-owning access | `ref<their<Data>> = borrow(owner)` |
+| `loc<T>` | Raw pointer | Unsafe operations only | `ptr<loc<Int>> = loc(variable)` |
 
 ### ✅ **Memory Management**
 - **Ownership types**: `my<T>`, `our<T>`, `their<T>` for safe memory handling
