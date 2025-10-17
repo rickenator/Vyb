@@ -109,13 +109,9 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
     llvm::Type* varType = nullptr;
 
     // std::cout << "DEBUG: VariableDeclaration for '" << node->id->name << "'" << std::endl;
-    // std::cout << "DEBUG: typeNode: " << (node->typeNode ? node->typeNode->toString() : "null") << std::endl;
-    // std::cout << "DEBUG: init: " << (node->init ? node->init->toString() : "null") << std::endl;
 
     if (node->typeNode) {
-        // std::cout << "DEBUG: Processing typeNode: " << node->typeNode->toString() << std::endl;
         varType = codegenType(node->typeNode.get());
-        // std::cout << "DEBUG: typeNode processing completed" << std::endl;
         if (!varType) {
             logError(node->loc, "Could not determine LLVM type for variable '" + node->id->name + "'.");
             m_currentLLVMValue = nullptr;
@@ -124,15 +120,12 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
     }
 
     if (node->init) {
-        // std::cout << "DEBUG: Processing init expression: " << node->init->toString() << std::endl;
         // Make sure the initializer knows its intended type if available
         if (node->typeNode && !node->init->type) {
             node->init->type = node->typeNode->clone();
         }
         
-        // std::cout << "DEBUG: About to accept init expression" << std::endl;
         node->init->accept(*this);
-        // std::cout << "DEBUG: Init expression processing completed" << std::endl;
         initialVal = m_currentLLVMValue;
         if (!initialVal) {
             logError(node->init->loc, "Initialization expression for variable '" + node->id->name + "' evaluated to null.");

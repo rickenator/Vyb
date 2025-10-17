@@ -1,0 +1,6 @@
+// Test successful String variable with new unified syntax
+message<String> = "Hello, unified syntax!";
+
+main()<String> -> {
+    return message;
+}
