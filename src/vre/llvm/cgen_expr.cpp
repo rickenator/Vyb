@@ -513,6 +513,55 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
     // Debug output to track CallExpression visits
     std::cout << "DEBUG: CallExpression visitor called with callee: " << (node->callee ? node->callee->toString() : "null") << std::endl;
     
+    // Check for Vec::new() constructor calls
+    std::cout << "DEBUG: Checking if callee is MemberExpression..." << std::endl;
+    if (auto memberExpr = dynamic_cast<vyn::ast::MemberExpression*>(node->callee.get())) {
+        std::cout << "DEBUG: Found MemberExpression callee" << std::endl;
+        std::cout << "DEBUG: MemberExpression object: " << (memberExpr->object ? memberExpr->object->toString() : "null") << std::endl;
+        std::cout << "DEBUG: MemberExpression property: " << (memberExpr->property ? memberExpr->property->toString() : "null") << std::endl;
+        if (auto vecIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->object.get())) {
+            std::cout << "DEBUG: MemberExpression object is Identifier: " << vecIdent->name << std::endl;
+            if (auto newIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->property.get())) {
+                std::cout << "DEBUG: MemberExpression property is Identifier: " << newIdent->name << std::endl;
+                if (vecIdent->name == "Vec" && newIdent->name == "new") {
+                    // This is Vec::new() - create an empty vector
+                    std::cout << "DEBUG: Creating Vec::new() constructor" << std::endl;
+                    
+                    // Create Vec struct: { ptr, size, capacity }
+                    std::vector<llvm::Type*> vecFields = {
+                        llvm::PointerType::get(*context, 0), // ptr to elements (opaque pointer)
+                        llvm::Type::getInt64Ty(*context),    // size (0)
+                        llvm::Type::getInt64Ty(*context)     // capacity (0)
+                    };
+                    
+                    llvm::StructType* vecStructType = llvm::StructType::get(*context, vecFields, false);
+                    
+                    // Allocate the Vec struct
+                    llvm::Value* vecAlloca = builder->CreateAlloca(vecStructType, nullptr, "vec.new");
+                    
+                    // Initialize fields: ptr = null, size = 0, capacity = 0
+                    llvm::Value* nullPtr = llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0));
+                    llvm::Value* zero = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0);
+                    
+                    // Store null pointer
+                    llvm::Value* ptrFieldPtr = builder->CreateStructGEP(vecStructType, vecAlloca, 0, "vec.ptr_field");
+                    builder->CreateStore(nullPtr, ptrFieldPtr);
+                    
+                    // Store size = 0
+                    llvm::Value* sizeFieldPtr = builder->CreateStructGEP(vecStructType, vecAlloca, 1, "vec.size_field");
+                    builder->CreateStore(zero, sizeFieldPtr);
+                    
+                    // Store capacity = 0
+                    llvm::Value* capFieldPtr = builder->CreateStructGEP(vecStructType, vecAlloca, 2, "vec.cap_field");
+                    builder->CreateStore(zero, capFieldPtr);
+                    
+                    m_currentLLVMValue = vecAlloca;
+                    return;
+                }
+            }
+        }
+    }
+    
     // First, check if this is an intrinsic function call
     auto identCallee = dynamic_cast<vyn::ast::Identifier*>(node->callee.get());
     std::string calleeName = node->callee->toString();

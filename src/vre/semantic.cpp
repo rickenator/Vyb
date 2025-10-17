@@ -555,9 +555,38 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             return;
         }
     }
+    
+    // Handle Vec::new() constructor calls
+    if (auto memberExpr = dynamic_cast<ast::MemberExpression*>(node->callee.get())) {
+        // Check if this is Vec::new()
+        if (auto vecIdent = dynamic_cast<ast::Identifier*>(memberExpr->object.get())) {
+            if (auto newIdent = dynamic_cast<ast::Identifier*>(memberExpr->property.get())) {
+                if (vecIdent->name == "Vec" && newIdent->name == "new") {
+                    // This is Vec::new() - create an empty vector
+                    if (!node->arguments.empty()) {
+                        addError("Vec::new() does not accept any arguments", node);
+                        return;
+                    }
+                    
+                    // Need to infer element type from context or default to a generic type
+                    // For now, we'll default to Vec<Int> if no context is available
+                    // TODO: In a full implementation, this should be inferred from the variable declaration
+                    auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+                    auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+                    auto vecType = std::make_unique<ast::VecType>(node->loc, std::move(intType));
+                    
+                    expressionTypes[node] = vecType.get();
+                    node->type = std::shared_ptr<ast::TypeNode>(std::move(vecType));
+                    return;
+                }
+            }
+        }
+    }
+    
     // Fallback: default CallExpression analysis (no additional checks)
     // ...existing code...
 }
+
 void SemanticAnalyzer::visit(ast::ArrayElementExpression* node) {
     if (!node || !node->array || !node->index) {
         addError("Malformed array element expression.", node);
@@ -1281,7 +1310,24 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
         return;
     }
     const std::string& typeNameStr = node->identifier->name;
-    if (typeNameStr == "loc") {
+    if (typeNameStr == "Vec") {
+        // Convert Vec<T> TypeName to VecType
+        if (node->genericArgs.empty() || !node->genericArgs[0]) {
+            addError("Vec type requires a type parameter (e.g., Vec<Int>).", node);
+            return; 
+        }
+        if (node->genericArgs.size() > 1) {
+            addError("Vec type accepts only one type parameter.", node);
+            return; 
+        }
+        
+        // Visit the element type
+        node->genericArgs[0]->accept(*this);
+        
+        // Create a VecType instance
+        auto vecType = std::make_unique<ast::VecType>(node->loc, node->genericArgs[0]->clone());
+        node->type = std::shared_ptr<ast::TypeNode>(vecType.release());
+    } else if (typeNameStr == "loc") {
         if (node->genericArgs.empty() || !node->genericArgs[0]) {
             addError("loc type constructor requires a type parameter (e.g., loc<T>).", node);
             return; 
@@ -1443,6 +1489,13 @@ void SemanticAnalyzer::visit(ast::ArrayType* node) {
         node->elementType->accept(*this);
     }
 }
+
+void SemanticAnalyzer::visit(ast::VecType* node) {
+    if (node && node->elementType) {
+        node->elementType->accept(*this);
+    }
+}
+
 void SemanticAnalyzer::visit(ast::FunctionType* node) {
     if (node) {
         for (auto& paramType : node->parameterTypes) { 
@@ -1562,6 +1615,12 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
             // For simplicity, ignoring size compatibility for now (atTarget->sizeExpression vs atValue->sizeExpression).
             // A full check would compare constant sizes if available.
             return areTypesCompatible(atTarget->elementType.get(), atValue->elementType.get());
+        }
+        case ast::TypeNode::Category::VEC: {
+            auto* vtTarget = static_cast<ast::VecType*>(targetType);
+            auto* vtValue = static_cast<ast::VecType*>(valueType);
+            // Vec<T> is compatible with Vec<U> if T is compatible with U.
+            return areTypesCompatible(vtTarget->elementType.get(), vtValue->elementType.get());
         }
         case ast::TypeNode::Category::FUNCTION: {
             auto* ftTarget = static_cast<ast::FunctionType*>(targetType);

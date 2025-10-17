@@ -1,0 +1,9 @@
+// Test shorthand parameter syntax
+fn<Int> add_shorthand(Int a, Int b) -> {
+    return a + b;
+}
+
+fn<Int> main() -> {
+    var<Int> result = add_shorthand(10, 20);
+    return result;
+}

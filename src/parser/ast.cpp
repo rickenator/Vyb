@@ -910,6 +910,29 @@ std::unique_ptr<TypeNode> ArrayType::clone() const {
     );
 }
 
+// --- VecType ---
+VecType::VecType(SourceLocation loc, TypeNodePtr et)
+    : TypeNode(loc), elementType(std::move(et)) {}
+
+NodeType VecType::getType() const {
+    return NodeType::VEC_TYPE;
+}
+
+std::string VecType::toString() const {
+    return "Vec<" + (elementType ? elementType->toString() : "UnknownType") + ">";
+}
+
+void VecType::accept(Visitor& visitor) {
+    visitor.visit(this);
+}
+
+std::unique_ptr<TypeNode> VecType::clone() const {
+    return std::make_unique<VecType>(
+        loc, 
+        elementType ? elementType->clone() : nullptr
+    );
+}
+
 // --- FunctionType ---
 FunctionType::FunctionType(SourceLocation loc, std::vector<TypeNodePtr> pt, TypeNodePtr rt)
     : TypeNode(loc), parameterTypes(std::move(pt)), returnType(std::move(rt)) {}

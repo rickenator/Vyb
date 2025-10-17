@@ -233,6 +233,7 @@ public:
     void visit(ast::TypeName* node) override;
     void visit(ast::PointerType* node) override;
     void visit(ast::ArrayType* node) override;
+    void visit(ast::VecType* node) override;
     void visit(ast::FunctionType* node) override;
     void visit(ast::OptionalType* node) override;
     void visit(ast::TupleTypeNode* node) override; // Added for tuple type support
