@@ -118,14 +118,13 @@ namespace vyn {
         if (peek().type == TokenType::IDENTIFIER) {
             std::string identifier_name = peek().lexeme;
             
-            // Check if this looks like a function call pattern: identifier followed by ()
-            // This is a lookahead to see if it's identifier() with no arguments
-            if (pos_ + 1 < tokens_.size() && tokens_[pos_ + 1].type == TokenType::LPAREN &&
-                pos_ + 2 < tokens_.size() && tokens_[pos_ + 2].type == TokenType::RPAREN) {
-                // This looks like a parameterless function call, skip type parsing
+            // Check if this looks like a function call pattern: identifier followed by (
+            // This includes both parameterless and parameterized function calls
+            if (pos_ + 1 < tokens_.size() && tokens_[pos_ + 1].type == TokenType::LPAREN) {
+                // This looks like a function call (with or without parameters), skip type parsing
                 skip_type_parsing = true;
             }
-            // Also skip for known intrinsic functions
+            // Also skip for known intrinsic functions even without parentheses
             else if (identifier_name == "println" || identifier_name == "print" || identifier_name == "debug" || 
                 identifier_name == "error" || identifier_name == "warn" || identifier_name == "info" ||
                 identifier_name == "lit" || identifier_name == "notype" || identifier_name == "bare" || 

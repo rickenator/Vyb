@@ -828,13 +828,25 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
             return;
         }
 
-        // Implicit cast if necessary (e.g. int to float)
+        // Implicit cast if necessary (e.g. int to float, i64 to i32)
         llvm::Type* expectedArgType = calleeFunc->getFunctionType()->getParamType(i);
         if (argValue->getType() != expectedArgType) {
             if (expectedArgType->isFloatingPointTy() && argValue->getType()->isIntegerTy()) {
                 argValue = builder->CreateSIToFP(argValue, expectedArgType, "callargcast");
             } else if (expectedArgType->isIntegerTy() && argValue->getType()->isFloatingPointTy()) {
                 argValue = builder->CreateFPToSI(argValue, expectedArgType, "callargcast");
+            } else if (expectedArgType->isIntegerTy() && argValue->getType()->isIntegerTy()) {
+                // Handle integer width mismatches (e.g., i64 to i32)
+                llvm::IntegerType* expectedIntType = llvm::cast<llvm::IntegerType>(expectedArgType);
+                llvm::IntegerType* actualIntType = llvm::cast<llvm::IntegerType>(argValue->getType());
+                
+                if (expectedIntType->getBitWidth() < actualIntType->getBitWidth()) {
+                    // Truncate to smaller width (e.g., i64 to i32)
+                    argValue = builder->CreateTrunc(argValue, expectedArgType, "callargtrunc");
+                } else if (expectedIntType->getBitWidth() > actualIntType->getBitWidth()) {
+                    // Sign-extend to larger width (e.g., i32 to i64)
+                    argValue = builder->CreateSExt(argValue, expectedArgType, "callargsext");
+                }
             }
             // Add more sophisticated casting rules as needed
         }
