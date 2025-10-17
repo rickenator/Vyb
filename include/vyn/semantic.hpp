@@ -262,6 +262,7 @@ private:
     std::vector<SymbolTable*> scopes;
     std::unordered_set<std::string> reservedWords; // Added for isReservedWord
     std::unordered_map<std::string, std::unique_ptr<TemplateInfo>> templateRegistry;
+    std::unordered_map<std::string, std::unique_ptr<ast::Declaration>> instantiatedTemplates;
 
     void enterScope();
     void exitScope();

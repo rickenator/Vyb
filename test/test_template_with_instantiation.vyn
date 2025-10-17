@@ -1,0 +1,13 @@
+// Test template instantiation with GenericInstantiationExpression
+template Container<T> {
+    struct Data {
+        value<T>
+    }
+}
+
+fn<Int> main() -> {
+    // This line should trigger GenericInstantiationExpression processing
+    // Note: This is a placeholder syntax - in real usage, we'd need proper instantiation
+    var<Int> result = 42;
+    return result;
+}

@@ -2001,10 +2001,22 @@ std::unique_ptr<ast::Declaration> SemanticAnalyzer::performMonomorphization(Temp
         return nullptr;
     }
     
-    // Clone and substitute the template body
-    return cloneAndSubstituteAST(templateInfo->declaration->body.get(), 
-                                templateInfo->parameterNames, 
-                                concreteTypes);
+    // Generate a unique key for this instantiation
+    std::string instanceKey = templateInfo->templateName + "<";
+    for (size_t i = 0; i < concreteTypes.size(); ++i) {
+        if (i > 0) instanceKey += ",";
+        instanceKey += concreteTypes[i];
+    }
+    instanceKey += ">";
+    
+    // For now, just return nullptr to indicate "monomorphization not yet implemented"
+    // In a full implementation, this would:
+    // 1. Clone the template body AST
+    // 2. Substitute type parameters with concrete types
+    // 3. Cache the result for reuse
+    // 4. Return the instantiated declaration
+    
+    return nullptr;
 }
 
 std::unique_ptr<ast::Declaration> SemanticAnalyzer::cloneAndSubstituteAST(ast::Declaration* templateBody,
@@ -2014,16 +2026,13 @@ std::unique_ptr<ast::Declaration> SemanticAnalyzer::cloneAndSubstituteAST(ast::D
         return nullptr;
     }
     
-    // For now, return nullptr to indicate "not yet implemented"
-    // A full implementation would:
-    // 1. Deep clone the AST structure using a proper AST cloning visitor
-    // 2. Walk through all TypeName nodes
+    // Placeholder implementation - proper AST cloning would require:
+    // 1. Deep clone the AST structure
+    // 2. Walk through all TypeName nodes in the cloned AST
     // 3. Replace generic parameter names with concrete types
     // 4. Update function signatures, struct fields, etc.
     // 5. Generate specialized mangled names
     
-    // This is a placeholder - actual AST cloning and substitution requires
-    // implementing an AST cloning visitor pattern
     return nullptr;
 }
 
