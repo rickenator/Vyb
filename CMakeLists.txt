@@ -91,6 +91,7 @@ set(VRE_SOURCES
     src/vre/llvm/cgen_vec.cpp
     src/vre/llvm/cgen_function.cpp
     src/vre/llvm/cgen_semantics.cpp
+    src/vre/llvm/cgen_ownership.cpp
 )
 
 # VRE headers
