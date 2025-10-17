@@ -29,6 +29,9 @@ Vyn **v0.3.7** is a functional programming language with impressive capabilities
 
 ### ✅ **Core Language Features**
 - **Functions**: `fn<ReturnType> name(params) -> body` with full LLVM compilation
+  - **Standard parameters**: `var<Type> name` or `const<Type> name` 
+  - **Shorthand parameters**: `Type name` or `const Type name`
+  - **Mixed syntax**: Both forms can be used in the same function
 - **Variables**: `var x = 42` with type inference and explicit typing
 - **Arrays**: `[T; N]` fixed-size arrays with indexing and beautiful println() output
 - **Structs**: `struct Point { x: Int, y: Int }` with field access
@@ -57,22 +60,49 @@ Vyn **v0.3.7** is a functional programming language with impressive capabilities
 
 ### Basic Syntax
 
-Vyn uses clean, expressive syntax with optional type annotations:
+Vyn uses clean, expressive syntax with flexible parameter syntax:
 
 ```vyn
-# Simple function returning an integer
-fn<Int> add(a: Int, b: Int) -> {
+# Functions support both standard and shorthand parameter syntax
+
+# Standard syntax: explicit var<Type> or const<Type>
+fn<Int> add_standard(var<Int> a, const<Int> b) -> {
     return a + b
 }
 
-# Function with auto-return (last expression)
-fn<Int> square(x: Int) -> x * x
+# Shorthand syntax: Type directly (implicitly mutable)
+fn<Int> add_shorthand(Int a, Int b) -> {
+    return a + b
+}
+
+# Mixed syntax: combining both forms in same function
+fn<Int> mixed_params(var<Int> x, Int y, const<Int> z) -> {
+    return x + y + z
+}
 
 # Complex return types with auto-serialization
 fn<Int, String, Bool> get_data() -> {
     return 42, "result", true
 }
 # When called from main(), outputs: {"Int":42,"String":"result","Bool":true}
+```
+
+### Function Parameters
+
+Vyn supports two parameter syntax styles for maximum flexibility:
+
+```vyn
+# Standard syntax: explicit mutability
+fn<String> format_standard(var<String> prefix, const<Int> value) -> {
+    return prefix + value.to_string()
+}
+
+# Shorthand syntax: type-first (more concise)
+fn<String> format_shorthand(String prefix, const Int value) -> {
+    return prefix + value.to_string()
+}
+
+# Both produce identical behavior and LLVM IR
 ```
 
 ### Variables and Types
