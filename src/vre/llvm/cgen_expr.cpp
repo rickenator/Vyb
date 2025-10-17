@@ -1338,38 +1338,45 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
             return;
         }
         
-        // Check if the object is a struct/class type
-        if (!objectValue->getType()->isPointerTy()) {
-            logError(node->object->loc, "Property member access on non-pointer type");
-            m_currentLLVMValue = nullptr;
-            return;
-        }
-
-        // Get the pointee type - this should be the struct type
-        llvm::Type* pointeeType = nullptr;
+        llvm::Value* structPtr = nullptr;
+        llvm::Type* structType = nullptr;
         
-        // First try to get the type from alloca instruction if available
-        if (llvm::AllocaInst* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(objectValue)) {
-            pointeeType = allocaInst->getAllocatedType();
-            std::cerr << "DEBUG: Got type from alloca: " << getTypeName(pointeeType) << std::endl;
+        // Check if the object is a pointer to a struct (alloca) or actual struct value
+        if (objectValue->getType()->isPointerTy()) {
+            // Object is a pointer (from alloca) - use it directly
+            structPtr = objectValue;
+            
+            // Get the pointee type from alloca instruction if available
+            if (llvm::AllocaInst* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(objectValue)) {
+                structType = allocaInst->getAllocatedType();
+                std::cerr << "DEBUG: Got struct type from alloca: " << getTypeName(structType) << std::endl;
+            } else {
+                std::cerr << "DEBUG: Object is a pointer but not an alloca" << std::endl;
+                logError(node->loc, "Cannot determine struct type for member access");
+                m_currentLLVMValue = nullptr;
+                return;
+            }
+        } else if (objectValue->getType()->isStructTy()) {
+            // Object is a struct value (loaded from variable) - create temporary alloca
+            structType = objectValue->getType();
+            structPtr = builder->CreateAlloca(structType, nullptr, "temp_struct");
+            builder->CreateStore(objectValue, structPtr);
+            std::cerr << "DEBUG: Created temporary alloca for struct value: " << getTypeName(structType) << std::endl;
         } else {
-            // For opaque pointers in LLVM 15+, we can't easily get the pointee type
-            // We need to rely on context or type hints
-            std::cerr << "DEBUG: Object is not an alloca, cannot determine pointee type safely" << std::endl;
-            logError(node->loc, "Cannot determine struct type for member access");
+            logError(node->object->loc, "Property member access on non-struct type");
             m_currentLLVMValue = nullptr;
             return;
         }
 
-        if (!pointeeType || !pointeeType->isStructTy()) {
+        if (!structType || !structType->isStructTy()) {
             logError(node->loc, "Cannot access field of non-struct type");
             m_currentLLVMValue = nullptr;
             return;
         }
 
-        llvm::StructType* structType = llvm::cast<llvm::StructType>(pointeeType);
+        llvm::StructType* llvmStructType = llvm::cast<llvm::StructType>(structType);
         std::string fieldName = propIdent->name;
-        int fieldIndex = getStructFieldIndex(structType, fieldName);
+        int fieldIndex = getStructFieldIndex(llvmStructType, fieldName);
 
         if (fieldIndex < 0) {
             logError(node->loc, "Field '" + fieldName + "' not found in struct");
@@ -1379,23 +1386,29 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
 
         // Debug output
         std::cerr << "DEBUG: MemberExpression - Field '" << fieldName << "' at index " << fieldIndex 
-                  << " in struct " << structType->getName().str() << std::endl;
+                  << " in struct " << llvmStructType->getName().str() << std::endl;
 
         // Create a GEP to get a pointer to the field
-        llvm::Value* fieldPtr = builder->CreateStructGEP(structType, objectValue, fieldIndex, fieldName + "_ptr");
+        llvm::Value* fieldPtr = builder->CreateStructGEP(llvmStructType, structPtr, fieldIndex, fieldName + "_ptr");
         
         // Debug the field type
-        llvm::Type* fieldType = structType->getElementType(fieldIndex);
+        llvm::Type* fieldType = llvmStructType->getElementType(fieldIndex);
         std::cerr << "DEBUG: Field type: " << getTypeName(fieldType) << std::endl;
         
-        // For primitive types like Int, automatically load the value
-        if (fieldType->isIntegerTy()) {
-            m_currentLLVMValue = builder->CreateLoad(fieldType, fieldPtr, fieldName + "_val");
-            std::cerr << "DEBUG: Loaded integer field value" << std::endl;
-        } else {
-            // Store the field pointer for now - any access that needs the value can load it
+        // Check if we're on the LHS of an assignment - in that case return the pointer
+        if (m_isLHSOfAssignment) {
             m_currentLLVMValue = fieldPtr;
-            std::cerr << "DEBUG: Returning field pointer" << std::endl;
+            std::cerr << "DEBUG: Returning field pointer for LHS assignment" << std::endl;
+        } else {
+            // For reading, load the value for primitive types like Int
+            if (fieldType->isIntegerTy()) {
+                m_currentLLVMValue = builder->CreateLoad(fieldType, fieldPtr, fieldName + "_val");
+                std::cerr << "DEBUG: Loaded integer field value" << std::endl;
+            } else {
+                // For non-primitive types, return the pointer
+                m_currentLLVMValue = fieldPtr;
+                std::cerr << "DEBUG: Returning field pointer for non-primitive type" << std::endl;
+            }
         }
     }
 }

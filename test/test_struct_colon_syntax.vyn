@@ -1,7 +1,7 @@
-// Test file to verify old colon syntax still works for backward compatibility
+// Test file to verify new angle bracket syntax for Vyn consistency
 struct Point {
-    x: Int,
-    y: Int
+    x<Int>,
+    y<Int>
 }
 
 fn<Point> main() -> {
