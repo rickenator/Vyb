@@ -36,14 +36,18 @@ void LLVMCodegen::visit(vyn::ast::BlockStatement* node) {
         }
     }
     
-    // Exit scope and cleanup variables only if current block isn't terminated
-    if (builder->GetInsertBlock() && !builder->GetInsertBlock()->getTerminator()) {
-        exitScope();
-    } else {
-        // Block is terminated, just pop the scope without generating cleanup
+    // Always exit scope and cleanup variables, but check if block is terminated
+    // If block is terminated (e.g., by return), cleanup must happen before termination
+    if (builder->GetInsertBlock() && builder->GetInsertBlock()->getTerminator()) {
+        // Block is terminated - can't insert cleanup code here
+        // This case should be handled by inserting cleanup before return statements
+        std::cout << "DEBUG: Block terminated, skipping cleanup insertion (cleanup should have happened before terminator)" << std::endl;
         if (!scopeStack.empty()) {
             scopeStack.pop_back();
         }
+    } else {
+        // Block not terminated - safe to insert cleanup code
+        exitScope();
     }
     
     // Restore namedValues to outer scope
@@ -154,21 +158,44 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                         }
                     }
                 }
+                
+                // IMPORTANT: Clean up current block scope before returning
+                // This prevents the block scope cleanup from happening after the terminator
+                if (!scopeStack.empty()) {
+                    std::cout << "DEBUG: Cleaning up current scope before return" << std::endl;
+                    exitScope();
+                }
+                
                 builder->CreateRet(returnValue);
             }
         } else {
             // Error during argument codegen or argument is null expression (should not happen for valid AST)
             // TODO: Report error (Return argument codegen failed or resulted in null)
             if (currentFunction && currentFunction->getReturnType()->isVoidTy()) {
+                // IMPORTANT: Clean up current block scope before returning
+                if (!scopeStack.empty()) {
+                    std::cout << "DEBUG: Cleaning up current scope before void return" << std::endl;
+                    exitScope();
+                }
                 builder->CreateRetVoid();
             } else if (currentFunction) {
                 // Return undef if function expects a non-void type and codegen failed
+                // IMPORTANT: Clean up current block scope before returning
+                if (!scopeStack.empty()) {
+                    std::cout << "DEBUG: Cleaning up current scope before undef return" << std::endl;
+                    exitScope();
+                }
                 builder->CreateRet(llvm::UndefValue::get(currentFunction->getReturnType()));
                 logError(node->loc, "Return expression codegen failed, returning undef.");
             }
         }
     } else {
         // No argument, so it's a void return
+        // IMPORTANT: Clean up current block scope before returning
+        if (!scopeStack.empty()) {
+            std::cout << "DEBUG: Cleaning up current scope before void return (no arg)" << std::endl;
+            exitScope();
+        }
         builder->CreateRetVoid();
     }
 }
