@@ -1,6 +1,8 @@
 ; ModuleID = 'VynModule'
 source_filename = "VynModule"
 
+@type_name = private unnamed_addr constant [9 x i8] c"Vec<Int>\00", align 1
+
 define i64 @main() {
 entry:
   %numbers = alloca { ptr, i64, i64 }, align 8
@@ -25,11 +27,16 @@ entry:
   %vec.current_size5 = load i64, ptr %vec.size_ptr4, align 4
   %vec.new_size6 = add i64 %vec.current_size5, 1
   store i64 %vec.new_size6, ptr %vec.size_ptr4, align 4
+  %numbers7 = load { ptr, i64, i64 }, ptr %numbers, align 8
+  %serialize_temp = alloca { ptr, i64, i64 }, align 8
+  store { ptr, i64, i64 } %numbers7, ptr %serialize_temp, align 8
+  %serialized_json = call ptr @__vyn_serialize_to_json(ptr %serialize_temp, ptr @type_name)
+  call void @__vyn_println(ptr %serialized_json)
   ret i64 0
 }
 
-declare void @__vyn_println(ptr)
-
 declare ptr @__vyn_serialize_to_json(ptr, ptr)
+
+declare void @__vyn_println(ptr)
 
 declare ptr @__vyn_convert_lit_string(ptr)
