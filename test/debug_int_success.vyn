@@ -1,0 +1,6 @@
+// Test unified syntax with integers (should work perfectly)
+x<Int> = 42;
+
+main()<Int> -> {
+    return x;
+}
