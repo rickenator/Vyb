@@ -286,6 +286,19 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
     } else if (R->getType()->isFloatingPointTy() && L->getType()->isIntegerTy()) {
         L = builder->CreateSIToFP(L, R->getType(), "sitofptmp");
         isFloatOp = true;
+    } else if (L->getType()->isIntegerTy() && R->getType()->isIntegerTy() && L->getType() != R->getType()) {
+        // Handle integer width mismatches (e.g., i32 vs i64)
+        // Coerce to the smaller width to preserve variable precision
+        llvm::IntegerType* leftIntType = llvm::cast<llvm::IntegerType>(L->getType());
+        llvm::IntegerType* rightIntType = llvm::cast<llvm::IntegerType>(R->getType());
+        
+        if (leftIntType->getBitWidth() < rightIntType->getBitWidth()) {
+            // Left is smaller, truncate right to match left
+            R = builder->CreateTrunc(R, L->getType(), "inttrunctmp");
+        } else {
+            // Right is smaller, truncate left to match right
+            L = builder->CreateTrunc(L, R->getType(), "inttrunctmp");
+        }
     } else if (L->getType()->isPointerTy() && R->getType()->isIntegerTy()) {
         // Pointer arithmetic (e.g. ptr + int)
         // We need to extract the appropriate type information for CreateGEP
