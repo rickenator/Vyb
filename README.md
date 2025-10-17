@@ -818,7 +818,7 @@ Resizable array collection with methods like `push()`, `pop()`, `len()`, `get()`
 
 ## License
 
-MIT License - see LICENSE file for details.
+Apache License - see LICENSE file for details.
 
 ---
 
