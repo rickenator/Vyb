@@ -81,9 +81,9 @@ vyn::ast::StmtPtr StatementParser::parse() {
         case vyn::TokenType::KEYWORD_AWAIT:
             return parse_await();
         case vyn::TokenType::KEYWORD_BREAK:
-            throw std::runtime_error("Break statement parsing not yet implemented at " + location_to_string(current_token.location));
+            return parse_break();
         case vyn::TokenType::KEYWORD_CONTINUE:
-            throw std::runtime_error("Continue statement parsing not yet implemented at " + location_to_string(current_token.location));
+            return parse_continue();
         default:
             // Check if this could be a relaxed syntax variable declaration (Type name)
             if (current_token.type == vyn::TokenType::IDENTIFIER) {
@@ -690,6 +690,24 @@ vyn::ast::StmtPtr StatementParser::parse_match() {
     expect(vyn::TokenType::RBRACE, "Expected '}' after match cases.");
     
     return std::make_unique<vyn::ast::MatchStatement>(match_loc, std::move(match_expr), std::move(cases));
+}
+
+std::unique_ptr<vyn::ast::BreakStatement> StatementParser::parse_break() {
+    SourceLocation break_loc = expect(vyn::TokenType::KEYWORD_BREAK, "Expected 'break'").location;
+    
+    // Optional semicolon
+    match(vyn::TokenType::SEMICOLON);
+    
+    return std::make_unique<vyn::ast::BreakStatement>(break_loc);
+}
+
+std::unique_ptr<vyn::ast::ContinueStatement> StatementParser::parse_continue() {
+    SourceLocation continue_loc = expect(vyn::TokenType::KEYWORD_CONTINUE, "Expected 'continue'").location;
+    
+    // Optional semicolon
+    match(vyn::TokenType::SEMICOLON);
+    
+    return std::make_unique<vyn::ast::ContinueStatement>(continue_loc);
 }
 
 // Parses an unsafe block: 'unsafe { ... }'
