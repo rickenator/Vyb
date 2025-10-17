@@ -1,11 +1,12 @@
 ; ModuleID = 'VynModule'
 source_filename = "VynModule"
 
-@0 = private unnamed_addr constant [6 x i8] c"hello\00", align 1
+@0 = private unnamed_addr constant [12 x i8] c"Hello World\00", align 1
 
-define { ptr, i64, i1 } @main() {
+define i64 @main() {
 entry:
-  ret { ptr, i64, i1 } { ptr @0, i64 42, i1 true }
+  call void @__vyn_println(ptr @0)
+  ret i64 0
 }
 
 declare void @__vyn_println(ptr)
