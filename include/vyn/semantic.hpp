@@ -242,6 +242,7 @@ public:
     struct TemplateInfo {
         std::unique_ptr<ast::TemplateDeclaration> declaration;
         std::vector<std::string> parameterNames;
+        std::vector<std::vector<std::string>> parameterConstraints; // bounds for each parameter
         std::string templateName;
         
         TemplateInfo(std::unique_ptr<ast::TemplateDeclaration> decl)
@@ -249,6 +250,15 @@ public:
             for (const auto& param : declaration->genericParams) {
                 if (param && param->name) {
                     parameterNames.push_back(param->name->name);
+                    
+                    // Extract trait bounds for this parameter
+                    std::vector<std::string> bounds;
+                    for (const auto& bound : param->bounds) {
+                        if (bound) {
+                            bounds.push_back(bound->toString());
+                        }
+                    }
+                    parameterConstraints.push_back(std::move(bounds));
                 }
             }
         }
@@ -289,6 +299,14 @@ private:
     std::unique_ptr<ast::Declaration> cloneAndSubstituteAST(ast::Declaration* templateBody,
                                                            const std::vector<std::string>& genericParams,
                                                            const std::vector<std::string>& concreteTypes);
+    
+    // Template constraint validation methods
+    bool validateTemplateConstraints(TemplateInfo* templateInfo,
+                                   const std::vector<std::string>& concreteTypes,
+                                   ast::GenericInstantiationExpression* node);
+    bool typeImplementsTrait(const std::string& typeName, const std::string& traitName);
+    std::vector<std::string> getImplementedTraits(const std::string& typeName);
+    bool isBuiltinTypeCompatible(const std::string& typeName, const std::string& traitName);
 };
 
 } // namespace vyn

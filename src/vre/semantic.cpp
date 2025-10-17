@@ -1968,6 +1968,11 @@ void SemanticAnalyzer::handleTemplateInstantiation(ast::Identifier* identifier,
         }
     }
     
+    // Validate template constraints before monomorphization
+    if (!validateTemplateConstraints(templateInfo, concreteTypes, node)) {
+        return; // Error already reported
+    }
+    
     // Perform monomorphization
     auto instantiated = performMonomorphization(templateInfo, concreteTypes);
     if (instantiated) {
@@ -2034,6 +2039,102 @@ std::unique_ptr<ast::Declaration> SemanticAnalyzer::cloneAndSubstituteAST(ast::D
     // 5. Generate specialized mangled names
     
     return nullptr;
+}
+
+// Template constraint validation methods
+bool SemanticAnalyzer::validateTemplateConstraints(TemplateInfo* templateInfo,
+                                                  const std::vector<std::string>& concreteTypes,
+                                                  ast::GenericInstantiationExpression* node) {
+    if (!templateInfo || concreteTypes.size() != templateInfo->parameterNames.size()) {
+        return false;
+    }
+    
+    // Validate each type argument against its constraints
+    for (size_t i = 0; i < concreteTypes.size(); ++i) {
+        const std::string& concreteType = concreteTypes[i];
+        const std::vector<std::string>& constraints = templateInfo->parameterConstraints[i];
+        
+        // Check each trait constraint for this type parameter
+        for (const std::string& traitName : constraints) {
+            if (!typeImplementsTrait(concreteType, traitName)) {
+                addError("Type '" + concreteType + "' does not implement required trait '" + 
+                        traitName + "' for template parameter '" + 
+                        templateInfo->parameterNames[i] + "'.", node);
+                return false;
+            }
+        }
+    }
+    
+    return true;
+}
+
+bool SemanticAnalyzer::typeImplementsTrait(const std::string& typeName, const std::string& traitName) {
+    // Check if the type implements the specified trait
+    // This is a simplified implementation - a full system would:
+    // 1. Look up trait implementations in the symbol table
+    // 2. Check for built-in trait implementations
+    // 3. Handle generic trait implementations
+    
+    // For now, implement basic built-in type trait support
+    if (isBuiltinTypeCompatible(typeName, traitName)) {
+        return true;
+    }
+    
+    // Look up user-defined implementations
+    // TODO: Implement proper trait implementation lookup
+    // This would search for impl declarations matching the type and trait
+    
+    return false;
+}
+
+std::vector<std::string> SemanticAnalyzer::getImplementedTraits(const std::string& typeName) {
+    std::vector<std::string> traits;
+    
+    // Add built-in trait implementations
+    if (typeName == "Int" || typeName == "Float" || typeName == "Char") {
+        traits.push_back("Comparable");
+        traits.push_back("Equatable");
+        if (typeName == "Int" || typeName == "Float") {
+            traits.push_back("Numeric");
+        }
+    }
+    
+    if (typeName == "String" || typeName == "Char") {
+        traits.push_back("Equatable");
+        if (typeName == "String") {
+            traits.push_back("Comparable");
+        }
+    }
+    
+    if (typeName == "Bool") {
+        traits.push_back("Equatable");
+    }
+    
+    // TODO: Look up user-defined trait implementations
+    
+    return traits;
+}
+
+bool SemanticAnalyzer::isBuiltinTypeCompatible(const std::string& typeName, const std::string& traitName) {
+    // Check built-in type and trait compatibility
+    if (traitName == "Comparable") {
+        return typeName == "Int" || typeName == "Float" || typeName == "Char" || typeName == "String";
+    }
+    
+    if (traitName == "Equatable") {
+        return typeName == "Int" || typeName == "Float" || typeName == "Char" || 
+               typeName == "String" || typeName == "Bool";
+    }
+    
+    if (traitName == "Numeric") {
+        return typeName == "Int" || typeName == "Float";
+    }
+    
+    if (traitName == "Hashable") {
+        return typeName == "Int" || typeName == "String" || typeName == "Char" || typeName == "Bool";
+    }
+    
+    return false;
 }
 
 } // Added missing closing brace for namespace vyn

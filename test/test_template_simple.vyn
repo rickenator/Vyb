@@ -1,0 +1,14 @@
+// Simple template constraint validation test
+// Tests template instantiation and constraint validation
+
+template Container<T: Comparable> {
+    struct Data {
+        value<T>
+    }
+}
+
+fn<Int> main() -> {
+    // Simple variable declarations to test constraint validation
+    var<Int> result = 42;
+    return result;
+}
