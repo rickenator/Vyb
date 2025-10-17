@@ -966,7 +966,32 @@ void SemanticAnalyzer::visit(ast::ThisExpression* node) {}
 void SemanticAnalyzer::visit(ast::SuperExpression* node) {}
 void SemanticAnalyzer::visit(ast::AwaitExpression* node) {}
 void SemanticAnalyzer::visit(ast::ListComprehension* node) {}
-void SemanticAnalyzer::visit(ast::GenericInstantiationExpression* node) {}
+void SemanticAnalyzer::visit(ast::GenericInstantiationExpression* node) {
+    if (!node || !node->baseExpression) {
+        addError("Invalid generic instantiation expression.", node);
+        return;
+    }
+    
+    // Visit the base expression to understand what we're instantiating
+    node->baseExpression->accept(*this);
+    
+    // Visit all generic arguments (type parameters)
+    for (auto& typeArg : node->genericArguments) {
+        if (typeArg) {
+            typeArg->accept(*this);
+        }
+    }
+    
+    // Try to identify if this is a template instantiation
+    if (auto identifier = dynamic_cast<ast::Identifier*>(node->baseExpression.get())) {
+        handleTemplateInstantiation(identifier, node->genericArguments, node);
+    } else if (auto memberExpr = dynamic_cast<ast::MemberExpression*>(node->baseExpression.get())) {
+        // Handle something like Container<Int>::create
+        handleMemberTemplateInstantiation(memberExpr, node->genericArguments, node);
+    } else {
+        addError("Invalid base expression for generic instantiation.", node->baseExpression.get());
+    }
+}
 void SemanticAnalyzer::visit(ast::PointerDerefExpression* node) {
     // at() intrinsic only allowed inside an unsafe block
     if (!isInUnsafeBlock()) {
@@ -1293,7 +1318,55 @@ void SemanticAnalyzer::visit(ast::EnumDeclaration* node) {}
 void SemanticAnalyzer::visit(ast::FieldDeclaration* node) {}
 void SemanticAnalyzer::visit(ast::EnumVariant* node) {}
 // void SemanticAnalyzer::visit(ast::GenericParameter* node) {} // Handled above
-void SemanticAnalyzer::visit(ast::TemplateDeclaration* node) {}
+void SemanticAnalyzer::visit(ast::TemplateDeclaration* node) {
+    if (!node || !node->name) {
+        addError("Malformed template declaration.", node);
+        return;
+    }
+    
+    const std::string& templateName = node->name->name;
+    
+    // Check if template name is already registered
+    if (templateRegistry.find(templateName) != templateRegistry.end()) {
+        addError("Template '" + templateName + "' is already defined.", node);
+        return;
+    }
+    
+    // Validate generic parameters
+    for (const auto& param : node->genericParams) {
+        if (!param || !param->name) {
+            addError("Invalid generic parameter in template '" + templateName + "'.", node);
+            return;
+        }
+    }
+    
+    // Clone the template declaration for storage
+    auto clonedDecl = std::make_unique<ast::TemplateDeclaration>(
+        node->loc, 
+        std::make_unique<ast::Identifier>(node->name->loc, node->name->name),
+        std::vector<std::unique_ptr<ast::GenericParameter>>(),
+        nullptr // Will be cloned separately if needed
+    );
+    
+    // Clone generic parameters
+    for (const auto& param : node->genericParams) {
+        if (param && param->name) {
+            auto clonedParam = std::make_unique<ast::GenericParameter>(
+                param->loc,
+                std::make_unique<ast::Identifier>(param->name->loc, param->name->name)
+            );
+            clonedDecl->genericParams.push_back(std::move(clonedParam));
+        }
+    }
+    
+    // Register the template
+    registerTemplate(std::move(clonedDecl));
+    
+    // Visit the template body for immediate syntax checking
+    if (node->body) {
+        node->body->accept(*this);
+    }
+}
 void SemanticAnalyzer::visit(ast::ThrowStatement* node) {}
 
 void SemanticAnalyzer::visit(ast::TypeNode* node) {
@@ -1812,6 +1885,146 @@ void SemanticAnalyzer::visit(ast::ArrayInitializationExpression* node) {
     // 2. Set the array initialization expression's type to an array type with the element type
     
     // For now we skip the advanced type checking
+}
+
+// Template management method implementations
+void SemanticAnalyzer::registerTemplate(std::unique_ptr<ast::TemplateDeclaration> templateDecl) {
+    if (!templateDecl || !templateDecl->name) {
+        return;
+    }
+    
+    const std::string& templateName = templateDecl->name->name;
+    auto templateInfo = std::make_unique<TemplateInfo>(std::move(templateDecl));
+    templateRegistry[templateName] = std::move(templateInfo);
+}
+
+SemanticAnalyzer::TemplateInfo* SemanticAnalyzer::findTemplate(const std::string& templateName) {
+    auto it = templateRegistry.find(templateName);
+    if (it != templateRegistry.end()) {
+        return it->second.get();
+    }
+    return nullptr;
+}
+
+bool SemanticAnalyzer::isTemplateInstantiation(const std::string& name) {
+    // Check if this looks like a template instantiation (contains '<' and '>')
+    return name.find('<') != std::string::npos && name.find('>') != std::string::npos;
+}
+
+std::unique_ptr<ast::Declaration> SemanticAnalyzer::instantiateTemplate(
+    const std::string& templateName, 
+    const std::vector<std::string>& typeArgs) {
+    
+    TemplateInfo* templateInfo = findTemplate(templateName);
+    if (!templateInfo) {
+        return nullptr;
+    }
+    
+    // Validate type argument count
+    if (typeArgs.size() != templateInfo->parameterNames.size()) {
+        return nullptr;
+    }
+    
+    // TODO: Implement actual monomorphization here
+    // For now, return nullptr to indicate "not yet implemented"
+    // This is where we would:
+    // 1. Clone the template body
+    // 2. Substitute type parameters with concrete types
+    // 3. Generate specialized AST nodes
+    // 4. Return the instantiated declaration
+    
+    return nullptr;
+}
+
+void SemanticAnalyzer::handleTemplateInstantiation(ast::Identifier* identifier, 
+                                                  const std::vector<ast::TypeNodePtr>& typeArgs,
+                                                  ast::GenericInstantiationExpression* node) {
+    if (!identifier) return;
+    
+    std::string templateName = identifier->name;
+    TemplateInfo* templateInfo = findTemplate(templateName);
+    
+    if (!templateInfo) {
+        addError("Template '" + templateName + "' not found.", node);
+        return;
+    }
+    
+    // Validate type argument count
+    if (typeArgs.size() != templateInfo->parameterNames.size()) {
+        addError("Template '" + templateName + "' expects " + 
+                std::to_string(templateInfo->parameterNames.size()) + 
+                " type arguments, got " + std::to_string(typeArgs.size()) + ".", node);
+        return;
+    }
+    
+    // Convert type arguments to string representations for substitution
+    std::vector<std::string> concreteTypes;
+    for (const auto& typeArg : typeArgs) {
+        if (typeArg) {
+            concreteTypes.push_back(typeArg->toString());
+        } else {
+            addError("Invalid type argument in template instantiation.", node);
+            return;
+        }
+    }
+    
+    // Perform monomorphization
+    auto instantiated = performMonomorphization(templateInfo, concreteTypes);
+    if (instantiated) {
+        // Store the instantiated template for later use in codegen
+        // For now, just mark that we successfully processed it
+        expressionTypes[node] = nullptr; // Will be properly typed later
+    }
+}
+
+void SemanticAnalyzer::handleMemberTemplateInstantiation(ast::MemberExpression* memberExpr,
+                                                        const std::vector<ast::TypeNodePtr>& typeArgs,
+                                                        ast::GenericInstantiationExpression* node) {
+    // Handle cases like Container<Int>::create
+    if (!memberExpr || !memberExpr->object) {
+        addError("Invalid member template instantiation.", node);
+        return;
+    }
+    
+    // For now, delegate to regular template instantiation
+    // In a full implementation, this would handle method templates and nested templates
+    if (auto objectId = dynamic_cast<ast::Identifier*>(memberExpr->object.get())) {
+        handleTemplateInstantiation(objectId, typeArgs, node);
+    } else {
+        addError("Complex member template instantiation not yet supported.", node);
+    }
+}
+
+std::unique_ptr<ast::Declaration> SemanticAnalyzer::performMonomorphization(TemplateInfo* templateInfo,
+                                                                           const std::vector<std::string>& concreteTypes) {
+    if (!templateInfo || !templateInfo->declaration) {
+        return nullptr;
+    }
+    
+    // Clone and substitute the template body
+    return cloneAndSubstituteAST(templateInfo->declaration->body.get(), 
+                                templateInfo->parameterNames, 
+                                concreteTypes);
+}
+
+std::unique_ptr<ast::Declaration> SemanticAnalyzer::cloneAndSubstituteAST(ast::Declaration* templateBody,
+                                                                         const std::vector<std::string>& genericParams,
+                                                                         const std::vector<std::string>& concreteTypes) {
+    if (!templateBody) {
+        return nullptr;
+    }
+    
+    // For now, return nullptr to indicate "not yet implemented"
+    // A full implementation would:
+    // 1. Deep clone the AST structure using a proper AST cloning visitor
+    // 2. Walk through all TypeName nodes
+    // 3. Replace generic parameter names with concrete types
+    // 4. Update function signatures, struct fields, etc.
+    // 5. Generate specialized mangled names
+    
+    // This is a placeholder - actual AST cloning and substitution requires
+    // implementing an AST cloning visitor pattern
+    return nullptr;
 }
 
 } // Added missing closing brace for namespace vyn

@@ -1,5 +1,5 @@
-// Quicksort implementation in Vyn showcasing templates, functional programming,
-// and advanced language features like ownership semantics and unsafe optimizations.
+// Quicksort implementation in Vyn v0.3.7 showcasing templates, 
+// modern syntax, and advanced language features
 
 // ----- Module Metadata -----
 bundle(algorithms, algorithms.sort)
@@ -13,34 +13,73 @@ import vyn::core::debug
 
 // Define a Comparable trait that types must implement to be sorted
 trait Comparable {
-    fn lt(self, other: Self) -> Bool;
-    fn gt(self, other: Self) -> Bool;
-    fn eq(self, other: Self) -> Bool;
+    fn<Bool> lt(self, other: Self) -> {
+        // Implementation defined by implementor
+    }
+    fn<Bool> gt(self, other: Self) -> {
+        // Implementation defined by implementor
+    }
+    fn<Bool> eq(self, other: Self) -> {
+        // Implementation defined by implementor
+    }
 }
 
 // ----- Core Quicksort Algorithm -----
 
 // Template function using generic type T that implements Comparable
-fn<my<[T]>> quicksort(var<my<[T]>> array) -> {
-    if array.len() <= 1 {
-        return array;  // Base case: already sorted
+template<T: Comparable> fn<Vec<T>> quicksort(var<Vec<T>> array) -> {
+    if (array.len() <= 1) {
+        return array  // Base case: already sorted
     }
 
     // Choose pivot (middle element for better performance on partially sorted arrays)
-    const<Int> pivot_idx = array.len() / 2;
-    const<T> pivot = array[pivot_idx];
+    var<Int> pivot_idx = array.len() / 2
+    var<T> pivot = array.get(pivot_idx)
     
-    // Partition using functional approach with filter
-    var<my<[T]>> left = array.filter(|x| x.lt(pivot));
-    var<my<[T]>> right = array.filter(|x| x.gt(pivot));
-    var<my<[T]>> equal = array.filter(|x| x.eq(pivot));
+    // Partition using Vec<T> operations
+    var<Vec<T>> left = Vec::new()
+    var<Vec<T>> right = Vec::new()
+    var<Vec<T>> equal = Vec::new()
+    
+    var<Int> i = 0
+    while (i < array.len()) {
+        var<T> elem = array.get(i)
+        if (elem.lt(pivot)) {
+            left.push(elem)
+        } else if (elem.gt(pivot)) {
+            right.push(elem)
+        } else {
+            equal.push(elem)
+        }
+        i = i + 1
+    }
     
     // Recursively sort partitions
-    var<my<[T]>> left_sorted = quicksort(left);
-    var<my<[T]>> right_sorted = quicksort(right);
+    var<Vec<T>> left_sorted = quicksort(left)
+    var<Vec<T>> right_sorted = quicksort(right)
     
     // Combine results
-    return left_sorted.concat(equal).concat(right_sorted);
+    var<Vec<T>> result = Vec::new()
+    // Add left_sorted elements
+    i = 0
+    while (i < left_sorted.len()) {
+        result.push(left_sorted.get(i))
+        i = i + 1
+    }
+    // Add equal elements
+    i = 0
+    while (i < equal.len()) {
+        result.push(equal.get(i))
+        i = i + 1
+    }
+    // Add right_sorted elements
+    i = 0
+    while (i < right_sorted.len()) {
+        result.push(right_sorted.get(i))
+        i = i + 1
+    }
+    
+    return result
 }
 
 // ----- In-place Version with Memory Optimizations -----
@@ -175,13 +214,23 @@ fn<my<[T]>> quicksort_parallel(var<my<[T]>> array, var<Int> threshold = 1000) ->
 // ----- Example Usage -----
 
 fn<Int> main() -> {
-    // Create an array of integers
-    var<my<[Int]>> nums = [9, 3, 7, 1, 5, 8, 2, 6, 4];
-    println("Original array: " + nums.to_string());
+    // Create a vector of integers using Vec<T>
+    var<Vec<Int>> nums = Vec::new()
+    nums.push(9)
+    nums.push(3)
+    nums.push(7)
+    nums.push(1)
+    nums.push(5)
+    nums.push(8)
+    nums.push(2)
+    nums.push(6)
+    nums.push(4)
     
-    // Use functional approach for small arrays
-    var<my<[Int]>> sorted = quicksort(nums);
-    println("Sorted array (functional): " + sorted.to_string());
+    println("Original vector: " + nums.to_string())
+    
+    // Use template function for sorting
+    var<Vec<Int>> sorted = quicksort(nums)
+    println("Sorted vector: " + sorted.to_string())
     
     // Create a new array for in-place sort
     var<my<[Int]>> nums2 = [9, 3, 7, 1, 5, 8, 2, 6, 4];

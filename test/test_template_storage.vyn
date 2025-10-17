@@ -1,0 +1,10 @@
+// Test template storage system
+template Container {
+    struct Data {
+        value<Int>
+    }
+}
+
+fn<Int> main() -> {
+    return 42
+}

@@ -1,37 +1,46 @@
-// B-tree implementation in Vyn
+// B-tree implementation in Vyn v0.3.7
 // Generic over key (K) and value (V) types, with order M as a compile-time constant
+// Demonstrates advanced template usage with type constraints
 
-// Assume a Comparable trait for keys
-template Comparable
-  fn<Bool> lt(const<Self> self, const<their<Self const>> other) -> 
-  fn<Bool> eq(const<Self> self, const<their<Self const>> other) -> 
+// Comparable trait for keys - modern v0.3.7 syntax
+template Comparable {
+    fn<Bool> lt(const<Self> self, const<their<Self const>> other) -> {
+        // Implementation defined by implementor
+    }
+    fn<Bool> eq(const<Self> self, const<their<Self const>> other) -> {
+        // Implementation defined by implementor  
+    }
+} 
 
 // B-tree template parameterized by key type K, value type V, and order M
 template BTree<K: Comparable, V, M: UInt> {
-  class Node {
-    var<[K; M-1]> keys
-    var<[V; M-1]> values
-    var<[my<Node>; M]> children
-    var<UInt> num_keys
-    var<Bool> is_leaf
-
-    fn<Node> new(var<Bool> is_leaf_param) -> { 
-      Node {
-        keys = [K; M-1](), 
-        values = [V; M-1](), 
-        children = [my<Node>; M](), 
-        num_keys = 0,
-        is_leaf = is_leaf_param
-      }
+  struct Node {
+    keys<[K; M-1]>,
+    values<[V; M-1]>,
+    children<[my<Node>; M]>,
+    num_keys<Int>,
+    is_leaf<Bool>
+  }
+  
+  fn<Node> new_node(var<Bool> is_leaf_param) -> {
+    return Node {
+      keys = [K; M-1](),
+      values = [V; M-1](),
+      children = [my<Node>; M](),
+      num_keys = 0,
+      is_leaf = is_leaf_param
     }
   }
 
-  var<my<Node>> root
-  var<UInt> size
+struct BTree<K: Comparable, V, M: Int> {
+  root<my<Node>>,
+  size<Int>
+}
 
-  fn<BTree<K, V, M>> new() -> 
-    const<my<Node>> root_node = make_my(Node::new(true)) 
-    BTree { root: root_node, size: 0 }
+fn<BTree<K, V, M>> new() -> {
+  var<my<Node>> root_node = make_my(new_node(true))
+  return BTree { root = root_node, size = 0 }
+}
 
   fn<Maybe<V>> search(const<Self> self, var<K> key) -> {
     search_node(view self.root, key)
@@ -142,19 +151,20 @@ template BTree<K: Comparable, V, M: UInt> {
   }
 }
 
-// Example usage
-fn<Void> main() -> {
+// Example usage - demonstrates template instantiation
+fn<Int> main() -> {
   var<BTree<Int, String, 3>> tree = BTree<Int, String, 3>::new()
   tree.insert(10, "ten")
   tree.insert(20, "twenty")
   tree.insert(5, "five")
   tree.insert(15, "fifteen")
   
-  match tree.search(10)
-    Some(v) => println("Found: {}", v)
+  match tree.search(10) {
+    Some(v) => println("Found: " + v),
     None => println("Not found")
+  }
   
   match tree.search(99) {
-    Some(v) => println("Found: {}", v)
+    Some(v) => println("Found: " + v),
     None => println("Not found")
   }

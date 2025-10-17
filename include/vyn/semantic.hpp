@@ -238,6 +238,22 @@ public:
     void visit(ast::OptionalType* node) override;
     void visit(ast::TupleTypeNode* node) override; // Added for tuple type support
 
+    // Template storage system - public for access
+    struct TemplateInfo {
+        std::unique_ptr<ast::TemplateDeclaration> declaration;
+        std::vector<std::string> parameterNames;
+        std::string templateName;
+        
+        TemplateInfo(std::unique_ptr<ast::TemplateDeclaration> decl)
+            : declaration(std::move(decl)), templateName(declaration->name->name) {
+            for (const auto& param : declaration->genericParams) {
+                if (param && param->name) {
+                    parameterNames.push_back(param->name->name);
+                }
+            }
+        }
+    };
+
 private:
     Driver& driver_;
     SymbolTable* currentScope;
@@ -245,12 +261,33 @@ private:
     std::unordered_map<ast::Node*, ast::TypeNode*> expressionTypes;
     std::vector<SymbolTable*> scopes;
     std::unordered_set<std::string> reservedWords; // Added for isReservedWord
+    std::unordered_map<std::string, std::unique_ptr<TemplateInfo>> templateRegistry;
 
     void enterScope();
     void exitScope();
     void addError(const std::string& message, const ast::Node* node);
     // bool isLValue(ast::Expression* expr); // Duplicate declaration removed
     bool isRawLocationType(ast::Expression* expr);
+    
+    // Template management methods
+    void registerTemplate(std::unique_ptr<ast::TemplateDeclaration> templateDecl);
+    TemplateInfo* findTemplate(const std::string& templateName);
+    bool isTemplateInstantiation(const std::string& name);
+    std::unique_ptr<ast::Declaration> instantiateTemplate(const std::string& templateName, 
+                                                         const std::vector<std::string>& typeArgs);
+    
+    // Template instantiation helpers
+    void handleTemplateInstantiation(ast::Identifier* identifier, 
+                                   const std::vector<ast::TypeNodePtr>& typeArgs,
+                                   ast::GenericInstantiationExpression* node);
+    void handleMemberTemplateInstantiation(ast::MemberExpression* memberExpr,
+                                         const std::vector<ast::TypeNodePtr>& typeArgs,
+                                         ast::GenericInstantiationExpression* node);
+    std::unique_ptr<ast::Declaration> performMonomorphization(TemplateInfo* templateInfo,
+                                                             const std::vector<std::string>& concreteTypes);
+    std::unique_ptr<ast::Declaration> cloneAndSubstituteAST(ast::Declaration* templateBody,
+                                                           const std::vector<std::string>& genericParams,
+                                                           const std::vector<std::string>& concreteTypes);
 };
 
 } // namespace vyn
