@@ -182,7 +182,7 @@ TEST_CASE("Print parser version", "[parser]") {
 
 TEST_CASE("Semantic: from(addr) only allowed in unsafe", "[semantic][pointer][unsafe][test38]") {
     std::string source_ok = R"(
-fn main() -> Int{
+fn<Int> main() -> {
     var<Int> addr = 0x1234;
     var<loc<Int>> p;
     unsafe {
@@ -194,7 +194,7 @@ fn main() -> Int{
     REQUIRE_NOTHROW(run_vyn_code(source_ok, "test_source_ok.vyn", false));
 
     std::string source_err = R"(
-fn main() -> Int {
+fn<Int> main() -> {
     var<Int> a = 0x1234;
     var<loc<Int>> p = from<loc<Int>>(a);
     return 0;
