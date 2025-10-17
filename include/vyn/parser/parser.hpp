@@ -176,6 +176,7 @@ namespace vyn { // Changed Vyn to vyn
         std::unique_ptr<vyn::ast::BlockStatement> parse_block(); 
         vyn::ast::ExprPtr parse_pattern(); 
         vyn::ast::StmtPtr parse_try();
+        vyn::ast::StmtPtr parse_match();
         vyn::ast::StmtPtr parse_defer();
         vyn::ast::StmtPtr parse_await();
         std::unique_ptr<vyn::ast::UnsafeStatement> parse_unsafe(); // Added declaration

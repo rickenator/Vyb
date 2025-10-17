@@ -1,0 +1,7 @@
+fn<Int> main() -> {
+    var<Int> x = 42;
+    match x {
+        42 => 100
+    };
+    return 0;
+}
