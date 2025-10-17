@@ -1,78 +1,77 @@
-// Relaxed syntax examples for Vyn
+// Relaxed syntax examples for Vyn v0.4.0 - Updated to unified syntax
 
-// Function with relaxed parameter syntax
-fn<Float> calculate_area(Float width, Float height) -> {
+// Function with unified parameter syntax
+calculate_area(width<Float>, height<Float>)<Float> -> {
     width * height
 }
 
 // Function with mixed parameter syntax
-fn<Int> process_data(var<String> data, const Int factor) -> {
-    var<Int> result = data.to_int() * factor
+process_data(data<String>, const factor<Int>)<Int> -> {
+    result<Int> = data.to_int() * factor
     return result
 }
 
-// Demonstration of local variable declarations using relaxed syntax
-fn<Void> demo_local_vars() -> {
-    // Relaxed syntax for local variables
-    Int count = 5                  // Equivalent to var<Int> count = 5
-    String message = "Hello"       // Equivalent to var<String> message = "Hello"
-    Float pi                       // Equivalent to var<Float> pi (uninitialized)
-    pi = 3.14159                   // Later assignment
+// Demonstration of local variable declarations using unified syntax
+demo_local_vars()<Void> -> {
+    // Unified syntax for local variables
+    count<Int> = 5                     // Mutable variable
+    message<String> = "Hello"          // Mutable string variable
+    pi<Float>                         // Uninitialized variable
+    pi = 3.14159                      // Later assignment
     
-    // Immutable with relaxed syntax
-    const Bool flag = true         // Equivalent to const<Bool> flag = true
+    // Immutable with const
+    const flag<Bool> = true           // Immutable boolean
     
-    // Type inference with 'auto'
-    auto sum = count + 10          // Inferred as Int
-    auto greeting = message + "!"  // Inferred as String
+    // Type inference (planned feature)
+    // auto sum = count + 10          // Would be inferred as Int
+    // auto greeting = message + "!"  // Would be inferred as String
     
-    // Complex types still work with relaxed syntax
-    my<[Int]> numbers = [1, 2, 3, 4, 5]
-    their<String> borrowed_msg = borrow(message)
+    // Complex types with unified syntax
+    numbers<my<[Int]>> = [1, 2, 3, 4, 5]
+    borrowed_msg<their<String>> = borrow(message)
     
     println("Count: " + count.to_string())
     println("Message: " + message)
     println("Pi: " + pi.to_string())
-    println("Sum: " + sum.to_string())
 }
 
-// Function with ownership types using relaxed syntax
-fn<Int> sum_array(my<[Int]> array) -> {
-    var<Int> total = 0
+// Function with ownership types using unified syntax
+sum_array(array<my<[Int]>>)<Int> -> {
+    total<Int> = 0
     for i in 0..array.len() {
         total += array[i]
     }
     return total
 }
 
-// Function with ownership types using standard syntax
-fn<Int> product_array(var<my<[Int]>> array) -> {
-    var<Int> total = 1
+// Function with ownership types using explicit syntax
+product_array(array<my<[Int]>>)<Int> -> {
+    total<Int> = 1
     for i in 0..array.len() {
         total *= array[i]
     }
     return total
 }
 
-// Main function using relaxed syntax for locals
-fn<Int> main() -> {
-    // Call functions with various parameter styles
-    Float area = calculate_area(5.0, 10.0)
+// Main function using unified syntax
+main()<Int> -> {
+    // Call functions with unified parameter styles
+    area<Float> = calculate_area(5.0, 10.0)
     println("Area: " + area.to_string())
     
-    Int result = process_data("100", 5)
+    result<Int> = process_data("100", 5)
     println("Result: " + result.to_string())
     
     // Demonstrate local variable syntax
     demo_local_vars()
     
     // Test ownership types
-    my<[Int]> values = [1, 2, 3, 4, 5]
-    Int total = sum_array(values)  // Ownership moves to sum_array
+    values<my<[Int]>> = [1, 2, 3, 4, 5]
+    total<Int> = sum_array(values)  // Ownership moves to sum_array
     
     // Need to create a new array since values was moved
-    my<[Int]> more_values = [2, 3, 4]
-    Int product = product_array(more_values)
+    more_values<my<[Int]>> = [2, 3, 4]
+    product<Int> = product_array(more_values)
     
     println("Total: " + total.to_string())
     println("Product: " + product.to_string())

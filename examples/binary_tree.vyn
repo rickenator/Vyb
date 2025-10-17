@@ -1,0 +1,178 @@
+// Simple Binary Search Tree implementation in Vyn v0.4.0
+// Demonstrates structs, functions, and memory management with unified syntax
+// Realistic example using current language features
+
+// Tree node structure
+struct TreeNode {
+    key<Int>,
+    value<String>,
+    left<my<TreeNode>>,
+    right<my<TreeNode>>,
+    has_left<Bool>,
+    has_right<Bool>
+}
+
+// Tree container
+struct BinaryTree {
+    root<my<TreeNode>>,
+    has_root<Bool>,
+    size<Int>
+}
+
+// Create a new tree node
+create_node(key<Int>, value<String>)<TreeNode> -> {
+    return TreeNode {
+        key = key,
+        value = value,
+        left = my(TreeNode { key = 0, value = "", left = my(TreeNode{}), right = my(TreeNode{}), has_left = false, has_right = false }),
+        right = my(TreeNode { key = 0, value = "", left = my(TreeNode{}), right = my(TreeNode{}), has_left = false, has_right = false }),
+        has_left = false,
+        has_right = false
+    }
+}
+
+// Create a new empty tree
+new_tree()<BinaryTree> -> {
+    dummy_node<TreeNode> = TreeNode {
+        key = 0,
+        value = "",
+        left = my(TreeNode{}),
+        right = my(TreeNode{}),
+        has_left = false,
+        has_right = false
+    }
+    
+    return BinaryTree {
+        root = my(dummy_node),
+        has_root = false,
+        size = 0
+    }
+}
+
+// Insert a key-value pair into the tree
+insert(tree<BinaryTree>, key<Int>, value<String>)<Void> -> {
+    if (!tree.has_root) {
+        tree.root = my(create_node(key, value))
+        tree.has_root = true
+        tree.size = tree.size + 1
+        return
+    }
+    
+    insert_recursive(borrow tree.root, key, value)
+    tree.size = tree.size + 1
+}
+
+// Recursive insertion helper
+insert_recursive(node<their<TreeNode>>, key<Int>, value<String>)<Void> -> {
+    if (key < node.key) {
+        if (!node.has_left) {
+            node.left = my(create_node(key, value))
+            node.has_left = true
+        } else {
+            insert_recursive(borrow node.left, key, value)
+        }
+    } else {
+        if (!node.has_right) {
+            node.right = my(create_node(key, value))
+            node.has_right = true
+        } else {
+            insert_recursive(borrow node.right, key, value)
+        }
+    }
+}
+
+// Search for a key in the tree
+search(tree<BinaryTree>, key<Int>)<String> -> {
+    if (!tree.has_root) {
+        return "NOT_FOUND"
+    }
+    
+    return search_recursive(view tree.root, key)
+}
+
+// Recursive search helper
+search_recursive(node<their<TreeNode const>>, key<Int>)<String> -> {
+    if (node.key == key) {
+        return node.value
+    }
+    
+    if (key < node.key) {
+        if (node.has_left) {
+            return search_recursive(view node.left, key)
+        } else {
+            return "NOT_FOUND"
+        }
+    } else {
+        if (node.has_right) {
+            return search_recursive(view node.right, key)
+        } else {
+            return "NOT_FOUND"
+        }
+    }
+}
+
+// Print tree in order (for debugging)
+print_tree(tree<BinaryTree>)<Void> -> {
+    if (tree.has_root) {
+        println("Tree contents (in-order):")
+        print_in_order(view tree.root)
+    } else {
+        println("Tree is empty")
+    }
+}
+
+// In-order traversal helper
+print_in_order(node<their<TreeNode const>>)<Void> -> {
+    if (node.has_left) {
+        print_in_order(view node.left)
+    }
+    
+    println("Key: " + node.key.to_string() + ", Value: " + node.value)
+    
+    if (node.has_right) {
+        print_in_order(view node.right)
+    }
+}
+
+// Main function demonstrating the binary search tree
+main()<Int> -> {
+    // Create a new tree
+    tree<BinaryTree> = new_tree()
+    
+    println("Binary Search Tree Example - Vyn v0.4.0")
+    println("==========================================")
+    
+    // Insert some values
+    println("Inserting values...")
+    insert(tree, 50, "fifty")
+    insert(tree, 30, "thirty")
+    insert(tree, 70, "seventy")
+    insert(tree, 20, "twenty")
+    insert(tree, 40, "forty")
+    insert(tree, 60, "sixty")
+    insert(tree, 80, "eighty")
+    
+    println("Tree size: " + tree.size.to_string())
+    println("")
+    
+    // Search for some values
+    println("Search operations:")
+    result1<String> = search(tree, 40)
+    println("Search for 40: " + result1)
+    
+    result2<String> = search(tree, 99)
+    println("Search for 99: " + result2)
+    
+    result3<String> = search(tree, 20)
+    println("Search for 20: " + result3)
+    
+    result4<String> = search(tree, 70)
+    println("Search for 70: " + result4)
+    
+    println("")
+    
+    // Print the entire tree
+    print_tree(tree)
+    
+    return 0
+}

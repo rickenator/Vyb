@@ -6,7 +6,7 @@
 
 ## 1. Introduction
 
-Welcome to the Vyn Programming Guide. This guide walks you through writing, building, and extending Vyn programs, from your first "Hello, Vyn!" to deep dives into the Vyn language internals and runtime. Version 0.3.7 delivers a robust systems programming language with LLVM backend, pattern matching with `match` statements, comprehensive control flow including `break`/`continue`, resizable `Vec<T>` collections, modern struct syntax, and comprehensive auto-serialization capabilities.
+Welcome to the Vyn Programming Guide. This guide walks you through writing, building, and extending Vyn programs, from your first "Hello, Vyn!" to deep dives into the Vyn language internals and runtime. Version 0.4.0 delivers a robust systems programming language with LLVM backend, pattern matching with `match` statements, comprehensive control flow including `break`/`continue`, resizable `Vec<T>` collections, unified syntax, and comprehensive auto-serialization capabilities.
 
 ### 1.1 Purpose & Audience
 
@@ -42,7 +42,7 @@ Vyn is a statically typed, template-metaprogramming language designed to compile
 * **Concurrency Built In**: Async/await, with planned actors, threads, and typed channels.
 * **Self-Hosting & Extensible**: Planned compiler written in Vyn; add backends, macros, and modules at runtime.
 
-**Current Version:** 0.3.7 🚀 **FULLY FUNCTIONAL**
+**Current Version:** 0.4.0 🚀 **FULLY FUNCTIONAL**
 
 ## Quick Start
 
@@ -139,7 +139,7 @@ This unique `import`/`smuggle` distinction makes Vyn's module system both secure
 
 ## What's Working Now
 
-Vyn **v0.3.7** is a **complete systems programming language** ready for production use:
+Vyn **v0.4.0** is a **complete systems programming language** ready for production use:
 
 ### ✅ **Core Language Features**
 - **Functions**: `name(params)<ReturnType> -> body` with full LLVM compilation
@@ -204,7 +204,7 @@ Vyn **v0.3.7** is a **complete systems programming language** ready for producti
 
 ## Language Overview
 
-Vyn v0.3.7 is a **complete, production-ready systems programming language** with modern syntax, powerful pattern matching, and comprehensive collection support.
+Vyn v0.4.0 is a **complete, production-ready systems programming language** with modern syntax, powerful pattern matching, and comprehensive collection support.
 
 ### Language Features Showcase
 
@@ -745,7 +745,7 @@ unsafe {
 
 ## Roadmap
 
-### ✅ **Completed (v0.3.7)**
+### ✅ **Completed (v0.4.0)**
 - **Complete Core Language**: Functions, variables, structs with modern `field<Type>` syntax
 - **LLVM Backend**: Full compilation pipeline with JIT execution
 - **Advanced Control Flow**: `if/else`, `while/for` loops, `match` statements, `break/continue`
@@ -795,7 +795,7 @@ See `doc/` directory for detailed design documents and RFCs.
 
 ## Recent Progress
 
-**v0.3.7 Major Language Completion**: Full-featured programming language achieved
+**v0.4.0 Major Language Revolution**: Unified syntax transformation completed
 - ✅ **Match Statements**: Complete pattern matching with `=>` syntax and comprehensive patterns
 - ✅ **Break/Continue**: Loop control flow statements working in all loop types
 - ✅ **Vec<T> Collections**: Fully functional resizable arrays with all methods (`new`, `push`, `pop`, `len`, `get`)
@@ -805,7 +805,7 @@ See `doc/` directory for detailed design documents and RFCs.
 - ✅ **Member Access**: Object field access (`obj.field`) and array indexing (`arr[index]`)
 - ✅ **Auto-serialization**: Complex return types with smart JSON-like output
 
-**Language Status**: Vyn v0.3.7 is now a **fully functional systems programming language** suitable for real-world programming tasks, with all core language constructs implemented and working.
+**Language Status**: Vyn v0.4.0 is now a **fully functional systems programming language** with revolutionary unified syntax, suitable for real-world programming tasks with all core language constructs implemented and working.
 
 ## Getting Help
 
@@ -820,7 +820,7 @@ See `doc/` directory for detailed design documents and RFCs.
 
 ### A. EBNF Grammar
 
-Vyn's syntax is defined by an EBNF grammar reflecting current v0.3.7 capabilities:
+Vyn's syntax is defined by an EBNF grammar reflecting current v0.4.0 capabilities:
 
 ```
 module = { declaration | statement };
@@ -938,4 +938,4 @@ Apache License - see LICENSE file for details.
 
 ---
 
-*Vyn v0.3.7: A complete systems programming language with pattern matching, resizable collections, modern syntax, and unique import/smuggle module system - ready for real-world development.*
+*Vyn v0.4.0: A complete systems programming language with unified syntax, pattern matching, resizable collections, and unique import/smuggle module system - ready for real-world development.*
