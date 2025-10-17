@@ -558,7 +558,40 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
     // Fallback: default CallExpression analysis (no additional checks)
     // ...existing code...
 }
-void SemanticAnalyzer::visit(ast::ArrayElementExpression* node) {}
+void SemanticAnalyzer::visit(ast::ArrayElementExpression* node) {
+    if (!node || !node->array || !node->index) {
+        addError("Malformed array element expression.", node);
+        return;
+    }
+
+    // Process the array expression first
+    node->array->accept(*this);
+    
+    // Process the index expression
+    node->index->accept(*this);
+
+    // Get the array's type to determine the element type
+    auto arrayTypeIt = expressionTypes.find(node->array.get());
+    if (arrayTypeIt != expressionTypes.end() && arrayTypeIt->second) {
+        if (auto arrayType = dynamic_cast<ast::ArrayType*>(arrayTypeIt->second)) {
+            // The element type is the array's element type
+            if (arrayType->elementType) {
+                expressionTypes[node] = arrayType->elementType->clone().release();
+                node->type = std::shared_ptr<ast::TypeNode>(arrayType->elementType->clone());
+            }
+        }
+    }
+    
+    // Validate index type (should be integer)
+    auto indexTypeIt = expressionTypes.find(node->index.get());
+    if (indexTypeIt != expressionTypes.end() && indexTypeIt->second) {
+        if (auto indexTypeName = dynamic_cast<ast::TypeName*>(indexTypeIt->second)) {
+            if (indexTypeName->identifier->name != "Int") {
+                addError("Array index must be an integer type, got: " + indexTypeName->identifier->name, node);
+            }
+        }
+    }
+}
 void SemanticAnalyzer::visit(ast::MemberExpression* node) {
     if (!node || !node->object || !node->property) {
         addError("Malformed member expression.", node);
@@ -857,7 +890,48 @@ void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
     expressionTypes[node] = node->typePath->clone().release();
     // Optionally, check that all fields exist in the class/struct and types match (not implemented here)
 }
-void SemanticAnalyzer::visit(ast::ArrayLiteral* node) {}
+void SemanticAnalyzer::visit(ast::ArrayLiteral* node) {
+    if (!node) {
+        return;
+    }
+
+    // Process all elements to infer types
+    ast::TypeNode* elementType = nullptr;
+    for (auto& element : node->elements) {
+        if (element) {
+            element->accept(*this);
+            
+            // Get the element type
+            auto elemTypeIt = expressionTypes.find(element.get());
+            if (elemTypeIt != expressionTypes.end() && elemTypeIt->second) {
+                if (!elementType) {
+                    // First element sets the type
+                    elementType = elemTypeIt->second;
+                } else {
+                    // TODO: Type compatibility check for all elements
+                    // For now, assume all elements have the same type
+                }
+            }
+        }
+    }
+    
+    if (elementType) {
+        // Create an array type [ElementType; Size]
+        auto sizeExpr = std::make_unique<ast::IntegerLiteral>(
+            node->loc, 
+            static_cast<int64_t>(node->elements.size())
+        );
+        
+        auto arrayType = std::make_unique<ast::ArrayType>(
+            node->loc,
+            elementType->clone(),
+            std::move(sizeExpr)
+        );
+        
+        expressionTypes[node] = arrayType.release();
+        node->type = std::shared_ptr<ast::TypeNode>(expressionTypes[node]->clone());
+    }
+}
 void SemanticAnalyzer::visit(ast::FunctionExpression* node) {}
 void SemanticAnalyzer::visit(ast::ThisExpression* node) {}
 void SemanticAnalyzer::visit(ast::SuperExpression* node) {}

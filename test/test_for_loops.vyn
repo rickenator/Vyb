@@ -1,0 +1,28 @@
+# Test for loops with different patterns
+
+## Simple counting loop (sum 0..4)
+fn<Int> test_simple_for() -> {
+    var<Int> sum = 0
+    for (var<Int> i = 0; i < 5; i = i + 1) {
+        sum = sum + i
+    }
+    return sum  # Expected: 10
+}
+
+## Different increment
+fn<Int> test_step_for() -> {
+    var<Int> sum = 0
+    for (var<Int> i = 0; i < 10; i = i + 2) {
+        sum = sum + i
+    }
+    return sum  # Expected: 0 + 2 + 4 + 6 + 8 = 20
+}
+
+## Countdown
+fn<Int> test_countdown_for() -> {
+    var<Int> sum = 0
+    for (var<Int> i = 5; i > 0; i = i - 1) {
+        sum = sum + i
+    }
+    return sum  # Expected: 5 + 4 + 3 + 2 + 1 = 15
+}

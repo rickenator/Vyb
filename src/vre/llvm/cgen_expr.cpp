@@ -1184,8 +1184,29 @@ void LLVMCodegen::visit(vyn::ast::AssignmentExpression *node) {
 void LLVMCodegen::visit(vyn::ast::ArrayElementExpression *node) {
     // This is for using array[index] as an R-value (i.e., loading the value)
     // LHS usage is handled in AssignmentExpression
-    node->array->accept(*this);
-    llvm::Value *arrayPtr = m_currentLLVMValue; // Should be a pointer to the first element
+    
+    llvm::Value *arrayPtr = nullptr;
+    
+    // Special handling for identifier expressions to get the alloca directly
+    if (auto* identExpr = dynamic_cast<vyn::ast::Identifier*>(node->array.get())) {
+        auto it = namedValues.find(identExpr->name);
+        if (it != namedValues.end()) {
+            if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(it->second)) {
+                // For array variables, we need the alloca (pointer to array), not the loaded value
+                arrayPtr = alloca;
+            } else {
+                arrayPtr = it->second; // Global or function
+            }
+        } else {
+            logError(identExpr->loc, "Undefined identifier in array access: " + identExpr->name);
+            m_currentLLVMValue = nullptr;
+            return;
+        }
+    } else {
+        // For other expressions, visit normally
+        node->array->accept(*this);
+        arrayPtr = m_currentLLVMValue;
+    }
 
     node->index->accept(*this);
     llvm::Value *indexVal = m_currentLLVMValue;
@@ -1230,7 +1251,22 @@ void LLVMCodegen::visit(vyn::ast::ArrayElementExpression *node) {
         return;
     }
 
-    llvm::Value *elementAddress = builder->CreateGEP(elementType, arrayPtr, indexVal, "arrayelemaddr_rval");
+    // For array access, we need to handle the indexing properly
+    // If arrayPtr is an alloca of array type, we need [0, index] to access the element
+    // If arrayPtr points to the first element, we just use [index]
+    
+    llvm::Value *elementAddress = nullptr;
+    
+    if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(arrayPtr)) {
+        // arrayPtr is an alloca of array type, so we need [0, index] to get to the element
+        llvm::Value* zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0);
+        std::vector<llvm::Value*> indices = {zero, indexVal};
+        elementAddress = builder->CreateGEP(alloca->getAllocatedType(), arrayPtr, indices, "arrayelemaddr_rval");
+    } else {
+        // arrayPtr points to the first element, so just use [index]
+        elementAddress = builder->CreateGEP(elementType, arrayPtr, indexVal, "arrayelemaddr_rval");
+    }
+    
     m_currentLLVMValue = builder->CreateLoad(elementType, elementAddress, "arrayelemload");
 }
 

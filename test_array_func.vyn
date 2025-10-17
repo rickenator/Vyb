@@ -1,0 +1,10 @@
+fn<[Int; 3]> test_array() -> {
+    var<[Int; 3]> arr = [10, 20, 30];
+    return arr;
+}
+
+fn<Int> main() -> {
+    var<[Int; 3]> result = test_array();
+    println(result);
+    return 0;
+}
