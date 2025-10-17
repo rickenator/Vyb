@@ -1,0 +1,6 @@
+# Test file with just string to isolate segfault
+y<String> = "hello";
+
+main()<Void> -> {
+    return;
+}
