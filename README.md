@@ -30,10 +30,11 @@ Vyn **v0.3.7** is a functional programming language with impressive capabilities
 ### ✅ **Core Language Features**
 - **Functions**: `fn<ReturnType> name(params) -> body` with full LLVM compilation
 - **Variables**: `var x = 42` with type inference and explicit typing
+- **Arrays**: `[T; N]` fixed-size arrays with indexing and beautiful println() output
 - **Structs**: `struct Point { x: Int, y: Int }` with field access
 - **Control Flow**: `if/else`, `while` loops, `return` statements
 - **Arithmetic**: `+`, `-`, `*`, `/` with proper precedence
-- **I/O**: `println()` for output, works with strings and integers
+- **I/O**: `println()` for output, works with strings, integers, and arrays
 
 ### ✅ **Advanced Type System**
 - **Multi-value returns**: `fn<Int,String> main() -> return 42, "hello"`
@@ -103,6 +104,23 @@ struct Point {
 fn<Int> main() -> {
     var p = Point { x: 10, y: 20 }
     return p.x + p.y  # Returns 30
+}
+```
+
+### Arrays and Collections
+
+```vyn
+# Fixed-size arrays with beautiful output
+fn<Int> main() -> {
+    var<[Int; 3]> numbers = [10, 20, 30]
+    var<[Int; 1]> single = [42]
+    
+    println(numbers)  # Outputs: [10, 20, 30]
+    println(single)   # Outputs: [42]
+    
+    # Array indexing and functions
+    var first = numbers[0]  # Gets 10
+    return first
 }
 ```
 
@@ -262,12 +280,13 @@ unsafe {
 - LLVM backend with JIT execution
 - Basic type system and inference
 - Functions, variables, structs
+- **Fixed-size arrays**: `[T; N]` with literals, indexing, and perfect serialization
 - Control flow (if/else, while)
 - Auto-serialization for complex returns
 - Memory safety with ownership types
 
 ### 🚧 **In Progress**
-- **Arrays and Collections**: `[T; N]`, `Vec<T>` for data management
+- **Dynamic Collections**: `Vec<T>` for resizable data management
 - **For Loops**: Parser tokens exist, need runtime completion
 - **String Operations**: Concatenation, comparison, manipulation
 - **Standard Library**: I/O, math, collections modules

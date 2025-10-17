@@ -17,7 +17,8 @@ This document outlines the completed features, ongoing development, and future c
 The current primary focus is on:
 1.  **Standard Library Expansion:** Building core modules for collections, I/O, math
 2.  **For Loop Implementation:** Completing runtime support for parsed for loop syntax
-3.  **Arrays and Collections:** Implementing `[T; N]` and `Vec<T>` data structures
+3.  **✅ Arrays and Collections (COMPLETED v0.3.7):** Fixed-size arrays `[T; N]` fully implemented with beautiful serialization
+4.  **Dynamic Collections:** Implementing `Vec<T>` resizable data structures
 
 ## Project Structure and Organization
 
