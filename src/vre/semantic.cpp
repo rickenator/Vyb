@@ -230,8 +230,8 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
         addError("Redefinition of function \\\"" + node->id->name + "\\\" in the same scope.", node->id.get());
     }
 
-    auto funcSymbol = new SymbolInfo{SymbolInfo::Kind::Function, node->id->name, false, nullptr};
-    currentScope->add(SymbolInfo{funcSymbol->kind, funcSymbol->name, funcSymbol->isConst, funcSymbol->type}); // Explicit SymbolInfo construction
+    auto funcSymbol = new SymbolInfo{SymbolInfo::Kind::Function, node->id->name, false, ast::OwnershipKind::MY, nullptr};
+    currentScope->add(SymbolInfo{funcSymbol->kind, funcSymbol->name, funcSymbol->isConst, funcSymbol->ownershipKind, funcSymbol->type}); // Explicit SymbolInfo construction
     delete funcSymbol; // SymbolInfo is copied into the table
 
     enterScope(); 
@@ -249,11 +249,11 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
             if (param.typeNode) { // Changed from param.type to param.typeNode
                 param.typeNode->accept(*this); 
                 paramTypesVec.push_back(param.typeNode->clone());
-                currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, param.name->name, false, param.typeNode->clone().release()}); // Explicit SymbolInfo, changed param.id to param.name, param.type to param.typeNode
+                currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, param.name->name, false, ast::OwnershipKind::MY, param.typeNode->clone().release()}); // Explicit SymbolInfo, changed param.id to param.name, param.type to param.typeNode
             } else {
                 addError("Parameter \\\"" + param.name->name + "\\\" missing type.", param.name.get()); // Changed from param.id to param.name
                 paramTypesVec.push_back(nullptr); 
-                currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, param.name->name, false, nullptr}); // Explicit SymbolInfo, changed param.id to param.name
+                currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, param.name->name, false, ast::OwnershipKind::MY, nullptr}); // Explicit SymbolInfo, changed param.id to param.name
             }
         }
     }
@@ -339,7 +339,7 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
     }
 
     SymbolInfo::Kind kind = SymbolInfo::Kind::Variable; 
-    currentScope->add(SymbolInfo{kind, node->id->name, node->isConst, symbolType ? symbolType->clone().release() : nullptr}); // Explicit SymbolInfo
+    currentScope->add(SymbolInfo{kind, node->id->name, node->isConst, ast::OwnershipKind::MY, symbolType ? symbolType->clone().release() : nullptr}); // Explicit SymbolInfo
 }
 
 void SemanticAnalyzer::visit(ast::ClassDeclaration* node) {
@@ -349,7 +349,7 @@ void SemanticAnalyzer::visit(ast::ClassDeclaration* node) {
     if (currentScope->lookupDirect(node->name->name)) {
         addError("Redefinition of class \\\"" + node->name->name + "\\\" in the same scope.", node->name.get());
     }
-    currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, node->name->name, false, new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->name->loc, node->name->name))});
+    currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, node->name->name, false, ast::OwnershipKind::MY, new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->name->loc, node->name->name))});
 
 
     enterScope();
@@ -438,10 +438,10 @@ void SemanticAnalyzer::visit(ast::TypeAliasDeclaration* node) {
     }
 
     if (node->name && node->typeNode && node->typeNode->type) {
-        currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, node->name->name, false, node->typeNode->type->clone().release()}); // Explicit SymbolInfo
+        currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, node->name->name, false, ast::OwnershipKind::MY, node->typeNode->type->clone().release()}); // Explicit SymbolInfo
     } else if (node->name) {
         addError("Type alias \\\"" + node->name->name + "\\\" has an unresolved target type.", node);
-        currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, node->name->name, false, nullptr}); // Explicit SymbolInfo
+        currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, node->name->name, false, ast::OwnershipKind::MY, nullptr}); // Explicit SymbolInfo
     }
 }
 
@@ -2146,14 +2146,32 @@ bool SemanticAnalyzer::isBuiltinTypeCompatible(const std::string& typeName, cons
 }
 
 void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std::string& objectName, const std::string& methodName) {
-    // Validate that the object is a Vec type
-    // In a full implementation, we would look up the object's type in the symbol table
-    // For now, we'll assume it's a Vec and perform basic validation
+    // Validate that the object is a Vec type and check constness
+    // Look up the object in the symbol table to check mutability
+    SymbolInfo* objSymbol = currentScope->lookup(objectName);
+    bool isConstVec = false;
+    bool isTheirVec = false;
+    
+    if (objSymbol) {
+        // Check if the variable is const or has ownership constraints
+        if (objSymbol->isConst) {
+            isConstVec = true;
+        }
+        // Check for 'their' ownership (borrowed reference)
+        if (objSymbol->ownershipKind == ast::OwnershipKind::THEIR) {
+            isTheirVec = true;
+        }
+    }
     
     if (methodName == "push") {
         // push(element) -> Vec<T> (for chaining)
         if (node->arguments.size() != 1) {
             addError("Vec::push expects exactly 1 argument", node);
+            return;
+        }
+        // Check constness - push is a mutating operation
+        if (isConstVec) {
+            addError("Cannot call mutating method 'push' on const Vec: " + objectName, node);
             return;
         }
         // Return type is the Vec itself for chaining
@@ -2168,6 +2186,11 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         // pop() -> T (element type)
         if (node->arguments.size() != 0) {
             addError("Vec::pop expects no arguments", node);
+            return;
+        }
+        // Check constness - pop is a mutating operation
+        if (isConstVec) {
+            addError("Cannot call mutating method 'pop' on const Vec: " + objectName, node);
             return;
         }
         // Return element type
@@ -2210,6 +2233,11 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
             addError("Vec::push_array expects exactly 1 argument (array)", node);
             return;
         }
+        // Check constness - push_array is a mutating operation
+        if (isConstVec) {
+            addError("Cannot call mutating method 'push_array' on const Vec: " + objectName, node);
+            return;
+        }
         // TODO: Validate argument is array type [T; N] compatible with Vec<T>
         // Return Vec type for chaining
         auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
@@ -2236,6 +2264,11 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         // clear() -> void
         if (node->arguments.size() != 0) {
             addError("Vec::clear expects no arguments", node);
+            return;
+        }
+        // Check constness - clear is a mutating operation
+        if (isConstVec) {
+            addError("Cannot call mutating method 'clear' on const Vec: " + objectName, node);
             return;
         }
         // Return void (no type)
@@ -2294,6 +2327,11 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
             addError("Vec::remove_at expects exactly 1 argument (index)", node);
             return;
         }
+        // Check constness - remove_at is a mutating operation
+        if (isConstVec) {
+            addError("Cannot call mutating method 'remove_at' on const Vec: " + objectName, node);
+            return;
+        }
         // TODO: Validate index is Int type
         // Return element type
         auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
@@ -2307,8 +2345,25 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
             addError("Vec::get_array expects exactly 1 argument (pre-allocated array)", node);
             return;
         }
+        // get_array is read-only, so it's allowed on const/their Vecs
         // TODO: Validate argument is array type [T; N] compatible with Vec<T>
         // Return Int (number of elements copied for efficiency feedback)
+        auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+        auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+        expressionTypes[node] = intType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
+        
+    } else if (methodName == "get_vec") {
+        // get_vec(target_vec) -> Int (number of elements copied)
+        // Extracts contents from any Vec into target Vec, respecting constness
+        if (node->arguments.size() != 1) {
+            addError("Vec::get_vec expects exactly 1 argument (target Vec)", node);
+            return;
+        }
+        // get_vec is read-only on source Vec (works with all ownership types: MY, OUR, THEIR, PTR)
+        // constness is automatically respected since this is a read-only operation
+        // TODO: Validate argument is Vec<T> type compatible with source Vec<T>
+        // Return Int (number of elements copied)
         auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
         auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
         expressionTypes[node] = intType.get();

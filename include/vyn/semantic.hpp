@@ -105,6 +105,7 @@ struct SymbolInfo {
     Kind kind;
     std::string name;
     bool isConst = false;
+    ast::OwnershipKind ownershipKind = ast::OwnershipKind::MY; // Default to unique ownership
     ast::TypeNode* type = nullptr;
 };
 

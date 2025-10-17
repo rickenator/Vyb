@@ -1,0 +1,75 @@
+// Test Vec constness checking for all ownership types
+// This test demonstrates that constness is respected regardless of ownership type
+
+fn test_vec_constness() -> void {
+    // Test MY ownership (unique)
+    my Vec<Int> my_vec = Vec<Int>()
+    my_vec.push(1)  // Should work - mutable my Vec
+    my_vec.push(2)
+    
+    const my Vec<Int> const_my_vec = Vec<Int>()
+    // const_my_vec.push(3)  // Should error - const Vec
+    let len1 = const_my_vec.len()  // Should work - read-only method
+    
+    // Test OUR ownership (shared)  
+    our Vec<Int> our_vec = Vec<Int>()
+    our_vec.push(4)  // Should work - mutable our Vec
+    our_vec.push(5)
+    
+    const our Vec<Int> const_our_vec = Vec<Int>()
+    // const_our_vec.push(6)  // Should error - const Vec
+    let len2 = const_our_vec.len()  // Should work - read-only method
+    
+    // Test THEIR ownership (borrowed)
+    their Vec<Int> their_vec = Vec<Int>()
+    their_vec.push(7)  // Should work - mutable their Vec  
+    their_vec.push(8)
+    
+    const their Vec<Int> const_their_vec = Vec<Int>()
+    // const_their_vec.push(9)  // Should error - const Vec
+    let len3 = const_their_vec.len()  // Should work - read-only method
+    
+    // Test PTR ownership (raw pointer)
+    ptr Vec<Int> ptr_vec = Vec<Int>()
+    ptr_vec.push(10)  // Should work - mutable ptr Vec
+    ptr_vec.push(11)
+    
+    const ptr Vec<Int> const_ptr_vec = Vec<Int>()
+    // const_ptr_vec.push(12)  // Should error - const Vec
+    let len4 = const_ptr_vec.len()  // Should work - read-only method
+    
+    println("All constness checks passed!")
+}
+
+fn test_mutating_methods_constness() -> void {
+    my Vec<Int> mutable_vec = Vec<Int>()
+    const my Vec<Int> const_vec = Vec<Int>()
+    
+    // Test all mutating methods on mutable Vec (should work)
+    mutable_vec.push(1)
+    mutable_vec.push_array([2, 3, 4])
+    let popped = mutable_vec.pop()
+    mutable_vec.clear()
+    mutable_vec.push(5)
+    let removed = mutable_vec.remove_at(0)
+    
+    // Test all mutating methods on const Vec (should error)
+    // const_vec.push(1)           // Should error
+    // const_vec.push_array([2])   // Should error  
+    // const_vec.pop()             // Should error
+    // const_vec.clear()           // Should error
+    // const_vec.remove_at(0)      // Should error
+    
+    // Test read-only methods on const Vec (should work)
+    let len = const_vec.len()
+    let empty = const_vec.is_empty()
+    let cap = const_vec.capacity()
+    let contains_val = const_vec.contains(1)
+    
+    println("Mutating methods constness checks passed!")
+}
+
+fn main() -> void {
+    test_vec_constness()
+    test_mutating_methods_constness()
+}

@@ -63,6 +63,8 @@ void LLVMCodegen::handleVecMethod(vyn::ast::CallExpression* node, const std::str
         handleVecRemoveAt(node, vecPtr, vecStructType);
     } else if (methodName == "get_array") {
         handleVecGetArray(node, vecPtr, vecStructType);
+    } else if (methodName == "get_vec") {
+        handleVecGetVec(node, vecPtr, vecStructType);
     } else {
         logError(node->loc, "Unknown Vec method: " + methodName);
         m_currentLLVMValue = nullptr;
@@ -389,6 +391,52 @@ void LLVMCodegen::handleVecGetArray(vyn::ast::CallExpression* node, llvm::Value*
     
     // For now, return the number of elements that would be copied
     m_currentLLVMValue = vecSize;
+}
+
+void LLVMCodegen::handleVecGetVec(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
+    if (node->arguments.size() != 1) {
+        logError(node->loc, "Vec::get_vec expects exactly 1 argument (target Vec)");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Evaluate the target Vec argument
+    node->arguments[0]->accept(*this);
+    llvm::Value* targetVecPtr = m_currentLLVMValue;
+    if (!targetVecPtr) {
+        logError(node->loc, "Failed to evaluate target Vec argument for Vec::get_vec");
+        return;
+    }
+    
+    // Get source Vec size
+    llvm::Value* srcSizeFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 1, "src_vec.size_ptr");
+    llvm::Value* srcSize = builder->CreateLoad(llvm::Type::getInt64Ty(*context), srcSizeFieldPtr, "src_vec.size");
+    
+    // Get source Vec data pointer
+    llvm::Value* srcDataFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 0, "src_vec.data_ptr");
+    llvm::Value* srcDataPtr = builder->CreateLoad(llvm::PointerType::get(*context, 0), srcDataFieldPtr, "src_vec.data");
+    
+    // Get target Vec pointers
+    llvm::Value* targetSizeFieldPtr = builder->CreateStructGEP(vecStructType, targetVecPtr, 1, "target_vec.size_ptr");
+    llvm::Value* targetCapacityFieldPtr = builder->CreateStructGEP(vecStructType, targetVecPtr, 2, "target_vec.capacity_ptr");
+    llvm::Value* targetDataFieldPtr = builder->CreateStructGEP(vecStructType, targetVecPtr, 0, "target_vec.data_ptr");
+    
+    std::cout << "DEBUG: Vec::get_vec() called - extracting contents from 'their Vec' to target Vec" << std::endl;
+    
+    // In a full implementation, this would:
+    // 1. Allocate new storage in target Vec if needed
+    // 2. Copy all elements from source Vec to target Vec
+    // 3. Update target Vec's size and potentially capacity
+    // 4. Clear the source Vec (since it's a 'their' Vec being consumed)
+    // 5. Return number of elements transferred
+    
+    // For now, simulate the transfer:
+    // Set target size to source size
+    builder->CreateStore(srcSize, targetSizeFieldPtr);
+    
+    // In a real implementation, we'd copy the data and potentially free source
+    // For demonstration, just return the number of elements that would be transferred
+    m_currentLLVMValue = srcSize;
 }
 
 } // namespace vyn
