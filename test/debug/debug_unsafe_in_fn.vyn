@@ -1,0 +1,1 @@
+fn<Int> main() -> { unsafe { var<Int> x = 5; } return 42; }

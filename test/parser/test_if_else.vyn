@@ -1,0 +1,12 @@
+fn<i32> main() -> {
+    var<i32> x = 15;
+    var<i32> result = 0;
+    
+    if (x > 10) {
+        result = 42;
+    } else {
+        result = 99;
+    }
+    
+    return result;
+}

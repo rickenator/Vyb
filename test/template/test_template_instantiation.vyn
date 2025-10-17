@@ -1,0 +1,12 @@
+// Test template instantiation - using parser expected syntax
+template Container<T> {
+    struct Data {
+        value<T>
+    }
+}
+
+fn<Int> main() -> {
+    // Simple test without template instantiation for now
+    var<Int> result = 42;
+    return result;
+}

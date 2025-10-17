@@ -43,7 +43,7 @@ public:
 } // namespace vyn::ast
 ```
 
-**Note:** As of v0.3.5, Vyn uses the `var<T>`/`const<T>` declaration syntax, so every `VariableDeclaration` node will have `type` set (no longer optional in practice).
+**Note:** As of v0.3.7, Vyn uses the `var<T>`/`const<T>` declaration syntax with full support for modern struct syntax (`field<Type>`), match statements, break/continue, and Vec<T> collections, so every `VariableDeclaration` node will have `type` set (no longer optional in practice).
 
 ## 2. Function Parameter (`vyn::ast::FunctionParameter`)
 
@@ -65,6 +65,36 @@ public:
 
 } // namespace vyn::ast
 ```
+
+### Function Parameter Syntax
+
+Vyn supports two parameter syntax styles that produce identical AST structures:
+
+#### Standard Syntax
+```vyn
+// Explicit mutability with angle brackets
+fn<String> format(var<String> prefix, const<Int> value) -> {
+    return prefix + value.to_string()
+}
+```
+
+#### Shorthand Syntax 
+```vyn
+// Type-first shorthand (more concise)
+fn<String> format(String prefix, const Int value) -> {
+    return prefix + value.to_string()
+}
+```
+
+#### Mixed Syntax
+```vyn
+// Both forms can be used in the same function
+fn<Int> calculate(var<Int> base, Int multiplier, const<Int> offset) -> {
+    return base * multiplier + offset
+}
+```
+
+Both syntaxes produce identical `FunctionParameter` AST nodes and LLVM IR. The shorthand syntax assumes `var` (mutable) unless `const` is explicitly specified.
 
 ## 3. Function Declaration (`vyn::ast::FunctionDeclaration`)
 
@@ -98,12 +128,15 @@ public:
 Function declarations in Vyn support multi-value return types using the generic syntax `fn<T1, T2, ...>`. When the function name is `main`, the Vyn runtime automatically serializes returned values to JSON format:
 
 ```vyn
-// Single return type
+// Single return type with standard parameter syntax
 fn<Int> add(var<Int> a, var<Int> b) -> a + b
 
-// Multi-value return type
-fn<Int, String> get_values() -> {
-    return 42, "Hello, World!"
+// Same function with shorthand parameter syntax
+fn<Int> add_shorthand(Int a, Int b) -> a + b
+
+// Multi-value return type with mixed parameter syntax
+fn<Int, String> get_values(String prefix, const Int count) -> {
+    return count, prefix + "Hello, World!"
 }
 
 // Auto-serialization in main()

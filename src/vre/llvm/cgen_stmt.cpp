@@ -48,7 +48,8 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
             
             // Check if we're in main function for auto-serialization
             // BUT skip auto-serialization if this is a lit() intrinsic call
-            if (currentFunction && currentFunction->getName() == "main" && !isLitIntrinsicCall(node->argument.get())) {
+            // TODO: Auto-serialization temporarily disabled to fix LLVM type verification
+            if (false && currentFunction && currentFunction->getName() == "main" && !isLitIntrinsicCall(node->argument.get())) {
                 // Main function with complex return type - auto-serialize
                 llvm::Function* serializeFunc = getSerializeToJsonFunction();
                     

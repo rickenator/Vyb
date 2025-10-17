@@ -1,0 +1,5 @@
+fn<Int> main() -> {
+    var<String> greeting = "Hello";
+    println(greeting);
+    return 0;
+}

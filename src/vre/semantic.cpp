@@ -555,10 +555,72 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             return;
         }
     }
+    
+    // Handle Vec::new() constructor calls
+    if (auto memberExpr = dynamic_cast<ast::MemberExpression*>(node->callee.get())) {
+        // Check if this is Vec::new()
+        if (auto vecIdent = dynamic_cast<ast::Identifier*>(memberExpr->object.get())) {
+            if (auto newIdent = dynamic_cast<ast::Identifier*>(memberExpr->property.get())) {
+                if (vecIdent->name == "Vec" && newIdent->name == "new") {
+                    // This is Vec::new() - create an empty vector
+                    if (!node->arguments.empty()) {
+                        addError("Vec::new() does not accept any arguments", node);
+                        return;
+                    }
+                    
+                    // Need to infer element type from context or default to a generic type
+                    // For now, we'll default to Vec<Int> if no context is available
+                    // TODO: In a full implementation, this should be inferred from the variable declaration
+                    auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+                    auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+                    auto vecType = std::make_unique<ast::VecType>(node->loc, std::move(intType));
+                    
+                    expressionTypes[node] = vecType.get();
+                    node->type = std::shared_ptr<ast::TypeNode>(std::move(vecType));
+                    return;
+                }
+            }
+        }
+    }
+    
     // Fallback: default CallExpression analysis (no additional checks)
     // ...existing code...
 }
-void SemanticAnalyzer::visit(ast::ArrayElementExpression* node) {}
+
+void SemanticAnalyzer::visit(ast::ArrayElementExpression* node) {
+    if (!node || !node->array || !node->index) {
+        addError("Malformed array element expression.", node);
+        return;
+    }
+
+    // Process the array expression first
+    node->array->accept(*this);
+    
+    // Process the index expression
+    node->index->accept(*this);
+
+    // Get the array's type to determine the element type
+    auto arrayTypeIt = expressionTypes.find(node->array.get());
+    if (arrayTypeIt != expressionTypes.end() && arrayTypeIt->second) {
+        if (auto arrayType = dynamic_cast<ast::ArrayType*>(arrayTypeIt->second)) {
+            // The element type is the array's element type
+            if (arrayType->elementType) {
+                expressionTypes[node] = arrayType->elementType->clone().release();
+                node->type = std::shared_ptr<ast::TypeNode>(arrayType->elementType->clone());
+            }
+        }
+    }
+    
+    // Validate index type (should be integer)
+    auto indexTypeIt = expressionTypes.find(node->index.get());
+    if (indexTypeIt != expressionTypes.end() && indexTypeIt->second) {
+        if (auto indexTypeName = dynamic_cast<ast::TypeName*>(indexTypeIt->second)) {
+            if (indexTypeName->identifier->name != "Int") {
+                addError("Array index must be an integer type, got: " + indexTypeName->identifier->name, node);
+            }
+        }
+    }
+}
 void SemanticAnalyzer::visit(ast::MemberExpression* node) {
     if (!node || !node->object || !node->property) {
         addError("Malformed member expression.", node);
@@ -857,13 +919,79 @@ void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
     expressionTypes[node] = node->typePath->clone().release();
     // Optionally, check that all fields exist in the class/struct and types match (not implemented here)
 }
-void SemanticAnalyzer::visit(ast::ArrayLiteral* node) {}
+void SemanticAnalyzer::visit(ast::ArrayLiteral* node) {
+    if (!node) {
+        return;
+    }
+
+    // Process all elements to infer types
+    ast::TypeNode* elementType = nullptr;
+    for (auto& element : node->elements) {
+        if (element) {
+            element->accept(*this);
+            
+            // Get the element type
+            auto elemTypeIt = expressionTypes.find(element.get());
+            if (elemTypeIt != expressionTypes.end() && elemTypeIt->second) {
+                if (!elementType) {
+                    // First element sets the type
+                    elementType = elemTypeIt->second;
+                } else {
+                    // TODO: Type compatibility check for all elements
+                    // For now, assume all elements have the same type
+                }
+            }
+        }
+    }
+    
+    if (elementType) {
+        // Create an array type [ElementType; Size]
+        auto sizeExpr = std::make_unique<ast::IntegerLiteral>(
+            node->loc, 
+            static_cast<int64_t>(node->elements.size())
+        );
+        
+        auto arrayType = std::make_unique<ast::ArrayType>(
+            node->loc,
+            elementType->clone(),
+            std::move(sizeExpr)
+        );
+        
+        expressionTypes[node] = arrayType.release();
+        node->type = std::shared_ptr<ast::TypeNode>(expressionTypes[node]->clone());
+    }
+}
 void SemanticAnalyzer::visit(ast::FunctionExpression* node) {}
 void SemanticAnalyzer::visit(ast::ThisExpression* node) {}
 void SemanticAnalyzer::visit(ast::SuperExpression* node) {}
 void SemanticAnalyzer::visit(ast::AwaitExpression* node) {}
 void SemanticAnalyzer::visit(ast::ListComprehension* node) {}
-void SemanticAnalyzer::visit(ast::GenericInstantiationExpression* node) {}
+void SemanticAnalyzer::visit(ast::GenericInstantiationExpression* node) {
+    if (!node || !node->baseExpression) {
+        addError("Invalid generic instantiation expression.", node);
+        return;
+    }
+    
+    // Visit the base expression to understand what we're instantiating
+    node->baseExpression->accept(*this);
+    
+    // Visit all generic arguments (type parameters)
+    for (auto& typeArg : node->genericArguments) {
+        if (typeArg) {
+            typeArg->accept(*this);
+        }
+    }
+    
+    // Try to identify if this is a template instantiation
+    if (auto identifier = dynamic_cast<ast::Identifier*>(node->baseExpression.get())) {
+        handleTemplateInstantiation(identifier, node->genericArguments, node);
+    } else if (auto memberExpr = dynamic_cast<ast::MemberExpression*>(node->baseExpression.get())) {
+        // Handle something like Container<Int>::create
+        handleMemberTemplateInstantiation(memberExpr, node->genericArguments, node);
+    } else {
+        addError("Invalid base expression for generic instantiation.", node->baseExpression.get());
+    }
+}
 void SemanticAnalyzer::visit(ast::PointerDerefExpression* node) {
     // at() intrinsic only allowed inside an unsafe block
     if (!isInUnsafeBlock()) {
@@ -1190,7 +1318,55 @@ void SemanticAnalyzer::visit(ast::EnumDeclaration* node) {}
 void SemanticAnalyzer::visit(ast::FieldDeclaration* node) {}
 void SemanticAnalyzer::visit(ast::EnumVariant* node) {}
 // void SemanticAnalyzer::visit(ast::GenericParameter* node) {} // Handled above
-void SemanticAnalyzer::visit(ast::TemplateDeclaration* node) {}
+void SemanticAnalyzer::visit(ast::TemplateDeclaration* node) {
+    if (!node || !node->name) {
+        addError("Malformed template declaration.", node);
+        return;
+    }
+    
+    const std::string& templateName = node->name->name;
+    
+    // Check if template name is already registered
+    if (templateRegistry.find(templateName) != templateRegistry.end()) {
+        addError("Template '" + templateName + "' is already defined.", node);
+        return;
+    }
+    
+    // Validate generic parameters
+    for (const auto& param : node->genericParams) {
+        if (!param || !param->name) {
+            addError("Invalid generic parameter in template '" + templateName + "'.", node);
+            return;
+        }
+    }
+    
+    // Clone the template declaration for storage
+    auto clonedDecl = std::make_unique<ast::TemplateDeclaration>(
+        node->loc, 
+        std::make_unique<ast::Identifier>(node->name->loc, node->name->name),
+        std::vector<std::unique_ptr<ast::GenericParameter>>(),
+        nullptr // Will be cloned separately if needed
+    );
+    
+    // Clone generic parameters
+    for (const auto& param : node->genericParams) {
+        if (param && param->name) {
+            auto clonedParam = std::make_unique<ast::GenericParameter>(
+                param->loc,
+                std::make_unique<ast::Identifier>(param->name->loc, param->name->name)
+            );
+            clonedDecl->genericParams.push_back(std::move(clonedParam));
+        }
+    }
+    
+    // Register the template
+    registerTemplate(std::move(clonedDecl));
+    
+    // Visit the template body for immediate syntax checking
+    if (node->body) {
+        node->body->accept(*this);
+    }
+}
 void SemanticAnalyzer::visit(ast::ThrowStatement* node) {}
 
 void SemanticAnalyzer::visit(ast::TypeNode* node) {
@@ -1207,7 +1383,24 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
         return;
     }
     const std::string& typeNameStr = node->identifier->name;
-    if (typeNameStr == "loc") {
+    if (typeNameStr == "Vec") {
+        // Convert Vec<T> TypeName to VecType
+        if (node->genericArgs.empty() || !node->genericArgs[0]) {
+            addError("Vec type requires a type parameter (e.g., Vec<Int>).", node);
+            return; 
+        }
+        if (node->genericArgs.size() > 1) {
+            addError("Vec type accepts only one type parameter.", node);
+            return; 
+        }
+        
+        // Visit the element type
+        node->genericArgs[0]->accept(*this);
+        
+        // Create a VecType instance
+        auto vecType = std::make_unique<ast::VecType>(node->loc, node->genericArgs[0]->clone());
+        node->type = std::shared_ptr<ast::TypeNode>(vecType.release());
+    } else if (typeNameStr == "loc") {
         if (node->genericArgs.empty() || !node->genericArgs[0]) {
             addError("loc type constructor requires a type parameter (e.g., loc<T>).", node);
             return; 
@@ -1369,6 +1562,13 @@ void SemanticAnalyzer::visit(ast::ArrayType* node) {
         node->elementType->accept(*this);
     }
 }
+
+void SemanticAnalyzer::visit(ast::VecType* node) {
+    if (node && node->elementType) {
+        node->elementType->accept(*this);
+    }
+}
+
 void SemanticAnalyzer::visit(ast::FunctionType* node) {
     if (node) {
         for (auto& paramType : node->parameterTypes) { 
@@ -1488,6 +1688,12 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
             // For simplicity, ignoring size compatibility for now (atTarget->sizeExpression vs atValue->sizeExpression).
             // A full check would compare constant sizes if available.
             return areTypesCompatible(atTarget->elementType.get(), atValue->elementType.get());
+        }
+        case ast::TypeNode::Category::VEC: {
+            auto* vtTarget = static_cast<ast::VecType*>(targetType);
+            auto* vtValue = static_cast<ast::VecType*>(valueType);
+            // Vec<T> is compatible with Vec<U> if T is compatible with U.
+            return areTypesCompatible(vtTarget->elementType.get(), vtValue->elementType.get());
         }
         case ast::TypeNode::Category::FUNCTION: {
             auto* ftTarget = static_cast<ast::FunctionType*>(targetType);
@@ -1679,6 +1885,256 @@ void SemanticAnalyzer::visit(ast::ArrayInitializationExpression* node) {
     // 2. Set the array initialization expression's type to an array type with the element type
     
     // For now we skip the advanced type checking
+}
+
+// Template management method implementations
+void SemanticAnalyzer::registerTemplate(std::unique_ptr<ast::TemplateDeclaration> templateDecl) {
+    if (!templateDecl || !templateDecl->name) {
+        return;
+    }
+    
+    const std::string& templateName = templateDecl->name->name;
+    auto templateInfo = std::make_unique<TemplateInfo>(std::move(templateDecl));
+    templateRegistry[templateName] = std::move(templateInfo);
+}
+
+SemanticAnalyzer::TemplateInfo* SemanticAnalyzer::findTemplate(const std::string& templateName) {
+    auto it = templateRegistry.find(templateName);
+    if (it != templateRegistry.end()) {
+        return it->second.get();
+    }
+    return nullptr;
+}
+
+bool SemanticAnalyzer::isTemplateInstantiation(const std::string& name) {
+    // Check if this looks like a template instantiation (contains '<' and '>')
+    return name.find('<') != std::string::npos && name.find('>') != std::string::npos;
+}
+
+std::unique_ptr<ast::Declaration> SemanticAnalyzer::instantiateTemplate(
+    const std::string& templateName, 
+    const std::vector<std::string>& typeArgs) {
+    
+    TemplateInfo* templateInfo = findTemplate(templateName);
+    if (!templateInfo) {
+        return nullptr;
+    }
+    
+    // Validate type argument count
+    if (typeArgs.size() != templateInfo->parameterNames.size()) {
+        return nullptr;
+    }
+    
+    // TODO: Implement actual monomorphization here
+    // For now, return nullptr to indicate "not yet implemented"
+    // This is where we would:
+    // 1. Clone the template body
+    // 2. Substitute type parameters with concrete types
+    // 3. Generate specialized AST nodes
+    // 4. Return the instantiated declaration
+    
+    return nullptr;
+}
+
+void SemanticAnalyzer::handleTemplateInstantiation(ast::Identifier* identifier, 
+                                                  const std::vector<ast::TypeNodePtr>& typeArgs,
+                                                  ast::GenericInstantiationExpression* node) {
+    if (!identifier) return;
+    
+    std::string templateName = identifier->name;
+    TemplateInfo* templateInfo = findTemplate(templateName);
+    
+    if (!templateInfo) {
+        addError("Template '" + templateName + "' not found.", node);
+        return;
+    }
+    
+    // Validate type argument count
+    if (typeArgs.size() != templateInfo->parameterNames.size()) {
+        addError("Template '" + templateName + "' expects " + 
+                std::to_string(templateInfo->parameterNames.size()) + 
+                " type arguments, got " + std::to_string(typeArgs.size()) + ".", node);
+        return;
+    }
+    
+    // Convert type arguments to string representations for substitution
+    std::vector<std::string> concreteTypes;
+    for (const auto& typeArg : typeArgs) {
+        if (typeArg) {
+            concreteTypes.push_back(typeArg->toString());
+        } else {
+            addError("Invalid type argument in template instantiation.", node);
+            return;
+        }
+    }
+    
+    // Validate template constraints before monomorphization
+    if (!validateTemplateConstraints(templateInfo, concreteTypes, node)) {
+        return; // Error already reported
+    }
+    
+    // Perform monomorphization
+    auto instantiated = performMonomorphization(templateInfo, concreteTypes);
+    if (instantiated) {
+        // Store the instantiated template for later use in codegen
+        // For now, just mark that we successfully processed it
+        expressionTypes[node] = nullptr; // Will be properly typed later
+    }
+}
+
+void SemanticAnalyzer::handleMemberTemplateInstantiation(ast::MemberExpression* memberExpr,
+                                                        const std::vector<ast::TypeNodePtr>& typeArgs,
+                                                        ast::GenericInstantiationExpression* node) {
+    // Handle cases like Container<Int>::create
+    if (!memberExpr || !memberExpr->object) {
+        addError("Invalid member template instantiation.", node);
+        return;
+    }
+    
+    // For now, delegate to regular template instantiation
+    // In a full implementation, this would handle method templates and nested templates
+    if (auto objectId = dynamic_cast<ast::Identifier*>(memberExpr->object.get())) {
+        handleTemplateInstantiation(objectId, typeArgs, node);
+    } else {
+        addError("Complex member template instantiation not yet supported.", node);
+    }
+}
+
+std::unique_ptr<ast::Declaration> SemanticAnalyzer::performMonomorphization(TemplateInfo* templateInfo,
+                                                                           const std::vector<std::string>& concreteTypes) {
+    if (!templateInfo || !templateInfo->declaration) {
+        return nullptr;
+    }
+    
+    // Generate a unique key for this instantiation
+    std::string instanceKey = templateInfo->templateName + "<";
+    for (size_t i = 0; i < concreteTypes.size(); ++i) {
+        if (i > 0) instanceKey += ",";
+        instanceKey += concreteTypes[i];
+    }
+    instanceKey += ">";
+    
+    // For now, just return nullptr to indicate "monomorphization not yet implemented"
+    // In a full implementation, this would:
+    // 1. Clone the template body AST
+    // 2. Substitute type parameters with concrete types
+    // 3. Cache the result for reuse
+    // 4. Return the instantiated declaration
+    
+    return nullptr;
+}
+
+std::unique_ptr<ast::Declaration> SemanticAnalyzer::cloneAndSubstituteAST(ast::Declaration* templateBody,
+                                                                         const std::vector<std::string>& genericParams,
+                                                                         const std::vector<std::string>& concreteTypes) {
+    if (!templateBody) {
+        return nullptr;
+    }
+    
+    // Placeholder implementation - proper AST cloning would require:
+    // 1. Deep clone the AST structure
+    // 2. Walk through all TypeName nodes in the cloned AST
+    // 3. Replace generic parameter names with concrete types
+    // 4. Update function signatures, struct fields, etc.
+    // 5. Generate specialized mangled names
+    
+    return nullptr;
+}
+
+// Template constraint validation methods
+bool SemanticAnalyzer::validateTemplateConstraints(TemplateInfo* templateInfo,
+                                                  const std::vector<std::string>& concreteTypes,
+                                                  ast::GenericInstantiationExpression* node) {
+    if (!templateInfo || concreteTypes.size() != templateInfo->parameterNames.size()) {
+        return false;
+    }
+    
+    // Validate each type argument against its constraints
+    for (size_t i = 0; i < concreteTypes.size(); ++i) {
+        const std::string& concreteType = concreteTypes[i];
+        const std::vector<std::string>& constraints = templateInfo->parameterConstraints[i];
+        
+        // Check each trait constraint for this type parameter
+        for (const std::string& traitName : constraints) {
+            if (!typeImplementsTrait(concreteType, traitName)) {
+                addError("Type '" + concreteType + "' does not implement required trait '" + 
+                        traitName + "' for template parameter '" + 
+                        templateInfo->parameterNames[i] + "'.", node);
+                return false;
+            }
+        }
+    }
+    
+    return true;
+}
+
+bool SemanticAnalyzer::typeImplementsTrait(const std::string& typeName, const std::string& traitName) {
+    // Check if the type implements the specified trait
+    // This is a simplified implementation - a full system would:
+    // 1. Look up trait implementations in the symbol table
+    // 2. Check for built-in trait implementations
+    // 3. Handle generic trait implementations
+    
+    // For now, implement basic built-in type trait support
+    if (isBuiltinTypeCompatible(typeName, traitName)) {
+        return true;
+    }
+    
+    // Look up user-defined implementations
+    // TODO: Implement proper trait implementation lookup
+    // This would search for impl declarations matching the type and trait
+    
+    return false;
+}
+
+std::vector<std::string> SemanticAnalyzer::getImplementedTraits(const std::string& typeName) {
+    std::vector<std::string> traits;
+    
+    // Add built-in trait implementations
+    if (typeName == "Int" || typeName == "Float" || typeName == "Char") {
+        traits.push_back("Comparable");
+        traits.push_back("Equatable");
+        if (typeName == "Int" || typeName == "Float") {
+            traits.push_back("Numeric");
+        }
+    }
+    
+    if (typeName == "String" || typeName == "Char") {
+        traits.push_back("Equatable");
+        if (typeName == "String") {
+            traits.push_back("Comparable");
+        }
+    }
+    
+    if (typeName == "Bool") {
+        traits.push_back("Equatable");
+    }
+    
+    // TODO: Look up user-defined trait implementations
+    
+    return traits;
+}
+
+bool SemanticAnalyzer::isBuiltinTypeCompatible(const std::string& typeName, const std::string& traitName) {
+    // Check built-in type and trait compatibility
+    if (traitName == "Comparable") {
+        return typeName == "Int" || typeName == "Float" || typeName == "Char" || typeName == "String";
+    }
+    
+    if (traitName == "Equatable") {
+        return typeName == "Int" || typeName == "Float" || typeName == "Char" || 
+               typeName == "String" || typeName == "Bool";
+    }
+    
+    if (traitName == "Numeric") {
+        return typeName == "Int" || typeName == "Float";
+    }
+    
+    if (traitName == "Hashable") {
+        return typeName == "Int" || typeName == "String" || typeName == "Char" || typeName == "Bool";
+    }
+    
+    return false;
 }
 
 } // Added missing closing brace for namespace vyn

@@ -1,0 +1,4 @@
+fn<i32> main() -> {
+    var<i32> a = 10;
+    return 42;
+}

@@ -1,0 +1,11 @@
+// Test struct field access without returning the whole struct
+
+struct Point {
+    x<Int>,
+    y<Int>
+}
+
+fn<Int> main() -> {
+    var<Point> p = Point { x = 10, y = 20 };
+    return p.x;
+}

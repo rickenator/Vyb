@@ -121,6 +121,36 @@ void LLVMCodegen::visit(ast::ArrayType* node) {
     m_currentLLVMValue = nullptr; // No value produced
 }
 
+void LLVMCodegen::visit(ast::VecType* node) {
+    // VecType represents a dynamic vector Vec<T>
+    // It generates an LLVM struct type with { ptr, size, capacity }
+    
+    if (!node->elementType) {
+        logError(node->loc, "Vec type has no element type");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Get the LLVM type for the element type
+    llvm::Type* elementLLVMType = codegenType(node->elementType.get());
+    if (!elementLLVMType) {
+        logError(node->loc, "Failed to resolve Vec element type");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Create Vec struct: { ptr T*, size i64, capacity i64 }
+    std::vector<llvm::Type*> vecFields = {
+        llvm::PointerType::get(*context, 0), // ptr to elements (opaque pointer)
+        llvm::Type::getInt64Ty(*context),    // size
+        llvm::Type::getInt64Ty(*context)     // capacity
+    };
+    
+    llvm::StructType* vecLLVMType = llvm::StructType::get(*context, vecFields, false);
+    m_currentLLVMType = vecLLVMType;
+    m_currentLLVMValue = nullptr;
+}
+
 void LLVMCodegen::visit(ast::FunctionType* node) {
     // FunctionType represents a function pointer type with parameter and return types
     // It generates an LLVM function type
@@ -327,6 +357,29 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
             }
             std::string typeNameStr = typeNameNode->identifier->name; // Access name via identifier
 
+            // Handle Vec<T> types
+            if (typeNameStr == "Vec") {
+                if (typeNameNode->genericArgs.empty() || !typeNameNode->genericArgs[0]) {
+                    logError(typeNode->loc, "Vec type requires a type parameter (e.g., Vec<Int>)");
+                    return nullptr;
+                }
+                llvm::Type* elemTy = codegenType(typeNameNode->genericArgs[0].get());
+                if (!elemTy) {
+                    logError(typeNode->loc, "Could not determine LLVM type for Vec element.");
+                    return nullptr;
+                }
+
+                // Create Vec struct: { ptr T*, size i64, capacity i64 }
+                std::vector<llvm::Type*> vecFields = {
+                    llvm::PointerType::get(*context, 0), // ptr to elements (opaque pointer)
+                    llvm::Type::getInt64Ty(*context),    // size
+                    llvm::Type::getInt64Ty(*context)     // capacity
+                };
+                
+                llvmType = llvm::StructType::get(*context, vecFields, false);
+                break;
+            }
+
             if (typeNameStr == "Int" || typeNameStr == "int" || typeNameStr == "i64") {
                 llvmType = int64Type;
             } else if (typeNameStr == "Int8" || typeNameStr == "int8" || typeNameStr == "i8") {
@@ -417,6 +470,28 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                 memberLlvmTypes.push_back(memberLlvmType);
             }
             llvmType = llvm::StructType::get(*context, memberLlvmTypes);
+            break;
+        }
+        case vyn::ast::TypeNode::Category::VEC: {
+            auto* vecTypeNode = dynamic_cast<vyn::ast::VecType*>(typeNode);
+            if (!vecTypeNode || !vecTypeNode->elementType) {
+                logError(typeNode->loc, "Vec type node has no element type or is not a VecType.");
+                return nullptr;
+            }
+            llvm::Type* elemTy = codegenType(vecTypeNode->elementType.get());
+            if (!elemTy) {
+                logError(typeNode->loc, "Could not determine LLVM type for Vec element.");
+                return nullptr;
+            }
+
+            // Create Vec struct: { ptr T*, size i64, capacity i64 }
+            std::vector<llvm::Type*> vecFields = {
+                llvm::PointerType::get(*context, 0), // ptr to elements (opaque pointer)
+                llvm::Type::getInt64Ty(*context),    // size
+                llvm::Type::getInt64Ty(*context)     // capacity
+            };
+            
+            llvmType = llvm::StructType::get(*context, vecFields, false);
             break;
         }
         case vyn::ast::TypeNode::Category::FUNCTION: { // Changed from FUNCTION_SIGNATURE

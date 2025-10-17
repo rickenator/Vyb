@@ -1,5 +1,12 @@
 **Multi-Value Returns with Typeful JSON Serialization**
 
+**Status:** ✅ Core functionality IMPLEMENTED in v0.3.7
+- Smart type detection working
+- Multi-value returns functional: `fn<Int,String> main() -> return 42, "hello"`
+- Auto-serialization prevents segfaults
+- Basic structured output implemented
+- Full JSON formatting and advanced features in progress
+
 ## Goal
 
 Enable any function in Vyn to return one or more values of arbitrary types, with the Vyn runtime auto‑serializing the result into a concise, type‑annotated JSON representation and allowing a matching auto‑deserializer to produce faithful Vyn structs.

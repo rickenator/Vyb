@@ -1,0 +1,13 @@
+// Test struct field assignment
+
+struct Point {
+    x<Int>,
+    y<Int>
+}
+
+fn<Int> main() -> {
+    var<Point> p = Point { x = 10, y = 20 };
+    p.x = 30;
+    p.y = 40;
+    return p.x + p.y;
+}

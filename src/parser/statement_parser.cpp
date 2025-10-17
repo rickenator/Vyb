@@ -37,7 +37,6 @@ vyn::ast::StmtPtr StatementParser::parse() {
     }
     vyn::token::Token current_token = this->peek();
     switch (current_token.type) {
-        case vyn::TokenType::KEYWORD_LET:
         case vyn::TokenType::KEYWORD_MUT:
         case vyn::TokenType::KEYWORD_CONST:
         case vyn::TokenType::KEYWORD_VAR:
@@ -67,6 +66,8 @@ vyn::ast::StmtPtr StatementParser::parse() {
             return parse_while();
         case vyn::TokenType::KEYWORD_FOR:
             return parse_for();
+        case vyn::TokenType::KEYWORD_MATCH:
+            return parse_match();
         case vyn::TokenType::KEYWORD_RETURN:
             return parse_return();
         case vyn::TokenType::LBRACE:
@@ -80,9 +81,9 @@ vyn::ast::StmtPtr StatementParser::parse() {
         case vyn::TokenType::KEYWORD_AWAIT:
             return parse_await();
         case vyn::TokenType::KEYWORD_BREAK:
-            throw std::runtime_error("Break statement parsing not yet implemented at " + location_to_string(current_token.location));
+            return parse_break();
         case vyn::TokenType::KEYWORD_CONTINUE:
-            throw std::runtime_error("Continue statement parsing not yet implemented at " + location_to_string(current_token.location));
+            return parse_continue();
         default:
             // Check if this could be a relaxed syntax variable declaration (Type name)
             if (current_token.type == vyn::TokenType::IDENTIFIER) {
@@ -447,6 +448,7 @@ bool StatementParser::is_statement_start(vyn::TokenType type) const {
         case vyn::TokenType::KEYWORD_IF:
         case vyn::TokenType::KEYWORD_WHILE:
         case vyn::TokenType::KEYWORD_FOR:
+        case vyn::TokenType::KEYWORD_MATCH:
         case vyn::TokenType::KEYWORD_RETURN:
         case vyn::TokenType::LBRACE:
         case vyn::TokenType::KEYWORD_BREAK:
@@ -627,6 +629,85 @@ vyn::ast::StmtPtr StatementParser::parse_await() {
     token::Token await_op_token(TokenType::KEYWORD_AWAIT, "await", await_loc); // Create a token for await operator
     auto await_unary_expr = std::make_unique<ast::UnaryExpression>(await_loc, await_op_token, std::move(expression));
     return std::make_unique<ast::ExpressionStatement>(await_loc, std::move(await_unary_expr));
+}
+
+vyn::ast::StmtPtr StatementParser::parse_match() {
+    SourceLocation match_loc = expect(vyn::TokenType::KEYWORD_MATCH, "Expected 'match'").location;
+    
+    // Parse the expression to match against, but not compound expressions that might contain braces
+    // For now, let's just parse primary expressions (identifiers, literals) to avoid struct conflicts
+    vyn::ast::ExprPtr match_expr;
+    if (peek().type == vyn::TokenType::IDENTIFIER) {
+        SourceLocation id_loc = peek().location;
+        std::string id_name = peek().lexeme;
+        consume(); // consume the identifier
+        match_expr = std::make_unique<vyn::ast::Identifier>(id_loc, id_name);
+    } else if (peek().type == vyn::TokenType::INT_LITERAL) {
+        SourceLocation lit_loc = peek().location;
+        int64_t value = std::stoll(peek().lexeme);
+        consume(); // consume the literal
+        match_expr = std::make_unique<vyn::ast::IntegerLiteral>(lit_loc, value);
+    } else {
+        throw error(peek(), "Expected identifier or literal after 'match'.");
+    }
+    
+    // Expect opening brace
+    expect(vyn::TokenType::LBRACE, "Expected '{' after match expression.");
+    
+    // Parse match arms: pattern => expression
+    std::vector<std::pair<vyn::ast::ExprPtr, vyn::ast::ExprPtr>> cases;
+    
+    while (!check(vyn::TokenType::RBRACE) && !IsAtEnd()) {
+        // Skip newlines between cases
+        while (match(vyn::TokenType::NEWLINE)) {}
+        
+        if (check(vyn::TokenType::RBRACE)) break;
+        
+        // Parse pattern (for now, treat as expression - can be enhanced for proper patterns later)
+        vyn::ast::ExprPtr pattern = expr_parser_.parse_expression();
+        if (!pattern) {
+            throw error(peek(), "Expected pattern in match arm.");
+        }
+        
+        // Expect '=>' (fat arrow)
+        expect(vyn::TokenType::FAT_ARROW, "Expected '=>' after match pattern.");
+        
+        // Parse result expression
+        vyn::ast::ExprPtr result = expr_parser_.parse_expression();
+        if (!result) {
+            throw error(peek(), "Expected expression after '=>' in match arm.");
+        }
+        
+        cases.emplace_back(std::move(pattern), std::move(result));
+        
+        // Optional comma
+        match(vyn::TokenType::COMMA);
+        
+        // Skip trailing newlines
+        while (match(vyn::TokenType::NEWLINE)) {}
+    }
+    
+    expect(vyn::TokenType::RBRACE, "Expected '}' after match cases.");
+    
+    return std::make_unique<vyn::ast::MatchStatement>(match_loc, std::move(match_expr), std::move(cases));
+}
+
+std::unique_ptr<vyn::ast::BreakStatement> StatementParser::parse_break() {
+    SourceLocation break_loc = expect(vyn::TokenType::KEYWORD_BREAK, "Expected 'break'").location;
+    
+    // Optional semicolon
+    match(vyn::TokenType::SEMICOLON);
+    
+    return std::make_unique<vyn::ast::BreakStatement>(break_loc);
+}
+
+std::unique_ptr<vyn::ast::ContinueStatement> StatementParser::parse_continue() {
+    SourceLocation continue_loc = expect(vyn::TokenType::KEYWORD_CONTINUE, "Expected 'continue'").location;
+    
+    // Optional semicolon
+    match(vyn::TokenType::SEMICOLON);
+    
+    return std::make_unique<vyn::ast::ContinueStatement>(continue_loc);
 }
 
 // Parses an unsafe block: 'unsafe { ... }'

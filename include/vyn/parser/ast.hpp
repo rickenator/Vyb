@@ -97,6 +97,7 @@ class TypeNode;
 class TypeName; // Added
 class PointerType; // Added
 class ArrayType; // Added
+class VecType; // Added
 class FunctionType; // Added
 class OptionalType; // Added
 class TupleTypeNode; // ADDED FORWARD DECLARATION
@@ -236,6 +237,7 @@ enum class NodeType {
     TYPE_NAME, // Added
     POINTER_TYPE, // Added
     ARRAY_TYPE, // Added
+    VEC_TYPE, // Added
     FUNCTION_TYPE, // Added
     OPTIONAL_TYPE, // Added
     TUPLE_TYPE // ADDED
@@ -325,6 +327,7 @@ public:
     virtual void visit(TypeName* node) = 0;
     virtual void visit(PointerType* node) = 0;
     virtual void visit(ArrayType* node) = 0;
+    virtual void visit(VecType* node) = 0;
     virtual void visit(FunctionType* node) = 0;
     virtual void visit(OptionalType* node) = 0;
     virtual void visit(TupleTypeNode* node) = 0;
@@ -852,6 +855,7 @@ public:
         IDENTIFIER,
         POINTER,
         ARRAY,
+        VEC,
         FUNCTION,
         TUPLE,
         OPTIONAL,
@@ -871,6 +875,7 @@ public:
             case Category::IDENTIFIER:     std::cout << "TypeNode Category: IDENTIFIER\n"; break;
             case Category::POINTER:        std::cout << "TypeNode Category: POINTER\n"; break;
             case Category::ARRAY:          std::cout << "TypeNode Category: ARRAY\n"; break;
+            case Category::VEC:            std::cout << "TypeNode Category: VEC\n"; break;
             case Category::FUNCTION:       std::cout << "TypeNode Category: FUNCTION\n"; break;
             case Category::TUPLE:          std::cout << "TypeNode Category: TUPLE\n"; break;
             case Category::OPTIONAL:       std::cout << "TypeNode Category: OPTIONAL\n"; break;
@@ -937,6 +942,21 @@ public:
     std::unique_ptr<TypeNode> clone() const override; // Override clone
 };
 // --- End of ArrayType Definition ---
+
+// --- Full Class Definition for VecType ---
+class VecType : public TypeNode {
+public:
+    TypeNodePtr elementType; // The type of the vector elements
+
+    VecType(SourceLocation loc, TypeNodePtr elementType);
+    NodeType getType() const override;
+    std::string toString() const override;
+    void accept(Visitor& visitor) override;
+
+    Category getCategory() const override { return Category::VEC; }
+    std::unique_ptr<TypeNode> clone() const override; // Override clone
+};
+// --- End of VecType Definition ---
 
 // --- Full Class Definition for FunctionType ---
 class FunctionType : public TypeNode {

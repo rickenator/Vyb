@@ -118,14 +118,54 @@ namespace vyn {
         if (peek().type == TokenType::IDENTIFIER) {
             std::string identifier_name = peek().lexeme;
             
-            // Check if this looks like a function call pattern: identifier followed by ()
-            // This is a lookahead to see if it's identifier() with no arguments
-            if (pos_ + 1 < tokens_.size() && tokens_[pos_ + 1].type == TokenType::LPAREN &&
-                pos_ + 2 < tokens_.size() && tokens_[pos_ + 2].type == TokenType::RPAREN) {
-                // This looks like a parameterless function call, skip type parsing
+            // Helper lambda to find next non-comment/non-newline token position
+            auto find_next_token = [&](size_t start_pos) -> size_t {
+                for (size_t i = start_pos; i < tokens_.size(); ++i) {
+                    if (tokens_[i].type != TokenType::COMMENT && 
+                        tokens_[i].type != TokenType::NEWLINE &&
+                        tokens_[i].type != TokenType::INDENT &&
+                        tokens_[i].type != TokenType::DEDENT) {
+                        return i;
+                    }
+                }
+                return tokens_.size(); // Not found
+            };
+            
+            // Find the actual position of the identifier that peek() sees
+            size_t identifier_pos = pos_;
+            while (identifier_pos < tokens_.size() && 
+                   (tokens_[identifier_pos].type == TokenType::COMMENT || 
+                    tokens_[identifier_pos].type == TokenType::NEWLINE ||
+                    tokens_[identifier_pos].type == TokenType::INDENT ||
+                    tokens_[identifier_pos].type == TokenType::DEDENT)) {
+                identifier_pos++;
+            }
+            
+            // Check for simple function call: identifier()
+            // Use the identifier_pos to find the next token after the identifier  
+            size_t after_identifier_pos = find_next_token(identifier_pos + 1);
+            if (after_identifier_pos < tokens_.size() && tokens_[after_identifier_pos].type == TokenType::LPAREN) {
                 skip_type_parsing = true;
             }
-            // Also skip for known intrinsic functions
+            // Find positions of next 3 significant tokens after the identifier position
+            size_t token1_pos = find_next_token(identifier_pos + 1);  // Should be DOT or COLONCOLON  
+            size_t token2_pos = token1_pos < tokens_.size() ? find_next_token(token1_pos + 1) : tokens_.size();  // Should be IDENTIFIER (method name)
+            size_t token3_pos = token2_pos < tokens_.size() ? find_next_token(token2_pos + 1) : tokens_.size();  // Should be LPAREN
+            
+
+            
+            // Check for Type::method() or variable.method() patterns
+            if (token1_pos < tokens_.size() && token2_pos < tokens_.size() && token3_pos < tokens_.size()) {
+                bool is_dot_pattern = tokens_[token1_pos].type == TokenType::DOT;
+                bool is_coloncolon_pattern = tokens_[token1_pos].type == TokenType::COLONCOLON;
+                bool has_method = tokens_[token2_pos].type == TokenType::IDENTIFIER;
+                bool has_lparen = tokens_[token3_pos].type == TokenType::LPAREN;
+                
+                if ((is_dot_pattern || is_coloncolon_pattern) && has_method && has_lparen) {
+                    skip_type_parsing = true;
+                }
+            }
+            // Also skip for known intrinsic functions even without parentheses
             else if (identifier_name == "println" || identifier_name == "print" || identifier_name == "debug" || 
                 identifier_name == "error" || identifier_name == "warn" || identifier_name == "info" ||
                 identifier_name == "lit" || identifier_name == "notype" || identifier_name == "bare" || 
@@ -135,6 +175,7 @@ namespace vyn {
         }
         
         if (!skip_type_parsing) {
+            std::cout << "DEBUG: Attempting type parsing for identifier: " << peek().lexeme << std::endl;
             try {
                 TypeParser type_parser(tokens_, pos_, current_file_path_, *this); // Pass *this for ExpressionParser reference
                 ast::TypeNodePtr type_node = type_parser.parse(); // Call parse() instead of parse_type_annotation()
@@ -794,6 +835,12 @@ regular_array_literal:
                 expr = parse_call_expression(std::move(expr)); // parse_call_expression expects callee and handles args
             } else if (match(TokenType::DOT)) {
                 DEBUG_PRINT("parse_postfix_expr: Matched DOT for member access.");
+                DEBUG_TOKEN(previous_token());
+                expr = parse_member_access(std::move(expr));
+                DEBUG_PRINT("parse_postfix_expr: After parse_member_access. Current token:");
+                DEBUG_TOKEN(peek());
+            } else if (match(TokenType::COLONCOLON)) {
+                DEBUG_PRINT("parse_postfix_expr: Matched COLONCOLON for static member access.");
                 DEBUG_TOKEN(previous_token());
                 expr = parse_member_access(std::move(expr));
                 DEBUG_PRINT("parse_postfix_expr: After parse_member_access. Current token:");

@@ -108,8 +108,14 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
     llvm::Value* initialVal = nullptr;
     llvm::Type* varType = nullptr;
 
+    // std::cout << "DEBUG: VariableDeclaration for '" << node->id->name << "'" << std::endl;
+    // std::cout << "DEBUG: typeNode: " << (node->typeNode ? node->typeNode->toString() : "null") << std::endl;
+    // std::cout << "DEBUG: init: " << (node->init ? node->init->toString() : "null") << std::endl;
+
     if (node->typeNode) {
+        // std::cout << "DEBUG: Processing typeNode: " << node->typeNode->toString() << std::endl;
         varType = codegenType(node->typeNode.get());
+        // std::cout << "DEBUG: typeNode processing completed" << std::endl;
         if (!varType) {
             logError(node->loc, "Could not determine LLVM type for variable '" + node->id->name + "'.");
             m_currentLLVMValue = nullptr;
@@ -118,12 +124,15 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
     }
 
     if (node->init) {
+        // std::cout << "DEBUG: Processing init expression: " << node->init->toString() << std::endl;
         // Make sure the initializer knows its intended type if available
         if (node->typeNode && !node->init->type) {
             node->init->type = node->typeNode->clone();
         }
         
+        // std::cout << "DEBUG: About to accept init expression" << std::endl;
         node->init->accept(*this);
+        // std::cout << "DEBUG: Init expression processing completed" << std::endl;
         initialVal = m_currentLLVMValue;
         if (!initialVal) {
             logError(node->init->loc, "Initialization expression for variable '" + node->id->name + "' evaluated to null.");
@@ -247,16 +256,15 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
             m_currentLLVMValue = nullptr; return;
         }
         
-        // Special handling for main function: if it has a complex return type,
-        // it will use auto-serialization and should return i32 as exit code
-        // BUT if the function body returns a lit() intrinsic, keep the original return type
-        if (node->id->name == "main" && 
-            !returnType->isIntegerTy() && 
-            !returnType->isVoidTy() && 
-            !(returnType->isPointerTy() && returnType == int8PtrType) &&
-            !functionBodyReturnsLitIntrinsic(node->body.get())) {
-            returnType = int32Type; // main returns exit code when auto-serializing
-        }
+        // TODO: Auto-serialization for main function is disabled for now to fix type verification
+        // When enabled, main functions with complex types will serialize to JSON and return i32
+        // if (node->id->name == "main" && 
+        //     !returnType->isIntegerTy() && 
+        //     !returnType->isVoidTy() && 
+        //     !(returnType->isPointerTy() && returnType == int8PtrType) &&
+        //     !functionBodyReturnsLitIntrinsic(node->body.get())) {
+        //     returnType = int32Type; // main returns exit code when auto-serializing
+        // }
     } else {
         returnType = llvm::Type::getVoidTy(*context);
     }

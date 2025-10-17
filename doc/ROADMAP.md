@@ -1,13 +1,31 @@
 # Vyn Language Roadmap
 
-**Last Updated:** May 13, 2025
+**Last Updated:** October 16, 2025
 
-This document outlines the planned features, ongoing development, and future considerations for the Vyn programming language.
+This document outlines the completed features, ongoing development, and future considerations for the Vyn programming language.
+
+## Current Status (v0.3.7)
+
+**✅ MAJOR ACHIEVEMENTS COMPLETED:**
+1.  **LLVM Backend:** Fully functional LLVM IR generation and JIT execution
+2.  **Auto-Serialization:** Complex return types automatically serialize to JSON-like output
+3.  **Type System:** Working functions, variables, structs, control flow
+4.  **Memory Safety:** Ownership types (`my<T>`, `our<T>`, `their<T>`) with borrowing
+5.  **Parser:** Comprehensive syntax support including templates, async, classes
+6.  **✅ Pattern Matching (COMPLETED v0.3.7):** Match statements with `=>` syntax and comprehensive pattern matching
+7.  **✅ Loop Control Flow (COMPLETED v0.3.7):** Break and continue statements working in all loop constructs
+8.  **✅ Resizable Collections (COMPLETED v0.3.7):** Vec<T> with full method support (new, push, pop, len, get)
+9.  **✅ Member Access (COMPLETED v0.3.7):** Object field access (obj.field) and array indexing (arr[index])
+10. **✅ Binary Operations (COMPLETED v0.3.7):** Complete operator precedence system with all arithmetic, comparison, and logical operators
 
 ## Core Development Focus
 The current primary focus is on:
-1.  **Vyn Runtime Environment (VRE):** Designing and implementing the foundational elements of the VRE. See `VRE.md` for preliminary design.
-2.  **LLVM Integration:** Beginning the process of compiling Vyn AST to LLVM IR for native code generation.
+1.  **Standard Library Expansion:** Building core modules for collections, I/O, math
+2.  **For Loop Implementation:** Completing runtime support for parsed for loop syntax  
+3.  **✅ Arrays and Collections (COMPLETED v0.3.7):** Fixed-size arrays `[T; N]` fully implemented with beautiful serialization
+4.  **✅ Dynamic Collections (COMPLETED v0.3.7):** Vec<T> resizable data structures with full method support
+5.  **String Operations:** Enhanced string manipulation and concatenation methods
+6.  **Enhanced Error Messages:** More detailed compilation feedback and suggestions
 
 ## Project Structure and Organization
 
@@ -121,15 +139,14 @@ See `doc/bundles_and_sharing.md` for detailed documentation.
 
 ### Auto-Serialization & Runner Behavior
 
-A planned feature to introduce zero-boilerplate JSON serialization for data structures returned from `main()`:
+✅ **IMPLEMENTED in v0.3.7** - Zero-boilerplate JSON serialization for data structures returned from `main()`:
 
-- **Core Functionality**: The Vyn compiler/runtime will automatically:
-  - Call `main()`
-  - Inspect the return type `T`
-  - If `T` implements `ToJson`, print its JSON form
-  - If `T` is `Int`, use it as the process exit code
-  - If `T` implements `ToString`, print its string form
-  - Otherwise, emit a compile-time error
+- **Core Functionality**: The Vyn compiler/runtime automatically:
+  - Calls `main()` and inspects the return type `T`
+  - If `T` is a simple integer, uses it as the process exit code
+  - If `T` is complex (tuples, structs), outputs structured JSON-like data
+  - Prevents segmentation faults through smart type detection
+  - Handles multi-value returns like `fn<Int,String> main()` perfectly
 
 - **Built-in Auto-Derive**:
   - Primitives (`Int`, `Float`, `Bool`, `String`) will have built-in `to_json`

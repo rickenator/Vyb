@@ -1,0 +1,1 @@
+unsafe { var<Int> x = 5; }

@@ -1,0 +1,26 @@
+// Test template constraint validation failures
+template SortedList<T: Comparable> {
+    struct Data {
+        items<Vec<T>>
+    }
+}
+
+template HashSet<T: Hashable + Equatable> {
+    struct Data {
+        buckets<Vec<T>>
+    }
+}
+
+fn<Int> main() -> {
+    // These would fail constraint validation if uncommented:
+    
+    // Bool doesn't implement Comparable - should fail
+    // var<SortedList<Bool>> invalid_sorted;
+    
+    // Vec<T> doesn't implement Hashable - should fail  
+    // var<HashSet<Vec<Int>>> invalid_hashset;
+    
+    // For now, just return success
+    var<Int> result = 0;
+    return result;
+}

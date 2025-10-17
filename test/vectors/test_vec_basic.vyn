@@ -1,0 +1,14 @@
+fn<Int> main() -> {
+    // Test basic Vec creation
+    var<Vec<Int>> numbers = Vec::new();
+    
+    // Test push operations
+    numbers.push(10);
+    numbers.push(20);
+    numbers.push(30);
+    
+    // Test println with Vec
+    println(numbers);
+    
+    return 0;
+}

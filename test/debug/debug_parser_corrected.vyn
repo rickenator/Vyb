@@ -1,0 +1,8 @@
+fn<Int> main() -> {
+    var<Int> addr = 0x1234;
+    var<loc<Int>> p;
+    unsafe {
+        p = from<loc<Int>>(addr);
+    }
+    return 0;
+}

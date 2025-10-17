@@ -1,0 +1,10 @@
+fn<i32> add(i32 a, i32 b) -> {
+    return a + b;
+}
+
+fn<i32> main() -> {
+    var<i32> x = 5;
+    var<i32> y = 3;
+    var<i32> result = add(x, y);
+    return result;
+}

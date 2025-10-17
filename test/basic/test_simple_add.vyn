@@ -1,0 +1,6 @@
+fn<i32> main() -> {
+    var<i32> a = 10;
+    var<i32> b = 20;
+    var<i32> result = a + b;
+    return result;
+}

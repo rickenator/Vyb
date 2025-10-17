@@ -1,0 +1,144 @@
+// Simple Template Examples for Vyn v0.3.7
+// Demonstrates basic template functionality with modern syntax
+
+// ----- Generic Function Templates -----
+
+// Simple generic function that works with any type
+template<T> fn<T> identity(var<T> value) -> {
+    return value
+}
+
+// Generic function with type constraint
+template<T: Comparable> fn<T> max(var<T> a, var<T> b) -> {
+    if (a.gt(b)) {
+        return a
+    } else {
+        return b
+    }
+}
+
+// ----- Generic Struct Templates -----
+
+// Simple generic container
+template<T> struct Container {
+    value<T>
+}
+
+template<T> fn<Container<T>> new_container(var<T> initial_value) -> {
+    return Container { value = initial_value }
+}
+
+template<T> fn<T> get_value(var<Container<T>> container) -> {
+    return container.value
+}
+
+// Generic pair structure
+template<T, U> struct Pair {
+    first<T>,
+    second<U>
+}
+
+template<T, U> fn<Pair<T, U>> make_pair(var<T> first_val, var<U> second_val) -> {
+    return Pair { first = first_val, second = second_val }
+}
+
+// Swap function for pairs
+template<T, U> fn<Pair<U, T>> swap_pair(var<Pair<T, U>> p) -> {
+    return Pair { first = p.second, second = p.first }
+}
+
+// ----- Generic Collection Template -----
+
+// Simple generic stack using Vec<T>
+template<T> struct Stack {
+    items<Vec<T>>
+}
+
+template<T> fn<Stack<T>> new_stack() -> {
+    var<Vec<T>> items = Vec::new()
+    return Stack { items = items }
+}
+
+template<T> fn<Void> push(var<Stack<T>> stack, var<T> item) -> {
+    stack.items.push(item)
+}
+
+template<T> fn<T> pop(var<Stack<T>> stack) -> {
+    // Simple implementation - in real code would handle empty stack
+    var<Int> last_index = stack.items.len() - 1
+    return stack.items.get(last_index)
+}
+
+template<T> fn<Bool> is_empty(var<Stack<T>> stack) -> {
+    return stack.items.len() == 0
+}
+
+// ----- Trait Implementation for Built-in Types -----
+
+// Implement Comparable for Int
+impl Comparable for Int {
+    fn<Bool> lt(var<Int> self, var<Int> other) -> {
+        return self < other
+    }
+    fn<Bool> gt(var<Int> self, var<Int> other) -> {
+        return self > other
+    }
+    fn<Bool> eq(var<Int> self, var<Int> other) -> {
+        return self == other
+    }
+}
+
+// Implement Comparable for String
+impl Comparable for String {
+    fn<Bool> lt(var<String> self, var<String> other) -> {
+        return self < other
+    }
+    fn<Bool> gt(var<String> self, var<String> other) -> {
+        return self > other
+    }
+    fn<Bool> eq(var<String> self, var<String> other) -> {
+        return self == other
+    }
+}
+
+// ----- Example Usage -----
+
+fn<Int> main() -> {
+    // Test identity function
+    var<Int> x = identity(42)
+    var<String> s = identity("hello")
+    
+    println("Identity test: " + x.to_string() + ", " + s)
+    
+    // Test max function
+    var<Int> bigger = max(10, 20)
+    var<String> later = max("apple", "zebra")
+    
+    println("Max test: " + bigger.to_string() + ", " + later)
+    
+    // Test generic container
+    var<Container<Int>> int_container = new_container(100)
+    var<Container<String>> str_container = new_container("world")
+    
+    println("Container test: " + get_value(int_container).to_string() + 
+            ", " + get_value(str_container))
+    
+    // Test generic pair
+    var<Pair<Int, String>> p1 = make_pair(1, "one")
+    var<Pair<String, Int>> p2 = swap_pair(p1)
+    
+    println("Pair test: (" + p1.first.to_string() + ", " + p1.second + ") -> (" + 
+            p2.first + ", " + p2.second.to_string() + ")")
+    
+    // Test generic stack
+    var<Stack<Int>> stack = new_stack()
+    push(stack, 1)
+    push(stack, 2)
+    push(stack, 3)
+    
+    println("Stack test: " + (!is_empty(stack)).to_string())
+    var<Int> top = pop(stack)
+    println("Popped: " + top.to_string())
+    
+    return 0
+}

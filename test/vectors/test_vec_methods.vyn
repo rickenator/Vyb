@@ -1,0 +1,15 @@
+fn<Int> main() -> {
+    // Test Vec with different types
+    var<Vec<String>> words = Vec::new();
+    words.push("hello");
+    words.push("world");
+    
+    var<Vec<Int>> empty = Vec::new();
+    println("Length:", empty.len());
+    
+    empty.push(42);
+    println("After push:", empty.len());
+    println("Contents:", empty);
+    
+    return 0;
+}

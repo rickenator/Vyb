@@ -422,29 +422,15 @@ std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_struct() {
         }
         auto field_name = std::make_unique<ast::Identifier>(this->current_location(), this->consume().lexeme);
         
-        // Track which syntax we're using
-        bool using_angle_bracket = false;
-        
-        // Support both colon and angle bracket syntax for field types
-        if (this->match(vyn::TokenType::COLON)) {
-            // Original colon syntax (field: Type)
-            using_angle_bracket = false;
-        } else if (this->match(vyn::TokenType::LT)) {
-            // New angle bracket syntax (field<Type>)
-            using_angle_bracket = true;
-        } else {
-            throw std::runtime_error("Expected ':' or '<' after field name in struct \'" + name->name + "\' at " + location_to_string(this->current_location()));
-        }
+        // Use Vyn's consistent template syntax: field<Type>
+        this->expect(vyn::TokenType::LT);
         
         auto field_type_node = this->type_parser_.parse();
         if (!field_type_node) {
             throw std::runtime_error("Expected type for field \'" + field_name->name + "\' in struct \'" + name->name + "\' at " + location_to_string(this->current_location()));
         }
         
-        // If we used angle bracket syntax, expect the closing bracket
-        if (using_angle_bracket) {
-            this->expect(vyn::TokenType::GT);
-        }
+        this->expect(vyn::TokenType::GT);
         
         fields.push_back(std::make_unique<ast::FieldDeclaration>(field_loc, std::move(field_name), std::move(field_type_node), nullptr, false));
 
@@ -796,29 +782,15 @@ std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_class_declaratio
             }
             auto field_name = std::make_unique<ast::Identifier>(field_loc, this->consume().lexeme);
             
-            // Track which syntax we're using
-            bool using_angle_bracket = false;
-            
-            // Support both colon and angle bracket syntax for field types
-            if (this->match(vyn::TokenType::COLON)) {
-                // Original colon syntax (field: Type)
-                using_angle_bracket = false;
-            } else if (this->match(vyn::TokenType::LT)) {
-                // New angle bracket syntax (field<Type>)
-                using_angle_bracket = true;
-            } else {
-                throw std::runtime_error("Expected ':' or '<' after field name in class \'" + class_name->name + "\' at " + location_to_string(this->current_location()));
-            }
+            // Use Vyn's consistent template syntax: field<Type>
+            this->expect(vyn::TokenType::LT);
             
             auto field_type = this->type_parser_.parse();
             if (!field_type) {
                 throw std::runtime_error("Expected type for field \'" + field_name->name + "\' in class \'" + class_name->name + "\' at " + location_to_string(this->current_location()));
             }
             
-            // If we used angle bracket syntax, expect the closing bracket
-            if (using_angle_bracket) {
-                this->expect(vyn::TokenType::GT);
-            }
+            this->expect(vyn::TokenType::GT);
             
             ast::ExprPtr initializer = nullptr;
             if (this->match(vyn::TokenType::EQ)) {

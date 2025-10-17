@@ -130,6 +130,14 @@ private:
     // String operations
     llvm::Value* generateStringConcatenation(llvm::Value* leftStr, llvm::Value* rightStr, SourceLocation loc);
     
+    // Array serialization
+    llvm::Value* generateArraySerialization(llvm::Value* arrayPtr, vyn::ast::ArrayType* arrayType);
+    llvm::Value* generateGenericSerialization(llvm::Value* objPtr, vyn::ast::TypeNode* typeNode);
+    llvm::Value* generateIntToString(llvm::Value* intValue);
+    llvm::Value* generateFloatToString(llvm::Value* floatValue);
+    llvm::Value* generateBoolToString(llvm::Value* boolValue);
+    llvm::Function* getSprintfFunction();
+    
     // ToString conversion helpers for mixed-type string concatenation  
     llvm::Value* generateToStringCall(llvm::Value* value, llvm::Type* valueType, vyn::ast::TypeNode* astType, SourceLocation loc);
     llvm::Value* generateMixedStringConcatenation(llvm::Value* leftValue, llvm::Value* rightValue, 
@@ -140,6 +148,13 @@ private:
     llvm::Function* getPrintlnFunction();
     llvm::Function* getVynPrintlnFunction();
     llvm::Function* getSerializeToJsonFunction();
+    
+    // Vec operations
+    void handleVecMethod(vyn::ast::CallExpression* node, const std::string& objectName, const std::string& methodName);
+    void handleVecPush(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
+    void handleVecPop(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
+    void handleVecLen(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
+    void handleVecGet(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
 
     // Ensure all core intrinsic functions are declared
     void ensureCoreIntrinsicFunctions();
@@ -239,6 +254,7 @@ public:
     void visit(vyn::ast::TypeName* node) override;
     void visit(vyn::ast::PointerType* node) override;
     void visit(vyn::ast::ArrayType* node) override;
+    void visit(vyn::ast::VecType* node) override;
     void visit(vyn::ast::FunctionType* node) override;
     void visit(vyn::ast::OptionalType* node) override;
     void visit(vyn::ast::TupleTypeNode* node) override;

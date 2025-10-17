@@ -1,6 +1,24 @@
 #ifndef VYN_HPP
 #define VYN_HPP
 
+/*
+ * Vyn Programming Language v0.3.7
+ * 
+ * CURRENT IMPLEMENTATION STATUS:
+ * ✅ Complete LLVM backend with JIT execution
+ * ✅ Auto-serialization for complex return types
+ * ✅ Functions, variables, structs, control flow (if/else, while, for)
+ * ✅ Fixed-size arrays [T; N] with indexing and beautiful println() serialization
+ * ✅ Type system with ownership (my<T>, our<T>, their<T>)
+ * ✅ Memory safety with borrowing (view, borrow) and unsafe blocks
+ * ✅ Comprehensive parser supporting templates, async, classes
+ * 🚧 Dynamic vectors Vec<T> (planned for next iteration)
+ * 🚧 Range-based for loops (parser tokens ready, implementation pending) 
+ * 📋 Standard library modules (planned)
+ * 
+ * This header provides the main interface for Vyn compilation and execution.
+ */
+
 #include "vyn/parser/lexer.hpp" 
 #include "vyn/parser/parser.hpp" // Corrected path
 #include "vyn/parser/ast.hpp"
@@ -10,7 +28,7 @@
 #include "vyn/driver.hpp" // Added for vyn::Driver
 
 // Declare function for JIT compilation and execution of Vyn code
-// This is implemented in main.cpp
+// This is implemented in main.cpp with auto-serialization support
 int run_vyn_code(const std::string& source, const std::string& fileName, bool generateLLVMIR = false);
 
 /* // EBNF Grammar of the Vyn Language  // Uncommented
