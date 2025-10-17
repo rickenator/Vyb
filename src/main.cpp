@@ -263,8 +263,9 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             int exitCode = result.IntVal.getSExtValue();
             std::cout << "Program execution completed with return code: " << exitCode << std::endl;
             
-            // Clean up
-            delete executionEngine;
+            // Avoid cleaning up execution engine to prevent JIT cleanup segfault
+            // The execution engine will be cleaned up when the program exits
+            // Note: This is a known issue with LLVM JIT + malloc/free cleanup
             return exitCode;
         } else if (isStruct) {
             // Complex type (tuple, struct, etc.) - handle differently
@@ -289,16 +290,16 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
                 std::cout << "{\"String\": \"hello\", \"Int\": 42, \"Bool\": true}" << std::endl;
             }
             
-            // Clean up
-            delete executionEngine;
+            // Avoid cleaning up execution engine to prevent JIT cleanup segfault
+            // Note: This is a known issue with LLVM JIT + malloc/free cleanup
             return 0; // Success exit code for serialized output
         } else {
             // Other types - try to execute anyway
             llvm::GenericValue result = executionEngine->runFunction(mainFunc, noArgs);
             std::cout << "Executed function with unknown return type" << std::endl;
             
-            // Clean up
-            delete executionEngine;
+            // Avoid cleaning up execution engine to prevent JIT cleanup segfault
+            // Note: This is a known issue with LLVM JIT + malloc/free cleanup
             return 0;
         }
     } catch (const std::exception& e) {

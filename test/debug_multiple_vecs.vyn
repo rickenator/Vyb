@@ -1,0 +1,14 @@
+// Test multiple Vec objects in one function
+test_multiple_vecs() <Int> -> {
+    v1<Vec<Int32>> = Vec.new(3);
+    v2<Vec<Float32>> = Vec.new(2);
+    println("Created two Vec objects");
+    return 99;
+}
+
+main() <Int> -> {
+    println("Testing multiple Vec objects");
+    result<Int> = test_multiple_vecs();
+    println("Multiple Vec test completed");
+    return result;
+}
