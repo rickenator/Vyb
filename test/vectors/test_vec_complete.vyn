@@ -1,0 +1,23 @@
+fn<Int> main() -> {
+    // Test Vec::new() constructor
+    var<Vec<Int>> numbers = Vec::new();
+    
+    // Test Vec::push() method
+    numbers.push(10);
+    numbers.push(20);
+    numbers.push(30);
+    
+    // Test Vec::len() method
+    var<Int> length = numbers.len();
+    println(length);
+    
+    // Test Vec::get() method
+    var<Int> first = numbers.get(0);
+    println(first);
+    
+    // Test Vec::pop() method  
+    var<Int> popped = numbers.pop();
+    println(popped);
+    
+    return 0;
+}

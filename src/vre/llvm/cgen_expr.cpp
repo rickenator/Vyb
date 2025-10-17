@@ -555,7 +555,8 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                     llvm::Value* capFieldPtr = builder->CreateStructGEP(vecStructType, vecAlloca, 2, "vec.cap_field");
                     builder->CreateStore(zero, capFieldPtr);
                     
-                    m_currentLLVMValue = vecAlloca;
+                    // Load the struct value for return (not the pointer)
+                    m_currentLLVMValue = builder->CreateLoad(vecStructType, vecAlloca, "vec.new.value");
                     return;
                 }
             }
@@ -856,6 +857,23 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
             node->arguments[0]->accept(*this);
             // m_currentLLVMValue is already set to the inner expression's result
             return;
+        }
+    }
+
+    // Check for Vec method calls before trying function lookup
+    if (auto memberExpr = dynamic_cast<vyn::ast::MemberExpression*>(node->callee.get())) {
+        if (auto objIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->object.get())) {
+            if (auto methodIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->property.get())) {
+                // Check if this looks like a Vec method call (object.method pattern)
+                std::string methodName = methodIdent->name;
+                std::string objectName = objIdent->name;
+                
+                if (methodName == "push" || methodName == "pop" || methodName == "len" || methodName == "get") {
+                    // This is a Vec method call - handle it specially
+                    handleVecMethod(node, objectName, methodName);
+                    return;
+                }
+            }
         }
     }
 

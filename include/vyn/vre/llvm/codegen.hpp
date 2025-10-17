@@ -148,6 +148,13 @@ private:
     llvm::Function* getPrintlnFunction();
     llvm::Function* getVynPrintlnFunction();
     llvm::Function* getSerializeToJsonFunction();
+    
+    // Vec operations
+    void handleVecMethod(vyn::ast::CallExpression* node, const std::string& objectName, const std::string& methodName);
+    void handleVecPush(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
+    void handleVecPop(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
+    void handleVecLen(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
+    void handleVecGet(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
 
     // Ensure all core intrinsic functions are declared
     void ensureCoreIntrinsicFunctions();

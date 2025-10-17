@@ -10,6 +10,7 @@ entry:
   store i64 0, ptr %vec.size_field, align 4
   %vec.cap_field = getelementptr inbounds { ptr, i64, i64 }, ptr %vec.new, i32 0, i32 2
   store i64 0, ptr %vec.cap_field, align 4
+  %vec.new.value = load { ptr, i64, i64 }, ptr %vec.new, align 8
   ret i64 0
 }
 
