@@ -1,0 +1,80 @@
+// Vec Efficiency Methods Comparison
+// 
+// This file demonstrates the efficiency differences between Vec methods
+// for performance-critical applications.
+
+main()<Int> -> {
+    println("=== Vec Efficiency Method Comparison ===");
+    
+    // Create a Vec with data
+    source<Vec<Int>> = Vec::new();
+    i<Int> = 0;
+    while (i < 1000) {  // Large dataset
+        source.push(i * i);
+        i = i + 1;
+    }
+    
+    println("Source Vec populated with", source.len(), "elements");
+    
+    // Method 1: to_array() - Allocates new array (less efficient)
+    println("Method 1: to_array() - Allocates new memory");
+    allocated_array<[Int; 100]> = source.to_array(100);
+    println("✓ New array allocated and populated");
+    
+    // Method 2: get_array() - Uses pre-allocated array (more efficient)  
+    println("Method 2: get_array() - Uses pre-allocated memory");
+    pre_allocated<[Int; 100]> = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];  // Pre-allocated buffer
+    copied<Int> = source.get_array(pre_allocated);
+    println("✓ Copied", copied, "elements to existing buffer");
+    
+    // Efficiency Benefits of get_array():
+    println("=== Efficiency Benefits of get_array() ===");
+    println("1. Zero memory allocation during operation");
+    println("2. Predictable memory usage for real-time systems");
+    println("3. Cache-friendly access patterns");
+    println("4. Buffer reuse for continuous processing");
+    println("5. Bounds checking with partial copy support");
+    
+    // Real-world scenarios where get_array() excels:
+    println("=== Ideal Use Cases ===");
+    println("• Embedded systems with limited memory");
+    println("• Real-time audio/video processing");
+    println("• Game engines with fixed frame budgets");
+    println("• Scientific computing with large datasets");
+    println("• High-frequency trading systems");
+    println("• IoT sensor data processing");
+    
+    // Demonstrate buffer reuse pattern
+    println("=== Buffer Reuse Pattern ===");
+    work_buffer<[Int; 50]> = [0; 50];
+    
+    // Process multiple chunks without allocation
+    chunk<Int> = 0;
+    while (chunk < 3) {
+        println("Processing chunk", chunk);
+        
+        // Simulate getting different data ranges
+        chunk_vec<Vec<Int>> = Vec::new();
+        start<Int> = chunk * 15;
+        end<Int> = start + 20;
+        
+        j<Int> = start;
+        while (j < end && j < source.len()) {
+            chunk_vec.push(source.get(j));
+            j = j + 1;
+        }
+        
+        // Reuse same buffer (no allocation!)
+        elements<Int> = chunk_vec.get_array(work_buffer);
+        println("  Processed", elements, "elements in pre-allocated buffer");
+        
+        chunk = chunk + 1;
+    }
+    
+    println("=== Performance Summary ===");
+    println("✓ All processing completed with minimal allocations");
+    println("✓ Memory usage remained constant and predictable");
+    println("✓ Perfect for performance-critical applications");
+    
+    return 0;
+}

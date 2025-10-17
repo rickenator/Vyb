@@ -2301,6 +2301,19 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         expressionTypes[node] = intType.get();
         node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
         
+    } else if (methodName == "get_array") {
+        // get_array(pre_allocated_array) -> Int (number of elements copied)
+        if (node->arguments.size() != 1) {
+            addError("Vec::get_array expects exactly 1 argument (pre-allocated array)", node);
+            return;
+        }
+        // TODO: Validate argument is array type [T; N] compatible with Vec<T>
+        // Return Int (number of elements copied for efficiency feedback)
+        auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+        auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+        expressionTypes[node] = intType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
+        
     } else {
         addError("Unknown Vec method: " + methodName, node);
     }

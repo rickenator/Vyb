@@ -896,7 +896,10 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 std::string methodName = methodIdent->name;
                 std::string objectName = objIdent->name;
                 
-                if (methodName == "push" || methodName == "pop" || methodName == "len" || methodName == "get") {
+                if (methodName == "push" || methodName == "pop" || methodName == "len" || methodName == "get" ||
+                    methodName == "push_array" || methodName == "to_array" || methodName == "get_array" ||
+                    methodName == "clear" || methodName == "is_empty" || methodName == "capacity" ||
+                    methodName == "concat" || methodName == "contains" || methodName == "remove_at") {
                     // This is a Vec method call - handle it specially
                     handleVecMethod(node, objectName, methodName);
                     return;

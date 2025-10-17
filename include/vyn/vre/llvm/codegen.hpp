@@ -163,6 +163,7 @@ private:
     void handleVecConcat(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecContains(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecRemoveAt(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
+    void handleVecGetArray(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
 
     // Ensure all core intrinsic functions are declared
     void ensureCoreIntrinsicFunctions();

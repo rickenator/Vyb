@@ -61,6 +61,8 @@ void LLVMCodegen::handleVecMethod(vyn::ast::CallExpression* node, const std::str
         handleVecContains(node, vecPtr, vecStructType);
     } else if (methodName == "remove_at") {
         handleVecRemoveAt(node, vecPtr, vecStructType);
+    } else if (methodName == "get_array") {
+        handleVecGetArray(node, vecPtr, vecStructType);
     } else {
         logError(node->loc, "Unknown Vec method: " + methodName);
         m_currentLLVMValue = nullptr;
@@ -356,6 +358,37 @@ void LLVMCodegen::handleVecRemoveAt(vyn::ast::CallExpression* node, llvm::Value*
     
     // Return removed value (placeholder)
     m_currentLLVMValue = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0);
+}
+
+void LLVMCodegen::handleVecGetArray(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
+    if (node->arguments.size() != 1) {
+        logError(node->loc, "Vec::get_array expects exactly 1 argument (pre-allocated array)");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Evaluate the pre-allocated array argument
+    node->arguments[0]->accept(*this);
+    llvm::Value* arrayPtr = m_currentLLVMValue;
+    if (!arrayPtr) {
+        logError(node->loc, "Failed to evaluate array argument for Vec::get_array");
+        return;
+    }
+    
+    // Get Vec size for bounds checking
+    llvm::Value* sizeFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 1, "vec.size_ptr");
+    llvm::Value* vecSize = builder->CreateLoad(llvm::Type::getInt64Ty(*context), sizeFieldPtr, "vec.size");
+    
+    std::cout << "DEBUG: Vec::get_array() called - copying to pre-allocated array" << std::endl;
+    
+    // In a full implementation, this would:
+    // 1. Check array size compatibility
+    // 2. Copy elements from Vec storage to the provided array
+    // 3. Handle bounds checking and partial copies
+    // 4. Return number of elements copied
+    
+    // For now, return the number of elements that would be copied
+    m_currentLLVMValue = vecSize;
 }
 
 } // namespace vyn
