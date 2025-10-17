@@ -43,7 +43,7 @@ public:
 } // namespace vyn::ast
 ```
 
-**Note:** As of v0.3.5, Vyn uses the `var<T>`/`const<T>` declaration syntax, so every `VariableDeclaration` node will have `type` set (no longer optional in practice).
+**Note:** As of v0.3.7, Vyn uses the `var<T>`/`const<T>` declaration syntax with full support for modern struct syntax (`field<Type>`), match statements, break/continue, and Vec<T> collections, so every `VariableDeclaration` node will have `type` set (no longer optional in practice).
 
 ## 2. Function Parameter (`vyn::ast::FunctionParameter`)
 

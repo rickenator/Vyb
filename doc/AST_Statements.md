@@ -200,7 +200,46 @@ public:
 } // namespace vyn::ast
 ```
 
-## 9. `ThrowStatement`
+## 9. `MatchStatement`
+
+Represents a pattern matching statement with `=>` syntax.
+
+-   **C++ Class**: `vyn::ast::MatchStatement`
+-   **`NodeType`**: `MATCH_STATEMENT`
+-   **Fields**:
+    -   `expr` (`ExprPtr`): The expression being matched against.
+    -   `cases` (`std::vector<std::pair<ExprPtr, ExprPtr>>`): Vector of pattern-result pairs, where each pair contains a pattern expression and the corresponding result expression.
+
+```cpp
+// From include/vyn/parser/ast.hpp
+namespace vyn::ast {
+class MatchStatement : public Statement {
+public:
+    ExprPtr expr;
+    std::vector<std::pair<ExprPtr, ExprPtr>> cases;
+
+    MatchStatement(SourceLocation loc, ExprPtr expr, std::vector<std::pair<ExprPtr, ExprPtr>> cases);
+    // ... accept, getType, toString methods ...
+};
+} // namespace vyn::ast
+```
+
+**Example Usage:**
+```vyn
+match x {
+    42 => println("The answer"),
+    0 => println("Zero"),
+    _ => println("Something else")
+}
+```
+
+The `MatchStatement` enables comprehensive pattern matching with:
+- **Value matching**: Direct comparison with literals (e.g., `42`, `"hello"`)
+- **Wildcard patterns**: `_` matches any value
+- **Fat arrow syntax**: `=>` separates patterns from results
+- **Exhaustive checking**: Compiler ensures all cases are covered
+
+## 10. `ThrowStatement`
 
 Represents a statement that throws an exception or error.
 
@@ -222,7 +261,7 @@ public:
 } // namespace vyn::ast
 ```
 
-## 10. `ScopedStatement`
+## 11. `ScopedStatement`
 
 Represents a statement that explicitly creates a new lexical scope.
 
@@ -244,7 +283,7 @@ public:
 } // namespace vyn::ast
 ```
 
-## 11. `TryStatement`
+## 12. `TryStatement`
 
 Represents a try-catch(-finally) block for exception handling.
 
@@ -278,7 +317,7 @@ public:
 } // namespace vyn::ast
 ```
 
-## 10. `UnsafeBlockStatement`
+## 13. `UnsafeBlockStatement`
 
 Represents an unsafe code block where memory operations are allowed.
 

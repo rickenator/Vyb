@@ -12,13 +12,20 @@ This document outlines the completed features, ongoing development, and future c
 3.  **Type System:** Working functions, variables, structs, control flow
 4.  **Memory Safety:** Ownership types (`my<T>`, `our<T>`, `their<T>`) with borrowing
 5.  **Parser:** Comprehensive syntax support including templates, async, classes
+6.  **✅ Pattern Matching (COMPLETED v0.3.7):** Match statements with `=>` syntax and comprehensive pattern matching
+7.  **✅ Loop Control Flow (COMPLETED v0.3.7):** Break and continue statements working in all loop constructs
+8.  **✅ Resizable Collections (COMPLETED v0.3.7):** Vec<T> with full method support (new, push, pop, len, get)
+9.  **✅ Member Access (COMPLETED v0.3.7):** Object field access (obj.field) and array indexing (arr[index])
+10. **✅ Binary Operations (COMPLETED v0.3.7):** Complete operator precedence system with all arithmetic, comparison, and logical operators
 
 ## Core Development Focus
 The current primary focus is on:
 1.  **Standard Library Expansion:** Building core modules for collections, I/O, math
-2.  **For Loop Implementation:** Completing runtime support for parsed for loop syntax
+2.  **For Loop Implementation:** Completing runtime support for parsed for loop syntax  
 3.  **✅ Arrays and Collections (COMPLETED v0.3.7):** Fixed-size arrays `[T; N]` fully implemented with beautiful serialization
-4.  **Dynamic Collections:** Implementing `Vec<T>` resizable data structures
+4.  **✅ Dynamic Collections (COMPLETED v0.3.7):** Vec<T> resizable data structures with full method support
+5.  **String Operations:** Enhanced string manipulation and concatenation methods
+6.  **Enhanced Error Messages:** More detailed compilation feedback and suggestions
 
 ## Project Structure and Organization
 
