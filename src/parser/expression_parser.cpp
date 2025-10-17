@@ -118,29 +118,6 @@ namespace vyn {
         if (peek().type == TokenType::IDENTIFIER) {
             std::string identifier_name = peek().lexeme;
             
-            // Find the actual position of the identifier that peek() sees
-            size_t identifier_pos = pos_;
-            while (identifier_pos < tokens_.size() && 
-                   (tokens_[identifier_pos].type == TokenType::COMMENT || 
-                    tokens_[identifier_pos].type == TokenType::NEWLINE ||
-                    tokens_[identifier_pos].type == TokenType::INDENT ||
-                    tokens_[identifier_pos].type == TokenType::DEDENT)) {
-                identifier_pos++;
-            }
-            
-            // Check if this looks like a function call: identifier(  
-            // identifier is at pos_+1, ( is at pos_+2
-            if (pos_ + 2 < tokens_.size() && tokens_[pos_ + 2].type == TokenType::LPAREN) {
-                skip_type_parsing = true;
-            }
-            // Check for object.method() pattern
-            // identifier is at pos_+1, . is at pos_+2, method is at pos_+3, ( is at pos_+4
-            else if (pos_ + 4 < tokens_.size() &&
-                     tokens_[pos_ + 2].type == TokenType::DOT &&
-                     tokens_[pos_ + 3].type == TokenType::IDENTIFIER &&
-                     tokens_[pos_ + 4].type == TokenType::LPAREN) {
-                skip_type_parsing = true;
-            }
             // Helper lambda to find next non-comment/non-newline token position
             auto find_next_token = [&](size_t start_pos) -> size_t {
                 for (size_t i = start_pos; i < tokens_.size(); ++i) {
@@ -154,6 +131,22 @@ namespace vyn {
                 return tokens_.size(); // Not found
             };
             
+            // Find the actual position of the identifier that peek() sees
+            size_t identifier_pos = pos_;
+            while (identifier_pos < tokens_.size() && 
+                   (tokens_[identifier_pos].type == TokenType::COMMENT || 
+                    tokens_[identifier_pos].type == TokenType::NEWLINE ||
+                    tokens_[identifier_pos].type == TokenType::INDENT ||
+                    tokens_[identifier_pos].type == TokenType::DEDENT)) {
+                identifier_pos++;
+            }
+            
+            // Check for simple function call: identifier()
+            // Use the identifier_pos to find the next token after the identifier  
+            size_t after_identifier_pos = find_next_token(identifier_pos + 1);
+            if (after_identifier_pos < tokens_.size() && tokens_[after_identifier_pos].type == TokenType::LPAREN) {
+                skip_type_parsing = true;
+            }
             // Find positions of next 3 significant tokens after the identifier position
             size_t token1_pos = find_next_token(identifier_pos + 1);  // Should be DOT or COLONCOLON  
             size_t token2_pos = token1_pos < tokens_.size() ? find_next_token(token1_pos + 1) : tokens_.size();  // Should be IDENTIFIER (method name)

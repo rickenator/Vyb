@@ -1,14 +1,14 @@
 // Test both parameter syntax forms
-fn<Int> add_colon(a: Int, b: Int) -> {
+fn<Int> add_standard(var<Int> a, var<Int> b) -> {
     return a + b;
 }
 
-fn<Int> add_angle(a<Int>, b<Int>) -> {
+fn<Int> add_shorthand(Int a, Int b) -> {
     return a + b;
 }
 
 fn<Int> main() -> {
-    var<Int> result1 = add_colon(10, 20);
-    var<Int> result2 = add_angle(30, 40);
+    var<Int> result1 = add_standard(10, 20);
+    var<Int> result2 = add_shorthand(30, 40);
     return result1 + result2;
 }
