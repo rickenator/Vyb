@@ -37,7 +37,6 @@ vyn::ast::StmtPtr StatementParser::parse() {
     }
     vyn::token::Token current_token = this->peek();
     switch (current_token.type) {
-        case vyn::TokenType::KEYWORD_LET:
         case vyn::TokenType::KEYWORD_MUT:
         case vyn::TokenType::KEYWORD_CONST:
         case vyn::TokenType::KEYWORD_VAR:
