@@ -4,6 +4,6 @@
 // @expect: pass
 // @expect-output: "hello"
 
-fn<String> main() -> {
+main()<String> -> {
     return "hello";
 }

@@ -4,7 +4,7 @@
 
 ## 1. Overview
 
-Vyn's `fn main() -> T` provides zero-boilerplate auto-serialization for any "pure data" return value to JSON. The compiler/runtime:
+Vyn's `main() -> T` provides zero-boilerplate auto-serialization for any "pure data" return value to JSON. The compiler/runtime:
 
 1. Call `main()`
 2. Inspect its return type `T`:
@@ -23,11 +23,11 @@ This enables scripts and API-style binaries to return structured data without ma
 
 ```vyn
 struct User {
-  var<Int> id
-  var<String> name
+  id<Int>
+  name<String>
 }
 
-fn<User> main() -> {
+main()<User> -> {
   return User { id: 1, name: "Rick" }
 }
 // Runner prints: {"id":1,"name":"Rick"}
@@ -40,10 +40,10 @@ When you need to adjust the JSON shape:
 ```vyn
 struct Secret {
   #[jsonIgnore]
-  var<String> token        // omitted from JSON output
+  token<String>        // omitted from JSON output
 
   #[jsonName="user_name"]
-  var<String> name         // renamed key in JSON
+  name<String>         // renamed key in JSON
 }
 
 // Hand-roll if you need full control:

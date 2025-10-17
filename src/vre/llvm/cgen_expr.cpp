@@ -26,8 +26,36 @@ void LLVMCodegen::visit(vyn::ast::BooleanLiteral *node) {
 }
 
 void LLVMCodegen::visit(vyn::ast::StringLiteral *node) {
-    // Create a global string pointer
-    m_currentLLVMValue = builder->CreateGlobalStringPtr(node->value);
+    if (currentFunction) {
+        // Inside a function - use CreateGlobalStringPtr
+        m_currentLLVMValue = builder->CreateGlobalStringPtr(node->value);
+    } else {
+        // Global scope - create a global constant string
+        // Create a constant string
+        llvm::Constant* stringConstant = llvm::ConstantDataArray::getString(*context, node->value, true);
+        
+        // Create a global variable to hold the string
+        llvm::GlobalVariable* globalString = new llvm::GlobalVariable(
+            *module,
+            stringConstant->getType(),
+            true, // isConstant
+            llvm::GlobalValue::PrivateLinkage,
+            stringConstant,
+            ".str"
+        );
+        
+        // Get a pointer to the first element (i8*)
+        std::vector<llvm::Constant*> indices = {
+            llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0),
+            llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0)
+        };
+        
+        m_currentLLVMValue = llvm::ConstantExpr::getGetElementPtr(
+            stringConstant->getType(),
+            globalString,
+            indices
+        );
+    }
 }
 
 void LLVMCodegen::visit(vyn::ast::NilLiteral* node) {

@@ -1,14 +1,14 @@
-fn<i32> multiply(i32 a, i32 b) -> {
+multiply(i32 a, i32 b)<i32> -> {
     return a * b;
 }
 
-fn<i32> calculate(i32 x, i32 y) -> {
-    var<i32> sum = x + y;
-    var<i32> product = multiply(sum, 2);
+calculate(i32 x, i32 y)<i32> -> {
+    sum<i32> = x + y;
+    product<i32> = multiply(sum, 2);
     return product;
 }
 
-fn<i32> main() -> {
-    var<i32> result = calculate(3, 7);
+main()<i32> -> {
+    result<i32> = calculate(3, 7);
     return result;
 }

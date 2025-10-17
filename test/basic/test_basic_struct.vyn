@@ -5,7 +5,7 @@ struct Person {
     age: Int
 }
 
-fn<Person> main() -> {
-    var<Person> p = Person { name = "Alice", age = 30 };
+main()<Person> -> {
+    p<Person> = Person { name = "Alice", age = 30 };
     return p;
 }

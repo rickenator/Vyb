@@ -85,9 +85,16 @@ vyn::ast::StmtPtr StatementParser::parse() {
         case vyn::TokenType::KEYWORD_CONTINUE:
             return parse_continue();
         default:
-            // Check if this could be a relaxed syntax variable declaration (Type name)
+            // Check if this could be a variable declaration with unified syntax (name<Type>)
             if (current_token.type == vyn::TokenType::IDENTIFIER) {
-                // Save position in case we need to backtrack
+                token::Token next_token = this->peekNext();
+                
+                // Check for new unified syntax pattern: name<Type>
+                if (next_token.type == vyn::TokenType::LT) {
+                    return parse_var_decl();
+                }
+                
+                // Check if this could be a legacy relaxed syntax variable declaration (Type name)
                 size_t saved_pos = this->pos_;
                 
                 try {
@@ -324,64 +331,169 @@ std::unique_ptr<vyn::ast::ReturnStatement> StatementParser::parse_return() {
 
 std::unique_ptr<vyn::ast::VariableDeclaration> StatementParser::parse_var_decl() {
     // Declaration start location
-    SourceLocation keyword_loc = this->current_location();
+    SourceLocation decl_loc = this->current_location();
     
     // Check what kind of declaration this is
     bool is_const_decl = false;
-    bool using_standard_syntax = true;
     bool auto_type_inference = false;
     
     // Check for 'auto' keyword first (type inference)
     if (this->match(vyn::TokenType::KEYWORD_AUTO)) {
         auto_type_inference = true;
         is_const_decl = false;
+        
+        // Parse variable name for auto
+        vyn::token::Token name_token = this->expect(vyn::TokenType::IDENTIFIER, "Expected variable name after 'auto'.");
+        auto identifier_node = std::make_unique<vyn::ast::Identifier>(name_token.location, name_token.lexeme);
+        
+        // Auto requires initializer
+        this->expect(vyn::TokenType::EQ, "Auto variables require an initializer.");
+        vyn::ast::ExprPtr initializer = this->expr_parser_.parse_expression();
+        if (!initializer) {
+            throw std::runtime_error("Expected initializer expression after '=' for auto variable at " + 
+                                   location_to_string(this->current_location()));
+        }
+        
+        SourceLocation end_loc = initializer->loc;
+        
+        if (this->peek().type == vyn::TokenType::SEMICOLON) {
+            end_loc = this->peek().location;
+            this->consume();
+        } else if (this->peek().type == vyn::TokenType::NEWLINE || this->IsAtEnd() || 
+                   this->peek().type == vyn::TokenType::RBRACE || this->peek().type == vyn::TokenType::DEDENT ||
+                   this->peek().type == vyn::TokenType::END_OF_FILE ||
+                   is_statement_start(this->peek().type)) {
+            // Optional semicolon
+        } else {
+            throw std::runtime_error("Expected statement separator after variable declaration at " + 
+                                   location_to_string(this->peek().location));
+        }
+        
+        return std::make_unique<vyn::ast::VariableDeclaration>(
+            decl_loc,
+            std::move(identifier_node),
+            is_const_decl,
+            nullptr, // Type will be inferred
+            std::move(initializer)
+        );
     }
-    // Check for standard or relaxed syntax
+    // Legacy support: Check for var/const keywords
     else if (this->match(vyn::TokenType::KEYWORD_VAR)) {
         is_const_decl = false;
-        using_standard_syntax = true;
+        // Legacy var<Type> syntax - parse type in angle brackets
+        this->expect(vyn::TokenType::LT, "Expected '<' after 'var'.");
+        ast::TypeNodePtr type_expr = this->type_parser_.parse();
+        if (!type_expr) {
+            throw std::runtime_error("Expected type inside '<>' in variable declaration at " + 
+                                   location_to_string(this->peek().location));
+        }
+        this->expect(vyn::TokenType::GT, "Expected '>' after type in variable declaration.");
+        
+        // Parse variable name
+        vyn::token::Token name_token = this->expect(vyn::TokenType::IDENTIFIER, "Expected variable name.");
+        auto identifier_node = std::make_unique<vyn::ast::Identifier>(name_token.location, name_token.lexeme);
+        
+        vyn::ast::ExprPtr initializer = nullptr;
+        SourceLocation end_loc = name_token.location;
+        
+        if (this->match(vyn::TokenType::EQ)) {
+            initializer = this->expr_parser_.parse_expression();
+            if (initializer) {
+                end_loc = initializer->loc;
+            }
+        }
+        
+        if (this->peek().type == vyn::TokenType::SEMICOLON) {
+            end_loc = this->peek().location;
+            this->consume();
+        } else if (this->peek().type == vyn::TokenType::NEWLINE || this->IsAtEnd() || 
+                   this->peek().type == vyn::TokenType::RBRACE || this->peek().type == vyn::TokenType::DEDENT ||
+                   this->peek().type == vyn::TokenType::END_OF_FILE ||
+                   is_statement_start(this->peek().type)) {
+            // Optional semicolon
+        } else {
+            throw std::runtime_error("Expected statement separator after variable declaration at " + 
+                                   location_to_string(this->peek().location));
+        }
+        
+        return std::make_unique<vyn::ast::VariableDeclaration>(
+            decl_loc,
+            std::move(identifier_node),
+            is_const_decl,
+            std::move(type_expr),
+            std::move(initializer)
+        );
     } else if (this->match(vyn::TokenType::KEYWORD_CONST)) {
         is_const_decl = true;
+        // Legacy const<Type> syntax - parse type in angle brackets
+        this->expect(vyn::TokenType::LT, "Expected '<' after 'const'.");
+        ast::TypeNodePtr type_expr = this->type_parser_.parse();
+        if (!type_expr) {
+            throw std::runtime_error("Expected type inside '<>' in variable declaration at " + 
+                                   location_to_string(this->peek().location));
+        }
+        this->expect(vyn::TokenType::GT, "Expected '>' after type in variable declaration.");
         
-        // Check if using standard syntax (const<Type>) or relaxed (const Type)
-        if (this->peek().type == vyn::TokenType::LT) {
-            using_standard_syntax = true;
-        } else {
-            using_standard_syntax = false;
-        }
-    } else {
-        // This must be a relaxed syntax with just a type name (Type name)
-        using_standard_syntax = false;
-        is_const_decl = false;
-    }
-    
-    // Parse the type
-    ast::TypeNodePtr type_expr = nullptr;
-    
-    if (!auto_type_inference) {
-        if (using_standard_syntax) {
-            // Standard syntax: var<Type> or const<Type>
-            this->expect(vyn::TokenType::LT, "Expected '<' after 'var'/'const'.");
-            type_expr = this->type_parser_.parse();
-            if (!type_expr) {
-                throw std::runtime_error("Expected type inside '<>' in variable declaration at " + 
-                                       location_to_string(this->peek().location));
-            }
-            this->expect(vyn::TokenType::GT, "Expected '>' after type in variable declaration.");
-        } else {
-            // Relaxed syntax: Type or const Type
-            type_expr = this->type_parser_.parse();
-            if (!type_expr) {
-                throw std::runtime_error("Expected type in variable declaration at " + 
-                                       location_to_string(this->peek().location));
+        // Parse variable name
+        vyn::token::Token name_token = this->expect(vyn::TokenType::IDENTIFIER, "Expected variable name.");
+        auto identifier_node = std::make_unique<vyn::ast::Identifier>(name_token.location, name_token.lexeme);
+        
+        vyn::ast::ExprPtr initializer = nullptr;
+        SourceLocation end_loc = name_token.location;
+        
+        if (this->match(vyn::TokenType::EQ)) {
+            initializer = this->expr_parser_.parse_expression();
+            if (initializer) {
+                end_loc = initializer->loc;
             }
         }
+        
+        if (this->peek().type == vyn::TokenType::SEMICOLON) {
+            end_loc = this->peek().location;
+            this->consume();
+        } else if (this->peek().type == vyn::TokenType::NEWLINE || this->IsAtEnd() || 
+                   this->peek().type == vyn::TokenType::RBRACE || this->peek().type == vyn::TokenType::DEDENT ||
+                   this->peek().type == vyn::TokenType::END_OF_FILE ||
+                   is_statement_start(this->peek().type)) {
+            // Optional semicolon
+        } else {
+            throw std::runtime_error("Expected statement separator after variable declaration at " + 
+                                   location_to_string(this->peek().location));
+        }
+        
+        return std::make_unique<vyn::ast::VariableDeclaration>(
+            decl_loc,
+            std::move(identifier_node),
+            is_const_decl,
+            std::move(type_expr),
+            std::move(initializer)
+        );
     }
     
-    // Next token is variable name
+    // NEW UNIFIED SYNTAX: name<Type> pattern
+    // Parse the variable name first
     vyn::token::Token name_token = this->expect(vyn::TokenType::IDENTIFIER, "Expected variable name.");
     auto identifier_node = std::make_unique<vyn::ast::Identifier>(name_token.location, name_token.lexeme);
+    
+    // Parse the type in angle brackets: name<Type>
+    this->expect(vyn::TokenType::LT, "Expected '<' after variable name in unified syntax.");
+    ast::TypeNodePtr type_expr = this->type_parser_.parse();
+    if (!type_expr) {
+        throw std::runtime_error("Expected type inside '<>' in variable declaration at " + 
+                               location_to_string(this->peek().location));
+    }
+    
+    // Check for const modifier: name<Type const>
+    if ((this->peek().type == vyn::TokenType::IDENTIFIER && this->peek().lexeme == "const") ||
+        this->peek().type == vyn::TokenType::KEYWORD_CONST) {
+        this->consume(); // consume "const"
+        is_const_decl = true;
+    }
+    
+    this->expect(vyn::TokenType::GT, "Expected '>' after type in variable declaration.");
 
+    
+    // Handle initializer
     vyn::ast::ExprPtr initializer = nullptr;
     SourceLocation end_loc = name_token.location; // Default end_loc if no initializer
 
@@ -390,17 +502,8 @@ std::unique_ptr<vyn::ast::VariableDeclaration> StatementParser::parse_var_decl()
         if (initializer) {
             end_loc = initializer->loc;
         }
-        
-        // For auto, infer the type from the initializer
-        if (auto_type_inference && initializer) {
-            // Type will be inferred during semantic analysis
-            // For now, we leave type_expr as nullptr
-        }
     } else if (is_const_decl && !initializer) {
         // Constants usually require an initializer (could enforce later)
-    } else if (auto_type_inference && !initializer) {
-        throw std::runtime_error("'auto' variables must have an initializer at " + 
-                               location_to_string(name_token.location));
     }
 
     if (this->peek().type == vyn::TokenType::SEMICOLON) {
@@ -419,7 +522,7 @@ std::unique_ptr<vyn::ast::VariableDeclaration> StatementParser::parse_var_decl()
 
     // Create the VariableDeclaration AST node
     return std::make_unique<vyn::ast::VariableDeclaration>(
-        keyword_loc,
+        decl_loc,
         std::move(identifier_node),
         is_const_decl,
         std::move(type_expr),

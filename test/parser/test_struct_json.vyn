@@ -4,8 +4,8 @@ struct Person {
     f64 height
 }
 
-fn<Person> create_person() -> {
-    var<Person> person = {
+create_person()<Person> -> {
+    person<Person> = {
         name = "Alice Smith",
         age = 30,
         height = 1.75

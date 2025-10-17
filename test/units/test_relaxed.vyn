@@ -8,7 +8,7 @@
 // @expect-error: n/a
 // @expect-return: n/a
 
-fn<Int> main() -> {
+main()<Int> -> {
     // Test relaxed syntax (Type instead of var<Type>)
     Int x = 42;
     

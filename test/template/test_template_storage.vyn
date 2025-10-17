@@ -5,6 +5,6 @@ template Container {
     }
 }
 
-fn<Int> main() -> {
+main()<Int> -> {
     return 42
 }

@@ -1,4 +1,4 @@
-fn<Int> main() -> {
+main()<Int> -> {
     // Test basic Vec creation
     var<Vec<Int>> numbers = Vec::new();
     

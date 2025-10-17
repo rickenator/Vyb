@@ -108,14 +108,8 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
     llvm::Value* initialVal = nullptr;
     llvm::Type* varType = nullptr;
 
-    // std::cout << "DEBUG: VariableDeclaration for '" << node->id->name << "'" << std::endl;
-    // std::cout << "DEBUG: typeNode: " << (node->typeNode ? node->typeNode->toString() : "null") << std::endl;
-    // std::cout << "DEBUG: init: " << (node->init ? node->init->toString() : "null") << std::endl;
-
-    if (node->typeNode) {
-        // std::cout << "DEBUG: Processing typeNode: " << node->typeNode->toString() << std::endl;
+        // Variable declaration processing    if (node->typeNode) {
         varType = codegenType(node->typeNode.get());
-        // std::cout << "DEBUG: typeNode processing completed" << std::endl;
         if (!varType) {
             logError(node->loc, "Could not determine LLVM type for variable '" + node->id->name + "'.");
             m_currentLLVMValue = nullptr;
@@ -124,15 +118,12 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
     }
 
     if (node->init) {
-        // std::cout << "DEBUG: Processing init expression: " << node->init->toString() << std::endl;
         // Make sure the initializer knows its intended type if available
         if (node->typeNode && !node->init->type) {
             node->init->type = node->typeNode->clone();
         }
         
-        // std::cout << "DEBUG: About to accept init expression" << std::endl;
         node->init->accept(*this);
-        // std::cout << "DEBUG: Init expression processing completed" << std::endl;
         initialVal = m_currentLLVMValue;
         if (!initialVal) {
             logError(node->init->loc, "Initialization expression for variable '" + node->id->name + "' evaluated to null.");
@@ -198,7 +189,6 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
             node->id->name
         );
         namedValues[node->id->name] = globalVar;
-        std::cout << "DEBUG: Registered global variable '" << node->id->name << "' in namedValues with ptr=" << (void*)globalVar << std::endl;
         m_currentLLVMValue = globalVar;
         // Propagate type info for struct/class variables
         if (node->typeNode) {
@@ -219,9 +209,6 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
         // Store the type info for this variable
         if (node->id->type) {
             valueTypeMap[alloca] = node->id->type;
-            std::cout << "DEBUG: Registered local variable '" << node->id->name << "' in namedValues with ptr=" << (void*)alloca << ", type=" << node->id->type->toString() << std::endl;
-        } else {
-            std::cout << "DEBUG: Registered local variable '" << node->id->name << "' in namedValues with ptr=" << (void*)alloca << ", but NO type info!" << std::endl;
         }
         m_currentLLVMValue = alloca;
         // Propagate type info for struct/class variables

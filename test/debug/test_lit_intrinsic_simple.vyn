@@ -5,6 +5,6 @@
 // @expect-output: 42
 
 // Test lit() intrinsic for raw JSON literal output
-fn<String> main() -> {
+main()<String> -> {
     return lit("42");
 }

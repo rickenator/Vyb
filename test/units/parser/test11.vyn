@@ -7,5 +7,5 @@
 // @expect-error: n/a
 // @expect-return: n/a
 
-async fn<Void> example() ->
+async example()<Void> ->
     await foo()

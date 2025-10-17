@@ -2,7 +2,7 @@
 
 **Status:** ✅ Core functionality IMPLEMENTED in v0.3.7
 - Smart type detection working
-- Multi-value returns functional: `fn<Int,String> main() -> return 42, "hello"`
+- Multi-value returns functional: `main()<Int,String> -> return 42, "hello"`
 - Auto-serialization prevents segfaults
 - Basic structured output implemented
 - Full JSON formatting and advanced features in progress
@@ -24,8 +24,8 @@ Auto‑JSONification applies only to `main()` returns. Other functions can use a
 Declare `main`’s return types as generics on the function, then `return` comma‑separated variables:
 
 ```vyn
-fn<Point,Rectangle> main() ->
-  var<Point> p, var<Rectangle> r = createShapes()
+main()<Point,Rectangle> ->
+  p<Point>, r<Rectangle> = createShapes()
   // modify
   p.x *= 2
   r.height += 25
@@ -35,12 +35,12 @@ fn<Point,Rectangle> main() ->
 For non‑`main` functions, call each struct’s built‑in `toJSON()` helper explicitly:
 
 ```vyn
-fn<String> compute() ->
-  var<Point> p = makePoint()
+compute()<String> ->
+  p<Point> = makePoint()
   return p.toJSON()  // returns JSON string
 ```
 
-* **`fn<T1,T2,…>`**: generic return‑type list for `main`.
+* **`main()<T1,T2,…>`**: generic return‑type list for `main`.
 * **`return`** in `main` triggers auto‑JSONification; elsewhere it returns native Vyn values or JSON if using `toJSON()`.
 
 ## Auto-Deserialization
@@ -52,8 +52,8 @@ VynR provides a built‑in intrinsic:
 // I don't have a clearly defined Tuple for multi-type members, or even like-types
 
 auto tuple = deserial(jsonString)
-var<Tuple<Person,Company>> x = tuple // does type check validation in runtime
-// is that then var<Int> id = x.Person.id or var<Company> x.Company for use later?
+x<Tuple<Person,Company>> = tuple // does type check validation in runtime
+// is that then id<Int> = x.Person.id or company<Company> = x.Company for use later?
 ```
 
 * `deserial(str)` returns an anonymous tuple whose elements’ types and field names match exactly what was serialized.
@@ -85,10 +85,10 @@ A lone struct return emits a single object (no array):
 Wrap literals in the intrinsic `lit()` to emit raw JSON primitives without wrapping:
 
 ```vyn
-fn<Int,Float,String> main() ->
+main()<Int,Float,String> ->
   return lit(42, 3.14, "hello")    // emits [42, 3.14, "hello"]
 
-fn<Int> main() ->
+main()<Int> ->
   return lit(0)                    // emits 0
 ```
 
@@ -127,7 +127,7 @@ If `notype()` is used with raw primitives (e.g., `notype(42)`), the compiler sho
 
 ```vyn
 // Invalid usage: notype() requires struct input
-fn<String, Int, String> main() -> {
+main()<String, Int, String> -> {
     return "hello", notype(42), "world";
 }
 ```

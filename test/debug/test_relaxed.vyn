@@ -6,7 +6,7 @@ import test_relaxed_syntax
 import test_relaxed_local
 
 // Main test runner
-fn<Int> main() -> {
+main()<Int> -> {
     println("Running relaxed syntax tests...")
     
     // Run all test suites

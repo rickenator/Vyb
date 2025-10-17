@@ -7,7 +7,7 @@
 // @expect-error: n/a
 // @expect-return: n/a
 
-async fn<String> fetch_data(url: String) -> {
+async fetch_data(url: String)<String> -> {
     const<my<http::client::Connection>> conn = http::client::connect(url);
     const<my<http::client::Response>> resp = await (view conn).get("/");
     if (resp.status != 200) {

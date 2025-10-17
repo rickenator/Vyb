@@ -13,4 +13,4 @@ struct MyData {
     val: Int
 }
 fn main() -> Int {
-    var<MyData> d = MyData{val: 777};
+    d<MyData> = MyData{val: 777};

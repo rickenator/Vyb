@@ -1,1 +1,1 @@
-fn<String> main() -> { var<my<Int>> x = 42; return "test"; }
+main()<String> -> { var<my<Int>> x = 42; return "test"; }

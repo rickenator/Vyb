@@ -3,22 +3,22 @@ type<Int> UserId;
 type<String> UserName;
 type<Int8> Score;
 
-fn<UserId> getUserId() -> {
+getUserId()<UserId> -> {
     return 42;
 }
 
-fn<UserName> getUserName() -> {
+getUserName()<UserName> -> {
     return "Alice";
 }
 
-fn<Score> getScore() -> {
+getScore()<Score> -> {
     return 100;
 }
 
-fn<Int> main() -> {
-    var<UserId> id = getUserId();
-    var<UserName> name = getUserName();
-    var<Score> score = getScore();
+main()<Int> -> {
+    id<UserId> = getUserId();
+    name<UserName> = getUserName();
+    score<Score> = getScore();
     
     return 0;
 }

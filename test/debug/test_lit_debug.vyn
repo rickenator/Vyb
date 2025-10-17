@@ -3,9 +3,9 @@
 // @category: intrinsic, json, serialization
 // @expect: pass
 
-fn<Int> main() -> {
+main()<Int> -> {
     println("Before lit() call...");
-    var<String> result = lit("42");
+    result<String> = lit("42");
     println("After lit() call, result:");
     println(result);
     println("Done");

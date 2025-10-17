@@ -1,5 +1,5 @@
 // Simple test for println function
-fn<Int> main() -> {
+main()<Int> -> {
     // Simple string println
     println("Hello, Vyn World!");
     

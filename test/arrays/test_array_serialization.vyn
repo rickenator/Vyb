@@ -1,8 +1,8 @@
-fn<Int> main() -> {
+main()<Int> -> {
     // Test various array scenarios
-    var<[Int; 3]> arr1 = [10, 20, 30];
-    var<[Int; 1]> arr2 = [42];
-    var<[Int; 5]> arr3 = [1, 2, 3, 4, 5];
+    arr1<[Int; 3]> = [10, 20, 30];
+    arr2<[Int; 1]> = [42];
+    arr3<[Int; 5]> = [1, 2, 3, 4, 5];
     
     println(arr1);
     println(arr2);

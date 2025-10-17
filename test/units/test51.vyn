@@ -1,6 +1,6 @@
 //# EXPECTED ERROR: borrow() can only be used inside an unsafe block
 
-fn<Int> main() -> {
+main()<Int> -> {
     var<my<Int>> x = 10;
     
     // Using borrow outside unsafe block should fail

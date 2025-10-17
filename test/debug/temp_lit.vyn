@@ -1,7 +1,7 @@
-fn<String> main() -> { 
+main()<String> -> { 
     println("Testing lit() intrinsic");
     println("Calling lit()...");
-    var<String> result = lit("42");
+    result<String> = lit("42");
     println("lit() result: ");
     println(result);
     return result;

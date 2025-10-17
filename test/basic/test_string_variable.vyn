@@ -1,5 +1,5 @@
-fn<Int> main() -> {
-    var<String> greeting = "Hello";
+main()<Int> -> {
+    greeting<String> = "Hello";
     println(greeting);
     return 0;
 }

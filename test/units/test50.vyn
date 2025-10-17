@@ -1,5 +1,5 @@
 // test50.vyn - Tests borrow(expr) and view(expr) syntax
-fn<Int> main() -> {
+main()<Int> -> {
     var<my<Int>> x = 10;
     
     unsafe {

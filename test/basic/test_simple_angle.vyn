@@ -4,6 +4,6 @@ struct SimplePoint {
     y<Int>
 }
 
-fn<SimplePoint> main() -> {
+main()<SimplePoint> -> {
     return SimplePoint { x=10, y=20 };
 }

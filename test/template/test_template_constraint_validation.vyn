@@ -23,9 +23,9 @@ template ValidCalculator<T: Numeric> {
     }
 }
 
-fn<Int> main() -> {
+main()<Int> -> {
     // The templates have been parsed and stored with constraints
     // Constraint validation will be triggered during actual instantiation
-    var<Int> test = 42;
+    test<Int> = 42;
     return test;
 }

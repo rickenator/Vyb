@@ -7,5 +7,5 @@
 // @expect-error: n/a
 // @expect-return: n/a
 
-fn<Void> example() ->
+example()<Void> ->
     defer foo()

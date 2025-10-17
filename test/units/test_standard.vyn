@@ -8,7 +8,7 @@
 // @expect-error: n/a
 // @expect-return: 42
 
-fn<Int> main() -> {
-    var<Int> x = 42;
+main()<Int> -> {
+    x<Int> = 42;
     return x;
 }

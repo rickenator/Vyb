@@ -1,4 +1,4 @@
-fn<Int> main() -> {
+main()<Int> -> {
     var<Float> x; // x is Float
     unsafe {
         var<loc<Int>> p = loc(x); // Error: trying to get loc<Int> from Float

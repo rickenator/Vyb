@@ -53,13 +53,13 @@ cd Vyn
 make -C build -j
 
 # Run your first Vyn program
-echo 'fn<Int> main() -> return 42' > hello.vyn
+echo 'main()<Int> -> return 42' > hello.vyn
 build/vyn hello.vyn  # Returns exit code 42
 
 # Try modern language features
 cat > example.vyn << 'EOF'
-fn<Int> main() -> {
-    var<Vec<Int>> numbers = Vec::new()
+main()<Int> -> {
+    numbers<Vec<Int>> = Vec::new()
     numbers.push(10)
     numbers.push(20)
     
@@ -73,7 +73,7 @@ EOF
 build/vyn example.vyn  # Returns 30
 
 # Complex return types with auto-serialization
-echo 'fn<Int,String> main() -> return 42, "Hello!"' > tuple.vyn
+echo 'main()<Int,String> -> return 42, "Hello!"' > tuple.vyn
 build/vyn tuple.vyn  # Outputs: [42, "Hello!"]
 ```
 
@@ -121,7 +121,7 @@ import utils::math::calculate
 smuggle debug::trace from "github.com/dev/tools"
 smuggle experimental::feature from "./local/experiments"
 
-fn<Int> main() -> {
+main()<Int> -> {
     println("Production ready!")
     trace("Debug info from smuggled module")
     return calculate(42)
@@ -142,11 +142,11 @@ This unique `import`/`smuggle` distinction makes Vyn's module system both secure
 Vyn **v0.3.7** is a **complete systems programming language** ready for production use:
 
 ### ✅ **Core Language Features**
-- **Functions**: `fn<ReturnType> name(params) -> body` with full LLVM compilation
-  - **Standard parameters**: `var<Type> name` or `const<Type> name` 
-  - **Shorthand parameters**: `Type name` or `const Type name`
+- **Functions**: `name(params)<ReturnType> -> body` with full LLVM compilation
+  - **Standard parameters**: `param<Type>` or `param<Type const>` 
+  - **Shorthand parameters**: `Type param` or `const Type param`
   - **Mixed syntax**: Both forms can be used in the same function
-- **Variables**: `var<Type> x = 42` with type inference and explicit typing
+- **Variables**: `name<Type> = value` with type inference and explicit typing
 - **Resizable Arrays**: `Vec<T>` with `new()`, `push()`, `pop()`, `len()`, `get()` methods
 - **Fixed Arrays**: `[T; N]` with indexing and beautiful println() output
 - **Structs**: `struct Point { x<Int>, y<Int> }` with field access (`p.x`, `p.y`)
@@ -156,11 +156,37 @@ Vyn **v0.3.7** is a **complete systems programming language** ready for producti
 - **I/O**: `println()` for output, works with all data types including vectors
 
 ### ✅ **Advanced Type System**
-- **Multi-value returns**: `fn<Int,String> main() -> return 42, "hello"`
+- **Multi-value returns**: `main()<Int,String> -> return 42, "hello"`
 - **Auto-serialization**: Complex return types automatically output as JSON
 - **Type safety**: Full type checking and inference with modern struct syntax
 - **Generic collections**: `Vec<Int>`, `Vec<String>` with full method support
 - **Member access**: Struct field access (`obj.field`) and array indexing (`arr[index]`)
+
+#### Primitive Types
+
+| Type | Description | Size | Range/Notes | Example |
+|------|-------------|------|-------------|---------|
+| `Int` | Signed integer | 64-bit | -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807 | `x<Int> = 42` |
+| `Float` | Floating point | 64-bit | IEEE 754 double precision | `pi<Float> = 3.14159` |
+| `Bool` | Boolean | 1-bit | `true` or `false` | `flag<Bool> = true` |
+| `String` | UTF-8 string | Variable | Heap-allocated, immutable | `name<String> = "Alice"` |
+| `Void` | No value | 0-bit | Used for functions that don't return | `print()<Void> -> { ... }` |
+
+#### Collection Types
+
+| Type | Description | Mutability | Example |
+|------|-------------|------------|---------|
+| `[T; N]` | Fixed-size array | Mutable elements | `nums<[Int; 5]> = [1, 2, 3, 4, 5]` |
+| `Vec<T>` | Dynamic array | Mutable elements | `items<Vec<String>> = Vec::new()` |
+
+#### Ownership Types
+
+| Type | Description | Use Case | Example |
+|------|-------------|----------|---------|
+| `my<T>` | Unique ownership | Single owner, move semantics | `data<my<Person>> = my(Person{...})` |
+| `our<T>` | Shared ownership | Reference counting | `config<our<Settings>> = our(Settings{...})` |
+| `their<T>` | Borrowed reference | Non-owning access | `ref<their<Data>> = borrow(owner)` |
+| `loc<T>` | Raw pointer | Unsafe operations only | `ptr<loc<Int>> = loc(variable)` |
 
 ### ✅ **Memory Management**
 - **Ownership types**: `my<T>`, `our<T>`, `their<T>` for safe memory handling
@@ -193,7 +219,7 @@ struct Person {
 }
 
 # Pattern matching with comprehensive match statements
-fn<String> grade_level(Int age) -> {
+grade_level(age<Int>)<String> -> {
     match age {
         0 => "infant",
         1 => "toddler", 
@@ -204,16 +230,16 @@ fn<String> grade_level(Int age) -> {
 }
 
 # Resizable collections with full method support
-fn<Int> process_scores() -> {
-    var<Vec<Int>> scores = Vec::new()
+process_scores()<Int> -> {
+    scores<Vec<Int>> = Vec::new()
     scores.push(95)
     scores.push(87)
     scores.push(92)
     
-    var<Int> total = 0
-    var<Int> i = 0
+    total<Int> = 0
+    i<Int> = 0
     while (i < scores.len()) {
-        var<Int> score = scores.get(i)
+        score<Int> = scores.get(i)
         total = total + score
         i = i + 1
         
@@ -230,8 +256,8 @@ fn<Int> process_scores() -> {
 }
 
 # Dual parameter syntax and member access
-fn<Person> create_person(String name, var<Int> age) -> {
-    var<Person> person = Person {
+create_person(name<String>, age<Int>)<Person> -> {
+    person<Person> = Person {
         name = name,
         age = age,
         scores = Vec::new()
@@ -244,10 +270,10 @@ fn<Person> create_person(String name, var<Int> age) -> {
     return person
 }
 
-fn<Int> main() -> {
-    var<Person> student = create_person("Alice", 20)
-    var<String> level = grade_level(student.age)
-    var<Int> total = process_scores()
+main()<Int> -> {
+    student<Person> = create_person("Alice", 20)
+    level<String> = grade_level(student.age)
+    total<Int> = process_scores()
     
     println(student)  # Auto-serialization of complex types
     println(level)
@@ -262,37 +288,37 @@ Vyn's design philosophy emphasizes safety by default, but provides escape hatche
 
 ```vyn
 # Safe memory management with ownership types
-fn<Int> safe_memory_example() -> {
+safe_memory_example()<Int> -> {
     # Unique ownership - automatically freed when out of scope
-    var<my<String>> owned = make_my("unique data")
+    owned<my<String>> = make_my("unique data")
     
     # Shared ownership - reference counted
-    var<our<String>> shared = make_our("shared data")
-    var<our<String>> another_ref = shared  # Reference count incremented
+    shared<our<String>> = make_our("shared data")
+    another_ref<our<String>> = shared  # Reference count incremented
     
     # Borrowing - non-owning references
-    var<their<String const>> view_ref = view shared      # Immutable borrow
-    var<their<String>> mut_ref = borrow owned           # Mutable borrow
+    view_ref<their<String const>> = view shared      # Immutable borrow
+    mut_ref<their<String>> = borrow owned           # Mutable borrow
     
     return 42
 }
 
 # Unsafe operations for low-level control
-fn<Int> unsafe_memory_example() -> {
-    var<Int> x = 42
-    var<Int> result = 0
+unsafe_memory_example()<Int> -> {
+    x<Int> = 42
+    result<Int> = 0
     
     unsafe {
         # Create raw pointers
-        var<loc<Int>> p = loc(x)     # Get pointer to x
-        var<loc<Int>> q = loc(result) # Get pointer to result
+        p<loc<Int>> = loc(x)     # Get pointer to x
+        q<loc<Int>> = loc(result) # Get pointer to result
         
         # Read and write through pointers
         at(q) = at(p) * 2           # Write x*2 to result through pointers
         
         # Pointer type conversion
-        var<loc<Void>> p_void = from<loc<Void>>(p)
-        var<loc<Int>> p_back = from<loc<Int>>(p_void)
+        p_void<loc<Void>> = from<loc<Void>>(p)
+        p_back<loc<Int>> = from<loc<Int>>(p_void)
     }
     
     return result  # Returns 84
@@ -306,6 +332,96 @@ fn<Int> unsafe_memory_example() -> {
 4. Encapsulate unsafe operations behind safe abstractions
 5. Test unsafe code extensively
 
+### Syntax and Literals
+
+Vyn uses indentation-sensitive syntax with optional braces and semicolons. Whitespace defines blocks, so consistent indentation is key. The unified `name<Type>` syntax provides consistency across all language constructs.
+
+#### Literal Forms
+
+```vyn
+# Integer literals
+x<Int> = 42                      # 64-bit signed integer (default)
+small<Int> = 123                 # All integers default to 64-bit
+large<Int> = -9223372036854775808  # Full 64-bit range
+
+# Floating point literals  
+pi<Float> = 3.14159              # 64-bit IEEE 754 double precision
+scientific<Float> = 1.23e-4      # Scientific notation supported
+negative<Float> = -2.718         # Negative floats
+
+# Boolean literals
+flag<Bool> = true                # Boolean true
+active<Bool> = false             # Boolean false
+
+# String literals
+name<String> = "Alice"           # UTF-8 string literals
+multiline<String> = "Line 1\nLine 2"  # Escape sequences supported
+empty<String> = ""               # Empty strings
+
+# Character and Unicode (planned)
+# ch<Char> = 'A'                 # Single byte UTF-8 code unit (planned)
+# rune<Rune> = '💡'              # Full Unicode code point (planned)
+
+# Array literals
+numbers<[Int; 5]> = [1, 2, 3, 4, 5]     # Fixed-size arrays
+mixed<[Float; 3]> = [1.0, 2.5, -3.14]   # Different element types
+empty_array<[Int; 0]> = []               # Empty arrays
+
+# Vector literals (dynamic arrays)
+items<Vec<Int>> = Vec::new()             # Empty dynamic vector
+# Dynamic vector literals with vec![] syntax planned
+
+# Raw bytes (planned)
+# raw<Bytes> = [0xDE, 0xAD, 0xBE]       # Raw byte sequences (planned)
+
+# Null/void
+# No explicit null literal - use Option<T> pattern when implemented
+```
+
+#### Syntax Examples
+
+```vyn
+# Variable declarations with unified syntax
+x<Int> = 42                      # Mutable variable
+const PI<Float> = 3.14159        # Immutable constant
+
+# Function declarations follow execution order
+add(a<Int>, b<Int>)<Int> -> a + b
+
+# Struct definitions with typed fields
+struct Point {
+    x<Float>,
+    y<Float> = 0.0               # Default values supported
+}
+
+# Pattern matching with comprehensive patterns
+process_value(val<Int>)<String> -> {
+    match val {
+        0 => "zero",
+        1..10 => "small",        # Range patterns (planned)
+        _ => "large"
+    }
+}
+
+# Memory safety with ownership types
+safe_data<my<String>> = my("unique")      # Unique ownership
+shared_data<our<String>> = our("shared")  # Reference counted
+borrowed<their<String>> = borrow safe_data  # Non-owning reference
+```
+
+#### Type System Features
+
+**Current Types**: `Int` (64-bit), `Float` (64-bit), `Bool`, `String`, `Void`, `[T; N]`, `Vec<T>`
+
+**Planned Types**: 
+- Sized integers: `Int32`, `Int16`, `Int8`, `UInt64`, `UInt32`, `UInt16`, `UInt8`
+- Sized floats: `Float32` for single precision
+- Characters: `Char` (UTF-8 code unit), `Rune` (Unicode code point)  
+- Raw data: `Bytes` for byte sequences
+- Compound: Tuples `(T1, T2, ...)`, advanced collections
+
+**Ownership Types**: `my<T>` (unique), `our<T>` (shared), `their<T>` (borrowed), `loc<T>` (unsafe raw pointer)
+
 ### Basic Syntax
 
 Vyn uses clean, expressive syntax with flexible parameter syntax:
@@ -313,23 +429,23 @@ Vyn uses clean, expressive syntax with flexible parameter syntax:
 ```vyn
 # Functions support both standard and shorthand parameter syntax
 
-# Standard syntax: explicit var<Type> or const<Type>
-fn<Int> add_standard(var<Int> a, const<Int> b) -> {
+# Standard syntax: explicit parameter<Type> or parameter<Type const>
+add_standard(a<Int>, b<Int const>)<Int> -> {
     return a + b
 }
 
 # Shorthand syntax: Type directly (implicitly mutable)
-fn<Int> add_shorthand(Int a, Int b) -> {
+add_shorthand(Int a, Int b)<Int> -> {
     return a + b
 }
 
 # Mixed syntax: combining both forms in same function
-fn<Int> mixed_params(var<Int> x, Int y, const<Int> z) -> {
+mixed_params(x<Int>, Int y, const Int z)<Int> -> {
     return x + y + z
 }
 
 # Complex return types with auto-serialization
-fn<Int, String, Bool> get_data() -> {
+get_data()<Int, String, Bool> -> {
     return 42, "result", true
 }
 # When called from main(), outputs: {"Int":42,"String":"result","Bool":true}
@@ -341,12 +457,12 @@ Vyn supports two parameter syntax styles for maximum flexibility:
 
 ```vyn
 # Standard syntax: explicit mutability
-fn<String> format_standard(var<String> prefix, const<Int> value) -> {
+format_standard(prefix<String>, value<Int const>)<String> -> {
     return prefix + String::from_int(value)
 }
 
 # Shorthand syntax: type-first (more concise)  
-fn<String> format_shorthand(String prefix, const Int value) -> {
+format_shorthand(String prefix, const Int value)<String> -> {
     return prefix + String::from_int(value)
 }
 
@@ -357,16 +473,16 @@ fn<String> format_shorthand(String prefix, const Int value) -> {
 
 ```vyn
 # Variables with type inference
-var x = 42          # Int
-var name = "Alice"  # String
-var flag = true     # Bool
+x = 42          # Int
+name = "Alice"  # String
+flag = true     # Bool
 
 # Explicit typing
-var<Int> count = 0
-var<String> message = "Hello"
+count<Int> = 0
+message<String> = "Hello"
 
-# Immutable bindings
-const PI = 3.14159
+# Immutable bindings (with const type modifier)
+PI<Float const> = 3.14159
 ```
 
 ### Structs and Data
@@ -379,8 +495,8 @@ struct Point {
 }
 
 # Create and use with field access
-fn<Int> main() -> {
-    var<Point> p = Point { x = 10, y = 20 }
+main()<Int> -> {
+    p<Point> = Point { x = 10, y = 20 }
     return p.x + p.y  # Returns 30
 }
 ```
@@ -400,8 +516,8 @@ smuggle debug::trace from "github.com/dev/tools"
 smuggle experimental::parser from "./local/experiments"
 
 # Use imported symbols
-fn<Int> main() -> {
-    var<Vec<Int>> numbers = Vec::new()
+main()<Int> -> {
+    numbers<Vec<Int>> = Vec::new()
     numbers.push(calculate(10))
     
     println(numbers)  # From trusted std::io
@@ -440,24 +556,24 @@ fn internal_helper() { ... }                      # Private to this file
 
 ```vyn
 # Resizable vectors with full method support
-fn<Int> main() -> {
-    var<Vec<Int>> numbers = Vec::new()
+main()<Int> -> {
+    numbers<Vec<Int>> = Vec::new()
     numbers.push(10)
     numbers.push(20)
     numbers.push(30)
     
     println(numbers)  # Outputs: { "type": "Vec<Int>", "address": "0x..." }
     
-    var<Int> length = numbers.len()    # Gets 3
-    var<Int> first = numbers.get(0)    # Gets 10
-    var<Int> last = numbers.pop()      # Gets and removes 30
+    length<Int> = numbers.len()    # Gets 3
+    first<Int> = numbers.get(0)    # Gets 10
+    last<Int> = numbers.pop()      # Gets and removes 30
     
     return first + last  # Returns 40
 }
 
 # Fixed-size arrays also supported
-fn<Int> array_example() -> {
-    var<[Int; 3]> fixed = [1, 2, 3]
+array_example()<Int> -> {
+    fixed<[Int; 3]> = [1, 2, 3]
     return fixed[0]  # Array indexing
 }
 ```
@@ -466,7 +582,7 @@ fn<Int> array_example() -> {
 
 ```vyn
 # Conditional expressions with modern syntax
-fn<String> check_sign(Int x) -> {
+check_sign(x<Int>)<String> -> {
     if (x > 0) {
         return "positive"
     } else if (x < 0) {
@@ -477,9 +593,9 @@ fn<String> check_sign(Int x) -> {
 }
 
 # While loops with break/continue
-fn<Int> factorial(Int n) -> {
-    var<Int> result = 1
-    var<Int> i = 1
+factorial(n<Int>)<Int> -> {
+    result<Int> = 1
+    i<Int> = 1
     while (i <= n) {
         if (i == 0) {
             continue
@@ -494,7 +610,7 @@ fn<Int> factorial(Int n) -> {
 }
 
 # Pattern matching with match statements
-fn<String> describe_number(Int x) -> {
+describe_number(x<Int>)<String> -> {
     match x {
         0 => "zero",
         1 => "one", 
@@ -542,14 +658,14 @@ Vyn/
 
 **Hello World:**
 ```vyn
-fn<Void> main() -> {
+main()<Void> -> {
     println("Hello, Vyn!")
 }
 ```
 
 **Mathematical Computation:**
 ```vyn
-fn<Int> fibonacci(Int n) -> {
+fibonacci(n<Int>)<Int> -> {
     if (n <= 1) {
         return n
     } else {
@@ -557,7 +673,7 @@ fn<Int> fibonacci(Int n) -> {
     }
 }
 
-fn<Int> main() -> {
+main()<Int> -> {
     return fibonacci(10)  # Returns 55
 }
 ```
@@ -570,7 +686,7 @@ struct Result {
     message<String>
 }
 
-fn<Result> process_data(Int x) -> {
+process_data(x<Int>)<Result> -> {
     if (x > 0) {
         return Result {
             success = true,
@@ -586,7 +702,7 @@ fn<Result> process_data(Int x) -> {
     }
 }
 
-fn<Result> main() -> {
+main()<Result> -> {
     return process_data(21)
 }
 # Outputs structured JSON for the Result
@@ -609,21 +725,21 @@ Vyn provides multiple memory management strategies:
 
 ```vyn
 # Unique ownership (like Rust's Box)
-var<my<String>> owned = make_my("unique data")
+owned<my<String>> = make_my("unique data")
 
 # Shared ownership (reference counted)
-var<our<String>> shared = make_our("shared data")
-var<our<String>> another_ref = shared  # Reference count incremented
+shared<our<String>> = make_our("shared data")
+another_ref<our<String>> = shared  # Reference count incremented
 
 # Borrowing (non-owning references)
-var<their<String>> view_ref = view shared      # Immutable borrow
-var<their<String>> mut_ref = borrow owned      # Mutable borrow
+view_ref<their<String>> = view shared      # Immutable borrow
+mut_ref<their<String>> = borrow owned      # Mutable borrow
 
 # Raw pointers for unsafe operations
 unsafe {
-    var<Int> x = 42
-    var<loc<Int>> ptr = loc(x)  # Get pointer to x
-    at(ptr) = 99               # Modify through pointer
+    x<Int> = 42
+    ptr<loc<Int>> = loc(x)  # Get pointer to x
+    at(ptr) = 99           # Modify through pointer
 }
 ```
 
@@ -765,11 +881,11 @@ digit = "0".."9";
 Vyn automatically serializes complex return types from `main()`:
 
 **Simple Returns:**
-- `fn<Int> main() -> return 42` → Exit code 42
-- `fn<String> main() -> return "hello"` → Outputs: hello
+- `main()<Int> -> return 42` → Exit code 42
+- `main()<String> -> return "hello"` → Outputs: hello
 
 **Complex Returns:**
-- `fn<Int,String> main() -> return 42, "hello"` → Outputs: [42, "hello"]
+- `main()<Int,String> -> return 42, "hello"` → Outputs: [42, "hello"]
 - Struct returns → JSON with field names and values
 - Vec returns → JSON array representation
 

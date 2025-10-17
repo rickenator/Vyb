@@ -5,9 +5,9 @@ template Container<T> {
     }
 }
 
-fn<Int> main() -> {
+main()<Int> -> {
     // This line should trigger GenericInstantiationExpression processing
     // Note: This is a placeholder syntax - in real usage, we'd need proper instantiation
-    var<Int> result = 42;
+    result<Int> = 42;
     return result;
 }

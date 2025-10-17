@@ -13,12 +13,12 @@ fn test_relaxed_parameters() -> {
 }
 
 // Helper function using relaxed parameter syntax
-fn<Int> calc_sum(Int a, Int b) -> {
+calc_sum(Int a, Int b)<Int> -> {
     return a + b
 }
 
 // Helper function using mixed parameter syntax
-fn<Float> calc_area(var<Float> width, Float height) -> {
+calc_area(var<Float> width, Float height)<Float> -> {
     return width * height
 }
 
@@ -43,12 +43,12 @@ fn greet(String name) -> {
 }
 
 // Function with explicit return type
-fn<Int> get_value() -> {
+get_value()<Int> -> {
     return 42
 }
 
 // Function demonstrating auto-return of last expression
-fn<Int> double_value(Int x) -> {
+double_value(Int x)<Int> -> {
     x * 2  // Last expression is implicitly returned
 }
 

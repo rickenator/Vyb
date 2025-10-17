@@ -12,5 +12,5 @@
 struct MyData {
     val: Int
 }
-fn<Void> main() -> -> Int {
-    var<MyData> d = MyData{val: 777};
+main()<Void> -> -> Int {
+    d<MyData> = MyData{val: 777};

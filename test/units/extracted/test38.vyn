@@ -10,7 +10,7 @@
 
     std::string source_ok = R"(
 fn main() -> Int{
-    var<Int> addr = 0x1234;
+    addr<Int> = 0x1234;
     std::string source_err = R"(
 fn main() -> Int {
-    var<Int> a = 0x1234;
+    a<Int> = 0x1234;

@@ -2,8 +2,8 @@
 type<Int> MyInt;
 type<String> MyString;
 
-fn<MyInt> main() -> {
-    var<MyInt> x = 47;
-    var<MyString> y = "Hello, world!"
+main()<MyInt> -> {
+    x<MyInt> = 47;
+    y<MyString> = "Hello, world!"
     return x, y;
 }

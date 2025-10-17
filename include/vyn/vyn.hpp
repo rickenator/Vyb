@@ -68,29 +68,26 @@ path                   ::= IDENTIFIER { ('::' | '.') IDENTIFIER } // Allow . as 
 
 class_declaration      ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ] 'class' IDENTIFIER [ 'extends' type ] [ 'implements' type_list ] '{' { class_member } '}'
 class_member           ::= field_declaration | method_declaration | constructor_declaration
-field_declaration      ::= [ 'pub' ] ( 'var' | 'const' ) IDENTIFIER ':' type [ '=' expression ] [';'] // Changed 'let' to 'var'
-method_declaration     ::= [ 'pub' ] [ 'static' ] [ 'template' '<' type_parameter_list '>' ] [ 'async' ] 'fn' '<' type '>' IDENTIFIER '(' [ parameter_list ] ')' '->' ( block_statement | expression [';'] ) [ 'throws' type_list ] // Updated for fn<ReturnType> syntax with mandatory arrow separator
+field_declaration      ::= [ 'pub' ] IDENTIFIER '<' type '>' [ '=' expression ] [';'] // Unified field<Type> syntax
+method_declaration     ::= [ 'pub' ] [ 'static' ] [ 'template' '<' type_parameter_list '>' ] [ 'async' ] IDENTIFIER '(' [ parameter_list ] ')' '<' type '>' '->' ( block_statement | expression [';'] ) [ 'throws' type_list ] // Unified method(params)<ReturnType> -> syntax
 constructor_declaration::= [ 'pub' ] 'new' [ template_parameters ] '(' [ parameter_list ] ')' [ 'throws' type_list ] ( block_statement | '=>' expression [';'] ) // Added throws, expression body
 
 struct_declaration     ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ] 'struct' IDENTIFIER '{' { struct_field_declaration } '}'
-struct_field_declaration ::= [ 'pub' ] IDENTIFIER ( ':' type | '<' type '>' ) [ '=' expression ] [';'] // Support both colon and angle bracket syntax
+struct_field_declaration ::= [ 'pub' ] IDENTIFIER '<' type '>' [ '=' expression ] [';'] // Unified field<Type> syntax
 
 enum_declaration       ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ] 'enum' IDENTIFIER '{' { enum_variant } '}'
 enum_variant           ::= IDENTIFIER [ '(' type_list ')' ] [ '=' expression ] ','?
 
 impl_declaration       ::= [ 'template' '<' type_parameter_list '>' ] 'impl' type [ 'for' type ] '{' { method_declaration } '}'
 
-function_declaration   ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ] [ 'async' ] 'fn' '<' type_list '>' IDENTIFIER '(' [ parameter_list ] ')' '->' ( block_statement | expression [';'] | statement ) [ 'throws' type_list ] // Updated for fn<ReturnType1, ReturnType2, ...> syntax with mandatory arrow separator
+function_declaration   ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ] [ 'async' ] IDENTIFIER '(' [ parameter_list ] ')' '<' type_list '>' '->' ( block_statement | expression [';'] | statement ) [ 'throws' type_list ] // Unified function(params)<ReturnType1, ReturnType2, ...> -> syntax
 
 trait_declaration      ::= [ 'pub' ] 'template' IDENTIFIER [ template_parameters ] '{' { method_signature } '}' // For template Comparable
-method_signature       ::= [ 'async' ] 'fn' '<' type_list '>' IDENTIFIER '(' [ parameter_list ] ')' '->' ';' [ 'throws' type_list ] // Updated for fn<ReturnType1, ReturnType2, ...> syntax
+method_signature       ::= [ 'async' ] IDENTIFIER '(' [ parameter_list ] ')' '<' type_list '>' '->' ';' [ 'throws' type_list ] // Unified method(params)<ReturnType1, ReturnType2, ...> -> syntax
 
 
-variable_declaration   ::= [ 'pub' ] 'var' '<' type '>' IDENTIFIER [ '=' expression ] [';'] // Standard generic-angled declaration syntax
-                        | [ 'pub' ] type IDENTIFIER [ '=' expression ] [';'] // Relaxed shorthand syntax
-                        | [ 'pub' ] 'auto' IDENTIFIER '=' expression [';'] // Type inference syntax
-constant_declaration   ::= [ 'pub' ] 'const' '<' type '>' IDENTIFIER [ '=' expression ] [';'] // Standard generic-angled constant syntax
-                        | [ 'pub' ] 'const' type IDENTIFIER [ '=' expression ] [';'] // Relaxed shorthand syntax
+variable_declaration   ::= [ 'pub' ] IDENTIFIER '<' type '>' [ '=' expression ] [';'] // Unified variable<Type> syntax
+constant_declaration   ::= [ 'pub' ] 'const' IDENTIFIER '<' type '>' [ '=' expression ] [';'] // Unified const variable<Type> syntax
 
 type_alias_declaration ::= [ 'pub' ] 'type' IDENTIFIER [ template_parameters ] '=' type [';'] // Semicolon optional
 
@@ -102,8 +99,7 @@ type_bounds            ::= type { '+' type }
 template_parameters    ::= '<' type_parameter_list '>'
 
 parameter_list         ::= parameter { ',' parameter }
-parameter              ::= ('var' | 'const') '<' type '>' IDENTIFIER [ '=' expression ] // Standard parameter syntax
-                        | [ 'const' ] type IDENTIFIER [ '=' expression ] // Relaxed parameter syntax (shorthand)
+parameter              ::= [ 'const' ] IDENTIFIER '<' type '>' [ '=' expression ] // Unified parameter<Type> syntax
 
 type_list              ::= type { ',' type }
 
@@ -220,7 +216,7 @@ tuple_literal          ::= '(' [ expression { ',' expression } [ ',' ] ] ')'
 struct_literal         ::= [ path_expression ] '{' [ struct_literal_field { ',' struct_literal_field } [ ',' ] ] '}' // Allows TypeName{...} and anonymous {...}
 struct_literal_field   ::= IDENTIFIER (':' | '=') expression | IDENTIFIER // Allow = for field init
 
-lambda_expression      ::= [ 'async' ] ( '|' [ parameter_list ] '|' | IDENTIFIER ) [ '->' type ] ( '=>' expression | block_statement )
+lambda_expression      ::= [ 'async' ] ( '|' [ parameter_list ] '|' | IDENTIFIER ) '<' type '>' ( '=>' expression | block_statement )
 
 // Type System (NEW - based on mem_RFC.md)
 Type                   ::= BaseType [ 'const' ] [ '?' ] // Added optional '?' for nullable types from old EBNF
@@ -235,7 +231,7 @@ OwnershipWrapper       ::= 'my' | 'our' | 'their' | 'ptr'
 
 ArrayType              ::= '[' Type [ ';' Expression ] ']' // e.g., [Int], [Int; 5]
 TupleType              ::= '(' [ Type { ',' Type } [ ',' ] ] ')' // e.g., (Int, String)
-FunctionType           ::= [ 'async' ] 'fn' '<' Type '>' '(' [ Type { ',' Type } ] ')' '->' [ 'throws' TypeList ] // Updated for fn<ReturnType> syntax
+FunctionType           ::= [ 'async' ] '(' [ Type { ',' Type } ] ')' '<' Type '>' '->' [ 'throws' TypeList ] // Unified (params)<ReturnType> -> syntax
 
 // Path and Arguments (mostly from old EBNF, ensure compatibility)
 path                   ::= IDENTIFIER { ('::' | '.') IDENTIFIER }

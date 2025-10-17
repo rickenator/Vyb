@@ -1,9 +1,9 @@
 // Test simple function call parsing
 
-fn<Int> simple_function() -> {
+simple_function()<Int> -> {
     return 42;
 }
 
-fn<Int> main() -> {
+main()<Int> -> {
     return simple_function();
 }

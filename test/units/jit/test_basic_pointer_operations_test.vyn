@@ -7,8 +7,8 @@
 // @expect-error: n/a
 // @expect-return: 99
 
-fn<Int> main() -> {
-    var<Int> x = 77;
+main()<Int> -> {
+    x<Int> = 77;
     var<loc<Int>> p;
     unsafe {
         p = loc(x);

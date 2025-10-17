@@ -1,21 +1,18 @@
 
-# Vyn Function Declaration Syntax
+# Vyn Unified Function Declaration Syntax
 
-This document defines the updated function declaration syntax in Vyn, aligning with the `<T>`-first style and requiring a mandatory arrow (`->`) to separate the signature from the body. Braces around the body are optional for single-expression functions.
+This document defines the unified function declaration syntax in Vyn using the `name<Type>` pattern. This eliminates the `fn` keyword in favor of a clean, execution-order syntax.
 
 ---
 
 ## 1. Grammar (EBNF)
 
 ```ebnf
-FunctionDecl ::= "fn" "<" TypeList ">" Identifier "(" ParamList ")" "->" Body
+FunctionDecl ::= Identifier "(" ParamList ")" "<" TypeList ">" "->" Body
 
 TypeList     ::= Type { "," Type }  // Single or multiple return types
 ParamList    ::= [ Param { "," Param } ]
-// Standard parameter syntax
-Param        ::= ("var" | "const") "<" Type ">" Identifier
-// Relaxed parameter syntax (shorthand)
-               | [ "const" ] Type Identifier
+Param        ::= [ "const" ] Identifier "<" Type ">" [ "=" Expression ]
 
 Body         ::= Block
                | Expression
@@ -24,13 +21,12 @@ Block        ::= "{" Statement* [ Expression ] "}"
 Expression   ::= <any single Vyn expression>  // no braces required
 ```
 
-- **Return type(s)** are declared in `<Type>` or `<Type1, Type2, ...>` immediately after `fn`.
-- **Multi-value returns** use comma-separated types: `fn<Int, String, Bool>`.
-- **Parameters** may use either:
-  - Standard syntax: `var<T>` or `const<T>` before the parameter name
-  - Shorthand syntax: `Type name` (implicitly mutable) or `const Type name` (immutable)
-- **`->`** is **mandatory**: it clearly demarcates the end of the signature and the start of the body.
-- **Braces `{}`** around the body are optional only when the body is a single expression.
+- **Function name** comes first, following natural execution order
+- **Parameters** in parentheses use unified `param<Type>` syntax
+- **Return type(s)** are declared in `<Type>` or `<Type1, Type2, ...>` after parameters
+- **Multi-value returns** use comma-separated types: `name()<Int, String, Bool>`
+- **`->`** is **mandatory**: it clearly demarcates the end of the signature and the start of the body
+- **Braces `{}`** around the body are optional only when the body is a single expression
 
 ---
 
@@ -40,10 +36,10 @@ Expression   ::= <any single Vyn expression>  // no braces required
 
 ```vyn
 class Node {
-  var<Bool> is_leaf
+  is_leaf<Bool>
 
   // Constructor with a block body
-  fn<Node> new(const<Bool> is_leaf_param) -> {
+  new(const is_leaf_param<Bool>)<Node> -> {
     Node { is_leaf: is_leaf_param }
   }
 }
@@ -53,33 +49,31 @@ class Node {
 
 ```vyn
 // A concise function doubling its input
-fn<Int> double(var<Int> x) -> x * 2
+double(x<Int>)<Int> -> x * 2
 ```
 
 ```vyn
 // Reading a value from a shared config
-fn<Bool> is_debug(var<our<Config>> cfg) -> view(cfg).debug
+is_debug(cfg<our<Config>>)<Bool> -> view(cfg).debug
 ```
 
 ### 2.3 Multi-Value Returns
 
 ```vyn
 // Function returning multiple values
-fn<Int, String> get_user_info(var<Int> user_id) -> {
+get_user_info(user_id<Int>)<Int, String> -> {
     return 42, "John Doe"
 }
 
 // Multi-value return with auto-serialization in main()
-fn<Int, String, Bool> main() -> {
+main()<Int, String, Bool> -> {
     return 42, "Hello, World!", true
     // Output: {"Int":42,"String":"Hello, World!","Bool":true}
 }
 
 // Calling multi-value function
-fn<String> process_user() -> {
-    var<Int> id;
-    var<String> name;
-    id, name = get_user_info(123);
+process_user()<String> -> {
+    id<Int>, name<String> = get_user_info(123)
     return "User: " + name
 }
 ```
@@ -87,22 +81,22 @@ fn<String> process_user() -> {
 ### 2.4 Using Relaxed Parameter Syntax (shorthand)
 
 ```vyn
-// Using shorthand syntax (equivalent to var<Int> x, var<Float> y)
-fn<Float> add(Int x, Float y) -> x + y
+// Basic unified syntax
+add(x<Int>, y<Float>)<Float> -> x + y
 
-// Mixed standard and shorthand syntax
-fn<String> format(var<String> prefix, const Int value) -> prefix + value.to_string()
+// Const parameters
+format(prefix<String>, const value<Int>)<String> -> prefix + value.to_string()
 
-// Complex types with shorthand syntax
-fn<Void> process(my<Task> task, const their<Data const> data) -> {
+// Complex ownership types
+process(task<my<Task>>, const data<their<Data const>>)<Void> -> {
     task.run(data)
 }
 
 // With generics
-fn<T> first_element<T>(my<[T]> array) -> array[0]
+first_element<T>(array<my<[T]>>)<T> -> array[0]
 
-// Multi-value return with shorthand parameters
-fn<Int, String> parse_input(String input) -> {
+// Multi-value return
+parse_input(input<String>)<Int, String> -> {
     return input.length(), input.trim()
 }
 ```
@@ -111,21 +105,17 @@ fn<Int, String> parse_input(String input) -> {
 
 ## 3. Rationale
 
-1. **Uniformity**: mirrors `<T>` usage in `var<T>`, `const<T>`, intrinsics, and generics.  
-2. **Clarity**: mandatory `->` prevents ambiguity when braces are omitted.  
-3. **Conciseness**: single-expression bodies can omit braces, reducing noise.  
-4. **Consistency**: keeps the return type in one place (`<Type>`) and the arrow purely as a separator.
+1. **Execution Order**: `name(params)<ReturnType>` follows natural left-to-right reading flow
+2. **Consistency**: Unified `name<Type>` pattern across all language constructs
+3. **Clarity**: Eliminates keyword noise (`fn`) in favor of direct declaration
+4. **Simplicity**: Single pattern to learn and remember
+5. **Natural Flow**: Parameters → Return Type → Implementation mirrors function execution
 
 ---
 
 ## 4. Notes
 
-- Multi-line or statement-rich bodies should always use braces:
-  ```vyn
-  fn<Void> perform(var<Int> x) -> {
-    process(x)
-    cleanup()
-    return
-  }
-  ```
-- The function’s return type is always taken from `<Type>`; no `-> Type` form is used.
+- Multi-line or statement-rich bodies should always use braces for clarity
+- Single-expression functions can omit braces for conciseness
+- The unified syntax represents the evolution toward maximum consistency in Vyn
+- Legacy `fn<Type>` syntax remains supported for backward compatibility

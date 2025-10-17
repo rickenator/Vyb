@@ -5,6 +5,6 @@
 // @expect-output: {"String":"hello","Int":42,"Bool":true}
 
 // Test basic auto-serialization without intrinsics
-fn<String, Int, Bool> main() -> {
+main()<String, Int, Bool> -> {
     return "hello", 42, true;
 }

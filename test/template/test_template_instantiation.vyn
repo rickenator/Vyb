@@ -5,8 +5,8 @@ template Container<T> {
     }
 }
 
-fn<Int> main() -> {
+main()<Int> -> {
     // Simple test without template instantiation for now
-    var<Int> result = 42;
+    result<Int> = 42;
     return result;
 }

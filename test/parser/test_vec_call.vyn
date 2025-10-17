@@ -1,4 +1,4 @@
-fn<Int> main() -> {
+main()<Int> -> {
     Vec::new();
     return 0;
 }

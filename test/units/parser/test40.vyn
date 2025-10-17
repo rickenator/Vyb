@@ -9,6 +9,6 @@
 // @expect-return: n/a
 
     std::string source = R"(
-fn<Void> main() -> -> Int{
+main()<Void> -> -> Int{
     unsafe {
-        var<Int> x = 1;
+        x<Int> = 1;

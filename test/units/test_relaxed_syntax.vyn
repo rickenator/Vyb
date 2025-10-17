@@ -9,18 +9,18 @@
 // @expect-return: n/a
 
 // Function with standard parameter syntax
-fn<Int> standard_params(var<Int> x, const<String> y) -> {
+standard_params(var<Int> x, const<String> y)<Int> -> {
     return x + y.to_int()
 }
 
 // Function with relaxed parameter syntax
-fn<Int> relaxed_params(Int x, const String y) -> {
+relaxed_params(Int x, const String y)<Int> -> {
     return x + y.to_int()
 }
 
 // Function with mixed parameter syntax
-fn<Float> mixed_params(var<Int> a, Float b, const<String> c, const Bool d) -> {
-    var<Float> result = a * b
+mixed_params(var<Int> a, Float b, const<String> c, const Bool d)<Float> -> {
+    result<Float> = a * b
     if d {
         result += c.to_float()
     }
@@ -28,16 +28,16 @@ fn<Float> mixed_params(var<Int> a, Float b, const<String> c, const Bool d) -> {
 }
 
 // Function with complex type parameters
-fn<Void> complex_types(my<[Int]> numbers, const their<String const> text) -> {
+complex_types(my<[Int]> numbers, const their<String const> text)<Void> -> {
     for i in 0..numbers.len() {
         println(text + numbers[i].to_string())
     }
 }
 
 // Test local variable declarations
-fn<Void> test_local_vars() -> {
+test_local_vars()<Void> -> {
     // Standard syntax
-    var<Int> a = 10
+    a<Int> = 10
     const<String> b = "standard"
     
     // Relaxed syntax
@@ -69,7 +69,7 @@ fn<Void> test_local_vars() -> {
 }
 
 // Test function calls with different parameter styles
-fn<Void> test_function_calls() -> {
+test_function_calls()<Void> -> {
     // Call with standard syntax
     const<Int> result1 = standard_params(var<Int>(5), const<String>("10"))
     println("Standard params result: " + result1.to_string())
@@ -84,7 +84,7 @@ fn<Void> test_function_calls() -> {
 }
 
 // Main test function
-fn<Int> main() -> {
+main()<Int> -> {
     println("Testing relaxed syntax features")
     
     test_local_vars()

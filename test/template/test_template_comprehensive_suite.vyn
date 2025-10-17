@@ -92,15 +92,15 @@ template VeryLongTemplateNameForTestingPurposes<VeryLongTypeParameterName: Compa
     }
 }
 
-fn<Int> main() -> {
+main()<Int> -> {
     // Basic functionality test - all templates should parse and store correctly
     // Constraint validation would be triggered during actual instantiation
     
     // Test different numeric types for constraint compatibility
-    var<Int> int_test = 42;        // Should work with Comparable, Numeric, Equatable
-    var<Float> float_test = 3.14;  // Should work with Comparable, Numeric, Equatable  
-    var<String> string_test = "hello"; // Should work with Comparable, Hashable, Equatable
-    var<Bool> bool_test = true;    // Should work with Equatable only
+    int_test<Int> = 42;        // Should work with Comparable, Numeric, Equatable
+    float_test<Float> = 3.14;  // Should work with Comparable, Numeric, Equatable  
+    string_test<String> = "hello"; // Should work with Comparable, Hashable, Equatable
+    bool_test<Bool> = true;    // Should work with Equatable only
     
     // Template constraint validation testing (conceptual - would be triggered by instantiation):
     

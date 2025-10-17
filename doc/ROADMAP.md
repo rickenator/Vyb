@@ -146,7 +146,7 @@ See `doc/bundles_and_sharing.md` for detailed documentation.
   - If `T` is a simple integer, uses it as the process exit code
   - If `T` is complex (tuples, structs), outputs structured JSON-like data
   - Prevents segmentation faults through smart type detection
-  - Handles multi-value returns like `fn<Int,String> main()` perfectly
+  - Handles multi-value returns like `main()<Int,String>` perfectly
 
 - **Built-in Auto-Derive**:
   - Primitives (`Int`, `Float`, `Bool`, `String`) will have built-in `to_json`
@@ -171,9 +171,10 @@ This feature will enable scripts and API-style binaries to return structured dat
 
 ### Function Syntax Investigation
 
--   **Function Syntax Relaxation**: Explore potential relaxation of the `fn<T>` syntax for specifying return types. Consider allowing alternative function declaration syntaxes that maintain clarity but reduce verbosity, such as:
+✅ **IMPLEMENTED in v0.4.0** - **Unified Syntax Revolution**: Successfully replaced keyword-heavy syntax with clean `name<Type>` patterns:
     ```vyn
-    fn example() -> Int { ... }  // Alternative to fn<Int> example() -> { ... }
+    example()<Int> -> { ... }  // Modern unified syntax (v0.4.0+)
+    fn<Int> example() -> { ... }  // Legacy syntax (still supported)
     ```
 -   **Casting Operations**: Formalize and implement casting operations, including:
     -   `cast<T>(expr)`: Explicit casting of expression to type T
