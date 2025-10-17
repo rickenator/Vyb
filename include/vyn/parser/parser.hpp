@@ -224,6 +224,7 @@ namespace vyn { // Changed Vyn to vyn
         
     private:
         bool IsOperator(const vyn::token::Token& token) const;
+        bool is_function_declaration_context() const;
 
     private:
         std::unique_ptr<vyn::ast::EnumVariant> parse_enum_variant(); 

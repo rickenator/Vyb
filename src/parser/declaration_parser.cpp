@@ -34,8 +34,12 @@ vyn::ast::DeclPtr DeclarationParser::parse() {
     token::Token next_token = this->peekNext();
 
     if (current_token.type == vyn::TokenType::KEYWORD_FN ||
-        current_token.type == vyn::TokenType::KEYWORD_ASYNC || // Accept async fn
-        (current_token.type == vyn::TokenType::IDENTIFIER && current_token.lexeme == "async" && next_token.type == vyn::TokenType::KEYWORD_FN)) {
+        current_token.type == vyn::TokenType::KEYWORD_ASYNC || // Accept async fn (legacy) and async name(params) (new)
+        (current_token.type == vyn::TokenType::IDENTIFIER && current_token.lexeme == "async" && next_token.type == vyn::TokenType::KEYWORD_FN) || // async fn (legacy)
+        (current_token.type == vyn::TokenType::IDENTIFIER && next_token.type == vyn::TokenType::LPAREN && this->is_function_declaration_context())) { // NEW UNIFIED SYNTAX: name(params) in function declaration context
+        #ifdef VERBOSE
+        std::cerr << "[DECL_PARSER] Parsing as function declaration" << std::endl;
+        #endif
         return this->parse_function();
     } else if (current_token.type == vyn::TokenType::KEYWORD_STRUCT) {
         auto struct_decl = this->parse_struct();
@@ -54,11 +58,15 @@ vyn::ast::DeclPtr DeclarationParser::parse() {
     } else if (current_token.type == vyn::TokenType::KEYWORD_LET ||
                current_token.type == vyn::TokenType::KEYWORD_MUT || // Changed from KEYWORD_VAR
                current_token.type == vyn::TokenType::KEYWORD_CONST ||
-               current_token.type == vyn::TokenType::KEYWORD_VAR || // Accept var
+               current_token.type == vyn::TokenType::KEYWORD_VAR || // Accept var (legacy)
                current_token.type == vyn::TokenType::KEYWORD_AUTO) { // Accept auto
         return this->parse_global_var_declaration();
+    } else if (current_token.type == vyn::TokenType::IDENTIFIER && next_token.type == vyn::TokenType::LT) {
+        // NEW UNIFIED SYNTAX: Check for name<Type> pattern
+        // This could be a variable declaration with unified syntax: name<Type>
+        return this->parse_global_var_declaration();
     } else {
-        // Check if this could be a relaxed syntax variable declaration (Type name)
+        // Check if this could be a legacy relaxed syntax variable declaration (Type name)
         // We need to try to parse it as a type and see if we succeed
         size_t saved_pos = this->pos_;  // Save position to restore if this isn't a declaration
         
@@ -255,9 +263,174 @@ std::unique_ptr<vyn::ast::FunctionDeclaration> DeclarationParser::parse_function
     }
     #endif
     
-    this->expect(vyn::TokenType::KEYWORD_FN);
+    // LEGACY SYNTAX SUPPORT: Check for old fn<ReturnType> name(params) pattern
+    if (this->match(vyn::TokenType::KEYWORD_FN)) {
+        // Parse the return type enclosed in angle brackets (legacy syntax)
+        ast::TypeNodePtr return_type_node = nullptr;
+        if (this->match(vyn::TokenType::LT)) { // <
+            // Parse comma-separated return types for multi-value returns
+            std::vector<ast::TypeNodePtr> return_types;
+            
+            do {
+                auto type = this->type_parser_.parse();
+                if (!type) {
+                    throw std::runtime_error("Expected return type after \'<\' in function declaration at " + 
+                                            location_to_string(this->current_location()));
+                }
+                return_types.push_back(std::move(type));
+            } while (this->match(vyn::TokenType::COMMA));
+            
+            this->expect(vyn::TokenType::GT); // >
+            
+            // If only one return type, use it directly; otherwise create a tuple
+            if (return_types.size() == 1) {
+                return_type_node = std::move(return_types[0]);
+            } else {
+                // Multiple return types: wrap in a TupleTypeNode
+                return_type_node = std::make_unique<ast::TupleTypeNode>(this->current_location(), std::move(return_types));
+            }
+        } else {
+            // Default to void if no return type specified
+            return_type_node = std::make_unique<ast::TypeName>(this->current_location(), 
+                                                             std::make_unique<ast::Identifier>(this->current_location(), "Void"));
+        }
+
+        // Handle normal function names, \'operator+\' syntax, and keyword \'operator\' followed by operator token
+        std::unique_ptr<ast::Identifier> name;
+        
+        if (this->peek().type == vyn::TokenType::IDENTIFIER) {
+            std::string name_lexeme = this->peek().lexeme;
+            SourceLocation name_loc = this->peek().location; 
+            this->consume();
+            
+            // Check for operator keyword and operator symbol pattern
+            if (name_lexeme == "operator" && this->IsOperator(this->peek())) {
+                auto op_token = this->consume();
+                name = std::make_unique<ast::Identifier>(name_loc, name_lexeme + op_token.lexeme);
+            } else {
+                name = std::make_unique<ast::Identifier>(name_loc, name_lexeme);
+            }
+        } else if (this->peek().type == vyn::TokenType::KEYWORD_OPERATOR) {
+            SourceLocation op_loc = this->peek().location; 
+            this->consume();
+            
+            if (!this->IsOperator(this->peek())) {
+                throw std::runtime_error("Expected operator symbol after \'operator\' keyword at " + 
+                                         location_to_string(this->current_location()));
+            }
+            auto op_token = this->consume();
+            name = std::make_unique<ast::Identifier>(op_loc, "operator" + op_token.lexeme);
+        } else {
+            throw std::runtime_error("Expected function name at " + location_to_string(this->current_location()));
+        }
+
+        this->expect(vyn::TokenType::LPAREN);
+        std::vector<vyn::ast::FunctionParameter> params_structs;
+        if (this->peek().type != vyn::TokenType::RPAREN) {
+            do {
+                params_structs.push_back(this->parse_function_parameter_struct());
+            } while (this->match(vyn::TokenType::COMMA));
+        }
+        this->expect(vyn::TokenType::RPAREN);
+        
+        // Parse the rest using legacy logic
+        ast::TypeNodePtr throws_type = nullptr;
+        this->expect(vyn::TokenType::ARROW);
+        
+        if (this->peek().type == vyn::TokenType::IDENTIFIER && this->peek().lexeme == "throws") {
+            this->consume();
+            if (this->peek().type == vyn::TokenType::IDENTIFIER) {
+                auto error_type_name_loc = this->current_location();
+                auto error_type_name_str = this->consume().lexeme;
+                auto error_type_identifier = std::make_unique<ast::Identifier>(error_type_name_loc, error_type_name_str);
+                throws_type = std::make_unique<ast::TypeName>(error_type_name_loc, std::move(error_type_identifier));
+            } else {
+                throw std::runtime_error("Expected error type after \'throws\' at " + location_to_string(this->current_location()));
+            }
+        }
+        
+        std::unique_ptr<ast::BlockStatement> body = nullptr;
+        if (this->peek().type == vyn::TokenType::IDENTIFIER) {
+            if (return_type_node && return_type_node->getCategory() == ast::TypeNode::Category::IDENTIFIER) {
+                if (ast::TypeName* return_type_name_node = dynamic_cast<ast::TypeName*>(return_type_node.get())) {
+                    if (return_type_name_node->identifier) {
+                        const auto& id_name = return_type_name_node->identifier->name;
+                        if (this->peek().lexeme == id_name) {
+                            SourceLocation stmt_loc = this->current_location();
+                            vyn::StatementParser stmt_parser(this->tokens_, this->pos_, 0, this->current_file_path_, this->type_parser_, this->expr_parser_, this);
+                            ast::StmtPtr single_stmt = stmt_parser.parse();
+                            this->pos_ = stmt_parser.get_current_pos();
+                            if (single_stmt) {
+                                std::vector<ast::StmtPtr> statements;
+                                statements.push_back(std::move(single_stmt));
+                                body = std::make_unique<ast::BlockStatement>(stmt_loc, std::move(statements));
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (this->peek().type == vyn::TokenType::LBRACE) {
+            vyn::StatementParser stmt_parser(this->tokens_, this->pos_, 0, this->current_file_path_, this->type_parser_, this->expr_parser_, this);
+            body = stmt_parser.parse_block();
+            this->pos_ = stmt_parser.get_current_pos();
+        } else if (this->peek().type == vyn::TokenType::INDENT) {
+            this->consume();
+            std::vector<ast::StmtPtr> statements;
+            while (!this->IsAtEnd() && this->peek().type != vyn::TokenType::DEDENT && this->peek().type != vyn::TokenType::END_OF_FILE) {
+                while (!this->IsAtEnd() && this->peek().type == vyn::TokenType::NEWLINE) this->consume();
+                if (this->IsAtEnd() || this->peek().type == vyn::TokenType::DEDENT) break;
+                vyn::StatementParser stmt_parser(this->tokens_, this->pos_, 0, this->current_file_path_, this->type_parser_, this->expr_parser_, this);
+                statements.push_back(stmt_parser.parse());
+                this->pos_ = stmt_parser.get_current_pos();
+            }
+            if (this->peek().type == vyn::TokenType::DEDENT) this->consume();
+            body = std::make_unique<ast::BlockStatement>(this->current_location(), std::move(statements));
+        }
+        
+        return std::make_unique<vyn::ast::FunctionDeclaration>(loc, std::move(name), std::move(params_structs), std::move(body), is_async, std::move(return_type_node));
+    }
     
-    // Parse the return type enclosed in angle brackets (new syntax)
+    // NEW UNIFIED SYNTAX: name(params)<ReturnType> pattern
+    // Parse the function name first
+    std::unique_ptr<ast::Identifier> name;
+    
+    if (this->peek().type == vyn::TokenType::IDENTIFIER) {
+        std::string name_lexeme = this->peek().lexeme;
+        SourceLocation name_loc = this->peek().location; 
+        this->consume();
+        
+        // Check for operator keyword and operator symbol pattern
+        if (name_lexeme == "operator" && this->IsOperator(this->peek())) {
+            auto op_token = this->consume();
+            name = std::make_unique<ast::Identifier>(name_loc, name_lexeme + op_token.lexeme);
+        } else {
+            name = std::make_unique<ast::Identifier>(name_loc, name_lexeme);
+        }
+    } else if (this->peek().type == vyn::TokenType::KEYWORD_OPERATOR) {
+        SourceLocation op_loc = this->peek().location; 
+        this->consume();
+        
+        if (!this->IsOperator(this->peek())) {
+            throw std::runtime_error("Expected operator symbol after \'operator\' keyword at " + 
+                                     location_to_string(this->current_location()));
+        }
+        auto op_token = this->consume();
+        name = std::make_unique<ast::Identifier>(op_loc, "operator" + op_token.lexeme);
+    } else {
+        throw std::runtime_error("Expected function name at " + location_to_string(this->current_location()));
+    }
+
+    // Parse parameters: name(params)
+    this->expect(vyn::TokenType::LPAREN);
+    std::vector<vyn::ast::FunctionParameter> params_structs;
+    if (this->peek().type != vyn::TokenType::RPAREN) {
+        do {
+            params_structs.push_back(this->parse_function_parameter_struct());
+        } while (this->match(vyn::TokenType::COMMA));
+    }
+    this->expect(vyn::TokenType::RPAREN);
+    
+    // Parse return type: name(params)<ReturnType>
     ast::TypeNodePtr return_type_node = nullptr;
     if (this->match(vyn::TokenType::LT)) { // <
         // Parse comma-separated return types for multi-value returns
@@ -287,51 +460,14 @@ std::unique_ptr<vyn::ast::FunctionDeclaration> DeclarationParser::parse_function
                                                          std::make_unique<ast::Identifier>(this->current_location(), "Void"));
     }
 
-    // Handle normal function names, \'operator+\' syntax, and keyword \'operator\' followed by operator token
-    std::unique_ptr<ast::Identifier> name;
     
-    if (this->peek().type == vyn::TokenType::IDENTIFIER) {
-        std::string name_lexeme = this->peek().lexeme;
-        SourceLocation name_loc = this->peek().location; 
-        this->consume();
-        
-        // Check for operator keyword and operator symbol pattern
-        if (name_lexeme == "operator" && this->IsOperator(this->peek())) {
-            auto op_token = this->consume();
-            name = std::make_unique<ast::Identifier>(name_loc, name_lexeme + op_token.lexeme);
-        } else {
-            name = std::make_unique<ast::Identifier>(name_loc, name_lexeme);
-        }
-    } else if (this->peek().type == vyn::TokenType::KEYWORD_OPERATOR) {
-        SourceLocation op_loc = this->peek().location; 
-        this->consume();
-        
-        if (!this->IsOperator(this->peek())) {
-            throw std::runtime_error("Expected operator symbol after \'operator\' keyword at " + 
-                                     location_to_string(this->current_location()));
-        }
-        auto op_token = this->consume();
-        name = std::make_unique<ast::Identifier>(op_loc, "operator" + op_token.lexeme);
-    } else {
-        throw std::runtime_error("Expected function name at " + location_to_string(this->current_location()));
-    }
-
-    this->expect(vyn::TokenType::LPAREN);
-    std::vector<vyn::ast::FunctionParameter> params_structs;
-    if (this->peek().type != vyn::TokenType::RPAREN) {
-        do {
-            params_structs.push_back(this->parse_function_parameter_struct());
-        } while (this->match(vyn::TokenType::COMMA));
-    }
-    this->expect(vyn::TokenType::RPAREN);
-
     // Variables to hold type information
     ast::TypeNodePtr throws_type = nullptr;
 
     // Expect arrow as mandatory separator between signature and body
     this->expect(vyn::TokenType::ARROW); // Arrow is now mandatory
 
-    // Support for \\\'throws\\\' keyword after the return type
+    // Support for \'throws\' keyword after the return type
     if (this->peek().type == vyn::TokenType::IDENTIFIER && this->peek().lexeme == "throws") { // KEYWORD_THROWS if it exists, else IDENTIFIER
         this->consume();
         
@@ -342,7 +478,7 @@ std::unique_ptr<vyn::ast::FunctionDeclaration> DeclarationParser::parse_function
             auto error_type_identifier = std::make_unique<ast::Identifier>(error_type_name_loc, error_type_name_str);
             throws_type = std::make_unique<ast::TypeName>(error_type_name_loc, std::move(error_type_identifier));
         } else {
-            throw std::runtime_error("Expected error type after \\\'throws\\\' at " + location_to_string(this->current_location()));
+            throw std::runtime_error("Expected error type after \'throws\' at " + location_to_string(this->current_location()));
         }
     }
 
@@ -559,7 +695,6 @@ std::unique_ptr<vyn::ast::VariableDeclaration> DeclarationParser::parse_global_v
     
     // Check what kind of declaration this is
     bool is_const_decl = false;
-    bool using_standard_syntax = true;
     bool auto_type_inference = false;
     
     // Check for 'auto' keyword first (type inference)
@@ -567,56 +702,101 @@ std::unique_ptr<vyn::ast::VariableDeclaration> DeclarationParser::parse_global_v
         auto_type_inference = true;
         is_const_decl = false;
     }
-    // Check for standard or relaxed syntax
+    // Legacy support: Check for var/const keywords
     else if (this->match(vyn::TokenType::KEYWORD_VAR)) {
         is_const_decl = false;
-        using_standard_syntax = true;
+        // Legacy var<Type> syntax - parse type in angle brackets
+        this->expect(vyn::TokenType::LT);
+        auto type_node = this->type_parser_.parse();
+        if (!type_node) {
+            throw std::runtime_error("Expected type annotation inside '<>' in declaration at " + 
+                                     location_to_string(this->current_location()));
+        }
+        this->expect(vyn::TokenType::GT);
+        
+        // Parse variable name
+        if (this->peek().type != vyn::TokenType::IDENTIFIER) {
+            throw std::runtime_error("Expected identifier after type annotation in declaration at " + 
+                                    location_to_string(this->current_location()));
+        }
+        auto identifier = std::make_unique<ast::Identifier>(this->current_location(), this->consume().lexeme);
+
+        ast::ExprPtr initializer = nullptr;
+        if (this->match(vyn::TokenType::EQ)) {
+            initializer = this->expr_parser_.parse_expression();
+            if (!initializer) {
+                throw std::runtime_error("Expected initializer expression after '=' in declaration at " + 
+                                        location_to_string(this->current_location()));
+            }
+        }
+
+        this->expect(vyn::TokenType::SEMICOLON);
+        return std::make_unique<vyn::ast::VariableDeclaration>(loc, std::move(identifier), is_const_decl, 
+                                                           std::move(type_node), std::move(initializer));
     } else if (this->match(vyn::TokenType::KEYWORD_CONST)) {
         is_const_decl = true;
+        // Legacy const<Type> syntax - parse type in angle brackets  
+        this->expect(vyn::TokenType::LT);
+        auto type_node = this->type_parser_.parse();
+        if (!type_node) {
+            throw std::runtime_error("Expected type annotation inside '<>' in declaration at " + 
+                                     location_to_string(this->current_location()));
+        }
+        this->expect(vyn::TokenType::GT);
         
-        // Check if using standard syntax (const<Type>) or relaxed (const Type)
-        if (this->peek().type == vyn::TokenType::LT) {
-            using_standard_syntax = true;
-        } else {
-            using_standard_syntax = false;
+        // Parse variable name
+        if (this->peek().type != vyn::TokenType::IDENTIFIER) {
+            throw std::runtime_error("Expected identifier after type annotation in declaration at " + 
+                                    location_to_string(this->current_location()));
         }
-    } else {
-        // This might be the relaxed syntax with just a type name
-        // Try to parse it as a type
-        using_standard_syntax = false;
-        is_const_decl = false;
+        auto identifier = std::make_unique<ast::Identifier>(this->current_location(), this->consume().lexeme);
+
+        ast::ExprPtr initializer = nullptr;
+        if (this->match(vyn::TokenType::EQ)) {
+            initializer = this->expr_parser_.parse_expression();
+            if (!initializer) {
+                throw std::runtime_error("Expected initializer expression after '=' in declaration at " + 
+                                        location_to_string(this->current_location()));
+            }
+        } else if (is_const_decl && !initializer) {
+            // Constants usually require an initializer (could enforce later)
+        }
+
+        this->expect(vyn::TokenType::SEMICOLON);
+        return std::make_unique<vyn::ast::VariableDeclaration>(loc, std::move(identifier), is_const_decl, 
+                                                           std::move(type_node), std::move(initializer));
     }
     
-    // Parse the type
-    ast::TypeNodePtr type_node = nullptr;
-    
-    if (!auto_type_inference) {
-        if (using_standard_syntax) {
-            // Standard syntax: var<Type> or const<Type>
-            this->expect(vyn::TokenType::LT);
-            type_node = this->type_parser_.parse();
-            if (!type_node) {
-                throw std::runtime_error("Expected type annotation inside '<>' in declaration at " + 
-                                         location_to_string(this->current_location()));
-            }
-            this->expect(vyn::TokenType::GT);
-        } else {
-            // Relaxed syntax: Type or const Type
-            type_node = this->type_parser_.parse();
-            if (!type_node) {
-                throw std::runtime_error("Expected type in declaration at " + 
-                                         location_to_string(this->current_location()));
-            }
-        }
-    }
-    
-    // Next token must be the variable name
+    // NEW UNIFIED SYNTAX: name<Type> pattern
+    // Parse the variable name first
     if (this->peek().type != vyn::TokenType::IDENTIFIER) {
-        throw std::runtime_error("Expected identifier after type annotation in declaration at " + 
+        throw std::runtime_error("Expected identifier at start of variable declaration at " + 
                                 location_to_string(this->current_location()));
     }
     auto identifier = std::make_unique<ast::Identifier>(this->current_location(), this->consume().lexeme);
-
+    
+    // Parse the type in angle brackets: name<Type>
+    ast::TypeNodePtr type_node = nullptr;
+    
+    if (!auto_type_inference) {
+        this->expect(vyn::TokenType::LT);
+        type_node = this->type_parser_.parse();
+        if (!type_node) {
+            throw std::runtime_error("Expected type annotation inside '<>' in declaration at " + 
+                                     location_to_string(this->current_location()));
+        }
+        
+        // Check for const modifier: name<Type const>
+        if ((this->peek().type == vyn::TokenType::IDENTIFIER && this->peek().lexeme == "const") ||
+            this->peek().type == vyn::TokenType::KEYWORD_CONST) {
+            this->consume(); // consume "const"
+            is_const_decl = true;
+        }
+        
+        this->expect(vyn::TokenType::GT);
+    }
+    
+    // Handle initializer
     ast::ExprPtr initializer = nullptr;
     if (this->match(vyn::TokenType::EQ)) {
         initializer = this->expr_parser_.parse_expression();
@@ -871,6 +1051,76 @@ std::unique_ptr<ast::EnumVariant> DeclarationParser::parse_enum_variant() {
         this->expect(vyn::TokenType::RPAREN);
     }
     return std::make_unique<ast::EnumVariant>(loc, std::move(name), std::move(associated_types));
+}
+
+// Helper method to determine if we're in a function declaration context
+// This helps distinguish between function declarations and function calls
+bool DeclarationParser::is_function_declaration_context() const {
+    // Look ahead to see if this matches function declaration pattern: name(params)<ReturnType> ->
+    size_t saved_pos = this->pos_;
+    
+    #ifdef VERBOSE
+    std::cerr << "[DECL_PARSER] Checking function declaration context at pos " << this->pos_ << std::endl;
+    #endif
+    
+    // Skip function name
+    if (this->pos_ >= this->tokens_.size() || this->tokens_[this->pos_].type != vyn::TokenType::IDENTIFIER) {
+        return false;
+    }
+    size_t look_pos = this->pos_ + 1;
+    
+    // Skip opening paren
+    if (look_pos >= this->tokens_.size() || this->tokens_[look_pos].type != vyn::TokenType::LPAREN) {
+        return false;
+    }
+    look_pos++;
+    
+    // Skip parameters until we find closing paren
+    int paren_depth = 1;
+    while (look_pos < this->tokens_.size() && paren_depth > 0) {
+        if (this->tokens_[look_pos].type == vyn::TokenType::LPAREN) {
+            paren_depth++;
+        } else if (this->tokens_[look_pos].type == vyn::TokenType::RPAREN) {
+            paren_depth--;
+        }
+        look_pos++;
+    }
+    
+    if (paren_depth > 0) {
+        return false; // Unmatched parentheses
+    }
+    
+    // Now we should be after the closing paren. Check for <ReturnType> -> pattern
+    if (look_pos < this->tokens_.size() && this->tokens_[look_pos].type == vyn::TokenType::LT) {
+        // Skip return type in angle brackets
+        look_pos++;
+        int angle_depth = 1;
+        while (look_pos < this->tokens_.size() && angle_depth > 0) {
+            if (this->tokens_[look_pos].type == vyn::TokenType::LT) {
+                angle_depth++;
+            } else if (this->tokens_[look_pos].type == vyn::TokenType::GT) {
+                angle_depth--;
+            }
+            look_pos++;
+        }
+        
+        if (angle_depth > 0) {
+            return false; // Unmatched angle brackets
+        }
+    }
+    
+    // Check for arrow after return type (or after params if no return type)
+    if (look_pos < this->tokens_.size() && this->tokens_[look_pos].type == vyn::TokenType::ARROW) {
+        #ifdef VERBOSE
+        std::cerr << "[DECL_PARSER] Found function declaration pattern!" << std::endl;
+        #endif
+        return true; // This looks like a function declaration
+    }
+    
+    #ifdef VERBOSE
+    std::cerr << "[DECL_PARSER] Not a function declaration pattern" << std::endl;
+    #endif
+    return false; // Doesn't match function declaration pattern
 }
 
 } // namespace vyn
