@@ -1,0 +1,12 @@
+// Simple test without cleanup to verify Vec::new works
+test_simple_vec()<Int> -> {
+    v1<Vec<Int32>> = Vec::new(5);
+    println("Vec created successfully");
+    return 42;
+}
+
+main()<Int> -> {
+    result<Int> = test_simple_vec();
+    println("Test completed successfully");
+    return result;
+}

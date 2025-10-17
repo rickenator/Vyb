@@ -36,8 +36,15 @@ void LLVMCodegen::visit(vyn::ast::BlockStatement* node) {
         }
     }
     
-    // Exit scope and cleanup variables
-    exitScope();
+    // Exit scope and cleanup variables only if current block isn't terminated
+    if (builder->GetInsertBlock() && !builder->GetInsertBlock()->getTerminator()) {
+        exitScope();
+    } else {
+        // Block is terminated, just pop the scope without generating cleanup
+        if (!scopeStack.empty()) {
+            scopeStack.pop_back();
+        }
+    }
     
     // Restore namedValues to outer scope
     namedValues = std::move(oldNamedValues);
