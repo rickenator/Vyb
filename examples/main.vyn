@@ -1,8 +1,8 @@
 import vyn::fs
 smuggle http::client
 
-class Vector
-  x<Float>
+class Vector {
+  x<Float>,
   y<Float>
 
   // 'other: Vector' is passed by value (copied).
@@ -12,24 +12,27 @@ class Vector
   // Static method, returns a new Vector instance by value.
   new(x<Float const>, y<Float const>)<Vector> ->
     Vector { x, y }
+}
 
 
-async fetch_data(url<String const>)<String> throws NetworkError ->
+async fetch_data(url<String const>)<String> throws NetworkError -> {
   // http::client::connect returns my<Connection>.
   conn<my<http::client::Connection> const> = http::client::connect(url)
 
   // conn.get() takes 'view self' (their<Connection const>) and returns my<Response>.
   resp<my<http::client::Response> const> = await (view conn).get("/")
 
-  if resp.status != 200
+  if resp.status != 200 {
     throw NetworkError("Failed to fetch: " + resp.status.to_string())
+  }
 
   // text() on my<Response> takes 'view self' (their<Response const>).
   return (view resp).text()
+}
 
 
 main()<Void> -> {
-  try
+  try {
     squares<my<[Int]>> = [x * x for x in 0..10] // Mutable binding.
 
     v1<Vector const> = Vector::new(1.0, 2.0)    // Immutable binding.
@@ -51,9 +54,11 @@ main()<Void> -> {
     data_str<String const> = await fetch_data("https://api.example.com") // Immutable binding.
     println("Fetched: " + data_str)
 
-  catch (e: NetworkError)
+  } catch (e: NetworkError) {
     println("Network error: " + e.message)
-  catch (e: IOError)
+  } catch (e: IOError) {
     println("IO error: " + e.message)
-  finally
+  } finally {
     println("Cleanup complete")
+  }
+}

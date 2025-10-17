@@ -1,5 +1,5 @@
-// Quicksort implementation in Vyn v0.3.7 showcasing templates, 
-// modern syntax, and advanced language features
+// Quicksort implementation in Vyn v0.4.0 showcasing templates, 
+// unified syntax, and advanced language features
 
 // ----- Module Metadata -----
 bundle(algorithms, algorithms.sort)
@@ -13,13 +13,13 @@ import vyn::core::debug
 
 // Define a Comparable trait that types must implement to be sorted
 trait Comparable {
-    fn<Bool> lt(self, other: Self) -> {
+    lt(self, other<Self>)<Bool> -> {
         // Implementation defined by implementor
     }
-    fn<Bool> gt(self, other: Self) -> {
+    gt(self, other<Self>)<Bool> -> {
         // Implementation defined by implementor
     }
-    fn<Bool> eq(self, other: Self) -> {
+    eq(self, other<Self>)<Bool> -> {
         // Implementation defined by implementor
     }
 }
@@ -27,23 +27,23 @@ trait Comparable {
 // ----- Core Quicksort Algorithm -----
 
 // Template function using generic type T that implements Comparable
-template<T: Comparable> fn<Vec<T>> quicksort(var<Vec<T>> array) -> {
+template<T: Comparable> quicksort(array<Vec<T>>)<Vec<T>> -> {
     if (array.len() <= 1) {
         return array  // Base case: already sorted
     }
 
     // Choose pivot (middle element for better performance on partially sorted arrays)
-    var<Int> pivot_idx = array.len() / 2
-    var<T> pivot = array.get(pivot_idx)
+    pivot_idx<Int> = array.len() / 2
+    pivot<T> = array.get(pivot_idx)
     
     // Partition using Vec<T> operations
-    var<Vec<T>> left = Vec::new()
-    var<Vec<T>> right = Vec::new()
-    var<Vec<T>> equal = Vec::new()
+    left<Vec<T>> = Vec::new()
+    right<Vec<T>> = Vec::new()
+    equal<Vec<T>> = Vec::new()
     
-    var<Int> i = 0
+    i<Int> = 0
     while (i < array.len()) {
-        var<T> elem = array.get(i)
+        elem<T> = array.get(i)
         if (elem.lt(pivot)) {
             left.push(elem)
         } else if (elem.gt(pivot)) {
@@ -55,11 +55,11 @@ template<T: Comparable> fn<Vec<T>> quicksort(var<Vec<T>> array) -> {
     }
     
     // Recursively sort partitions
-    var<Vec<T>> left_sorted = quicksort(left)
-    var<Vec<T>> right_sorted = quicksort(right)
+    left_sorted<Vec<T>> = quicksort(left)
+    right_sorted<Vec<T>> = quicksort(right)
     
     // Combine results
-    var<Vec<T>> result = Vec::new()
+    result<Vec<T>> = Vec::new()
     // Add left_sorted elements
     i = 0
     while (i < left_sorted.len()) {
@@ -213,9 +213,9 @@ fn<my<[T]>> quicksort_parallel(var<my<[T]>> array, var<Int> threshold = 1000) ->
 
 // ----- Example Usage -----
 
-fn<Int> main() -> {
+main()<Int> -> {
     // Create a vector of integers using Vec<T>
-    var<Vec<Int>> nums = Vec::new()
+    nums<Vec<Int>> = Vec::new()
     nums.push(9)
     nums.push(3)
     nums.push(7)
@@ -229,7 +229,7 @@ fn<Int> main() -> {
     println("Original vector: " + nums.to_string())
     
     // Use template function for sorting
-    var<Vec<Int>> sorted = quicksort(nums)
+    sorted<Vec<Int>> = quicksort(nums)
     println("Sorted vector: " + sorted.to_string())
     
     // Create a new array for in-place sort

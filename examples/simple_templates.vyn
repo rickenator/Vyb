@@ -1,5 +1,5 @@
-// Simple Template Examples for Vyn v0.3.7
-// Demonstrates basic template functionality with modern syntax
+// Simple Template Examples for Vyn v0.4.0
+// Demonstrates basic template functionality with unified syntax
 
 // ----- Generic Function Templates -----
 
@@ -19,7 +19,7 @@ template<T: Comparable> max(a<T>, b<T>)<T> -> {
 
 // ----- Generic Struct Templates -----
 
-// Simple generic container
+// Generic struct using unified syntax
 template<T> struct Container {
     value<T>
 }
@@ -49,7 +49,7 @@ template<T, U> swap_pair(p<Pair<T, U>>)<Pair<U, T>> -> {
 
 // ----- Generic Collection Template -----
 
-// Simple generic stack using Vec<T>
+// Generic stack using unified syntax
 template<T> struct Stack {
     items<Vec<T>>
 }

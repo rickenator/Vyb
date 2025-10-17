@@ -1,9 +1,16 @@
-// Memory semantics example with borrow/view shorthand
+// Memory semantics example with unified syntax v0.4.0
 // Pointer and borrowing examples
-unsafe {
-  p<loc<Int>> = loc(x)
-  at(p) = 42
-  b<their<Int>> = borrow(x)       // inferred mutable borrow
-  v<their<Int const>> = view(x)    // inferred immutable borrow
-  at(loc(b)) = 100                     // modify via borrow
+
+main()<Int> -> {
+    x<Int> = 42
+    
+    unsafe {
+        p<loc<Int>> = loc(x)
+        at(p) = 42
+        b<their<Int>> = borrow(x)       // inferred mutable borrow
+        v<their<Int const>> = view(x)    // inferred immutable borrow
+        at(loc(b)) = 100                // modify via borrow
+    }
+    
+    return x  // Returns 100
 }
