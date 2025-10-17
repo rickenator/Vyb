@@ -1,0 +1,35 @@
+// Test Vec array integration - push_array and to_array
+main()<Int> -> {
+    // Test push_array functionality
+    vec<Vec<Int>> = Vec::new()
+    
+    // Create an array to push
+    arr<[Int; 3]> = [10, 20, 30]
+    
+    // Push entire array to Vec
+    vec.push_array(arr)
+    println("After push_array:")
+    println("Vec length:", vec.len())
+    println("Vec contents:", vec)
+    
+    // Add more individual elements
+    vec.push(40).push(50)
+    println("After adding more elements:")
+    println("Vec length:", vec.len())
+    
+    // Test to_array functionality
+    output_array<[Int; 5]> = vec.to_array(5)
+    println("Converted to array:", output_array)
+    
+    // Test with different array sizes
+    small_array<[Int; 3]> = vec.to_array(3)  // Should take first 3 elements
+    println("Small array (first 3):", small_array)
+    
+    // Test type compatibility between Vec<T> and [T; N]
+    string_vec<Vec<String>> = Vec::new()
+    string_arr<[String; 2]> = ["hello", "world"]
+    string_vec.push_array(string_arr)
+    println("String vec length:", string_vec.len())
+    
+    return 0;
+}

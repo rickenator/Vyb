@@ -108,7 +108,8 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
     llvm::Value* initialVal = nullptr;
     llvm::Type* varType = nullptr;
 
-        // Variable declaration processing    if (node->typeNode) {
+    // Variable declaration processing
+    if (node->typeNode) {
         varType = codegenType(node->typeNode.get());
         if (!varType) {
             logError(node->loc, "Could not determine LLVM type for variable '" + node->id->name + "'.");

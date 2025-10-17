@@ -45,6 +45,22 @@ void LLVMCodegen::handleVecMethod(vyn::ast::CallExpression* node, const std::str
         handleVecLen(node, vecPtr, vecStructType);
     } else if (methodName == "get") {
         handleVecGet(node, vecPtr, vecStructType);
+    } else if (methodName == "push_array") {
+        handleVecPushArray(node, vecPtr, vecStructType);
+    } else if (methodName == "to_array") {
+        handleVecToArray(node, vecPtr, vecStructType);
+    } else if (methodName == "clear") {
+        handleVecClear(node, vecPtr, vecStructType);
+    } else if (methodName == "is_empty") {
+        handleVecIsEmpty(node, vecPtr, vecStructType);
+    } else if (methodName == "capacity") {
+        handleVecCapacity(node, vecPtr, vecStructType);
+    } else if (methodName == "concat") {
+        handleVecConcat(node, vecPtr, vecStructType);
+    } else if (methodName == "contains") {
+        handleVecContains(node, vecPtr, vecStructType);
+    } else if (methodName == "remove_at") {
+        handleVecRemoveAt(node, vecPtr, vecStructType);
     } else {
         logError(node->loc, "Unknown Vec method: " + methodName);
         m_currentLLVMValue = nullptr;
@@ -86,8 +102,8 @@ void LLVMCodegen::handleVecPush(vyn::ast::CallExpression* node, llvm::Value* vec
     // For now, we'll just print that we pushed a value (placeholder)
     std::cout << "DEBUG: Vec::push() called - size incremented" << std::endl;
     
-    // Return void (push doesn't return a value)
-    m_currentLLVMValue = nullptr;
+    // Return the Vec reference for method chaining
+    m_currentLLVMValue = vecPtr;
 }
 
 void LLVMCodegen::handleVecPop(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
@@ -163,6 +179,183 @@ void LLVMCodegen::handleVecGet(vyn::ast::CallExpression* node, llvm::Value* vecP
     
     // For now, return a placeholder value
     m_currentLLVMValue = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 42);
+}
+
+void LLVMCodegen::handleVecPushArray(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
+    if (node->arguments.size() != 1) {
+        logError(node->loc, "Vec::push_array expects exactly 1 argument (array)");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Evaluate the array argument
+    node->arguments[0]->accept(*this);
+    llvm::Value* arrayValue = m_currentLLVMValue;
+    if (!arrayValue) {
+        logError(node->loc, "Failed to evaluate array argument for Vec::push_array");
+        return;
+    }
+    
+    std::cout << "DEBUG: Vec::push_array() called - pushing entire array" << std::endl;
+    
+    // For now, placeholder implementation - would need proper array iteration
+    // Return the Vec reference for method chaining
+    m_currentLLVMValue = vecPtr;
+}
+
+void LLVMCodegen::handleVecToArray(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
+    if (node->arguments.size() != 1) {
+        logError(node->loc, "Vec::to_array expects exactly 1 argument (array size)");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Evaluate the size argument
+    node->arguments[0]->accept(*this);
+    llvm::Value* sizeValue = m_currentLLVMValue;
+    if (!sizeValue) {
+        logError(node->loc, "Failed to evaluate size argument for Vec::to_array");
+        return;
+    }
+    
+    std::cout << "DEBUG: Vec::to_array() called - converting to fixed array" << std::endl;
+    
+    // For now, return a placeholder array
+    // In full implementation, would create array from Vec elements
+    m_currentLLVMValue = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0);
+}
+
+void LLVMCodegen::handleVecClear(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
+    if (node->arguments.size() != 0) {
+        logError(node->loc, "Vec::clear expects no arguments");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Get pointer to size field and set to 0
+    llvm::Value* sizeFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 1, "vec.size_ptr");
+    builder->CreateStore(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0), sizeFieldPtr);
+    
+    std::cout << "DEBUG: Vec::clear() called - size reset to 0" << std::endl;
+    
+    // Return void
+    m_currentLLVMValue = nullptr;
+}
+
+void LLVMCodegen::handleVecIsEmpty(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
+    if (node->arguments.size() != 0) {
+        logError(node->loc, "Vec::is_empty expects no arguments");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Get pointer to size field
+    llvm::Value* sizeFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 1, "vec.size_ptr");
+    llvm::Value* currentSize = builder->CreateLoad(llvm::Type::getInt64Ty(*context), sizeFieldPtr, "vec.current_size");
+    
+    // Check if size == 0
+    llvm::Value* isEmpty = builder->CreateICmpEQ(currentSize, 
+                                                llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0),
+                                                "vec.is_empty");
+    
+    std::cout << "DEBUG: Vec::is_empty() called" << std::endl;
+    
+    // Return boolean result
+    m_currentLLVMValue = isEmpty;
+}
+
+void LLVMCodegen::handleVecCapacity(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
+    if (node->arguments.size() != 0) {
+        logError(node->loc, "Vec::capacity expects no arguments");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Get pointer to capacity field
+    llvm::Value* capacityFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 2, "vec.capacity_ptr");
+    
+    // Load and return current capacity
+    m_currentLLVMValue = builder->CreateLoad(llvm::Type::getInt64Ty(*context), capacityFieldPtr, "vec.capacity");
+    
+    std::cout << "DEBUG: Vec::capacity() called" << std::endl;
+}
+
+void LLVMCodegen::handleVecConcat(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
+    if (node->arguments.size() != 1) {
+        logError(node->loc, "Vec::concat expects exactly 1 argument (other Vec)");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Evaluate the other Vec argument
+    node->arguments[0]->accept(*this);
+    llvm::Value* otherVec = m_currentLLVMValue;
+    if (!otherVec) {
+        logError(node->loc, "Failed to evaluate Vec argument for Vec::concat");
+        return;
+    }
+    
+    std::cout << "DEBUG: Vec::concat() called - concatenating with another Vec" << std::endl;
+    
+    // For now, placeholder implementation
+    // Return the original Vec reference
+    m_currentLLVMValue = vecPtr;
+}
+
+void LLVMCodegen::handleVecContains(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
+    if (node->arguments.size() != 1) {
+        logError(node->loc, "Vec::contains expects exactly 1 argument (value to search)");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Evaluate the search value argument
+    node->arguments[0]->accept(*this);
+    llvm::Value* searchValue = m_currentLLVMValue;
+    if (!searchValue) {
+        logError(node->loc, "Failed to evaluate search value for Vec::contains");
+        return;
+    }
+    
+    std::cout << "DEBUG: Vec::contains() called - searching for value" << std::endl;
+    
+    // For now, return false as placeholder
+    m_currentLLVMValue = llvm::ConstantInt::get(llvm::Type::getInt1Ty(*context), 0);
+}
+
+void LLVMCodegen::handleVecRemoveAt(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
+    if (node->arguments.size() != 1) {
+        logError(node->loc, "Vec::remove_at expects exactly 1 argument (index)");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Evaluate the index argument
+    node->arguments[0]->accept(*this);
+    llvm::Value* index = m_currentLLVMValue;
+    if (!index) {
+        logError(node->loc, "Failed to evaluate index for Vec::remove_at");
+        return;
+    }
+    
+    std::cout << "DEBUG: Vec::remove_at() called - removing element at index" << std::endl;
+    
+    // For now, placeholder implementation - just decrement size
+    llvm::Value* sizeFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 1, "vec.size_ptr");
+    llvm::Value* currentSize = builder->CreateLoad(llvm::Type::getInt64Ty(*context), sizeFieldPtr, "vec.current_size");
+    
+    // Decrement size if not empty
+    llvm::Value* isEmpty = builder->CreateICmpEQ(currentSize, 
+                                                llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0),
+                                                "vec.is_empty");
+    llvm::Value* newSize = builder->CreateSub(currentSize,
+                                             llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1),
+                                             "vec.new_size");
+    llvm::Value* safeNewSize = builder->CreateSelect(isEmpty, currentSize, newSize, "vec.safe_new_size");
+    builder->CreateStore(safeNewSize, sizeFieldPtr);
+    
+    // Return removed value (placeholder)
+    m_currentLLVMValue = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0);
 }
 
 } // namespace vyn

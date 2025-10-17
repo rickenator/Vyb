@@ -581,6 +581,14 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 }
             }
         }
+        
+        // Handle Vec instance method calls: obj.method()
+        if (auto objIdent = dynamic_cast<ast::Identifier*>(memberExpr->object.get())) {
+            if (auto methodIdent = dynamic_cast<ast::Identifier*>(memberExpr->property.get())) {
+                handleVecMethodCall(node, objIdent->name, methodIdent->name);
+                return;
+            }
+        }
     }
     
     // Fallback: default CallExpression analysis (no additional checks)
@@ -2135,6 +2143,167 @@ bool SemanticAnalyzer::isBuiltinTypeCompatible(const std::string& typeName, cons
     }
     
     return false;
+}
+
+void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std::string& objectName, const std::string& methodName) {
+    // Validate that the object is a Vec type
+    // In a full implementation, we would look up the object's type in the symbol table
+    // For now, we'll assume it's a Vec and perform basic validation
+    
+    if (methodName == "push") {
+        // push(element) -> Vec<T> (for chaining)
+        if (node->arguments.size() != 1) {
+            addError("Vec::push expects exactly 1 argument", node);
+            return;
+        }
+        // Return type is the Vec itself for chaining
+        // In full implementation, get element type from Vec<T>
+        auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+        auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+        auto vecType = std::make_unique<ast::VecType>(node->loc, std::move(intType));
+        expressionTypes[node] = vecType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(vecType));
+        
+    } else if (methodName == "pop") {
+        // pop() -> T (element type)
+        if (node->arguments.size() != 0) {
+            addError("Vec::pop expects no arguments", node);
+            return;
+        }
+        // Return element type
+        auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+        auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+        expressionTypes[node] = intType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
+        
+    } else if (methodName == "len") {
+        // len() -> Int
+        if (node->arguments.size() != 0) {
+            addError("Vec::len expects no arguments", node);
+            return;
+        }
+        auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+        auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+        expressionTypes[node] = intType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
+        
+    } else if (methodName == "get") {
+        // get(index) -> T (element type)
+        if (node->arguments.size() != 1) {
+            addError("Vec::get expects exactly 1 argument (index)", node);
+            return;
+        }
+        // Validate index is integer type
+        if (node->arguments[0]) {
+            node->arguments[0]->accept(*this);
+            // TODO: Check that argument is Int type
+        }
+        // Return element type
+        auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+        auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+        expressionTypes[node] = intType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
+        
+    } else if (methodName == "push_array") {
+        // push_array(array) -> Vec<T> (for chaining)
+        if (node->arguments.size() != 1) {
+            addError("Vec::push_array expects exactly 1 argument (array)", node);
+            return;
+        }
+        // TODO: Validate argument is array type [T; N] compatible with Vec<T>
+        // Return Vec type for chaining
+        auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+        auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+        auto vecType = std::make_unique<ast::VecType>(node->loc, std::move(intType));
+        expressionTypes[node] = vecType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(vecType));
+        
+    } else if (methodName == "to_array") {
+        // to_array(size) -> [T; N]
+        if (node->arguments.size() != 1) {
+            addError("Vec::to_array expects exactly 1 argument (array size)", node);
+            return;
+        }
+        // TODO: Validate size argument is integer
+        // Return array type [T; N]
+        auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+        auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+        auto arrayType = std::make_unique<ast::ArrayType>(node->loc, std::move(intType), nullptr);
+        expressionTypes[node] = arrayType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(arrayType));
+        
+    } else if (methodName == "clear") {
+        // clear() -> void
+        if (node->arguments.size() != 0) {
+            addError("Vec::clear expects no arguments", node);
+            return;
+        }
+        // Return void (no type)
+        node->type = nullptr;
+        
+    } else if (methodName == "is_empty") {
+        // is_empty() -> Bool
+        if (node->arguments.size() != 0) {
+            addError("Vec::is_empty expects no arguments", node);
+            return;
+        }
+        auto boolId = std::make_unique<ast::Identifier>(node->loc, "Bool");
+        auto boolType = std::make_unique<ast::TypeName>(node->loc, std::move(boolId));
+        expressionTypes[node] = boolType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(boolType));
+        
+    } else if (methodName == "capacity") {
+        // capacity() -> Int
+        if (node->arguments.size() != 0) {
+            addError("Vec::capacity expects no arguments", node);
+            return;
+        }
+        auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+        auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+        expressionTypes[node] = intType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
+        
+    } else if (methodName == "concat") {
+        // concat(other_vec) -> Vec<T> (for chaining)
+        if (node->arguments.size() != 1) {
+            addError("Vec::concat expects exactly 1 argument (other Vec)", node);
+            return;
+        }
+        // TODO: Validate argument is compatible Vec<T> type
+        auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+        auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+        auto vecType = std::make_unique<ast::VecType>(node->loc, std::move(intType));
+        expressionTypes[node] = vecType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(vecType));
+        
+    } else if (methodName == "contains") {
+        // contains(value) -> Bool
+        if (node->arguments.size() != 1) {
+            addError("Vec::contains expects exactly 1 argument (value to search)", node);
+            return;
+        }
+        // TODO: Validate argument is compatible with element type T
+        auto boolId = std::make_unique<ast::Identifier>(node->loc, "Bool");
+        auto boolType = std::make_unique<ast::TypeName>(node->loc, std::move(boolId));
+        expressionTypes[node] = boolType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(boolType));
+        
+    } else if (methodName == "remove_at") {
+        // remove_at(index) -> T (removed element)
+        if (node->arguments.size() != 1) {
+            addError("Vec::remove_at expects exactly 1 argument (index)", node);
+            return;
+        }
+        // TODO: Validate index is Int type
+        // Return element type
+        auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+        auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+        expressionTypes[node] = intType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
+        
+    } else {
+        addError("Unknown Vec method: " + methodName, node);
+    }
 }
 
 } // Added missing closing brace for namespace vyn

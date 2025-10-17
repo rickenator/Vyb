@@ -155,6 +155,7 @@ public:
     bool isReservedWord(const std::string& name);
     bool isLValue(ast::Expression* expr);
     bool areTypesCompatible(ast::TypeNode* typeA, ast::TypeNode* typeB); // Added
+    void handleVecMethodCall(ast::CallExpression* node, const std::string& objectName, const std::string& methodName);
 
     // Statements
     void visit(ast::BlockStatement* node) override;
