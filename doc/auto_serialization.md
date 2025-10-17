@@ -1,10 +1,10 @@
 # Auto-Serialization & Runner Behavior in Vyn
 
-**Status:** Approved for roadmap, planned for future implementation
+**Status:** ✅ IMPLEMENTED in v0.3.7
 
 ## 1. Overview
 
-Vyn's `fn main() -> T` can be zero-boilerplate by auto-serializing any "pure data" return value to JSON. The compiler/runtime will:
+Vyn's `fn main() -> T` provides zero-boilerplate auto-serialization for any "pure data" return value to JSON. The compiler/runtime:
 
 1. Call `main()`
 2. Inspect its return type `T`:
@@ -90,12 +90,14 @@ Forces JSON serialization even for `ToString` types.
 - Extensible via attributes and manual `ToJson` implementations
 - Compile-time safety: non-serializable types are caught early
 
-## 7. Implementation Considerations
+## 7. Implementation Status (v0.3.7)
 
-- The `ToJson` trait will be part of the standard library
-- Auto-derivation will be performed during semantic analysis
-- The runner will need to integrate with the serialization system
-- Proper error messages will guide users toward correct usage
+- ✅ **Smart type detection**: Distinguishes simple integers from complex types
+- ✅ **Auto-serialization**: Complex return types output JSON-like structured data
+- ✅ **Exit code handling**: Simple integers return as process exit codes
+- ✅ **Tuple support**: Multi-value returns like `fn<Int,String> main()` work perfectly
+- 🚧 **Full JSON formatting**: Currently outputs basic structured format, full JSON coming soon
+- 📋 **Attribute system**: `#[jsonIgnore]` and `#[jsonName]` attributes planned for future
 
 ## 8. Future Extensions
 
