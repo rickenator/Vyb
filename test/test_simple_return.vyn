@@ -1,0 +1,4 @@
+fn<i32> main() -> {
+    let a = 10;
+    return 42;
+}
