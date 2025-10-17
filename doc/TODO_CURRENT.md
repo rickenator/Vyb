@@ -8,8 +8,8 @@
 ### Core Language (v0.3.7)
 - ✅ **LLVM Backend**: Full compilation pipeline with JIT execution
 - ✅ **Functions**: Complete function declaration, calling, return types
-- ✅ **Variables**: var<Type> and const<Type> with type inference
-- ✅ **Structs**: Modern syntax with field<Type> format
+- ✅ **Variables**: Unified name<Type> syntax with type inference
+- ✅ **Structs**: Unified field<Type> syntax
 - ✅ **Control Flow**: if/else, while loops working perfectly
 - ✅ **Pattern Matching**: Match statements with `=>` syntax and comprehensive patterns
 - ✅ **Loop Control**: Break and continue statements working in all loop constructs
@@ -108,8 +108,8 @@
 🚧 **IN PROGRESS: Dynamic Vectors**
 **Goal**: Enable basic data management
 ```vyn
-fn<[Int; 3]> main() -> {
-    var arr = [1, 2, 3]
+main()<[Int; 3]> -> {
+    arr<[Int; 3]> = [1, 2, 3]
     return arr
 }
 ```
@@ -118,7 +118,7 @@ fn<[Int; 3]> main() -> {
 **Goal**: Complete iteration support
 ```vyn
 main()<Int> -> {
-    sum = 0
+    sum<Int> = 0
     for i in 0..10 {
         sum = sum + i
     }
@@ -130,8 +130,8 @@ main()<Int> -> {
 **Goal**: Practical string manipulation
 ```vyn
 main()<String> -> {
-    name = "Rick"
-    greeting = "Hello, " + name + "!"
+    name<String> = "Rick"
+    greeting<String> = "Hello, " + name + "!"
     return greeting
 }
 ```

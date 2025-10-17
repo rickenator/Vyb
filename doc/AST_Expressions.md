@@ -457,8 +457,8 @@ Several memory operations in Vyn are represented using `ConstructionExpression` 
 Creates a pointer to a variable's memory location.
 
 ```
-var<Int> x = 42;
-var<loc<Int>> p = loc(x); // Creates a pointer to x
+x<Int> = 42
+p<loc<Int>> = loc(x) // Creates a pointer to x
 ```
 
 AST Representation:
@@ -471,8 +471,8 @@ AST Representation:
 Converts an integer address or a different pointer type to a specific pointer type.
 
 ```
-var<Int> addr = 0x12345678;
-var<loc<Int>> p = from<loc<Int>>(addr); // Converts integer to pointer
+addr<Int> = 0x12345678
+p<loc<Int>> = from<loc<Int>>(addr) // Converts integer to pointer
 ```
 
 AST Representation:
@@ -485,8 +485,8 @@ AST Representation:
 Accesses the value at a pointer's memory location.
 
 ```
-var<loc<Int>> p = loc(x);
-var<Int> y = at(p); // Reads from pointer
+p<loc<Int>> = loc(x)
+y<Int> = at(p) // Reads from pointer
 at(p) = 99;         // Writes to pointer
 ```
 

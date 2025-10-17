@@ -1,159 +1,110 @@
-# (Proposed) Vyn Declaration Syntax
+# Vyn Unified Declaration Syntax
 
-Vyn uses a gen---
+Vyn uses a unified **`name<Type>`** syntax pattern across all language constructs for consistency and clarity. This replaces the old keyword-heavy approach with a clean, uniform pattern.
 
-## Alternative Declaration Shorthand: `Type name`
+## Core Syntax Principles
 
----
+The unified syntax follows these patterns:
+- **Variables**: `name<Type> = value`
+- **Constants**: `const name<Type> = value`  
+- **Functions**: `name(params)<ReturnType> -> { ... }`
+- **Struct Fields**: `field<Type> = default`
+- **Parameters**: `param<Type> = default`
 
-## Struct Field Declaration Syntax
+## Variable Declarations
 
-Vyn supports two syntaxes for declaring struct fields, which can be used interchangeably or mixed within the same struct:
-
-### Colon Syntax (Original)
 ```vyn
-struct Person {
-    id: Int,
-    name: String,
-    age: Int
+// Mutable variables
+x<Int> = 42
+name<String> = "Alice"
+items<[String; 5]> = ["a", "b", "c", "d", "e"]
+
+// Immutable constants  
+const PI<Float> = 3.14159
+const MAX_SIZE<Int> = 1000
+
+// Ownership wrappers
+task<my<Task>> = my(Task { id: 1 })
+config<our<Config>> = our(Config { debug: true })
+borrowed<their<Foo>> = borrow(owner)
+```
+
+## Function Declarations
+
+```vyn
+// Basic function
+add(x<Int>, y<Int>)<Int> -> {
+    return x + y
+}
+
+// No parameters
+main()<Int> -> {
+    println("Hello, World!")
+    return 0
+}
+
+// Multiple return types (tuples)
+divide(a<Int>, b<Int>)<(Int, Int)> -> {
+    return (a / b, a % b)
+}
+
+// Template function
+max<T>(a<T>, b<T>)<T> -> {
+    if a > b { return a } else { return b }
 }
 ```
 
-### Angle Bracket Syntax (New)
+## Struct Definitions
+
 ```vyn
 struct Person {
-    id<Int>,
+    id<Int> = 0,
     name<String>,
-    age<Int>
+    age<Int> = 18,
+    active<Bool> = true
+}
+
+struct Point<T> {
+    x<T>,
+    y<T>
 }
 ```
 
-### Mixed Syntax
+## Function Parameters
+
 ```vyn
-struct MixedExample {
-    id<Int>,      // Angle bracket syntax
-    name: String, // Colon syntax
-    active<Bool>  // Angle bracket syntax
-}
+// Basic parameters
+process(data<String>, count<Int>)<Void> -> { ... }
+
+// Optional parameters with defaults
+create_user(name<String>, age<Int> = 25, active<Bool> = true)<User> -> { ... }
+
+// Const parameters
+hash_data(const data<String>)<Int> -> { ... }
 ```
-
-The angle bracket syntax aligns with Vyn's type-first philosophy used in function signatures (`fn<ReturnType>`) and variable declarations (`var<Type>`), providing visual consistency across the language.
-
----
 
 ## Rationale
 
-- **Consistency**: matches the `<T>` style used in intrinsics and generics.
-- **Clarity**: the variable's type is front-and-center, reducing the visual noise of colons.
-- **Uniformity**: single pattern for all bindings (`var<T>` and `const<T>`).
+**Consistency**: Single `name<Type>` pattern across all constructs eliminates mental overhead of remembering different syntaxes.
 
-This syntax replaces the older `var name: Type [= expr]` form for all new Vyn code.s bindings as mutable by default. For common local declarations, you can drop the angle-bracket form and write `Type name` instead of `var<Type> name` or `<Type> name`.
+**Clarity**: Type information is prominent and standardized, making code easier to read and understand.
 
-```ebnf
-Declaration ::= [ "const" ] Type Identifier [ "=" Expression ]
-              | "auto" Identifier "=" Expression
-```
+**Simplicity**: Eliminates keywords like `var`, `fn`, and complex colon syntaxes in favor of clean, uniform patterns.
 
-- **`Type name [= expr]`**  
-  Mutable binding of `name` with type `Type`.  
-- **`const Type name [= expr]`**  
-  Immutable binding of `name` with type `Type`.  
-- **`auto name = expr`**  
-  Mutable binding with inferred type from `expr`.
+**Execution Order**: Function syntax `name(params)<ReturnType>` follows natural left-to-right reading and execution flow.
 
-> Note: this form is for locals and parameters only. Top-level or generic declarations still use `<T>` syntax.
+## Migration from Legacy Syntax
 
----
-
-## Examples
+Old syntax is still supported for backward compatibility but new code should use unified patterns:
 
 ```vyn
-// Mutable by default
-Int   x = 0             // ⇔ var<Int> x = 0
-Float ratio             // ⇔ var<Float> ratio
+// Legacy (deprecated)
+var x: Int = 42
+fn add(x: Int, y: Int) -> Int { return x + y }
 
-// Immutable
-const String msg = "hi" // ⇔ const<String> msg = "hi"
-
-// Type inference
-auto count = 42         // inferred as Int
-
-// Ownership wrappers (explicit form)
-my<Task>   task    = my<Task>(Task { id: 1 })
-our<Config> cfg    = our<Config>(Config { debug: true })
-their<Foo> b       = borrow(owner)
+// Modern unified syntax  
+x<Int> = 42
+add(x<Int>, y<Int>)<Int> -> { return x + y }
 ```
 
----
-
-## Rationale for Original Syntax
-
-- **Consistency**: matches the `<T>` style used in intrinsics and generics.
-- **Clarity**: the variable's type is front-and-center, reducing the visual noise of colons.
-- **Uniformity**: single pattern for all bindings (`var<T>` and `const<T>`).
-
-## Rationale for Shorthand Syntax
-
-1. **Brevity**: minimal boilerplate for the common case.  
-2. **Clarity**: `const` flags immutability explicitly.  
-3. **Familiarity**: resembles C-style `int x;` but within Vyn's type-first mindset.  
-4. **Flexibility**: use `<T> name` when emphasizing generics, or `Type name` when brevity matters.
-
-The standard `var<Type>` and `const<Type>` syntax remains the canonical form for all advanced use cases.e declaration for variables and constants to align with intrinsic notation:
-
-```ebnf
-Declaration ::= ( "var" | "const" ) "<" Type ">" Identifier [ "=" Expression ]
-```
-
-- **`var<T> name [= expr]`**  
-  Mutable binding of type `T`.
-- **`const<T> name [= expr]`**  
-  Immutable binding of type `T`.
-
-Type annotations are **mandatory** in this form. Initialization (`= expr`) is optional.
-
----
-
-## Examples
-
-### Mutable variable
-
-```vyn
-var<Int> x          // `x` is a mutable `Int`, uninitialized (must be assigned before use)
-var<Int> y = 42     // `y` is a mutable `Int`, initialized to 42
-
-unsafe {
-  var<loc<Int>> p = loc(x)     // pointer to `x`
-  at(p) = 99
-}
-```
-
-### Immutable constant
-
-```vyn
-const<String> s = "hello"   // `s` is an immutable `String`
-const<Bool> flag           // `flag` is an immutable `Bool`, must be set in a `--init--` section
-```
-
-### Shared ownership
-
-```vyn
-var<our<Config>> cfg = our(Config { debug: true })
-```
-
-### Borrowing
-
-```vyn
-var<their<Foo>> b = borrow(owner)
-var<their<Foo const>> v = view(owner)
-```
-
----
-
-## Rationale
-
-- **Consistency**: matches the `<T>` style used in intrinsics and generics.
-- **Clarity**: the variable’s type is front-and-center, reducing the visual noise of colons.
-- **Uniformity**: single pattern for all bindings (`var<T>` and `const<T>`).
-
-This syntax replaces the older `var name: Type [= expr]` form for all new Vyn code.
+The unified syntax represents Vyn's evolution toward maximum clarity and consistency across all language constructs.
