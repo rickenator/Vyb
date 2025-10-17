@@ -514,11 +514,11 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
     std::cout << "DEBUG: CallExpression visitor called with callee: " << (node->callee ? node->callee->toString() : "null") << std::endl;
     
     // Check for Vec::new() constructor calls
-    std::cout << "DEBUG: Checking if callee is MemberExpression..." << std::endl;
+    // std::cout << "DEBUG: Checking if callee is MemberExpression..." << std::endl;
     if (auto memberExpr = dynamic_cast<vyn::ast::MemberExpression*>(node->callee.get())) {
-        std::cout << "DEBUG: Found MemberExpression callee" << std::endl;
-        std::cout << "DEBUG: MemberExpression object: " << (memberExpr->object ? memberExpr->object->toString() : "null") << std::endl;
-        std::cout << "DEBUG: MemberExpression property: " << (memberExpr->property ? memberExpr->property->toString() : "null") << std::endl;
+        // std::cout << "DEBUG: Found MemberExpression callee" << std::endl;
+        // std::cout << "DEBUG: MemberExpression object: " << (memberExpr->object ? memberExpr->object->toString() : "null") << std::endl;
+        // std::cout << "DEBUG: MemberExpression property: " << (memberExpr->property ? memberExpr->property->toString() : "null") << std::endl;
         if (auto vecIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->object.get())) {
             std::cout << "DEBUG: MemberExpression object is Identifier: " << vecIdent->name << std::endl;
             if (auto newIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->property.get())) {

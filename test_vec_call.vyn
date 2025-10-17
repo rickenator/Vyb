@@ -1,0 +1,4 @@
+fn<Int> main() -> {
+    Vec::new();
+    return 0;
+}

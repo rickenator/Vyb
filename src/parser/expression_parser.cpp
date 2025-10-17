@@ -117,12 +117,43 @@ namespace vyn {
         bool skip_type_parsing = false;
         if (peek().type == TokenType::IDENTIFIER) {
             std::string identifier_name = peek().lexeme;
+            std::cout << "DEBUG: Found identifier in parse_primary: " << identifier_name << " at pos_=" << pos_ << std::endl;
+            std::cout << "DEBUG: Token positions: ";
+            for (int i = 0; i <= 4 && (pos_ + i) < tokens_.size(); i++) {
+                std::cout << "pos_+" << i << "=" << tokens_[pos_ + i].lexeme << "(" << static_cast<int>(tokens_[pos_ + i].type) << ") ";
+            }
+            std::cout << std::endl;
             
             // Check if this looks like a function call pattern: identifier followed by (
             // This includes both parameterless and parameterized function calls
             if (pos_ + 1 < tokens_.size() && tokens_[pos_ + 1].type == TokenType::LPAREN) {
                 // This looks like a function call (with or without parameters), skip type parsing
+                std::cout << "DEBUG: Detected simple function call pattern: " << tokens_[pos_].lexeme << "()" << std::endl;
                 skip_type_parsing = true;
+            }
+            // Also check for method call patterns like object.method() - look ahead for . identifier (
+            else if (pos_ + 4 < tokens_.size() && 
+                     tokens_[pos_ + 2].type == TokenType::DOT &&
+                     tokens_[pos_ + 3].type == TokenType::IDENTIFIER &&
+                     tokens_[pos_ + 4].type == TokenType::LPAREN) {
+                // This looks like a method call (object.method()), skip type parsing
+                std::cout << "DEBUG: Detected dot method call pattern: " << tokens_[pos_ + 1].lexeme << "." << tokens_[pos_ + 3].lexeme << "()" << std::endl;
+                skip_type_parsing = true;
+            }
+            // Also check for static method call patterns like Vec::new() - look ahead for :: identifier (
+            else if (pos_ + 4 < tokens_.size()) {
+                std::cout << "DEBUG: Checking method call pattern..." << std::endl;
+                std::cout << "DEBUG: pos_+2 type=" << static_cast<int>(tokens_[pos_ + 2].type) << " (COLONCOLON=" << static_cast<int>(TokenType::COLONCOLON) << ")" << std::endl;
+                std::cout << "DEBUG: pos_+3 type=" << static_cast<int>(tokens_[pos_ + 3].type) << " (IDENTIFIER=" << static_cast<int>(TokenType::IDENTIFIER) << ")" << std::endl;
+                std::cout << "DEBUG: pos_+4 type=" << static_cast<int>(tokens_[pos_ + 4].type) << " (LPAREN=" << static_cast<int>(TokenType::LPAREN) << ")" << std::endl;
+                
+                if (tokens_[pos_ + 2].type == TokenType::COLONCOLON &&
+                    tokens_[pos_ + 3].type == TokenType::IDENTIFIER &&
+                    tokens_[pos_ + 4].type == TokenType::LPAREN) {
+                    // This looks like a method call (Type::method()), skip type parsing
+                    std::cout << "DEBUG: Detected method call pattern: " << tokens_[pos_ + 1].lexeme << "::" << tokens_[pos_ + 3].lexeme << "()" << std::endl;
+                    skip_type_parsing = true;
+                }
             }
             // Also skip for known intrinsic functions even without parentheses
             else if (identifier_name == "println" || identifier_name == "print" || identifier_name == "debug" || 
@@ -133,7 +164,12 @@ namespace vyn {
             }
         }
         
+        if (skip_type_parsing) {
+            std::cout << "DEBUG: Skipping type parsing for: " << tokens_[pos_].lexeme << std::endl;
+        }
+        
         if (!skip_type_parsing) {
+            std::cout << "DEBUG: Attempting type parsing for: " << tokens_[pos_].lexeme << std::endl;
             try {
                 TypeParser type_parser(tokens_, pos_, current_file_path_, *this); // Pass *this for ExpressionParser reference
                 ast::TypeNodePtr type_node = type_parser.parse(); // Call parse() instead of parse_type_annotation()
@@ -793,6 +829,12 @@ regular_array_literal:
                 expr = parse_call_expression(std::move(expr)); // parse_call_expression expects callee and handles args
             } else if (match(TokenType::DOT)) {
                 DEBUG_PRINT("parse_postfix_expr: Matched DOT for member access.");
+                DEBUG_TOKEN(previous_token());
+                expr = parse_member_access(std::move(expr));
+                DEBUG_PRINT("parse_postfix_expr: After parse_member_access. Current token:");
+                DEBUG_TOKEN(peek());
+            } else if (match(TokenType::COLONCOLON)) {
+                DEBUG_PRINT("parse_postfix_expr: Matched COLONCOLON for static member access.");
                 DEBUG_TOKEN(previous_token());
                 expr = parse_member_access(std::move(expr));
                 DEBUG_PRINT("parse_postfix_expr: After parse_member_access. Current token:");
