@@ -1,5 +1,5 @@
-fn<Int> main() -> {
-    var<Int> addr = 0x1234;
+main()<Int> -> {
+    addr<Int> = 0x1234;
     var<loc<Int>> p;
     unsafe {
         p = from<loc<Int>>(addr);

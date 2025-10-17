@@ -1,4 +1,4 @@
 fn main() -> Int{
-    var<Int> addr = 0x1234;
+    addr<Int> = 0x1234;
     return 0;
 }

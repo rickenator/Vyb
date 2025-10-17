@@ -53,13 +53,13 @@ cd Vyn
 make -C build -j
 
 # Run your first Vyn program
-echo 'fn<Int> main() -> return 42' > hello.vyn
+echo 'main()<Int> -> return 42' > hello.vyn
 build/vyn hello.vyn  # Returns exit code 42
 
 # Try modern language features
 cat > example.vyn << 'EOF'
-fn<Int> main() -> {
-    var<Vec<Int>> numbers = Vec::new()
+main()<Int> -> {
+    numbers<Vec<Int>> = Vec::new()
     numbers.push(10)
     numbers.push(20)
     
@@ -73,7 +73,7 @@ EOF
 build/vyn example.vyn  # Returns 30
 
 # Complex return types with auto-serialization
-echo 'fn<Int,String> main() -> return 42, "Hello!"' > tuple.vyn
+echo 'main()<Int,String> -> return 42, "Hello!"' > tuple.vyn
 build/vyn tuple.vyn  # Outputs: [42, "Hello!"]
 ```
 
@@ -121,7 +121,7 @@ import utils::math::calculate
 smuggle debug::trace from "github.com/dev/tools"
 smuggle experimental::feature from "./local/experiments"
 
-fn<Int> main() -> {
+main()<Int> -> {
     println("Production ready!")
     trace("Debug info from smuggled module")
     return calculate(42)
@@ -142,11 +142,11 @@ This unique `import`/`smuggle` distinction makes Vyn's module system both secure
 Vyn **v0.3.7** is a **complete systems programming language** ready for production use:
 
 ### ✅ **Core Language Features**
-- **Functions**: `fn<ReturnType> name(params) -> body` with full LLVM compilation
-  - **Standard parameters**: `var<Type> name` or `const<Type> name` 
-  - **Shorthand parameters**: `Type name` or `const Type name`
+- **Functions**: `name(params)<ReturnType> -> body` with full LLVM compilation
+  - **Standard parameters**: `param<Type>` or `param<Type const>` 
+  - **Shorthand parameters**: `Type param` or `const Type param`
   - **Mixed syntax**: Both forms can be used in the same function
-- **Variables**: `var<Type> x = 42` with type inference and explicit typing
+- **Variables**: `name<Type> = value` with type inference and explicit typing
 - **Resizable Arrays**: `Vec<T>` with `new()`, `push()`, `pop()`, `len()`, `get()` methods
 - **Fixed Arrays**: `[T; N]` with indexing and beautiful println() output
 - **Structs**: `struct Point { x<Int>, y<Int> }` with field access (`p.x`, `p.y`)
@@ -193,7 +193,7 @@ struct Person {
 }
 
 # Pattern matching with comprehensive match statements
-fn<String> grade_level(Int age) -> {
+grade_level(age<Int>)<String> -> {
     match age {
         0 => "infant",
         1 => "toddler", 
@@ -204,16 +204,16 @@ fn<String> grade_level(Int age) -> {
 }
 
 # Resizable collections with full method support
-fn<Int> process_scores() -> {
-    var<Vec<Int>> scores = Vec::new()
+process_scores()<Int> -> {
+    scores<Vec<Int>> = Vec::new()
     scores.push(95)
     scores.push(87)
     scores.push(92)
     
-    var<Int> total = 0
-    var<Int> i = 0
+    total<Int> = 0
+    i<Int> = 0
     while (i < scores.len()) {
-        var<Int> score = scores.get(i)
+        score<Int> = scores.get(i)
         total = total + score
         i = i + 1
         
@@ -230,8 +230,8 @@ fn<Int> process_scores() -> {
 }
 
 # Dual parameter syntax and member access
-fn<Person> create_person(String name, var<Int> age) -> {
-    var<Person> person = Person {
+create_person(name<String>, age<Int>)<Person> -> {
+    person<Person> = Person {
         name = name,
         age = age,
         scores = Vec::new()
@@ -244,10 +244,10 @@ fn<Person> create_person(String name, var<Int> age) -> {
     return person
 }
 
-fn<Int> main() -> {
-    var<Person> student = create_person("Alice", 20)
-    var<String> level = grade_level(student.age)
-    var<Int> total = process_scores()
+main()<Int> -> {
+    student<Person> = create_person("Alice", 20)
+    level<String> = grade_level(student.age)
+    total<Int> = process_scores()
     
     println(student)  # Auto-serialization of complex types
     println(level)
@@ -262,37 +262,37 @@ Vyn's design philosophy emphasizes safety by default, but provides escape hatche
 
 ```vyn
 # Safe memory management with ownership types
-fn<Int> safe_memory_example() -> {
+safe_memory_example()<Int> -> {
     # Unique ownership - automatically freed when out of scope
-    var<my<String>> owned = make_my("unique data")
+    owned<my<String>> = make_my("unique data")
     
     # Shared ownership - reference counted
-    var<our<String>> shared = make_our("shared data")
-    var<our<String>> another_ref = shared  # Reference count incremented
+    shared<our<String>> = make_our("shared data")
+    another_ref<our<String>> = shared  # Reference count incremented
     
     # Borrowing - non-owning references
-    var<their<String const>> view_ref = view shared      # Immutable borrow
-    var<their<String>> mut_ref = borrow owned           # Mutable borrow
+    view_ref<their<String const>> = view shared      # Immutable borrow
+    mut_ref<their<String>> = borrow owned           # Mutable borrow
     
     return 42
 }
 
 # Unsafe operations for low-level control
-fn<Int> unsafe_memory_example() -> {
-    var<Int> x = 42
-    var<Int> result = 0
+unsafe_memory_example()<Int> -> {
+    x<Int> = 42
+    result<Int> = 0
     
     unsafe {
         # Create raw pointers
-        var<loc<Int>> p = loc(x)     # Get pointer to x
-        var<loc<Int>> q = loc(result) # Get pointer to result
+        p<loc<Int>> = loc(x)     # Get pointer to x
+        q<loc<Int>> = loc(result) # Get pointer to result
         
         # Read and write through pointers
         at(q) = at(p) * 2           # Write x*2 to result through pointers
         
         # Pointer type conversion
-        var<loc<Void>> p_void = from<loc<Void>>(p)
-        var<loc<Int>> p_back = from<loc<Int>>(p_void)
+        p_void<loc<Void>> = from<loc<Void>>(p)
+        p_back<loc<Int>> = from<loc<Int>>(p_void)
     }
     
     return result  # Returns 84
@@ -313,23 +313,23 @@ Vyn uses clean, expressive syntax with flexible parameter syntax:
 ```vyn
 # Functions support both standard and shorthand parameter syntax
 
-# Standard syntax: explicit var<Type> or const<Type>
-fn<Int> add_standard(var<Int> a, const<Int> b) -> {
+# Standard syntax: explicit parameter<Type> or parameter<Type const>
+add_standard(a<Int>, b<Int const>)<Int> -> {
     return a + b
 }
 
 # Shorthand syntax: Type directly (implicitly mutable)
-fn<Int> add_shorthand(Int a, Int b) -> {
+add_shorthand(Int a, Int b)<Int> -> {
     return a + b
 }
 
 # Mixed syntax: combining both forms in same function
-fn<Int> mixed_params(var<Int> x, Int y, const<Int> z) -> {
+mixed_params(x<Int>, Int y, const Int z)<Int> -> {
     return x + y + z
 }
 
 # Complex return types with auto-serialization
-fn<Int, String, Bool> get_data() -> {
+get_data()<Int, String, Bool> -> {
     return 42, "result", true
 }
 # When called from main(), outputs: {"Int":42,"String":"result","Bool":true}
@@ -341,12 +341,12 @@ Vyn supports two parameter syntax styles for maximum flexibility:
 
 ```vyn
 # Standard syntax: explicit mutability
-fn<String> format_standard(var<String> prefix, const<Int> value) -> {
+format_standard(prefix<String>, value<Int const>)<String> -> {
     return prefix + String::from_int(value)
 }
 
 # Shorthand syntax: type-first (more concise)  
-fn<String> format_shorthand(String prefix, const Int value) -> {
+format_shorthand(String prefix, const Int value)<String> -> {
     return prefix + String::from_int(value)
 }
 
@@ -357,16 +357,16 @@ fn<String> format_shorthand(String prefix, const Int value) -> {
 
 ```vyn
 # Variables with type inference
-var x = 42          # Int
-var name = "Alice"  # String
-var flag = true     # Bool
+x = 42          # Int
+name = "Alice"  # String
+flag = true     # Bool
 
 # Explicit typing
-var<Int> count = 0
-var<String> message = "Hello"
+count<Int> = 0
+message<String> = "Hello"
 
-# Immutable bindings
-const PI = 3.14159
+# Immutable bindings (with const type modifier)
+PI<Float const> = 3.14159
 ```
 
 ### Structs and Data
@@ -379,8 +379,8 @@ struct Point {
 }
 
 # Create and use with field access
-fn<Int> main() -> {
-    var<Point> p = Point { x = 10, y = 20 }
+main()<Int> -> {
+    p<Point> = Point { x = 10, y = 20 }
     return p.x + p.y  # Returns 30
 }
 ```
@@ -400,8 +400,8 @@ smuggle debug::trace from "github.com/dev/tools"
 smuggle experimental::parser from "./local/experiments"
 
 # Use imported symbols
-fn<Int> main() -> {
-    var<Vec<Int>> numbers = Vec::new()
+main()<Int> -> {
+    numbers<Vec<Int>> = Vec::new()
     numbers.push(calculate(10))
     
     println(numbers)  # From trusted std::io
@@ -440,24 +440,24 @@ fn internal_helper() { ... }                      # Private to this file
 
 ```vyn
 # Resizable vectors with full method support
-fn<Int> main() -> {
-    var<Vec<Int>> numbers = Vec::new()
+main()<Int> -> {
+    numbers<Vec<Int>> = Vec::new()
     numbers.push(10)
     numbers.push(20)
     numbers.push(30)
     
     println(numbers)  # Outputs: { "type": "Vec<Int>", "address": "0x..." }
     
-    var<Int> length = numbers.len()    # Gets 3
-    var<Int> first = numbers.get(0)    # Gets 10
-    var<Int> last = numbers.pop()      # Gets and removes 30
+    length<Int> = numbers.len()    # Gets 3
+    first<Int> = numbers.get(0)    # Gets 10
+    last<Int> = numbers.pop()      # Gets and removes 30
     
     return first + last  # Returns 40
 }
 
 # Fixed-size arrays also supported
-fn<Int> array_example() -> {
-    var<[Int; 3]> fixed = [1, 2, 3]
+array_example()<Int> -> {
+    fixed<[Int; 3]> = [1, 2, 3]
     return fixed[0]  # Array indexing
 }
 ```
@@ -466,7 +466,7 @@ fn<Int> array_example() -> {
 
 ```vyn
 # Conditional expressions with modern syntax
-fn<String> check_sign(Int x) -> {
+check_sign(x<Int>)<String> -> {
     if (x > 0) {
         return "positive"
     } else if (x < 0) {
@@ -477,9 +477,9 @@ fn<String> check_sign(Int x) -> {
 }
 
 # While loops with break/continue
-fn<Int> factorial(Int n) -> {
-    var<Int> result = 1
-    var<Int> i = 1
+factorial(n<Int>)<Int> -> {
+    result<Int> = 1
+    i<Int> = 1
     while (i <= n) {
         if (i == 0) {
             continue
@@ -494,7 +494,7 @@ fn<Int> factorial(Int n) -> {
 }
 
 # Pattern matching with match statements
-fn<String> describe_number(Int x) -> {
+describe_number(x<Int>)<String> -> {
     match x {
         0 => "zero",
         1 => "one", 
@@ -542,14 +542,14 @@ Vyn/
 
 **Hello World:**
 ```vyn
-fn<Void> main() -> {
+main()<Void> -> {
     println("Hello, Vyn!")
 }
 ```
 
 **Mathematical Computation:**
 ```vyn
-fn<Int> fibonacci(Int n) -> {
+fibonacci(n<Int>)<Int> -> {
     if (n <= 1) {
         return n
     } else {
@@ -557,7 +557,7 @@ fn<Int> fibonacci(Int n) -> {
     }
 }
 
-fn<Int> main() -> {
+main()<Int> -> {
     return fibonacci(10)  # Returns 55
 }
 ```
@@ -570,7 +570,7 @@ struct Result {
     message<String>
 }
 
-fn<Result> process_data(Int x) -> {
+process_data(x<Int>)<Result> -> {
     if (x > 0) {
         return Result {
             success = true,
@@ -586,7 +586,7 @@ fn<Result> process_data(Int x) -> {
     }
 }
 
-fn<Result> main() -> {
+main()<Result> -> {
     return process_data(21)
 }
 # Outputs structured JSON for the Result
@@ -609,21 +609,21 @@ Vyn provides multiple memory management strategies:
 
 ```vyn
 # Unique ownership (like Rust's Box)
-var<my<String>> owned = make_my("unique data")
+owned<my<String>> = make_my("unique data")
 
 # Shared ownership (reference counted)
-var<our<String>> shared = make_our("shared data")
-var<our<String>> another_ref = shared  # Reference count incremented
+shared<our<String>> = make_our("shared data")
+another_ref<our<String>> = shared  # Reference count incremented
 
 # Borrowing (non-owning references)
-var<their<String>> view_ref = view shared      # Immutable borrow
-var<their<String>> mut_ref = borrow owned      # Mutable borrow
+view_ref<their<String>> = view shared      # Immutable borrow
+mut_ref<their<String>> = borrow owned      # Mutable borrow
 
 # Raw pointers for unsafe operations
 unsafe {
-    var<Int> x = 42
-    var<loc<Int>> ptr = loc(x)  # Get pointer to x
-    at(ptr) = 99               # Modify through pointer
+    x<Int> = 42
+    ptr<loc<Int>> = loc(x)  # Get pointer to x
+    at(ptr) = 99           # Modify through pointer
 }
 ```
 
@@ -765,11 +765,11 @@ digit = "0".."9";
 Vyn automatically serializes complex return types from `main()`:
 
 **Simple Returns:**
-- `fn<Int> main() -> return 42` → Exit code 42
-- `fn<String> main() -> return "hello"` → Outputs: hello
+- `main()<Int> -> return 42` → Exit code 42
+- `main()<String> -> return "hello"` → Outputs: hello
 
 **Complex Returns:**
-- `fn<Int,String> main() -> return 42, "hello"` → Outputs: [42, "hello"]
+- `main()<Int,String> -> return 42, "hello"` → Outputs: [42, "hello"]
 - Struct returns → JSON with field names and values
 - Vec returns → JSON array representation
 

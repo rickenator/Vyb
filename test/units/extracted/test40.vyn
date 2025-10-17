@@ -11,4 +11,4 @@
     std::string source = R"(
 fn main() -> Int{
     unsafe {
-        var<Int> x = 1;
+        x<Int> = 1;

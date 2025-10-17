@@ -17,8 +17,8 @@ struct Company {
     Int employeeCount
 }
 
-fn<Person, Company> main() -> {
-    var<Person> person = Person(id=123, name="Alice", salary=88000.0);
-    var<Company> company = Company(name="Acme", employeeCount=150);
+main()<Person, Company> -> {
+    person<Person> = Person(id=123, name="Alice", salary=88000.0);
+    company<Company> = Company(name="Acme", employeeCount=150);
     return notype(person), company;
 }

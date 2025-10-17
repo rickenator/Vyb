@@ -4,7 +4,7 @@ struct TestPoint {
     y<Int>
 }
 
-fn<Int> main() -> {
-    var<TestPoint> p = TestPoint { x=10, y=20 };
+main()<Int> -> {
+    p<TestPoint> = TestPoint { x=10, y=20 };
     return p.x;
 }

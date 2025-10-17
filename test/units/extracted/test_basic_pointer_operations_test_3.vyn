@@ -8,8 +8,8 @@
 // @expect-return: n/a
 
 
-fn<Void> main() -> -> Int {
-    var<Int> x = 77;
+main()<Void> -> -> Int {
+    x<Int> = 77;
     var<loc<Int>> p;
     unsafe {
         p = loc(x);

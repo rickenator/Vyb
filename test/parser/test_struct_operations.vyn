@@ -5,10 +5,10 @@ struct Point {
     y<Int>
 }
 
-fn<Int> main() -> {
-    var<Point> p1 = Point { x = 10, y = 20 };
-    var<Point> p2 = Point { x = 5, y = 15 };
+main()<Int> -> {
+    p1<Point> = Point { x = 10, y = 20 };
+    p2<Point> = Point { x = 5, y = 15 };
     
-    var<Int> sum = p1.x + p1.y + p2.x + p2.y;
+    sum<Int> = p1.x + p1.y + p2.x + p2.y;
     return sum;
 }

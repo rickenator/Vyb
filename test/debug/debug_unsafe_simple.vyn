@@ -1,1 +1,1 @@
-fn<String> main() -> { return "unsafe test"; }
+main()<String> -> { return "unsafe test"; }

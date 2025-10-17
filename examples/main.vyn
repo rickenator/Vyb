@@ -2,24 +2,24 @@ import vyn::fs
 smuggle http::client
 
 class Vector
-  var<Float> x
-  var<Float> y
+  x<Float>
+  y<Float>
 
   // 'other: Vector' is passed by value (copied).
-  fn<Vector> operator+(const<Vector> other) ->
+  operator+(other<Vector const>)<Vector> ->
     Vector { x: self.x + other.x, y: self.y + other.y }
 
   // Static method, returns a new Vector instance by value.
-  fn<Vector> new(const<Float> x, const<Float> y) ->
+  new(x<Float const>, y<Float const>)<Vector> ->
     Vector { x, y }
 
 
-async fn<String> fetch_data(const<String> url) throws NetworkError ->
+async fetch_data(url<String const>)<String> throws NetworkError ->
   // http::client::connect returns my<Connection>.
-  const<my<http::client::Connection>> conn = http::client::connect(url)
+  conn<my<http::client::Connection> const> = http::client::connect(url)
 
   // conn.get() takes 'view self' (their<Connection const>) and returns my<Response>.
-  const<my<http::client::Response>> resp = await (view conn).get("/")
+  resp<my<http::client::Response> const> = await (view conn).get("/")
 
   if resp.status != 200
     throw NetworkError("Failed to fetch: " + resp.status.to_string())
@@ -28,18 +28,18 @@ async fn<String> fetch_data(const<String> url) throws NetworkError ->
   return (view resp).text()
 
 
-fn<Void> main() -> {
+main()<Void> -> {
   try
-    var<my<[Int]>> squares = [x * x for x in 0..10] // Mutable binding.
+    squares<my<[Int]>> = [x * x for x in 0..10] // Mutable binding.
 
-    const<Vector> v1 = Vector::new(1.0, 2.0)    // Immutable binding.
-    const<Vector> v2 = Vector::new(3.0, 4.0)    // Immutable binding.
-    const<Vector> sum_vec = v1 + v2             // Immutable binding.
+    v1<Vector const> = Vector::new(1.0, 2.0)    // Immutable binding.
+    v2<Vector const> = Vector::new(3.0, 4.0)    // Immutable binding.
+    sum_vec<Vector const> = v1 + v2             // Immutable binding.
     
     println("Sum: x=" + sum_vec.x.to_string() + ", y=" + sum_vec.y.to_string())
 
     // fs::open returns my<fs::File>.
-    var<my<fs::File>> f = fs::open("output.txt") // Mutable binding.
+    f<my<fs::File>> = fs::open("output.txt") // Mutable binding.
 
     // defer f.close()
     // close() on my<fs::File> likely takes 'borrow self' or 'view self'.
@@ -48,7 +48,7 @@ fn<Void> main() -> {
     // f.write() likely takes 'borrow self' (their<fs::File>).
     (borrow f).write("Squares: " + squares.to_string())
 
-    const<String> data_str = await fetch_data("https://api.example.com") // Immutable binding.
+    data_str<String const> = await fetch_data("https://api.example.com") // Immutable binding.
     println("Fetched: " + data_str)
 
   catch (e: NetworkError)

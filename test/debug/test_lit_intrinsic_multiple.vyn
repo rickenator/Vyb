@@ -5,6 +5,6 @@
 // @expect-output: [42, true, null]
 
 // Test lit() intrinsic with multiple literals (array output)
-fn<String> main() -> {
+main()<String> -> {
     return lit("42", "true", "null");
 }

@@ -9,7 +9,7 @@
 
 class Node {
     var<Bool> is_leaf;
-    fn<Void> new(is_leaf_param: Bool) -> -> Node {
+    new(is_leaf_param: Bool)<Void> -> -> Node {
         return Node { is_leaf: is_leaf_param }
     }
 }

@@ -1,7 +1,7 @@
 // Simple test for the lit intrinsic function
-fn<String> main() -> {
+main()<String> -> {
     println("Test output BEFORE lit() call:");
-    var<String> result = lit("42");
+    result<String> = lit("42");
     println("Test output AFTER lit() call. Result:");
     println(result);
     return result;

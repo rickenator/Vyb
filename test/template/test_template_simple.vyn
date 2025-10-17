@@ -7,8 +7,8 @@ template Container<T: Comparable> {
     }
 }
 
-fn<Int> main() -> {
+main()<Int> -> {
     // Simple variable declarations to test constraint validation
-    var<Int> result = 42;
+    result<Int> = 42;
     return result;
 }

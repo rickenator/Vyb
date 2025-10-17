@@ -13,4 +13,4 @@ struct MyData { val: Int }
 struct OtherData { name: String }
 
 fn main() -> Int {
-    var<Int> md_addr = 0xCAFE; // Some address
+    md_addr<Int> = 0xCAFE; // Some address

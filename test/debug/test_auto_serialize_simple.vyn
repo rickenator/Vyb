@@ -5,6 +5,6 @@
 // @expect-output: "hello"
 
 // Test simple auto-serialization with single return
-fn<String> main() -> {
+main()<String> -> {
     return "hello";
 }

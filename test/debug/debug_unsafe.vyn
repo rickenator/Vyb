@@ -1,1 +1,1 @@
-unsafe { var<Int> x = 5; }
+unsafe { x<Int> = 5; }

@@ -1,10 +1,10 @@
-fn<i32> add(i32 a, i32 b) -> {
+add(i32 a, i32 b)<i32> -> {
     return a + b;
 }
 
-fn<i32> main() -> {
-    var<i32> x = 5;
-    var<i32> y = 3;
-    var<i32> result = add(x, y);
+main()<i32> -> {
+    x<i32> = 5;
+    y<i32> = 3;
+    result<i32> = add(x, y);
     return result;
 }

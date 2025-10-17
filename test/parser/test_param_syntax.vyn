@@ -1,14 +1,14 @@
 // Test both parameter syntax forms
-fn<Int> add_standard(var<Int> a, var<Int> b) -> {
+add_standard(var<Int> a, var<Int> b)<Int> -> {
     return a + b;
 }
 
-fn<Int> add_shorthand(Int a, Int b) -> {
+add_shorthand(Int a, Int b)<Int> -> {
     return a + b;
 }
 
-fn<Int> main() -> {
-    var<Int> result1 = add_standard(10, 20);
-    var<Int> result2 = add_shorthand(30, 40);
+main()<Int> -> {
+    result1<Int> = add_standard(10, 20);
+    result2<Int> = add_shorthand(30, 40);
     return result1 + result2;
 }

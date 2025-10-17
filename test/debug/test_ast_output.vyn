@@ -5,6 +5,6 @@ struct Point {
 }
 
 // This function doesn't need to compile, just parse to AST
-fn<Point> test() -> {
+test()<Point> -> {
     Point { x=10, y=20 }
 }

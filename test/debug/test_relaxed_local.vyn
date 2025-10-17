@@ -4,8 +4,8 @@
 @test
 fn test_local_vars() -> {
     // Relaxed syntax for local variables
-    Int count = 5                  // Equivalent to var<Int> count = 5
-    String message = "Hello"       // Equivalent to var<String> message = "Hello"
+    Int count = 5                  // Equivalent to count<Int> = 5
+    String message = "Hello"       // Equivalent to message<String> = "Hello"
     
     // Variable assignment
     count = 10
@@ -48,7 +48,7 @@ fn test_complex_scenarios() -> {
 }
 
 // Helper function
-fn<Int> get_number() -> {
+get_number()<Int> -> {
     return 42
 }
 

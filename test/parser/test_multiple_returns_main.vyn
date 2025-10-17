@@ -1,4 +1,4 @@
 // Test multiple return types from main
-fn<String, Int, Bool> main() -> {
+main()<String, Int, Bool> -> {
     return "hello", 42, true;
 }

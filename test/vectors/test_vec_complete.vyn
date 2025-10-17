@@ -1,4 +1,4 @@
-fn<Int> main() -> {
+main()<Int> -> {
     // Test Vec::new() constructor
     var<Vec<Int>> numbers = Vec::new();
     
@@ -8,15 +8,15 @@ fn<Int> main() -> {
     numbers.push(30);
     
     // Test Vec::len() method
-    var<Int> length = numbers.len();
+    length<Int> = numbers.len();
     println(length);
     
     // Test Vec::get() method
-    var<Int> first = numbers.get(0);
+    first<Int> = numbers.get(0);
     println(first);
     
     // Test Vec::pop() method  
-    var<Int> popped = numbers.pop();
+    popped<Int> = numbers.pop();
     println(popped);
     
     return 0;

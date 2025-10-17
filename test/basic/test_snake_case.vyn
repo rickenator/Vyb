@@ -1,13 +1,13 @@
 // Test snake_case function call parsing
 
-fn<Int> some_test_function() -> {
+some_test_function()<Int> -> {
     return 100;
 }
 
-fn<Int> another_function() -> {
+another_function()<Int> -> {
     return 200;
 }
 
-fn<Int> main() -> {
+main()<Int> -> {
     return some_test_function() + another_function();
 }

@@ -117,8 +117,8 @@ fn<[Int; 3]> main() -> {
 ### Priority 2: For Loops  
 **Goal**: Complete iteration support
 ```vyn
-fn<Int> main() -> {
-    var sum = 0
+main()<Int> -> {
+    sum = 0
     for i in 0..10 {
         sum = sum + i
     }
@@ -129,9 +129,9 @@ fn<Int> main() -> {
 ### Priority 3: String Operations
 **Goal**: Practical string manipulation
 ```vyn
-fn<String> main() -> {
-    var name = "Rick"
-    var greeting = "Hello, " + name + "!"
+main()<String> -> {
+    name = "Rick"
+    greeting = "Hello, " + name + "!"
     return greeting
 }
 ```

@@ -3,11 +3,11 @@
 // of using C-style function syntax instead of Vyn syntax
 
 // Correct Vyn syntax (this should work):
-fn<String> correct_syntax() -> {
+correct_syntax()<String> -> {
     return "works";
 }
 
-fn<String> main() -> {
+main()<String> -> {
     return correct_syntax();
 }
 

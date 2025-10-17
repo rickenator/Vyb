@@ -10,4 +10,4 @@
 
     std::string source = R"(
 fn main() -> Int {
-    var<Float> x = 10.0;
+    x<Float> = 10.0;

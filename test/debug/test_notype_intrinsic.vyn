@@ -5,6 +5,6 @@
 // @expect-error: notype() requires struct input, but got primitive Int
 
 // Test notype() intrinsic error handling - should fail with primitives
-fn<String, Int, String> main() -> {
+main()<String, Int, String> -> {
     return "hello", notype(42), "world";
 }

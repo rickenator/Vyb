@@ -4,11 +4,11 @@
 // @expect: pass
 
 // Simple function that returns basic employee data as multiple values
-fn<String, Int, Float, Bool> getEmployeeData() -> {
+getEmployeeData()<String, Int, Float, Bool> -> {
     return "John Doe", 1001, 75000.0, true;
 }
 
 // Main function returns employee data directly
-fn<String, Int, Float, Bool> main() -> {
+main()<String, Int, Float, Bool> -> {
     return getEmployeeData();
 }

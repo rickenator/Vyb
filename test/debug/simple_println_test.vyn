@@ -1,5 +1,5 @@
 // Test simple println
-fn<Int> main() -> {
+main()<Int> -> {
     println("Hello, world!");
     return 0;
 }

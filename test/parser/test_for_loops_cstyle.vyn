@@ -2,37 +2,37 @@
 # These tests verify C-style for loop functionality
 
 ## Simple counting loop (0 to 4)
-fn<Int> test_basic_for() -> {
-    var<Int> sum = 0
-    for (var<Int> i = 0; i < 5; i = i + 1) {
+test_basic_for()<Int> -> {
+    sum<Int> = 0
+    for (i<Int> = 0; i < 5; i = i + 1) {
         sum = sum + i
     }
     return sum  # Expected: 0+1+2+3+4 = 10
 }
 
 ## Step increment (even numbers 0 to 8)  
-fn<Int> test_step_for() -> {
-    var<Int> sum = 0
-    for (var<Int> i = 0; i < 10; i = i + 2) {
+test_step_for()<Int> -> {
+    sum<Int> = 0
+    for (i<Int> = 0; i < 10; i = i + 2) {
         sum = sum + i
     }
     return sum  # Expected: 0+2+4+6+8 = 20
 }
 
 ## Countdown (5 to 1)
-fn<Int> test_countdown_for() -> {
-    var<Int> sum = 0
-    for (var<Int> i = 5; i > 0; i = i - 1) {
+test_countdown_for()<Int> -> {
+    sum<Int> = 0
+    for (i<Int> = 5; i > 0; i = i - 1) {
         sum = sum + i
     }
     return sum  # Expected: 5+4+3+2+1 = 15
 }
 
 ## Nested loops
-fn<Int> test_nested_for() -> {
-    var<Int> sum = 0
-    for (var<Int> i = 1; i <= 3; i = i + 1) {
-        for (var<Int> j = 1; j <= 2; j = j + 1) {
+test_nested_for()<Int> -> {
+    sum<Int> = 0
+    for (i<Int> = 1; i <= 3; i = i + 1) {
+        for (j<Int> = 1; j <= 2; j = j + 1) {
             sum = sum + (i * j)
         }
     }

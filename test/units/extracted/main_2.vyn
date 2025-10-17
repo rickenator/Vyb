@@ -9,7 +9,7 @@
 
 fn main() {
     try {
-        var<Int> squares = [x * x for x in 0..10];
+        squares<Int> = [x * x for x in 0..10];
         const<Int> v1 = Vector::new(1.0, 2.0);
         const<Int> v2 = Vector::new(3.0, 4.0);
         const<Int> sum = v1 + v2;

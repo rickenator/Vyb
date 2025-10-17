@@ -5,11 +5,11 @@
 // @expect-output: {"String":"hello","Int":42,"Bool":true}
 
 // Function that returns multiple values to test parsing
-fn<String, Int, Bool> test_function() -> {
+test_function()<String, Int, Bool> -> {
     return "hello", 42, true;
 }
 
 // Main function that calls test_function and returns the multi-value result
-fn<String, Int, Bool> main() -> {
+main()<String, Int, Bool> -> {
     return test_function();
 }

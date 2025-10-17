@@ -8,9 +8,9 @@
 // @expect-error: n/a
 // @expect-return: n/a
 
-fn<Int> test_relaxed_local_variables() -> {
+test_relaxed_local_variables()<Int> -> {
     // Standard syntax
-    var<Int> x1 = 10;
+    x1<Int> = 10;
     const<Int> y1 = 20;
     
     // Relaxed syntax
@@ -21,7 +21,7 @@ fn<Int> test_relaxed_local_variables() -> {
     auto a1 = 50;
     
     // Collection types with appropriate syntax
-    var<[Int]> numbers = [1, 2, 3];
+    numbers<[Int]> = [1, 2, 3];
     // Using appropriate generic types
     var<Dict<String, Int>> scores;
     
@@ -51,11 +51,11 @@ fn<Int> test_relaxed_local_variables() -> {
 }
 
 // Helper functions for the test
-fn<Void> function_with_args(Int x, const String s) -> {
+function_with_args(Int x, const String s)<Void> -> {
     println(s + ": " + x);  // Auto-serialization handles conversion
 }
 
-fn<Int> main() -> {
+main()<Int> -> {
     Int result = test_relaxed_local_variables();
     println("Result: " + result);  // Auto-serialization handles conversion
     return 0;

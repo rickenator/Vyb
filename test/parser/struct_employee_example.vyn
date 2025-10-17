@@ -10,8 +10,8 @@ struct Employee {
     Bool isActive
 }
 
-fn<Employee> createEmployee() -> {
-    var<Employee> emp = Employee {
+createEmployee()<Employee> -> {
+    emp<Employee> = Employee {
         name = "John Doe",
         id = 1001,
         salary = 75000.0,
@@ -20,7 +20,7 @@ fn<Employee> createEmployee() -> {
     return emp;
 }
 
-fn<Employee> main() -> {
-    var<Employee> employee = createEmployee();
+main()<Employee> -> {
+    employee<Employee> = createEmployee();
     return employee;
 }

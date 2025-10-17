@@ -1,5 +1,5 @@
 // Simple function test to debug parser issue
 
-fn<String> main() -> {
+main()<String> -> {
     return "hello";
 }

@@ -9,5 +9,5 @@
 // @expect-return: n/a
 
     std::string source = R"(
-fn<Void> main() -> -> Int{
+main()<Void> -> -> Int{
     var<Int> x;

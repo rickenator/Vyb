@@ -4,12 +4,12 @@
 // ----- Generic Function Templates -----
 
 // Simple generic function that works with any type
-template<T> fn<T> identity(var<T> value) -> {
+template<T> identity(value<T>)<T> -> {
     return value
 }
 
 // Generic function with type constraint
-template<T: Comparable> fn<T> max(var<T> a, var<T> b) -> {
+template<T: Comparable> max(a<T>, b<T>)<T> -> {
     if (a.gt(b)) {
         return a
     } else {
@@ -24,11 +24,11 @@ template<T> struct Container {
     value<T>
 }
 
-template<T> fn<Container<T>> new_container(var<T> initial_value) -> {
+template<T> new_container(initial_value<T>)<Container<T>> -> {
     return Container { value = initial_value }
 }
 
-template<T> fn<T> get_value(var<Container<T>> container) -> {
+template<T> get_value(container<Container<T>>)<T> -> {
     return container.value
 }
 
@@ -38,12 +38,12 @@ template<T, U> struct Pair {
     second<U>
 }
 
-template<T, U> fn<Pair<T, U>> make_pair(var<T> first_val, var<U> second_val) -> {
+template<T, U> make_pair(first_val<T>, second_val<U>)<Pair<T, U>> -> {
     return Pair { first = first_val, second = second_val }
 }
 
 // Swap function for pairs
-template<T, U> fn<Pair<U, T>> swap_pair(var<Pair<T, U>> p) -> {
+template<T, U> swap_pair(p<Pair<T, U>>)<Pair<U, T>> -> {
     return Pair { first = p.second, second = p.first }
 }
 
@@ -54,22 +54,22 @@ template<T> struct Stack {
     items<Vec<T>>
 }
 
-template<T> fn<Stack<T>> new_stack() -> {
-    var<Vec<T>> items = Vec::new()
+template<T> new_stack()<Stack<T>> -> {
+    items<Vec<T>> = Vec::new()
     return Stack { items = items }
 }
 
-template<T> fn<Void> push(var<Stack<T>> stack, var<T> item) -> {
+template<T> push(stack<Stack<T>>, item<T>)<Void> -> {
     stack.items.push(item)
 }
 
-template<T> fn<T> pop(var<Stack<T>> stack) -> {
+template<T> pop(stack<Stack<T>>)<T> -> {
     // Simple implementation - in real code would handle empty stack
-    var<Int> last_index = stack.items.len() - 1
+    last_index<Int> = stack.items.len() - 1
     return stack.items.get(last_index)
 }
 
-template<T> fn<Bool> is_empty(var<Stack<T>> stack) -> {
+template<T> is_empty(stack<Stack<T>>)<Bool> -> {
     return stack.items.len() == 0
 }
 
@@ -77,67 +77,67 @@ template<T> fn<Bool> is_empty(var<Stack<T>> stack) -> {
 
 // Implement Comparable for Int
 impl Comparable for Int {
-    fn<Bool> lt(var<Int> self, var<Int> other) -> {
+    lt(self<Int>, other<Int>)<Bool> -> {
         return self < other
     }
-    fn<Bool> gt(var<Int> self, var<Int> other) -> {
+    gt(self<Int>, other<Int>)<Bool> -> {
         return self > other
     }
-    fn<Bool> eq(var<Int> self, var<Int> other) -> {
+    eq(self<Int>, other<Int>)<Bool> -> {
         return self == other
     }
 }
 
 // Implement Comparable for String
 impl Comparable for String {
-    fn<Bool> lt(var<String> self, var<String> other) -> {
+    lt(self<String>, other<String>)<Bool> -> {
         return self < other
     }
-    fn<Bool> gt(var<String> self, var<String> other) -> {
+    gt(self<String>, other<String>)<Bool> -> {
         return self > other
     }
-    fn<Bool> eq(var<String> self, var<String> other) -> {
+    eq(self<String>, other<String>)<Bool> -> {
         return self == other
     }
 }
 
 // ----- Example Usage -----
 
-fn<Int> main() -> {
+main()<Int> -> {
     // Test identity function
-    var<Int> x = identity(42)
-    var<String> s = identity("hello")
+    x<Int> = identity(42)
+    s<String> = identity("hello")
     
     println("Identity test: " + x.to_string() + ", " + s)
     
     // Test max function
-    var<Int> bigger = max(10, 20)
-    var<String> later = max("apple", "zebra")
+    bigger<Int> = max(10, 20)
+    later<String> = max("apple", "zebra")
     
     println("Max test: " + bigger.to_string() + ", " + later)
     
     // Test generic container
-    var<Container<Int>> int_container = new_container(100)
-    var<Container<String>> str_container = new_container("world")
+    int_container<Container<Int>> = new_container(100)
+    str_container<Container<String>> = new_container("world")
     
     println("Container test: " + get_value(int_container).to_string() + 
             ", " + get_value(str_container))
     
     // Test generic pair
-    var<Pair<Int, String>> p1 = make_pair(1, "one")
-    var<Pair<String, Int>> p2 = swap_pair(p1)
+    p1<Pair<Int, String>> = make_pair(1, "one")
+    p2<Pair<String, Int>> = swap_pair(p1)
     
     println("Pair test: (" + p1.first.to_string() + ", " + p1.second + ") -> (" + 
             p2.first + ", " + p2.second.to_string() + ")")
     
     // Test generic stack
-    var<Stack<Int>> stack = new_stack()
+    stack<Stack<Int>> = new_stack()
     push(stack, 1)
     push(stack, 2)
     push(stack, 3)
     
     println("Stack test: " + (!is_empty(stack)).to_string())
-    var<Int> top = pop(stack)
+    top<Int> = pop(stack)
     println("Popped: " + top.to_string())
     
     return 0

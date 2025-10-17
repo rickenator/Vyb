@@ -1,4 +1,4 @@
 // Simple plain text example
-fn<String> main() -> {
+main()<String> -> {
     return "raw string";
 }

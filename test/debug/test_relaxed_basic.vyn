@@ -4,7 +4,7 @@
 @test
 fn test_basic_relaxed_syntax() -> {
     // Standard syntax
-    var<Int> a = 10
+    a<Int> = 10
     assert(a == 10)
     
     // Relaxed syntax

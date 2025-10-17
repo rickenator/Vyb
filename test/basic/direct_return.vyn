@@ -5,11 +5,11 @@
 // @expect-output: {"Int":42,"String":"Hello, World!"}
 
 // Function that returns multiple values (Int and String)
-fn<Int, String> get_values() -> {
+get_values()<Int, String> -> {
     return 42, "Hello, World!";
 }
 
 // Main function directly returns the get_values() call
-fn<Int, String> main() -> {
+main()<Int, String> -> {
     return get_values();
 }

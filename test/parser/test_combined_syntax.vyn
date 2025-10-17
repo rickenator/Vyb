@@ -7,7 +7,7 @@ struct MixedPoint {
 }
 
 // Simple test to create and return a point
-fn<MixedPoint> main() -> {
-    var<MixedPoint> p = MixedPoint { x=10, y=20 };
+main()<MixedPoint> -> {
+    p<MixedPoint> = MixedPoint { x=10, y=20 };
     return p;
 }

@@ -23,7 +23,7 @@ template Calculator<T: Numeric> {
     }
 }
 
-fn<Int> main() -> {
+main()<Int> -> {
     // Test 1: Valid constraint - Int implements Comparable
     // This should work and trigger constraint validation (pass)
     var<Container<Int>::Data> container1 = Container<Int>::Data { value: 42 };

@@ -1,5 +1,5 @@
-fn<Int> main() -> {
-    var<Int> count = 0;
+main()<Int> -> {
+    count<Int> = 0;
     
     while (count < 10) {
         count = count + 1;

@@ -11,7 +11,7 @@ template HashSet<T: Hashable + Equatable> {
     }
 }
 
-fn<Int> main() -> {
+main()<Int> -> {
     // These would fail constraint validation if uncommented:
     
     // Bool doesn't implement Comparable - should fail
@@ -21,6 +21,6 @@ fn<Int> main() -> {
     // var<HashSet<Vec<Int>>> invalid_hashset;
     
     // For now, just return success
-    var<Int> result = 0;
+    result<Int> = 0;
     return result;
 }

@@ -1,6 +1,6 @@
-fn<i32> main() -> {
-    var<i32> x = 15;
-    var<i32> result = 0;
+main()<i32> -> {
+    x<i32> = 15;
+    result<i32> = 0;
     
     if (x > 10) {
         result = 42;

@@ -1,4 +1,4 @@
-fn<Int> main() -> {
+main()<Int> -> {
     // Test Vec with different types
     var<Vec<String>> words = Vec::new();
     words.push("hello");

@@ -1,10 +1,10 @@
 // Test that capitalized type constructors still work
 
-fn<Int> Point(var<Int> x, var<Int> y) -> {
+Point(var<Int> x, var<Int> y)<Int> -> {
     return x + y;
 }
 
-fn<Int> main() -> {
+main()<Int> -> {
     // This should still be parsed as a CallExpression since Point starts with capital
     // but is actually a function, not a type constructor
     return Point(10, 20);

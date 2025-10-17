@@ -1,19 +1,19 @@
 // Test all supported parameter syntax variations
-fn<Int> test_standard(var<Int> a, const<Int> b) -> {
+test_standard(var<Int> a, const<Int> b)<Int> -> {
     return a + b;
 }
 
-fn<Int> test_shorthand(Int a, const Int b) -> {
+test_shorthand(Int a, const Int b)<Int> -> {
     return a * b;
 }
 
-fn<Int> test_mixed(var<Int> x, Int y, const<Int> z) -> {
+test_mixed(var<Int> x, Int y, const<Int> z)<Int> -> {
     return x + y + z;
 }
 
-fn<Int> main() -> {
-    var<Int> r1 = test_standard(10, 5);    // 15
-    var<Int> r2 = test_shorthand(4, 3);    // 12  
-    var<Int> r3 = test_mixed(1, 2, 3);     // 6
+main()<Int> -> {
+    r1<Int> = test_standard(10, 5);    // 15
+    r2<Int> = test_shorthand(4, 3);    // 12  
+    r3<Int> = test_mixed(1, 2, 3);     // 6
     return r1 + r2 + r3;                   // 33
 }

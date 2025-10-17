@@ -5,13 +5,13 @@
 // @expect-output: {"Int":42,"String":"Hello, World!"}
 
 // Function that returns multiple values (Int and String)
-fn<Int, String> get_values() -> {
+get_values()<Int, String> -> {
     println("DEBUG: Inside get_values()");
     return 42, "Hello, World!";
 }
 
 // Main function that calls get_values and returns its first value
-fn<Int> main() -> {
+main()<Int> -> {
     println("DEBUG: Inside main, getting Int value from get_values()");
     let (x, y) = get_values();
     println("DEBUG: Got values from get_values(): " + x + ", " + y);

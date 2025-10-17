@@ -1,10 +1,10 @@
-fn<[Int; 3]> test_array() -> {
-    var<[Int; 3]> arr = [10, 20, 30];
+test_array()<[Int; 3]> -> {
+    arr<[Int; 3]> = [10, 20, 30];
     return arr;
 }
 
-fn<Int> main() -> {
-    var<[Int; 3]> result = test_array();
+main()<Int> -> {
+    result<[Int; 3]> = test_array();
     println(result);
     return 0;
 }

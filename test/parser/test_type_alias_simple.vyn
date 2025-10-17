@@ -1,7 +1,7 @@
 // Simple test file for type alias functionality
 type MyInt = Int;
 
-fn<MyInt> main() -> {
-    var<MyInt> x = 47;
+main()<MyInt> -> {
+    x<MyInt> = 47;
     return x;
 }
