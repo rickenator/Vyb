@@ -247,16 +247,15 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
             m_currentLLVMValue = nullptr; return;
         }
         
-        // Special handling for main function: if it has a complex return type,
-        // it will use auto-serialization and should return i32 as exit code
-        // BUT if the function body returns a lit() intrinsic, keep the original return type
-        if (node->id->name == "main" && 
-            !returnType->isIntegerTy() && 
-            !returnType->isVoidTy() && 
-            !(returnType->isPointerTy() && returnType == int8PtrType) &&
-            !functionBodyReturnsLitIntrinsic(node->body.get())) {
-            returnType = int32Type; // main returns exit code when auto-serializing
-        }
+        // TODO: Auto-serialization for main function is disabled for now to fix type verification
+        // When enabled, main functions with complex types will serialize to JSON and return i32
+        // if (node->id->name == "main" && 
+        //     !returnType->isIntegerTy() && 
+        //     !returnType->isVoidTy() && 
+        //     !(returnType->isPointerTy() && returnType == int8PtrType) &&
+        //     !functionBodyReturnsLitIntrinsic(node->body.get())) {
+        //     returnType = int32Type; // main returns exit code when auto-serializing
+        // }
     } else {
         returnType = llvm::Type::getVoidTy(*context);
     }

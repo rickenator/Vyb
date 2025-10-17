@@ -252,6 +252,7 @@ std::vector<vyn::token::Token> Lexer::tokenize() {
         // This case is for division. Comments (//) are handled earlier.
         emit_token(vyn::TokenType::DIVIDE, "/"); 
         break;
+      case '%': emit_token(vyn::TokenType::MODULO, "%"); break;
       case '&':
         if (pos_ + 1 < source_.size() && source_[pos_ + 1] == '&') {
           emit_token(vyn::TokenType::AND, "&&");

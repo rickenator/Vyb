@@ -48,14 +48,23 @@ Based on comprehensive analysis of documentation (EBNF grammar, AST specs, tests
 - [ ] Tuple types (`(Type1, Type2)`)
 - [ ] Function types (`fn<ReturnType>(ParamTypes)`)
 - [ ] Optional types (`Type?`)
-- [ ] Ownership wrappers (`my<Type>`, `our<Type>`, `their<Type>`, `ptr<Type>`)
+- [🔶] **Ownership wrappers** - PARTIALLY IMPLEMENTED
+  - [x] `my<Type>`, `our<Type>`, `their<Type>` (parsing works)
+  - [ ] `ptr<Type>` (missing from type parser)
+  - [ ] Semantic ownership enforcement
+  - [ ] LLVM codegen for ownership
 
 #### 4. **Memory Management** ⚠️ CRITICAL  
-- [ ] Semantic validation for `unsafe` blocks
-- [ ] `loc<T>()` pointer creation intrinsic
-- [ ] `at()` pointer dereferencing intrinsic
-- [ ] `from<loc<T>>()` type conversion intrinsic
-- [ ] Borrowing (`borrow()`, `view()`) intrinsics
+- [🔶] **Unsafe blocks** - PARTIALLY IMPLEMENTED
+  - [x] `unsafe { ... }` parsing and tokenization
+  - [ ] Semantic validation (operations only allowed in unsafe)
+- [ ] **Memory intrinsics** - NOT IMPLEMENTED
+  - [ ] `loc<T>()` pointer creation intrinsic
+  - [ ] `at()` pointer dereferencing intrinsic
+  - [ ] `from<loc<T>>()` type conversion intrinsic
+- [ ] **Borrowing intrinsics** - PARSING ONLY
+  - [x] `borrow()`, `view()` tokenization
+  - [ ] Semantic validation and type generation
 
 #### 5. **Multi-Value Returns** ⚠️ IMPORTANT
 - [ ] `fn<Type1, Type2>` syntax (parsing may exist)
@@ -135,8 +144,13 @@ Function return type does not match operand type of return inst!
 4. [ ] Implement array types and access
 
 ### Phase 3: Memory & Types (Week 4)
-1. [ ] Complete ownership type system
-2. [ ] Implement unsafe memory operations
+1. [ ] **Complete ownership type system**
+   - [ ] Fix `ptr<Type>` parsing (missing from type parser)
+   - [ ] Implement semantic ownership enforcement
+   - [ ] Add LLVM codegen for ownership types
+2. [ ] **Implement unsafe memory operations**
+   - [ ] Complete `loc<T>()`, `at()`, `from<loc<T>>()` intrinsics
+   - [ ] Semantic validation for unsafe-only operations
 3. [ ] Implement basic generics
 
 ### Phase 4: Advanced Features (Weeks 5-6)
