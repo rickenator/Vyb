@@ -562,10 +562,19 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
         if (auto vecIdent = dynamic_cast<ast::Identifier*>(memberExpr->object.get())) {
             if (auto newIdent = dynamic_cast<ast::Identifier*>(memberExpr->property.get())) {
                 if (vecIdent->name == "Vec" && newIdent->name == "new") {
-                    // This is Vec::new() - create an empty vector
-                    if (!node->arguments.empty()) {
-                        addError("Vec::new() does not accept any arguments", node);
+                    // This is Vec::new() or Vec::new(size) - create a vector
+                    if (node->arguments.size() > 1) {
+                        addError("Vec::new() accepts at most 1 argument (optional size)", node);
                         return;
+                    }
+                    
+                    // If size argument is provided, validate it's an integer type
+                    if (node->arguments.size() == 1) {
+                        auto sizeArg = node->arguments[0].get();
+                        if (sizeArg) {
+                            sizeArg->accept(*this);
+                            // TODO: In full implementation, validate that size argument is Int type
+                        }
                     }
                     
                     // Need to infer element type from context or default to a generic type
@@ -2099,10 +2108,10 @@ std::vector<std::string> SemanticAnalyzer::getImplementedTraits(const std::strin
     std::vector<std::string> traits;
     
     // Add built-in trait implementations
-    if (typeName == "Int" || typeName == "Float" || typeName == "Char") {
+    if (typeName == "Int" || typeName == "Int32" || typeName == "Float" || typeName == "Float32" || typeName == "Char") {
         traits.push_back("Comparable");
         traits.push_back("Equatable");
-        if (typeName == "Int" || typeName == "Float") {
+        if (typeName == "Int" || typeName == "Int32" || typeName == "Float" || typeName == "Float32") {
             traits.push_back("Numeric");
         }
     }
@@ -2126,16 +2135,16 @@ std::vector<std::string> SemanticAnalyzer::getImplementedTraits(const std::strin
 bool SemanticAnalyzer::isBuiltinTypeCompatible(const std::string& typeName, const std::string& traitName) {
     // Check built-in type and trait compatibility
     if (traitName == "Comparable") {
-        return typeName == "Int" || typeName == "Float" || typeName == "Char" || typeName == "String";
+        return typeName == "Int" || typeName == "Int32" || typeName == "Float" || typeName == "Float32" || typeName == "Char" || typeName == "String";
     }
     
     if (traitName == "Equatable") {
-        return typeName == "Int" || typeName == "Float" || typeName == "Char" || 
+        return typeName == "Int" || typeName == "Int32" || typeName == "Float" || typeName == "Float32" || typeName == "Char" || 
                typeName == "String" || typeName == "Bool";
     }
     
     if (traitName == "Numeric") {
-        return typeName == "Int" || typeName == "Float";
+        return typeName == "Int" || typeName == "Int32" || typeName == "Float" || typeName == "Float32";
     }
     
     if (traitName == "Hashable") {

@@ -382,10 +382,14 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
 
             if (typeNameStr == "Int" || typeNameStr == "int" || typeNameStr == "i64") {
                 llvmType = int64Type;
+            } else if (typeNameStr == "Int32" || typeNameStr == "int32" || typeNameStr == "i32") {
+                llvmType = int32Type;
             } else if (typeNameStr == "Int8" || typeNameStr == "int8" || typeNameStr == "i8") {
                 llvmType = int8Type;
             } else if (typeNameStr == "Float" || typeNameStr == "float" || typeNameStr == "f64") {
                 llvmType = doubleType;
+            } else if (typeNameStr == "Float32" || typeNameStr == "float32" || typeNameStr == "f32") {
+                llvmType = floatType;
             } else if (typeNameStr == "Bool" || typeNameStr == "bool") {
                 llvmType = int1Type;
             } else if (typeNameStr == "Void" || typeNameStr == "void") {
