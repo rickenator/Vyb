@@ -85,9 +85,16 @@ vyn::ast::StmtPtr StatementParser::parse() {
         case vyn::TokenType::KEYWORD_CONTINUE:
             return parse_continue();
         default:
-            // Check if this could be a relaxed syntax variable declaration (Type name)
+            // Check if this could be a variable declaration with unified syntax (name<Type>)
             if (current_token.type == vyn::TokenType::IDENTIFIER) {
-                // Save position in case we need to backtrack
+                token::Token next_token = this->peekNext();
+                
+                // Check for new unified syntax pattern: name<Type>
+                if (next_token.type == vyn::TokenType::LT) {
+                    return parse_var_decl();
+                }
+                
+                // Check if this could be a legacy relaxed syntax variable declaration (Type name)
                 size_t saved_pos = this->pos_;
                 
                 try {

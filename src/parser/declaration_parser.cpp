@@ -65,6 +65,10 @@ vyn::ast::DeclPtr DeclarationParser::parse() {
         // NEW UNIFIED SYNTAX: Check for name<Type> pattern
         // This could be a variable declaration with unified syntax: name<Type>
         return this->parse_global_var_declaration();
+    } else if (current_token.type == vyn::TokenType::IDENTIFIER && next_token.type == vyn::TokenType::LPAREN) {
+        // NEW UNIFIED SYNTAX: Check for name(params)<ReturnType> pattern
+        // This could be a function declaration with unified syntax
+        return this->parse_function();
     } else {
         // Check if this could be a legacy relaxed syntax variable declaration (Type name)
         // We need to try to parse it as a type and see if we succeed
@@ -188,61 +192,119 @@ std::unique_ptr<vyn::ast::Node> DeclarationParser::parse_param() {
 vyn::ast::FunctionParameter DeclarationParser::parse_function_parameter_struct() {
     SourceLocation loc = this->current_location();
     
-    // Check if we're using the standard syntax (var<Type> or const<Type>) or
-    // the relaxed syntax (Type or const Type)
-    bool is_mutable = true; // Default to mutable (var) if not specified
-    bool using_standard_syntax = true;
+    bool is_mutable = true; // Default to mutable unless specified otherwise
     
-    // Check for relaxed syntax with 'const' keyword first
+    // Check for legacy syntax with var/const keywords
     if (this->match(vyn::TokenType::KEYWORD_CONST)) {
         is_mutable = false;
         
-        // Check if the next token is '<' (standard syntax) or an identifier (relaxed syntax)
-        if (this->peek().type == vyn::TokenType::LT) {
-            // Standard syntax: const<Type>
-            using_standard_syntax = true;
-            this->expect(vyn::TokenType::LT);
-        } else {
-            // Relaxed syntax: const Type
-            using_standard_syntax = false;
-        }
-    } else if (this->match(vyn::TokenType::KEYWORD_VAR)) {
-        // Standard syntax: var<Type>
-        is_mutable = true;
+        // Legacy syntax: const<Type> name
         this->expect(vyn::TokenType::LT);
-    } else {
-        // Relaxed syntax: Type (no var/const keyword)
-        is_mutable = true;
-        using_standard_syntax = false;
-    }
-    
-    // Parse parameter type
-    auto type_annot = this->type_parser_.parse(); // Returns TypeNodePtr
-    if (!type_annot) {
-        throw std::runtime_error("Expected type annotation for parameter at " + location_to_string(this->current_location()));
-    }
-    
-    // If using standard syntax, expect the closing '>'
-    if (using_standard_syntax) {
-        this->expect(vyn::TokenType::GT);
-    }
-    
-    // Parse parameter name
-    if (this->peek().type != vyn::TokenType::IDENTIFIER) {
-        throw std::runtime_error("Expected parameter name (identifier) after type at " + location_to_string(this->current_location()));
-    }
-    auto name_ident = std::make_unique<ast::Identifier>(this->current_location(), this->consume().lexeme);
-    
-    // Parse optional default value
-    if (this->match(vyn::TokenType::EQ)) {
-        auto default_value = this->expr_parser_.parse_expression();
-        if (!default_value) {
-            throw std::runtime_error("Expected expression for default value of parameter \\\'" + name_ident->name + "\\\' at " + location_to_string(this->current_location()));
+        auto type_annot = this->type_parser_.parse();
+        if (!type_annot) {
+            throw std::runtime_error("Expected type annotation for parameter at " + location_to_string(this->current_location()));
         }
-        // default_value is parsed but not stored in FunctionParameter
+        this->expect(vyn::TokenType::GT);
+        
+        // Parse parameter name
+        if (this->peek().type != vyn::TokenType::IDENTIFIER) {
+            throw std::runtime_error("Expected parameter name (identifier) after type at " + location_to_string(this->current_location()));
+        }
+        auto name_ident = std::make_unique<ast::Identifier>(this->current_location(), this->consume().lexeme);
+        
+        // Parse optional default value
+        if (this->match(vyn::TokenType::EQ)) {
+            auto default_value = this->expr_parser_.parse_expression();
+            if (!default_value) {
+                throw std::runtime_error("Expected expression for default value of parameter \\\'" + name_ident->name + "\\\' at " + location_to_string(this->current_location()));
+            }
+        }
+        
+        return vyn::ast::FunctionParameter(std::move(name_ident), std::move(type_annot), is_mutable);
+    } else if (this->match(vyn::TokenType::KEYWORD_VAR)) {
+        is_mutable = true;
+        
+        // Legacy syntax: var<Type> name
+        this->expect(vyn::TokenType::LT);
+        auto type_annot = this->type_parser_.parse();
+        if (!type_annot) {
+            throw std::runtime_error("Expected type annotation for parameter at " + location_to_string(this->current_location()));
+        }
+        this->expect(vyn::TokenType::GT);
+        
+        // Parse parameter name
+        if (this->peek().type != vyn::TokenType::IDENTIFIER) {
+            throw std::runtime_error("Expected parameter name (identifier) after type at " + location_to_string(this->current_location()));
+        }
+        auto name_ident = std::make_unique<ast::Identifier>(this->current_location(), this->consume().lexeme);
+        
+        // Parse optional default value
+        if (this->match(vyn::TokenType::EQ)) {
+            auto default_value = this->expr_parser_.parse_expression();
+            if (!default_value) {
+                throw std::runtime_error("Expected expression for default value of parameter \\\'" + name_ident->name + "\\\' at " + location_to_string(this->current_location()));
+            }
+        }
+        
+        return vyn::ast::FunctionParameter(std::move(name_ident), std::move(type_annot), is_mutable);
     }
     
-    return vyn::ast::FunctionParameter(std::move(name_ident), std::move(type_annot), is_mutable);
+    // Check for unified syntax vs legacy relaxed syntax
+    if (this->peek().type == vyn::TokenType::IDENTIFIER) {
+        auto lookahead = this->peekNext();
+        if (lookahead.type == vyn::TokenType::LT) {
+            // NEW UNIFIED SYNTAX: name<Type>
+            auto name_ident = std::make_unique<ast::Identifier>(this->current_location(), this->consume().lexeme);
+            
+            this->expect(vyn::TokenType::LT);
+            auto type_annot = this->type_parser_.parse();
+            if (!type_annot) {
+                throw std::runtime_error("Expected type annotation for parameter at " + location_to_string(this->current_location()));
+            }
+            
+            // Check for const modifier: name<Type const>
+            if (this->peek().type == vyn::TokenType::IDENTIFIER && this->peek().lexeme == "const") {
+                this->consume(); // consume "const"
+                is_mutable = false;
+            }
+            
+            this->expect(vyn::TokenType::GT);
+            
+            // Parse optional default value
+            if (this->match(vyn::TokenType::EQ)) {
+                auto default_value = this->expr_parser_.parse_expression();
+                if (!default_value) {
+                    throw std::runtime_error("Expected expression for default value of parameter \\\'" + name_ident->name + "\\\' at " + location_to_string(this->current_location()));
+                }
+            }
+            
+            return vyn::ast::FunctionParameter(std::move(name_ident), std::move(type_annot), is_mutable);
+        } else {
+            // LEGACY RELAXED SYNTAX: Type name
+            auto type_annot = this->type_parser_.parse();
+            if (!type_annot) {
+                throw std::runtime_error("Expected type annotation for parameter at " + location_to_string(this->current_location()));
+            }
+            
+            // Parse parameter name
+            if (this->peek().type != vyn::TokenType::IDENTIFIER) {
+                throw std::runtime_error("Expected parameter name (identifier) after type at " + location_to_string(this->current_location()));
+            }
+            auto name_ident = std::make_unique<ast::Identifier>(this->current_location(), this->consume().lexeme);
+            
+            // Parse optional default value
+            if (this->match(vyn::TokenType::EQ)) {
+                auto default_value = this->expr_parser_.parse_expression();
+                if (!default_value) {
+                    throw std::runtime_error("Expected expression for default value of parameter \\\'" + name_ident->name + "\\\' at " + location_to_string(this->current_location()));
+                }
+            }
+            
+            return vyn::ast::FunctionParameter(std::move(name_ident), std::move(type_annot), is_mutable);
+        }
+    }
+    
+    throw std::runtime_error("Expected parameter declaration at " + location_to_string(this->current_location()));
 }
 
 
