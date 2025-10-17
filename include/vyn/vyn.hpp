@@ -7,12 +7,12 @@
  * CURRENT IMPLEMENTATION STATUS:
  * ✅ Complete LLVM backend with JIT execution
  * ✅ Auto-serialization for complex return types
- * ✅ Functions, variables, structs, control flow (if/else, while)
+ * ✅ Functions, variables, structs, control flow (if/else, while, for)
  * ✅ Type system with ownership (my<T>, our<T>, their<T>)
  * ✅ Memory safety with borrowing (view, borrow) and unsafe blocks
  * ✅ Comprehensive parser supporting templates, async, classes
  * 🚧 Arrays and collections (parser ready, runtime pending)
- * 🚧 For loops (parser ready, runtime pending) 
+ * � Range-based for loops (parser tokens ready, implementation pending) 
  * 📋 Standard library modules (planned)
  * 
  * This header provides the main interface for Vyn compilation and execution.

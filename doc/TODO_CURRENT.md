@@ -32,11 +32,12 @@
 - [ ] **Array Operations**: Indexing, iteration, slicing
 - [ ] **Memory Management**: Proper allocation/deallocation for collections
 
-### 2. Control Flow Completion  
-**Status**: Parser tokens exist, runtime implementation needed
-- [ ] **For Loops**: `for i in 0..10` and `for item in collection`
-- [ ] **Range Syntax**: `0..10`, `0..=10` for iteration
-- [ ] **Iterator Protocol**: Basic iteration interface
+### Control Flow Completion  
+**Status**: ✅ **C-style for loops COMPLETED** - Range-based for loops pending
+- ✅ **C-style For Loops**: `for (init; condition; increment)` fully working
+- ✅ **All scenarios tested**: counting, step increments, countdown, nested loops
+- [ ] **Range-based For Loops**: `for i in 0..10` (parser tokens exist, need implementation)
+- [ ] **Iterator Protocol**: Basic iteration interface for collections
 
 ### 3. String Operations
 **Status**: Basic strings work, need expanded operations
@@ -131,10 +132,10 @@ For each new feature:
 
 ## 📊 Progress Metrics
 
-**Language Completeness**: ~40% (core features working)
+**Language Completeness**: ~50% (core features working)
 - ✅ Basic programs: 100% working
 - ✅ Data structures: 60% (structs work, arrays/vectors pending)
-- ✅ Control flow: 70% (if/while work, for loops pending)
+- ✅ Control flow: 85% (if/while/for C-style work, range-based for pending)
 - ✅ Type system: 80% (core types work, generics pending)
 - ✅ Memory safety: 90% (ownership working, GC optional)
 
