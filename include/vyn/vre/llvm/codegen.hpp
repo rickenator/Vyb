@@ -130,6 +130,14 @@ private:
     // String operations
     llvm::Value* generateStringConcatenation(llvm::Value* leftStr, llvm::Value* rightStr, SourceLocation loc);
     
+    // Array serialization
+    llvm::Value* generateArraySerialization(llvm::Value* arrayPtr, vyn::ast::ArrayType* arrayType);
+    llvm::Value* generateGenericSerialization(llvm::Value* objPtr, vyn::ast::TypeNode* typeNode);
+    llvm::Value* generateIntToString(llvm::Value* intValue);
+    llvm::Value* generateFloatToString(llvm::Value* floatValue);
+    llvm::Value* generateBoolToString(llvm::Value* boolValue);
+    llvm::Function* getSprintfFunction();
+    
     // ToString conversion helpers for mixed-type string concatenation  
     llvm::Value* generateToStringCall(llvm::Value* value, llvm::Type* valueType, vyn::ast::TypeNode* astType, SourceLocation loc);
     llvm::Value* generateMixedStringConcatenation(llvm::Value* leftValue, llvm::Value* rightValue, 

@@ -890,11 +890,24 @@ void ArrayType::accept(Visitor& visitor) {
 }
 
 std::unique_ptr<TypeNode> ArrayType::clone() const {
-    // Cloning ExprPtr for sizeExpression is tricky as Expr is not a TypeNode.
-    // For now, assume sizeExpression doesn't need deep cloning in this context or handle it appropriately.
-    // This might require a more general clone mechanism for all Node types if deep copies of expressions are needed.
-    // For TypeNode's clone, we primarily care about cloning the type structure.
-    return std::make_unique<ArrayType>(loc, elementType ? elementType->clone() : nullptr, nullptr /* shallow copy sizeExpr for now */);
+    // Clone the size expression if it exists
+    ExprPtr clonedSizeExpr = nullptr;
+    if (sizeExpression) {
+        // For now, handle only IntegerLiteral size expressions
+        if (auto* intLit = dynamic_cast<IntegerLiteral*>(sizeExpression.get())) {
+            clonedSizeExpr = std::make_unique<IntegerLiteral>(intLit->loc, intLit->value);
+        } else {
+            // For more complex expressions, we'll skip cloning for now
+            // This preserves the original behavior for complex size expressions
+            clonedSizeExpr = nullptr;
+        }
+    }
+    
+    return std::make_unique<ArrayType>(
+        loc, 
+        elementType ? elementType->clone() : nullptr, 
+        std::move(clonedSizeExpr)
+    );
 }
 
 // --- FunctionType ---

@@ -103,4 +103,34 @@ llvm::Function* LLVMCodegen::getVynPrintlnFunction() {
     return vynPrintlnFunc;
 }
 
+llvm::Function* LLVMCodegen::getSprintfFunction() {
+    // Check if sprintf function already exists
+    llvm::Function* sprintfFunc = module->getFunction("sprintf");
+    if (sprintfFunc) {
+        return sprintfFunc;
+    }
+    
+    // Create sprintf function type: int sprintf(char*, const char*, ...)
+    std::vector<llvm::Type*> sprintfParamTypes = {
+        int8PtrType,  // char* buffer
+        int8PtrType   // const char* format
+    };
+    
+    llvm::FunctionType* sprintfType = llvm::FunctionType::get(
+        int32Type,               // return type: int
+        sprintfParamTypes,       // parameter types
+        true                     // is variadic
+    );
+    
+    // Create the sprintf function declaration
+    sprintfFunc = llvm::Function::Create(
+        sprintfType,
+        llvm::Function::ExternalLinkage,
+        "sprintf",
+        module.get()
+    );
+    
+    return sprintfFunc;
+}
+
 } // namespace vyn
