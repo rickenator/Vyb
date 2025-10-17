@@ -332,6 +332,96 @@ unsafe_memory_example()<Int> -> {
 4. Encapsulate unsafe operations behind safe abstractions
 5. Test unsafe code extensively
 
+### Syntax and Literals
+
+Vyn uses indentation-sensitive syntax with optional braces and semicolons. Whitespace defines blocks, so consistent indentation is key. The unified `name<Type>` syntax provides consistency across all language constructs.
+
+#### Literal Forms
+
+```vyn
+# Integer literals
+x<Int> = 42                      # 64-bit signed integer (default)
+small<Int> = 123                 # All integers default to 64-bit
+large<Int> = -9223372036854775808  # Full 64-bit range
+
+# Floating point literals  
+pi<Float> = 3.14159              # 64-bit IEEE 754 double precision
+scientific<Float> = 1.23e-4      # Scientific notation supported
+negative<Float> = -2.718         # Negative floats
+
+# Boolean literals
+flag<Bool> = true                # Boolean true
+active<Bool> = false             # Boolean false
+
+# String literals
+name<String> = "Alice"           # UTF-8 string literals
+multiline<String> = "Line 1\nLine 2"  # Escape sequences supported
+empty<String> = ""               # Empty strings
+
+# Character and Unicode (planned)
+# ch<Char> = 'A'                 # Single byte UTF-8 code unit (planned)
+# rune<Rune> = '💡'              # Full Unicode code point (planned)
+
+# Array literals
+numbers<[Int; 5]> = [1, 2, 3, 4, 5]     # Fixed-size arrays
+mixed<[Float; 3]> = [1.0, 2.5, -3.14]   # Different element types
+empty_array<[Int; 0]> = []               # Empty arrays
+
+# Vector literals (dynamic arrays)
+items<Vec<Int>> = Vec::new()             # Empty dynamic vector
+# Dynamic vector literals with vec![] syntax planned
+
+# Raw bytes (planned)
+# raw<Bytes> = [0xDE, 0xAD, 0xBE]       # Raw byte sequences (planned)
+
+# Null/void
+# No explicit null literal - use Option<T> pattern when implemented
+```
+
+#### Syntax Examples
+
+```vyn
+# Variable declarations with unified syntax
+x<Int> = 42                      # Mutable variable
+const PI<Float> = 3.14159        # Immutable constant
+
+# Function declarations follow execution order
+add(a<Int>, b<Int>)<Int> -> a + b
+
+# Struct definitions with typed fields
+struct Point {
+    x<Float>,
+    y<Float> = 0.0               # Default values supported
+}
+
+# Pattern matching with comprehensive patterns
+process_value(val<Int>)<String> -> {
+    match val {
+        0 => "zero",
+        1..10 => "small",        # Range patterns (planned)
+        _ => "large"
+    }
+}
+
+# Memory safety with ownership types
+safe_data<my<String>> = my("unique")      # Unique ownership
+shared_data<our<String>> = our("shared")  # Reference counted
+borrowed<their<String>> = borrow safe_data  # Non-owning reference
+```
+
+#### Type System Features
+
+**Current Types**: `Int` (64-bit), `Float` (64-bit), `Bool`, `String`, `Void`, `[T; N]`, `Vec<T>`
+
+**Planned Types**: 
+- Sized integers: `Int32`, `Int16`, `Int8`, `UInt64`, `UInt32`, `UInt16`, `UInt8`
+- Sized floats: `Float32` for single precision
+- Characters: `Char` (UTF-8 code unit), `Rune` (Unicode code point)  
+- Raw data: `Bytes` for byte sequences
+- Compound: Tuples `(T1, T2, ...)`, advanced collections
+
+**Ownership Types**: `my<T>` (unique), `our<T>` (shared), `their<T>` (borrowed), `loc<T>` (unsafe raw pointer)
+
 ### Basic Syntax
 
 Vyn uses clean, expressive syntax with flexible parameter syntax:
