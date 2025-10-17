@@ -230,8 +230,8 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
         addError("Redefinition of function \\\"" + node->id->name + "\\\" in the same scope.", node->id.get());
     }
 
-    auto funcSymbol = new SymbolInfo{SymbolInfo::Kind::Function, node->id->name, false, nullptr};
-    currentScope->add(SymbolInfo{funcSymbol->kind, funcSymbol->name, funcSymbol->isConst, funcSymbol->type}); // Explicit SymbolInfo construction
+    auto funcSymbol = new SymbolInfo{SymbolInfo::Kind::Function, node->id->name, false, ast::OwnershipKind::MY, nullptr};
+    currentScope->add(SymbolInfo{funcSymbol->kind, funcSymbol->name, funcSymbol->isConst, funcSymbol->ownershipKind, funcSymbol->type}); // Explicit SymbolInfo construction
     delete funcSymbol; // SymbolInfo is copied into the table
 
     enterScope(); 
@@ -249,11 +249,11 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
             if (param.typeNode) { // Changed from param.type to param.typeNode
                 param.typeNode->accept(*this); 
                 paramTypesVec.push_back(param.typeNode->clone());
-                currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, param.name->name, false, param.typeNode->clone().release()}); // Explicit SymbolInfo, changed param.id to param.name, param.type to param.typeNode
+                currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, param.name->name, false, ast::OwnershipKind::MY, param.typeNode->clone().release()}); // Explicit SymbolInfo, changed param.id to param.name, param.type to param.typeNode
             } else {
                 addError("Parameter \\\"" + param.name->name + "\\\" missing type.", param.name.get()); // Changed from param.id to param.name
                 paramTypesVec.push_back(nullptr); 
-                currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, param.name->name, false, nullptr}); // Explicit SymbolInfo, changed param.id to param.name
+                currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, param.name->name, false, ast::OwnershipKind::MY, nullptr}); // Explicit SymbolInfo, changed param.id to param.name
             }
         }
     }
@@ -339,7 +339,7 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
     }
 
     SymbolInfo::Kind kind = SymbolInfo::Kind::Variable; 
-    currentScope->add(SymbolInfo{kind, node->id->name, node->isConst, symbolType ? symbolType->clone().release() : nullptr}); // Explicit SymbolInfo
+    currentScope->add(SymbolInfo{kind, node->id->name, node->isConst, ast::OwnershipKind::MY, symbolType ? symbolType->clone().release() : nullptr}); // Explicit SymbolInfo
 }
 
 void SemanticAnalyzer::visit(ast::ClassDeclaration* node) {
@@ -349,7 +349,7 @@ void SemanticAnalyzer::visit(ast::ClassDeclaration* node) {
     if (currentScope->lookupDirect(node->name->name)) {
         addError("Redefinition of class \\\"" + node->name->name + "\\\" in the same scope.", node->name.get());
     }
-    currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, node->name->name, false, new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->name->loc, node->name->name))});
+    currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, node->name->name, false, ast::OwnershipKind::MY, new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->name->loc, node->name->name))});
 
 
     enterScope();
@@ -438,10 +438,10 @@ void SemanticAnalyzer::visit(ast::TypeAliasDeclaration* node) {
     }
 
     if (node->name && node->typeNode && node->typeNode->type) {
-        currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, node->name->name, false, node->typeNode->type->clone().release()}); // Explicit SymbolInfo
+        currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, node->name->name, false, ast::OwnershipKind::MY, node->typeNode->type->clone().release()}); // Explicit SymbolInfo
     } else if (node->name) {
         addError("Type alias \\\"" + node->name->name + "\\\" has an unresolved target type.", node);
-        currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, node->name->name, false, nullptr}); // Explicit SymbolInfo
+        currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, node->name->name, false, ast::OwnershipKind::MY, nullptr}); // Explicit SymbolInfo
     }
 }
 
@@ -562,10 +562,19 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
         if (auto vecIdent = dynamic_cast<ast::Identifier*>(memberExpr->object.get())) {
             if (auto newIdent = dynamic_cast<ast::Identifier*>(memberExpr->property.get())) {
                 if (vecIdent->name == "Vec" && newIdent->name == "new") {
-                    // This is Vec::new() - create an empty vector
-                    if (!node->arguments.empty()) {
-                        addError("Vec::new() does not accept any arguments", node);
+                    // This is Vec::new() or Vec::new(size) - create a vector
+                    if (node->arguments.size() > 1) {
+                        addError("Vec::new() accepts at most 1 argument (optional size)", node);
                         return;
+                    }
+                    
+                    // If size argument is provided, validate it's an integer type
+                    if (node->arguments.size() == 1) {
+                        auto sizeArg = node->arguments[0].get();
+                        if (sizeArg) {
+                            sizeArg->accept(*this);
+                            // TODO: In full implementation, validate that size argument is Int type
+                        }
                     }
                     
                     // Need to infer element type from context or default to a generic type
@@ -579,6 +588,14 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     node->type = std::shared_ptr<ast::TypeNode>(std::move(vecType));
                     return;
                 }
+            }
+        }
+        
+        // Handle Vec instance method calls: obj.method()
+        if (auto objIdent = dynamic_cast<ast::Identifier*>(memberExpr->object.get())) {
+            if (auto methodIdent = dynamic_cast<ast::Identifier*>(memberExpr->property.get())) {
+                handleVecMethodCall(node, objIdent->name, methodIdent->name);
+                return;
             }
         }
     }
@@ -2091,10 +2108,10 @@ std::vector<std::string> SemanticAnalyzer::getImplementedTraits(const std::strin
     std::vector<std::string> traits;
     
     // Add built-in trait implementations
-    if (typeName == "Int" || typeName == "Float" || typeName == "Char") {
+    if (typeName == "Int" || typeName == "Int32" || typeName == "Float" || typeName == "Float32" || typeName == "Char") {
         traits.push_back("Comparable");
         traits.push_back("Equatable");
-        if (typeName == "Int" || typeName == "Float") {
+        if (typeName == "Int" || typeName == "Int32" || typeName == "Float" || typeName == "Float32") {
             traits.push_back("Numeric");
         }
     }
@@ -2118,16 +2135,16 @@ std::vector<std::string> SemanticAnalyzer::getImplementedTraits(const std::strin
 bool SemanticAnalyzer::isBuiltinTypeCompatible(const std::string& typeName, const std::string& traitName) {
     // Check built-in type and trait compatibility
     if (traitName == "Comparable") {
-        return typeName == "Int" || typeName == "Float" || typeName == "Char" || typeName == "String";
+        return typeName == "Int" || typeName == "Int32" || typeName == "Float" || typeName == "Float32" || typeName == "Char" || typeName == "String";
     }
     
     if (traitName == "Equatable") {
-        return typeName == "Int" || typeName == "Float" || typeName == "Char" || 
+        return typeName == "Int" || typeName == "Int32" || typeName == "Float" || typeName == "Float32" || typeName == "Char" || 
                typeName == "String" || typeName == "Bool";
     }
     
     if (traitName == "Numeric") {
-        return typeName == "Int" || typeName == "Float";
+        return typeName == "Int" || typeName == "Int32" || typeName == "Float" || typeName == "Float32";
     }
     
     if (traitName == "Hashable") {
@@ -2135,6 +2152,235 @@ bool SemanticAnalyzer::isBuiltinTypeCompatible(const std::string& typeName, cons
     }
     
     return false;
+}
+
+void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std::string& objectName, const std::string& methodName) {
+    // Validate that the object is a Vec type and check constness
+    // Look up the object in the symbol table to check mutability
+    SymbolInfo* objSymbol = currentScope->lookup(objectName);
+    bool isConstVec = false;
+    bool isTheirVec = false;
+    
+    if (objSymbol) {
+        // Check if the variable is const or has ownership constraints
+        if (objSymbol->isConst) {
+            isConstVec = true;
+        }
+        // Check for 'their' ownership (borrowed reference)
+        if (objSymbol->ownershipKind == ast::OwnershipKind::THEIR) {
+            isTheirVec = true;
+        }
+    }
+    
+    if (methodName == "push") {
+        // push(element) -> Vec<T> (for chaining)
+        if (node->arguments.size() != 1) {
+            addError("Vec::push expects exactly 1 argument", node);
+            return;
+        }
+        // Check constness - push is a mutating operation
+        if (isConstVec) {
+            addError("Cannot call mutating method 'push' on const Vec: " + objectName, node);
+            return;
+        }
+        // Return type is the Vec itself for chaining
+        // In full implementation, get element type from Vec<T>
+        auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+        auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+        auto vecType = std::make_unique<ast::VecType>(node->loc, std::move(intType));
+        expressionTypes[node] = vecType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(vecType));
+        
+    } else if (methodName == "pop") {
+        // pop() -> T (element type)
+        if (node->arguments.size() != 0) {
+            addError("Vec::pop expects no arguments", node);
+            return;
+        }
+        // Check constness - pop is a mutating operation
+        if (isConstVec) {
+            addError("Cannot call mutating method 'pop' on const Vec: " + objectName, node);
+            return;
+        }
+        // Return element type
+        auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+        auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+        expressionTypes[node] = intType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
+        
+    } else if (methodName == "len") {
+        // len() -> Int
+        if (node->arguments.size() != 0) {
+            addError("Vec::len expects no arguments", node);
+            return;
+        }
+        auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+        auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+        expressionTypes[node] = intType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
+        
+    } else if (methodName == "get") {
+        // get(index) -> T (element type)
+        if (node->arguments.size() != 1) {
+            addError("Vec::get expects exactly 1 argument (index)", node);
+            return;
+        }
+        // Validate index is integer type
+        if (node->arguments[0]) {
+            node->arguments[0]->accept(*this);
+            // TODO: Check that argument is Int type
+        }
+        // Return element type
+        auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+        auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+        expressionTypes[node] = intType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
+        
+    } else if (methodName == "push_array") {
+        // push_array(array) -> Vec<T> (for chaining)
+        if (node->arguments.size() != 1) {
+            addError("Vec::push_array expects exactly 1 argument (array)", node);
+            return;
+        }
+        // Check constness - push_array is a mutating operation
+        if (isConstVec) {
+            addError("Cannot call mutating method 'push_array' on const Vec: " + objectName, node);
+            return;
+        }
+        // TODO: Validate argument is array type [T; N] compatible with Vec<T>
+        // Return Vec type for chaining
+        auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+        auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+        auto vecType = std::make_unique<ast::VecType>(node->loc, std::move(intType));
+        expressionTypes[node] = vecType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(vecType));
+        
+    } else if (methodName == "to_array") {
+        // to_array(size) -> [T; N]
+        if (node->arguments.size() != 1) {
+            addError("Vec::to_array expects exactly 1 argument (array size)", node);
+            return;
+        }
+        // TODO: Validate size argument is integer
+        // Return array type [T; N]
+        auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+        auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+        auto arrayType = std::make_unique<ast::ArrayType>(node->loc, std::move(intType), nullptr);
+        expressionTypes[node] = arrayType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(arrayType));
+        
+    } else if (methodName == "clear") {
+        // clear() -> void
+        if (node->arguments.size() != 0) {
+            addError("Vec::clear expects no arguments", node);
+            return;
+        }
+        // Check constness - clear is a mutating operation
+        if (isConstVec) {
+            addError("Cannot call mutating method 'clear' on const Vec: " + objectName, node);
+            return;
+        }
+        // Return void (no type)
+        node->type = nullptr;
+        
+    } else if (methodName == "is_empty") {
+        // is_empty() -> Bool
+        if (node->arguments.size() != 0) {
+            addError("Vec::is_empty expects no arguments", node);
+            return;
+        }
+        auto boolId = std::make_unique<ast::Identifier>(node->loc, "Bool");
+        auto boolType = std::make_unique<ast::TypeName>(node->loc, std::move(boolId));
+        expressionTypes[node] = boolType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(boolType));
+        
+    } else if (methodName == "capacity") {
+        // capacity() -> Int
+        if (node->arguments.size() != 0) {
+            addError("Vec::capacity expects no arguments", node);
+            return;
+        }
+        auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+        auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+        expressionTypes[node] = intType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
+        
+    } else if (methodName == "concat") {
+        // concat(other_vec) -> Vec<T> (for chaining)
+        if (node->arguments.size() != 1) {
+            addError("Vec::concat expects exactly 1 argument (other Vec)", node);
+            return;
+        }
+        // TODO: Validate argument is compatible Vec<T> type
+        auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+        auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+        auto vecType = std::make_unique<ast::VecType>(node->loc, std::move(intType));
+        expressionTypes[node] = vecType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(vecType));
+        
+    } else if (methodName == "contains") {
+        // contains(value) -> Bool
+        if (node->arguments.size() != 1) {
+            addError("Vec::contains expects exactly 1 argument (value to search)", node);
+            return;
+        }
+        // TODO: Validate argument is compatible with element type T
+        auto boolId = std::make_unique<ast::Identifier>(node->loc, "Bool");
+        auto boolType = std::make_unique<ast::TypeName>(node->loc, std::move(boolId));
+        expressionTypes[node] = boolType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(boolType));
+        
+    } else if (methodName == "remove_at") {
+        // remove_at(index) -> T (removed element)
+        if (node->arguments.size() != 1) {
+            addError("Vec::remove_at expects exactly 1 argument (index)", node);
+            return;
+        }
+        // Check constness - remove_at is a mutating operation
+        if (isConstVec) {
+            addError("Cannot call mutating method 'remove_at' on const Vec: " + objectName, node);
+            return;
+        }
+        // TODO: Validate index is Int type
+        // Return element type
+        auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+        auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+        expressionTypes[node] = intType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
+        
+    } else if (methodName == "get_array") {
+        // get_array(pre_allocated_array) -> Int (number of elements copied)
+        if (node->arguments.size() != 1) {
+            addError("Vec::get_array expects exactly 1 argument (pre-allocated array)", node);
+            return;
+        }
+        // get_array is read-only, so it's allowed on const/their Vecs
+        // TODO: Validate argument is array type [T; N] compatible with Vec<T>
+        // Return Int (number of elements copied for efficiency feedback)
+        auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+        auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+        expressionTypes[node] = intType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
+        
+    } else if (methodName == "get_vec") {
+        // get_vec(target_vec) -> Int (number of elements copied)
+        // Extracts contents from any Vec into target Vec, respecting constness
+        if (node->arguments.size() != 1) {
+            addError("Vec::get_vec expects exactly 1 argument (target Vec)", node);
+            return;
+        }
+        // get_vec is read-only on source Vec (works with all ownership types: MY, OUR, THEIR, PTR)
+        // constness is automatically respected since this is a read-only operation
+        // TODO: Validate argument is Vec<T> type compatible with source Vec<T>
+        // Return Int (number of elements copied)
+        auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+        auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+        expressionTypes[node] = intType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
+        
+    } else {
+        addError("Unknown Vec method: " + methodName, node);
+    }
 }
 
 } // Added missing closing brace for namespace vyn

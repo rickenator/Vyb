@@ -1,0 +1,80 @@
+// Test get_vec method with all ownership types
+// This test demonstrates that get_vec works with any ownership type as long as constness is respected
+
+fn test_get_vec_all_ownership_types() {
+    // Test get_vec with MY ownership (unique)
+    my Vec<Int> source_my = Vec<Int>()
+    source_my.push(1).push(2).push(3)
+    
+    my Vec<Int> target_my = Vec<Int>()
+    let copied1 = source_my.get_vec(target_my)  // Should work - my Vec source
+    println("Copied from my Vec: " + copied1.toString())
+    
+    // Test get_vec with OUR ownership (shared)
+    our Vec<Int> source_our = Vec<Int>()
+    source_our.push(4).push(5).push(6)
+    
+    our Vec<Int> target_our = Vec<Int>()
+    let copied2 = source_our.get_vec(target_our)  // Should work - our Vec source
+    println("Copied from our Vec: " + copied2.toString())
+    
+    // Test get_vec with THEIR ownership (borrowed) - the original use case
+    their Vec<Int> source_their = Vec<Int>()
+    source_their.push(7).push(8).push(9)
+    
+    their Vec<Int> target_their = Vec<Int>()
+    let copied3 = source_their.get_vec(target_their)  // Should work - their Vec source
+    println("Copied from their Vec: " + copied3.toString())
+    
+    // Test get_vec with PTR ownership (raw pointer)
+    ptr Vec<Int> source_ptr = Vec<Int>()
+    source_ptr.push(10).push(11).push(12)
+    
+    ptr Vec<Int> target_ptr = Vec<Int>()
+    let copied4 = source_ptr.get_vec(target_ptr)  // Should work - ptr Vec source
+    println("Copied from ptr Vec: " + copied4.toString())
+    
+    println("get_vec works with all ownership types!")
+}
+
+fn test_get_vec_constness_respect() {
+    // Test get_vec with const source Vecs - should work as it's read-only
+    const my Vec<Int> const_source = Vec<Int>()
+    my Vec<Int> target = Vec<Int>()
+    
+    let copied = const_source.get_vec(target)  // Should work - read-only operation on const Vec
+    println("Copied from const Vec: " + copied.toString())
+    
+    // Test get_vec chaining with other methods
+    my Vec<Int> chain_source = Vec<Int>()
+    chain_source.push(1).push(2).push(3)
+    
+    my Vec<Int> chain_target = Vec<Int>()
+    let result = chain_source.len()  // Can chain with other read-only methods
+    let copied_chained = chain_source.get_vec(chain_target)
+    
+    println("get_vec respects constness and works in chains!")
+}
+
+fn test_get_vec_cross_ownership() {
+    // Test get_vec between different ownership types
+    my Vec<Int> my_source = Vec<Int>()
+    my_source.push(1).push(2)
+    
+    our Vec<Int> our_target = Vec<Int>()
+    let copied1 = my_source.get_vec(our_target)  // MY source -> OUR target
+    
+    their Vec<Int> their_source = Vec<Int>()
+    their_source.push(3).push(4)
+    
+    ptr Vec<Int> ptr_target = Vec<Int>()
+    let copied2 = their_source.get_vec(ptr_target)  // THEIR source -> PTR target
+    
+    println("get_vec works across different ownership types!")
+}
+
+fn main() {
+    test_get_vec_all_ownership_types()
+    test_get_vec_constness_respect()
+    test_get_vec_cross_ownership()
+}

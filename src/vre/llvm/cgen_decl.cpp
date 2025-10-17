@@ -108,7 +108,8 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
     llvm::Value* initialVal = nullptr;
     llvm::Type* varType = nullptr;
 
-        // Variable declaration processing    if (node->typeNode) {
+    // Variable declaration processing
+    if (node->typeNode) {
         varType = codegenType(node->typeNode.get());
         if (!varType) {
             logError(node->loc, "Could not determine LLVM type for variable '" + node->id->name + "'.");
@@ -210,6 +211,40 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
         if (node->id->type) {
             valueTypeMap[alloca] = node->id->type;
         }
+        
+        // Determine ownership kind from variable's type annotation
+        ast::OwnershipKind ownership = ast::OwnershipKind::MY; // Default to MY ownership
+        bool needsCleanup = false;
+        
+        // Check if this is a Vec type that needs memory management
+        bool isVecType = false;
+        
+        // Check AST type information first
+        if (node->typeNode) {
+            std::string typeString = node->typeNode->toString();
+            std::cout << "DEBUG: Variable '" << node->id->name << "' has AST type: '" << typeString << "'" << std::endl;
+            if (typeString.find("Vec") != std::string::npos) {
+                isVecType = true;
+                needsCleanup = true;
+                std::cout << "DEBUG: Variable '" << node->id->name << "' is a Vec type (from AST) requiring cleanup" << std::endl;
+            }
+        }
+        
+        // Fall back to LLVM struct type name check
+        if (!isVecType) {
+            if (auto structType = llvm::dyn_cast<llvm::StructType>(varType)) {
+                std::string typeName = structType->getName().str();
+                std::cout << "DEBUG: Variable '" << node->id->name << "' has struct type: '" << typeName << "'" << std::endl;
+                if (typeName.find("Vec") != std::string::npos) {
+                    needsCleanup = true;
+                    std::cout << "DEBUG: Variable '" << node->id->name << "' is a Vec type (from LLVM) requiring cleanup" << std::endl;
+                }
+            }
+        }
+        
+        // Register variable for scope-based cleanup
+        registerVariable(node->id->name, alloca, initialVal, ownership, varType, needsCleanup);
+        
         m_currentLLVMValue = alloca;
         // Propagate type info for struct/class variables
         if (node->typeNode) {
@@ -286,6 +321,9 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
         llvm::BasicBlock* entryBB = llvm::BasicBlock::Create(*context, "entry", func);
         builder->SetInsertPoint(entryBB);
 
+        // Initialize scope management for function body
+        enterScope();
+
         // Create allocas for parameters and store initial argument values
         auto argIt = func->arg_begin();
         for (size_t i = 0; i < paramTypes.size(); ++i, ++argIt) {
@@ -296,17 +334,24 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
             if (!alloca) {
                 logError(node->params[i].name->loc, "Failed to create alloca for parameter '" + paramNames[i] + "'.");
                 // Cleanup might be needed here
+                exitScope(); // Clean up function scope before exiting
                 currentFunction = oldFunction;
                 namedValues.swap(oldNamedValues);
                 m_currentLLVMValue = nullptr; return;
             }
             builder->CreateStore(argVal, alloca);
             namedValues[paramNames[i]] = alloca;
+            
+            // Register parameter for scope-based cleanup (parameters have MY ownership by default)
+            registerVariable(paramNames[i], alloca, argVal, ast::OwnershipKind::MY, paramTypes[i], false);
         }
         
         std::cout << "DEBUG: FunctionDeclaration - about to process function body" << std::endl;
         node->body->accept(*this); // Generate code for the function body
         std::cout << "DEBUG: FunctionDeclaration - finished processing function body" << std::endl;
+
+        // Clean up function scope before return
+        exitScope();
 
         // Verify function return: ensure all paths return if non-void, or add implicit void return
         if (returnType->isVoidTy()) {

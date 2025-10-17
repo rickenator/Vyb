@@ -104,6 +104,20 @@ private:
     bool verbose = false;  // Controls detailed warning output
     bool m_isMemberAccessBase = false; // Controls Identifier behavior for member access
 
+    // Ownership and scope tracking
+    struct ScopeVariable {
+        std::string name;
+        llvm::Value* allocaInst;  // The alloca instruction for the variable
+        llvm::Value* value;       // Current value (may be loaded from alloca)
+        ast::OwnershipKind ownership;
+        bool needsCleanup;
+        llvm::Type* type;
+        bool isVecWithMallocData; // Tracks if this is a Vec that owns malloc'd data
+    };
+    std::vector<std::vector<ScopeVariable>> scopeStack;
+    std::map<std::string, uint32_t> refCounts; // For our<T> reference counting
+    std::map<std::string, llvm::Value*> refCountStorage; // Storage for refcount variables
+
     // Helper methods
     llvm::Type* codegenType(vyn::ast::TypeNode* typeNode); // Converts vyn::TypeNode to llvm::Type
     llvm::Function* getCurrentFunction();
@@ -155,6 +169,27 @@ private:
     void handleVecPop(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecLen(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecGet(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
+    void handleVecPushArray(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
+    void handleVecToArray(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
+    void handleVecClear(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
+    void handleVecIsEmpty(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
+    void handleVecCapacity(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
+    void handleVecConcat(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
+    void handleVecContains(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
+    void handleVecRemoveAt(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
+    void handleVecGetArray(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
+    void handleVecGetVec(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
+
+    // Scope and ownership management
+    void enterScope();
+    void exitScope();
+    void registerVariable(const std::string& name, llvm::Value* allocaInst, llvm::Value* value, ast::OwnershipKind ownership, llvm::Type* type, bool needsCleanup = false);
+    void cleanupVariable(const ScopeVariable& var);
+    void incrementRefCount(const std::string& name);
+    void decrementRefCount(const std::string& name);
+    llvm::Function* getOrCreateFreeFunction();
+    llvm::Function* getOrCreateMallocFunction();
+    llvm::Function* getOrCreateMemsetFunction();
 
     // Ensure all core intrinsic functions are declared
     void ensureCoreIntrinsicFunctions();

@@ -15,6 +15,10 @@ namespace vyn {
 void LLVMCodegen::visit(vyn::ast::BlockStatement* node) {
     // Save the current namedValues for block scoping
     auto oldNamedValues = namedValues;
+    
+    // Enter new scope for ownership tracking
+    enterScope();
+    
     std::cout << "DEBUG: BlockStatement visitor called with " << node->body.size() << " statements" << std::endl;
     for (size_t i = 0; i < node->body.size(); ++i) {
         const auto& stmt = node->body[i];
@@ -31,6 +35,17 @@ void LLVMCodegen::visit(vyn::ast::BlockStatement* node) {
             break; 
         }
     }
+    
+    // Exit scope and cleanup variables only if current block isn't terminated
+    if (builder->GetInsertBlock() && !builder->GetInsertBlock()->getTerminator()) {
+        exitScope();
+    } else {
+        // Block is terminated, just pop the scope without generating cleanup
+        if (!scopeStack.empty()) {
+            scopeStack.pop_back();
+        }
+    }
+    
     // Restore namedValues to outer scope
     namedValues = std::move(oldNamedValues);
 }
