@@ -89,6 +89,10 @@ void LLVMCodegen::handleVecPush(vyn::ast::CallExpression* node, llvm::Value* vec
     // Get element type from the value being pushed
     llvm::Type* elementType = valueToAdd->getType();
     
+    // Calculate the actual element size using DataLayout
+    llvm::DataLayout dataLayout(module.get());
+    uint64_t elementSizeBytes = dataLayout.getTypeAllocSize(elementType);
+    
     // Get pointers to struct fields
     llvm::Value* dataFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 0, "vec.data_ptr");
     llvm::Value* sizeFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 1, "vec.size_ptr");
@@ -120,8 +124,8 @@ void LLVMCodegen::handleVecPush(vyn::ast::CallExpression* node, llvm::Value* vec
         "vec.new_cap"
     );
     
-    // Calculate allocation size (8 bytes per element for now)
-    llvm::Value* elementSize = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 8);
+    // Calculate allocation size using actual element size
+    llvm::Value* elementSize = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), elementSizeBytes);
     llvm::Value* allocSize = builder->CreateMul(newCap, elementSize, "vec.alloc_size");
     
     // Call malloc
@@ -170,13 +174,37 @@ void LLVMCodegen::handleVecPush(vyn::ast::CallExpression* node, llvm::Value* vec
     // Reload data pointer (might have changed in alloc block)
     llvm::Value* finalDataPtr = builder->CreateLoad(llvm::PointerType::get(*context, 0), dataFieldPtr, "vec.final_data");
     
-    // Calculate offset for new element
-    llvm::Value* elementSize2 = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 8);
+    // Calculate offset for new element using actual element size
+    llvm::Value* elementSize2 = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), elementSizeBytes);
     llvm::Value* offset = builder->CreateMul(currentSize, elementSize2, "vec.offset");
     llvm::Value* elementPtr = builder->CreateGEP(llvm::Type::getInt8Ty(*context), finalDataPtr, offset, "vec.element_ptr");
     
-    // Store the value
-    builder->CreateStore(valueToAdd, elementPtr);
+    // Store the value - need to handle different types
+    if (elementType->isStructTy()) {
+        // For structs, do a memcpy from the source to destination
+        // valueToAdd should be a pointer to the struct
+        llvm::Value* srcPtr = valueToAdd;
+        if (!valueToAdd->getType()->isPointerTy()) {
+            // If valueToAdd is a struct value (not a pointer), we need to create a temporary
+            llvm::Value* tempAlloca = builder->CreateAlloca(elementType, nullptr, "vec.temp_struct");
+            builder->CreateStore(valueToAdd, tempAlloca);
+            srcPtr = tempAlloca;
+        }
+        
+        llvm::FunctionType* memcpyType = llvm::FunctionType::get(
+            llvm::PointerType::get(*context, 0),
+            {llvm::PointerType::get(*context, 0), llvm::PointerType::get(*context, 0), llvm::Type::getInt64Ty(*context)},
+            false
+        );
+        llvm::Function* memcpyFunc = module->getFunction("memcpy");
+        if (!memcpyFunc) {
+            memcpyFunc = llvm::Function::Create(memcpyType, llvm::Function::ExternalLinkage, "memcpy", module.get());
+        }
+        builder->CreateCall(memcpyFunc, {elementPtr, srcPtr, elementSize2});
+    } else {
+        // For primitives, direct store
+        builder->CreateStore(valueToAdd, elementPtr);
+    }
     
     // Increment size
     llvm::Value* newSize = builder->CreateAdd(currentSize, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1), "vec.new_size");
@@ -257,6 +285,26 @@ void LLVMCodegen::handleVecGet(vyn::ast::CallExpression* node, llvm::Value* vecP
         return;
     }
     
+    // Get the element type from the CallExpression's type (return type)
+    // The semantic analyzer should have set this to the element type (T from Vec<T>)
+    llvm::Type* elementLLVMType = nullptr;
+    uint64_t elementSizeBytes = 8; // Default to 8 bytes
+    
+    if (node->type) {
+        // Convert AST type to LLVM type
+        elementLLVMType = codegenType(node->type.get());
+        if (elementLLVMType) {
+            llvm::DataLayout dataLayout(module.get());
+            elementSizeBytes = dataLayout.getTypeAllocSize(elementLLVMType);
+        }
+    }
+    
+    // Fallback to i64 if we couldn't determine the type
+    if (!elementLLVMType) {
+        elementLLVMType = llvm::Type::getInt64Ty(*context);
+        elementSizeBytes = 8;
+    }
+    
     // Get pointers to struct fields
     llvm::Value* dataFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 0, "vec.data_ptr");
     llvm::Value* sizeFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 1, "vec.size_ptr");
@@ -268,18 +316,24 @@ void LLVMCodegen::handleVecGet(vyn::ast::CallExpression* node, llvm::Value* vecP
     // TODO: Add bounds checking - for now assume index is valid
     
     // Calculate offset: data_ptr + (index * element_size)
-    // Assuming 8-byte elements for now
-    llvm::Value* elementSize = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 8);
+    llvm::Value* elementSize = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), elementSizeBytes);
     llvm::Value* offset = builder->CreateMul(index, elementSize, "vec.offset");
     llvm::Value* elementPtr = builder->CreateGEP(llvm::Type::getInt8Ty(*context), dataPtr, offset, "vec.element_ptr");
     
-    // Load the element value
-    // For now, load as i64 (should match the element type)
-    llvm::Value* element = builder->CreateLoad(llvm::Type::getInt64Ty(*context), elementPtr, "vec.element");
-    
-    std::cout << "DEBUG: Vec::get() called - element retrieved" << std::endl;
-    
-    m_currentLLVMValue = element;
+    // Load the element value based on type
+    if (elementLLVMType->isStructTy()) {
+        // For structs, load the entire struct value (will be a copy)
+        llvm::Value* structValue = builder->CreateLoad(elementLLVMType, elementPtr, "vec.element_struct");
+        m_currentLLVMValue = structValue;
+        
+        std::cout << "DEBUG: Vec::get() called - returning struct value" << std::endl;
+    } else {
+        // For primitives, load the value directly
+        llvm::Value* element = builder->CreateLoad(elementLLVMType, elementPtr, "vec.element");
+        m_currentLLVMValue = element;
+        
+        std::cout << "DEBUG: Vec::get() called - element retrieved" << std::endl;
+    }
 }
 
 void LLVMCodegen::handleVecPushArray(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
