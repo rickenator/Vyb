@@ -134,12 +134,13 @@ std::unique_ptr<vyn::ast::ExpressionStatement> StatementParser::parse_expression
     // Check for optional semicolon or other valid terminators
     if (this->match(vyn::TokenType::SEMICOLON)) {
         // Semicolon consumed, all good.
-    } else if (this->peek().type == vyn::TokenType::NEWLINE ||
-               this->IsAtEnd() ||
+    } else if (this->IsAtEnd() ||
                this->peek().type == vyn::TokenType::RBRACE ||
-               this->peek().type == vyn::TokenType::DEDENT) {
-        // Optional semicolon: if it's a newline, end of file, closing brace, or dedent, it's fine.
-        // Do not consume newline, RBRACE, or DEDENT here, they might be significant for the outer structure.
+               this->peek().type == vyn::TokenType::DEDENT ||
+               // Check if next token starts a new statement
+               this->is_statement_start(this->peek().type)) {
+        // Optional semicolon: acceptable statement terminators
+        // Do not consume these tokens, they might be significant for the outer structure.
     } else {
         throw std::runtime_error("Expected semicolon, newline, '}', or DEDENT after expression statement at " +
                                  location_to_string(this->peek().location) + ", got " +
