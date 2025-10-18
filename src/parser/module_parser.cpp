@@ -1,31 +1,28 @@
 #include "vyn/parser/ast.hpp"
 #include "vyn/parser/token.hpp"
-#include "vyn/parser/parser.hpp" // Added missing include for parser definitions
+#include "vyn/parser/parser.hpp"
 #include <vector>
 #include <memory>
-#include <stdexcept> // Required for std::runtime_error
+#include <stdexcept>
 
-namespace vyn { // Changed Vyn to vyn
+namespace vyn {
 
-// Constructor for ModuleParser
-ModuleParser::ModuleParser(const std::vector<vyn::token::Token>& tokens, size_t& pos, const std::string& file_path, DeclarationParser& declaration_parser) // Changed Vyn::Token to vyn::token::Token
+ModuleParser::ModuleParser(const std::vector<vyn::token::Token>& tokens, size_t& pos, const std::string& file_path, DeclarationParser& declaration_parser)
     : BaseParser(tokens, pos, file_path), declaration_parser_(declaration_parser) {}
 
 std::unique_ptr<vyn::ast::Module> ModuleParser::parse() {
     vyn::SourceLocation module_loc = this->current_location();
-    std::vector<vyn::ast::StmtPtr> module_body; // Changed to ast::StmtPtr
+    std::vector<vyn::ast::StmtPtr> module_body;
 
     this->skip_comments_and_newlines();
 
-    while (this->peek().type != vyn::TokenType::END_OF_FILE) { // Corrected namespace to vyn::TokenType
-        vyn::token::Token current_token_before_parse = this->peek(); // Store token before parsing
-        size_t pos_before_parse = this->pos_; // Store position before parsing
+    while (this->peek().type != vyn::TokenType::END_OF_FILE) {
+        vyn::token::Token current_token_before_parse = this->peek();
+        size_t pos_before_parse = this->pos_;
 
-        // Try to parse a declaration first
         auto decl_node = this->declaration_parser_.parse();
         if (decl_node) {
             module_body.push_back(std::move(decl_node));
-            // Debug: print token before consuming semicolons
             std::cerr << "[ModuleParser] Before consuming semicolons, next token: "
                       << vyn::token_type_to_string(this->peek().type) << " (" << this->peek().lexeme << ")\\\\n";
             // Consume all consecutive semicolons after top-level declaration (e.g., class, struct, etc.)

@@ -372,7 +372,7 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
             if (isFloatOp) {
                 m_currentLLVMValue = builder->CreateFAdd(L, R, "faddtmp");
             }
-            // Debug output for string concatenation logic
+           
             else {
                 if (verbose) {
                     std::cout << "DEBUG PLUS: leftTypeNode=" << (leftTypeNode ? "yes" : "null") 
@@ -649,7 +649,7 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
 }
 
 void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
-    // Debug output to track CallExpression visits
+   
     std::cout << "DEBUG: CallExpression visitor called with callee: " << (node->callee ? node->callee->toString() : "null") << std::endl;
     if (node->type) {
         std::cout << "DEBUG: CallExpression has inferred type: " << node->type->toString() << std::endl;
@@ -2019,14 +2019,14 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
             return;
         }
 
-        // Debug output
+       
         std::cerr << "DEBUG: MemberExpression - Field '" << fieldName << "' at index " << fieldIndex 
                   << " in struct " << llvmStructType->getName().str() << std::endl;
 
         // Create a GEP to get a pointer to the field
         llvm::Value* fieldPtr = builder->CreateStructGEP(llvmStructType, structPtr, fieldIndex, fieldName + "_ptr");
         
-        // Debug the field type
+       
         llvm::Type* fieldType = llvmStructType->getElementType(fieldIndex);
         std::cerr << "DEBUG: Field type: " << getTypeName(fieldType) << std::endl;
         

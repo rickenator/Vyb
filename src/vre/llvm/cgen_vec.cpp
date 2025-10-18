@@ -218,13 +218,7 @@ void LLVMCodegen::handleVecPush(vyn::ast::CallExpression* node, llvm::Value* vec
     
     std::cout << "DEBUG: Vec::push() called - element stored" << std::endl;
     
-    // Return the Vec reference for method chaining
     m_currentLLVMValue = vecPtr;
-    
-    // Note: The builder's insertion point is now at the end of mergeBlock.
-    // The caller will continue adding instructions here (e.g., the next statement).
-    // This block will naturally get a terminator when the function ends or when
-    // the next control flow statement is encountered.
 }
 
 void LLVMCodegen::handleVecPop(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {

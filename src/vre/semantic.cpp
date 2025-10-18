@@ -55,7 +55,7 @@ SemanticAnalyzer::SemanticAnalyzer(Driver& driver) : driver_(driver), currentSco
         "extern", "import", "smuggle", "module", "use", "mut", "scoped", "bundle",
         "true", "false", "null", "nil",
         "addr", "at", "loc", "from",
-        "lit", "notype", "bare", "deserial"  // Added serialization mode intrinsics
+        "lit", "notype", "bare", "deserial"
     };
 }
 
@@ -148,10 +148,8 @@ bool SemanticAnalyzer::isLValue(ast::Expression* expr) {
 
 bool SemanticAnalyzer::isRawLocationType(ast::Expression* expr) {
     auto it = expressionTypes.find(expr);
-    if (it == expressionTypes.end() || !it->second) return false; 
-    // TODO: Actually check if it->second is a raw location type (e.g. specific TypeName or PointerType)
-    // For now, returning true if type is known, this needs proper implementation.
-    return true; // Added return
+    if (it == expressionTypes.end() || !it->second) return false;
+    return true;
 }
 
 
@@ -217,8 +215,7 @@ void SemanticAnalyzer::visit(ast::EmptyStatement* node) {
 // --- More complex visit methods and specific logic follow ---
 
 void SemanticAnalyzer::visit(ast::Module* node) {
-    // Module-level semantic analysis
-    for (auto& item : node->body) { // Changed items to body
+    for (auto& item : node->body) {
         if (item) item->accept(*this);
     }
 }
@@ -232,35 +229,35 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
     }
 
     auto funcSymbol = new SymbolInfo{SymbolInfo::Kind::Function, node->id->name, false, ast::OwnershipKind::MY, nullptr};
-    currentScope->add(SymbolInfo{funcSymbol->kind, funcSymbol->name, funcSymbol->isConst, funcSymbol->ownershipKind, funcSymbol->type}); // Explicit SymbolInfo construction
-    delete funcSymbol; // SymbolInfo is copied into the table
+    currentScope->add(SymbolInfo{funcSymbol->kind, funcSymbol->name, funcSymbol->isConst, funcSymbol->ownershipKind, funcSymbol->type});
+    delete funcSymbol;
 
     enterScope(); 
 
     std::vector<std::unique_ptr<ast::TypeNode>> paramTypesVec;
     
     for (auto& param : node->params) { 
-        if (param.name) { // Changed from param.id to param.name
-             if (isReservedWord(param.name->name)) { // Changed from param.id to param.name
-                addError("Identifier \\\"" + param.name->name + "\\\" is a reserved word and cannot be used as a parameter name.", param.name.get()); // Changed from param.id to param.name
+        if (param.name) {
+             if (isReservedWord(param.name->name)) {
+                addError("Identifier \\\"" + param.name->name + "\\\" is a reserved word and cannot be used as a parameter name.", param.name.get());
             }
-            if (currentScope->lookupDirect(param.name->name)) { // Changed from param.id to param.name
-                 addError("Redefinition of parameter \\\"" + param.name->name + "\\\".", param.name.get()); // Changed from param.id to param.name
+            if (currentScope->lookupDirect(param.name->name)) {
+                 addError("Redefinition of parameter \\\"" + param.name->name + "\\\".", param.name.get());
             }
-            if (param.typeNode) { // Changed from param.type to param.typeNode
+            if (param.typeNode) {
                 param.typeNode->accept(*this); 
                 paramTypesVec.push_back(param.typeNode->clone());
-                currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, param.name->name, false, ast::OwnershipKind::MY, param.typeNode->clone().release()}); // Explicit SymbolInfo, changed param.id to param.name, param.type to param.typeNode
+                currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, param.name->name, false, ast::OwnershipKind::MY, param.typeNode->clone().release()});
             } else {
-                addError("Parameter \\\"" + param.name->name + "\\\" missing type.", param.name.get()); // Changed from param.id to param.name
+                addError("Parameter \\\"" + param.name->name + "\\\" missing type.", param.name.get());
                 paramTypesVec.push_back(nullptr); 
-                currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, param.name->name, false, ast::OwnershipKind::MY, nullptr}); // Explicit SymbolInfo, changed param.id to param.name
+                currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, param.name->name, false, ast::OwnershipKind::MY, nullptr});
             }
         }
     }
 
     ast::TypeNode* returnTypeAstNode = nullptr;
-    if (node->returnTypeNode) { // Changed from returnType to returnTypeNode
+    if (node->returnTypeNode) {
         node->returnTypeNode->accept(*this); 
         returnTypeAstNode = node->returnTypeNode->clone().release();
     } else {
@@ -301,7 +298,7 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
         }
     }
 
-    if (node->typeNode) { // Changed from type to typeNode
+    if (node->typeNode) {
         node->typeNode->accept(*this);
     }
 
@@ -392,15 +389,8 @@ void SemanticAnalyzer::visit(ast::TraitDeclaration* node) {
 }
 
 void SemanticAnalyzer::visit(ast::ImplDeclaration* node) {
-    // Impl needs to refer to a Trait and a Type.
-    if (node->traitType) node->traitType->accept(*this); // Changed traitName to traitType
-    if (node->selfType) node->selfType->accept(*this);   // Changed typeName to selfType
-
-    // TODO: Add checks for trait and type existence and compatibility.
-    // SymbolInfo* traitSymbol = currentScope->lookup(node->traitType->toString()); 
-    // SymbolInfo* typeSymbol = currentScope->lookup(node->selfType->toString());  
-    // if (!traitSymbol || traitSymbol->kind != SymbolInfo::Kind::Type) { /* error */ }
-    // if (!typeSymbol || typeSymbol->kind != SymbolInfo::Kind::Type) { /* error */ }
+    if (node->traitType) node->traitType->accept(*this);
+    if (node->selfType) node->selfType->accept(*this);
 
     enterScope();
     for (auto& method : node->methods) { 
@@ -1088,7 +1078,7 @@ void SemanticAnalyzer::visit(ast::PointerDerefExpression* node) {
     }
     if (!node || !node->pointer) {
         addError("Malformed pointer dereference expression.", node);
-        expressionTypes[node] = nullptr; // Added to mark error
+        expressionTypes[node] = nullptr;
         return;
     }
     node->pointer->accept(*this);
@@ -1142,7 +1132,7 @@ void SemanticAnalyzer::visit(ast::AddrOfExpression* node) {
     }
     if (!node || !node->getLocation()) {
          addError("Malformed addr_of expression.", node);
-         expressionTypes[node] = nullptr; // Added to mark error
+         expressionTypes[node] = nullptr;
         return;
     }
     node->getLocation()->accept(*this); // Operand of addr()
@@ -1948,8 +1938,6 @@ void SemanticAnalyzer::visit(ast::TupleTypeNode* node) {
     }
 }
 
-// Additional helpful utility for SemanticAnalyzer (from semantic_tuple_type.cpp)
-// Note: This overload for TypeNode* is added alongside the existing Expression* version
 bool SemanticAnalyzer::isRawLocationType(ast::TypeNode* type) {
     // Determine if the type is a raw location type (loc<T>)
     if (auto* typeName = dynamic_cast<ast::TypeName*>(type)) {
