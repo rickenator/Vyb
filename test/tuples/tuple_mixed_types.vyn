@@ -1,0 +1,9 @@
+// Test nested Tuple types (if supported)
+// main()<Tuple<Int, Tuple<String, Bool>>> -> {
+//     // Would need nested tuple literal support
+// }
+
+// Test Tuple with all different types
+main()<Tuple<Int, String, Bool>> -> {
+    return 42, "test", true
+}

@@ -166,6 +166,7 @@ Vyn **v0.4.0** is a **complete systems programming language** ready for producti
 
 ### ✅ **Advanced Type System**
 - **Multi-value returns**: `main()<Int,String> -> return 42, "hello"`
+- **Variadic Tuples**: `Tuple<T,U,V,...>` supports 1 to N type parameters with both inline `(T,U,V)` and generic `Tuple<T,U,V>` syntax
 - **Auto-serialization**: Complex return types automatically output as JSON
 - **Type safety**: Full type checking and inference with modern struct syntax
 - **Generic collections**: `Vec<Int>`, `Vec<String>` with full method support
@@ -194,6 +195,7 @@ Vyn **v0.4.0** is a **complete systems programming language** ready for producti
 |------|-------------|------------|---------|
 | `[T; N]` | Fixed-size array | Mutable elements | `nums<[Int; 5]> = [1, 2, 3, 4, 5]` |
 | `Vec<T>` | Dynamic array | Mutable elements | `items<Vec<String>> = Vec::new()` |
+| `Tuple<T,U,...>` | Heterogeneous tuple (variadic) | Immutable | `data<Tuple<Int,String,Bool>>` |
 
 #### Ownership Types
 
@@ -679,6 +681,67 @@ describe_number(x<Int>)<String> -> {
     }
 }
 ```
+
+### Variadic Tuples
+
+Vyn supports **fully variadic tuple types** that can hold any number of heterogeneous elements (1 to N):
+
+```vyn
+# Single-element tuples
+get_single()<Tuple<Int>> -> {
+    return 42  # Automatically wrapped in tuple struct
+}
+
+# Two-element tuples (dual syntax)
+get_pair_inline()<Int, String> -> {
+    return 10, "hello"  # Inline syntax
+}
+
+get_pair_generic()<Tuple<Int, String>> -> {
+    return 20, "world"  # Generic syntax (equivalent)
+}
+
+# Multi-element tuples with mixed types
+get_data()<Tuple<String, Int, Bool, Float>> -> {
+    return "status", 200, true, 3.14
+}
+
+# Seven-element tuple demonstrating variadic support
+get_complex()<Tuple<Int, Int, Bool, String, Int, Bool, Int>> -> {
+    return 1, 2, true, "test", 3, false, 4
+}
+
+# Tuples work seamlessly with complex types
+get_mixed()<Tuple<String, Vec<Int>, Bool>> -> {
+    numbers<Vec<Int>> = Vec::new()
+    numbers.push(1)
+    numbers.push(2)
+    return "data", numbers, true
+}
+
+main()<Int> -> {
+    # All tuple syntaxes work identically
+    single<Tuple<Int>> = get_single()
+    pair<Tuple<Int,String>> = get_pair_inline()
+    data<Tuple<String,Int,Bool,Float>> = get_data()
+    
+    return 0
+}
+```
+
+**Tuple Features:**
+- **Variadic**: Supports 1 to N type parameters (tested up to 7+ elements)
+- **Dual Syntax**: Both `(T,U,V)` inline and `Tuple<T,U,V>` generic forms
+- **Type Safety**: Full compile-time type checking for all elements
+- **Complex Types**: Works with primitives, Strings, Vec, and custom types
+- **Auto-wrapping**: Single values automatically wrapped when returning to tuple type
+- **LLVM Structs**: Compiled to efficient anonymous struct types
+
+**Current Limitations** (planned for future releases):
+- No tuple element access (`.0`, `.1`, etc.)
+- No tuple variables (only return values)
+- No tuple destructuring
+- No tuple serialization output (compiles but values not printed)
 
 ## String Theory
 

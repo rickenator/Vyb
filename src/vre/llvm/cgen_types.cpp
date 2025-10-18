@@ -387,6 +387,33 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
             }
             std::string typeNameStr = typeNameNode->identifier->name; // Access name via identifier
 
+            // Handle Tuple<T, U, ...> types
+            if (typeNameStr == "Tuple") {
+                if (typeNameNode->genericArgs.empty()) {
+                    logError(typeNode->loc, "Tuple type requires type parameters (e.g., Tuple<Int, String>)");
+                    return nullptr;
+                }
+                
+                // Process each tuple element type
+                std::vector<llvm::Type*> tupleFields;
+                for (const auto& elemTypeNode : typeNameNode->genericArgs) {
+                    if (!elemTypeNode) {
+                        logError(typeNode->loc, "Tuple contains null type parameter");
+                        return nullptr;
+                    }
+                    llvm::Type* elemTy = codegenType(elemTypeNode.get());
+                    if (!elemTy) {
+                        logError(typeNode->loc, "Could not determine LLVM type for Tuple element: " + elemTypeNode->toString());
+                        return nullptr;
+                    }
+                    tupleFields.push_back(elemTy);
+                }
+                
+                // Create anonymous struct for the tuple
+                llvmType = llvm::StructType::get(*context, tupleFields, false);
+                break;
+            }
+
             // Handle Vec<T> types
             if (typeNameStr == "Vec") {
                 if (typeNameNode->genericArgs.empty() || !typeNameNode->genericArgs[0]) {

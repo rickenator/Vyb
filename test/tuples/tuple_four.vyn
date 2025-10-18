@@ -1,0 +1,4 @@
+// Test Tuple with 4 elements
+main()<Tuple<Int, String, Bool, Int>> -> {
+    return 1, "hello", true, 99
+}

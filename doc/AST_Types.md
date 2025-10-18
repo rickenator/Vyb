@@ -174,14 +174,41 @@ Function types can represent multi-value returns through the `fn<T1, T2, ...>` s
 
 For details on multi-value function syntax and auto-serialization, see [`Auto_Serialization_Main_Returns.md`](./Auto_Serialization_Main_Returns.md).
 
-### 2.6. `TupleTypeNode`
+### 2.6. `TupleTypeNode` (Variadic)
 
-Represents a tuple type (e.g., `(i32, string, bool)`).
+Represents a tuple type with **full variadic support** (e.g., `(i32, string, bool)` or `Tuple<Int, String, Bool>`).
+
+Vyn tuples support **1 to N type parameters** and can be expressed in two equivalent syntaxes:
+- **Inline syntax**: `main()<Int, String, Bool>` (comma-separated types)
+- **Generic syntax**: `main()<Tuple<Int, String, Bool>>` (explicit Tuple generic)
+
+Both syntaxes produce identical LLVM anonymous struct types and are fully interchangeable.
 
 -   **C++ Class**: `vyn::ast::TupleTypeNode`
 -   **`NodeType`**: `TUPLE_TYPE_NODE`
 -   **Fields**:
-    -   `elementTypes` (`std::vector<TypeNodePtr>`): A vector of types for the elements in the tuple.
+    -   `elementTypes` (`std::vector<TypeNodePtr>`): A vector of types for the elements in the tuple (variadic, supports any length).
+
+**Examples:**
+```vyn
+# Single-element tuple
+main()<Tuple<Int>> -> return 42
+
+# Multi-element tuples
+main()<Int, String> -> return 10, "hello"
+main()<Tuple<Int, String, Bool, Float>> -> return 1, "test", true, 3.14
+
+# Seven-element tuple
+main()<Tuple<Int, Int, Bool, String, Int, Bool, Int>> -> 
+    return 1, 2, true, "data", 3, false, 4
+```
+
+**Implementation Notes:**
+- Single-element tuples require special handling in return statements (auto-wrapping scalar to struct)
+- Tuple literals are created via `SequenceExpression` for multi-element, plain expressions for single-element
+- LLVM representation: anonymous struct types `{ T1, T2, ..., TN }`
+- Codegen in `cgen_types.cpp` handles `Tuple<T,U,...>` generic syntax
+- Return wrapping in `cgen_stmt.cpp` handles single-element edge case
 
 ```cpp
 // From include/vyn/parser/ast.hpp
