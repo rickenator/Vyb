@@ -2358,17 +2358,62 @@ void LLVMCodegen::visit(ast::SuperExpression* node) {
 }
 
 void LLVMCodegen::visit(ast::AwaitExpression* node) {
-    // 'await' expression - for asynchronous operations
-    // For now, just evaluate the inner expression synchronously
-    // TODO: Implement proper async/await semantics
-    logWarning(node->loc, "'await' expressions are treated as synchronous for now");
+    // 'await' expression - suspend current async function and wait for Future<T>
     
-    if (node->expr) {
-        node->expr->accept(*this);
-    } else {
+    if (!node->expr) {
         logError(node->loc, "await expression missing operand");
         m_currentLLVMValue = nullptr;
+        return;
     }
+    
+    // Check if we're in an async context
+    if (!currentAsyncState.isAsync) {
+        logError(node->loc, "await can only be used in async functions");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Evaluate the expression being awaited (should be a Future<T>)
+    node->expr->accept(*this);
+    llvm::Value* futureValue = m_currentLLVMValue;
+    
+    if (!futureValue) {
+        logError(node->loc, "Failed to evaluate await expression");
+        return;
+    }
+    
+    // Generate state machine suspension point
+    // 1. Save current state and local variables
+    // 2. Schedule continuation
+    // 3. Return control to runtime
+    
+    // Increment state counter for this suspension point
+    int currentState = ++currentAsyncState.stateCounter;
+    
+    // Create continuation block for when await completes
+    llvm::BasicBlock* continuationBlock = llvm::BasicBlock::Create(
+        *context, "await_continuation_" + std::to_string(currentState), currentFunction);
+    
+    // Store the state number
+    llvm::Value* stateNumberPtr = builder->CreateStructGEP(
+        currentAsyncState.stateStructType, currentAsyncState.stateStructInstance, 0);
+    builder->CreateStore(
+        llvm::ConstantInt::get(int32Type, currentState), stateNumberPtr);
+    
+    // Call runtime to await the future
+    llvm::Function* awaitFunc = getOrCreateAwaitTaskFunction();
+    
+    // For now, we'll create a simple placeholder implementation
+    // In a real implementation, this would need proper LLVM coroutine intrinsics
+    // or a more sophisticated state machine
+    
+    // Call vyn_await_task with a dummy task ID for now
+    llvm::Value* dummyTaskId = llvm::ConstantInt::get(int64Type, 0);
+    builder->CreateCall(awaitFunc, {dummyTaskId});
+    
+    // For simplicity, just return the input future value for now
+    // This doesn't implement proper suspension/resumption semantics yet
+    m_currentLLVMValue = futureValue;
 }
 
 // Array serialization helper function

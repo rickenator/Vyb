@@ -192,6 +192,30 @@ private:
     llvm::Function* getOrCreateMallocFunction();
     llvm::Function* getOrCreateMemsetFunction();
 
+    // Async/await support
+    struct AsyncState {
+        llvm::Function* asyncFunction;
+        llvm::Function* stateMachineFunction;
+        llvm::StructType* stateStructType;
+        llvm::Value* stateStructInstance;
+        llvm::Value* currentStateValue;
+        llvm::BasicBlock* resumeBlock;
+        llvm::Value* futureValue;
+        int stateCounter;
+        bool isAsync;
+        
+        AsyncState() : asyncFunction(nullptr), stateMachineFunction(nullptr), 
+                       stateStructType(nullptr), stateStructInstance(nullptr),
+                       currentStateValue(nullptr), resumeBlock(nullptr), 
+                       futureValue(nullptr), stateCounter(0), isAsync(false) {}
+    };
+    
+    AsyncState currentAsyncState;
+    llvm::Function* getOrCreateScheduleTaskFunction();
+    llvm::Function* getOrCreateAwaitTaskFunction();
+    llvm::Function* getOrCreateCreateFutureFunction();
+    llvm::StructType* createFutureStructType(llvm::Type* resultType);
+
     // Ensure all core intrinsic functions are declared
     void ensureCoreIntrinsicFunctions();
 

@@ -2,6 +2,7 @@
 #include "vyn/vre/llvm/codegen.hpp"
 #include "vyn/parser/ast.hpp"
 #include "vyn/parser/source_location.hpp" // For vyn::SourceLocation
+#include "vyn/runtime/async_runtime.hpp" // For async runtime integration
 
 // LLVM Headers
 #include "llvm/ADT/APFloat.h"

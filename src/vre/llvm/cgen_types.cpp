@@ -153,11 +153,11 @@ void LLVMCodegen::visit(ast::VecType* node) {
 
 void LLVMCodegen::visit(ast::FutureType* node) {
     // FutureType represents an async Future<T>
-    // It generates an LLVM struct type with { ptr to result T*, state i32, completion_ptr void* }
+    // Generate LLVM struct type: { T* result, i32 state, i8* runtime_data }
     
     if (!node->resultType) {
         logError(node->loc, "Future type has no result type");
-        m_currentLLVMValue = nullptr;
+        m_currentLLVMType = nullptr;
         return;
     }
     
