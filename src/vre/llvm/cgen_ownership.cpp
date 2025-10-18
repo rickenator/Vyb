@@ -108,6 +108,10 @@ void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
                 
                 // Continue block
                 builder->SetInsertPoint(continueBlock);
+                
+                // If this cleanup is happening right before a return, we need to
+                // ensure the continue block has proper termination
+                // This will be handled by the subsequent return statement
             } else {
                 std::cout << "DEBUG: Skipping MY cleanup for non-Vec variable: " << var.name << std::endl;
             }

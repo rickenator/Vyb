@@ -104,6 +104,10 @@ std::unique_ptr<llvm::Module> LLVMCodegen::releaseModule() {
     return std::move(module);
 }
 
+std::unique_ptr<llvm::LLVMContext> LLVMCodegen::releaseContext() {
+    return std::move(context);
+}
+
 void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
     llvm::Value* initialVal = nullptr;
     llvm::Type* varType = nullptr;

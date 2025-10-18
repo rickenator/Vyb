@@ -1,0 +1,13 @@
+// Simple function call test to isolate segfault
+create_vec() <Int> -> {
+    v<Vec<Int32>> = Vec.new(2);
+    println("Vec created in function");
+    return 42;
+}
+
+main() <Int> -> {
+    println("Starting function call test");
+    result<Int> = create_vec();
+    println("Function call completed");
+    return result;
+}

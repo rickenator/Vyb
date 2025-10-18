@@ -1,0 +1,6 @@
+// Test: Create Vec but DON'T free it - let LLVM handle cleanup
+main() <Int> -> {
+    v <Vec<Int32>> = Vec.new(1);
+    println("Vec created, NOT freed by our code");
+    return 0;
+}

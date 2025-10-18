@@ -12,6 +12,8 @@
 #include <set> // For test and parser verbosity specifiers
 #include <algorithm> // For std::find
 #include <cstdio> // For printf and fflush
+#include <cstdlib> // For malloc/free
+#include <cstring> // For memset
 
 // Declare the intrinsic functions from intrinsics.cpp
 extern "C" {
@@ -47,14 +49,13 @@ extern "C" {
     // char* __vyn_toString_tuple(void* tuple_ptr, const char* type_spec);
 }
 
-// LLVM includes for JIT compilation
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include <llvm/ExecutionEngine/GenericValue.h>
-#include <llvm/ExecutionEngine/Interpreter.h> // Include for LLVMLinkInInterpreter
-#include <llvm/ExecutionEngine/MCJIT.h>       // Include for LLVMLinkInMCJIT
+// LLVM includes for ORC JIT compilation
+#include <llvm/ExecutionEngine/Orc/LLJIT.h>
+#include <llvm/ExecutionEngine/Orc/ThreadSafeModule.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/Error.h>
 
 // Globals for test verbose control
 std::set<std::string> g_verbose_test_specifiers;
@@ -83,16 +84,9 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
     llvm::InitializeNativeTargetAsmPrinter();
     llvm::InitializeNativeTargetAsmParser();
     
-    // Explicitly initialize the required components for JIT execution
-    std::cout << "Setting up JIT options..." << std::endl;
-    try {
-        // Try manually linking the required components
-        LLVMLinkInMCJIT();
-        LLVMLinkInInterpreter();
-        std::cout << "LLVM components linked successfully." << std::endl;
-    } catch(const std::exception& e) {
-        std::cerr << "Error linking LLVM components: " << e.what() << std::endl;
-    }
+    // Setup for ORC JIT execution
+    std::cout << "Setting up ORC JIT options..." << std::endl;
+    std::cout << "LLVM components ready for ORC JIT." << std::endl;
 
     try {
         std::cout << "Creating driver instance..." << std::endl;
@@ -134,8 +128,9 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             std::cout << "Generated LLVM IR to " << irFilename << std::endl;
         }
 
-        // Get the LLVM module from the code generator
+        // Get the LLVM module and context from the code generator
         std::unique_ptr<llvm::Module> module = codegen.releaseModule();
+        std::unique_ptr<llvm::LLVMContext> context = codegen.releaseContext();
 
         std::cout << "Setting up execution engine..." << std::endl;
 
@@ -167,140 +162,153 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             throw std::runtime_error("Missing required intrinsic functions in module");
         }
 
-        // Create the JIT execution engine (MCJIT)
-        std::string engineError;
-        // Use EngineBuilder for MCJIT creation
-        llvm::EngineBuilder engineBuilder(std::move(module));
-        engineBuilder.setErrorStr(&engineError);
-        engineBuilder.setEngineKind(llvm::EngineKind::JIT);
-        llvm::ExecutionEngine* executionEngine = engineBuilder.create();
-        if (!executionEngine) {
-            throw std::runtime_error("Failed to create ExecutionEngine: " + engineError);
+        // Create the ORC JIT execution engine
+        auto jitOrErr = llvm::orc::LLJITBuilder().create();
+        if (!jitOrErr) {
+            std::string errorMsg;
+            llvm::raw_string_ostream stream(errorMsg);
+            stream << jitOrErr.takeError();
+            throw std::runtime_error("Failed to create LLJIT: " + errorMsg);
         }
-
-        // Register the intrinsic functions with the JIT
-        executionEngine->addGlobalMapping(printlnFunc, (void*)&__vyn_println);
-        executionEngine->addGlobalMapping(serializeFunc, (void*)&__vyn_serialize_to_json);
+        auto& jit = *jitOrErr;
+        
+        // Register runtime functions with the JIT before adding module
+        auto& mainDylib = jit->getMainJITDylib();
+        llvm::orc::MangleAndInterner mangle(jit->getExecutionSession(), jit->getDataLayout());
+        
+        // Define symbol mappings for our runtime functions
+        llvm::orc::SymbolMap runtimeSymbols;
+        runtimeSymbols[mangle("__vyn_println")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_println), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_serialize_to_json")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_serialize_to_json), llvm::JITSymbolFlags::Exported);
+        
+        // Register standard library functions
+        runtimeSymbols[mangle("malloc")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr((void*)&malloc), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("malloc.1")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr((void*)&malloc), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("free")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr((void*)&free), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("free.1")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr((void*)&free), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("memset")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr((void*)&memset), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("memset.1")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr((void*)&memset), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("memset.2")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr((void*)&memset), llvm::JITSymbolFlags::Exported);
+        
         if (litConvertFunc) {
-            executionEngine->addGlobalMapping(litConvertFunc, (void*)&__vyn_convert_lit_string);
+            runtimeSymbols[mangle("__vyn_convert_lit_string")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyn_convert_lit_string), llvm::JITSymbolFlags::Exported);
         }
         if (stringConcatFunc) {
-            executionEngine->addGlobalMapping(stringConcatFunc, (void*)&__vyn_string_concat);
-        }
-        if (stringConcatFunc) {
-            executionEngine->addGlobalMapping(stringConcatFunc, (void*)&__vyn_string_concat);
+            runtimeSymbols[mangle("__vyn_string_concat")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyn_string_concat), llvm::JITSymbolFlags::Exported);
         }
         
-        // Register toString functions with the JIT
+        // Register toString functions
         if (toStringIntFunc) {
-            executionEngine->addGlobalMapping(toStringIntFunc, (void*)&__vyn_toString_int);
+            runtimeSymbols[mangle("__vyn_toString_int")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_int), llvm::JITSymbolFlags::Exported);
         }
         if (toStringInt8Func) {
-            executionEngine->addGlobalMapping(toStringInt8Func, (void*)&__vyn_toString_int8);
+            runtimeSymbols[mangle("__vyn_toString_int8")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_int8), llvm::JITSymbolFlags::Exported);
         }
         if (toStringInt16Func) {
-            executionEngine->addGlobalMapping(toStringInt16Func, (void*)&__vyn_toString_int16);
+            runtimeSymbols[mangle("__vyn_toString_int16")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_int16), llvm::JITSymbolFlags::Exported);
         }
         if (toStringInt32Func) {
-            executionEngine->addGlobalMapping(toStringInt32Func, (void*)&__vyn_toString_int32);
+            runtimeSymbols[mangle("__vyn_toString_int32")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_int32), llvm::JITSymbolFlags::Exported);
         }
         if (toStringInt64Func) {
-            executionEngine->addGlobalMapping(toStringInt64Func, (void*)&__vyn_toString_int64);
+            runtimeSymbols[mangle("__vyn_toString_int64")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_int64), llvm::JITSymbolFlags::Exported);
         }
         if (toStringUInt8Func) {
-            executionEngine->addGlobalMapping(toStringUInt8Func, (void*)&__vyn_toString_uint8);
+            runtimeSymbols[mangle("__vyn_toString_uint8")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_uint8), llvm::JITSymbolFlags::Exported);
         }
         if (toStringUInt16Func) {
-            executionEngine->addGlobalMapping(toStringUInt16Func, (void*)&__vyn_toString_uint16);
+            runtimeSymbols[mangle("__vyn_toString_uint16")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_uint16), llvm::JITSymbolFlags::Exported);
         }
         if (toStringUInt32Func) {
-            executionEngine->addGlobalMapping(toStringUInt32Func, (void*)&__vyn_toString_uint32);
+            runtimeSymbols[mangle("__vyn_toString_uint32")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_uint32), llvm::JITSymbolFlags::Exported);
         }
         if (toStringUInt64Func) {
-            executionEngine->addGlobalMapping(toStringUInt64Func, (void*)&__vyn_toString_uint64);
+            runtimeSymbols[mangle("__vyn_toString_uint64")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_uint64), llvm::JITSymbolFlags::Exported);
         }
         if (toStringFloatFunc) {
-            executionEngine->addGlobalMapping(toStringFloatFunc, (void*)&__vyn_toString_float);
+            runtimeSymbols[mangle("__vyn_toString_float")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_float), llvm::JITSymbolFlags::Exported);
         }
         if (toStringFloat32Func) {
-            executionEngine->addGlobalMapping(toStringFloat32Func, (void*)&__vyn_toString_float32);
+            runtimeSymbols[mangle("__vyn_toString_float32")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_float32), llvm::JITSymbolFlags::Exported);
         }
         if (toStringBoolFunc) {
-            executionEngine->addGlobalMapping(toStringBoolFunc, (void*)&__vyn_toString_bool);
+            runtimeSymbols[mangle("__vyn_toString_bool")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_bool), llvm::JITSymbolFlags::Exported);
         }
         if (toStringStringFunc) {
-            executionEngine->addGlobalMapping(toStringStringFunc, (void*)&__vyn_toString_string);
+            runtimeSymbols[mangle("__vyn_toString_string")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_string), llvm::JITSymbolFlags::Exported);
         }
         if (toStringCharFunc) {
-            executionEngine->addGlobalMapping(toStringCharFunc, (void*)&__vyn_toString_char);
+            runtimeSymbols[mangle("__vyn_toString_char")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_char), llvm::JITSymbolFlags::Exported);
         }
         if (toStringRuneFunc) {
-            executionEngine->addGlobalMapping(toStringRuneFunc, (void*)&__vyn_toString_rune);
+            runtimeSymbols[mangle("__vyn_toString_rune")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_rune), llvm::JITSymbolFlags::Exported);
         }
         if (toStringByteFunc) {
-            executionEngine->addGlobalMapping(toStringByteFunc, (void*)&__vyn_toString_byte);
+            runtimeSymbols[mangle("__vyn_toString_byte")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_byte), llvm::JITSymbolFlags::Exported);
         }
-        std::cout << "Execution engine created successfully" << std::endl;
-        std::cout << "Finding main function..." << std::endl;
-        llvm::Function* mainFunc = executionEngine->FindFunctionNamed("main");
-        if (!mainFunc) {
-            throw std::runtime_error("No 'main' function found in the program");
-        }
-        std::cout << "Found main function" << std::endl;
         
-        // Get the return type of main function for auto-serialization
-        llvm::Type* mainReturnType = mainFunc->getReturnType();
-        bool isSimpleInteger = mainReturnType->isIntegerTy();
-        bool isStruct = mainReturnType->isStructTy();
+        // Add all the runtime symbols to the main dylib
+        auto defineErr = mainDylib.define(llvm::orc::absoluteSymbols(runtimeSymbols));
+        if (defineErr) {
+            std::string errorMsg;
+            llvm::raw_string_ostream stream(errorMsg);
+            stream << defineErr;
+            throw std::runtime_error("Failed to define runtime symbols: " + errorMsg);
+        }
+        
+        // Add the module to the JIT
+        auto tsm = llvm::orc::ThreadSafeModule(std::move(module), std::move(context));
+        auto addErr = jit->addIRModule(std::move(tsm));
+        if (addErr) {
+            std::string errorMsg;
+            llvm::raw_string_ostream stream(errorMsg);
+            stream << addErr;
+            throw std::runtime_error("Failed to add module to JIT: " + errorMsg);
+        }
+        std::cout << "ORC JIT execution engine created successfully" << std::endl;
+        std::cout << "Finding main function..." << std::endl;
+        // Look up the main function
+        auto symbolResult = jit->lookup("main");
+        if (!symbolResult) {
+            std::cerr << "Error: Could not find main function" << std::endl;
+            return 1;
+        }
+        
+        // Convert ExecutorAddr to function pointer
+        auto executorAddr = *symbolResult;
+        typedef int (*MainFuncType)();
+        MainFuncType mainFunc = reinterpret_cast<MainFuncType>(static_cast<void*>(executorAddr.toPtr<void*>()));
         
         // Execute the main function
-        std::vector<llvm::GenericValue> noArgs;
-        
-        // Auto-serialization logic - check return type before execution
-        if (isSimpleInteger) {
-            // Simple integer - execute normally and use as exit code
-            llvm::GenericValue result = executionEngine->runFunction(mainFunc, noArgs);
-            int exitCode = result.IntVal.getSExtValue();
-            std::cout << "Program execution completed with return code: " << exitCode << std::endl;
-            
-            // Clean up
-            delete executionEngine;
-            return exitCode;
-        } else if (isStruct) {
-            // Complex type (tuple, struct, etc.) - handle differently
-            std::cout << "Auto-serializing complex return type..." << std::endl;
-            
-            // For now, we'll avoid the segfault by not executing struct returns in JIT
-            // This is a known limitation of LLVM JIT with complex return types
-            std::cout << "Note: Complex return types are not yet fully supported in JIT execution" << std::endl;
-            
-            if (mainReturnType->getStructNumElements() == 2) {
-                // Handle 2-element tuple
-                auto elem0Type = mainReturnType->getStructElementType(0);
-                auto elem1Type = mainReturnType->getStructElementType(1);
-                
-                if (elem0Type->isIntegerTy() && elem1Type->isIntegerTy()) {
-                    // Mock output for tuple (10, 20)
-                    std::cout << "[10, 20]" << std::endl;
-                }
-            } else if (mainReturnType->getStructNumElements() == 3) {
-                // Handle 3-element tuple (String, Int, Bool)
-                std::cout << "Mock output for 3-element tuple:" << std::endl;
-                std::cout << "{\"String\": \"hello\", \"Int\": 42, \"Bool\": true}" << std::endl;
-            }
-            
-            // Clean up
-            delete executionEngine;
-            return 0; // Success exit code for serialized output
-        } else {
-            // Other types - try to execute anyway
-            llvm::GenericValue result = executionEngine->runFunction(mainFunc, noArgs);
-            std::cout << "Executed function with unknown return type" << std::endl;
-            
-            // Clean up
-            delete executionEngine;
-            return 0;
-        }
+        int exitCode = mainFunc();
+        return exitCode;
     } catch (const std::exception& e) {
         std::cerr << "Error running Vyn code: " << e.what() << std::endl;
         throw; // Re-throw the exception to allow calling code to handle errors
