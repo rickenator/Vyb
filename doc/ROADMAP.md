@@ -4,7 +4,7 @@
 
 This document outlines the completed features, ongoing development, and future considerations for the Vyn programming language.
 
-## Current Status (v0.3.7)
+## Current Status (v0.4.0)
 
 **✅ MAJOR ACHIEVEMENTS COMPLETED:**
 1.  **LLVM Backend:** Fully functional LLVM IR generation and JIT execution
@@ -12,11 +12,59 @@ This document outlines the completed features, ongoing development, and future c
 3.  **Type System:** Working functions, variables, structs, control flow
 4.  **Memory Safety:** Ownership types (`my<T>`, `our<T>`, `their<T>`) with borrowing
 5.  **Parser:** Comprehensive syntax support including templates, async, classes
-6.  **✅ Pattern Matching (COMPLETED v0.3.7):** Match statements with `=>` syntax and comprehensive pattern matching
-7.  **✅ Loop Control Flow (COMPLETED v0.3.7):** Break and continue statements working in all loop constructs
-8.  **✅ Resizable Collections (COMPLETED v0.3.7):** Vec<T> with full method support (new, push, pop, len, get)
-9.  **✅ Member Access (COMPLETED v0.3.7):** Object field access (obj.field) and array indexing (arr[index])
-10. **✅ Binary Operations (COMPLETED v0.3.7):** Complete operator precedence system with all arithmetic, comparison, and logical operators
+6.  **✅ Pattern Matching (COMPLETED):** Match statements with `=>` syntax and comprehensive pattern matching
+7.  **✅ Loop Control Flow (COMPLETED):** Break and continue statements working in all loop constructs
+8.  **✅ Resizable Collections (COMPLETED):** Vec<T> with full method support (new, push, pop, len, get)
+9.  **✅ Member Access (COMPLETED):** Object field access (obj.field) and array indexing (arr[index])
+10. **✅ Binary Operations (COMPLETED):** Complete operator precedence system with all arithmetic, comparison, and logical operators
+11. **✅ Variadic Tuples (COMPLETED v0.4.0):** `Tuple<T,U,V,...>` with full 1-N type parameter support and dual syntax
+
+### Variadic Tuple System (v0.4.0)
+
+Vyn now supports **fully variadic tuple types** with comprehensive 1-to-N type parameter support:
+
+**Features Implemented:**
+- ✅ **Dual Syntax Support:**
+  - Inline syntax: `main()<Int, String, Bool>` 
+  - Generic syntax: `main()<Tuple<Int, String, Bool>>`
+  - Both produce identical LLVM anonymous struct types
+  
+- ✅ **Complete Variadic Range:**
+  - Single-element tuples: `Tuple<Int>` with auto-wrapping
+  - Multi-element tuples: 2-7+ elements tested and verified
+  - No theoretical upper limit on element count
+  
+- ✅ **Type System Integration:**
+  - Generic type parameter processing in `cgen_types.cpp`
+  - Sequence expression handling in `cgen_expr.cpp`
+  - Return statement auto-wrapping in `cgen_stmt.cpp`
+  - Full type safety and compile-time checking
+  
+- ✅ **Complex Type Support:**
+  - Primitive types: Int, Float, Bool
+  - String types with proper memory management
+  - Collection types: Vec<T> in tuples
+  - Custom struct types (planned)
+  
+- ✅ **Comprehensive Testing:**
+  - 9 test files covering edge cases
+  - Single-element tuple edge case verified
+  - Mixed type combinations tested
+  - All tests pass without crashes or type errors
+
+**LLVM Representation:**
+- Tuples compile to anonymous struct types: `{ T1, T2, ..., TN }`
+- Efficient memory layout with no overhead
+- Compatible with C ABI for struct returns
+
+**Current Limitations** (future enhancements):
+- ⏳ Tuple element access (`.0`, `.1`, `.2` syntax)
+- ⏳ Tuple variables (only return values currently)
+- ⏳ Tuple destructuring (`let (a, b, c) = tuple`)
+- ⏳ Tuple serialization/output (compiles but no JSON output yet)
+- ⏳ Tuple pattern matching in match expressions
+
+See `test/tuples/README.md` for detailed documentation and examples.
 
 ## Core Development Focus
 The current primary focus is on:
