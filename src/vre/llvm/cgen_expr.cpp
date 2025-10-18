@@ -26,9 +26,11 @@ void LLVMCodegen::visit(vyn::ast::BooleanLiteral *node) {
 }
 
 void LLVMCodegen::visit(vyn::ast::StringLiteral *node) {
+    llvm::Value* strPtr = nullptr;
+    
     if (currentFunction) {
         // Inside a function - use CreateGlobalStringPtr
-        m_currentLLVMValue = builder->CreateGlobalStringPtr(node->value);
+        strPtr = builder->CreateGlobalStringPtr(node->value);
     } else {
         // Global scope - create a global constant string
         // Create a constant string
@@ -50,11 +52,32 @@ void LLVMCodegen::visit(vyn::ast::StringLiteral *node) {
             llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0)
         };
         
-        m_currentLLVMValue = llvm::ConstantExpr::getGetElementPtr(
+        strPtr = llvm::ConstantExpr::getGetElementPtr(
             stringConstant->getType(),
             globalString,
             indices
         );
+    }
+    
+    // Convert to String struct {ptr, len}
+    if (currentFunction) {
+        // Create String struct type
+        llvm::Type* int8PtrType = llvm::PointerType::get(*context, 0);
+        llvm::Type* int64Type = llvm::Type::getInt64Ty(*context);
+        llvm::StructType* stringStructType = llvm::StructType::get(*context, {int8PtrType, int64Type});
+        
+        // Calculate length (exclude null terminator)
+        llvm::Value* lenValue = llvm::ConstantInt::get(int64Type, node->value.length());
+        
+        // Build the String struct
+        llvm::Value* stringStruct = llvm::UndefValue::get(stringStructType);
+        stringStruct = builder->CreateInsertValue(stringStruct, strPtr, 0, "str.ptr");
+        stringStruct = builder->CreateInsertValue(stringStruct, lenValue, 1, "str.len");
+        
+        m_currentLLVMValue = stringStruct;
+    } else {
+        // In global scope, just return the pointer for now (backward compatibility)
+        m_currentLLVMValue = strPtr;
     }
 }
 

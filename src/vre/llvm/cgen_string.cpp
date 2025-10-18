@@ -14,6 +14,20 @@ llvm::Value* LLVMCodegen::generateStringConcatenation(llvm::Value* leftStr, llvm
         return nullptr;
     }
     
+    // If either operand is a String struct {ptr, len}, extract the pointer
+    if (leftStr->getType()->isStructTy()) {
+        llvm::StructType* st = llvm::cast<llvm::StructType>(leftStr->getType());
+        if (st->getNumElements() == 2) {
+            leftStr = builder->CreateExtractValue(leftStr, 0, "left.str.data");
+        }
+    }
+    if (rightStr->getType()->isStructTy()) {
+        llvm::StructType* st = llvm::cast<llvm::StructType>(rightStr->getType());
+        if (st->getNumElements() == 2) {
+            rightStr = builder->CreateExtractValue(rightStr, 0, "right.str.data");
+        }
+    }
+    
     // Create function signature for string concatenation helper
     llvm::FunctionType* concatFuncType = llvm::FunctionType::get(
         int8PtrType,                                 // Return type: char* (string)
@@ -80,6 +94,16 @@ llvm::Value* LLVMCodegen::generateToStringCall(llvm::Value* value, llvm::Type* v
     if (!value || !valueType) {
         logError(loc, "Invalid value or type for toString conversion");
         return nullptr;
+    }
+    
+    // Check if value is a String struct type
+    if (valueType->isStructTy()) {
+        llvm::StructType* structType = llvm::cast<llvm::StructType>(valueType);
+        if (structType->getNumElements() == 2) {
+            // This is a String struct {ptr, len}, extract the data pointer
+            llvm::Value* dataPtr = builder->CreateExtractValue(value, 0, "str.data_for_concat");
+            return dataPtr;
+        }
     }
     
     // Get the base type name, resolving type aliases
@@ -161,10 +185,20 @@ llvm::Value* LLVMCodegen::generateMixedStringConcatenation(llvm::Value* leftValu
     // Determine if left operand is already a string
     std::string leftTypeName = resolveTypeAliasToBaseName(leftTypeNode);
     bool leftIsString = (leftValue->getType() == int8PtrType) || (leftTypeName == "String");
+    // Also check for String struct type
+    if (leftValue->getType()->isStructTy()) {
+        llvm::StructType* st = llvm::cast<llvm::StructType>(leftValue->getType());
+        if (st->getNumElements() == 2) leftIsString = true;
+    }
     
     // Determine if right operand is already a string  
     std::string rightTypeName = resolveTypeAliasToBaseName(rightTypeNode);
     bool rightIsString = (rightValue->getType() == int8PtrType) || (rightTypeName == "String");
+    // Also check for String struct type
+    if (rightValue->getType()->isStructTy()) {
+        llvm::StructType* st = llvm::cast<llvm::StructType>(rightValue->getType());
+        if (st->getNumElements() == 2) rightIsString = true;
+    }
     
     // Convert left operand to string if needed
     if (leftIsString) {
