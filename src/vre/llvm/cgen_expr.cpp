@@ -915,6 +915,33 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         }
         return;
     }
+
+    // Handle borrowing operations: borrow(), view()
+    if (identCallee && (identCallee->name == "borrow" || identCallee->name == "view") && node->arguments.size() == 1) {
+        std::cout << "DEBUG: Processing borrowing operation " << identCallee->name << "() in LLVM codegen" << std::endl;
+        
+        // Evaluate the argument to get the value to borrow
+        node->arguments[0]->accept(*this);
+        if (!m_currentLLVMValue) {
+            logError(node->arguments[0]->loc, "Argument to " + identCallee->name + "() evaluated to null");
+            return;
+        }
+        
+        llvm::Value* valueToBorrow = m_currentLLVMValue;
+        
+        // For borrowing, we need to get the address of the value
+        if (valueToBorrow->getType()->isPointerTy()) {
+            // If it's already a pointer (e.g., alloca), use it directly
+            m_currentLLVMValue = valueToBorrow;
+            std::cout << "DEBUG: Successfully processed borrowing operation " << identCallee->name << "() - returned pointer" << std::endl;
+        } else {
+            // If it's a value, we need to create a temporary and get its address
+            // This shouldn't normally happen for well-formed borrow operations
+            logError(node->loc, identCallee->name + "() requires an lvalue (something that can be borrowed)");
+            return;
+        }
+        return;
+    }
     
     // Special handling for println with auto-serialization
     if (identCallee && identCallee->name == "println" && node->arguments.size() == 1) {
@@ -1816,7 +1843,30 @@ void LLVMCodegen::visit(ast::BorrowExpression* node) {
         return;
     }
     
-    // Evaluate the expression being borrowed
+    // Special handling for identifiers - we want the alloca address, not the loaded value
+    if (auto* identNode = dynamic_cast<ast::Identifier*>(node->expression.get())) {
+        // Look up the identifier in the named values map to get the alloca directly
+        auto it = namedValues.find(identNode->name);
+        if (it != namedValues.end()) {
+            if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(it->second)) {
+                // For borrowing an identifier, return the alloca address directly
+                m_currentLLVMValue = alloca;
+                return;
+            }
+        }
+        
+        // Also check current function named values
+        auto funcIt = m_currentFunctionNamedValues.find(identNode->name);
+        if (funcIt != m_currentFunctionNamedValues.end()) {
+            // For borrowing an identifier, return the alloca address directly
+            m_currentLLVMValue = funcIt->second;
+            return;
+        }
+        
+        // If not found, fall through to regular evaluation
+    }
+    
+    // Evaluate the expression being borrowed (for non-identifier cases)
     node->expression->accept(*this);
     llvm::Value* borrowedValue = m_currentLLVMValue;
     

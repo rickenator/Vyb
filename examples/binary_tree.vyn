@@ -50,7 +50,7 @@ new_tree()<BinaryTree> -> {
 }
 
 // Insert a key-value pair into the tree
-insert(tree<BinaryTree>, key<Int>, value<String>)<Void> -> {
+insert(tree<their<BinaryTree>>, key<Int>, value<String>)<Void> -> {
     if (!tree.has_root) {
         tree.root = my(create_node(key, value))
         tree.has_root = true
@@ -144,13 +144,13 @@ main()<Int> -> {
     
     // Insert some values
     println("Inserting values...")
-    insert(tree, 50, "fifty")
-    insert(tree, 30, "thirty")
-    insert(tree, 70, "seventy")
-    insert(tree, 20, "twenty")
-    insert(tree, 40, "forty")
-    insert(tree, 60, "sixty")
-    insert(tree, 80, "eighty")
+    insert(borrow tree, 50, "fifty")
+    insert(borrow tree, 30, "thirty")
+    insert(borrow tree, 70, "seventy")
+    insert(borrow tree, 20, "twenty")
+    insert(borrow tree, 40, "forty")
+    insert(borrow tree, 60, "sixty")
+    insert(borrow tree, 80, "eighty")
     
     println("Tree size: " + tree.size.to_string())
     println("")

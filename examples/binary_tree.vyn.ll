@@ -149,73 +149,57 @@ entry:
   ret %BinaryTree %BinaryTree_val, !dbg !22
 }
 
-define void @insert(%BinaryTree %tree, i64 %key, ptr %value) !dbg !24 {
+define void @insert(ptr %tree, i64 %key, ptr %value) !dbg !24 {
 entry:
   %value3 = alloca ptr, align 8
   %key2 = alloca i64, align 8
-  %tree1 = alloca %BinaryTree, align 8
-  store %BinaryTree %tree, ptr %tree1, align 8, !dbg !31
+  %tree1 = alloca ptr, align 8
+  store ptr %tree, ptr %tree1, align 8, !dbg !31
   call void @llvm.dbg.declare(metadata ptr %tree1, metadata !28, metadata !DIExpression()), !dbg !32
   store i64 %key, ptr %key2, align 4, !dbg !31
   call void @llvm.dbg.declare(metadata ptr %key2, metadata !29, metadata !DIExpression()), !dbg !33
   store ptr %value, ptr %value3, align 8, !dbg !31
   call void @llvm.dbg.declare(metadata ptr %value3, metadata !30, metadata !DIExpression()), !dbg !34
-  %tree4 = load %BinaryTree, ptr %tree1, align 8, !dbg !31
-  %temp_struct = alloca %BinaryTree, align 8, !dbg !31
-  store %BinaryTree %tree4, ptr %temp_struct, align 8, !dbg !31
-  %has_root_ptr = getelementptr inbounds %BinaryTree, ptr %temp_struct, i32 0, i32 1, !dbg !31
+  %tree4 = load ptr, ptr %tree1, align 8, !dbg !31
+  %has_root_ptr = getelementptr inbounds %BinaryTree, ptr %tree4, i32 0, i32 1, !dbg !31
   %has_root_val = load i1, ptr %has_root_ptr, align 1, !dbg !31
   %nottmp = xor i1 %has_root_val, true, !dbg !31
   br i1 %nottmp, label %then, label %ifcont, !dbg !31
 
 then:                                             ; preds = %entry
-  %tree5 = load %BinaryTree, ptr %tree1, align 8, !dbg !31
-  %temp_struct6 = alloca %BinaryTree, align 8, !dbg !31
-  store %BinaryTree %tree5, ptr %temp_struct6, align 8, !dbg !31
-  %root_ptr = getelementptr inbounds %BinaryTree, ptr %temp_struct6, i32 0, i32 0, !dbg !31
-  %key7 = load i64, ptr %key2, align 4, !dbg !31
-  %value8 = load ptr, ptr %value3, align 8, !dbg !31
-  %calltmp = call %TreeNode @create_node(i64 %key7, ptr %value8), !dbg !31
+  %tree5 = load ptr, ptr %tree1, align 8, !dbg !31
+  %root_ptr = getelementptr inbounds %BinaryTree, ptr %tree5, i32 0, i32 0, !dbg !31
+  %key6 = load i64, ptr %key2, align 4, !dbg !31
+  %value7 = load ptr, ptr %value3, align 8, !dbg !31
+  %calltmp = call %TreeNode @create_node(i64 %key6, ptr %value7), !dbg !31
   %malloc_struct = call ptr @malloc(i64 40), !dbg !31
   store %TreeNode %calltmp, ptr %malloc_struct, align 8, !dbg !31
   store ptr %malloc_struct, ptr %root_ptr, align 8, !dbg !31
-  %tree9 = load %BinaryTree, ptr %tree1, align 8, !dbg !31
-  %temp_struct10 = alloca %BinaryTree, align 8, !dbg !31
-  store %BinaryTree %tree9, ptr %temp_struct10, align 8, !dbg !31
-  %has_root_ptr11 = getelementptr inbounds %BinaryTree, ptr %temp_struct10, i32 0, i32 1, !dbg !31
-  store i1 true, ptr %has_root_ptr11, align 1, !dbg !31
-  %tree12 = load %BinaryTree, ptr %tree1, align 8, !dbg !31
-  %temp_struct13 = alloca %BinaryTree, align 8, !dbg !31
-  store %BinaryTree %tree12, ptr %temp_struct13, align 8, !dbg !31
-  %size_ptr = getelementptr inbounds %BinaryTree, ptr %temp_struct13, i32 0, i32 2, !dbg !31
-  %tree14 = load %BinaryTree, ptr %tree1, align 8, !dbg !31
-  %temp_struct15 = alloca %BinaryTree, align 8, !dbg !31
-  store %BinaryTree %tree14, ptr %temp_struct15, align 8, !dbg !31
-  %size_ptr16 = getelementptr inbounds %BinaryTree, ptr %temp_struct15, i32 0, i32 2, !dbg !31
-  %size_val = load i64, ptr %size_ptr16, align 4, !dbg !31
+  %tree8 = load ptr, ptr %tree1, align 8, !dbg !31
+  %has_root_ptr9 = getelementptr inbounds %BinaryTree, ptr %tree8, i32 0, i32 1, !dbg !31
+  store i1 true, ptr %has_root_ptr9, align 1, !dbg !31
+  %tree10 = load ptr, ptr %tree1, align 8, !dbg !31
+  %size_ptr = getelementptr inbounds %BinaryTree, ptr %tree10, i32 0, i32 2, !dbg !31
+  %tree11 = load ptr, ptr %tree1, align 8, !dbg !31
+  %size_ptr12 = getelementptr inbounds %BinaryTree, ptr %tree11, i32 0, i32 2, !dbg !31
+  %size_val = load i64, ptr %size_ptr12, align 4, !dbg !31
   %addtmp = add i64 %size_val, 1, !dbg !31
   store i64 %addtmp, ptr %size_ptr, align 4, !dbg !31
   ret void, !dbg !31
 
 ifcont:                                           ; preds = %entry
-  %tree17 = load %BinaryTree, ptr %tree1, align 8, !dbg !31
-  %temp_struct18 = alloca %BinaryTree, align 8, !dbg !31
-  store %BinaryTree %tree17, ptr %temp_struct18, align 8, !dbg !31
-  %root_ptr19 = getelementptr inbounds %BinaryTree, ptr %temp_struct18, i32 0, i32 0, !dbg !31
-  %key20 = load i64, ptr %key2, align 4, !dbg !31
-  %value21 = load ptr, ptr %value3, align 8, !dbg !31
-  call void @insert_recursive(ptr %root_ptr19, i64 %key20, ptr %value21), !dbg !31
-  %tree22 = load %BinaryTree, ptr %tree1, align 8, !dbg !31
-  %temp_struct23 = alloca %BinaryTree, align 8, !dbg !31
-  store %BinaryTree %tree22, ptr %temp_struct23, align 8, !dbg !31
-  %size_ptr24 = getelementptr inbounds %BinaryTree, ptr %temp_struct23, i32 0, i32 2, !dbg !31
-  %tree25 = load %BinaryTree, ptr %tree1, align 8, !dbg !31
-  %temp_struct26 = alloca %BinaryTree, align 8, !dbg !31
-  store %BinaryTree %tree25, ptr %temp_struct26, align 8, !dbg !31
-  %size_ptr27 = getelementptr inbounds %BinaryTree, ptr %temp_struct26, i32 0, i32 2, !dbg !31
-  %size_val28 = load i64, ptr %size_ptr27, align 4, !dbg !31
-  %addtmp29 = add i64 %size_val28, 1, !dbg !31
-  store i64 %addtmp29, ptr %size_ptr24, align 4, !dbg !31
+  %tree13 = load ptr, ptr %tree1, align 8, !dbg !31
+  %root_ptr14 = getelementptr inbounds %BinaryTree, ptr %tree13, i32 0, i32 0, !dbg !31
+  %key15 = load i64, ptr %key2, align 4, !dbg !31
+  %value16 = load ptr, ptr %value3, align 8, !dbg !31
+  call void @insert_recursive(ptr %root_ptr14, i64 %key15, ptr %value16), !dbg !31
+  %tree17 = load ptr, ptr %tree1, align 8, !dbg !31
+  %size_ptr18 = getelementptr inbounds %BinaryTree, ptr %tree17, i32 0, i32 2, !dbg !31
+  %tree19 = load ptr, ptr %tree1, align 8, !dbg !31
+  %size_ptr20 = getelementptr inbounds %BinaryTree, ptr %tree19, i32 0, i32 2, !dbg !31
+  %size_val21 = load i64, ptr %size_ptr20, align 4, !dbg !31
+  %addtmp22 = add i64 %size_val21, 1, !dbg !31
+  store i64 %addtmp22, ptr %size_ptr18, align 4, !dbg !31
   ret void, !dbg !31
 }
 
@@ -224,317 +208,310 @@ entry:
   %value3 = alloca ptr, align 8
   %key2 = alloca i64, align 8
   %node1 = alloca ptr, align 8
-  store ptr %node, ptr %node1, align 8, !dbg !42
-  call void @llvm.dbg.declare(metadata ptr %node1, metadata !39, metadata !DIExpression()), !dbg !43
-  store i64 %key, ptr %key2, align 4, !dbg !42
-  call void @llvm.dbg.declare(metadata ptr %key2, metadata !40, metadata !DIExpression()), !dbg !44
-  store ptr %value, ptr %value3, align 8, !dbg !42
-  call void @llvm.dbg.declare(metadata ptr %value3, metadata !41, metadata !DIExpression()), !dbg !45
-  %key4 = load i64, ptr %key2, align 4, !dbg !42
-  %node5 = load ptr, ptr %node1, align 8, !dbg !42
-  %key_ptr = getelementptr inbounds %TreeNode, ptr %node5, i32 0, i32 0, !dbg !42
-  %key_val = load i64, ptr %key_ptr, align 4, !dbg !42
-  %icmpslttmp = icmp slt i64 %key4, %key_val, !dbg !42
-  br i1 %icmpslttmp, label %then, label %else, !dbg !42
+  store ptr %node, ptr %node1, align 8, !dbg !40
+  call void @llvm.dbg.declare(metadata ptr %node1, metadata !37, metadata !DIExpression()), !dbg !41
+  store i64 %key, ptr %key2, align 4, !dbg !40
+  call void @llvm.dbg.declare(metadata ptr %key2, metadata !38, metadata !DIExpression()), !dbg !42
+  store ptr %value, ptr %value3, align 8, !dbg !40
+  call void @llvm.dbg.declare(metadata ptr %value3, metadata !39, metadata !DIExpression()), !dbg !43
+  %key4 = load i64, ptr %key2, align 4, !dbg !40
+  %node5 = load ptr, ptr %node1, align 8, !dbg !40
+  %key_ptr = getelementptr inbounds %TreeNode, ptr %node5, i32 0, i32 0, !dbg !40
+  %key_val = load i64, ptr %key_ptr, align 4, !dbg !40
+  %icmpslttmp = icmp slt i64 %key4, %key_val, !dbg !40
+  br i1 %icmpslttmp, label %then, label %else, !dbg !40
 
 then:                                             ; preds = %entry
-  %node6 = load ptr, ptr %node1, align 8, !dbg !42
-  %has_left_ptr = getelementptr inbounds %TreeNode, ptr %node6, i32 0, i32 4, !dbg !42
-  %has_left_val = load i1, ptr %has_left_ptr, align 1, !dbg !42
-  %nottmp = xor i1 %has_left_val, true, !dbg !42
-  br i1 %nottmp, label %then7, label %else8, !dbg !42
+  %node6 = load ptr, ptr %node1, align 8, !dbg !40
+  %has_left_ptr = getelementptr inbounds %TreeNode, ptr %node6, i32 0, i32 4, !dbg !40
+  %has_left_val = load i1, ptr %has_left_ptr, align 1, !dbg !40
+  %nottmp = xor i1 %has_left_val, true, !dbg !40
+  br i1 %nottmp, label %then7, label %else8, !dbg !40
 
 else:                                             ; preds = %entry
-  %node18 = load ptr, ptr %node1, align 8, !dbg !42
-  %has_right_ptr = getelementptr inbounds %TreeNode, ptr %node18, i32 0, i32 5, !dbg !42
-  %has_right_val = load i1, ptr %has_right_ptr, align 1, !dbg !42
-  %nottmp19 = xor i1 %has_right_val, true, !dbg !42
-  br i1 %nottmp19, label %then20, label %else21, !dbg !42
+  %node18 = load ptr, ptr %node1, align 8, !dbg !40
+  %has_right_ptr = getelementptr inbounds %TreeNode, ptr %node18, i32 0, i32 5, !dbg !40
+  %has_right_val = load i1, ptr %has_right_ptr, align 1, !dbg !40
+  %nottmp19 = xor i1 %has_right_val, true, !dbg !40
+  br i1 %nottmp19, label %then20, label %else21, !dbg !40
 
 then7:                                            ; preds = %then
-  %node9 = load ptr, ptr %node1, align 8, !dbg !42
-  %left_ptr = getelementptr inbounds %TreeNode, ptr %node9, i32 0, i32 2, !dbg !42
-  %key10 = load i64, ptr %key2, align 4, !dbg !42
-  %value11 = load ptr, ptr %value3, align 8, !dbg !42
-  %calltmp = call %TreeNode @create_node(i64 %key10, ptr %value11), !dbg !42
-  %malloc_struct = call ptr @malloc(i64 40), !dbg !42
-  store %TreeNode %calltmp, ptr %malloc_struct, align 8, !dbg !42
-  store ptr %malloc_struct, ptr %left_ptr, align 8, !dbg !42
-  %node12 = load ptr, ptr %node1, align 8, !dbg !42
-  %has_left_ptr13 = getelementptr inbounds %TreeNode, ptr %node12, i32 0, i32 4, !dbg !42
-  store i1 true, ptr %has_left_ptr13, align 1, !dbg !42
-  br label %ifcont, !dbg !42
+  %node9 = load ptr, ptr %node1, align 8, !dbg !40
+  %left_ptr = getelementptr inbounds %TreeNode, ptr %node9, i32 0, i32 2, !dbg !40
+  %key10 = load i64, ptr %key2, align 4, !dbg !40
+  %value11 = load ptr, ptr %value3, align 8, !dbg !40
+  %calltmp = call %TreeNode @create_node(i64 %key10, ptr %value11), !dbg !40
+  %malloc_struct = call ptr @malloc(i64 40), !dbg !40
+  store %TreeNode %calltmp, ptr %malloc_struct, align 8, !dbg !40
+  store ptr %malloc_struct, ptr %left_ptr, align 8, !dbg !40
+  %node12 = load ptr, ptr %node1, align 8, !dbg !40
+  %has_left_ptr13 = getelementptr inbounds %TreeNode, ptr %node12, i32 0, i32 4, !dbg !40
+  store i1 true, ptr %has_left_ptr13, align 1, !dbg !40
+  br label %ifcont, !dbg !40
 
 else8:                                            ; preds = %then
-  %node14 = load ptr, ptr %node1, align 8, !dbg !42
-  %left_ptr15 = getelementptr inbounds %TreeNode, ptr %node14, i32 0, i32 2, !dbg !42
-  %key16 = load i64, ptr %key2, align 4, !dbg !42
-  %value17 = load ptr, ptr %value3, align 8, !dbg !42
-  call void @insert_recursive(ptr %left_ptr15, i64 %key16, ptr %value17), !dbg !42
-  br label %ifcont, !dbg !42
+  %node14 = load ptr, ptr %node1, align 8, !dbg !40
+  %left_ptr15 = getelementptr inbounds %TreeNode, ptr %node14, i32 0, i32 2, !dbg !40
+  %key16 = load i64, ptr %key2, align 4, !dbg !40
+  %value17 = load ptr, ptr %value3, align 8, !dbg !40
+  call void @insert_recursive(ptr %left_ptr15, i64 %key16, ptr %value17), !dbg !40
+  br label %ifcont, !dbg !40
 
 ifcont:                                           ; preds = %else8, %then7
-  br label %ifcont34, !dbg !42
+  br label %ifcont34, !dbg !40
 
 then20:                                           ; preds = %else
-  %node22 = load ptr, ptr %node1, align 8, !dbg !42
-  %right_ptr = getelementptr inbounds %TreeNode, ptr %node22, i32 0, i32 3, !dbg !42
-  %key23 = load i64, ptr %key2, align 4, !dbg !42
-  %value24 = load ptr, ptr %value3, align 8, !dbg !42
-  %calltmp25 = call %TreeNode @create_node(i64 %key23, ptr %value24), !dbg !42
-  %malloc_struct26 = call ptr @malloc(i64 40), !dbg !42
-  store %TreeNode %calltmp25, ptr %malloc_struct26, align 8, !dbg !42
-  store ptr %malloc_struct26, ptr %right_ptr, align 8, !dbg !42
-  %node27 = load ptr, ptr %node1, align 8, !dbg !42
-  %has_right_ptr28 = getelementptr inbounds %TreeNode, ptr %node27, i32 0, i32 5, !dbg !42
-  store i1 true, ptr %has_right_ptr28, align 1, !dbg !42
-  br label %ifcont33, !dbg !42
+  %node22 = load ptr, ptr %node1, align 8, !dbg !40
+  %right_ptr = getelementptr inbounds %TreeNode, ptr %node22, i32 0, i32 3, !dbg !40
+  %key23 = load i64, ptr %key2, align 4, !dbg !40
+  %value24 = load ptr, ptr %value3, align 8, !dbg !40
+  %calltmp25 = call %TreeNode @create_node(i64 %key23, ptr %value24), !dbg !40
+  %malloc_struct26 = call ptr @malloc(i64 40), !dbg !40
+  store %TreeNode %calltmp25, ptr %malloc_struct26, align 8, !dbg !40
+  store ptr %malloc_struct26, ptr %right_ptr, align 8, !dbg !40
+  %node27 = load ptr, ptr %node1, align 8, !dbg !40
+  %has_right_ptr28 = getelementptr inbounds %TreeNode, ptr %node27, i32 0, i32 5, !dbg !40
+  store i1 true, ptr %has_right_ptr28, align 1, !dbg !40
+  br label %ifcont33, !dbg !40
 
 else21:                                           ; preds = %else
-  %node29 = load ptr, ptr %node1, align 8, !dbg !42
-  %right_ptr30 = getelementptr inbounds %TreeNode, ptr %node29, i32 0, i32 3, !dbg !42
-  %key31 = load i64, ptr %key2, align 4, !dbg !42
-  %value32 = load ptr, ptr %value3, align 8, !dbg !42
-  call void @insert_recursive(ptr %right_ptr30, i64 %key31, ptr %value32), !dbg !42
-  br label %ifcont33, !dbg !42
+  %node29 = load ptr, ptr %node1, align 8, !dbg !40
+  %right_ptr30 = getelementptr inbounds %TreeNode, ptr %node29, i32 0, i32 3, !dbg !40
+  %key31 = load i64, ptr %key2, align 4, !dbg !40
+  %value32 = load ptr, ptr %value3, align 8, !dbg !40
+  call void @insert_recursive(ptr %right_ptr30, i64 %key31, ptr %value32), !dbg !40
+  br label %ifcont33, !dbg !40
 
 ifcont33:                                         ; preds = %else21, %then20
-  br label %ifcont34, !dbg !42
+  br label %ifcont34, !dbg !40
 
 ifcont34:                                         ; preds = %ifcont33, %ifcont
-  ret void, !dbg !42
+  ret void, !dbg !40
 }
 
-define ptr @search(%BinaryTree %tree, i64 %key) !dbg !46 {
+define ptr @search(%BinaryTree %tree, i64 %key) !dbg !44 {
 entry:
   %key2 = alloca i64, align 8
   %tree1 = alloca %BinaryTree, align 8
-  store %BinaryTree %tree, ptr %tree1, align 8, !dbg !52
-  call void @llvm.dbg.declare(metadata ptr %tree1, metadata !50, metadata !DIExpression()), !dbg !53
-  store i64 %key, ptr %key2, align 4, !dbg !52
-  call void @llvm.dbg.declare(metadata ptr %key2, metadata !51, metadata !DIExpression()), !dbg !54
-  %tree3 = load %BinaryTree, ptr %tree1, align 8, !dbg !52
-  %temp_struct = alloca %BinaryTree, align 8, !dbg !52
-  store %BinaryTree %tree3, ptr %temp_struct, align 8, !dbg !52
-  %has_root_ptr = getelementptr inbounds %BinaryTree, ptr %temp_struct, i32 0, i32 1, !dbg !52
-  %has_root_val = load i1, ptr %has_root_ptr, align 1, !dbg !52
-  %nottmp = xor i1 %has_root_val, true, !dbg !52
-  br i1 %nottmp, label %then, label %ifcont, !dbg !52
+  store %BinaryTree %tree, ptr %tree1, align 8, !dbg !50
+  call void @llvm.dbg.declare(metadata ptr %tree1, metadata !48, metadata !DIExpression()), !dbg !51
+  store i64 %key, ptr %key2, align 4, !dbg !50
+  call void @llvm.dbg.declare(metadata ptr %key2, metadata !49, metadata !DIExpression()), !dbg !52
+  %tree3 = load %BinaryTree, ptr %tree1, align 8, !dbg !50
+  %temp_struct = alloca %BinaryTree, align 8, !dbg !50
+  store %BinaryTree %tree3, ptr %temp_struct, align 8, !dbg !50
+  %has_root_ptr = getelementptr inbounds %BinaryTree, ptr %temp_struct, i32 0, i32 1, !dbg !50
+  %has_root_val = load i1, ptr %has_root_ptr, align 1, !dbg !50
+  %nottmp = xor i1 %has_root_val, true, !dbg !50
+  br i1 %nottmp, label %then, label %ifcont, !dbg !50
 
 then:                                             ; preds = %entry
-  ret ptr @3, !dbg !52
+  ret ptr @3, !dbg !50
 
 ifcont:                                           ; preds = %entry
-  %tree4 = load %BinaryTree, ptr %tree1, align 8, !dbg !52
-  %temp_struct5 = alloca %BinaryTree, align 8, !dbg !52
-  store %BinaryTree %tree4, ptr %temp_struct5, align 8, !dbg !52
-  %root_ptr = getelementptr inbounds %BinaryTree, ptr %temp_struct5, i32 0, i32 0, !dbg !52
-  %key6 = load i64, ptr %key2, align 4, !dbg !52
-  %calltmp = call ptr @search_recursive(ptr %root_ptr, i64 %key6), !dbg !52
-  ret ptr %calltmp, !dbg !52
+  %tree4 = load %BinaryTree, ptr %tree1, align 8, !dbg !50
+  %temp_struct5 = alloca %BinaryTree, align 8, !dbg !50
+  store %BinaryTree %tree4, ptr %temp_struct5, align 8, !dbg !50
+  %root_ptr = getelementptr inbounds %BinaryTree, ptr %temp_struct5, i32 0, i32 0, !dbg !50
+  %key6 = load i64, ptr %key2, align 4, !dbg !50
+  %calltmp = call ptr @search_recursive(ptr %root_ptr, i64 %key6), !dbg !50
+  ret ptr %calltmp, !dbg !50
 }
 
-define ptr @search_recursive(ptr %node, i64 %key) !dbg !55 {
+define ptr @search_recursive(ptr %node, i64 %key) !dbg !53 {
 entry:
   %key2 = alloca i64, align 8
   %node1 = alloca ptr, align 8
-  store ptr %node, ptr %node1, align 8, !dbg !61
-  call void @llvm.dbg.declare(metadata ptr %node1, metadata !59, metadata !DIExpression()), !dbg !62
-  store i64 %key, ptr %key2, align 4, !dbg !61
-  call void @llvm.dbg.declare(metadata ptr %key2, metadata !60, metadata !DIExpression()), !dbg !63
-  %node3 = load ptr, ptr %node1, align 8, !dbg !61
-  %key_ptr = getelementptr inbounds %TreeNode, ptr %node3, i32 0, i32 0, !dbg !61
-  %key_val = load i64, ptr %key_ptr, align 4, !dbg !61
-  %key4 = load i64, ptr %key2, align 4, !dbg !61
-  %icmpeqtmp = icmp eq i64 %key_val, %key4, !dbg !61
-  br i1 %icmpeqtmp, label %then, label %ifcont, !dbg !61
+  store ptr %node, ptr %node1, align 8, !dbg !59
+  call void @llvm.dbg.declare(metadata ptr %node1, metadata !57, metadata !DIExpression()), !dbg !60
+  store i64 %key, ptr %key2, align 4, !dbg !59
+  call void @llvm.dbg.declare(metadata ptr %key2, metadata !58, metadata !DIExpression()), !dbg !61
+  %node3 = load ptr, ptr %node1, align 8, !dbg !59
+  %key_ptr = getelementptr inbounds %TreeNode, ptr %node3, i32 0, i32 0, !dbg !59
+  %key_val = load i64, ptr %key_ptr, align 4, !dbg !59
+  %key4 = load i64, ptr %key2, align 4, !dbg !59
+  %icmpeqtmp = icmp eq i64 %key_val, %key4, !dbg !59
+  br i1 %icmpeqtmp, label %then, label %ifcont, !dbg !59
 
 then:                                             ; preds = %entry
-  %node5 = load ptr, ptr %node1, align 8, !dbg !61
-  %value_ptr = getelementptr inbounds %TreeNode, ptr %node5, i32 0, i32 1, !dbg !61
-  ret ptr %value_ptr, !dbg !61
+  %node5 = load ptr, ptr %node1, align 8, !dbg !59
+  %value_ptr = getelementptr inbounds %TreeNode, ptr %node5, i32 0, i32 1, !dbg !59
+  ret ptr %value_ptr, !dbg !59
 
 ifcont:                                           ; preds = %entry
-  %key6 = load i64, ptr %key2, align 4, !dbg !61
-  %node7 = load ptr, ptr %node1, align 8, !dbg !61
-  %key_ptr8 = getelementptr inbounds %TreeNode, ptr %node7, i32 0, i32 0, !dbg !61
-  %key_val9 = load i64, ptr %key_ptr8, align 4, !dbg !61
-  %icmpslttmp = icmp slt i64 %key6, %key_val9, !dbg !61
-  br i1 %icmpslttmp, label %then10, label %else, !dbg !61
+  %key6 = load i64, ptr %key2, align 4, !dbg !59
+  %node7 = load ptr, ptr %node1, align 8, !dbg !59
+  %key_ptr8 = getelementptr inbounds %TreeNode, ptr %node7, i32 0, i32 0, !dbg !59
+  %key_val9 = load i64, ptr %key_ptr8, align 4, !dbg !59
+  %icmpslttmp = icmp slt i64 %key6, %key_val9, !dbg !59
+  br i1 %icmpslttmp, label %then10, label %else, !dbg !59
 
 then10:                                           ; preds = %ifcont
-  %node11 = load ptr, ptr %node1, align 8, !dbg !61
-  %has_left_ptr = getelementptr inbounds %TreeNode, ptr %node11, i32 0, i32 4, !dbg !61
-  %has_left_val = load i1, ptr %has_left_ptr, align 1, !dbg !61
-  br i1 %has_left_val, label %then12, label %else13, !dbg !61
+  %node11 = load ptr, ptr %node1, align 8, !dbg !59
+  %has_left_ptr = getelementptr inbounds %TreeNode, ptr %node11, i32 0, i32 4, !dbg !59
+  %has_left_val = load i1, ptr %has_left_ptr, align 1, !dbg !59
+  br i1 %has_left_val, label %then12, label %else13, !dbg !59
 
 else:                                             ; preds = %ifcont
-  %node16 = load ptr, ptr %node1, align 8, !dbg !61
-  %has_right_ptr = getelementptr inbounds %TreeNode, ptr %node16, i32 0, i32 5, !dbg !61
-  %has_right_val = load i1, ptr %has_right_ptr, align 1, !dbg !61
-  br i1 %has_right_val, label %then17, label %else18, !dbg !61
+  %node16 = load ptr, ptr %node1, align 8, !dbg !59
+  %has_right_ptr = getelementptr inbounds %TreeNode, ptr %node16, i32 0, i32 5, !dbg !59
+  %has_right_val = load i1, ptr %has_right_ptr, align 1, !dbg !59
+  br i1 %has_right_val, label %then17, label %else18, !dbg !59
 
 then12:                                           ; preds = %then10
-  %node14 = load ptr, ptr %node1, align 8, !dbg !61
-  %left_ptr = getelementptr inbounds %TreeNode, ptr %node14, i32 0, i32 2, !dbg !61
-  %key15 = load i64, ptr %key2, align 4, !dbg !61
-  %calltmp = call ptr @search_recursive(ptr %left_ptr, i64 %key15), !dbg !61
-  ret ptr %calltmp, !dbg !61
+  %node14 = load ptr, ptr %node1, align 8, !dbg !59
+  %left_ptr = getelementptr inbounds %TreeNode, ptr %node14, i32 0, i32 2, !dbg !59
+  %key15 = load i64, ptr %key2, align 4, !dbg !59
+  %calltmp = call ptr @search_recursive(ptr %left_ptr, i64 %key15), !dbg !59
+  ret ptr %calltmp, !dbg !59
 
 else13:                                           ; preds = %then10
-  ret ptr @4, !dbg !61
+  ret ptr @4, !dbg !59
 
 then17:                                           ; preds = %else
-  %node19 = load ptr, ptr %node1, align 8, !dbg !61
-  %right_ptr = getelementptr inbounds %TreeNode, ptr %node19, i32 0, i32 3, !dbg !61
-  %key20 = load i64, ptr %key2, align 4, !dbg !61
-  %calltmp21 = call ptr @search_recursive(ptr %right_ptr, i64 %key20), !dbg !61
-  ret ptr %calltmp21, !dbg !61
+  %node19 = load ptr, ptr %node1, align 8, !dbg !59
+  %right_ptr = getelementptr inbounds %TreeNode, ptr %node19, i32 0, i32 3, !dbg !59
+  %key20 = load i64, ptr %key2, align 4, !dbg !59
+  %calltmp21 = call ptr @search_recursive(ptr %right_ptr, i64 %key20), !dbg !59
+  ret ptr %calltmp21, !dbg !59
 
 else18:                                           ; preds = %else
-  ret ptr @5, !dbg !61
+  ret ptr @5, !dbg !59
 }
 
-define void @print_tree(%BinaryTree %tree) !dbg !64 {
+define void @print_tree(%BinaryTree %tree) !dbg !62 {
 entry:
   %tree1 = alloca %BinaryTree, align 8
-  store %BinaryTree %tree, ptr %tree1, align 8, !dbg !69
-  call void @llvm.dbg.declare(metadata ptr %tree1, metadata !68, metadata !DIExpression()), !dbg !70
-  %tree2 = load %BinaryTree, ptr %tree1, align 8, !dbg !69
-  %temp_struct = alloca %BinaryTree, align 8, !dbg !69
-  store %BinaryTree %tree2, ptr %temp_struct, align 8, !dbg !69
-  %has_root_ptr = getelementptr inbounds %BinaryTree, ptr %temp_struct, i32 0, i32 1, !dbg !69
-  %has_root_val = load i1, ptr %has_root_ptr, align 1, !dbg !69
-  br i1 %has_root_val, label %then, label %else, !dbg !69
+  store %BinaryTree %tree, ptr %tree1, align 8, !dbg !67
+  call void @llvm.dbg.declare(metadata ptr %tree1, metadata !66, metadata !DIExpression()), !dbg !68
+  %tree2 = load %BinaryTree, ptr %tree1, align 8, !dbg !67
+  %temp_struct = alloca %BinaryTree, align 8, !dbg !67
+  store %BinaryTree %tree2, ptr %temp_struct, align 8, !dbg !67
+  %has_root_ptr = getelementptr inbounds %BinaryTree, ptr %temp_struct, i32 0, i32 1, !dbg !67
+  %has_root_val = load i1, ptr %has_root_ptr, align 1, !dbg !67
+  br i1 %has_root_val, label %then, label %else, !dbg !67
 
 then:                                             ; preds = %entry
-  call void @__vyn_println(ptr @6), !dbg !69
-  %tree3 = load %BinaryTree, ptr %tree1, align 8, !dbg !69
-  %temp_struct4 = alloca %BinaryTree, align 8, !dbg !69
-  store %BinaryTree %tree3, ptr %temp_struct4, align 8, !dbg !69
-  %root_ptr = getelementptr inbounds %BinaryTree, ptr %temp_struct4, i32 0, i32 0, !dbg !69
-  call void @print_in_order(ptr %root_ptr), !dbg !69
-  br label %ifcont, !dbg !69
+  call void @__vyn_println(ptr @6), !dbg !67
+  %tree3 = load %BinaryTree, ptr %tree1, align 8, !dbg !67
+  %temp_struct4 = alloca %BinaryTree, align 8, !dbg !67
+  store %BinaryTree %tree3, ptr %temp_struct4, align 8, !dbg !67
+  %root_ptr = getelementptr inbounds %BinaryTree, ptr %temp_struct4, i32 0, i32 0, !dbg !67
+  call void @print_in_order(ptr %root_ptr), !dbg !67
+  br label %ifcont, !dbg !67
 
 else:                                             ; preds = %entry
-  call void @__vyn_println(ptr @7), !dbg !69
-  br label %ifcont, !dbg !69
+  call void @__vyn_println(ptr @7), !dbg !67
+  br label %ifcont, !dbg !67
 
 ifcont:                                           ; preds = %else, %then
-  ret void, !dbg !69
+  ret void, !dbg !67
 }
 
-define void @print_in_order(ptr %node) !dbg !71 {
+define void @print_in_order(ptr %node) !dbg !69 {
 entry:
   %node1 = alloca ptr, align 8
-  store ptr %node, ptr %node1, align 8, !dbg !76
-  call void @llvm.dbg.declare(metadata ptr %node1, metadata !75, metadata !DIExpression()), !dbg !77
-  %node2 = load ptr, ptr %node1, align 8, !dbg !76
-  %has_left_ptr = getelementptr inbounds %TreeNode, ptr %node2, i32 0, i32 4, !dbg !76
-  %has_left_val = load i1, ptr %has_left_ptr, align 1, !dbg !76
-  br i1 %has_left_val, label %then, label %ifcont, !dbg !76
+  store ptr %node, ptr %node1, align 8, !dbg !74
+  call void @llvm.dbg.declare(metadata ptr %node1, metadata !73, metadata !DIExpression()), !dbg !75
+  %node2 = load ptr, ptr %node1, align 8, !dbg !74
+  %has_left_ptr = getelementptr inbounds %TreeNode, ptr %node2, i32 0, i32 4, !dbg !74
+  %has_left_val = load i1, ptr %has_left_ptr, align 1, !dbg !74
+  br i1 %has_left_val, label %then, label %ifcont, !dbg !74
 
 then:                                             ; preds = %entry
-  %node3 = load ptr, ptr %node1, align 8, !dbg !76
-  %left_ptr = getelementptr inbounds %TreeNode, ptr %node3, i32 0, i32 2, !dbg !76
-  call void @print_in_order(ptr %left_ptr), !dbg !76
-  br label %ifcont, !dbg !76
+  %node3 = load ptr, ptr %node1, align 8, !dbg !74
+  %left_ptr = getelementptr inbounds %TreeNode, ptr %node3, i32 0, i32 2, !dbg !74
+  call void @print_in_order(ptr %left_ptr), !dbg !74
+  br label %ifcont, !dbg !74
 
 ifcont:                                           ; preds = %then, %entry
-  %node4 = load ptr, ptr %node1, align 8, !dbg !76
-  %key_ptr = getelementptr inbounds %TreeNode, ptr %node4, i32 0, i32 0, !dbg !76
-  %key_val = load i64, ptr %key_ptr, align 4, !dbg !76
-  %tostring = call ptr @__vyn_toString_int(i64 %key_val), !dbg !76
-  %strcattmp = call ptr @__vyn_string_concat(ptr @8, ptr %tostring), !dbg !76
-  %strcattmp5 = call ptr @__vyn_string_concat(ptr %strcattmp, ptr @9), !dbg !76
-  %node6 = load ptr, ptr %node1, align 8, !dbg !76
-  %value_ptr = getelementptr inbounds %TreeNode, ptr %node6, i32 0, i32 1, !dbg !76
-  %strcattmp7 = call ptr @__vyn_string_concat(ptr %strcattmp5, ptr %value_ptr), !dbg !76
-  call void @__vyn_println(ptr %strcattmp7), !dbg !76
-  %node8 = load ptr, ptr %node1, align 8, !dbg !76
-  %has_right_ptr = getelementptr inbounds %TreeNode, ptr %node8, i32 0, i32 5, !dbg !76
-  %has_right_val = load i1, ptr %has_right_ptr, align 1, !dbg !76
-  br i1 %has_right_val, label %then9, label %ifcont11, !dbg !76
+  %node4 = load ptr, ptr %node1, align 8, !dbg !74
+  %key_ptr = getelementptr inbounds %TreeNode, ptr %node4, i32 0, i32 0, !dbg !74
+  %key_val = load i64, ptr %key_ptr, align 4, !dbg !74
+  %tostring = call ptr @__vyn_toString_int(i64 %key_val), !dbg !74
+  %strcattmp = call ptr @__vyn_string_concat(ptr @8, ptr %tostring), !dbg !74
+  %strcattmp5 = call ptr @__vyn_string_concat(ptr %strcattmp, ptr @9), !dbg !74
+  %node6 = load ptr, ptr %node1, align 8, !dbg !74
+  %value_ptr = getelementptr inbounds %TreeNode, ptr %node6, i32 0, i32 1, !dbg !74
+  %strcattmp7 = call ptr @__vyn_string_concat(ptr %strcattmp5, ptr %value_ptr), !dbg !74
+  call void @__vyn_println(ptr %strcattmp7), !dbg !74
+  %node8 = load ptr, ptr %node1, align 8, !dbg !74
+  %has_right_ptr = getelementptr inbounds %TreeNode, ptr %node8, i32 0, i32 5, !dbg !74
+  %has_right_val = load i1, ptr %has_right_ptr, align 1, !dbg !74
+  br i1 %has_right_val, label %then9, label %ifcont11, !dbg !74
 
 then9:                                            ; preds = %ifcont
-  %node10 = load ptr, ptr %node1, align 8, !dbg !76
-  %right_ptr = getelementptr inbounds %TreeNode, ptr %node10, i32 0, i32 3, !dbg !76
-  call void @print_in_order(ptr %right_ptr), !dbg !76
-  br label %ifcont11, !dbg !76
+  %node10 = load ptr, ptr %node1, align 8, !dbg !74
+  %right_ptr = getelementptr inbounds %TreeNode, ptr %node10, i32 0, i32 3, !dbg !74
+  call void @print_in_order(ptr %right_ptr), !dbg !74
+  br label %ifcont11, !dbg !74
 
 ifcont11:                                         ; preds = %then9, %ifcont
-  ret void, !dbg !76
+  ret void, !dbg !74
 }
 
-define i64 @main() !dbg !78 {
+define i64 @main() !dbg !76 {
 entry:
-  %result4 = alloca ptr, align 8, !dbg !87
-  %result3 = alloca ptr, align 8, !dbg !87
-  %result2 = alloca ptr, align 8, !dbg !87
-  %result1 = alloca ptr, align 8, !dbg !87
-  %tree = alloca %BinaryTree, align 8, !dbg !87
-  %calltmp = call %BinaryTree @new_tree(), !dbg !87
-  store %BinaryTree %calltmp, ptr %tree, align 8, !dbg !87
-  call void @llvm.dbg.declare(metadata ptr %tree, metadata !82, metadata !DIExpression()), !dbg !88
-  call void @__vyn_println(ptr @10), !dbg !87
-  call void @__vyn_println(ptr @11), !dbg !87
-  call void @__vyn_println(ptr @12), !dbg !87
-  %tree1 = load %BinaryTree, ptr %tree, align 8, !dbg !87
-  call void @insert(%BinaryTree %tree1, i64 50, ptr @13), !dbg !87
-  %tree2 = load %BinaryTree, ptr %tree, align 8, !dbg !87
-  call void @insert(%BinaryTree %tree2, i64 30, ptr @14), !dbg !87
-  %tree3 = load %BinaryTree, ptr %tree, align 8, !dbg !87
-  call void @insert(%BinaryTree %tree3, i64 70, ptr @15), !dbg !87
-  %tree4 = load %BinaryTree, ptr %tree, align 8, !dbg !87
-  call void @insert(%BinaryTree %tree4, i64 20, ptr @16), !dbg !87
-  %tree5 = load %BinaryTree, ptr %tree, align 8, !dbg !87
-  call void @insert(%BinaryTree %tree5, i64 40, ptr @17), !dbg !87
-  %tree6 = load %BinaryTree, ptr %tree, align 8, !dbg !87
-  call void @insert(%BinaryTree %tree6, i64 60, ptr @18), !dbg !87
-  %tree7 = load %BinaryTree, ptr %tree, align 8, !dbg !87
-  call void @insert(%BinaryTree %tree7, i64 80, ptr @19), !dbg !87
-  %tree8 = load %BinaryTree, ptr %tree, align 8, !dbg !87
-  %temp_struct = alloca %BinaryTree, align 8, !dbg !87
-  store %BinaryTree %tree8, ptr %temp_struct, align 8, !dbg !87
-  %size_ptr = getelementptr inbounds %BinaryTree, ptr %temp_struct, i32 0, i32 2, !dbg !87
-  %size_val = load i64, ptr %size_ptr, align 4, !dbg !87
-  %tostring = call ptr @__vyn_toString_int(i64 %size_val), !dbg !87
-  %strcattmp = call ptr @__vyn_string_concat(ptr @20, ptr %tostring), !dbg !87
-  call void @__vyn_println(ptr %strcattmp), !dbg !87
-  call void @__vyn_println(ptr @21), !dbg !87
-  call void @__vyn_println(ptr @22), !dbg !87
-  %tree9 = load %BinaryTree, ptr %tree, align 8, !dbg !87
-  %calltmp10 = call ptr @search(%BinaryTree %tree9, i64 40), !dbg !87
-  store ptr %calltmp10, ptr %result1, align 8, !dbg !87
-  call void @llvm.dbg.declare(metadata ptr %result1, metadata !83, metadata !DIExpression()), !dbg !89
-  %result111 = load ptr, ptr %result1, align 8, !dbg !87
-  %strcattmp12 = call ptr @__vyn_string_concat(ptr @23, ptr %result111), !dbg !87
-  call void @__vyn_println(ptr %strcattmp12), !dbg !87
-  %tree13 = load %BinaryTree, ptr %tree, align 8, !dbg !87
-  %calltmp14 = call ptr @search(%BinaryTree %tree13, i64 99), !dbg !87
-  store ptr %calltmp14, ptr %result2, align 8, !dbg !87
-  call void @llvm.dbg.declare(metadata ptr %result2, metadata !84, metadata !DIExpression()), !dbg !90
-  %result215 = load ptr, ptr %result2, align 8, !dbg !87
-  %strcattmp16 = call ptr @__vyn_string_concat(ptr @24, ptr %result215), !dbg !87
-  call void @__vyn_println(ptr %strcattmp16), !dbg !87
-  %tree17 = load %BinaryTree, ptr %tree, align 8, !dbg !87
-  %calltmp18 = call ptr @search(%BinaryTree %tree17, i64 20), !dbg !87
-  store ptr %calltmp18, ptr %result3, align 8, !dbg !87
-  call void @llvm.dbg.declare(metadata ptr %result3, metadata !85, metadata !DIExpression()), !dbg !91
-  %result319 = load ptr, ptr %result3, align 8, !dbg !87
-  %strcattmp20 = call ptr @__vyn_string_concat(ptr @25, ptr %result319), !dbg !87
-  call void @__vyn_println(ptr %strcattmp20), !dbg !87
-  %tree21 = load %BinaryTree, ptr %tree, align 8, !dbg !87
-  %calltmp22 = call ptr @search(%BinaryTree %tree21, i64 70), !dbg !87
-  store ptr %calltmp22, ptr %result4, align 8, !dbg !87
-  call void @llvm.dbg.declare(metadata ptr %result4, metadata !86, metadata !DIExpression()), !dbg !92
-  %result423 = load ptr, ptr %result4, align 8, !dbg !87
-  %strcattmp24 = call ptr @__vyn_string_concat(ptr @26, ptr %result423), !dbg !87
-  call void @__vyn_println(ptr %strcattmp24), !dbg !87
-  call void @__vyn_println(ptr @27), !dbg !87
-  %tree25 = load %BinaryTree, ptr %tree, align 8, !dbg !87
-  call void @print_tree(%BinaryTree %tree25), !dbg !87
-  ret i64 0, !dbg !87
+  %result4 = alloca ptr, align 8, !dbg !85
+  %result3 = alloca ptr, align 8, !dbg !85
+  %result2 = alloca ptr, align 8, !dbg !85
+  %result1 = alloca ptr, align 8, !dbg !85
+  %tree = alloca %BinaryTree, align 8, !dbg !85
+  %calltmp = call %BinaryTree @new_tree(), !dbg !85
+  store %BinaryTree %calltmp, ptr %tree, align 8, !dbg !85
+  call void @llvm.dbg.declare(metadata ptr %tree, metadata !80, metadata !DIExpression()), !dbg !86
+  call void @__vyn_println(ptr @10), !dbg !85
+  call void @__vyn_println(ptr @11), !dbg !85
+  call void @__vyn_println(ptr @12), !dbg !85
+  call void @insert(ptr %tree, i64 50, ptr @13), !dbg !85
+  call void @insert(ptr %tree, i64 30, ptr @14), !dbg !85
+  call void @insert(ptr %tree, i64 70, ptr @15), !dbg !85
+  call void @insert(ptr %tree, i64 20, ptr @16), !dbg !85
+  call void @insert(ptr %tree, i64 40, ptr @17), !dbg !85
+  call void @insert(ptr %tree, i64 60, ptr @18), !dbg !85
+  call void @insert(ptr %tree, i64 80, ptr @19), !dbg !85
+  %tree1 = load %BinaryTree, ptr %tree, align 8, !dbg !85
+  %temp_struct = alloca %BinaryTree, align 8, !dbg !85
+  store %BinaryTree %tree1, ptr %temp_struct, align 8, !dbg !85
+  %size_ptr = getelementptr inbounds %BinaryTree, ptr %temp_struct, i32 0, i32 2, !dbg !85
+  %size_val = load i64, ptr %size_ptr, align 4, !dbg !85
+  %tostring = call ptr @__vyn_toString_int(i64 %size_val), !dbg !85
+  %strcattmp = call ptr @__vyn_string_concat(ptr @20, ptr %tostring), !dbg !85
+  call void @__vyn_println(ptr %strcattmp), !dbg !85
+  call void @__vyn_println(ptr @21), !dbg !85
+  call void @__vyn_println(ptr @22), !dbg !85
+  %tree2 = load %BinaryTree, ptr %tree, align 8, !dbg !85
+  %calltmp3 = call ptr @search(%BinaryTree %tree2, i64 40), !dbg !85
+  store ptr %calltmp3, ptr %result1, align 8, !dbg !85
+  call void @llvm.dbg.declare(metadata ptr %result1, metadata !81, metadata !DIExpression()), !dbg !87
+  %result14 = load ptr, ptr %result1, align 8, !dbg !85
+  %strcattmp5 = call ptr @__vyn_string_concat(ptr @23, ptr %result14), !dbg !85
+  call void @__vyn_println(ptr %strcattmp5), !dbg !85
+  %tree6 = load %BinaryTree, ptr %tree, align 8, !dbg !85
+  %calltmp7 = call ptr @search(%BinaryTree %tree6, i64 99), !dbg !85
+  store ptr %calltmp7, ptr %result2, align 8, !dbg !85
+  call void @llvm.dbg.declare(metadata ptr %result2, metadata !82, metadata !DIExpression()), !dbg !88
+  %result28 = load ptr, ptr %result2, align 8, !dbg !85
+  %strcattmp9 = call ptr @__vyn_string_concat(ptr @24, ptr %result28), !dbg !85
+  call void @__vyn_println(ptr %strcattmp9), !dbg !85
+  %tree10 = load %BinaryTree, ptr %tree, align 8, !dbg !85
+  %calltmp11 = call ptr @search(%BinaryTree %tree10, i64 20), !dbg !85
+  store ptr %calltmp11, ptr %result3, align 8, !dbg !85
+  call void @llvm.dbg.declare(metadata ptr %result3, metadata !83, metadata !DIExpression()), !dbg !89
+  %result312 = load ptr, ptr %result3, align 8, !dbg !85
+  %strcattmp13 = call ptr @__vyn_string_concat(ptr @25, ptr %result312), !dbg !85
+  call void @__vyn_println(ptr %strcattmp13), !dbg !85
+  %tree14 = load %BinaryTree, ptr %tree, align 8, !dbg !85
+  %calltmp15 = call ptr @search(%BinaryTree %tree14, i64 70), !dbg !85
+  store ptr %calltmp15, ptr %result4, align 8, !dbg !85
+  call void @llvm.dbg.declare(metadata ptr %result4, metadata !84, metadata !DIExpression()), !dbg !90
+  %result416 = load ptr, ptr %result4, align 8, !dbg !85
+  %strcattmp17 = call ptr @__vyn_string_concat(ptr @26, ptr %result416), !dbg !85
+  call void @__vyn_println(ptr %strcattmp17), !dbg !85
+  call void @__vyn_println(ptr @27), !dbg !85
+  %tree18 = load %BinaryTree, ptr %tree, align 8, !dbg !85
+  call void @print_tree(%BinaryTree %tree18), !dbg !85
+  ret i64 0, !dbg !85
 }
 
 ; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)
@@ -583,70 +560,68 @@ attributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memo
 !23 = !DILocation(line: 36, column: 1, scope: !16)
 !24 = distinct !DISubprogram(name: "insert", linkageName: "insert", scope: !1, file: !1, line: 52, type: !25, scopeLine: 52, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !27)
 !25 = !DISubroutineType(types: !26)
-!26 = !{null, !19, !8, !9}
+!26 = !{null, !9, !8, !9}
 !27 = !{!28, !29, !30}
-!28 = !DILocalVariable(name: "tree", scope: !24, file: !1, line: 53, type: !19)
+!28 = !DILocalVariable(name: "tree", scope: !24, file: !1, line: 53, type: !9)
 !29 = !DILocalVariable(name: "key", scope: !24, file: !1, line: 53, type: !8)
 !30 = !DILocalVariable(name: "value", scope: !24, file: !1, line: 53, type: !9)
 !31 = !DILocation(line: 52, column: 1, scope: !24)
 !32 = !DILocation(line: 53, column: 12, scope: !24)
-!33 = !DILocation(line: 53, column: 29, scope: !24)
-!34 = !DILocation(line: 53, column: 41, scope: !24)
-!35 = distinct !DISubprogram(name: "insert_recursive", linkageName: "insert_recursive", scope: !1, file: !1, line: 65, type: !36, scopeLine: 65, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !38)
-!36 = !DISubroutineType(types: !37)
-!37 = !{null, !9, !8, !9}
-!38 = !{!39, !40, !41}
-!39 = !DILocalVariable(name: "node", scope: !35, file: !1, line: 66, type: !9)
-!40 = !DILocalVariable(name: "key", scope: !35, file: !1, line: 66, type: !8)
-!41 = !DILocalVariable(name: "value", scope: !35, file: !1, line: 66, type: !9)
-!42 = !DILocation(line: 65, column: 1, scope: !35)
-!43 = !DILocation(line: 66, column: 22, scope: !35)
-!44 = !DILocation(line: 66, column: 44, scope: !35)
-!45 = !DILocation(line: 66, column: 56, scope: !35)
-!46 = distinct !DISubprogram(name: "search", linkageName: "search", scope: !1, file: !1, line: 84, type: !47, scopeLine: 84, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !49)
-!47 = !DISubroutineType(types: !48)
-!48 = !{!9, !19, !8}
-!49 = !{!50, !51}
-!50 = !DILocalVariable(name: "tree", scope: !46, file: !1, line: 85, type: !19)
-!51 = !DILocalVariable(name: "key", scope: !46, file: !1, line: 85, type: !8)
-!52 = !DILocation(line: 84, column: 1, scope: !46)
-!53 = !DILocation(line: 85, column: 12, scope: !46)
-!54 = !DILocation(line: 85, column: 29, scope: !46)
-!55 = distinct !DISubprogram(name: "search_recursive", linkageName: "search_recursive", scope: !1, file: !1, line: 93, type: !56, scopeLine: 93, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !58)
-!56 = !DISubroutineType(types: !57)
-!57 = !{!9, !9, !8}
-!58 = !{!59, !60}
-!59 = !DILocalVariable(name: "node", scope: !55, file: !1, line: 94, type: !9)
-!60 = !DILocalVariable(name: "key", scope: !55, file: !1, line: 94, type: !8)
-!61 = !DILocation(line: 93, column: 1, scope: !55)
-!62 = !DILocation(line: 94, column: 22, scope: !55)
-!63 = !DILocation(line: 94, column: 50, scope: !55)
-!64 = distinct !DISubprogram(name: "print_tree", linkageName: "print_tree", scope: !1, file: !1, line: 114, type: !65, scopeLine: 114, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !67)
-!65 = !DISubroutineType(types: !66)
-!66 = !{null, !19}
-!67 = !{!68}
-!68 = !DILocalVariable(name: "tree", scope: !64, file: !1, line: 115, type: !19)
-!69 = !DILocation(line: 114, column: 1, scope: !64)
-!70 = !DILocation(line: 115, column: 16, scope: !64)
-!71 = distinct !DISubprogram(name: "print_in_order", linkageName: "print_in_order", scope: !1, file: !1, line: 124, type: !72, scopeLine: 124, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !74)
-!72 = !DISubroutineType(types: !73)
-!73 = !{null, !9}
-!74 = !{!75}
-!75 = !DILocalVariable(name: "node", scope: !71, file: !1, line: 125, type: !9)
-!76 = !DILocation(line: 124, column: 1, scope: !71)
-!77 = !DILocation(line: 125, column: 20, scope: !71)
-!78 = distinct !DISubprogram(name: "main", linkageName: "main", scope: !1, file: !1, line: 137, type: !79, scopeLine: 137, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !81)
-!79 = !DISubroutineType(types: !80)
-!80 = !{!8}
-!81 = !{!82, !83, !84, !85, !86}
-!82 = !DILocalVariable(name: "tree", scope: !78, file: !1, line: 139, type: !19)
-!83 = !DILocalVariable(name: "result1", scope: !78, file: !1, line: 160, type: !9)
-!84 = !DILocalVariable(name: "result2", scope: !78, file: !1, line: 163, type: !9)
-!85 = !DILocalVariable(name: "result3", scope: !78, file: !1, line: 166, type: !9)
-!86 = !DILocalVariable(name: "result4", scope: !78, file: !1, line: 169, type: !9)
-!87 = !DILocation(line: 137, column: 1, scope: !78)
-!88 = !DILocation(line: 139, column: 5, scope: !78)
-!89 = !DILocation(line: 160, column: 1, scope: !78)
-!90 = !DILocation(line: 163, column: 1, scope: !78)
-!91 = !DILocation(line: 166, column: 1, scope: !78)
-!92 = !DILocation(line: 169, column: 1, scope: !78)
+!33 = !DILocation(line: 53, column: 36, scope: !24)
+!34 = !DILocation(line: 53, column: 48, scope: !24)
+!35 = distinct !DISubprogram(name: "insert_recursive", linkageName: "insert_recursive", scope: !1, file: !1, line: 65, type: !25, scopeLine: 65, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !36)
+!36 = !{!37, !38, !39}
+!37 = !DILocalVariable(name: "node", scope: !35, file: !1, line: 66, type: !9)
+!38 = !DILocalVariable(name: "key", scope: !35, file: !1, line: 66, type: !8)
+!39 = !DILocalVariable(name: "value", scope: !35, file: !1, line: 66, type: !9)
+!40 = !DILocation(line: 65, column: 1, scope: !35)
+!41 = !DILocation(line: 66, column: 22, scope: !35)
+!42 = !DILocation(line: 66, column: 44, scope: !35)
+!43 = !DILocation(line: 66, column: 56, scope: !35)
+!44 = distinct !DISubprogram(name: "search", linkageName: "search", scope: !1, file: !1, line: 84, type: !45, scopeLine: 84, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !47)
+!45 = !DISubroutineType(types: !46)
+!46 = !{!9, !19, !8}
+!47 = !{!48, !49}
+!48 = !DILocalVariable(name: "tree", scope: !44, file: !1, line: 85, type: !19)
+!49 = !DILocalVariable(name: "key", scope: !44, file: !1, line: 85, type: !8)
+!50 = !DILocation(line: 84, column: 1, scope: !44)
+!51 = !DILocation(line: 85, column: 12, scope: !44)
+!52 = !DILocation(line: 85, column: 29, scope: !44)
+!53 = distinct !DISubprogram(name: "search_recursive", linkageName: "search_recursive", scope: !1, file: !1, line: 93, type: !54, scopeLine: 93, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !56)
+!54 = !DISubroutineType(types: !55)
+!55 = !{!9, !9, !8}
+!56 = !{!57, !58}
+!57 = !DILocalVariable(name: "node", scope: !53, file: !1, line: 94, type: !9)
+!58 = !DILocalVariable(name: "key", scope: !53, file: !1, line: 94, type: !8)
+!59 = !DILocation(line: 93, column: 1, scope: !53)
+!60 = !DILocation(line: 94, column: 22, scope: !53)
+!61 = !DILocation(line: 94, column: 50, scope: !53)
+!62 = distinct !DISubprogram(name: "print_tree", linkageName: "print_tree", scope: !1, file: !1, line: 114, type: !63, scopeLine: 114, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !65)
+!63 = !DISubroutineType(types: !64)
+!64 = !{null, !19}
+!65 = !{!66}
+!66 = !DILocalVariable(name: "tree", scope: !62, file: !1, line: 115, type: !19)
+!67 = !DILocation(line: 114, column: 1, scope: !62)
+!68 = !DILocation(line: 115, column: 16, scope: !62)
+!69 = distinct !DISubprogram(name: "print_in_order", linkageName: "print_in_order", scope: !1, file: !1, line: 124, type: !70, scopeLine: 124, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !72)
+!70 = !DISubroutineType(types: !71)
+!71 = !{null, !9}
+!72 = !{!73}
+!73 = !DILocalVariable(name: "node", scope: !69, file: !1, line: 125, type: !9)
+!74 = !DILocation(line: 124, column: 1, scope: !69)
+!75 = !DILocation(line: 125, column: 20, scope: !69)
+!76 = distinct !DISubprogram(name: "main", linkageName: "main", scope: !1, file: !1, line: 137, type: !77, scopeLine: 137, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !79)
+!77 = !DISubroutineType(types: !78)
+!78 = !{!8}
+!79 = !{!80, !81, !82, !83, !84}
+!80 = !DILocalVariable(name: "tree", scope: !76, file: !1, line: 139, type: !19)
+!81 = !DILocalVariable(name: "result1", scope: !76, file: !1, line: 160, type: !9)
+!82 = !DILocalVariable(name: "result2", scope: !76, file: !1, line: 163, type: !9)
+!83 = !DILocalVariable(name: "result3", scope: !76, file: !1, line: 166, type: !9)
+!84 = !DILocalVariable(name: "result4", scope: !76, file: !1, line: 169, type: !9)
+!85 = !DILocation(line: 137, column: 1, scope: !76)
+!86 = !DILocation(line: 139, column: 5, scope: !76)
+!87 = !DILocation(line: 160, column: 1, scope: !76)
+!88 = !DILocation(line: 163, column: 1, scope: !76)
+!89 = !DILocation(line: 166, column: 1, scope: !76)
+!90 = !DILocation(line: 169, column: 1, scope: !76)
