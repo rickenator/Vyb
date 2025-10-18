@@ -15,6 +15,7 @@
 #include <vector>
 #include <memory>
 #include <unordered_set>
+#include <map>
 
 namespace vyn {
 
@@ -276,6 +277,9 @@ private:
     std::unordered_set<std::string> reservedWords; // Added for isReservedWord
     std::unordered_map<std::string, std::unique_ptr<TemplateInfo>> templateRegistry;
     std::unordered_map<std::string, std::unique_ptr<ast::Declaration>> instantiatedTemplates;
+    
+    // Struct field type storage for member access resolution
+    std::unordered_map<std::string, std::map<std::string, ast::TypeNode*>> structFieldTypes;
 
     void enterScope();
     void exitScope();

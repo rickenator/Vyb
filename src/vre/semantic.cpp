@@ -6,6 +6,7 @@
 #include <memory>
 #include <unordered_set> 
 #include <string> 
+#include <map> 
 
 namespace vyn {
 
@@ -669,22 +670,31 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
     }
 
     // Look up the struct/class definition in the symbol table
-    const std::string& typeName_str = typeName->identifier->name;
-    SymbolInfo* typeInfo = currentScope->lookup(typeName_str);
-    if (!typeInfo) {
-        addError("Unknown type: " + typeName_str, node);
+    const std::string& structTypeName = typeName->identifier->name;
+    const std::string& fieldName = propertyId->name;
+    
+    // Check if we have field information for this struct
+    auto structIt = structFieldTypes.find(structTypeName);
+    if (structIt == structFieldTypes.end()) {
+        addError("Unknown struct type: " + structTypeName, node);
         return;
     }
-
-    // For now, since we don't have a direct way to access field types from the typeInfo,
-    // we'll continue with the simplified approach and assume the field type is Int,
-    // which works for our test case. In a more complete implementation, we would:
-    // 1. Get the class declaration from the symbol table
-    // 2. Find the field in the class members
-    // 3. Get the field's type
     
-    // For the time being, we'll at least create a proper type node:
-    expressionTypes[node] = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Int"));
+    // Look up the specific field
+    auto& fieldMap = structIt->second;
+    auto fieldIt = fieldMap.find(fieldName);
+    if (fieldIt == fieldMap.end()) {
+        addError("Field '" + fieldName + "' not found in struct '" + structTypeName + "'", node);
+        return;
+    }
+    
+    // Set the type of the member expression to the field's type
+    ast::TypeNode* fieldType = fieldIt->second;
+    expressionTypes[node] = fieldType;
+    node->type = std::shared_ptr<ast::TypeNode>(fieldType->clone());
+    
+    std::cout << "DEBUG: Resolved member access " << structTypeName << "." << fieldName 
+              << " to type: " << fieldType->toString() << std::endl;
 }
 void SemanticAnalyzer::visit(ast::AssignmentExpression* node) {
     if (!node || !node->left || !node->right) {
@@ -1326,7 +1336,47 @@ void SemanticAnalyzer::visit(ast::ExternStatement* node) {
 }
 
 void SemanticAnalyzer::visit(ast::ImportDeclaration* node) {}
-void SemanticAnalyzer::visit(ast::StructDeclaration* node) {}
+void SemanticAnalyzer::visit(ast::StructDeclaration* node) {
+    if (!node || !node->name) {
+        addError("Malformed struct declaration.", node);
+        return;
+    }
+
+    const std::string& structName = node->name->name;
+    
+    if (isReservedWord(structName)) {
+        addError("Identifier \"" + structName + "\" is a reserved word and cannot be used as a struct name.", node->name.get());
+    }
+    
+    if (currentScope->lookupDirect(structName)) {
+        addError("Redefinition of struct \"" + structName + "\" in the same scope.", node->name.get());
+        return;
+    }
+
+    // Create and register the struct type in the symbol table
+    auto structType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->name->loc, structName));
+    currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, structName, false, ast::OwnershipKind::MY, structType});
+
+    // Store struct field information for member access resolution
+    // We'll use a map to store field types by struct name
+    std::map<std::string, ast::TypeNode*> fieldTypes;
+    
+    for (auto& field : node->fields) {
+        if (field && field->name && field->typeNode) {
+            // Visit the field type to ensure it's valid
+            field->typeNode->accept(*this);
+            
+            // Store the field type for later member access resolution
+            fieldTypes[field->name->name] = field->typeNode.get();
+            
+            std::cout << "DEBUG: Registered struct field " << structName << "." << field->name->name 
+                      << " with type: " << field->typeNode->toString() << std::endl;
+        }
+    }
+    
+    // Store field information in the semantic analyzer (we'll need to add this storage)
+    structFieldTypes[structName] = fieldTypes;
+}
 // void SemanticAnalyzer::visit(ast::ClassDeclaration* node) {} // Handled above
 void SemanticAnalyzer::visit(ast::EnumDeclaration* node) {}
 // void SemanticAnalyzer::visit(ast::TraitDeclaration* node) {} // Handled above (commented out)
@@ -1454,8 +1504,13 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
                typeNameStr == "bool" || typeNameStr == "string" || typeNameStr == "void" ||
                typeNameStr == "int" || typeNameStr == "float" ||
                typeNameStr == "Int" || typeNameStr == "String" || typeNameStr == "Int8" ||
-               typeNameStr == "Future" || typeNameStr == "Void") { 
+               typeNameStr == "Future" || typeNameStr == "Void" ||
+               typeNameStr == "my" || typeNameStr == "their" || typeNameStr == "view" || typeNameStr == "borrow") { 
         node->type = std::shared_ptr<ast::TypeNode>(node->clone());
+        // For ownership types, visit generic arguments if present
+        for (auto& argTypeNode : node->genericArgs) {
+            if (argTypeNode) argTypeNode->accept(*this);
+        }
     } else {
         SymbolInfo* symbol = currentScope->lookup(typeNameStr); 
         if (!symbol || !symbol->type) {
