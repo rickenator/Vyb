@@ -1,0 +1,53 @@
+# Comprehensive test showing all primitive types together
+
+test_all_integers()<Int> -> {
+    # Signed integers
+    i8<Int8> = 127
+    i16<Int16> = 32767
+    i32<Int32> = 2147483647
+    i64<Int> = 42
+    
+    # Unsigned integers
+    u8<UInt8> = 255
+    u16<UInt16> = 65535
+    u32<UInt32> = 100
+    u64<UInt64> = 200
+    
+    return 8
+}
+
+test_all_floats()<Int> -> {
+    # Floating point types
+    f32<Float32> = 3.14159
+    f64<Float> = 2.71828
+    
+    return 16
+}
+
+test_all_chars()<Int> -> {
+    # Character types
+    ch<Char> = 65        # 'A'
+    rn<Rune> = 128512    # 😀
+    
+    return 32
+}
+
+test_other_types()<Int> -> {
+    # Other primitive types
+    flag<Bool> = true
+    message<String> = "Hello"
+    
+    return 64
+}
+
+main()<Int> -> {
+    total<Int> = 0
+    
+    total = total + test_all_integers()
+    total = total + test_all_floats()
+    total = total + test_all_chars()
+    total = total + test_other_types()
+    
+    # Should return 8 + 16 + 32 + 64 = 120
+    return total
+}
