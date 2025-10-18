@@ -670,7 +670,13 @@ regular_array_literal:
                 vyn::ast::ExprPtr right = parse_higher_precedence(); 
                 DEBUG_PRINT("parse_binary_expression: After parsing right operand. Current token:");
                 DEBUG_TOKEN(peek());
-                left = std::make_unique<ast::BinaryExpression>(op_token.location, std::move(left), op_token, std::move(right));
+                
+                // Special handling for range operators
+                if (matched_op_type == TokenType::DOTDOT) {
+                    left = std::make_unique<ast::RangeExpression>(op_token.location, std::move(left), std::move(right));
+                } else {
+                    left = std::make_unique<ast::BinaryExpression>(op_token.location, std::move(left), op_token, std::move(right));
+                }
             } else {
                 DEBUG_PRINT("parse_binary_expression: No more matching operators found.");
                 break; // No matching operator found

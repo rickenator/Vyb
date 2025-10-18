@@ -55,6 +55,7 @@ class FunctionExpression; // Added
 class ThisExpression; // Added
 class SuperExpression; // Added
 class AwaitExpression; // Added
+class RangeExpression; // Added for range-based for loops
 
 // Statements
 class BlockStatement;
@@ -194,6 +195,7 @@ enum class NodeType {
     THIS_EXPRESSION, // Added
     SUPER_EXPRESSION, // Added
     AWAIT_EXPRESSION, // Added
+    RANGE_EXPRESSION, // Added for range-based for loops
 
 
     // Statements
@@ -285,6 +287,7 @@ public:
     virtual void visit(ThisExpression* node) = 0;
     virtual void visit(SuperExpression* node) = 0;
     virtual void visit(AwaitExpression* node) = 0;
+    virtual void visit(RangeExpression* node) = 0;
 
     // Statements
     virtual void visit(BlockStatement* node) = 0;
@@ -1275,6 +1278,19 @@ class AwaitExpression : public Expression {
 public:
     ExprPtr expr;
     AwaitExpression(SourceLocation loc, ExprPtr expr);
+    NodeType getType() const override;
+    std::string toString() const override;
+    void accept(Visitor& visitor) override;
+};
+
+// --- RangeExpression ---
+class RangeExpression : public Expression {
+public:
+    ExprPtr start;
+    ExprPtr end;
+    ExprPtr step; // Optional step value (nullptr means step=1)
+    
+    RangeExpression(SourceLocation loc, ExprPtr start, ExprPtr end, ExprPtr step = nullptr);
     NodeType getType() const override;
     std::string toString() const override;
     void accept(Visitor& visitor) override;

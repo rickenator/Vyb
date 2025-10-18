@@ -228,6 +228,111 @@ std::unique_ptr<vyn::ast::WhileStatement> StatementParser::parse_while() {
 
 std::unique_ptr<vyn::ast::ForStatement> StatementParser::parse_for() {
     SourceLocation for_loc = this->expect(vyn::TokenType::KEYWORD_FOR, "Expected 'for'.").location;
+    
+    // Check for range-based for loop: `for identifier in expression { body }`
+    if (this->peek().type == vyn::TokenType::IDENTIFIER) {
+        size_t saved_pos = this->pos_;
+        token::Token ident_token = this->consume();
+        
+        if (this->peek().type == vyn::TokenType::KEYWORD_IN) {
+            // This is a range-based for loop
+            this->consume(); // Consume 'in'
+            
+            // Parse the range expression
+            vyn::ast::ExprPtr range_expr = this->expr_parser_.parse_expression();
+            
+            // Check for optional step parameter: for i in 0..10, 2
+            if (this->peek().type == vyn::TokenType::COMMA) {
+                this->consume(); // Consume comma
+                vyn::ast::ExprPtr step_expr = this->expr_parser_.parse_expression();
+                
+                // If range_expr is a RangeExpression, add the step to it
+                if (range_expr->getType() == vyn::ast::NodeType::RANGE_EXPRESSION) {
+                    auto* range = static_cast<vyn::ast::RangeExpression*>(range_expr.get());
+                    range->step = std::move(step_expr);
+                }
+            }
+            
+            // Expect the body block
+            auto body = parse_block();
+            
+            // Desugar range-based for loop to C-style for loop
+            // for i in start..end { body }
+            // becomes:
+            // { var i = start; while i <= end { body; i = i + step; } }
+            // Note: Ranges are now INCLUSIVE
+            
+            // We need to extract start and end from the RangeExpression
+            if (range_expr->getType() == vyn::ast::NodeType::RANGE_EXPRESSION) {
+                auto* range = static_cast<vyn::ast::RangeExpression*>(range_expr.get());
+                
+                // Create the loop variable declaration: var i = start;
+                auto loop_var_name = std::make_unique<vyn::ast::Identifier>(ident_token.location, ident_token.lexeme);
+                auto type_name_id = std::make_unique<vyn::ast::Identifier>(ident_token.location, "Int");
+                auto loop_var_type = std::make_unique<vyn::ast::TypeName>(ident_token.location, std::move(type_name_id));
+                auto init_value = std::move(range->start);
+                auto loop_var_decl = std::make_unique<vyn::ast::VariableDeclaration>(
+                    ident_token.location,
+                    std::move(loop_var_name),
+                    false,  // isConst (false for var)
+                    std::move(loop_var_type),
+                    std::move(init_value)
+                );
+                
+                // Create the condition: i <= end (INCLUSIVE)
+                auto cond_left = std::make_unique<vyn::ast::Identifier>(ident_token.location, ident_token.lexeme);
+                token::Token cond_op_token(vyn::TokenType::LTEQ, "<=", ident_token.location);
+                auto condition = std::make_unique<vyn::ast::BinaryExpression>(
+                    ident_token.location,
+                    std::move(cond_left),
+                    cond_op_token,
+                    std::move(range->end)
+                );
+                
+                // Create the increment: i = i + step (default step is 1)
+                auto incr_left = std::make_unique<vyn::ast::Identifier>(ident_token.location, ident_token.lexeme);
+                auto incr_right_left = std::make_unique<vyn::ast::Identifier>(ident_token.location, ident_token.lexeme);
+                
+                // Use provided step or default to 1
+                vyn::ast::ExprPtr step_value;
+                if (range->step) {
+                    step_value = std::move(range->step);
+                } else {
+                    step_value = std::make_unique<vyn::ast::IntegerLiteral>(ident_token.location, 1);
+                }
+                
+                token::Token plus_token(vyn::TokenType::PLUS, "+", ident_token.location);
+                auto incr_right = std::make_unique<vyn::ast::BinaryExpression>(
+                    ident_token.location,
+                    std::move(incr_right_left),
+                    plus_token,
+                    std::move(step_value)
+                );
+                token::Token assign_token(vyn::TokenType::EQ, "=", ident_token.location);
+                auto increment = std::make_unique<vyn::ast::AssignmentExpression>(
+                    ident_token.location,
+                    std::move(incr_left),
+                    assign_token,
+                    std::move(incr_right)
+                );
+                
+                return std::make_unique<vyn::ast::ForStatement>(
+                    for_loc,
+                    std::move(loop_var_decl),
+                    std::move(condition),
+                    std::move(increment),
+                    std::move(body)
+                );
+            } else {
+                throw std::runtime_error("Expected range expression after 'in' in for loop at " + location_to_string(for_loc));
+            }
+        } else {
+            // Not a range-based for loop, restore position
+            this->pos_ = saved_pos;
+        }
+    }
+    
+    // C-style for loop: for (init; cond; update) { body }
     this->expect(vyn::TokenType::LPAREN, "Expected '(' after 'for'.");
 
     vyn::ast::StmtPtr initializer = nullptr;

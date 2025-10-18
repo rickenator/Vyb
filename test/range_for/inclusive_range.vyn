@@ -1,0 +1,8 @@
+// Test: Range-based for loop (all ranges are inclusive now)
+main()<Int> -> {
+    var<Int> sum = 0;
+    for i in 0..5 {
+        sum = sum + i;
+    }
+    return sum;  // Should return 0+1+2+3+4+5 = 15
+}

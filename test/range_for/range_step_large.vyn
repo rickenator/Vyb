@@ -1,0 +1,8 @@
+// Test: Range with large step
+main()<Int> -> {
+    var<Int> count = 0;
+    for i in 1..100, 10 {
+        count = count + 1;
+    }
+    return count;  // Should return 10 (values: 1,11,21,31,41,51,61,71,81,91)
+}

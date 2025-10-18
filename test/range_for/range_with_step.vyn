@@ -1,0 +1,8 @@
+// Test: Range-based for loop with step parameter
+main()<Int> -> {
+    var<Int> sum = 0;
+    for i in 0..10, 2 {
+        sum = sum + i;
+    }
+    return sum;  // Should return 0+2+4+6+8+10 = 30
+}

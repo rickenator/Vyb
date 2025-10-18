@@ -1,0 +1,11 @@
+// Test: Range-based for loop with break
+main()<Int> -> {
+    var<Int> sum = 0;
+    for i in 0..9 {
+        if (i == 5) {
+            break;
+        }
+        sum = sum + i;
+    }
+    return sum;  // Should return 0+1+2+3+4 = 10
+}

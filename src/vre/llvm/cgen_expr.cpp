@@ -2800,6 +2800,13 @@ void LLVMCodegen::visit(ast::SuperExpression* node) {
     m_currentLLVMValue = llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0));
 }
 
+void LLVMCodegen::visit(ast::RangeExpression* node) {
+    // Range expressions are handled during parsing/desugaring for range-based for loops
+    // They should not appear directly in LLVM codegen
+    logError(node->loc, "Range expression should have been desugared during parsing");
+    m_currentLLVMValue = nullptr;
+}
+
 void LLVMCodegen::visit(ast::AwaitExpression* node) {
     // 'await' expression - suspend current async function and wait for Future<T>
     

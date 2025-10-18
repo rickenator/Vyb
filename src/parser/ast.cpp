@@ -1545,6 +1545,26 @@ void AwaitExpression::accept(Visitor& visitor) {
     visitor.visit(this);
 }
 
+// --- RangeExpression ---
+RangeExpression::RangeExpression(SourceLocation loc, ExprPtr start, ExprPtr end, ExprPtr step)
+    : Expression(loc), start(std::move(start)), end(std::move(end)), step(std::move(step)) {}
+
+NodeType RangeExpression::getType() const {
+    return NodeType::RANGE_EXPRESSION;
+}
+
+std::string RangeExpression::toString() const {
+    std::string result = (start ? start->toString() : "nullptr") + ".." + (end ? end->toString() : "nullptr");
+    if (step) {
+        result += ", " + step->toString();
+    }
+    return result;
+}
+
+void RangeExpression::accept(Visitor& visitor) {
+    visitor.visit(this);
+}
+
 // --- ThrowStatement ---
 ThrowStatement::ThrowStatement(SourceLocation loc, ExprPtr expr)
     : Statement(loc), expr(std::move(expr)) {}
