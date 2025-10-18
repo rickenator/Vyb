@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.0] - 2025-10-17
+
+### Major Infrastructure Upgrade
+- **MCJIT to ORC JIT Migration**: Complete replacement of deprecated MCJIT with modern LLVM ORC JIT
+  - Migrated from `ExecutionEngine` to `LLJIT` (LLVM 18 ORC JIT infrastructure)
+  - Updated symbol registration from `addGlobalMapping()` to `SymbolMap` with `ExecutorSymbolDef`
+  - Enhanced memory management with `ThreadSafeModule` support
+  - Added `releaseContext()` method to codegen for proper context handling
+  - Comprehensive symbol registration for standard library functions (`malloc`, `free`, `memset`)
+  - Proper handling of mangled symbol names with variants (.1, .2, etc.)
+
+### Fixed
+- **Segmentation Fault Resolution**: Completely resolved segmentation faults in Vec system memory management
+  - Fixed crashes occurring during JIT execution of functions with malloc/free operations
+  - ORC JIT provides better isolation between JIT memory and application memory
+  - Vec system memory management now works perfectly with multiple object creation and cleanup
+  - Proven through comprehensive testing with multiple Vec creation scenarios
+
+### Improved
+- **JIT Performance**: Modern ORC JIT provides better performance and stability
+- **Memory Safety**: Enhanced separation between compiler memory and runtime memory
+- **Function Execution**: Robust function pointer conversion using `ExecutorAddr` API
+- **Symbol Resolution**: Better handling of runtime symbol lookup and registration
+
+### Technical Details
+- **New LLVM Headers**: 
+  - `llvm/ExecutionEngine/Orc/LLJIT.h`
+  - `llvm/ExecutionEngine/Orc/ThreadSafeModule.h`
+  - `llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h`
+- **Updated Function Lookup**: Replaced `FindFunctionNamed()` with `jit->lookup()` pattern
+- **Enhanced Symbol Registration**: `ExecutorAddr::fromPtr()` for proper symbol mapping
+- **Memory Function Support**: Full registration of malloc/free/memset with proper mangling
+
+### Migration Impact
+- **Developer Experience**: No changes to Vyn language syntax or semantics
+- **Runtime Stability**: Dramatically improved stability for memory-intensive operations
+- **Vec System**: Full functionality restored with automatic cleanup working perfectly
+- **Performance**: Better JIT compilation performance with modern LLVM infrastructure
+
+### Test Results
+- **Memory Safety**: Multiple Vec creation and destruction without crashes
+- **Function Calls**: Complex function call chains with malloc/free operations
+- **Return Values**: Proper exit code handling and complex return type serialization
+- **Compilation**: Faster and more reliable JIT compilation process
+
+### Files Modified
+- `src/main.cpp` - Complete MCJIT to ORC JIT conversion with symbol registration
+- `include/vyn/vre/llvm/codegen.hpp` - Added ThreadSafeModule support methods
+- Standard library integration remains unchanged, maintaining API compatibility
+
+---
+
 ## [0.3.6] - 2025-06-02
 
 ### Added

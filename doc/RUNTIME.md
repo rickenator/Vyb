@@ -10,6 +10,8 @@ Vyn's memory model is designed for safety and explicitness, drawing inspiration 
 
 This document details these aspects, aligning with the `mem_RFC.md` proposal.
 
+**Runtime Note**: As of v0.4.0, Vyn uses LLVM's modern ORC JIT infrastructure, providing robust memory management and excellent compatibility with the ownership and borrowing system described here.
+
 ## 2. Variable Declarations and Binding Mutability
 
 Vyn uses two keywords for variable bindings:
