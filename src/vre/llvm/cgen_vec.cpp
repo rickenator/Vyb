@@ -59,8 +59,10 @@ void LLVMCodegen::handleVecMethod(vyn::ast::CallExpression* node, const std::str
         handleVecConcat(node, vecPtr, vecStructType);
     } else if (methodName == "contains") {
         handleVecContains(node, vecPtr, vecStructType);
-    } else if (methodName == "remove_at") {
+    } else if (methodName == "remove_at" || methodName == "remove") {
         handleVecRemoveAt(node, vecPtr, vecStructType);
+    } else if (methodName == "resize") {
+        handleVecResize(node, vecPtr, vecStructType);
     } else if (methodName == "get_array") {
         handleVecGetArray(node, vecPtr, vecStructType);
     } else if (methodName == "get_vec") {
@@ -86,27 +88,136 @@ void LLVMCodegen::handleVecPush(vyn::ast::CallExpression* node, llvm::Value* vec
         return;
     }
     
-    // For now, implement a simple push that just increments size
-    // In a full implementation, this would need to handle memory allocation/reallocation
+    // Get element type from the value being pushed
+    llvm::Type* elementType = valueToAdd->getType();
+    
+    // Calculate the actual element size using DataLayout
+    llvm::DataLayout dataLayout(module.get());
+    uint64_t elementSizeBytes = dataLayout.getTypeAllocSize(elementType);
     
     // Get pointers to struct fields
+    llvm::Value* dataFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 0, "vec.data_ptr");
     llvm::Value* sizeFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 1, "vec.size_ptr");
+    llvm::Value* capFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 2, "vec.cap_ptr");
     
-    // Load current size
+    // Load current size and capacity
     llvm::Value* currentSize = builder->CreateLoad(llvm::Type::getInt64Ty(*context), sizeFieldPtr, "vec.current_size");
+    llvm::Value* currentCap = builder->CreateLoad(llvm::Type::getInt64Ty(*context), capFieldPtr, "vec.current_cap");
+    llvm::Value* dataPtr = builder->CreateLoad(llvm::PointerType::get(*context, 0), dataFieldPtr, "vec.data");
     
-    // Increment size by 1
-    llvm::Value* newSize = builder->CreateAdd(currentSize, 
-                                             llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1), 
-                                             "vec.new_size");
+    // Check if we need to allocate/grow
+    llvm::Value* needsAlloc = builder->CreateICmpEQ(currentCap, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0), "vec.needs_alloc");
+    llvm::Value* needsGrow = builder->CreateICmpEQ(currentSize, currentCap, "vec.needs_grow");
+    llvm::Value* needsRealloc = builder->CreateOr(needsAlloc, needsGrow, "vec.needs_realloc");
     
-    // Store new size
+    llvm::BasicBlock* entryBlock = builder->GetInsertBlock();
+    llvm::BasicBlock* allocBlock = llvm::BasicBlock::Create(*context, "vec.alloc", entryBlock->getParent());
+    llvm::BasicBlock* copyBlock = llvm::BasicBlock::Create(*context, "vec.copy", entryBlock->getParent());
+    llvm::BasicBlock* noCopyBlock = llvm::BasicBlock::Create(*context, "vec.no_copy", entryBlock->getParent());
+    llvm::BasicBlock* mergeBlock = llvm::BasicBlock::Create(*context, "vec.merge", entryBlock->getParent());
+    
+    builder->CreateCondBr(needsRealloc, allocBlock, mergeBlock);
+    
+    // Alloc block - allocate or grow the array
+    builder->SetInsertPoint(allocBlock);
+    
+    // New capacity: if 0, start with 4, else double it
+    llvm::Value* newCap = builder->CreateSelect(
+        needsAlloc,
+        llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 4),
+        builder->CreateMul(currentCap, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 2)),
+        "vec.new_cap"
+    );
+    
+    // Calculate allocation size using actual element size
+    llvm::Value* elementSize = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), elementSizeBytes);
+    llvm::Value* allocSize = builder->CreateMul(newCap, elementSize, "vec.alloc_size");
+    
+    // Call malloc
+    llvm::FunctionType* mallocType = llvm::FunctionType::get(
+        llvm::PointerType::get(*context, 0),
+        {llvm::Type::getInt64Ty(*context)},
+        false
+    );
+    llvm::Function* mallocFunc = module->getFunction("malloc");
+    if (!mallocFunc) {
+        mallocFunc = llvm::Function::Create(mallocType, llvm::Function::ExternalLinkage, "malloc", module.get());
+    }
+    llvm::Value* newDataPtr = builder->CreateCall(mallocFunc, {allocSize}, "vec.new_data");
+    
+    // If there was old data, copy it (using memcpy if size > 0)
+    llvm::Value* hasData = builder->CreateICmpNE(currentSize, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0), "vec.has_data");
+    builder->CreateCondBr(hasData, copyBlock, noCopyBlock);
+    
+    // Copy block
+    builder->SetInsertPoint(copyBlock);
+    llvm::Value* copySize = builder->CreateMul(currentSize, elementSize, "vec.copy_size");
+    llvm::FunctionType* memcpyType = llvm::FunctionType::get(
+        llvm::PointerType::get(*context, 0),
+        {llvm::PointerType::get(*context, 0), llvm::PointerType::get(*context, 0), llvm::Type::getInt64Ty(*context)},
+        false
+    );
+    llvm::Function* memcpyFunc = module->getFunction("memcpy");
+    if (!memcpyFunc) {
+        memcpyFunc = llvm::Function::Create(memcpyType, llvm::Function::ExternalLinkage, "memcpy", module.get());
+    }
+    builder->CreateCall(memcpyFunc, {newDataPtr, dataPtr, copySize});
+    builder->CreateBr(noCopyBlock);
+    
+    // No copy block - update the Vec struct
+    builder->SetInsertPoint(noCopyBlock);
+    builder->CreateStore(newDataPtr, dataFieldPtr);
+    builder->CreateStore(newCap, capFieldPtr);
+    builder->CreateBr(mergeBlock);
+    
+    // Merge block - both paths (alloc and no-alloc) meet here
+    // IMPORTANT: This must be created last so it becomes func->back() and gets automatic terminator
+    builder->SetInsertPoint(mergeBlock);
+    
+    // Reload data pointer (might have changed in alloc block)
+    llvm::Value* finalDataPtr = builder->CreateLoad(llvm::PointerType::get(*context, 0), dataFieldPtr, "vec.final_data");
+    
+    // Reload size (shouldn't have changed, but for clarity)
+    llvm::Value* reloadedSize = builder->CreateLoad(llvm::Type::getInt64Ty(*context), sizeFieldPtr, "vec.reloaded_size");
+    
+    // Calculate offset for new element using actual element size
+    llvm::Value* elementSize2 = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), elementSizeBytes);
+    llvm::Value* offset = builder->CreateMul(reloadedSize, elementSize2, "vec.offset");
+    llvm::Value* elementPtr = builder->CreateGEP(llvm::Type::getInt8Ty(*context), finalDataPtr, offset, "vec.element_ptr");
+    
+    // Store the value - need to handle different types
+    if (elementType->isStructTy()) {
+        // For structs, do a memcpy from the source to destination
+        // valueToAdd should be a pointer to the struct
+        llvm::Value* srcPtr = valueToAdd;
+        if (!valueToAdd->getType()->isPointerTy()) {
+            // If valueToAdd is a struct value (not a pointer), we need to create a temporary
+            llvm::Value* tempAlloca = builder->CreateAlloca(elementType, nullptr, "vec.temp_struct");
+            builder->CreateStore(valueToAdd, tempAlloca);
+            srcPtr = tempAlloca;
+        }
+        
+        llvm::FunctionType* memcpyType2 = llvm::FunctionType::get(
+            llvm::PointerType::get(*context, 0),
+            {llvm::PointerType::get(*context, 0), llvm::PointerType::get(*context, 0), llvm::Type::getInt64Ty(*context)},
+            false
+        );
+        llvm::Function* memcpyFunc2 = module->getFunction("memcpy");
+        if (!memcpyFunc2) {
+            memcpyFunc2 = llvm::Function::Create(memcpyType2, llvm::Function::ExternalLinkage, "memcpy", module.get());
+        }
+        builder->CreateCall(memcpyFunc2, {elementPtr, srcPtr, elementSize2});
+    } else {
+        // For primitives, direct store
+        builder->CreateStore(valueToAdd, elementPtr);
+    }
+    
+    // Increment size
+    llvm::Value* newSize = builder->CreateAdd(reloadedSize, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1), "vec.new_size");
     builder->CreateStore(newSize, sizeFieldPtr);
     
-    // For now, we'll just print that we pushed a value (placeholder)
-    std::cout << "DEBUG: Vec::push() called - size incremented" << std::endl;
+    std::cout << "DEBUG: Vec::push() called - element stored" << std::endl;
     
-    // Return the Vec reference for method chaining
     m_currentLLVMValue = vecPtr;
 }
 
@@ -179,10 +290,55 @@ void LLVMCodegen::handleVecGet(vyn::ast::CallExpression* node, llvm::Value* vecP
         return;
     }
     
-    std::cout << "DEBUG: Vec::get() called with index" << std::endl;
+    // Get the element type from the CallExpression's type (return type)
+    // The semantic analyzer should have set this to the element type (T from Vec<T>)
+    llvm::Type* elementLLVMType = nullptr;
+    uint64_t elementSizeBytes = 8; // Default to 8 bytes
     
-    // For now, return a placeholder value
-    m_currentLLVMValue = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 42);
+    if (node->type) {
+        // Convert AST type to LLVM type
+        elementLLVMType = codegenType(node->type.get());
+        if (elementLLVMType) {
+            llvm::DataLayout dataLayout(module.get());
+            elementSizeBytes = dataLayout.getTypeAllocSize(elementLLVMType);
+        }
+    }
+    
+    // Fallback to i64 if we couldn't determine the type
+    if (!elementLLVMType) {
+        elementLLVMType = llvm::Type::getInt64Ty(*context);
+        elementSizeBytes = 8;
+    }
+    
+    // Get pointers to struct fields
+    llvm::Value* dataFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 0, "vec.data_ptr");
+    llvm::Value* sizeFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 1, "vec.size_ptr");
+    
+    // Load the data pointer and size
+    llvm::Value* dataPtr = builder->CreateLoad(llvm::PointerType::get(*context, 0), dataFieldPtr, "vec.data");
+    llvm::Value* size = builder->CreateLoad(llvm::Type::getInt64Ty(*context), sizeFieldPtr, "vec.size");
+    
+    // TODO: Add bounds checking - for now assume index is valid
+    
+    // Calculate offset: data_ptr + (index * element_size)
+    llvm::Value* elementSize = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), elementSizeBytes);
+    llvm::Value* offset = builder->CreateMul(index, elementSize, "vec.offset");
+    llvm::Value* elementPtr = builder->CreateGEP(llvm::Type::getInt8Ty(*context), dataPtr, offset, "vec.element_ptr");
+    
+    // Load the element value based on type
+    if (elementLLVMType->isStructTy()) {
+        // For structs, load the entire struct value (will be a copy)
+        llvm::Value* structValue = builder->CreateLoad(elementLLVMType, elementPtr, "vec.element_struct");
+        m_currentLLVMValue = structValue;
+        
+        std::cout << "DEBUG: Vec::get() called - returning struct value" << std::endl;
+    } else {
+        // For primitives, load the value directly
+        llvm::Value* element = builder->CreateLoad(elementLLVMType, elementPtr, "vec.element");
+        m_currentLLVMValue = element;
+        
+        std::cout << "DEBUG: Vec::get() called - element retrieved" << std::endl;
+    }
 }
 
 void LLVMCodegen::handleVecPushArray(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
@@ -336,30 +492,127 @@ void LLVMCodegen::handleVecRemoveAt(vyn::ast::CallExpression* node, llvm::Value*
     
     // Evaluate the index argument
     node->arguments[0]->accept(*this);
-    llvm::Value* index = m_currentLLVMValue;
-    if (!index) {
+    llvm::Value* indexToRemove = m_currentLLVMValue;
+    if (!indexToRemove) {
         logError(node->loc, "Failed to evaluate index for Vec::remove_at");
         return;
     }
     
-    std::cout << "DEBUG: Vec::remove_at() called - removing element at index" << std::endl;
+    // Get element type from the CallExpression's type (return type)
+    llvm::Type* elementLLVMType = nullptr;
+    uint64_t elementSizeBytes = 8; // Default
     
-    // For now, placeholder implementation - just decrement size
+    if (node->type) {
+        elementLLVMType = codegenType(node->type.get());
+        if (elementLLVMType) {
+            llvm::DataLayout dataLayout(module.get());
+            elementSizeBytes = dataLayout.getTypeAllocSize(elementLLVMType);
+        }
+    }
+    
+    if (!elementLLVMType) {
+        elementLLVMType = llvm::Type::getInt64Ty(*context);
+        elementSizeBytes = 8;
+    }
+    
+    // Get pointers to struct fields
+    llvm::Value* dataFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 0, "vec.data_ptr");
     llvm::Value* sizeFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 1, "vec.size_ptr");
-    llvm::Value* currentSize = builder->CreateLoad(llvm::Type::getInt64Ty(*context), sizeFieldPtr, "vec.current_size");
     
-    // Decrement size if not empty
-    llvm::Value* isEmpty = builder->CreateICmpEQ(currentSize, 
-                                                llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0),
-                                                "vec.is_empty");
-    llvm::Value* newSize = builder->CreateSub(currentSize,
-                                             llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1),
-                                             "vec.new_size");
-    llvm::Value* safeNewSize = builder->CreateSelect(isEmpty, currentSize, newSize, "vec.safe_new_size");
-    builder->CreateStore(safeNewSize, sizeFieldPtr);
+    // Load current data pointer and size
+    llvm::Value* dataPtr = builder->CreateLoad(llvm::PointerType::get(*context, 0), dataFieldPtr, "vec.data");
+    llvm::Value* currentSize = builder->CreateLoad(llvm::Type::getInt64Ty(*context), sizeFieldPtr, "vec.size");
     
-    // Return removed value (placeholder)
-    m_currentLLVMValue = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0);
+    // Bounds check: index < size
+    llvm::Value* indexInBounds = builder->CreateICmpULT(indexToRemove, currentSize, "vec.index_in_bounds");
+    
+    llvm::BasicBlock* removeBlock = llvm::BasicBlock::Create(*context, "vec.remove_valid", builder->GetInsertBlock()->getParent());
+    llvm::BasicBlock* mergeBlock = llvm::BasicBlock::Create(*context, "vec.remove_merge", builder->GetInsertBlock()->getParent());
+    
+    // Create a phi node for the return value
+    builder->CreateCondBr(indexInBounds, removeBlock, mergeBlock);
+    
+    // Remove block - valid index
+    builder->SetInsertPoint(removeBlock);
+    
+    // Calculate offset to the element being removed
+    llvm::Value* elementSize = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), elementSizeBytes);
+    llvm::Value* removeOffset = builder->CreateMul(indexToRemove, elementSize, "vec.remove_offset");
+    llvm::Value* removePtr = builder->CreateGEP(llvm::Type::getInt8Ty(*context), dataPtr, removeOffset, "vec.remove_ptr");
+    
+    // Load the element being removed (for return value)
+    llvm::Value* removedElement;
+    if (elementLLVMType->isStructTy()) {
+        removedElement = builder->CreateLoad(elementLLVMType, removePtr, "vec.removed_element");
+    } else {
+        removedElement = builder->CreateLoad(elementLLVMType, removePtr, "vec.removed_element");
+    }
+    
+    // Shift elements after the removed index down by one
+    // Elements to shift: size - index - 1
+    llvm::Value* elementsAfter = builder->CreateSub(currentSize, 
+        builder->CreateAdd(indexToRemove, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1)),
+        "vec.elements_after");
+    
+    // Check if there are elements to shift
+    llvm::Value* hasElementsToShift = builder->CreateICmpUGT(elementsAfter, 
+        llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0), "vec.has_elements_to_shift");
+    
+    llvm::BasicBlock* shiftBlock = llvm::BasicBlock::Create(*context, "vec.shift", builder->GetInsertBlock()->getParent());
+    llvm::BasicBlock* noShiftBlock = llvm::BasicBlock::Create(*context, "vec.no_shift", builder->GetInsertBlock()->getParent());
+    
+    builder->CreateCondBr(hasElementsToShift, shiftBlock, noShiftBlock);
+    
+    // Shift block - use memmove to shift elements
+    builder->SetInsertPoint(shiftBlock);
+    
+    llvm::Value* srcOffset = builder->CreateMul(
+        builder->CreateAdd(indexToRemove, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1)),
+        elementSize, "vec.src_offset");
+    llvm::Value* srcPtr = builder->CreateGEP(llvm::Type::getInt8Ty(*context), dataPtr, srcOffset, "vec.src_ptr");
+    llvm::Value* bytesToMove = builder->CreateMul(elementsAfter, elementSize, "vec.bytes_to_move");
+    
+    // Use memmove (safer than memcpy for overlapping regions)
+    llvm::FunctionType* memmoveType = llvm::FunctionType::get(
+        llvm::PointerType::get(*context, 0),
+        {llvm::PointerType::get(*context, 0), llvm::PointerType::get(*context, 0), llvm::Type::getInt64Ty(*context)},
+        false
+    );
+    llvm::Function* memmoveFunc = module->getFunction("memmove");
+    if (!memmoveFunc) {
+        memmoveFunc = llvm::Function::Create(memmoveType, llvm::Function::ExternalLinkage, "memmove", module.get());
+    }
+    builder->CreateCall(memmoveFunc, {removePtr, srcPtr, bytesToMove});
+    builder->CreateBr(noShiftBlock);
+    
+    // No shift block - just update size
+    builder->SetInsertPoint(noShiftBlock);
+    llvm::Value* newSize = builder->CreateSub(currentSize, 
+        llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1), "vec.new_size");
+    builder->CreateStore(newSize, sizeFieldPtr);
+    builder->CreateBr(mergeBlock);
+    
+    // Merge block
+    builder->SetInsertPoint(mergeBlock);
+    llvm::PHINode* resultPhi = builder->CreatePHI(elementLLVMType, 2, "vec.remove_result");
+    resultPhi->addIncoming(removedElement, noShiftBlock);
+    
+    // For out of bounds, return zero/default value
+    llvm::Value* defaultValue;
+    if (elementLLVMType->isIntegerTy()) {
+        defaultValue = llvm::ConstantInt::get(elementLLVMType, 0);
+    } else if (elementLLVMType->isFloatingPointTy()) {
+        defaultValue = llvm::ConstantFP::get(elementLLVMType, 0.0);
+    } else if (elementLLVMType->isStructTy()) {
+        defaultValue = llvm::ConstantAggregateZero::get(elementLLVMType);
+    } else {
+        defaultValue = llvm::Constant::getNullValue(elementLLVMType);
+    }
+    resultPhi->addIncoming(defaultValue, builder->GetInsertBlock()->getUniquePredecessor());
+    
+    std::cout << "DEBUG: Vec::remove_at() called - element removed and Vec compacted" << std::endl;
+    
+    m_currentLLVMValue = resultPhi;
 }
 
 void LLVMCodegen::handleVecGetArray(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
@@ -437,6 +690,226 @@ void LLVMCodegen::handleVecGetVec(vyn::ast::CallExpression* node, llvm::Value* v
     // In a real implementation, we'd copy the data and potentially free source
     // For demonstration, just return the number of elements that would be transferred
     m_currentLLVMValue = srcSize;
+}
+
+void LLVMCodegen::handleVecResize(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
+    if (node->arguments.size() != 1) {
+        logError(node->loc, "Vec::resize expects exactly 1 argument (new_capacity)");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Evaluate the new capacity argument
+    node->arguments[0]->accept(*this);
+    llvm::Value* newCapacity = m_currentLLVMValue;
+    if (!newCapacity) {
+        logError(node->loc, "Failed to evaluate new_capacity for Vec::resize");
+        return;
+    }
+    
+    // Get element type - try to infer from context or default to i64
+    llvm::Type* elementType = llvm::Type::getInt64Ty(*context);
+    uint64_t elementSizeBytes = 8;
+    
+    // Try to get actual element type from Vec type parameter if available
+    // For now, use default since we don't have full type parameter tracking yet
+    llvm::DataLayout dataLayout(module.get());
+    
+    // Get pointers to struct fields
+    llvm::Value* dataFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 0, "vec.data_ptr");
+    llvm::Value* sizeFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 1, "vec.size_ptr");
+    llvm::Value* capFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 2, "vec.cap_ptr");
+    
+    // Load current values
+    llvm::Value* oldDataPtr = builder->CreateLoad(llvm::PointerType::get(*context, 0), dataFieldPtr, "vec.old_data");
+    llvm::Value* currentSize = builder->CreateLoad(llvm::Type::getInt64Ty(*context), sizeFieldPtr, "vec.size");
+    llvm::Value* currentCap = builder->CreateLoad(llvm::Type::getInt64Ty(*context), capFieldPtr, "vec.old_cap");
+    
+    // Check if newCapacity > 0
+    llvm::Value* hasCapacity = builder->CreateICmpUGT(newCapacity, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0), "vec.has_capacity");
+    
+    llvm::BasicBlock* allocBlock = llvm::BasicBlock::Create(*context, "vec.resize_alloc", builder->GetInsertBlock()->getParent());
+    llvm::BasicBlock* freeBlock = llvm::BasicBlock::Create(*context, "vec.resize_free", builder->GetInsertBlock()->getParent());
+    llvm::BasicBlock* mergeBlock = llvm::BasicBlock::Create(*context, "vec.resize_merge", builder->GetInsertBlock()->getParent());
+    
+    builder->CreateCondBr(hasCapacity, allocBlock, freeBlock);
+    
+    // Alloc block - allocate new storage
+    builder->SetInsertPoint(allocBlock);
+    
+    llvm::Value* elementSize = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), elementSizeBytes);
+    llvm::Value* allocSize = builder->CreateMul(newCapacity, elementSize, "vec.alloc_size");
+    
+    // Call malloc
+    llvm::FunctionType* mallocType = llvm::FunctionType::get(
+        llvm::PointerType::get(*context, 0),
+        {llvm::Type::getInt64Ty(*context)},
+        false
+    );
+    llvm::Function* mallocFunc = module->getFunction("malloc");
+    if (!mallocFunc) {
+        mallocFunc = llvm::Function::Create(mallocType, llvm::Function::ExternalLinkage, "malloc", module.get());
+    }
+    llvm::Value* newDataPtr = builder->CreateCall(mallocFunc, {allocSize}, "vec.new_data");
+    
+    // Copy existing data if there is any (copy min(size, newCapacity) elements)
+    llvm::Value* elementsToCopy = builder->CreateSelect(
+        builder->CreateICmpULT(currentSize, newCapacity),
+        currentSize,
+        newCapacity,
+        "vec.elements_to_copy"
+    );
+    
+    llvm::Value* hasOldData = builder->CreateICmpNE(oldDataPtr, 
+        llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0)), "vec.has_old_data");
+    llvm::Value* hasCopyData = builder->CreateAnd(hasOldData,
+        builder->CreateICmpUGT(elementsToCopy, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0)),
+        "vec.has_copy_data");
+    
+    llvm::BasicBlock* copyBlock = llvm::BasicBlock::Create(*context, "vec.resize_copy", builder->GetInsertBlock()->getParent());
+    llvm::BasicBlock* noCopyBlock = llvm::BasicBlock::Create(*context, "vec.resize_no_copy", builder->GetInsertBlock()->getParent());
+    
+    builder->CreateCondBr(hasCopyData, copyBlock, noCopyBlock);
+    
+    // Copy block
+    builder->SetInsertPoint(copyBlock);
+    llvm::Value* copySize = builder->CreateMul(elementsToCopy, elementSize, "vec.copy_size");
+    llvm::FunctionType* memcpyType = llvm::FunctionType::get(
+        llvm::PointerType::get(*context, 0),
+        {llvm::PointerType::get(*context, 0), llvm::PointerType::get(*context, 0), llvm::Type::getInt64Ty(*context)},
+        false
+    );
+    llvm::Function* memcpyFunc = module->getFunction("memcpy");
+    if (!memcpyFunc) {
+        memcpyFunc = llvm::Function::Create(memcpyType, llvm::Function::ExternalLinkage, "memcpy", module.get());
+    }
+    builder->CreateCall(memcpyFunc, {newDataPtr, oldDataPtr, copySize});
+    builder->CreateBr(noCopyBlock);
+    
+    // No copy block - free old data and update Vec
+    builder->SetInsertPoint(noCopyBlock);
+    
+    // Free old data if it exists
+    llvm::BasicBlock* freeOldBlock = llvm::BasicBlock::Create(*context, "vec.resize_free_old", builder->GetInsertBlock()->getParent());
+    llvm::BasicBlock* noFreeBlock = llvm::BasicBlock::Create(*context, "vec.resize_no_free", builder->GetInsertBlock()->getParent());
+    
+    builder->CreateCondBr(hasOldData, freeOldBlock, noFreeBlock);
+    
+    builder->SetInsertPoint(freeOldBlock);
+    llvm::FunctionType* freeType = llvm::FunctionType::get(
+        llvm::Type::getVoidTy(*context),
+        {llvm::PointerType::get(*context, 0)},
+        false
+    );
+    llvm::Function* freeFunc = module->getFunction("free");
+    if (!freeFunc) {
+        freeFunc = llvm::Function::Create(freeType, llvm::Function::ExternalLinkage, "free", module.get());
+    }
+    builder->CreateCall(freeFunc, {oldDataPtr});
+    builder->CreateBr(noFreeBlock);
+    
+    builder->SetInsertPoint(noFreeBlock);
+    builder->CreateStore(newDataPtr, dataFieldPtr);
+    builder->CreateStore(newCapacity, capFieldPtr);
+    // Update size to min(currentSize, newCapacity)
+    builder->CreateStore(elementsToCopy, sizeFieldPtr);
+    builder->CreateBr(mergeBlock);
+    
+    // Free block - newCapacity is 0, free everything
+    builder->SetInsertPoint(freeBlock);
+    llvm::BasicBlock* freeClearBlock = llvm::BasicBlock::Create(*context, "vec.resize_clear", builder->GetInsertBlock()->getParent());
+    llvm::BasicBlock* noFreeClearBlock = llvm::BasicBlock::Create(*context, "vec.resize_no_clear", builder->GetInsertBlock()->getParent());
+    
+    llvm::Value* hasDataToFree = builder->CreateICmpNE(oldDataPtr,
+        llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0)), "vec.has_data_to_free");
+    builder->CreateCondBr(hasDataToFree, freeClearBlock, noFreeClearBlock);
+    
+    builder->SetInsertPoint(freeClearBlock);
+    llvm::Function* freeFunc2 = module->getFunction("free");
+    if (!freeFunc2) {
+        llvm::FunctionType* freeType2 = llvm::FunctionType::get(
+            llvm::Type::getVoidTy(*context),
+            {llvm::PointerType::get(*context, 0)},
+            false
+        );
+        freeFunc2 = llvm::Function::Create(freeType2, llvm::Function::ExternalLinkage, "free", module.get());
+    }
+    builder->CreateCall(freeFunc2, {oldDataPtr});
+    builder->CreateBr(noFreeClearBlock);
+    
+    builder->SetInsertPoint(noFreeClearBlock);
+    builder->CreateStore(llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0)), dataFieldPtr);
+    builder->CreateStore(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0), sizeFieldPtr);
+    builder->CreateStore(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0), capFieldPtr);
+    builder->CreateBr(mergeBlock);
+    
+    // Merge block
+    builder->SetInsertPoint(mergeBlock);
+    
+    std::cout << "DEBUG: Vec::resize() called - Vec resized" << std::endl;
+    
+    // Return void
+    m_currentLLVMValue = nullptr;
+}
+
+void LLVMCodegen::handleVecMethodOnValue(vyn::ast::CallExpression* node, llvm::Value* vecValue, const std::string& methodName, vyn::ast::Expression* objectExpr) {
+    // Handle Vec method calls when we have the Vec value directly (not just a name)
+    // This is used for calls like tree.nodes.push() where tree.nodes is a member expression
+    
+    llvm::Value* vecPtr = vecValue;
+    
+    // Check if the value is a pointer
+    if (!vecPtr->getType()->isPointerTy()) {
+        // If it's a value (not a pointer), we need to create a temporary alloca and store it
+        llvm::Type* vecType = vecPtr->getType();
+        llvm::Value* tempAlloca = builder->CreateAlloca(vecType, nullptr, "vec.temp");
+        builder->CreateStore(vecPtr, tempAlloca);
+        vecPtr = tempAlloca;
+    }
+    
+    // Define Vec struct type: { ptr, i64, i64 }
+    std::vector<llvm::Type*> vecFields = {
+        llvm::PointerType::get(*context, 0), // ptr to elements
+        llvm::Type::getInt64Ty(*context),    // size
+        llvm::Type::getInt64Ty(*context)     // capacity
+    };
+    llvm::Type* vecStructType = llvm::StructType::get(*context, vecFields, false);
+    
+    // Dispatch to the appropriate handler
+    if (methodName == "push") {
+        handleVecPush(node, vecPtr, vecStructType);
+    } else if (methodName == "pop") {
+        handleVecPop(node, vecPtr, vecStructType);
+    } else if (methodName == "len") {
+        handleVecLen(node, vecPtr, vecStructType);
+    } else if (methodName == "get") {
+        handleVecGet(node, vecPtr, vecStructType);
+    } else if (methodName == "push_array") {
+        handleVecPushArray(node, vecPtr, vecStructType);
+    } else if (methodName == "to_array") {
+        handleVecToArray(node, vecPtr, vecStructType);
+    } else if (methodName == "clear") {
+        handleVecClear(node, vecPtr, vecStructType);
+    } else if (methodName == "is_empty") {
+        handleVecIsEmpty(node, vecPtr, vecStructType);
+    } else if (methodName == "capacity") {
+        handleVecCapacity(node, vecPtr, vecStructType);
+    } else if (methodName == "concat") {
+        handleVecConcat(node, vecPtr, vecStructType);
+    } else if (methodName == "contains") {
+        handleVecContains(node, vecPtr, vecStructType);
+    } else if (methodName == "remove_at" || methodName == "remove") {
+        handleVecRemoveAt(node, vecPtr, vecStructType);
+    } else if (methodName == "resize") {
+        handleVecResize(node, vecPtr, vecStructType);
+    } else if (methodName == "get_array") {
+        handleVecGetArray(node, vecPtr, vecStructType);
+    } else if (methodName == "get_vec") {
+        handleVecGetVec(node, vecPtr, vecStructType);
+    } else {
+        logError(node->loc, "Unknown Vec method: " + methodName);
+        m_currentLLVMValue = nullptr;
+    }
 }
 
 } // namespace vyn

@@ -89,6 +89,7 @@ set(VRE_SOURCES
     src/vre/llvm/cgen_string.cpp
     src/vre/llvm/cgen_println.cpp
     src/vre/llvm/cgen_vec.cpp
+    src/vre/llvm/cgen_string_type.cpp
     src/vre/llvm/cgen_function.cpp
     src/vre/llvm/cgen_semantics.cpp
     src/vre/llvm/cgen_ownership.cpp

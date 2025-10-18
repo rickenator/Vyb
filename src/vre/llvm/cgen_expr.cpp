@@ -26,9 +26,11 @@ void LLVMCodegen::visit(vyn::ast::BooleanLiteral *node) {
 }
 
 void LLVMCodegen::visit(vyn::ast::StringLiteral *node) {
+    llvm::Value* strPtr = nullptr;
+    
     if (currentFunction) {
         // Inside a function - use CreateGlobalStringPtr
-        m_currentLLVMValue = builder->CreateGlobalStringPtr(node->value);
+        strPtr = builder->CreateGlobalStringPtr(node->value);
     } else {
         // Global scope - create a global constant string
         // Create a constant string
@@ -50,11 +52,32 @@ void LLVMCodegen::visit(vyn::ast::StringLiteral *node) {
             llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0)
         };
         
-        m_currentLLVMValue = llvm::ConstantExpr::getGetElementPtr(
+        strPtr = llvm::ConstantExpr::getGetElementPtr(
             stringConstant->getType(),
             globalString,
             indices
         );
+    }
+    
+    // Convert to String struct {ptr, len}
+    if (currentFunction) {
+        // Create String struct type
+        llvm::Type* int8PtrType = llvm::PointerType::get(*context, 0);
+        llvm::Type* int64Type = llvm::Type::getInt64Ty(*context);
+        llvm::StructType* stringStructType = llvm::StructType::get(*context, {int8PtrType, int64Type});
+        
+        // Calculate length (exclude null terminator)
+        llvm::Value* lenValue = llvm::ConstantInt::get(int64Type, node->value.length());
+        
+        // Build the String struct
+        llvm::Value* stringStruct = llvm::UndefValue::get(stringStructType);
+        stringStruct = builder->CreateInsertValue(stringStruct, strPtr, 0, "str.ptr");
+        stringStruct = builder->CreateInsertValue(stringStruct, lenValue, 1, "str.len");
+        
+        m_currentLLVMValue = stringStruct;
+    } else {
+        // In global scope, just return the pointer for now (backward compatibility)
+        m_currentLLVMValue = strPtr;
     }
 }
 
@@ -80,7 +103,9 @@ void LLVMCodegen::visit(vyn::ast::ObjectLiteral* node) {
     }
 
     // Get the struct type for the object
+    std::cerr << "DEBUG: ObjectLiteral resolving type: " << node->typePath->toString() << std::endl;
     llvm::Type* structTy = codegenType(node->typePath.get());
+    std::cerr << "DEBUG: ObjectLiteral resolved type to: " << getTypeName(structTy) << " with pointer: " << structTy << std::endl;
     if (!structTy || !structTy->isStructTy()) {
         logError(node->loc, "Object literal type is not a struct type");
         m_currentLLVMValue = nullptr;
@@ -174,6 +199,9 @@ void LLVMCodegen::visit(vyn::ast::ObjectLiteral* node) {
     // we should load the struct value rather than return the pointer.
     // This ensures type compatibility with value semantics.
     llvm::Value* structValue = builder->CreateLoad(structTy, allocaInst, structName + "_val");
+    
+    std::cerr << "DEBUG: ObjectLiteral created struct value with type: " << getTypeName(structValue->getType()) << std::endl;
+    std::cerr << "DEBUG: Expected struct type was: " << getTypeName(structTy) << std::endl;
     
     // Return the loaded struct value
     m_currentLLVMValue = structValue;
@@ -344,7 +372,7 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
             if (isFloatOp) {
                 m_currentLLVMValue = builder->CreateFAdd(L, R, "faddtmp");
             }
-            // Debug output for string concatenation logic
+           
             else {
                 if (verbose) {
                     std::cout << "DEBUG PLUS: leftTypeNode=" << (leftTypeNode ? "yes" : "null") 
@@ -352,7 +380,90 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
                     std::cout << "DEBUG PLUS: Checking LLVM types for string detection..." << std::endl;
                 }
                 
-                // First check for string types using LLVM types directly (more reliable)
+                // Check for String struct types: { ptr, len }
+                bool leftIsStringStruct = false;
+                bool rightIsStringStruct = false;
+                
+                if (L->getType()->isStructTy()) {
+                    llvm::StructType* structType = llvm::cast<llvm::StructType>(L->getType());
+                    if (structType->getNumElements() == 2) {
+                        leftIsStringStruct = true;
+                    }
+                }
+                if (R->getType()->isStructTy()) {
+                    llvm::StructType* structType = llvm::cast<llvm::StructType>(R->getType());
+                    if (structType->getNumElements() == 2) {
+                        rightIsStringStruct = true;
+                    }
+                }
+                
+                // Handle String + String concatenation
+                if (leftIsStringStruct && rightIsStringStruct) {
+                    std::cout << "DEBUG PLUS: String + String concatenation detected" << std::endl;
+                    
+                    // Define String struct type: { ptr: *i8, len: i64 }
+                    std::vector<llvm::Type*> strFields = {
+                        llvm::PointerType::get(*context, 0),
+                        llvm::Type::getInt64Ty(*context)
+                    };
+                    llvm::StructType* strStructType = llvm::StructType::get(*context, strFields, false);
+                    
+                    // Extract fields from left string
+                    llvm::Value* str1Data = builder->CreateExtractValue(L, 0, "str1.data");
+                    llvm::Value* str1Len = builder->CreateExtractValue(L, 1, "str1.len");
+                    
+                    // Extract fields from right string
+                    llvm::Value* str2Data = builder->CreateExtractValue(R, 0, "str2.data");
+                    llvm::Value* str2Len = builder->CreateExtractValue(R, 1, "str2.len");
+                    
+                    // Calculate new length
+                    llvm::Value* newLen = builder->CreateAdd(str1Len, str2Len, "str.new_len");
+                    
+                    // Allocate new buffer (+1 for null terminator)
+                    llvm::Value* allocSize = builder->CreateAdd(newLen, 
+                        llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1), "str.alloc_size");
+                    
+                    llvm::FunctionType* mallocType = llvm::FunctionType::get(
+                        llvm::PointerType::get(*context, 0),
+                        {llvm::Type::getInt64Ty(*context)},
+                        false
+                    );
+                    llvm::Function* mallocFunc = module->getFunction("malloc");
+                    if (!mallocFunc) {
+                        mallocFunc = llvm::Function::Create(mallocType, llvm::Function::ExternalLinkage, "malloc", module.get());
+                    }
+                    llvm::Value* newData = builder->CreateCall(mallocFunc, {allocSize}, "str.new_data");
+                    
+                    // Copy first string
+                    llvm::FunctionType* memcpyType = llvm::FunctionType::get(
+                        llvm::PointerType::get(*context, 0),
+                        {llvm::PointerType::get(*context, 0), llvm::PointerType::get(*context, 0), llvm::Type::getInt64Ty(*context)},
+                        false
+                    );
+                    llvm::Function* memcpyFunc = module->getFunction("memcpy");
+                    if (!memcpyFunc) {
+                        memcpyFunc = llvm::Function::Create(memcpyType, llvm::Function::ExternalLinkage, "memcpy", module.get());
+                    }
+                    builder->CreateCall(memcpyFunc, {newData, str1Data, str1Len});
+                    
+                    // Copy second string at offset
+                    llvm::Value* offset = builder->CreateGEP(llvm::Type::getInt8Ty(*context), newData, str1Len, "str.offset");
+                    builder->CreateCall(memcpyFunc, {offset, str2Data, str2Len});
+                    
+                    // Add null terminator
+                    llvm::Value* nullTermPos = builder->CreateGEP(llvm::Type::getInt8Ty(*context), newData, newLen, "str.null_pos");
+                    builder->CreateStore(llvm::ConstantInt::get(llvm::Type::getInt8Ty(*context), 0), nullTermPos);
+                    
+                    // Create new String struct
+                    llvm::Value* resultStr = llvm::UndefValue::get(strStructType);
+                    resultStr = builder->CreateInsertValue(resultStr, newData, 0, "str.result_data");
+                    resultStr = builder->CreateInsertValue(resultStr, newLen, 1, "str.result_len");
+                    
+                    m_currentLLVMValue = resultStr;
+                    break;
+                }
+                
+                // First check for old-style string types using LLVM types directly (more reliable)
                 bool leftIsString = (L->getType() == int8PtrType);
                 bool rightIsString = (R->getType() == int8PtrType);
                 
@@ -538,7 +649,7 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
 }
 
 void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
-    // Debug output to track CallExpression visits
+   
     std::cout << "DEBUG: CallExpression visitor called with callee: " << (node->callee ? node->callee->toString() : "null") << std::endl;
     if (node->type) {
         std::cout << "DEBUG: CallExpression has inferred type: " << node->type->toString() << std::endl;
@@ -658,6 +769,51 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                     
                     // Load the struct value for return (not the pointer)
                     m_currentLLVMValue = builder->CreateLoad(vecStructType, vecAlloca, "vec.new.value");
+                    return;
+                }
+                
+                // Check for String::from_bytes() constructor
+                if (vecIdent->name == "String" && newIdent->name == "from_bytes") {
+                    std::cout << "DEBUG: Creating String::from_bytes() constructor" << std::endl;
+                    
+                    if (node->arguments.size() != 2) {
+                        logError(node->loc, "String::from_bytes expects exactly 2 arguments (byte_ptr, length)");
+                        m_currentLLVMValue = nullptr;
+                        return;
+                    }
+                    
+                    // Evaluate byte pointer argument
+                    node->arguments[0]->accept(*this);
+                    llvm::Value* bytePtr = m_currentLLVMValue;
+                    if (!bytePtr) {
+                        logError(node->arguments[0]->loc, "Failed to evaluate byte pointer for String::from_bytes");
+                        m_currentLLVMValue = nullptr;
+                        return;
+                    }
+                    
+                    // Evaluate length argument
+                    node->arguments[1]->accept(*this);
+                    llvm::Value* length = m_currentLLVMValue;
+                    if (!length) {
+                        logError(node->arguments[1]->loc, "Failed to evaluate length for String::from_bytes");
+                        m_currentLLVMValue = nullptr;
+                        return;
+                    }
+                    
+                    // Create String struct: { ptr: *i8, len: i64 }
+                    std::vector<llvm::Type*> strFields = {
+                        llvm::PointerType::get(*context, 0), // ptr to bytes
+                        llvm::Type::getInt64Ty(*context)     // length
+                    };
+                    llvm::StructType* strStructType = llvm::StructType::get(*context, strFields, false);
+                    
+                    // Create String struct value
+                    llvm::Value* resultStr = llvm::UndefValue::get(strStructType);
+                    resultStr = builder->CreateInsertValue(resultStr, bytePtr, 0, "str.from_bytes_data");
+                    resultStr = builder->CreateInsertValue(resultStr, length, 1, "str.from_bytes_len");
+                    
+                    m_currentLLVMValue = resultStr;
+                    std::cout << "DEBUG: String::from_bytes() created successfully" << std::endl;
                     return;
                 }
             }
@@ -850,15 +1006,91 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
     // Handle ownership constructors: my(), their(), our()
     if (identCallee && (identCallee->name == "my" || identCallee->name == "their" || identCallee->name == "our") && node->arguments.size() == 1) {
         std::cout << "DEBUG: Processing ownership constructor " << identCallee->name << "() in LLVM codegen" << std::endl;
-        // For ownership constructors, we just evaluate the argument and pass it through
-        // The ownership semantics are handled at the type level, not at runtime
+        
+        // Evaluate the argument to get the struct value
         node->arguments[0]->accept(*this);
         if (!m_currentLLVMValue) {
             logError(node->arguments[0]->loc, "Argument to " + identCallee->name + "() evaluated to null");
             return;
         }
-        std::cout << "DEBUG: Successfully processed ownership constructor " << identCallee->name << "()" << std::endl;
-        // The result is the same as the argument - ownership is a compile-time concept
+        
+        llvm::Value* structValue = m_currentLLVMValue;
+        llvm::Type* structType = structValue->getType();
+        
+        if (identCallee->name == "my") {
+            // For my(), allocate memory on heap and store the struct value
+            if (!structType->isStructTy()) {
+                logError(node->loc, "my() can only be used with struct types");
+                return;
+            }
+            
+            // Allocate memory for the struct on the heap
+            llvm::Function* mallocFunc = module->getFunction("malloc");
+            if (!mallocFunc) {
+                // Declare malloc if not already declared
+                llvm::FunctionType* mallocType = llvm::FunctionType::get(
+                    llvm::PointerType::get(llvm::Type::getInt8Ty(*context), 0), 
+                    {llvm::Type::getInt64Ty(*context)}, 
+                    false
+                );
+                mallocFunc = llvm::Function::Create(
+                    mallocType, 
+                    llvm::Function::ExternalLinkage, 
+                    "malloc", 
+                    module.get()
+                );
+            }
+            
+            // Calculate size of struct
+            llvm::DataLayout dataLayout(module.get());
+            uint64_t structSize = dataLayout.getTypeAllocSize(structType);
+            llvm::Value* sizeValue = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), structSize);
+            
+            // Call malloc
+            llvm::Value* mallocPtr = builder->CreateCall(mallocFunc, {sizeValue}, "malloc_struct");
+            
+            // Cast malloc result to struct pointer type
+            llvm::Type* structPtrType = llvm::PointerType::get(structType, 0);
+            llvm::Value* structPtr = builder->CreateBitCast(mallocPtr, structPtrType, "struct_ptr");
+            
+            // Store the struct value into allocated memory
+            builder->CreateStore(structValue, structPtr);
+            
+            // Return the pointer
+            m_currentLLVMValue = structPtr;
+            std::cout << "DEBUG: Successfully processed ownership constructor my() - allocated and returned pointer" << std::endl;
+        } else {
+            // For their() and our(), just pass through the value for now
+            // In a real implementation, these would have different semantics
+            std::cout << "DEBUG: Successfully processed ownership constructor " << identCallee->name << "()" << std::endl;
+        }
+        return;
+    }
+
+    // Handle borrowing operations: borrow(), view()
+    if (identCallee && (identCallee->name == "borrow" || identCallee->name == "view") && node->arguments.size() == 1) {
+        std::cout << "DEBUG: Processing borrowing operation " << identCallee->name << "() in LLVM codegen" << std::endl;
+        
+        // Evaluate the argument to get the value to borrow
+        node->arguments[0]->accept(*this);
+        if (!m_currentLLVMValue) {
+            logError(node->arguments[0]->loc, "Argument to " + identCallee->name + "() evaluated to null");
+            return;
+        }
+        
+        llvm::Value* valueToBorrow = m_currentLLVMValue;
+        
+        // For borrowing, we need to get the address of the value
+        if (valueToBorrow->getType()->isPointerTy()) {
+            // If it's already a pointer (e.g., alloca), use it directly
+            m_currentLLVMValue = valueToBorrow;
+            std::cout << "DEBUG: Successfully processed borrowing operation " << identCallee->name << "() - returned pointer" << std::endl;
+        } else {
+            // If it's a value, we need to create a temporary and get its address
+            // This shouldn't normally happen for well-formed borrow operations
+            logError(node->loc, identCallee->name + "() requires an lvalue (something that can be borrowed)");
+            return;
+        }
         return;
     }
     
@@ -1017,19 +1249,80 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 }
             }
             
-            // Handle Vec method calls
+            // Handle Vec and String method calls
             if (auto objIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->object.get())) {
                 std::string objectName = objIdent->name;
                 
-                if (methodName == "push" || methodName == "pop" || methodName == "len" || methodName == "get" ||
+                // Check if this is a String or Vec variable by looking at its type
+                auto varIt = namedValues.find(objectName);
+                bool isStringVar = false;
+                bool isVecVar = false;
+                
+                if (varIt != namedValues.end()) {
+                    llvm::Value* varValue = varIt->second;
+                    // For AllocaInst, we can get the allocated type
+                    if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(varValue)) {
+                        llvm::Type* allocatedType = allocaInst->getAllocatedType();
+                        if (allocatedType->isStructTy()) {
+                            llvm::StructType* structType = llvm::cast<llvm::StructType>(allocatedType);
+                            // String struct has 2 fields: { ptr, len }
+                            // Vec struct has 3 fields: { ptr, size, capacity }
+                            if (structType->getNumElements() == 2) {
+                                isStringVar = true;
+                            } else if (structType->getNumElements() == 3) {
+                                isVecVar = true;
+                            }
+                        }
+                    }
+                }
+                
+                // Handle String methods
+                if (isStringVar) {
+                    if (methodName == "len" || methodName == "length" || methodName == "concat" || methodName == "substring" || 
+                        methodName == "substr" || methodName == "char_at" || methodName == "to_bytes" ||
+                        methodName == "from_bytes" || methodName == "starts_with" || methodName == "ends_with" ||
+                        methodName == "contains" || methodName == "to_upper" || methodName == "to_lower") {
+                        handleStringMethod(node, objectName, methodName);
+                        return;
+                    }
+                }
+                
+                // Handle Vec methods
+                if (isVecVar || (!isStringVar && (methodName == "push" || methodName == "pop" || methodName == "get" ||
                     methodName == "push_array" || methodName == "to_array" || methodName == "get_array" ||
                     methodName == "clear" || methodName == "is_empty" || methodName == "capacity" ||
-                    methodName == "concat" || methodName == "contains" || methodName == "remove_at" ||
-                    methodName == "get_vec") {
-                    // This is a Vec method call - handle it specially
-                    handleVecMethod(node, objectName, methodName);
+                    methodName == "remove_at" || methodName == "get_vec"))) {
+                    // These methods are Vec-specific or we couldn't determine type
+                    if (methodName == "push" || methodName == "pop" || methodName == "len" || methodName == "get" ||
+                        methodName == "push_array" || methodName == "to_array" || methodName == "get_array" ||
+                        methodName == "clear" || methodName == "is_empty" || methodName == "capacity" ||
+                        methodName == "concat" || methodName == "contains" || methodName == "remove_at" ||
+                        methodName == "get_vec") {
+                        handleVecMethod(node, objectName, methodName);
+                        return;
+                    }
+                }
+            }
+            
+            // Handle Vec method calls on member expressions (e.g., tree.nodes.push())
+            // The object is itself a member expression
+            if (methodName == "push" || methodName == "pop" || methodName == "len" || methodName == "get" ||
+                methodName == "push_array" || methodName == "to_array" || methodName == "get_array" ||
+                methodName == "clear" || methodName == "is_empty" || methodName == "capacity" ||
+                methodName == "concat" || methodName == "contains" || methodName == "remove_at" ||
+                methodName == "get_vec") {
+                // Evaluate the object to get the Vec value
+                memberExpr->object->accept(*this);
+                llvm::Value* vecValue = m_currentLLVMValue;
+                if (!vecValue) {
+                    logError(memberExpr->object->loc, "Failed to evaluate object for Vec method call");
+                    m_currentLLVMValue = nullptr;
                     return;
                 }
+                
+                // Handle the Vec method with the evaluated value directly
+                handleVecMethodOnValue(node, vecValue, methodName, memberExpr->object.get());
+                return;
             }
         }
     }
@@ -1726,14 +2019,14 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
             return;
         }
 
-        // Debug output
+       
         std::cerr << "DEBUG: MemberExpression - Field '" << fieldName << "' at index " << fieldIndex 
                   << " in struct " << llvmStructType->getName().str() << std::endl;
 
         // Create a GEP to get a pointer to the field
         llvm::Value* fieldPtr = builder->CreateStructGEP(llvmStructType, structPtr, fieldIndex, fieldName + "_ptr");
         
-        // Debug the field type
+       
         llvm::Type* fieldType = llvmStructType->getElementType(fieldIndex);
         std::cerr << "DEBUG: Field type: " << getTypeName(fieldType) << std::endl;
         
@@ -1762,7 +2055,30 @@ void LLVMCodegen::visit(ast::BorrowExpression* node) {
         return;
     }
     
-    // Evaluate the expression being borrowed
+    // Special handling for identifiers - we want the alloca address, not the loaded value
+    if (auto* identNode = dynamic_cast<ast::Identifier*>(node->expression.get())) {
+        // Look up the identifier in the named values map to get the alloca directly
+        auto it = namedValues.find(identNode->name);
+        if (it != namedValues.end()) {
+            if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(it->second)) {
+                // For borrowing an identifier, return the alloca address directly
+                m_currentLLVMValue = alloca;
+                return;
+            }
+        }
+        
+        // Also check current function named values
+        auto funcIt = m_currentFunctionNamedValues.find(identNode->name);
+        if (funcIt != m_currentFunctionNamedValues.end()) {
+            // For borrowing an identifier, return the alloca address directly
+            m_currentLLVMValue = funcIt->second;
+            return;
+        }
+        
+        // If not found, fall through to regular evaluation
+    }
+    
+    // Evaluate the expression being borrowed (for non-identifier cases)
     node->expression->accept(*this);
     llvm::Value* borrowedValue = m_currentLLVMValue;
     

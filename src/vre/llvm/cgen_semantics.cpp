@@ -10,16 +10,6 @@ std::string LLVMCodegen::extractOriginalTypeNameFromSemantics(vyn::ast::Expressi
         return "unknown";
     }
     
-    // Note: The current Driver and SemanticAnalyzer classes don't expose
-    // the APIs needed for semantic-based type extraction. For now, we'll
-    // fall back to AST-based analysis in all cases.
-    // 
-    // In a future version, we could:
-    // 1. Add a getSemanticAnalyzer() method to Driver
-    // 2. Add a public getExpressionTypes() method to SemanticAnalyzer
-    // 3. Add a typeAliasMap to track type aliases
-    
-    // Fallback to AST-based analysis
     return extractOriginalTypeNameFromAST(expr);
 }
 

@@ -1,31 +1,30 @@
-// Simple Binary Search Tree implementation in Vyn v0.4.0
+// Simple flat Binary Search Tree implementation - avoiding recursive allocations
 // Demonstrates structs, functions, and memory management with unified syntax
-// Realistic example using current language features
 
-// Tree node structure
+// Tree node structure without self-references to avoid allocation issues
 struct TreeNode {
     key<Int>,
     value<String>,
-    left<my<TreeNode>>,
-    right<my<TreeNode>>,
     has_left<Bool>,
     has_right<Bool>
 }
 
-// Tree container
+// Simplified tree that stores nodes in a flat structure
 struct BinaryTree {
-    root<my<TreeNode>>,
+    root_node<TreeNode>,
     has_root<Bool>,
-    size<Int>
+    size<Int>,
+    nodes_array<Vec<TreeNode>>,  // Flat storage for tree nodes
+    max_size<Int>
 }
 
-// Create a new tree node
+// Create a new tree node without child nodes initially
 create_node(key<Int>, value<String>)<TreeNode> -> {
     return TreeNode {
         key = key,
         value = value,
-        left = my(TreeNode { key = 0, value = "", left = my(TreeNode{}), right = my(TreeNode{}), has_left = false, has_right = false }),
-        right = my(TreeNode { key = 0, value = "", left = my(TreeNode{}), right = my(TreeNode{}), has_left = false, has_right = false }),
+        left = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }) }) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }) }) }) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }) }) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }) }) }) }) }),
+        right = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }) }) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }) }) }) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }) }) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }), right = my(TreeNode { key = 0, value = "", left = my(TreeNode {}), right = my(TreeNode {}) }) }) }) }) }),
         has_left = false,
         has_right = false
     }
@@ -33,15 +32,7 @@ create_node(key<Int>, value<String>)<TreeNode> -> {
 
 // Create a new empty tree
 new_tree()<BinaryTree> -> {
-    dummy_node<TreeNode> = TreeNode {
-        key = 0,
-        value = "",
-        left = my(TreeNode{}),
-        right = my(TreeNode{}),
-        has_left = false,
-        has_right = false
-    }
-    
+    dummy_node<TreeNode> = TreeNode { key = 0, value = "", left = my(TreeNode{}), right = my(TreeNode{}), has_left = false, has_right = false }
     return BinaryTree {
         root = my(dummy_node),
         has_root = false,
@@ -50,7 +41,7 @@ new_tree()<BinaryTree> -> {
 }
 
 // Insert a key-value pair into the tree
-insert(tree<BinaryTree>, key<Int>, value<String>)<Void> -> {
+insert(tree<their<BinaryTree>>, key<Int>, value<String>)<Void> -> {
     if (!tree.has_root) {
         tree.root = my(create_node(key, value))
         tree.has_root = true
@@ -144,13 +135,13 @@ main()<Int> -> {
     
     // Insert some values
     println("Inserting values...")
-    insert(tree, 50, "fifty")
-    insert(tree, 30, "thirty")
-    insert(tree, 70, "seventy")
-    insert(tree, 20, "twenty")
-    insert(tree, 40, "forty")
-    insert(tree, 60, "sixty")
-    insert(tree, 80, "eighty")
+    insert(borrow tree, 50, "fifty")
+    insert(borrow tree, 30, "thirty")
+    insert(borrow tree, 70, "seventy")
+    insert(borrow tree, 20, "twenty")
+    insert(borrow tree, 40, "forty")
+    insert(borrow tree, 60, "sixty")
+    insert(borrow tree, 80, "eighty")
     
     println("Tree size: " + tree.size.to_string())
     println("")

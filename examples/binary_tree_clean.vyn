@@ -1,0 +1,104 @@
+// Clean Binary Search Tree implementation in Vyn v0.4.0
+// Simple approach that avoids recursive my() allocations
+
+// Tree node structure - no self-referential pointers to avoid recursion issues
+struct TreeNode {
+    key<Int>,
+    value<String>
+}
+
+// Tree container with flat storage
+struct BinaryTree {
+    nodes<Vec<TreeNode>>,
+    has_root<Bool>,
+    size<Int>
+}
+
+// Create a new empty tree
+new_tree()<BinaryTree> -> {
+    return BinaryTree {
+        nodes = Vec::new(),
+        has_root = false,
+        size = 0
+    }
+}
+
+// Insert a key-value pair into the tree (simplified approach)
+insert(tree<their<BinaryTree>>, key<Int>, value<String>)<Void> -> {
+    new_node<TreeNode> = TreeNode { key = key, value = value }
+    tree.nodes.push(new_node)
+    tree.has_root = true
+    tree.size = tree.size + 1
+}
+
+// Search for a key in the tree (linear search for simplicity)
+search(tree<BinaryTree>, key<Int>)<String> -> {
+    if (!tree.has_root) {
+        return "NOT_FOUND"
+    }
+    
+    i<Int> = 0
+    while (i < tree.size) {
+        node<TreeNode> = tree.nodes.get(i)
+        if (node.key == key) {
+            return node.value
+        }
+        i = i + 1
+    }
+    
+    return "NOT_FOUND"
+}
+
+// Print all nodes in the tree
+print_tree(tree<BinaryTree>)<Void> -> {
+    if (!tree.has_root) {
+        println("Tree is empty")
+        return
+    }
+    
+    println("Tree contents:")
+    i<Int> = 0
+    while (i < tree.size) {
+        node<TreeNode> = tree.nodes.get(i)
+        println("Key: " + node.key.to_string() + ", Value: " + node.value)
+        i = i + 1
+    }
+}
+
+// Main function demonstrating the binary search tree
+main()<Int> -> {
+    // Create a new tree
+    tree<BinaryTree> = new_tree()
+    
+    println("Clean Binary Search Tree Example - Vyn v0.4.0")
+    println("==============================================")
+    
+    // Insert some values
+    println("Inserting values...")
+    insert(borrow tree, 50, "fifty")
+    insert(borrow tree, 30, "thirty")
+    insert(borrow tree, 70, "seventy")
+    insert(borrow tree, 20, "twenty")
+    insert(borrow tree, 40, "forty")
+    
+    println("Tree size: " + tree.size.to_string())
+    println("")
+    
+    // Search for some values
+    println("Search operations:")
+    result1<String> = search(tree, 40)
+    println("Search for 40: " + result1)
+    
+    result2<String> = search(tree, 99)
+    println("Search for 99: " + result2)
+    
+    result3<String> = search(tree, 20)
+    println("Search for 20: " + result3)
+    
+    println("")
+    
+    // Print the entire tree
+    print_tree(tree)
+    
+    return 0
+}

@@ -508,8 +508,6 @@ int main(int argc, char* argv[]) {
                 try {
                     std::cout << "Starting JIT execution of " << filename << std::endl;
                     int result = run_vyn_code(source, filename, emit_llvm_ir);
-                    // Note: result is 0 for serialized output, or actual integer for simple returns
-                    // The auto-serialization logic in run_vyn_code handles output appropriately
                     return result;
                 } catch (const std::exception& e) {
                     std::cerr << "Error during code execution: " << e.what() << std::endl;

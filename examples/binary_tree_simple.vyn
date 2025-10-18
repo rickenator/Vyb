@@ -1,0 +1,31 @@
+main()<Int> -> {
+    tree<BinaryTree> = BinaryTree { nodes = Vec::new() };
+    
+    // Get nodes reference and work with it directly
+    nodes<Vec<TreeNode>> = tree.nodes;
+    
+    // Test adding nodes
+    node1<TreeNode> = TreeNode { value = 10, left = -1, right = -1 };
+    nodes.push(node1);
+    
+    node2<TreeNode> = TreeNode { value = 5, left = -1, right = -1 };
+    nodes.push(node2);
+    
+    println("Binary tree size:", nodes.len());
+    
+    // Test getting nodes
+    first_node<TreeNode> = nodes.get(0);
+    println("First node value:", first_node.value);
+    
+    return 0;
+}
+
+struct TreeNode {
+    value<Int>,
+    left<Int>,   // Index into nodes vector (-1 for null)
+    right<Int>   // Index into nodes vector (-1 for null)
+}
+
+struct BinaryTree {
+    nodes<Vec<TreeNode>>
+}

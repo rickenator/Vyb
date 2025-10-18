@@ -6,7 +6,7 @@ namespace vyn {
 
 // Helper function to convert SourceLocation to string for error messages
 std::string locationToString(const SourceLocation& loc) {
-    return loc.filePath + ":" + std::to_string(loc.line) + ":" + std::to_string(loc.column); // Changed file to filePath
+    return loc.filePath + ":" + std::to_string(loc.line) + ":" + std::to_string(loc.column);
 }
 
 // Constructor
@@ -45,11 +45,6 @@ vyn::ast::TypeNodePtr TypeParser::parse_base_or_ownership_wrapped_type() { // Co
     // or as regular identifiers if they are not keywords. The generic <...> part will be handled by parse_postfix_type.
     // Thus, we don't consume them here.
     //
-    // OLD CODE:
-    // if (check(vyn::TokenType::KEYWORD_MY)) {
-    //     is_mutable = true;
-    //     consume();
-    // } else if (check(vyn::TokenType::KEYWORD_OUR)) {
     //     consume();
     // } else if (check(vyn::TokenType::KEYWORD_THEIR)) {
     //     consume();
@@ -62,12 +57,6 @@ vyn::ast::TypeNodePtr TypeParser::parse_base_or_ownership_wrapped_type() { // Co
     // previously here would now be handled by semantic analysis
     // based on the resulting type_node's name (e.g., if it's "my").
     //
-    // OLD CODE:
-    // if (is_mutable) {
-    //     // If the type is mutable, we might need to adjust the node (depends on your AST design)
-    //     // For example, wrapping the type in a MutableTypeNode if such a node exists
-    //     // type_node = std::make_shared<MutableTypeNode>(start_loc, type_node);
-    // }
 
     return type_node; // Return the potentially wrapped type
 }
@@ -115,20 +104,20 @@ vyn::ast::TypeNodePtr TypeParser::parse_atomic_or_group_type() { // Corrected na
         // return vyn::ast::TypeNode::newIdentifier(start_loc, std::move(type_name_identifier), {}, false, false); 
         return std::make_unique<vyn::ast::TypeName>(start_loc, std::move(type_name_identifier));
 
-    } else if (this->match(vyn::TokenType::LPAREN)) {  // Changed from LEFT_PAREN
-        std::vector<vyn::ast::TypeNodePtr> member_types_parsed; // Changed vyn::TypeNodePtr to vyn::ast::TypeNodePtr
-        if (this->peek().type != vyn::TokenType::RPAREN) { // Changed from RIGHT_PAREN
+    } else if (this->match(vyn::TokenType::LPAREN)) { 
+        std::vector<vyn::ast::TypeNodePtr> member_types_parsed;
+        if (this->peek().type != vyn::TokenType::RPAREN) {
             do {
                 member_types_parsed.push_back(this->parse());
-            } while (this->match(vyn::TokenType::COMMA)); // Changed from vyn::token::TokenType
+            } while (this->match(vyn::TokenType::COMMA));
         }
-        this->expect(vyn::TokenType::RPAREN); // Changed from RIGHT_PAREN
+        this->expect(vyn::TokenType::RPAREN);
 
-        // return vyn::ast::TypeNode::newTuple(start_loc, std::move(member_types_parsed), false, false); // Changed TypeNode to vyn::ast::TypeNode, loc to start_loc
+        // return vyn::ast::TypeNode::newTuple(start_loc, std::move(member_types_parsed), false, false);
         return std::make_unique<vyn::ast::TupleTypeNode>(start_loc, std::move(member_types_parsed));
 
-    } else if (this->match(vyn::TokenType::LBRACKET)) {  // Changed from LEFT_BRACKET
-        vyn::SourceLocation array_loc = this->previous_token().location; // Changed from loc
+    } else if (this->match(vyn::TokenType::LBRACKET)) { 
+        vyn::SourceLocation array_loc = this->previous_token().location;
         
         // Store current position before parsing element type
         size_t before_element_type_pos = pos_;
@@ -151,8 +140,8 @@ vyn::ast::TypeNodePtr TypeParser::parse_atomic_or_group_type() { // Corrected na
         
         vyn::ast::ExprPtr size_expression = nullptr; // Declared size_expression
 
-        if (this->match(vyn::TokenType::SEMICOLON)) { // Changed from vyn::token::TokenType
-            if (this->IsAtEnd() || this->peek().type == vyn::TokenType::RBRACKET) { // Changed from RIGHT_BRACKET
+        if (this->match(vyn::TokenType::SEMICOLON)) {
+            if (this->IsAtEnd() || this->peek().type == vyn::TokenType::RBRACKET) {
                 throw this->error(this->peek(), "Expected size expression after \';\' in array type.");
             }
             
@@ -160,7 +149,7 @@ vyn::ast::TypeNodePtr TypeParser::parse_atomic_or_group_type() { // Corrected na
             size_t before_size_expr_pos = pos_;
             
             try {
-                size_expression = expr_parser_.parse_expression(); // Changed parse to parse_expression
+                size_expression = expr_parser_.parse_expression();
             } catch (const std::runtime_error& e) {
                 // If parsing the size expression fails, backtrack
                 pos_ = before_size_expr_pos;
@@ -177,7 +166,7 @@ vyn::ast::TypeNodePtr TypeParser::parse_atomic_or_group_type() { // Corrected na
         size_t before_rbracket_pos = pos_;
         
         try {
-            this->expect(vyn::TokenType::RBRACKET);  // Changed from RIGHT_BRACKET
+            this->expect(vyn::TokenType::RBRACKET); 
         } catch (const std::runtime_error& e) {
             // If RBRACKET isn't found where expected, backtrack
             pos_ = before_element_type_pos;
@@ -185,28 +174,28 @@ vyn::ast::TypeNodePtr TypeParser::parse_atomic_or_group_type() { // Corrected na
         }
         
         // expect() already throws an error if the token type doesn\\'t match.
-        // return vyn::ast::TypeNode::newArray(array_loc, std::move(element_type), std::move(size_expression), false, false); // Changed TypeNode to vyn::ast::TypeNode
+        // return vyn::ast::TypeNode::newArray(array_loc, std::move(element_type), std::move(size_expression), false, false);
         return std::make_unique<vyn::ast::ArrayType>(array_loc, std::move(element_type), std::move(size_expression));
 
-    } else if (this->match(vyn::TokenType::KEYWORD_FN)) {  // Changed from KEYWORD_FUN
-        vyn::SourceLocation fn_loc = start_loc;  // Changed loc to start_loc
-        this->expect(vyn::TokenType::LPAREN); // Changed from LEFT_PAREN
-        std::vector<vyn::ast::TypeNodePtr> param_types_parsed; // Changed vyn::TypeNodePtr to vyn::ast::TypeNodePtr
-        if (this->peek().type != vyn::TokenType::RPAREN) { // Changed from RIGHT_PAREN
+    } else if (this->match(vyn::TokenType::KEYWORD_FN)) { 
+        vyn::SourceLocation fn_loc = start_loc; 
+        this->expect(vyn::TokenType::LPAREN);
+        std::vector<vyn::ast::TypeNodePtr> param_types_parsed;
+        if (this->peek().type != vyn::TokenType::RPAREN) {
             do {
                 param_types_parsed.push_back(this->parse());
-            } while (this->match(vyn::TokenType::COMMA)); // Changed from vyn::token::TokenType
+            } while (this->match(vyn::TokenType::COMMA));
         }
-        this->expect(vyn::TokenType::RPAREN); // Changed from RIGHT_PAREN
+        this->expect(vyn::TokenType::RPAREN);
 
-        vyn::ast::TypeNodePtr return_type_parsed = nullptr; // Changed vyn::TypeNodePtr to vyn::ast::TypeNodePtr
-        if (this->match(vyn::TokenType::ARROW)) { // Changed from vyn::token::TokenType
+        vyn::ast::TypeNodePtr return_type_parsed = nullptr;
+        if (this->match(vyn::TokenType::ARROW)) {
             return_type_parsed = this->parse();
             if (!return_type_parsed) {
                  throw this->error(this->peek(), "Expected return type after \\'->\\' in function type at " + this->current_location().toString());
             }
         }
-        // return vyn::ast::TypeNode::newFunctionSignature(fn_loc, std::move(param_types_parsed), std::move(return_type_parsed), false, false); // Changed TypeNode to vyn::ast::TypeNode
+        // return vyn::ast::TypeNode::newFunctionSignature(fn_loc, std::move(param_types_parsed), std::move(return_type_parsed), false, false);
         return std::make_unique<vyn::ast::FunctionType>(fn_loc, std::move(param_types_parsed), std::move(return_type_parsed));
     }
 
@@ -218,9 +207,9 @@ vyn::ast::TypeNodePtr TypeParser::parse_atomic_or_group_type() { // Corrected na
 vyn::ast::TypeNodePtr TypeParser::parse_postfix_type(vyn::ast::TypeNodePtr current_type) { // Corrected namespace for return type and parameter
     while (true) {
         SourceLocation op_loc = peek().location;
-        if (this->match(vyn::TokenType::LT)) { // Changed from LESS
+        if (this->match(vyn::TokenType::LT)) {
             // Generic type parameters
-            std::vector<vyn::ast::TypeNodePtr> generic_args; // Changed vyn::TypeNodePtr to vyn::ast::TypeNodePtr
+            std::vector<vyn::ast::TypeNodePtr> generic_args;
             // Parse comma-separated list of type arguments
             if (this->peek().type != vyn::TokenType::GT) { // Removed extra parenthesis
                 do {
@@ -230,41 +219,41 @@ vyn::ast::TypeNodePtr TypeParser::parse_postfix_type(vyn::ast::TypeNodePtr curre
                                         this->current_location().toString());
                     }
                     generic_args.push_back(std::move(type_arg));
-                } while (this->match(vyn::TokenType::COMMA)); // Changed from vyn::token::TokenType
+                } while (this->match(vyn::TokenType::COMMA));
             }
-            this->expect(vyn::TokenType::GT); // Changed from GREATER
+            this->expect(vyn::TokenType::GT);
             // Update the current_type with generic arguments
-            // if (current_type->category == vyn::ast::TypeNode::Category::IDENTIFIER) { // Changed TypeCategory to Category
+            // if (current_type->category == vyn::ast::TypeNode::Category::IDENTIFIER) {
             //     current_type->genericArguments = std::move(generic_args);
             if (auto* type_name_node = dynamic_cast<vyn::ast::TypeName*>(current_type.get())) {
                 type_name_node->genericArgs = std::move(generic_args);
             } else {
                 throw this->error(this->previous_token(), "Generic parameters can only be applied to identifier types");
             }
-        } else if (this->match(vyn::TokenType::LBRACKET)) { // Changed from LEFT_BRACKET
-            SourceLocation lbracket_loc = this->previous_token().location; // Changed from loc
-            if (this->match(vyn::TokenType::RBRACKET)) {  // Changed from RIGHT_BRACKET
-                // current_type = vyn::ast::TypeNode::newArray(lbracket_loc, std::move(current_type), nullptr, false, false); // Changed TypeNode to vyn::ast::TypeNode
+        } else if (this->match(vyn::TokenType::LBRACKET)) {
+            SourceLocation lbracket_loc = this->previous_token().location;
+            if (this->match(vyn::TokenType::RBRACKET)) { 
+                // current_type = vyn::ast::TypeNode::newArray(lbracket_loc, std::move(current_type), nullptr, false, false);
                 current_type = std::make_unique<vyn::ast::ArrayType>(lbracket_loc, std::move(current_type), nullptr);
             } else {
                 this->put_back_token(); 
                 break; 
             }
-        } else if (this->match(vyn::TokenType::MULTIPLY)) { // Changed from STAR
+        } else if (this->match(vyn::TokenType::MULTIPLY)) {
             // if (current_type->isPointer) { 
             if (dynamic_cast<vyn::ast::PointerType*>(current_type.get())) {
                 throw this->error(this->previous_token(), "Type is already a pointer.");
             }
             // current_type->isPointer = true;
             current_type = std::make_unique<vyn::ast::PointerType>(op_loc, std::move(current_type));
-        } else if (this->match(vyn::TokenType::QUESTION_MARK)) {  // Changed from QUESTION
+        } else if (this->match(vyn::TokenType::QUESTION_MARK)) { 
             // if (current_type->isOptional) {
             if (dynamic_cast<vyn::ast::OptionalType*>(current_type.get())) {
                 throw this->error(this->previous_token(), "Type is already optional: " + current_type->loc.toString());
             }
             // current_type->isOptional = true;
             current_type = std::make_unique<vyn::ast::OptionalType>(op_loc, std::move(current_type));
-        } else if (this->match(vyn::TokenType::KEYWORD_CONST)) {  // Changed from CONST
+        } else if (this->match(vyn::TokenType::KEYWORD_CONST)) { 
             // TODO: Implement proper const type wrapper
             // For now, just consume the const token and continue parsing
             // This allows parsing to proceed while we develop const semantics

@@ -179,7 +179,7 @@ void LLVMCodegen::popLoop() {
 
 // Helper function to get field index
 int LLVMCodegen::getStructFieldIndex(llvm::StructType* structType, const std::string& fieldName) {
-    // Debug output
+   
     std::cerr << "DEBUG: getStructFieldIndex - Looking for field '" << fieldName << "'" << std::endl;
     
     if (!structType) {

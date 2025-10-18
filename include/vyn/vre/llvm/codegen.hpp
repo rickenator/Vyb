@@ -175,6 +175,7 @@ private:
     
     // Vec operations
     void handleVecMethod(vyn::ast::CallExpression* node, const std::string& objectName, const std::string& methodName);
+    void handleVecMethodOnValue(vyn::ast::CallExpression* node, llvm::Value* vecValue, const std::string& methodName, vyn::ast::Expression* objectExpr);
     void handleVecPush(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecPop(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecLen(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
@@ -187,8 +188,23 @@ private:
     void handleVecConcat(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecContains(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecRemoveAt(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
+    void handleVecResize(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecGetArray(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecGetVec(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
+
+    // String type methods
+    void handleStringMethod(vyn::ast::CallExpression* node, const std::string& objectName, const std::string& methodName);
+    void handleStringLen(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
+    void handleStringConcat(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
+    void handleStringSubstring(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
+    void handleStringCharAt(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
+    void handleStringToBytes(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
+    void handleStringFromBytes(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
+    void handleStringStartsWith(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
+    void handleStringEndsWith(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
+    void handleStringContains(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
+    void handleStringToUpper(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
+    void handleStringToLower(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
 
     // Scope and ownership management
     void enterScope();

@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 #include <memory>
-#include <set> // Added for g_verbose_test_specifiers
+#include <set>
 
 // llvm includes for JIT
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
@@ -14,8 +14,8 @@
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/raw_ostream.h>
 
-#include "vyn/driver.hpp" // Added for vyn::Driver
-#include <fstream> // Required for std::ofstream
+#include "vyn/driver.hpp"
+#include <fstream>
 
 // Use the run_vyn_code function from main.cpp (declared in vyn.hpp)
 // No need to redefine it here
@@ -168,9 +168,6 @@ public:
     // Ensure all virtuals from ast::Visitor are covered if LLVMCodegen doesn't cover them.
     // This list should be cross-referenced with ast.hpp and LLVMCodegen's declarations.
 
-    // Added based on previous edits to cgen_expr.cpp, ensure these are covered if not in LLVMCodegen
-    // void visit(vyn::ast::IdentifierExpression* node) override {}; // Removed, assuming ast::Identifier is used.
-
 };
 
 // --- END: Dummy Visitor Implementations for Tests ---
@@ -186,7 +183,7 @@ fn<Int> main() -> {
     addr<Int> = 0x1234;
     p<loc<Int>>;
     unsafe {
-        p = from<loc<Int>>(addr); // Updated syntax
+        p = from<loc<Int>>(addr);
     }
     return 0;
 }

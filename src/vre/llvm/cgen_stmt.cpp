@@ -64,6 +64,8 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
             // Debug output to see what we're returning
             std::cerr << "DEBUG: ReturnStatement - Type: " << getTypeName(returnValue->getType()) 
                 << ", Function Return Type: " << (currentFunction ? getTypeName(currentFunction->getReturnType()) : "null") << std::endl;
+            std::cerr << "DEBUG: Return value LLVM type pointer: " << returnValue->getType() << std::endl;
+            std::cerr << "DEBUG: Function return LLVM type pointer: " << (currentFunction ? currentFunction->getReturnType() : nullptr) << std::endl;
             
             // Check if we're in main function for auto-serialization
             // BUT skip auto-serialization if this is a lit() intrinsic call
@@ -281,7 +283,14 @@ void LLVMCodegen::visit(vyn::ast::IfStatement* node) {
         }
         builder->SetInsertPoint(mergeBB);
     } else {
-        mergeBB->eraseFromParent(); // Or just let DCE handle it. For clarity, explicit removal if unused.
+        // mergeBB was never added to the function, so we can't call eraseFromParent()
+        // Just let it be garbage collected or explicitly delete it
+        if (mergeBB->getParent()) {
+            mergeBB->eraseFromParent();
+        } else {
+            // mergeBB will be automatically cleaned up when it goes out of scope
+            // since it was never added to the function
+        }
     }
     
     // If IfStatement were an expression, a PHI node would be needed here.
