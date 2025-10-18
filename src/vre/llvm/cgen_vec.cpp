@@ -108,10 +108,13 @@ void LLVMCodegen::handleVecPush(vyn::ast::CallExpression* node, llvm::Value* vec
     llvm::Value* needsGrow = builder->CreateICmpEQ(currentSize, currentCap, "vec.needs_grow");
     llvm::Value* needsRealloc = builder->CreateOr(needsAlloc, needsGrow, "vec.needs_realloc");
     
-    llvm::BasicBlock* allocBlock = llvm::BasicBlock::Create(*context, "vec.alloc", builder->GetInsertBlock()->getParent());
-    llvm::BasicBlock* storeBlock = llvm::BasicBlock::Create(*context, "vec.store", builder->GetInsertBlock()->getParent());
+    llvm::BasicBlock* entryBlock = builder->GetInsertBlock();
+    llvm::BasicBlock* allocBlock = llvm::BasicBlock::Create(*context, "vec.alloc", entryBlock->getParent());
+    llvm::BasicBlock* copyBlock = llvm::BasicBlock::Create(*context, "vec.copy", entryBlock->getParent());
+    llvm::BasicBlock* noCopyBlock = llvm::BasicBlock::Create(*context, "vec.no_copy", entryBlock->getParent());
+    llvm::BasicBlock* mergeBlock = llvm::BasicBlock::Create(*context, "vec.merge", entryBlock->getParent());
     
-    builder->CreateCondBr(needsRealloc, allocBlock, storeBlock);
+    builder->CreateCondBr(needsRealloc, allocBlock, mergeBlock);
     
     // Alloc block - allocate or grow the array
     builder->SetInsertPoint(allocBlock);
@@ -141,9 +144,6 @@ void LLVMCodegen::handleVecPush(vyn::ast::CallExpression* node, llvm::Value* vec
     llvm::Value* newDataPtr = builder->CreateCall(mallocFunc, {allocSize}, "vec.new_data");
     
     // If there was old data, copy it (using memcpy if size > 0)
-    llvm::BasicBlock* copyBlock = llvm::BasicBlock::Create(*context, "vec.copy", builder->GetInsertBlock()->getParent());
-    llvm::BasicBlock* noCopyBlock = llvm::BasicBlock::Create(*context, "vec.no_copy", builder->GetInsertBlock()->getParent());
-    
     llvm::Value* hasData = builder->CreateICmpNE(currentSize, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0), "vec.has_data");
     builder->CreateCondBr(hasData, copyBlock, noCopyBlock);
     
@@ -166,17 +166,21 @@ void LLVMCodegen::handleVecPush(vyn::ast::CallExpression* node, llvm::Value* vec
     builder->SetInsertPoint(noCopyBlock);
     builder->CreateStore(newDataPtr, dataFieldPtr);
     builder->CreateStore(newCap, capFieldPtr);
-    builder->CreateBr(storeBlock);
+    builder->CreateBr(mergeBlock);
     
-    // Store block - store the new element
-    builder->SetInsertPoint(storeBlock);
+    // Merge block - both paths (alloc and no-alloc) meet here
+    // IMPORTANT: This must be created last so it becomes func->back() and gets automatic terminator
+    builder->SetInsertPoint(mergeBlock);
     
     // Reload data pointer (might have changed in alloc block)
     llvm::Value* finalDataPtr = builder->CreateLoad(llvm::PointerType::get(*context, 0), dataFieldPtr, "vec.final_data");
     
+    // Reload size (shouldn't have changed, but for clarity)
+    llvm::Value* reloadedSize = builder->CreateLoad(llvm::Type::getInt64Ty(*context), sizeFieldPtr, "vec.reloaded_size");
+    
     // Calculate offset for new element using actual element size
     llvm::Value* elementSize2 = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), elementSizeBytes);
-    llvm::Value* offset = builder->CreateMul(currentSize, elementSize2, "vec.offset");
+    llvm::Value* offset = builder->CreateMul(reloadedSize, elementSize2, "vec.offset");
     llvm::Value* elementPtr = builder->CreateGEP(llvm::Type::getInt8Ty(*context), finalDataPtr, offset, "vec.element_ptr");
     
     // Store the value - need to handle different types
@@ -191,29 +195,34 @@ void LLVMCodegen::handleVecPush(vyn::ast::CallExpression* node, llvm::Value* vec
             srcPtr = tempAlloca;
         }
         
-        llvm::FunctionType* memcpyType = llvm::FunctionType::get(
+        llvm::FunctionType* memcpyType2 = llvm::FunctionType::get(
             llvm::PointerType::get(*context, 0),
             {llvm::PointerType::get(*context, 0), llvm::PointerType::get(*context, 0), llvm::Type::getInt64Ty(*context)},
             false
         );
-        llvm::Function* memcpyFunc = module->getFunction("memcpy");
-        if (!memcpyFunc) {
-            memcpyFunc = llvm::Function::Create(memcpyType, llvm::Function::ExternalLinkage, "memcpy", module.get());
+        llvm::Function* memcpyFunc2 = module->getFunction("memcpy");
+        if (!memcpyFunc2) {
+            memcpyFunc2 = llvm::Function::Create(memcpyType2, llvm::Function::ExternalLinkage, "memcpy", module.get());
         }
-        builder->CreateCall(memcpyFunc, {elementPtr, srcPtr, elementSize2});
+        builder->CreateCall(memcpyFunc2, {elementPtr, srcPtr, elementSize2});
     } else {
         // For primitives, direct store
         builder->CreateStore(valueToAdd, elementPtr);
     }
     
     // Increment size
-    llvm::Value* newSize = builder->CreateAdd(currentSize, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1), "vec.new_size");
+    llvm::Value* newSize = builder->CreateAdd(reloadedSize, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1), "vec.new_size");
     builder->CreateStore(newSize, sizeFieldPtr);
     
     std::cout << "DEBUG: Vec::push() called - element stored" << std::endl;
     
     // Return the Vec reference for method chaining
     m_currentLLVMValue = vecPtr;
+    
+    // Note: The builder's insertion point is now at the end of mergeBlock.
+    // The caller will continue adding instructions here (e.g., the next statement).
+    // This block will naturally get a terminator when the function ends or when
+    // the next control flow statement is encountered.
 }
 
 void LLVMCodegen::handleVecPop(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
