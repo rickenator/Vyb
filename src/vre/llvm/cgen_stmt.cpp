@@ -135,28 +135,69 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                           << ", Function return type: " << getTypeName(currentFunction->getReturnType()) << std::endl;
                 
                 if (returnValue->getType() != currentFunction->getReturnType()) {
-                    // Types don't match, try to cast
-                    llvm::Value* castedValue = tryCast(returnValue, currentFunction->getReturnType(), node->loc);
-                    if (castedValue) {
-                        std::cerr << "DEBUG: Successfully cast return value to " << getTypeName(castedValue->getType()) << std::endl;
-                        returnValue = castedValue;
-                    } else {
-                        // For member expressions (e.g., p.x) load the value if needed
-                        if (returnValue->getType()->isPointerTy() && 
-                            !currentFunction->getReturnType()->isPointerTy()) {
-                            std::cerr << "DEBUG: Loading pointer value for return" << std::endl;
+                    // Special case: returning a single element tuple (Tuple<T>)
+                    // If function returns a struct and we have a scalar, wrap it in a struct
+                    if (llvm::StructType* structRetType = llvm::dyn_cast<llvm::StructType>(currentFunction->getReturnType())) {
+                        if (structRetType->getNumElements() == 1 && 
+                            !returnValue->getType()->isStructTy() &&
+                            structRetType->getElementType(0) == returnValue->getType()) {
+                            std::cerr << "DEBUG: Wrapping scalar value in single-element tuple struct" << std::endl;
                             
-                            // For loading, we need to know the element type
-                            llvm::Type* elementType = nullptr;
-                            if (llvm::AllocaInst* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(returnValue)) {
-                                elementType = allocaInst->getAllocatedType();
+                            // Create a single-element struct
+                            llvm::Value* tupleStruct = llvm::UndefValue::get(structRetType);
+                            returnValue = builder->CreateInsertValue(tupleStruct, returnValue, {0}, "tuple_wrap");
+                            
+                            std::cerr << "DEBUG: Wrapped value type: " << getTypeName(returnValue->getType()) << std::endl;
+                        } else {
+                            // Try normal cast
+                            llvm::Value* castedValue = tryCast(returnValue, currentFunction->getReturnType(), node->loc);
+                            if (castedValue) {
+                                std::cerr << "DEBUG: Successfully cast return value to " << getTypeName(castedValue->getType()) << std::endl;
+                                returnValue = castedValue;
                             } else {
-                                // Can't determine element type safely, use function return type
-                                elementType = currentFunction->getReturnType();
+                                // For member expressions (e.g., p.x) load the value if needed
+                                if (returnValue->getType()->isPointerTy() && 
+                                    !currentFunction->getReturnType()->isPointerTy()) {
+                                    std::cerr << "DEBUG: Loading pointer value for return" << std::endl;
+                                    
+                                    // For loading, we need to know the element type
+                                    llvm::Type* elementType = nullptr;
+                                    if (llvm::AllocaInst* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(returnValue)) {
+                                        elementType = allocaInst->getAllocatedType();
+                                    } else {
+                                        // Can't determine element type safely, use function return type
+                                        elementType = currentFunction->getReturnType();
+                                    }
+                                    
+                                    returnValue = builder->CreateLoad(elementType, returnValue, "member_load");
+                                    std::cerr << "DEBUG: After loading, return value type: " << getTypeName(returnValue->getType()) << std::endl;
+                                }
                             }
-                            
-                            returnValue = builder->CreateLoad(elementType, returnValue, "member_load");
-                            std::cerr << "DEBUG: After loading, return value type: " << getTypeName(returnValue->getType()) << std::endl;
+                        }
+                    } else {
+                        // Not a struct return type, try normal cast
+                        llvm::Value* castedValue = tryCast(returnValue, currentFunction->getReturnType(), node->loc);
+                        if (castedValue) {
+                            std::cerr << "DEBUG: Successfully cast return value to " << getTypeName(castedValue->getType()) << std::endl;
+                            returnValue = castedValue;
+                        } else {
+                            // For member expressions (e.g., p.x) load the value if needed
+                            if (returnValue->getType()->isPointerTy() && 
+                                !currentFunction->getReturnType()->isPointerTy()) {
+                                std::cerr << "DEBUG: Loading pointer value for return" << std::endl;
+                                
+                                // For loading, we need to know the element type
+                                llvm::Type* elementType = nullptr;
+                                if (llvm::AllocaInst* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(returnValue)) {
+                                    elementType = allocaInst->getAllocatedType();
+                                } else {
+                                    // Can't determine element type safely, use function return type
+                                    elementType = currentFunction->getReturnType();
+                                }
+                                
+                                returnValue = builder->CreateLoad(elementType, returnValue, "member_load");
+                                std::cerr << "DEBUG: After loading, return value type: " << getTypeName(returnValue->getType()) << std::endl;
+                            }
                         }
                     }
                 }

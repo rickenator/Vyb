@@ -2767,13 +2767,11 @@ void LLVMCodegen::visit(ast::SequenceExpression* node) {
         return;
     }
     
-    // If only one value, return it directly (single-value return)
-    if (values.size() == 1) {
-        m_currentLLVMValue = values[0];
-        return;
-    }
+    // Even for single value, we need to create a struct if expected
+    // (e.g., return type is Tuple<Int> which is a struct)
+    // The type checking will be done at return statement level
     
-    // Create a struct type for multiple values
+    // Create a struct type for the values
     llvm::StructType* tupleType = llvm::StructType::get(*context, types);
     
     // Create an undef struct and insert each value

@@ -1,0 +1,66 @@
+╔═══════════════════════════════════════════════════════════════════════════╗
+║         Memory & Ownership Tests - Consolidation Summary                 ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+CHANGES COMPLETED:
+==================
+
+1. SYNTAX UPDATES
+   ✓ Updated borrow expr → borrow(expr)
+   ✓ Updated view expr → view(expr)
+   ✓ Consistent with my(expr) and our(expr) syntax
+
+2. DIRECTORY CONSOLIDATION
+   ✓ Moved test/borrowing/* to test/memory/
+   ✓ Removed empty test/borrowing directory
+   ✓ All ownership/memory tests now in one location
+
+3. NEW TEST FILES
+   ✓ test/memory/ownership_test.vyn (comprehensive 10-test suite)
+   ✓ test/memory/ownership_simple_test.vyn (simplified examples)
+   ✓ test/memory/syntax_test.vyn (syntax validation)
+   ✓ test/memory/README.md (complete documentation)
+
+4. UPDATED EXISTING FILES
+   ✓ test/memory/simple_memory_test.vyn (new syntax)
+   ✓ test/memory/borrow_test.vyn (moved & updated)
+
+FILES IN test/memory/:
+=====================
+- README.md                     (Documentation)
+- borrow_test.vyn               (Basic borrow test with structs)
+- simple_memory_test.vyn        (Pointer operations test)
+- syntax_test.vyn               (Syntax validation)
+- ownership_simple_test.vyn     (Simplified ownership examples)
+- ownership_test.vyn            (Comprehensive 10-test suite)
+
+TEST COVERAGE:
+=============
+✓ my<T> unique ownership
+✓ our<T> shared ownership
+✓ borrow() creating their<T>
+✓ view() creating their<T const>
+✓ loc() pointer creation
+✓ at() pointer dereferencing
+✓ Function parameter borrowing
+✓ Complex ownership chains
+✓ Sequential borrow operations
+✓ String ownership
+✓ Unsafe block requirements
+
+VERIFICATION:
+============
+✓ All tests compile successfully
+✓ Syntax parsing validated
+✓ No compilation errors
+✓ Git commit created: 37c1b28
+
+RUN TESTS:
+=========
+build/vyn test/memory/syntax_test.vyn
+build/vyn test/memory/simple_memory_test.vyn
+build/vyn test/memory/borrow_test.vyn
+build/vyn test/memory/ownership_simple_test.vyn
+build/vyn test/memory/ownership_test.vyn
+
+See test/memory/README.md for detailed documentation!

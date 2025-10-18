@@ -1,0 +1,4 @@
+// Test Tuple with single element
+main()<Tuple<Int>> -> {
+    return 42
+}

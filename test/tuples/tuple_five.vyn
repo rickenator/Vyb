@@ -1,0 +1,4 @@
+// Test Tuple with 5 elements
+main()<Tuple<Int, Int, Int, Int, Int>> -> {
+    return 10, 20, 30, 40, 50
+}
