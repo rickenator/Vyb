@@ -410,6 +410,23 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                 break;
             }
 
+            // Handle ownership types: my<T>, their<T>, view<T>, borrow<T>
+            if (typeNameStr == "my" || typeNameStr == "their" || typeNameStr == "view" || typeNameStr == "borrow") {
+                if (typeNameNode->genericArgs.empty() || !typeNameNode->genericArgs[0]) {
+                    logError(typeNode->loc, typeNameStr + " type requires a type parameter (e.g., " + typeNameStr + "<TreeNode>)");
+                    return nullptr;
+                }
+                // For LLVM code generation, ownership types are just the underlying type
+                // The ownership semantics are handled at a higher level
+                llvm::Type* underlyingType = codegenType(typeNameNode->genericArgs[0].get());
+                if (!underlyingType) {
+                    logError(typeNode->loc, "Could not determine LLVM type for " + typeNameStr + " underlying type.");
+                    return nullptr;
+                }
+                llvmType = underlyingType;
+                break;
+            }
+
             if (typeNameStr == "Int" || typeNameStr == "int" || typeNameStr == "i64") {
                 llvmType = int64Type;
             } else if (typeNameStr == "Int32" || typeNameStr == "int32" || typeNameStr == "i32") {
