@@ -1,0 +1,6 @@
+// Even simpler test - just basic assignment and return
+main()<Int> -> {
+    x<Int> = 42;
+    x = 100;  // Direct assignment
+    return x;
+}
