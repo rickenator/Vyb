@@ -115,7 +115,9 @@ namespace vyn {
         
         // Before trying type parsing, check if this is likely a function call pattern
         bool skip_type_parsing = false;
-        if (peek().type == TokenType::IDENTIFIER) {
+        if (peek().type == TokenType::IDENTIFIER || peek().type == TokenType::KEYWORD_MY || 
+            peek().type == TokenType::KEYWORD_THEIR || peek().type == TokenType::KEYWORD_OUR ||
+            peek().type == TokenType::KEYWORD_BORROW || peek().type == TokenType::KEYWORD_VIEW) {
             std::string identifier_name = peek().lexeme;
             
             // Helper lambda to find next non-comment/non-newline token position
@@ -169,7 +171,9 @@ namespace vyn {
             else if (identifier_name == "println" || identifier_name == "print" || identifier_name == "debug" || 
                 identifier_name == "error" || identifier_name == "warn" || identifier_name == "info" ||
                 identifier_name == "lit" || identifier_name == "notype" || identifier_name == "bare" || 
-                identifier_name == "deserial") {
+                identifier_name == "deserial" || identifier_name == "my" || identifier_name == "their" || 
+                identifier_name == "our" || identifier_name == "borrow" || identifier_name == "view") {
+                std::cout << "DEBUG: Skipping type parsing for intrinsic function: " << identifier_name << std::endl;
                 skip_type_parsing = true;
             }
         }
@@ -299,7 +303,9 @@ namespace vyn {
 
 regular_array_literal:
         // Handle 'from<Type>(expr)' syntax, Typed Struct Literals, and Plain Identifiers
-        if (peek().type == TokenType::IDENTIFIER) {
+        if (peek().type == TokenType::IDENTIFIER || peek().type == TokenType::KEYWORD_MY || 
+            peek().type == TokenType::KEYWORD_THEIR || peek().type == TokenType::KEYWORD_OUR ||
+            peek().type == TokenType::KEYWORD_BORROW || peek().type == TokenType::KEYWORD_VIEW) {
             token::Token current_id_token = peek(); // Peek, don't consume yet
 
             if (current_id_token.lexeme == "from") {
@@ -383,8 +389,8 @@ regular_array_literal:
                 expect(TokenType::RBRACE);
                 return std::make_unique<ast::ObjectLiteral>(struct_loc, std::move(type_path_node), std::move(properties));
             } else {
-                // Plain Identifier
-                token::Token id_token = consume(); // Consume IDENTIFIER (this was current_id_token if not "from<...")
+                // Plain Identifier (including ownership keywords treated as identifiers)
+                token::Token id_token = consume(); // Consume IDENTIFIER or ownership keyword
                 return std::make_unique<ast::Identifier>(id_token.location, id_token.lexeme);
             }
         }
@@ -896,6 +902,11 @@ bool ExpressionParser::is_literal(TokenType type) const {
 bool ExpressionParser::is_expression_start(vyn::TokenType type) const {
     // Primary expression starters
     if (type == TokenType::IDENTIFIER ||
+        type == TokenType::KEYWORD_MY ||
+        type == TokenType::KEYWORD_THEIR ||
+        type == TokenType::KEYWORD_OUR ||
+        type == TokenType::KEYWORD_BORROW ||
+        type == TokenType::KEYWORD_VIEW ||
         type == TokenType::INT_LITERAL ||
         type == TokenType::FLOAT_LITERAL ||
         type == TokenType::STRING_LITERAL ||

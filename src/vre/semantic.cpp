@@ -456,7 +456,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
     if (auto ident = dynamic_cast<ast::Identifier*>(node->callee.get())) {
         const std::string& name = ident->name;
         if (name == "lit" || name == "notype" || name == "bare" || name == "deserial" || 
-            name == "borrow" || name == "view") {
+            name == "borrow" || name == "view" || name == "my" || name == "their" || name == "our") {
             isIntrinsic = true;
         }
     }
@@ -551,6 +551,46 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             std::vector<ast::TypeNodePtr> theirArgs;
             theirArgs.push_back(std::move(innerType));
             ast::TypeNode* resultType = new ast::TypeName(node->loc, std::move(theirId), std::move(theirArgs));
+            expressionTypes[node] = resultType;
+            node->type = std::shared_ptr<ast::TypeNode>(resultType->clone().release());
+            return;
+        }
+        
+        // Handle ownership constructors: my(), their(), our()
+        if (name == "my" || name == "their" || name == "our") {
+            if (node->arguments.size() != 1) {
+                addError(name + "() expects exactly one argument", node);
+                return;
+            }
+            
+            ast::Expression* argExpr = node->arguments[0].get();
+            if (!argExpr) {
+                addError(name + "() argument cannot be null", node);
+                return;
+            }
+            
+            // Get the argument type 
+            ast::TypeNode* argType = nullptr;
+            if (argExpr->type) {
+                argType = argExpr->type.get();
+            } else {
+                auto typeIt = expressionTypes.find(argExpr);
+                if (typeIt != expressionTypes.end()) {
+                    argType = typeIt->second;
+                }
+            }
+            
+            if (!argType) {
+                addError("Cannot determine type of argument to " + name + "()", node);
+                return;
+            }
+            
+            // Create ownership type: my<T>, their<T>, or our<T>
+            auto ownershipId = std::make_unique<ast::Identifier>(node->loc, name);
+            std::vector<ast::TypeNodePtr> ownershipArgs;
+            ownershipArgs.push_back(argType->clone());
+            
+            ast::TypeNode* resultType = new ast::TypeName(node->loc, std::move(ownershipId), std::move(ownershipArgs));
             expressionTypes[node] = resultType;
             node->type = std::shared_ptr<ast::TypeNode>(resultType->clone().release());
             return;

@@ -487,11 +487,13 @@ void LLVMCodegen::visit(vyn::ast::StructDeclaration* node) {
             logError(fieldDecl->name->loc, "Field \'" + fieldDecl->name->name + "\' in struct \'" + nameStr + "\' is missing a type.");
             m_currentLLVMValue = nullptr; return;
         }
+        std::cout << "DEBUG: Processing field '" << fieldDecl->name->name << "' with type: " << fieldDecl->typeNode->toString() << std::endl;
         llvm::Type* fieldType = codegenType(fieldDecl->typeNode.get()); // Changed .type to ->typeNode
         if (!fieldType) {
             logError(fieldDecl->name->loc, "Could not determine LLVM type for field \'" + fieldDecl->name->name + "\' in struct \'" + nameStr + "\'.");
             m_currentLLVMValue = nullptr; return;
         }
+        std::cout << "DEBUG: Successfully generated LLVM type for field '" << fieldDecl->name->name << "'" << std::endl;
         fieldTypes.push_back(fieldType);
         typeInfo.fieldIndices[fieldDecl->name->name] = i; // Changed .name to ->name
     }

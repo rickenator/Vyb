@@ -540,6 +540,11 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
 void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
     // Debug output to track CallExpression visits
     std::cout << "DEBUG: CallExpression visitor called with callee: " << (node->callee ? node->callee->toString() : "null") << std::endl;
+    if (node->type) {
+        std::cout << "DEBUG: CallExpression has inferred type: " << node->type->toString() << std::endl;
+    } else {
+        std::cout << "DEBUG: CallExpression has no inferred type" << std::endl;
+    }
     
     // Check for Vec::new() constructor calls
     // std::cout << "DEBUG: Checking if callee is MemberExpression..." << std::endl;
@@ -839,6 +844,21 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         
         // Convert integer to pointer
         m_currentLLVMValue = builder->CreateIntToPtr(m_currentLLVMValue, ptrTy, "from_cast");
+        return;
+    }
+    
+    // Handle ownership constructors: my(), their(), our()
+    if (identCallee && (identCallee->name == "my" || identCallee->name == "their" || identCallee->name == "our") && node->arguments.size() == 1) {
+        std::cout << "DEBUG: Processing ownership constructor " << identCallee->name << "() in LLVM codegen" << std::endl;
+        // For ownership constructors, we just evaluate the argument and pass it through
+        // The ownership semantics are handled at the type level, not at runtime
+        node->arguments[0]->accept(*this);
+        if (!m_currentLLVMValue) {
+            logError(node->arguments[0]->loc, "Argument to " + identCallee->name + "() evaluated to null");
+            return;
+        }
+        std::cout << "DEBUG: Successfully processed ownership constructor " << identCallee->name << "()" << std::endl;
+        // The result is the same as the argument - ownership is a compile-time concept
         return;
     }
     
@@ -1826,6 +1846,8 @@ void LLVMCodegen::visit(ast::ConstructionExpression* node) {
         return;
     }
     
+    std::cout << "DEBUG: ConstructionExpression processing type: " << node->constructedType->toString() << std::endl;
+    
     // Get the type being constructed
     llvm::Type* constructedLLVMType = codegenType(node->constructedType.get());
     if (!constructedLLVMType) {
@@ -1833,6 +1855,8 @@ void LLVMCodegen::visit(ast::ConstructionExpression* node) {
         m_currentLLVMValue = nullptr;
         return;
     }
+    
+    std::cout << "DEBUG: Successfully resolved constructed type: " << node->constructedType->toString() << std::endl;
     
     // For now, implement basic construction with default values
     if (constructedLLVMType->isStructTy()) {
