@@ -212,10 +212,17 @@ private:
         int stateCounter;
         bool isAsync;
         
+        // Debug support for async state machines
+        llvm::DILocalVariable* stateDebugVar;
+        llvm::DILocalVariable* futureDebugVar;
+        std::map<int, llvm::DILocation*> suspensionPointLocations;
+        std::map<int, std::string> stateDescriptions;
+        
         AsyncState() : asyncFunction(nullptr), stateMachineFunction(nullptr), 
                        stateStructType(nullptr), stateStructInstance(nullptr),
                        currentStateValue(nullptr), resumeBlock(nullptr), 
-                       futureValue(nullptr), stateCounter(0), isAsync(false) {}
+                       futureValue(nullptr), stateCounter(0), isAsync(false),
+                       stateDebugVar(nullptr), futureDebugVar(nullptr) {}
     };
     
     AsyncState currentAsyncState;
@@ -240,6 +247,12 @@ private:
                                                    const SourceLocation& loc, llvm::DIScope* scope = nullptr);
     void insertDebugVariableDeclaration(llvm::DILocalVariable* debugVar, llvm::Value* alloca, 
                                         const SourceLocation& loc);
+    
+    // Async state machine debug support
+    void initializeAsyncStateDebugInfo(const std::string& functionName, const SourceLocation& loc);
+    void createSuspensionPointDebugInfo(int stateNumber, const SourceLocation& loc, const std::string& description);
+    void insertAsyncStateTransitionDebugInfo(int fromState, int toState, const SourceLocation& loc);
+    void insertContinuationDebugMarker(int stateNumber, const SourceLocation& loc);
 
     // RTTI (Run-Time Type Information)
     llvm::StructType* getOrCreateRTTIStructType();

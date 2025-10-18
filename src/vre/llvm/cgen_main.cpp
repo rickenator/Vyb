@@ -377,3 +377,107 @@ void LLVMCodegen::insertDebugVariableDeclaration(llvm::DILocalVariable* debugVar
     std::cout << "DEBUG: Inserted debug declaration for variable '" << debugVar->getName().str() 
               << "' at line " << loc.line << " column " << loc.column << std::endl;
 }
+
+// --- Async State Machine Debug Information Implementation ---
+
+void LLVMCodegen::initializeAsyncStateDebugInfo(const std::string& functionName, const SourceLocation& loc) {
+    if (!debugBuilder || !currentAsyncState.isAsync) {
+        return;
+    }
+    
+    // Create debug variables for async state tracking
+    if (currentAsyncState.stateStructType && currentAsyncState.stateStructInstance) {
+        // Create debug info for the state variable
+        llvm::DIType* stateType = getDebugType(int32Type, "AsyncState");
+        currentAsyncState.stateDebugVar = createDebugVariableInfo(
+            functionName + "_state", stateType, loc);
+        
+        if (currentAsyncState.stateDebugVar) {
+            insertDebugVariableDeclaration(currentAsyncState.stateDebugVar, 
+                                           currentAsyncState.stateStructInstance, loc);
+        }
+    }
+    
+    // Create debug info for the future result variable  
+    if (currentAsyncState.futureValue) {
+        llvm::DIType* futureType = getDebugType(currentAsyncState.futureValue->getType(), "Future");
+        currentAsyncState.futureDebugVar = createDebugVariableInfo(
+            functionName + "_future", futureType, loc);
+        
+        if (currentAsyncState.futureDebugVar && currentAsyncState.futureValue) {
+            insertDebugVariableDeclaration(currentAsyncState.futureDebugVar, 
+                                           currentAsyncState.futureValue, loc);
+        }
+    }
+    
+    std::cout << "DEBUG: Initialized async state debug info for function '" << functionName 
+              << "' at line " << loc.line << std::endl;
+}
+
+void LLVMCodegen::createSuspensionPointDebugInfo(int stateNumber, const SourceLocation& loc, const std::string& description) {
+    if (!debugBuilder || !currentAsyncState.isAsync) {
+        return;
+    }
+    
+    // Create debug location for this suspension point
+    llvm::DILocation* suspensionLocation = llvm::DILocation::get(
+        *context,
+        loc.line,
+        loc.column,
+        debugScopeStack.empty() ? debugCompileUnit : debugScopeStack.top()
+    );
+    
+    // Store suspension point information
+    currentAsyncState.suspensionPointLocations[stateNumber] = suspensionLocation;
+    currentAsyncState.stateDescriptions[stateNumber] = description;
+    
+    std::cout << "DEBUG: Created suspension point " << stateNumber << " (" << description 
+              << ") at line " << loc.line << " column " << loc.column << std::endl;
+}
+
+void LLVMCodegen::insertAsyncStateTransitionDebugInfo(int fromState, int toState, const SourceLocation& loc) {
+    if (!debugBuilder || !currentAsyncState.isAsync) {
+        return;
+    }
+    
+    // Set debug location for the state transition
+    setDebugLocation(loc);
+    
+    // Log the state transition for debugging
+    std::cout << "DEBUG: Async state transition from " << fromState << " to " << toState 
+              << " at line " << loc.line << " column " << loc.column << std::endl;
+    
+    // Store the transition information (could be used for more sophisticated debug info later)
+    auto fromDesc = currentAsyncState.stateDescriptions.find(fromState);
+    auto toDesc = currentAsyncState.stateDescriptions.find(toState);
+    
+    if (fromDesc != currentAsyncState.stateDescriptions.end() && 
+        toDesc != currentAsyncState.stateDescriptions.end()) {
+        std::cout << "DEBUG: State transition: '" << fromDesc->second << "' -> '" << toDesc->second << "'" << std::endl;
+    }
+}
+
+void LLVMCodegen::insertContinuationDebugMarker(int stateNumber, const SourceLocation& loc) {
+    if (!debugBuilder || !currentAsyncState.isAsync) {
+        return;
+    }
+    
+    // Set debug location for the continuation point
+    setDebugLocation(loc);
+    
+    // Find the suspension point location if available
+    auto suspensionPoint = currentAsyncState.suspensionPointLocations.find(stateNumber);
+    auto stateDesc = currentAsyncState.stateDescriptions.find(stateNumber);
+    
+    std::cout << "DEBUG: Continuation point for state " << stateNumber;
+    if (stateDesc != currentAsyncState.stateDescriptions.end()) {
+        std::cout << " (" << stateDesc->second << ")";
+    }
+    std::cout << " at line " << loc.line << " column " << loc.column << std::endl;
+    
+    if (suspensionPoint != currentAsyncState.suspensionPointLocations.end()) {
+        std::cout << "DEBUG: Resuming from suspension point at line " 
+                  << suspensionPoint->second->getLine() << " column " 
+                  << suspensionPoint->second->getColumn() << std::endl;
+    }
+}

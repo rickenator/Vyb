@@ -358,6 +358,9 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
         currentAsyncState.asyncFunction = func;
         currentAsyncState.stateCounter = 0;
         
+        // Initialize debug information for async state machine
+        initializeAsyncStateDebugInfo(node->id->name, node->loc);
+        
         // For async functions, modify return type to Future<T> if not already
         if (node->returnTypeNode) {
             // Check if return type is already Future<T>
