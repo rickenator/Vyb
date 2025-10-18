@@ -4,7 +4,7 @@
 
 This document outlines the completed features, ongoing development, and future considerations for the Vyn programming language.
 
-## Current Status (v0.4.0)
+## Current Status (v0.4.1)
 
 **✅ MAJOR ACHIEVEMENTS COMPLETED:**
 1.  **LLVM Backend:** Fully functional LLVM IR generation and JIT execution
@@ -15,9 +15,11 @@ This document outlines the completed features, ongoing development, and future c
 6.  **✅ Pattern Matching (COMPLETED):** Match statements with `=>` syntax and comprehensive pattern matching
 7.  **✅ Loop Control Flow (COMPLETED):** Break and continue statements working in all loop constructs
 8.  **✅ Resizable Collections (COMPLETED):** Vec<T> with full method support (new, push, pop, len, get)
-9.  **✅ Member Access (COMPLETED):** Object field access (obj.field) and array indexing (arr[index])
-10. **✅ Binary Operations (COMPLETED):** Complete operator precedence system with all arithmetic, comparison, and logical operators
-11. **✅ Variadic Tuples (COMPLETED v0.4.0):** `Tuple<T,U,V,...>` with full 1-N type parameter support and dual syntax
+9.  **✅ Vec Iteration (COMPLETED v0.4.1):** `for (item in vec)` with mandatory parentheses, full break/continue support
+10. **✅ Range-Based For Loops (COMPLETED v0.4.1):** `for (i in 0..10)` inclusive ranges with optional step
+11. **✅ Member Access (COMPLETED):** Object field access (obj.field) and array indexing (arr[index])
+12. **✅ Binary Operations (COMPLETED):** Complete operator precedence system with all arithmetic, comparison, and logical operators
+13. **✅ Variadic Tuples (COMPLETED v0.4.0):** `Tuple<T,U,V,...>` with full 1-N type parameter support and dual syntax
 
 ### Variadic Tuple System (v0.4.0)
 
@@ -69,11 +71,13 @@ See `test/tuples/README.md` for detailed documentation and examples.
 ## Core Development Focus
 The current primary focus is on:
 1.  **Standard Library Expansion:** Building core modules for collections, I/O, math
-2.  **For Loop Implementation:** Completing runtime support for parsed for loop syntax  
+2.  **✅ For Loop Implementation (COMPLETED v0.4.1):** Vec iteration and range-based for loops with mandatory parentheses
 3.  **✅ Arrays and Collections (COMPLETED v0.3.7):** Fixed-size arrays `[T; N]` fully implemented with beautiful serialization
 4.  **✅ Dynamic Collections (COMPLETED v0.3.7):** Vec<T> resizable data structures with full method support
-5.  **✅ String Operations (COMPLETED v0.4.0):** Complete String type with natural literal syntax and 11 methods
-6.  **Enhanced Error Messages:** More detailed compilation feedback and suggestions
+5.  **✅ Vec Iteration (COMPLETED v0.4.1):** `for (item in vec)` with break/continue support
+6.  **✅ String Operations (COMPLETED v0.4.0):** Complete String type with natural literal syntax and 11 methods
+7.  **Enhanced Error Messages:** More detailed compilation feedback and suggestions
+8.  **Tuple Element Access:** `.0`, `.1`, `.2` syntax for accessing tuple elements
 
 ## Project Structure and Organization
 
