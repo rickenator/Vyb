@@ -743,11 +743,15 @@ regular_array_literal:
     }
 
     vyn::ast::ExprPtr ExpressionParser::parse_unary_expr() {
-        if (match(TokenType::BANG) || match(TokenType::MINUS) || match(TokenType::TILDE) || match(TokenType::KEYWORD_AWAIT)) {
+        if (match(TokenType::KEYWORD_AWAIT)) {
+            token::Token await_token = previous_token();
+            vyn::ast::ExprPtr operand = parse_unary_expr();
+            return std::make_unique<ast::AwaitExpression>(await_token.location, std::move(operand));
+        }
+        
+        if (match(TokenType::BANG) || match(TokenType::MINUS) || match(TokenType::TILDE)) {
             token::Token op_token = previous_token();
             vyn::ast::ExprPtr operand = parse_unary_expr(); 
-            // For await, we might want a specific AST node, e.g., AwaitExpression,
-            // but UnaryExpression can work if the operator token type is distinct.
             return std::make_unique<ast::UnaryExpression>(op_token.location, op_token, std::move(operand));
         }
         // Attempt to parse TypeNode for potential constructor call or array initialization `[Type; Size]()`
@@ -894,11 +898,15 @@ bool ExpressionParser::is_expression_start(vyn::TokenType type) const {
         return true;
     }
 
+    // Check for await keyword (special case)
+    if (type == TokenType::KEYWORD_AWAIT) {
+        return true;
+    }
+
     // Unary operator starters
     if (type == TokenType::BANG ||
         type == TokenType::MINUS ||
-        type == TokenType::TILDE ||
-        type == TokenType::KEYWORD_AWAIT) // if await is an operator
+        type == TokenType::TILDE)
     {
         return true;
     }

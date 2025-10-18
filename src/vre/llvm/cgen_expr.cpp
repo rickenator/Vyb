@@ -2400,11 +2400,15 @@ void LLVMCodegen::visit(ast::AwaitExpression* node) {
     std::cout << "DEBUG: Creating await suspension point at line " << node->loc.line 
               << " column " << node->loc.column << " (state " << currentState << ")" << std::endl;
     
-    // Store the state number
-    llvm::Value* stateNumberPtr = builder->CreateStructGEP(
-        currentAsyncState.stateStructType, currentAsyncState.stateStructInstance, 0);
-    builder->CreateStore(
-        llvm::ConstantInt::get(int32Type, currentState), stateNumberPtr);
+    // Store the state number (if async state infrastructure is available)
+    if (currentAsyncState.stateStructType && currentAsyncState.stateStructInstance) {
+        llvm::Value* stateNumberPtr = builder->CreateStructGEP(
+            currentAsyncState.stateStructType, currentAsyncState.stateStructInstance, 0);
+        builder->CreateStore(
+            llvm::ConstantInt::get(int32Type, currentState), stateNumberPtr);
+    } else {
+        std::cout << "DEBUG: Async state infrastructure not initialized, skipping state storage" << std::endl;
+    }
     
     // Call runtime to await the future
     llvm::Function* awaitFunc = getOrCreateAwaitTaskFunction();
