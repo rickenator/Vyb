@@ -2400,12 +2400,20 @@ void LLVMCodegen::visit(ast::AwaitExpression* node) {
     std::cout << "DEBUG: Creating await suspension point at line " << node->loc.line 
               << " column " << node->loc.column << " (state " << currentState << ")" << std::endl;
     
+    // Create debug information for this suspension point
+    std::string suspensionDesc = "await_expression_" + std::to_string(currentState);
+    createSuspensionPointDebugInfo(currentState, node->loc, suspensionDesc);
+    
     // Store the state number (if async state infrastructure is available)
     if (currentAsyncState.stateStructType && currentAsyncState.stateStructInstance) {
         llvm::Value* stateNumberPtr = builder->CreateStructGEP(
             currentAsyncState.stateStructType, currentAsyncState.stateStructInstance, 0);
         builder->CreateStore(
             llvm::ConstantInt::get(int32Type, currentState), stateNumberPtr);
+        
+        // Add debug info for state transition (from previous state to suspension)
+        int previousState = currentState - 1;
+        insertAsyncStateTransitionDebugInfo(previousState, currentState, node->loc);
     } else {
         std::cout << "DEBUG: Async state infrastructure not initialized, skipping state storage" << std::endl;
     }
@@ -2426,6 +2434,9 @@ void LLVMCodegen::visit(ast::AwaitExpression* node) {
     
     // Switch to the continuation block
     builder->SetInsertPoint(continuationBlock);
+    
+    // Insert continuation debug marker
+    insertContinuationDebugMarker(currentState, node->loc);
     
     // For simplicity, just return the input future value for now
     // This doesn't implement proper suspension/resumption semantics yet
