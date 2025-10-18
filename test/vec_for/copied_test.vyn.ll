@@ -52,7 +52,7 @@ attributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memo
 !llvm.module.flags = !{!2, !3}
 
 !0 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, file: !1, producer: "Vyn Compiler", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)
-!1 = !DIFile(filename: "simple_range.vyn.ll", directory: "/home/rick/Projects/Vyn/test/range_for")
+!1 = !DIFile(filename: "copied_test.vyn.ll", directory: "/home/rick/Projects/Vyn/test/vec_for")
 !2 = !{i32 2, !"Debug Info Version", i32 3}
 !3 = !{i32 2, !"Dwarf Version", i32 4}
 !4 = distinct !DISubprogram(name: "main", linkageName: "main", scope: !1, file: !1, line: 2, type: !5, scopeLine: 2, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !8)
@@ -64,4 +64,4 @@ attributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memo
 !10 = !DILocalVariable(name: "i", scope: !4, file: !1, line: 4, type: !7)
 !11 = !DILocation(line: 2, column: 1, scope: !4)
 !12 = !DILocation(line: 3, column: 1, scope: !4)
-!13 = !DILocation(line: 4, column: 10, scope: !4)
+!13 = !DILocation(line: 4, column: 9, scope: !4)

@@ -229,7 +229,10 @@ std::unique_ptr<vyn::ast::WhileStatement> StatementParser::parse_while() {
 std::unique_ptr<vyn::ast::ForStatement> StatementParser::parse_for() {
     SourceLocation for_loc = this->expect(vyn::TokenType::KEYWORD_FOR, "Expected 'for'.").location;
     
-    // Check for range-based for loop: `for identifier in expression { body }`
+    // Expect opening parenthesis
+    this->expect(vyn::TokenType::LPAREN, "Expected '(' after 'for'");
+    
+    // Check for range-based for loop: `for (identifier in expression) { body }`
     if (this->peek().type == vyn::TokenType::IDENTIFIER) {
         size_t saved_pos = this->pos_;
         token::Token ident_token = this->consume();
@@ -253,17 +256,19 @@ std::unique_ptr<vyn::ast::ForStatement> StatementParser::parse_for() {
                 }
             }
             
+            // Expect closing parenthesis
+            this->expect(vyn::TokenType::RPAREN, "Expected ')' after for loop header");
+            
             // Expect the body block
             auto body = parse_block();
             
-            // Desugar range-based for loop to C-style for loop
-            // for i in start..end { body }
-            // becomes:
-            // { var i = start; while i <= end { body; i = i + step; } }
-            // Note: Ranges are now INCLUSIVE
-            
-            // We need to extract start and end from the RangeExpression
+            // Check what kind of expression we're iterating over
             if (range_expr->getType() == vyn::ast::NodeType::RANGE_EXPRESSION) {
+                // Desugar range-based for loop to C-style for loop
+                // for i in start..end { body }
+                // becomes:
+                // { var i = start; while i <= end { body; i = i + step; } }
+                // Note: Ranges are now INCLUSIVE
                 auto* range = static_cast<vyn::ast::RangeExpression*>(range_expr.get());
                 
                 // Create the loop variable declaration: var i = start;
@@ -324,7 +329,113 @@ std::unique_ptr<vyn::ast::ForStatement> StatementParser::parse_for() {
                     std::move(body)
                 );
             } else {
-                throw std::runtime_error("Expected range expression after 'in' in for loop at " + location_to_string(for_loc));
+                // Not a RangeExpression - assume it's a Vec<T> or other iterable
+                // Desugar: for item in vec { body }
+                // into a traditional for loop with 3 initializers using nested structure
+                
+                std::string vec_tmp_name = "__vec_tmp_" + ident_token.lexeme;
+                std::string idx_name = "__idx_" + ident_token.lexeme;
+                std::string len_name = "__len_" + ident_token.lexeme;
+                
+                // 1. var __vec_tmp = vec;
+                auto vec_tmp_var = std::make_unique<vyn::ast::Identifier>(ident_token.location, vec_tmp_name);
+                auto vec_tmp_decl = std::make_unique<vyn::ast::VariableDeclaration>(
+                    ident_token.location,
+                    std::move(vec_tmp_var),
+                    false, nullptr, std::move(range_expr)
+                );
+                
+                // 2. var __idx = 0;
+                auto idx_var = std::make_unique<vyn::ast::Identifier>(ident_token.location, idx_name);
+                auto idx_type_id = std::make_unique<vyn::ast::Identifier>(ident_token.location, "Int");
+                auto idx_type = std::make_unique<vyn::ast::TypeName>(ident_token.location, std::move(idx_type_id));
+                auto idx_init = std::make_unique<vyn::ast::IntegerLiteral>(ident_token.location, 0);
+                auto idx_decl = std::make_unique<vyn::ast::VariableDeclaration>(
+                    ident_token.location, std::move(idx_var), false, std::move(idx_type), std::move(idx_init)
+                );
+                
+                // 3. var __len = __vec_tmp.len();
+                auto len_var = std::make_unique<vyn::ast::Identifier>(ident_token.location, len_name);
+                auto vec_tmp_ref = std::make_unique<vyn::ast::Identifier>(ident_token.location, vec_tmp_name);
+                auto len_method = std::make_unique<vyn::ast::Identifier>(ident_token.location, "len");
+                auto len_member = std::make_unique<vyn::ast::MemberExpression>(
+                    ident_token.location, std::move(vec_tmp_ref), std::move(len_method), false
+                );
+                auto len_call = std::make_unique<vyn::ast::CallExpression>(
+                    ident_token.location, std::move(len_member), std::vector<vyn::ast::ExprPtr>()
+                );
+                auto len_decl = std::make_unique<vyn::ast::VariableDeclaration>(
+                    ident_token.location, std::move(len_var), false, nullptr, std::move(len_call)
+                );
+                
+                // 4. Condition: __idx < __len
+                auto cond_idx = std::make_unique<vyn::ast::Identifier>(ident_token.location, idx_name);
+                auto cond_len = std::make_unique<vyn::ast::Identifier>(ident_token.location, len_name);
+                token::Token lt_token(vyn::TokenType::LT, "<", ident_token.location);
+                auto condition = std::make_unique<vyn::ast::BinaryExpression>(
+                    ident_token.location, std::move(cond_idx), lt_token, std::move(cond_len)
+                );
+                
+                // 5. Increment: __idx = __idx + 1
+                auto incr_idx_left = std::make_unique<vyn::ast::Identifier>(ident_token.location, idx_name);
+                auto incr_idx_right_left = std::make_unique<vyn::ast::Identifier>(ident_token.location, idx_name);
+                auto one_lit = std::make_unique<vyn::ast::IntegerLiteral>(ident_token.location, 1);
+                token::Token plus_token(vyn::TokenType::PLUS, "+", ident_token.location);
+                auto incr_right = std::make_unique<vyn::ast::BinaryExpression>(
+                    ident_token.location, std::move(incr_idx_right_left), plus_token, std::move(one_lit)
+                );
+                token::Token assign_token(vyn::TokenType::EQ, "=", ident_token.location);
+                auto increment = std::make_unique<vyn::ast::AssignmentExpression>(
+                    ident_token.location, std::move(incr_idx_left), assign_token, std::move(incr_right)
+                );
+                
+                // 6. Prepend to body: var item = __vec_tmp.get(__idx);
+                auto item_var = std::make_unique<vyn::ast::Identifier>(ident_token.location, ident_token.lexeme);
+                auto vec_tmp_for_get = std::make_unique<vyn::ast::Identifier>(ident_token.location, vec_tmp_name);
+                auto get_method = std::make_unique<vyn::ast::Identifier>(ident_token.location, "get");
+                auto get_member = std::make_unique<vyn::ast::MemberExpression>(
+                    ident_token.location, std::move(vec_tmp_for_get), std::move(get_method), false
+                );
+                auto idx_arg = std::make_unique<vyn::ast::Identifier>(ident_token.location, idx_name);
+                std::vector<vyn::ast::ExprPtr> get_args;
+                get_args.push_back(std::move(idx_arg));
+                auto get_call = std::make_unique<vyn::ast::CallExpression>(
+                    ident_token.location, std::move(get_member), std::move(get_args)
+                );
+                auto item_decl = std::make_unique<vyn::ast::VariableDeclaration>(
+                    ident_token.location, std::move(item_var), false, nullptr, std::move(get_call)
+                );
+                
+                auto block_body = dynamic_cast<vyn::ast::BlockStatement*>(body.get());
+                if (block_body) {
+                    block_body->body.insert(block_body->body.begin(), std::move(item_decl));
+                }
+                
+                // 7. Create the actual while loop: while (__idx < __len) { body with item; __idx++; }
+                // Add increment as last statement in body
+                auto incr_stmt = std::make_unique<vyn::ast::ExpressionStatement>(
+                    ident_token.location, std::move(increment)
+                );
+                if (block_body) {
+                    block_body->body.push_back(std::move(incr_stmt));
+                }
+                
+                auto while_loop = std::make_unique<vyn::ast::WhileStatement>(
+                    for_loc, std::move(condition), std::move(body)
+                );
+                
+                // 8. Build block: { vec_tmp_decl; len_decl; idx_decl; while_loop; }
+                std::vector<vyn::ast::StmtPtr> block_stmts;
+                block_stmts.push_back(std::move(vec_tmp_decl));
+                block_stmts.push_back(std::move(len_decl));
+                block_stmts.push_back(std::move(idx_decl));
+                block_stmts.push_back(std::move(while_loop));
+                auto final_block = std::make_unique<vyn::ast::BlockStatement>(ident_token.location, std::move(block_stmts));
+                
+                // 9. Wrap in a dummy for loop to match return type
+                return std::make_unique<vyn::ast::ForStatement>(
+                    for_loc, nullptr, nullptr, nullptr, std::move(final_block)
+                );
             }
         } else {
             // Not a range-based for loop, restore position
@@ -333,7 +444,7 @@ std::unique_ptr<vyn::ast::ForStatement> StatementParser::parse_for() {
     }
     
     // C-style for loop: for (init; cond; update) { body }
-    this->expect(vyn::TokenType::LPAREN, "Expected '(' after 'for'.");
+    // Note: LPAREN was already consumed above
 
     vyn::ast::StmtPtr initializer = nullptr;
     

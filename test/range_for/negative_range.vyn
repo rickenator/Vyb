@@ -1,7 +1,7 @@
 // Test: Range with negative numbers (inclusive)
 main()<Int> -> {
     var<Int> sum = 0;
-    for i in -5..4 {
+    for (i in -5..4) {
         sum = sum + i;
     }
     return sum;  // Should return -5+-4+-3+-2+-1+0+1+2+3+4 = -5

@@ -1,7 +1,7 @@
 // Test: Range-based for loop with continue
 main()<Int> -> {
     var<Int> sum = 0;
-    for i in 0..9 {
+    for (i in 0..9) {
         if (i == 5) {
             continue;
         }
