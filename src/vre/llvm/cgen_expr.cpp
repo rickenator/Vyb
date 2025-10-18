@@ -2421,6 +2421,12 @@ void LLVMCodegen::visit(ast::AwaitExpression* node) {
     llvm::Value* dummyTaskId = llvm::ConstantInt::get(int64Type, 0);
     builder->CreateCall(awaitFunc, {dummyTaskId});
     
+    // Branch to the continuation block to maintain proper control flow
+    builder->CreateBr(continuationBlock);
+    
+    // Switch to the continuation block
+    builder->SetInsertPoint(continuationBlock);
+    
     // For simplicity, just return the input future value for now
     // This doesn't implement proper suspension/resumption semantics yet
     m_currentLLVMValue = futureValue;

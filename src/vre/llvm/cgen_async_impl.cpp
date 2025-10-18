@@ -24,7 +24,14 @@ llvm::Function* LLVMCodegen::getOrCreateScheduleTaskFunction() {
     std::vector<llvm::Type*> paramTypes = { int8PtrType, int8PtrType };
     llvm::FunctionType* funcType = llvm::FunctionType::get(int64Type, paramTypes, false);
     
-    return llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, funcName, module.get());
+    llvm::Function* scheduleFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, funcName, module.get());
+    
+    // Add a basic implementation (returns dummy task ID for now)
+    llvm::BasicBlock* entry = llvm::BasicBlock::Create(*context, "entry", scheduleFunc);
+    llvm::IRBuilder<> funcBuilder(entry);
+    funcBuilder.CreateRet(llvm::ConstantInt::get(int64Type, 1));
+    
+    return scheduleFunc;
 }
 
 llvm::Function* LLVMCodegen::getOrCreateAwaitTaskFunction() {
@@ -38,7 +45,14 @@ llvm::Function* LLVMCodegen::getOrCreateAwaitTaskFunction() {
     std::vector<llvm::Type*> paramTypes = { int64Type };
     llvm::FunctionType* funcType = llvm::FunctionType::get(voidType, paramTypes, false);
     
-    return llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, funcName, module.get());
+    llvm::Function* awaitFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, funcName, module.get());
+    
+    // Add a basic implementation (no-op for now)
+    llvm::BasicBlock* entry = llvm::BasicBlock::Create(*context, "entry", awaitFunc);
+    llvm::IRBuilder<> funcBuilder(entry);
+    funcBuilder.CreateRetVoid();
+    
+    return awaitFunc;
 }
 
 llvm::Function* LLVMCodegen::getOrCreateCreateFutureFunction() {
@@ -52,7 +66,14 @@ llvm::Function* LLVMCodegen::getOrCreateCreateFutureFunction() {
     std::vector<llvm::Type*> paramTypes = { int64Type };
     llvm::FunctionType* funcType = llvm::FunctionType::get(int8PtrType, paramTypes, false);
     
-    return llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, funcName, module.get());
+    llvm::Function* createFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, funcName, module.get());
+    
+    // Add a basic implementation (returns null for now)
+    llvm::BasicBlock* entry = llvm::BasicBlock::Create(*context, "entry", createFunc);
+    llvm::IRBuilder<> funcBuilder(entry);
+    funcBuilder.CreateRet(llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(int8PtrType)));
+    
+    return createFunc;
 }
 
 llvm::StructType* LLVMCodegen::createFutureStructType(llvm::Type* resultType) {
