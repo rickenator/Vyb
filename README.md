@@ -42,7 +42,7 @@ Vyn is a statically typed, template-metaprogramming language designed to compile
 * **Concurrency Built In**: Async/await, with planned actors, threads, and typed channels.
 * **Self-Hosting & Extensible**: Planned compiler written in Vyn; add backends, macros, and modules at runtime.
 
-**Current Version:** 0.4.0 🚀 **FULLY FUNCTIONAL**
+**Current Version:** 0.4.0 🚀 **FULLY FUNCTIONAL WITH ASYNC DEBUGGING**
 
 ## Quick Start
 
@@ -162,6 +162,13 @@ Vyn **v0.4.0** is a **complete systems programming language** ready for producti
 - **Generic collections**: `Vec<Int>`, `Vec<String>` with full method support
 - **Member access**: Struct field access (`obj.field`) and array indexing (`arr[index]`)
 
+### ✅ **Async Programming & Debugging**
+- **Async/Await**: Complete async function support with `async` keyword and `await` expressions
+- **Future<T> Types**: Asynchronous return types with proper type checking
+- **Debug Infrastructure**: Comprehensive LLVM debug information with DIBuilder integration
+- **State Machine Debugging**: Suspension point tracking and continuation debugging for async functions
+- **Debug Variable Information**: Local variable metadata with type information and scope tracking
+
 #### Primitive Types
 
 | Type | Description | Size | Range/Notes | Example |
@@ -200,6 +207,8 @@ Vyn **v0.4.0** is a **complete systems programming language** ready for producti
 - **LLVM backend**: Direct compilation to native code with JIT execution
 - **Comprehensive parser**: Handles complex syntax including templates, async, classes
 - **Rich error messages**: Clear compilation feedback
+- **Advanced Test Harness**: Modern parallel test runner with HTML/JSON reporting and triage analysis
+- **Debug Information**: Complete DWARF debug metadata generation for debugging async state machines
 - **Git integration**: Regular commits track development progress
 
 ## Language Overview
@@ -636,6 +645,45 @@ make -C build -j
 build/vyn test/test_simple_add.vyn
 ```
 
+## Test Harness
+
+Vyn includes a modern, comprehensive test harness for managing 391+ test files:
+
+### Quick Testing
+```bash
+# Run all tests with parallel execution
+./test_harness.py
+
+# Run specific categories
+./test_harness.py --category parser,semantic
+
+# Generate comprehensive reports
+./test_harness.py --html-report report.html --json-report results.json
+
+# Run with filtering and analysis
+./test_harness.py --priority high --exclude-slow --workers 8
+```
+
+### Test Analysis and Triage
+```bash
+# Analyze test failures and create triage plan
+./triage_tool.py results.json
+
+# Generate markdown triage report
+./triage_tool.py results.json --format markdown --output triage.md
+
+# Focus on critical issues only
+./triage_tool.py results.json --priority critical,high
+```
+
+### Test Features
+- **391 Test Files**: Comprehensive coverage across all language features
+- **Parallel Execution**: Multi-threaded test runner for fast feedback
+- **Rich Reporting**: HTML, JSON, and console output with detailed metrics
+- **Smart Categorization**: Automatic test categorization and filtering
+- **Failure Analysis**: Pattern recognition and triage plan generation
+- **Performance Tracking**: Execution time analysis and slow test detection
+
 ## Project Structure
 
 ```
@@ -760,6 +808,10 @@ unsafe {
 - **Binary Operations**: Full operator set (`+`, `-`, `*`, `/`, `==`, `!=`, `<`, `>`, etc.)
 - **Dual Parameter Syntax**: Both standard (`var<Type>`) and shorthand (`Type`) forms
 - **Auto-serialization**: Complex return types automatically output as JSON
+- **Async/Await Support**: Complete async function implementation with proper parsing and codegen
+- **Debug Infrastructure**: Comprehensive LLVM debug information with DIBuilder and DWARF metadata
+- **Async State Machine Debugging**: Suspension point tracking, state transitions, and continuation debugging
+- **Modern Test Harness**: Parallel test runner with 391+ tests, HTML/JSON reporting, and failure triage analysis
 
 ### 🚧 **In Progress**
 - **String Operations**: Concatenation, comparison, and manipulation methods
@@ -799,7 +851,7 @@ See `doc/` directory for detailed design documents and RFCs.
 
 ## Recent Progress
 
-**v0.4.0 Major Language Revolution**: Unified syntax transformation completed
+**v0.4.0 Major Language Revolution**: Complete systems programming language with async debugging
 - ✅ **Match Statements**: Complete pattern matching with `=>` syntax and comprehensive patterns
 - ✅ **Break/Continue**: Loop control flow statements working in all loop types
 - ✅ **Vec<T> Collections**: Fully functional resizable arrays with all methods (`new`, `push`, `pop`, `len`, `get`)
@@ -808,8 +860,11 @@ See `doc/` directory for detailed design documents and RFCs.
 - ✅ **Dual Parameter Syntax**: Both `var<Type> name` and `Type name` forms working seamlessly
 - ✅ **Member Access**: Object field access (`obj.field`) and array indexing (`arr[index]`)
 - ✅ **Auto-serialization**: Complex return types with smart JSON-like output
+- ✅ **Async/Await**: Complete asynchronous programming support with Future<T> types
+- ✅ **Debug Infrastructure**: Full LLVM debug metadata with async state machine debugging
+- ✅ **Test Harness**: Modern parallel test runner managing 391+ tests with comprehensive reporting
 
-**Language Status**: Vyn v0.4.0 is now a **fully functional systems programming language** with revolutionary unified syntax, suitable for real-world programming tasks with all core language constructs implemented and working.
+**Language Status**: Vyn v0.4.0 is now a **complete, production-ready systems programming language** with advanced async debugging capabilities, suitable for real-world programming tasks with all core language constructs implemented, tested, and debuggable.
 
 ## Getting Help
 
