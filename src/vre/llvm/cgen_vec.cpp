@@ -86,25 +86,103 @@ void LLVMCodegen::handleVecPush(vyn::ast::CallExpression* node, llvm::Value* vec
         return;
     }
     
-    // For now, implement a simple push that just increments size
-    // In a full implementation, this would need to handle memory allocation/reallocation
+    // Get element type from the value being pushed
+    llvm::Type* elementType = valueToAdd->getType();
     
     // Get pointers to struct fields
+    llvm::Value* dataFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 0, "vec.data_ptr");
     llvm::Value* sizeFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 1, "vec.size_ptr");
+    llvm::Value* capFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 2, "vec.cap_ptr");
     
-    // Load current size
+    // Load current size and capacity
     llvm::Value* currentSize = builder->CreateLoad(llvm::Type::getInt64Ty(*context), sizeFieldPtr, "vec.current_size");
+    llvm::Value* currentCap = builder->CreateLoad(llvm::Type::getInt64Ty(*context), capFieldPtr, "vec.current_cap");
+    llvm::Value* dataPtr = builder->CreateLoad(llvm::PointerType::get(*context, 0), dataFieldPtr, "vec.data");
     
-    // Increment size by 1
-    llvm::Value* newSize = builder->CreateAdd(currentSize, 
-                                             llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1), 
-                                             "vec.new_size");
+    // Check if we need to allocate/grow
+    llvm::Value* needsAlloc = builder->CreateICmpEQ(currentCap, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0), "vec.needs_alloc");
+    llvm::Value* needsGrow = builder->CreateICmpEQ(currentSize, currentCap, "vec.needs_grow");
+    llvm::Value* needsRealloc = builder->CreateOr(needsAlloc, needsGrow, "vec.needs_realloc");
     
-    // Store new size
+    llvm::BasicBlock* allocBlock = llvm::BasicBlock::Create(*context, "vec.alloc", builder->GetInsertBlock()->getParent());
+    llvm::BasicBlock* storeBlock = llvm::BasicBlock::Create(*context, "vec.store", builder->GetInsertBlock()->getParent());
+    
+    builder->CreateCondBr(needsRealloc, allocBlock, storeBlock);
+    
+    // Alloc block - allocate or grow the array
+    builder->SetInsertPoint(allocBlock);
+    
+    // New capacity: if 0, start with 4, else double it
+    llvm::Value* newCap = builder->CreateSelect(
+        needsAlloc,
+        llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 4),
+        builder->CreateMul(currentCap, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 2)),
+        "vec.new_cap"
+    );
+    
+    // Calculate allocation size (8 bytes per element for now)
+    llvm::Value* elementSize = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 8);
+    llvm::Value* allocSize = builder->CreateMul(newCap, elementSize, "vec.alloc_size");
+    
+    // Call malloc
+    llvm::FunctionType* mallocType = llvm::FunctionType::get(
+        llvm::PointerType::get(*context, 0),
+        {llvm::Type::getInt64Ty(*context)},
+        false
+    );
+    llvm::Function* mallocFunc = module->getFunction("malloc");
+    if (!mallocFunc) {
+        mallocFunc = llvm::Function::Create(mallocType, llvm::Function::ExternalLinkage, "malloc", module.get());
+    }
+    llvm::Value* newDataPtr = builder->CreateCall(mallocFunc, {allocSize}, "vec.new_data");
+    
+    // If there was old data, copy it (using memcpy if size > 0)
+    llvm::BasicBlock* copyBlock = llvm::BasicBlock::Create(*context, "vec.copy", builder->GetInsertBlock()->getParent());
+    llvm::BasicBlock* noCopyBlock = llvm::BasicBlock::Create(*context, "vec.no_copy", builder->GetInsertBlock()->getParent());
+    
+    llvm::Value* hasData = builder->CreateICmpNE(currentSize, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0), "vec.has_data");
+    builder->CreateCondBr(hasData, copyBlock, noCopyBlock);
+    
+    // Copy block
+    builder->SetInsertPoint(copyBlock);
+    llvm::Value* copySize = builder->CreateMul(currentSize, elementSize, "vec.copy_size");
+    llvm::FunctionType* memcpyType = llvm::FunctionType::get(
+        llvm::PointerType::get(*context, 0),
+        {llvm::PointerType::get(*context, 0), llvm::PointerType::get(*context, 0), llvm::Type::getInt64Ty(*context)},
+        false
+    );
+    llvm::Function* memcpyFunc = module->getFunction("memcpy");
+    if (!memcpyFunc) {
+        memcpyFunc = llvm::Function::Create(memcpyType, llvm::Function::ExternalLinkage, "memcpy", module.get());
+    }
+    builder->CreateCall(memcpyFunc, {newDataPtr, dataPtr, copySize});
+    builder->CreateBr(noCopyBlock);
+    
+    // No copy block - update the Vec struct
+    builder->SetInsertPoint(noCopyBlock);
+    builder->CreateStore(newDataPtr, dataFieldPtr);
+    builder->CreateStore(newCap, capFieldPtr);
+    builder->CreateBr(storeBlock);
+    
+    // Store block - store the new element
+    builder->SetInsertPoint(storeBlock);
+    
+    // Reload data pointer (might have changed in alloc block)
+    llvm::Value* finalDataPtr = builder->CreateLoad(llvm::PointerType::get(*context, 0), dataFieldPtr, "vec.final_data");
+    
+    // Calculate offset for new element
+    llvm::Value* elementSize2 = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 8);
+    llvm::Value* offset = builder->CreateMul(currentSize, elementSize2, "vec.offset");
+    llvm::Value* elementPtr = builder->CreateGEP(llvm::Type::getInt8Ty(*context), finalDataPtr, offset, "vec.element_ptr");
+    
+    // Store the value
+    builder->CreateStore(valueToAdd, elementPtr);
+    
+    // Increment size
+    llvm::Value* newSize = builder->CreateAdd(currentSize, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1), "vec.new_size");
     builder->CreateStore(newSize, sizeFieldPtr);
     
-    // For now, we'll just print that we pushed a value (placeholder)
-    std::cout << "DEBUG: Vec::push() called - size incremented" << std::endl;
+    std::cout << "DEBUG: Vec::push() called - element stored" << std::endl;
     
     // Return the Vec reference for method chaining
     m_currentLLVMValue = vecPtr;
@@ -179,10 +257,29 @@ void LLVMCodegen::handleVecGet(vyn::ast::CallExpression* node, llvm::Value* vecP
         return;
     }
     
-    std::cout << "DEBUG: Vec::get() called with index" << std::endl;
+    // Get pointers to struct fields
+    llvm::Value* dataFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 0, "vec.data_ptr");
+    llvm::Value* sizeFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 1, "vec.size_ptr");
     
-    // For now, return a placeholder value
-    m_currentLLVMValue = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 42);
+    // Load the data pointer and size
+    llvm::Value* dataPtr = builder->CreateLoad(llvm::PointerType::get(*context, 0), dataFieldPtr, "vec.data");
+    llvm::Value* size = builder->CreateLoad(llvm::Type::getInt64Ty(*context), sizeFieldPtr, "vec.size");
+    
+    // TODO: Add bounds checking - for now assume index is valid
+    
+    // Calculate offset: data_ptr + (index * element_size)
+    // Assuming 8-byte elements for now
+    llvm::Value* elementSize = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 8);
+    llvm::Value* offset = builder->CreateMul(index, elementSize, "vec.offset");
+    llvm::Value* elementPtr = builder->CreateGEP(llvm::Type::getInt8Ty(*context), dataPtr, offset, "vec.element_ptr");
+    
+    // Load the element value
+    // For now, load as i64 (should match the element type)
+    llvm::Value* element = builder->CreateLoad(llvm::Type::getInt64Ty(*context), elementPtr, "vec.element");
+    
+    std::cout << "DEBUG: Vec::get() called - element retrieved" << std::endl;
+    
+    m_currentLLVMValue = element;
 }
 
 void LLVMCodegen::handleVecPushArray(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {

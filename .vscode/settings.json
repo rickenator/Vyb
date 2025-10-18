@@ -14,7 +14,8 @@
         "typeindex": "cpp",
         "typeinfo": "cpp",
         "chrono": "cpp",
-        "thread": "cpp"
+        "thread": "cpp",
+        "istream": "cpp"
     },
     "idf.pythonInstallPath": "/usr/bin/python3"
 }
