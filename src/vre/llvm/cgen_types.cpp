@@ -416,14 +416,18 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                     logError(typeNode->loc, typeNameStr + " type requires a type parameter (e.g., " + typeNameStr + "<TreeNode>)");
                     return nullptr;
                 }
-                // For LLVM code generation, ownership types are just the underlying type
-                // The ownership semantics are handled at a higher level
+                std::cout << "DEBUG: Processing ownership type " << typeNameStr << " with underlying type: " 
+                          << typeNameNode->genericArgs[0]->toString() << std::endl;
+                // For LLVM code generation, ownership types become pointers to the underlying type
+                // This solves circular reference issues and matches the runtime semantics
                 llvm::Type* underlyingType = codegenType(typeNameNode->genericArgs[0].get());
                 if (!underlyingType) {
                     logError(typeNode->loc, "Could not determine LLVM type for " + typeNameStr + " underlying type.");
                     return nullptr;
                 }
-                llvmType = underlyingType;
+                // Create pointer to the underlying type
+                llvmType = llvm::PointerType::getUnqual(underlyingType);
+                std::cout << "DEBUG: Successfully resolved ownership type " << typeNameStr << " to pointer type" << std::endl;
                 break;
             }
 
@@ -455,14 +459,20 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                 // Check type alias map first
                 auto typeAliasIt = typeAliasMap.find(typeNameStr);
                 if (typeAliasIt != typeAliasMap.end()) {
+                    std::cout << "DEBUG: Found type alias for " << typeNameStr << std::endl;
                     llvmType = typeAliasIt->second;
                 } else {
                     auto userTypeIt = userTypeMap.find(typeNameStr);
                     if (userTypeIt != userTypeMap.end()) {
+                        std::cout << "DEBUG: Found user type " << typeNameStr << " in userTypeMap, isOpaque: " 
+                                  << userTypeIt->second.llvmType->isOpaque() << std::endl;
                         llvmType = userTypeIt->second.llvmType;
                     } else {
+                        std::cout << "DEBUG: User type " << typeNameStr << " not found in userTypeMap, checking LLVM context" << std::endl;
                         llvm::StructType* existingType = llvm::StructType::getTypeByName(*context, typeNameStr);
                         if (existingType) {
+                            std::cout << "DEBUG: Found existing type " << typeNameStr << " in LLVM context, isOpaque: " 
+                                      << existingType->isOpaque() << std::endl;
                             llvmType = existingType;
                         } else {
                             // This case should ideally be caught by semantic analysis if it\'s an undefined type.

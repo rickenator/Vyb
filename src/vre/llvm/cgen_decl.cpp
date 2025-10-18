@@ -479,6 +479,9 @@ void LLVMCodegen::visit(vyn::ast::StructDeclaration* node) {
     UserTypeInfo typeInfo;
     typeInfo.llvmType = structType;
     typeInfo.isStruct = true;
+    
+    // Add opaque struct to map BEFORE processing field types (for circular references)
+    userTypeMap[nameStr] = typeInfo;
 
     std::vector<llvm::Type*> fieldTypes;
     for (size_t i = 0; i < node->fields.size(); ++i) {
@@ -499,6 +502,8 @@ void LLVMCodegen::visit(vyn::ast::StructDeclaration* node) {
     }
 
     structType->setBody(fieldTypes, /*isPacked=*/false);
+    std::cout << "DEBUG: Set struct body for " << nameStr << " with " << fieldTypes.size() << " fields, struct is opaque: " << structType->isOpaque() << std::endl;
+    // Update the map entry with complete field information
     userTypeMap[nameStr] = typeInfo;
     m_currentLLVMValue = nullptr; // structType is an llvm::Type*, not llvm::Value*
 }

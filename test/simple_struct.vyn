@@ -1,0 +1,16 @@
+// Simple struct test without ownership types
+struct SimpleNode {
+    value<Int>
+}
+
+create_simple()<SimpleNode> -> {
+    return SimpleNode {
+        value = 42
+    }
+}
+
+main() -> {
+    node<SimpleNode> = create_simple()
+    println("Value: " + lit(node.value))
+    return 0
+}

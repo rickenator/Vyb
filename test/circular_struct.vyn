@@ -1,0 +1,11 @@
+// Test struct with self-references but no ownership types
+struct Node {
+    value<Int>,
+    left<Node>,  // Direct self-reference without ownership  
+    right<Node>
+}
+
+main() -> {
+    // Just create an empty struct
+    return 0
+}

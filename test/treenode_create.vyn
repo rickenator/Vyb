@@ -1,0 +1,22 @@
+// Test creating TreeNode instance
+struct TreeNode {
+    key<Int>,
+    value<String>,
+    left<my<TreeNode>>,
+    right<my<TreeNode>>,
+    has_left<Bool>,
+    has_right<Bool>
+}
+
+main() -> {
+    // Try to create a TreeNode
+    node<TreeNode> = TreeNode {
+        key = 0,
+        value = "test",
+        left = my(TreeNode{}),  // This might cause the issue
+        right = my(TreeNode{}),
+        has_left = false,
+        has_right = false
+    }
+    return 0
+}

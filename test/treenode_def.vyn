@@ -1,0 +1,14 @@
+// Test TreeNode definition without usage
+struct TreeNode {
+    key<Int>,
+    value<String>,
+    left<my<TreeNode>>,
+    right<my<TreeNode>>,
+    has_left<Bool>,
+    has_right<Bool>
+}
+
+main() -> {
+    // Just return without using TreeNode
+    return 0
+}
