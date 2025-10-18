@@ -181,12 +181,40 @@ Vyn **v0.4.0** is a **complete systems programming language** ready for producti
 
 #### Primitive Types
 
+**Signed Integers:**
 | Type | Description | Size | Range/Notes | Example |
 |------|-------------|------|-------------|---------|
-| `Int` | Signed integer | 64-bit | -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807 | `x<Int> = 42` |
-| `Float` | Floating point | 64-bit | IEEE 754 double precision | `pi<Float> = 3.14159` |
+| `Int` / `Int64` | Signed integer (default) | 64-bit | -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807 | `x<Int> = 42` |
+| `Int32` | 32-bit signed integer | 32-bit | -2,147,483,648 to 2,147,483,647 | `count<Int32> = 100` |
+| `Int16` | 16-bit signed integer | 16-bit | -32,768 to 32,767 | `small<Int16> = 1000` |
+| `Int8` | 8-bit signed integer | 8-bit | -128 to 127 | `byte<Int8> = 127` |
+
+**Unsigned Integers:**
+| Type | Description | Size | Range/Notes | Example |
+|------|-------------|------|-------------|---------|
+| `UInt64` | 64-bit unsigned integer | 64-bit | 0 to 18,446,744,073,709,551,615 | `large<UInt64> = 1000000` |
+| `UInt32` | 32-bit unsigned integer | 32-bit | 0 to 4,294,967,295 | `count<UInt32> = 100` |
+| `UInt16` | 16-bit unsigned integer | 16-bit | 0 to 65,535 | `port<UInt16> = 8080` |
+| `UInt8` | 8-bit unsigned integer | 8-bit | 0 to 255 | `byte<UInt8> = 255` |
+
+**Floating Point:**
+| Type | Description | Size | Precision | Example |
+|------|-------------|------|-----------|---------|  
+| `Float` / `Float64` | Double precision (default) | 64-bit | IEEE 754 double (~15-17 digits) | `pi<Float> = 3.14159` |
+| `Float32` | Single precision | 32-bit | IEEE 754 single (~6-9 digits) | `ratio<Float32> = 1.5` |
+
+**Character Types:**
+| Type | Description | Size | Range/Notes | Example |
+|------|-------------|------|-------------|---------|
+| `Char` | UTF-8 code unit | 8-bit | Single byte (0-255) | `ch<Char> = 65` # 'A' |
+| `Rune` | Unicode code point | 32-bit | Full Unicode range (U+0000 to U+10FFFF) | `emoji<Rune> = 128512` # 😀 |
+
+**Other Types:**
+| Type | Description | Size | Range/Notes | Example |
+|------|-------------|------|-------------|---------|
 | `Bool` | Boolean | 1-bit | `true` or `false` | `flag<Bool> = true` |
-| `String` | UTF-8 string | Variable | Heap-allocated, immutable | `name<String> = "Alice"` |
+| `String` | UTF-8 string | Variable | Heap-allocated fat pointer `{ ptr, len }` | `name<String> = "Alice"` |
+| `Bytes` | Raw binary data | Variable | Fat pointer for byte sequences `{ ptr, len }` | Future byte literals |
 | `Void` | No value | 0-bit | Used for functions that don't return | `print()<Void> -> { ... }` |
 
 #### Collection Types
@@ -473,16 +501,25 @@ borrowed<their<String>> = borrow(safe_data)  # Non-owning reference
 
 #### Type System Features
 
-**Current Types**: `Int` (64-bit), `Float` (64-bit), `Bool`, `String`, `Void`, `[T; N]`, `Vec<T>`
+**Current Primitive Types**:
+- **Signed integers**: `Int`/`Int64` (default), `Int32`, `Int16`, `Int8`
+- **Unsigned integers**: `UInt64`, `UInt32`, `UInt16`, `UInt8`  
+- **Floating point**: `Float`/`Float64` (default), `Float32`
+- **Characters**: `Char` (UTF-8 code unit), `Rune` (Unicode code point)
+- **Binary data**: `Bytes` (fat pointer for raw bytes)
+- **Other**: `Bool`, `String`, `Void`
 
-**Planned Types**: 
-- Sized integers: `Int32`, `Int16`, `Int8`, `UInt64`, `UInt32`, `UInt16`, `UInt8`
-- Sized floats: `Float32` for single precision
-- Characters: `Char` (UTF-8 code unit), `Rune` (Unicode code point)  
-- Raw data: `Bytes` for byte sequences
-- Compound: Tuples `(T1, T2, ...)`, advanced collections
+**Current Collection Types**:
+- **Fixed arrays**: `[T; N]` with compile-time size
+- **Dynamic arrays**: `Vec<T>` resizable collections
+- **Tuples**: `Tuple<T,U,...>` variadic heterogeneous types
 
 **Ownership Types**: `my<T>` (unique), `our<T>` (shared), `their<T>` (borrowed), `loc<T>` (unsafe raw pointer)
+
+**Type Aliasing**: All numeric types support multiple naming conventions:
+- Vyn style: `Int32`, `Float64`, `UInt8`
+- C style: `int32`, `float64`, `uint8`  
+- LLVM style: `i32`, `f64`, `u8`
 
 ### Basic Syntax
 
