@@ -1,5 +1,5 @@
 // Test both parameter syntax forms
-add_standard(var<Int> a, var<Int> b)<Int> -> {
+add_standard(a<Int>, b<Int>)<Int> -> {
     return a + b;
 }
 

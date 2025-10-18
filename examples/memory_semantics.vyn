@@ -7,9 +7,10 @@ main()<Int> -> {
     unsafe {
         p<loc<Int>> = loc(x);
         at(p) = 42;
-        // b<their<Int>> = borrow x;       // TODO: borrow not implemented yet
-        // v<their<Int const>> = view x;    // TODO: view not implemented yet
-        // at(loc(b)) = 100;                // TODO: modify via borrow
+        // Test the new view and borrow operators
+        b<their<Int>> = borrow x;       // Now implemented!
+        v<their<Int>> = view x;         // Now implemented!
+        length<Int> = (view x).len();   // This should work once String methods are added
     }
     
     return x;  // Returns 42

@@ -18,7 +18,7 @@ calc_sum(Int a, Int b)<Int> -> {
 }
 
 // Helper function using mixed parameter syntax
-calc_area(var<Float> width, Float height)<Float> -> {
+calc_area(width<Float>, Float height)<Float> -> {
     return width * height
 }
 

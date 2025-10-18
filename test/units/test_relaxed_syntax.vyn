@@ -9,7 +9,7 @@
 // @expect-return: n/a
 
 // Function with standard parameter syntax
-standard_params(var<Int> x, const<String> y)<Int> -> {
+standard_params(x<Int>, const<String> y)<Int> -> {
     return x + y.to_int()
 }
 
@@ -19,7 +19,7 @@ relaxed_params(Int x, const String y)<Int> -> {
 }
 
 // Function with mixed parameter syntax
-mixed_params(var<Int> a, Float b, const<String> c, const Bool d)<Float> -> {
+mixed_params(a<Int>, Float b, const<String> c, const Bool d)<Float> -> {
     result<Float> = a * b
     if d {
         result += c.to_float()
@@ -71,7 +71,7 @@ test_local_vars()<Void> -> {
 // Test function calls with different parameter styles
 test_function_calls()<Void> -> {
     // Call with standard syntax
-    const<Int> result1 = standard_params(var<Int>(5), const<String>("10"))
+    const<Int> result1 = standard_params(5, const<String>("10"))
     println("Standard params result: " + result1.to_string())
     
     // Call with relaxed syntax
@@ -79,7 +79,7 @@ test_function_calls()<Void> -> {
     println("Relaxed params result: " + result2.to_string())
     
     // Call with mixed syntax
-    Float result3 = mixed_params(var<Int>(10), 2.5, const<String>("1.5"), true)
+    Float result3 = mixed_params(10, 2.5, const<String>("1.5"), true)
     println("Mixed params result: " + result3.to_string())
 }
 

@@ -23,7 +23,7 @@ test_relaxed_local_variables()<Int> -> {
     // Collection types with appropriate syntax
     numbers<[Int]> = [1, 2, 3];
     // Using appropriate generic types
-    var<Dict<String, Int>> scores;
+    scores<Dict<String, Int>>;
     
     // Function calls with arguments
     function_with_args(10, "Hello");

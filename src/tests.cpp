@@ -183,8 +183,8 @@ TEST_CASE("Print parser version", "[parser]") {
 TEST_CASE("Semantic: from(addr) only allowed in unsafe", "[semantic][pointer][unsafe][test38]") {
     std::string source_ok = R"(
 fn<Int> main() -> {
-    var<Int> addr = 0x1234;
-    var<loc<Int>> p;
+    addr<Int> = 0x1234;
+    p<loc<Int>>;
     unsafe {
         p = from<loc<Int>>(addr); // Updated syntax
     }
@@ -195,8 +195,8 @@ fn<Int> main() -> {
 
     std::string source_err = R"(
 fn<Int> main() -> {
-    var<Int> a = 0x1234;
-    var<loc<Int>> p = from<loc<Int>>(a);
+    a<Int> = 0x1234;
+    p<loc<Int>> = from<loc<Int>>(a);
     return 0;
 }
 )";

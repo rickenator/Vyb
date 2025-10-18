@@ -10,4 +10,4 @@
 
     std::string source = R"(
 class Point {
-    var<Int> x;
+    x<Int>;

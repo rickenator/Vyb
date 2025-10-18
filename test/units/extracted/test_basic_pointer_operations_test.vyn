@@ -10,7 +10,7 @@
 
 main()<Int> -> {
     x<Int> = 77;
-    var<loc<Int>> p;
+    p<loc<Int>>;
     unsafe {
         p = loc(x);
         at(p) = 99;

@@ -10,4 +10,4 @@
 
     std::string source = R"(
 main()<Void> -> -> Int {
-    var<loc<Int>> p = 0x1234;
+    p<loc<Int>> = 0x1234;

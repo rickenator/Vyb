@@ -3,7 +3,7 @@
 ## 1. Overview
 
 Vyn's memory model is designed for safety and explicitness, drawing inspiration from modern systems languages. It distinguishes between:
-1.  **Binding Mutability**: Whether a variable can be reassigned (`var` vs `const`).
+1.  **Binding Mutability**: Whether a variable can be reassigned (default mutable vs `const`).
 2.  **Ownership**: Who is responsible for managing the memory of data (`my<T>`, `our<T>`, `their<T>`).
 3.  **Data Mutability**: Whether the data itself can be changed, often indicated by `const` on the type (e.g., `my<T const>`).
 4.  **References (Borrows)**: How non-owning pointers (`their<T>`) are created and used via `borrow` and `view` keywords.
@@ -36,7 +36,7 @@ Vyn uses two keywords for variable bindings:
     Note: `const` on a binding only prevents reassignment. If the bound value holds a mutable type (e.g., `my<Data>`), the data *within* that value might still be modifiable through methods on `Data`, unless the type itself is immutable (e.g., `my<Data const>`).
 
     ```vyn
-    class Counter { var<Int> value = 0; fn increment(&mut self) { self.value = self.value + 1; } }
+    class Counter { value<Int> = 0; fn increment(&mut self) { self.value = self.value + 1; } }
     const<my<Counter>> c = my(Counter{});
     // c = my(Counter{}); // Error: c is a const binding
     c.increment(); // Allowed, if Counter.increment takes their<Counter> (or similar for owned)
@@ -68,16 +68,16 @@ Borrowed references (`their<T>`) are created using the `borrow` and `view` keywo
 
 *   **`view <expr>`**: Creates an immutable borrow `their<T const>`. This provides a read-only view of the data.
     ```vyn
-    var owner: my<Foo> = my(Foo{ value: 10 });
-    var immutable_ref: their<Foo const> = view owner;
+    owner<my<Foo>> = my(Foo{ value: 10 });
+    immutable_ref<their<Foo const>> = view owner;
     // immutable_ref.value = 20; // Error: cannot modify through their<T const>
     print(immutable_ref.value); // OK
     ```
 
 *   **`borrow <expr>`**: Creates a mutable borrow `their<T>`. This allows modification of the data, subject to borrowing rules (e.g., no other active borrows to the same data).
     ```vyn
-    var owner: my<Foo> = my(Foo{ value: 10 });
-    var mutable_ref: their<Foo> = borrow owner;
+    owner<my<Foo>> = my(Foo{ value: 10 });
+    mutable_ref<their<Foo>> = borrow owner;
     mutable_ref.value = 20; // OK, owner.value is now 20
     print(mutable_ref.value); // OK
     ```
@@ -97,7 +97,7 @@ Function parameters use ownership types to define how arguments are passed:
 *   **`param: my<T>`** (or `our<T>`): The argument is moved into the function. The caller loses ownership.
     ```vyn
     fn consume_data(data: my<Foo>) { /* data is now owned by this function */ }
-    var my_foo: my<Foo> = my(Foo{});
+    my_foo<my<Foo>> = my(Foo{});
     consume_data(my_foo);
     // my_foo is no longer valid here
     ```
@@ -107,7 +107,7 @@ Function parameters use ownership types to define how arguments are passed:
     fn modify_data(data: their<Foo>) {
         data.value = data.value + 1;
     }
-    var owner: my<Foo> = my(Foo{value: 5});
+    owner<my<Foo>> = my(Foo{value: 5});
     modify_data(borrow owner); // owner.value becomes 6
     ```
 
@@ -117,7 +117,7 @@ Function parameters use ownership types to define how arguments are passed:
         print(data.value);
         // data.value = 10; // Error
     }
-    var<my<Foo>> owner_mut = my(Foo{value: 7});
+    owner_mut<my<Foo>> = my(Foo{value: 7});
     const<my<Foo const>> owner_const = my(Foo{value: 8});
 
     read_data(view owner_mut);
@@ -130,13 +130,13 @@ Fields within structs and classes are declared with a name and a type. Their mut
 
 ```vyn
 struct Point {
-    var<Int> x; // A field of value type
+    x<Int>; // A field of value type
     y: Int;
     meta: my<String>; // An owned field
 }
 
 // Instance mutability:
-var<my<Point>> p1 = my(Point { x: 10, y: 20, meta: make_my("info") });
+p1<my<Point>> = my(Point { x: 10, y: 20, meta: my("info") });
 p1.x = 15; // Allowed, p1 is mutable and x is a value type field
 p1.meta = my("new_info"); // Allowed, p1 is mutable, old meta is dropped
 
@@ -147,9 +147,9 @@ const<my<Point>> p2 = my(Point { x: 0, y: 0, meta: make_my("const_info") });
             // To make fields behave like `const` bindings, use `my<Point const>`
             // or declare fields with immutable types like `my<String const>`.
 
-// For more fine-grained control, fields can also have `var` or `const` specifiers,
-// though this is less common than controlling mutability via the instance or type.
-// The AST supports `isMutable` for FieldDeclaration, implying `var field: Type` or `const field: Type`.
+// For more fine-grained control, fields can have explicit `const` specifiers,
+// otherwise they default to mutable
+// The AST supports `isMutable` for FieldDeclaration, implying `name<Type>` or `const name<Type>`.
 // Example if `var`/`const` field modifiers are used:
 struct Config {
     var<Int> refresh_rate;

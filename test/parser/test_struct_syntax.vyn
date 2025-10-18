@@ -40,14 +40,14 @@ createEntities()<Person, Company> -> {
 // serialize these values to JSON output
 main()<Person, Company> -> {
     // Receive multiple return values from createShapes()
-    var<Point> p, r<Rectangle> = createShapes()
+    p<Point>, r<Rectangle> = createShapes()
     
     // Modify the received values
     p.x = p.x * 2      // Double the x coordinate
     r.height = r.height + 25  // Add 25 to the height
     
     // Get another set of multi-return values
-    var<Person> person, company<Company> = createEntities()
+    person<Person>, company<Company> = createEntities()
     
     // Modify these values too
     person.salary = person.salary * 1.1  // 10% raise

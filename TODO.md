@@ -9,7 +9,7 @@ Based on comprehensive analysis of documentation (EBNF grammar, AST specs, tests
 ### Core Language Elements
 - **Lexer/Tokenizer**: Complete with all documented token types
 - **Basic function declarations**: `fn<ReturnType> name() -> { ... }`
-- **Basic variable declarations**: `var<Type> name = value`
+- **Basic variable declarations**: `name<Type> = value`
 - **Struct declarations**: Both colon (`x: Int`) and angle bracket (`x<Int>`) syntax
 - **Struct construction**: `StructName{field: value}`
 - **Integer/Float/String literals**: Basic literal parsing
@@ -69,7 +69,7 @@ Based on comprehensive analysis of documentation (EBNF grammar, AST specs, tests
 #### 5. **Multi-Value Returns** ⚠️ IMPORTANT
 - [ ] `fn<Type1, Type2>` syntax (parsing may exist)
 - [ ] Comma-separated return values (`return a, b`)
-- [ ] Multiple assignment (`var<T1> a, var<T2> b = func()`)
+- [ ] Multiple assignment (`a<T1>, b<T2> = func()`)
 
 ### 🔶 MEDIUM PRIORITY - Advanced Features
 

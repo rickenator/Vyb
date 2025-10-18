@@ -9,6 +9,6 @@
 
 template BTree<K, V, M: UInt> {
     class Node {
-        var<[K; M-1]> keys;
+        keys<[K; M-1]>;
     }
 }
