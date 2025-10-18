@@ -265,14 +265,10 @@ vyn::ast::TypeNodePtr TypeParser::parse_postfix_type(vyn::ast::TypeNodePtr curre
             // current_type->isOptional = true;
             current_type = std::make_unique<vyn::ast::OptionalType>(op_loc, std::move(current_type));
         } else if (this->match(vyn::TokenType::KEYWORD_CONST)) {  // Changed from CONST
-            // if (current_type->dataIsConst) {
-            //      throw this->error(this->previous_token(), "Type is already const: " + current_type->loc.toString());
-            // }
-            // current_type->dataIsConst = true;
-            // TODO: Handle 'const' type qualifier. This may require AST changes or be a semantic check.
-            // For now, consuming the token and not modifying the type, or throwing an error.
-            // Let's throw an error for now, as its behavior is undefined with current AST.
-            throw this->error(this->previous_token(), "'const' type qualifier is not yet supported here.");
+            // TODO: Implement proper const type wrapper
+            // For now, just consume the const token and continue parsing
+            // This allows parsing to proceed while we develop const semantics
+            // The const information will be lost but parsing won't fail
         }
         else {
             break; 
