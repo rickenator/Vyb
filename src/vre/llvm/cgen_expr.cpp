@@ -357,7 +357,90 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
                     std::cout << "DEBUG PLUS: Checking LLVM types for string detection..." << std::endl;
                 }
                 
-                // First check for string types using LLVM types directly (more reliable)
+                // Check for String struct types: { ptr, len }
+                bool leftIsStringStruct = false;
+                bool rightIsStringStruct = false;
+                
+                if (L->getType()->isStructTy()) {
+                    llvm::StructType* structType = llvm::cast<llvm::StructType>(L->getType());
+                    if (structType->getNumElements() == 2) {
+                        leftIsStringStruct = true;
+                    }
+                }
+                if (R->getType()->isStructTy()) {
+                    llvm::StructType* structType = llvm::cast<llvm::StructType>(R->getType());
+                    if (structType->getNumElements() == 2) {
+                        rightIsStringStruct = true;
+                    }
+                }
+                
+                // Handle String + String concatenation
+                if (leftIsStringStruct && rightIsStringStruct) {
+                    std::cout << "DEBUG PLUS: String + String concatenation detected" << std::endl;
+                    
+                    // Define String struct type: { ptr: *i8, len: i64 }
+                    std::vector<llvm::Type*> strFields = {
+                        llvm::PointerType::get(*context, 0),
+                        llvm::Type::getInt64Ty(*context)
+                    };
+                    llvm::StructType* strStructType = llvm::StructType::get(*context, strFields, false);
+                    
+                    // Extract fields from left string
+                    llvm::Value* str1Data = builder->CreateExtractValue(L, 0, "str1.data");
+                    llvm::Value* str1Len = builder->CreateExtractValue(L, 1, "str1.len");
+                    
+                    // Extract fields from right string
+                    llvm::Value* str2Data = builder->CreateExtractValue(R, 0, "str2.data");
+                    llvm::Value* str2Len = builder->CreateExtractValue(R, 1, "str2.len");
+                    
+                    // Calculate new length
+                    llvm::Value* newLen = builder->CreateAdd(str1Len, str2Len, "str.new_len");
+                    
+                    // Allocate new buffer (+1 for null terminator)
+                    llvm::Value* allocSize = builder->CreateAdd(newLen, 
+                        llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1), "str.alloc_size");
+                    
+                    llvm::FunctionType* mallocType = llvm::FunctionType::get(
+                        llvm::PointerType::get(*context, 0),
+                        {llvm::Type::getInt64Ty(*context)},
+                        false
+                    );
+                    llvm::Function* mallocFunc = module->getFunction("malloc");
+                    if (!mallocFunc) {
+                        mallocFunc = llvm::Function::Create(mallocType, llvm::Function::ExternalLinkage, "malloc", module.get());
+                    }
+                    llvm::Value* newData = builder->CreateCall(mallocFunc, {allocSize}, "str.new_data");
+                    
+                    // Copy first string
+                    llvm::FunctionType* memcpyType = llvm::FunctionType::get(
+                        llvm::PointerType::get(*context, 0),
+                        {llvm::PointerType::get(*context, 0), llvm::PointerType::get(*context, 0), llvm::Type::getInt64Ty(*context)},
+                        false
+                    );
+                    llvm::Function* memcpyFunc = module->getFunction("memcpy");
+                    if (!memcpyFunc) {
+                        memcpyFunc = llvm::Function::Create(memcpyType, llvm::Function::ExternalLinkage, "memcpy", module.get());
+                    }
+                    builder->CreateCall(memcpyFunc, {newData, str1Data, str1Len});
+                    
+                    // Copy second string at offset
+                    llvm::Value* offset = builder->CreateGEP(llvm::Type::getInt8Ty(*context), newData, str1Len, "str.offset");
+                    builder->CreateCall(memcpyFunc, {offset, str2Data, str2Len});
+                    
+                    // Add null terminator
+                    llvm::Value* nullTermPos = builder->CreateGEP(llvm::Type::getInt8Ty(*context), newData, newLen, "str.null_pos");
+                    builder->CreateStore(llvm::ConstantInt::get(llvm::Type::getInt8Ty(*context), 0), nullTermPos);
+                    
+                    // Create new String struct
+                    llvm::Value* resultStr = llvm::UndefValue::get(strStructType);
+                    resultStr = builder->CreateInsertValue(resultStr, newData, 0, "str.result_data");
+                    resultStr = builder->CreateInsertValue(resultStr, newLen, 1, "str.result_len");
+                    
+                    m_currentLLVMValue = resultStr;
+                    break;
+                }
+                
+                // First check for old-style string types using LLVM types directly (more reliable)
                 bool leftIsString = (L->getType() == int8PtrType);
                 bool rightIsString = (R->getType() == int8PtrType);
                 

@@ -11,6 +11,14 @@ main() <Int> -> {
     len<Int> = msg.len()
     println("String length: " + len.to_string())
     
+    // Test 3: Create another string
+    world<String> = String::from_bytes(" World", 6)
+    
+    // Test 4: Concatenate strings with + operator
+    combined<String> = msg + world
+    combinedLen<Int> = combined.len()
+    println("Combined string length: " + combinedLen.to_string())
+    
     println("String tests completed")
     return 0
 }
