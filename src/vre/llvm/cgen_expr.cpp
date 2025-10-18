@@ -1143,28 +1143,58 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 }
             }
             
-            // Handle Vec method calls
+            // Handle Vec and String method calls
             if (auto objIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->object.get())) {
                 std::string objectName = objIdent->name;
                 
-                if (methodName == "push" || methodName == "pop" || methodName == "len" || methodName == "get" ||
-                    methodName == "push_array" || methodName == "to_array" || methodName == "get_array" ||
-                    methodName == "clear" || methodName == "is_empty" || methodName == "capacity" ||
-                    methodName == "concat" || methodName == "contains" || methodName == "remove_at" ||
-                    methodName == "get_vec") {
-                    // This is a Vec method call - handle it specially
-                    handleVecMethod(node, objectName, methodName);
-                    return;
+                // Check if this is a String or Vec variable by looking at its type
+                auto varIt = namedValues.find(objectName);
+                bool isStringVar = false;
+                bool isVecVar = false;
+                
+                if (varIt != namedValues.end()) {
+                    llvm::Value* varValue = varIt->second;
+                    // For AllocaInst, we can get the allocated type
+                    if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(varValue)) {
+                        llvm::Type* allocatedType = allocaInst->getAllocatedType();
+                        if (allocatedType->isStructTy()) {
+                            llvm::StructType* structType = llvm::cast<llvm::StructType>(allocatedType);
+                            // String struct has 2 fields: { ptr, len }
+                            // Vec struct has 3 fields: { ptr, size, capacity }
+                            if (structType->getNumElements() == 2) {
+                                isStringVar = true;
+                            } else if (structType->getNumElements() == 3) {
+                                isVecVar = true;
+                            }
+                        }
+                    }
                 }
                 
-                // Handle String method calls
-                if (methodName == "length" || methodName == "concat" || methodName == "substring" || 
-                    methodName == "substr" || methodName == "char_at" || methodName == "to_bytes" ||
-                    methodName == "from_bytes" || methodName == "starts_with" || methodName == "ends_with" ||
-                    methodName == "contains" || methodName == "to_upper" || methodName == "to_lower") {
-                    // This is a String method call - handle it specially
-                    handleStringMethod(node, objectName, methodName);
-                    return;
+                // Handle String methods
+                if (isStringVar) {
+                    if (methodName == "len" || methodName == "length" || methodName == "concat" || methodName == "substring" || 
+                        methodName == "substr" || methodName == "char_at" || methodName == "to_bytes" ||
+                        methodName == "from_bytes" || methodName == "starts_with" || methodName == "ends_with" ||
+                        methodName == "contains" || methodName == "to_upper" || methodName == "to_lower") {
+                        handleStringMethod(node, objectName, methodName);
+                        return;
+                    }
+                }
+                
+                // Handle Vec methods
+                if (isVecVar || (!isStringVar && (methodName == "push" || methodName == "pop" || methodName == "get" ||
+                    methodName == "push_array" || methodName == "to_array" || methodName == "get_array" ||
+                    methodName == "clear" || methodName == "is_empty" || methodName == "capacity" ||
+                    methodName == "remove_at" || methodName == "get_vec"))) {
+                    // These methods are Vec-specific or we couldn't determine type
+                    if (methodName == "push" || methodName == "pop" || methodName == "len" || methodName == "get" ||
+                        methodName == "push_array" || methodName == "to_array" || methodName == "get_array" ||
+                        methodName == "clear" || methodName == "is_empty" || methodName == "capacity" ||
+                        methodName == "concat" || methodName == "contains" || methodName == "remove_at" ||
+                        methodName == "get_vec") {
+                        handleVecMethod(node, objectName, methodName);
+                        return;
+                    }
                 }
             }
             

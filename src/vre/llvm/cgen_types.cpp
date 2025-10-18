@@ -446,7 +446,12 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
             } else if (typeNameStr == "Void" || typeNameStr == "void") {
                 llvmType = voidType;
             } else if (typeNameStr == "String" || typeNameStr == "string") {
-                llvmType = int8PtrType; 
+                // String is a struct: { ptr: *i8, len: i64 }
+                std::vector<llvm::Type*> strFields = {
+                    llvm::PointerType::get(*context, 0), // ptr to bytes
+                    llvm::Type::getInt64Ty(*context)     // length
+                };
+                llvmType = llvm::StructType::get(*context, strFields, false);
             } else if (typeNameStr == "char") {
                 llvmType = int8Type;
             } else if (typeNameStr == "i32") {

@@ -3,8 +3,13 @@
 main() <Int> -> {
     println("Starting String tests...")
     
-    // Create a byte array representing "Hello"
-    bytes<[Int; 5]> = [72, 101, 108, 108, 111]
+    // Test 1: Create a simple string message
+    msg<String> = String::from_bytes("Hello", 5)
+    println("Created string from bytes")
+    
+    // Test 2: Get string length
+    len<Int> = msg.len()
+    println("String length: " + len.to_string())
     
     println("String tests completed")
     return 0
