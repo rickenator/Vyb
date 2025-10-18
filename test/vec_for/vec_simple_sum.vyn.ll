@@ -3,12 +3,12 @@ source_filename = "VynModule"
 
 define i64 @main() !dbg !4 {
 entry:
-  %num = alloca i64, align 8, !dbg !17
-  %__len_num = alloca i64, align 8, !dbg !17
-  %__idx_num = alloca i64, align 8, !dbg !17
-  %__run_once_num = alloca i1, align 1, !dbg !17
+  %x = alloca i64, align 8, !dbg !17
+  %__len_x = alloca i64, align 8, !dbg !17
+  %__idx_x = alloca i64, align 8, !dbg !17
+  %__run_once_x = alloca i1, align 1, !dbg !17
   %sum = alloca i64, align 8, !dbg !17
-  %numbers = alloca { ptr, i64, i64 }, align 8, !dbg !17
+  %v = alloca { ptr, i64, i64 }, align 8, !dbg !17
   %vec.new = alloca { ptr, i64, i64 }, align 8, !dbg !17
   %vec.ptr_field = getelementptr inbounds { ptr, i64, i64 }, ptr %vec.new, i32 0, i32 0, !dbg !17
   store ptr null, ptr %vec.ptr_field, align 8, !dbg !17
@@ -17,11 +17,11 @@ entry:
   %vec.cap_field = getelementptr inbounds { ptr, i64, i64 }, ptr %vec.new, i32 0, i32 2, !dbg !17
   store i64 0, ptr %vec.cap_field, align 4, !dbg !17
   %vec.new.value = load { ptr, i64, i64 }, ptr %vec.new, align 8, !dbg !17
-  store { ptr, i64, i64 } %vec.new.value, ptr %numbers, align 8, !dbg !17
-  call void @llvm.dbg.declare(metadata ptr %numbers, metadata !9, metadata !DIExpression()), !dbg !18
-  %vec.data_ptr = getelementptr inbounds { ptr, i64, i64 }, ptr %numbers, i32 0, i32 0, !dbg !17
-  %vec.size_ptr = getelementptr inbounds { ptr, i64, i64 }, ptr %numbers, i32 0, i32 1, !dbg !17
-  %vec.cap_ptr = getelementptr inbounds { ptr, i64, i64 }, ptr %numbers, i32 0, i32 2, !dbg !17
+  store { ptr, i64, i64 } %vec.new.value, ptr %v, align 8, !dbg !17
+  call void @llvm.dbg.declare(metadata ptr %v, metadata !9, metadata !DIExpression()), !dbg !18
+  %vec.data_ptr = getelementptr inbounds { ptr, i64, i64 }, ptr %v, i32 0, i32 0, !dbg !17
+  %vec.size_ptr = getelementptr inbounds { ptr, i64, i64 }, ptr %v, i32 0, i32 1, !dbg !17
+  %vec.cap_ptr = getelementptr inbounds { ptr, i64, i64 }, ptr %v, i32 0, i32 2, !dbg !17
   %vec.current_size = load i64, ptr %vec.size_ptr, align 4, !dbg !17
   %vec.current_cap = load i64, ptr %vec.cap_ptr, align 4, !dbg !17
   %vec.data = load ptr, ptr %vec.data_ptr, align 8, !dbg !17
@@ -53,12 +53,12 @@ vec.merge:                                        ; preds = %vec.no_copy, %entry
   %vec.reloaded_size = load i64, ptr %vec.size_ptr, align 4, !dbg !17
   %vec.offset = mul i64 %vec.reloaded_size, 8, !dbg !17
   %vec.element_ptr = getelementptr i8, ptr %vec.final_data, i64 %vec.offset, !dbg !17
-  store i64 10, ptr %vec.element_ptr, align 4, !dbg !17
+  store i64 1, ptr %vec.element_ptr, align 4, !dbg !17
   %vec.new_size = add i64 %vec.reloaded_size, 1, !dbg !17
   store i64 %vec.new_size, ptr %vec.size_ptr, align 4, !dbg !17
-  %vec.data_ptr1 = getelementptr inbounds { ptr, i64, i64 }, ptr %numbers, i32 0, i32 0, !dbg !17
-  %vec.size_ptr2 = getelementptr inbounds { ptr, i64, i64 }, ptr %numbers, i32 0, i32 1, !dbg !17
-  %vec.cap_ptr3 = getelementptr inbounds { ptr, i64, i64 }, ptr %numbers, i32 0, i32 2, !dbg !17
+  %vec.data_ptr1 = getelementptr inbounds { ptr, i64, i64 }, ptr %v, i32 0, i32 0, !dbg !17
+  %vec.size_ptr2 = getelementptr inbounds { ptr, i64, i64 }, ptr %v, i32 0, i32 1, !dbg !17
+  %vec.cap_ptr3 = getelementptr inbounds { ptr, i64, i64 }, ptr %v, i32 0, i32 2, !dbg !17
   %vec.current_size4 = load i64, ptr %vec.size_ptr2, align 4, !dbg !17
   %vec.current_cap5 = load i64, ptr %vec.cap_ptr3, align 4, !dbg !17
   %vec.data6 = load ptr, ptr %vec.data_ptr1, align 8, !dbg !17
@@ -90,12 +90,12 @@ vec.merge13:                                      ; preds = %vec.no_copy12, %vec
   %vec.reloaded_size20 = load i64, ptr %vec.size_ptr2, align 4, !dbg !17
   %vec.offset21 = mul i64 %vec.reloaded_size20, 8, !dbg !17
   %vec.element_ptr22 = getelementptr i8, ptr %vec.final_data19, i64 %vec.offset21, !dbg !17
-  store i64 20, ptr %vec.element_ptr22, align 4, !dbg !17
+  store i64 2, ptr %vec.element_ptr22, align 4, !dbg !17
   %vec.new_size23 = add i64 %vec.reloaded_size20, 1, !dbg !17
   store i64 %vec.new_size23, ptr %vec.size_ptr2, align 4, !dbg !17
-  %vec.data_ptr24 = getelementptr inbounds { ptr, i64, i64 }, ptr %numbers, i32 0, i32 0, !dbg !17
-  %vec.size_ptr25 = getelementptr inbounds { ptr, i64, i64 }, ptr %numbers, i32 0, i32 1, !dbg !17
-  %vec.cap_ptr26 = getelementptr inbounds { ptr, i64, i64 }, ptr %numbers, i32 0, i32 2, !dbg !17
+  %vec.data_ptr24 = getelementptr inbounds { ptr, i64, i64 }, ptr %v, i32 0, i32 0, !dbg !17
+  %vec.size_ptr25 = getelementptr inbounds { ptr, i64, i64 }, ptr %v, i32 0, i32 1, !dbg !17
+  %vec.cap_ptr26 = getelementptr inbounds { ptr, i64, i64 }, ptr %v, i32 0, i32 2, !dbg !17
   %vec.current_size27 = load i64, ptr %vec.size_ptr25, align 4, !dbg !17
   %vec.current_cap28 = load i64, ptr %vec.cap_ptr26, align 4, !dbg !17
   %vec.data29 = load ptr, ptr %vec.data_ptr24, align 8, !dbg !17
@@ -127,7 +127,7 @@ vec.merge36:                                      ; preds = %vec.no_copy35, %vec
   %vec.reloaded_size43 = load i64, ptr %vec.size_ptr25, align 4, !dbg !17
   %vec.offset44 = mul i64 %vec.reloaded_size43, 8, !dbg !17
   %vec.element_ptr45 = getelementptr i8, ptr %vec.final_data42, i64 %vec.offset44, !dbg !17
-  store i64 30, ptr %vec.element_ptr45, align 4, !dbg !17
+  store i64 3, ptr %vec.element_ptr45, align 4, !dbg !17
   %vec.new_size46 = add i64 %vec.reloaded_size43, 1, !dbg !17
   store i64 %vec.new_size46, ptr %vec.size_ptr25, align 4, !dbg !17
   store i64 0, ptr %sum, align 4, !dbg !17
@@ -135,68 +135,68 @@ vec.merge36:                                      ; preds = %vec.no_copy35, %vec
   br label %for.init, !dbg !17
 
 for.init:                                         ; preds = %vec.merge36
-  store i1 true, ptr %__run_once_num, align 1, !dbg !17
-  call void @llvm.dbg.declare(metadata ptr %__run_once_num, metadata !12, metadata !DIExpression()), !dbg !20
+  store i1 true, ptr %__run_once_x, align 1, !dbg !17
+  call void @llvm.dbg.declare(metadata ptr %__run_once_x, metadata !12, metadata !DIExpression()), !dbg !20
   br label %for.cond, !dbg !17
 
 for.cond:                                         ; preds = %for.update, %for.init
-  %__run_once_num47 = load i1, ptr %__run_once_num, align 1, !dbg !17
-  br i1 %__run_once_num47, label %for.body, label %for.exit, !dbg !17
+  %__run_once_x47 = load i1, ptr %__run_once_x, align 1, !dbg !17
+  br i1 %__run_once_x47, label %for.body, label %for.exit, !dbg !17
 
 for.body:                                         ; preds = %for.cond
-  store i64 0, ptr %__idx_num, align 4, !dbg !17
-  call void @llvm.dbg.declare(metadata ptr %__idx_num, metadata !14, metadata !DIExpression()), !dbg !20
-  %vec.size_ptr48 = getelementptr inbounds { ptr, i64, i64 }, ptr %numbers, i32 0, i32 1, !dbg !17
+  store i64 0, ptr %__idx_x, align 4, !dbg !17
+  call void @llvm.dbg.declare(metadata ptr %__idx_x, metadata !14, metadata !DIExpression()), !dbg !20
+  %vec.size_ptr48 = getelementptr inbounds { ptr, i64, i64 }, ptr %v, i32 0, i32 1, !dbg !17
   %vec.len = load i64, ptr %vec.size_ptr48, align 4, !dbg !17
-  store i64 %vec.len, ptr %__len_num, align 4, !dbg !17
-  call void @llvm.dbg.declare(metadata ptr %__len_num, metadata !15, metadata !DIExpression()), !dbg !20
+  store i64 %vec.len, ptr %__len_x, align 4, !dbg !17
+  call void @llvm.dbg.declare(metadata ptr %__len_x, metadata !15, metadata !DIExpression()), !dbg !20
   br label %loop.header, !dbg !17
 
 for.update:                                       ; preds = %loop.exit
-  store i1 false, ptr %__run_once_num, align 1, !dbg !17
+  store i1 false, ptr %__run_once_x, align 1, !dbg !17
   br label %for.cond, !dbg !17
 
 for.exit:                                         ; preds = %for.cond
   %sum61 = load i64, ptr %sum, align 4, !dbg !17
-  %numbers_cleanup_load = load { ptr, i64, i64 }, ptr %numbers, align 8, !dbg !17
-  %numbers_data_ptr = extractvalue { ptr, i64, i64 } %numbers_cleanup_load, 0, !dbg !17
-  %numbers_null_check = icmp ne ptr %numbers_data_ptr, null, !dbg !17
-  br i1 %numbers_null_check, label %numbers_free_block, label %numbers_continue, !dbg !17
+  %v_cleanup_load = load { ptr, i64, i64 }, ptr %v, align 8, !dbg !17
+  %v_data_ptr = extractvalue { ptr, i64, i64 } %v_cleanup_load, 0, !dbg !17
+  %v_null_check = icmp ne ptr %v_data_ptr, null, !dbg !17
+  br i1 %v_null_check, label %v_free_block, label %v_continue, !dbg !17
 
 loop.header:                                      ; preds = %loop.body, %for.body
-  %__idx_num49 = load i64, ptr %__idx_num, align 4, !dbg !17
-  %__len_num50 = load i64, ptr %__len_num, align 4, !dbg !17
-  %icmpslttmp = icmp slt i64 %__idx_num49, %__len_num50, !dbg !17
+  %__idx_x49 = load i64, ptr %__idx_x, align 4, !dbg !17
+  %__len_x50 = load i64, ptr %__len_x, align 4, !dbg !17
+  %icmpslttmp = icmp slt i64 %__idx_x49, %__len_x50, !dbg !17
   br i1 %icmpslttmp, label %loop.body, label %loop.exit, !dbg !17
 
 loop.body:                                        ; preds = %loop.header
-  %__idx_num51 = load i64, ptr %__idx_num, align 4, !dbg !17
-  %vec.data_ptr52 = getelementptr inbounds { ptr, i64, i64 }, ptr %numbers, i32 0, i32 0, !dbg !17
-  %vec.size_ptr53 = getelementptr inbounds { ptr, i64, i64 }, ptr %numbers, i32 0, i32 1, !dbg !17
+  %__idx_x51 = load i64, ptr %__idx_x, align 4, !dbg !17
+  %vec.data_ptr52 = getelementptr inbounds { ptr, i64, i64 }, ptr %v, i32 0, i32 0, !dbg !17
+  %vec.size_ptr53 = getelementptr inbounds { ptr, i64, i64 }, ptr %v, i32 0, i32 1, !dbg !17
   %vec.data54 = load ptr, ptr %vec.data_ptr52, align 8, !dbg !17
   %vec.size = load i64, ptr %vec.size_ptr53, align 4, !dbg !17
-  %vec.offset55 = mul i64 %__idx_num51, 8, !dbg !17
+  %vec.offset55 = mul i64 %__idx_x51, 8, !dbg !17
   %vec.element_ptr56 = getelementptr i8, ptr %vec.data54, i64 %vec.offset55, !dbg !17
   %vec.element = load i64, ptr %vec.element_ptr56, align 4, !dbg !17
-  store i64 %vec.element, ptr %num, align 4, !dbg !17
-  call void @llvm.dbg.declare(metadata ptr %num, metadata !16, metadata !DIExpression()), !dbg !20
+  store i64 %vec.element, ptr %x, align 4, !dbg !17
+  call void @llvm.dbg.declare(metadata ptr %x, metadata !16, metadata !DIExpression()), !dbg !20
   %sum57 = load i64, ptr %sum, align 4, !dbg !17
-  %num58 = load i64, ptr %num, align 4, !dbg !17
-  %addtmp = add i64 %sum57, %num58, !dbg !17
+  %x58 = load i64, ptr %x, align 4, !dbg !17
+  %addtmp = add i64 %sum57, %x58, !dbg !17
   store i64 %addtmp, ptr %sum, align 4, !dbg !17
-  %__idx_num59 = load i64, ptr %__idx_num, align 4, !dbg !17
-  %addtmp60 = add i64 %__idx_num59, 1, !dbg !17
-  store i64 %addtmp60, ptr %__idx_num, align 4, !dbg !17
+  %__idx_x59 = load i64, ptr %__idx_x, align 4, !dbg !17
+  %addtmp60 = add i64 %__idx_x59, 1, !dbg !17
+  store i64 %addtmp60, ptr %__idx_x, align 4, !dbg !17
   br label %loop.header, !dbg !17
 
 loop.exit:                                        ; preds = %loop.header
   br label %for.update, !dbg !17
 
-numbers_free_block:                               ; preds = %for.exit
-  call void @free(ptr %numbers_data_ptr), !dbg !17
-  br label %numbers_continue, !dbg !17
+v_free_block:                                     ; preds = %for.exit
+  call void @free(ptr %v_data_ptr), !dbg !17
+  br label %v_continue, !dbg !17
 
-numbers_continue:                                 ; preds = %numbers_free_block, %for.exit
+v_continue:                                       ; preds = %v_free_block, %for.exit
   ret i64 %sum61, !dbg !17
 }
 
@@ -221,23 +221,23 @@ attributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memo
 !llvm.module.flags = !{!2, !3}
 
 !0 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, file: !1, producer: "Vyn Compiler", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)
-!1 = !DIFile(filename: "simple_vec.vyn.ll", directory: "/home/rick/Projects/Vyn/test/vec_for")
+!1 = !DIFile(filename: "vec_simple_sum.vyn.ll", directory: "/home/rick/Projects/Vyn/test/vec_for")
 !2 = !{i32 2, !"Debug Info Version", i32 3}
 !3 = !{i32 2, !"Dwarf Version", i32 4}
-!4 = distinct !DISubprogram(name: "main", linkageName: "main", scope: !1, file: !1, line: 1, type: !5, scopeLine: 1, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !8)
+!4 = distinct !DISubprogram(name: "main", linkageName: "main", scope: !1, file: !1, line: 2, type: !5, scopeLine: 2, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !8)
 !5 = !DISubroutineType(types: !6)
 !6 = !{!7}
 !7 = !DIBasicType(name: "i64", size: 64, encoding: DW_ATE_signed)
 !8 = !{!9, !11, !12, !14, !15, !16}
-!9 = !DILocalVariable(name: "numbers", scope: !4, file: !1, line: 2, type: !10)
+!9 = !DILocalVariable(name: "v", scope: !4, file: !1, line: 3, type: !10)
 !10 = !DICompositeType(tag: DW_TAG_structure_type, name: "struct_{ ptr, i64, i64 }", scope: !1, file: !1, size: 192, align: 8)
-!11 = !DILocalVariable(name: "sum", scope: !4, file: !1, line: 7, type: !7)
-!12 = !DILocalVariable(name: "__run_once_num", scope: !4, file: !1, line: 8, type: !13)
+!11 = !DILocalVariable(name: "sum", scope: !4, file: !1, line: 8, type: !7)
+!12 = !DILocalVariable(name: "__run_once_x", scope: !4, file: !1, line: 9, type: !13)
 !13 = !DIBasicType(name: "bool", size: 1, encoding: DW_ATE_boolean)
-!14 = !DILocalVariable(name: "__idx_num", scope: !4, file: !1, line: 8, type: !7)
-!15 = !DILocalVariable(name: "__len_num", scope: !4, file: !1, line: 8, type: !7)
-!16 = !DILocalVariable(name: "num", scope: !4, file: !1, line: 8, type: !7)
-!17 = !DILocation(line: 1, column: 1, scope: !4)
-!18 = !DILocation(line: 2, column: 1, scope: !4)
-!19 = !DILocation(line: 7, column: 1, scope: !4)
-!20 = !DILocation(line: 8, column: 10, scope: !4)
+!14 = !DILocalVariable(name: "__idx_x", scope: !4, file: !1, line: 9, type: !7)
+!15 = !DILocalVariable(name: "__len_x", scope: !4, file: !1, line: 9, type: !7)
+!16 = !DILocalVariable(name: "x", scope: !4, file: !1, line: 9, type: !7)
+!17 = !DILocation(line: 2, column: 1, scope: !4)
+!18 = !DILocation(line: 3, column: 1, scope: !4)
+!19 = !DILocation(line: 8, column: 1, scope: !4)
+!20 = !DILocation(line: 9, column: 10, scope: !4)
