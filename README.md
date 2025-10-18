@@ -746,6 +746,10 @@ unsafe {
 ## Roadmap
 
 ### ✅ **Completed (v0.4.0)**
+- **JIT Infrastructure Upgrade**: Migrated from deprecated MCJIT to modern LLVM ORC JIT
+  - Resolved all segmentation faults in Vec system memory management
+  - Enhanced stability and performance for memory-intensive operations
+  - Better isolation between JIT compilation memory and application memory
 - **Complete Core Language**: Functions, variables, structs with modern `field<Type>` syntax
 - **LLVM Backend**: Full compilation pipeline with JIT execution
 - **Advanced Control Flow**: `if/else`, `while/for` loops, `match` statements, `break/continue`
@@ -777,9 +781,9 @@ Vyn is built on solid foundations:
 
 - **Frontend**: Hand-written recursive descent parser
 - **AST**: Rich abstract syntax tree with source location tracking
-- **Backend**: LLVM for code generation and JIT execution
+- **Backend**: LLVM for code generation and ORC JIT execution
 - **Type System**: Strong static typing with ownership and borrowing
-- **Runtime**: LLVM ExecutionEngine with auto-serialization support
+- **Runtime**: LLVM ORC JIT (LLJIT) with auto-serialization support
 
 ## Contributing
 
