@@ -6,7 +6,7 @@
 
 ## 1. Introduction
 
-Welcome to the Vyn Programming Guide. This guide walks you through writing, building, and extending Vyn programs, from your first "Hello, Vyn!" to deep dives into the Vyn language internals and runtime. Version 0.4.0 delivers a robust systems programming language with LLVM backend, pattern matching with `match` statements, comprehensive control flow including `break`/`continue`, resizable `Vec<T>` collections, unified syntax, and comprehensive auto-serialization capabilities.
+Welcome to the Vyn Programming Guide. This guide walks you through writing, building, and extending Vyn programs, from your first "Hello, Vyn!" to deep dives into the Vyn language internals and runtime. Version 0.4.1 delivers a robust systems programming language with LLVM backend, complete sized type system, pattern matching with `match` statements, comprehensive control flow including `break`/`continue`, resizable `Vec<T>` collections, unified syntax, and comprehensive auto-serialization capabilities.
 
 ### 1.1 Purpose & Audience
 
@@ -43,7 +43,7 @@ Vyn is a statically typed, template-metaprogramming language designed to compile
 * **Concurrency Built In**: Async/await, with planned actors, threads, and typed channels.
 * **Self-Hosting & Extensible**: Planned compiler written in Vyn; add backends, macros, and modules at runtime.
 
-**Current Version:** 0.4.0 🚀 **FULLY FUNCTIONAL WITH CANONICAL SYNTAX**
+**Current Version:** 0.4.1 🚀 **COMPLETE TYPE SYSTEM**
 
 ## Quick Start
 
@@ -148,7 +148,7 @@ This unique `import`/`smuggle` distinction makes Vyn's module system both secure
 
 ## What's Working Now
 
-Vyn **v0.4.0** is a **complete systems programming language** ready for production use:
+Vyn **v0.4.1** is a **complete systems programming language** ready for production use:
 
 ### ✅ **Core Language Features**
 - **Functions**: `name(params)<ReturnType> -> body` with full LLVM compilation
@@ -236,7 +236,7 @@ Vyn **v0.4.0** is a **complete systems programming language** ready for producti
 
 ### ✅ **Canonical Ownership Syntax** 
 
-Vyn v0.4.0 introduces **unified canonical syntax** for ownership and borrowing operations, eliminating inconsistencies:
+Vyn v0.4.1 features **unified canonical syntax** for ownership and borrowing operations, eliminating inconsistencies:
 
 #### **Type Annotations**
 ```vyn
@@ -294,7 +294,7 @@ python3 migrate_syntax.py --migrate --directory . --backup --report
 
 ## Language Overview
 
-Vyn v0.4.0 is a **complete, production-ready systems programming language** with modern syntax, powerful pattern matching, and comprehensive collection support.
+Vyn v0.4.1 is a **complete, production-ready systems programming language** with modern syntax, complete sized type system, powerful pattern matching, and comprehensive collection support.
 
 ### Language Features Showcase
 
@@ -1221,7 +1221,7 @@ unsafe {
 
 ## Roadmap
 
-### ✅ **Completed (v0.4.0)**
+### ✅ **Completed (v0.4.1)**
 - **JIT Infrastructure Upgrade**: Migrated from deprecated MCJIT to modern LLVM ORC JIT
   - Resolved all segmentation faults in Vec system memory management
   - Enhanced stability and performance for memory-intensive operations
@@ -1257,7 +1257,7 @@ unsafe {
 
 ## Testing & Development Tools
 
-Vyn v0.4.0 includes a **modern, comprehensive testing infrastructure** designed for efficient development and quality assurance:
+Vyn v0.4.1 includes a **modern, comprehensive testing infrastructure** designed for efficient development and quality assurance:
 
 ### 🧪 **Modern Test Harness**
 
@@ -1361,7 +1361,7 @@ See `doc/` directory for detailed design documents and RFCs.
 
 ## Recent Progress
 
-**v0.4.0 Major Language Revolution**: Complete systems programming language with canonical syntax unification
+**v0.4.1 Complete Type System**: Full primitive type support with sized integers, floats, and character types
 - ✅ **Canonical Syntax Unification**: Complete migration to unified `my()`/`our()` constructors and `view`/`borrow` operators
 - ✅ **Modern Test Harness**: Parallel test runner managing 391+ tests with HTML/JSON reporting and failure triage
 - ✅ **Syntax Migration Tools**: Automated migration from legacy to canonical syntax with comprehensive reporting
@@ -1376,7 +1376,7 @@ See `doc/` directory for detailed design documents and RFCs.
 - ✅ **Async/Await**: Complete asynchronous programming support with Future<T> types
 - ✅ **Debug Infrastructure**: Full LLVM debug metadata with async state machine debugging
 
-**Language Status**: Vyn v0.4.0 is now a **complete, production-ready systems programming language** with unified canonical syntax, comprehensive test infrastructure, and advanced debugging capabilities, suitable for real-world programming tasks with all core language constructs implemented, tested, and fully consistent.
+**Language Status**: Vyn v0.4.1 is now a **complete, production-ready systems programming language** with unified canonical syntax, comprehensive sized type system (Int8-Int64, UInt8-UInt64, Float32/64, Char, Rune, Bytes), comprehensive test infrastructure, and advanced debugging capabilities, suitable for real-world programming tasks with all core language constructs implemented, tested, and fully consistent.
 
 ## Getting Help
 
@@ -1391,7 +1391,7 @@ See `doc/` directory for detailed design documents and RFCs.
 
 ### A. EBNF Grammar
 
-Vyn's syntax is defined by an EBNF grammar reflecting current v0.4.0 capabilities:
+Vyn's syntax is defined by an EBNF grammar reflecting current v0.4.1 capabilities:
 
 ```
 module = { declaration | statement };
@@ -1509,4 +1509,4 @@ Apache License - see LICENSE file for details.
 
 ---
 
-*Vyn v0.4.0: A complete systems programming language with unified syntax, pattern matching, resizable collections, and unique import/smuggle module system - ready for real-world development.*
+*Vyn v0.4.1: A complete systems programming language with comprehensive sized type system, unified syntax, pattern matching, resizable collections, and unique import/smuggle module system - ready for real-world development.*
