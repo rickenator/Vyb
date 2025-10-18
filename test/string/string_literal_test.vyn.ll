@@ -140,7 +140,7 @@ attributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memo
 !llvm.module.flags = !{!2, !3}
 
 !0 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, file: !1, producer: "Vyn Compiler", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)
-!1 = !DIFile(filename: "string_literal_test.vyn.ll", directory: "/home/rick/Projects/Vyn/test")
+!1 = !DIFile(filename: "string_literal_test.vyn.ll", directory: "/home/rick/Projects/Vyn/test/string")
 !2 = !{i32 2, !"Debug Info Version", i32 3}
 !3 = !{i32 2, !"Dwarf Version", i32 4}
 !4 = distinct !DISubprogram(name: "main", linkageName: "main", scope: !1, file: !1, line: 3, type: !5, scopeLine: 3, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !8)

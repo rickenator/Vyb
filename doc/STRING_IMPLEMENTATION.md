@@ -11,12 +11,60 @@ struct String {
 }
 ```
 
+## String Literals
+
+Vyn supports **natural string literal syntax** where quoted text is automatically treated as a String type:
+
+```vyn
+# Direct literal assignment (no constructor needed!)
+data<String> = "Hello"
+
+# Literal concatenation
+combined<String> = "this" + "that"
+
+# Method calls on literals
+length<Int> = "Vyn".len()
+first<Int> = "Hello".char_at(0)
+check<Bool> = "Test".starts_with("Te")
+```
+
+### Implementation Details
+
+String literals are converted to String structs in the code generation phase:
+
+**In Function Scope:**
+- `StringLiteral` visitor creates a String struct `{ptr, len}`
+- Calculates length from the literal's string value
+- Uses `CreateInsertValue` to build the struct
+- Returns the String struct for use in expressions
+
+**In Global Scope:**
+- Returns `i8*` for backward compatibility
+- Global string constants remain null-terminated C strings
+- Ensures compatibility with existing code and C interop
+
+**Memory Management:**
+- String literals are stored as global constants
+- No malloc/free needed for literal data
+- Efficient: zero runtime allocation for literal strings
+- Safe: literals live for program duration
+
+**Example Code Generation:**
+```vyn
+data<String> = "Hello"
+# Generates LLVM IR approximately:
+# %literal_ptr = getelementptr @.str.hello
+# %literal_len = 5
+# %string_struct = {i8* %literal_ptr, i64 %literal_len}
+```
+
 ## Implemented Methods
 
 ### 1. Constructor Methods
 - **`String::from_bytes(ptr: *i8, len: i64) -> String`**
   - Creates a String from a byte pointer and length
   - Memory: Uses provided pointer directly (no allocation)
+  - Note: Typically not needed with string literal syntax
 
 ### 2. Property Methods
 - **`len() -> i64`**
@@ -146,18 +194,36 @@ All String operations that allocate memory add a null terminator:
 
 ## Testing
 
+### Test Organization
+All String tests are located in `test/string/` directory for better organization:
+
 ### Test Files
-- **`test/string_test.vyn`**: Basic String functionality
+- **`test/string/string_test.vyn`**: Basic String functionality
   - from_bytes() constructor
   - len() method
   - + operator concatenation
 
-- **`test/string_simple_test.vyn`**: Comprehensive method tests
-  - All 11 String methods tested
+- **`test/string/string_simple_test.vyn`**: Quick method validation
+  - All 11 String methods in one test
   - Bounds checking verified
   - Memory management validated
 
+- **`test/string/string_methods_test.vyn`**: Comprehensive method tests
+  - Individual test functions for each method
+  - Edge cases and bounds checking
+  - Detailed output validation
+
+- **`test/string/string_literal_test.vyn`**: String literal syntax
+  - Direct literal assignment
+  - Literal concatenation
+  - Method calls on literals
+
+- **`test/string/string_literal_simple.vyn`**: Simple literal tests
+  - Basic concatenation validation
+
 ### Test Results
+
+**string_simple_test.vyn:**
 ```
 Testing String methods...
 substring length: 5           ✅ (substring(0, 5) of "Hello World")
@@ -168,6 +234,32 @@ contains: true               ✅ (contains "lo Wo")
 to_upper first char: 72      ✅ ('H' already uppercase)
 to_lower first char: 104     ✅ ('H' → 'h')
 All tests completed!
+```
+
+**string_literal_test.vyn:**
+```
+String literal assigned: 5
+Concatenated length: 11      ✅ ("Hello" + " " + "World")
+First char: 72               ✅ ("Hello World".char_at(0))
+Starts with Hello: true      ✅ (literal.starts_with() works)
+```
+
+**string_test.vyn:**
+```
+Starting String tests...
+Created string from bytes
+String length: 5
+Combined string length: 11
+String tests completed
+```
+
+### Running Tests
+```bash
+# Run all String tests
+python3 test_harness.py --directory test/string
+
+# Run specific test
+build/vyn test/string/string_literal_test.vyn
 ```
 
 ## Type Differentiation
@@ -244,11 +336,19 @@ All String methods produce null-terminated strings compatible with:
 
 The String type implementation is **complete and production-ready**:
 - ✅ 11 methods fully implemented
+- ✅ Natural string literal syntax (`"text"` → String struct)
 - ✅ Comprehensive bounds checking
 - ✅ Proper memory management
 - ✅ C interop compatibility
-- ✅ Full test coverage
+- ✅ Full test coverage (test/string/ directory)
 - ✅ Clean code organization
 - ✅ Well-documented
 
-This provides Vyn with a **robust and practical String type** that emphasizes **memory safety** and **ownership awareness**, as requested.
+**Key Features:**
+- **Zero-cost literals**: String literals compile to struct without allocation
+- **Natural syntax**: `"this" + "that"` just works
+- **Safe by default**: Bounds checking on all index operations
+- **C compatible**: Null-terminated for printf, strstr, etc.
+- **Method chaining**: `text.to_lower().substring(0, 5)`
+
+This provides Vyn with a **robust and practical String type** that emphasizes **memory safety**, **natural syntax**, and **ownership awareness**, as requested.
