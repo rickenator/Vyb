@@ -855,15 +855,64 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
     // Handle ownership constructors: my(), their(), our()
     if (identCallee && (identCallee->name == "my" || identCallee->name == "their" || identCallee->name == "our") && node->arguments.size() == 1) {
         std::cout << "DEBUG: Processing ownership constructor " << identCallee->name << "() in LLVM codegen" << std::endl;
-        // For ownership constructors, we just evaluate the argument and pass it through
-        // The ownership semantics are handled at the type level, not at runtime
+        
+        // Evaluate the argument to get the struct value
         node->arguments[0]->accept(*this);
         if (!m_currentLLVMValue) {
             logError(node->arguments[0]->loc, "Argument to " + identCallee->name + "() evaluated to null");
             return;
         }
-        std::cout << "DEBUG: Successfully processed ownership constructor " << identCallee->name << "()" << std::endl;
-        // The result is the same as the argument - ownership is a compile-time concept
+        
+        llvm::Value* structValue = m_currentLLVMValue;
+        llvm::Type* structType = structValue->getType();
+        
+        if (identCallee->name == "my") {
+            // For my(), allocate memory on heap and store the struct value
+            if (!structType->isStructTy()) {
+                logError(node->loc, "my() can only be used with struct types");
+                return;
+            }
+            
+            // Allocate memory for the struct on the heap
+            llvm::Function* mallocFunc = module->getFunction("malloc");
+            if (!mallocFunc) {
+                // Declare malloc if not already declared
+                llvm::FunctionType* mallocType = llvm::FunctionType::get(
+                    llvm::PointerType::get(llvm::Type::getInt8Ty(*context), 0), 
+                    {llvm::Type::getInt64Ty(*context)}, 
+                    false
+                );
+                mallocFunc = llvm::Function::Create(
+                    mallocType, 
+                    llvm::Function::ExternalLinkage, 
+                    "malloc", 
+                    module.get()
+                );
+            }
+            
+            // Calculate size of struct
+            llvm::DataLayout dataLayout(module.get());
+            uint64_t structSize = dataLayout.getTypeAllocSize(structType);
+            llvm::Value* sizeValue = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), structSize);
+            
+            // Call malloc
+            llvm::Value* mallocPtr = builder->CreateCall(mallocFunc, {sizeValue}, "malloc_struct");
+            
+            // Cast malloc result to struct pointer type
+            llvm::Type* structPtrType = llvm::PointerType::get(structType, 0);
+            llvm::Value* structPtr = builder->CreateBitCast(mallocPtr, structPtrType, "struct_ptr");
+            
+            // Store the struct value into allocated memory
+            builder->CreateStore(structValue, structPtr);
+            
+            // Return the pointer
+            m_currentLLVMValue = structPtr;
+            std::cout << "DEBUG: Successfully processed ownership constructor my() - allocated and returned pointer" << std::endl;
+        } else {
+            // For their() and our(), just pass through the value for now
+            // In a real implementation, these would have different semantics
+            std::cout << "DEBUG: Successfully processed ownership constructor " << identCallee->name << "()" << std::endl;
+        }
         return;
     }
     

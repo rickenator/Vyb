@@ -55,45 +55,57 @@ entry:
   store ptr @0, ptr %value_ptr7, align 8, !dbg !13
   %TreeNode_obj8 = alloca %TreeNode, align 8, !dbg !13
   %TreeNode_val = load %TreeNode, ptr %TreeNode_obj8, align 8, !dbg !13
+  %malloc_struct = call ptr @malloc(i64 40), !dbg !13
+  store %TreeNode %TreeNode_val, ptr %malloc_struct, align 8, !dbg !13
   %left_ptr = getelementptr inbounds %TreeNode, ptr %TreeNode_obj5, i32 0, i32 2, !dbg !13
-  store %TreeNode %TreeNode_val, ptr %left_ptr, align 8, !dbg !13
+  store ptr %malloc_struct, ptr %left_ptr, align 8, !dbg !13
   %TreeNode_obj9 = alloca %TreeNode, align 8, !dbg !13
   %TreeNode_val10 = load %TreeNode, ptr %TreeNode_obj9, align 8, !dbg !13
+  %malloc_struct11 = call ptr @malloc(i64 40), !dbg !13
+  store %TreeNode %TreeNode_val10, ptr %malloc_struct11, align 8, !dbg !13
   %right_ptr = getelementptr inbounds %TreeNode, ptr %TreeNode_obj5, i32 0, i32 3, !dbg !13
-  store %TreeNode %TreeNode_val10, ptr %right_ptr, align 8, !dbg !13
+  store ptr %malloc_struct11, ptr %right_ptr, align 8, !dbg !13
   %has_left_ptr = getelementptr inbounds %TreeNode, ptr %TreeNode_obj5, i32 0, i32 4, !dbg !13
   store i1 false, ptr %has_left_ptr, align 1, !dbg !13
   %has_right_ptr = getelementptr inbounds %TreeNode, ptr %TreeNode_obj5, i32 0, i32 5, !dbg !13
   store i1 false, ptr %has_right_ptr, align 1, !dbg !13
-  %TreeNode_val11 = load %TreeNode, ptr %TreeNode_obj5, align 8, !dbg !13
-  %left_ptr12 = getelementptr inbounds %TreeNode, ptr %TreeNode_obj, i32 0, i32 2, !dbg !13
-  store %TreeNode %TreeNode_val11, ptr %left_ptr12, align 8, !dbg !13
-  %TreeNode_obj13 = alloca %TreeNode, align 8, !dbg !13
-  %key_ptr14 = getelementptr inbounds %TreeNode, ptr %TreeNode_obj13, i32 0, i32 0, !dbg !13
-  store i64 0, ptr %key_ptr14, align 4, !dbg !13
-  %value_ptr15 = getelementptr inbounds %TreeNode, ptr %TreeNode_obj13, i32 0, i32 1, !dbg !13
-  store ptr @1, ptr %value_ptr15, align 8, !dbg !13
-  %TreeNode_obj16 = alloca %TreeNode, align 8, !dbg !13
-  %TreeNode_val17 = load %TreeNode, ptr %TreeNode_obj16, align 8, !dbg !13
-  %left_ptr18 = getelementptr inbounds %TreeNode, ptr %TreeNode_obj13, i32 0, i32 2, !dbg !13
-  store %TreeNode %TreeNode_val17, ptr %left_ptr18, align 8, !dbg !13
-  %TreeNode_obj19 = alloca %TreeNode, align 8, !dbg !13
-  %TreeNode_val20 = load %TreeNode, ptr %TreeNode_obj19, align 8, !dbg !13
-  %right_ptr21 = getelementptr inbounds %TreeNode, ptr %TreeNode_obj13, i32 0, i32 3, !dbg !13
-  store %TreeNode %TreeNode_val20, ptr %right_ptr21, align 8, !dbg !13
-  %has_left_ptr22 = getelementptr inbounds %TreeNode, ptr %TreeNode_obj13, i32 0, i32 4, !dbg !13
-  store i1 false, ptr %has_left_ptr22, align 1, !dbg !13
-  %has_right_ptr23 = getelementptr inbounds %TreeNode, ptr %TreeNode_obj13, i32 0, i32 5, !dbg !13
-  store i1 false, ptr %has_right_ptr23, align 1, !dbg !13
-  %TreeNode_val24 = load %TreeNode, ptr %TreeNode_obj13, align 8, !dbg !13
-  %right_ptr25 = getelementptr inbounds %TreeNode, ptr %TreeNode_obj, i32 0, i32 3, !dbg !13
-  store %TreeNode %TreeNode_val24, ptr %right_ptr25, align 8, !dbg !13
-  %has_left_ptr26 = getelementptr inbounds %TreeNode, ptr %TreeNode_obj, i32 0, i32 4, !dbg !13
+  %TreeNode_val12 = load %TreeNode, ptr %TreeNode_obj5, align 8, !dbg !13
+  %malloc_struct13 = call ptr @malloc(i64 40), !dbg !13
+  store %TreeNode %TreeNode_val12, ptr %malloc_struct13, align 8, !dbg !13
+  %left_ptr14 = getelementptr inbounds %TreeNode, ptr %TreeNode_obj, i32 0, i32 2, !dbg !13
+  store ptr %malloc_struct13, ptr %left_ptr14, align 8, !dbg !13
+  %TreeNode_obj15 = alloca %TreeNode, align 8, !dbg !13
+  %key_ptr16 = getelementptr inbounds %TreeNode, ptr %TreeNode_obj15, i32 0, i32 0, !dbg !13
+  store i64 0, ptr %key_ptr16, align 4, !dbg !13
+  %value_ptr17 = getelementptr inbounds %TreeNode, ptr %TreeNode_obj15, i32 0, i32 1, !dbg !13
+  store ptr @1, ptr %value_ptr17, align 8, !dbg !13
+  %TreeNode_obj18 = alloca %TreeNode, align 8, !dbg !13
+  %TreeNode_val19 = load %TreeNode, ptr %TreeNode_obj18, align 8, !dbg !13
+  %malloc_struct20 = call ptr @malloc(i64 40), !dbg !13
+  store %TreeNode %TreeNode_val19, ptr %malloc_struct20, align 8, !dbg !13
+  %left_ptr21 = getelementptr inbounds %TreeNode, ptr %TreeNode_obj15, i32 0, i32 2, !dbg !13
+  store ptr %malloc_struct20, ptr %left_ptr21, align 8, !dbg !13
+  %TreeNode_obj22 = alloca %TreeNode, align 8, !dbg !13
+  %TreeNode_val23 = load %TreeNode, ptr %TreeNode_obj22, align 8, !dbg !13
+  %malloc_struct24 = call ptr @malloc(i64 40), !dbg !13
+  store %TreeNode %TreeNode_val23, ptr %malloc_struct24, align 8, !dbg !13
+  %right_ptr25 = getelementptr inbounds %TreeNode, ptr %TreeNode_obj15, i32 0, i32 3, !dbg !13
+  store ptr %malloc_struct24, ptr %right_ptr25, align 8, !dbg !13
+  %has_left_ptr26 = getelementptr inbounds %TreeNode, ptr %TreeNode_obj15, i32 0, i32 4, !dbg !13
   store i1 false, ptr %has_left_ptr26, align 1, !dbg !13
-  %has_right_ptr27 = getelementptr inbounds %TreeNode, ptr %TreeNode_obj, i32 0, i32 5, !dbg !13
+  %has_right_ptr27 = getelementptr inbounds %TreeNode, ptr %TreeNode_obj15, i32 0, i32 5, !dbg !13
   store i1 false, ptr %has_right_ptr27, align 1, !dbg !13
-  %TreeNode_val28 = load %TreeNode, ptr %TreeNode_obj, align 8, !dbg !13
-  ret %TreeNode %TreeNode_val28, !dbg !13
+  %TreeNode_val28 = load %TreeNode, ptr %TreeNode_obj15, align 8, !dbg !13
+  %malloc_struct29 = call ptr @malloc(i64 40), !dbg !13
+  store %TreeNode %TreeNode_val28, ptr %malloc_struct29, align 8, !dbg !13
+  %right_ptr30 = getelementptr inbounds %TreeNode, ptr %TreeNode_obj, i32 0, i32 3, !dbg !13
+  store ptr %malloc_struct29, ptr %right_ptr30, align 8, !dbg !13
+  %has_left_ptr31 = getelementptr inbounds %TreeNode, ptr %TreeNode_obj, i32 0, i32 4, !dbg !13
+  store i1 false, ptr %has_left_ptr31, align 1, !dbg !13
+  %has_right_ptr32 = getelementptr inbounds %TreeNode, ptr %TreeNode_obj, i32 0, i32 5, !dbg !13
+  store i1 false, ptr %has_right_ptr32, align 1, !dbg !13
+  %TreeNode_val33 = load %TreeNode, ptr %TreeNode_obj, align 8, !dbg !13
+  ret %TreeNode %TreeNode_val33, !dbg !13
 }
 
 define %BinaryTree @new_tree() !dbg !16 {
@@ -106,23 +118,29 @@ entry:
   store ptr @2, ptr %value_ptr, align 8, !dbg !22
   %TreeNode_obj1 = alloca %TreeNode, align 8, !dbg !22
   %TreeNode_val = load %TreeNode, ptr %TreeNode_obj1, align 8, !dbg !22
+  %malloc_struct = call ptr @malloc(i64 40), !dbg !22
+  store %TreeNode %TreeNode_val, ptr %malloc_struct, align 8, !dbg !22
   %left_ptr = getelementptr inbounds %TreeNode, ptr %TreeNode_obj, i32 0, i32 2, !dbg !22
-  store %TreeNode %TreeNode_val, ptr %left_ptr, align 8, !dbg !22
+  store ptr %malloc_struct, ptr %left_ptr, align 8, !dbg !22
   %TreeNode_obj2 = alloca %TreeNode, align 8, !dbg !22
   %TreeNode_val3 = load %TreeNode, ptr %TreeNode_obj2, align 8, !dbg !22
+  %malloc_struct4 = call ptr @malloc(i64 40), !dbg !22
+  store %TreeNode %TreeNode_val3, ptr %malloc_struct4, align 8, !dbg !22
   %right_ptr = getelementptr inbounds %TreeNode, ptr %TreeNode_obj, i32 0, i32 3, !dbg !22
-  store %TreeNode %TreeNode_val3, ptr %right_ptr, align 8, !dbg !22
+  store ptr %malloc_struct4, ptr %right_ptr, align 8, !dbg !22
   %has_left_ptr = getelementptr inbounds %TreeNode, ptr %TreeNode_obj, i32 0, i32 4, !dbg !22
   store i1 false, ptr %has_left_ptr, align 1, !dbg !22
   %has_right_ptr = getelementptr inbounds %TreeNode, ptr %TreeNode_obj, i32 0, i32 5, !dbg !22
   store i1 false, ptr %has_right_ptr, align 1, !dbg !22
-  %TreeNode_val4 = load %TreeNode, ptr %TreeNode_obj, align 8, !dbg !22
-  store %TreeNode %TreeNode_val4, ptr %dummy_node, align 8, !dbg !22
+  %TreeNode_val5 = load %TreeNode, ptr %TreeNode_obj, align 8, !dbg !22
+  store %TreeNode %TreeNode_val5, ptr %dummy_node, align 8, !dbg !22
   call void @llvm.dbg.declare(metadata ptr %dummy_node, metadata !21, metadata !DIExpression()), !dbg !23
   %BinaryTree_obj = alloca %BinaryTree, align 8, !dbg !22
-  %dummy_node5 = load %TreeNode, ptr %dummy_node, align 8, !dbg !22
+  %dummy_node6 = load %TreeNode, ptr %dummy_node, align 8, !dbg !22
+  %malloc_struct7 = call ptr @malloc(i64 40), !dbg !22
+  store %TreeNode %dummy_node6, ptr %malloc_struct7, align 8, !dbg !22
   %root_ptr = getelementptr inbounds %BinaryTree, ptr %BinaryTree_obj, i32 0, i32 0, !dbg !22
-  store %TreeNode %dummy_node5, ptr %root_ptr, align 8, !dbg !22
+  store ptr %malloc_struct7, ptr %root_ptr, align 8, !dbg !22
   %has_root_ptr = getelementptr inbounds %BinaryTree, ptr %BinaryTree_obj, i32 0, i32 1, !dbg !22
   store i1 false, ptr %has_root_ptr, align 1, !dbg !22
   %size_ptr = getelementptr inbounds %BinaryTree, ptr %BinaryTree_obj, i32 0, i32 2, !dbg !22
@@ -158,7 +176,9 @@ then:                                             ; preds = %entry
   %key7 = load i64, ptr %key2, align 4, !dbg !31
   %value8 = load ptr, ptr %value3, align 8, !dbg !31
   %calltmp = call %TreeNode @create_node(i64 %key7, ptr %value8), !dbg !31
-  store %TreeNode %calltmp, ptr %root_ptr, align 8, !dbg !31
+  %malloc_struct = call ptr @malloc(i64 40), !dbg !31
+  store %TreeNode %calltmp, ptr %malloc_struct, align 8, !dbg !31
+  store ptr %malloc_struct, ptr %root_ptr, align 8, !dbg !31
   %tree9 = load %BinaryTree, ptr %tree1, align 8, !dbg !31
   %temp_struct10 = alloca %BinaryTree, align 8, !dbg !31
   store %BinaryTree %tree9, ptr %temp_struct10, align 8, !dbg !31
@@ -237,7 +257,9 @@ then7:                                            ; preds = %then
   %key10 = load i64, ptr %key2, align 4, !dbg !42
   %value11 = load ptr, ptr %value3, align 8, !dbg !42
   %calltmp = call %TreeNode @create_node(i64 %key10, ptr %value11), !dbg !42
-  store %TreeNode %calltmp, ptr %left_ptr, align 8, !dbg !42
+  %malloc_struct = call ptr @malloc(i64 40), !dbg !42
+  store %TreeNode %calltmp, ptr %malloc_struct, align 8, !dbg !42
+  store ptr %malloc_struct, ptr %left_ptr, align 8, !dbg !42
   %node12 = load ptr, ptr %node1, align 8, !dbg !42
   %has_left_ptr13 = getelementptr inbounds %TreeNode, ptr %node12, i32 0, i32 4, !dbg !42
   store i1 true, ptr %has_left_ptr13, align 1, !dbg !42
@@ -252,7 +274,7 @@ else8:                                            ; preds = %then
   br label %ifcont, !dbg !42
 
 ifcont:                                           ; preds = %else8, %then7
-  br label %ifcont33, !dbg !42
+  br label %ifcont34, !dbg !42
 
 then20:                                           ; preds = %else
   %node22 = load ptr, ptr %node1, align 8, !dbg !42
@@ -260,24 +282,26 @@ then20:                                           ; preds = %else
   %key23 = load i64, ptr %key2, align 4, !dbg !42
   %value24 = load ptr, ptr %value3, align 8, !dbg !42
   %calltmp25 = call %TreeNode @create_node(i64 %key23, ptr %value24), !dbg !42
-  store %TreeNode %calltmp25, ptr %right_ptr, align 8, !dbg !42
-  %node26 = load ptr, ptr %node1, align 8, !dbg !42
-  %has_right_ptr27 = getelementptr inbounds %TreeNode, ptr %node26, i32 0, i32 5, !dbg !42
-  store i1 true, ptr %has_right_ptr27, align 1, !dbg !42
-  br label %ifcont32, !dbg !42
-
-else21:                                           ; preds = %else
-  %node28 = load ptr, ptr %node1, align 8, !dbg !42
-  %right_ptr29 = getelementptr inbounds %TreeNode, ptr %node28, i32 0, i32 3, !dbg !42
-  %key30 = load i64, ptr %key2, align 4, !dbg !42
-  %value31 = load ptr, ptr %value3, align 8, !dbg !42
-  call void @insert_recursive(ptr %right_ptr29, i64 %key30, ptr %value31), !dbg !42
-  br label %ifcont32, !dbg !42
-
-ifcont32:                                         ; preds = %else21, %then20
+  %malloc_struct26 = call ptr @malloc(i64 40), !dbg !42
+  store %TreeNode %calltmp25, ptr %malloc_struct26, align 8, !dbg !42
+  store ptr %malloc_struct26, ptr %right_ptr, align 8, !dbg !42
+  %node27 = load ptr, ptr %node1, align 8, !dbg !42
+  %has_right_ptr28 = getelementptr inbounds %TreeNode, ptr %node27, i32 0, i32 5, !dbg !42
+  store i1 true, ptr %has_right_ptr28, align 1, !dbg !42
   br label %ifcont33, !dbg !42
 
-ifcont33:                                         ; preds = %ifcont32, %ifcont
+else21:                                           ; preds = %else
+  %node29 = load ptr, ptr %node1, align 8, !dbg !42
+  %right_ptr30 = getelementptr inbounds %TreeNode, ptr %node29, i32 0, i32 3, !dbg !42
+  %key31 = load i64, ptr %key2, align 4, !dbg !42
+  %value32 = load ptr, ptr %value3, align 8, !dbg !42
+  call void @insert_recursive(ptr %right_ptr30, i64 %key31, ptr %value32), !dbg !42
+  br label %ifcont33, !dbg !42
+
+ifcont33:                                         ; preds = %else21, %then20
+  br label %ifcont34, !dbg !42
+
+ifcont34:                                         ; preds = %ifcont33, %ifcont
   ret void, !dbg !42
 }
 
@@ -515,6 +539,8 @@ entry:
 
 ; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)
 declare void @llvm.dbg.declare(metadata, metadata, metadata) #0
+
+declare ptr @malloc(i64)
 
 declare void @__vyn_println(ptr)
 
