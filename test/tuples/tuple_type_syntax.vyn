@@ -1,0 +1,4 @@
+// Test Tuple<T,U> type syntax
+main()<Tuple<Int, Int>> -> {
+    return 42, 99
+}
