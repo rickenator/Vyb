@@ -64,6 +64,8 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
             // Debug output to see what we're returning
             std::cerr << "DEBUG: ReturnStatement - Type: " << getTypeName(returnValue->getType()) 
                 << ", Function Return Type: " << (currentFunction ? getTypeName(currentFunction->getReturnType()) : "null") << std::endl;
+            std::cerr << "DEBUG: Return value LLVM type pointer: " << returnValue->getType() << std::endl;
+            std::cerr << "DEBUG: Function return LLVM type pointer: " << (currentFunction ? currentFunction->getReturnType() : nullptr) << std::endl;
             
             // Check if we're in main function for auto-serialization
             // BUT skip auto-serialization if this is a lit() intrinsic call

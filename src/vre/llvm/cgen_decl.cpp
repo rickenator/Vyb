@@ -299,6 +299,8 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
             returnType = createFutureStructType(originalReturnType);
         } else {
             returnType = codegenType(node->returnTypeNode.get());
+            std::cerr << "DEBUG: Function " << node->id->name << " return type resolved to: " 
+                      << getTypeName(returnType) << " with pointer: " << returnType << std::endl;
             if (!returnType) {
                 logError(node->loc, "Could not determine LLVM return type for function '" + node->id->name + "'.");
                 m_currentLLVMValue = nullptr; return;
@@ -488,6 +490,7 @@ void LLVMCodegen::visit(vyn::ast::StructDeclaration* node) {
     
     // Add opaque struct to map BEFORE processing field types (for circular references)
     userTypeMap[nameStr] = typeInfo;
+    std::cerr << "DEBUG: Stored " << nameStr << " in userTypeMap with LLVM type pointer: " << structType << std::endl;
 
     std::vector<llvm::Type*> fieldTypes;
     for (size_t i = 0; i < node->fields.size(); ++i) {

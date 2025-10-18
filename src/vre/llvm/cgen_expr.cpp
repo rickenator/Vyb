@@ -80,7 +80,9 @@ void LLVMCodegen::visit(vyn::ast::ObjectLiteral* node) {
     }
 
     // Get the struct type for the object
+    std::cerr << "DEBUG: ObjectLiteral resolving type: " << node->typePath->toString() << std::endl;
     llvm::Type* structTy = codegenType(node->typePath.get());
+    std::cerr << "DEBUG: ObjectLiteral resolved type to: " << getTypeName(structTy) << " with pointer: " << structTy << std::endl;
     if (!structTy || !structTy->isStructTy()) {
         logError(node->loc, "Object literal type is not a struct type");
         m_currentLLVMValue = nullptr;
@@ -174,6 +176,9 @@ void LLVMCodegen::visit(vyn::ast::ObjectLiteral* node) {
     // we should load the struct value rather than return the pointer.
     // This ensures type compatibility with value semantics.
     llvm::Value* structValue = builder->CreateLoad(structTy, allocaInst, structName + "_val");
+    
+    std::cerr << "DEBUG: ObjectLiteral created struct value with type: " << getTypeName(structValue->getType()) << std::endl;
+    std::cerr << "DEBUG: Expected struct type was: " << getTypeName(structTy) << std::endl;
     
     // Return the loaded struct value
     m_currentLLVMValue = structValue;

@@ -171,11 +171,16 @@ void LLVMCodegen::visit(vyn::ast::Module* node) {
         }
     }
 
-    // THIRD PASS: Process all statements (including function bodies)
+    // THIRD PASS: Process all remaining statements (skip structs already processed in first pass)
     std::cout << "DEBUG: Third pass - processing all statements" << std::endl;
     for (size_t i = 0; i < node->body.size(); ++i) {
         const auto& stmt = node->body[i];
         if (stmt) {
+            // Skip struct declarations since they were already processed in first pass
+            if (stmt->getType() == vyn::ast::NodeType::STRUCT_DECLARATION) {
+                std::cout << "DEBUG: Skipping struct declaration statement " << i << " (already processed in first pass)" << std::endl;
+                continue;
+            }
             std::cout << "DEBUG: Processing module statement " << i << " (type: " << static_cast<int>(stmt->getType()) << ")" << std::endl;
             stmt->accept(*this);
         }
