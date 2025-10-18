@@ -1,0 +1,272 @@
+// Comprehensive ownership and borrowing test
+// Tests: my<T>, our<T>, their<T>, borrow(), view(), loc(), at()
+
+struct TestData {
+    value<Int>,
+    name<String>
+}
+
+// Test 1: my<T> unique ownership
+test_my_ownership()<Int> -> {
+    println("=== Test 1: my<T> unique ownership ===")
+    data<my<Int>> = my(42)
+    println("Created my<Int> with value: 42")
+    
+    // Moved ownership (would invalidate original in full implementation)
+    moved<my<Int>> = data
+    println("Moved ownership successfully")
+    return 1
+}
+
+// Test 2: our<T> shared ownership
+test_our_ownership()<Int> -> {
+    println("\n=== Test 2: our<T> shared ownership ===")
+    shared<our<String>> = our("shared data")
+    println("Created our<String>: shared data")
+    
+    // Multiple references to same shared data
+    ref1<our<String>> = shared
+    ref2<our<String>> = shared
+    println("Created multiple references to shared data")
+    return 1
+}
+
+// Test 3: borrow() creates mutable their<T>
+test_borrow_mutable()<Int> -> {
+    println("\n=== Test 3: borrow() mutable borrowing ===")
+    data<my<TestData>> = my(TestData { value = 100, name = "test" })
+    println("Created TestData with value: 100")
+    
+    unsafe {
+        borrowed<their<TestData>> = borrow(data)
+        println("Created mutable borrow")
+        
+        // Can modify through borrow
+        borrowed.value = 200
+        println("Modified value through borrow to: 200")
+    }
+    
+    println("Original data value after borrow: " + data.value.to_string())
+    return data.value  // Should be 200
+}
+
+// Test 4: view() creates immutable their<T const>
+test_view_immutable()<Int> -> {
+    println("\n=== Test 4: view() immutable borrowing ===")
+    data<my<Int>> = my(42)
+    println("Created my<Int> with value: 42")
+    
+    unsafe {
+        viewed<their<Int const>> = view(data)
+        println("Created immutable view")
+        
+        // Can read but not modify
+        println("Value through view: " + viewed.to_string())
+        
+        // This should error if uncommented:
+        // viewed = 100  // Cannot modify through view
+    }
+    
+    return data
+}
+
+// Test 5: loc() and at() for pointer operations
+test_loc_at_pointers()<Int> -> {
+    println("\n=== Test 5: loc() and at() pointer operations ===")
+    x<Int> = 42
+    println("Created Int x = 42")
+    
+    unsafe {
+        ptr<loc<Int>> = loc(x)
+        println("Created pointer to x")
+        
+        old_value<Int> = at(ptr)
+        println("Value at pointer: " + old_value.to_string())
+        
+        at(ptr) = 100
+        println("Set value through pointer to: 100")
+    }
+    
+    println("Value of x after pointer modification: " + x.to_string())
+    return x  // Should be 100
+}
+
+// Test 6: borrow() with function parameters
+modify_through_borrow(borrowed<their<TestData>>)<Void> -> {
+    borrowed.value = borrowed.value * 2
+    println("Modified value in function: " + borrowed.value.to_string())
+}
+
+test_borrow_function_params()<Int> -> {
+    println("\n=== Test 6: borrow() with function parameters ===")
+    data<my<TestData>> = my(TestData { value = 10, name = "param_test" })
+    println("Created TestData with value: 10")
+    
+    unsafe {
+        modify_through_borrow(borrow(data))
+    }
+    
+    println("Value after function call: " + data.value.to_string())
+    return data.value  // Should be 20
+}
+
+// Test 7: view() with function parameters (read-only)
+read_through_view(viewed<their<TestData const>>)<Int> -> {
+    println("Reading value through view: " + viewed.value.to_string())
+    return viewed.value
+}
+
+test_view_function_params()<Int> -> {
+    println("\n=== Test 7: view() with function parameters ===")
+    data<my<TestData>> = my(TestData { value = 99, name = "view_test" })
+    println("Created TestData with value: 99")
+    
+    unsafe {
+        result<Int> = read_through_view(view(data))
+        println("Read value through view function: " + result.to_string())
+    }
+    
+    println("Original data unchanged: " + data.value.to_string())
+    return data.value  // Should still be 99
+}
+
+// Test 8: Complex ownership chain
+test_ownership_chain()<Int> -> {
+    println("\n=== Test 8: Complex ownership chain ===")
+    
+    // Create unique ownership
+    unique<my<Int>> = my(1)
+    println("Created my<Int> = 1")
+    
+    // Create shared ownership
+    shared<our<Int>> = our(2)
+    println("Created our<Int> = 2")
+    
+    result<Int> = 0
+    
+    unsafe {
+        // Borrow the unique
+        borrowed_unique<their<Int>> = borrow(unique)
+        borrowed_unique = 10
+        println("Borrowed and modified unique: 10")
+        
+        // View the shared
+        viewed_shared<their<Int const>> = view(shared)
+        println("Viewed shared: " + viewed_shared.to_string())
+        
+        result = unique + shared
+    }
+    
+    println("Final result: " + result.to_string())
+    return result  // Should be 12
+}
+
+// Test 9: String with ownership
+test_string_ownership()<Int> -> {
+    println("\n=== Test 9: String ownership ===")
+    
+    text<my<String>> = my("Hello, Vyn!")
+    println("Created my<String>: Hello, Vyn!")
+    
+    unsafe {
+        viewed<their<String const>> = view(text)
+        length<Int> = viewed.len()
+        println("String length through view: " + length.to_string())
+    }
+    
+    return text.len()
+}
+
+// Test 10: Multiple borrows in sequence
+test_sequential_borrows()<Int> -> {
+    println("\n=== Test 10: Sequential borrows ===")
+    data<my<Int>> = my(5)
+    println("Created my<Int> = 5")
+    
+    unsafe {
+        // First borrow
+        borrow1<their<Int>> = borrow(data)
+        borrow1 = borrow1 * 2
+        println("After first borrow: " + data.to_string())
+        
+        // Second borrow
+        borrow2<their<Int>> = borrow(data)
+        borrow2 = borrow2 + 3
+        println("After second borrow: " + data.to_string())
+        
+        // View
+        final_view<their<Int const>> = view(data)
+        println("Final view: " + final_view.to_string())
+    }
+    
+    return data  // Should be 13 (5*2=10, 10+3=13)
+}
+
+// Main test runner
+main()<Int> -> {
+    println("╔═══════════════════════════════════════════════════════════╗")
+    println("║    Comprehensive Ownership & Memory Semantics Test       ║")
+    println("╚═══════════════════════════════════════════════════════════╝\n")
+    
+    total_tests<Int> = 10
+    passed<Int> = 0
+    
+    // Run all tests
+    if (test_my_ownership() == 1) {
+        passed = passed + 1
+        println("✓ Test 1 passed")
+    }
+    
+    if (test_our_ownership() == 1) {
+        passed = passed + 1
+        println("✓ Test 2 passed")
+    }
+    
+    if (test_borrow_mutable() == 200) {
+        passed = passed + 1
+        println("✓ Test 3 passed")
+    }
+    
+    if (test_view_immutable() == 42) {
+        passed = passed + 1
+        println("✓ Test 4 passed")
+    }
+    
+    if (test_loc_at_pointers() == 100) {
+        passed = passed + 1
+        println("✓ Test 5 passed")
+    }
+    
+    if (test_borrow_function_params() == 20) {
+        passed = passed + 1
+        println("✓ Test 6 passed")
+    }
+    
+    if (test_view_function_params() == 99) {
+        passed = passed + 1
+        println("✓ Test 7 passed")
+    }
+    
+    if (test_ownership_chain() == 12) {
+        passed = passed + 1
+        println("✓ Test 8 passed")
+    }
+    
+    if (test_string_ownership() > 0) {
+        passed = passed + 1
+        println("✓ Test 9 passed")
+    }
+    
+    if (test_sequential_borrows() == 13) {
+        passed = passed + 1
+        println("✓ Test 10 passed")
+    }
+    
+    println("\n╔═══════════════════════════════════════════════════════════╗")
+    println("║                    Test Summary                          ║")
+    println("╠═══════════════════════════════════════════════════════════╣")
+    println("║  Passed: " + passed.to_string() + "/" + total_tests.to_string() + "                                                ║")
+    println("╚═══════════════════════════════════════════════════════════╝")
+    
+    return passed
+}

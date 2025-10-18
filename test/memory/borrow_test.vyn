@@ -11,7 +11,7 @@ main()<Int> -> {
     my_struct<TestStruct> = TestStruct { value = 0 }
     println("Before: " + my_struct.value.to_string())
     
-    modify_struct(borrow my_struct)
+    modify_struct(borrow(my_struct))
     
     println("After: " + my_struct.value.to_string())
     return 0

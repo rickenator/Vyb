@@ -50,25 +50,24 @@ tree<my<TreeNode>>    = my(TreeNode {
 });
 ```
 
-### **3. Borrowing Operations**
+### Borrowing Operations
 
-Used to create temporary references without transferring ownership:
+Borrowing uses function-call syntax `view(expr)` and `borrow(expr)`:
 
 ```vyn
-// Immutable borrowing (creates their<T const>)
-readonly<their<String const>> = view data;
-length<Int>                   = (view data).len();
+readonly<their<String const>> = view(data);
+length<Int>                   = view(data).len();
 
-// Mutable borrowing (creates their<T>)  
-writable<their<String>>       = borrow data;
-(borrow data).push_str("!");
+# Mutable borrowing
+writable<their<String>>       = borrow(data);
+borrow(data).push_str("!");
 
-// Method call borrowing
-result<String> = (view connection).send_request();
-(borrow buffer).write(data);
+# Inline borrowing
+result<String> = view(connection).send_request();
+borrow(buffer).write(data);
 ```
 
-> **Design Note**: The operator syntax `view expr` and `borrow expr` (without parentheses) is currently canonical to distinguish borrowing operations from function calls. This emphasizes that borrowing is a zero-cost reference operation, not a function with potential overhead. However, the parenthesized syntax `view(expr)` and `borrow(expr)` remains under consideration for potential future adoption based on parser complexity and developer feedback. The current design prioritizes semantic clarity and performance transparency.
+> **Design Note**: The function-call syntax `view(expr)` and `borrow(expr)` provides syntactic consistency with other ownership operations `my(expr)` and `our(expr)`. This unified approach makes the language more regular and easier to parse, while still clearly distinguishing borrowing operations from value construction. The function-call style emphasizes that these are fundamental language operations, not external functions.
 
 ### **4. Complete Real-World Example**
 
@@ -90,20 +89,20 @@ impl ConnectionPool {
     
     // Method uses canonical borrowing for parameters
     get_connection(self<their<ConnectionPool>>)<my<Connection>> -> {
-        if (view self.connections).is_empty() {
-            // Create new connection using shared config
-            new_conn<my<Connection>> = my(Connection::new(view self.shared_config));
+        if view(self.connections).is_empty() {
+            # Create new connection with immutable shared config view
+            new_conn<my<Connection>> = my(Connection::new(view(self.shared_config)));
             return new_conn;
         } else {
-            // Move connection from pool
-            return (borrow self.connections).pop().unwrap();
+            # Reuse existing connection from pool
+            return borrow(self.connections).pop().unwrap();
         }
     }
     
     // Async method with canonical Future types
     async execute_query(self<their<ConnectionPool>>, query<String>)<Future<my<Result>>> -> {
         conn<my<Connection>> = self.get_connection();
-        result<my<Result>> = await (view conn).execute(view query);
+        result<my<Result>> = await view(conn).execute(view(query));
         return result;
     }
 }
@@ -117,12 +116,12 @@ async main()<Void> -> {
     pool<my<ConnectionPool>> = ConnectionPool::new(config);
     
     // Execute queries with borrowing
-    result1<my<Result>> = await (view pool).execute_query("SELECT * FROM users");
-    result2<my<Result>> = await (view pool).execute_query("SELECT * FROM orders");
+    result1<my<Result>> = await view(pool).execute_query("SELECT * FROM users");
+    result2<my<Result>> = await view(pool).execute_query("SELECT * FROM orders");
     
-    // Process results
-    (view result1).print();
-    (view result2).print();
+    # Print results using immutable views
+    view(result1).print();
+    view(result2).print();
 }
 ```
 
@@ -153,12 +152,12 @@ The canonical syntax integrates with the parser as follows:
 
 ### **Expression Context Recognition**  
 - `my(expr)`, `our(expr)` → Parsed as function calls returning owned values
-- `view expr`, `borrow expr` → Parsed as prefix unary operators returning borrowed references
+- `view(expr)`, `borrow(expr)` → Parsed as function-like calls returning borrowed references
 
 ### **Precedence Rules**
 1. **Type parsing**: Ownership types have higher precedence than base types
 2. **Expression parsing**: Borrowing operators have prefix unary precedence
-3. **Method calls**: `(view obj).method()` → Borrowing binds before method call
+3. **Method calls**: `view(obj).method()` → Borrowing binds before method call
 
 ## 🧪 **Testing Standards**
 
@@ -172,8 +171,8 @@ test_canonical_ownership()<Void> -> {
     shared<our<Config>> = our(Config::test());
     
     // Use canonical borrowing
-    length<Int> = (view data).len();
-    (borrow data).clear();
+    length<Int> = view(data).len();
+    borrow(data).clear();
     
     println("Test completed with canonical syntax");
 }

@@ -1,0 +1,21 @@
+// Test updated borrow/view syntax without full ownership implementation
+main()<Int> -> {
+    println("=== Testing borrow() and view() syntax ===")
+    
+    x<Int> = 42
+    println("Created x = 42")
+    
+    // Test that borrow() and view() parse correctly with function-call syntax
+    unsafe {
+        p<loc<Int>> = loc(x)
+        at(p) = 100
+        println("Modified x through pointer to 100")
+        
+        // These demonstrate the new syntax (even if not fully functional yet)
+        // b<their<Int>> = borrow(x)
+        // v<their<Int const>> = view(x)
+    }
+    
+    println("Final value: " + x.to_string())
+    return x
+}

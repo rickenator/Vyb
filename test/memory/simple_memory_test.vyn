@@ -5,8 +5,8 @@ main()<Int> -> {
     unsafe {
         p<loc<Int>> = loc(x);
         at(p) = 100;  // Change x through pointer
-        b<their<Int>> = borrow x;
-        v<their<Int>> = view x;
+        b<their<Int>> = borrow(x);
+        v<their<Int>> = view(x);
     }
     
     return x;  // Should return 100 since we changed it through pointer

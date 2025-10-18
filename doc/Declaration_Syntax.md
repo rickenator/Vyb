@@ -26,7 +26,7 @@ const MAX_SIZE<Int> = 1000
 // Ownership wrappers
 task<my<Task>> = my(Task { id: 1 })
 config<our<Config>> = our(Config { debug: true })
-borrowed<their<Foo>> = borrow owner
+borrowed<their<Foo>> = borrow(owner)
 ```
 
 ## Function Declarations

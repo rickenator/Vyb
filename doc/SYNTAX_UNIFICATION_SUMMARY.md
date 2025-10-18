@@ -40,7 +40,7 @@ Successfully completed comprehensive syntax unification for Vyn v0.4.0, establis
 - **Complete Syntax Reference**: Authoritative documentation for all ownership operations
 - **Type Annotations**: `my<T>`, `our<T>`, `their<T>` type system documentation
 - **Value Construction**: `my(expr)`, `our(expr)` constructor syntax and usage
-- **Borrowing Operations**: `view expr`, `borrow expr` operator documentation
+- **Borrowing Operations**: `view(expr)`, `borrow(expr)` function call documentation
 - **Real-World Examples**: Comprehensive code examples showing proper usage
 - **Migration Guidelines**: Clear before/after examples and best practices
 
@@ -78,17 +78,17 @@ Successfully completed comprehensive syntax unification for Vyn v0.4.0, establis
    writable = borrow(data)
    
    # After (Canonical)
-   readonly = view data
-   writable = borrow data
+   readonly = view(data)
+   writable = borrow(data)
    ```
 
 3. **Documentation Syntax**:
    ```vyn
    # Before (Inconsistent)
-   make_my borrow view expressions
+   make_my borrow() view() expressions
    
    # After (Canonical)
-   my() constructor with view/borrow operators
+   my() constructor with view()/borrow() functions
    ```
 
 ## 📈 **Benefits Achieved**

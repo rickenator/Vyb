@@ -449,7 +449,7 @@ public:
 };
 
 
-// Represents a borrow or view expression: borrow expr, view expr
+// Represents a borrow or view expression: borrow(expr), view(expr)
 class BorrowExpression : public Expression { // Renamed from BorrowExprNode
 public:
     ExprPtr expression; 

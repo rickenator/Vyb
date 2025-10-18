@@ -96,8 +96,8 @@ build/vyn tuple.vyn  # Outputs: [42, "Hello!"]
     *   `their<T>`: Non-owning borrow/reference to data `T`.
 *   **Data Mutability**: Indicated by `const` on the type itself (e.g., `my<T const>` for unique ownership of immutable data).
 *   **Borrowing**:
-    *   `view <expr>`: Creates an immutable borrow `their<T const>`.
-    *   `borrow <expr>`: Creates a mutable borrow `their<T>`.
+    *   `view(expr)`: Creates an immutable borrow `their<T const>`.
+    *   `borrow(expr)`: Creates a mutable borrow `their<T>`.
 *   **`unsafe` Blocks**: Sections of code marked `unsafe { ... }` where raw pointers (`loc<T>`) can be used and some compiler guarantees are relaxed. Within these blocks, operations like `at(ptr)` for dereferencing and `from<loc<T>>()` for pointer conversion are available.
 *   **Scoped Block**: Planned block prefixed with `scoped` that defers GC and cleans up at block exit.
 *   **Actor**: Planned lightweight concurrent entity with a built-in mailbox for message passing.
@@ -201,7 +201,7 @@ Vyn **v0.4.0** is a **complete systems programming language** ready for producti
 |------|-------------|----------|---------|
 | `my<T>` | Unique ownership | Single owner, move semantics | `data<my<Person>> = my(Person{...})` |
 | `our<T>` | Shared ownership | Reference counting | `config<our<Settings>> = our(Settings{...})` |
-| `their<T>` | Borrowed reference | Non-owning access | `ref<their<Data>> = view owner` |
+| `their<T>` | Borrowed reference | Non-owning access | `ref<their<Data>> = view(owner)` |
 | `loc<T>` | Raw pointer | Unsafe operations only | `ptr<loc<Int>> = loc(variable)` |
 
 ### ✅ **Canonical Ownership Syntax** 
@@ -226,11 +226,11 @@ result<my<Data>>     = my(compute_data())
 
 #### **Borrowing Operations**
 ```vyn
-# Create temporary references with view/borrow operators
-readonly<their<String const>> = view data     # Immutable borrow
-writable<their<String>>       = borrow data   # Mutable borrow
-length<Int>                   = (view data).len()
-(borrow data).clear()
+# Create temporary references with view/borrow functions
+readonly<their<String const>> = view(data)     # Immutable borrow
+writable<their<String>>       = borrow(data)   # Mutable borrow
+length<Int>                   = view(data).len()
+borrow(data).clear()
 ```
 
 #### **Legacy Syntax Migration**
@@ -248,7 +248,7 @@ python3 migrate_syntax.py --migrate --directory . --backup --report
 
 ### ✅ **Memory Management**
 - **Ownership types**: `my<T>`, `our<T>`, `their<T>` for safe memory handling
-- **Borrowing**: `view expr` and `borrow expr` for references  
+- **Borrowing**: `view(expr)` and `borrow(expr)` for references  
 - **Unsafe operations**: `loc<T>` pointers in `unsafe {}` blocks
 - **Raw Memory Operations**: Complete `unsafe` block system with `loc<T>` pointers
 - **Memory Safety**: Borrow checking and lifetime analysis prevent dangling pointers
@@ -357,8 +357,8 @@ safe_memory_example()<Int> -> {
     another_ref<our<String>> = shared  # Reference count incremented
     
     # Borrowing - non-owning references
-    view_ref<their<String const>> = view shared      # Immutable borrow
-    mut_ref<their<String>> = borrow owned           # Mutable borrow
+    view_ref<their<String const>> = view(shared)      # Immutable borrow
+    mut_ref<their<String>> = borrow(owned)           # Mutable borrow
     
     return 42
 }
@@ -466,7 +466,7 @@ process_value(val<Int>)<String> -> {
 # Memory safety with ownership types
 safe_data<my<String>> = my("unique")      # Unique ownership
 shared_data<our<String>> = our("shared")  # Reference counted
-borrowed<their<String>> = borrow safe_data  # Non-owning reference
+borrowed<their<String>> = borrow(safe_data)  # Non-owning reference
 ```
 
 #### Type System Features
@@ -681,8 +681,6 @@ describe_number(x<Int>)<String> -> {
 ```
 
 ## String Theory
-
-*Everything you ever wanted to know about Strings (but were afraid to ask)*
 
 Vyn's String type is a production-ready fat pointer implementation with comprehensive method support and natural literal syntax. Unlike C's null-terminated strings or C++'s heavyweight `std::string`, Vyn Strings combine the best of both worlds: efficient representation with modern conveniences.
 
@@ -944,9 +942,6 @@ c_str<*i8> = name.to_bytes()  # Get raw pointer
 - **Rope data structure**: Efficient concatenation for large strings
 - **Copy-on-write**: Share data until modification
 
-### Why "String Theory"?
-
-Because like theoretical physics, String manipulation can seem simple on the surface but reveals deep complexity when you dive in. Vyn's approach: make the simple cases trivial while keeping the complex cases possible.
 
 ```vyn
 # Simple things are simple
@@ -1113,8 +1108,8 @@ shared<our<String>> = our("shared data")
 another_ref<our<String>> = shared  # Reference count incremented
 
 # Borrowing (non-owning references)
-view_ref<their<String>> = view shared      # Immutable borrow
-mut_ref<their<String>> = borrow owned      # Mutable borrow
+view_ref<their<String>> = view(shared)      # Immutable borrow
+mut_ref<their<String>> = borrow(owned)      # Mutable borrow
 
 # Raw pointers for unsafe operations
 unsafe {
@@ -1343,8 +1338,8 @@ digit = "0".."9";
 - `their<T>`: Non-owning borrow, lifetime checked
 
 **Borrowing Operations:**
-- `view expr`: Creates `their<T const>` immutable borrow
-- `borrow expr`: Creates `their<T>` mutable borrow
+- `view(expr)`: Creates `their<T const>` immutable borrow
+- `borrow(expr)`: Creates `their<T>` mutable borrow
 
 **Unsafe Operations:**
 - `loc<T>`: Raw pointer type
