@@ -20,6 +20,16 @@ entry:
   %vec.new.value = load { ptr, i64, i64 }, ptr %vec.new, align 8
   store { ptr, i64, i64 } %vec.new.value, ptr %v1, align 8
   call void @__vyn_println(ptr @0)
+  %v1_cleanup_load = load { ptr, i64, i64 }, ptr %v1, align 8
+  %v1_data_ptr = extractvalue { ptr, i64, i64 } %v1_cleanup_load, 0
+  %v1_null_check = icmp ne ptr %v1_data_ptr, null
+  br i1 %v1_null_check, label %v1_free_block, label %v1_continue
+
+v1_free_block:                                    ; preds = %entry
+  call void @free(ptr %v1_data_ptr)
+  br label %v1_continue
+
+v1_continue:                                      ; preds = %v1_free_block, %entry
   ret i64 42
 }
 
@@ -28,6 +38,8 @@ declare ptr @malloc(i64)
 declare ptr @memset(ptr, i32, i64)
 
 declare void @__vyn_println(ptr)
+
+declare void @free(ptr)
 
 declare ptr @__vyn_serialize_to_json(ptr, ptr)
 

@@ -58,6 +58,7 @@ public:
     void generate(vyn::ast::Module* astModule, const std::string& outputFilename); // Add declaration
     void dumpIR() const; // Add declaration
     std::unique_ptr<llvm::Module> releaseModule(); // Add declaration
+    std::unique_ptr<llvm::LLVMContext> releaseContext(); // Add declaration for context release
     llvm::Module* getModule() const { return module.get(); } // Add method to get module pointer without releasing
 
 private:
