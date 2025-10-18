@@ -439,4 +439,62 @@ void LLVMCodegen::handleVecGetVec(vyn::ast::CallExpression* node, llvm::Value* v
     m_currentLLVMValue = srcSize;
 }
 
+void LLVMCodegen::handleVecMethodOnValue(vyn::ast::CallExpression* node, llvm::Value* vecValue, const std::string& methodName, vyn::ast::Expression* objectExpr) {
+    // Handle Vec method calls when we have the Vec value directly (not just a name)
+    // This is used for calls like tree.nodes.push() where tree.nodes is a member expression
+    
+    llvm::Value* vecPtr = vecValue;
+    
+    // Check if the value is a pointer
+    if (!vecPtr->getType()->isPointerTy()) {
+        // If it's a value (not a pointer), we need to create a temporary alloca and store it
+        llvm::Type* vecType = vecPtr->getType();
+        llvm::Value* tempAlloca = builder->CreateAlloca(vecType, nullptr, "vec.temp");
+        builder->CreateStore(vecPtr, tempAlloca);
+        vecPtr = tempAlloca;
+    }
+    
+    // Define Vec struct type: { ptr, i64, i64 }
+    std::vector<llvm::Type*> vecFields = {
+        llvm::PointerType::get(*context, 0), // ptr to elements
+        llvm::Type::getInt64Ty(*context),    // size
+        llvm::Type::getInt64Ty(*context)     // capacity
+    };
+    llvm::Type* vecStructType = llvm::StructType::get(*context, vecFields, false);
+    
+    // Dispatch to the appropriate handler
+    if (methodName == "push") {
+        handleVecPush(node, vecPtr, vecStructType);
+    } else if (methodName == "pop") {
+        handleVecPop(node, vecPtr, vecStructType);
+    } else if (methodName == "len") {
+        handleVecLen(node, vecPtr, vecStructType);
+    } else if (methodName == "get") {
+        handleVecGet(node, vecPtr, vecStructType);
+    } else if (methodName == "push_array") {
+        handleVecPushArray(node, vecPtr, vecStructType);
+    } else if (methodName == "to_array") {
+        handleVecToArray(node, vecPtr, vecStructType);
+    } else if (methodName == "clear") {
+        handleVecClear(node, vecPtr, vecStructType);
+    } else if (methodName == "is_empty") {
+        handleVecIsEmpty(node, vecPtr, vecStructType);
+    } else if (methodName == "capacity") {
+        handleVecCapacity(node, vecPtr, vecStructType);
+    } else if (methodName == "concat") {
+        handleVecConcat(node, vecPtr, vecStructType);
+    } else if (methodName == "contains") {
+        handleVecContains(node, vecPtr, vecStructType);
+    } else if (methodName == "remove_at") {
+        handleVecRemoveAt(node, vecPtr, vecStructType);
+    } else if (methodName == "get_array") {
+        handleVecGetArray(node, vecPtr, vecStructType);
+    } else if (methodName == "get_vec") {
+        handleVecGetVec(node, vecPtr, vecStructType);
+    } else {
+        logError(node->loc, "Unknown Vec method: " + methodName);
+        m_currentLLVMValue = nullptr;
+    }
+}
+
 } // namespace vyn

@@ -70,13 +70,20 @@ entry:
   store %TreeNode %TreeNode_val, ptr %new_node, align 8, !dbg !20
   call void @llvm.dbg.declare(metadata ptr %new_node, metadata !18, metadata !DIExpression()), !dbg !24
   %tree6 = load ptr, ptr %tree1, align 8, !dbg !20
-  %has_root_ptr = getelementptr inbounds %BinaryTree, ptr %tree6, i32 0, i32 1, !dbg !20
-  store i1 true, ptr %has_root_ptr, align 1, !dbg !20
-  %tree7 = load ptr, ptr %tree1, align 8, !dbg !20
-  %size_ptr = getelementptr inbounds %BinaryTree, ptr %tree7, i32 0, i32 2, !dbg !20
+  %nodes_ptr = getelementptr inbounds %BinaryTree, ptr %tree6, i32 0, i32 0, !dbg !20
+  %new_node7 = load %TreeNode, ptr %new_node, align 8, !dbg !20
+  %vec.size_ptr = getelementptr inbounds { ptr, i64, i64 }, ptr %nodes_ptr, i32 0, i32 1, !dbg !20
+  %vec.current_size = load i64, ptr %vec.size_ptr, align 4, !dbg !20
+  %vec.new_size = add i64 %vec.current_size, 1, !dbg !20
+  store i64 %vec.new_size, ptr %vec.size_ptr, align 4, !dbg !20
   %tree8 = load ptr, ptr %tree1, align 8, !dbg !20
-  %size_ptr9 = getelementptr inbounds %BinaryTree, ptr %tree8, i32 0, i32 2, !dbg !20
-  %size_val = load i64, ptr %size_ptr9, align 4, !dbg !20
+  %has_root_ptr = getelementptr inbounds %BinaryTree, ptr %tree8, i32 0, i32 1, !dbg !20
+  store i1 true, ptr %has_root_ptr, align 1, !dbg !20
+  %tree9 = load ptr, ptr %tree1, align 8, !dbg !20
+  %size_ptr = getelementptr inbounds %BinaryTree, ptr %tree9, i32 0, i32 2, !dbg !20
+  %tree10 = load ptr, ptr %tree1, align 8, !dbg !20
+  %size_ptr11 = getelementptr inbounds %BinaryTree, ptr %tree10, i32 0, i32 2, !dbg !20
+  %size_val = load i64, ptr %size_ptr11, align 4, !dbg !20
   %addtmp = add i64 %size_val, 1, !dbg !20
   store i64 %addtmp, ptr %size_ptr, align 4, !dbg !20
   ret void, !dbg !20
@@ -118,9 +125,14 @@ loop.header:                                      ; preds = %loop.body, %ifcont
   br i1 %icmpslttmp, label %loop.body, label %loop.exit, !dbg !32
 
 loop.body:                                        ; preds = %loop.header
-  %key7 = load i64, ptr %key2, align 4, !dbg !32
-  %i8 = load i64, ptr %i, align 4, !dbg !32
-  %addtmp = add i64 %i8, 1, !dbg !32
+  %tree7 = load %BinaryTree, ptr %tree1, align 8, !dbg !32
+  %temp_struct8 = alloca %BinaryTree, align 8, !dbg !32
+  store %BinaryTree %tree7, ptr %temp_struct8, align 8, !dbg !32
+  %nodes_ptr = getelementptr inbounds %BinaryTree, ptr %temp_struct8, i32 0, i32 0, !dbg !32
+  %i9 = load i64, ptr %i, align 4, !dbg !32
+  %key10 = load i64, ptr %key2, align 4, !dbg !32
+  %i11 = load i64, ptr %i, align 4, !dbg !32
+  %addtmp = add i64 %i11, 1, !dbg !32
   store i64 %addtmp, ptr %i, align 4, !dbg !32
   br label %loop.header, !dbg !32
 
@@ -163,8 +175,13 @@ loop.header:                                      ; preds = %loop.body, %ifcont
   br i1 %icmpslttmp, label %loop.body, label %loop.exit, !dbg !42
 
 loop.body:                                        ; preds = %loop.header
-  %i6 = load i64, ptr %i, align 4, !dbg !42
-  %addtmp = add i64 %i6, 1, !dbg !42
+  %tree6 = load %BinaryTree, ptr %tree1, align 8, !dbg !42
+  %temp_struct7 = alloca %BinaryTree, align 8, !dbg !42
+  store %BinaryTree %tree6, ptr %temp_struct7, align 8, !dbg !42
+  %nodes_ptr = getelementptr inbounds %BinaryTree, ptr %temp_struct7, i32 0, i32 0, !dbg !42
+  %i8 = load i64, ptr %i, align 4, !dbg !42
+  %i9 = load i64, ptr %i, align 4, !dbg !42
+  %addtmp = add i64 %i9, 1, !dbg !42
   store i64 %addtmp, ptr %i, align 4, !dbg !42
   br label %loop.header, !dbg !42
 

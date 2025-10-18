@@ -633,10 +633,30 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
         }
         
         // Handle Vec instance method calls: obj.method()
+        // First check if it's a simple identifier (e.g., vec.push())
         if (auto objIdent = dynamic_cast<ast::Identifier*>(memberExpr->object.get())) {
             if (auto methodIdent = dynamic_cast<ast::Identifier*>(memberExpr->property.get())) {
                 handleVecMethodCall(node, objIdent->name, methodIdent->name);
                 return;
+            }
+        }
+        
+        // Now handle the case where object is a member expression (e.g., tree.nodes.push())
+        // In this case, we need to analyze the object to determine its type
+        if (auto methodIdent = dynamic_cast<ast::Identifier*>(memberExpr->property.get())) {
+            // Visit the object expression to determine its type
+            memberExpr->object->accept(*this);
+            
+            // Get the object's type
+            auto objTypeIt = expressionTypes.find(memberExpr->object.get());
+            if (objTypeIt != expressionTypes.end() && objTypeIt->second) {
+                // Check if the object's type is a Vec type
+                if (auto vecType = dynamic_cast<ast::VecType*>(objTypeIt->second)) {
+                    // This is a Vec method call, handle it
+                    // We pass a dummy name since we're working with member expressions
+                    handleVecMethodCallOnMember(node, vecType, methodIdent->name);
+                    return;
+                }
             }
         }
     }
@@ -2496,6 +2516,89 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
         expressionTypes[node] = intType.get();
         node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
+        
+    } else {
+        addError("Unknown Vec method: " + methodName, node);
+    }
+}
+
+void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, ast::VecType* vecType, const std::string& methodName) {
+    // Handle Vec method calls on member expressions (e.g., tree.nodes.push())
+    // This variant doesn't need to look up the object in the symbol table since we already have the type
+    
+    // Get the element type from the Vec<T>
+    ast::TypeNode* elementType = vecType->elementType.get();
+    
+    if (methodName == "push") {
+        // push(element) -> Vec<T> (for chaining)
+        if (node->arguments.size() != 1) {
+            addError("Vec::push expects exactly 1 argument", node);
+            return;
+        }
+        // Accept the argument to ensure it gets analyzed
+        node->arguments[0]->accept(*this);
+        
+        // Return type is the Vec itself for chaining
+        expressionTypes[node] = vecType;
+        node->type = std::shared_ptr<ast::TypeNode>(vecType->clone());
+        
+    } else if (methodName == "pop") {
+        // pop() -> T (element type)
+        if (node->arguments.size() != 0) {
+            addError("Vec::pop expects no arguments", node);
+            return;
+        }
+        // Return element type
+        if (elementType) {
+            expressionTypes[node] = elementType;
+            node->type = std::shared_ptr<ast::TypeNode>(elementType->clone());
+        }
+        
+    } else if (methodName == "len") {
+        // len() -> Int
+        if (node->arguments.size() != 0) {
+            addError("Vec::len expects no arguments", node);
+            return;
+        }
+        auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+        auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+        expressionTypes[node] = intType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
+        
+    } else if (methodName == "get") {
+        // get(index) -> T (element type)
+        if (node->arguments.size() != 1) {
+            addError("Vec::get expects exactly 1 argument (index)", node);
+            return;
+        }
+        // Validate index argument
+        if (node->arguments[0]) {
+            node->arguments[0]->accept(*this);
+        }
+        // Return element type
+        if (elementType) {
+            expressionTypes[node] = elementType;
+            node->type = std::shared_ptr<ast::TypeNode>(elementType->clone());
+        }
+        
+    } else if (methodName == "clear") {
+        // clear() -> void
+        if (node->arguments.size() != 0) {
+            addError("Vec::clear expects no arguments", node);
+            return;
+        }
+        node->type = nullptr;
+        
+    } else if (methodName == "is_empty") {
+        // is_empty() -> Bool
+        if (node->arguments.size() != 0) {
+            addError("Vec::is_empty expects no arguments", node);
+            return;
+        }
+        auto boolId = std::make_unique<ast::Identifier>(node->loc, "Bool");
+        auto boolType = std::make_unique<ast::TypeName>(node->loc, std::move(boolId));
+        expressionTypes[node] = boolType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(boolType));
         
     } else {
         addError("Unknown Vec method: " + methodName, node);

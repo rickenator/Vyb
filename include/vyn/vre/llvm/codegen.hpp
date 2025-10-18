@@ -175,6 +175,7 @@ private:
     
     // Vec operations
     void handleVecMethod(vyn::ast::CallExpression* node, const std::string& objectName, const std::string& methodName);
+    void handleVecMethodOnValue(vyn::ast::CallExpression* node, llvm::Value* vecValue, const std::string& methodName, vyn::ast::Expression* objectExpr);
     void handleVecPush(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecPop(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecLen(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);

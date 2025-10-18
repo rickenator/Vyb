@@ -1112,6 +1112,27 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                     return;
                 }
             }
+            
+            // Handle Vec method calls on member expressions (e.g., tree.nodes.push())
+            // The object is itself a member expression
+            if (methodName == "push" || methodName == "pop" || methodName == "len" || methodName == "get" ||
+                methodName == "push_array" || methodName == "to_array" || methodName == "get_array" ||
+                methodName == "clear" || methodName == "is_empty" || methodName == "capacity" ||
+                methodName == "concat" || methodName == "contains" || methodName == "remove_at" ||
+                methodName == "get_vec") {
+                // Evaluate the object to get the Vec value
+                memberExpr->object->accept(*this);
+                llvm::Value* vecValue = m_currentLLVMValue;
+                if (!vecValue) {
+                    logError(memberExpr->object->loc, "Failed to evaluate object for Vec method call");
+                    m_currentLLVMValue = nullptr;
+                    return;
+                }
+                
+                // Handle the Vec method with the evaluated value directly
+                handleVecMethodOnValue(node, vecValue, methodName, memberExpr->object.get());
+                return;
+            }
         }
     }
 
