@@ -716,5 +716,63 @@ void LLVMCodegen::visit(vyn::ast::TemplateDeclaration* node) {
     m_currentLLVMValue = nullptr;
 }
 
+void LLVMCodegen::createFunctionForwardDeclaration(vyn::ast::FunctionDeclaration* node) {
+    std::cout << "DEBUG: Creating forward declaration for function: " << node->id->name << std::endl;
+    
+    // Check if function already exists
+    llvm::Function* existingFunc = module->getFunction(node->id->name);
+    if (existingFunc) {
+        std::cout << "DEBUG: Function " << node->id->name << " already exists, skipping forward declaration" << std::endl;
+        return;
+    }
+    
+    // Extract parameter types
+    std::vector<llvm::Type*> paramTypes;
+    for (const auto& paramNode : node->params) {
+        if (!paramNode.typeNode) {
+            logError(paramNode.name->loc, "Parameter '" + paramNode.name->name + "' in function '" + node->id->name + "' is missing a type annotation.");
+            return;
+        }
+        llvm::Type* llvmType = codegenType(paramNode.typeNode.get());
+        if (!llvmType) {
+            logError(paramNode.name->loc, "Could not determine LLVM type for parameter '" + paramNode.name->name + "' in function '" + node->id->name + "'.");
+            return;
+        }
+        paramTypes.push_back(llvmType);
+    }
+
+    // Extract return type
+    llvm::Type* returnType = nullptr;
+    if (node->returnTypeNode) {
+        if (currentAsyncState.isAsync) {
+            // For async functions, the actual return type is wrapped in Future<T>
+            llvm::Type* originalReturnType = codegenType(node->returnTypeNode.get());
+            if (!originalReturnType) {
+                logError(node->loc, "Could not determine LLVM return type for async function '" + node->id->name + "'.");
+                return;
+            }
+            returnType = createFutureStructType(originalReturnType);
+        } else {
+            returnType = codegenType(node->returnTypeNode.get());
+            if (!returnType) {
+                logError(node->loc, "Could not determine LLVM return type for function '" + node->id->name + "'.");
+                return;
+            }
+        }
+    } else {
+        if (currentAsyncState.isAsync) {
+            // Async void function returns Future<void>
+            returnType = createFutureStructType(llvm::Type::getVoidTy(*context));
+        } else {
+            returnType = llvm::Type::getVoidTy(*context);
+        }
+    }
+    
+    // Create function type and forward declaration
+    llvm::FunctionType* funcType = llvm::FunctionType::get(returnType, paramTypes, false /*isVarArg*/);
+    llvm::Function* func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, node->id->name, module.get());
+    
+    std::cout << "DEBUG: Successfully created forward declaration for function: " << node->id->name << std::endl;
+}
 
 

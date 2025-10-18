@@ -1,0 +1,17 @@
+// Test method call parsing issue
+
+struct TestStruct {
+    value<Int>
+}
+
+test_method_call(obj<TestStruct>)<Void> -> {
+    // This should work - direct method call
+    println("Testing direct method call:")
+    obj.value.to_string()
+}
+
+main()<Int> -> {
+    test<TestStruct> = TestStruct { value = 42 }
+    test_method_call(test)
+    return 0
+}

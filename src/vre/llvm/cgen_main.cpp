@@ -150,6 +150,29 @@ void LLVMCodegen::visit(vyn::ast::Module* node) {
     vyn::ast::Module* previousModule = m_currentVynModule;
     m_currentVynModule = node;
 
+    // FIRST PASS: Process all struct declarations to establish type information
+    std::cout << "DEBUG: First pass - processing struct declarations" << std::endl;
+    for (size_t i = 0; i < node->body.size(); ++i) {
+        const auto& stmt = node->body[i];
+        if (stmt && stmt->getType() == vyn::ast::NodeType::STRUCT_DECLARATION) {
+            std::cout << "DEBUG: Processing struct declaration statement " << i << std::endl;
+            stmt->accept(*this);
+        }
+    }
+
+    // SECOND PASS: Create forward declarations for all functions
+    std::cout << "DEBUG: Second pass - creating function forward declarations" << std::endl;
+    for (size_t i = 0; i < node->body.size(); ++i) {
+        const auto& stmt = node->body[i];
+        if (stmt && stmt->getType() == vyn::ast::NodeType::FUNCTION_DECLARATION) {
+            std::cout << "DEBUG: Creating forward declaration for function statement " << i << std::endl;
+            vyn::ast::FunctionDeclaration* funcDecl = static_cast<vyn::ast::FunctionDeclaration*>(stmt.get());
+            createFunctionForwardDeclaration(funcDecl);
+        }
+    }
+
+    // THIRD PASS: Process all statements (including function bodies)
+    std::cout << "DEBUG: Third pass - processing all statements" << std::endl;
     for (size_t i = 0; i < node->body.size(); ++i) {
         const auto& stmt = node->body[i];
         if (stmt) {

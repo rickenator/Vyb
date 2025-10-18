@@ -149,23 +149,44 @@ namespace vyn {
             if (after_identifier_pos < tokens_.size() && tokens_[after_identifier_pos].type == TokenType::LPAREN) {
                 skip_type_parsing = true;
             }
-            // Find positions of next 3 significant tokens after the identifier position
-            size_t token1_pos = find_next_token(identifier_pos + 1);  // Should be DOT or COLONCOLON  
-            size_t token2_pos = token1_pos < tokens_.size() ? find_next_token(token1_pos + 1) : tokens_.size();  // Should be IDENTIFIER (method name)
-            size_t token3_pos = token2_pos < tokens_.size() ? find_next_token(token2_pos + 1) : tokens_.size();  // Should be LPAREN
+            // Find positions of next significant tokens for chained member access patterns
+            size_t token_pos = find_next_token(identifier_pos + 1);  // Start after identifier
             
-
-            
-            // Check for Type::method() or variable.method() patterns
-            if (token1_pos < tokens_.size() && token2_pos < tokens_.size() && token3_pos < tokens_.size()) {
-                bool is_dot_pattern = tokens_[token1_pos].type == TokenType::DOT;
-                bool is_coloncolon_pattern = tokens_[token1_pos].type == TokenType::COLONCOLON;
-                bool has_method = tokens_[token2_pos].type == TokenType::IDENTIFIER;
-                bool has_lparen = tokens_[token3_pos].type == TokenType::LPAREN;
-                
-                if ((is_dot_pattern || is_coloncolon_pattern) && has_method && has_lparen) {
-                    skip_type_parsing = true;
+            // Check for chained member access patterns: obj.field.field.method()
+            bool found_method_call_pattern = false;
+            while (token_pos < tokens_.size()) {
+                if (tokens_[token_pos].type == TokenType::DOT || 
+                    tokens_[token_pos].type == TokenType::COLONCOLON) {
+                    // Found DOT or ::, look for identifier after it
+                    size_t next_identifier_pos = find_next_token(token_pos + 1);
+                    if (next_identifier_pos >= tokens_.size() || 
+                        tokens_[next_identifier_pos].type != TokenType::IDENTIFIER) {
+                        break; // No identifier after DOT/::
+                    }
+                    
+                    // Check what comes after this identifier
+                    size_t after_identifier_pos = find_next_token(next_identifier_pos + 1);
+                    if (after_identifier_pos < tokens_.size() && 
+                        tokens_[after_identifier_pos].type == TokenType::LPAREN) {
+                        // Found identifier followed by LPAREN - this is a method call
+                        found_method_call_pattern = true;
+                        break;
+                    } else if (after_identifier_pos < tokens_.size() &&
+                               (tokens_[after_identifier_pos].type == TokenType::DOT ||
+                                tokens_[after_identifier_pos].type == TokenType::COLONCOLON)) {
+                        // Continue the chain
+                        token_pos = after_identifier_pos;
+                    } else {
+                        // End of chain without method call
+                        break;
+                    }
+                } else {
+                    break;
                 }
+            }
+            
+            if (found_method_call_pattern) {
+                skip_type_parsing = true;
             }
             // Also skip for known intrinsic functions even without parentheses
             else if (identifier_name == "println" || identifier_name == "print" || identifier_name == "debug" || 

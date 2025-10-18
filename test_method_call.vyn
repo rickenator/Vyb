@@ -1,0 +1,12 @@
+// Simple test case for method call parsing
+
+struct TestStruct {
+    value<Int>
+}
+
+main()<Int> -> {
+    test<TestStruct> = TestStruct { value = 42 }
+    result<String> = test.value.to_string()
+    println(result)
+    return 0
+}
