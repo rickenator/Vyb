@@ -665,6 +665,51 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                     m_currentLLVMValue = builder->CreateLoad(vecStructType, vecAlloca, "vec.new.value");
                     return;
                 }
+                
+                // Check for String::from_bytes() constructor
+                if (vecIdent->name == "String" && newIdent->name == "from_bytes") {
+                    std::cout << "DEBUG: Creating String::from_bytes() constructor" << std::endl;
+                    
+                    if (node->arguments.size() != 2) {
+                        logError(node->loc, "String::from_bytes expects exactly 2 arguments (byte_ptr, length)");
+                        m_currentLLVMValue = nullptr;
+                        return;
+                    }
+                    
+                    // Evaluate byte pointer argument
+                    node->arguments[0]->accept(*this);
+                    llvm::Value* bytePtr = m_currentLLVMValue;
+                    if (!bytePtr) {
+                        logError(node->arguments[0]->loc, "Failed to evaluate byte pointer for String::from_bytes");
+                        m_currentLLVMValue = nullptr;
+                        return;
+                    }
+                    
+                    // Evaluate length argument
+                    node->arguments[1]->accept(*this);
+                    llvm::Value* length = m_currentLLVMValue;
+                    if (!length) {
+                        logError(node->arguments[1]->loc, "Failed to evaluate length for String::from_bytes");
+                        m_currentLLVMValue = nullptr;
+                        return;
+                    }
+                    
+                    // Create String struct: { ptr: *i8, len: i64 }
+                    std::vector<llvm::Type*> strFields = {
+                        llvm::PointerType::get(*context, 0), // ptr to bytes
+                        llvm::Type::getInt64Ty(*context)     // length
+                    };
+                    llvm::StructType* strStructType = llvm::StructType::get(*context, strFields, false);
+                    
+                    // Create String struct value
+                    llvm::Value* resultStr = llvm::UndefValue::get(strStructType);
+                    resultStr = builder->CreateInsertValue(resultStr, bytePtr, 0, "str.from_bytes_data");
+                    resultStr = builder->CreateInsertValue(resultStr, length, 1, "str.from_bytes_len");
+                    
+                    m_currentLLVMValue = resultStr;
+                    std::cout << "DEBUG: String::from_bytes() created successfully" << std::endl;
+                    return;
+                }
             }
         }
     }
@@ -1109,6 +1154,16 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                     methodName == "get_vec") {
                     // This is a Vec method call - handle it specially
                     handleVecMethod(node, objectName, methodName);
+                    return;
+                }
+                
+                // Handle String method calls
+                if (methodName == "length" || methodName == "concat" || methodName == "substring" || 
+                    methodName == "substr" || methodName == "char_at" || methodName == "to_bytes" ||
+                    methodName == "from_bytes" || methodName == "starts_with" || methodName == "ends_with" ||
+                    methodName == "contains" || methodName == "to_upper" || methodName == "to_lower") {
+                    // This is a String method call - handle it specially
+                    handleStringMethod(node, objectName, methodName);
                     return;
                 }
             }

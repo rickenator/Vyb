@@ -192,6 +192,20 @@ private:
     void handleVecGetArray(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecGetVec(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
 
+    // String type methods
+    void handleStringMethod(vyn::ast::CallExpression* node, const std::string& objectName, const std::string& methodName);
+    void handleStringLen(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
+    void handleStringConcat(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
+    void handleStringSubstring(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
+    void handleStringCharAt(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
+    void handleStringToBytes(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
+    void handleStringFromBytes(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
+    void handleStringStartsWith(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
+    void handleStringEndsWith(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
+    void handleStringContains(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
+    void handleStringToUpper(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
+    void handleStringToLower(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
+
     // Scope and ownership management
     void enterScope();
     void exitScope();

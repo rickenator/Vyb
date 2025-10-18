@@ -1,0 +1,11 @@
+// Test basic String type functionality
+
+main() <Int> -> {
+    println("Starting String tests...")
+    
+    // Create a byte array representing "Hello"
+    bytes<[Int; 5]> = [72, 101, 108, 108, 111]
+    
+    println("String tests completed")
+    return 0
+}
