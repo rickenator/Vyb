@@ -332,6 +332,12 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
     llvm::Function* oldFunction = currentFunction;
     currentFunction = func;
 
+    // Create debug information for the function
+    llvm::DISubprogram* debugFunction = nullptr;
+    if (node->body) { // Only create debug info for functions with bodies
+        debugFunction = createDebugFunctionInfo(func, node->id->name, node->loc, node->isAsync);
+    }
+
     // Handle async functions
     AsyncState oldAsyncState = currentAsyncState;
     if (node->isAsync) {
@@ -363,6 +369,9 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
     if (node->body) { 
         llvm::BasicBlock* entryBB = llvm::BasicBlock::Create(*context, "entry", func);
         builder->SetInsertPoint(entryBB);
+
+        // Set debug location for function entry
+        setDebugLocation(node->loc);
 
         // Initialize scope management for function body
         enterScope();
@@ -417,6 +426,11 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
             // func->print(llvm::errs()); // Print the malformed function
             // Consider erasing the function: func->eraseFromParent();
             // For now, let it be, so errors are visible.
+        }
+
+        // Pop debug scope for function
+        if (debugFunction) {
+            popDebugScope();
         }
 
     } // else it's a forward declaration or extern, no body to generate now.

@@ -2360,6 +2360,9 @@ void LLVMCodegen::visit(ast::SuperExpression* node) {
 void LLVMCodegen::visit(ast::AwaitExpression* node) {
     // 'await' expression - suspend current async function and wait for Future<T>
     
+    // Set debug location for await expression (important for debugging async code)
+    setDebugLocation(node->loc);
+    
     if (!node->expr) {
         logError(node->loc, "await expression missing operand");
         m_currentLLVMValue = nullptr;
@@ -2393,6 +2396,9 @@ void LLVMCodegen::visit(ast::AwaitExpression* node) {
     // Create continuation block for when await completes
     llvm::BasicBlock* continuationBlock = llvm::BasicBlock::Create(
         *context, "await_continuation_" + std::to_string(currentState), currentFunction);
+    
+    std::cout << "DEBUG: Creating await suspension point at line " << node->loc.line 
+              << " column " << node->loc.column << " (state " << currentState << ")" << std::endl;
     
     // Store the state number
     llvm::Value* stateNumberPtr = builder->CreateStructGEP(

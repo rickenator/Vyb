@@ -4,6 +4,8 @@
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/IR/DIBuilder.h>
+#include <llvm/IR/DebugInfoMetadata.h>
 #include <llvm/Support/raw_ostream.h>
 #include <map>
 #include <memory>
@@ -66,6 +68,12 @@ private:
     std::unique_ptr<llvm::LLVMContext> context;
     std::unique_ptr<llvm::Module> module;
     std::unique_ptr<llvm::IRBuilder<>> builder;
+    
+    // Debug information support
+    std::unique_ptr<llvm::DIBuilder> debugBuilder;
+    llvm::DICompileUnit* debugCompileUnit;
+    llvm::DIFile* debugFile;
+    std::stack<llvm::DIScope*> debugScopeStack;
 
     // Basic LLVM types
     llvm::Type* voidType;
@@ -219,6 +227,15 @@ private:
     // Ensure all core intrinsic functions are declared
     void ensureCoreIntrinsicFunctions();
 
+    // Debug information support
+    void initializeDebugInfo(const std::string& filename);
+    void finalizeDebugInfo();
+    llvm::DISubprogram* createDebugFunctionInfo(llvm::Function* function, const std::string& name, 
+                                                const SourceLocation& loc, bool isAsync = false);
+    void setDebugLocation(const SourceLocation& loc);
+    void pushDebugScope(llvm::DIScope* scope);
+    void popDebugScope();
+    llvm::DIType* getDebugType(llvm::Type* llvmType, const std::string& typeName = "");
 
     // RTTI (Run-Time Type Information)
     llvm::StructType* getOrCreateRTTIStructType();
