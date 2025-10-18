@@ -933,6 +933,29 @@ std::unique_ptr<TypeNode> VecType::clone() const {
     );
 }
 
+// --- FutureType ---
+FutureType::FutureType(SourceLocation loc, TypeNodePtr rt)
+    : TypeNode(loc), resultType(std::move(rt)) {}
+
+NodeType FutureType::getType() const {
+    return NodeType::FUTURE_TYPE;
+}
+
+std::string FutureType::toString() const {
+    return "Future<" + (resultType ? resultType->toString() : "UnknownType") + ">";
+}
+
+void FutureType::accept(Visitor& visitor) {
+    visitor.visit(this);
+}
+
+std::unique_ptr<TypeNode> FutureType::clone() const {
+    return std::make_unique<FutureType>(
+        loc, 
+        resultType ? resultType->clone() : nullptr
+    );
+}
+
 // --- FunctionType ---
 FunctionType::FunctionType(SourceLocation loc, std::vector<TypeNodePtr> pt, TypeNodePtr rt)
     : TypeNode(loc), parameterTypes(std::move(pt)), returnType(std::move(rt)) {}

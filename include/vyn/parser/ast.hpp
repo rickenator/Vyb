@@ -98,6 +98,7 @@ class TypeName; // Added
 class PointerType; // Added
 class ArrayType; // Added
 class VecType; // Added
+class FutureType; // Added for async/await support
 class FunctionType; // Added
 class OptionalType; // Added
 class TupleTypeNode; // ADDED FORWARD DECLARATION
@@ -238,6 +239,7 @@ enum class NodeType {
     POINTER_TYPE, // Added
     ARRAY_TYPE, // Added
     VEC_TYPE, // Added
+    FUTURE_TYPE, // Added for async/await support
     FUNCTION_TYPE, // Added
     OPTIONAL_TYPE, // Added
     TUPLE_TYPE // ADDED
@@ -328,6 +330,7 @@ public:
     virtual void visit(PointerType* node) = 0;
     virtual void visit(ArrayType* node) = 0;
     virtual void visit(VecType* node) = 0;
+    virtual void visit(FutureType* node) = 0;
     virtual void visit(FunctionType* node) = 0;
     virtual void visit(OptionalType* node) = 0;
     virtual void visit(TupleTypeNode* node) = 0;
@@ -856,6 +859,7 @@ public:
         POINTER,
         ARRAY,
         VEC,
+        FUTURE,
         FUNCTION,
         TUPLE,
         OPTIONAL,
@@ -876,6 +880,7 @@ public:
             case Category::POINTER:        std::cout << "TypeNode Category: POINTER\n"; break;
             case Category::ARRAY:          std::cout << "TypeNode Category: ARRAY\n"; break;
             case Category::VEC:            std::cout << "TypeNode Category: VEC\n"; break;
+            case Category::FUTURE:         std::cout << "TypeNode Category: FUTURE\n"; break;
             case Category::FUNCTION:       std::cout << "TypeNode Category: FUNCTION\n"; break;
             case Category::TUPLE:          std::cout << "TypeNode Category: TUPLE\n"; break;
             case Category::OPTIONAL:       std::cout << "TypeNode Category: OPTIONAL\n"; break;
@@ -957,6 +962,21 @@ public:
     std::unique_ptr<TypeNode> clone() const override; // Override clone
 };
 // --- End of VecType Definition ---
+
+// --- Full Class Definition for FutureType ---
+class FutureType : public TypeNode {
+public:
+    TypeNodePtr resultType; // The type of the future result
+
+    FutureType(SourceLocation loc, TypeNodePtr resultType);
+    NodeType getType() const override;
+    std::string toString() const override;
+    void accept(Visitor& visitor) override;
+
+    Category getCategory() const override { return Category::FUTURE; }
+    std::unique_ptr<TypeNode> clone() const override; // Override clone
+};
+// --- End of FutureType Definition ---
 
 // --- Full Class Definition for FunctionType ---
 class FunctionType : public TypeNode {

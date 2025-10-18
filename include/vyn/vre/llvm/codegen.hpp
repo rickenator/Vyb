@@ -4,6 +4,8 @@
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/IR/DIBuilder.h>
+#include <llvm/IR/DebugInfoMetadata.h>
 #include <llvm/Support/raw_ostream.h>
 #include <map>
 #include <memory>
@@ -66,6 +68,12 @@ private:
     std::unique_ptr<llvm::LLVMContext> context;
     std::unique_ptr<llvm::Module> module;
     std::unique_ptr<llvm::IRBuilder<>> builder;
+    
+    // Debug information support
+    std::unique_ptr<llvm::DIBuilder> debugBuilder;
+    llvm::DICompileUnit* debugCompileUnit;
+    llvm::DIFile* debugFile;
+    std::stack<llvm::DIScope*> debugScopeStack;
 
     // Basic LLVM types
     llvm::Type* voidType;
@@ -192,9 +200,42 @@ private:
     llvm::Function* getOrCreateMallocFunction();
     llvm::Function* getOrCreateMemsetFunction();
 
+    // Async/await support
+    struct AsyncState {
+        llvm::Function* asyncFunction;
+        llvm::Function* stateMachineFunction;
+        llvm::StructType* stateStructType;
+        llvm::Value* stateStructInstance;
+        llvm::Value* currentStateValue;
+        llvm::BasicBlock* resumeBlock;
+        llvm::Value* futureValue;
+        int stateCounter;
+        bool isAsync;
+        
+        AsyncState() : asyncFunction(nullptr), stateMachineFunction(nullptr), 
+                       stateStructType(nullptr), stateStructInstance(nullptr),
+                       currentStateValue(nullptr), resumeBlock(nullptr), 
+                       futureValue(nullptr), stateCounter(0), isAsync(false) {}
+    };
+    
+    AsyncState currentAsyncState;
+    llvm::Function* getOrCreateScheduleTaskFunction();
+    llvm::Function* getOrCreateAwaitTaskFunction();
+    llvm::Function* getOrCreateCreateFutureFunction();
+    llvm::StructType* createFutureStructType(llvm::Type* resultType);
+
     // Ensure all core intrinsic functions are declared
     void ensureCoreIntrinsicFunctions();
 
+    // Debug information support
+    void initializeDebugInfo(const std::string& filename);
+    void finalizeDebugInfo();
+    llvm::DISubprogram* createDebugFunctionInfo(llvm::Function* function, const std::string& name, 
+                                                const SourceLocation& loc, bool isAsync = false);
+    void setDebugLocation(const SourceLocation& loc);
+    void pushDebugScope(llvm::DIScope* scope);
+    void popDebugScope();
+    llvm::DIType* getDebugType(llvm::Type* llvmType, const std::string& typeName = "");
 
     // RTTI (Run-Time Type Information)
     llvm::StructType* getOrCreateRTTIStructType();
@@ -291,6 +332,7 @@ public:
     void visit(vyn::ast::PointerType* node) override;
     void visit(vyn::ast::ArrayType* node) override;
     void visit(vyn::ast::VecType* node) override;
+    void visit(vyn::ast::FutureType* node) override;
     void visit(vyn::ast::FunctionType* node) override;
     void visit(vyn::ast::OptionalType* node) override;
     void visit(vyn::ast::TupleTypeNode* node) override;

@@ -1,0 +1,55 @@
+// Comprehensive async/await functionality test
+// Tests async function compilation, Future<T> handling, and await expressions
+
+// Basic async function returning Future<Int>
+async compute_async_value()<Future<Int>> -> {
+    println("Computing async value...");
+    return 42;
+}
+
+// Async function that awaits another async function
+async process_values()<Future<String>> -> {
+    println("Starting processing...");
+    
+    value<Int> = await compute_async_value();
+    
+    // For now, just return a simple string since string interpolation may not be implemented
+    println("Processed value");
+    return "processed";
+}
+
+// Async void function
+async background_task()<Future<Void>> -> {
+    println("Background task starting...");
+    // Simulate some work
+    println("Background task completed");
+    return;
+}
+
+// Regular function that creates and waits for async tasks
+test_async_operations()<Void> -> {
+    println("=== Async Operations Test ===");
+    
+    // Test basic async function call
+    future1<Future<Int>> = compute_async_value();
+    println("Created future for compute_async_value");
+    
+    // Test async function that awaits
+    future2<Future<String>> = process_values();
+    println("Created future for process_values");
+    
+    // Test async void function
+    future3<Future<Void>> = background_task();
+    println("Created future for background_task");
+    
+    println("All async operations initiated");
+}
+
+main()<Void> -> {
+    println("Starting async/await comprehensive test");
+    
+    test_async_operations();
+    
+    println("Async test completed");
+    return;
+}

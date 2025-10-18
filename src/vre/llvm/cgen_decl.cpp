@@ -276,10 +276,20 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
 
     llvm::Type* returnType = nullptr;
     if (node->returnTypeNode) {
-        returnType = codegenType(node->returnTypeNode.get());
-        if (!returnType) {
-            logError(node->loc, "Could not determine LLVM return type for function '" + node->id->name + "'.");
-            m_currentLLVMValue = nullptr; return;
+        if (currentAsyncState.isAsync) {
+            // For async functions, the actual return type is wrapped in Future<T>
+            llvm::Type* originalReturnType = codegenType(node->returnTypeNode.get());
+            if (!originalReturnType) {
+                logError(node->loc, "Could not determine LLVM return type for async function '" + node->id->name + "'.");
+                m_currentLLVMValue = nullptr; return;
+            }
+            returnType = createFutureStructType(originalReturnType);
+        } else {
+            returnType = codegenType(node->returnTypeNode.get());
+            if (!returnType) {
+                logError(node->loc, "Could not determine LLVM return type for function '" + node->id->name + "'.");
+                m_currentLLVMValue = nullptr; return;
+            }
         }
         
         // TODO: Auto-serialization for main function is disabled for now to fix type verification
@@ -292,7 +302,12 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
         //     returnType = int32Type; // main returns exit code when auto-serializing
         // }
     } else {
-        returnType = llvm::Type::getVoidTy(*context);
+        if (currentAsyncState.isAsync) {
+            // Async void function returns Future<void>
+            returnType = createFutureStructType(llvm::Type::getVoidTy(*context));
+        } else {
+            returnType = llvm::Type::getVoidTy(*context);
+        }
     }
     
     llvm::FunctionType* funcType = llvm::FunctionType::get(returnType, paramTypes, false /*isVarArg*/);
@@ -317,6 +332,36 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
     llvm::Function* oldFunction = currentFunction;
     currentFunction = func;
 
+    // Create debug information for the function
+    llvm::DISubprogram* debugFunction = nullptr;
+    if (node->body) { // Only create debug info for functions with bodies
+        debugFunction = createDebugFunctionInfo(func, node->id->name, node->loc, node->isAsync);
+    }
+
+    // Handle async functions
+    AsyncState oldAsyncState = currentAsyncState;
+    if (node->isAsync) {
+        currentAsyncState.isAsync = true;
+        currentAsyncState.asyncFunction = func;
+        currentAsyncState.stateCounter = 0;
+        
+        // For async functions, modify return type to Future<T> if not already
+        if (node->returnTypeNode) {
+            // Check if return type is already Future<T>
+            auto futureType = dynamic_cast<ast::FutureType*>(node->returnTypeNode.get());
+            if (!futureType) {
+                // Wrap the return type in Future<T>
+                // The actual LLVM function will return a Future struct
+                llvm::Type* originalReturnType = returnType;
+                llvm::StructType* futureStructType = createFutureStructType(originalReturnType);
+                // Note: We keep the original function signature for now
+                // The async transformation will happen during codegen
+            }
+        }
+    } else {
+        currentAsyncState.isAsync = false;
+    }
+
     // Store old namedValues and create a new scope for the function arguments and locals
     std::map<std::string, llvm::Value*> oldNamedValues;
     oldNamedValues.swap(namedValues); 
@@ -324,6 +369,9 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
     if (node->body) { 
         llvm::BasicBlock* entryBB = llvm::BasicBlock::Create(*context, "entry", func);
         builder->SetInsertPoint(entryBB);
+
+        // Set debug location for function entry
+        setDebugLocation(node->loc);
 
         // Initialize scope management for function body
         enterScope();
@@ -380,10 +428,16 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
             // For now, let it be, so errors are visible.
         }
 
+        // Pop debug scope for function
+        if (debugFunction) {
+            popDebugScope();
+        }
+
     } // else it's a forward declaration or extern, no body to generate now.
 
-    // Restore outer scope
+    // Restore outer scope and async state
     currentFunction = oldFunction;
+    currentAsyncState = oldAsyncState;
     namedValues.swap(oldNamedValues); 
 
     m_currentLLVMValue = func; // The "value" of a function declaration is the function itself

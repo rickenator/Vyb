@@ -1,0 +1,23 @@
+// Test debug information for async functions
+// This test verifies that debug info is generated for async functions and await expressions
+
+async fetch_data()<Future<Int>> -> {
+    // Some computation
+    result<Int> = 10;
+    println("Fetching data...");
+    return result;
+}
+
+async process_data()<Future<Int>> -> {
+    data1<Int> = await fetch_data();
+    data2<Int> = await fetch_data();
+    
+    combined<Int> = data1 + data2;
+    return combined;
+}
+
+main()<Int> -> {
+    println("=== Debug Async Test ===");
+    result<Future<Int>> = process_data();
+    return 0;
+}

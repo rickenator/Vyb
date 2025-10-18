@@ -1417,6 +1417,23 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
         // Create a VecType instance
         auto vecType = std::make_unique<ast::VecType>(node->loc, node->genericArgs[0]->clone());
         node->type = std::shared_ptr<ast::TypeNode>(vecType.release());
+    } else if (typeNameStr == "Future") {
+        // Convert Future<T> TypeName to FutureType
+        if (node->genericArgs.empty() || !node->genericArgs[0]) {
+            addError("Future type requires a type parameter (e.g., Future<Int>).", node);
+            return; 
+        }
+        if (node->genericArgs.size() > 1) {
+            addError("Future type accepts only one type parameter.", node);
+            return; 
+        }
+        
+        // Visit the result type
+        node->genericArgs[0]->accept(*this);
+        
+        // Create a FutureType instance
+        auto futureType = std::make_unique<ast::FutureType>(node->loc, node->genericArgs[0]->clone());
+        node->type = std::shared_ptr<ast::TypeNode>(futureType.release());
     } else if (typeNameStr == "loc") {
         if (node->genericArgs.empty() || !node->genericArgs[0]) {
             addError("loc type constructor requires a type parameter (e.g., loc<T>).", node);
@@ -1436,7 +1453,8 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
                typeNameStr == "f32" || typeNameStr == "f64" ||
                typeNameStr == "bool" || typeNameStr == "string" || typeNameStr == "void" ||
                typeNameStr == "int" || typeNameStr == "float" ||
-               typeNameStr == "Int" || typeNameStr == "String" || typeNameStr == "Int8") { 
+               typeNameStr == "Int" || typeNameStr == "String" || typeNameStr == "Int8" ||
+               typeNameStr == "Future" || typeNameStr == "Void") { 
         node->type = std::shared_ptr<ast::TypeNode>(node->clone());
     } else {
         SymbolInfo* symbol = currentScope->lookup(typeNameStr); 
@@ -1583,6 +1601,12 @@ void SemanticAnalyzer::visit(ast::ArrayType* node) {
 void SemanticAnalyzer::visit(ast::VecType* node) {
     if (node && node->elementType) {
         node->elementType->accept(*this);
+    }
+}
+
+void SemanticAnalyzer::visit(ast::FutureType* node) {
+    if (node && node->resultType) {
+        node->resultType->accept(*this);
     }
 }
 

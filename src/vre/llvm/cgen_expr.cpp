@@ -2358,17 +2358,78 @@ void LLVMCodegen::visit(ast::SuperExpression* node) {
 }
 
 void LLVMCodegen::visit(ast::AwaitExpression* node) {
-    // 'await' expression - for asynchronous operations
-    // For now, just evaluate the inner expression synchronously
-    // TODO: Implement proper async/await semantics
-    logWarning(node->loc, "'await' expressions are treated as synchronous for now");
+    // 'await' expression - suspend current async function and wait for Future<T>
     
-    if (node->expr) {
-        node->expr->accept(*this);
-    } else {
+    // Set debug location for await expression (important for debugging async code)
+    setDebugLocation(node->loc);
+    
+    if (!node->expr) {
         logError(node->loc, "await expression missing operand");
         m_currentLLVMValue = nullptr;
+        return;
     }
+    
+    // Check if we're in an async context
+    if (!currentAsyncState.isAsync) {
+        logError(node->loc, "await can only be used in async functions");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Evaluate the expression being awaited (should be a Future<T>)
+    node->expr->accept(*this);
+    llvm::Value* futureValue = m_currentLLVMValue;
+    
+    if (!futureValue) {
+        logError(node->loc, "Failed to evaluate await expression");
+        return;
+    }
+    
+    // Generate state machine suspension point
+    // 1. Save current state and local variables
+    // 2. Schedule continuation
+    // 3. Return control to runtime
+    
+    // Increment state counter for this suspension point
+    int currentState = ++currentAsyncState.stateCounter;
+    
+    // Create continuation block for when await completes
+    llvm::BasicBlock* continuationBlock = llvm::BasicBlock::Create(
+        *context, "await_continuation_" + std::to_string(currentState), currentFunction);
+    
+    std::cout << "DEBUG: Creating await suspension point at line " << node->loc.line 
+              << " column " << node->loc.column << " (state " << currentState << ")" << std::endl;
+    
+    // Store the state number (if async state infrastructure is available)
+    if (currentAsyncState.stateStructType && currentAsyncState.stateStructInstance) {
+        llvm::Value* stateNumberPtr = builder->CreateStructGEP(
+            currentAsyncState.stateStructType, currentAsyncState.stateStructInstance, 0);
+        builder->CreateStore(
+            llvm::ConstantInt::get(int32Type, currentState), stateNumberPtr);
+    } else {
+        std::cout << "DEBUG: Async state infrastructure not initialized, skipping state storage" << std::endl;
+    }
+    
+    // Call runtime to await the future
+    llvm::Function* awaitFunc = getOrCreateAwaitTaskFunction();
+    
+    // For now, we'll create a simple placeholder implementation
+    // In a real implementation, this would need proper LLVM coroutine intrinsics
+    // or a more sophisticated state machine
+    
+    // Call vyn_await_task with a dummy task ID for now
+    llvm::Value* dummyTaskId = llvm::ConstantInt::get(int64Type, 0);
+    builder->CreateCall(awaitFunc, {dummyTaskId});
+    
+    // Branch to the continuation block to maintain proper control flow
+    builder->CreateBr(continuationBlock);
+    
+    // Switch to the continuation block
+    builder->SetInsertPoint(continuationBlock);
+    
+    // For simplicity, just return the input future value for now
+    // This doesn't implement proper suspension/resumption semantics yet
+    m_currentLLVMValue = futureValue;
 }
 
 // Array serialization helper function

@@ -151,6 +151,36 @@ void LLVMCodegen::visit(ast::VecType* node) {
     m_currentLLVMValue = nullptr;
 }
 
+void LLVMCodegen::visit(ast::FutureType* node) {
+    // FutureType represents an async Future<T>
+    // Generate LLVM struct type: { T* result, i32 state, i8* runtime_data }
+    
+    if (!node->resultType) {
+        logError(node->loc, "Future type has no result type");
+        m_currentLLVMType = nullptr;
+        return;
+    }
+    
+    // Get the LLVM type for the result type
+    llvm::Type* resultLLVMType = codegenType(node->resultType.get());
+    if (!resultLLVMType) {
+        logError(node->loc, "Failed to resolve Future result type");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Create Future struct: { result_ptr T*, state i32, completion_ptr void* }
+    std::vector<llvm::Type*> futureFields = {
+        llvm::PointerType::get(*context, 0), // ptr to result (opaque pointer)
+        llvm::Type::getInt32Ty(*context),    // state (pending=0, completed=1, failed=2)
+        llvm::PointerType::get(*context, 0)  // completion callback ptr (opaque pointer)
+    };
+    
+    llvm::StructType* futureLLVMType = llvm::StructType::get(*context, futureFields, false);
+    m_currentLLVMType = futureLLVMType;
+    m_currentLLVMValue = nullptr;
+}
+
 void LLVMCodegen::visit(ast::FunctionType* node) {
     // FunctionType represents a function pointer type with parameter and return types
     // It generates an LLVM function type
@@ -400,6 +430,10 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                 llvmType = int8Type;
             } else if (typeNameStr == "i32") {
                 llvmType = int32Type;
+            } else if (typeNameStr == "Future") {
+                // For now, treat generic Future type as opaque pointer
+                // The real Future<T> types will be handled by the FutureType visitor
+                llvmType = llvm::PointerType::getUnqual(int8Type);
             } else {
                 // Check type alias map first
                 auto typeAliasIt = typeAliasMap.find(typeNameStr);
@@ -496,6 +530,28 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
             };
             
             llvmType = llvm::StructType::get(*context, vecFields, false);
+            break;
+        }
+        case vyn::ast::TypeNode::Category::FUTURE: {
+            auto* futureTypeNode = dynamic_cast<vyn::ast::FutureType*>(typeNode);
+            if (!futureTypeNode || !futureTypeNode->resultType) {
+                logError(typeNode->loc, "Future type node has no result type or is not a FutureType.");
+                return nullptr;
+            }
+            llvm::Type* resultTy = codegenType(futureTypeNode->resultType.get());
+            if (!resultTy) {
+                logError(typeNode->loc, "Could not determine LLVM type for Future result.");
+                return nullptr;
+            }
+
+            // Create Future struct: { result_ptr T*, state i32, completion_ptr void* }
+            std::vector<llvm::Type*> futureFields = {
+                llvm::PointerType::get(*context, 0), // ptr to result (opaque pointer)
+                llvm::Type::getInt32Ty(*context),    // state (pending=0, completed=1, failed=2)
+                llvm::PointerType::get(*context, 0)  // completion callback ptr (opaque pointer)
+            };
+            
+            llvmType = llvm::StructType::get(*context, futureFields, false);
             break;
         }
         case vyn::ast::TypeNode::Category::FUNCTION: { // Changed from FUNCTION_SIGNATURE
