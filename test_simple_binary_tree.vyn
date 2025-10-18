@@ -1,0 +1,41 @@
+// Simple binary tree test without recursive allocations
+struct SimpleNode {
+    key<Int>,
+    value<String>,
+    has_left<Bool>,
+    has_right<Bool>
+}
+
+struct SimpleTree {
+    has_root<Bool>,
+    size<Int>
+}
+
+create_simple_tree()<SimpleTree> -> {
+    return SimpleTree {
+        has_root = false,
+        size = 0
+    }
+}
+
+insert_value(tree<their<SimpleTree>>, key<Int>, value<String>)<Void> -> {
+    tree.has_root = true
+    tree.size = tree.size + 1
+}
+
+main()<Int> -> {
+    tree<SimpleTree> = create_simple_tree()
+    
+    println("Initial tree state:")
+    println("Has root: " + tree.has_root.to_string())
+    println("Size: " + tree.size.to_string())
+    
+    insert_value(borrow tree, 50, "fifty")
+    insert_value(borrow tree, 30, "thirty")
+    
+    println("After insertions:")
+    println("Has root: " + tree.has_root.to_string())
+    println("Size: " + tree.size.to_string())
+    
+    return 0
+}
