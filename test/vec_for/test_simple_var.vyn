@@ -1,0 +1,4 @@
+main()<Int> -> {
+    x<Int> = 5;
+    return x;
+}

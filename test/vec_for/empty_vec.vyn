@@ -1,0 +1,8 @@
+main()<Int> -> {
+    v<Vec<Int>> = Vec::new();
+    s<Int> = 0;
+    for (x in v) {
+        s = s + x;
+    }
+    return s;  // Should return 0 (empty vec)
+}

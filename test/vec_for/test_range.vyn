@@ -1,0 +1,7 @@
+main()<Int> -> {
+    var<Int> s = 0;
+    for (i in 0..2) {
+        s = s + i;
+    }
+    return s;
+}

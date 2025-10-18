@@ -1,0 +1,20 @@
+// Test Vec iteration with continue
+main()<Int> -> {
+    v<Vec<Int>> = Vec::new();
+    v.push(1);
+    v.push(2);
+    v.push(3);
+    v.push(4);
+    v.push(5);
+    
+    var<Int> sum = 0;
+    var<Int> count = 0;
+    for (x in v) {
+        count = count + 1;
+        if (count == 3) {
+            continue;
+        }
+        sum = sum + x;
+    }
+    return sum;  // Should return 12 (1+2+4+5, skipping element at position 3)
+}

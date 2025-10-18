@@ -1,0 +1,8 @@
+// Test just the desugaring without Vec - use a simple counter
+main()<Int> -> {
+    var<Int> s = 0;
+    for (i in 0..2) {
+        s = s + i;
+    }
+    return s;  // Should return 3 (0+1+2)
+}

@@ -1042,6 +1042,18 @@ void SemanticAnalyzer::visit(ast::FunctionExpression* node) {}
 void SemanticAnalyzer::visit(ast::ThisExpression* node) {}
 void SemanticAnalyzer::visit(ast::SuperExpression* node) {}
 void SemanticAnalyzer::visit(ast::AwaitExpression* node) {}
+
+void SemanticAnalyzer::visit(ast::RangeExpression* node) {
+    if (node->start) {
+        node->start->accept(*this);
+    }
+    if (node->end) {
+        node->end->accept(*this);
+    }
+    if (node->step) {
+        node->step->accept(*this);
+    }
+}
 void SemanticAnalyzer::visit(ast::ListComprehension* node) {}
 void SemanticAnalyzer::visit(ast::GenericInstantiationExpression* node) {
     if (!node || !node->baseExpression) {

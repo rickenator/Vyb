@@ -1,0 +1,26 @@
+// Practical example: Finding max value in a Vec<Int>
+
+main()<Int> -> {
+    numbers<Vec<Int>> = Vec::new();
+    numbers.push(42);
+    numbers.push(17);
+    numbers.push(99);
+    numbers.push(8);
+    numbers.push(55);
+    
+    var<Int> max = 0;
+    var<Int> first = 1;
+    
+    for (num in numbers) {
+        if (first == 1) {
+            max = num;
+            first = 0;
+        } else {
+            if (num > max) {
+                max = num;
+            }
+        }
+    }
+    
+    return max;  // Returns 99
+}
