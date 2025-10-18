@@ -92,7 +92,7 @@ main()<Int> -> {
     
     // Test complex type with relaxed syntax
     my<[Int]> test_array = [7, 8, 9]
-    complex_types(test_array, const view("Item: "))
+    complex_types(test_array, const view "Item: ")
     
     return 0
 }

@@ -7,8 +7,8 @@ main()<Int> -> {
     unsafe {
         p<loc<Int>> = loc(x);
         at(p) = 42;
-        // b<their<Int>> = borrow(x);       // TODO: borrow not implemented yet
-        // v<their<Int const>> = view(x);    // TODO: view not implemented yet
+        // b<their<Int>> = borrow x;       // TODO: borrow not implemented yet
+        // v<their<Int const>> = view x;    // TODO: view not implemented yet
         // at(loc(b)) = 100;                // TODO: modify via borrow
     }
     

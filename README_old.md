@@ -223,11 +223,11 @@ Vyn's memory model is designed for safety and explicitness, distinguishing betwe
 Vyn uses ownership types to manage memory and control data access:
 *   **`my<T>`**: Unique-owning pointer. When a `my<T>` goes out of scope, its data is deallocated.
     ```vyn
-    var<my<String>> unique_data = make_my("owned");
+    var<my<String>> unique_data = my("owned");
     ```
 *   **`our<T>`**: Shared-owning pointer (reference-counted). Data is deallocated when the last `our<T>` is dropped.
     ```vyn
-    var<our<String>> shared_data = make_our("shared");
+    var<our<String>> shared_data = our("shared");
     var<our<String>> another_ref = shared_data; // Reference count incremented
     ```
 *   **`their<T>`**: Borrowed pointer (non-owning reference). Provides temporary access to data owned by `my<T>`, `our<T>`, or another `their<T>`. Created using `borrow` or `view`.
@@ -239,18 +239,18 @@ Controlled by applying `const` to the type `T` *within* the ownership wrapper:
 *   `our<T>`: Shared ownership of (potentially) mutable data `T`. (Requires synchronization like `Mutex<T>` for thread-safe mutation).
 *   `our<T const>`: Shared ownership of immutable data `T`.
 *   `their<T>`: A mutable borrow of data `T`.
-*   `their<T const>`: An immutable borrow (view) of data `T`.
+*   `their<T const>`: An immutable borrow view of data `T`.
 
 **Borrowing with `view` and `borrow`**:
 *   **`view <expr>`**: Creates an immutable borrow `their<T const>`.
     ```vyn
-    var<my<Int>> owner = make_my(10);
+    var<my<Int>> owner = my(10);
     var<their<Int const>> immutable_ref = view owner;
     // immutable_ref = 20; // Error: cannot modify through their<T const>
     ```
 *   **`borrow <expr>`**: Creates a mutable borrow `their<T>`.
     ```vyn
-    var<my<Int>> owner = make_my(10);
+    var<my<Int>> owner = my(10);
     var<their<Int>> mutable_ref = borrow owner;
     mutable_ref = 20; // OK, owner's data is now 20
     ```
@@ -767,7 +767,7 @@ Channels provide safe message queues between threads and actors. Ownership of da
 let ch: Channel<my<Data>> = Channel::bounded(100) // Channel of owned data
 
 spawn fn producer() {
-    for i in 0..<50 { ch.send(make_my(Data{id:i})) } // Send owned data
+    for i in 0..<50 { ch.send(my(Data{id:i})) } // Send owned data
 }
 spawn fn consumer() {
     while let Some(owned_data) = ch.recv() { // Receive owned data
@@ -784,7 +784,7 @@ spawn fn consumer() {
 When data needs to be shared and mutated between threads, `Mutex<T>` (Mutual Exclusion) is used, typically wrapped in an `our<T>` for shared ownership of the mutex itself.
 
 ```vyn
-var shared_value: our<Mutex<Int>> = make_our(Mutex(0));
+var shared_value: our<Mutex<Int>> = our(Mutex(0));
 
 // Thread 1
 spawn fn(val_ref = shared_value.clone()) { // Clone our<Mutex<Int>>

@@ -1,0 +1,201 @@
+# Canonical Reference Syntax for Vyn v0.4.0
+
+This document defines the **authoritative syntax** for all ownership and reference operations in Vyn. This syntax is **mandatory** for all code, documentation, and examples.
+
+## 🎯 **Design Principles**
+
+1. **Consistency**: Single syntax for each operation across all contexts
+2. **Clarity**: Explicit distinction between types and value construction
+3. **Composability**: Natural integration with complex expressions
+4. **Intuitiveness**: Direct mapping to VRE implementation concepts
+
+## 📝 **Complete Syntax Reference**
+
+### **1. Ownership Type Annotations**
+
+Used in variable declarations, function parameters, and return types:
+
+```vyn
+// Variable declarations
+name<my<Type>>     = ...    // Unique ownership type
+name<our<Type>>    = ...    // Shared ownership type (reference counted)
+name<their<Type>>  = ...    // Borrowed reference type
+
+// Function signatures  
+process(input<my<String>>, config<our<Settings>>)<my<Result>> -> { ... }
+
+// Complex nested types
+cache<our<HashMap<String, my<Data>>>>  = our(HashMap.new());
+futures<Vec<Future<my<Response>>>>     = Vec.new();
+```
+
+### **2. Ownership Value Construction**
+
+Used to create owned values from expressions:
+
+```vyn
+// Basic construction
+unique_data<my<String>>   = my("hello");
+shared_config<our<Config>> = our(Config::default());
+
+// Expression construction
+computed<my<Int>>     = my(calculate_value());
+cloned<our<String>>   = our(original.clone());
+
+// Complex construction
+tree<my<TreeNode>>    = my(TreeNode {
+    value: 42,
+    left: my(TreeNode::empty()),
+    right: my(TreeNode::empty())
+});
+```
+
+### **3. Borrowing Operations**
+
+Used to create temporary references without transferring ownership:
+
+```vyn
+// Immutable borrowing (creates their<T const>)
+readonly<their<String const>> = view data;
+length<Int>                   = (view data).len();
+
+// Mutable borrowing (creates their<T>)  
+writable<their<String>>       = borrow data;
+(borrow data).push_str("!");
+
+// Method call borrowing
+result<String> = (view connection).send_request();
+(borrow buffer).write(data);
+```
+
+> **Design Note**: The operator syntax `view expr` and `borrow expr` (without parentheses) is currently canonical to distinguish borrowing operations from function calls. This emphasizes that borrowing is a zero-cost reference operation, not a function with potential overhead. However, the parenthesized syntax `view(expr)` and `borrow(expr)` remains under consideration for potential future adoption based on parser complexity and developer feedback. The current design prioritizes semantic clarity and performance transparency.
+
+### **4. Complete Real-World Example**
+
+```vyn
+// Connection pool with canonical syntax
+class ConnectionPool {
+    connections<Vec<my<Connection>>>,
+    shared_config<our<PoolConfig>>
+}
+
+impl ConnectionPool {
+    // Constructor uses canonical ownership creation
+    new(config<our<PoolConfig>>)<my<ConnectionPool>> -> {
+        return my(ConnectionPool {
+            connections: Vec.new(),
+            shared_config: config
+        });
+    }
+    
+    // Method uses canonical borrowing for parameters
+    get_connection(self<their<ConnectionPool>>)<my<Connection>> -> {
+        if (view self.connections).is_empty() {
+            // Create new connection using shared config
+            new_conn<my<Connection>> = my(Connection::new(view self.shared_config));
+            return new_conn;
+        } else {
+            // Move connection from pool
+            return (borrow self.connections).pop().unwrap();
+        }
+    }
+    
+    // Async method with canonical Future types
+    async execute_query(self<their<ConnectionPool>>, query<String>)<Future<my<Result>>> -> {
+        conn<my<Connection>> = self.get_connection();
+        result<my<Result>> = await (view conn).execute(view query);
+        return result;
+    }
+}
+
+// Usage with canonical syntax
+async main()<Void> -> {
+    // Create shared configuration
+    config<our<PoolConfig>> = our(PoolConfig::default());
+    
+    // Create connection pool
+    pool<my<ConnectionPool>> = ConnectionPool::new(config);
+    
+    // Execute queries with borrowing
+    result1<my<Result>> = await (view pool).execute_query("SELECT * FROM users");
+    result2<my<Result>> = await (view pool).execute_query("SELECT * FROM orders");
+    
+    // Process results
+    (view result1).print();
+    (view result2).print();
+}
+```
+
+## ⚖️ **Syntax Comparison**
+
+### **✅ Canonical (Use This)**
+```vyn
+data<my<String>>    = my("owned");        // ✅ Ownership construction
+shared<our<Config>> = our(Config::new()); // ✅ Shared construction  
+view<their<String>> = view data;          // ✅ Immutable borrowing
+mutable<their<String>> = borrow data;     // ✅ Mutable borrowing
+```
+
+### **❌ Legacy (Don't Use)**
+```vyn
+data<my<String>>    = my("owned");   // ❌ Deprecated function
+shared<our<Config>> = our(Config::new()); // ❌ Deprecated function
+view<their<String>> = view data;   // ❌ Never existed, wrong concept
+```
+
+## 🔧 **Parser Integration**
+
+The canonical syntax integrates with the parser as follows:
+
+### **Type Context Recognition**
+- `my<Type>`, `our<Type>`, `their<Type>` → Parsed as ownership type wrappers
+- Nested generics: `Vec<my<Future<String>>>` → Properly parsed with arbitrary nesting depth
+
+### **Expression Context Recognition**  
+- `my(expr)`, `our(expr)` → Parsed as function calls returning owned values
+- `view expr`, `borrow expr` → Parsed as prefix unary operators returning borrowed references
+
+### **Precedence Rules**
+1. **Type parsing**: Ownership types have higher precedence than base types
+2. **Expression parsing**: Borrowing operators have prefix unary precedence
+3. **Method calls**: `(view obj).method()` → Borrowing binds before method call
+
+## 🧪 **Testing Standards**
+
+All tests must use canonical syntax:
+
+```vyn
+// Test file example
+test_canonical_ownership()<Void> -> {
+    // Use canonical construction
+    data<my<String>> = my("test data");
+    shared<our<Config>> = our(Config::test());
+    
+    // Use canonical borrowing
+    length<Int> = (view data).len();
+    (borrow data).clear();
+    
+    println("Test completed with canonical syntax");
+}
+```
+
+## 📋 **Documentation Standards**
+
+All documentation must use canonical syntax:
+
+- **Examples**: Only canonical syntax in all code examples
+- **API Docs**: Function signatures must use canonical ownership types
+- **Tutorials**: Teach canonical syntax from the beginning
+- **Migration**: Update any legacy examples immediately
+
+## 🎯 **Benefits Summary**
+
+1. **Cognitive Load**: Single syntax to learn and remember
+2. **Code Consistency**: All Vyn code looks the same across projects
+3. **Tool Support**: Simplified parsing and IDE integration
+4. **Learning Curve**: Clear, unambiguous syntax for newcomers
+5. **Maintenance**: No legacy syntax variants to support
+
+---
+
+**This document is the authoritative reference for Vyn ownership and borrowing syntax. All code, documentation, and examples must follow these conventions.**

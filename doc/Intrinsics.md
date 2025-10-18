@@ -132,12 +132,12 @@ fn their<T const>(owner: my<T> | our<T>) -> their<T const>
 For convenience, the compiler provides **inferred** shorthand intrinsics:
 
 ```vyn
-fn borrow(owner) -> their<T>
-fn view(owner)   -> their<T const>
+fn borrow owner -> their<T>
+fn view owner   -> their<T const>
 ```
 
-- **`borrow(owner)`** infers `T` from `owner` and returns `their<T>`.  
-- **`view(owner)`** infers `T` from `owner` and returns `their<T const>`.
+- **`borrow owner`** infers `T` from `owner` and returns `their<T>`.  
+- **`view owner`** infers `T` from `owner` and returns `their<T const>`.
 
 ---
 

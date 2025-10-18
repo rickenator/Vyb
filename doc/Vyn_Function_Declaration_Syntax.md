@@ -54,7 +54,7 @@ double(x<Int>)<Int> -> x * 2
 
 ```vyn
 // Reading a value from a shared config
-is_debug(cfg<our<Config>>)<Bool> -> view(cfg).debug
+is_debug(cfg<our<Config>>)<Bool> -> view cfg.debug
 ```
 
 ### 2.3 Multi-Value Returns

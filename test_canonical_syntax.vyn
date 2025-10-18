@@ -1,0 +1,16 @@
+// Simple test of canonical syntax
+main()<Int> -> {
+    # Test my() constructor
+    data<my<String>> = my("hello world")
+    
+    # Test our() constructor  
+    shared<our<String>> = our("shared data")
+    
+    # Test view borrowing
+    length<Int> = (view data).len()
+    
+    println("Data:", data)
+    println("Length:", length)
+    
+    return 42
+}

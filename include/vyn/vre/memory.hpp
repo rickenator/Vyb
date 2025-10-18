@@ -44,7 +44,7 @@ using their = T*; // Using raw pointer for non-owning borrows
 
 // Functions for creating Boxed values
 // template<typename T, typename... Args>
-// my<T> make_my(Args&&... args) { // Renamed from make_box
+// my<T> my(Args&&... args) { // Renamed from make_box
 //     // Potentially use custom allocation here
 //     return std::make_unique<T>(std::forward<Args>(args)...);
 // }

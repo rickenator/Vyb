@@ -1651,7 +1651,7 @@ void LLVMCodegen::visit(ast::BorrowExpression* node) {
     // The semantics depend on the kind of borrow
     switch (node->kind) {
         case ast::BorrowKind::MUTABLE_BORROW:
-            // borrow(expr) - creates a mutable reference
+            // borrow expr - creates a mutable reference
             if (borrowedValue->getType()->isPointerTy()) {
                 // If it's already a pointer, just return it
                 m_currentLLVMValue = borrowedValue;
@@ -1668,7 +1668,7 @@ void LLVMCodegen::visit(ast::BorrowExpression* node) {
             break;
             
         case ast::BorrowKind::IMMUTABLE_VIEW:
-            // view(expr) - creates an immutable reference
+            // view expr - creates an immutable reference
             if (borrowedValue->getType()->isPointerTy()) {
                 // If it's already a pointer, just return it
                 m_currentLLVMValue = borrowedValue;

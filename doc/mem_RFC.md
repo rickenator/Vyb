@@ -50,10 +50,10 @@ Data mutability is controlled by `const` on the pointee: e.g., `my<Foo const>` m
 Borrow creation is achieved using the `borrow` and `view` keywords, which act as prefix operators:
 
 ```vyn
-// Immutable borrow (read-only view)
-var v: their<Foo const> = view owner_expr // or view(owner_expr) for clarity
+// Immutable borrow read-only view
+var v: their<Foo const> = view owner_expr // or view owner_expr for clarity
 // Mutable borrow
-var b: their<Foo> = borrow owner_expr   // or borrow(owner_expr) for clarity
+var b: their<Foo> = borrow owner_expr   // or borrow owner_expr for clarity
 ```
 
 * `view <expr>`: creates `their<T const>` (an immutable view) from a `my<T>`, `our<T>`, or another `their<T>`. This is equivalent to an immutable borrow.
@@ -68,7 +68,7 @@ Compile-time checks enforce lifetimes and aliasing rules (e.g., one mutable borr
 Direct mutation behind `our<T>` is allowed in single-threaded code. For thread-safe mutable sharing, wrap in sync primitives:
 
 ```vyn
-var shared: our<Mutex<Bar>> = make_our(Mutex(Bar{v:1}))
+var shared: our<Mutex<Bar>> = our(Mutex(Bar{v:1}))
 ```
 
 Immutable shared data (`our<T const>`) is thread-safe by default.
@@ -77,7 +77,7 @@ Immutable shared data (`our<T const>`) is thread-safe by default.
 
 ## 6. Helper Intrinsics
 
-* `make_our(expr)`: returns `our<T>` by allocating and ref‑counting
+* `our(expr)`: returns `our<T>` by allocating and ref‑counting
 * `view <expr>`: creates `their<T const>` (immutable view/borrow)
 * `borrow <expr>`: creates `their<T>` (mutable borrow)
 * `alloc(n)` / `free(l)`: raw memory operations for `loc<T>`
@@ -93,7 +93,7 @@ A `Mutex<T>` provides mutual-exclusion access to `T` in multi-threaded contexts.
 
 ```vyn
 // Create a shared, thread-safe Foo
-var shared_foo: our<Mutex<Foo>> = make_our(Mutex{ value: Foo{/*...*/} })
+var shared_foo: our<Mutex<Foo>> = our(Mutex{ value: Foo{/*...*/} })
 
 // 1. Blocking lock (wait indefinitely)
 let guard: LockGuard<Foo> = shared_foo.lock()
@@ -207,15 +207,15 @@ const<my<Foo const>> b = Foo{x:10}
 ### 10.2 Shared Ownership (`our<T>`)
 
 ```vyn
-var<our<Bar>> s = make_our(Bar{v:1})
-var<our<Mutex<Bar>>> ts = make_our(Mutex(Bar{v:2}))
+var<our<Bar>> s = our(Bar{v:1})
+var<our<Mutex<Bar>>> ts = our(Mutex(Bar{v:2}))
 ```
 
 ### 10.3 Borrowed References (`their<T>`)
 
 ```vyn
 var owner: my<Baz> = Baz{v:99}
-var v1: their<Baz const> = view owner    // read-only view (immutable borrow)
+var v1: their<Baz const> = view owner    // read-only view immutable borrow
 var b1: their<Baz> = borrow owner      // mutable borrow
 
 // Example with an existing borrow

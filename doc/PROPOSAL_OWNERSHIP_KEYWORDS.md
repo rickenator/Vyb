@@ -73,7 +73,7 @@ We propose the following modifications to the Vyn language syntax and EBNF:
 | Immutable Borrow Type       | `&const Data`                        | `their const Data`                            | `their<const T>`|
 | Create Unique (default)     | `let d = Data{};`                    | `let d = Data{};` (still default)             |             |
 | Create Unique (explicit type)| `let d: Data = Data{};`              | `let d: my Data = Data{};`                    |             |
-| Create Shared               | `let s = Shared::new(Data{});`       | `let s: our Data = make_our(Data{});` (conceptual fn) |             |
+| Create Shared               | `let s = Shared::new(Data{});`       | `let s: our Data = our(Data{});` (conceptual fn) |             |
 | Create Mutable Borrow       | `let r = &d;`                        | `let r = their d;`                            |             |
 | Create Immutable Borrow     | `let cr = &const d;`                 | `let cr = their const d;`                     |             |
 
@@ -109,7 +109,7 @@ fn process_uniquely(val: my Item) { // Takes ownership
 
 ### Shared Ownership (`our`)
 ```vyn
-let shared_item1: our Item = make_our(Item { data: 30 });
+let shared_item1: our Item = our(Item { data: 30 });
 let shared_item2: our Item = shared_item1; // Reference count increases
 
 fn use_shared_item(s_item: our Item) {
@@ -186,7 +186,7 @@ read_item(borrowed_c_const);
 
 *   What is the community consensus on the verbosity vs. explicitness trade-off for these keywords?
 *   Are there unforeseen parsing ambiguities?
-*   What should be the precise mechanism and syntax for creating `our Type` instances (e.g., `make_our(value)`, `new our Type`, `our { value }`)? This proposal leans towards a library function for now.
+*   What should be the precise mechanism and syntax for creating `our Type` instances (e.g., `our(value)`, `new our Type`, `our { value }`)? This proposal leans towards a library function for now.
 *   How should `our const T` vs `our T` interact with mutability of the underlying data? (e.g. an `our Item` where `Item` has `let` fields).
 *   Should `my` be *required* for unique ownership, or is `let x = Value{}` sufficient, with `my Type` being an optional explicit annotation? (This proposal suggests the latter).
 
