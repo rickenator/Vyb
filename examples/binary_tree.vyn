@@ -21,11 +21,20 @@ struct BinaryTree {
 
 // Create a new tree node
 create_node(key<Int>, value<String>)<TreeNode> -> {
+    dummy_node<TreeNode> = TreeNode {
+        key = 0,
+        value = "",
+        left = my(TreeNode{}),
+        right = my(TreeNode{}),
+        has_left = false,
+        has_right = false
+    }
+    
     return TreeNode {
         key = key,
         value = value,
-        left = my(TreeNode { key = 0, value = "", left = my(TreeNode{}), right = my(TreeNode{}), has_left = false, has_right = false }),
-        right = my(TreeNode { key = 0, value = "", left = my(TreeNode{}), right = my(TreeNode{}), has_left = false, has_right = false }),
+        left = my(dummy_node),
+        right = my(dummy_node),
         has_left = false,
         has_right = false
     }
