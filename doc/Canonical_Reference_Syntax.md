@@ -68,6 +68,8 @@ result<String> = (view connection).send_request();
 (borrow buffer).write(data);
 ```
 
+> **Design Note**: The operator syntax `view expr` and `borrow expr` (without parentheses) is currently canonical to distinguish borrowing operations from function calls. This emphasizes that borrowing is a zero-cost reference operation, not a function with potential overhead. However, the parenthesized syntax `view(expr)` and `borrow(expr)` remains under consideration for potential future adoption based on parser complexity and developer feedback. The current design prioritizes semantic clarity and performance transparency.
+
 ### **4. Complete Real-World Example**
 
 ```vyn

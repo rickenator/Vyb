@@ -47,6 +47,8 @@ borrow expression           // Create mutable borrow -> their<T>
 view expression             // Create immutable borrow -> their<T const>
 ```
 
+> **Syntax Rationale**: The operator syntax `view expr` and `borrow expr` (without parentheses) distinguishes zero-cost borrowing operations from allocation constructors `my(expr)` and `our(expr)`. This design emphasizes the semantic difference between creating owned values (which may allocate) and creating lightweight references (which are zero-cost). The parenthesized alternatives `view(expr)` and `borrow(expr)` remain under consideration for potential adoption based on parser implementation complexity and developer ergonomics.
+
 ### ✅ **Complete Example with Canonical Syntax**
 
 ```vyn
