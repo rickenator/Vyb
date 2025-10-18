@@ -115,7 +115,9 @@ namespace vyn {
         
         // Before trying type parsing, check if this is likely a function call pattern
         bool skip_type_parsing = false;
-        if (peek().type == TokenType::IDENTIFIER) {
+        if (peek().type == TokenType::IDENTIFIER || peek().type == TokenType::KEYWORD_MY || 
+            peek().type == TokenType::KEYWORD_THEIR || peek().type == TokenType::KEYWORD_OUR ||
+            peek().type == TokenType::KEYWORD_BORROW || peek().type == TokenType::KEYWORD_VIEW) {
             std::string identifier_name = peek().lexeme;
             
             // Helper lambda to find next non-comment/non-newline token position
@@ -147,29 +149,52 @@ namespace vyn {
             if (after_identifier_pos < tokens_.size() && tokens_[after_identifier_pos].type == TokenType::LPAREN) {
                 skip_type_parsing = true;
             }
-            // Find positions of next 3 significant tokens after the identifier position
-            size_t token1_pos = find_next_token(identifier_pos + 1);  // Should be DOT or COLONCOLON  
-            size_t token2_pos = token1_pos < tokens_.size() ? find_next_token(token1_pos + 1) : tokens_.size();  // Should be IDENTIFIER (method name)
-            size_t token3_pos = token2_pos < tokens_.size() ? find_next_token(token2_pos + 1) : tokens_.size();  // Should be LPAREN
+            // Find positions of next significant tokens for chained member access patterns
+            size_t token_pos = find_next_token(identifier_pos + 1);  // Start after identifier
             
-
-            
-            // Check for Type::method() or variable.method() patterns
-            if (token1_pos < tokens_.size() && token2_pos < tokens_.size() && token3_pos < tokens_.size()) {
-                bool is_dot_pattern = tokens_[token1_pos].type == TokenType::DOT;
-                bool is_coloncolon_pattern = tokens_[token1_pos].type == TokenType::COLONCOLON;
-                bool has_method = tokens_[token2_pos].type == TokenType::IDENTIFIER;
-                bool has_lparen = tokens_[token3_pos].type == TokenType::LPAREN;
-                
-                if ((is_dot_pattern || is_coloncolon_pattern) && has_method && has_lparen) {
-                    skip_type_parsing = true;
+            // Check for chained member access patterns: obj.field.field.method()
+            bool found_method_call_pattern = false;
+            while (token_pos < tokens_.size()) {
+                if (tokens_[token_pos].type == TokenType::DOT || 
+                    tokens_[token_pos].type == TokenType::COLONCOLON) {
+                    // Found DOT or ::, look for identifier after it
+                    size_t next_identifier_pos = find_next_token(token_pos + 1);
+                    if (next_identifier_pos >= tokens_.size() || 
+                        tokens_[next_identifier_pos].type != TokenType::IDENTIFIER) {
+                        break; // No identifier after DOT/::
+                    }
+                    
+                    // Check what comes after this identifier
+                    size_t after_identifier_pos = find_next_token(next_identifier_pos + 1);
+                    if (after_identifier_pos < tokens_.size() && 
+                        tokens_[after_identifier_pos].type == TokenType::LPAREN) {
+                        // Found identifier followed by LPAREN - this is a method call
+                        found_method_call_pattern = true;
+                        break;
+                    } else if (after_identifier_pos < tokens_.size() &&
+                               (tokens_[after_identifier_pos].type == TokenType::DOT ||
+                                tokens_[after_identifier_pos].type == TokenType::COLONCOLON)) {
+                        // Continue the chain
+                        token_pos = after_identifier_pos;
+                    } else {
+                        // End of chain without method call
+                        break;
+                    }
+                } else {
+                    break;
                 }
+            }
+            
+            if (found_method_call_pattern) {
+                skip_type_parsing = true;
             }
             // Also skip for known intrinsic functions even without parentheses
             else if (identifier_name == "println" || identifier_name == "print" || identifier_name == "debug" || 
                 identifier_name == "error" || identifier_name == "warn" || identifier_name == "info" ||
                 identifier_name == "lit" || identifier_name == "notype" || identifier_name == "bare" || 
-                identifier_name == "deserial") {
+                identifier_name == "deserial" || identifier_name == "my" || identifier_name == "their" || 
+                identifier_name == "our" || identifier_name == "borrow" || identifier_name == "view") {
+                std::cout << "DEBUG: Skipping type parsing for intrinsic function: " << identifier_name << std::endl;
                 skip_type_parsing = true;
             }
         }
@@ -299,7 +324,9 @@ namespace vyn {
 
 regular_array_literal:
         // Handle 'from<Type>(expr)' syntax, Typed Struct Literals, and Plain Identifiers
-        if (peek().type == TokenType::IDENTIFIER) {
+        if (peek().type == TokenType::IDENTIFIER || peek().type == TokenType::KEYWORD_MY || 
+            peek().type == TokenType::KEYWORD_THEIR || peek().type == TokenType::KEYWORD_OUR ||
+            peek().type == TokenType::KEYWORD_BORROW || peek().type == TokenType::KEYWORD_VIEW) {
             token::Token current_id_token = peek(); // Peek, don't consume yet
 
             if (current_id_token.lexeme == "from") {
@@ -383,8 +410,8 @@ regular_array_literal:
                 expect(TokenType::RBRACE);
                 return std::make_unique<ast::ObjectLiteral>(struct_loc, std::move(type_path_node), std::move(properties));
             } else {
-                // Plain Identifier
-                token::Token id_token = consume(); // Consume IDENTIFIER (this was current_id_token if not "from<...")
+                // Plain Identifier (including ownership keywords treated as identifiers)
+                token::Token id_token = consume(); // Consume IDENTIFIER or ownership keyword
                 return std::make_unique<ast::Identifier>(id_token.location, id_token.lexeme);
             }
         }
@@ -896,6 +923,11 @@ bool ExpressionParser::is_literal(TokenType type) const {
 bool ExpressionParser::is_expression_start(vyn::TokenType type) const {
     // Primary expression starters
     if (type == TokenType::IDENTIFIER ||
+        type == TokenType::KEYWORD_MY ||
+        type == TokenType::KEYWORD_THEIR ||
+        type == TokenType::KEYWORD_OUR ||
+        type == TokenType::KEYWORD_BORROW ||
+        type == TokenType::KEYWORD_VIEW ||
         type == TokenType::INT_LITERAL ||
         type == TokenType::FLOAT_LITERAL ||
         type == TokenType::STRING_LITERAL ||

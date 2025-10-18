@@ -131,6 +131,7 @@ private:
     llvm::Type* codegenType(vyn::ast::TypeNode* typeNode); // Converts vyn::TypeNode to llvm::Type
     llvm::Function* getCurrentFunction();
     llvm::BasicBlock* getCurrentBasicBlock();
+    void createFunctionForwardDeclaration(vyn::ast::FunctionDeclaration* funcDecl); // Forward declaration helper
 
     // Error and warning reporting
     void logError(const SourceLocation& loc, const std::string& message);
