@@ -283,7 +283,14 @@ void LLVMCodegen::visit(vyn::ast::IfStatement* node) {
         }
         builder->SetInsertPoint(mergeBB);
     } else {
-        mergeBB->eraseFromParent(); // Or just let DCE handle it. For clarity, explicit removal if unused.
+        // mergeBB was never added to the function, so we can't call eraseFromParent()
+        // Just let it be garbage collected or explicitly delete it
+        if (mergeBB->getParent()) {
+            mergeBB->eraseFromParent();
+        } else {
+            // mergeBB will be automatically cleaned up when it goes out of scope
+            // since it was never added to the function
+        }
     }
     
     // If IfStatement were an expression, a PHI node would be needed here.
