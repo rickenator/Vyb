@@ -1,0 +1,43 @@
+// Simple test for String methods
+
+main() <Int> -> {
+    println("Testing String methods...")
+    
+    // Test substring
+    msg<String> = String::from_bytes("Hello World", 11)
+    sub<String> = msg.substring(0, 5)
+    len<Int> = sub.len()
+    println("substring length: " + len.to_string())
+    
+    // Test char_at
+    ch<Int> = msg.char_at(0)
+    println("char_at(0): " + ch.to_string())
+    
+    // Test starts_with
+    prefix<String> = String::from_bytes("Hello", 5)
+    result1<Bool> = msg.starts_with(prefix)
+    println("starts_with: " + result1.to_string())
+    
+    // Test ends_with
+    suffix<String> = String::from_bytes("World", 5)
+    result2<Bool> = msg.ends_with(suffix)
+    println("ends_with: " + result2.to_string())
+    
+    // Test contains
+    sub2<String> = String::from_bytes("lo Wo", 5)
+    result3<Bool> = msg.contains(sub2)
+    println("contains: " + result3.to_string())
+    
+    // Test to_upper
+    upper<String> = msg.to_upper()
+    ch_upper<Int> = upper.char_at(0)
+    println("to_upper first char: " + ch_upper.to_string())
+    
+    // Test to_lower
+    lower<String> = msg.to_lower()
+    ch_lower<Int> = lower.char_at(0)
+    println("to_lower first char: " + ch_lower.to_string())
+    
+    println("All tests completed!")
+    return 0
+}
