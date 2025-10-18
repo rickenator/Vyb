@@ -410,6 +410,12 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
             builder->CreateStore(argVal, alloca);
             namedValues[paramNames[i]] = alloca;
             
+            // Store type information for function parameters
+            if (node->params[i].typeNode) {
+                valueTypeMap[alloca] = std::shared_ptr<vyn::ast::TypeNode>(node->params[i].typeNode->clone());
+                std::cout << "DEBUG: Stored type mapping for parameter '" << paramNames[i] << "'" << std::endl;
+            }
+            
             // Register parameter for scope-based cleanup (parameters have MY ownership by default)
             registerVariable(paramNames[i], alloca, argVal, ast::OwnershipKind::MY, paramTypes[i], false);
             

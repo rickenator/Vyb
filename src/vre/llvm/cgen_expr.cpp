@@ -1519,7 +1519,16 @@ void LLVMCodegen::visit(ast::Identifier* node) {
             if (!m_isLHSOfAssignment) {
                 // Load the value from the alloca for variable access
                 llvm::Type* loadType = alloca->getAllocatedType();
-                m_currentLLVMValue = builder->CreateLoad(loadType, alloca, node->name);
+                llvm::Value* loadedValue = builder->CreateLoad(loadType, alloca, node->name);
+                
+                // Propagate type information from alloca to loaded value
+                auto typeIt = valueTypeMap.find(alloca);
+                if (typeIt != valueTypeMap.end()) {
+                    valueTypeMap[loadedValue] = typeIt->second;
+                    std::cout << "DEBUG: Propagated type mapping from alloca to loaded value for '" << node->name << "'" << std::endl;
+                }
+                
+                m_currentLLVMValue = loadedValue;
                 return;
             }
         }
@@ -1533,7 +1542,16 @@ void LLVMCodegen::visit(ast::Identifier* node) {
     if (funcIt != m_currentFunctionNamedValues.end()) {
         // Load the value from the alloca
         llvm::Type* loadType = funcIt->second->getAllocatedType();
-        m_currentLLVMValue = builder->CreateLoad(loadType, funcIt->second, node->name);
+        llvm::Value* loadedValue = builder->CreateLoad(loadType, funcIt->second, node->name);
+        
+        // Propagate type information from alloca to loaded value
+        auto typeIt = valueTypeMap.find(funcIt->second);
+        if (typeIt != valueTypeMap.end()) {
+            valueTypeMap[loadedValue] = typeIt->second;
+            std::cout << "DEBUG: Propagated type mapping from function alloca to loaded value for '" << node->name << "'" << std::endl;
+        }
+        
+        m_currentLLVMValue = loadedValue;
         return;
     }
     
@@ -1625,10 +1643,56 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
                 structType = allocaInst->getAllocatedType();
                 std::cerr << "DEBUG: Got struct type from alloca: " << getTypeName(structType) << std::endl;
             } else {
-                std::cerr << "DEBUG: Object is a pointer but not an alloca" << std::endl;
-                logError(node->loc, "Cannot determine struct type for member access");
-                m_currentLLVMValue = nullptr;
-                return;
+                // Handle function parameters and other pointer values
+                std::cerr << "DEBUG: Object is a pointer but not an alloca, checking pointee type" << std::endl;
+                if (llvm::PointerType* ptrType = llvm::dyn_cast<llvm::PointerType>(objectValue->getType())) {
+                    // For newer LLVM versions, we need to use a different approach
+                    // Since we can't easily get the pointee type, try to get it from the value type map
+                    auto valueTypeIter = valueTypeMap.find(objectValue);
+                    if (valueTypeIter != valueTypeMap.end()) {
+                        // Get the AST type and convert it to LLVM type
+                        if (auto astType = valueTypeIter->second.get()) {
+                            // Handle ownership types specially - extract underlying type
+                            ast::TypeNode* underlyingType = astType;
+                            if (auto typeNameNode = dynamic_cast<ast::TypeName*>(astType)) {
+                                std::string typeNameStr = typeNameNode->identifier ? typeNameNode->identifier->name : "";
+                                if ((typeNameStr == "my" || typeNameStr == "our" || typeNameStr == "their" || 
+                                     typeNameStr == "borrow" || typeNameStr == "view") && 
+                                    !typeNameNode->genericArgs.empty() && typeNameNode->genericArgs[0]) {
+                                    underlyingType = typeNameNode->genericArgs[0].get();
+                                    std::cerr << "DEBUG: Extracted underlying type from ownership type: " << typeNameStr 
+                                              << " -> " << underlyingType->toString() << std::endl;
+                                }
+                            }
+                            
+                            llvm::Type* astLLVMType = codegenType(underlyingType);
+                            if (astLLVMType && astLLVMType->isStructTy()) {
+                                structType = astLLVMType;
+                                std::cerr << "DEBUG: Got struct type from AST type mapping: " << getTypeName(structType) << std::endl;
+                            } else {
+                                std::cerr << "DEBUG: AST type mapping didn't yield struct type, got: " << (astLLVMType ? getTypeName(astLLVMType) : "null") << std::endl;
+                                logError(node->loc, "Cannot determine struct type for member access");
+                                m_currentLLVMValue = nullptr;
+                                return;
+                            }
+                        } else {
+                            std::cerr << "DEBUG: No AST type information available" << std::endl;
+                            logError(node->loc, "Cannot determine struct type for member access");
+                            m_currentLLVMValue = nullptr;
+                            return;
+                        }
+                    } else {
+                        std::cerr << "DEBUG: No type mapping found for pointer value" << std::endl;
+                        logError(node->loc, "Cannot determine struct type for member access");
+                        m_currentLLVMValue = nullptr;
+                        return;
+                    }
+                } else {
+                    std::cerr << "DEBUG: Pointer type cast failed" << std::endl;
+                    logError(node->loc, "Cannot determine struct type for member access");
+                    m_currentLLVMValue = nullptr;
+                    return;
+                }
             }
         } else if (objectValue->getType()->isStructTy()) {
             // Object is a struct value (loaded from variable) - create temporary alloca

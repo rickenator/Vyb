@@ -9,6 +9,8 @@
 #include <llvm/IR/DerivedTypes.h> // For StructType, PointerType
 #include <llvm/IR/Constants.h>    // For Constant
 #include <llvm/Support/raw_ostream.h> // For llvm::errs() if logError uses it (logError is not moved here yet)
+#include <algorithm>
+#include <cctype>
 
 #include <string>
 #include <vector> 
@@ -196,6 +198,19 @@ int LLVMCodegen::getStructFieldIndex(llvm::StructType* structType, const std::st
     std::string structName = structType->getName().str();
     std::cerr << "DEBUG: structName = '" << structName << "'" << std::endl;
     
+    // Strip numeric suffix from LLVM struct names (e.g., "TreeNode.0" -> "TreeNode")
+    std::string baseStructName = structName;
+    size_t dotPos = structName.find_last_of('.');
+    if (dotPos != std::string::npos) {
+        // Check if everything after the dot is a number
+        std::string suffix = structName.substr(dotPos + 1);
+        bool isNumeric = !suffix.empty() && std::all_of(suffix.begin(), suffix.end(), ::isdigit);
+        if (isNumeric) {
+            baseStructName = structName.substr(0, dotPos);
+            std::cerr << "DEBUG: Stripped numeric suffix, baseStructName = '" << baseStructName << "'" << std::endl;
+        }
+    }
+    
     // Simple hardcoded mapping for TestPoint struct fields
     if (structName.find("TestPoint") != std::string::npos) {
         std::cerr << "DEBUG: Found TestPoint struct" << std::endl;
@@ -203,7 +218,7 @@ int LLVMCodegen::getStructFieldIndex(llvm::StructType* structType, const std::st
         if (fieldName == "y") return 1;
     }
     
-    auto it = userTypeMap.find(structName);
+    auto it = userTypeMap.find(baseStructName);
     if (it != userTypeMap.end()) {
         const auto& typeInfo = it->second;
         auto fieldIt = typeInfo.fieldIndices.find(fieldName);
