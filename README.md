@@ -680,6 +680,288 @@ describe_number(x<Int>)<String> -> {
 }
 ```
 
+## String Theory
+
+*Everything you ever wanted to know about Strings (but were afraid to ask)*
+
+Vyn's String type is a production-ready fat pointer implementation with comprehensive method support and natural literal syntax. Unlike C's null-terminated strings or C++'s heavyweight `std::string`, Vyn Strings combine the best of both worlds: efficient representation with modern conveniences.
+
+### String Structure
+
+```vyn
+# Internally, String is a fat pointer struct:
+struct String {
+    ptr: *i8,    # Pointer to null-terminated byte data
+    len: i64     # Length (excluding null terminator)
+}
+```
+
+This design provides:
+- **O(1) length queries** - No strlen() scanning needed
+- **C interoperability** - Null termination for printf, strstr, etc.
+- **Memory efficiency** - Just 16 bytes overhead per string
+- **Safe indexing** - Built-in bounds checking
+
+### Natural String Syntax
+
+String literals in Vyn are first-class citizens:
+
+```vyn
+# Direct literal assignment
+greeting<String> = "Hello, Vyn!"
+
+# Literal concatenation (just works™)
+message<String> = "Hello" + " " + "World"
+
+# Method calls on literals
+length<Int> = "Vyn".len()                    # Returns 3
+first<Int> = "Quantum".char_at(0)            # Returns 'Q' (81)
+check<Bool> = "Einstein".starts_with("Ein")  # Returns true
+
+# All without explicit constructors!
+```
+
+### Complete Method Reference
+
+**Constructor**
+```vyn
+# Create from raw bytes (C interop)
+name<String> = String::from_bytes("Alice", 5)
+raw<String> = String::from_bytes(c_ptr, c_len)
+```
+
+**Property Access**
+```vyn
+msg<String> = "Hello"
+length<Int> = msg.len()  # Returns 5, O(1) operation
+```
+
+**Substring Operations**
+```vyn
+text<String> = "Hello World"
+
+# Extract substring (end optional)
+hello<String> = text.substring(0, 5)      # "Hello"
+world<String> = text.substring(6, 11)     # "World"
+rest<String> = text.substring(6)          # "World" (to end)
+
+# Safe character access with bounds checking
+first<Int> = text.char_at(0)      # 72 ('H')
+space<Int> = text.char_at(5)      # 32 (' ')
+invalid<Int> = text.char_at(99)   # 0 (null char for out of bounds)
+```
+
+**Search and Comparison**
+```vyn
+sentence<String> = "The quick brown fox"
+
+# Prefix/suffix checking
+has_the<Bool> = sentence.starts_with("The")      # true
+has_fox<Bool> = sentence.ends_with("fox")        # true
+has_dog<Bool> = sentence.ends_with("dog")        # false
+
+# Substring search
+has_quick<Bool> = sentence.contains("quick")     # true
+has_slow<Bool> = sentence.contains("slow")       # false
+
+# Empty strings always match
+always<Bool> = sentence.starts_with("")          # true
+```
+
+**Case Conversion**
+```vyn
+mixed<String> = "Hello World"
+
+# ASCII case conversion (allocates new string)
+upper<String> = mixed.to_upper()   # "HELLO WORLD"
+lower<String> = mixed.to_lower()   # "hello world"
+
+# Original unchanged (immutability)
+println(mixed)  # Still "Hello World"
+```
+
+**String Concatenation**
+```vyn
+# Using + operator (most natural)
+full<String> = "Hello" + " " + "World"
+
+# Chaining operations
+result<String> = "Vyn".to_upper() + " " + "Language".to_lower()
+# Result: "VYN language"
+
+# Mixed types (planned with toString())
+# message<String> = "Count: " + 42.to_string()
+```
+
+### Practical Examples
+
+**Text Processing**
+```vyn
+process_input(text<String>)<Bool> -> {
+    # Validate input
+    if (text.len() == 0) {
+        return false
+    }
+    
+    # Check for command prefix
+    if (text.starts_with("/")) {
+        command<String> = text.substring(1)
+        println("Command: " + command)
+        return true
+    }
+    
+    # Search for keywords
+    if (text.contains("help")) {
+        println("Help requested")
+        return true
+    }
+    
+    return false
+}
+```
+
+**String Manipulation**
+```vyn
+format_name(first<String>, last<String>)<String> -> {
+    # Capitalize first letter of each name
+    first_upper<String> = first.char_at(0).to_string().to_upper() + 
+                          first.substring(1).to_lower()
+    
+    last_upper<String> = last.char_at(0).to_string().to_upper() + 
+                         last.substring(1).to_lower()
+    
+    # Combine with space
+    return first_upper + " " + last_upper
+}
+
+main()<Int> -> {
+    formatted<String> = format_name("ALICE", "wonderland")
+    println(formatted)  # "Alice Wonderland"
+    return 0
+}
+```
+
+**Data Validation**
+```vyn
+validate_email(email<String>)<Bool> -> {
+    # Simple email validation
+    if (email.len() < 3) {
+        return false  # Too short
+    }
+    
+    if (!email.contains("@")) {
+        return false  # No @ symbol
+    }
+    
+    # Check @ is not first or last
+    at_pos<Int> = email.find("@")  # (planned method)
+    if (at_pos == 0 || at_pos == email.len() - 1) {
+        return false
+    }
+    
+    return true
+}
+```
+
+### Memory Management
+
+**Allocation Strategy**
+```vyn
+# Read-only operations: ZERO allocations
+len<Int> = "Hello".len()                    # No malloc
+ch<Int> = "World".char_at(0)                # No malloc
+check<Bool> = "Test".starts_with("Te")      # No malloc
+
+# Transform operations: Allocate new strings
+upper<String> = "hello".to_upper()          # malloc(6) for "HELLO\0"
+sub<String> = "Hello World".substring(0, 5) # malloc(6) for "Hello\0"
+concat<String> = "A" + "B"                  # malloc(3) for "AB\0"
+
+# Ownership handles cleanup automatically
+# (when ownership system is fully integrated)
+```
+
+**Bounds Safety**
+```vyn
+# All index operations are bounds-checked at runtime
+text<String> = "Vyn"
+
+safe<Int> = text.char_at(2)      # OK: returns 'n' (110)
+safe2<Int> = text.char_at(0)     # OK: returns 'V' (86)
+
+# Out of bounds returns safe defaults
+oob1<Int> = text.char_at(-1)     # Returns 0 (null char)
+oob2<Int> = text.char_at(100)    # Returns 0 (null char)
+
+# substring returns empty string for invalid bounds
+empty<String> = text.substring(10, 20)  # Returns {null, 0}
+```
+
+### Performance Characteristics
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `len()` | O(1) | O(1) | Just reads struct field |
+| `char_at(i)` | O(1) | O(1) | Bounds-checked array access |
+| `starts_with(s)` | O(k) | O(1) | k = prefix length, uses memcmp |
+| `ends_with(s)` | O(k) | O(1) | k = suffix length, uses memcmp |
+| `contains(s)` | O(n×k) | O(1) | Uses C strstr (KMP-like) |
+| `substring(i,j)` | O(k) | O(k) | k = j-i, allocates new buffer |
+| `to_upper()` | O(n) | O(n) | Allocates new buffer, ASCII only |
+| `to_lower()` | O(n) | O(n) | Allocates new buffer, ASCII only |
+| `a + b` | O(n+m) | O(n+m) | Allocates new buffer |
+
+### C Interoperability
+
+All String methods produce null-terminated strings for C compatibility:
+
+```vyn
+# Use with C functions (planned FFI)
+name<String> = "Alice"
+c_str<*i8> = name.to_bytes()  # Get raw pointer
+
+# Compatible with:
+# printf("%s", c_str)
+# strlen(c_str)
+# strcmp(c_str1, c_str2)
+# strstr(haystack, needle)
+```
+
+### Future Enhancements
+
+**Planned Methods**
+- `split(delimiter: String) -> Vec<String>` - Split into vector of substrings
+- `trim() -> String` - Remove leading/trailing whitespace
+- `replace(old: String, new: String) -> String` - Replace all occurrences
+- `find(substring: String) -> Int` - Get index of first occurrence
+- `parse_int() -> Option<Int>` - Parse string to integer
+- `format(args...)` - String interpolation
+
+**Advanced Features**
+- **UTF-8 support**: Unicode-aware operations (length, indexing, case)
+- **Small string optimization**: Inline strings ≤15 bytes (no heap allocation)
+- **String interning**: Share identical string data
+- **Rope data structure**: Efficient concatenation for large strings
+- **Copy-on-write**: Share data until modification
+
+### Why "String Theory"?
+
+Because like theoretical physics, String manipulation can seem simple on the surface but reveals deep complexity when you dive in. Vyn's approach: make the simple cases trivial while keeping the complex cases possible.
+
+```vyn
+# Simple things are simple
+msg<String> = "Hello" + " " + "World"
+
+# Complex things are possible (when needed)
+advanced<String> = data
+    .to_lower()
+    .substring(0, 100)
+    .replace("old", "new")  # (planned)
+    .trim()                 # (planned)
+```
+
+**String Theory Achievement Unlocked:** You now understand Vyn Strings better than most physicists understand actual string theory! 🎻✨
+
 ## Build System
 
 Vyn uses CMake for building:
@@ -693,7 +975,7 @@ cmake .. && make clean && make -j
 make -C build -j
 
 # Run tests
-build/vyn test/test_simple_add.vyn
+build/vyn test/string/string_test.vyn
 ```
 
 ## Test Harness
