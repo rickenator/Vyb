@@ -749,6 +749,19 @@ regular_array_literal:
             return std::make_unique<ast::AwaitExpression>(await_token.location, std::move(operand));
         }
         
+        // Handle view and borrow operators
+        if (match(TokenType::KEYWORD_VIEW)) {
+            token::Token view_token = previous_token();
+            vyn::ast::ExprPtr operand = parse_unary_expr();
+            return std::make_unique<ast::UnaryExpression>(view_token.location, view_token, std::move(operand));
+        }
+        
+        if (match(TokenType::KEYWORD_BORROW)) {
+            token::Token borrow_token = previous_token();
+            vyn::ast::ExprPtr operand = parse_unary_expr();
+            return std::make_unique<ast::UnaryExpression>(borrow_token.location, borrow_token, std::move(operand));
+        }
+        
         if (match(TokenType::BANG) || match(TokenType::MINUS) || match(TokenType::TILDE)) {
             token::Token op_token = previous_token();
             vyn::ast::ExprPtr operand = parse_unary_expr(); 
