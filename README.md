@@ -682,8 +682,6 @@ describe_number(x<Int>)<String> -> {
 
 ## String Theory
 
-*Everything you ever wanted to know about Strings (but were afraid to ask)*
-
 Vyn's String type is a production-ready fat pointer implementation with comprehensive method support and natural literal syntax. Unlike C's null-terminated strings or C++'s heavyweight `std::string`, Vyn Strings combine the best of both worlds: efficient representation with modern conveniences.
 
 ### String Structure
@@ -944,9 +942,6 @@ c_str<*i8> = name.to_bytes()  # Get raw pointer
 - **Rope data structure**: Efficient concatenation for large strings
 - **Copy-on-write**: Share data until modification
 
-### Why "String Theory"?
-
-Because like theoretical physics, String manipulation can seem simple on the surface but reveals deep complexity when you dive in. Vyn's approach: make the simple cases trivial while keeping the complex cases possible.
 
 ```vyn
 # Simple things are simple
