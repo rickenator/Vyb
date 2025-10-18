@@ -103,6 +103,16 @@ set(VRE_HEADERS
     include/vyn/vre/llvm/codegen.hpp
 )
 
+# Runtime sources
+set(RUNTIME_SOURCES
+    src/runtime/async_runtime.cpp
+)
+
+# Runtime headers
+set(RUNTIME_HEADERS
+    include/vyn/runtime/async_runtime.hpp
+)
+
 # Main and tests
 set(MAIN_SOURCES src/main.cpp src/tests.cpp)
 
@@ -111,6 +121,8 @@ add_executable(vyn
     ${PARSER_HEADERS}
     ${VRE_SOURCES}
     ${VRE_HEADERS}
+    ${RUNTIME_SOURCES}
+    ${RUNTIME_HEADERS}
     ${MAIN_SOURCES}
 )
 
@@ -126,6 +138,36 @@ target_compile_definitions(vyn PRIVATE ${LLVM_DEFINITIONS})
 target_link_libraries(vyn PRIVATE
     Catch2::Catch2WithMain
     ${LLVM_LIBS} # Link against the mapped LLVM libraries
+)
+
+# Create async runtime test executable
+add_executable(test_async_runtime
+    test/test_async_runtime.cpp
+    ${RUNTIME_SOURCES}
+    ${RUNTIME_HEADERS}
+)
+
+target_include_directories(test_async_runtime PRIVATE
+    include
+)
+
+target_link_libraries(test_async_runtime PRIVATE
+    pthread  # Required for std::thread
+)
+
+# Create async integration demo executable
+add_executable(test_async_integration
+    test/test_async_integration.cpp
+    ${RUNTIME_SOURCES}
+    ${RUNTIME_HEADERS}
+)
+
+target_include_directories(test_async_integration PRIVATE
+    include
+)
+
+target_link_libraries(test_async_integration PRIVATE
+    pthread  # Required for std::thread
 )
 
 # Add debug flags for tests.cpp
