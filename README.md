@@ -157,6 +157,7 @@ Vyn **v0.4.1** is a **complete systems programming language** ready for producti
   - **Mixed syntax**: Both forms can be used in the same function
 - **Variables**: `name<Type> = value` with type inference and explicit typing
 - **Resizable Arrays**: `Vec<T>` with `new()`, `push()`, `pop()`, `len()`, `get()` methods
+- **Vec Iteration**: `for (item in vec)` loops with full break/continue support
 - **Fixed Arrays**: `[T; N]` with indexing and beautiful println() output
 - **Structs**: `struct Point { x<Int>, y<Int> }` with field access (`p.x`, `p.y`)
 - **Control Flow**: `if/else`, `while/for` loops, `match` statements, `break/continue`
@@ -670,6 +671,21 @@ main()<Int> -> {
     return first + last  # Returns 40
 }
 
+# Vec iteration - parentheses mandatory
+iterate_example()<Int> -> {
+    items<Vec<Int>> = Vec::new()
+    items.push(1)
+    items.push(2)
+    items.push(3)
+    
+    sum<Int> = 0
+    for (item in items) {
+        sum = sum + item
+    }
+    
+    return sum  # Returns 6
+}
+
 # Fixed-size arrays also supported
 array_example()<Int> -> {
     fixed<[Int; 3]> = [1, 2, 3]
@@ -706,6 +722,30 @@ factorial(n<Int>)<Int> -> {
         }
     }
     return result
+}
+
+# Vec iteration with for loops (parentheses mandatory)
+sum_vector(numbers<Vec<Int>>)<Int> -> {
+    total<Int> = 0
+    for (num in numbers) {
+        if (num < 0) {
+            continue  # Skip negative numbers
+        }
+        total = total + num
+        if (total > 100) {
+            break  # Stop if sum exceeds 100
+        }
+    }
+    return total
+}
+
+# Range-based for loops (inclusive)
+count_to_ten()<Int> -> {
+    sum<Int> = 0
+    for (i in 0..10) {
+        sum = sum + i
+    }
+    return sum  # Returns 55
 }
 
 # Pattern matching with match statements

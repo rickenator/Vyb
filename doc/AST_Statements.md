@@ -84,7 +84,7 @@ public:
 
 ## 4. `ForStatement`
 
-Represents a for loop.
+Represents a for loop. Supports both range-based iteration and Vec<T> iteration.
 
 -   **C++ Class**: `vyn::ast::ForStatement`
 -   **`NodeType`**: `FOR_STATEMENT`
@@ -92,6 +92,26 @@ Represents a for loop.
     -   `iterator` (`IdentifierPtr`): The identifier for the loop variable.
     -   `range` (`ExprPtr`): The expression that evaluates to the range or collection.
     -   `body` (`StmtPtr`): The statement (usually a `BlockStatement`) executed for each iteration.
+
+**Syntax Requirements (v0.4.1):**
+- Parentheses are **mandatory**: `for (item in expr)` not `for item in expr`
+- Supports range expressions: `for (i in 0..10)` inclusive ranges
+- Supports Vec iteration: `for (item in vec)` where vec is a Vec<T>
+- Break and continue statements work in all for loop variants
+
+**Desugaring:**
+Vec iteration desugars to index-based loops:
+```vyn
+for (item in vec) { body }
+// Becomes:
+for (__run_once = true; __run_once; __run_once = false) {
+    var __len = vec.len();
+    for (__idx = 0; __idx < __len; __idx = __idx + 1) {
+        var item = vec.get(__idx);
+        body;
+    }
+}
+```
 
 ```cpp
 // From include/vyn/parser/ast.hpp
