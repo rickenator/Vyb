@@ -12,6 +12,12 @@ entry:
   store %TestStruct %obj, ptr %obj1, align 4, !dbg !10
   call void @llvm.dbg.declare(metadata ptr %obj1, metadata !9, metadata !DIExpression()), !dbg !11
   call void @__vyn_println(ptr @0), !dbg !10
+  %obj2 = load %TestStruct, ptr %obj1, align 4, !dbg !10
+  %temp_struct = alloca %TestStruct, align 8, !dbg !10
+  store %TestStruct %obj2, ptr %temp_struct, align 4, !dbg !10
+  %value_ptr = getelementptr inbounds %TestStruct, ptr %temp_struct, i32 0, i32 0, !dbg !10
+  %value_val = load i64, ptr %value_ptr, align 4, !dbg !10
+  %tostring = call ptr @__vyn_toString_int(i64 %value_val), !dbg !10
   ret void, !dbg !10
 }
 
@@ -25,6 +31,8 @@ entry:
 declare void @llvm.dbg.declare(metadata, metadata, metadata) #0
 
 declare void @__vyn_println(ptr)
+
+declare ptr @__vyn_toString_int(i64)
 
 declare ptr @__vyn_serialize_to_json(ptr, ptr)
 

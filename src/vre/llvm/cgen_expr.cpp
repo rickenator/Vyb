@@ -976,12 +976,49 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         }
     }
 
-    // Check for Vec method calls before trying function lookup
+    // Check for method calls before trying function lookup
     if (auto memberExpr = dynamic_cast<vyn::ast::MemberExpression*>(node->callee.get())) {
-        if (auto objIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->object.get())) {
-            if (auto methodIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->property.get())) {
-                // Check if this looks like a Vec method call (object.method pattern)
-                std::string methodName = methodIdent->name;
+        if (auto methodIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->property.get())) {
+            std::string methodName = methodIdent->name;
+            
+            // Handle to_string method calls
+            if (methodName == "to_string") {
+                std::cout << "DEBUG: Processing to_string method call" << std::endl;
+                
+                // Evaluate the object (the thing we're calling to_string on)
+                memberExpr->object->accept(*this);
+                llvm::Value* objectValue = m_currentLLVMValue;
+                if (!objectValue) {
+                    logError(memberExpr->object->loc, "Failed to evaluate object for to_string method call");
+                    m_currentLLVMValue = nullptr;
+                    return;
+                }
+                
+                // Get the type of the object
+                llvm::Type* objectType = objectValue->getType();
+                vyn::ast::TypeNode* objectASTType = nullptr;
+                
+                // Try to get AST type information for better type resolution
+                auto valueTypeIter = valueTypeMap.find(objectValue);
+                if (valueTypeIter != valueTypeMap.end()) {
+                    objectASTType = valueTypeIter->second.get();
+                }
+                
+                // Generate the to_string call
+                llvm::Value* result = generateToStringCall(objectValue, objectType, objectASTType, node->loc);
+                if (result) {
+                    std::cout << "DEBUG: Successfully generated to_string call" << std::endl;
+                    m_currentLLVMValue = result;
+                    return;
+                } else {
+                    logError(node->loc, "Failed to generate to_string call for type");
+                    m_currentLLVMValue = nullptr;
+                    return;
+                }
+            }
+            
+            // Handle Vec method calls
+            if (auto objIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->object.get())) {
                 std::string objectName = objIdent->name;
                 
                 if (methodName == "push" || methodName == "pop" || methodName == "len" || methodName == "get" ||
