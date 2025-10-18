@@ -1,0 +1,30 @@
+// Practical example: Filtering even numbers from Vec
+
+main()<Int> -> {
+    numbers<Vec<Int>> = Vec::new();
+    numbers.push(1);
+    numbers.push(2);
+    numbers.push(3);
+    numbers.push(4);
+    numbers.push(5);
+    numbers.push(6);
+    
+    evens<Vec<Int>> = Vec::new();
+    
+    for (num in numbers) {
+        // Check if even (would use modulo in real code)
+        var<Int> half = num / 2;
+        var<Int> doubled = half * 2;
+        if (doubled == num) {
+            evens.push(num);
+        }
+    }
+    
+    // Sum the even numbers
+    var<Int> sum = 0;
+    for (even in evens) {
+        sum = sum + even;
+    }
+    
+    return sum;  // Returns 2+4+6 = 12
+}
