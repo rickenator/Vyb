@@ -430,6 +430,10 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                 llvmType = int8Type;
             } else if (typeNameStr == "i32") {
                 llvmType = int32Type;
+            } else if (typeNameStr == "Future") {
+                // For now, treat generic Future type as opaque pointer
+                // The real Future<T> types will be handled by the FutureType visitor
+                llvmType = llvm::PointerType::getUnqual(int8Type);
             } else {
                 // Check type alias map first
                 auto typeAliasIt = typeAliasMap.find(typeNameStr);
