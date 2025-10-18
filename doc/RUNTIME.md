@@ -108,7 +108,7 @@ Function parameters use ownership types to define how arguments are passed:
         data.value = data.value + 1;
     }
     owner<my<Foo>> = my(Foo{value: 5});
-    modify_data(borrow owner); // owner.value becomes 6
+    modify_data(borrow(owner)); // owner.value becomes 6
     ```
 
 *   **`param: their<T const>`**: The function receives an immutable borrow. The original data can be mutable or immutable.
@@ -120,8 +120,8 @@ Function parameters use ownership types to define how arguments are passed:
     owner_mut<my<Foo>> = my(Foo{value: 7});
     const<my<Foo const>> owner_const = my(Foo{value: 8});
 
-    read_data(view owner_mut);
-    read_data(view owner_const);
+    read_data(view(owner_mut));
+    read_data(view(owner_const));
     ```
 
 ## 6. Struct and Class Fields

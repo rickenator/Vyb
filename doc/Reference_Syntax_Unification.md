@@ -47,7 +47,7 @@ borrow expression           // Create mutable borrow -> their<T>
 view expression             // Create immutable borrow -> their<T const>
 ```
 
-> **Syntax Rationale**: The operator syntax `view expr` and `borrow expr` (without parentheses) distinguishes zero-cost borrowing operations from allocation constructors `my(expr)` and `our(expr)`. This design emphasizes the semantic difference between creating owned values (which may allocate) and creating lightweight references (which are zero-cost). The parenthesized alternatives `view(expr)` and `borrow(expr)` remain under consideration for potential adoption based on parser implementation complexity and developer ergonomics.
+> **Syntax Rationale**: The unified function-call syntax `my(expr)`, `our(expr)`, `view(expr)`, and `borrow(expr)` provides syntactic consistency across all ownership operations. This design makes the language more regular and predictable, simplifying both parser implementation and developer understanding. The function-call style clearly indicates these are fundamental language constructs while maintaining a clean, readable syntax.
 
 ### ✅ **Complete Example with Canonical Syntax**
 
@@ -59,16 +59,16 @@ process_data(input<my<String>>)<their<String const>> -> {
     shared_ref<our<String>> = our(input.clone());
     
     // Create borrowed references with operators
-    immutable_view<their<String const>> = view owned_copy;
-    mutable_borrow<their<String>> = borrow owned_copy;
+    immutable_view<their<String const>> = view(owned_copy);
+    mutable_borrow<their<String>> = borrow(owned_copy);
     
-    return view owned_copy;  // Return immutable view
+    return view(owned_copy);  // Return immutable view
 }
 
 main()<Void> -> {
     data<my<String>> = my("Hello, World!");
     result<their<String const>> = process_data(data);
-    println((view result));
+    println(view(result));
 }
 ```
 
@@ -107,8 +107,8 @@ The parser recognizes these constructs with the following precedence:
 2. **Expression Context**: 
    - `my(expr)` → Ownership constructor (function call)
    - `our(expr)` → Ownership constructor (function call)  
-   - `borrow expr` → Borrowing operator (prefix unary)
-   - `view expr` → Borrowing operator (prefix unary)
+   - `borrow(expr)` → Borrowing function call
+   - `view(expr)` → Borrowing function call
 
 ## Benefits of Unification
 
