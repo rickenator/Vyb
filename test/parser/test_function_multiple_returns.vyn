@@ -4,6 +4,6 @@ getMultipleValues()<String, Int> -> {
 }
 
 main()<String, Int> -> {
-    var<String> result1, result2<Int> = getMultipleValues();
+    result1<String>, result2<Int> = getMultipleValues();
     return result1,result2;
 }

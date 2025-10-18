@@ -21,7 +21,7 @@ Enable any function in Vyn to return one or more values of arbitrary types, with
 
 Auto‑JSONification applies only to `main()` returns. Other functions can use an explicit emitter (`toJSON()`).
 
-Declare `main`’s return types as generics on the function, then `return` comma‑separated variables:
+Declare `main`'s return types as generics on the function, then `return` comma‑separated values:
 
 ```vyn
 main()<Point,Rectangle> ->
@@ -186,7 +186,7 @@ Emits:
 Use `bare()` to emit *only the raw field values* of a struct as a JSON array — removing all type and field metadata. Useful for returning unnamed tuples.
 
 ```vyn
-var<Person> p = Person(id=123, name="Rick", salary=88000.0)
+p<Person> = Person(id=123, name="Rick", salary=88000.0)
 return bare(p)
 ```
 

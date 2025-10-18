@@ -1,6 +1,6 @@
 // Test that capitalized type constructors still work
 
-Point(var<Int> x, var<Int> y)<Int> -> {
+Point(x<Int>, y<Int>)<Int> -> {
     return x + y;
 }
 

@@ -7,4 +7,4 @@
 // @expect-error: n/a
 // @expect-return: n/a
 
-var<[Int; N-1+2*3]> x;
+x<[Int; N-1+2*3]>;

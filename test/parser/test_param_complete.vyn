@@ -1,5 +1,5 @@
 // Test all supported parameter syntax variations
-test_standard(var<Int> a, const<Int> b)<Int> -> {
+test_standard(a<Int>, const<Int> b)<Int> -> {
     return a + b;
 }
 
@@ -7,7 +7,7 @@ test_shorthand(Int a, const Int b)<Int> -> {
     return a * b;
 }
 
-test_mixed(var<Int> x, Int y, const<Int> z)<Int> -> {
+test_mixed(x<Int>, Int y, const<Int> z)<Int> -> {
     return x + y + z;
 }
 

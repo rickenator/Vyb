@@ -89,7 +89,7 @@ build/vyn tuple.vyn  # Outputs: [42, "Hello!"]
 ### 1.3 Key Concepts & Terminology
 
 *   **Template**: A generic type/function parameterized by types or constants, instantiated at compile time.
-*   **Binding Mutability**: Variables are declared with `var` (mutable binding, can be reassigned) or `const` (immutable binding, cannot be reassigned).
+*   **Binding Mutability**: Variables are declared with unified syntax (mutable by default) or `const` (immutable binding, cannot be reassigned).
 *   **Ownership Types**:
     *   `my<T>`: Unique ownership of data `T`.
     *   `our<T>`: Shared (reference-counted) ownership of data `T`.
@@ -1023,9 +1023,9 @@ function = ["async"] "fn" ["<" type {"," type} ">"] identifier ["(" [parameter {
 template = "template" identifier ["<" identifier {"," identifier} ">"] block;
 class = "class" identifier block;
 block = "{" { statement } "}" | INDENT { statement } DEDENT;
-statement = const_decl | var_decl | if_stmt | for_stmt | while_stmt | match_stmt | break_stmt | continue_stmt | return_stmt | expression;
+statement = const_decl | name_decl | if_stmt | for_stmt | while_stmt | match_stmt | break_stmt | continue_stmt | return_stmt | expression;
 const_decl = "const" ["<" type ">"] identifier "=" expression [";"]; 
-var_decl = "var" ["<" type ">"] identifier ["=" expression] [";"]; 
+name_decl = ["<" type ">"] identifier ["=" expression] [";"]; 
 if_stmt = "if" "(" expression ")" block ["else" (block | if_stmt)];
 for_stmt = "for" "(" identifier "in" expression ")" block;
 while_stmt = "while" "(" expression ")" block;
@@ -1043,7 +1043,7 @@ array_index = expression "[" expression "]";
 array_expr = "[" [expression {"," expression}] "]";
 call_expr = identifier "(" [expression {"," expression}] ")";
 type = identifier | "Vec" "<" type ">" | "[" type ";" expression "]";
-parameter = ["var" "<" type ">"] identifier | type identifier | "const" type identifier;
+parameter = ["<" type ">"] identifier | type identifier | "const" type identifier;
 pattern = identifier | int_literal | "_";
 identifier = letter { letter | digit | "_" };
 int_literal = ["-"] digit { digit };

@@ -26,22 +26,22 @@ template Calculator<T: Numeric> {
 main()<Int> -> {
     // Test 1: Valid constraint - Int implements Comparable
     // This should work and trigger constraint validation (pass)
-    var<Container<Int>::Data> container1 = Container<Int>::Data { value: 42 };
+    container1<Container<Int>::Data> = Container<Int>::Data { value: 42 };
     
     // Test 2: Valid constraint - String implements Comparable  
     // This should work and trigger constraint validation (pass)
-    var<Container<String>::Data> container2 = Container<String>::Data { value: "hello" };
+    container2<Container<String>::Data> = Container<String>::Data { value: "hello" };
     
     // Test 3: Valid multiple constraints - String implements Hashable + Equatable
     // This should work and trigger constraint validation (pass)
-    var<HashMapEntry<String, Int>::Entry> entry1 = HashMapEntry<String, Int>::Entry { 
+    entry1<HashMapEntry<String, Int>::Entry> = HashMapEntry<String, Int>::Entry { 
         key: "test", 
         value: 100 
     };
     
     // Test 4: Valid numeric constraint - Int implements Numeric
     // This should work and trigger constraint validation (pass)
-    var<Calculator<Int>::Data> calc = Calculator<Int>::Data { value: 42 };
+    calc<Calculator<Int>::Data> = Calculator<Int>::Data { value: 42 };
     
     return calc.value;
 }

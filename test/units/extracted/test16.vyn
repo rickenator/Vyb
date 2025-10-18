@@ -8,7 +8,7 @@
 // @expect-return: n/a
 
 class Node {
-    var<Bool> is_leaf
+    is_leaf<Bool>
     fn new(is_leaf_param: Bool) -> Node {
         return Node { is_leaf: is_leaf_param }
     }

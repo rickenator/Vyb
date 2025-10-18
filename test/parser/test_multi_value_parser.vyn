@@ -16,13 +16,13 @@ get_multiple_values()<Int, Float, Bool> -> {
 
 // Function call that captures multi-value return
 test_multi_return()<Void> -> {
-    var<Int> x;
-    var<String> y;
+    x<Int>;
+    y<String>;
     x, y = get_values();
     
-    var<Int> a;
-    var<Float> b;
-    var<Bool> c;
+    a<Int>;
+    b<Float>;
+    c<Bool>;
     a, b, c = get_multiple_values();
 }
 

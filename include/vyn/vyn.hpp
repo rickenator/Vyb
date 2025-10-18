@@ -262,7 +262,7 @@ BorrowExpr             ::= 'borrow' '(' Expression ')'
 // - Semicolon optionality: Many semicolons have been made optional ([';']) to align with examples.
 //   The parser's actual strictness should be confirmed. If truly optional, it can lead to ambiguities.
 // - Expression bodies for functions: `=> expression` added.
-// - `let` vs `var`: `let` and `let mut` added to `variable_declaration`.
+// - Unified Syntax: All declarations use `name<Type>` syntax consistently.
 // - `if-expression`: Added to `conditional_expression`.
 // - `statement_without_block`: Helper for `if` statements with non-block consequents.
 // - Constructor calls: A `call_expression` of the form `TypeName ( arguments )`, where `TypeName` is a `path_expression` resolving to a type, is parsed as a `ConstructionExpression`.

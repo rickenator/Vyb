@@ -5,7 +5,7 @@ main()<Int> -> {
     
     unsafe {
         // Using borrow on non-owned type should fail
-        var<their<Int>> b = borrow x;
+        b<their<Int>> = borrow x;
         b = 20;
     }
     

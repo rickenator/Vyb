@@ -9,6 +9,6 @@
 
 template Node<K> {
     class Foo {
-        var<[my<Node>; K]> children
+        children<[my<Node>; K]>
     }
 }

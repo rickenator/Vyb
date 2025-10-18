@@ -1,10 +1,7 @@
 //# EXPECTED ERROR: view() can only be used inside an unsafe block
 
 main()<Int> -> {
-    var<my<Int>> x = 10;
+    x<my<Int>> = 10;
     
-    // Using view outside unsafe block should fail
-    var<their<Int const>> v = view x;
-    
-    return x;
-}
+    // Create a view (immutable borrow)
+    v<their<Int const>> = view x;
