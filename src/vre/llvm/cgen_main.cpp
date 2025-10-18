@@ -322,3 +322,58 @@ llvm::DIType* LLVMCodegen::getDebugType(llvm::Type* llvmType, const std::string&
     // Default case: create an unspecified type
     return debugBuilder->createUnspecifiedType(typeName.empty() ? "unknown" : typeName);
 }
+
+llvm::DILocalVariable* LLVMCodegen::createDebugVariableInfo(const std::string& varName, llvm::DIType* debugType, 
+                                                           const SourceLocation& loc, llvm::DIScope* scope) {
+    if (!debugBuilder || !debugType) {
+        return nullptr;
+    }
+    
+    // Use provided scope or current scope from stack
+    llvm::DIScope* currentScope = scope;
+    if (!currentScope && !debugScopeStack.empty()) {
+        currentScope = debugScopeStack.top();
+    }
+    
+    if (!currentScope) {
+        return nullptr;
+    }
+    
+    // Create local variable debug info
+    llvm::DILocalVariable* debugVar = debugBuilder->createAutoVariable(
+        currentScope,           // Scope
+        varName,               // Name
+        debugFile,             // File
+        loc.line,              // Line number
+        debugType,             // Type
+        true,                  // Always preserve
+        llvm::DINode::FlagZero // Flags
+    );
+    
+    std::cout << "DEBUG: Created debug info for variable '" << varName << "' at line " << loc.line << std::endl;
+    return debugVar;
+}
+
+void LLVMCodegen::insertDebugVariableDeclaration(llvm::DILocalVariable* debugVar, llvm::Value* alloca, 
+                                                 const SourceLocation& loc) {
+    if (!debugBuilder || !debugVar || !alloca) {
+        return;
+    }
+    
+    // Insert a debug declaration at the current insertion point
+    debugBuilder->insertDeclare(
+        alloca,                                    // Storage
+        debugVar,                                  // Variable info
+        debugBuilder->createExpression(),          // Complex expression (empty)
+        llvm::DILocation::get(                     // Debug location
+            *context,
+            loc.line,
+            loc.column,
+            debugScopeStack.empty() ? debugCompileUnit : debugScopeStack.top()
+        ),
+        builder->GetInsertBlock()                  // Basic block
+    );
+    
+    std::cout << "DEBUG: Inserted debug declaration for variable '" << debugVar->getName().str() 
+              << "' at line " << loc.line << " column " << loc.column << std::endl;
+}

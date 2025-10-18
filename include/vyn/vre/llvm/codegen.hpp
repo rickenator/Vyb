@@ -236,6 +236,10 @@ private:
     void pushDebugScope(llvm::DIScope* scope);
     void popDebugScope();
     llvm::DIType* getDebugType(llvm::Type* llvmType, const std::string& typeName = "");
+    llvm::DILocalVariable* createDebugVariableInfo(const std::string& varName, llvm::DIType* debugType, 
+                                                   const SourceLocation& loc, llvm::DIScope* scope = nullptr);
+    void insertDebugVariableDeclaration(llvm::DILocalVariable* debugVar, llvm::Value* alloca, 
+                                        const SourceLocation& loc);
 
     // RTTI (Run-Time Type Information)
     llvm::StructType* getOrCreateRTTIStructType();

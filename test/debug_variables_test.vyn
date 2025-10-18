@@ -1,0 +1,15 @@
+// Test for debug variable information including parameters and local variables
+
+add_numbers(a<Int>, b<Int>)<Int> -> {
+    result<Int> = a + b;
+    return result;
+}
+
+main()<Int> -> {
+    println("=== Debug Variables Test ===");
+    x<Int> = 5;
+    y<Int> = 10;
+    sum<Int> = add_numbers(x, y);
+    println("Sum calculated successfully");
+    return 0;
+}

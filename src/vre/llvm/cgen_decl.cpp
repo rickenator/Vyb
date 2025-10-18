@@ -249,6 +249,19 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
         // Register variable for scope-based cleanup
         registerVariable(node->id->name, alloca, initialVal, ownership, varType, needsCleanup);
         
+        // Create debug information for the variable
+        if (debugBuilder && !debugScopeStack.empty()) {
+            std::string typeName = getTypeName(varType);
+            llvm::DIType* debugType = getDebugType(varType, typeName);
+            if (debugType) {
+                llvm::DILocalVariable* debugVar = createDebugVariableInfo(
+                    node->id->name, debugType, node->loc);
+                if (debugVar) {
+                    insertDebugVariableDeclaration(debugVar, alloca, node->loc);
+                }
+            }
+        }
+        
         m_currentLLVMValue = alloca;
         // Propagate type info for struct/class variables
         if (node->typeNode) {
@@ -396,6 +409,19 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
             
             // Register parameter for scope-based cleanup (parameters have MY ownership by default)
             registerVariable(paramNames[i], alloca, argVal, ast::OwnershipKind::MY, paramTypes[i], false);
+            
+            // Create debug information for the parameter
+            if (debugBuilder && !debugScopeStack.empty()) {
+                std::string typeName = getTypeName(paramTypes[i]);
+                llvm::DIType* debugType = getDebugType(paramTypes[i], typeName);
+                if (debugType) {
+                    llvm::DILocalVariable* debugVar = createDebugVariableInfo(
+                        paramNames[i], debugType, node->params[i].name->loc);
+                    if (debugVar) {
+                        insertDebugVariableDeclaration(debugVar, alloca, node->params[i].name->loc);
+                    }
+                }
+            }
         }
         
         std::cout << "DEBUG: FunctionDeclaration - about to process function body" << std::endl;
