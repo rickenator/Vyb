@@ -1573,8 +1573,11 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
         return;
     }
     
-    // Evaluate the object expression
+    // Evaluate the object expression (should not be treated as LHS)
+    bool wasLHS = m_isLHSOfAssignment;
+    m_isLHSOfAssignment = false;  // Object evaluation should load the value normally
     node->object->accept(*this);
+    m_isLHSOfAssignment = wasLHS;  // Restore LHS flag for field access
     llvm::Value* objectValue = m_currentLLVMValue;
     
     if (!objectValue) {
@@ -1645,6 +1648,7 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
             } else {
                 // Handle function parameters and other pointer values
                 std::cerr << "DEBUG: Object is a pointer but not an alloca, checking pointee type" << std::endl;
+                std::cerr << "DEBUG: Object pointer type: " << getTypeName(objectValue->getType()) << std::endl;
                 if (llvm::PointerType* ptrType = llvm::dyn_cast<llvm::PointerType>(objectValue->getType())) {
                     // For newer LLVM versions, we need to use a different approach
                     // Since we can't easily get the pointee type, try to get it from the value type map
