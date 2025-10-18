@@ -1,0 +1,74 @@
+// Vec<T> Iteration Example: Distance Calculations
+// 
+// This example demonstrates iterating over a Vec<Int> to process 
+// distance values representing points in 2D space.
+//
+// Mathematical Context:
+// - For a 2D point (x, y), distance to origin = sqrt(x^2 + y^2)
+// - This example stores pre-calculated distance squared values
+// - Example: point (3, 4) -> 3^2 + 4^2 = 25 -> distance ~5.0
+//
+// Vec Iteration Features Demonstrated:
+// - for (item in vec) syntax with mandatory parentheses
+// - Accumulating values during iteration
+// - Using break to exit early
+// - Calculating aggregate statistics (count, sum, average)
+
+main()<Int> -> {
+    // Create a Vec to hold squared distance values
+    // Each value represents a point's distance^2 to origin (0,0)
+    distances_squared<Vec<Int>> = Vec::new()
+    
+    // Add squared distance values for various 2D points:
+    distances_squared.push(25)    // Point (3, 4): distance ~5.0
+    distances_squared.push(0)     // Point (0, 0): distance 0.0  
+    distances_squared.push(2)     // Point (1, 1): distance ~1.414
+    distances_squared.push(25)    // Point (-3, 4): distance 5.0
+    distances_squared.push(169)   // Point (5, 12): distance 13.0
+    distances_squared.push(100)   // Point (8, 6): distance 10.0
+    
+    println("Distance values from Vec<Int> iteration:")
+    println("")
+    
+    // Initialize accumulators for statistics
+    count<Int> = 0
+    total<Int> = 0
+    
+    // Iterate through Vec using for loop (parentheses mandatory!)
+    for (d_squared in distances_squared) {
+        // Accumulate the total
+        total = total + d_squared
+        
+        // Print current value
+        println("Distance squared: ")
+        println(d_squared)
+        println("")
+        
+        // Increment counter
+        count = count + 1
+        
+        // Demonstrate break: stop if we've processed 10 items
+        if (count >= 10) {
+            break
+        }
+    }
+    
+    // Print summary statistics
+    println("")
+    println("Total points processed: ")
+    println(count)
+    println("")
+    println("Sum of squared distances: ")
+    println(total)
+    println("")
+    
+    // Calculate and print average (if we processed any points)
+    if (count > 0) {
+        avg<Int> = total / count
+        println("Average squared distance: ")
+        println(avg)
+    }
+    
+    // Return the count as exit code
+    return count
+}
