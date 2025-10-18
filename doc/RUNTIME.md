@@ -21,8 +21,8 @@ Vyn uses two keywords for variable bindings:
     var x: Int = 10;
     x = 20; // Allowed
 
-    var<my<String>> item = make_my("hello");
-    item = make_my("world"); // Allowed, old "hello" is dropped
+    var<my<String>> item = my("hello");
+    item = my("world"); // Allowed, old "hello" is dropped
     ```
 
 *   **`const`**: Declares an immutable binding. The variable cannot be reassigned after initialization.
@@ -30,15 +30,15 @@ Vyn uses two keywords for variable bindings:
     const<Float> PI = 3.14159;
     // PI = 3.0; // Error: cannot reassign a const binding
 
-    const<my<String>> GREETING = make_my("Hello");
-    // GREETING = make_my("Hi"); // Error
+    const<my<String>> GREETING = my("Hello");
+    // GREETING = my("Hi"); // Error
     ```
     Note: `const` on a binding only prevents reassignment. If the bound value holds a mutable type (e.g., `my<Data>`), the data *within* that value might still be modifiable through methods on `Data`, unless the type itself is immutable (e.g., `my<Data const>`).
 
     ```vyn
     class Counter { var<Int> value = 0; fn increment(&mut self) { self.value = self.value + 1; } }
-    const<my<Counter>> c = make_my(Counter{});
-    // c = make_my(Counter{}); // Error: c is a const binding
+    const<my<Counter>> c = my(Counter{});
+    // c = my(Counter{}); // Error: c is a const binding
     c.increment(); // Allowed, if Counter.increment takes their<Counter> (or similar for owned)
                    // and modifies internal state. The binding `c` is const,
                    // but the object it points to can be mutated if its type allows.
@@ -60,7 +60,7 @@ Vyn employs ownership types to manage memory and control data access:
 *   `our<T>`: Shared ownership of mutable data `T` (requires synchronization for thread-safety).
 *   `our<T const>`: Shared ownership of immutable data `T` (inherently thread-safe for reading).
 *   `their<T>`: A mutable borrow of data `T`.
-*   `their<T const>`: An immutable borrow (view) of data `T`.
+*   `their<T const>`: An immutable borrow view of data `T`.
 
 ## 4. Borrowing: Creating `their<T>` References
 
@@ -68,7 +68,7 @@ Borrowed references (`their<T>`) are created using the `borrow` and `view` keywo
 
 *   **`view <expr>`**: Creates an immutable borrow `their<T const>`. This provides a read-only view of the data.
     ```vyn
-    var owner: my<Foo> = make_my(Foo{ value: 10 });
+    var owner: my<Foo> = my(Foo{ value: 10 });
     var immutable_ref: their<Foo const> = view owner;
     // immutable_ref.value = 20; // Error: cannot modify through their<T const>
     print(immutable_ref.value); // OK
@@ -76,7 +76,7 @@ Borrowed references (`their<T>`) are created using the `borrow` and `view` keywo
 
 *   **`borrow <expr>`**: Creates a mutable borrow `their<T>`. This allows modification of the data, subject to borrowing rules (e.g., no other active borrows to the same data).
     ```vyn
-    var owner: my<Foo> = make_my(Foo{ value: 10 });
+    var owner: my<Foo> = my(Foo{ value: 10 });
     var mutable_ref: their<Foo> = borrow owner;
     mutable_ref.value = 20; // OK, owner.value is now 20
     print(mutable_ref.value); // OK
@@ -97,7 +97,7 @@ Function parameters use ownership types to define how arguments are passed:
 *   **`param: my<T>`** (or `our<T>`): The argument is moved into the function. The caller loses ownership.
     ```vyn
     fn consume_data(data: my<Foo>) { /* data is now owned by this function */ }
-    var my_foo: my<Foo> = make_my(Foo{});
+    var my_foo: my<Foo> = my(Foo{});
     consume_data(my_foo);
     // my_foo is no longer valid here
     ```
@@ -107,7 +107,7 @@ Function parameters use ownership types to define how arguments are passed:
     fn modify_data(data: their<Foo>) {
         data.value = data.value + 1;
     }
-    var owner: my<Foo> = make_my(Foo{value: 5});
+    var owner: my<Foo> = my(Foo{value: 5});
     modify_data(borrow owner); // owner.value becomes 6
     ```
 
@@ -117,8 +117,8 @@ Function parameters use ownership types to define how arguments are passed:
         print(data.value);
         // data.value = 10; // Error
     }
-    var<my<Foo>> owner_mut = make_my(Foo{value: 7});
-    const<my<Foo const>> owner_const = make_my(Foo{value: 8});
+    var<my<Foo>> owner_mut = my(Foo{value: 7});
+    const<my<Foo const>> owner_const = my(Foo{value: 8});
 
     read_data(view owner_mut);
     read_data(view owner_const);
@@ -136,11 +136,11 @@ struct Point {
 }
 
 // Instance mutability:
-var<my<Point>> p1 = make_my(Point { x: 10, y: 20, meta: make_my("info") });
+var<my<Point>> p1 = my(Point { x: 10, y: 20, meta: make_my("info") });
 p1.x = 15; // Allowed, p1 is mutable and x is a value type field
-p1.meta = make_my("new_info"); // Allowed, p1 is mutable, old meta is dropped
+p1.meta = my("new_info"); // Allowed, p1 is mutable, old meta is dropped
 
-const<my<Point>> p2 = make_my(Point { x: 0, y: 0, meta: make_my("const_info") });
+const<my<Point>> p2 = my(Point { x: 0, y: 0, meta: make_my("const_info") });
 // p2.x = 5; // Error: if p2 is a const binding to my<Point>, direct field mutation
             // might be disallowed or depend on whether Point is a "const-friendly" type.
             // Typically, for `const p: my<T>`, `T` itself must be treated as `T const`.

@@ -1,0 +1,335 @@
+# Vyn Intrinsics & Core Syntax
+
+This document covers Vyn’s built-in intrinsics, variable declaration syntax (including type inference), and function declaration syntax, all aligned with the `<T>`‑first style.
+
+---
+
+## 1. Variable & Constant Declarations
+
+Vyn uses two primary declaration forms:
+
+```ebnf
+Declaration ::= "var" "<" Type ">" Identifier [ "=" Expression ]
+              | "var" "auto" Identifier "=" Expression
+              | "const" "<" Type ">" Identifier [ "=" Expression ]
+```
+
+- **`var<T> name [= expr]`**  
+  Mutable binding of type `T`.  
+- **`var auto name = expr`**  
+  Mutable binding with type `T` inferred from `expr`.  
+- **`const<T> name [= expr]`**  
+  Immutable binding of type `T`.  
+
+> **Note:** `const auto` is not supported; use explicit `const<T>` for immutable bindings.
+
+### Examples
+
+```vyn
+var<Int> x             // mutable Int, uninitialized
+var<Int> y = 42        // mutable Int, initialized
+
+var auto tree = BTree<Int, String, 3>::new()
+// `tree` inferred as BTree<Int, String, 3>
+
+const<String> s = "hello"  // immutable String
+```
+
+Ownership-aware declarations:
+
+```vyn
+var<my<Task>> task = my<Task>(Task { id: 1, payload: "foo" })
+var<our<Config>> cfg  = our<Config>(Config { debug: true })
+var<their<Foo>> b     = their<Foo>(owner)       // mutable borrow
+var<their<Foo const>> v = their<Foo const>(owner)  // immutable borrow
+```
+
+Pointer declarations (inside `unsafe`):
+
+```vyn
+unsafe {
+  var<loc<Int>> p = loc(x)
+  at(p) = 99
+}
+```
+
+---
+
+## 2. Function Declaration Syntax
+
+Functions follow a `<ReturnType>`‑first style, with a mandatory `->` separator. Braces are optional for single-expression bodies.
+
+```ebnf
+FunctionDecl ::= "fn" "<" Type ">" Identifier "(" ParamList ")" "->" Body
+
+ParamList    ::= [ Param { "," Param } ]
+Param        ::= ("var" | "const") "<" Type ">" Identifier
+
+Body         ::= Block
+               | Expression
+
+Block        ::= "{" Statement* [ Expression ] "}"
+Expression   ::= <any single Vyn expression>
+```
+
+- **Return type**: declared in `<Type>` after `fn`.  
+- **Parameters**: `var<T>` or `const<T>` before each name.  
+- **`->`**: mandatory separator between signature and body.  
+- **Braces** `{}` optional only for single-expression bodies.
+
+### Examples
+
+```vyn
+class Node {
+  var<Bool> is_leaf
+
+  // Constructor with block body
+  fn<Node> new(const<Bool> is_leaf_param) -> {
+    Node { is_leaf: is_leaf_param }
+  }
+
+  // Concise single-expression function
+  fn<Int> double(var<Int> x) -> x * 2
+}
+```
+
+---
+
+## 3. Intrinsics Overview
+
+Intrinsics are compiler-handled operations, split into **stable** (Sections 4–6) and **proposed/experimental** (Section 7).
+
+### 3.1 Reserved Keywords
+
+These names are reserved and cannot be used as identifiers:
+
+- **Declarations**: `var`, `auto`, `const`  
+- **Ownership & borrowing**: `my`, `our`, `their`, `borrow`, `view`  
+- **Pointer & address**: `loc`, `at`, `addr`, `from`  
+- **Type metadata**: `sizeof`, `alignof`, `offsetof`  
+- **Visibility/macros**: `import`, `smuggle`, `share`
+
+---
+
+## 4. Ownership Intrinsics
+
+### 4.1 Core Wrappers
+
+```vyn
+fn my<T>(value: T) -> my<T>
+fn our<T>(value: T) -> our<T>
+fn their<T>(owner: my<T> | our<T>) -> their<T>
+fn their<T const>(owner: my<T> | our<T>) -> their<T const>
+```
+
+- **`my<T>(value)`**: wrap `value` in a unique-owned `my<T>`.  
+- **`our<T>(value)`**: wrap `value` in a shared-owned `our<T>`.  
+- **`their<T>(owner)`**: create a mutable borrow `their<T>` of `owner`.  
+- **`their<T const>(owner)`**: create an immutable borrow `their<T const>` of `owner`.
+
+### 4.2 Shorthand Borrowing
+
+For convenience, the compiler provides **inferred** shorthand intrinsics:
+
+```vyn
+fn borrow(owner) -> their<T>
+fn view(owner)   -> their<T const>
+```
+
+- **`borrow(owner)`** infers `T` from `owner` and returns `their<T>`.  
+- **`view(owner)`** infers `T` from `owner` and returns `their<T const>`.
+
+---
+
+## 5. Memory Intrinsics (`unsafe` required)
+
+```vyn
+unsafe fn loc<T>(expr: T) -> loc<T>
+unsafe fn at<T>(pointer: loc<T>) -> T
+unsafe fn addr<T>(pointer: loc<T>) -> Int64
+unsafe fn from<P>(addr: Int64) -> P
+```
+
+- **`loc<T>(expr)`**: address‑of a value → `loc<T>`.  
+- **`at<T>(pointer)`**: dereference pointer → `T` (l-value/r-value).  
+- **`addr<T>(pointer)`**: pointer → raw `Int64`.  
+- **`from<P>(addr)`**: raw `Int64` → pointer `P`.
+
+---
+
+## 6. Type Metadata Intrinsics (safe)
+
+```vyn
+fn sizeof<T>() -> UInt
+fn alignof<T>() -> UInt
+fn offsetof<T>(field: identifier) -> UInt
+```
+
+- **`sizeof<T>()`**: size of `T` in bytes.  
+- **`alignof<T>()`**: alignment of `T`.  
+- **`offsetof<T>(field)`**: byte offset of `field` in `T`.
+
+---
+
+## 7. Auto-Serialization Intrinsics (stable)
+
+Vyn provides built-in serialization support for automatic JSON generation of data structures, particularly for values returned from `main()`. These intrinsics are stable and ready for production use.
+
+### 7.1 Serialization Mode Intrinsics
+
+```vyn
+fn lit(value: T) -> T
+fn notype(value: T) -> T
+fn bare(value: T) -> T
+fn deserial(value: T) -> T
+```
+
+- **`lit(value)`**: Emits raw JSON literals without type wrapping. Converts strings to raw JSON values, numbers to unquoted numbers, and booleans to literal true/false. Restricted to primitive values (Int, Float, String, Bool).
+
+- **`notype(value)`**: Removes `<Type>` suffixes from field names in struct serialization. For structs, this produces cleaner JSON field names without type annotations. Only valid for structs.
+
+- **`bare(value)`**: Emits only raw field values as JSON array, removing all type and field metadata. For structs, outputs values in field declaration order as a JSON array. Only valid for structs.
+
+- **`deserial(json_string)`**: Deserializes JSON string back to typed Vyn values. Used for converting JSON input back to Vyn data structures.
+
+#### Examples
+
+**lit() Intrinsic:**
+```vyn
+fn<String> main() -> {
+    return lit("42");     // Output: 42 (number, not string)
+}
+
+fn<String> main() -> {
+    return lit("true");   // Output: true (boolean, not string)
+}
+
+fn<String> main() -> {
+    return lit("hello");  // Output: "hello" (quoted string)
+}
+```
+
+**notype() Intrinsic:**
+```vyn
+struct Person {
+    Int id,
+    String name
+}
+
+fn<Person> main() -> {
+    var<Person> p = Person(id=123, name="Alice");
+    return notype(p);
+    // Output: {"id":123,"name":"Alice"} 
+    // instead of {"id<Int>":123,"name<String>":"Alice"}
+}
+```
+
+**bare() Intrinsic:**
+```vyn
+struct Point {
+    Float x,
+    Float y
+}
+
+fn<Point> main() -> {
+    var<Point> point = Point(x=3.5, y=4.2);
+    return bare(point);
+    // Output: [3.5, 4.2]
+    // instead of {"x<Float>":3.5,"y<Float>":4.2}
+}
+```
+
+**Multi-Value with Mixed Intrinsics:**
+```vyn
+struct Config {
+    String name,
+    Int version
+}
+
+fn<Config, Int> main() -> {
+    var<Config> cfg = Config(name="app", version=1);
+    return notype(cfg), lit("42");
+    // Output: [{"name":"app","version":1}, 42]
+}
+```
+
+### 7.2 JSON Serialization Intrinsics
+
+The following intrinsics are provided for manual JSON construction and are used internally by the auto-serialization system:
+
+```vyn
+fn __vyn_serialize_to_json(value: any) -> String
+fn __vyn_serialize_struct_with_names(value: any) -> String
+fn __vyn_json_array_start() -> String
+fn __vyn_json_array_append(current: String, item: String) -> String
+fn __vyn_json_array_end(current: String) -> String
+fn __vyn_json_object_start() -> String
+fn __vyn_json_object_append_field(current: String, name: String, value: String) -> String
+fn __vyn_json_object_end(current: String) -> String
+```
+
+- **`__vyn_serialize_to_json(value)`**: serialize any value to JSON string.
+- **`__vyn_serialize_struct_with_names(value)`**: serialize struct with field names included.
+- **JSON Array functions**: manually construct JSON arrays with proper formatting.
+- **JSON Object functions**: manually construct JSON objects with field names and values.
+
+### 7.3 Auto-Serialization Usage
+
+The auto-serialization system automatically activates when `main()` returns a structured value:
+
+```vyn
+// Simple value return - auto-serialized to JSON
+fn<Int> main() -> {
+    return 42  // Output: 42
+}
+
+// Struct return - auto-serialized with field names
+struct Point {
+    var<Float> x
+    var<Float> y
+}
+
+fn<Point> main() -> {
+    return Point { x: 3.5, y: 4.2 }
+    // Output: {"x": 3.5, "y": 4.2}
+}
+
+// Custom serialization with mode intrinsics
+fn<String> main() -> {
+    var<String> name = "example"
+    return lit(name)  // Output: example (without quotes)
+}
+```
+
+### 7.4 Serialization Guidelines
+
+1. **Return Types**: `main()` can return any serializable type; JSON output is automatic.
+2. **Mode Control**: Use `lit()`, `notype()`, `bare()`, `deserial()` to customize serialization behavior.
+3. **Manual Construction**: Use `__vyn_json_*` functions for complex manual JSON building.
+4. **Performance**: Auto-serialization is optimized for common cases; manual intrinsics available for edge cases.
+
+For comprehensive documentation on auto-serialization capabilities and configuration, see `doc/Auto_Serialization_Main_Returns.md`.
+
+---
+
+## 8. Proposed/Experimental Intrinsics
+
+```vyn
+fn offset<T>(ptr: loc<T>, count: Int) -> loc<T>
+fn is_null<T>(ptr: loc<T>) -> Bool
+fn aligned<T>(ptr: loc<T>) -> Bool
+fn mem_copy(dst: loc<UInt8>, src: loc<UInt8>, n: UInt) -> Void
+fn mem_set(ptr: loc<UInt8>, value: UInt8, n: UInt) -> Void
+// Atomic & volatile operations
+```
+
+---
+
+## 9. Usage Guidelines
+
+1. **Declarations**: choose explicit (`var<T>`) or inferred (`var auto`).  
+2. **Functions**: return in `<Type>`, arrow mandatory, braces optional for single expressions.  
+3. **Ownership**: use `my<T>`, `our<T>`, `their<T>`, with optional `borrow()`/`view()` shorthand.  
+4. **Intrinsics**: memory ops only in `unsafe`, metadata always safe.  
+5. **Serialization**: use auto-serialization for `main()` returns; mode intrinsics for customization.
+6. **Stability**: Sections 4–7 are stable; Section 8 is experimental.

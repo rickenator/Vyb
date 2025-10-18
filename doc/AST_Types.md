@@ -97,7 +97,7 @@ Represents a reference type (e.g., `&i32`, `&mut string`).
 -   **`NodeType`**: `REFERENCE_TYPE_NODE`
 -   **Fields**:
     -   `referencedType` (`TypeNodePtr`): The type of the data being referenced.
-    -   `kind` (`BorrowKind`): The kind of borrow (e.g., `SHARED`, `MUTABLE`, `UNIQUE_MUTABLE`).
+    -   `kind` (`BorrowKind`): The kind of borrow e.g., `SHARED`, `MUTABLE`, `UNIQUE_MUTABLE`.
 
 ```cpp
 // From include/vyn/parser/ast.hpp

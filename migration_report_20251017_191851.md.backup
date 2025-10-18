@@ -1,0 +1,1263 @@
+# Vyn Syntax Migration Report
+Generated: 2025-10-17 19:18:51
+
+## Summary
+- Files scanned: 502
+- Files with legacy syntax: 21
+- Total migrations needed: 75
+
+## Migration Details
+
+### borrow_call_to_operator (18 instances)
+
+**examples/memory_semantics.vyn:10**
+```vyn
+// OLD:
+borrow(x)
+// NEW:
+borrow x
+```
+
+**examples/relaxed_syntax.vyn:31**
+```vyn
+// OLD:
+borrow(message)
+// NEW:
+borrow message
+```
+
+**test/units/test50.vyn:1**
+```vyn
+// OLD:
+borrow(expr)
+// NEW:
+borrow expr
+```
+
+**test/units/test50.vyn:7**
+```vyn
+// OLD:
+borrow(x)
+// NEW:
+borrow x
+```
+
+**test/units/test51.vyn:7**
+```vyn
+// OLD:
+borrow(x)
+// NEW:
+borrow x
+```
+
+**test/units/test53.vyn:8**
+```vyn
+// OLD:
+borrow(x)
+// NEW:
+borrow x
+```
+
+**README_old.md:242**
+```vyn
+// OLD:
+borrow (view)
+// NEW:
+borrow view
+```
+
+**README.md:195**
+```vyn
+// OLD:
+borrow(owner)
+// NEW:
+borrow owner
+```
+
+**doc/Intrinsics.md:135**
+```vyn
+// OLD:
+borrow(owner)
+// NEW:
+borrow owner
+```
+
+**doc/Intrinsics.md:139**
+```vyn
+// OLD:
+borrow(owner)
+// NEW:
+borrow owner
+```
+
+**doc/Declaration_Syntax.md:29**
+```vyn
+// OLD:
+borrow(owner)
+// NEW:
+borrow owner
+```
+
+**doc/RUNTIME.md:63**
+```vyn
+// OLD:
+borrow (view)
+// NEW:
+borrow view
+```
+
+**doc/AST_Types.md:100**
+```vyn
+// OLD:
+borrow (e.g., `SHARED`, `MUTABLE`, `UNIQUE_MUTABLE`)
+// NEW:
+borrow e.g., `SHARED`, `MUTABLE`, `UNIQUE_MUTABLE`
+```
+
+**doc/mem_RFC.md:53**
+```vyn
+// OLD:
+borrow (read-only view)
+// NEW:
+borrow read-only view
+```
+
+**doc/mem_RFC.md:56**
+```vyn
+// OLD:
+borrow(owner_expr)
+// NEW:
+borrow owner_expr
+```
+
+**doc/AST_Expressions.md:96**
+```vyn
+// OLD:
+borrow(owner)
+// NEW:
+borrow owner
+```
+
+**doc/AST_Expressions.md:272**
+```vyn
+// OLD:
+borrow (e.g., `SHARED`, `MUTABLE`, `UNIQUE_MUTABLE`)
+// NEW:
+borrow e.g., `SHARED`, `MUTABLE`, `UNIQUE_MUTABLE`
+```
+
+**src/vre/llvm/cgen_expr.cpp:1654**
+```vyn
+// OLD:
+borrow(expr)
+// NEW:
+borrow expr
+```
+
+### view_call_to_operator (12 instances)
+
+**examples/memory_semantics.vyn:11**
+```vyn
+// OLD:
+view(x)
+// NEW:
+view x
+```
+
+**test/units/test50.vyn:1**
+```vyn
+// OLD:
+view(expr)
+// NEW:
+view expr
+```
+
+**test/units/test50.vyn:11**
+```vyn
+// OLD:
+view(x)
+// NEW:
+view x
+```
+
+**test/units/test_relaxed_syntax.vyn:95**
+```vyn
+// OLD:
+view("Item: ")
+// NEW:
+view "Item: "
+```
+
+**test/units/test52.vyn:7**
+```vyn
+// OLD:
+view(x)
+// NEW:
+view x
+```
+
+**doc/Intrinsics.md:136**
+```vyn
+// OLD:
+view(owner)
+// NEW:
+view owner
+```
+
+**doc/Intrinsics.md:140**
+```vyn
+// OLD:
+view(owner)
+// NEW:
+view owner
+```
+
+**doc/mem_RFC.md:54**
+```vyn
+// OLD:
+view(owner_expr)
+// NEW:
+view owner_expr
+```
+
+**doc/mem_RFC.md:218**
+```vyn
+// OLD:
+view (immutable borrow)
+// NEW:
+view immutable borrow
+```
+
+**doc/Vyn_Function_Declaration_Syntax.md:57**
+```vyn
+// OLD:
+view(cfg)
+// NEW:
+view cfg
+```
+
+**doc/AST_Expressions.md:96**
+```vyn
+// OLD:
+view(owner)
+// NEW:
+view owner
+```
+
+**src/vre/llvm/cgen_expr.cpp:1671**
+```vyn
+// OLD:
+view(expr)
+// NEW:
+view expr
+```
+
+### make_my_to_my (25 instances)
+
+**README_old.md:226**
+```vyn
+// OLD:
+make_my("owned")
+// NEW:
+my("owned")
+```
+
+**README_old.md:247**
+```vyn
+// OLD:
+make_my(10)
+// NEW:
+my(10)
+```
+
+**README_old.md:253**
+```vyn
+// OLD:
+make_my(10)
+// NEW:
+my(10)
+```
+
+**README_old.md:770**
+```vyn
+// OLD:
+make_my(Data{id:i})
+// NEW:
+my(Data{id:i})
+```
+
+**README.md:302**
+```vyn
+// OLD:
+make_my("unique data")
+// NEW:
+my("unique data")
+```
+
+**README.md:776**
+```vyn
+// OLD:
+make_my("unique data")
+// NEW:
+my("unique data")
+```
+
+**doc/RUNTIME.md:24**
+```vyn
+// OLD:
+make_my("hello")
+// NEW:
+my("hello")
+```
+
+**doc/RUNTIME.md:25**
+```vyn
+// OLD:
+make_my("world")
+// NEW:
+my("world")
+```
+
+**doc/RUNTIME.md:33**
+```vyn
+// OLD:
+make_my("Hello")
+// NEW:
+my("Hello")
+```
+
+**doc/RUNTIME.md:34**
+```vyn
+// OLD:
+make_my("Hi")
+// NEW:
+my("Hi")
+```
+
+**doc/RUNTIME.md:40**
+```vyn
+// OLD:
+make_my(Counter{})
+// NEW:
+my(Counter{})
+```
+
+**doc/RUNTIME.md:41**
+```vyn
+// OLD:
+make_my(Counter{})
+// NEW:
+my(Counter{})
+```
+
+**doc/RUNTIME.md:71**
+```vyn
+// OLD:
+make_my(Foo{ value: 10 })
+// NEW:
+my(Foo{ value: 10 })
+```
+
+**doc/RUNTIME.md:79**
+```vyn
+// OLD:
+make_my(Foo{ value: 10 })
+// NEW:
+my(Foo{ value: 10 })
+```
+
+**doc/RUNTIME.md:100**
+```vyn
+// OLD:
+make_my(Foo{})
+// NEW:
+my(Foo{})
+```
+
+**doc/RUNTIME.md:110**
+```vyn
+// OLD:
+make_my(Foo{value: 5})
+// NEW:
+my(Foo{value: 5})
+```
+
+**doc/RUNTIME.md:120**
+```vyn
+// OLD:
+make_my(Foo{value: 7})
+// NEW:
+my(Foo{value: 7})
+```
+
+**doc/RUNTIME.md:121**
+```vyn
+// OLD:
+make_my(Foo{value: 8})
+// NEW:
+my(Foo{value: 8})
+```
+
+**doc/RUNTIME.md:139**
+```vyn
+// OLD:
+make_my(Point { x: 10, y: 20, meta: make_my("info")
+// NEW:
+my(Point { x: 10, y: 20, meta: make_my("info")
+```
+
+**doc/RUNTIME.md:141**
+```vyn
+// OLD:
+make_my("new_info")
+// NEW:
+my("new_info")
+```
+
+**doc/RUNTIME.md:143**
+```vyn
+// OLD:
+make_my(Point { x: 0, y: 0, meta: make_my("const_info")
+// NEW:
+my(Point { x: 0, y: 0, meta: make_my("const_info")
+```
+
+**doc/Reference_Syntax_Unification.md:18**
+```vyn
+// OLD:
+make_my("data")
+// NEW:
+my("data")
+```
+
+**doc/Reference_Syntax_Unification.md:89**
+```vyn
+// OLD:
+make_my("text")
+// NEW:
+my("text")
+```
+
+**doc/Canonical_Reference_Syntax.md:139**
+```vyn
+// OLD:
+make_my("owned")
+// NEW:
+my("owned")
+```
+
+**include/vyn/vre/memory.hpp:47**
+```vyn
+// OLD:
+make_my(Args&&... args)
+// NEW:
+my(Args&&... args)
+```
+
+### make_our_to_our (15 instances)
+
+**README_old.md:230**
+```vyn
+// OLD:
+make_our("shared")
+// NEW:
+our("shared")
+```
+
+**README_old.md:787**
+```vyn
+// OLD:
+make_our(Mutex(0)
+// NEW:
+our(Mutex(0)
+```
+
+**README.md:305**
+```vyn
+// OLD:
+make_our("shared data")
+// NEW:
+our("shared data")
+```
+
+**README.md:779**
+```vyn
+// OLD:
+make_our("shared data")
+// NEW:
+our("shared data")
+```
+
+**doc/PROPOSAL_OWNERSHIP_KEYWORDS.md:76**
+```vyn
+// OLD:
+make_our(Data{})
+// NEW:
+our(Data{})
+```
+
+**doc/PROPOSAL_OWNERSHIP_KEYWORDS.md:112**
+```vyn
+// OLD:
+make_our(Item { data: 30 })
+// NEW:
+our(Item { data: 30 })
+```
+
+**doc/PROPOSAL_OWNERSHIP_KEYWORDS.md:189**
+```vyn
+// OLD:
+make_our(value)
+// NEW:
+our(value)
+```
+
+**doc/mem_RFC.md:71**
+```vyn
+// OLD:
+make_our(Mutex(Bar{v:1})
+// NEW:
+our(Mutex(Bar{v:1})
+```
+
+**doc/mem_RFC.md:80**
+```vyn
+// OLD:
+make_our(expr)
+// NEW:
+our(expr)
+```
+
+**doc/mem_RFC.md:96**
+```vyn
+// OLD:
+make_our(Mutex{ value: Foo{/*...*/} })
+// NEW:
+our(Mutex{ value: Foo{/*...*/} })
+```
+
+**doc/mem_RFC.md:210**
+```vyn
+// OLD:
+make_our(Bar{v:1})
+// NEW:
+our(Bar{v:1})
+```
+
+**doc/mem_RFC.md:211**
+```vyn
+// OLD:
+make_our(Mutex(Bar{v:2})
+// NEW:
+our(Mutex(Bar{v:2})
+```
+
+**doc/Reference_Syntax_Unification.md:19**
+```vyn
+// OLD:
+make_our("data")
+// NEW:
+our("data")
+```
+
+**doc/Reference_Syntax_Unification.md:90**
+```vyn
+// OLD:
+make_our("text")
+// NEW:
+our("text")
+```
+
+**doc/Canonical_Reference_Syntax.md:140**
+```vyn
+// OLD:
+make_our(Config::new()
+// NEW:
+our(Config::new()
+```
+
+### comment_make_my_fix (3 instances)
+
+**doc/RUNTIME.md:34**
+```vyn
+// OLD:
+// GREETING = make_my(
+// NEW:
+// GREETING = my(
+```
+
+**doc/RUNTIME.md:41**
+```vyn
+// OLD:
+// c = make_my(
+// NEW:
+// c = my(
+```
+
+**include/vyn/vre/memory.hpp:47**
+```vyn
+// OLD:
+// my<T> make_my(
+// NEW:
+// my<T> my(
+```
+
+### make_their_to_view (2 instances)
+
+**doc/Reference_Syntax_Unification.md:20**
+```vyn
+// OLD:
+make_their("data")
+// NEW:
+view "data"
+```
+
+**doc/Canonical_Reference_Syntax.md:141**
+```vyn
+// OLD:
+make_their(data)
+// NEW:
+view data
+```
+
+## Files Requiring Migration
+
+### README.md (5 changes)
+
+**Line 195:** borrow_call_to_operator
+```
+194: | `our<T>` | Shared ownership | Reference counting | `config<our<Settings>> = our(Settings{...})` |
+195: | `their<T>` | Borrowed reference | Non-owning access | `ref<their<Data>> = borrow(owner)` |
+196: | `loc<T>` | Raw pointer | Unsafe operations only | `ptr<loc<Int>> = loc(variable)` |
+```
+**Change:** `borrow(owner)` → `borrow owner`
+
+**Line 302:** make_my_to_my
+```
+301:     # Unique ownership - automatically freed when out of scope
+302:     owned<my<String>> = make_my("unique data")
+303: 
+```
+**Change:** `make_my("unique data")` → `my("unique data")`
+
+**Line 305:** make_our_to_our
+```
+304:     # Shared ownership - reference counted
+305:     shared<our<String>> = make_our("shared data")
+306:     another_ref<our<String>> = shared  # Reference count incremented
+```
+**Change:** `make_our("shared data")` → `our("shared data")`
+
+**Line 776:** make_my_to_my
+```
+775: # Unique ownership (like Rust's Box)
+776: owned<my<String>> = make_my("unique data")
+777: 
+```
+**Change:** `make_my("unique data")` → `my("unique data")`
+
+**Line 779:** make_our_to_our
+```
+778: # Shared ownership (reference counted)
+779: shared<our<String>> = make_our("shared data")
+780: another_ref<our<String>> = shared  # Reference count incremented
+```
+**Change:** `make_our("shared data")` → `our("shared data")`
+
+### README_old.md (7 changes)
+
+**Line 226:** make_my_to_my
+```
+225:     ```vyn
+226:     var<my<String>> unique_data = make_my("owned");
+227:     ```
+```
+**Change:** `make_my("owned")` → `my("owned")`
+
+**Line 230:** make_our_to_our
+```
+229:     ```vyn
+230:     var<our<String>> shared_data = make_our("shared");
+231:     var<our<String>> another_ref = shared_data; // Reference count incremented
+```
+**Change:** `make_our("shared")` → `our("shared")`
+
+**Line 242:** borrow_call_to_operator
+```
+241: *   `their<T>`: A mutable borrow of data `T`.
+242: *   `their<T const>`: An immutable borrow (view) of data `T`.
+243: 
+```
+**Change:** `borrow (view)` → `borrow view`
+
+**Line 247:** make_my_to_my
+```
+246:     ```vyn
+247:     var<my<Int>> owner = make_my(10);
+248:     var<their<Int const>> immutable_ref = view owner;
+```
+**Change:** `make_my(10)` → `my(10)`
+
+**Line 253:** make_my_to_my
+```
+252:     ```vyn
+253:     var<my<Int>> owner = make_my(10);
+254:     var<their<Int>> mutable_ref = borrow owner;
+```
+**Change:** `make_my(10)` → `my(10)`
+
+**Line 770:** make_my_to_my
+```
+769: spawn fn producer() {
+770:     for i in 0..<50 { ch.send(make_my(Data{id:i})) } // Send owned data
+771: }
+```
+**Change:** `make_my(Data{id:i})` → `my(Data{id:i})`
+
+**Line 787:** make_our_to_our
+```
+786: ```vyn
+787: var shared_value: our<Mutex<Int>> = make_our(Mutex(0));
+788: 
+```
+**Change:** `make_our(Mutex(0)` → `our(Mutex(0)`
+
+### doc/AST_Expressions.md (3 changes)
+
+**Line 96:** view_call_to_operator
+```
+95: 
+96: The `borrow(owner)` and `view(owner)` intrinsics are parsed as CallExpression nodes
+97: with `callee` matching the identifier `borrow` or `view` and a single argument.
+```
+**Change:** `view(owner)` → `view owner`
+
+**Line 96:** borrow_call_to_operator
+```
+95: 
+96: The `borrow(owner)` and `view(owner)` intrinsics are parsed as CallExpression nodes
+97: with `callee` matching the identifier `borrow` or `view` and a single argument.
+```
+**Change:** `borrow(owner)` → `borrow owner`
+
+**Line 272:** borrow_call_to_operator
+```
+271:     -   `operand` (`ExprPtr`): The expression being borrowed.
+272:     -   `kind` (`BorrowKind`): The kind of borrow (e.g., `SHARED`, `MUTABLE`, `UNIQUE_MUTABLE`). `BorrowKind` is an enum defined in `ast.hpp`.
+273: 
+```
+**Change:** `borrow (e.g., `SHARED`, `MUTABLE`, `UNIQUE_MUTABLE`)` → `borrow e.g., `SHARED`, `MUTABLE`, `UNIQUE_MUTABLE``
+
+### doc/AST_Types.md (1 changes)
+
+**Line 100:** borrow_call_to_operator
+```
+99:     -   `referencedType` (`TypeNodePtr`): The type of the data being referenced.
+100:     -   `kind` (`BorrowKind`): The kind of borrow (e.g., `SHARED`, `MUTABLE`, `UNIQUE_MUTABLE`).
+101: 
+```
+**Change:** `borrow (e.g., `SHARED`, `MUTABLE`, `UNIQUE_MUTABLE`)` → `borrow e.g., `SHARED`, `MUTABLE`, `UNIQUE_MUTABLE``
+
+### doc/Canonical_Reference_Syntax.md (3 changes)
+
+**Line 139:** make_my_to_my
+```
+138: ```vyn
+139: data<my<String>>    = make_my("owned");   // ❌ Deprecated function
+140: shared<our<Config>> = make_our(Config::new()); // ❌ Deprecated function
+```
+**Change:** `make_my("owned")` → `my("owned")`
+
+**Line 140:** make_our_to_our
+```
+139: data<my<String>>    = make_my("owned");   // ❌ Deprecated function
+140: shared<our<Config>> = make_our(Config::new()); // ❌ Deprecated function
+141: view<their<String>> = make_their(data);   // ❌ Never existed, wrong concept
+```
+**Change:** `make_our(Config::new()` → `our(Config::new()`
+
+**Line 141:** make_their_to_view
+```
+140: shared<our<Config>> = make_our(Config::new()); // ❌ Deprecated function
+141: view<their<String>> = make_their(data);   // ❌ Never existed, wrong concept
+142: ```
+```
+**Change:** `make_their(data)` → `view data`
+
+### doc/Declaration_Syntax.md (1 changes)
+
+**Line 29:** borrow_call_to_operator
+```
+28: config<our<Config>> = our(Config { debug: true })
+29: borrowed<their<Foo>> = borrow(owner)
+30: ```
+```
+**Change:** `borrow(owner)` → `borrow owner`
+
+### doc/Intrinsics.md (4 changes)
+
+**Line 135:** borrow_call_to_operator
+```
+134: ```vyn
+135: fn borrow(owner) -> their<T>
+136: fn view(owner)   -> their<T const>
+```
+**Change:** `borrow(owner)` → `borrow owner`
+
+**Line 136:** view_call_to_operator
+```
+135: fn borrow(owner) -> their<T>
+136: fn view(owner)   -> their<T const>
+137: ```
+```
+**Change:** `view(owner)` → `view owner`
+
+**Line 139:** borrow_call_to_operator
+```
+138: 
+139: - **`borrow(owner)`** infers `T` from `owner` and returns `their<T>`.
+140: - **`view(owner)`** infers `T` from `owner` and returns `their<T const>`.
+```
+**Change:** `borrow(owner)` → `borrow owner`
+
+**Line 140:** view_call_to_operator
+```
+139: - **`borrow(owner)`** infers `T` from `owner` and returns `their<T>`.
+140: - **`view(owner)`** infers `T` from `owner` and returns `their<T const>`.
+141: 
+```
+**Change:** `view(owner)` → `view owner`
+
+### doc/PROPOSAL_OWNERSHIP_KEYWORDS.md (3 changes)
+
+**Line 76:** make_our_to_our
+```
+75: | Create Unique (explicit type)| `let d: Data = Data{};`              | `let d: my Data = Data{};`                    |             |
+76: | Create Shared               | `let s = Shared::new(Data{});`       | `let s: our Data = make_our(Data{});` (conceptual fn) |             |
+77: | Create Mutable Borrow       | `let r = &d;`                        | `let r = their d;`                            |             |
+```
+**Change:** `make_our(Data{})` → `our(Data{})`
+
+**Line 112:** make_our_to_our
+```
+111: ```vyn
+112: let shared_item1: our Item = make_our(Item { data: 30 });
+113: let shared_item2: our Item = shared_item1; // Reference count increases
+```
+**Change:** `make_our(Item { data: 30 })` → `our(Item { data: 30 })`
+
+**Line 189:** make_our_to_our
+```
+188: *   Are there unforeseen parsing ambiguities?
+189: *   What should be the precise mechanism and syntax for creating `our Type` instances (e.g., `make_our(value)`, `new our Type`, `our { value }`)? This proposal leans towards a library function for now.
+190: *   How should `our const T` vs `our T` interact with mutability of the underlying data? (e.g. an `our Item` where `Item` has `let` fields).
+```
+**Change:** `make_our(value)` → `our(value)`
+
+### doc/RUNTIME.md (18 changes)
+
+**Line 24:** make_my_to_my
+```
+23: 
+24:     var<my<String>> item = make_my("hello");
+25:     item = make_my("world"); // Allowed, old "hello" is dropped
+```
+**Change:** `make_my("hello")` → `my("hello")`
+
+**Line 25:** make_my_to_my
+```
+24:     var<my<String>> item = make_my("hello");
+25:     item = make_my("world"); // Allowed, old "hello" is dropped
+26:     ```
+```
+**Change:** `make_my("world")` → `my("world")`
+
+**Line 33:** make_my_to_my
+```
+32: 
+33:     const<my<String>> GREETING = make_my("Hello");
+34:     // GREETING = make_my("Hi"); // Error
+```
+**Change:** `make_my("Hello")` → `my("Hello")`
+
+**Line 34:** make_my_to_my
+```
+33:     const<my<String>> GREETING = make_my("Hello");
+34:     // GREETING = make_my("Hi"); // Error
+35:     ```
+```
+**Change:** `make_my("Hi")` → `my("Hi")`
+
+**Line 34:** comment_make_my_fix
+```
+33:     const<my<String>> GREETING = make_my("Hello");
+34:     // GREETING = make_my("Hi"); // Error
+35:     ```
+```
+**Change:** `// GREETING = make_my(` → `// GREETING = my(`
+
+**Line 40:** make_my_to_my
+```
+39:     class Counter { var<Int> value = 0; fn increment(&mut self) { self.value = self.value + 1; } }
+40:     const<my<Counter>> c = make_my(Counter{});
+41:     // c = make_my(Counter{}); // Error: c is a const binding
+```
+**Change:** `make_my(Counter{})` → `my(Counter{})`
+
+**Line 41:** make_my_to_my
+```
+40:     const<my<Counter>> c = make_my(Counter{});
+41:     // c = make_my(Counter{}); // Error: c is a const binding
+42:     c.increment(); // Allowed, if Counter.increment takes their<Counter> (or similar for owned)
+```
+**Change:** `make_my(Counter{})` → `my(Counter{})`
+
+**Line 41:** comment_make_my_fix
+```
+40:     const<my<Counter>> c = make_my(Counter{});
+41:     // c = make_my(Counter{}); // Error: c is a const binding
+42:     c.increment(); // Allowed, if Counter.increment takes their<Counter> (or similar for owned)
+```
+**Change:** `// c = make_my(` → `// c = my(`
+
+**Line 63:** borrow_call_to_operator
+```
+62: *   `their<T>`: A mutable borrow of data `T`.
+63: *   `their<T const>`: An immutable borrow (view) of data `T`.
+64: 
+```
+**Change:** `borrow (view)` → `borrow view`
+
+**Line 71:** make_my_to_my
+```
+70:     ```vyn
+71:     var owner: my<Foo> = make_my(Foo{ value: 10 });
+72:     var immutable_ref: their<Foo const> = view owner;
+```
+**Change:** `make_my(Foo{ value: 10 })` → `my(Foo{ value: 10 })`
+
+**Line 79:** make_my_to_my
+```
+78:     ```vyn
+79:     var owner: my<Foo> = make_my(Foo{ value: 10 });
+80:     var mutable_ref: their<Foo> = borrow owner;
+```
+**Change:** `make_my(Foo{ value: 10 })` → `my(Foo{ value: 10 })`
+
+**Line 100:** make_my_to_my
+```
+99:     fn consume_data(data: my<Foo>) { /* data is now owned by this function */ }
+100:     var my_foo: my<Foo> = make_my(Foo{});
+101:     consume_data(my_foo);
+```
+**Change:** `make_my(Foo{})` → `my(Foo{})`
+
+**Line 110:** make_my_to_my
+```
+109:     }
+110:     var owner: my<Foo> = make_my(Foo{value: 5});
+111:     modify_data(borrow owner); // owner.value becomes 6
+```
+**Change:** `make_my(Foo{value: 5})` → `my(Foo{value: 5})`
+
+**Line 120:** make_my_to_my
+```
+119:     }
+120:     var<my<Foo>> owner_mut = make_my(Foo{value: 7});
+121:     const<my<Foo const>> owner_const = make_my(Foo{value: 8});
+```
+**Change:** `make_my(Foo{value: 7})` → `my(Foo{value: 7})`
+
+**Line 121:** make_my_to_my
+```
+120:     var<my<Foo>> owner_mut = make_my(Foo{value: 7});
+121:     const<my<Foo const>> owner_const = make_my(Foo{value: 8});
+122: 
+```
+**Change:** `make_my(Foo{value: 8})` → `my(Foo{value: 8})`
+
+**Line 139:** make_my_to_my
+```
+138: // Instance mutability:
+139: var<my<Point>> p1 = make_my(Point { x: 10, y: 20, meta: make_my("info") });
+140: p1.x = 15; // Allowed, p1 is mutable and x is a value type field
+```
+**Change:** `make_my(Point { x: 10, y: 20, meta: make_my("info")` → `my(Point { x: 10, y: 20, meta: make_my("info")`
+
+**Line 141:** make_my_to_my
+```
+140: p1.x = 15; // Allowed, p1 is mutable and x is a value type field
+141: p1.meta = make_my("new_info"); // Allowed, p1 is mutable, old meta is dropped
+142: 
+```
+**Change:** `make_my("new_info")` → `my("new_info")`
+
+**Line 143:** make_my_to_my
+```
+142: 
+143: const<my<Point>> p2 = make_my(Point { x: 0, y: 0, meta: make_my("const_info") });
+144: // p2.x = 5; // Error: if p2 is a const binding to my<Point>, direct field mutation
+```
+**Change:** `make_my(Point { x: 0, y: 0, meta: make_my("const_info")` → `my(Point { x: 0, y: 0, meta: make_my("const_info")`
+
+### doc/Reference_Syntax_Unification.md (5 changes)
+
+**Line 18:** make_my_to_my
+```
+17:    ```vyn
+18:    make_my("data")    // Documented in README/docs
+19:    make_our("data")
+```
+**Change:** `make_my("data")` → `my("data")`
+
+**Line 19:** make_our_to_our
+```
+18:    make_my("data")    // Documented in README/docs
+19:    make_our("data")
+20:    make_their("data")
+```
+**Change:** `make_our("data")` → `our("data")`
+
+**Line 20:** make_their_to_view
+```
+19:    make_our("data")
+20:    make_their("data")
+21:    ```
+```
+**Change:** `make_their("data")` → `view "data"`
+
+**Line 89:** make_my_to_my
+```
+88: // OLD (inconsistent):
+89: data<my<String>> = make_my("text");      // ❌ Remove
+90: shared<our<String>> = make_our("text");  // ❌ Remove
+```
+**Change:** `make_my("text")` → `my("text")`
+
+**Line 90:** make_our_to_our
+```
+89: data<my<String>> = make_my("text");      // ❌ Remove
+90: shared<our<String>> = make_our("text");  // ❌ Remove
+91: 
+```
+**Change:** `make_our("text")` → `our("text")`
+
+### doc/Vyn_Function_Declaration_Syntax.md (1 changes)
+
+**Line 57:** view_call_to_operator
+```
+56: // Reading a value from a shared config
+57: is_debug(cfg<our<Config>>)<Bool> -> view(cfg).debug
+58: ```
+```
+**Change:** `view(cfg)` → `view cfg`
+
+### doc/mem_RFC.md (9 changes)
+
+**Line 53:** borrow_call_to_operator
+```
+52: ```vyn
+53: // Immutable borrow (read-only view)
+54: var v: their<Foo const> = view owner_expr // or view(owner_expr) for clarity
+```
+**Change:** `borrow (read-only view)` → `borrow read-only view`
+
+**Line 54:** view_call_to_operator
+```
+53: // Immutable borrow (read-only view)
+54: var v: their<Foo const> = view owner_expr // or view(owner_expr) for clarity
+55: // Mutable borrow
+```
+**Change:** `view(owner_expr)` → `view owner_expr`
+
+**Line 56:** borrow_call_to_operator
+```
+55: // Mutable borrow
+56: var b: their<Foo> = borrow owner_expr   // or borrow(owner_expr) for clarity
+57: ```
+```
+**Change:** `borrow(owner_expr)` → `borrow owner_expr`
+
+**Line 71:** make_our_to_our
+```
+70: ```vyn
+71: var shared: our<Mutex<Bar>> = make_our(Mutex(Bar{v:1}))
+72: ```
+```
+**Change:** `make_our(Mutex(Bar{v:1})` → `our(Mutex(Bar{v:1})`
+
+**Line 80:** make_our_to_our
+```
+79: 
+80: * `make_our(expr)`: returns `our<T>` by allocating and ref‑counting
+81: * `view <expr>`: creates `their<T const>` (immutable view/borrow)
+```
+**Change:** `make_our(expr)` → `our(expr)`
+
+**Line 96:** make_our_to_our
+```
+95: // Create a shared, thread-safe Foo
+96: var shared_foo: our<Mutex<Foo>> = make_our(Mutex{ value: Foo{/*...*/} })
+97: 
+```
+**Change:** `make_our(Mutex{ value: Foo{/*...*/} })` → `our(Mutex{ value: Foo{/*...*/} })`
+
+**Line 210:** make_our_to_our
+```
+209: ```vyn
+210: var<our<Bar>> s = make_our(Bar{v:1})
+211: var<our<Mutex<Bar>>> ts = make_our(Mutex(Bar{v:2}))
+```
+**Change:** `make_our(Bar{v:1})` → `our(Bar{v:1})`
+
+**Line 211:** make_our_to_our
+```
+210: var<our<Bar>> s = make_our(Bar{v:1})
+211: var<our<Mutex<Bar>>> ts = make_our(Mutex(Bar{v:2}))
+212: ```
+```
+**Change:** `make_our(Mutex(Bar{v:2})` → `our(Mutex(Bar{v:2})`
+
+**Line 218:** view_call_to_operator
+```
+217: var owner: my<Baz> = Baz{v:99}
+218: var v1: their<Baz const> = view owner    // read-only view (immutable borrow)
+219: var b1: their<Baz> = borrow owner      // mutable borrow
+```
+**Change:** `view (immutable borrow)` → `view immutable borrow`
+
+### examples/memory_semantics.vyn (2 changes)
+
+**Line 10:** borrow_call_to_operator
+```
+9:         at(p) = 42;
+10:         // b<their<Int>> = borrow(x);       // TODO: borrow not implemented yet
+11:         // v<their<Int const>> = view(x);    // TODO: view not implemented yet
+```
+**Change:** `borrow(x)` → `borrow x`
+
+**Line 11:** view_call_to_operator
+```
+10:         // b<their<Int>> = borrow(x);       // TODO: borrow not implemented yet
+11:         // v<their<Int const>> = view(x);    // TODO: view not implemented yet
+12:         // at(loc(b)) = 100;                // TODO: modify via borrow
+```
+**Change:** `view(x)` → `view x`
+
+### examples/relaxed_syntax.vyn (1 changes)
+
+**Line 31:** borrow_call_to_operator
+```
+30:     numbers<my<[Int]>> = [1, 2, 3, 4, 5]
+31:     borrowed_msg<their<String>> = borrow(message)
+32: 
+```
+**Change:** `borrow(message)` → `borrow message`
+
+### include/vyn/vre/memory.hpp (2 changes)
+
+**Line 47:** make_my_to_my
+```
+46: // template<typename T, typename... Args>
+47: // my<T> make_my(Args&&... args) { // Renamed from make_box
+48: //     // Potentially use custom allocation here
+```
+**Change:** `make_my(Args&&... args)` → `my(Args&&... args)`
+
+**Line 47:** comment_make_my_fix
+```
+46: // template<typename T, typename... Args>
+47: // my<T> make_my(Args&&... args) { // Renamed from make_box
+48: //     // Potentially use custom allocation here
+```
+**Change:** `// my<T> make_my(` → `// my<T> my(`
+
+### src/vre/llvm/cgen_expr.cpp (2 changes)
+
+**Line 1654:** borrow_call_to_operator
+```
+1653:         case ast::BorrowKind::MUTABLE_BORROW:
+1654:             // borrow(expr) - creates a mutable reference
+1655:             if (borrowedValue->getType()->isPointerTy()) {
+```
+**Change:** `borrow(expr)` → `borrow expr`
+
+**Line 1671:** view_call_to_operator
+```
+1670:         case ast::BorrowKind::IMMUTABLE_VIEW:
+1671:             // view(expr) - creates an immutable reference
+1672:             if (borrowedValue->getType()->isPointerTy()) {
+```
+**Change:** `view(expr)` → `view expr`
+
+### test/units/test50.vyn (4 changes)
+
+**Line 1:** view_call_to_operator
+```
+1: // test50.vyn - Tests borrow(expr) and view(expr) syntax
+2: main()<Int> -> {
+```
+**Change:** `view(expr)` → `view expr`
+
+**Line 1:** borrow_call_to_operator
+```
+1: // test50.vyn - Tests borrow(expr) and view(expr) syntax
+2: main()<Int> -> {
+```
+**Change:** `borrow(expr)` → `borrow expr`
+
+**Line 7:** borrow_call_to_operator
+```
+6:         // Test borrow shorthand for mutable borrow
+7:         var<their<Int>> b = borrow(x);
+8:         b = 20; // Modify through the borrow
+```
+**Change:** `borrow(x)` → `borrow x`
+
+**Line 11:** view_call_to_operator
+```
+10:         // Test view shorthand for immutable borrow
+11:         var<their<Int const>> v = view(x);
+12:         // v = 30; // This would be a compile error as v is immutable
+```
+**Change:** `view(x)` → `view x`
+
+### test/units/test51.vyn (1 changes)
+
+**Line 7:** borrow_call_to_operator
+```
+6:     // Using borrow outside unsafe block should fail
+7:     var<their<Int>> b = borrow(x);
+8:     b = 20;
+```
+**Change:** `borrow(x)` → `borrow x`
+
+### test/units/test52.vyn (1 changes)
+
+**Line 7:** view_call_to_operator
+```
+6:     // Using view outside unsafe block should fail
+7:     var<their<Int const>> v = view(x);
+8: 
+```
+**Change:** `view(x)` → `view x`
+
+### test/units/test53.vyn (1 changes)
+
+**Line 8:** borrow_call_to_operator
+```
+7:         // Using borrow on non-owned type should fail
+8:         var<their<Int>> b = borrow(x);
+9:         b = 20;
+```
+**Change:** `borrow(x)` → `borrow x`
+
+### test/units/test_relaxed_syntax.vyn (1 changes)
+
+**Line 95:** view_call_to_operator
+```
+94:     my<[Int]> test_array = [7, 8, 9]
+95:     complex_types(test_array, const view("Item: "))
+96: 
+```
+**Change:** `view("Item: ")` → `view "Item: "`

@@ -4,7 +4,7 @@ main()<Int> -> {
     var<my<Int>> x = 10;
     
     // Using view outside unsafe block should fail
-    var<their<Int const>> v = view(x);
+    var<their<Int const>> v = view x;
     
     return x;
 }

@@ -28,7 +28,7 @@ demo_local_vars()<Void> -> {
     
     // Complex types with unified syntax
     numbers<my<[Int]>> = [1, 2, 3, 4, 5]
-    borrowed_msg<their<String>> = borrow(message)
+    borrowed_msg<their<String>> = borrow message
     
     println("Count: " + count.to_string())
     println("Message: " + message)

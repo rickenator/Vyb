@@ -93,7 +93,7 @@ Several types of intrinsics are parsed as CallExpression nodes with specific `ca
 
 ### Borrowing Intrinsics (shorthand)
 
-The `borrow(owner)` and `view(owner)` intrinsics are parsed as CallExpression nodes
+The `borrow owner` and `view owner` intrinsics are parsed as CallExpression nodes
 with `callee` matching the identifier `borrow` or `view` and a single argument.
 They produce `their<T>` or `their<T const>` respectively.
 
@@ -269,7 +269,7 @@ Represents a borrow expression (e.g., `&x`, `&mut y`).
 -   **`NodeType`**: `BORROW_EXPRESSION`
 -   **Fields**:
     -   `operand` (`ExprPtr`): The expression being borrowed.
-    -   `kind` (`BorrowKind`): The kind of borrow (e.g., `SHARED`, `MUTABLE`, `UNIQUE_MUTABLE`). `BorrowKind` is an enum defined in `ast.hpp`.
+    -   `kind` (`BorrowKind`): The kind of borrow e.g., `SHARED`, `MUTABLE`, `UNIQUE_MUTABLE`. `BorrowKind` is an enum defined in `ast.hpp`.
 
 ```cpp
 // From include/vyn/parser/ast.hpp
