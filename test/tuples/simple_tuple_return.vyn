@@ -1,0 +1,4 @@
+// Minimal tuple return test
+main()<Int, Int> -> {
+    return 1, 2
+}

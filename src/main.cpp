@@ -283,6 +283,19 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             throw std::runtime_error("Failed to define runtime symbols: " + errorMsg);
         }
         
+        // Check main function's return type before moving module
+        llvm::Function* mainFuncForTypeCheck = module->getFunction("main");
+        bool mainReturnsStruct = false;
+        bool mainReturnsInt = false;
+        bool mainReturnsVoid = false;
+        
+        if (mainFuncForTypeCheck) {
+            llvm::Type* returnType = mainFuncForTypeCheck->getReturnType();
+            mainReturnsStruct = returnType->isStructTy();
+            mainReturnsInt = returnType->isIntegerTy();
+            mainReturnsVoid = returnType->isVoidTy();
+        }
+        
         // Add the module to the JIT
         auto tsm = llvm::orc::ThreadSafeModule(std::move(module), std::move(context));
         auto addErr = jit->addIRModule(std::move(tsm));
@@ -294,21 +307,45 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
         }
         std::cout << "ORC JIT execution engine created successfully" << std::endl;
         std::cout << "Finding main function..." << std::endl;
-        // Look up the main function
+        
+        // Look up the main function symbol
         auto symbolResult = jit->lookup("main");
         if (!symbolResult) {
             std::cerr << "Error: Could not find main function" << std::endl;
             return 1;
         }
         
-        // Convert ExecutorAddr to function pointer
         auto executorAddr = *symbolResult;
-        typedef int (*MainFuncType)();
-        MainFuncType mainFunc = reinterpret_cast<MainFuncType>(static_cast<void*>(executorAddr.toPtr<void*>()));
         
-        // Execute the main function
-        int exitCode = mainFunc();
-        return exitCode;
+        // Check if return type is a struct (tuple)
+        if (mainReturnsStruct) {
+            // Tuple return - for now, just call it and ignore the return value
+            // TODO: Implement proper tuple serialization
+            std::cout << "Note: main returns a tuple. Tuple serialization not yet implemented." << std::endl;
+            typedef void (*VoidMainFuncType)();
+            VoidMainFuncType voidMainFunc = reinterpret_cast<VoidMainFuncType>(static_cast<void*>(executorAddr.toPtr<void*>()));
+            voidMainFunc();
+            return 0;  // Return success
+        } else if (mainReturnsInt) {
+            // Integer return - standard main
+            typedef int (*MainFuncType)();
+            MainFuncType intMainFunc = reinterpret_cast<MainFuncType>(static_cast<void*>(executorAddr.toPtr<void*>()));
+            int exitCode = intMainFunc();
+            return exitCode;
+        } else if (mainReturnsVoid) {
+            // Void return
+            typedef void (*VoidMainFuncType)();
+            VoidMainFuncType voidMainFunc = reinterpret_cast<VoidMainFuncType>(static_cast<void*>(executorAddr.toPtr<void*>()));
+            voidMainFunc();
+            return 0;
+        } else {
+            // Other return type - call as void and return 0
+            std::cout << "Note: main returns non-standard type. Calling without return value handling." << std::endl;
+            typedef void (*VoidMainFuncType)();
+            VoidMainFuncType voidMainFunc = reinterpret_cast<VoidMainFuncType>(static_cast<void*>(executorAddr.toPtr<void*>()));
+            voidMainFunc();
+            return 0;
+        }
     } catch (const std::exception& e) {
         std::cerr << "Error running Vyn code: " << e.what() << std::endl;
         throw; // Re-throw the exception to allow calling code to handle errors

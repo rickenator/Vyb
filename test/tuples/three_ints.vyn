@@ -1,0 +1,4 @@
+// Test returning tuple with three integers
+main()<Int, Int, Int> -> {
+    return 10, 20, 30
+}
