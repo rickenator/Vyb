@@ -4,8 +4,8 @@ source_filename = "VynModule"
 define i64 @main() !dbg !4 {
 entry:
   %x = alloca i64, align 8, !dbg !17
-  %__len_x = alloca i64, align 8, !dbg !17
   %__idx_x = alloca i64, align 8, !dbg !17
+  %__len_x = alloca i64, align 8, !dbg !17
   %__run_once_x = alloca i1, align 1, !dbg !17
   %sum = alloca i64, align 8, !dbg !17
   %v = alloca { ptr, i64, i64 }, align 8, !dbg !17
@@ -144,52 +144,58 @@ for.cond:                                         ; preds = %for.update, %for.in
   br i1 %__run_once_x47, label %for.body, label %for.exit, !dbg !17
 
 for.body:                                         ; preds = %for.cond
-  store i64 0, ptr %__idx_x, align 4, !dbg !17
-  call void @llvm.dbg.declare(metadata ptr %__idx_x, metadata !14, metadata !DIExpression()), !dbg !20
   %vec.size_ptr48 = getelementptr inbounds { ptr, i64, i64 }, ptr %v, i32 0, i32 1, !dbg !17
   %vec.len = load i64, ptr %vec.size_ptr48, align 4, !dbg !17
   store i64 %vec.len, ptr %__len_x, align 4, !dbg !17
-  call void @llvm.dbg.declare(metadata ptr %__len_x, metadata !15, metadata !DIExpression()), !dbg !20
-  br label %loop.header, !dbg !17
+  call void @llvm.dbg.declare(metadata ptr %__len_x, metadata !14, metadata !DIExpression()), !dbg !20
+  br label %for.init49, !dbg !17
 
-for.update:                                       ; preds = %loop.exit
+for.update:                                       ; preds = %for.exit53
   store i1 false, ptr %__run_once_x, align 1, !dbg !17
   br label %for.cond, !dbg !17
 
 for.exit:                                         ; preds = %for.cond
-  %sum61 = load i64, ptr %sum, align 4, !dbg !17
+  %sum66 = load i64, ptr %sum, align 4, !dbg !17
   %v_cleanup_load = load { ptr, i64, i64 }, ptr %v, align 8, !dbg !17
   %v_data_ptr = extractvalue { ptr, i64, i64 } %v_cleanup_load, 0, !dbg !17
   %v_null_check = icmp ne ptr %v_data_ptr, null, !dbg !17
   br i1 %v_null_check, label %v_free_block, label %v_continue, !dbg !17
 
-loop.header:                                      ; preds = %loop.body, %for.body
-  %__idx_x49 = load i64, ptr %__idx_x, align 4, !dbg !17
-  %__len_x50 = load i64, ptr %__len_x, align 4, !dbg !17
-  %icmpslttmp = icmp slt i64 %__idx_x49, %__len_x50, !dbg !17
-  br i1 %icmpslttmp, label %loop.body, label %loop.exit, !dbg !17
+for.init49:                                       ; preds = %for.body
+  store i64 0, ptr %__idx_x, align 4, !dbg !17
+  call void @llvm.dbg.declare(metadata ptr %__idx_x, metadata !15, metadata !DIExpression()), !dbg !20
+  br label %for.cond50, !dbg !17
 
-loop.body:                                        ; preds = %loop.header
-  %__idx_x51 = load i64, ptr %__idx_x, align 4, !dbg !17
-  %vec.data_ptr52 = getelementptr inbounds { ptr, i64, i64 }, ptr %v, i32 0, i32 0, !dbg !17
-  %vec.size_ptr53 = getelementptr inbounds { ptr, i64, i64 }, ptr %v, i32 0, i32 1, !dbg !17
-  %vec.data54 = load ptr, ptr %vec.data_ptr52, align 8, !dbg !17
-  %vec.size = load i64, ptr %vec.size_ptr53, align 4, !dbg !17
-  %vec.offset55 = mul i64 %__idx_x51, 8, !dbg !17
-  %vec.element_ptr56 = getelementptr i8, ptr %vec.data54, i64 %vec.offset55, !dbg !17
-  %vec.element = load i64, ptr %vec.element_ptr56, align 4, !dbg !17
+for.cond50:                                       ; preds = %for.update52, %for.init49
+  %__idx_x54 = load i64, ptr %__idx_x, align 4, !dbg !17
+  %__len_x55 = load i64, ptr %__len_x, align 4, !dbg !17
+  %icmpslttmp = icmp slt i64 %__idx_x54, %__len_x55, !dbg !17
+  br i1 %icmpslttmp, label %for.body51, label %for.exit53, !dbg !17
+
+for.body51:                                       ; preds = %for.cond50
+  %__idx_x56 = load i64, ptr %__idx_x, align 4, !dbg !17
+  %vec.data_ptr57 = getelementptr inbounds { ptr, i64, i64 }, ptr %v, i32 0, i32 0, !dbg !17
+  %vec.size_ptr58 = getelementptr inbounds { ptr, i64, i64 }, ptr %v, i32 0, i32 1, !dbg !17
+  %vec.data59 = load ptr, ptr %vec.data_ptr57, align 8, !dbg !17
+  %vec.size = load i64, ptr %vec.size_ptr58, align 4, !dbg !17
+  %vec.offset60 = mul i64 %__idx_x56, 8, !dbg !17
+  %vec.element_ptr61 = getelementptr i8, ptr %vec.data59, i64 %vec.offset60, !dbg !17
+  %vec.element = load i64, ptr %vec.element_ptr61, align 4, !dbg !17
   store i64 %vec.element, ptr %x, align 4, !dbg !17
   call void @llvm.dbg.declare(metadata ptr %x, metadata !16, metadata !DIExpression()), !dbg !20
-  %sum57 = load i64, ptr %sum, align 4, !dbg !17
-  %x58 = load i64, ptr %x, align 4, !dbg !17
-  %addtmp = add i64 %sum57, %x58, !dbg !17
+  %sum62 = load i64, ptr %sum, align 4, !dbg !17
+  %x63 = load i64, ptr %x, align 4, !dbg !17
+  %addtmp = add i64 %sum62, %x63, !dbg !17
   store i64 %addtmp, ptr %sum, align 4, !dbg !17
-  %__idx_x59 = load i64, ptr %__idx_x, align 4, !dbg !17
-  %addtmp60 = add i64 %__idx_x59, 1, !dbg !17
-  store i64 %addtmp60, ptr %__idx_x, align 4, !dbg !17
-  br label %loop.header, !dbg !17
+  br label %for.update52, !dbg !17
 
-loop.exit:                                        ; preds = %loop.header
+for.update52:                                     ; preds = %for.body51
+  %__idx_x64 = load i64, ptr %__idx_x, align 4, !dbg !17
+  %addtmp65 = add i64 %__idx_x64, 1, !dbg !17
+  store i64 %addtmp65, ptr %__idx_x, align 4, !dbg !17
+  br label %for.cond50, !dbg !17
+
+for.exit53:                                       ; preds = %for.cond50
   br label %for.update, !dbg !17
 
 v_free_block:                                     ; preds = %for.exit
@@ -197,7 +203,7 @@ v_free_block:                                     ; preds = %for.exit
   br label %v_continue, !dbg !17
 
 v_continue:                                       ; preds = %v_free_block, %for.exit
-  ret i64 %sum61, !dbg !17
+  ret i64 %sum66, !dbg !17
 }
 
 ; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)
@@ -234,8 +240,8 @@ attributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memo
 !11 = !DILocalVariable(name: "sum", scope: !4, file: !1, line: 8, type: !7)
 !12 = !DILocalVariable(name: "__run_once_x", scope: !4, file: !1, line: 9, type: !13)
 !13 = !DIBasicType(name: "bool", size: 1, encoding: DW_ATE_boolean)
-!14 = !DILocalVariable(name: "__idx_x", scope: !4, file: !1, line: 9, type: !7)
-!15 = !DILocalVariable(name: "__len_x", scope: !4, file: !1, line: 9, type: !7)
+!14 = !DILocalVariable(name: "__len_x", scope: !4, file: !1, line: 9, type: !7)
+!15 = !DILocalVariable(name: "__idx_x", scope: !4, file: !1, line: 9, type: !7)
 !16 = !DILocalVariable(name: "x", scope: !4, file: !1, line: 9, type: !7)
 !17 = !DILocation(line: 2, column: 1, scope: !4)
 !18 = !DILocation(line: 3, column: 1, scope: !4)

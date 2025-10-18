@@ -410,23 +410,16 @@ std::unique_ptr<vyn::ast::ForStatement> StatementParser::parse_for() {
                     block_body->body.insert(block_body->body.begin(), std::move(item_decl));
                 }
                 
-                // 6. Create the while loop: while (__idx < __len) { body with item; __idx++; }
-                auto incr_stmt = std::make_unique<vyn::ast::ExpressionStatement>(
-                    ident_token.location, std::move(increment)
-                );
-                if (block_body) {
-                    block_body->body.push_back(std::move(incr_stmt));
-                }
-                
-                auto while_loop = std::make_unique<vyn::ast::WhileStatement>(
-                    for_loc, std::move(condition), std::move(body)
+                // 6. Create inner for loop: for (__idx init; condition; increment) { body with item }
+                // Using for loop ensures increment happens even with continue
+                auto inner_for = std::make_unique<vyn::ast::ForStatement>(
+                    for_loc, std::move(idx_decl), std::move(condition), std::move(increment), std::move(body)
                 );
                 
-                // 7. Build block: { idx_decl; len_decl; while_loop; }
+                // 7. Build block: { len_decl; inner_for; }
                 std::vector<vyn::ast::StmtPtr> block_stmts;
-                block_stmts.push_back(std::move(idx_decl));
                 block_stmts.push_back(std::move(len_decl));
-                block_stmts.push_back(std::move(while_loop));
+                block_stmts.push_back(std::move(inner_for));
                 auto final_block = std::make_unique<vyn::ast::BlockStatement>(ident_token.location, std::move(block_stmts));
                 
                 // 8. Wrap in a for loop that runs once: for (var __run = true; __run; __run = false) { block }
