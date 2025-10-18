@@ -291,6 +291,7 @@ public:
     void visit(vyn::ast::PointerType* node) override;
     void visit(vyn::ast::ArrayType* node) override;
     void visit(vyn::ast::VecType* node) override;
+    void visit(vyn::ast::FutureType* node) override;
     void visit(vyn::ast::FunctionType* node) override;
     void visit(vyn::ast::OptionalType* node) override;
     void visit(vyn::ast::TupleTypeNode* node) override;
