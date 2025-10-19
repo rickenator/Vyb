@@ -779,19 +779,17 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
         return;
     }
 
-    // Get the type name of the object (assuming it's a TypeName for now)
-    ast::TypeName* typeName = dynamic_cast<ast::TypeName*>(it->second);
-    if (!typeName || !typeName->identifier) {
-        addError("Object is not of a struct or class type.", node);
-        return;
-    }
-
-    // Look up the struct/class definition in the symbol table
-    const std::string& structTypeName = typeName->identifier->name;
+    // Get the full type string (e.g., "Box<Int>") not just the base name
+    std::string structTypeName = it->second->toString();
     const std::string& fieldName = propertyId->name;
+    
+    std::cout << "DEBUG: MemberExpression - checking " << structTypeName << "." << fieldName 
+              << " (type class: " << typeid(*it->second).name() << ")" << std::endl;
     
     // Before checking struct fields, check if this might be a trait method call
     // (MemberExpression can be part of CallExpression, where callee is the MemberExpression)
+    
+    // First check concrete trait impls
     auto typeImplsIt = traitImpls.find(structTypeName);
     if (typeImplsIt != traitImpls.end()) {
         for (const auto& traitEntry : typeImplsIt->second) {
@@ -808,10 +806,41 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
         }
     }
     
+    // Also check generic trait impls - check if structTypeName matches any pattern
+    for (const auto& typeEntry : genericTraitImpls) {
+        const std::string& pattern = typeEntry.first; // e.g., "Box<T>"
+        
+        // Simple pattern matching: check if structTypeName matches pattern
+        // Box<Int> should match Box<T>
+        if (matchesPattern(structTypeName, pattern)) {
+            for (const auto& traitEntry : typeEntry.second) {
+                const GenericImplInfo* implInfo = traitEntry.second.get();
+                if (implInfo && implInfo->declaration) {
+                    for (const auto& method : implInfo->declaration->methods) {
+                        if (method && method->id && method->id->name == fieldName) {
+                            // This is a generic trait method
+                            std::cout << "DEBUG: MemberExpression identified generic trait method: " 
+                                      << structTypeName << " matches " << pattern 
+                                      << ", method: " << fieldName << std::endl;
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Extract base struct name for field lookup (Box<Int> -> Box)
+    std::string baseStructName = structTypeName;
+    size_t anglePos = structTypeName.find('<');
+    if (anglePos != std::string::npos) {
+        baseStructName = structTypeName.substr(0, anglePos);
+    }
+    
     // Check if we have field information for this struct
-    auto structIt = structFieldTypes.find(structTypeName);
+    auto structIt = structFieldTypes.find(baseStructName);
     if (structIt == structFieldTypes.end()) {
-        addError("Unknown struct type: " + structTypeName, node);
+        addError("Unknown struct type: " + baseStructName, node);
         return;
     }
     
@@ -3427,6 +3456,36 @@ bool SemanticAnalyzer::traitMethodSignatureMatches(const TraitMethod& traitMetho
     // TODO: More rigorous type checking for parameters
     // For now, just basic validation
     
+    return true;
+}
+
+bool SemanticAnalyzer::matchesPattern(const std::string& concreteType, const std::string& pattern) {
+    // Simple pattern matching: Box<Int> matches Box<T>
+    // Extract base type from both
+    
+    size_t concreteAngle = concreteType.find('<');
+    size_t patternAngle = pattern.find('<');
+    
+    // If pattern has no angle brackets, must match exactly
+    if (patternAngle == std::string::npos) {
+        return concreteType == pattern;
+    }
+    
+    // If concrete type has no angle brackets but pattern does, no match
+    if (concreteAngle == std::string::npos) {
+        return false;
+    }
+    
+    // Check base types match (e.g., "Box" == "Box")
+    std::string concreteBase = concreteType.substr(0, concreteAngle);
+    std::string patternBase = pattern.substr(0, patternAngle);
+    
+    if (concreteBase != patternBase) {
+        return false;
+    }
+    
+    // For now, if base types match and both have angle brackets, consider it a match
+    // A more sophisticated implementation would validate type argument counts
     return true;
 }
 

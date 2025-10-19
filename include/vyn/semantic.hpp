@@ -439,6 +439,10 @@ private:
                           const std::vector<std::unique_ptr<ast::FunctionDeclaration>>& methods);
     bool traitMethodSignatureMatches(const TraitMethod& traitMethod,
                                     ast::FunctionDeclaration* implMethod);
+    
+    // Pattern matching helper for generic type matching
+    // Returns true if concrete type (e.g., "Box<Int>") matches pattern (e.g., "Box<T>")
+    bool matchesPattern(const std::string& concreteType, const std::string& pattern);
 };
 
 } // namespace vyn
