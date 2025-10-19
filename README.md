@@ -179,11 +179,61 @@ Vyn **v0.4.1** is a **complete systems programming language** with **trait syste
 - **Member access**: Struct field access (`obj.field`) and array indexing (`arr[index]`)
 
 ### ✅ **Async Programming & Debugging**
-- **Async/Await**: Complete async function support with `async` keyword and `await` expressions
-- **Future<T> Types**: Asynchronous return types with proper type checking
-- **Debug Infrastructure**: Comprehensive LLVM debug information with DIBuilder integration
-- **State Machine Debugging**: Suspension point tracking and continuation debugging for async functions
-- **Debug Variable Information**: Local variable metadata with type information and scope tracking
+
+Vyn v0.4.1 features **complete async/await support** for writing concurrent programs:
+
+#### Async Function Syntax
+```vyn
+// Async function returning Future<Int>
+async compute_value()<Future<Int>> -> {
+    println("Computing...")
+    return 42
+}
+
+// Async function with await
+async process_data()<Future<String>> -> {
+    value<Int> = await compute_value()  // Suspend until future resolves
+    println("Got value")
+    return "processed"
+}
+
+// Async void function
+async background_task()<Future<Void>> -> {
+    println("Task running...")
+    return
+}
+```
+
+#### Key Features
+- **async keyword**: Declares asynchronous functions that return Future<T>
+- **await expressions**: Suspend execution until a Future resolves
+- **Future<T> types**: Type-safe asynchronous return values
+- **State machines**: Async functions compiled to efficient state machines
+- **Debug support**: Full DWARF metadata for debugging async execution
+- **Suspension tracking**: Debug info for continuation points and state transitions
+
+#### Usage Example
+```vyn
+main()<Void> -> {
+    // Create async tasks
+    future1<Future<Int>> = compute_value()
+    future2<Future<String>> = process_data()
+    
+    // Futures execute concurrently
+    println("Tasks initiated")
+    return
+}
+```
+
+**See:** `test/async/async_simple.vyn` and `test/async/async_comprehensive.vyn` for working examples
+
+**Implementation Status:**
+- ✅ Async function parsing and validation
+- ✅ Future<T> type checking
+- ✅ await expression support
+- ✅ State machine code generation
+- ✅ LLVM codegen with debug metadata
+- ✅ Comprehensive test coverage
 
 ### ✅ **Trait System (Phase 1 - v0.4.2)**
 - **Trait Declarations**: Define interfaces with method signatures
