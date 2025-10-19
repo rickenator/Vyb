@@ -529,11 +529,17 @@ std::unique_ptr<vyn::ast::FunctionDeclaration> DeclarationParser::parse_function
     // Variables to hold type information
     ast::TypeNodePtr throws_type = nullptr;
 
-    // Expect arrow as mandatory separator between signature and body
-    this->expect(vyn::TokenType::ARROW); // Arrow is now mandatory
+    // Arrow is OPTIONAL in aspect declarations:
+    // - No arrow = mandatory method (must be implemented in bind)
+    // - Arrow + body = optional method with default implementation  
+    // - Arrow + no body (-> { }) = optional method with empty default
+    bool hasArrow = (this->peek().type == vyn::TokenType::ARROW);
+    if (hasArrow) {
+        this->consume(); // Consume the arrow
+    }
 
-    // Support for \'throws\' keyword after the return type
-    if (this->peek().type == vyn::TokenType::IDENTIFIER && this->peek().lexeme == "throws") { // KEYWORD_THROWS if it exists, else IDENTIFIER
+    // Support for 'throws' keyword after the return type
+    if (hasArrow && this->peek().type == vyn::TokenType::IDENTIFIER && this->peek().lexeme == "throws") { // KEYWORD_THROWS if it exists, else IDENTIFIER
         this->consume();
         
         // Parse the error type that can be thrown
@@ -548,8 +554,11 @@ std::unique_ptr<vyn::ast::FunctionDeclaration> DeclarationParser::parse_function
     }
 
     std::unique_ptr<ast::BlockStatement> body = nullptr;
-    // Accept function declarations without a body (forward declarations)
-    if (this->peek().type == vyn::TokenType::IDENTIFIER) {
+    
+    if (hasArrow) {
+        // Parse optional body when arrow is present
+        // Accept function declarations without a body (forward declarations)
+        if (this->peek().type == vyn::TokenType::IDENTIFIER) {
         // Handle constructor return expressions like: Node { is_leaf: is_leaf_param }
         if (return_type_node && return_type_node->getCategory() == ast::TypeNode::Category::IDENTIFIER) {
             // Extract identifier name from return type
@@ -589,12 +598,14 @@ std::unique_ptr<vyn::ast::FunctionDeclaration> DeclarationParser::parse_function
         }
         if (this->peek().type == vyn::TokenType::DEDENT) this->consume(); // Consume exactly one DEDENT
         body = std::make_unique<ast::BlockStatement>(this->current_location(), std::move(statements));
+        }
+        // If arrow present but no body follows, that's fine (-> { } empty default)
     } else {
-        // Forward declaration or no body (e.g. for extern functions).
-        // 'body' remains nullptr, which is correct for these cases.
+        // No arrow = mandatory method (must be implemented in binds)
+        // 'body' remains nullptr
     }
 
-    return std::make_unique<vyn::ast::FunctionDeclaration>(loc, std::move(name), std::move(params_structs), std::move(body), is_async, std::move(return_type_node));
+    return std::make_unique<vyn::ast::FunctionDeclaration>(loc, std::move(name), std::move(params_structs), std::move(body), is_async, std::move(return_type_node), hasArrow);
 }
 
 // StructDeclNode not in ast.hpp. Assuming a Declaration type for it.

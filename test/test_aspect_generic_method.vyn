@@ -2,7 +2,7 @@
 // Test calling methods on generic aspect implementations
 
 aspect Display {
-    show(self<Self>)<Void> -> { }
+    show(self<Self>)<Void>  // Mandatory method (no arrow = must implement)
 }
 
 struct Box<T> {
