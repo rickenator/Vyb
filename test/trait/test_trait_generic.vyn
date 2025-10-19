@@ -1,0 +1,33 @@
+// Phase 3: Generic trait implementations
+// Tests impl<T> Trait for GenericType<T>
+
+trait Container {
+    size(self<Self>)<Int> -> { }
+    is_empty(self<Self>)<Bool> -> { }
+}
+
+// Generic impl: any Vec<T> implements Container
+impl<T> Container for Vec<T> {
+    size(self<Vec<T>>)<Int> -> {
+        return self.len()
+    }
+    
+    is_empty(self<Vec<T>>)<Bool> -> {
+        return self.len() == 0
+    }
+}
+
+main()<Int> -> {
+    // Create a Vec<Int>
+    numbers<Vec<Int>> = Vec::new()
+    numbers.push(1)
+    numbers.push(2)
+    numbers.push(3)
+    
+    // Call trait methods on Vec<Int>
+    size<Int> = numbers.size()
+    empty<Bool> = numbers.is_empty()
+    
+    // Should return 3 (size is 3, empty is 0/false)
+    return size
+}
