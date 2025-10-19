@@ -625,9 +625,9 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     // Otherwise check for trait methods
                     if (auto typeName = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
                         if (typeName->identifier) {
-                            std::string typeNameStr = typeName->identifier->name;
+                            std::string typeNameStr = typeName->toString(); // Use full type with generic args
                             
-                            // Look for trait implementations
+                            // Look for concrete trait implementations
                             auto typeImplsIt = traitImpls.find(typeNameStr);
                             if (typeImplsIt != traitImpls.end()) {
                                 for (const auto& traitEntry : typeImplsIt->second) {
@@ -644,6 +644,32 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                             std::cout << "DEBUG: Resolved trait method call: " << typeNameStr 
                                                       << "." << methodName << " from trait " << traitName << std::endl;
                                             return;
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Also check generic trait impls
+                            for (const auto& typeEntry : genericTraitImpls) {
+                                const std::string& pattern = typeEntry.first;
+                                
+                                if (matchesPattern(typeNameStr, pattern)) {
+                                    for (const auto& traitEntry : typeEntry.second) {
+                                        const GenericImplInfo* implInfo = traitEntry.second.get();
+                                        if (implInfo && implInfo->declaration) {
+                                            for (const auto& method : implInfo->declaration->methods) {
+                                                if (method && method->id && method->id->name == methodName) {
+                                                    if (method->returnTypeNode) {
+                                                        expressionTypes[node] = method->returnTypeNode.get();
+                                                        node->type = std::shared_ptr<ast::TypeNode>(method->returnTypeNode->clone());
+                                                    }
+                                                    
+                                                    std::cout << "DEBUG: Resolved generic trait method call (ident path): " 
+                                                              << typeNameStr << " matches " << pattern 
+                                                              << ", method: " << methodName << std::endl;
+                                                    return;
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -680,10 +706,10 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 // Get the type name to look up trait implementations
                 if (auto typeName = dynamic_cast<ast::TypeName*>(objTypeIt->second)) {
                     if (typeName->identifier) {
-                        std::string typeNameStr = typeName->identifier->name;
+                        std::string typeNameStr = typeName->toString(); // Use full type string with generic args
                         std::string methodName = methodIdent->name;
                         
-                        // Look for trait implementations for this type
+                        // Look for concrete trait implementations for this type
                         auto typeImplsIt = traitImpls.find(typeNameStr);
                         if (typeImplsIt != traitImpls.end()) {
                             // Check each trait this type implements
@@ -703,6 +729,33 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                         std::cout << "DEBUG: Resolved trait method call: " << typeNameStr 
                                                   << "." << methodName << " from trait " << traitName << std::endl;
                                         return;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Also check generic trait impls - check if typeNameStr matches any pattern
+                        for (const auto& typeEntry : genericTraitImpls) {
+                            const std::string& pattern = typeEntry.first; // e.g., "Box<T>"
+                            
+                            // Check if typeNameStr matches pattern (e.g., Box<Int> matches Box<T>)
+                            if (matchesPattern(typeNameStr, pattern)) {
+                                for (const auto& traitEntry : typeEntry.second) {
+                                    const GenericImplInfo* implInfo = traitEntry.second.get();
+                                    if (implInfo && implInfo->declaration) {
+                                        for (const auto& method : implInfo->declaration->methods) {
+                                            if (method && method->id && method->id->name == methodName) {
+                                                // Found the generic trait method! Set the return type
+                                                if (method->returnTypeNode) {
+                                                    expressionTypes[node] = method->returnTypeNode.get();
+                                                    node->type = std::shared_ptr<ast::TypeNode>(method->returnTypeNode->clone());
+                                                }
+                                                
+                                                std::cout << "DEBUG: Resolved generic trait method call: " << typeNameStr 
+                                                          << " matches " << pattern << ", method: " << methodName << std::endl;
+                                                return;
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -782,9 +835,6 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
     // Get the full type string (e.g., "Box<Int>") not just the base name
     std::string structTypeName = it->second->toString();
     const std::string& fieldName = propertyId->name;
-    
-    std::cout << "DEBUG: MemberExpression - checking " << structTypeName << "." << fieldName 
-              << " (type class: " << typeid(*it->second).name() << ")" << std::endl;
     
     // Before checking struct fields, check if this might be a trait method call
     // (MemberExpression can be part of CallExpression, where callee is the MemberExpression)
@@ -2272,9 +2322,19 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
             addError("Unknown type identifier: " + typeNameStr, node);
             return;
         }
-        node->type = std::shared_ptr<ast::TypeNode>(symbol->type->clone());
-        for (auto& argTypeNode : node->genericArgs) {
-            if (argTypeNode) argTypeNode->accept(*this);
+        
+        // Clone the base type, but preserve generic arguments from this node
+        if (!node->genericArgs.empty()) {
+            // This is a parameterized user-defined type (e.g., Box<Int>)
+            // Keep the original node with its generic arguments
+            node->type = std::shared_ptr<ast::TypeNode>(node->clone());
+            // Visit the generic arguments
+            for (auto& argTypeNode : node->genericArgs) {
+                if (argTypeNode) argTypeNode->accept(*this);
+            }
+        } else {
+            // Non-parameterized type, use the symbol's type
+            node->type = std::shared_ptr<ast::TypeNode>(symbol->type->clone());
         }
     }
 }
