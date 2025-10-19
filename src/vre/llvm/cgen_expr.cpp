@@ -335,10 +335,6 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
     }
 
     bool isFloatOp = L->getType()->isFloatingPointTy() || R->getType()->isFloatingPointTy();
-    
-    std::cerr << "DEBUG BinaryExpr: L type=" << getTypeName(L->getType()) 
-              << ", R type=" << getTypeName(R->getType()) 
-              << ", isFloatOp=" << isFloatOp << std::endl;
 
     if (L->getType()->isFloatingPointTy() && R->getType()->isIntegerTy()) {
         R = builder->CreateSIToFP(R, L->getType(), "sitofptmp");
@@ -373,22 +369,13 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
 
     switch (node->op.type) {
         case vyn::TokenType::PLUS: // Reverted to vyn::TokenType::PLUS
-            std::cerr << "DEBUG: In PLUS case, isFloatOp=" << isFloatOp << std::endl;
             if (isFloatOp) {
-                std::cerr << "DEBUG: Taking float branch - creating FAdd" << std::endl;
                 m_currentLLVMValue = builder->CreateFAdd(L, R, "faddtmp");
-                std::cerr << "DEBUG: FAdd created: ";
-                if (m_currentLLVMValue) {
-                    m_currentLLVMValue->print(llvm::errs());
-                    std::cerr << std::endl;
-                } else {
-                    std::cerr << "NULL!" << std::endl;
-                }
-                std::cerr << "DEBUG: FAdd created, breaking" << std::endl;
+                break;  // Exit the case after creating FAdd
             }
-           
-            else {
-                std::cerr << "DEBUG: Taking non-float branch" << std::endl;
+            
+            // Handle non-float operations
+            {
                 if (verbose) {
                     std::cout << "DEBUG PLUS: leftTypeNode=" << (leftTypeNode ? "yes" : "null") 
                               << ", rightTypeNode=" << (rightTypeNode ? "yes" : "null") << std::endl;
@@ -2048,16 +2035,13 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
         // Check if we're on the LHS of an assignment - in that case return the pointer
         if (m_isLHSOfAssignment) {
             m_currentLLVMValue = fieldPtr;
-            std::cerr << "DEBUG: Returning field pointer for LHS assignment" << std::endl;
         } else {
             // For reading, load the value for primitive types (Int, Float, Bool, etc.)
             if (fieldType->isIntegerTy() || fieldType->isFloatingPointTy()) {
                 m_currentLLVMValue = builder->CreateLoad(fieldType, fieldPtr, fieldName + "_val");
-                std::cerr << "DEBUG: Loaded primitive field value (int or float)" << std::endl;
             } else {
                 // For non-primitive types (structs, arrays, etc.), return the pointer
                 m_currentLLVMValue = fieldPtr;
-                std::cerr << "DEBUG: Returning field pointer for non-primitive type" << std::endl;
             }
         }
     }
