@@ -152,7 +152,7 @@ This unique `import`/`smuggle` distinction makes Vyn's module system both secure
 
 ## What's Working Now
 
-Vyn **v0.4.1** is a **complete systems programming language** ready for production use:
+Vyn **v0.4.1** is a **complete systems programming language** with **trait system foundation (Phase 1)** ready for production use:
 
 ### ✅ **Core Language Features**
 - **Functions**: `name(params)<ReturnType> -> body` with full LLVM compilation
@@ -184,6 +184,38 @@ Vyn **v0.4.1** is a **complete systems programming language** ready for producti
 - **Debug Infrastructure**: Comprehensive LLVM debug information with DIBuilder integration
 - **State Machine Debugging**: Suspension point tracking and continuation debugging for async functions
 - **Debug Variable Information**: Local variable metadata with type information and scope tracking
+
+### ✅ **Trait System (Phase 1 - v0.4.2)**
+- **Trait Declarations**: Define interfaces with method signatures
+  ```vyn
+  trait Printable {
+      print(self<Self>)<Void> -> { }
+      to_string(self<Self>)<String> -> { }
+  }
+  ```
+- **Method Signatures**: Traits specify required methods with type signatures
+- **Default Implementations**: Trait methods can provide default behavior
+  ```vyn
+  trait Comparable {
+      lt(self<Self>, other<Self>)<Bool> -> { }
+      eq(self<Self>, other<Self>)<Bool> -> {
+          // Default implementation
+          return !(self.lt(other)) && !(other.lt(self));
+      }
+  }
+  ```
+- **Generic Traits**: Traits support generic type parameters
+- **Trait Registry**: Semantic analyzer validates and stores trait definitions
+- **Impl Validation**: `impl Trait for Type` blocks validated against trait signatures
+- **Self Type**: Methods use `Self` type parameter for trait implementors
+- **Built-in Traits**: `Comparable`, `Equatable`, `Numeric`, `Hashable` available for primitives
+
+**Coming in Phase 2:**
+- Trait method calls on values (`value.method()`)
+- Trait-based polymorphism
+- Generic trait implementations (`impl<T: Comparable> for Vec<T>`)
+
+**See:** `doc/TRAIT_SYSTEM_DESIGN.md` for complete specification
 
 #### Primitive Types
 
