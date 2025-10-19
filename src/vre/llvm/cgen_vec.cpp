@@ -216,8 +216,9 @@ void LLVMCodegen::handleVecPush(vyn::ast::CallExpression* node, llvm::Value* vec
     llvm::Value* newSize = builder->CreateAdd(reloadedSize, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1), "vec.new_size");
     builder->CreateStore(newSize, sizeFieldPtr);
     
-    std::cout << "DEBUG: Vec::push() called - element stored" << std::endl;
+    std::cout << "DEBUG: Vec::push() called - element stored, returning Vec for chaining" << std::endl;
     
+    // Return the Vec pointer to enable method chaining
     m_currentLLVMValue = vecPtr;
 }
 
