@@ -1977,6 +1977,34 @@ void SemanticAnalyzer::visit(ast::ImplDeclaration* node) {
         return;
     }
     
+    // Handle generic parameters if present (e.g., impl<T> ...)
+    bool hasGenericParams = !node->genericParams.empty();
+    std::vector<std::string> typeParamNames;
+    
+    if (hasGenericParams) {
+        std::cout << "DEBUG: Processing generic impl with " << node->genericParams.size() << " type parameters" << std::endl;
+        
+        // Enter a new scope for type parameters
+        enterScope();
+        
+        // Register each type parameter as a valid type in this scope
+        for (const auto& param : node->genericParams) {
+            if (param && param->name) {
+                std::string paramName = param->name->name;
+                typeParamNames.push_back(paramName);
+                
+                // Register the type parameter as a type symbol
+                SymbolInfo typeParamSymbol;
+                typeParamSymbol.name = paramName;
+                typeParamSymbol.kind = SymbolInfo::Kind::Type;
+                typeParamSymbol.type = nullptr; // Generic type parameter has no concrete type yet
+                currentScope->add(typeParamSymbol);
+                
+                std::cout << "DEBUG: Registered type parameter: " << paramName << std::endl;
+            }
+        }
+    }
+    
     std::string typeName = node->selfType->toString();
     std::string traitName;
     
@@ -1990,6 +2018,7 @@ void SemanticAnalyzer::visit(ast::ImplDeclaration* node) {
         TraitInfo* traitInfo = findTrait(traitName);
         if (!traitInfo) {
             addError("Trait '" + traitName + "' is not defined.", node);
+            if (hasGenericParams) exitScope();
             return;
         }
         
@@ -1999,10 +2028,25 @@ void SemanticAnalyzer::visit(ast::ImplDeclaration* node) {
                              typeName == "Bool" || typeName == "String" ||
                              typeName == "Char" || typeName == "Rune");
         
-        if (!isBuiltinType) {
+        // For generic impls, the type might contain type parameters (e.g., Vec<T>)
+        // which should be allowed if T is a type parameter
+        bool isGenericType = false;
+        if (hasGenericParams) {
+            // Check if typeName contains any type parameters
+            for (const auto& paramName : typeParamNames) {
+                if (typeName.find(paramName) != std::string::npos) {
+                    isGenericType = true;
+                    std::cout << "DEBUG: Type " << typeName << " uses type parameter " << paramName << std::endl;
+                    break;
+                }
+            }
+        }
+        
+        if (!isBuiltinType && !isGenericType) {
             SymbolInfo* typeSym = currentScope->lookup(typeName);
             if (!typeSym || typeSym->kind != SymbolInfo::Kind::Type) {
                 addError("Type '" + typeName + "' is not defined.", node);
+                if (hasGenericParams) exitScope();
                 return;
             }
         }
@@ -2010,6 +2054,7 @@ void SemanticAnalyzer::visit(ast::ImplDeclaration* node) {
         // Validate that all required trait methods are implemented
         if (!validateTraitImpl(typeName, traitName, node->methods)) {
             addError("Incomplete implementation of trait '" + traitName + "' for type '" + typeName + "'.", node);
+            if (hasGenericParams) exitScope();
             return;
         }
         
@@ -2029,6 +2074,12 @@ void SemanticAnalyzer::visit(ast::ImplDeclaration* node) {
                 method->accept(*this);
             }
         }
+    }
+    
+    // Exit the type parameter scope if we entered one
+    if (hasGenericParams) {
+        exitScope();
+        std::cout << "DEBUG: Exited generic impl type parameter scope" << std::endl;
     }
 }
 
