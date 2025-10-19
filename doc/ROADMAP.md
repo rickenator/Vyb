@@ -78,6 +78,7 @@ The current primary focus is on:
 6.  **✅ String Operations (COMPLETED v0.4.0):** Complete String type with natural literal syntax and 11 methods
 7.  **Enhanced Error Messages:** More detailed compilation feedback and suggestions
 8.  **Tuple Element Access:** `.0`, `.1`, `.2` syntax for accessing tuple elements
+9.  **⏳ Select Expressions (MID PRIORITY):** Expression-based pattern matching with `pass` keyword for explicit returns
 
 ## Project Structure and Organization
 
@@ -161,6 +162,72 @@ As the Vyn project grows, a more structured directory layout will be beneficial 
 -   **User Guides and Tutorials**: Create user-friendly guides and tutorials covering language features, build process, and using the standard library.
 -   **API Reference**: Generate or manually create a reference documentation for the standard library and core compiler interfaces.
 -   **Compiler Internals Documentation**: Add more detailed documentation on compiler internals, including the AST, semantic analysis, and code generation phases.
+
+### Select Expressions (Mid Priority)
+
+A powerful expression-based pattern matching construct that complements the existing `match` statement:
+
+- **Core Concept**: `select` is an **expression** (not a statement) that pattern-matches on a value and returns a result
+  - Auto-infers return type from context or defaults to `Void`
+  - Uses `pass` keyword to explicitly return values from match arms
+  - Syntactic sugar for complex if-then-else chains
+
+- **Syntax**:
+  ```vyn
+  result<String> = select(value) -> {
+      pattern1 -> { pass expression1 }
+      pattern2 -> { pass expression2 }
+      ?        -> { pass default_expression }
+  }
+  ```
+
+- **Key Features**:
+  - **Type Inference**: Return type inferred from LHS variable declaration
+  - **Expression-Based**: Can be used anywhere an expression is valid
+  - **Explicit Returns**: `pass` keyword makes value flow explicit
+  - **Value Equality**: Pattern matching uses value equality (requires careful Struct comparison semantics)
+  - **String Concatenation**: Supports `+` operator for mixed-type concatenation (likely using JSON representation)
+
+- **Example Use Cases**:
+  ```vyn
+  // Auto-typed from LHS
+  message<String> = select(frequency) -> {
+      0.0 -> { pass "This " + frequency }
+      1.0 -> { pass "That " + frequency }
+      ?   -> { increment_other(); pass "The other" }
+  }
+  
+  // Void return (side effects only)
+  select(status_code) -> {
+      200 -> { log("Success") }
+      404 -> { log("Not Found") }
+      ?   -> { log("Unknown: " + status_code) }
+  }
+  
+  // Inline simple cases
+  value<Int> = select(x) -> { 0 -> { pass 10 }, 1 -> { pass 20 }, ? -> { pass 0 } }
+  ```
+
+- **Implementation Requirements**:
+  1. **Type System**: Implement value-based equality for all types including Structs
+  2. **String Concatenation**: Auto-conversion of non-String types (probably via JSON serialization)
+  3. **`pass` Keyword**: New keyword for explicit value returns in select arms
+  4. **Type Inference**: Analyze LHS to determine select expression's return type
+  5. **Codegen**: Generate optimal LLVM IR (similar to match but with return values)
+
+- **Distinctions from Match**:
+  - `match`: Statement-based, used for control flow, no return value
+  - `select`: Expression-based, returns a value, can be assigned
+  - `match` arms use `->` for direct execution
+  - `select` arms use `-> { pass value }` for explicit returns
+
+- **Benefits**:
+  - More expressive than nested ternary operators
+  - Cleaner than long if-else-if chains
+  - Type-safe pattern matching with value returns
+  - Natural fit for functional-style programming
+
+**Status**: Proposed for mid-priority implementation after current core features stabilize.
 
 ### Bundles & Sharing System
 
