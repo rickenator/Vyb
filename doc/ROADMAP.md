@@ -69,16 +69,25 @@ Vyn now supports **fully variadic tuple types** with comprehensive 1-to-N type p
 See `test/tuples/README.md` for detailed documentation and examples.
 
 ## Core Development Focus
-The current primary focus is on:
-1.  **Standard Library Expansion:** Building core modules for collections, I/O, math
-2.  **✅ For Loop Implementation (COMPLETED v0.4.1):** Vec iteration and range-based for loops with mandatory parentheses
-3.  **✅ Arrays and Collections (COMPLETED v0.3.7):** Fixed-size arrays `[T; N]` fully implemented with beautiful serialization
-4.  **✅ Dynamic Collections (COMPLETED v0.3.7):** Vec<T> resizable data structures with full method support
-5.  **✅ Vec Iteration (COMPLETED v0.4.1):** `for (item in vec)` with break/continue support
-6.  **✅ String Operations (COMPLETED v0.4.0):** Complete String type with natural literal syntax and 11 methods
-7.  **Enhanced Error Messages:** More detailed compilation feedback and suggestions
-8.  **Tuple Element Access:** `.0`, `.1`, `.2` syntax for accessing tuple elements
-9.  **✅ Select Expressions (COMPLETED v0.4.1):** Expression-based pattern matching with `pass` keyword for explicit returns
+
+### 🔥 HIGH PRIORITY (v0.4.2)
+The immediate focus for the next release:
+
+1. **✅ Template Scaffolding (COMPLETED v0.4.1):** Template declarations with type parameter recognition
+2. **🚧 Trait System (IN PROGRESS):** User-extensible traits with impl blocks
+   - Define traits with method signatures
+   - Implement traits for types (structs and primitives)
+   - Call trait methods on values (value.method())
+   - Validate trait bounds in templates
+   - See `doc/TRAIT_SYSTEM_DESIGN.md` for full specification
+3. **Template Instantiation:** Monomorphization of generic types/functions
+4. **Trait-Based Generics:** `max<T: Comparable>(a, b)` working end-to-end
+
+### 📋 CURRENT FOCUS
+1. **Standard Library Expansion:** Building core modules for collections, I/O, math
+2. **Enhanced Error Messages:** More detailed compilation feedback and suggestions
+3. **Tuple Element Access:** `.0`, `.1`, `.2` syntax for accessing tuple elements
+4. **String Comparison Operators:** Lexical ordering for String types
 
 ## Project Structure and Organization
 
@@ -430,6 +439,45 @@ This feature will enable scripts and API-style binaries to return structured dat
     -   Dynamic dispatch mechanisms for trait objects
     -   Performance considerations for virtual method tables versus monomorphization
     -   Trait object safety rules
+
+### Trait System Implementation (v0.4.2+)
+
+**HIGH PRIORITY** - Comprehensive trait system for user-extensible polymorphism:
+
+#### Phase 1: Trait Declarations (v0.4.2)
+- **Trait Definition Syntax**: `trait Comparable { lt(self, other: Self)<Bool> -> { ... } }`
+- **Trait Registry**: Store trait definitions with method signatures
+- **Trait Validation**: Check method signatures and return types
+- **Trait Inheritance**: `trait Ord : Comparable { ... }` for trait hierarchies
+- **Default Methods**: Trait methods with default implementations
+
+#### Phase 2: Trait Implementations (v0.4.2)
+- **Impl Block Syntax**: `impl Comparable for Point { ... }`
+- **Implementation Validation**: Verify all required methods implemented
+- **Trait Method Calls**: Enable `value.method()` syntax for trait methods
+- **Generic Implementations**: `impl<T: Comparable> Comparable for Vec<T> { ... }`
+
+#### Phase 3: Template Instantiation (v0.4.3)
+- **Monomorphization**: Generate specialized code for concrete types
+- **Trait Bound Validation**: Check `T: Comparable` constraints during instantiation
+- **Instantiation Cache**: Avoid duplicate code generation
+- **Error Messages**: Clear feedback on constraint violations
+
+#### Phase 4: Advanced Trait Features (v0.5.0)
+- **Associated Types**: `trait Iterator { type Item; ... }`
+- **Associated Constants**: `trait Numeric { const ZERO: Self; ... }`
+- **Trait Objects**: Dynamic dispatch with `dyn Comparable`
+- **Multiple Trait Bounds**: `T: Comparable + Hashable`
+
+#### Phase 5: Class System (v0.6.0) - OPTIONAL
+- **Class Declarations**: `class Animal { ... }` with inheritance
+- **Constructors**: `init(name: String) { ... }` syntax
+- **Inheritance**: `class Dog : Animal { ... }` for OOP patterns
+- **Encapsulation**: Private fields, public methods
+- **Virtual Methods**: Dynamic dispatch for subclass overrides
+- **Design Philosophy**: Classes are OPTIONAL - structs + traits sufficient for most use cases
+
+See `doc/TRAIT_SYSTEM_DESIGN.md` for complete specification and design rationale.
 
 ### Other Language Considerations
 
