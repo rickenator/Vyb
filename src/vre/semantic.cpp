@@ -3326,15 +3326,28 @@ void SemanticAnalyzer::registerTraitImpl(ast::ImplDeclaration* implDecl) {
     std::string typeName = implDecl->selfType->toString();
     std::string traitName = implDecl->traitType->toString();
     
-    // Store the implementation methods
-    std::vector<ast::FunctionDeclaration*> implMethods;
-    for (const auto& method : implDecl->methods) {
-        if (method) {
-            implMethods.push_back(method.get());
-        }
-    }
+    // Check if this is a generic implementation (has type parameters)
+    bool isGeneric = !implDecl->genericParams.empty();
     
-    traitImpls[typeName][traitName] = implMethods;
+    if (isGeneric) {
+        // Store generic implementation separately
+        std::cout << "DEBUG: Storing generic trait impl: " << traitName << " for " << typeName << std::endl;
+        
+        auto genericInfo = std::make_unique<GenericImplInfo>(implDecl);
+        genericTraitImpls[typeName][traitName] = std::move(genericInfo);
+    } else {
+        // Store concrete implementation
+        std::cout << "DEBUG: Storing concrete trait impl: " << traitName << " for " << typeName << std::endl;
+        
+        std::vector<ast::FunctionDeclaration*> implMethods;
+        for (const auto& method : implDecl->methods) {
+            if (method) {
+                implMethods.push_back(method.get());
+            }
+        }
+        
+        traitImpls[typeName][traitName] = implMethods;
+    }
 }
 
 bool SemanticAnalyzer::validateTraitImpl(const std::string& typeName, 

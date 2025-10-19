@@ -1,0 +1,32 @@
+# Test method call on monomorphized generic type with trait impl
+# This should trigger method monomorphization
+
+struct Box<T> {
+    value<T>
+}
+
+trait Display {
+    show(self<Self>)<String> -> { }
+}
+
+impl<T> Display for Box<T> {
+    show(self<Self>)<String> -> {
+        return "Box"
+    }
+}
+
+main()<Int> -> {
+    # Create Box<Int> - this monomorphizes Box
+    b<Box<Int>> = Box<Int> { value = 42 }
+    
+    # Call method on Box<Int> - should trigger method monomorphization
+    # This needs to: 
+    # 1. Detect b has type Box<Int>
+    # 2. Find generic impl: impl<T> Display for Box<T>
+    # 3. Substitute T -> Int
+    # 4. Generate Box_Int_show() function
+    # str<String> = b.show()
+    
+    # For now, just return success
+    return 0
+}
