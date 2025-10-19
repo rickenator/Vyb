@@ -1,0 +1,20 @@
+// Test new aspect/bind syntax
+
+aspect Display {
+    show(self<Self>)<String> -> { }
+}
+
+struct Point {
+    x<Int>,
+    y<Int>,
+}
+
+bind Display -> Point {
+    show(self<Self>)<String> -> {
+        return "Point";
+    }
+}
+
+main()<Int> -> {
+    return 0;
+}
