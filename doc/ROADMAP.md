@@ -219,42 +219,50 @@ As the Vyn project grows, a more structured directory layout will be beneficial 
 
 **Status**: ✅ Fully implemented and tested with test_select_simple.vyn and test_select_pass.vyn.
 
-#### Range/Comparison Patterns
+#### Range/Comparison Patterns ✅
 
-An enhancement to both `match` and `select` to support comparison-based patterns:
+**Status**: ✅ **Fully implemented in v0.4.1** (October 2025)
 
-- **Motivation**: Enable elegant handling of numeric ranges and ordered comparisons without full class/interface system
-  - Works with any comparable type (Int, Float, String with lexical ordering)
+An enhancement to both `match` and `select` to support comparison-based patterns for elegant range handling.
+
+- **Motivation**: Enable elegant handling of numeric ranges and ordered comparisons
+  - Works with any comparable type (Int, Float currently; String future)
   - Reduces verbose if-else chains for range-based logic
   - Complements exact-match patterns with relational operators
 
-- **Syntax** (using `select` as example):
+- **Syntax Examples**:
   ```vyn
-  label<String> = select(age) -> {
-      == 0  -> { pass "infant" }
-      >= 1  -> { pass "toddler" }
-      >= 5  -> { pass "kindergarten" }
-      >= 18 -> { pass "adult" }
-      ?     -> { pass "student" }
-  }
-  
+  // Select expression with comparison patterns
   grade<String> = select(score) -> {
-      >= 90 -> { pass "A" }
-      >= 80 -> { pass "B" }
-      >= 70 -> { pass "C" }
-      >= 60 -> { pass "D" }
+      >= 90 -> { pass "A" },
+      >= 80 -> { pass "B" },
+      >= 70 -> { pass "C" },
+      >= 60 -> { pass "D" },
       ?     -> { pass "F" }
   }
   
-  // String lexical comparison (requires String comparison operators)
-  category<String> = select(name) -> {
-      < "M"  -> { pass "First Half" }
-      >= "M" -> { pass "Second Half" }
+  // Match statement with comparison patterns
+  match (temperature) {
+      < 0   -> println("Freezing"),
+      < 20  -> println("Cold"),
+      < 30  -> println("Comfortable"),
+      >= 30 -> println("Hot")
+  }
+  
+  // Mixed comparison operators
+  result<Int> = select(value) -> {
+      == 0  -> 1,        // Exact equality
+      != -1 -> 2,        // Not equal
+      > 100 -> 3,        // Greater than
+      >= 50 -> 4,        // Greater or equal
+      < 10  -> 5,        // Less than
+      <= 0  -> 6,        // Less or equal
+      ?     -> 7         // Wildcard catch-all
   }
   ```
 
 - **Supported Operators**:
-  - `==` - Exact equality (same as current behavior)
+  - `==` - Exact equality
   - `!=` - Not equal
   - `<`  - Less than
   - `<=` - Less than or equal
@@ -263,46 +271,87 @@ An enhancement to both `match` and `select` to support comparison-based patterns
 
 - **Evaluation Semantics**:
   - Patterns evaluated **top-to-bottom** (order matters!)
-  - First matching pattern wins (early exit)
-  - Wildcard `?` acts as catch-all (should be last)
-  - All comparison operators use the matched value as right operand: `pattern_op value`
-  - Example: `>= 18` means "is the matched value >= 18?"
+  - **First matching pattern wins** (early exit)
+  - Wildcard `?` acts as catch-all (typically last)
+  - Comparison: `matched_value op pattern_value`
+  - Example: Pattern `>= 18` means "is matched_value >= 18?"
+
+- **Unreachable Pattern Detection** ⚠️:
+  
+  The semantic analyzer enforces pattern reachability as **compile-time errors**:
+  
+  1. **Wildcard in Middle**: `?` followed by any pattern
+     ```vyn
+     match (x) {
+         >= 90 -> "A",
+         ? -> "other",      // Catches everything
+         >= 80 -> "B"       // ERROR: Unreachable (already caught by ?)
+     }
+     ```
+  
+  2. **Subsumed Comparisons**: Broader pattern before narrower
+     ```vyn
+     select(score) -> {
+         >= 80 -> 1,        // Catches 80+
+         >= 90 -> 2         // ERROR: 90+ already caught by >= 80
+     }
+     ```
+  
+  3. **Duplicate Patterns**: Same pattern appearing twice
+     ```vyn
+     match (x) {
+         == 75 -> "first",
+         == 75 -> "second"  // ERROR: Duplicate pattern
+     }
+     ```
+  
+  4. **Range Subsumption**: Exact match covered by range
+     ```vyn
+     select(n) -> {
+         >= 70 -> 1,        // Catches 70+
+         == 75 -> 2         // ERROR: 75 already caught by >= 70
+     }
+     ```
+  
+  **Error Messages**:
+  - `"Pattern after wildcard in case N is unreachable"`
+  - `"Pattern '>= 90' in case N is subsumed by earlier '>= 80' (case M)"`
+  - `"Pattern '== 75' in case N is duplicate pattern (case M)"`
+  - `"Pattern '== 75' in case N is covered by earlier '>= 70' (case M)"`
+  
+  **Design Philosophy**: 
+  - Flexible pattern ordering (no forced monotonic constraints)
+  - But **no tolerance for sloppy code** that can never execute
+  - Catches common logic errors at compile time
+  - Clear, actionable error messages
 
 - **Type Requirements**:
   - Type must support the comparison operator used
-  - **Current Support**: Int, Float (have built-in comparison)
-  - **Future Support**: String (requires lexical comparison implementation)
-  - **Struct Support**: Requires explicit comparison operator overloading (future polymorphism feature)
-
-- **Implementation Prerequisites**:
-  1. Extend pattern AST to include comparison operators
-  2. Implement comparison codegen for all supported types
-  3. Add String comparison operators (`<`, `<=`, `>`, `>=`) for lexical ordering
-  4. Ensure top-to-bottom evaluation order in codegen
-  5. Type checking to verify comparison operator compatibility
-
-- **Same Syntax for Match**:
-  ```vyn
-  match (temperature) {
-      < 0   -> println("Freezing")
-      < 20  -> println("Cold")
-      < 30  -> println("Comfortable")
-      >= 30 -> println("Hot")
-  }
-  ```
+  - **Current Support**: Int, Float (built-in comparisons)
+  - **Future Support**: String (lexical ordering), Char, Rune
+  - **Struct Support**: Requires explicit operator overloading (future feature)
 
 - **Benefits**:
   - Natural expression of range-based logic
-  - Avoids verbose chained comparisons
+  - Compile-time detection of unreachable code
+  - Avoids verbose chained if-else statements
   - Works without complex type system (interfaces/traits)
   - Clear, readable code for categorization problems
 
-- **Edge Cases**:
-  - Overlapping patterns: first match wins (explicit ordering requirement)
-  - Missing wildcard: if no pattern matches, `select` behavior TBD (error? default value? Void?)
-  - Non-comparable types: compile-time error
+- **Implementation Details**:
+  1. ✅ Extended pattern AST with ComparisonPattern node
+  2. ✅ Comparison codegen for Int and Float types (LLVM icmp/fcmp)
+  3. ✅ Top-to-bottom evaluation order guaranteed in codegen
+  4. ✅ Unreachable pattern analysis in semantic analyzer
+  5. ⏳ String comparison operators (future: lexical ordering)
+  6. ⏳ Full type checking for comparison compatibility
 
-**Status**: Future extension to match/select, depends on String comparison operators.
+- **Test Coverage**:
+  - `test/select_match/test_comparison_simple.vyn` - Basic comparison patterns
+  - `test/select_match/test_comparison_patterns.vyn` - All six operators
+  - `test/select_match/test_unreachable_patterns.vyn` - Error detection
+
+**Status**: ✅ Fully implemented for Int/Float types with unreachable pattern detection. String comparison operators remain as future enhancement.
 
 ### Bundles & Sharing System
 

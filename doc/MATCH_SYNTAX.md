@@ -81,6 +81,39 @@ match (result) {
 }
 ```
 
+### Comparison Patterns ✅ (v0.4.1)
+
+Match against numeric ranges using comparison operators:
+
+```vyn
+match (score) {
+    >= 90 -> println("A"),
+    >= 80 -> println("B"),
+    >= 70 -> println("C"),
+    >= 60 -> println("D"),
+    ?     -> println("F")
+}
+```
+
+**Supported Operators**: `==`, `!=`, `<`, `<=`, `>`, `>=`
+
+**Important**: Patterns are evaluated **top-to-bottom**, first match wins:
+```vyn
+match (age) {
+    >= 18 -> println("Adult"),     // Catches 18+
+    >= 21 -> println("Can drink")  // ERROR: Unreachable! (21+ already caught)
+}
+```
+
+**Unreachable Pattern Detection**:
+The compiler will reject patterns that can never match:
+- Wildcard before other patterns
+- Broader ranges before narrower ones
+- Duplicate exact matches
+- Exact matches covered by ranges
+
+See the "Unreachable Pattern Detection" section below for details.
+
 ### Future: Complex Patterns
 Planned support for:
 - Struct destructuring: `Point { x, y } > ...`

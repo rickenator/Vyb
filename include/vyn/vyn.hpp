@@ -12,8 +12,9 @@
  * ✅ Dynamic vectors Vec<T> with full method support (new, push, pop, len, get)
  * ✅ Vec iteration with for loops and break/continue
  * ✅ Range-based for loops (0..10 inclusive ranges)
- * ✅ Pattern matching with match statements (-> syntax, ? wildcard)
+ * ✅ Pattern matching with match statements (-> syntax, ? wildcard, comparison patterns)
  * ✅ Select expressions with pass keyword (expression-based pattern matching)
+ * ✅ Comparison patterns (>=, <=, <, >, ==, !=) with unreachable pattern detection
  * ✅ Type system with ownership (my<T>, our<T>, their<T>)
  * ✅ Memory safety with borrowing (view, borrow) and unsafe blocks
  * ✅ Comprehensive parser supporting templates, async, classes
@@ -141,7 +142,8 @@ match_arm              ::= pattern '->' ( expression | block_statement | stateme
 select_expression      ::= 'select' '(' expression ')' '->' '{' select_arm* '}' ';'
 select_arm             ::= pattern '->' ( expression | block_statement ) ','?
 
-pattern                ::= IDENTIFIER [ '@' pattern ]
+pattern                ::= comparison_pattern
+                         | IDENTIFIER [ '@' pattern ]
                          | literal
                          | '?'                   // wildcard (no-match continues as NOP)
                          | path '{' [ field_pattern { ',' field_pattern } [','] ] '}' // Struct pattern
@@ -149,6 +151,12 @@ pattern                ::= IDENTIFIER [ '@' pattern ]
                          | '[' [ pattern_list ] ']' // Array/slice pattern
                          | '(' pattern_list ')' // Tuple pattern
                          | '&' [ 'const' ] pattern // For reference patterns
+
+comparison_pattern     ::= ( '==' | '!=' | '<' | '<=' | '>' | '>=' ) expression
+                         // Comparison patterns for match/select (e.g., >= 90, < 60)
+                         // Pattern evaluation: matched_value op pattern_value
+                         // Unreachable patterns detected at compile time
+
 field_pattern          ::= IDENTIFIER ':' pattern | IDENTIFIER
 pattern_list           ::= pattern { ',' pattern }
 pattern_assignment_statement ::= pattern '=' expression [';'] // For ref x = _
