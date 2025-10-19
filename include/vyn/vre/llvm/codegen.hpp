@@ -50,6 +50,11 @@ struct LoopContext {
     llvm::BasicBlock *loopExit;   // Block after the loop
 };
 
+// Helper struct to manage select expression context
+struct SelectContext {
+    llvm::BasicBlock *endBlock;   // Block after the select
+    llvm::AllocaInst *resultAlloca; // Alloca for storing the result
+};
 
 class LLVMCodegen : public ast::Visitor {
 public:
@@ -97,6 +102,8 @@ private:
     llvm::StructType* currentClassType = nullptr; // Initialize
     LoopContext currentLoopContext;
     std::vector<LoopContext> loopStack;
+    std::vector<SelectContext> selectStack;  // Track nested select expressions
+    bool infer_types_only = false;  // Flag for type inference without codegen
     std::map<std::string, llvm::AllocaInst*> m_currentFunctionNamedValues;
 
 
@@ -319,6 +326,7 @@ public:
     void visit(vyn::ast::AwaitExpression* node) override;
     void visit(vyn::ast::RangeExpression* node) override;
     void visit(vyn::ast::BlockExpression* node) override;
+    void visit(vyn::ast::SelectExpression* node) override;
 
     // Add missing visit methods for expressions from ast.hpp if they are defined there
     // and are causing linker errors.
@@ -334,6 +342,7 @@ public:
     void visit(vyn::ast::WhileStatement* node) override;
     void visit(vyn::ast::ForStatement* node) override;
     void visit(vyn::ast::ReturnStatement* node) override;
+    void visit(vyn::ast::PassStatement* node) override;
     void visit(vyn::ast::BreakStatement* node) override;
     void visit(vyn::ast::ContinueStatement* node) override;
     void visit(vyn::ast::UnsafeStatement* node) override;

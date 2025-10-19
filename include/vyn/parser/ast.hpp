@@ -57,6 +57,7 @@ class SuperExpression; // Added
 class AwaitExpression; // Added
 class RangeExpression; // Added for range-based for loops
 class BlockExpression; // Block as expression for match arms
+class SelectExpression; // Select expression for pattern matching with returns
 
 // Statements
 class BlockStatement;
@@ -65,6 +66,7 @@ class IfStatement;
 class ForStatement;
 class WhileStatement;
 class ReturnStatement;
+class PassStatement;
 class BreakStatement;
 class ContinueStatement;
 class TryStatement;
@@ -198,6 +200,7 @@ enum class NodeType {
     AWAIT_EXPRESSION, // Added
     RANGE_EXPRESSION, // Added for range-based for loops
     BLOCK_EXPRESSION, // Block as expression for match arms
+    SELECT_EXPRESSION, // Select expression for pattern matching
 
 
     // Statements
@@ -207,6 +210,7 @@ enum class NodeType {
     FOR_STATEMENT,
     WHILE_STATEMENT,
     RETURN_STATEMENT,
+    PASS_STATEMENT,
     BREAK_STATEMENT,
     CONTINUE_STATEMENT,
     TRY_STATEMENT,
@@ -291,6 +295,7 @@ public:
     virtual void visit(AwaitExpression* node) = 0;
     virtual void visit(RangeExpression* node) = 0;
     virtual void visit(BlockExpression* node) = 0;
+    virtual void visit(SelectExpression* node) = 0;
 
     // Statements
     virtual void visit(BlockStatement* node) = 0;
@@ -299,6 +304,7 @@ public:
     virtual void visit(ForStatement* node) = 0;
     virtual void visit(WhileStatement* node) = 0;
     virtual void visit(ReturnStatement* node) = 0;
+    virtual void visit(PassStatement* node) = 0;
     virtual void visit(BreakStatement* node) = 0;
     virtual void visit(ContinueStatement* node) = 0;
     virtual void visit(TryStatement* node) = 0; 
@@ -749,6 +755,7 @@ public:
     void accept(Visitor& visitor) override;
 };
 
+// --- ReturnStatement ---
 class ReturnStatement : public Statement {
 public:
     ExprPtr argument; // Optional, can be nullptr
@@ -760,6 +767,19 @@ public:
     void accept(Visitor& visitor) override;
 };
 
+// --- PassStatement ---
+class PassStatement : public Statement {
+public:
+    ExprPtr argument; // Required - must pass a value
+
+    PassStatement(SourceLocation loc, ExprPtr argument);
+    virtual ~PassStatement();
+    NodeType getType() const override;
+    std::string toString() const override;
+    void accept(Visitor& visitor) override;
+};
+
+// --- BreakStatement ---
 class BreakStatement : public Statement {
 public:
     BreakStatement(SourceLocation loc);
@@ -769,6 +789,7 @@ public:
     void accept(Visitor& visitor) override;
 };
 
+// --- ContinueStatement ---
 class ContinueStatement : public Statement {
 public:
     ContinueStatement(SourceLocation loc);
@@ -1305,6 +1326,18 @@ public:
     std::unique_ptr<BlockStatement> block;
     
     BlockExpression(SourceLocation loc, std::unique_ptr<BlockStatement> block);
+    NodeType getType() const override;
+    std::string toString() const override;
+    void accept(Visitor& visitor) override;
+};
+
+// --- SelectExpression ---
+class SelectExpression : public Expression {
+public:
+    ExprPtr expr;
+    std::vector<std::pair<ExprPtr, ExprPtr>> cases;
+    
+    SelectExpression(SourceLocation loc, ExprPtr expr, std::vector<std::pair<ExprPtr, ExprPtr>> cases);
     NodeType getType() const override;
     std::string toString() const override;
     void accept(Visitor& visitor) override;

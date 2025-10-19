@@ -1,0 +1,17 @@
+// Simple select test
+
+test_naked()<Void> -> {
+    x<Int const> = 42;
+    result<Int> = select(x) -> {
+        1 -> 10,
+        42 -> 420,
+        ? -> 0
+    };
+    println(result);
+}
+
+main()<Void> -> {
+    println("Starting test");
+    test_naked();
+    println("Done");
+}

@@ -1,0 +1,130 @@
+// Test select expressions - naked values auto-return, blocks use pass
+
+test_naked_values()<Void> -> {
+    // Basic select with naked values - auto returns
+    x<Int const> = 42;
+    result<Str> = select(x) -> {
+        1 -> "one",
+        42 -> "forty-two",
+        100 -> "hundred",
+        ? -> "other"
+    };
+    println(result);
+    
+    // Select with different value
+    y<Int const> = 1;
+    result2<Str> = select(y) -> {
+        1 -> "one",
+        42 -> "forty-two", 
+        ? -> "other"
+    };
+    println(result2);
+}
+
+test_blocks_with_pass()<Void> -> {
+    // Select with block expressions using pass keyword
+    n<Int const> = 3;
+    result<Str> = select(n) -> {
+        1 -> {
+            temp<Str> = "The value is: ";
+            pass temp + "one"
+        },
+        2 -> {
+            prefix<Str> = "Number ";
+            pass prefix + "two"
+        },
+        3 -> {
+            msg<Str> = "Found three!";
+            println(msg);
+            pass "THREE"
+        },
+        ? -> {
+            pass "unknown"
+        }
+    };
+    println(result);
+}
+
+test_mixed_naked_and_blocks()<Void> -> {
+    // Mix naked values and blocks in same select
+    x<Int const> = 42;
+    answer<Str> = select(x) -> {
+        1 -> "one",
+        42 -> {
+            exclaim<Str> = "!!!";
+            pass "forty-two" + exclaim
+        },
+        100 -> "hundred",
+        ? -> {
+            pass "other value"
+        }
+    };
+    println(answer);
+}
+
+test_computation_blocks()<Void> -> {
+    // Blocks with computation before pass
+    n<Int const> = 5;
+    doubled<Int> = select(n) -> {
+        1 -> { pass 2 },
+        2 -> { pass 4 },
+        3 -> { pass 6 },
+        5 -> {
+            base<Int> = 10;
+            result<Int> = base * 2;
+            pass result
+        },
+        ? -> { pass 0 }
+    };
+    println(doubled);
+}
+
+test_select_for_side_effects()<Void> -> {
+    // Select without assignment - side effects only
+    x<Int const> = 2;
+    select(x) -> {
+        1 -> println("one"),
+        2 -> {
+            println("Found two!");
+            println("Printing again")
+        },
+        ? -> println("unknown")
+    };
+}
+
+test_wildcard()<Void> -> {
+    // Wildcard should catch anything
+    z<Int const> = 999;
+    caught<Str> = select(z) -> {
+        1 -> "one",
+        ? -> {
+            msg<Str> = "wildcard caught: ";
+            pass msg + "999"
+        }
+    };
+    println(caught);
+}
+
+main()<Void> -> {
+    println("=== Testing Select Expressions ===");
+    
+    println("\n--- Naked Values ---");
+    test_naked_values();
+    
+    println("\n--- Blocks with Pass ---");
+    test_blocks_with_pass();
+    
+    println("\n--- Mixed Naked and Blocks ---");
+    test_mixed_naked_and_blocks();
+    
+    println("\n--- Computation Blocks ---");
+    test_computation_blocks();
+    
+    println("\n--- Side Effects ---");
+    test_select_for_side_effects();
+    
+    println("\n--- Wildcard ---");
+    test_wildcard();
+    
+    println("\n=== All tests complete ===");
+}

@@ -461,6 +461,8 @@ vyn::TokenType Lexer::get_keyword_type(const std::string& word) {
         {"finally", vyn::TokenType::KEYWORD_FINALLY},
         {"defer", vyn::TokenType::KEYWORD_DEFER},
         {"match", vyn::TokenType::KEYWORD_MATCH},
+        {"select", vyn::TokenType::KEYWORD_SELECT},
+        {"pass", vyn::TokenType::KEYWORD_PASS},
         {"scoped", vyn::TokenType::KEYWORD_SCOPED},
         {"ref", vyn::TokenType::KEYWORD_REF},
         {"extern", vyn::TokenType::KEYWORD_EXTERN},

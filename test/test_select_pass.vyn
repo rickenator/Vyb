@@ -1,0 +1,30 @@
+// Test select with blocks and pass
+
+test_blocks_with_pass()<Void> -> {
+    n<Int const> = 3;
+    result<Int> = select(n) -> {
+        1 -> {
+            temp<Int> = 10;
+            pass temp
+        },
+        2 -> {
+            x<Int> = 20;
+            pass x
+        },
+        3 -> {
+            msg<Int> = 300;
+            println(msg);
+            pass msg
+        },
+        ? -> {
+            pass 0
+        }
+    };
+    println(result);
+}
+
+main()<Void> -> {
+    println("Test starting");
+    test_blocks_with_pass();
+    println("Test done");
+}

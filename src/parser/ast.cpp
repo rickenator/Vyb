@@ -675,6 +675,24 @@ void ReturnStatement::accept(Visitor& visitor) {
     visitor.visit(this);
 }
 
+// --- PassStatement ---
+PassStatement::PassStatement(SourceLocation loc, ExprPtr arg)
+    : Statement(loc), argument(std::move(arg)) {}
+
+PassStatement::~PassStatement() = default;
+
+NodeType PassStatement::getType() const {
+    return NodeType::PASS_STATEMENT;
+}
+
+std::string PassStatement::toString() const {
+    return "pass " + (argument ? argument->toString() : "") + ";";
+}
+
+void PassStatement::accept(Visitor& visitor) {
+    visitor.visit(this);
+}
+
 // --- BreakStatement ---
 BreakStatement::BreakStatement(SourceLocation loc)
     : Statement(loc) {}
@@ -1578,6 +1596,27 @@ std::string BlockExpression::toString() const {
 }
 
 void BlockExpression::accept(Visitor& visitor) {
+    visitor.visit(this);
+}
+
+// --- SelectExpression ---
+SelectExpression::SelectExpression(SourceLocation loc, ExprPtr expr, std::vector<std::pair<ExprPtr, ExprPtr>> cases)
+    : Expression(loc), expr(std::move(expr)), cases(std::move(cases)) {}
+
+NodeType SelectExpression::getType() const {
+    return NodeType::SELECT_EXPRESSION;
+}
+
+std::string SelectExpression::toString() const {
+    std::string result = "select(" + (expr ? expr->toString() : "nullptr") + ") { ";
+    for (const auto& [pattern, value] : cases) {
+        result += (pattern ? pattern->toString() : "?") + " -> " + (value ? value->toString() : "nullptr") + ", ";
+    }
+    result += "}";
+    return result;
+}
+
+void SelectExpression::accept(Visitor& visitor) {
     visitor.visit(this);
 }
 

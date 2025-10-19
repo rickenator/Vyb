@@ -528,4 +528,90 @@ public:
 } // namespace vyn::ast
 ```
 
+## 19. `SelectExpression`
+
+Represents a select expression for pattern matching that returns a value (e.g., `select(x) -> { 1 -> 10, 2 -> 20, ? -> 0 };`).
+
+-   **C++ Class**: `vyn::ast::SelectExpression`
+-   **`NodeType`**: `SELECT_EXPRESSION`
+-   **Fields**:
+    -   `value` (`ExprPtr`): The expression being matched against.
+    -   `cases` (`std::vector<std::pair<ExprPtr, ExprPtr>>`): Vector of pattern-result pairs.
+
+```cpp
+// From include/vyn/parser/ast.hpp
+namespace vyn::ast {
+class SelectExpression : public Expression {
+public:
+    ExprPtr value;
+    std::vector<std::pair<ExprPtr, ExprPtr>> cases; // pattern -> result
+
+    SelectExpression(SourceLocation loc, ExprPtr value, std::vector<std::pair<ExprPtr, ExprPtr>> cases);
+    // ... accept, getType, toString methods ...
+};
+} // namespace vyn::ast
+```
+
+**Key Characteristics**:
+- Expression-based pattern matching (unlike match which is statement-based)
+- Returns a value that can be assigned to variables
+- Requires semicolon terminator: `select(...) -> { ... };`
+- Supports two result forms:
+  - **Naked expressions**: `pattern -> value` (auto-returns)
+  - **Block expressions**: `pattern -> { statements; pass value }` (explicit return)
+- Type inferred from first case
+- Uses SelectContext stack for proper code generation
+
+**Example**:
+```vyn
+result<Int> = select(status) -> {
+    1 -> 100,           // Naked expression
+    2 -> {
+        x<Int> = 200;   // Block with statements
+        pass x          // Explicit return
+    },
+    ? -> 0              // Wildcard default
+};
+```
+
+## 20. `PassStatement`
+
+Represents a pass statement that returns a value from a select block without returning from the enclosing function.
+
+-   **C++ Class**: `vyn::ast::PassStatement`
+-   **`NodeType`**: `PASS_STATEMENT`
+-   **Fields**:
+    -   `value` (`ExprPtr`): The expression to return from the select block.
+
+```cpp
+// From include/vyn/parser/ast.hpp
+namespace vyn::ast {
+class PassStatement : public Statement {
+public:
+    ExprPtr value;
+
+    PassStatement(SourceLocation loc, ExprPtr value);
+    // ... accept, getType, toString methods ...
+};
+} // namespace vyn::ast
+```
+
+**Key Characteristics**:
+- Only valid inside select expression blocks
+- Returns value from the **block**, not the enclosing function
+- Requires an expression argument (cannot be empty)
+- Semantic analysis checks that pass appears within select context
+- Generates store to resultAlloca and branch to endBlock in LLVM IR
+
+**Example**:
+```vyn
+select(code) -> {
+    3 -> {
+        msg<Int> = 300;
+        println(msg);      // Side effect
+        pass msg           // Return from this block
+    }
+};
+```
+
 *Note: `TernaryExpression` was previously listed but is not present in `include/vyn/parser/ast.hpp` and has been removed. Other expression types might be detailed in `AST_Literals.md` (like `Identifier`) or `AST_Types.md` (if type constructs can be expressions).* For planned expressions, refer to `AST_Roadmap.md`.

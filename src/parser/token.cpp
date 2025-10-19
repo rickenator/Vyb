@@ -51,6 +51,8 @@ std::string token_type_to_string(vyn::TokenType type) { // Corrected namespace f
         {vyn::TokenType::KEYWORD_FINALLY, "KEYWORD_FINALLY"},
         {vyn::TokenType::KEYWORD_DEFER, "KEYWORD_DEFER"},
         {vyn::TokenType::KEYWORD_MATCH, "KEYWORD_MATCH"},
+        {vyn::TokenType::KEYWORD_SELECT, "KEYWORD_SELECT"},
+        {vyn::TokenType::KEYWORD_PASS, "KEYWORD_PASS"},
         {vyn::TokenType::KEYWORD_SCOPED, "KEYWORD_SCOPED"},
         {vyn::TokenType::KEYWORD_REF, "KEYWORD_REF"},
         {vyn::TokenType::KEYWORD_EXTERN, "KEYWORD_EXTERN"},
