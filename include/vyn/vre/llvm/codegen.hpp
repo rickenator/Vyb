@@ -134,8 +134,14 @@ private:
     std::map<std::string, uint32_t> refCounts; // For our<T> reference counting
     std::map<std::string, llvm::Value*> refCountStorage; // Storage for refcount variables
 
+    // Monomorphization: Generic type instantiation
+    std::map<std::string, vyn::ast::StructDeclaration*> genericStructTemplates; // Store generic struct AST nodes (e.g., Box<T>)
+    std::map<std::string, llvm::StructType*> monomorphizedStructs; // Cache instantiated types (e.g., "Box<Int>" -> Box_Int LLVM type)
+    
     // Helper methods
     llvm::Type* codegenType(vyn::ast::TypeNode* typeNode); // Converts vyn::TypeNode to llvm::Type
+    std::string mangleGenericTypeName(const std::string& baseName, const std::vector<vyn::ast::TypeNodePtr>& typeArgs); // Generate mangled name like Box_Int
+    llvm::StructType* monomorphizeStruct(const std::string& baseName, const std::vector<vyn::ast::TypeNodePtr>& typeArgs); // Generate specialized struct
     llvm::Function* getCurrentFunction();
     llvm::BasicBlock* getCurrentBasicBlock();
     void createFunctionForwardDeclaration(vyn::ast::FunctionDeclaration* funcDecl); // Forward declaration helper

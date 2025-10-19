@@ -458,6 +458,26 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                 break;
             }
 
+            // MONOMORPHIZATION: Check if this is a generic struct instantiation (e.g., Box<Int>)
+            // Before checking for primitive types, see if this matches a generic template
+            if (!typeNameNode->genericArgs.empty()) {
+                auto templateIt = genericStructTemplates.find(typeNameStr);
+                if (templateIt != genericStructTemplates.end()) {
+                    std::cout << "DEBUG: Detected generic struct instantiation: " << typeNameStr 
+                              << " with " << typeNameNode->genericArgs.size() << " type arguments" << std::endl;
+                    
+                    // Trigger monomorphization
+                    llvm::StructType* specializedType = monomorphizeStruct(typeNameStr, typeNameNode->genericArgs);
+                    if (!specializedType) {
+                        logError(typeNode->loc, "Failed to monomorphize " + typeNameStr);
+                        return nullptr;
+                    }
+                    
+                    llvmType = specializedType;
+                    break;
+                }
+            }
+
             // Signed integer types (64-bit default)
             if (typeNameStr == "Int" || typeNameStr == "int" || typeNameStr == "i64") {
                 llvmType = int64Type;

@@ -1,0 +1,13 @@
+# Simplified test for monomorphization
+# Tests that Box<Int> gets properly monomorphized
+
+struct Box<T> {
+    value<T>
+}
+
+main()<Int> -> {
+    # Create a Box<Int> variable  
+    # Use explicit initialization
+    b<Box<Int>> = { value = 42 }
+    return 0
+}

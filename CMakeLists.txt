@@ -84,6 +84,7 @@ set(VRE_SOURCES
     src/vre/llvm/cgen_util.cpp
     src/vre/llvm/cgen_expr.cpp
     src/vre/llvm/cgen_decl.cpp
+    src/vre/llvm/cgen_monomorph.cpp
     src/vre/llvm/cgen_stmt.cpp
     src/vre/llvm/cgen_helpers.cpp
     src/vre/llvm/cgen_string.cpp

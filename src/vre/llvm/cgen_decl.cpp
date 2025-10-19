@@ -484,6 +484,18 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
 
 void LLVMCodegen::visit(vyn::ast::StructDeclaration* node) {
     std::string nameStr = node->name->name;
+    
+    // Check if this is a generic struct (has type parameters like Box<T>)
+    if (!node->genericParams.empty()) {
+        std::cout << "DEBUG: Storing generic struct template: " << nameStr << " with " 
+                  << node->genericParams.size() << " type parameters" << std::endl;
+        // Store the AST node for later monomorphization when instantiated (e.g., Box<Int>)
+        genericStructTemplates[nameStr] = node;
+        m_currentLLVMValue = nullptr;
+        return; // Don't generate LLVM type yet
+    }
+    
+    // Non-generic struct: generate LLVM type immediately
     llvm::StructType* structType = llvm::StructType::create(*context, nameStr);
 
     UserTypeInfo typeInfo;
