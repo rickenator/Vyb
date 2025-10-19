@@ -62,27 +62,31 @@ cd Vyn
 make -C build -j
 
 # Run your first Vyn program
-echo 'main()<Int> -> return 42' > hello.vyn
+echo 'main()<Int> -> { return 42 }' > hello.vyn
 build/vyn hello.vyn  # Returns exit code 42
 
-# Try modern language features
+# Try select expressions with pattern matching
 cat > example.vyn << 'EOF'
 main()<Int> -> {
-    numbers<Vec<Int>> = Vec::new()
-    numbers.push(10)
-    numbers.push(20)
+    numbers<Vec<Int>> = Vec::new();
+    numbers.push(10);
+    numbers.push(20);
     
-    match numbers.len() {
-        0 => return 0,
-        2 => return numbers.get(0) + numbers.get(1),
-        _ => return -1
-    }
+    result<Int> = select(numbers.len()) -> {
+        0 -> 0,
+        2 -> {
+            sum<Int> = numbers.get(0) + numbers.get(1);
+            pass sum
+        },
+        ? -> -1
+    };
+    return result
 }
 EOF
 build/vyn example.vyn  # Returns 30
 
 # Complex return types with auto-serialization
-echo 'main()<Int,String> -> return 42, "Hello!"' > tuple.vyn
+echo 'main()<Int,String> -> { return 42, "Hello!" }' > tuple.vyn
 build/vyn tuple.vyn  # Outputs: [42, "Hello!"]
 ```
 
