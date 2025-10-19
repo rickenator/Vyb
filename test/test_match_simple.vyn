@@ -1,0 +1,15 @@
+// Simple match test
+
+test_match()<Void> -> {
+    x<Int const> = 2
+    
+    match (x) {
+        1 -> println("one"),
+        2 -> println("two"),
+        3 -> println("three")
+    }
+}
+
+main()<Void> -> {
+    test_match()
+}

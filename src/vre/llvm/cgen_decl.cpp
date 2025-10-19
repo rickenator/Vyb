@@ -446,6 +446,8 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
         if (returnType->isVoidTy()) {
             // Check if the last block has a terminator. If not, add ret void.
             if (!func->empty() && !func->back().getTerminator()) {
+                // Make sure we're inserting at the end of the last block
+                builder->SetInsertPoint(&func->back());
                 builder->CreateRetVoid();
             }
         } else {

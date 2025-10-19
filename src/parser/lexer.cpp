@@ -270,6 +270,7 @@ std::vector<vyn::token::Token> Lexer::tokenize() {
       case ';': emit_token(vyn::TokenType::SEMICOLON, ";"); break; 
       case '@': emit_token(vyn::TokenType::AT, "@"); break; 
       case '_': emit_token(vyn::TokenType::UNDERSCORE, "_"); break; 
+      case '?': emit_token(vyn::TokenType::QUESTION_MARK, "?"); break;
       default:
         // If no token was emitted by the switch, pos_ and column_ were not advanced by emit_token
         // Restore them to ensure the error message is correct and to avoid infinite loops if pos_ didn't change.

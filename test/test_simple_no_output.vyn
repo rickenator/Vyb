@@ -1,0 +1,5 @@
+// Super simple test
+
+main()<Void> -> {
+    x<Int const> = 42
+}

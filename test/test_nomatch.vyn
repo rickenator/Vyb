@@ -1,0 +1,11 @@
+// Test without match
+
+test()<Void> -> {
+    println("Hello from test")
+}
+
+main()<Void> -> {
+    println("Hello from main")
+    test()
+    println("Done")
+}

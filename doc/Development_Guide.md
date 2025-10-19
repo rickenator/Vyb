@@ -106,11 +106,11 @@ element<Int> = fixed[2]  // Array indexing
 #### Pattern Matching
 ```vyn
 describe_number(x<Int>)<String> -> {
-    match x {
-        0 => "zero",
-        1 => "one",
-        42 => "the answer", 
-        _ => "some number"
+    match (x) {
+        0 -> "zero",
+        1 -> "one",
+        42 -> "the answer", 
+        ? -> "some number"
     }
 }
 ```

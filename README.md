@@ -162,7 +162,7 @@ Vyn **v0.4.1** is a **complete systems programming language** ready for producti
 - **Structs**: `struct Point { x<Int>, y<Int> }` with field access (`p.x`, `p.y`)
 - **Control Flow**: `if/else`, `while/for` loops, `match` statements, `break/continue`
 - **Arithmetic**: Full binary operators (`+`, `-`, `*`, `/`, `==`, `!=`, `<`, `>`, etc.)
-- **Pattern Matching**: `match expr { pattern => result }` with comprehensive patterns
+- **Pattern Matching**: `match (expr) { pattern -> result }` with comprehensive patterns
 - **I/O**: `println()` for output, works with all data types including vectors
 
 ### ✅ **Advanced Type System**
@@ -311,12 +311,12 @@ struct Person {
 
 # Pattern matching with comprehensive match statements
 grade_level(age<Int>)<String> -> {
-    match age {
-        0 => "infant",
-        1 => "toddler", 
-        5 => "kindergarten",
-        18 => "adult",
-        _ => "student"
+    match (age) {
+        0 -> "infant",
+        1 -> "toddler", 
+        5 -> "kindergarten",
+        18 -> "adult",
+        ? -> "student"
     }
 }
 
@@ -487,10 +487,10 @@ struct Point {
 
 # Pattern matching with comprehensive patterns
 process_value(val<Int>)<String> -> {
-    match val {
-        0 => "zero",
-        1..10 => "small",        # Range patterns (planned)
-        _ => "large"
+    match (val) {
+        0 -> "zero",
+        1 -> "small",             # More patterns planned
+        ? -> "large"
     }
 }
 
@@ -750,11 +750,11 @@ count_to_ten()<Int> -> {
 
 # Pattern matching with match statements
 describe_number(x<Int>)<String> -> {
-    match x {
-        0 => "zero",
-        1 => "one", 
-        42 => "the answer",
-        _ => "some number"
+    match (x) {
+        0 -> "zero",
+        1 -> "one", 
+        42 -> "the answer",
+        ? -> "some number"
     }
 }
 ```
@@ -1405,7 +1405,7 @@ See `doc/` directory for detailed design documents and RFCs.
 - ✅ **Canonical Syntax Unification**: Complete migration to unified `my()`/`our()` constructors and `view`/`borrow` operators
 - ✅ **Modern Test Harness**: Parallel test runner managing 391+ tests with HTML/JSON reporting and failure triage
 - ✅ **Syntax Migration Tools**: Automated migration from legacy to canonical syntax with comprehensive reporting
-- ✅ **Match Statements**: Complete pattern matching with `=>` syntax and comprehensive patterns
+- ✅ **Match Statements**: Complete pattern matching with `->` arrow syntax and `?` wildcard; no-match results in NOP
 - ✅ **Break/Continue**: Loop control flow statements working in all loop types
 - ✅ **Vec<T> Collections**: Fully functional resizable arrays with all methods (`new`, `push`, `pop`, `len`, `get`)
 - ✅ **Modern Struct Syntax**: Updated to `field<Type>` syntax with perfect field access

@@ -1565,6 +1565,22 @@ void RangeExpression::accept(Visitor& visitor) {
     visitor.visit(this);
 }
 
+// --- BlockExpression ---
+BlockExpression::BlockExpression(SourceLocation loc, std::unique_ptr<BlockStatement> block)
+    : Expression(loc), block(std::move(block)) {}
+
+NodeType BlockExpression::getType() const {
+    return NodeType::BLOCK_EXPRESSION;
+}
+
+std::string BlockExpression::toString() const {
+    return "{ " + (block ? block->toString() : "nullptr") + " }";
+}
+
+void BlockExpression::accept(Visitor& visitor) {
+    visitor.visit(this);
+}
+
 // --- ThrowStatement ---
 ThrowStatement::ThrowStatement(SourceLocation loc, ExprPtr expr)
     : Statement(loc), expr(std::move(expr)) {}

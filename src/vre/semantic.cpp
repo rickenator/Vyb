@@ -1071,6 +1071,11 @@ void SemanticAnalyzer::visit(ast::RangeExpression* node) {
         node->step->accept(*this);
     }
 }
+void SemanticAnalyzer::visit(ast::BlockExpression* node) {
+    if (node->block) {
+        node->block->accept(*this);
+    }
+}
 void SemanticAnalyzer::visit(ast::ListComprehension* node) {}
 void SemanticAnalyzer::visit(ast::GenericInstantiationExpression* node) {
     if (!node || !node->baseExpression) {

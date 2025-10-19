@@ -12,7 +12,7 @@ This document outlines the completed features, ongoing development, and future c
 3.  **Type System:** Working functions, variables, structs, control flow
 4.  **Memory Safety:** Ownership types (`my<T>`, `our<T>`, `their<T>`) with borrowing
 5.  **Parser:** Comprehensive syntax support including templates, async, classes
-6.  **✅ Pattern Matching (COMPLETED):** Match statements with `=>` syntax and comprehensive pattern matching
+6.  **✅ Pattern Matching (COMPLETED):** Match statements with `->` arrow syntax and `?` wildcard; no-match continues as NOP
 7.  **✅ Loop Control Flow (COMPLETED):** Break and continue statements working in all loop constructs
 8.  **✅ Resizable Collections (COMPLETED):** Vec<T> with full method support (new, push, pop, len, get)
 9.  **✅ Vec Iteration (COMPLETED v0.4.1):** `for (item in vec)` with mandatory parentheses, full break/continue support
@@ -78,6 +78,7 @@ The current primary focus is on:
 6.  **✅ String Operations (COMPLETED v0.4.0):** Complete String type with natural literal syntax and 11 methods
 7.  **Enhanced Error Messages:** More detailed compilation feedback and suggestions
 8.  **Tuple Element Access:** `.0`, `.1`, `.2` syntax for accessing tuple elements
+9.  **⏳ Select Expressions (MID PRIORITY):** Expression-based pattern matching with `pass` keyword for explicit returns
 
 ## Project Structure and Organization
 
@@ -161,6 +162,157 @@ As the Vyn project grows, a more structured directory layout will be beneficial 
 -   **User Guides and Tutorials**: Create user-friendly guides and tutorials covering language features, build process, and using the standard library.
 -   **API Reference**: Generate or manually create a reference documentation for the standard library and core compiler interfaces.
 -   **Compiler Internals Documentation**: Add more detailed documentation on compiler internals, including the AST, semantic analysis, and code generation phases.
+
+### Select Expressions
+
+A powerful expression-based pattern matching construct that complements the existing `match` statement:
+
+- **Core Concept**: `select` is an **expression** (not a statement) that pattern-matches on a value and returns a result
+  - Auto-infers return type from context or defaults to `Void`
+  - Uses `pass` keyword to explicitly return values from match arms
+  - Syntactic sugar for complex if-then-else chains
+
+- **Syntax**:
+  ```vyn
+  result<String> = select(value) -> {
+      pattern1 -> { pass expression1 }
+      pattern2 -> { pass expression2 }
+      ?        -> { pass default_expression }
+  }
+  ```
+
+- **Key Features**:
+  - **Type Inference**: Return type inferred from LHS variable declaration
+  - **Expression-Based**: Can be used anywhere an expression is valid
+  - **Explicit Returns**: `pass` keyword makes value flow explicit
+  - **Value Equality**: Pattern matching uses value equality (requires careful Struct comparison semantics)
+  - **String Concatenation**: Supports `+` operator for mixed-type concatenation (likely using JSON representation)
+
+- **Example Use Cases**:
+  ```vyn
+  // Auto-typed from LHS
+  message<String> = select(frequency) -> {
+      0.0 -> { pass "This " + frequency }
+      1.0 -> { pass "That " + frequency }
+      ?   -> { increment_other(); pass "The other" }
+  }
+  
+  // Void return (side effects only)
+  select(status_code) -> {
+      200 -> { log("Success") }
+      404 -> { log("Not Found") }
+      ?   -> { log("Unknown: " + status_code) }
+  }
+  
+  // Inline simple cases
+  value<Int> = select(x) -> { 0 -> { pass 10 }, 1 -> { pass 20 }, ? -> { pass 0 } }
+  ```
+
+- **Implementation Requirements**:
+  1. **Type System**: Implement value-based equality for all types including Structs
+  2. **String Concatenation**: Auto-conversion of non-String types (probably via JSON serialization)
+  3. **`pass` Keyword**: New keyword for explicit value returns in select arms
+  4. **Type Inference**: Analyze LHS to determine select expression's return type
+  5. **Codegen**: Generate optimal LLVM IR (similar to match but with return values)
+
+- **Distinctions from Match**:
+  - `match`: Statement-based, used for control flow, no return value
+  - `select`: Expression-based, returns a value, can be assigned
+  - `match` arms use `->` for direct execution
+  - `select` arms use `-> { pass value }` for explicit returns
+
+- **Benefits**:
+  - More expressive than nested ternary operators
+  - Cleaner than long if-else-if chains
+  - Type-safe pattern matching with value returns
+  - Natural fit for functional-style programming
+
+**Status**: Proposed for mid-priority implementation after current core features stabilize.
+
+#### Range/Comparison Patterns
+
+An enhancement to both `match` and `select` to support comparison-based patterns:
+
+- **Motivation**: Enable elegant handling of numeric ranges and ordered comparisons without full class/interface system
+  - Works with any comparable type (Int, Float, String with lexical ordering)
+  - Reduces verbose if-else chains for range-based logic
+  - Complements exact-match patterns with relational operators
+
+- **Syntax** (using `select` as example):
+  ```vyn
+  label<String> = select(age) -> {
+      == 0  -> { pass "infant" }
+      >= 1  -> { pass "toddler" }
+      >= 5  -> { pass "kindergarten" }
+      >= 18 -> { pass "adult" }
+      ?     -> { pass "student" }
+  }
+  
+  grade<String> = select(score) -> {
+      >= 90 -> { pass "A" }
+      >= 80 -> { pass "B" }
+      >= 70 -> { pass "C" }
+      >= 60 -> { pass "D" }
+      ?     -> { pass "F" }
+  }
+  
+  // String lexical comparison (requires String comparison operators)
+  category<String> = select(name) -> {
+      < "M"  -> { pass "First Half" }
+      >= "M" -> { pass "Second Half" }
+  }
+  ```
+
+- **Supported Operators**:
+  - `==` - Exact equality (same as current behavior)
+  - `!=` - Not equal
+  - `<`  - Less than
+  - `<=` - Less than or equal
+  - `>`  - Greater than
+  - `>=` - Greater than or equal
+
+- **Evaluation Semantics**:
+  - Patterns evaluated **top-to-bottom** (order matters!)
+  - First matching pattern wins (early exit)
+  - Wildcard `?` acts as catch-all (should be last)
+  - All comparison operators use the matched value as right operand: `pattern_op value`
+  - Example: `>= 18` means "is the matched value >= 18?"
+
+- **Type Requirements**:
+  - Type must support the comparison operator used
+  - **Current Support**: Int, Float (have built-in comparison)
+  - **Future Support**: String (requires lexical comparison implementation)
+  - **Struct Support**: Requires explicit comparison operator overloading (future polymorphism feature)
+
+- **Implementation Prerequisites**:
+  1. Extend pattern AST to include comparison operators
+  2. Implement comparison codegen for all supported types
+  3. Add String comparison operators (`<`, `<=`, `>`, `>=`) for lexical ordering
+  4. Ensure top-to-bottom evaluation order in codegen
+  5. Type checking to verify comparison operator compatibility
+
+- **Same Syntax for Match**:
+  ```vyn
+  match (temperature) {
+      < 0   -> println("Freezing")
+      < 20  -> println("Cold")
+      < 30  -> println("Comfortable")
+      >= 30 -> println("Hot")
+  }
+  ```
+
+- **Benefits**:
+  - Natural expression of range-based logic
+  - Avoids verbose chained comparisons
+  - Works without complex type system (interfaces/traits)
+  - Clear, readable code for categorization problems
+
+- **Edge Cases**:
+  - Overlapping patterns: first match wins (explicit ordering requirement)
+  - Missing wildcard: if no pattern matches, `select` behavior TBD (error? default value? Void?)
+  - Non-comparable types: compile-time error
+
+**Status**: Future extension to match/select, depends on String comparison operators.
 
 ### Bundles & Sharing System
 
