@@ -1,0 +1,18 @@
+# Test generic trait implementation with monomorphization
+# NOTE: Phase 5 validates parsing and struct monomorphization
+# Phase 6 will add Self resolution and method monomorphization
+
+struct Box<T> {
+    value<T>
+}
+
+main()<Int> -> {
+    # Create Box<Int> - validates monomorphization works
+    b<Box<Int>> = Box<Int> { value = 42 }
+    
+    # TODO Phase 6: Generic trait implementations with method bodies
+    # trait Display { show(self<Self>)<String> }
+    # impl<T> Display for Box<T> { ... }
+    
+    return 0
+}
