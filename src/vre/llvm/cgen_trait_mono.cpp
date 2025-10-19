@@ -248,14 +248,18 @@ llvm::Function* LLVMCodegen::monomorphizeTraitMethod(const std::string& concrete
                         module.get()
                     );
                     
-                    // Cache it before generating body
+                                        // Cache it before generating body
                     monomorphizedMethods[cacheKey] = specializedFunc;
                     
                     // Generate the function body with type substitution active
                     std::cout << "DEBUG: Generating specialized function body..." << std::endl;
                     
-                    // Save current state
+                    // Save current state - INCLUDING builder insert point!
                     auto savedTypeSubstitutions = currentTypeSubstitutions;
+                    auto savedNamedValues = namedValues;
+                    llvm::BasicBlock* savedInsertBlock = builder->GetInsertBlock();
+                    llvm::BasicBlock::iterator savedInsertPoint = builder->GetInsertPoint();
+                    
                     currentTypeSubstitutions = typeSubstitutions;
                     
                     // Generate function body by visiting the method AST
@@ -264,7 +268,6 @@ llvm::Function* LLVMCodegen::monomorphizeTraitMethod(const std::string& concrete
                     builder->SetInsertPoint(entry);
                     
                     // Set up named values for parameters
-                    auto savedNamedValues = namedValues;
                     namedValues.clear();
                     
                     size_t argIdx = 0;
@@ -304,9 +307,16 @@ llvm::Function* LLVMCodegen::monomorphizeTraitMethod(const std::string& concrete
                         }
                     }
                     
-                    // Restore state
+                    // Restore state - INCLUDING builder insert point!
                     namedValues = savedNamedValues;
                     currentTypeSubstitutions = savedTypeSubstitutions;
+                    if (savedInsertBlock) {
+                        if (savedInsertPoint != savedInsertBlock->end()) {
+                            builder->SetInsertPoint(savedInsertBlock, savedInsertPoint);
+                        } else {
+                            builder->SetInsertPoint(savedInsertBlock);
+                        }
+                    }
                     
                     std::cout << "DEBUG: Successfully generated specialized function: " << specializedName << std::endl;
                     return specializedFunc;
@@ -323,11 +333,17 @@ llvm::Function* LLVMCodegen::monomorphizeTraitMethod(const std::string& concrete
 llvm::Type* LLVMCodegen::resolveTypeForMonomorphization(const TypePattern& pattern, 
                                                         const std::map<std::string, std::string>& substitutions) {
     std::string mangledName = pattern.toMangled();
-    std::string structName = "struct." + mangledName;
     
     std::cout << "DEBUG: Resolving type for pattern: " << mangledName << std::endl;
     
-    // Check if struct type already exists
+    // Check if struct type already exists (without "struct." prefix - the name used in monomorphizeStruct)
+    if (llvm::StructType* structType = llvm::StructType::getTypeByName(*context, mangledName)) {
+        std::cout << "DEBUG: Found existing struct type: " << mangledName << std::endl;
+        return structType;
+    }
+    
+    // Also try with "struct." prefix for compatibility
+    std::string structName = "struct." + mangledName;
     if (llvm::StructType* structType = llvm::StructType::getTypeByName(*context, structName)) {
         std::cout << "DEBUG: Found existing struct type: " << structName << std::endl;
         return structType;

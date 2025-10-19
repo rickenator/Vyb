@@ -117,8 +117,13 @@ void LLVMCodegen::generate(vyn::ast::Module* astModule, const std::string& outpu
     // Finalize debug information before verification
     finalizeDebugInfo();
 
-    if (llvm::verifyModule(*module, &llvm::errs())) {
+    bool verificationFailed = llvm::verifyModule(*module, &llvm::errs());
+    if (verificationFailed) {
         logError(SourceLocation(), "LLVM module verification failed.");
+        // Still print the IR for debugging purposes
+        std::cerr << "\n\n=== INVALID LLVM IR (for debugging) ===\n" << std::endl;
+        module->print(llvm::errs(), nullptr);
+        std::cerr << "\n=== END INVALID IR ===\n" << std::endl;
         return;
     }
 

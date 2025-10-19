@@ -431,7 +431,8 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
     if (auto ident = dynamic_cast<ast::Identifier*>(node->callee.get())) {
         const std::string& name = ident->name;
         if (name == "lit" || name == "notype" || name == "bare" || name == "deserial" || 
-            name == "borrow" || name == "view" || name == "my" || name == "their" || name == "our") {
+            name == "borrow" || name == "view" || name == "my" || name == "their" || name == "our" ||
+            name == "println") {
             isIntrinsic = true;
         }
     }
@@ -568,6 +569,22 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             ast::TypeNode* resultType = new ast::TypeName(node->loc, std::move(ownershipId), std::move(ownershipArgs));
             expressionTypes[node] = resultType;
             node->type = std::shared_ptr<ast::TypeNode>(resultType->clone().release());
+            return;
+        }
+        
+        // Handle println intrinsic
+        if (name == "println") {
+            // println accepts one argument of any type and returns Void
+            if (node->arguments.size() != 1) {
+                addError("println() expects exactly one argument", node);
+                return;
+            }
+            
+            // Create Void return type
+            auto voidId = std::make_unique<ast::Identifier>(node->loc, "Void");
+            ast::TypeNode* voidType = new ast::TypeName(node->loc, std::move(voidId), std::vector<ast::TypeNodePtr>{});
+            expressionTypes[node] = voidType;
+            node->type = std::shared_ptr<ast::TypeNode>(voidType->clone().release());
             return;
         }
     }
