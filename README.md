@@ -236,6 +236,9 @@ main()<Void> -> {
 - ✅ Comprehensive test coverage
 
 ### ✅ **Trait System (Phase 1 - v0.4.2)**
+
+**Philosophy:** Vyn uses **traits + structs** instead of classes and inheritance. This provides polymorphism, code reuse, and composition without the complexity and pitfalls of OOP class hierarchies. See [`doc/WHY_TRAITS_NOT_CLASSES.md`](doc/WHY_TRAITS_NOT_CLASSES.md) for detailed rationale.
+
 - **Trait Declarations**: Define interfaces with method signatures
   ```vyn
   trait Printable {
@@ -259,6 +262,13 @@ main()<Void> -> {
 - **Impl Validation**: `impl Trait for Type` blocks validated against trait signatures
 - **Self Type**: Methods use `Self` type parameter for trait implementors
 - **Built-in Traits**: `Comparable`, `Equatable`, `Numeric`, `Hashable` available for primitives
+
+**Why Traits > Classes:**
+- ✅ Multiple trait implementations (no diamond problem)
+- ✅ Composition over inheritance (more flexible)
+- ✅ Extension without modification (impl traits for any type)
+- ✅ Static dispatch (zero-cost abstractions)
+- ✅ No fragile base class problem
 
 **Coming in Phase 2:**
 - Trait method calls on values (`value.method()`)
