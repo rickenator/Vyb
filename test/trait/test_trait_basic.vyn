@@ -1,0 +1,19 @@
+// Basic trait declaration test
+// Tests Phase 1: Trait declarations with method signatures
+
+trait Printable {
+    print(self<Self>)<Void> -> { }
+    to_string(self<Self>)<String> -> { }
+}
+
+trait Comparable {
+    lt(self<Self>, other<Self>)<Bool> -> { }
+    eq(self<Self>, other<Self>)<Bool> -> {
+        // Default implementation
+        return !(self.lt(other)) && !(other.lt(self));
+    }
+}
+
+main()<Int> -> {
+    return 42;
+}

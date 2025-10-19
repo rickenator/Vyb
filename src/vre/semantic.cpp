@@ -383,39 +383,7 @@ void SemanticAnalyzer::visit(ast::ClassDeclaration* node) {
 // Removed visit(ast::ConstructorDeclaration* node)
 // Removed visit(ast::DestructorDeclaration* node)
 
-void SemanticAnalyzer::visit(ast::TraitDeclaration* node) {
-    // Body commented out due to incomplete type errors from build log.
-    // Requires ast.hpp to have full definition of TraitDeclaration.
-    // if (node && node->id && isReservedWord(node->id->name)) {
-    //     addError("Identifier \\\"" + node->id->name + "\\\" is a reserved word and cannot be used as a trait name.", node->id.get());
-    // }
-    // if (node && node->id && currentScope->lookupDirect(node->id->name)) {
-    //     addError("Redefinition of trait \\\"" + node->id->name + "\\\" in the same scope.", node->id.get());
-    // }
-    // if (node && node->id) {
-    //    currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, node->id->name, false, new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->id->loc, node->id->name))}); // Assuming id has loc and name
-    // }
-
-    // enterScope();
-    // if (node) {
-    //     for (auto& member : node->methods) { 
-    //         if(member) member->accept(*this);
-    //     }
-    // }
-    // exitScope();
-}
-
-void SemanticAnalyzer::visit(ast::ImplDeclaration* node) {
-    if (node->traitType) node->traitType->accept(*this);
-    if (node->selfType) node->selfType->accept(*this);
-
-    enterScope();
-    for (auto& method : node->methods) { 
-        if(method) method->accept(*this);
-        // Additionally, check if methods match trait definition
-    }
-    exitScope();
-}
+// Trait and Impl visitor implementations moved below after TemplateDeclaration
 
 
 void SemanticAnalyzer::visit(ast::NamespaceDeclaration* node) {
@@ -1836,6 +1804,134 @@ void SemanticAnalyzer::visit(ast::TemplateDeclaration* node) {
     
     std::cout << "DEBUG: Template '" << templateName << "' registered successfully" << std::endl;
 }
+
+void SemanticAnalyzer::visit(ast::TraitDeclaration* node) {
+    if (!node || !node->name) {
+        addError("Malformed trait declaration.", node);
+        return;
+    }
+    
+    const std::string& traitName = node->name->name;
+    
+    // Check if trait is already registered
+    if (traitRegistry.find(traitName) != traitRegistry.end()) {
+        addError("Trait '" + traitName + "' is already defined.", node);
+        return;
+    }
+    
+    std::cout << "DEBUG: Registering trait: " << traitName << std::endl;
+    
+    // Validate generic parameters
+    for (const auto& param : node->genericParams) {
+        if (!param || !param->name) {
+            addError("Invalid generic parameter in trait '" + traitName + "'.", node);
+            return;
+        }
+    }
+    
+    // Validate trait methods
+    for (const auto& method : node->methods) {
+        if (!method || !method->id) {
+            addError("Invalid method in trait '" + traitName + "'.", node);
+            return;
+        }
+        
+        // Check for self parameter
+        bool hasSelfParam = false;
+        if (!method->params.empty() && method->params[0].name) {
+            if (method->params[0].name->name == "self") {
+                hasSelfParam = true;
+            }
+        }
+        
+        if (!hasSelfParam) {
+            addError("Trait method '" + method->id->name + "' must have 'self' as first parameter.", method.get());
+        }
+        
+        // Validate return type
+        if (!method->returnTypeNode) {
+            addError("Trait method '" + method->id->name + "' must declare a return type.", method.get());
+        }
+        
+        std::cout << "DEBUG:   Method: " << method->id->name 
+                  << " (default impl: " << (method->body ? "yes" : "no") << ")" << std::endl;
+    }
+    
+    // Register the trait
+    registerTrait(node);
+    
+    // Register trait as a type in the symbol table
+    SymbolInfo traitSym;
+    traitSym.name = traitName;
+    traitSym.kind = SymbolInfo::Kind::Type;
+    traitSym.type = nullptr; // Traits are interface types, not concrete
+    currentScope->add(traitSym);
+    
+    std::cout << "DEBUG: Trait '" << traitName << "' registered successfully with " 
+              << node->methods.size() << " methods" << std::endl;
+}
+
+void SemanticAnalyzer::visit(ast::ImplDeclaration* node) {
+    if (!node || !node->selfType) {
+        addError("Malformed impl declaration.", node);
+        return;
+    }
+    
+    std::string typeName = node->selfType->toString();
+    std::string traitName;
+    
+    if (node->traitType) {
+        // This is a trait implementation: impl Trait for Type
+        traitName = node->traitType->toString();
+        
+        std::cout << "DEBUG: Processing impl " << traitName << " for " << typeName << std::endl;
+        
+        // Check if trait exists
+        TraitInfo* traitInfo = findTrait(traitName);
+        if (!traitInfo) {
+            addError("Trait '" + traitName + "' is not defined.", node);
+            return;
+        }
+        
+        // Check if type exists (for user-defined types)
+        // Primitives like Int, Float, String are always valid
+        bool isBuiltinType = (typeName == "Int" || typeName == "Float" || 
+                             typeName == "Bool" || typeName == "String" ||
+                             typeName == "Char" || typeName == "Rune");
+        
+        if (!isBuiltinType) {
+            SymbolInfo* typeSym = currentScope->lookup(typeName);
+            if (!typeSym || typeSym->kind != SymbolInfo::Kind::Type) {
+                addError("Type '" + typeName + "' is not defined.", node);
+                return;
+            }
+        }
+        
+        // Validate that all required trait methods are implemented
+        if (!validateTraitImpl(typeName, traitName, node->methods)) {
+            addError("Incomplete implementation of trait '" + traitName + "' for type '" + typeName + "'.", node);
+            return;
+        }
+        
+        // Register the trait implementation
+        registerTraitImpl(node);
+        
+        std::cout << "DEBUG: Successfully registered impl " << traitName << " for " << typeName 
+                  << " with " << node->methods.size() << " methods" << std::endl;
+    } else {
+        // This is an inherent impl: impl Type { ... }
+        // Just adds methods directly to the type without a trait
+        std::cout << "DEBUG: Processing inherent impl for " << typeName << std::endl;
+        
+        // Visit all methods to validate them
+        for (const auto& method : node->methods) {
+            if (method) {
+                method->accept(*this);
+            }
+        }
+    }
+}
+
 void SemanticAnalyzer::visit(ast::ThrowStatement* node) {}
 
 void SemanticAnalyzer::visit(ast::TypeNode* node) {
@@ -2579,19 +2675,23 @@ bool SemanticAnalyzer::validateTemplateConstraints(TemplateInfo* templateInfo,
 
 bool SemanticAnalyzer::typeImplementsTrait(const std::string& typeName, const std::string& traitName) {
     // Check if the type implements the specified trait
-    // This is a simplified implementation - a full system would:
-    // 1. Look up trait implementations in the symbol table
-    // 2. Check for built-in trait implementations
-    // 3. Handle generic trait implementations
     
-    // For now, implement basic built-in type trait support
+    // First, check for built-in trait implementations
     if (isBuiltinTypeCompatible(typeName, traitName)) {
         return true;
     }
     
-    // Look up user-defined implementations
-    // TODO: Implement proper trait implementation lookup
-    // This would search for impl declarations matching the type and trait
+    // Look up user-defined trait implementations
+    auto typeIt = traitImpls.find(typeName);
+    if (typeIt != traitImpls.end()) {
+        auto traitIt = typeIt->second.find(traitName);
+        if (traitIt != typeIt->second.end()) {
+            // Found an impl block for this type and trait
+            return true;
+        }
+    }
+    
+    // TODO: Handle generic trait implementations (impl<T> Trait for Vec<T>)
     
     return false;
 }
@@ -2619,7 +2719,13 @@ std::vector<std::string> SemanticAnalyzer::getImplementedTraits(const std::strin
         traits.push_back("Equatable");
     }
     
-    // TODO: Look up user-defined trait implementations
+    // Look up user-defined trait implementations
+    auto typeIt = traitImpls.find(typeName);
+    if (typeIt != traitImpls.end()) {
+        for (const auto& traitEntry : typeIt->second) {
+            traits.push_back(traitEntry.first);
+        }
+    }
     
     return traits;
 }
@@ -2974,6 +3080,126 @@ void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, as
     } else {
         addError("Unknown Vec method: " + methodName, node);
     }
+}
+
+// ===== Trait Management Methods =====
+
+void SemanticAnalyzer::registerTrait(ast::TraitDeclaration* traitDecl) {
+    if (!traitDecl || !traitDecl->name) {
+        return;
+    }
+    
+    auto traitInfo = std::make_unique<TraitInfo>(traitDecl);
+    const std::string& traitName = traitInfo->name;
+    
+    traitRegistry[traitName] = std::move(traitInfo);
+}
+
+SemanticAnalyzer::TraitInfo* SemanticAnalyzer::findTrait(const std::string& traitName) {
+    auto it = traitRegistry.find(traitName);
+    if (it != traitRegistry.end()) {
+        return it->second.get();
+    }
+    return nullptr;
+}
+
+void SemanticAnalyzer::registerTraitImpl(ast::ImplDeclaration* implDecl) {
+    if (!implDecl || !implDecl->selfType || !implDecl->traitType) {
+        return;
+    }
+    
+    std::string typeName = implDecl->selfType->toString();
+    std::string traitName = implDecl->traitType->toString();
+    
+    // Store the implementation methods
+    std::vector<ast::FunctionDeclaration*> implMethods;
+    for (const auto& method : implDecl->methods) {
+        if (method) {
+            implMethods.push_back(method.get());
+        }
+    }
+    
+    traitImpls[typeName][traitName] = implMethods;
+}
+
+bool SemanticAnalyzer::validateTraitImpl(const std::string& typeName, 
+                                        const std::string& traitName,
+                                        const std::vector<std::unique_ptr<ast::FunctionDeclaration>>& methods) {
+    TraitInfo* traitInfo = findTrait(traitName);
+    if (!traitInfo) {
+        return false;
+    }
+    
+    // Check that all required trait methods are implemented
+    for (const auto& traitMethod : traitInfo->methods) {
+        // Skip methods with default implementations
+        if (traitMethod.hasDefaultImpl) {
+            continue;
+        }
+        
+        bool found = false;
+        for (const auto& implMethod : methods) {
+            if (implMethod && implMethod->id && 
+                implMethod->id->name == traitMethod.name) {
+                
+                // Validate signature matches
+                if (!traitMethodSignatureMatches(traitMethod, implMethod.get())) {
+                    std::cout << "DEBUG: Method signature mismatch for: " << traitMethod.name << std::endl;
+                    return false;
+                }
+                
+                found = true;
+                break;
+            }
+        }
+        
+        if (!found) {
+            std::cout << "DEBUG: Missing required trait method: " << traitMethod.name << std::endl;
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+bool SemanticAnalyzer::traitMethodSignatureMatches(const TraitMethod& traitMethod,
+                                                   ast::FunctionDeclaration* implMethod) {
+    if (!implMethod || !implMethod->id) {
+        return false;
+    }
+    
+    // Check method name
+    if (implMethod->id->name != traitMethod.name) {
+        return false;
+    }
+    
+    // Check parameter count (including self)
+    if (implMethod->params.size() != traitMethod.parameterNames.size()) {
+        std::cout << "DEBUG: Parameter count mismatch: " 
+                  << implMethod->params.size() << " vs " 
+                  << traitMethod.parameterNames.size() << std::endl;
+        return false;
+    }
+    
+    // Check return type matches
+    if (implMethod->returnTypeNode && traitMethod.returnType) {
+        std::string implReturnType = implMethod->returnTypeNode->toString();
+        std::string traitReturnType = traitMethod.returnType->toString();
+        
+        if (implReturnType != traitReturnType) {
+            std::cout << "DEBUG: Return type mismatch: " 
+                      << implReturnType << " vs " << traitReturnType << std::endl;
+            return false;
+        }
+    } else if (implMethod->returnTypeNode || traitMethod.returnType) {
+        // One has return type, other doesn't
+        return false;
+    }
+    
+    // TODO: More rigorous type checking for parameters
+    // For now, just basic validation
+    
+    return true;
 }
 
 } // Added missing closing brace for namespace vyn
