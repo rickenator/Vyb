@@ -3,7 +3,7 @@ source_filename = "VynModule"
 
 define i64 @main() !dbg !4 {
 entry:
-  ret i64 42, !dbg !8
+  ret i64 0, !dbg !8
 }
 
 declare void @__vyn_println(ptr)
@@ -16,11 +16,11 @@ declare ptr @__vyn_convert_lit_string(ptr)
 !llvm.module.flags = !{!2, !3}
 
 !0 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, file: !1, producer: "Vyn Compiler", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)
-!1 = !DIFile(filename: "test_mono_basic.vyn.ll", directory: "/home/rick/Projects/Vyn/test/aspect")
+!1 = !DIFile(filename: "test_type_param_simple.vyn.ll", directory: "/home/rick/Projects/Vyn/test/aspect")
 !2 = !{i32 2, !"Debug Info Version", i32 3}
 !3 = !{i32 2, !"Dwarf Version", i32 4}
-!4 = distinct !DISubprogram(name: "main", linkageName: "main", scope: !1, file: !1, line: 8, type: !5, scopeLine: 8, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)
+!4 = distinct !DISubprogram(name: "main", linkageName: "main", scope: !1, file: !1, line: 20, type: !5, scopeLine: 20, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)
 !5 = !DISubroutineType(types: !6)
 !6 = !{!7}
 !7 = !DIBasicType(name: "i64", size: 64, encoding: DW_ATE_signed)
-!8 = !DILocation(line: 8, column: 1, scope: !4)
+!8 = !DILocation(line: 20, column: 1, scope: !4)

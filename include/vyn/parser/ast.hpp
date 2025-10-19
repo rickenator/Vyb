@@ -1097,9 +1097,10 @@ public:
     std::vector<FunctionParameter> params;
     std::unique_ptr<BlockStatement> body;
     bool isAsync;
+    bool hasDefaultImpl; // true if method has arrow (-> {...}), false if mandatory (no arrow)
     TypeNodePtr returnTypeNode; // Optional return type annotation
 
-    FunctionDeclaration(SourceLocation loc, std::unique_ptr<Identifier> id, std::vector<FunctionParameter> params, std::unique_ptr<BlockStatement> body, bool isAsync = false, TypeNodePtr returnTypeNode = nullptr);
+    FunctionDeclaration(SourceLocation loc, std::unique_ptr<Identifier> id, std::vector<FunctionParameter> params, std::unique_ptr<BlockStatement> body, bool isAsync = false, TypeNodePtr returnTypeNode = nullptr, bool hasDefaultImpl = true);
     ~FunctionDeclaration() override = default;
     NodeType getType() const override;
     std::string toString() const override;

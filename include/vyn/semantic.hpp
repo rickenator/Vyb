@@ -176,6 +176,60 @@ struct GenericImplInfo {
     }
 };
 
+// Information about aspect/trait methods and the trait itself
+// Declared before SemanticAnalyzer for use in public API
+struct TraitMethod {
+    std::string name;
+    std::vector<std::string> parameterNames;
+    std::vector<ast::TypeNode*> parameterTypes;
+    ast::TypeNode* returnType;
+    ast::FunctionDeclaration* declaration; // Original AST node
+    bool hasDefaultImpl;
+};
+
+struct TraitInfo {
+    std::string name;
+    std::vector<std::string> genericParams;
+    std::vector<std::string> superTraits; // Aspect inheritance
+    std::vector<TraitMethod> methods;
+    ast::AspectDeclaration* declaration; // Original AST node
+    
+    TraitInfo(ast::AspectDeclaration* decl) : declaration(decl) {
+        if (decl->name) {
+            name = decl->name->name;
+        }
+        
+        // Extract generic parameters
+        for (const auto& param : decl->genericParams) {
+            if (param && param->name) {
+                genericParams.push_back(param->name->name);
+            }
+        }
+        
+        // Extract methods
+        for (const auto& method : decl->methods) {
+            if (method) {
+                TraitMethod tm;
+                if (method->id) {
+                    tm.name = method->id->name;
+                }
+                
+                // Extract parameters
+                for (const auto& param : method->params) {
+                    tm.parameterNames.push_back(param.name->name);
+                    tm.parameterTypes.push_back(param.typeNode.get());
+                }
+                
+                tm.returnType = method->returnTypeNode.get();
+                tm.declaration = method.get();
+                tm.hasDefaultImpl = (method->body != nullptr);
+                
+                methods.push_back(std::move(tm));
+            }
+        }
+    }
+};
+
 class SemanticAnalyzer : public ast::Visitor {
 public:
     explicit SemanticAnalyzer(Driver& driver);
@@ -185,6 +239,10 @@ public:
     // Access to generic trait implementations for monomorphization
     const std::unordered_map<std::string, std::unordered_map<std::string, std::unique_ptr<GenericImplInfo>>>& 
     getGenericTraitImpls() const { return genericTraitImpls; }
+    
+    // Access to aspect/trait registry
+    const std::unordered_map<std::string, std::unique_ptr<TraitInfo>>& 
+    getTraitRegistry() const { return traitRegistry; }
 
     // Helper methods
     bool isInLoop();
@@ -312,59 +370,6 @@ public:
         }
     };
 
-    // Trait storage system - public for access
-    struct TraitMethod {
-        std::string name;
-        std::vector<std::string> parameterNames;
-        std::vector<ast::TypeNode*> parameterTypes;
-        ast::TypeNode* returnType;
-        ast::FunctionDeclaration* declaration; // Original AST node
-        bool hasDefaultImpl;
-    };
-
-    struct TraitInfo {
-        std::string name;
-        std::vector<std::string> genericParams;
-        std::vector<std::string> superTraits; // Aspect inheritance
-        std::vector<TraitMethod> methods;
-        ast::AspectDeclaration* declaration; // Original AST node
-        
-        TraitInfo(ast::AspectDeclaration* decl) : declaration(decl) {
-            if (decl->name) {
-                name = decl->name->name;
-            }
-            
-            // Extract generic parameters
-            for (const auto& param : decl->genericParams) {
-                if (param && param->name) {
-                    genericParams.push_back(param->name->name);
-                }
-            }
-            
-            // Extract methods
-            for (const auto& method : decl->methods) {
-                if (method) {
-                    TraitMethod tm;
-                    if (method->id) {
-                        tm.name = method->id->name;
-                    }
-                    
-                    // Extract parameters
-                    for (const auto& param : method->params) {
-                        tm.parameterNames.push_back(param.name->name);
-                        tm.parameterTypes.push_back(param.typeNode.get());
-                    }
-                    
-                    tm.returnType = method->returnTypeNode.get();
-                    tm.declaration = method.get();
-                    tm.hasDefaultImpl = (method->body != nullptr);
-                    
-                    methods.push_back(std::move(tm));
-                }
-            }
-        }
-    };
-
 private:
     Driver& driver_;
     SymbolTable* currentScope;
@@ -434,6 +439,10 @@ private:
                           const std::vector<std::unique_ptr<ast::FunctionDeclaration>>& methods);
     bool traitMethodSignatureMatches(const TraitMethod& traitMethod,
                                     ast::FunctionDeclaration* implMethod);
+    
+    // Pattern matching helper for generic type matching
+    // Returns true if concrete type (e.g., "Box<Int>") matches pattern (e.g., "Box<T>")
+    bool matchesPattern(const std::string& concreteType, const std::string& pattern);
 };
 
 } // namespace vyn

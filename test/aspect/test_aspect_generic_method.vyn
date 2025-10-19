@@ -1,0 +1,23 @@
+// Test: Generic aspect method calls
+// Test calling methods on generic aspect implementations
+
+aspect Display {
+    show(self<Self>)<Void>  // Mandatory method (no arrow = must implement)
+}
+
+struct Box<T> {
+    value<T>
+}
+
+bind<T> Display -> Box<T> {
+    show(self<Self>)<Void> -> {
+        println("Box contains a value");
+    }
+}
+
+main()<Int> -> {
+    box<Box<Int>> = Box<Int> { value = 42 };
+    box.show();
+    println("Test passed!");
+    return 0;
+}

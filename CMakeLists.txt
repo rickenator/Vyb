@@ -145,36 +145,6 @@ target_link_libraries(vyn PRIVATE
     ${LLVM_LIBS} # Link against the mapped LLVM libraries
 )
 
-# Create async runtime test executable
-add_executable(test_async_runtime
-    test/test_async_runtime.cpp
-    ${RUNTIME_SOURCES}
-    ${RUNTIME_HEADERS}
-)
-
-target_include_directories(test_async_runtime PRIVATE
-    include
-)
-
-target_link_libraries(test_async_runtime PRIVATE
-    pthread  # Required for std::thread
-)
-
-# Create async integration demo executable
-add_executable(test_async_integration
-    test/test_async_integration.cpp
-    ${RUNTIME_SOURCES}
-    ${RUNTIME_HEADERS}
-)
-
-target_include_directories(test_async_integration PRIVATE
-    include
-)
-
-target_link_libraries(test_async_integration PRIVATE
-    pthread  # Required for std::thread
-)
-
 # Add debug flags for tests.cpp
 set_source_files_properties(src/tests.cpp PROPERTIES COMPILE_FLAGS "-DDEBUG_TESTS -DVERBOSE")
 

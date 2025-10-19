@@ -1167,8 +1167,8 @@ void VariableDeclaration::accept(Visitor& visitor) {
 
 // --- FunctionDeclaration ---
 // ... existing code ...
-FunctionDeclaration::FunctionDeclaration(SourceLocation loc, std::unique_ptr<Identifier> i, std::vector<FunctionParameter> ps, std::unique_ptr<BlockStatement> b, bool is_async, TypeNodePtr ret_type_node)
-    : Declaration(loc), id(std::move(i)), params(std::move(ps)), body(std::move(b)), isAsync(is_async), returnTypeNode(std::move(ret_type_node)) {}
+FunctionDeclaration::FunctionDeclaration(SourceLocation loc, std::unique_ptr<Identifier> i, std::vector<FunctionParameter> ps, std::unique_ptr<BlockStatement> b, bool is_async, TypeNodePtr ret_type_node, bool has_default_impl)
+    : Declaration(loc), id(std::move(i)), params(std::move(ps)), body(std::move(b)), isAsync(is_async), hasDefaultImpl(has_default_impl), returnTypeNode(std::move(ret_type_node)) {}
 
 NodeType FunctionDeclaration::getType() const {
     return NodeType::FUNCTION_DECLARATION;
