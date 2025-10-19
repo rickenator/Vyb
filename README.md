@@ -756,12 +756,16 @@ count_to_ten()<Int> -> {
 # Pattern matching with match statements
 describe_number(x<Int>)<String> -> {
     match (x) {
-        0 -> "zero",
-        1 -> "one", 
-        42 -> "the answer",
-        ? -> "some number"
+        0 -> return "zero",
+        1 -> return "one", 
+        42 -> return "the answer",
+        ? -> return "some number"
     }
 }
+
+# Match arms can execute any statement, including return
+# The match statement itself doesn't return a value, but pattern arms can
+# return from the enclosing function when the type matches
 
 # Select expressions - elegant pattern matching that returns a value
 compute_bonus(level<Int>)<Int> -> {
@@ -812,8 +816,10 @@ Vyn's pattern matching supports **comparison patterns** for elegant range-based 
 
 ```vyn
 # Comparison operators in patterns: >, <, >=, <=, ==, !=
+
+# Select expression - returns a value directly
 classify_score(score<Int>)<String> -> {
-    match (score) {
+    return select(score) -> {
         >= 90 -> "A",
         >= 80 -> "B",
         >= 70 -> "C",
@@ -822,34 +828,44 @@ classify_score(score<Int>)<String> -> {
     }
 }
 
-# Works in select expressions too
+# Match statement - returns from enclosing function
+classify_score_match(score<Int>)<String> -> {
+    match (score) {
+        >= 90 -> return "A",
+        >= 80 -> return "B",
+        >= 70 -> return "C",
+        >= 60 -> return "D",
+        ? -> return "F"
+    }
+}
+
+# Tax rate calculation with select
 compute_tax_rate(income<Int>)<Float> -> {
-    rate<Float> = select(income) -> {
+    return select(income) -> {
         < 10000 -> 0.0,
         < 50000 -> 0.15,
         < 100000 -> 0.25,
         ? -> 0.35
-    };
-    return rate
+    }
 }
 
 # Comparison patterns work with floats and integers
 categorize_temperature(temp<Float>)<String> -> {
     match (temp) {
-        < 0.0 -> "freezing",
-        < 10.0 -> "cold",
-        < 20.0 -> "mild",
-        < 30.0 -> "warm",
-        ? -> "hot"
+        < 0.0 -> return "freezing",
+        < 10.0 -> return "cold",
+        < 20.0 -> return "mild",
+        < 30.0 -> return "warm",
+        ? -> return "hot"
     }
 }
 
 # Unreachable pattern detection - compiler ERROR
 invalid_patterns(x<Int>)<String> -> {
     match (x) {
-        > 10 -> "big",
-        > 5 -> "medium",  # ERROR: unreachable (subsumed by > 10)
-        ? -> "small"
+        > 10 -> return "big",
+        > 5 -> return "medium",  # ERROR: unreachable (subsumed by > 10)
+        ? -> return "small"
     }
 }
 
@@ -865,6 +881,11 @@ invalid_patterns(x<Int>)<String> -> {
 - **Compile-Time Errors**: Unreachable patterns detected and rejected
 - **Wildcard Position**: `?` must be last pattern or compiler ERROR
 - **No Gaps Required**: `>= 90`, `>= 80`, `>= 70` is valid (evaluates top-to-bottom)
+
+**Match vs Select with Comparison Patterns:**
+- **`select`**: Expression that evaluates to a value - use naked expressions or `pass` keyword
+- **`match`**: Statement for side effects - pattern arms can `return` from enclosing function
+- Both support identical comparison pattern syntax and unreachable pattern detection
 ```
 
 ### Variadic Tuples
