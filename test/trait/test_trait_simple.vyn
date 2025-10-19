@@ -1,0 +1,31 @@
+// Phase 2: Simple trait implementation test without println
+// Tests impl Trait for Type with method returning values
+
+trait Calculator {
+    add(self<Self>, value<Int>)<Int> -> { }
+    get_value(self<Self>)<Int> -> { }
+}
+
+struct Counter {
+    count<Int>
+}
+
+impl Calculator for Counter {
+    add(self<Counter>, value<Int>)<Int> -> {
+        return self.count + value
+    }
+    
+    get_value(self<Counter>)<Int> -> {
+        return self.count
+    }
+}
+
+main()<Int> -> {
+    c<Counter> = Counter { count = 10 }
+    
+    // Call trait methods
+    result<Int> = c.add(5)
+    value<Int> = c.get_value()
+    
+    return result + value  // Should return 15 + 10 = 25
+}

@@ -1,0 +1,33 @@
+// Phase 2: Trait implementation test
+// Tests impl Trait for Type with actual method implementations
+
+trait Printable {
+    print(self<Self>)<Void> -> { }
+    describe(self<Self>)<String> -> { }
+}
+
+struct Point {
+    x<Int>,
+    y<Int>
+}
+
+impl Printable for Point {
+    print(self<Point>)<Void> -> {
+        println("Point(" + self.x.to_string() + ", " + self.y.to_string() + ")")
+    }
+    
+    describe(self<Point>)<String> -> {
+        return "Point at (" + self.x.to_string() + ", " + self.y.to_string() + ")"
+    }
+}
+
+main()<Int> -> {
+    p<Point> = Point { x = 10, y = 20 }
+    
+    // Call trait methods on Point
+    p.print()
+    desc<String> = p.describe()
+    println(desc)
+    
+    return 0
+}
