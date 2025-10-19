@@ -1620,6 +1620,22 @@ void SelectExpression::accept(Visitor& visitor) {
     visitor.visit(this);
 }
 
+// --- ComparisonPattern ---
+ComparisonPattern::ComparisonPattern(SourceLocation loc, token::Token op, ExprPtr value)
+    : Expression(loc), op(op), value(std::move(value)) {}
+
+NodeType ComparisonPattern::getType() const {
+    return NodeType::COMPARISON_PATTERN;
+}
+
+std::string ComparisonPattern::toString() const {
+    return op.lexeme + " " + (value ? value->toString() : "nullptr");
+}
+
+void ComparisonPattern::accept(Visitor& visitor) {
+    visitor.visit(this);
+}
+
 // --- ThrowStatement ---
 ThrowStatement::ThrowStatement(SourceLocation loc, ExprPtr expr)
     : Statement(loc), expr(std::move(expr)) {}

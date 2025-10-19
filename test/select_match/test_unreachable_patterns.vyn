@@ -1,0 +1,65 @@
+// Test unreachable pattern detection
+// Should produce warnings for unreachable patterns
+
+// Case 1: Wildcard not last (should warn)
+test_wildcard_position()<Int> -> {
+    value<Int const> = 42
+    result<Int const> = select(value) -> {
+        ? -> 1,
+        >= 50 -> 2,  // Should warn: unreachable after wildcard
+        < 30 -> 3    // Should warn: unreachable after wildcard
+    }
+    return result
+}
+
+// Case 2: Subsumption >= patterns (should warn)
+test_subsumption_gte()<Int> -> {
+    value<Int const> = 85
+    result<Int const> = select(value) -> {
+        >= 80 -> 1,
+        >= 90 -> 2   // Should warn: subsumed by >= 80
+    }
+    return result
+}
+
+// Case 3: Duplicate patterns (should warn)
+test_duplicate_patterns()<Int> -> {
+    value<Int const> = 75
+    result<Int const> = select(value) -> {
+        == 75 -> 1,
+        == 75 -> 2   // Should warn: duplicate pattern
+    }
+    return result
+}
+
+// Case 4: Range overlap (should warn)
+test_range_overlap()<Int> -> {
+    value<Int const> = 75
+    result<Int const> = select(value) -> {
+        >= 70 -> 1,
+        == 75 -> 2   // Should warn: covered by >= 70
+    }
+    return result
+}
+
+// Case 5: Correct ordering (no warnings)
+test_correct_ordering()<Int> -> {
+    value<Int const> = 85
+    result<Int const> = select(value) -> {
+        >= 90 -> 1,
+        >= 80 -> 2,
+        >= 70 -> 3,
+        ? -> 4
+    }
+    return result
+}
+
+main()<Int> -> {
+    println("Testing unreachable pattern detection")
+    println(test_wildcard_position())
+    println(test_subsumption_gte())
+    println(test_duplicate_patterns())
+    println(test_range_overlap())
+    println(test_correct_ordering())
+    return 0
+}

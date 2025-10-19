@@ -109,6 +109,16 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
         vyn::SemanticAnalyzer semanticAnalyzer(driver);
         semanticAnalyzer.analyze(ast.get());
         std::cout << "Semantic analysis completed" << std::endl;
+        
+        // Print semantic errors/warnings
+        const auto& semanticErrors = semanticAnalyzer.getErrors();
+        if (!semanticErrors.empty()) {
+            std::cout << "\nSemantic Warnings/Errors:" << std::endl;
+            for (const auto& error : semanticErrors) {
+                std::cout << "  " << error << std::endl;
+            }
+            std::cout << std::endl;
+        }
 
         std::cout << "Generating LLVM IR code..." << std::endl;
         vyn::LLVMCodegen codegen(driver);

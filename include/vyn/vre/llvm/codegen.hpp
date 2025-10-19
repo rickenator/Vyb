@@ -327,6 +327,7 @@ public:
     void visit(vyn::ast::RangeExpression* node) override;
     void visit(vyn::ast::BlockExpression* node) override;
     void visit(vyn::ast::SelectExpression* node) override;
+    void visit(vyn::ast::ComparisonPattern* node) override;
 
     // Add missing visit methods for expressions from ast.hpp if they are defined there
     // and are causing linker errors.

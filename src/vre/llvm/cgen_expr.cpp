@@ -623,7 +623,7 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
             if (isFloatOp) m_currentLLVMValue = builder->CreateFCmpOLT(L, R, "fcmpltmp");
             else m_currentLLVMValue = builder->CreateICmpSLT(L, R, "icmpslttmp"); 
             break;
-        case vyn::TokenType::LTEQ: // Reverted to vyn::TokenType::LTEQ
+        case vyn::TokenType::LTEQ: // Reverted to vyn::TokenType::LTEQ:
             if (isFloatOp) m_currentLLVMValue = builder->CreateFCmpOLE(L, R, "fcmpletmp");
             else m_currentLLVMValue = builder->CreateICmpSLE(L, R, "icmpsletmp"); 
             break;
@@ -631,7 +631,7 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
             if (isFloatOp) m_currentLLVMValue = builder->CreateFCmpOGT(L, R, "fcmpgtmp");
             else m_currentLLVMValue = builder->CreateICmpSGT(L, R, "icmpsgttmp"); 
             break;
-        case vyn::TokenType::GTEQ: // Reverted to vyn::TokenType::GTEQ
+        case vyn::TokenType::GTEQ: // Reverted to vyn::TokenType::GTEQ:
             if (isFloatOp) m_currentLLVMValue = builder->CreateFCmpOGE(L, R, "fcmpgetmp");
             else m_currentLLVMValue = builder->CreateICmpSGE(L, R, "icmpsgetmp"); 
             break;
@@ -2822,6 +2822,13 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
     // If the block ends with a return statement, that's handled by the return logic
 }
 
+void LLVMCodegen::visit(ast::ComparisonPattern* node) {
+    // Comparison patterns are only used within match/select statements
+    // They should not be evaluated directly as standalone expressions
+    logError(node->loc, "Comparison pattern can only be used in match/select statements");
+    m_currentLLVMValue = nullptr;
+}
+
 void LLVMCodegen::visit(ast::SelectExpression* node) {
     // Select expression: pattern match and return a value
     // Supports both naked expressions (auto-return) and blocks with pass keyword
@@ -2928,13 +2935,88 @@ void LLVMCodegen::visit(ast::SelectExpression* node) {
         llvm::BasicBlock* caseBB = llvm::BasicBlock::Create(*context, "select.case", func);
         nextCaseBB = llvm::BasicBlock::Create(*context, "select.next");
         
-        // Evaluate pattern
-        pattern->accept(*this);
-        llvm::Value* patternValue = m_currentLLVMValue;
+        // Check if this is a comparison pattern
+        bool isComparisonPattern = (pattern->getType() == ast::NodeType::COMPARISON_PATTERN);
+        llvm::Value* cond = nullptr;
         
-        if (patternValue) {
-            // Compare match value with pattern value
-            llvm::Value* cond = builder->CreateICmpEQ(matchValue, patternValue, "select.cmp");
+        if (isComparisonPattern) {
+            // Handle comparison pattern (e.g., >= 18, < 0)
+            auto* compPattern = static_cast<ast::ComparisonPattern*>(pattern.get());
+            
+            // Evaluate the comparison value
+            compPattern->value->accept(*this);
+            llvm::Value* patternValue = m_currentLLVMValue;
+            
+            if (patternValue) {
+                // Perform comparison based on operator
+                if (matchValue->getType()->isIntegerTy() && patternValue->getType()->isIntegerTy()) {
+                    switch (compPattern->op.type) {
+                        case TokenType::LT:
+                            cond = builder->CreateICmpSLT(matchValue, patternValue, "select.cmp.lt");
+                            break;
+                        case TokenType::LTEQ:
+                            cond = builder->CreateICmpSLE(matchValue, patternValue, "select.cmp.le");
+                            break;
+                        case TokenType::GT:
+                            cond = builder->CreateICmpSGT(matchValue, patternValue, "select.cmp.gt");
+                            break;
+                        case TokenType::GTEQ:
+                            cond = builder->CreateICmpSGE(matchValue, patternValue, "select.cmp.ge");
+                            break;
+                        case TokenType::EQEQ:
+                            cond = builder->CreateICmpEQ(matchValue, patternValue, "select.cmp.eq");
+                            break;
+                        case TokenType::NOTEQ:
+                            cond = builder->CreateICmpNE(matchValue, patternValue, "select.cmp.ne");
+                            break;
+                        default:
+                            logError(compPattern->loc, "Unknown comparison operator in pattern");
+                            cond = llvm::ConstantInt::getFalse(*context);
+                            break;
+                    }
+                } else if (matchValue->getType()->isFloatingPointTy() && patternValue->getType()->isFloatingPointTy()) {
+                    switch (compPattern->op.type) {
+                        case TokenType::LT:
+                            cond = builder->CreateFCmpOLT(matchValue, patternValue, "select.cmp.flt");
+                            break;
+                        case TokenType::LTEQ:
+                            cond = builder->CreateFCmpOLE(matchValue, patternValue, "select.cmp.fle");
+                            break;
+                        case TokenType::GT:
+                            cond = builder->CreateFCmpOGT(matchValue, patternValue, "select.cmp.fgt");
+                            break;
+                        case TokenType::GTEQ:
+                            cond = builder->CreateFCmpOGE(matchValue, patternValue, "select.cmp.fge");
+                            break;
+                        case TokenType::EQEQ:
+                            cond = builder->CreateFCmpOEQ(matchValue, patternValue, "select.cmp.feq");
+                            break;
+                        case TokenType::NOTEQ:
+                            cond = builder->CreateFCmpONE(matchValue, patternValue, "select.cmp.fne");
+                            break;
+                        default:
+                            logError(compPattern->loc, "Unknown comparison operator in pattern");
+                            cond = llvm::ConstantInt::getFalse(*context);
+                            break;
+                    }
+                } else {
+                    logError(compPattern->loc, "Comparison pattern requires integer or float types");
+                    cond = llvm::ConstantInt::getFalse(*context);
+                }
+            }
+        } else {
+            // Exact match pattern (literal value)
+            // Evaluate pattern
+            pattern->accept(*this);
+            llvm::Value* patternValue = m_currentLLVMValue;
+            
+            if (patternValue) {
+                // Compare match value with pattern value
+                cond = builder->CreateICmpEQ(matchValue, patternValue, "select.cmp");
+            }
+        }
+        
+        if (cond) {
             builder->CreateCondBr(cond, caseBB, nextCaseBB);
             
             // Case matched - evaluate result expression

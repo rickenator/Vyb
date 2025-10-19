@@ -789,38 +789,115 @@ void LLVMCodegen::visit(vyn::ast::MatchStatement* node) {
         if (!casePattern) {
             builder->CreateBr(caseBodyBBs[i]);
         } else {
-            // Evaluate the pattern
-            casePattern->accept(*this);
-            llvm::Value* patternValue = m_currentLLVMValue;
-            if (!patternValue) {
-                logError(casePattern->loc, "Failed to evaluate match pattern");
-                m_currentLLVMValue = nullptr;
-                return;
-            }
+            // Check if this is a comparison pattern (e.g., >= 18, < 0)
+            bool isComparisonPattern = (casePattern->getType() == vyn::ast::NodeType::COMPARISON_PATTERN);
             
-            // Compare the pattern with the match value
             llvm::Value* isMatch = nullptr;
             
-            // Handle different pattern types
-            if (patternValue->getType()->isIntegerTy() && matchValue->getType()->isIntegerTy()) {
-                // Integer comparison
-                isMatch = builder->CreateICmpEQ(matchValue, patternValue, "match.icmp");
-            } else if (patternValue->getType()->isFloatingPointTy() && matchValue->getType()->isFloatingPointTy()) {
-                // Float comparison
-                isMatch = builder->CreateFCmpOEQ(matchValue, patternValue, "match.fcmp");
-            } else {
-                // For more complex types, we'd need custom comparison logic
-                // For now, just do a pointer comparison if both are pointers
-                if (patternValue->getType()->isPointerTy() && matchValue->getType()->isPointerTy()) {
-                    isMatch = builder->CreateICmpEQ(
-                        builder->CreatePtrToInt(matchValue, llvm::Type::getInt64Ty(*context)),
-                        builder->CreatePtrToInt(patternValue, llvm::Type::getInt64Ty(*context)),
-                        "match.ptrcmp"
-                    );
+            if (isComparisonPattern) {
+                // Handle comparison pattern
+                auto* compPattern = static_cast<vyn::ast::ComparisonPattern*>(casePattern.get());
+                
+                // Evaluate the comparison value
+                compPattern->value->accept(*this);
+                llvm::Value* patternValue = m_currentLLVMValue;
+                if (!patternValue) {
+                    logError(compPattern->value->loc, "Failed to evaluate comparison pattern value");
+                    m_currentLLVMValue = nullptr;
+                    return;
+                }
+                
+                // Perform the comparison based on the operator
+                if (matchValue->getType()->isIntegerTy() && patternValue->getType()->isIntegerTy()) {
+                    // Integer comparison
+                    switch (compPattern->op.type) {
+                        case vyn::TokenType::LT:
+                            isMatch = builder->CreateICmpSLT(matchValue, patternValue, "match.cmp.lt");
+                            break;
+                        case vyn::TokenType::LTEQ:
+                            isMatch = builder->CreateICmpSLE(matchValue, patternValue, "match.cmp.le");
+                            break;
+                        case vyn::TokenType::GT:
+                            isMatch = builder->CreateICmpSGT(matchValue, patternValue, "match.cmp.gt");
+                            break;
+                        case vyn::TokenType::GTEQ:
+                            isMatch = builder->CreateICmpSGE(matchValue, patternValue, "match.cmp.ge");
+                            break;
+                        case vyn::TokenType::EQEQ:
+                            isMatch = builder->CreateICmpEQ(matchValue, patternValue, "match.cmp.eq");
+                            break;
+                        case vyn::TokenType::NOTEQ:
+                            isMatch = builder->CreateICmpNE(matchValue, patternValue, "match.cmp.ne");
+                            break;
+                        default:
+                            logError(compPattern->loc, "Unknown comparison operator in pattern");
+                            isMatch = llvm::ConstantInt::getFalse(*context);
+                            break;
+                    }
+                } else if (matchValue->getType()->isFloatingPointTy() && patternValue->getType()->isFloatingPointTy()) {
+                    // Float comparison
+                    switch (compPattern->op.type) {
+                        case vyn::TokenType::LT:
+                            isMatch = builder->CreateFCmpOLT(matchValue, patternValue, "match.cmp.flt");
+                            break;
+                        case vyn::TokenType::LTEQ:
+                            isMatch = builder->CreateFCmpOLE(matchValue, patternValue, "match.cmp.fle");
+                            break;
+                        case vyn::TokenType::GT:
+                            isMatch = builder->CreateFCmpOGT(matchValue, patternValue, "match.cmp.fgt");
+                            break;
+                        case vyn::TokenType::GTEQ:
+                            isMatch = builder->CreateFCmpOGE(matchValue, patternValue, "match.cmp.fge");
+                            break;
+                        case vyn::TokenType::EQEQ:
+                            isMatch = builder->CreateFCmpOEQ(matchValue, patternValue, "match.cmp.feq");
+                            break;
+                        case vyn::TokenType::NOTEQ:
+                            isMatch = builder->CreateFCmpONE(matchValue, patternValue, "match.cmp.fne");
+                            break;
+                        default:
+                            logError(compPattern->loc, "Unknown comparison operator in pattern");
+                            isMatch = llvm::ConstantInt::getFalse(*context);
+                            break;
+                    }
                 } else {
-                    // If we can't compare, assume no match
+                    logError(compPattern->loc, "Comparison pattern requires integer or float types");
                     isMatch = llvm::ConstantInt::getFalse(*context);
-                    logWarning(casePattern->loc, "Complex pattern matching not fully implemented");
+                }
+            } else {
+                // Exact match pattern (literal value)
+                // Evaluate the pattern
+                casePattern->accept(*this);
+                llvm::Value* patternValue = m_currentLLVMValue;
+                if (!patternValue) {
+                    logError(casePattern->loc, "Failed to evaluate match pattern");
+                    m_currentLLVMValue = nullptr;
+                    return;
+                }
+                
+                // Compare the pattern with the match value
+                
+                // Handle different pattern types
+                if (patternValue->getType()->isIntegerTy() && matchValue->getType()->isIntegerTy()) {
+                    // Integer comparison
+                    isMatch = builder->CreateICmpEQ(matchValue, patternValue, "match.icmp");
+                } else if (patternValue->getType()->isFloatingPointTy() && matchValue->getType()->isFloatingPointTy()) {
+                    // Float comparison
+                    isMatch = builder->CreateFCmpOEQ(matchValue, patternValue, "match.fcmp");
+                } else {
+                    // For more complex types, we'd need custom comparison logic
+                    // For now, just do a pointer comparison if both are pointers
+                    if (patternValue->getType()->isPointerTy() && matchValue->getType()->isPointerTy()) {
+                        isMatch = builder->CreateICmpEQ(
+                            builder->CreatePtrToInt(matchValue, llvm::Type::getInt64Ty(*context)),
+                            builder->CreatePtrToInt(patternValue, llvm::Type::getInt64Ty(*context)),
+                            "match.ptrcmp"
+                        );
+                    } else {
+                        // If we can't compare, assume no match
+                        isMatch = llvm::ConstantInt::getFalse(*context);
+                        logWarning(casePattern->loc, "Complex pattern matching not fully implemented");
+                    }
                 }
             }
             
@@ -846,8 +923,12 @@ void LLVMCodegen::visit(vyn::ast::MatchStatement* node) {
     // If there's no wildcard pattern and no match occurs, execution continues (NOP)
     builder->SetInsertPoint(defaultBB);
     m_currentLLVMValue = nullptr;
-    if (!builder->GetInsertBlock()->getTerminator()) {
+    // Only branch to endMatchBB if there's no wildcard pattern (which would have caught everything)
+    if (!hasWildcard && !builder->GetInsertBlock()->getTerminator()) {
         builder->CreateBr(endMatchBB);
+    } else if (hasWildcard && !builder->GetInsertBlock()->getTerminator()) {
+        // If there's a wildcard, this block is unreachable, but LLVM still needs a terminator
+        builder->CreateUnreachable();
     }
     
     // Set insertion point to end of match
@@ -858,10 +939,14 @@ void LLVMCodegen::visit(vyn::ast::MatchStatement* node) {
         }
         builder->SetInsertPoint(endMatchBB);
     } else {
-        // endMatchBB was never actually branched to, so clean it up
+        // endMatchBB was never actually branched to (all cases returned/broke)
+        // Clean it up and don't set insert point to it
         if (endMatchBB->getParent()) {
             endMatchBB->eraseFromParent();
         }
+        delete endMatchBB;
+        // Leave the builder at the last block that was generated
+        // Don't change the insertion point since all paths terminated
     }
     
     // The match result is determined by the Phi node that combines all case results

@@ -58,6 +58,7 @@ class AwaitExpression; // Added
 class RangeExpression; // Added for range-based for loops
 class BlockExpression; // Block as expression for match arms
 class SelectExpression; // Select expression for pattern matching with returns
+class ComparisonPattern; // Comparison pattern for match/select (e.g., >= 18)
 
 // Statements
 class BlockStatement;
@@ -201,6 +202,7 @@ enum class NodeType {
     RANGE_EXPRESSION, // Added for range-based for loops
     BLOCK_EXPRESSION, // Block as expression for match arms
     SELECT_EXPRESSION, // Select expression for pattern matching
+    COMPARISON_PATTERN, // Comparison pattern for match/select
 
 
     // Statements
@@ -296,6 +298,7 @@ public:
     virtual void visit(RangeExpression* node) = 0;
     virtual void visit(BlockExpression* node) = 0;
     virtual void visit(SelectExpression* node) = 0;
+    virtual void visit(ComparisonPattern* node) = 0;
 
     // Statements
     virtual void visit(BlockStatement* node) = 0;
@@ -1338,6 +1341,19 @@ public:
     std::vector<std::pair<ExprPtr, ExprPtr>> cases;
     
     SelectExpression(SourceLocation loc, ExprPtr expr, std::vector<std::pair<ExprPtr, ExprPtr>> cases);
+    NodeType getType() const override;
+    std::string toString() const override;
+    void accept(Visitor& visitor) override;
+};
+
+// --- ComparisonPattern ---
+// Represents comparison patterns like >= 18, < 0, == 5 in match/select
+class ComparisonPattern : public Expression {
+public:
+    token::Token op;  // Comparison operator (LT, LE, GT, GE, EQEQ, BANGEQ)
+    ExprPtr value;    // Value to compare against
+    
+    ComparisonPattern(SourceLocation loc, token::Token op, ExprPtr value);
     NodeType getType() const override;
     std::string toString() const override;
     void accept(Visitor& visitor) override;

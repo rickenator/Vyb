@@ -116,11 +116,23 @@ namespace vyn {
                 
                 if (check(TokenType::RBRACE)) break;
                 
-                // Parse pattern: either '?' for wildcard or a primary expression
+                // Parse pattern: '?', comparison pattern (e.g., >= 18), or literal
                 vyn::ast::ExprPtr pattern;
                 if (peek().type == TokenType::QUESTION_MARK) {
                     consume(); // consume '?'
                     pattern = nullptr; // Wildcard pattern
+                } else if (peek().type == TokenType::LT || peek().type == TokenType::LTEQ ||
+                           peek().type == TokenType::GT || peek().type == TokenType::GTEQ ||
+                           peek().type == TokenType::EQEQ || peek().type == TokenType::NOTEQ) {
+                    // Comparison pattern (e.g., >= 18, < 0, == 5)
+                    auto op_token = consume(); // consume comparison operator
+                    auto value = parse_primary();
+                    if (!value) {
+                        throw error(peek(), "Expected value after comparison operator in pattern");
+                    }
+                    pattern = std::make_unique<vyn::ast::ComparisonPattern>(
+                        op_token.location, op_token, std::move(value)
+                    );
                 } else {
                     pattern = parse_primary();
                     if (!pattern) {

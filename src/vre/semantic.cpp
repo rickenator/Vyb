@@ -1082,11 +1082,118 @@ void SemanticAnalyzer::visit(ast::SelectExpression* node) {
         node->expr->accept(*this);
     }
     
-    // Visit all patterns and result expressions
-    for (const auto& [pattern, result] : node->cases) {
-        if (pattern) {
+    // Track comparison patterns for unreachable detection
+    struct ComparisonInfo {
+        vyn::TokenType op;
+        int64_t value;
+        size_t caseIndex;
+    };
+    std::vector<ComparisonInfo> comparisons;
+    size_t wildcardIndex = SIZE_MAX;
+    
+    // Visit all patterns and check for unreachable patterns
+    for (size_t i = 0; i < node->cases.size(); i++) {
+        const auto& [pattern, result] = node->cases[i];
+        
+        if (!pattern) {
+            // Wildcard pattern (nullptr)
+            if (wildcardIndex == SIZE_MAX) {
+                wildcardIndex = i;
+            } else {
+                // Can't get loc from nullptr, use result as node
+                addError("Wildcard pattern already used in case " + 
+                        std::to_string(wildcardIndex + 1) + ", this pattern is unreachable", result.get());
+            }
+        } else if (auto* comp = dynamic_cast<ast::ComparisonPattern*>(pattern.get())) {
+            // Check if this pattern comes after a wildcard
+            if (wildcardIndex != SIZE_MAX) {
+                addError("Pattern after wildcard in case " + 
+                        std::to_string(wildcardIndex + 1) + " is unreachable", pattern.get());
+            }
+            
+            // Try to extract constant value for unreachable detection
+            if (auto* intLit = dynamic_cast<ast::IntegerLiteral*>(comp->value.get())) {
+                int64_t value = intLit->value;
+                vyn::TokenType op = comp->op.type;
+                
+                // Check against all previous comparison patterns
+                for (const auto& prev : comparisons) {
+                    bool isUnreachable = false;
+                    std::string reason;
+                    
+                    // Check for duplicate patterns
+                    if (prev.op == op && prev.value == value) {
+                        isUnreachable = true;
+                        reason = "duplicate pattern";
+                    }
+                    // Check for subsumption: >= 80 subsumes >= 90
+                    else if (prev.op == vyn::TokenType::GTEQ && op == vyn::TokenType::GTEQ && prev.value <= value) {
+                        isUnreachable = true;
+                        reason = "subsumed by earlier '>= " + std::to_string(prev.value) + "'";
+                    }
+                    // Check for subsumption: <= 80 subsumes <= 70
+                    else if (prev.op == vyn::TokenType::LTEQ && op == vyn::TokenType::LTEQ && prev.value >= value) {
+                        isUnreachable = true;
+                        reason = "subsumed by earlier '<= " + std::to_string(prev.value) + "'";
+                    }
+                    // Check for subsumption: >= 80 subsumes > 80
+                    else if (prev.op == vyn::TokenType::GTEQ && op == vyn::TokenType::GT && prev.value <= value) {
+                        isUnreachable = true;
+                        reason = "subsumed by earlier '>= " + std::to_string(prev.value) + "'";
+                    }
+                    // Check for subsumption: <= 80 subsumes < 80
+                    else if (prev.op == vyn::TokenType::LTEQ && op == vyn::TokenType::LT && prev.value >= value) {
+                        isUnreachable = true;
+                        reason = "subsumed by earlier '<= " + std::to_string(prev.value) + "'";
+                    }
+                    // Check for == within >= range: >= 70 subsumes == 75
+                    else if (prev.op == vyn::TokenType::GTEQ && op == vyn::TokenType::EQEQ && value >= prev.value) {
+                        isUnreachable = true;
+                        reason = "covered by earlier '>= " + std::to_string(prev.value) + "'";
+                    }
+                    // Check for == within <= range: <= 80 subsumes == 75
+                    else if (prev.op == vyn::TokenType::LTEQ && op == vyn::TokenType::EQEQ && value <= prev.value) {
+                        isUnreachable = true;
+                        reason = "covered by earlier '<= " + std::to_string(prev.value) + "'";
+                    }
+                    // Check for == within > range: > 70 subsumes == 75
+                    else if (prev.op == vyn::TokenType::GT && op == vyn::TokenType::EQEQ && value > prev.value) {
+                        isUnreachable = true;
+                        reason = "covered by earlier '> " + std::to_string(prev.value) + "'";
+                    }
+                    // Check for == within < range: < 80 subsumes == 75
+                    else if (prev.op == vyn::TokenType::LT && op == vyn::TokenType::EQEQ && value < prev.value) {
+                        isUnreachable = true;
+                        reason = "covered by earlier '< " + std::to_string(prev.value) + "'";
+                    }
+                    
+                    if (isUnreachable) {
+                        std::string opStr;
+                        switch (op) {
+                            case vyn::TokenType::EQEQ:  opStr = "=="; break;
+                            case vyn::TokenType::NOTEQ: opStr = "!="; break;
+                            case vyn::TokenType::LT:    opStr = "<"; break;
+                            case vyn::TokenType::LTEQ:  opStr = "<="; break;
+                            case vyn::TokenType::GT:    opStr = ">"; break;
+                            case vyn::TokenType::GTEQ:  opStr = ">="; break;
+                            default: opStr = "?"; break;
+                        }
+                        addError("Pattern '" + opStr + " " + std::to_string(value) + 
+                                "' in case " + std::to_string(i + 1) + " is " + reason + 
+                                " (case " + std::to_string(prev.caseIndex + 1) + ")", pattern.get());
+                        break;
+                    }
+                }
+                
+                comparisons.push_back({op, value, i});
+            }
+            
+            comp->accept(*this);
+        } else {
+            // Other pattern types
             pattern->accept(*this);
         }
+        
         if (result) {
             result->accept(*this);
         }
@@ -1097,6 +1204,18 @@ void SemanticAnalyzer::visit(ast::SelectExpression* node) {
     // - Pattern types should match the expression type
     // - Check for exhaustiveness
 }
+
+void SemanticAnalyzer::visit(ast::ComparisonPattern* node) {
+    // Visit the value expression in the comparison pattern
+    if (node->value) {
+        node->value->accept(*this);
+    }
+    
+    // TODO: Type checking:
+    // - Verify the comparison operator is valid for the value type
+    // - Check that the matched expression type supports the comparison
+}
+
 void SemanticAnalyzer::visit(ast::ListComprehension* node) {}
 void SemanticAnalyzer::visit(ast::GenericInstantiationExpression* node) {
     if (!node || !node->baseExpression) {
@@ -1407,7 +1526,129 @@ void SemanticAnalyzer::visit(ast::UnsafeStatement* node) {
     exitScope();
 }
 void SemanticAnalyzer::visit(ast::AssertStatement* node) {}
-void SemanticAnalyzer::visit(ast::MatchStatement* node) {}
+void SemanticAnalyzer::visit(ast::MatchStatement* node) {
+    // Visit the expression being matched
+    if (node->expr) {
+        node->expr->accept(*this);
+    }
+    
+    // Track comparison patterns for unreachable detection
+    struct ComparisonInfo {
+        vyn::TokenType op;
+        int64_t value;
+        size_t caseIndex;
+    };
+    std::vector<ComparisonInfo> comparisons;
+    size_t wildcardIndex = SIZE_MAX;
+    
+    // Visit all patterns and check for unreachable patterns
+    for (size_t i = 0; i < node->cases.size(); i++) {
+        const auto& [pattern, block] = node->cases[i];
+        
+        if (!pattern) {
+            // Wildcard pattern (nullptr)
+            if (wildcardIndex == SIZE_MAX) {
+                wildcardIndex = i;
+            } else {
+                // Can't get loc from nullptr, use block as node
+                addError("Wildcard pattern already used in case " + 
+                        std::to_string(wildcardIndex + 1) + ", this pattern is unreachable", block.get());
+            }
+        } else if (auto* comp = dynamic_cast<ast::ComparisonPattern*>(pattern.get())) {
+            // Check if this pattern comes after a wildcard
+            if (wildcardIndex != SIZE_MAX) {
+                addError("Pattern after wildcard in case " + 
+                        std::to_string(wildcardIndex + 1) + " is unreachable", pattern.get());
+            }
+            
+            // Try to extract constant value for unreachable detection
+            if (auto* intLit = dynamic_cast<ast::IntegerLiteral*>(comp->value.get())) {
+                int64_t value = intLit->value;
+                vyn::TokenType op = comp->op.type;
+                
+                // Check against all previous comparison patterns
+                for (const auto& prev : comparisons) {
+                    bool isUnreachable = false;
+                    std::string reason;
+                    
+                    // Check for duplicate patterns
+                    if (prev.op == op && prev.value == value) {
+                        isUnreachable = true;
+                        reason = "duplicate pattern";
+                    }
+                    // Check for subsumption: >= 80 subsumes >= 90
+                    else if (prev.op == vyn::TokenType::GTEQ && op == vyn::TokenType::GTEQ && prev.value <= value) {
+                        isUnreachable = true;
+                        reason = "subsumed by earlier '>= " + std::to_string(prev.value) + "'";
+                    }
+                    // Check for subsumption: <= 80 subsumes <= 70
+                    else if (prev.op == vyn::TokenType::LTEQ && op == vyn::TokenType::LTEQ && prev.value >= value) {
+                        isUnreachable = true;
+                        reason = "subsumed by earlier '<= " + std::to_string(prev.value) + "'";
+                    }
+                    // Check for subsumption: >= 80 subsumes > 80
+                    else if (prev.op == vyn::TokenType::GTEQ && op == vyn::TokenType::GT && prev.value <= value) {
+                        isUnreachable = true;
+                        reason = "subsumed by earlier '>= " + std::to_string(prev.value) + "'";
+                    }
+                    // Check for subsumption: <= 80 subsumes < 80
+                    else if (prev.op == vyn::TokenType::LTEQ && op == vyn::TokenType::LT && prev.value >= value) {
+                        isUnreachable = true;
+                        reason = "subsumed by earlier '<= " + std::to_string(prev.value) + "'";
+                    }
+                    // Check for == within >= range: >= 70 subsumes == 75
+                    else if (prev.op == vyn::TokenType::GTEQ && op == vyn::TokenType::EQEQ && value >= prev.value) {
+                        isUnreachable = true;
+                        reason = "covered by earlier '>= " + std::to_string(prev.value) + "'";
+                    }
+                    // Check for == within <= range: <= 80 subsumes == 75
+                    else if (prev.op == vyn::TokenType::LTEQ && op == vyn::TokenType::EQEQ && value <= prev.value) {
+                        isUnreachable = true;
+                        reason = "covered by earlier '<= " + std::to_string(prev.value) + "'";
+                    }
+                    // Check for == within > range: > 70 subsumes == 75
+                    else if (prev.op == vyn::TokenType::GT && op == vyn::TokenType::EQEQ && value > prev.value) {
+                        isUnreachable = true;
+                        reason = "covered by earlier '> " + std::to_string(prev.value) + "'";
+                    }
+                    // Check for == within < range: < 80 subsumes == 75
+                    else if (prev.op == vyn::TokenType::LT && op == vyn::TokenType::EQEQ && value < prev.value) {
+                        isUnreachable = true;
+                        reason = "covered by earlier '< " + std::to_string(prev.value) + "'";
+                    }
+                    
+                    if (isUnreachable) {
+                        std::string opStr;
+                        switch (op) {
+                            case vyn::TokenType::EQEQ:  opStr = "=="; break;
+                            case vyn::TokenType::NOTEQ: opStr = "!="; break;
+                            case vyn::TokenType::LT:    opStr = "<"; break;
+                            case vyn::TokenType::LTEQ:  opStr = "<="; break;
+                            case vyn::TokenType::GT:    opStr = ">"; break;
+                            case vyn::TokenType::GTEQ:  opStr = ">="; break;
+                            default: opStr = "?"; break;
+                        }
+                        addError("Pattern '" + opStr + " " + std::to_string(value) + 
+                                "' in case " + std::to_string(i + 1) + " is " + reason + 
+                                " (case " + std::to_string(prev.caseIndex + 1) + ")", pattern.get());
+                        break;
+                    }
+                }
+                
+                comparisons.push_back({op, value, i});
+            }
+            
+            comp->accept(*this);
+        } else {
+            // Other pattern types
+            pattern->accept(*this);
+        }
+        
+        if (block) {
+            block->accept(*this);
+        }
+    }
+}
 void SemanticAnalyzer::visit(ast::YieldStatement* node) {
     // Check if we're inside a generator function
     // For now, we'll just check for any yield expression
