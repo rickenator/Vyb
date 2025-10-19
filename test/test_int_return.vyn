@@ -1,0 +1,13 @@
+// Test with int return
+
+test()<Int> -> {
+    println("Hello from test")
+    return 42
+}
+
+main()<Int> -> {
+    println("Hello from main")
+    result<Int const> = test()
+    println("Done")
+    return result
+}

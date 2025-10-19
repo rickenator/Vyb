@@ -701,7 +701,7 @@ void LLVMCodegen::visit(vyn::ast::MatchStatement* node) {
 
     // Create basic blocks for each case and the end of match
     llvm::BasicBlock* defaultBB = nullptr;
-    llvm::BasicBlock* endMatchBB = llvm::BasicBlock::Create(*context, "match.end", function);
+    llvm::BasicBlock* endMatchBB = llvm::BasicBlock::Create(*context, "match.end"); // Don't add to function yet
     
     std::vector<llvm::BasicBlock*> caseBBs;
     std::vector<llvm::BasicBlock*> caseBodyBBs;
@@ -790,8 +790,10 @@ void LLVMCodegen::visit(vyn::ast::MatchStatement* node) {
             // Value from the body becomes the match result
         }
         
-        // Branch to end of match
-        builder->CreateBr(endMatchBB);
+        // Branch to end of match only if the case body doesn't already have a terminator
+        if (!builder->GetInsertBlock()->getTerminator()) {
+            builder->CreateBr(endMatchBB);
+        }
     }
     
     // Generate code for default case (no match)
@@ -799,10 +801,23 @@ void LLVMCodegen::visit(vyn::ast::MatchStatement* node) {
     // In a default case, we'll just continue with a null value
     logWarning(node->loc, "Non-exhaustive match pattern");
     m_currentLLVMValue = nullptr;
-    builder->CreateBr(endMatchBB);
+    if (!builder->GetInsertBlock()->getTerminator()) {
+        builder->CreateBr(endMatchBB);
+    }
     
     // Set insertion point to end of match
-    builder->SetInsertPoint(endMatchBB);
+    // Only add endMatchBB to the function if it has predecessors (i.e., if it's actually used)
+    if (!endMatchBB->use_empty()) {
+        if (!endMatchBB->getParent()) {
+            endMatchBB->insertInto(function);
+        }
+        builder->SetInsertPoint(endMatchBB);
+    } else {
+        // endMatchBB was never actually branched to, so clean it up
+        if (endMatchBB->getParent()) {
+            endMatchBB->eraseFromParent();
+        }
+    }
     
     // The match result is determined by the Phi node that combines all case results
     // But for now, we'll just set the result to null to indicate no value

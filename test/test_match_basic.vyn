@@ -1,0 +1,28 @@
+// Test basic match statement functionality
+
+test_int_match()<Void> -> {
+    x<Int const> = 42
+    
+    match x {
+        0 => println("zero"),
+        1 => println("one"),
+        42 => println("forty-two"),
+        100 => println("hundred")
+    }
+}
+
+test_enum_like()<Void> -> {
+    status<Int const> = 1
+    
+    match status {
+        0 => println("init"),
+        1 => println("running"),
+        2 => println("done")
+    }
+}
+
+main()<Void> -> {
+    println("Testing match statement:")
+    test_int_match()
+    test_enum_like()
+}
