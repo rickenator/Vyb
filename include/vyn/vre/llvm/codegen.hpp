@@ -171,6 +171,7 @@ private:
         
         static TypePattern parse(const std::string& typeStr);
         bool matchesPattern(const TypePattern& concrete, std::map<std::string, std::string>& substitutions) const;
+        std::string toMangled() const;       // e.g., "Box<Int>" -> "Box_Int"
     };
     
     llvm::Function* monomorphizeTraitMethod(const std::string& concreteType, 
@@ -178,6 +179,17 @@ private:
                                            const std::string& methodName);
     std::string extractBasePattern(const std::string& concreteType);
     std::string getFullTypeName(vyn::ast::Expression* expr);
+    
+    // Helper methods for monomorphization with type substitution
+    llvm::Type* resolveTypeForMonomorphization(const TypePattern& pattern, 
+                                               const std::map<std::string, std::string>& substitutions);
+    llvm::Type* resolveParameterTypeWithSubstitution(vyn::ast::TypeNode* typeNode, 
+                                                     const std::map<std::string, std::string>& substitutions);
+    llvm::Type* resolveReturnTypeWithSubstitution(vyn::ast::TypeNode* typeNode, 
+                                                  const std::map<std::string, std::string>& substitutions);
+    
+    // Current type substitutions active during monomorphization
+    std::map<std::string, std::string> currentTypeSubstitutions;
     
     // Cache for monomorphized trait methods: "Box<Int>::show" -> Function*
     std::map<std::string, llvm::Function*> monomorphizedMethods;

@@ -3310,7 +3310,7 @@ void SemanticAnalyzer::registerTrait(ast::AspectDeclaration* traitDecl) {
     traitRegistry[traitName] = std::move(traitInfo);
 }
 
-SemanticAnalyzer::TraitInfo* SemanticAnalyzer::findTrait(const std::string& traitName) {
+TraitInfo* SemanticAnalyzer::findTrait(const std::string& traitName) {
     auto it = traitRegistry.find(traitName);
     if (it != traitRegistry.end()) {
         return it->second.get();

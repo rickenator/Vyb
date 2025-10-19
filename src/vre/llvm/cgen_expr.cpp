@@ -822,7 +822,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         }
     }
     
-    // Check if this is a trait method call first
+    // Check if this is an aspect method call (including generic aspects)
     if (auto memberExpr = dynamic_cast<vyn::ast::MemberExpression*>(node->callee.get())) {
         if (auto objIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->object.get())) {
             if (auto methodIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->property.get())) {
@@ -831,25 +831,66 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 if (objIt != namedValues.end()) {
                     llvm::Value* objectAlloca = objIt->second;
                     
-                    // Try to get the type name from the AST
-                    std::string typeName;
+                    // Try to get the full concrete type name from the AST (e.g., "Box<Int>")
+                    std::string concreteType;
                     if (objIdent->type) {
-                        if (auto typeNameNode = dynamic_cast<ast::TypeName*>(objIdent->type.get())) {
-                            if (typeNameNode->identifier) {
-                                typeName = typeNameNode->identifier->name;
-                            }
-                        }
+                        concreteType = objIdent->type->toString();
                     }
                     
-                    if (!typeName.empty()) {
+                    if (!concreteType.empty()) {
                         std::string methodName = methodIdent->name;
                         
-                        // Try to find this as a trait method implementation
-                        // Trait impl functions are named just as their method name (e.g., "add", "get_value")
+                        std::cout << "DEBUG: Checking aspect method call: " << concreteType 
+                                  << "." << methodName << "()" << std::endl;
+                        
+                        // First try to find a non-generic (concrete) aspect impl function
+                        // These are named just as their method name (e.g., "show", "add")
                         llvm::Function* implFunc = module->getFunction(methodName);
+                        
+                        // If not found, try to monomorphize from generic aspect impl
+                        if (!implFunc) {
+                            std::cout << "DEBUG: No concrete impl found, trying generic monomorphization..." << std::endl;
+                            
+                            // Try to find which aspect this method belongs to
+                            // We need to search through aspects to find which one declares this method
+                            if (driver_.hasSemanticAnalyzer()) {
+                                SemanticAnalyzer* semantic = driver_.getSemanticAnalyzer();
+                                const auto& aspects = semantic->getTraitRegistry();  // Get aspect registry
+                                
+                                // Search all aspects for this method
+                                for (const auto& aspectEntry : aspects) {
+                                    const std::string& aspectName = aspectEntry.first;
+                                    const TraitInfo* aspectInfo = aspectEntry.second.get();
+                                    
+                                    // Check if this aspect has the method (iterate through vector)
+                                    bool hasMethod = false;
+                                    if (aspectInfo) {
+                                        for (const auto& method : aspectInfo->methods) {
+                                            if (method.name == methodName) {
+                                                hasMethod = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    
+                                    if (hasMethod) {
+                                        std::cout << "DEBUG: Found method " << methodName 
+                                                  << " in aspect " << aspectName << std::endl;
+                                        
+                                        // Try to monomorphize the method for the concrete type
+                                        implFunc = monomorphizeTraitMethod(concreteType, aspectName, methodName);
+                                        if (implFunc) {
+                                            std::cout << "DEBUG: Successfully monomorphized method!" << std::endl;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
                         if (implFunc) {
-                            std::cout << "DEBUG: Found trait method implementation: " << methodName 
-                                      << " for type " << typeName << std::endl;
+                            std::cout << "DEBUG: Found aspect method implementation: " << methodName 
+                                      << " for type " << concreteType << std::endl;
                             
                             // Build arguments: first arg is the object, rest are the call arguments
                             std::vector<llvm::Value*> argValues;
@@ -870,7 +911,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                             for (auto& arg : node->arguments) {
                                 arg->accept(*this);
                                 if (!m_currentLLVMValue) {
-                                    logError(arg->loc, "Argument codegen failed for trait method " + methodName);
+                                    logError(arg->loc, "Argument codegen failed for aspect method " + methodName);
                                     m_currentLLVMValue = nullptr;
                                     return;
                                 }
@@ -882,11 +923,14 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                                 builder->CreateCall(implFunc, argValues);
                                 m_currentLLVMValue = nullptr;
                             } else {
-                                m_currentLLVMValue = builder->CreateCall(implFunc, argValues, "trait.method.result");
+                                m_currentLLVMValue = builder->CreateCall(implFunc, argValues, "aspect.method.result");
                             }
                             
-                            std::cout << "DEBUG: Successfully generated call to trait method: " << methodName << std::endl;
+                            std::cout << "DEBUG: Successfully generated call to aspect method: " << methodName << std::endl;
                             return;
+                        } else {
+                            std::cout << "DEBUG: No aspect implementation found for " << concreteType 
+                                      << "." << methodName << "()" << std::endl;
                         }
                     }
                 }
