@@ -248,14 +248,18 @@ llvm::Function* LLVMCodegen::monomorphizeTraitMethod(const std::string& concrete
                         module.get()
                     );
                     
-                    // Cache it before generating body
+                                        // Cache it before generating body
                     monomorphizedMethods[cacheKey] = specializedFunc;
                     
                     // Generate the function body with type substitution active
                     std::cout << "DEBUG: Generating specialized function body..." << std::endl;
                     
-                    // Save current state
+                    // Save current state - INCLUDING builder insert point!
                     auto savedTypeSubstitutions = currentTypeSubstitutions;
+                    auto savedNamedValues = namedValues;
+                    llvm::BasicBlock* savedInsertBlock = builder->GetInsertBlock();
+                    llvm::BasicBlock::iterator savedInsertPoint = builder->GetInsertPoint();
+                    
                     currentTypeSubstitutions = typeSubstitutions;
                     
                     // Generate function body by visiting the method AST
@@ -264,7 +268,6 @@ llvm::Function* LLVMCodegen::monomorphizeTraitMethod(const std::string& concrete
                     builder->SetInsertPoint(entry);
                     
                     // Set up named values for parameters
-                    auto savedNamedValues = namedValues;
                     namedValues.clear();
                     
                     size_t argIdx = 0;
@@ -304,9 +307,16 @@ llvm::Function* LLVMCodegen::monomorphizeTraitMethod(const std::string& concrete
                         }
                     }
                     
-                    // Restore state
+                    // Restore state - INCLUDING builder insert point!
                     namedValues = savedNamedValues;
                     currentTypeSubstitutions = savedTypeSubstitutions;
+                    if (savedInsertBlock) {
+                        if (savedInsertPoint != savedInsertBlock->end()) {
+                            builder->SetInsertPoint(savedInsertBlock, savedInsertPoint);
+                        } else {
+                            builder->SetInsertPoint(savedInsertBlock);
+                        }
+                    }
                     
                     std::cout << "DEBUG: Successfully generated specialized function: " << specializedName << std::endl;
                     return specializedFunc;
