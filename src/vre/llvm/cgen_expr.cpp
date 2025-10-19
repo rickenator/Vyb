@@ -838,13 +838,15 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                         std::cout << "DEBUG: Checking aspect method call: " << concreteType 
                                   << "." << methodName << "()" << std::endl;
                         
-                        // First try to find a non-generic (concrete) aspect impl function
-                        // These are named just as their method name (e.g., "show", "add")
-                        llvm::Function* implFunc = module->getFunction(methodName);
+                        // First try to find a bind implementation with mangled name (Type_method)
+                        std::string mangledName = concreteType + "_" + methodName;
+                        llvm::Function* implFunc = module->getFunction(mangledName);
                         
-                        // If not found, try to monomorphize from generic aspect impl
-                        if (!implFunc) {
-                            std::cout << "DEBUG: No concrete impl found, trying generic monomorphization..." << std::endl;
+                        if (implFunc) {
+                            std::cout << "DEBUG: Found bind method implementation: " << mangledName << std::endl;
+                        } else {
+                            std::cout << "DEBUG: No bind implementation found (" << mangledName 
+                                      << "), trying generic monomorphization..." << std::endl;
                             
                             // Try to find which aspect this method belongs to
                             // We need to search through aspects to find which one declares this method

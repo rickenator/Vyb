@@ -322,8 +322,17 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
     
     llvm::FunctionType* funcType = llvm::FunctionType::get(returnType, paramTypes, false /*isVarArg*/);
     
+    // Mangle function name if inside a bind/impl block
+    std::string functionName = node->id->name;
+    if (m_currentImplTypeNode) {
+        // Create mangled name: TypeName_methodName (e.g., Person_goodbye, Robot_hello)
+        functionName = m_currentImplTypeNode->toString() + "_" + node->id->name;
+        std::cout << "DEBUG: Mangling bind method name: " << node->id->name 
+                  << " -> " << functionName << std::endl;
+    }
+    
     // Check for existing function (could be forward declaration or redefinition)
-    llvm::Function* func = module->getFunction(node->id->name);
+    llvm::Function* func = module->getFunction(functionName);
     if (func) {
         if (func->getFunctionType() != funcType) {
             logError(node->loc, "Redefinition of function '" + node->id->name + "' with different signature.");
@@ -335,7 +344,7 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
         }
         // If it was a forward declaration and types match, we are now providing the body.
     } else {
-        func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, node->id->name, module.get());
+        func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, functionName, module.get());
     }
 
     // Set current function for subsequent codegen (body, variable declarations)
@@ -345,7 +354,7 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
     // Create debug information for the function
     llvm::DISubprogram* debugFunction = nullptr;
     if (node->body) { // Only create debug info for functions with bodies
-        debugFunction = createDebugFunctionInfo(func, node->id->name, node->loc, node->isAsync);
+        debugFunction = createDebugFunctionInfo(func, functionName, node->loc, node->isAsync);
     }
 
     // Handle async functions
@@ -356,7 +365,7 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
         currentAsyncState.stateCounter = 0;
         
         // Initialize debug information for async state machine
-        initializeAsyncStateDebugInfo(node->id->name, node->loc);
+        initializeAsyncStateDebugInfo(functionName, node->loc);
         
         // For async functions, modify return type to Future<T> if not already
         if (node->returnTypeNode) {
