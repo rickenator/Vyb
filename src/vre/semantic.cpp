@@ -2190,7 +2190,7 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
     } else if (typeNameStr == "i8" || typeNameStr == "i16" || typeNameStr == "i32" || typeNameStr == "i64" ||
                typeNameStr == "u8" || typeNameStr == "u16" || typeNameStr == "u32" || typeNameStr == "u64" ||
                typeNameStr == "f32" || typeNameStr == "f64" ||
-               typeNameStr == "bool" || typeNameStr == "string" || typeNameStr == "void" ||
+               typeNameStr == "bool" || typeNameStr == "Bool" || typeNameStr == "string" || typeNameStr == "void" ||
                typeNameStr == "int" || typeNameStr == "float" ||
                typeNameStr == "Int" || typeNameStr == "String" || typeNameStr == "Int8" ||
                typeNameStr == "Future" || typeNameStr == "Void" ||
