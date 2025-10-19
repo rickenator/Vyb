@@ -161,6 +161,7 @@ Vyn **v0.4.1** is a **complete systems programming language** ready for producti
 - **Fixed Arrays**: `[T; N]` with indexing and beautiful println() output
 - **Structs**: `struct Point { x<Int>, y<Int> }` with field access (`p.x`, `p.y`)
 - **Control Flow**: `if/else`, `while/for` loops, `match` statements, `break/continue`
+- **Select Expressions**: `select(expr) -> { pattern -> result };` with auto-return and explicit `pass` keyword
 - **Arithmetic**: Full binary operators (`+`, `-`, `*`, `/`, `==`, `!=`, `<`, `>`, etc.)
 - **Pattern Matching**: `match (expr) { pattern -> result }` with comprehensive patterns
 - **I/O**: `println()` for output, works with all data types including vectors
@@ -757,6 +758,49 @@ describe_number(x<Int>)<String> -> {
         ? -> "some number"
     }
 }
+
+# Select expressions - elegant pattern matching that returns a value
+compute_bonus(level<Int>)<Int> -> {
+    # Simple select with naked expressions (auto-return)
+    multiplier<Int> = select(level) -> {
+        1 -> 10,
+        2 -> 20,
+        3 -> 30,
+        ? -> 5
+    };
+    return multiplier * 100
+}
+
+# Select with complex blocks and explicit pass keyword
+process_request(code<Int>)<Int> -> {
+    result<Int> = select(code) -> {
+        1 -> {
+            temp<Int> = 10;
+            pass temp
+        },
+        2 -> {
+            x<Int> = 20;
+            pass x
+        },
+        3 -> {
+            msg<Int> = 300;
+            println(msg);
+            pass msg
+        },
+        ? -> {
+            pass 0
+        }
+    };
+    return result
+}
+
+# Select expressions combine the best of match and expression values:
+# - Naked expressions (1 -> 10) auto-return without 'pass'
+# - Complex blocks ({ ... }) use 'pass' keyword to return value
+# - 'pass' returns from the block, NOT the enclosing function
+# - Type inference from first case ensures type safety
+# - Wildcard '?' provides default case handling
+```
 ```
 
 ### Variadic Tuples
@@ -1402,6 +1446,11 @@ See `doc/` directory for detailed design documents and RFCs.
 ## Recent Progress
 
 **v0.4.1 Complete Type System**: Full primitive type support with sized integers, floats, and character types
+- ✅ **Select Expressions**: Pattern matching expressions with `select(expr) -> { pattern -> result };` syntax
+  - **Naked expressions**: Simple values auto-return without `pass` keyword
+  - **Complex blocks**: Use `pass` keyword to return from block without exiting function
+  - **Type inference**: First case determines result type for entire select
+  - **Pattern matching**: Exact equality patterns with wildcard `?` support
 - ✅ **Canonical Syntax Unification**: Complete migration to unified `my()`/`our()` constructors and `view`/`borrow` operators
 - ✅ **Modern Test Harness**: Parallel test runner managing 391+ tests with HTML/JSON reporting and failure triage
 - ✅ **Syntax Migration Tools**: Automated migration from legacy to canonical syntax with comprehensive reporting
