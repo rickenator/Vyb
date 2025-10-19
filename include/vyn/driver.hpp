@@ -2,14 +2,20 @@
 
 namespace vyn {
 
+// Forward declaration
+class SemanticAnalyzer;
+
 class Driver {
 public:
-    // Placeholder for now
-    Driver() = default; 
-    // Add any necessary methods or members that SemanticAnalyzer or LLVMCodegen might expect.
-    // For example, if they need to report errors or access shared resources through the Driver:
-    // void reportError(const std::string& message, const SourceLocation& loc);
-    // SomeSharedResource& getSharedResource();
+    Driver() = default;
+    
+    // SemanticAnalyzer access for codegen
+    void setSemanticAnalyzer(SemanticAnalyzer* analyzer) { semanticAnalyzer_ = analyzer; }
+    SemanticAnalyzer* getSemanticAnalyzer() const { return semanticAnalyzer_; }
+    bool hasSemanticAnalyzer() const { return semanticAnalyzer_ != nullptr; }
+
+private:
+    SemanticAnalyzer* semanticAnalyzer_ = nullptr;
 };
 
 } // namespace vyn

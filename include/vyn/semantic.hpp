@@ -143,11 +143,48 @@ private:
     SymbolTable* parent;
 };
 
+// Information about a generic trait implementation (e.g., impl<T> Display for Box<T>)
+// Declared before SemanticAnalyzer to allow use in getter return type
+struct GenericImplInfo {
+    std::string typePattern;           // e.g., "Box<T>"
+    std::string traitName;             // e.g., "Display"
+    std::vector<std::string> typeParams; // e.g., ["T"]
+    ast::ImplDeclaration* declaration; // Original AST node
+    std::map<std::string, ast::FunctionDeclaration*> methods; // method name -> AST
+    
+    GenericImplInfo(ast::ImplDeclaration* decl) : declaration(decl) {
+        if (decl->selfType) {
+            typePattern = decl->selfType->toString();
+        }
+        if (decl->traitType) {
+            traitName = decl->traitType->toString();
+        }
+        
+        // Extract type parameters
+        for (const auto& param : decl->genericParams) {
+            if (param && param->name) {
+                typeParams.push_back(param->name->name);
+            }
+        }
+        
+        // Store methods
+        for (const auto& method : decl->methods) {
+            if (method && method->id) {
+                methods[method->id->name] = method.get();
+            }
+        }
+    }
+};
+
 class SemanticAnalyzer : public ast::Visitor {
 public:
     explicit SemanticAnalyzer(Driver& driver);
     void analyze(ast::Module* root);
     const std::vector<std::string>& getErrors() const { return errors; }
+    
+    // Access to generic trait implementations for monomorphization
+    const std::unordered_map<std::string, std::unordered_map<std::string, std::unique_ptr<GenericImplInfo>>>& 
+    getGenericTraitImpls() const { return genericTraitImpls; }
 
     // Helper methods
     bool isInLoop();
@@ -323,38 +360,6 @@ public:
                     tm.hasDefaultImpl = (method->body != nullptr);
                     
                     methods.push_back(std::move(tm));
-                }
-            }
-        }
-    };
-    
-    // Information about a generic trait implementation (e.g., impl<T> Display for Box<T>)
-    struct GenericImplInfo {
-        std::string typePattern;           // e.g., "Box<T>"
-        std::string traitName;             // e.g., "Display"
-        std::vector<std::string> typeParams; // e.g., ["T"]
-        ast::ImplDeclaration* declaration; // Original AST node
-        std::map<std::string, ast::FunctionDeclaration*> methods; // method name -> AST
-        
-        GenericImplInfo(ast::ImplDeclaration* decl) : declaration(decl) {
-            if (decl->selfType) {
-                typePattern = decl->selfType->toString();
-            }
-            if (decl->traitType) {
-                traitName = decl->traitType->toString();
-            }
-            
-            // Extract type parameters
-            for (const auto& param : decl->genericParams) {
-                if (param && param->name) {
-                    typeParams.push_back(param->name->name);
-                }
-            }
-            
-            // Store methods
-            for (const auto& method : decl->methods) {
-                if (method && method->id) {
-                    methods[method->id->name] = method.get();
                 }
             }
         }

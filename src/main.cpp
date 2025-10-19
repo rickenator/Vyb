@@ -107,6 +107,7 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
 
         std::cout << "Running semantic analysis..." << std::endl;
         vyn::SemanticAnalyzer semanticAnalyzer(driver);
+        driver.setSemanticAnalyzer(&semanticAnalyzer);  // Make semantic data available to codegen
         semanticAnalyzer.analyze(ast.get());
         
         // Check for semantic errors and fail if any exist
@@ -546,6 +547,7 @@ int main(int argc, char* argv[]) {
                 
                 vyn::Driver driver;
                 vyn::SemanticAnalyzer semanticAnalyzer(driver);
+                driver.setSemanticAnalyzer(&semanticAnalyzer);  // Make semantic data available
                 semanticAnalyzer.analyze(ast.get());
                 
                 std::cout << "Semantic analysis completed successfully" << std::endl;
