@@ -1,4 +1,4 @@
-# Working test for monomorphization with explicit object literal types
+# Working test -> monomorphization with explicit object literal types
 
 struct Box<T> {
     value<T>
@@ -6,7 +6,7 @@ struct Box<T> {
 
 # Test that we can use Box<Int> successfully
 main()<Int> -> {
-    # This should work since we're not using generic impl yet
+    # This should work since we're not using generic bind yet
     # Just testing basic monomorphization
     return 42
 }

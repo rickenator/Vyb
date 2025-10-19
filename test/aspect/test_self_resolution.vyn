@@ -1,16 +1,16 @@
-# Test Self type resolution in generic trait implementations
-# Phase 6 Step 1: Verify Self resolves to Box<T> in impl<T> Trait for Box<T>
+# Test Self type resolution in generic aspect implementations
+# Phase 6 Step 1: Verify Self resolves to Box<T> in bind<T> Trait -> Box<T>
 
 struct Box<T> {
     value<T>
 }
 
-trait Display {
+aspect Display {
     show(self<Self>)<String> -> { }
 }
 
 # Generic implementation: Self should resolve to Box<T>
-impl<T> Display for Box<T> {
+bind<T> Display -> Box<T> {
     show(self<Self>)<String> -> {
         return "Box"
     }

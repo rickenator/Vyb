@@ -1,12 +1,12 @@
-// Basic trait declaration test
+// Basic aspect declaration test
 // Tests Phase 1: Trait declarations with method signatures
 
-trait Printable {
+aspect Printable {
     print(self<Self>)<Void> -> { }
     to_string(self<Self>)<String> -> { }
 }
 
-trait Comparable {
+aspect Comparable {
     lt(self<Self>, other<Self>)<Bool> -> { }
     eq(self<Self>, other<Self>)<Bool> -> {
         // Default implementation

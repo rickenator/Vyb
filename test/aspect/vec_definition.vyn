@@ -1,5 +1,5 @@
-# Vec type definition for testing
-# Simple non-generic version first to validate trait impls work
+# Vec type definition -> testing
+# Simple non-generic version first to validate aspect impls work
 
 struct Vec {
     data<loc<Int>>,     # Pointer to data

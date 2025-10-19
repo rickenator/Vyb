@@ -1,7 +1,7 @@
-// Phase 2: Simple trait implementation test without println
-// Tests impl Trait for Type with method returning values
+// Phase 2: Simple aspect implementation test without println
+// Tests bind Trait -> Type with method returning values
 
-trait Calculator {
+aspect Calculator {
     add(self<Self>, value<Int>)<Int> -> { }
     get_value(self<Self>)<Int> -> { }
 }
@@ -10,7 +10,7 @@ struct Counter {
     count<Int>
 }
 
-impl Calculator for Counter {
+bind Calculator -> Counter {
     add(self<Counter>, value<Int>)<Int> -> {
         return self.count + value
     }
@@ -23,7 +23,7 @@ impl Calculator for Counter {
 main()<Int> -> {
     c<Counter> = Counter { count = 10 }
     
-    // Call trait methods
+    // Call aspect methods
     result<Int> = c.add(5)
     value<Int> = c.get_value()
     

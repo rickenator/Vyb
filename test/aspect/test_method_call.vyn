@@ -1,15 +1,15 @@
-# Test method call on monomorphized generic type with trait impl
+# Test method call on monomorphized generic type with aspect bind
 # This should trigger method monomorphization
 
 struct Box<T> {
     value<T>
 }
 
-trait Display {
+aspect Display {
     show(self<Self>)<String> -> { }
 }
 
-impl<T> Display for Box<T> {
+bind<T> Display -> Box<T> {
     show(self<Self>)<String> -> {
         return "Box"
     }
@@ -22,7 +22,7 @@ main()<Int> -> {
     # Call method on Box<Int> - should trigger method monomorphization
     # This needs to: 
     # 1. Detect b has type Box<Int>
-    # 2. Find generic impl: impl<T> Display for Box<T>
+    # 2. Find generic bind: bind<T> Display -> Box<T>
     # 3. Substitute T -> Int
     # 4. Generate Box_Int_show() function
     # str<String> = b.show()

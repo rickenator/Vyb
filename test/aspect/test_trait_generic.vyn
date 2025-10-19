@@ -1,13 +1,13 @@
-// Phase 3: Generic trait implementations
-// Tests impl<T> Trait for GenericType<T>
+// Phase 3: Generic aspect implementations
+// Tests bind<T> Trait -> GenericType<T>
 
-trait Container {
+aspect Container {
     size(self<Self>)<Int> -> { }
     is_empty(self<Self>)<Bool> -> { }
 }
 
-// Generic impl: any Vec<T> implements Container
-impl<T> Container for Vec<T> {
+// Generic bind: any Vec<T> implements Container
+bind<T> Container -> Vec<T> {
     size(self<Vec<T>>)<Int> -> {
         return self.len()
     }
@@ -24,7 +24,7 @@ main()<Int> -> {
     numbers.push(2)
     numbers.push(3)
     
-    // Call trait methods on Vec<Int>
+    // Call aspect methods on Vec<Int>
     size<Int> = numbers.size()
     empty<Bool> = numbers.is_empty()
     
