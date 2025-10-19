@@ -6,8 +6,7 @@ struct Box<T> {
 }
 
 main()<Int> -> {
-    # Create a Box<Int> variable  
-    # Use explicit initialization
-    b<Box<Int>> = { value = 42 }
+    # Create a Box<Int> variable with explicit type in literal
+    b<Box<Int>> = Box<Int> { value = 42 }
     return 0
 }
