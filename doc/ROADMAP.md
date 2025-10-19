@@ -163,7 +163,7 @@ As the Vyn project grows, a more structured directory layout will be beneficial 
 -   **API Reference**: Generate or manually create a reference documentation for the standard library and core compiler interfaces.
 -   **Compiler Internals Documentation**: Add more detailed documentation on compiler internals, including the AST, semantic analysis, and code generation phases.
 
-### Select Expressions (Mid Priority)
+### Select Expressions
 
 A powerful expression-based pattern matching construct that complements the existing `match` statement:
 
@@ -228,6 +228,91 @@ A powerful expression-based pattern matching construct that complements the exis
   - Natural fit for functional-style programming
 
 **Status**: Proposed for mid-priority implementation after current core features stabilize.
+
+#### Range/Comparison Patterns
+
+An enhancement to both `match` and `select` to support comparison-based patterns:
+
+- **Motivation**: Enable elegant handling of numeric ranges and ordered comparisons without full class/interface system
+  - Works with any comparable type (Int, Float, String with lexical ordering)
+  - Reduces verbose if-else chains for range-based logic
+  - Complements exact-match patterns with relational operators
+
+- **Syntax** (using `select` as example):
+  ```vyn
+  label<String> = select(age) -> {
+      == 0  -> { pass "infant" }
+      >= 1  -> { pass "toddler" }
+      >= 5  -> { pass "kindergarten" }
+      >= 18 -> { pass "adult" }
+      ?     -> { pass "student" }
+  }
+  
+  grade<String> = select(score) -> {
+      >= 90 -> { pass "A" }
+      >= 80 -> { pass "B" }
+      >= 70 -> { pass "C" }
+      >= 60 -> { pass "D" }
+      ?     -> { pass "F" }
+  }
+  
+  // String lexical comparison (requires String comparison operators)
+  category<String> = select(name) -> {
+      < "M"  -> { pass "First Half" }
+      >= "M" -> { pass "Second Half" }
+  }
+  ```
+
+- **Supported Operators**:
+  - `==` - Exact equality (same as current behavior)
+  - `!=` - Not equal
+  - `<`  - Less than
+  - `<=` - Less than or equal
+  - `>`  - Greater than
+  - `>=` - Greater than or equal
+
+- **Evaluation Semantics**:
+  - Patterns evaluated **top-to-bottom** (order matters!)
+  - First matching pattern wins (early exit)
+  - Wildcard `?` acts as catch-all (should be last)
+  - All comparison operators use the matched value as right operand: `pattern_op value`
+  - Example: `>= 18` means "is the matched value >= 18?"
+
+- **Type Requirements**:
+  - Type must support the comparison operator used
+  - **Current Support**: Int, Float (have built-in comparison)
+  - **Future Support**: String (requires lexical comparison implementation)
+  - **Struct Support**: Requires explicit comparison operator overloading (future polymorphism feature)
+
+- **Implementation Prerequisites**:
+  1. Extend pattern AST to include comparison operators
+  2. Implement comparison codegen for all supported types
+  3. Add String comparison operators (`<`, `<=`, `>`, `>=`) for lexical ordering
+  4. Ensure top-to-bottom evaluation order in codegen
+  5. Type checking to verify comparison operator compatibility
+
+- **Same Syntax for Match**:
+  ```vyn
+  match (temperature) {
+      < 0   -> println("Freezing")
+      < 20  -> println("Cold")
+      < 30  -> println("Comfortable")
+      >= 30 -> println("Hot")
+  }
+  ```
+
+- **Benefits**:
+  - Natural expression of range-based logic
+  - Avoids verbose chained comparisons
+  - Works without complex type system (interfaces/traits)
+  - Clear, readable code for categorization problems
+
+- **Edge Cases**:
+  - Overlapping patterns: first match wins (explicit ordering requirement)
+  - Missing wildcard: if no pattern matches, `select` behavior TBD (error? default value? Void?)
+  - Non-comparable types: compile-time error
+
+**Status**: Future extension to match/select, depends on String comparison operators.
 
 ### Bundles & Sharing System
 
