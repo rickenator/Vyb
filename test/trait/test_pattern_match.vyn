@@ -1,0 +1,26 @@
+# Simple test to trigger trait method monomorphization detection
+# We'll add actual method calls in the next iteration
+
+struct Box<T> {
+    value<T>
+}
+
+trait Display {
+    show(self<Self>)<String> -> { }
+}
+
+impl<T> Display for Box<T> {
+    show(self<Self>)<String> -> {
+        return "Box"
+    }
+}
+
+main()<Int> -> {
+    # Create Box<Int> - this should monomorphize Box struct
+    b<Box<Int>> = Box<Int> { value = 42 }
+    
+    # TODO: Once method call detection is added:
+    # str<String> = b.show()  # This will trigger monomorphization
+    
+    return 0
+}
