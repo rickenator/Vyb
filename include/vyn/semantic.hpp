@@ -347,6 +347,9 @@ private:
     
     // Struct field type storage for member access resolution
     std::unordered_map<std::string, std::map<std::string, ast::TypeNode*>> structFieldTypes;
+    
+    // Context for resolving 'Self' type in trait implementations
+    ast::TypeNode* currentImplType = nullptr;  // Set to Box<T> when processing impl for Box<T>
 
     void enterScope();
     void exitScope();
