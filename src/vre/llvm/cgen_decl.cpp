@@ -48,19 +48,14 @@ void LLVMCodegen::visit(ast::TraitDeclaration* node) {
     // In a full implementation, this information would be used for vtable generation when
     // types implement this trait
     
-    // Record method signatures in the trait
-    for (const auto& method : node->methods) {
-        if (method) {
-            method->accept(*this);
-            // We don't actually generate code for trait methods
-            // They're just signatures that implementing types must provide
-        }
-    }
+    // Skip visiting trait method signatures - they contain placeholder types like 'Self'
+    // which have no concrete LLVM representation. The actual method implementations
+    // will be generated when processing impl blocks.
+    
+    std::cout << "DEBUG: Trait '" << traitName << "' declaration skipped in codegen (interface only, no runtime code)" << std::endl;
     
     // Traits don't produce runtime values
     m_currentLLVMValue = nullptr;
-    
-    logWarning(node->loc, "TraitDeclaration processed for signature information only. Full trait support requires implementation types to provide concrete methods.");
 }
 
 void LLVMCodegen::visit(ast::NamespaceDeclaration* node) {
@@ -664,24 +659,32 @@ void LLVMCodegen::visit(vyn::ast::FieldDeclaration* node) {
 }
 
 void LLVMCodegen::visit(vyn::ast::ImplDeclaration* node) {
-    // `impl MyStruct { fn foo(&self) {} }`
-    // This associates methods with a type.
-    // Set `currentClassType` (or a more general `currentImplTargetType`)
-    // so that FunctionDeclarations inside this block know their `this`/`self` type.
-
+    // impl blocks associate methods with types.
+    // Generic impl blocks (e.g., impl<T> Display for Box<T>) are templates that don't
+    // generate code until instantiated with concrete types.
+    
+    // Check if this is a generic impl block
+    if (!node->genericParams.empty()) {
+        std::cout << "DEBUG: Skipping generic impl block for " << node->selfType->toString() 
+                  << " - codegen happens on instantiation" << std::endl;
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // For non-generic impl blocks, generate the methods for the concrete type
     // ast.hpp: TypeNodePtr selfType; // The type being implemented
     // ast.hpp: std::vector<std::unique_ptr<FunctionDeclaration>> methods;
 
-    llvm::Type* targetType = codegenType(node->selfType.get()); // Corrected: Was targetType, ast.hpp shows 'selfType'
+    llvm::Type* targetType = codegenType(node->selfType.get());
     if (!targetType || !targetType->isStructTy()) {
-        logError(node->loc, "Target type for impl block is not a known struct/class type: " + node->selfType->toString()); // Corrected: Was targetType
+        logError(node->loc, "Target type for impl block is not a known struct/class type: " + node->selfType->toString());
         m_currentLLVMValue = nullptr; return;
     }
     llvm::StructType* oldCurrentClassType = currentClassType;
     currentClassType = llvm::dyn_cast<llvm::StructType>(targetType);
-    m_currentImplTypeNode = node->selfType.get(); // Corrected: Was targetType
+    m_currentImplTypeNode = node->selfType.get();
 
-    for (const auto& member : node->methods) { // Corrected: Was body, ast.hpp shows 'methods'
+    for (const auto& member : node->methods) {
         // Members are typically FunctionDeclarations (methods)
         member->accept(*this); // This will call visit(FunctionDeclaration*)
     }

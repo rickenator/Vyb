@@ -2041,6 +2041,11 @@ void SemanticAnalyzer::visit(ast::ImplDeclaration* node) {
     std::string typeName = node->selfType->toString();
     std::string traitName;
     
+    // Set current impl type for Self resolution (will be restored later)
+    ast::TypeNode* previousImplType = currentImplType;
+    currentImplType = node->selfType.get();
+    std::cout << "DEBUG: Set currentImplType to " << typeName << " for Self resolution" << std::endl;
+    
     if (node->traitType) {
         // This is a trait implementation: impl Trait for Type
         traitName = node->traitType->toString();
@@ -2121,6 +2126,9 @@ void SemanticAnalyzer::visit(ast::ImplDeclaration* node) {
         exitScope();
         std::cout << "DEBUG: Exited generic impl type parameter scope" << std::endl;
     }
+    
+    // Restore previous impl type
+    currentImplType = previousImplType;
 }
 
 void SemanticAnalyzer::visit(ast::ThrowStatement* node) {}
@@ -2139,6 +2147,22 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
         return;
     }
     const std::string& typeNameStr = node->identifier->name;
+    
+    // Handle 'Self' type - resolve to current impl type or allow as placeholder
+    if (typeNameStr == "Self") {
+        if (currentImplType) {
+            // We're inside an impl block - resolve Self to the implementing type
+            std::cout << "DEBUG: Resolving Self to " << currentImplType->toString() << std::endl;
+            expressionTypes[node] = currentImplType;
+            return;
+        } else {
+            // We're in a trait declaration - treat Self as a valid placeholder type
+            std::cout << "DEBUG: Self used as placeholder in trait declaration" << std::endl;
+            node->type = std::shared_ptr<ast::TypeNode>(node->clone());
+            return;
+        }
+    }
+    
     if (typeNameStr == "Vec") {
         // Convert Vec<T> TypeName to VecType
         if (node->genericArgs.empty() || !node->genericArgs[0]) {
@@ -3302,15 +3326,28 @@ void SemanticAnalyzer::registerTraitImpl(ast::ImplDeclaration* implDecl) {
     std::string typeName = implDecl->selfType->toString();
     std::string traitName = implDecl->traitType->toString();
     
-    // Store the implementation methods
-    std::vector<ast::FunctionDeclaration*> implMethods;
-    for (const auto& method : implDecl->methods) {
-        if (method) {
-            implMethods.push_back(method.get());
-        }
-    }
+    // Check if this is a generic implementation (has type parameters)
+    bool isGeneric = !implDecl->genericParams.empty();
     
-    traitImpls[typeName][traitName] = implMethods;
+    if (isGeneric) {
+        // Store generic implementation separately
+        std::cout << "DEBUG: Storing generic trait impl: " << traitName << " for " << typeName << std::endl;
+        
+        auto genericInfo = std::make_unique<GenericImplInfo>(implDecl);
+        genericTraitImpls[typeName][traitName] = std::move(genericInfo);
+    } else {
+        // Store concrete implementation
+        std::cout << "DEBUG: Storing concrete trait impl: " << traitName << " for " << typeName << std::endl;
+        
+        std::vector<ast::FunctionDeclaration*> implMethods;
+        for (const auto& method : implDecl->methods) {
+            if (method) {
+                implMethods.push_back(method.get());
+            }
+        }
+        
+        traitImpls[typeName][traitName] = implMethods;
+    }
 }
 
 bool SemanticAnalyzer::validateTraitImpl(const std::string& typeName, 

@@ -327,6 +327,38 @@ public:
             }
         }
     };
+    
+    // Information about a generic trait implementation (e.g., impl<T> Display for Box<T>)
+    struct GenericImplInfo {
+        std::string typePattern;           // e.g., "Box<T>"
+        std::string traitName;             // e.g., "Display"
+        std::vector<std::string> typeParams; // e.g., ["T"]
+        ast::ImplDeclaration* declaration; // Original AST node
+        std::map<std::string, ast::FunctionDeclaration*> methods; // method name -> AST
+        
+        GenericImplInfo(ast::ImplDeclaration* decl) : declaration(decl) {
+            if (decl->selfType) {
+                typePattern = decl->selfType->toString();
+            }
+            if (decl->traitType) {
+                traitName = decl->traitType->toString();
+            }
+            
+            // Extract type parameters
+            for (const auto& param : decl->genericParams) {
+                if (param && param->name) {
+                    typeParams.push_back(param->name->name);
+                }
+            }
+            
+            // Store methods
+            for (const auto& method : decl->methods) {
+                if (method && method->id) {
+                    methods[method->id->name] = method.get();
+                }
+            }
+        }
+    };
 
 private:
     Driver& driver_;
@@ -345,8 +377,15 @@ private:
     // Maps "Point" -> "Comparable" -> { method implementations }
     std::unordered_map<std::string, std::unordered_map<std::string, std::vector<ast::FunctionDeclaration*>>> traitImpls;
     
+    // Generic trait implementation registry: stores templates like impl<T> Display for Box<T>
+    // Maps "Box<T>" -> "Display" -> GenericImplInfo
+    std::unordered_map<std::string, std::unordered_map<std::string, std::unique_ptr<GenericImplInfo>>> genericTraitImpls;
+    
     // Struct field type storage for member access resolution
     std::unordered_map<std::string, std::map<std::string, ast::TypeNode*>> structFieldTypes;
+    
+    // Context for resolving 'Self' type in trait implementations
+    ast::TypeNode* currentImplType = nullptr;  // Set to Box<T> when processing impl for Box<T>
 
     void enterScope();
     void exitScope();

@@ -1,0 +1,22 @@
+# Test Self type resolution in generic trait implementations
+# Phase 6 Step 1: Verify Self resolves to Box<T> in impl<T> Trait for Box<T>
+
+struct Box<T> {
+    value<T>
+}
+
+trait Display {
+    show(self<Self>)<String> -> { }
+}
+
+# Generic implementation: Self should resolve to Box<T>
+impl<T> Display for Box<T> {
+    show(self<Self>)<String> -> {
+        return "Box"
+    }
+}
+
+main()<Int> -> {
+    # Just test that it parses and semantic analysis succeeds
+    return 0
+}
