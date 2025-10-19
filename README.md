@@ -1358,9 +1358,9 @@ main()<Result> -> {
 
 One of Vyn's standout features is automatic serialization of complex return types:
 
-- **Simple integers**: Return as exit codes (`fn<Int> main() -> return 42`)
+- **Simple integers**: Return as exit codes (`main()<Int> -> { return 42 }`)
 - **Complex types**: Automatically serialize to JSON-like format
-- **Tuples**: `fn<Int,String> main() -> return 10, "hello"` outputs `[10, "hello"]`
+- **Tuples**: `main()<Int,String> -> { return 10, "hello" }` outputs `[10, "hello"]`
 - **Structs**: Full structured output with field names and values
 
 This makes Vyn excellent for data processing scripts and API-style programs.
@@ -1566,44 +1566,258 @@ See `doc/` directory for detailed design documents and RFCs.
 
 ### A. EBNF Grammar
 
-Vyn's syntax is defined by an EBNF grammar reflecting current v0.4.1 capabilities:
+Vyn's syntax is defined by a comprehensive EBNF grammar reflecting v0.4.1 capabilities:
 
+```ebnf
+// Conventions:
+//   IDENTIFIER:        Represents a valid identifier token.
+//   INTEGER_LITERAL:   Represents an integer literal token.
+//   FLOAT_LITERAL:     Represents a float literal token.
+//   STRING_LITERAL:    Represents a string literal token.
+//   BOOLEAN_LITERAL:   Represents 'true' or 'false'.
+//   'keyword':         Denotes a literal keyword.
+//   { ... }:           Represents zero or more occurrences (Kleene star).
+//   [ ... ]:           Represents zero or one occurrence (optional).
+//   ( ... | ... ):     Represents a choice (alternation).
+//   ... ::= ... :      Defines a production rule.
+
+// Module Structure
+module                 ::= { module_item } EOF
+module_item            ::= import_statement
+                         | smuggle_statement
+                         | class_declaration
+                         | struct_declaration
+                         | enum_declaration
+                         | impl_declaration
+                         | function_declaration
+                         | variable_declaration
+                         | constant_declaration
+                         | type_alias_declaration
+                         | trait_declaration
+                         | statement
+
+// Import System (import/smuggle)
+import_statement       ::= 'import' path [ 'as' IDENTIFIER ] [';']
+smuggle_statement      ::= 'smuggle' path [ 'as' IDENTIFIER ] [';']
+path                   ::= IDENTIFIER { ('::' | '.') IDENTIFIER }
+
+// Type Declarations
+struct_declaration     ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ] 
+                           'struct' IDENTIFIER '{' { struct_field_declaration } '}'
+struct_field_declaration ::= [ 'pub' ] IDENTIFIER '<' type '>' [ '=' expression ] [';']
+
+class_declaration      ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ] 
+                           'class' IDENTIFIER [ 'extends' type ] [ 'implements' type_list ] 
+                           '{' { class_member } '}'
+class_member           ::= field_declaration | method_declaration | constructor_declaration
+field_declaration      ::= [ 'pub' ] IDENTIFIER '<' type '>' [ '=' expression ] [';']
+
+enum_declaration       ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ] 
+                           'enum' IDENTIFIER '{' { enum_variant } '}'
+enum_variant           ::= IDENTIFIER [ '(' type_list ')' ] [ '=' expression ] ','?
+
+impl_declaration       ::= [ 'template' '<' type_parameter_list '>' ] 
+                           'impl' type [ 'for' type ] '{' { method_declaration } '}'
+
+trait_declaration      ::= [ 'pub' ] 'template' IDENTIFIER [ template_parameters ] 
+                           '{' { method_signature } '}'
+
+// Function Declarations
+function_declaration   ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ] [ 'async' ] 
+                           IDENTIFIER '(' [ parameter_list ] ')' '<' type_list '>' '->' 
+                           ( block_statement | expression [';'] | statement ) 
+                           [ 'throws' type_list ]
+
+method_declaration     ::= [ 'pub' ] [ 'static' ] [ 'template' '<' type_parameter_list '>' ] [ 'async' ]
+                           IDENTIFIER '(' [ parameter_list ] ')' '<' type '>' '->' 
+                           ( block_statement | expression [';'] ) [ 'throws' type_list ]
+
+method_signature       ::= [ 'async' ] IDENTIFIER '(' [ parameter_list ] ')' 
+                           '<' type_list '>' '->' ';' [ 'throws' type_list ]
+
+constructor_declaration::= [ 'pub' ] 'new' [ template_parameters ] 
+                           '(' [ parameter_list ] ')' [ 'throws' type_list ] 
+                           ( block_statement | '=>' expression [';'] )
+
+// Variable Declarations
+variable_declaration   ::= [ 'pub' ] IDENTIFIER '<' type '>' [ '=' expression ] [';']
+constant_declaration   ::= [ 'pub' ] IDENTIFIER '<' type 'const' '>' '=' expression [';']
+type_alias_declaration ::= [ 'pub' ] 'type' IDENTIFIER [ template_parameters ] '=' type [';']
+
+// Parameters and Templates
+type_parameter_list    ::= type_parameter { ',' type_parameter }
+type_parameter         ::= IDENTIFIER [ ':' type_bounds ] | expression
+type_bounds            ::= type { '+' type }
+template_parameters    ::= '<' type_parameter_list '>'
+
+parameter_list         ::= parameter { ',' parameter }
+parameter              ::= [ 'const' ] IDENTIFIER '<' type '>' [ '=' expression ]
+
+type_list              ::= type { ',' type }
+
+// Statements
+statement              ::= expression_statement
+                         | block_statement
+                         | if_statement
+                         | for_statement
+                         | while_statement
+                         | loop_statement
+                         | match_statement
+                         | return_statement
+                         | break_statement
+                         | continue_statement
+                         | pass_statement
+                         | defer_statement
+                         | try_statement
+                         | variable_declaration
+                         | constant_declaration
+                         | pattern_assignment_statement
+                         | scoped_statement
+                         | throw_statement
+
+expression_statement   ::= expression [';']
+block_statement        ::= '{' { statement } '}'
+
+if_statement           ::= 'if' expression ( block_statement | statement_without_block ) 
+                           { 'else' 'if' expression ( block_statement | statement_without_block ) } 
+                           [ 'else' ( block_statement | statement_without_block ) ]
+
+for_statement          ::= 'for' pattern 'in' expression block_statement
+while_statement        ::= 'while' expression block_statement
+loop_statement         ::= 'loop' block_statement
+
+match_statement        ::= 'match' '(' expression ')' '{' match_arm* '}'
+match_arm              ::= pattern '->' ( expression | block_statement | statement_without_block ) ','?
+
+select_expression      ::= 'select' '(' expression ')' '->' '{' select_arm* '}' ';'
+select_arm             ::= pattern '->' ( expression | block_statement ) ','?
+
+return_statement       ::= 'return' [ expression ] [';']
+break_statement        ::= 'break' [ IDENTIFIER ] [ expression ] [';']
+continue_statement     ::= 'continue' [ IDENTIFIER ] [';']
+pass_statement         ::= 'pass' expression [';']
+defer_statement        ::= 'defer' ( expression_statement | block_statement )
+throw_statement        ::= 'throw' expression [';']
+scoped_statement       ::= 'scoped' block_statement
+
+try_statement          ::= 'try' block_statement { catch_clause } [ 'finally' block_statement ]
+catch_clause           ::= 'catch' [ '(' IDENTIFIER ':' type ')' | IDENTIFIER ] block_statement
+
+pattern_assignment_statement ::= pattern '=' expression [';']
+statement_without_block ::= expression_statement | return_statement | break_statement 
+                          | continue_statement | throw_statement
+
+// Patterns
+pattern                ::= comparison_pattern
+                         | IDENTIFIER [ '@' pattern ]
+                         | literal
+                         | '?'
+                         | path '{' [ field_pattern { ',' field_pattern } [','] ] '}'
+                         | path '(' [ pattern_list ] ')'
+                         | '[' [ pattern_list ] ']'
+                         | '(' pattern_list ')'
+                         | '&' [ 'const' ] pattern
+
+comparison_pattern     ::= ( '==' | '!=' | '<' | '<=' | '>' | '>=' ) expression
+
+field_pattern          ::= IDENTIFIER ':' pattern | IDENTIFIER
+pattern_list           ::= pattern { ',' pattern }
+
+// Expressions
+expression             ::= assignment_expression
+assignment_expression  ::= conditional_expression [ assignment_operator assignment_expression ]
+assignment_operator    ::= '=' | '+=' | '-=' | '*=' | '/=' | '%=' | '&=' | '|=' | '^=' | '<<=' | '>>='
+
+conditional_expression ::= logical_or_expression [ '?' expression ':' conditional_expression ]
+                         | if_expression
+
+logical_or_expression  ::= logical_and_expression { '||' logical_and_expression }
+logical_and_expression ::= bitwise_or_expression { '&&' bitwise_or_expression }
+bitwise_or_expression  ::= bitwise_xor_expression { '|' bitwise_xor_expression }
+bitwise_xor_expression ::= bitwise_and_expression { '^' bitwise_and_expression }
+bitwise_and_expression ::= equality_expression { '&' equality_expression }
+equality_expression    ::= relational_expression { ( '==' | '!=' ) relational_expression }
+relational_expression  ::= range_expression { ( '<' | '<=' | '>' | '>=' | 'is' | 'as' ) range_expression }
+range_expression       ::= shift_expression [ '..' shift_expression ]
+shift_expression       ::= additive_expression { ( '<<' | '>>' ) additive_expression }
+additive_expression    ::= multiplicative_expression { ( '+' | '-' ) multiplicative_expression }
+multiplicative_expression ::= unary_expression { ( '*' | '/' | '%' ) unary_expression }
+
+unary_expression       ::= ( '!' | '-' | '+' | '*' | 'await' | 'throw' ) unary_expression
+                         | primary_expression
+
+primary_expression     ::= literal
+                         | path_expression
+                         | '(' expression ')'
+                         | call_expression
+                         | member_access_expression
+                         | index_access_expression
+                         | list_comprehension
+                         | array_literal
+                         | array_construction
+                         | tuple_literal
+                         | struct_literal
+                         | lambda_expression
+                         | select_expression
+                         | 'self' | 'super'
+
+if_expression          ::= 'if' expression block_statement 'else' ( block_statement | if_expression )
+
+literal                ::= INTEGER_LITERAL | FLOAT_LITERAL | STRING_LITERAL | BOOLEAN_LITERAL | 'null'
+
+path_expression        ::= path [ type_arguments ]
+call_expression        ::= primary_expression '(' [ argument_list ] ')' [ '?' ]
+argument_list          ::= expression { ',' expression }
+
+member_access_expression ::= primary_expression ( '.' | '?.' | '::' ) IDENTIFIER
+index_access_expression  ::= primary_expression '[' expression ']' [ '?' ]
+
+list_comprehension     ::= '[' expression 'for' pattern 'in' expression [ 'if' expression ] ']'
+array_literal          ::= '[' [ expression { ',' expression } [','] ] ']'
+                         | '[' expression ';' expression ']'
+array_construction     ::= ArrayType '(' ')'
+
+tuple_literal          ::= '(' [ expression { ',' expression } [ ',' ] ] ')'
+
+struct_literal         ::= [ path_expression ] '{' [ struct_literal_field { ',' struct_literal_field } [ ',' ] ] '}'
+struct_literal_field   ::= IDENTIFIER (':' | '=') expression | IDENTIFIER
+
+lambda_expression      ::= [ 'async' ] ( '|' [ parameter_list ] '|' | IDENTIFIER ) '<' type '>' 
+                           ( '=>' expression | block_statement )
+
+// Type System
+Type                   ::= BaseType [ 'const' ] [ '?' ]
+BaseType               ::= IDENTIFIER
+                         | OwnershipWrapper '<' Type '>'
+                         | ArrayType
+                         | TupleType
+                         | FunctionType
+                         | '(' Type ')'
+
+OwnershipWrapper       ::= 'my' | 'our' | 'their' | 'ptr' | 'loc'
+
+ArrayType              ::= '[' Type [ ';' Expression ] ']'
+TupleType              ::= '(' [ Type { ',' Type } [ ',' ] ] ')'
+FunctionType           ::= [ 'async' ] '(' [ Type { ',' Type } ] ')' '<' Type '>' '->' 
+                           [ 'throws' TypeList ]
+
+type_arguments         ::= '<' type_argument_list '>'
+type_argument_list     ::= type_argument { ',' type_argument }
+type_argument          ::= Type | Expression
+
+// Borrowing Intrinsics
+BorrowExpr             ::= 'borrow' '(' Expression ')'
+                         | 'view' '(' Expression ')'
 ```
-module = { declaration | statement };
-declaration = function | template | class;
-function = ["async"] "fn" ["<" type {"," type} ">"] identifier ["(" [parameter {"," parameter}] ")"] ["->"] block;
-template = "template" identifier ["<" identifier {"," identifier} ">"] block;
-class = "class" identifier block;
-block = "{" { statement } "}" | INDENT { statement } DEDENT;
-statement = const_decl | name_decl | if_stmt | for_stmt | while_stmt | match_stmt | break_stmt | continue_stmt | return_stmt | expression;
-const_decl = "const" ["<" type ">"] identifier "=" expression [";"]; 
-name_decl = ["<" type ">"] identifier ["=" expression] [";"]; 
-if_stmt = "if" "(" expression ")" block ["else" (block | if_stmt)];
-for_stmt = "for" "(" identifier "in" expression ")" block;
-while_stmt = "while" "(" expression ")" block;
-match_stmt = "match" expression "{" { pattern "=>" expression [","] } "}";
-break_stmt = "break" [";"]; 
-continue_stmt = "continue" [";"]; 
-return_stmt = "return" [expression {"," expression}] [";"]; 
-expression = primary | unary_expr | binary_expr | member_access | array_index;
-primary = identifier | int_literal | string_literal | bool_literal | "(" expression ")" | array_expr | call_expr;
-unary_expr = ("-" | "!") expression;
-binary_expr = expression operator expression;
-operator = "+" | "-" | "*" | "/" | "==" | "!=" | "<" | ">" | "<=" | ">=";
-member_access = expression "." identifier;
-array_index = expression "[" expression "]";
-array_expr = "[" [expression {"," expression}] "]";
-call_expr = identifier "(" [expression {"," expression}] ")";
-type = identifier | "Vec" "<" type ">" | "[" type ";" expression "]";
-parameter = ["<" type ">"] identifier | type identifier | "const" type identifier;
-pattern = identifier | int_literal | "_";
-identifier = letter { letter | digit | "_" };
-int_literal = ["-"] digit { digit };
-string_literal = "\"" { any_char - "\"" } "\"";
-bool_literal = "true" | "false";
-letter = "a".."z" | "A".."Z";
-digit = "0".."9";
-```
+
+**Key EBNF Features:**
+- **Unified Syntax**: All declarations use `name<Type>` pattern
+- **Comparison Patterns**: `>= expr`, `<= expr`, etc. for match/select
+- **Select Expressions**: Pattern matching that returns values with `pass` keyword
+- **Ownership Types**: `my<T>`, `our<T>`, `their<T>`, `loc<T>` wrappers
+- **Import/Smuggle**: Dual module system for verified vs. flexible imports
+- **Async/Await**: Full async function and expression support
+- **Multiple Returns**: Functions can return multiple values (tuples)
 
 ### B. Memory Model Reference
 
@@ -1627,11 +1841,11 @@ digit = "0".."9";
 Vyn automatically serializes complex return types from `main()`:
 
 **Simple Returns:**
-- `main()<Int> -> return 42` → Exit code 42
-- `main()<String> -> return "hello"` → Outputs: hello
+- `main()<Int> -> { return 42 }` → Exit code 42
+- `main()<String> -> { return "hello" }` → Outputs: hello
 
 **Complex Returns:**
-- `main()<Int,String> -> return 42, "hello"` → Outputs: [42, "hello"]
+- `main()<Int,String> -> { return 42, "hello" }` → Outputs: [42, "hello"]
 - Struct returns → JSON with field names and values
 - Vec returns → JSON array representation
 
