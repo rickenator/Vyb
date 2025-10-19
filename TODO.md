@@ -99,21 +99,25 @@ Based on comprehensive implementation progress, approximately **50-60%** of core
 
 ### 🔶 MEDIUM PRIORITY - Advanced Features
 
-#### 6. **Object-Oriented Features**
+#### 6. **Trait System & Polymorphism**
 - [x] `struct` declarations with generic parameters
 - [x] `impl` blocks (complete semantic support)
 - [x] Method calls (member access)
 - [x] `trait` declarations (complete)
-- [ ] `class` declarations (planned)
-- [ ] Inheritance (`extends`) (planned)
+- [x] Generic trait implementations (`impl<T> Trait for Type<T>`)
+- [ ] Trait bounds (`<T: Trait>`)
+- [ ] Associated types (`trait Iterator { type Item }`)
+- [ ] Trait objects (dynamic dispatch, if needed)
+
+**Note**: Vyn uses traits + structs instead of classes. See `doc/WHY_TRAITS_NOT_CLASSES.md`
 
 #### 7. **Generic Programming**
 - [x] Generic parameters (`<T>`, `<K, V>`)
 - [x] Type parameter scoping and substitution
 - [x] Generic structs and trait impls
+- [x] **Phase 5**: Monomorphization (code generation for generic types) ✅
 - [ ] Generic constraints/bounds (`<T: Trait>`)
-- [ ] Template instantiation caching
-- [ ] **Phase 5**: Monomorphization (code generation for generic types)
+- [ ] Template instantiation caching (partial - struct caching done)
 
 #### 8. **Module System**
 - [ ] `import` statements (parsing exists)

@@ -374,7 +374,7 @@ python3 migrate_syntax.py --migrate --directory . --backup --report
 
 ### ✅ **Developer Experience**
 - **LLVM backend**: Direct compilation to native code with JIT execution
-- **Comprehensive parser**: Handles complex syntax including templates, async, classes
+- **Comprehensive parser**: Handles complex syntax including templates, async, traits
 - **Rich error messages**: Clear compilation feedback
 - **Advanced Test Harness**: Modern parallel test runner with HTML/JSON reporting and triage analysis
 - **Debug Information**: Complete DWARF debug metadata generation for debugging async state machines
@@ -1667,7 +1667,6 @@ Vyn's syntax is defined by a comprehensive EBNF grammar reflecting v0.4.1 capabi
 module                 ::= { module_item } EOF
 module_item            ::= import_statement
                          | smuggle_statement
-                         | class_declaration
                          | struct_declaration
                          | enum_declaration
                          | impl_declaration
@@ -1688,10 +1687,7 @@ struct_declaration     ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ]
                            'struct' IDENTIFIER '{' { struct_field_declaration } '}'
 struct_field_declaration ::= [ 'pub' ] IDENTIFIER '<' type '>' [ '=' expression ] [';']
 
-class_declaration      ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ] 
-                           'class' IDENTIFIER [ 'extends' type ] [ 'implements' type_list ] 
-                           '{' { class_member } '}'
-class_member           ::= field_declaration | method_declaration | constructor_declaration
+
 field_declaration      ::= [ 'pub' ] IDENTIFIER '<' type '>' [ '=' expression ] [';']
 
 enum_declaration       ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ] 
