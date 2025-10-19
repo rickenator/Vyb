@@ -164,6 +164,24 @@ private:
 
     llvm::Value* tryCast(llvm::Value* value, llvm::Type* targetType, const vyn::SourceLocation& loc);
     
+    // Generic trait method monomorphization
+    struct TypePattern {
+        std::string base;                    // e.g., "Box"
+        std::vector<std::string> args;       // e.g., ["Int"] or ["T"]
+        
+        static TypePattern parse(const std::string& typeStr);
+        bool matchesPattern(const TypePattern& concrete, std::map<std::string, std::string>& substitutions) const;
+    };
+    
+    llvm::Function* monomorphizeTraitMethod(const std::string& concreteType, 
+                                           const std::string& traitName,
+                                           const std::string& methodName);
+    std::string extractBasePattern(const std::string& concreteType);
+    std::string getFullTypeName(vyn::ast::Expression* expr);
+    
+    // Cache for monomorphized trait methods: "Box<Int>::show" -> Function*
+    std::map<std::string, llvm::Function*> monomorphizedMethods;
+    
     // String operations
     llvm::Value* generateStringConcatenation(llvm::Value* leftStr, llvm::Value* rightStr, SourceLocation loc);
     
