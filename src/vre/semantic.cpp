@@ -231,13 +231,18 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
     if (isReservedWord(node->id->name)) {
         addError("Identifier \\\"" + node->id->name + "\\\" is a reserved word and cannot be used as a function name.", node->id.get());
     }
-    if (currentScope->lookupDirect(node->id->name)) { 
-        addError("Redefinition of function \\\"" + node->id->name + "\\\" in the same scope.", node->id.get());
-    }
+    
+    // Skip adding to scope if this is a method in an aspect or bind
+    // These are stored in the trait registry, not the global symbol table
+    if (!processingTraitOrBindMethod) {
+        if (currentScope->lookupDirect(node->id->name)) { 
+            addError("Redefinition of function \\\"" + node->id->name + "\\\" in the same scope.", node->id.get());
+        }
 
-    auto funcSymbol = new SymbolInfo{SymbolInfo::Kind::Function, node->id->name, false, ast::OwnershipKind::MY, nullptr};
-    currentScope->add(SymbolInfo{funcSymbol->kind, funcSymbol->name, funcSymbol->isConst, funcSymbol->ownershipKind, funcSymbol->type});
-    delete funcSymbol;
+        auto funcSymbol = new SymbolInfo{SymbolInfo::Kind::Function, node->id->name, false, ast::OwnershipKind::MY, nullptr};
+        currentScope->add(SymbolInfo{funcSymbol->kind, funcSymbol->name, funcSymbol->isConst, funcSymbol->ownershipKind, funcSymbol->type});
+        delete funcSymbol;
+    }
 
     enterScope(); 
 
@@ -272,12 +277,19 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
         returnTypeAstNode = new ast::TypeName(node->loc, std::move(void_type_id));
     }
     
-    SymbolInfo* funcSymFromTable = currentScope->getParent()->lookup(node->id->name);
-    if (funcSymFromTable) {
-        funcSymFromTable->type = new ast::FunctionType(node->loc, std::move(paramTypesVec), std::unique_ptr<ast::TypeNode>(returnTypeAstNode));
-        if (funcSymFromTable->type) {
-             node->type = std::shared_ptr<ast::TypeNode>(funcSymFromTable->type->clone().release());
+    // Only look up and set function type in symbol table for regular functions
+    // For trait/bind methods, they're stored in the trait registry instead
+    if (!processingTraitOrBindMethod) {
+        SymbolInfo* funcSymFromTable = currentScope->getParent()->lookup(node->id->name);
+        if (funcSymFromTable) {
+            funcSymFromTable->type = new ast::FunctionType(node->loc, std::move(paramTypesVec), std::unique_ptr<ast::TypeNode>(returnTypeAstNode));
+            if (funcSymFromTable->type) {
+                 node->type = std::shared_ptr<ast::TypeNode>(funcSymFromTable->type->clone().release());
+            }
         }
+    } else {
+        // For trait/bind methods, still set the node's type directly
+        node->type = std::shared_ptr<ast::TypeNode>(new ast::FunctionType(node->loc, std::move(paramTypesVec), std::unique_ptr<ast::TypeNode>(returnTypeAstNode)));
     }
 
     if (node->body) {
@@ -672,6 +684,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                 
                                 if (matchesPattern(typeNameStr, pattern)) {
                                     for (const auto& traitEntry : typeEntry.second) {
+                                        const std::string& traitName = traitEntry.first;
                                         const GenericImplInfo* implInfo = traitEntry.second.get();
                                         if (implInfo && implInfo->declaration) {
                                             for (const auto& method : implInfo->declaration->methods) {
@@ -680,10 +693,56 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                                         expressionTypes[node] = method->returnTypeNode.get();
                                                         node->type = std::shared_ptr<ast::TypeNode>(method->returnTypeNode->clone());
                                                     }
-                                                    
-                                                    std::cout << "DEBUG: Resolved generic trait method call (ident path): " 
-                                                              << typeNameStr << " matches " << pattern 
-                                                              << ", method: " << methodName << std::endl;
+                                                    return;
+                                                }
+                                            }
+                                            
+                                            // Not in impl - check if aspect has default implementation
+                                            auto traitIt = traitRegistry.find(traitName);
+                                            if (traitIt != traitRegistry.end()) {
+                                                for (const auto& traitMethod : traitIt->second->methods) {
+                                                    if (traitMethod.name == methodName && traitMethod.hasDefaultImpl) {
+                                                        // Found default implementation
+                                                        if (traitMethod.returnType) {
+                                                            expressionTypes[node] = traitMethod.returnType;
+                                                            node->type = std::shared_ptr<ast::TypeNode>(traitMethod.returnType->clone());
+                                                        }
+                                                        return;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Check concrete impls for default methods
+                            auto concreteImplsIt = traitImpls.find(typeNameStr);
+                            if (concreteImplsIt != traitImpls.end()) {
+                                for (const auto& traitEntry : concreteImplsIt->second) {
+                                    const std::string& traitName = traitEntry.first;
+                                    const std::vector<ast::FunctionDeclaration*>& methods = traitEntry.second;
+                                    
+                                    // Check if method is in impl
+                                    bool foundInImpl = false;
+                                    for (ast::FunctionDeclaration* method : methods) {
+                                        if (method && method->id && method->id->name == methodName) {
+                                            foundInImpl = true;
+                                            break;
+                                        }
+                                    }
+                                    
+                                    // If not in impl, check aspect for default implementation
+                                    if (!foundInImpl) {
+                                        auto traitIt = traitRegistry.find(traitName);
+                                        if (traitIt != traitRegistry.end()) {
+                                            for (const auto& traitMethod : traitIt->second->methods) {
+                                                if (traitMethod.name == methodName && traitMethod.hasDefaultImpl) {
+                                                    // Found default implementation
+                                                    if (traitMethod.returnType) {
+                                                        expressionTypes[node] = traitMethod.returnType;
+                                                        node->type = std::shared_ptr<ast::TypeNode>(traitMethod.returnType->clone());
+                                                    }
                                                     return;
                                                 }
                                             }
@@ -758,6 +817,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                             // Check if typeNameStr matches pattern (e.g., Box<Int> matches Box<T>)
                             if (matchesPattern(typeNameStr, pattern)) {
                                 for (const auto& traitEntry : typeEntry.second) {
+                                    const std::string& traitName = traitEntry.first;
                                     const GenericImplInfo* implInfo = traitEntry.second.get();
                                     if (implInfo && implInfo->declaration) {
                                         for (const auto& method : implInfo->declaration->methods) {
@@ -767,9 +827,56 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                                     expressionTypes[node] = method->returnTypeNode.get();
                                                     node->type = std::shared_ptr<ast::TypeNode>(method->returnTypeNode->clone());
                                                 }
-                                                
-                                                std::cout << "DEBUG: Resolved generic trait method call: " << typeNameStr 
-                                                          << " matches " << pattern << ", method: " << methodName << std::endl;
+                                                return;
+                                            }
+                                        }
+                                        
+                                        // Not in impl - check if aspect has default implementation
+                                        auto traitIt = traitRegistry.find(traitName);
+                                        if (traitIt != traitRegistry.end()) {
+                                            for (const auto& traitMethod : traitIt->second->methods) {
+                                                if (traitMethod.name == methodName && traitMethod.hasDefaultImpl) {
+                                                    // Found default implementation - set return type from aspect
+                                                    if (traitMethod.returnType) {
+                                                        expressionTypes[node] = traitMethod.returnType;
+                                                        node->type = std::shared_ptr<ast::TypeNode>(traitMethod.returnType->clone());
+                                                    }
+                                                    return;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Check concrete impls for default methods
+                        auto concreteImplsIt = traitImpls.find(typeNameStr);
+                        if (concreteImplsIt != traitImpls.end()) {
+                            for (const auto& traitEntry : concreteImplsIt->second) {
+                                const std::string& traitName = traitEntry.first;
+                                const std::vector<ast::FunctionDeclaration*>& methods = traitEntry.second;
+                                
+                                // Check if method is in impl
+                                bool foundInImpl = false;
+                                for (ast::FunctionDeclaration* method : methods) {
+                                    if (method && method->id && method->id->name == methodName) {
+                                        foundInImpl = true;
+                                        break;
+                                    }
+                                }
+                                
+                                // If not in impl, check aspect for default implementation
+                                if (!foundInImpl) {
+                                    auto traitIt = traitRegistry.find(traitName);
+                                    if (traitIt != traitRegistry.end()) {
+                                        for (const auto& traitMethod : traitIt->second->methods) {
+                                            if (traitMethod.name == methodName && traitMethod.hasDefaultImpl) {
+                                                // Found default implementation - set return type from aspect
+                                                if (traitMethod.returnType) {
+                                                    expressionTypes[node] = traitMethod.returnType;
+                                                    node->type = std::shared_ptr<ast::TypeNode>(traitMethod.returnType->clone());
+                                                }
                                                 return;
                                             }
                                         }
@@ -886,9 +993,49 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
                     for (const auto& method : implInfo->declaration->methods) {
                         if (method && method->id && method->id->name == fieldName) {
                             // This is a generic trait method
-                            std::cout << "DEBUG: MemberExpression identified generic trait method: " 
-                                      << structTypeName << " matches " << pattern 
-                                      << ", method: " << fieldName << std::endl;
+                            return;
+                        }
+                    }
+                    
+                    // Not in impl - check if aspect has default implementation
+                    const std::string& traitName = traitEntry.first;
+                    auto traitIt = traitRegistry.find(traitName);
+                    if (traitIt != traitRegistry.end()) {
+                        for (const auto& traitMethod : traitIt->second->methods) {
+                            if (traitMethod.name == fieldName && traitMethod.hasDefaultImpl) {
+                                // Found default implementation in aspect
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Check concrete trait impls for default methods
+    auto concreteImplsIt = traitImpls.find(structTypeName);
+    if (concreteImplsIt != traitImpls.end()) {
+        for (const auto& traitEntry : concreteImplsIt->second) {
+            const std::string& traitName = traitEntry.first;
+            const std::vector<ast::FunctionDeclaration*>& methods = traitEntry.second;
+            
+            // Check if method is in impl
+            bool foundInImpl = false;
+            for (ast::FunctionDeclaration* method : methods) {
+                if (method && method->id && method->id->name == fieldName) {
+                    foundInImpl = true;
+                    break;
+                }
+            }
+            
+            // If not in impl, check aspect for default implementation
+            if (!foundInImpl) {
+                auto traitIt = traitRegistry.find(traitName);
+                if (traitIt != traitRegistry.end()) {
+                    for (const auto& traitMethod : traitIt->second->methods) {
+                        if (traitMethod.name == fieldName && traitMethod.hasDefaultImpl) {
+                            // Found default implementation in aspect
                             return;
                         }
                     }
@@ -2191,11 +2338,13 @@ void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
         registerTraitImpl(node);
         
         // Visit all methods to validate their bodies (while type params are still in scope)
+        processingTraitOrBindMethod = true;  // Don't add bind methods to global scope
         for (const auto& method : node->methods) {
             if (method) {
                 method->accept(*this);
             }
         }
+        processingTraitOrBindMethod = false;
         
         std::cout << "DEBUG: Successfully registered impl " << traitName << " for " << typeName 
                   << " with " << node->methods.size() << " methods" << std::endl;
@@ -2205,11 +2354,13 @@ void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
         std::cout << "DEBUG: Processing inherent bind for " << typeName << std::endl;
         
         // Visit all methods to validate them
+        processingTraitOrBindMethod = true;  // Don't add inherent bind methods to global scope
         for (const auto& method : node->methods) {
             if (method) {
                 method->accept(*this);
             }
         }
+        processingTraitOrBindMethod = false;
     }
     
     // Exit the type parameter scope if we entered one

@@ -396,6 +396,7 @@ private:
     
     // Context for resolving 'Self' type in aspect implementations
     ast::TypeNode* currentImplType = nullptr;  // Set to Box<T> when processing bind Display -> Box<T>
+    bool processingTraitOrBindMethod = false;  // True when visiting methods inside aspect or bind
 
     void enterScope();
     void exitScope();
