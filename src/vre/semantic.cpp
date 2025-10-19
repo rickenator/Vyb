@@ -2047,7 +2047,7 @@ void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
     std::cout << "DEBUG: Set currentImplType to " << typeName << " for Self resolution" << std::endl;
     
     if (node->traitType) {
-        // This is a trait implementation: impl Trait for Type
+        // This is an aspect implementation: bind Aspect -> Type
         traitName = node->traitType->toString();
         
         std::cout << "DEBUG: Processing impl " << traitName << " for " << typeName << std::endl;
@@ -2109,9 +2109,9 @@ void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
         std::cout << "DEBUG: Successfully registered impl " << traitName << " for " << typeName 
                   << " with " << node->methods.size() << " methods" << std::endl;
     } else {
-        // This is an inherent impl: impl Type { ... }
-        // Just adds methods directly to the type without a trait
-        std::cout << "DEBUG: Processing inherent impl for " << typeName << std::endl;
+        // This is an inherent bind: bind Type { ... }
+        // Just adds methods directly to the type without an aspect
+        std::cout << "DEBUG: Processing inherent bind for " << typeName << std::endl;
         
         // Visit all methods to validate them
         for (const auto& method : node->methods) {
@@ -2156,8 +2156,8 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
             expressionTypes[node] = currentImplType;
             return;
         } else {
-            // We're in a trait declaration - treat Self as a valid placeholder type
-            std::cout << "DEBUG: Self used as placeholder in trait declaration" << std::endl;
+            // We're in an aspect declaration - treat Self as a valid placeholder type
+            std::cout << "DEBUG: Self used as placeholder in aspect declaration" << std::endl;
             node->type = std::shared_ptr<ast::TypeNode>(node->clone());
             return;
         }
@@ -2906,7 +2906,7 @@ bool SemanticAnalyzer::typeImplementsTrait(const std::string& typeName, const st
         }
     }
     
-    // TODO: Handle generic trait implementations (impl<T> Trait for Vec<T>)
+    // TODO: Handle generic aspect implementations (bind<T> Aspect -> Type<T>)
     
     return false;
 }
