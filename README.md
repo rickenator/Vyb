@@ -1977,7 +1977,7 @@ Vyn automatically serializes complex return types from `main()`:
 - Vec returns → JSON array representation
 
 **Customization:**
-Implement `Serialize` trait for custom serialization behavior.
+Implement `Serialize` aspect for custom serialization behavior.
 
 ## Glossary
 
