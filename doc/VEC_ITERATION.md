@@ -85,6 +85,11 @@ for (__run_once = true; __run_once; __run_once = false) {
 
 - Currently only supports identifier expressions: `for (x in v)` ✓
 - Complex expressions not yet supported: `for (x in get_vec())` ✗
+- **Vec<Struct> limitation**: Vec.get() currently returns Int type regardless of actual element type
+  - Works correctly for Vec<Int>: `for (x in vec_int)` ✓
+  - Type inference issue for Vec<Point> or other struct types
+  - Accessing struct fields on iteration variable fails: `p.x` returns error
+  - Will be fixed when Vec type system is enhanced
 - Will be extended to support any expression in future
 
 ## Tests

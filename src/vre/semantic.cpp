@@ -152,6 +152,13 @@ bool SemanticAnalyzer::isRawLocationType(ast::Expression* expr) {
     return true;
 }
 
+std::shared_ptr<ast::TypeNode> SemanticAnalyzer::cloneTypeNode(ast::TypeNode* type) {
+    if (!type) return nullptr;
+    
+    // Use the existing clone() method on TypeNode
+    return std::shared_ptr<ast::TypeNode>(type->clone());
+}
+
 
 // Basic visit methods for expressions (Single definitions)
 void SemanticAnalyzer::visit(ast::Identifier* node) {
@@ -331,8 +338,18 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
         addError("'auto' variable \\\"" + node->id->name + "\\\" must have an initializer for type inference", node);
     }
     
-    ast::TypeNode* symbolType = node->typeNode ? node->typeNode.get() : nullptr;
-    if (!symbolType && node->init && expressionTypes.count(node->init.get())) {
+    // Get the resolved type - prefer the resolved type from typeNode->type if available
+    ast::TypeNode* symbolType = nullptr;
+    if (node->typeNode) {
+        // If the typeNode has been resolved (e.g., TypeName->type contains the resolved VecType),
+        // use that instead of the TypeName itself
+        if (node->typeNode->type) {
+            symbolType = node->typeNode->type.get();
+        } else {
+            symbolType = node->typeNode.get();
+        }
+    } else if (node->init && expressionTypes.count(node->init.get())) {
+        // For type inference without explicit type annotation
         symbolType = expressionTypes[node->init.get()];
     }
 
@@ -2369,7 +2386,25 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
             node->arguments[0]->accept(*this);
             // TODO: Check that argument is Int type
         }
-        // Return element type
+        
+        // Extract element type from Vec<T>
+        // Look up the object in the symbol table to get its Vec type
+        SymbolInfo* objSymbol = currentScope->lookup(objectName);
+        if (objSymbol && objSymbol->type) {
+            // Check if the type is a VecType
+            if (auto* vecType = dynamic_cast<ast::VecType*>(objSymbol->type)) {
+                // Clone the element type for the return type
+                if (vecType->elementType) {
+                    // Deep clone the element type node
+                    std::shared_ptr<ast::TypeNode> clonedElementType = cloneTypeNode(vecType->elementType.get());
+                    expressionTypes[node] = clonedElementType.get();
+                    node->type = clonedElementType;
+                    return;
+                }
+            }
+        }
+        
+        // Fallback to Int if we couldn't determine the element type
         auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
         auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
         expressionTypes[node] = intType.get();

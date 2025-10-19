@@ -371,9 +371,11 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
         case vyn::TokenType::PLUS: // Reverted to vyn::TokenType::PLUS
             if (isFloatOp) {
                 m_currentLLVMValue = builder->CreateFAdd(L, R, "faddtmp");
+                break;  // Exit the case after creating FAdd
             }
-           
-            else {
+            
+            // Handle non-float operations
+            {
                 if (verbose) {
                     std::cout << "DEBUG PLUS: leftTypeNode=" << (leftTypeNode ? "yes" : "null") 
                               << ", rightTypeNode=" << (rightTypeNode ? "yes" : "null") << std::endl;
@@ -2033,16 +2035,13 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
         // Check if we're on the LHS of an assignment - in that case return the pointer
         if (m_isLHSOfAssignment) {
             m_currentLLVMValue = fieldPtr;
-            std::cerr << "DEBUG: Returning field pointer for LHS assignment" << std::endl;
         } else {
-            // For reading, load the value for primitive types like Int
-            if (fieldType->isIntegerTy()) {
+            // For reading, load the value for primitive types (Int, Float, Bool, etc.)
+            if (fieldType->isIntegerTy() || fieldType->isFloatingPointTy()) {
                 m_currentLLVMValue = builder->CreateLoad(fieldType, fieldPtr, fieldName + "_val");
-                std::cerr << "DEBUG: Loaded integer field value" << std::endl;
             } else {
-                // For non-primitive types, return the pointer
+                // For non-primitive types (structs, arrays, etc.), return the pointer
                 m_currentLLVMValue = fieldPtr;
-                std::cerr << "DEBUG: Returning field pointer for non-primitive type" << std::endl;
             }
         }
     }
