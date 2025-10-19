@@ -236,6 +236,9 @@ main()<Void> -> {
 - ✅ Comprehensive test coverage
 
 ### ✅ **Trait System (Phase 1 - v0.4.2)**
+
+**Philosophy:** Vyn uses **traits + structs** instead of classes and inheritance. This provides polymorphism, code reuse, and composition without the complexity and pitfalls of OOP class hierarchies. See [`doc/WHY_TRAITS_NOT_CLASSES.md`](doc/WHY_TRAITS_NOT_CLASSES.md) for detailed rationale.
+
 - **Trait Declarations**: Define interfaces with method signatures
   ```vyn
   trait Printable {
@@ -259,6 +262,13 @@ main()<Void> -> {
 - **Impl Validation**: `impl Trait for Type` blocks validated against trait signatures
 - **Self Type**: Methods use `Self` type parameter for trait implementors
 - **Built-in Traits**: `Comparable`, `Equatable`, `Numeric`, `Hashable` available for primitives
+
+**Why Traits > Classes:**
+- ✅ Multiple trait implementations (no diamond problem)
+- ✅ Composition over inheritance (more flexible)
+- ✅ Extension without modification (impl traits for any type)
+- ✅ Static dispatch (zero-cost abstractions)
+- ✅ No fragile base class problem
 
 **Coming in Phase 2:**
 - Trait method calls on values (`value.method()`)
@@ -374,7 +384,7 @@ python3 migrate_syntax.py --migrate --directory . --backup --report
 
 ### ✅ **Developer Experience**
 - **LLVM backend**: Direct compilation to native code with JIT execution
-- **Comprehensive parser**: Handles complex syntax including templates, async, classes
+- **Comprehensive parser**: Handles complex syntax including templates, async, traits
 - **Rich error messages**: Clear compilation feedback
 - **Advanced Test Harness**: Modern parallel test runner with HTML/JSON reporting and triage analysis
 - **Debug Information**: Complete DWARF debug metadata generation for debugging async state machines
@@ -1667,7 +1677,6 @@ Vyn's syntax is defined by a comprehensive EBNF grammar reflecting v0.4.1 capabi
 module                 ::= { module_item } EOF
 module_item            ::= import_statement
                          | smuggle_statement
-                         | class_declaration
                          | struct_declaration
                          | enum_declaration
                          | impl_declaration
@@ -1688,10 +1697,7 @@ struct_declaration     ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ]
                            'struct' IDENTIFIER '{' { struct_field_declaration } '}'
 struct_field_declaration ::= [ 'pub' ] IDENTIFIER '<' type '>' [ '=' expression ] [';']
 
-class_declaration      ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ] 
-                           'class' IDENTIFIER [ 'extends' type ] [ 'implements' type_list ] 
-                           '{' { class_member } '}'
-class_member           ::= field_declaration | method_declaration | constructor_declaration
+
 field_declaration      ::= [ 'pub' ] IDENTIFIER '<' type '>' [ '=' expression ] [';']
 
 enum_declaration       ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ] 

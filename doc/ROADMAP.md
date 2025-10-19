@@ -469,13 +469,15 @@ This feature will enable scripts and API-style binaries to return structured dat
 - **Trait Objects**: Dynamic dispatch with `dyn Comparable`
 - **Multiple Trait Bounds**: `T: Comparable + Hashable`
 
-#### Phase 5: Class System (v0.6.0) - OPTIONAL
-- **Class Declarations**: `class Animal { ... }` with inheritance
-- **Constructors**: `init(name: String) { ... }` syntax
-- **Inheritance**: `class Dog : Animal { ... }` for OOP patterns
-- **Encapsulation**: Private fields, public methods
-- **Virtual Methods**: Dynamic dispatch for subclass overrides
-- **Design Philosophy**: Classes are OPTIONAL - structs + traits sufficient for most use cases
+#### Phase 5: Advanced Trait Features (v0.6.0)
+- **Trait Objects**: Dynamic dispatch when static dispatch isn't possible
+- **Associated Types**: `trait Iterator { type Item; ... }`
+- **Higher-Kinded Types**: Traits over type constructors
+- **Visibility System**: Module-level privacy for encapsulation
+- **Default Type Parameters**: `struct Vec<T, Alloc = DefaultAllocator>`
+- **Design Philosophy**: Traits + Structs provide complete polymorphism without classes
+
+**Note**: Vyn deliberately avoids classes and inheritance hierarchies. The trait system provides all necessary polymorphism and code reuse without the complexity and pitfalls of OOP inheritance. See `doc/WHY_TRAITS_NOT_CLASSES.md` for detailed rationale.
 
 See `doc/TRAIT_SYSTEM_DESIGN.md` for complete specification and design rationale.
 
@@ -483,7 +485,7 @@ See `doc/TRAIT_SYSTEM_DESIGN.md` for complete specification and design rationale
 
 The following points were previously noted in `ROADMAP.txt` and are retained here for future planning:
 
--   **Template Placement**: Explore allowing template/generic declarations in more contexts beyond just module-level (e.g., within classes, functions) if deemed beneficial for advanced metaprogramming scenarios. Currently, templates are primarily module-level items.
+-   **Template Placement**: Explore allowing template/generic declarations in more contexts beyond just module-level (e.g., within functions, nested scopes) if deemed beneficial for advanced metaprogramming scenarios. Currently, templates are primarily module-level items.
 -   **Dedicated Header Files (`.vyh` or similar)**: Investigate the potential need for dedicated header files (e.g., `.vyh`) for separating public interfaces, public template/generic definitions, and type declarations from implementation files (`.vyn`). This could improve organization, reduce compilation dependencies, and potentially speed up compile times for larger Vyn projects by allowing for more explicit module boundaries.
 
 ## Documentation

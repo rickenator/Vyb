@@ -263,79 +263,47 @@ trait Async<T> {
 }
 ```
 
-## Class Types (Future Feature)
+## Why Traits, Not Classes?
 
-### When to Use Classes vs Structs+Traits
+Vyn uses **structs + traits** as the foundation for polymorphism and code reuse, deliberately avoiding classes and inheritance hierarchies. See [WHY_TRAITS_NOT_CLASSES.md](WHY_TRAITS_NOT_CLASSES.md) for a comprehensive explanation.
 
-**Use Structs + Traits when:**
-- Simple data types (Point, Color, Date)
-- Immutable data structures
-- Functional programming style
-- No need for inheritance
-- Explicit behavior through traits
+### The Vyn Way
 
-**Use Classes when:**
-- Need inheritance hierarchy
-- Want encapsulation with private fields
-- Object-oriented design patterns
-- Mutable state management
-- Need constructors and destructors
-
-### Class Syntax (Proposed)
-
+**Data = Structs**
 ```vyn
-class Animal {
-    // Private by default
-    name<String>
-    age<Int>
-    
-    // Constructor
-    pub new(name<String>, age<Int>)<Animal> -> {
-        self.name = name
-        self.age = age
-    }
-    
-    // Public method
-    pub speak(self<their<Animal>>)<Void> -> {
-        println("Animal speaks")
-    }
-    
-    // Protected method (for subclasses)
-    protected get_info(self<their<Animal>>)<String> -> {
-        return self.name + " is " + self.age.to_string()
-    }
+struct Point { x<Int>, y<Int> }
+```
+
+**Behavior = Traits**
+```vyn
+trait Drawable {
+    draw(self<their<Self>>)<Void> -> { }
 }
 
-// Inheritance
-class Dog : Animal {
-    breed<String>
-    
-    pub new(name<String>, age<Int>, breed<String>)<Dog> -> {
-        super.new(name, age)  // Call parent constructor
-        self.breed = breed
-    }
-    
-    // Override method
-    pub speak(self<their<Dog>>)<Void> -> {
-        println("Woof!")
-    }
-}
-
-// Implement traits for classes
-impl Comparable for Dog {
-    lt(self<their<Dog>>, other<their<Dog>>)<Bool> -> {
-        return self.age < other.age
+impl Drawable for Point {
+    draw(self<their<Point>>)<Void> -> {
+        println("Drawing point at (" + self.x.to_string() + ", " + self.y.to_string() + ")")
     }
 }
 ```
 
-**Key Class Features:**
-- Inheritance with `:`
-- Method overriding
-- Access modifiers (pub, protected, private)
-- Constructors with `new`
-- `super` for parent access
-- Still implement traits like structs
+**Polymorphism = Trait Bounds**
+```vyn
+render<T: Drawable>(shape<their<T>>)<Void> -> {
+    shape.draw()
+}
+```
+
+**This is all you need.** No classes, no inheritance, no diamond problem.
+
+### Advantages
+
+✅ **Multiple Trait Implementations** - Unlike single inheritance  
+✅ **No Fragile Base Class** - Changes don't break dependents  
+✅ **Better Composition** - Mix and match behaviors freely  
+✅ **Extension Without Modification** - Impl traits for any type  
+✅ **Static Dispatch** - Zero-cost abstractions  
+✅ **Simple Mental Model** - Structs are data, traits are contracts
 
 ## Implementation Phases
 
@@ -452,43 +420,46 @@ main()<Int> -> {
 3. **Generic impl** - impl<T> Trait for Vec<T>
 
 ### Long-term (v0.6.0)
-1. **Class system** - Inheritance and OOP
-2. **Trait objects** - Dynamic dispatch
-3. **Advanced generics** - Higher-kinded types
+1. **Trait objects** - Dynamic dispatch (if needed for specific use cases)
+2. **Advanced generics** - Higher-kinded types
+3. **Associated types** - Type members in traits
 
 ## Design Questions
 
-### Q: Why allow both structs and classes?
+### Q: Why no classes?
 
-**A:** Flexibility. Simple data types shouldn't require class ceremony. Classes are for when you want OOP patterns.
+**A:** Traits provide everything classes do, without the complexity:
+- **Polymorphism** ✅ via trait bounds
+- **Code reuse** ✅ via default trait implementations
+- **Multiple "inheritance"** ✅ unlimited trait impls (no diamond problem)
+- **Encapsulation** ✅ via modules and visibility (planned)
+
+Classes add:
+- ❌ Fragile base class problem
+- ❌ Diamond problem complexity
+- ❌ Forced inheritance hierarchies
+- ❌ Runtime overhead (vtables)
+
+See [WHY_TRAITS_NOT_CLASSES.md](WHY_TRAITS_NOT_CLASSES.md) for detailed rationale.
+
+### Q: What about encapsulation?
+
+**A:** Vyn will have module-level visibility:
 
 ```vyn
-// Simple: Just data + functions
-struct Point { x<Int>, y<Int> }
-distance(p1<Point>, p2<Point>)<Float> -> { ... }
-
-// Complex: Encapsulation + inheritance
-class Shape {
-    protected center<Point>
-    pub area(self<their<Shape>>)<Float> ->  // Abstract
+// Private by default in modules
+struct BankAccount {
+    balance<Int>  // Private field
 }
+
+pub get_balance(account<their<BankAccount>>)<Int> -> {
+    return account.balance  // Module can access
+}
+
+// Outside module: cannot access balance directly
 ```
 
-### Q: How to avoid trait/class confusion?
-
-**A:** Clear guidelines:
-- **Struct** = Data structure (no behavior)
-- **Trait** = Interface/capability (behavior contract)
-- **Class** = Object with state + behavior + inheritance
-
-### Q: Performance implications?
-
-**A:**
-- **Traits with templates** → Zero-cost (static dispatch)
-- **Trait objects** → Dynamic dispatch (small vtable cost)
-- **Classes** → Same as C++ virtual calls when needed
-
-### Q: How to handle trait conflicts?
+### Q: How to avoid trait conflicts?
 
 ```vyn
 trait A { fn method(self<their<Self>>)<Int> -> }

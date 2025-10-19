@@ -446,22 +446,103 @@ regular_array_literal:
                 // (either as a typed struct name like "from { ... }" or a plain variable "from").
             }
 
-            // Typed Struct Literal: Identifier { ... } or Plain Identifier
+            // Typed Struct Literal: Identifier { ... } or Identifier<T, ...> { ... } or Plain Identifier
             bool is_typed_struct = false;
-            // Check if the next token after IDENTIFIER is LBRACE
-            if (pos_ + 1 < tokens_.size() && tokens_[pos_ + 1].type == TokenType::LBRACE) {
-                is_typed_struct = true;
+            bool has_generic_args = false;
+            
+            // Look ahead to check for Type { or Type<Args> { patterns
+            if (pos_ + 1 < tokens_.size()) {
+                if (tokens_[pos_ + 1].type == TokenType::LBRACE) {
+                    // Simple case: Type {
+                    is_typed_struct = true;
+                } else if (tokens_[pos_ + 1].type == TokenType::LT) {
+                    // Potential generic type: Type<...> {
+                    // Scan ahead to find matching > followed by {
+                    int angle_depth = 0;
+                    size_t scan_pos = pos_ + 1;
+                    
+                    while (scan_pos < tokens_.size()) {
+                        if (tokens_[scan_pos].type == TokenType::LT) {
+                            angle_depth++;
+                        } else if (tokens_[scan_pos].type == TokenType::GT) {
+                            angle_depth--;
+                            if (angle_depth == 0) {
+                                // Found matching >, check next token for {
+                                if (scan_pos + 1 < tokens_.size() && 
+                                    tokens_[scan_pos + 1].type == TokenType::LBRACE) {
+                                    is_typed_struct = true;
+                                    has_generic_args = true;
+                                }
+                                break;
+                            }
+                        } else if (angle_depth == 0) {
+                            // Hit something else at same level, not a generic type literal
+                            break;
+                        }
+                        scan_pos++;
+                    }
+                }
             }
 
             if (is_typed_struct) {
                 token::Token type_name_token = consume(); // Consume IDENTIFIER
+                SourceLocation struct_loc = type_name_token.location;
+                
+                // Build the type path
                 auto type_identifier_node = std::make_unique<ast::Identifier>(type_name_token.location, type_name_token.lexeme);
-                auto type_path_node = std::make_unique<ast::TypeName>(type_name_token.location, std::move(type_identifier_node));
+                std::vector<ast::TypeNodePtr> generic_args;
+                
+                if (has_generic_args) {
+                    // Parse generic arguments: <Type1, Type2, ...>
+                    expect(TokenType::LT);
+                    
+                    while (true) {
+                        // Parse each type argument recursively as a simple type
+                        // For now, support simple identifiers and nested generics
+                        if (!check(TokenType::IDENTIFIER)) {
+                            throw error(peek(), "Expected type identifier in generic arguments");
+                        }
+                        
+                        token::Token arg_token = consume();
+                        auto arg_id = std::make_unique<ast::Identifier>(arg_token.location, arg_token.lexeme);
+                        
+                        // Check for nested generics (e.g., Box<Vec<Int>>)
+                        std::vector<ast::TypeNodePtr> nested_args;
+                        if (match(TokenType::LT)) {
+                            // Recursively parse nested generic args
+                            int nested_depth = 1;
+                            size_t start_pos = pos_ - 1;
+                            
+                            while (nested_depth > 0 && pos_ < tokens_.size()) {
+                                if (peek().type == TokenType::LT) {
+                                    nested_depth++;
+                                    consume();
+                                } else if (peek().type == TokenType::GT) {
+                                    nested_depth--;
+                                    consume();
+                                } else {
+                                    consume();
+                                }
+                            }
+                            // For now, we'll skip nested parsing and just create a simple type
+                            // This can be enhanced later for full nested generic support
+                        }
+                        
+                        generic_args.push_back(std::make_unique<ast::TypeName>(arg_token.location, std::move(arg_id), std::move(nested_args)));
+                        
+                        if (match(TokenType::COMMA)) {
+                            continue;
+                        } else {
+                            break;
+                        }
+                    }
+                    
+                    expect(TokenType::GT);
+                }
+                
+                auto type_path_node = std::make_unique<ast::TypeName>(struct_loc, std::move(type_identifier_node), std::move(generic_args));
 
                 expect(TokenType::LBRACE); // Consumes LBRACE
-                // Use type_name_token.location for the ObjectLiteral if it represents the start of the typed literal.
-                // The 'loc' variable from the start of parse_primary() might be too broad if other constructs were peeked at.
-                SourceLocation struct_loc = type_name_token.location; 
 
                 std::vector<ast::ObjectProperty> properties;
                 if (!check(TokenType::RBRACE)) { 
