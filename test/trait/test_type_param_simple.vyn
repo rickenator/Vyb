@@ -1,0 +1,22 @@
+# Test type parameter usage in method bodies
+
+trait Display {
+    show(self<Self>)<Void> -> { }
+}
+
+struct Box<T> {
+    value<T>
+}
+
+# Generic impl where methods can use T
+impl<T> Display for Box<T> {
+    show(self<Box<T>>)<Void> -> {
+        # T should be recognized as a valid type parameter here
+        # For now, just return without using T
+        return
+    }
+}
+
+main()<Int> -> {
+    return 0
+}

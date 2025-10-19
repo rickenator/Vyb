@@ -1,0 +1,18 @@
+# Test type parameter recognition in generic impl methods
+
+trait Container {
+    size(self<Self>)<Int> -> { }
+}
+
+# Generic impl with type parameter T
+impl<T> Container for Wrapper<T> {
+    size(self<Wrapper<T>>)<Int> -> {
+        # Use T in a local variable declaration
+        value<T> = self.data
+        return 1
+    }
+}
+
+main()<Int> -> {
+    return 0
+}
