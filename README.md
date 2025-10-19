@@ -805,6 +805,66 @@ process_request(code<Int>)<Int> -> {
 # - Type inference from first case ensures type safety
 # - Wildcard '?' provides default case handling
 ```
+
+### Comparison Patterns (Range Matching)
+
+Vyn's pattern matching supports **comparison patterns** for elegant range-based matching with compile-time safety:
+
+```vyn
+# Comparison operators in patterns: >, <, >=, <=, ==, !=
+classify_score(score<Int>)<String> -> {
+    match (score) {
+        >= 90 -> "A",
+        >= 80 -> "B",
+        >= 70 -> "C",
+        >= 60 -> "D",
+        ? -> "F"
+    }
+}
+
+# Works in select expressions too
+compute_tax_rate(income<Int>)<Float> -> {
+    rate<Float> = select(income) -> {
+        < 10000 -> 0.0,
+        < 50000 -> 0.15,
+        < 100000 -> 0.25,
+        ? -> 0.35
+    };
+    return rate
+}
+
+# Comparison patterns work with floats and integers
+categorize_temperature(temp<Float>)<String> -> {
+    match (temp) {
+        < 0.0 -> "freezing",
+        < 10.0 -> "cold",
+        < 20.0 -> "mild",
+        < 30.0 -> "warm",
+        ? -> "hot"
+    }
+}
+
+# Unreachable pattern detection - compiler ERROR
+invalid_patterns(x<Int>)<String> -> {
+    match (x) {
+        > 10 -> "big",
+        > 5 -> "medium",  # ERROR: unreachable (subsumed by > 10)
+        ? -> "small"
+    }
+}
+
+# Other unreachable pattern errors:
+# - Wildcard before end: match (x) { ? -> "any", 5 -> "five" }  # ERROR
+# - Duplicate patterns: match (x) { > 10 -> "a", > 10 -> "b" }  # ERROR  
+# - Overlapping ranges: match (x) { > 5 -> "a", >= 3 -> "b" }  # ERROR
+```
+
+**Comparison Pattern Rules:**
+- **Evaluation Order**: Patterns tested top-to-bottom, first-match-wins
+- **Type Safety**: Works with `Int`, `Float` types (more types planned)
+- **Compile-Time Errors**: Unreachable patterns detected and rejected
+- **Wildcard Position**: `?` must be last pattern or compiler ERROR
+- **No Gaps Required**: `>= 90`, `>= 80`, `>= 70` is valid (evaluates top-to-bottom)
 ```
 
 ### Variadic Tuples
