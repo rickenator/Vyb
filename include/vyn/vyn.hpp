@@ -2,18 +2,21 @@
 #define VYN_HPP
 
 /*
- * Vyn Programming Language v0.3.7
+ * Vyn Programming Language v0.4.1
  * 
  * CURRENT IMPLEMENTATION STATUS:
  * ✅ Complete LLVM backend with JIT execution
  * ✅ Auto-serialization for complex return types
  * ✅ Functions, variables, structs, control flow (if/else, while, for)
  * ✅ Fixed-size arrays [T; N] with indexing and beautiful println() serialization
+ * ✅ Dynamic vectors Vec<T> with full method support (new, push, pop, len, get)
+ * ✅ Vec iteration with for loops and break/continue
+ * ✅ Range-based for loops (0..10 inclusive ranges)
+ * ✅ Pattern matching with match statements (-> syntax, ? wildcard)
+ * ✅ Select expressions with pass keyword (expression-based pattern matching)
  * ✅ Type system with ownership (my<T>, our<T>, their<T>)
  * ✅ Memory safety with borrowing (view, borrow) and unsafe blocks
  * ✅ Comprehensive parser supporting templates, async, classes
- * 🚧 Dynamic vectors Vec<T> (planned for next iteration)
- * 🚧 Range-based for loops (parser tokens ready, implementation pending) 
  * 📋 Standard library modules (planned)
  * 
  * This header provides the main interface for Vyn compilation and execution.
@@ -114,6 +117,7 @@ statement              ::= expression_statement
                          | return_statement
                          | break_statement
                          | continue_statement
+                         | pass_statement
                          | defer_statement
                          | try_statement
                          | variable_declaration
@@ -133,6 +137,10 @@ while_statement        ::= 'while' expression block_statement // Consider also: 
 loop_statement         ::= 'loop' block_statement
 match_statement        ::= 'match' '(' expression ')' '{' match_arm* '}'
 match_arm              ::= pattern '->' ( expression | block_statement | statement_without_block ) ','?
+
+select_expression      ::= 'select' '(' expression ')' '->' '{' select_arm* '}' ';'
+select_arm             ::= pattern '->' ( expression | block_statement ) ','?
+
 pattern                ::= IDENTIFIER [ '@' pattern ]
                          | literal
                          | '?'                   // wildcard (no-match continues as NOP)
@@ -148,6 +156,7 @@ pattern_assignment_statement ::= pattern '=' expression [';'] // For ref x = _
 return_statement       ::= 'return' [ expression ] [';'] // Semicolon made optional
 break_statement        ::= 'break' [ IDENTIFIER ] [ expression ] [';'] // Semicolon optional
 continue_statement     ::= 'continue' [ IDENTIFIER ] [';'] // Semicolon optional
+pass_statement         ::= 'pass' expression [';'] // Returns from select block, not enclosing function
 defer_statement        ::= 'defer' ( expression_statement | block_statement ) // Semicolon handled by expr_stmt
 try_statement          ::= 'try' block_statement { catch_clause } [ 'finally' block_statement ]
 catch_clause           ::= 'catch' [ '(' IDENTIFIER ':' type ')' | IDENTIFIER ] block_statement // Adjusted for (e: Type)
@@ -191,6 +200,7 @@ primary_expression     ::= literal
                          | tuple_literal
                          | struct_literal           // For TypeName{...} and anonymous {...}
                          | lambda_expression
+                         | select_expression        // Expression-based pattern matching
                          | 'self' | 'super'
                          // if_expression is now part of conditional_expression
 

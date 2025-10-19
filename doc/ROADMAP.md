@@ -78,7 +78,7 @@ The current primary focus is on:
 6.  **✅ String Operations (COMPLETED v0.4.0):** Complete String type with natural literal syntax and 11 methods
 7.  **Enhanced Error Messages:** More detailed compilation feedback and suggestions
 8.  **Tuple Element Access:** `.0`, `.1`, `.2` syntax for accessing tuple elements
-9.  **⏳ Select Expressions (MID PRIORITY):** Expression-based pattern matching with `pass` keyword for explicit returns
+9.  **✅ Select Expressions (COMPLETED v0.4.1):** Expression-based pattern matching with `pass` keyword for explicit returns
 
 ## Project Structure and Organization
 
@@ -165,69 +165,59 @@ As the Vyn project grows, a more structured directory layout will be beneficial 
 
 ### Select Expressions
 
-A powerful expression-based pattern matching construct that complements the existing `match` statement:
+✅ **COMPLETED in v0.4.1** - A powerful expression-based pattern matching construct:
 
 - **Core Concept**: `select` is an **expression** (not a statement) that pattern-matches on a value and returns a result
-  - Auto-infers return type from context or defaults to `Void`
-  - Uses `pass` keyword to explicitly return values from match arms
-  - Syntactic sugar for complex if-then-else chains
+  - Auto-infers return type from first case
+  - Uses `pass` keyword to explicitly return values from blocks
+  - Naked expressions auto-return without `pass` keyword
+  - Requires semicolon terminator after closing brace
 
 - **Syntax**:
   ```vyn
-  result<String> = select(value) -> {
-      pattern1 -> { pass expression1 }
-      pattern2 -> { pass expression2 }
-      ?        -> { pass default_expression }
-  }
+  result<Int> = select(value) -> {
+      1 -> 10,              // Naked expression (auto-returns)
+      2 -> 20,
+      3 -> {                // Block with statements
+          temp<Int> = 300;
+          println(temp);
+          pass temp         // Explicit return from block
+      },
+      ? -> 0                // Wildcard default
+  };                        // Semicolon required
   ```
 
 - **Key Features**:
-  - **Type Inference**: Return type inferred from LHS variable declaration
+  - **Type Inference**: Return type inferred from first case evaluation
+  - **Dual Syntax**: Naked expressions OR blocks with `pass`
   - **Expression-Based**: Can be used anywhere an expression is valid
-  - **Explicit Returns**: `pass` keyword makes value flow explicit
-  - **Value Equality**: Pattern matching uses value equality (requires careful Struct comparison semantics)
-  - **String Concatenation**: Supports `+` operator for mixed-type concatenation (likely using JSON representation)
+  - **SelectContext Stack**: Supports nested select expressions
+  - **Value Equality**: Pattern matching uses exact equality (ICmpEQ)
+  - **Wildcard Support**: `?` matches anything
 
-- **Example Use Cases**:
-  ```vyn
-  // Auto-typed from LHS
-  message<String> = select(frequency) -> {
-      0.0 -> { pass "This " + frequency }
-      1.0 -> { pass "That " + frequency }
-      ?   -> { increment_other(); pass "The other" }
-  }
-  
-  // Void return (side effects only)
-  select(status_code) -> {
-      200 -> { log("Success") }
-      404 -> { log("Not Found") }
-      ?   -> { log("Unknown: " + status_code) }
-  }
-  
-  // Inline simple cases
-  value<Int> = select(x) -> { 0 -> { pass 10 }, 1 -> { pass 20 }, ? -> { pass 0 } }
-  ```
-
-- **Implementation Requirements**:
-  1. **Type System**: Implement value-based equality for all types including Structs
-  2. **String Concatenation**: Auto-conversion of non-String types (probably via JSON serialization)
-  3. **`pass` Keyword**: New keyword for explicit value returns in select arms
-  4. **Type Inference**: Analyze LHS to determine select expression's return type
-  5. **Codegen**: Generate optimal LLVM IR (similar to match but with return values)
+- **Implementation Details**:
+  - ✅ PassStatement AST node for explicit returns from blocks
+  - ✅ SelectExpression AST node for the expression
+  - ✅ Parser architecture: ExpressionParser ↔ StatementParser bidirectional linkage
+  - ✅ Type inference with temporary basic block and infer_types_only flag
+  - ✅ SelectContext stack tracking endBlock and resultAlloca for nested selects
+  - ✅ Semantic analysis checking for pass outside select context
 
 - **Distinctions from Match**:
   - `match`: Statement-based, used for control flow, no return value
   - `select`: Expression-based, returns a value, can be assigned
-  - `match` arms use `->` for direct execution
-  - `select` arms use `-> { pass value }` for explicit returns
+  - `match` arms execute statements directly
+  - `select` arms either auto-return (naked) or use `pass` (blocks)
+  - `pass` returns from the **block**, NOT the enclosing function
 
 - **Benefits**:
   - More expressive than nested ternary operators
   - Cleaner than long if-else-if chains
   - Type-safe pattern matching with value returns
   - Natural fit for functional-style programming
+  - Supports complex logic in blocks while maintaining expression semantics
 
-**Status**: Proposed for mid-priority implementation after current core features stabilize.
+**Status**: ✅ Fully implemented and tested with test_select_simple.vyn and test_select_pass.vyn.
 
 #### Range/Comparison Patterns
 
