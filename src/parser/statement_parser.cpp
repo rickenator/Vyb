@@ -1000,10 +1000,20 @@ vyn::ast::StmtPtr StatementParser::parse_match() {
         // Expect '->' (arrow)
         expect(vyn::TokenType::ARROW, "Expected '->' after match pattern.");
         
-        // Parse result expression
-        vyn::ast::ExprPtr result = expr_parser_.parse_expression();
-        if (!result) {
-            throw error(peek(), "Expected expression after '=>' in match arm.");
+        // Parse result: either a block statement or an expression
+        vyn::ast::ExprPtr result;
+        if (check(vyn::TokenType::LBRACE)) {
+            // Parse block statement and wrap it in a BlockExpression
+            auto block_stmt = parse_block();
+            result = std::make_unique<vyn::ast::BlockExpression>(
+                block_stmt->loc, std::move(block_stmt)
+            );
+        } else {
+            // Parse regular expression
+            result = expr_parser_.parse_expression();
+            if (!result) {
+                throw error(peek(), "Expected expression or block after '->' in match arm.");
+            }
         }
         
         cases.emplace_back(std::move(pattern), std::move(result));

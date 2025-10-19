@@ -203,6 +203,7 @@ public:
     void visit(ast::SuperExpression* node) override;
     void visit(ast::AwaitExpression* node) override;
     void visit(ast::RangeExpression* node) override;
+    void visit(ast::BlockExpression* node) override;
     void visit(ast::ListComprehension* node) override;
     void visit(ast::GenericInstantiationExpression* node) override;
     void visit(ast::PointerDerefExpression* node) override;

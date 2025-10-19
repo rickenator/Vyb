@@ -2806,6 +2806,22 @@ void LLVMCodegen::visit(ast::RangeExpression* node) {
     m_currentLLVMValue = nullptr;
 }
 
+void LLVMCodegen::visit(ast::BlockExpression* node) {
+    // Block as expression: execute the block and the last value becomes the result
+    if (!node->block) {
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Execute all statements in the block
+    for (const auto& stmt : node->block->body) {
+        stmt->accept(*this);
+    }
+    
+    // The m_currentLLVMValue should be set by the last statement/expression in the block
+    // If the block ends with a return statement, that's handled by the return logic
+}
+
 void LLVMCodegen::visit(ast::AwaitExpression* node) {
     // 'await' expression - suspend current async function and wait for Future<T>
     
