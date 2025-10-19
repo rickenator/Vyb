@@ -65,9 +65,39 @@ vyn::ast::DeclPtr DeclarationParser::parse() {
                current_token.type == vyn::TokenType::KEYWORD_AUTO) { // Accept auto
         return this->parse_global_var_declaration();
     } else if (current_token.type == vyn::TokenType::IDENTIFIER && next_token.type == vyn::TokenType::LT) {
-        // NEW UNIFIED SYNTAX: Check for name<Type> pattern
-        // This could be a variable declaration with unified syntax: name<Type>
-        return this->parse_global_var_declaration();
+        // NEW UNIFIED SYNTAX: Could be name<Type> variable OR name<Type> -> function
+        // Look ahead to distinguish: if we see ARROW after the type annotation, it's a function
+        size_t saved_pos = this->pos_;
+        bool is_function = false;
+        
+        try {
+            this->consume(); // consume identifier
+            // Skip over <Type> or <Type1, Type2, ...>
+            int angle_depth = 0;
+            if (this->peek().type == vyn::TokenType::LT) {
+                this->consume();
+                angle_depth = 1;
+                while (angle_depth > 0 && !this->IsAtEnd()) {
+                    if (this->peek().type == vyn::TokenType::LT) angle_depth++;
+                    else if (this->peek().type == vyn::TokenType::GT) angle_depth--;
+                    this->consume();
+                }
+            }
+            // Now check if we see ARROW (function) or something else (variable)
+            if (this->peek().type == vyn::TokenType::ARROW) {
+                is_function = true;
+            }
+        } catch (...) {
+            // Error during lookahead, treat as variable
+        }
+        
+        this->pos_ = saved_pos; // Restore position
+        
+        if (is_function) {
+            return this->parse_function();
+        } else {
+            return this->parse_global_var_declaration();
+        }
     } else if (current_token.type == vyn::TokenType::IDENTIFIER && next_token.type == vyn::TokenType::LPAREN) {
         // NEW UNIFIED SYNTAX: Check for name(params)<ReturnType> pattern
         // This could be a function declaration with unified syntax
@@ -690,6 +720,10 @@ std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_trait_declaratio
         }
         methods.push_back(std::move(method));
         
+        // Optional comma or semicolon after method declaration - not required (consistent with struct fields)
+        this->match(vyn::TokenType::COMMA);
+        this->match(vyn::TokenType::SEMICOLON);
+        
         this->skip_comments_and_newlines();
     }
     
@@ -724,7 +758,11 @@ std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_impl() {
     this->expect(vyn::TokenType::LBRACE);
     std::vector<std::unique_ptr<ast::FunctionDeclaration>> methods;
     while (!this->check(vyn::TokenType::RBRACE) && !this->IsAtEnd()) {
-        methods.push_back(this->parse_function()); 
+        methods.push_back(this->parse_function());
+        // Optional comma or semicolon after method declaration - not required
+        this->match(vyn::TokenType::COMMA);
+        this->match(vyn::TokenType::SEMICOLON);
+        this->skip_comments_and_newlines();
     }
     this->expect(vyn::TokenType::RBRACE);
 
