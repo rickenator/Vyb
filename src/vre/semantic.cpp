@@ -611,7 +611,50 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
         // First check if it's a simple identifier (e.g., vec.push())
         if (auto objIdent = dynamic_cast<ast::Identifier*>(memberExpr->object.get())) {
             if (auto methodIdent = dynamic_cast<ast::Identifier*>(memberExpr->property.get())) {
-                handleVecMethodCall(node, objIdent->name, methodIdent->name);
+                std::string methodName = methodIdent->name;
+                
+                // Look up the object's type
+                SymbolInfo* objSymbol = currentScope->lookup(objIdent->name);
+                if (objSymbol && objSymbol->type) {
+                    // Check if it's a Vec type
+                    if (auto vecType = dynamic_cast<ast::VecType*>(objSymbol->type)) {
+                        handleVecMethodCall(node, objIdent->name, methodName);
+                        return;
+                    }
+                    
+                    // Otherwise check for trait methods
+                    if (auto typeName = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
+                        if (typeName->identifier) {
+                            std::string typeNameStr = typeName->identifier->name;
+                            
+                            // Look for trait implementations
+                            auto typeImplsIt = traitImpls.find(typeNameStr);
+                            if (typeImplsIt != traitImpls.end()) {
+                                for (const auto& traitEntry : typeImplsIt->second) {
+                                    const std::string& traitName = traitEntry.first;
+                                    const std::vector<ast::FunctionDeclaration*>& methods = traitEntry.second;
+                                    
+                                    for (ast::FunctionDeclaration* method : methods) {
+                                        if (method && method->id && method->id->name == methodName) {
+                                            if (method->returnTypeNode) {
+                                                expressionTypes[node] = method->returnTypeNode.get();
+                                                node->type = std::shared_ptr<ast::TypeNode>(method->returnTypeNode->clone());
+                                            }
+                                            
+                                            std::cout << "DEBUG: Resolved trait method call: " << typeNameStr 
+                                                      << "." << methodName << " from trait " << traitName << std::endl;
+                                            return;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // If we reach here, try Vec method as fallback (for backward compatibility)
+                // This will generate an error if not found
+                handleVecMethodCall(node, objIdent->name, methodName);
                 return;
             }
         }
@@ -631,6 +674,45 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     // We pass a dummy name since we're working with member expressions
                     handleVecMethodCallOnMember(node, vecType, methodIdent->name);
                     return;
+                }
+                
+                // Check if this is a trait method call
+                // Get the type name to look up trait implementations
+                if (auto typeName = dynamic_cast<ast::TypeName*>(objTypeIt->second)) {
+                    if (typeName->identifier) {
+                        std::string typeNameStr = typeName->identifier->name;
+                        std::string methodName = methodIdent->name;
+                        
+                        // Look for trait implementations for this type
+                        auto typeImplsIt = traitImpls.find(typeNameStr);
+                        if (typeImplsIt != traitImpls.end()) {
+                            // Check each trait this type implements
+                            for (const auto& traitEntry : typeImplsIt->second) {
+                                const std::string& traitName = traitEntry.first;
+                                const std::vector<ast::FunctionDeclaration*>& methods = traitEntry.second;
+                                
+                                // Look for the method in this trait's implementation
+                                for (ast::FunctionDeclaration* method : methods) {
+                                    if (method && method->id && method->id->name == methodName) {
+                                        // Found the method! Set the return type
+                                        if (method->returnTypeNode) {
+                                            expressionTypes[node] = method->returnTypeNode.get();
+                                            node->type = std::shared_ptr<ast::TypeNode>(method->returnTypeNode->clone());
+                                        }
+                                        
+                                        std::cout << "DEBUG: Resolved trait method call: " << typeNameStr 
+                                                  << "." << methodName << " from trait " << traitName << std::endl;
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // If we didn't find a trait method, it might be a struct method (future feature)
+                        // or it's an error
+                        addError("Method '" + methodName + "' not found for type '" + typeNameStr + "'", node);
+                        return;
+                    }
                 }
             }
         }
@@ -707,6 +789,24 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
     // Look up the struct/class definition in the symbol table
     const std::string& structTypeName = typeName->identifier->name;
     const std::string& fieldName = propertyId->name;
+    
+    // Before checking struct fields, check if this might be a trait method call
+    // (MemberExpression can be part of CallExpression, where callee is the MemberExpression)
+    auto typeImplsIt = traitImpls.find(structTypeName);
+    if (typeImplsIt != traitImpls.end()) {
+        for (const auto& traitEntry : typeImplsIt->second) {
+            const std::vector<ast::FunctionDeclaration*>& methods = traitEntry.second;
+            for (ast::FunctionDeclaration* method : methods) {
+                if (method && method->id && method->id->name == fieldName) {
+                    // This is a trait method, not a field
+                    // Don't set type here - let CallExpression handle it
+                    std::cout << "DEBUG: MemberExpression identified trait method: " 
+                              << structTypeName << "." << fieldName << std::endl;
+                    return;
+                }
+            }
+        }
+    }
     
     // Check if we have field information for this struct
     auto structIt = structFieldTypes.find(structTypeName);

@@ -822,6 +822,78 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         }
     }
     
+    // Check if this is a trait method call first
+    if (auto memberExpr = dynamic_cast<vyn::ast::MemberExpression*>(node->callee.get())) {
+        if (auto objIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->object.get())) {
+            if (auto methodIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->property.get())) {
+                // Look up the object to get its LLVM value
+                auto objIt = namedValues.find(objIdent->name);
+                if (objIt != namedValues.end()) {
+                    llvm::Value* objectAlloca = objIt->second;
+                    
+                    // Try to get the type name from the AST
+                    std::string typeName;
+                    if (objIdent->type) {
+                        if (auto typeNameNode = dynamic_cast<ast::TypeName*>(objIdent->type.get())) {
+                            if (typeNameNode->identifier) {
+                                typeName = typeNameNode->identifier->name;
+                            }
+                        }
+                    }
+                    
+                    if (!typeName.empty()) {
+                        std::string methodName = methodIdent->name;
+                        
+                        // Try to find this as a trait method implementation
+                        // Trait impl functions are named just as their method name (e.g., "add", "get_value")
+                        llvm::Function* implFunc = module->getFunction(methodName);
+                        if (implFunc) {
+                            std::cout << "DEBUG: Found trait method implementation: " << methodName 
+                                      << " for type " << typeName << std::endl;
+                            
+                            // Build arguments: first arg is the object, rest are the call arguments
+                            std::vector<llvm::Value*> argValues;
+                            
+                            // Load the struct value to pass as first argument
+                            if (auto allocaType = llvm::dyn_cast<llvm::AllocaInst>(objectAlloca)) {
+                                llvm::Value* structValue = builder->CreateLoad(
+                                    allocaType->getAllocatedType(), 
+                                    objectAlloca, 
+                                    objIdent->name + ".load"
+                                );
+                                argValues.push_back(structValue);
+                            } else {
+                                argValues.push_back(objectAlloca);
+                            }
+                            
+                            // Add the remaining arguments
+                            for (auto& arg : node->arguments) {
+                                arg->accept(*this);
+                                if (!m_currentLLVMValue) {
+                                    logError(arg->loc, "Argument codegen failed for trait method " + methodName);
+                                    m_currentLLVMValue = nullptr;
+                                    return;
+                                }
+                                argValues.push_back(m_currentLLVMValue);
+                            }
+                            
+                            // Make the call
+                            if (implFunc->getReturnType()->isVoidTy()) {
+                                builder->CreateCall(implFunc, argValues);
+                                m_currentLLVMValue = nullptr;
+                            } else {
+                                m_currentLLVMValue = builder->CreateCall(implFunc, argValues, "trait.method.result");
+                            }
+                            
+                            std::cout << "DEBUG: Successfully generated call to trait method: " << methodName << std::endl;
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
     // First, check if this is an intrinsic function call
     auto identCallee = dynamic_cast<vyn::ast::Identifier*>(node->callee.get());
     std::string calleeName = node->callee->toString();
