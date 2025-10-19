@@ -722,8 +722,11 @@ void LLVMCodegen::visit(vyn::ast::GenericParameter* node) {
 
 void LLVMCodegen::visit(vyn::ast::TemplateDeclaration* node) {
     // Template declarations are blueprints. Code is generated when they are instantiated.
-    // The codegen might store the template definition for later instantiation.
-    logError(node->loc, "TemplateDeclaration visited. Codegen happens on instantiation, not for the template itself.");
+    // No LLVM IR is generated for template declarations themselves - only for instantiations.
+    // Silently skip template declarations during codegen.
+    std::cout << "DEBUG: Skipping TemplateDeclaration '" 
+              << (node && node->name ? node->name->name : "<unnamed>") 
+              << "' - codegen happens on instantiation" << std::endl;
     m_currentLLVMValue = nullptr;
 }
 

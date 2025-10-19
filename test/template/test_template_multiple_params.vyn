@@ -1,0 +1,22 @@
+// Test template with multiple type parameters and constraints
+
+template Container<K: Comparable, V> {
+    struct KeyValue {
+        key<K>,
+        value<V>
+    }
+}
+
+template Stack<T> {
+    struct Node {
+        data<T>,
+        next<Int>  // Simplified - would be their<Node<T>> in full implementation
+    }
+}
+
+main()<Int> -> {
+    // Templates are registered and type-checked
+    // Actual instantiation would happen when creating instances
+    result<Int> = 100
+    return result
+}

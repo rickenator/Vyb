@@ -102,7 +102,7 @@ struct BorrowInfo {
 };
 
 struct SymbolInfo {
-    enum class Kind { Variable, Function, Type };
+    enum class Kind { Variable, Function, Type, TYPE_PARAMETER };
     Kind kind;
     std::string name;
     bool isConst = false;

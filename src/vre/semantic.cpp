@@ -1779,17 +1779,62 @@ void SemanticAnalyzer::visit(ast::TemplateDeclaration* node) {
                 param->loc,
                 std::make_unique<ast::Identifier>(param->name->loc, param->name->name)
             );
+            
+            // Clone bounds if present
+            for (const auto& bound : param->bounds) {
+                if (bound) {
+                    clonedParam->bounds.push_back(bound->clone());
+                }
+            }
+            
             clonedDecl->genericParams.push_back(std::move(clonedParam));
         }
     }
     
-    // Register the template
-    registerTemplate(std::move(clonedDecl));
+    // Register the template BEFORE visiting the body
+    // This allows recursive template definitions
+    auto templateInfo = std::make_unique<TemplateInfo>(std::move(clonedDecl));
     
-    // Visit the template body for immediate syntax checking
+    // Enter a new scope for the template body
+    enterScope();
+    
+    // Register all generic type parameters as valid types in this scope
+    // This allows code inside the template to use T, K, V, etc.
+    for (const auto& param : node->genericParams) {
+        if (param && param->name) {
+            const std::string& paramName = param->name->name;
+            
+            // Create a placeholder TypeName for the generic parameter
+            auto genericType = std::make_unique<ast::TypeName>(
+                param->loc,
+                std::make_unique<ast::Identifier>(param->loc, paramName)
+            );
+            
+            // Register it in the symbol table as a type parameter
+            SymbolInfo sym;
+            sym.name = paramName;
+            sym.type = genericType.get(); // Store raw pointer, managed separately
+            sym.kind = SymbolInfo::Kind::TYPE_PARAMETER; // Mark as generic type parameter
+            
+            currentScope->add(sym);
+            
+            std::cout << "DEBUG: Registered template type parameter: " << paramName << std::endl;
+        }
+    }
+    
+    // Store template in registry
+    templateRegistry[templateName] = std::move(templateInfo);
+    
+    // Visit the template body with type parameters in scope
     if (node->body) {
+        std::cout << "DEBUG: Visiting template body for: " << templateName << std::endl;
         node->body->accept(*this);
     }
+    
+    // Exit the template scope
+    exitScope();
+    
+    std::cout << "DEBUG: Template '" << templateName << "' registered successfully" << std::endl;
 }
 void SemanticAnalyzer::visit(ast::ThrowStatement* node) {}
 
@@ -1869,7 +1914,20 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
             if (argTypeNode) argTypeNode->accept(*this);
         }
     } else {
-        SymbolInfo* symbol = currentScope->lookup(typeNameStr); 
+        // Check if this is a generic type parameter first
+        SymbolInfo* symbol = currentScope->lookup(typeNameStr);
+        if (symbol && symbol->kind == SymbolInfo::Kind::TYPE_PARAMETER) {
+            // This is a valid generic type parameter (like T, K, V)
+            std::cout << "DEBUG: Recognized generic type parameter: " << typeNameStr << std::endl;
+            node->type = std::shared_ptr<ast::TypeNode>(node->clone());
+            // Visit generic arguments if present (e.g., Vec<T>)
+            for (auto& argTypeNode : node->genericArgs) {
+                if (argTypeNode) argTypeNode->accept(*this);
+            }
+            return;
+        }
+        
+        // Check if it's a regular type
         if (!symbol || !symbol->type) {
             addError("Unknown type identifier: " + typeNameStr, node);
             return;
