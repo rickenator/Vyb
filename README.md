@@ -152,7 +152,7 @@ This unique `import`/`smuggle` distinction makes Vyn's module system both secure
 
 ## What's Working Now
 
-Vyn **v0.4.1** is a **complete systems programming language** with **trait system foundation (Phase 1)** ready for production use:
+Vyn **v0.4.1** is a **complete systems programming language** with **aspect system foundation (Phase 1)** ready for production use:
 
 ### ✅ **Core Language Features**
 - **Functions**: `name(params)<ReturnType> -> body` with full LLVM compilation
@@ -235,47 +235,86 @@ main()<Void> -> {
 - ✅ LLVM codegen with debug metadata
 - ✅ Comprehensive test coverage
 
-### ✅ **Trait System (Phase 1 - v0.4.2)**
+### ✅ **Aspect System (v0.4.1)**
 
-**Philosophy:** Vyn uses **traits + structs** instead of classes and inheritance. This provides polymorphism, code reuse, and composition without the complexity and pitfalls of OOP class hierarchies. See [`doc/WHY_TRAITS_NOT_CLASSES.md`](doc/WHY_TRAITS_NOT_CLASSES.md) for detailed rationale.
+**Philosophy:** Vyn uses **aspects + structs** instead of classes and inheritance. This provides polymorphism, code reuse, and composition without the complexity and pitfalls of OOP class hierarchies. See [`doc/WHY_ASPECTS_NOT_CLASSES.md`](doc/WHY_ASPECTS_NOT_CLASSES.md) for detailed rationale.
 
-- **Trait Declarations**: Define interfaces with method signatures
-  ```vyn
-  trait Printable {
-      print(self<Self>)<Void> -> { }
-      to_string(self<Self>)<String> -> { }
-  }
-  ```
-- **Method Signatures**: Traits specify required methods with type signatures
-- **Default Implementations**: Trait methods can provide default behavior
-  ```vyn
-  trait Comparable {
-      lt(self<Self>, other<Self>)<Bool> -> { }
-      eq(self<Self>, other<Self>)<Bool> -> {
-          // Default implementation
-          return !(self.lt(other)) && !(other.lt(self));
-      }
-  }
-  ```
-- **Generic Traits**: Traits support generic type parameters
-- **Trait Registry**: Semantic analyzer validates and stores trait definitions
-- **Impl Validation**: `impl Trait for Type` blocks validated against trait signatures
-- **Self Type**: Methods use `Self` type parameter for trait implementors
-- **Built-in Traits**: `Comparable`, `Equatable`, `Numeric`, `Hashable` available for primitives
+#### **Complete Aspect Example**
 
-**Why Traits > Classes:**
-- ✅ Multiple trait implementations (no diamond problem)
+```vyn
+# Define an aspect (interface) with method signatures
+aspect Display {
+    show(self<Self>)<String> -> { }
+    format(self<Self>, prefix<String>)<String> -> { }
+}
+
+# Define a generic struct
+struct Box<T> {
+    value<T>
+}
+
+# Bind the aspect to a concrete type
+bind Display -> Box<Int> {
+    show(self<Self>)<String> -> {
+        return "Box with integer"
+    }
+    
+    format(self<Self>, prefix<String>)<String> -> {
+        return prefix + ": Box[Int]"
+    }
+}
+
+# Bind the aspect to another type
+struct Point {
+    x<Int>,
+    y<Int>
+}
+
+bind Display -> Point {
+    show(self<Self>)<String> -> {
+        return "Point"
+    }
+    
+    format(self<Self>, prefix<String>)<String> -> {
+        return prefix + ": (x,y)"
+    }
+}
+
+main()<Int> -> {
+    box<Box<Int>> = Box<Int> { value = 42 }
+    point<Point> = Point { x = 10, y = 20 }
+    # Method calls coming in Phase 6 Step 3
+    return 0
+}
+```
+
+#### **Current Implementation Status**
+
+**✅ Fully Working:**
+- **Aspect Declarations**: Define interfaces with method signatures and `Self` type
+- **Bind Blocks**: Implement aspects for types using `bind Aspect -> Type` syntax
+- **Generic Aspects**: Aspects support generic type parameters
+- **Generic Bindings**: `bind<T> Display -> Box<T>` with type parameter extraction
+- **Aspect Registry**: Semantic analyzer validates and stores aspect definitions
+- **Bind Validation**: Full signature checking against aspect requirements
+- **Default Implementations**: Aspect methods can provide default behavior
+- **Pattern Matching**: Type pattern matching for generic aspect monomorphization
+- **Canonical Syntax**: Arrow syntax `->` for bindings (was `for` keyword)
+
+**🚧 In Progress (Phase 6 - Generic Aspect Methods):**
+- **Method Calls**: Invoking aspect methods on values (`value.show()`)
+- **Method Monomorphization**: Automatic specialization of generic aspect implementations
+- **Aspect-based Polymorphism**: Runtime dispatch through aspect interfaces
+
+**Why Aspects > Classes:**
+- ✅ Multiple aspect implementations (no diamond problem)
 - ✅ Composition over inheritance (more flexible)
-- ✅ Extension without modification (impl traits for any type)
+- ✅ Extension without modification (bind aspects to any type)
 - ✅ Static dispatch (zero-cost abstractions)
 - ✅ No fragile base class problem
+- ✅ Explicit binding makes relationships clear
 
-**Coming in Phase 2:**
-- Trait method calls on values (`value.method()`)
-- Trait-based polymorphism
-- Generic trait implementations (`impl<T: Comparable> for Vec<T>`)
-
-**See:** `doc/TRAIT_SYSTEM_DESIGN.md` for complete specification
+**See:** `doc/ASPECT_SYSTEM_DESIGN.md` for complete specification and `test/aspect/` for working examples
 
 #### Primitive Types
 
@@ -1679,12 +1718,12 @@ module_item            ::= import_statement
                          | smuggle_statement
                          | struct_declaration
                          | enum_declaration
-                         | impl_declaration
+                         | bind_declaration
                          | function_declaration
                          | variable_declaration
                          | constant_declaration
                          | type_alias_declaration
-                         | trait_declaration
+                         | aspect_declaration
                          | statement
 
 // Import System (import/smuggle)
@@ -1704,10 +1743,10 @@ enum_declaration       ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ]
                            'enum' IDENTIFIER '{' { enum_variant } '}'
 enum_variant           ::= IDENTIFIER [ '(' type_list ')' ] [ '=' expression ] ','?
 
-impl_declaration       ::= [ 'template' '<' type_parameter_list '>' ] 
-                           'impl' type [ 'for' type ] '{' { method_declaration } '}'
+bind_declaration       ::= [ 'template' '<' type_parameter_list '>' ] 
+                           'bind' type [ '->' type ] '{' { method_declaration } '}'
 
-trait_declaration      ::= [ 'pub' ] 'template' IDENTIFIER [ template_parameters ] 
+aspect_declaration     ::= [ 'pub' ] 'aspect' IDENTIFIER [ template_parameters ] 
                            '{' { method_signature } '}'
 
 // Function Declarations
