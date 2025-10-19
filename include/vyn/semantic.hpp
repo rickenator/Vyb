@@ -168,6 +168,7 @@ public:
     void visit(ast::ForStatement* node) override;
     void visit(ast::WhileStatement* node) override;
     void visit(ast::ReturnStatement* node) override;
+    void visit(ast::PassStatement* node) override;
     void visit(ast::BreakStatement* node) override;
     void visit(ast::ContinueStatement* node) override;
     void visit(ast::TryStatement* node) override;
@@ -204,6 +205,7 @@ public:
     void visit(ast::AwaitExpression* node) override;
     void visit(ast::RangeExpression* node) override;
     void visit(ast::BlockExpression* node) override;
+    void visit(ast::SelectExpression* node) override;
     void visit(ast::ListComprehension* node) override;
     void visit(ast::GenericInstantiationExpression* node) override;
     void visit(ast::PointerDerefExpression* node) override;

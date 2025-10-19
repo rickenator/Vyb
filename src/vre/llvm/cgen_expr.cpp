@@ -2822,6 +2822,171 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
     // If the block ends with a return statement, that's handled by the return logic
 }
 
+void LLVMCodegen::visit(ast::SelectExpression* node) {
+    // Select expression: pattern match and return a value
+    // Supports both naked expressions (auto-return) and blocks with pass keyword
+    
+    setDebugLocation(node->loc);
+    
+    if (!node->expr) {
+        logError(node->loc, "select expression missing match target");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Evaluate the expression to match against
+    node->expr->accept(*this);
+    llvm::Value* matchValue = m_currentLLVMValue;
+    
+    if (!matchValue) {
+        logError(node->loc, "select expression target evaluated to null");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Create basic blocks for pattern matching
+    llvm::Function* func = builder->GetInsertBlock()->getParent();
+    llvm::BasicBlock* endSelectBB = llvm::BasicBlock::Create(*context, "select.end");
+    
+    // Create alloca for result value (will be set by whichever pattern matches)
+    llvm::Type* resultType = nullptr;
+    llvm::AllocaInst* resultAlloca = nullptr;
+    
+    // Push select context EARLY for pass statements (with null resultAlloca temporarily)
+    SelectContext selectCtx;
+    selectCtx.endBlock = endSelectBB;
+    selectCtx.resultAlloca = nullptr; // Will be set after determining type
+    selectStack.push_back(selectCtx);
+    
+    // Determine result type from first case (TODO: proper type inference)
+    if (!node->cases.empty() && node->cases[0].second) {
+        // Save current insertion point
+        llvm::BasicBlock* savedBB = builder->GetInsertBlock();
+        llvm::BasicBlock::iterator savedIP = builder->GetInsertPoint();
+        
+        // Create a temporary block for type inference
+        llvm::BasicBlock* tempBB = llvm::BasicBlock::Create(*context, "select.type_infer", func);
+        builder->SetInsertPoint(tempBB);
+        
+        // Enable type inference mode
+        infer_types_only = true;
+        
+        // Evaluate first result to get type
+        node->cases[0].second->accept(*this);
+        if (m_currentLLVMValue) {
+            resultType = m_currentLLVMValue->getType();
+        }
+        
+        // Disable type inference mode
+        infer_types_only = false;
+        
+        // Delete the temporary block (it was just for type inference)
+        tempBB->eraseFromParent();
+        
+        // Restore insertion point
+        builder->SetInsertPoint(savedBB, savedIP);
+        
+        // Create resultAlloca with determined type
+        if (resultType) {
+            resultAlloca = builder->CreateAlloca(resultType, nullptr, "select.result");
+            // Update the context with the actual resultAlloca
+            selectStack.back().resultAlloca = resultAlloca;
+        }
+    }
+    
+    llvm::BasicBlock* nextCaseBB = nullptr;
+    bool hasWildcard = false;
+    
+    for (size_t i = 0; i < node->cases.size(); ++i) {
+        const auto& [pattern, result] = node->cases[i];
+        
+        // Check for wildcard pattern
+        if (!pattern) {
+            hasWildcard = true;
+            // Wildcard matches everything - evaluate result
+            if (result) {
+                // Check if result is a BlockExpression (contains pass) or naked expression
+                if (dynamic_cast<ast::BlockExpression*>(result.get())) {
+                    // Block expression - pass statement will handle storing result
+                    result->accept(*this);
+                } else {
+                    // Naked expression - auto-store result
+                    result->accept(*this);
+                    if (resultAlloca && m_currentLLVMValue) {
+                        builder->CreateStore(m_currentLLVMValue, resultAlloca);
+                    }
+                    // Auto-branch to end for naked expressions
+                    if (!builder->GetInsertBlock()->getTerminator()) {
+                        builder->CreateBr(endSelectBB);
+                    }
+                }
+            }
+            break;
+        }
+        
+        // Create blocks for this case
+        llvm::BasicBlock* caseBB = llvm::BasicBlock::Create(*context, "select.case", func);
+        nextCaseBB = llvm::BasicBlock::Create(*context, "select.next");
+        
+        // Evaluate pattern
+        pattern->accept(*this);
+        llvm::Value* patternValue = m_currentLLVMValue;
+        
+        if (patternValue) {
+            // Compare match value with pattern value
+            llvm::Value* cond = builder->CreateICmpEQ(matchValue, patternValue, "select.cmp");
+            builder->CreateCondBr(cond, caseBB, nextCaseBB);
+            
+            // Case matched - evaluate result expression
+            builder->SetInsertPoint(caseBB);
+            if (result) {
+                // Check if result is a BlockExpression or naked expression
+                if (dynamic_cast<ast::BlockExpression*>(result.get())) {
+                    // Block expression - pass statement will handle storing and branching
+                    result->accept(*this);
+                } else {
+                    // Naked expression - auto-store and branch
+                    result->accept(*this);
+                    if (resultAlloca && m_currentLLVMValue) {
+                        builder->CreateStore(m_currentLLVMValue, resultAlloca);
+                    }
+                    if (!builder->GetInsertBlock()->getTerminator()) {
+                        builder->CreateBr(endSelectBB);
+                    }
+                }
+            }
+            
+            // Continue to next case
+            nextCaseBB->insertInto(func);
+            builder->SetInsertPoint(nextCaseBB);
+        }
+    }
+    
+    // Pop select context
+    selectStack.pop_back();
+    
+    // If no wildcard, branch to end from last nextCaseBB
+    if (!hasWildcard && nextCaseBB && !nextCaseBB->getTerminator()) {
+        builder->CreateBr(endSelectBB);
+    }
+    
+    // Only insert endSelectBB if it has predecessors
+    if (endSelectBB->hasNPredecessorsOrMore(1)) {
+        endSelectBB->insertInto(func);
+        builder->SetInsertPoint(endSelectBB);
+    } else {
+        delete endSelectBB;
+        endSelectBB = nullptr;
+    }
+    
+    // Load result value
+    if (resultAlloca) {
+        m_currentLLVMValue = builder->CreateLoad(resultType, resultAlloca, "select.result.load");
+    } else {
+        m_currentLLVMValue = nullptr;
+    }
+}
+
 void LLVMCodegen::visit(ast::AwaitExpression* node) {
     // 'await' expression - suspend current async function and wait for Future<T>
     

@@ -1076,6 +1076,27 @@ void SemanticAnalyzer::visit(ast::BlockExpression* node) {
         node->block->accept(*this);
     }
 }
+void SemanticAnalyzer::visit(ast::SelectExpression* node) {
+    // Visit the expression being matched
+    if (node->expr) {
+        node->expr->accept(*this);
+    }
+    
+    // Visit all patterns and result expressions
+    for (const auto& [pattern, result] : node->cases) {
+        if (pattern) {
+            pattern->accept(*this);
+        }
+        if (result) {
+            result->accept(*this);
+        }
+    }
+    
+    // TODO: Type checking:
+    // - All result expressions should have compatible types
+    // - Pattern types should match the expression type
+    // - Check for exhaustiveness
+}
 void SemanticAnalyzer::visit(ast::ListComprehension* node) {}
 void SemanticAnalyzer::visit(ast::GenericInstantiationExpression* node) {
     if (!node || !node->baseExpression) {
@@ -1341,6 +1362,17 @@ void SemanticAnalyzer::visit(ast::ReturnStatement* node) {
         node->argument->accept(*this);
     }
 }
+
+void SemanticAnalyzer::visit(ast::PassStatement* node) {
+    // Visit the pass value (required)
+    if (node->argument) {
+        node->argument->accept(*this);
+    } else {
+        errors.push_back("Pass statement requires an expression");
+    }
+    // TODO: Check that we're inside a select expression block
+}
+
 void SemanticAnalyzer::visit(ast::BreakStatement* node) {
     // Check if we're inside a loop
     if (!isInLoop()) {

@@ -9,6 +9,9 @@ StatementParser::StatementParser(const std::vector<token::Token>& tokens, size_t
     : BaseParser(tokens, pos, file_path), type_parser_(type_parser), expr_parser_(expr_parser), decl_parser_(decl_parser) {
     // indent_level is part of BaseParser or handled there if needed.
     // If BaseParser doesn't take indent_level, and it's needed here, add a member: this->indent_level_ = indent_level;
+    
+    // Let expression parser access statement parser for block parsing
+    expr_parser_.set_statement_parser(this);
 }
 
 void StatementParser::set_declaration_parser(DeclarationParser* dp) {
@@ -70,6 +73,8 @@ vyn::ast::StmtPtr StatementParser::parse() {
             return parse_match();
         case vyn::TokenType::KEYWORD_RETURN:
             return parse_return();
+        case vyn::TokenType::KEYWORD_PASS:
+            return parse_pass();
         case vyn::TokenType::LBRACE:
             return parse_block();
         case vyn::TokenType::KEYWORD_TRY:
@@ -551,6 +556,37 @@ std::unique_ptr<vyn::ast::ReturnStatement> StatementParser::parse_return() {
     return std::make_unique<vyn::ast::ReturnStatement>(return_loc, std::move(value));
 }
 
+std::unique_ptr<vyn::ast::PassStatement> StatementParser::parse_pass() {
+    SourceLocation pass_loc = this->expect(vyn::TokenType::KEYWORD_PASS, "Expected 'pass'.").location;
+    vyn::ast::ExprPtr value = nullptr;
+    SourceLocation end_loc = pass_loc;
+
+    // Pass requires an argument - it must pass a value
+    if (this->peek().type == vyn::TokenType::SEMICOLON || this->peek().type == vyn::TokenType::NEWLINE || 
+        this->peek().type == vyn::TokenType::RBRACE || this->peek().type == vyn::TokenType::DEDENT) {
+        throw std::runtime_error("Expected expression after 'pass' keyword at " + location_to_string(pass_loc));
+    }
+
+    // Parse the expression to pass
+    value = this->expr_parser_.parse_expression();
+    if (!value) {
+        throw std::runtime_error("Expected expression after 'pass' at " + location_to_string(this->peek().location));
+    }
+    end_loc = value->loc;
+
+    if (this->peek().type == vyn::TokenType::SEMICOLON) {
+        end_loc = this->peek().location;
+        this->consume(); // Consume semicolon
+    } else if (this->peek().type == vyn::TokenType::NEWLINE || this->IsAtEnd() || 
+               this->peek().type == vyn::TokenType::RBRACE || this->peek().type == vyn::TokenType::DEDENT) {
+        // Optional semicolon at the end of a line or before closing brace
+    } else {
+        throw std::runtime_error("Expected semicolon or newline after pass statement at " + location_to_string(this->peek().location));
+    }
+
+    return std::make_unique<vyn::ast::PassStatement>(pass_loc, std::move(value));
+}
+
 std::unique_ptr<vyn::ast::VariableDeclaration> StatementParser::parse_var_decl() {
     // Declaration start location
     SourceLocation decl_loc = this->current_location();
@@ -775,6 +811,7 @@ bool StatementParser::is_statement_start(vyn::TokenType type) const {
         case vyn::TokenType::KEYWORD_FOR:
         case vyn::TokenType::KEYWORD_MATCH:
         case vyn::TokenType::KEYWORD_RETURN:
+        case vyn::TokenType::KEYWORD_PASS:
         case vyn::TokenType::LBRACE:
         case vyn::TokenType::KEYWORD_BREAK:
         case vyn::TokenType::KEYWORD_CONTINUE:

@@ -115,8 +115,10 @@ namespace vyn { // Changed Vyn to vyn
     };
 
     class ExpressionParser : public BaseParser {
+        StatementParser* stmt_parser_ = nullptr; // For parsing blocks in select expressions
     public:
         ExpressionParser(const std::vector<token::Token>& tokens, size_t& pos, const std::string& file_path);
+        void set_statement_parser(StatementParser* sp) { stmt_parser_ = sp; }
         vyn::ast::ExprPtr parse_expression(); // Removed override
         vyn::ast::ExprPtr parse_primary(); // For match patterns - parses literals, identifiers without binary ops
         bool is_expression_start(vyn::TokenType type) const; // Added declaration
@@ -186,6 +188,7 @@ namespace vyn { // Changed Vyn to vyn
         std::unique_ptr<vyn::ast::WhileStatement> parse_while(); 
         std::unique_ptr<vyn::ast::ForStatement> parse_for(); 
         std::unique_ptr<vyn::ast::ReturnStatement> parse_return(); 
+        std::unique_ptr<vyn::ast::PassStatement> parse_pass(); 
         std::unique_ptr<vyn::ast::BreakStatement> parse_break(); 
         std::unique_ptr<vyn::ast::ContinueStatement> parse_continue(); 
         std::unique_ptr<vyn::ast::VariableDeclaration> parse_var_decl(); 

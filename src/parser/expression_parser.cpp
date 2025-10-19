@@ -85,6 +85,82 @@ namespace vyn {
         DEBUG_TOKEN(peek());
         SourceLocation loc = peek().location; // General location, might be overridden
 
+        // Handle select expressions: select(expr) -> { pattern -> result, ... }
+        if (match(TokenType::KEYWORD_SELECT)) {
+            SourceLocation select_loc = peek().location;
+            
+            // Expect opening parenthesis for the select expression
+            expect(TokenType::LPAREN, "Expected '(' after 'select'");
+            
+            // Parse the expression to match against
+            vyn::ast::ExprPtr select_expr = parse_expression();
+            if (!select_expr) {
+                throw error(peek(), "Expected expression in select statement");
+            }
+            
+            // Expect closing parenthesis
+            expect(TokenType::RPAREN, "Expected ')' after select expression");
+            
+            // Expect arrow
+            expect(TokenType::ARROW, "Expected '->' after select expression");
+            
+            // Expect opening brace
+            expect(TokenType::LBRACE, "Expected '{' after '->' in select");
+            
+            // Parse select arms: pattern -> expression
+            std::vector<std::pair<vyn::ast::ExprPtr, vyn::ast::ExprPtr>> cases;
+            
+            while (!check(TokenType::RBRACE) && !IsAtEnd()) {
+                // Skip newlines between cases
+                while (match(TokenType::NEWLINE)) {}
+                
+                if (check(TokenType::RBRACE)) break;
+                
+                // Parse pattern: either '?' for wildcard or a primary expression
+                vyn::ast::ExprPtr pattern;
+                if (peek().type == TokenType::QUESTION_MARK) {
+                    consume(); // consume '?'
+                    pattern = nullptr; // Wildcard pattern
+                } else {
+                    pattern = parse_primary();
+                    if (!pattern) {
+                        throw error(peek(), "Expected pattern in select arm");
+                    }
+                }
+                
+                // Expect '->' (arrow)
+                expect(TokenType::ARROW, "Expected '->' after select pattern");
+                
+                // Parse result: either a block or a naked expression
+                vyn::ast::ExprPtr result;
+                if (check(TokenType::LBRACE) && stmt_parser_) {
+                    // Parse block statement and wrap it in a BlockExpression
+                    auto block_stmt = stmt_parser_->parse_block();
+                    result = std::make_unique<vyn::ast::BlockExpression>(
+                        block_stmt->loc, std::move(block_stmt)
+                    );
+                } else {
+                    // Parse naked expression
+                    result = parse_expression();
+                    if (!result) {
+                        throw error(peek(), "Expected expression after '->' in select arm");
+                    }
+                }
+                
+                cases.emplace_back(std::move(pattern), std::move(result));
+                
+                // Optional comma
+                match(TokenType::COMMA);
+                
+                // Skip trailing newlines
+                while (match(TokenType::NEWLINE)) {}
+            }
+            
+            expect(TokenType::RBRACE, "Expected '}' after select cases");
+            
+            return std::make_unique<vyn::ast::SelectExpression>(select_loc, std::move(select_expr), std::move(cases));
+        }
+
         // Handle if statements as expressions (e.g. `let x = if cond { 1 } else { 0 }`)
         if (match(TokenType::KEYWORD_IF)) {
             expect(TokenType::LPAREN); // Expect \\\'(\\\' after \\\'if\\\'

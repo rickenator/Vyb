@@ -394,6 +394,43 @@ void LLVMCodegen::visit(vyn::ast::WhileStatement* node) {
     m_currentLLVMValue = nullptr; // While statement itself doesn't produce a value
 }
 
+void LLVMCodegen::visit(vyn::ast::PassStatement* node) {
+    // Pass statement is used inside select expression blocks to return a value
+    if (selectStack.empty()) {
+        logError(node->loc, "Pass statement can only be used inside select expression blocks.");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    SelectContext& currentSelect = selectStack.back();
+    
+    // Codegen the pass value
+    if (node->argument) {
+        node->argument->accept(*this);
+        llvm::Value* passValue = m_currentLLVMValue;
+        
+        // During type inference, just keep the value and return
+        if (infer_types_only) {
+            m_currentLLVMValue = passValue;
+            return;
+        }
+        
+        if (passValue && currentSelect.resultAlloca) {
+            // Store the value in the result alloca
+            builder->CreateStore(passValue, currentSelect.resultAlloca);
+            
+            // Branch to the end block
+            builder->CreateBr(currentSelect.endBlock);
+        } else {
+            logError(node->loc, "Failed to generate code for pass value.");
+        }
+    } else {
+        logError(node->loc, "Pass statement requires an expression.");
+    }
+    
+    m_currentLLVMValue = nullptr;
+}
+
 void LLVMCodegen::visit(vyn::ast::BreakStatement* node) {
     if (loopStack.empty()) {
         logError(node->loc, "Break statement outside of a loop.");
