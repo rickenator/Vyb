@@ -18,7 +18,7 @@ using namespace vyn;
 
 // --- Declarations ---
 
-void LLVMCodegen::visit(ast::TraitDeclaration* node) {
+void LLVMCodegen::visit(ast::AspectDeclaration* node) {
     // Traits are interfaces/type constraints that don't generate runtime code by themselves
     // They're primarily used for compile-time type checking and polymorphism
     
@@ -658,7 +658,7 @@ void LLVMCodegen::visit(vyn::ast::FieldDeclaration* node) {
     m_currentLLVMValue = nullptr;
 }
 
-void LLVMCodegen::visit(vyn::ast::ImplDeclaration* node) {
+void LLVMCodegen::visit(vyn::ast::BindDeclaration* node) {
     // impl blocks associate methods with types.
     // Generic impl blocks (e.g., impl<T> Display for Box<T>) are templates that don't
     // generate code until instantiated with concrete types.

@@ -88,12 +88,12 @@ class ImportDeclaration;
 class StructDeclaration;
 class ClassDeclaration;
 class FieldDeclaration;
-class ImplDeclaration;
+class BindDeclaration;
 class EnumDeclaration;
 class EnumVariant;
 class GenericParameter;
 class TemplateDeclaration;
-class TraitDeclaration; // Added
+class AspectDeclaration; // Added
 class NamespaceDeclaration; // Added
 
 // Types (These are typically part of TypeNode or used as type specifiers,
@@ -233,12 +233,12 @@ enum class NodeType {
     STRUCT_DECLARATION,
     CLASS_DECLARATION,
     FIELD_DECLARATION,
-    IMPL_DECLARATION,
+    BIND_DECLARATION,
     ENUM_DECLARATION,
     ENUM_VARIANT,
     GENERIC_PARAMETER, 
     TEMPLATE_DECLARATION,
-    TRAIT_DECLARATION, // Added
+    ASPECT_DECLARATION, // Added
     NAMESPACE_DECLARATION, // Added
 
     // Other
@@ -328,12 +328,12 @@ public:
     virtual void visit(StructDeclaration* node) = 0;
     virtual void visit(ClassDeclaration* node) = 0;
     virtual void visit(FieldDeclaration* node) = 0;
-    virtual void visit(ImplDeclaration* node) = 0;
+    virtual void visit(BindDeclaration* node) = 0;
     virtual void visit(EnumDeclaration* node) = 0;
     virtual void visit(EnumVariant* node) = 0;
     virtual void visit(GenericParameter* node) = 0;
     virtual void visit(TemplateDeclaration* node) = 0;
-    virtual void visit(TraitDeclaration* node) = 0;
+    virtual void visit(AspectDeclaration* node) = 0;
     virtual void visit(NamespaceDeclaration* node) = 0;
     
     // Other
@@ -1163,17 +1163,17 @@ public:
     void accept(Visitor& visitor) override;
 };
 
-// ImplDeclaration
-class ImplDeclaration : public Declaration {
+// BindDeclaration
+class BindDeclaration : public Declaration {
 public:
-    std::unique_ptr<Identifier> name; // Optional name for the impl block (less common)
+    std::unique_ptr<Identifier> name; // Optional name for the bind block (less common)
     std::vector<std::unique_ptr<GenericParameter>> genericParams;
-    TypeNodePtr traitType; // Optional: if implementing a trait (e.g., impl MyTrait for MyType)
+    TypeNodePtr traitType; // Optional: if implementing an aspect (e.g., bind MyAspect -> MyType)
     TypeNodePtr selfType;  // The type for which methods are being implemented (e.g., MyType)
     std::vector<std::unique_ptr<FunctionDeclaration>> methods;
 
-    ImplDeclaration(SourceLocation loc, TypeNodePtr selfType, std::vector<std::unique_ptr<FunctionDeclaration>> methods, std::unique_ptr<Identifier> name = nullptr, std::vector<std::unique_ptr<GenericParameter>> genericParams = {}, TypeNodePtr traitType = nullptr);
-    ~ImplDeclaration() override = default;
+    BindDeclaration(SourceLocation loc, TypeNodePtr selfType, std::vector<std::unique_ptr<FunctionDeclaration>> methods, std::unique_ptr<Identifier> name = nullptr, std::vector<std::unique_ptr<GenericParameter>> genericParams = {}, TypeNodePtr traitType = nullptr);
+    ~BindDeclaration() override = default;
     NodeType getType() const override;
     std::string toString() const override;
     void accept(Visitor& visitor) override;
@@ -1380,15 +1380,15 @@ public:
     void accept(Visitor& visitor) override;
 };
 
-// --- TraitDeclaration ---
-class TraitDeclaration : public Declaration {
+// --- AspectDeclaration ---
+class AspectDeclaration : public Declaration {
 public:
     std::unique_ptr<Identifier> name;
     std::vector<std::unique_ptr<GenericParameter>> genericParams;
     std::vector<std::unique_ptr<FunctionDeclaration>> methods;
 
-    TraitDeclaration(SourceLocation loc, std::unique_ptr<Identifier> name, std::vector<std::unique_ptr<GenericParameter>> genericParams, std::vector<std::unique_ptr<FunctionDeclaration>> methods);
-    ~TraitDeclaration() override = default;
+    AspectDeclaration(SourceLocation loc, std::unique_ptr<Identifier> name, std::vector<std::unique_ptr<GenericParameter>> genericParams, std::vector<std::unique_ptr<FunctionDeclaration>> methods);
+    ~AspectDeclaration() override = default;
     NodeType getType() const override;
     std::string toString() const override;
     void accept(Visitor& visitor) override;

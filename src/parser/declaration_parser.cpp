@@ -684,7 +684,7 @@ std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_trait_declaratio
     
     this->expect(vyn::TokenType::RBRACE);
     
-    return std::make_unique<ast::TraitDeclaration>(loc, std::move(name), std::move(generic_params), std::move(methods));
+    return std::make_unique<ast::AspectDeclaration>(loc, std::move(name), std::move(generic_params), std::move(methods));
 }
 
 // ImplDeclNode not in ast.hpp. Assuming a Declaration type for it.
@@ -717,7 +717,7 @@ std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_impl() {
     }
     this->expect(vyn::TokenType::RBRACE);
 
-    return std::make_unique<ast::ImplDeclaration>(loc, std::move(self_type_node), std::move(methods), nullptr, std::move(generic_params), std::move(trait_type_node));
+    return std::make_unique<ast::BindDeclaration>(loc, std::move(self_type_node), std::move(methods), nullptr, std::move(generic_params), std::move(trait_type_node));
 }
 
 
