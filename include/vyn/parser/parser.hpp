@@ -118,6 +118,7 @@ namespace vyn { // Changed Vyn to vyn
     public:
         ExpressionParser(const std::vector<token::Token>& tokens, size_t& pos, const std::string& file_path);
         vyn::ast::ExprPtr parse_expression(); // Removed override
+        vyn::ast::ExprPtr parse_primary(); // For match patterns - parses literals, identifiers without binary ops
         bool is_expression_start(vyn::TokenType type) const; // Added declaration
 
     private:
@@ -138,7 +139,6 @@ namespace vyn { // Changed Vyn to vyn
         vyn::ast::ExprPtr parse_primary_expr(); // If this is different from parse_atom/parse_primary
         vyn::ast::ExprPtr parse_atom();
         vyn::ast::ExprPtr parse_literal();
-        vyn::ast::ExprPtr parse_primary(); // General primary expression parsing
         vyn::ast::ExprPtr parse_call_expression(vyn::ast::ExprPtr callee_expr);
         vyn::ast::ExprPtr parse_member_access(vyn::ast::ExprPtr object);
 

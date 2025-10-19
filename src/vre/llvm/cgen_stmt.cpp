@@ -730,6 +730,15 @@ void LLVMCodegen::visit(vyn::ast::MatchStatement* node) {
     llvm::BasicBlock* nextCaseBB = caseBBs[0];
     builder->CreateBr(nextCaseBB);
     
+    // Check if there's a wildcard pattern (nullptr) in the cases
+    bool hasWildcard = false;
+    for (const auto& caseItem : node->cases) {
+        if (!caseItem.first) {
+            hasWildcard = true;
+            break;
+        }
+    }
+    
     // Generate code for each case
     for (size_t i = 0; i < node->cases.size(); i++) {
         // Set insertion point to this case's pattern matching block
@@ -797,9 +806,8 @@ void LLVMCodegen::visit(vyn::ast::MatchStatement* node) {
     }
     
     // Generate code for default case (no match)
+    // If there's no wildcard pattern and no match occurs, execution continues (NOP)
     builder->SetInsertPoint(defaultBB);
-    // In a default case, we'll just continue with a null value
-    logWarning(node->loc, "Non-exhaustive match pattern");
     m_currentLLVMValue = nullptr;
     if (!builder->GetInsertBlock()->getTerminator()) {
         builder->CreateBr(endMatchBB);
@@ -822,8 +830,6 @@ void LLVMCodegen::visit(vyn::ast::MatchStatement* node) {
     // The match result is determined by the Phi node that combines all case results
     // But for now, we'll just set the result to null to indicate no value
     m_currentLLVMValue = nullptr;
-    
-    logWarning(node->loc, "MatchStatement implemented with basic functionality. Complex pattern matching may require additional support.");
 }
 
 void LLVMCodegen::visit(vyn::ast::AssertStatement* node) {

@@ -12,7 +12,7 @@ This document outlines the completed features, ongoing development, and future c
 3.  **Type System:** Working functions, variables, structs, control flow
 4.  **Memory Safety:** Ownership types (`my<T>`, `our<T>`, `their<T>`) with borrowing
 5.  **Parser:** Comprehensive syntax support including templates, async, classes
-6.  **✅ Pattern Matching (COMPLETED):** Match statements with `=>` syntax and comprehensive pattern matching
+6.  **✅ Pattern Matching (COMPLETED):** Match statements with `>` arrow syntax and `?` wildcard; no-match continues as NOP
 7.  **✅ Loop Control Flow (COMPLETED):** Break and continue statements working in all loop constructs
 8.  **✅ Resizable Collections (COMPLETED):** Vec<T> with full method support (new, push, pop, len, get)
 9.  **✅ Vec Iteration (COMPLETED v0.4.1):** `for (item in vec)` with mandatory parentheses, full break/continue support

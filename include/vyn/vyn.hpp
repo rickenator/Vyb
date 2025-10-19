@@ -131,11 +131,11 @@ statement_without_block ::= expression_statement | return_statement | break_stat
 for_statement          ::= 'for' pattern 'in' expression block_statement
 while_statement        ::= 'while' expression block_statement // Consider also: while_let_statement
 loop_statement         ::= 'loop' block_statement
-match_statement        ::= 'match' expression [ '{' ] { match_arm } [ '}' ] // Braces for arms made optional
-match_arm              ::= pattern [ 'if' expression ] '=>' ( expression | block_statement | statement_without_block ) ','?
+match_statement        ::= 'match' '(' expression ')' '{' match_arm* '}'
+match_arm              ::= pattern '>' ( expression | block_statement | statement_without_block ) ','?
 pattern                ::= IDENTIFIER [ '@' pattern ]
                          | literal
-                         | '_'
+                         | '?'                   // wildcard (no-match continues as NOP)
                          | path '{' [ field_pattern { ',' field_pattern } [','] ] '}' // Struct pattern
                          | path '(' [ pattern_list ] ')' // Enum variant pattern
                          | '[' [ pattern_list ] ']' // Array/slice pattern

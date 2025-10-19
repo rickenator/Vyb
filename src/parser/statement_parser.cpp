@@ -959,22 +959,17 @@ vyn::ast::StmtPtr StatementParser::parse_await() {
 vyn::ast::StmtPtr StatementParser::parse_match() {
     SourceLocation match_loc = expect(vyn::TokenType::KEYWORD_MATCH, "Expected 'match'").location;
     
-    // Parse the expression to match against, but not compound expressions that might contain braces
-    // For now, let's just parse primary expressions (identifiers, literals) to avoid struct conflicts
-    vyn::ast::ExprPtr match_expr;
-    if (peek().type == vyn::TokenType::IDENTIFIER) {
-        SourceLocation id_loc = peek().location;
-        std::string id_name = peek().lexeme;
-        consume(); // consume the identifier
-        match_expr = std::make_unique<vyn::ast::Identifier>(id_loc, id_name);
-    } else if (peek().type == vyn::TokenType::INT_LITERAL) {
-        SourceLocation lit_loc = peek().location;
-        int64_t value = std::stoll(peek().lexeme);
-        consume(); // consume the literal
-        match_expr = std::make_unique<vyn::ast::IntegerLiteral>(lit_loc, value);
-    } else {
-        throw error(peek(), "Expected identifier or literal after 'match'.");
+    // Expect opening parenthesis for the match expression
+    expect(vyn::TokenType::LPAREN, "Expected '(' after 'match'.");
+    
+    // Parse the expression to match against (can be any expression)
+    vyn::ast::ExprPtr match_expr = expr_parser_.parse_expression();
+    if (!match_expr) {
+        throw error(peek(), "Expected expression in match statement.");
     }
+    
+    // Expect closing parenthesis
+    expect(vyn::TokenType::RPAREN, "Expected ')' after match expression.");
     
     // Expect opening brace
     expect(vyn::TokenType::LBRACE, "Expected '{' after match expression.");
@@ -988,14 +983,22 @@ vyn::ast::StmtPtr StatementParser::parse_match() {
         
         if (check(vyn::TokenType::RBRACE)) break;
         
-        // Parse pattern (for now, treat as expression - can be enhanced for proper patterns later)
-        vyn::ast::ExprPtr pattern = expr_parser_.parse_expression();
-        if (!pattern) {
-            throw error(peek(), "Expected pattern in match arm.");
+        // Parse pattern: either '?' for wildcard or a primary expression (literal, identifier)
+        vyn::ast::ExprPtr pattern;
+        if (peek().type == vyn::TokenType::QUESTION_MARK) {
+            // Wildcard pattern - represented as nullptr
+            consume(); // consume '?'
+            pattern = nullptr;
+        } else {
+            // Primary expression pattern (no binary operators to avoid consuming >)
+            pattern = expr_parser_.parse_primary();
+            if (!pattern) {
+                throw error(peek(), "Expected pattern in match arm.");
+            }
         }
         
-        // Expect '=>' (fat arrow)
-        expect(vyn::TokenType::FAT_ARROW, "Expected '=>' after match pattern.");
+        // Expect '>' (arrow)
+        expect(vyn::TokenType::GT, "Expected '>' after match pattern.");
         
         // Parse result expression
         vyn::ast::ExprPtr result = expr_parser_.parse_expression();
