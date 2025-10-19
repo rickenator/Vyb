@@ -479,7 +479,7 @@ items<Vec<Int>> = Vec::new()             # Empty dynamic vector
 ```vyn
 # Variable declarations with unified syntax
 x<Int> = 42                      # Mutable variable
-const PI<Float> = 3.14159        # Immutable constant
+PI<Float const> = 3.14159        # Immutable constant
 
 # Function declarations follow execution order
 add(a<Int>, b<Int>)<Int> -> a + b
@@ -586,8 +586,9 @@ flag = true     # Bool
 count<Int> = 0
 message<String> = "Hello"
 
-# Immutable bindings (with const type modifier)
+# Immutable values (const is a type modifier)
 PI<Float const> = 3.14159
+MAX_SIZE<Int const> = 1000
 ```
 
 ### Structs and Data
