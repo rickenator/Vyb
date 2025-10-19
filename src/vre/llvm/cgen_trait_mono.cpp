@@ -323,11 +323,17 @@ llvm::Function* LLVMCodegen::monomorphizeTraitMethod(const std::string& concrete
 llvm::Type* LLVMCodegen::resolveTypeForMonomorphization(const TypePattern& pattern, 
                                                         const std::map<std::string, std::string>& substitutions) {
     std::string mangledName = pattern.toMangled();
-    std::string structName = "struct." + mangledName;
     
     std::cout << "DEBUG: Resolving type for pattern: " << mangledName << std::endl;
     
-    // Check if struct type already exists
+    // Check if struct type already exists (without "struct." prefix - the name used in monomorphizeStruct)
+    if (llvm::StructType* structType = llvm::StructType::getTypeByName(*context, mangledName)) {
+        std::cout << "DEBUG: Found existing struct type: " << mangledName << std::endl;
+        return structType;
+    }
+    
+    // Also try with "struct." prefix for compatibility
+    std::string structName = "struct." + mangledName;
     if (llvm::StructType* structType = llvm::StructType::getTypeByName(*context, structName)) {
         std::cout << "DEBUG: Found existing struct type: " << structName << std::endl;
         return structType;
