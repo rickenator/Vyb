@@ -171,7 +171,7 @@ void SemanticAnalyzer::visit(ast::Identifier* node) {
     expressionTypes[node] = symbol->type;
     if (symbol->type) {
         node->type = std::shared_ptr<ast::TypeNode>(symbol->type->clone());
-        std::cout << "DEBUG: Set AST type for identifier '" << node->name << "' to: " << node->type->toString() << std::endl;
+
     } else {
         std::cout << "DEBUG: No type found for identifier '" << node->name << "'" << std::endl;
     }
@@ -1890,7 +1890,7 @@ void SemanticAnalyzer::visit(ast::StructDeclaration* node) {
                 typeParamSymbol.type = nullptr;
                 currentScope->add(typeParamSymbol);
                 
-                std::cout << "DEBUG: Registered struct type parameter: " << paramName << std::endl;
+
             }
         }
     }
@@ -1928,7 +1928,7 @@ void SemanticAnalyzer::visit(ast::StructDeclaration* node) {
     // Exit type parameter scope if we entered one
     if (hasGenericParams) {
         exitScope();
-        std::cout << "DEBUG: Exited struct type parameter scope for " << structName << std::endl;
+
     }
 }
 // void SemanticAnalyzer::visit(ast::ClassDeclaration* node) {} // Handled above
@@ -2048,8 +2048,6 @@ void SemanticAnalyzer::visit(ast::AspectDeclaration* node) {
         return;
     }
     
-    std::cout << "DEBUG: Registering aspect: " << traitName << std::endl;
-    
     // Validate generic parameters
     for (const auto& param : node->genericParams) {
         if (!param || !param->name) {
@@ -2095,9 +2093,6 @@ void SemanticAnalyzer::visit(ast::AspectDeclaration* node) {
     traitSym.kind = SymbolInfo::Kind::Type;
     traitSym.type = nullptr; // Aspects are interface types, not concrete
     currentScope->add(traitSym);
-    
-    std::cout << "DEBUG: Trait '" << traitName << "' registered successfully with " 
-              << node->methods.size() << " methods" << std::endl;
 }
 
 void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
@@ -2111,7 +2106,7 @@ void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
     std::vector<std::string> typeParamNames;
     
     if (hasGenericParams) {
-        std::cout << "DEBUG: Processing generic impl with " << node->genericParams.size() << " type parameters" << std::endl;
+
         
         // Enter a new scope for type parameters
         enterScope();
@@ -2220,7 +2215,7 @@ void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
     // Exit the type parameter scope if we entered one
     if (hasGenericParams) {
         exitScope();
-        std::cout << "DEBUG: Exited generic impl type parameter scope" << std::endl;
+
     }
     
     // Restore previous impl type

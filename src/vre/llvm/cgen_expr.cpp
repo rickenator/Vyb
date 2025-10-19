@@ -652,12 +652,7 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
 
 void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
    
-    std::cout << "DEBUG: CallExpression visitor called with callee: " << (node->callee ? node->callee->toString() : "null") << std::endl;
-    if (node->type) {
-        std::cout << "DEBUG: CallExpression has inferred type: " << node->type->toString() << std::endl;
-    } else {
-        std::cout << "DEBUG: CallExpression has no inferred type" << std::endl;
-    }
+
     
     // Check for Vec::new() constructor calls
     // std::cout << "DEBUG: Checking if callee is MemberExpression..." << std::endl;
@@ -942,7 +937,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
     auto identCallee = dynamic_cast<vyn::ast::Identifier*>(node->callee.get());
     std::string calleeName = node->callee->toString();
     
-    std::cout << "DEBUG: CallExpression calleeName: '" << calleeName << "', identCallee: " << (identCallee ? "valid" : "null") << std::endl;
+
     
     // Special handling for intrinsic functions with potential variable name conflicts
     if (identCallee && node->arguments.size() == 1) {
