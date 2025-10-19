@@ -107,10 +107,10 @@ element<Int> = fixed[2]  // Array indexing
 ```vyn
 describe_number(x<Int>)<String> -> {
     match (x) {
-        0 > "zero",
-        1 > "one",
-        42 > "the answer", 
-        ? > "some number"
+        0 -> "zero",
+        1 -> "one",
+        42 -> "the answer", 
+        ? -> "some number"
     }
 }
 ```

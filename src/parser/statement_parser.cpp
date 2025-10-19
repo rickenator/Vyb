@@ -997,8 +997,8 @@ vyn::ast::StmtPtr StatementParser::parse_match() {
             }
         }
         
-        // Expect '>' (arrow)
-        expect(vyn::TokenType::GT, "Expected '>' after match pattern.");
+        // Expect '->' (arrow)
+        expect(vyn::TokenType::ARROW, "Expected '->' after match pattern.");
         
         // Parse result expression
         vyn::ast::ExprPtr result = expr_parser_.parse_expression();

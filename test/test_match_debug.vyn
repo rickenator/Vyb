@@ -3,21 +3,21 @@
 test_one()<Void> -> {
     x<Int const> = 1
     match (x) {
-        1 > println("matched 1")
+        1 -> println("matched 1")
     }
 }
 
 test_two()<Void> -> {
     x<Int const> = 2
     match (x) {
-        2 > println("matched 2")
+        2 -> println("matched 2")
     }
 }
 
 test_three()<Void> -> {
     x<Int const> = 3
     match (x) {
-        3 > println("matched 3")
+        3 -> println("matched 3")
     }
 }
 

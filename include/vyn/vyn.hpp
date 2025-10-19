@@ -132,7 +132,7 @@ for_statement          ::= 'for' pattern 'in' expression block_statement
 while_statement        ::= 'while' expression block_statement // Consider also: while_let_statement
 loop_statement         ::= 'loop' block_statement
 match_statement        ::= 'match' '(' expression ')' '{' match_arm* '}'
-match_arm              ::= pattern '>' ( expression | block_statement | statement_without_block ) ','?
+match_arm              ::= pattern '->' ( expression | block_statement | statement_without_block ) ','?
 pattern                ::= IDENTIFIER [ '@' pattern ]
                          | literal
                          | '?'                   // wildcard (no-match continues as NOP)

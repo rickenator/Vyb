@@ -8,9 +8,9 @@ The `match` statement provides pattern matching in Vyn with clean, intuitive syn
 
 ```vyn
 match (expression) {
-    pattern > result_expression,
-    pattern > result_expression,
-    ?       > default_expression
+    pattern -> result_expression,
+    pattern -> result_expression,
+    ?       -> default_expression
 }
 ```
 
@@ -21,18 +21,18 @@ The expression to match is enclosed in parentheses for visual clarity and to avo
 
 ```vyn
 match (x + y) {
-    0 > println("zero"),
-    1 > println("one")
+    0 -> println("zero"),
+    1 -> println("one")
 }
 ```
 
-### Arrow Operator (`>`)
-Pattern matching uses the simple `>` arrow (not `=>`):
+### Arrow Operator (`->`)
+Pattern matching uses the `->` arrow, consistent with function syntax:
 
 ```vyn
 match (value) {
-    42 > "the answer",
-    0  > "zero"
+    42 -> "the answer",
+    0  -> "zero"
 }
 ```
 
@@ -41,9 +41,9 @@ The wildcard pattern `?` matches anything:
 
 ```vyn
 match (status) {
-    0 > "init",
-    1 > "running",
-    ? > "unknown"  // Matches all other values
+    0 -> "init",
+    1 -> "running",
+    ? -> "unknown"  // Matches all other values
 }
 ```
 
@@ -52,8 +52,8 @@ If no pattern matches and there's no wildcard, execution continues as a NOP:
 
 ```vyn
 match (x) {
-    1 > println("one"),
-    2 > println("two")
+    1 -> println("one"),
+    2 -> println("two")
     // If x is 3, nothing happens - execution continues
 }
 ```
@@ -65,9 +65,9 @@ Match specific literal values:
 
 ```vyn
 match (x) {
-    0    > "zero",
-    42   > "forty-two",
-    3.14 > "pi"
+    0    -> "zero",
+    42   -> "forty-two",
+    3.14 -> "pi"
 }
 ```
 
@@ -76,8 +76,8 @@ Currently match identifiers as values (future: destructuring):
 
 ```vyn
 match (result) {
-    success > handle_success(),
-    error   > handle_error()
+    success -> handle_success(),
+    error   -> handle_error()
 }
 ```
 
@@ -94,10 +94,10 @@ Planned support for:
 ```vyn
 describe_number(x<Int>)<String> -> {
     match (x) {
-        0  > "zero",
-        1  > "one",
-        42 > "the answer",
-        ?  > "some number"
+        0  -> "zero",
+        1  -> "one",
+        42 -> "the answer",
+        ?  -> "some number"
     }
 }
 ```
@@ -106,10 +106,10 @@ describe_number(x<Int>)<String> -> {
 ```vyn
 process_status(code<Int>)<Void> -> {
     match (code) {
-        200 > println("OK"),
-        404 > println("Not Found"),
-        500 > println("Server Error"),
-        ?   > println("Unknown status")
+        200 -> println("OK"),
+        404 -> println("Not Found"),
+        500 -> println("Server Error"),
+        ?   -> println("Unknown status")
     }
 }
 ```
@@ -118,8 +118,8 @@ process_status(code<Int>)<Void> -> {
 ```vyn
 check_specific(n<Int>)<Void> -> {
     match (n) {
-        1 > println("one"),
-        2 > println("two")
+        1 -> println("one"),
+        2 -> println("two")
         // For any other value, nothing happens
     }
 }
@@ -153,7 +153,7 @@ check_specific(n<Int>)<Void> -> {
 
 ```
 match_statement ::= 'match' '(' expression ')' '{' match_arm* '}'
-match_arm       ::= pattern '>' expression ','?
+match_arm       ::= pattern '->' expression ','?
 pattern         ::= literal
                   | identifier  
                   | '?'                    // wildcard
@@ -169,10 +169,11 @@ pattern         ::= literal
 - **Consistency**: Aligns with `if (condition)` and other control flow
 - **Flexibility**: Allows complex expressions without ambiguity
 
-### Why `>` Instead of `=>`?
-- **Simplicity**: One character is cleaner and easier to type
-- **Direction**: Clearly shows flow from pattern to result
-- **Distinctiveness**: Doesn't conflict with other arrow operators
+### Why `->` Instead of `=>`?
+- **Consistency**: Matches function declaration syntax `foo() -> { ... }`
+- **Familiarity**: Standard arrow operator used throughout Vyn
+- **Clarity**: Clearly shows flow from pattern to result
+- **Uniformity**: Same arrow for all "points to" semantics
 
 ### Why `?` Instead of `_`?
 - **Intuitive**: `?` universally means "anything" or "unknown"
@@ -205,13 +206,13 @@ default: return "other"
 ### Vyn
 ```vyn
 match (x) {
-    0 > "zero",
-    ? > "other"
+    0 -> "zero",
+    ? -> "other"
 }
 ```
 
 **Advantages**:
-- Cleaner arrow syntax
+- Consistent arrow syntax with functions
 - Clear expression boundaries with parens
 - Intuitive wildcard symbol
 - Flexible no-match behavior
