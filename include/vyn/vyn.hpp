@@ -57,12 +57,12 @@ module_item            ::= import_statement
                          | class_declaration
                          | struct_declaration
                          | enum_declaration
-                         | impl_declaration
+                         | bind_declaration
                          | function_declaration
                          | variable_declaration
                          | constant_declaration
                          | type_alias_declaration
-                         | trait_declaration // Added for template Comparable like constructs
+                         | aspect_declaration // Added for aspect Comparable like constructs
                          | statement // Allow top-level statements like expressions for scripting or simple files
 
 // Top-level declarations
@@ -82,11 +82,11 @@ struct_field_declaration ::= [ 'pub' ] IDENTIFIER '<' type '>' [ '=' expression 
 enum_declaration       ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ] 'enum' IDENTIFIER '{' { enum_variant } '}'
 enum_variant           ::= IDENTIFIER [ '(' type_list ')' ] [ '=' expression ] ','?
 
-impl_declaration       ::= [ 'template' '<' type_parameter_list '>' ] 'impl' type [ 'for' type ] '{' { method_declaration } '}'
+bind_declaration       ::= [ 'template' '<' type_parameter_list '>' ] 'bind' type [ '->' type ] '{' { method_declaration } '}'
 
 function_declaration   ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ] [ 'async' ] IDENTIFIER '(' [ parameter_list ] ')' '<' type_list '>' '->' ( block_statement | expression [';'] | statement ) [ 'throws' type_list ] // Unified function(params)<ReturnType1, ReturnType2, ...> -> syntax
 
-trait_declaration      ::= [ 'pub' ] 'template' IDENTIFIER [ template_parameters ] '{' { method_signature } '}' // For template Comparable
+aspect_declaration     ::= [ 'pub' ] 'aspect' IDENTIFIER [ template_parameters ] '{' { method_signature } '}' // For aspect Comparable
 method_signature       ::= [ 'async' ] IDENTIFIER '(' [ parameter_list ] ')' '<' type_list '>' '->' ';' [ 'throws' type_list ] // Unified method(params)<ReturnType1, ReturnType2, ...> -> syntax
 
 

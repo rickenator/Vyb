@@ -1,4 +1,4 @@
-# Simplified test for monomorphization
+# Simplified test -> monomorphization
 # Tests that Box<Int> gets properly monomorphized
 
 struct Box<T> {

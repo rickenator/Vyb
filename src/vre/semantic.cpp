@@ -1938,34 +1938,34 @@ void SemanticAnalyzer::visit(ast::TemplateDeclaration* node) {
     std::cout << "DEBUG: Template '" << templateName << "' registered successfully" << std::endl;
 }
 
-void SemanticAnalyzer::visit(ast::TraitDeclaration* node) {
+void SemanticAnalyzer::visit(ast::AspectDeclaration* node) {
     if (!node || !node->name) {
-        addError("Malformed trait declaration.", node);
+        addError("Malformed aspect declaration.", node);
         return;
     }
     
     const std::string& traitName = node->name->name;
     
-    // Check if trait is already registered
+    // Check if aspect is already registered
     if (traitRegistry.find(traitName) != traitRegistry.end()) {
-        addError("Trait '" + traitName + "' is already defined.", node);
+        addError("Aspect '" + traitName + "' is already defined.", node);
         return;
     }
     
-    std::cout << "DEBUG: Registering trait: " << traitName << std::endl;
+    std::cout << "DEBUG: Registering aspect: " << traitName << std::endl;
     
     // Validate generic parameters
     for (const auto& param : node->genericParams) {
         if (!param || !param->name) {
-            addError("Invalid generic parameter in trait '" + traitName + "'.", node);
+            addError("Invalid generic parameter in aspect '" + traitName + "'.", node);
             return;
         }
     }
     
-    // Validate trait methods
+    // Validate aspect methods
     for (const auto& method : node->methods) {
         if (!method || !method->id) {
-            addError("Invalid method in trait '" + traitName + "'.", node);
+            addError("Invalid method in aspect '" + traitName + "'.", node);
             return;
         }
         
@@ -1978,35 +1978,35 @@ void SemanticAnalyzer::visit(ast::TraitDeclaration* node) {
         }
         
         if (!hasSelfParam) {
-            addError("Trait method '" + method->id->name + "' must have 'self' as first parameter.", method.get());
+            addError("Aspect method '" + method->id->name + "' must have 'self' as first parameter.", method.get());
         }
         
         // Validate return type
         if (!method->returnTypeNode) {
-            addError("Trait method '" + method->id->name + "' must declare a return type.", method.get());
+            addError("Aspect method '" + method->id->name + "' must declare a return type.", method.get());
         }
         
         std::cout << "DEBUG:   Method: " << method->id->name 
                   << " (default impl: " << (method->body ? "yes" : "no") << ")" << std::endl;
     }
     
-    // Register the trait
+    // Register the aspect
     registerTrait(node);
     
-    // Register trait as a type in the symbol table
+    // Register aspect as a type in the symbol table
     SymbolInfo traitSym;
     traitSym.name = traitName;
     traitSym.kind = SymbolInfo::Kind::Type;
-    traitSym.type = nullptr; // Traits are interface types, not concrete
+    traitSym.type = nullptr; // Aspects are interface types, not concrete
     currentScope->add(traitSym);
     
     std::cout << "DEBUG: Trait '" << traitName << "' registered successfully with " 
               << node->methods.size() << " methods" << std::endl;
 }
 
-void SemanticAnalyzer::visit(ast::ImplDeclaration* node) {
+void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
     if (!node || !node->selfType) {
-        addError("Malformed impl declaration.", node);
+        addError("Malformed bind declaration.", node);
         return;
     }
     
@@ -2047,7 +2047,7 @@ void SemanticAnalyzer::visit(ast::ImplDeclaration* node) {
     std::cout << "DEBUG: Set currentImplType to " << typeName << " for Self resolution" << std::endl;
     
     if (node->traitType) {
-        // This is a trait implementation: impl Trait for Type
+        // This is an aspect implementation: bind Aspect -> Type
         traitName = node->traitType->toString();
         
         std::cout << "DEBUG: Processing impl " << traitName << " for " << typeName << std::endl;
@@ -2109,9 +2109,9 @@ void SemanticAnalyzer::visit(ast::ImplDeclaration* node) {
         std::cout << "DEBUG: Successfully registered impl " << traitName << " for " << typeName 
                   << " with " << node->methods.size() << " methods" << std::endl;
     } else {
-        // This is an inherent impl: impl Type { ... }
-        // Just adds methods directly to the type without a trait
-        std::cout << "DEBUG: Processing inherent impl for " << typeName << std::endl;
+        // This is an inherent bind: bind Type { ... }
+        // Just adds methods directly to the type without an aspect
+        std::cout << "DEBUG: Processing inherent bind for " << typeName << std::endl;
         
         // Visit all methods to validate them
         for (const auto& method : node->methods) {
@@ -2156,8 +2156,8 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
             expressionTypes[node] = currentImplType;
             return;
         } else {
-            // We're in a trait declaration - treat Self as a valid placeholder type
-            std::cout << "DEBUG: Self used as placeholder in trait declaration" << std::endl;
+            // We're in an aspect declaration - treat Self as a valid placeholder type
+            std::cout << "DEBUG: Self used as placeholder in aspect declaration" << std::endl;
             node->type = std::shared_ptr<ast::TypeNode>(node->clone());
             return;
         }
@@ -2906,7 +2906,7 @@ bool SemanticAnalyzer::typeImplementsTrait(const std::string& typeName, const st
         }
     }
     
-    // TODO: Handle generic trait implementations (impl<T> Trait for Vec<T>)
+    // TODO: Handle generic aspect implementations (bind<T> Aspect -> Type<T>)
     
     return false;
 }
@@ -3297,9 +3297,9 @@ void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, as
     }
 }
 
-// ===== Trait Management Methods =====
+// ===== Aspect Management Methods =====
 
-void SemanticAnalyzer::registerTrait(ast::TraitDeclaration* traitDecl) {
+void SemanticAnalyzer::registerTrait(ast::AspectDeclaration* traitDecl) {
     if (!traitDecl || !traitDecl->name) {
         return;
     }
@@ -3318,7 +3318,7 @@ SemanticAnalyzer::TraitInfo* SemanticAnalyzer::findTrait(const std::string& trai
     return nullptr;
 }
 
-void SemanticAnalyzer::registerTraitImpl(ast::ImplDeclaration* implDecl) {
+void SemanticAnalyzer::registerTraitImpl(ast::BindDeclaration* implDecl) {
     if (!implDecl || !implDecl->selfType || !implDecl->traitType) {
         return;
     }

@@ -79,8 +79,8 @@ class FunctionDeclaration;
 class StructDeclaration;
 class EnumDeclaration;
 class TypeAliasDeclaration;
-class TraitDeclaration; // Add forward declaration
-class ImplDeclaration;
+class AspectDeclaration; // Add forward declaration
+class BindDeclaration;
 class NamespaceDeclaration; // Add forward declaration
 
 // Missing forward declarations for types
@@ -143,16 +143,16 @@ private:
     SymbolTable* parent;
 };
 
-// Information about a generic trait implementation (e.g., impl<T> Display for Box<T>)
+// Information about a generic aspect binding (e.g., bind<T> Display -> Box<T>)
 // Declared before SemanticAnalyzer to allow use in getter return type
 struct GenericImplInfo {
     std::string typePattern;           // e.g., "Box<T>"
     std::string traitName;             // e.g., "Display"
     std::vector<std::string> typeParams; // e.g., ["T"]
-    ast::ImplDeclaration* declaration; // Original AST node
+    ast::BindDeclaration* declaration; // Original AST node
     std::map<std::string, ast::FunctionDeclaration*> methods; // method name -> AST
     
-    GenericImplInfo(ast::ImplDeclaration* decl) : declaration(decl) {
+    GenericImplInfo(ast::BindDeclaration* decl) : declaration(decl) {
         if (decl->selfType) {
             typePattern = decl->selfType->toString();
         }
@@ -264,8 +264,8 @@ public:
     void visit(ast::EnumDeclaration* node) override;
     void visit(ast::TypeAliasDeclaration* node) override;
     void visit(ast::ImportDeclaration* node) override;
-    void visit(ast::TraitDeclaration* node) override; // Uncommented
-    void visit(ast::ImplDeclaration* node) override; // Ensure this is present
+    void visit(ast::AspectDeclaration* node) override; // Uncommented
+    void visit(ast::BindDeclaration* node) override; // Ensure this is present
     void visit(ast::NamespaceDeclaration* node) override; // Uncommented
     void visit(ast::FieldDeclaration* node) override;
     void visit(ast::EnumVariant* node) override;
@@ -325,11 +325,11 @@ public:
     struct TraitInfo {
         std::string name;
         std::vector<std::string> genericParams;
-        std::vector<std::string> superTraits; // Trait inheritance
+        std::vector<std::string> superTraits; // Aspect inheritance
         std::vector<TraitMethod> methods;
-        ast::TraitDeclaration* declaration; // Original AST node
+        ast::AspectDeclaration* declaration; // Original AST node
         
-        TraitInfo(ast::TraitDeclaration* decl) : declaration(decl) {
+        TraitInfo(ast::AspectDeclaration* decl) : declaration(decl) {
             if (decl->name) {
                 name = decl->name->name;
             }
@@ -389,8 +389,8 @@ private:
     // Struct field type storage for member access resolution
     std::unordered_map<std::string, std::map<std::string, ast::TypeNode*>> structFieldTypes;
     
-    // Context for resolving 'Self' type in trait implementations
-    ast::TypeNode* currentImplType = nullptr;  // Set to Box<T> when processing impl for Box<T>
+    // Context for resolving 'Self' type in aspect implementations
+    ast::TypeNode* currentImplType = nullptr;  // Set to Box<T> when processing bind Display -> Box<T>
 
     void enterScope();
     void exitScope();
@@ -426,10 +426,10 @@ private:
     std::vector<std::string> getImplementedTraits(const std::string& typeName);
     bool isBuiltinTypeCompatible(const std::string& typeName, const std::string& traitName);
     
-    // Trait management methods
-    void registerTrait(ast::TraitDeclaration* traitDecl);
+    // Aspect management methods
+    void registerTrait(ast::AspectDeclaration* traitDecl);
     TraitInfo* findTrait(const std::string& traitName);
-    void registerTraitImpl(ast::ImplDeclaration* implDecl);
+    void registerTraitImpl(ast::BindDeclaration* implDecl);
     bool validateTraitImpl(const std::string& typeName, const std::string& traitName,
                           const std::vector<std::unique_ptr<ast::FunctionDeclaration>>& methods);
     bool traitMethodSignatureMatches(const TraitMethod& traitMethod,

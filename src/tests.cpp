@@ -99,7 +99,7 @@ public:
     void visit(vyn::ast::MatchStatement* node) override {};
     void visit(vyn::ast::YieldStatement* node) override {};
     void visit(vyn::ast::YieldReturnStatement* node) override {};
-    void visit(vyn::ast::TraitDeclaration* node) override {};
+    void visit(vyn::ast::AspectDeclaration* node) override {};
     void visit(vyn::ast::NamespaceDeclaration* node) override {};
     void visit(vyn::ast::TypeName* node) override {};
     void visit(vyn::ast::PointerType* node) override {};
@@ -129,7 +129,7 @@ public:
     void visit(vyn::ast::YieldStatement* node) override {};
     void visit(vyn::ast::YieldReturnStatement* node) override {};
     void visit(vyn::ast::AssertStatement* node) override {};
-    void visit(vyn::ast::TraitDeclaration* node) override {};
+    void visit(vyn::ast::AspectDeclaration* node) override {};
     void visit(vyn::ast::NamespaceDeclaration* node) override {};
     void visit(vyn::ast::TypeName* node) override {};
     void visit(vyn::ast::PointerType* node) override {};

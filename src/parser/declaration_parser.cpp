@@ -44,10 +44,10 @@ vyn::ast::DeclPtr DeclarationParser::parse() {
     } else if (current_token.type == vyn::TokenType::KEYWORD_STRUCT) {
         auto struct_decl = this->parse_struct();
         return struct_decl;
-    } else if (current_token.type == vyn::TokenType::KEYWORD_TRAIT) {
+    } else if (current_token.type == vyn::TokenType::KEYWORD_ASPECT) {
         auto trait_decl = this->parse_trait_declaration();
         return trait_decl;
-    } else if (current_token.type == vyn::TokenType::KEYWORD_IMPL) {
+    } else if (current_token.type == vyn::TokenType::KEYWORD_BIND) {
         auto impl_decl = this->parse_impl();
         return impl_decl;
     } else if (current_token.type == vyn::TokenType::KEYWORD_CLASS) { // Changed this line
@@ -653,7 +653,7 @@ std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_struct() {
 // Syntax: trait Name<T> { method1(self, ...)<RetType> -> { ... } method2(self)<RetType>; ... }
 std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_trait_declaration() {
     SourceLocation loc = this->current_location();
-    this->expect(vyn::TokenType::KEYWORD_TRAIT);
+    this->expect(vyn::TokenType::KEYWORD_ASPECT);
     
     // Parse trait name
     if (this->peek().type != vyn::TokenType::IDENTIFIER) {
@@ -684,7 +684,7 @@ std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_trait_declaratio
     
     this->expect(vyn::TokenType::RBRACE);
     
-    return std::make_unique<ast::TraitDeclaration>(loc, std::move(name), std::move(generic_params), std::move(methods));
+    return std::make_unique<ast::AspectDeclaration>(loc, std::move(name), std::move(generic_params), std::move(methods));
 }
 
 // ImplDeclNode not in ast.hpp. Assuming a Declaration type for it.
@@ -692,21 +692,21 @@ std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_trait_declaratio
 // Similar to struct, this needs a vyn::ImplDeclaration in ast.hpp.
 std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_impl() {
     SourceLocation loc = this->current_location();
-    this->expect(vyn::TokenType::KEYWORD_IMPL);
+    this->expect(vyn::TokenType::KEYWORD_BIND);
 
     auto generic_params = this->parse_generic_params();
 
     ast::TypeNodePtr trait_type_node = nullptr;
     ast::TypeNodePtr self_type_node = this->type_parser_.parse();
     if (!self_type_node) {
-        throw std::runtime_error("Expected type name in impl block at " + location_to_string(this->current_location()));
+        throw std::runtime_error("Expected type name in bind block at " + location_to_string(this->current_location()));
     }
 
-    if (this->match(vyn::TokenType::KEYWORD_FOR)) {
+    if (this->match(vyn::TokenType::ARROW)) {
         trait_type_node = std::move(self_type_node);
         self_type_node = this->type_parser_.parse();
         if (!self_type_node) {
-            throw std::runtime_error("Expected type name after \'for\' in impl block at " + location_to_string(this->current_location()));
+            throw std::runtime_error("Expected type name after '->' in bind block at " + location_to_string(this->current_location()));
         }
     }
 
@@ -717,7 +717,7 @@ std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_impl() {
     }
     this->expect(vyn::TokenType::RBRACE);
 
-    return std::make_unique<ast::ImplDeclaration>(loc, std::move(self_type_node), std::move(methods), nullptr, std::move(generic_params), std::move(trait_type_node));
+    return std::make_unique<ast::BindDeclaration>(loc, std::move(self_type_node), std::move(methods), nullptr, std::move(generic_params), std::move(trait_type_node));
 }
 
 

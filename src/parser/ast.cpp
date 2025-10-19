@@ -1322,18 +1322,18 @@ void ClassDeclaration::accept(Visitor& visitor) {
     visitor.visit(this);
 }
 
-// --- ImplDeclaration ---
+// --- BindDeclaration ---
 // ... existing code ...
-ImplDeclaration::ImplDeclaration(SourceLocation loc, TypeNodePtr self_ty, std::vector<std::unique_ptr<FunctionDeclaration>> meths, std::unique_ptr<Identifier> n, std::vector<std::unique_ptr<GenericParameter>> gp, TypeNodePtr trait_ty)
+BindDeclaration::BindDeclaration(SourceLocation loc, TypeNodePtr self_ty, std::vector<std::unique_ptr<FunctionDeclaration>> meths, std::unique_ptr<Identifier> n, std::vector<std::unique_ptr<GenericParameter>> gp, TypeNodePtr trait_ty)
     : Declaration(loc), selfType(std::move(self_ty)), methods(std::move(meths)), name(std::move(n)), genericParams(std::move(gp)), traitType(std::move(trait_ty)) {}
 
-NodeType ImplDeclaration::getType() const {
-    return NodeType::IMPL_DECLARATION;
+NodeType BindDeclaration::getType() const {
+    return NodeType::BIND_DECLARATION;
 }
 
-std::string ImplDeclaration::toString() const {
+std::string BindDeclaration::toString() const {
     std::stringstream ss;
-    ss << "impl";
+    ss << "bind";
     if (!genericParams.empty()) {
         ss << "<";
         for (size_t i = 0; i < genericParams.size(); ++i) {
@@ -1345,7 +1345,7 @@ std::string ImplDeclaration::toString() const {
     if (traitType) {
         ss << " " << traitType->toString();
     }
-    ss << " for " << (selfType ? selfType->toString() : "UnknownType");
+    ss << " -> " << (selfType ? selfType->toString() : "UnknownType");
     if (name) {
         ss << " as " << name->toString();
     }
@@ -1365,7 +1365,7 @@ std::string ImplDeclaration::toString() const {
     return ss.str();
 }
 
-void ImplDeclaration::accept(Visitor& visitor) {
+void BindDeclaration::accept(Visitor& visitor) {
     visitor.visit(this);
 }
 
@@ -1673,17 +1673,17 @@ void MatchStatement::accept(Visitor& visitor) {
     visitor.visit(this);
 }
 
-// --- TraitDeclaration ---
-TraitDeclaration::TraitDeclaration(SourceLocation loc, std::unique_ptr<Identifier> n, std::vector<std::unique_ptr<GenericParameter>> gp, std::vector<std::unique_ptr<FunctionDeclaration>> meths)
+// --- AspectDeclaration ---
+AspectDeclaration::AspectDeclaration(SourceLocation loc, std::unique_ptr<Identifier> n, std::vector<std::unique_ptr<GenericParameter>> gp, std::vector<std::unique_ptr<FunctionDeclaration>> meths)
     : Declaration(loc), name(std::move(n)), genericParams(std::move(gp)), methods(std::move(meths)) {}
 
-NodeType TraitDeclaration::getType() const {
-    return NodeType::TRAIT_DECLARATION;
+NodeType AspectDeclaration::getType() const {
+    return NodeType::ASPECT_DECLARATION;
 }
 
-std::string TraitDeclaration::toString() const {
+std::string AspectDeclaration::toString() const {
     std::stringstream ss;
-    ss << "trait " << (name ? name->toString() : "") << " {\n";
+    ss << "aspect " << (name ? name->toString() : "") << " {\n";
     for (const auto& method : methods) {
         if (method) {
             std::string methodStr = method->toString();
@@ -1698,7 +1698,7 @@ std::string TraitDeclaration::toString() const {
     return ss.str();
 }
 
-void TraitDeclaration::accept(Visitor& visitor) {
+void AspectDeclaration::accept(Visitor& visitor) {
     visitor.visit(this);
 }
 

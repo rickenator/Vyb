@@ -386,12 +386,12 @@ public:
     void visit(vyn::ast::StructDeclaration* node) override;
     void visit(vyn::ast::ClassDeclaration* node) override;
     void visit(vyn::ast::FieldDeclaration* node) override;
-    void visit(vyn::ast::ImplDeclaration* node) override;
+    void visit(vyn::ast::BindDeclaration* node) override;
     void visit(vyn::ast::EnumDeclaration* node) override;
     void visit(vyn::ast::EnumVariant* node) override;
     void visit(vyn::ast::GenericParameter* node) override;
     void visit(vyn::ast::TemplateDeclaration* node) override;
-    void visit(vyn::ast::TraitDeclaration* node) override;
+    void visit(vyn::ast::AspectDeclaration* node) override;
     void visit(vyn::ast::NamespaceDeclaration* node) override;
     void visit(vyn::ast::Module* node) override;
     void visit(vyn::ast::GenericInstantiationExpression* node) override;

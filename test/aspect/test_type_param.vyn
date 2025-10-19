@@ -1,11 +1,11 @@
-# Test type parameter recognition in generic impl methods
+# Test type parameter recognition in generic bind methods
 
-trait Container {
+aspect Container {
     size(self<Self>)<Int> -> { }
 }
 
-# Generic impl with type parameter T
-impl<T> Container for Wrapper<T> {
+# Generic bind with type parameter T
+bind<T> Container -> Wrapper<T> {
     size(self<Wrapper<T>>)<Int> -> {
         # Use T in a local variable declaration
         value<T> = self.data

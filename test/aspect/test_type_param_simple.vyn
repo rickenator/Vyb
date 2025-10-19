@@ -1,6 +1,6 @@
 # Test type parameter usage in method bodies
 
-trait Display {
+aspect Display {
     show(self<Self>)<Void> -> { }
 }
 
@@ -8,8 +8,8 @@ struct Box<T> {
     value<T>
 }
 
-# Generic impl where methods can use T
-impl<T> Display for Box<T> {
+# Generic bind where methods can use T
+bind<T> Display -> Box<T> {
     show(self<Box<T>>)<Void> -> {
         # T should be recognized as a valid type parameter here
         # For now, just return without using T
