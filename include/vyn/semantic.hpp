@@ -102,7 +102,7 @@ struct BorrowInfo {
 };
 
 struct SymbolInfo {
-    enum class Kind { Variable, Function, Type };
+    enum class Kind { Variable, Function, Type, TYPE_PARAMETER };
     Kind kind;
     std::string name;
     bool isConst = false;
@@ -275,6 +275,59 @@ public:
         }
     };
 
+    // Trait storage system - public for access
+    struct TraitMethod {
+        std::string name;
+        std::vector<std::string> parameterNames;
+        std::vector<ast::TypeNode*> parameterTypes;
+        ast::TypeNode* returnType;
+        ast::FunctionDeclaration* declaration; // Original AST node
+        bool hasDefaultImpl;
+    };
+
+    struct TraitInfo {
+        std::string name;
+        std::vector<std::string> genericParams;
+        std::vector<std::string> superTraits; // Trait inheritance
+        std::vector<TraitMethod> methods;
+        ast::TraitDeclaration* declaration; // Original AST node
+        
+        TraitInfo(ast::TraitDeclaration* decl) : declaration(decl) {
+            if (decl->name) {
+                name = decl->name->name;
+            }
+            
+            // Extract generic parameters
+            for (const auto& param : decl->genericParams) {
+                if (param && param->name) {
+                    genericParams.push_back(param->name->name);
+                }
+            }
+            
+            // Extract methods
+            for (const auto& method : decl->methods) {
+                if (method) {
+                    TraitMethod tm;
+                    if (method->id) {
+                        tm.name = method->id->name;
+                    }
+                    
+                    // Extract parameters
+                    for (const auto& param : method->params) {
+                        tm.parameterNames.push_back(param.name->name);
+                        tm.parameterTypes.push_back(param.typeNode.get());
+                    }
+                    
+                    tm.returnType = method->returnTypeNode.get();
+                    tm.declaration = method.get();
+                    tm.hasDefaultImpl = (method->body != nullptr);
+                    
+                    methods.push_back(std::move(tm));
+                }
+            }
+        }
+    };
+
 private:
     Driver& driver_;
     SymbolTable* currentScope;
@@ -284,6 +337,13 @@ private:
     std::unordered_set<std::string> reservedWords; // Added for isReservedWord
     std::unordered_map<std::string, std::unique_ptr<TemplateInfo>> templateRegistry;
     std::unordered_map<std::string, std::unique_ptr<ast::Declaration>> instantiatedTemplates;
+    
+    // Trait registry for user-defined traits
+    std::unordered_map<std::string, std::unique_ptr<TraitInfo>> traitRegistry;
+    
+    // Trait implementation registry: type -> trait -> methods
+    // Maps "Point" -> "Comparable" -> { method implementations }
+    std::unordered_map<std::string, std::unordered_map<std::string, std::vector<ast::FunctionDeclaration*>>> traitImpls;
     
     // Struct field type storage for member access resolution
     std::unordered_map<std::string, std::map<std::string, ast::TypeNode*>> structFieldTypes;
@@ -321,6 +381,15 @@ private:
     bool typeImplementsTrait(const std::string& typeName, const std::string& traitName);
     std::vector<std::string> getImplementedTraits(const std::string& typeName);
     bool isBuiltinTypeCompatible(const std::string& typeName, const std::string& traitName);
+    
+    // Trait management methods
+    void registerTrait(ast::TraitDeclaration* traitDecl);
+    TraitInfo* findTrait(const std::string& traitName);
+    void registerTraitImpl(ast::ImplDeclaration* implDecl);
+    bool validateTraitImpl(const std::string& typeName, const std::string& traitName,
+                          const std::vector<std::unique_ptr<ast::FunctionDeclaration>>& methods);
+    bool traitMethodSignatureMatches(const TraitMethod& traitMethod,
+                                    ast::FunctionDeclaration* implMethod);
 };
 
 } // namespace vyn

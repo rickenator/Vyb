@@ -44,6 +44,9 @@ vyn::ast::DeclPtr DeclarationParser::parse() {
     } else if (current_token.type == vyn::TokenType::KEYWORD_STRUCT) {
         auto struct_decl = this->parse_struct();
         return struct_decl;
+    } else if (current_token.type == vyn::TokenType::KEYWORD_TRAIT) {
+        auto trait_decl = this->parse_trait_declaration();
+        return trait_decl;
     } else if (current_token.type == vyn::TokenType::KEYWORD_IMPL) {
         auto impl_decl = this->parse_impl();
         return impl_decl;
@@ -645,6 +648,44 @@ std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_struct() {
     return std::make_unique<ast::StructDeclaration>(loc, std::move(name), std::move(generic_params), std::move(fields));
 }
 
+
+// TraitDeclaration parser
+// Syntax: trait Name<T> { method1(self, ...)<RetType> -> { ... } method2(self)<RetType>; ... }
+std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_trait_declaration() {
+    SourceLocation loc = this->current_location();
+    this->expect(vyn::TokenType::KEYWORD_TRAIT);
+    
+    // Parse trait name
+    if (this->peek().type != vyn::TokenType::IDENTIFIER) {
+        throw std::runtime_error("Expected trait name (identifier) at " + location_to_string(this->current_location()));
+    }
+    auto name = std::make_unique<ast::Identifier>(this->current_location(), this->consume().lexeme);
+    
+    // Parse generic parameters (e.g., trait Trait<T>)
+    auto generic_params = this->parse_generic_params();
+    
+    // Expect opening brace for trait body
+    this->expect(vyn::TokenType::LBRACE);
+    this->skip_comments_and_newlines();
+    
+    // Parse trait methods
+    std::vector<std::unique_ptr<ast::FunctionDeclaration>> methods;
+    
+    while (this->peek().type != vyn::TokenType::RBRACE && this->peek().type != vyn::TokenType::END_OF_FILE) {
+        // Parse method declaration (may or may not have a body for default implementations)
+        auto method = this->parse_function();
+        if (!method) {
+            throw std::runtime_error("Failed to parse trait method in trait '" + name->name + "' at " + location_to_string(this->current_location()));
+        }
+        methods.push_back(std::move(method));
+        
+        this->skip_comments_and_newlines();
+    }
+    
+    this->expect(vyn::TokenType::RBRACE);
+    
+    return std::make_unique<ast::TraitDeclaration>(loc, std::move(name), std::move(generic_params), std::move(methods));
+}
 
 // ImplDeclNode not in ast.hpp. Assuming a Declaration type for it.
 // parser.hpp: std::unique_ptr<vyn::Declaration> parse_impl();

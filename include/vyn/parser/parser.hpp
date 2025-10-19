@@ -213,6 +213,7 @@ namespace vyn { // Changed Vyn to vyn
         vyn::ast::DeclPtr parse();
         std::unique_ptr<vyn::ast::FunctionDeclaration> parse_function();
         std::unique_ptr<vyn::ast::Declaration> parse_struct();
+        std::unique_ptr<vyn::ast::Declaration> parse_trait_declaration();
         std::unique_ptr<vyn::ast::Declaration> parse_impl();
         std::unique_ptr<vyn::ast::Declaration> parse_class_declaration();
         std::unique_ptr<vyn::ast::Declaration> parse_field_declaration();
