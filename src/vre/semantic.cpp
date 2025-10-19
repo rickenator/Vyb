@@ -1778,9 +1778,36 @@ void SemanticAnalyzer::visit(ast::StructDeclaration* node) {
         return;
     }
 
+    // Handle generic parameters if present (e.g., struct Box<T>)
+    bool hasGenericParams = !node->genericParams.empty();
+    if (hasGenericParams) {
+        enterScope();  // Create scope for type parameters
+        
+        for (const auto& param : node->genericParams) {
+            if (param && param->name) {
+                std::string paramName = param->name->name;
+                
+                // Register the type parameter as a TYPE_PARAMETER symbol
+                SymbolInfo typeParamSymbol;
+                typeParamSymbol.name = paramName;
+                typeParamSymbol.kind = SymbolInfo::Kind::TYPE_PARAMETER;
+                typeParamSymbol.type = nullptr;
+                currentScope->add(typeParamSymbol);
+                
+                std::cout << "DEBUG: Registered struct type parameter: " << paramName << std::endl;
+            }
+        }
+    }
+
     // Create and register the struct type in the symbol table
     auto structType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->name->loc, structName));
-    currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, structName, false, ast::OwnershipKind::MY, structType});
+    
+    // Register in parent scope (not the type parameter scope)
+    if (hasGenericParams) {
+        currentScope->getParent()->add(SymbolInfo{SymbolInfo::Kind::Type, structName, false, ast::OwnershipKind::MY, structType});
+    } else {
+        currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, structName, false, ast::OwnershipKind::MY, structType});
+    }
 
     // Store struct field information for member access resolution
     // We'll use a map to store field types by struct name
@@ -1788,7 +1815,7 @@ void SemanticAnalyzer::visit(ast::StructDeclaration* node) {
     
     for (auto& field : node->fields) {
         if (field && field->name && field->typeNode) {
-            // Visit the field type to ensure it's valid
+            // Visit the field type to ensure it's valid (type params are now in scope)
             field->typeNode->accept(*this);
             
             // Store the field type for later member access resolution
@@ -1801,6 +1828,12 @@ void SemanticAnalyzer::visit(ast::StructDeclaration* node) {
     
     // Store field information in the semantic analyzer (we'll need to add this storage)
     structFieldTypes[structName] = fieldTypes;
+    
+    // Exit type parameter scope if we entered one
+    if (hasGenericParams) {
+        exitScope();
+        std::cout << "DEBUG: Exited struct type parameter scope for " << structName << std::endl;
+    }
 }
 // void SemanticAnalyzer::visit(ast::ClassDeclaration* node) {} // Handled above
 void SemanticAnalyzer::visit(ast::EnumDeclaration* node) {}
@@ -1993,10 +2026,10 @@ void SemanticAnalyzer::visit(ast::ImplDeclaration* node) {
                 std::string paramName = param->name->name;
                 typeParamNames.push_back(paramName);
                 
-                // Register the type parameter as a type symbol
+                // Register the type parameter as a TYPE_PARAMETER symbol
                 SymbolInfo typeParamSymbol;
                 typeParamSymbol.name = paramName;
-                typeParamSymbol.kind = SymbolInfo::Kind::Type;
+                typeParamSymbol.kind = SymbolInfo::Kind::TYPE_PARAMETER;
                 typeParamSymbol.type = nullptr; // Generic type parameter has no concrete type yet
                 currentScope->add(typeParamSymbol);
                 
@@ -2060,6 +2093,13 @@ void SemanticAnalyzer::visit(ast::ImplDeclaration* node) {
         
         // Register the trait implementation
         registerTraitImpl(node);
+        
+        // Visit all methods to validate their bodies (while type params are still in scope)
+        for (const auto& method : node->methods) {
+            if (method) {
+                method->accept(*this);
+            }
+        }
         
         std::cout << "DEBUG: Successfully registered impl " << traitName << " for " << typeName 
                   << " with " << node->methods.size() << " methods" << std::endl;
