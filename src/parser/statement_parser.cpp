@@ -1043,14 +1043,26 @@ vyn::ast::StmtPtr StatementParser::parse_match() {
         
         if (check(vyn::TokenType::RBRACE)) break;
         
-        // Parse pattern: either '?' for wildcard or a primary expression (literal, identifier)
+        // Parse pattern: '?', comparison pattern (e.g., >= 18), or literal
         vyn::ast::ExprPtr pattern;
         if (peek().type == vyn::TokenType::QUESTION_MARK) {
             // Wildcard pattern - represented as nullptr
             consume(); // consume '?'
             pattern = nullptr;
+        } else if (peek().type == vyn::TokenType::LT || peek().type == vyn::TokenType::LTEQ ||
+                   peek().type == vyn::TokenType::GT || peek().type == vyn::TokenType::GTEQ ||
+                   peek().type == vyn::TokenType::EQEQ || peek().type == vyn::TokenType::NOTEQ) {
+            // Comparison pattern (e.g., >= 18, < 0, == 5)
+            auto op_token = consume(); // consume comparison operator
+            auto value = expr_parser_.parse_primary();
+            if (!value) {
+                throw error(peek(), "Expected value after comparison operator in pattern.");
+            }
+            pattern = std::make_unique<vyn::ast::ComparisonPattern>(
+                op_token.location, op_token, std::move(value)
+            );
         } else {
-            // Primary expression pattern (no binary operators to avoid consuming >)
+            // Primary expression pattern (literal for exact match)
             pattern = expr_parser_.parse_primary();
             if (!pattern) {
                 throw error(peek(), "Expected pattern in match arm.");
