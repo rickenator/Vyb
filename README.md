@@ -1358,9 +1358,9 @@ main()<Result> -> {
 
 One of Vyn's standout features is automatic serialization of complex return types:
 
-- **Simple integers**: Return as exit codes (`fn<Int> main() -> return 42`)
+- **Simple integers**: Return as exit codes (`main()<Int> -> { return 42 }`)
 - **Complex types**: Automatically serialize to JSON-like format
-- **Tuples**: `fn<Int,String> main() -> return 10, "hello"` outputs `[10, "hello"]`
+- **Tuples**: `main()<Int,String> -> { return 10, "hello" }` outputs `[10, "hello"]`
 - **Structs**: Full structured output with field names and values
 
 This makes Vyn excellent for data processing scripts and API-style programs.
@@ -1627,11 +1627,11 @@ digit = "0".."9";
 Vyn automatically serializes complex return types from `main()`:
 
 **Simple Returns:**
-- `main()<Int> -> return 42` → Exit code 42
-- `main()<String> -> return "hello"` → Outputs: hello
+- `main()<Int> -> { return 42 }` → Exit code 42
+- `main()<String> -> { return "hello" }` → Outputs: hello
 
 **Complex Returns:**
-- `main()<Int,String> -> return 42, "hello"` → Outputs: [42, "hello"]
+- `main()<Int,String> -> { return 42, "hello" }` → Outputs: [42, "hello"]
 - Struct returns → JSON with field names and values
 - Vec returns → JSON array representation
 
