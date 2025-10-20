@@ -2824,6 +2824,59 @@ void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
 
 void SemanticAnalyzer::visit(ast::ThrowStatement* node) {}
 
+// --- Error Handling Visitor Implementations ---
+
+void SemanticAnalyzer::visit(ast::FailStatement* node) {
+    // TODO: Phase 1 implementation
+    // - Verify error expression is present
+    // - Type check error expression implements Errorable aspect
+    // - Capture stack trace information
+    if (node->error) {
+        node->error->accept(*this);
+    }
+}
+
+void SemanticAnalyzer::visit(ast::TrapClause* node) {
+    // TODO: Phase 1 implementation
+    // - Verify error type is valid
+    // - Type check handler block
+    // - Ensure handler return type matches block expression type
+    if (node->errorType) {
+        node->errorType->accept(*this);
+    }
+    if (node->handler) {
+        node->handler->accept(*this);
+    }
+}
+
+void SemanticAnalyzer::visit(ast::EnsureClause* node) {
+    // TODO: Phase 1 implementation
+    // - Type check cleanup block
+    // - Verify cleanup block returns Void or has expression statements
+    if (node->cleanupBlock) {
+        node->cleanupBlock->accept(*this);
+    }
+}
+
+void SemanticAnalyzer::visit(ast::RethrowStatement* node) {
+    // TODO: Phase 1 implementation
+    // - Verify rethrow is inside a trap clause
+    // - Type check transformed error if present
+    // - Ensure error type is compatible with outer trap clauses
+    if (node->transformedError) {
+        node->transformedError->accept(*this);
+    }
+}
+
+void SemanticAnalyzer::visit(ast::PanicStatement* node) {
+    // TODO: Phase 1 implementation
+    // - Type check panic message (should be string)
+    // - Mark as noreturn for control flow analysis
+    if (node->message) {
+        node->message->accept(*this);
+    }
+}
+
 void SemanticAnalyzer::visit(ast::TypeNode* node) {
     // This is a base class, specific derived type visitors should be called.
     // If this is ever called directly, it might indicate an issue or a need

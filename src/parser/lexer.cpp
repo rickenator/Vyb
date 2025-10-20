@@ -483,7 +483,12 @@ vyn::TokenType Lexer::get_keyword_type(const std::string& word) {
         {"borrow", vyn::TokenType::KEYWORD_BORROW},
         {"view", vyn::TokenType::KEYWORD_VIEW},
         {"nil", vyn::TokenType::KEYWORD_NIL},
-        {"auto", vyn::TokenType::KEYWORD_AUTO}
+        {"auto", vyn::TokenType::KEYWORD_AUTO},
+        {"fail", vyn::TokenType::KEYWORD_FAIL},
+        {"trap", vyn::TokenType::KEYWORD_TRAP},
+        {"rethrow", vyn::TokenType::KEYWORD_RETHROW},
+        {"ensure", vyn::TokenType::KEYWORD_ENSURE},
+        {"panic", vyn::TokenType::KEYWORD_PANIC}
     };
 
     auto it = keywords.find(word);

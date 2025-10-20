@@ -418,6 +418,14 @@ public:
     void visit(vyn::ast::Module* node) override;
     void visit(vyn::ast::GenericInstantiationExpression* node) override;
     void visit(vyn::ast::ThrowStatement* node) override;
+    
+    // Error Handling
+    void visit(vyn::ast::FailStatement* node) override;
+    void visit(vyn::ast::TrapClause* node) override;
+    void visit(vyn::ast::EnsureClause* node) override;
+    void visit(vyn::ast::RethrowStatement* node) override;
+    void visit(vyn::ast::PanicStatement* node) override;
+    
     void visit(vyn::ast::TypeNode* node) override;
     void visit(vyn::ast::AssertStatement* node) override;
     void visit(vyn::ast::TypeName* node) override;
