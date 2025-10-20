@@ -549,11 +549,11 @@ main()<Int> -> {
 
 ### Memory Safety & Freedom Operations
 
-Vyn's design philosophy emphasizes safety by default, but provides escape hatches for low-level memory manipulation when needed:
+Vyn's design philosophy: **FREEDOM over restrictions**. The language provides compiler-managed ownership by default, but empowers programmers with low-level control when needed:
 
 ```vyn
-# Safe memory management with ownership types
-safe_memory_example()<Int> -> {
+# Restricted memory management with ownership types
+restricted_memory_example()<Int> -> {
     # Unique ownership - automatically freed when out of scope
     owned<my<String>> = my("unique data")
     
@@ -568,8 +568,8 @@ safe_memory_example()<Int> -> {
     return 42
 }
 
-# Freedom operations for low-level control
-unsafe_memory_example()<Int> -> {
+# FREEDOM operations for low-level control
+freedom_memory_example()<Int> -> {
     x<Int> = 42
     result<Int> = 0
     
@@ -590,11 +590,11 @@ unsafe_memory_example()<Int> -> {
 }
 ```
 
-**Safety Guidelines for Freedom Code:**
+**FREEDOM Code Guidelines:**
 1. Minimize the scope of `freedom` blocks
 2. Document all invariants and assumptions
 3. Validate pointers before dereferencing
-4. Encapsulate freedom operations behind safe abstractions
+4. Encapsulate freedom operations behind restricted abstractions
 5. Test freedom code extensively
 
 ### Syntax and Literals
