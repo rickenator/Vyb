@@ -487,6 +487,57 @@ This feature will enable scripts and API-style binaries to return structured dat
 
 See `doc/TRAIT_SYSTEM_DESIGN.md` for complete specification and design rationale.
 
+### Future Development Priorities
+
+The following features are planned for future releases (no particular priority order):
+
+1. **Self-Hosted Standard Library**: Bootstrap a pure Vyn stdlib implementation
+   - Core data structures (Vec, Map, Set) in native Vyn
+   - I/O primitives and file handling
+   - String manipulation utilities
+   - Math and numeric operations
+   - Eventually replace C++ VRE components
+
+2. **Complete String Implementation**: Finish robust String type
+   - UTF-8 encoding/decoding support
+   - String interpolation syntax
+   - Advanced string methods (split, join, replace, regex)
+   - Efficient substring operations
+   - String comparison operators (lexical ordering)
+
+3. **Import/Smuggle System**: Module visibility and dependency management
+   - `import` for normal module imports
+   - `smuggle` for bypassing visibility restrictions
+   - Bundle-based sharing system integration
+   - Circular dependency detection
+   - Module caching and precompilation
+
+4. **C Bindings and FFI**: Foreign function interface for C interoperability
+   - `extern "C"` function declarations
+   - C struct layout compatibility
+   - Calling C libraries (libc, POSIX, etc.)
+   - Enable: I/O, networking, filesystem, process control
+   - Safe wrappers around freedom (unsafe) C operations
+
+5. **Robust Async/Await and Threading**: Complete concurrency model
+   - Full thread primitive support
+   - Cancellation points for cooperative multitasking
+   - Signal handling integration
+   - Mutex, semaphore, condition variables
+   - Timed await with timeouts
+   - Thread-local storage
+   - Work stealing scheduler (future)
+
+6. **Package Scoping Architecture**: Module system and package management
+   - Package definition and structure
+   - Dependency resolution
+   - Version constraints
+   - Package registry integration
+   - Build system integration
+   - Bundle system implementation (see `doc/bundles_and_sharing.md`)
+
+7. **Additional Considerations**: TBD - user feedback and evolution
+
 ### Other Language Considerations
 
 The following points were previously noted in `ROADMAP.txt` and are retained here for future planning:
