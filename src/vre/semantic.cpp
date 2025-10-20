@@ -167,7 +167,51 @@ ast::TypeNode* SemanticAnalyzer::substituteSelfType(ast::TypeNode* returnType, c
     if (auto typeName = dynamic_cast<ast::TypeName*>(returnType)) {
         if (typeName->identifier && typeName->identifier->name == "Self") {
             // Replace Self with the concrete type
-            return new ast::TypeName(typeName->loc, std::make_unique<ast::Identifier>(typeName->loc, concreteType));
+            // Need to parse concreteType to extract base name and generic arguments
+            // E.g., "Box<Point>" -> base="Box", genericArgs=["Point"]
+            
+            size_t anglePos = concreteType.find('<');
+            if (anglePos != std::string::npos) {
+                // Has generic arguments
+                std::string baseName = concreteType.substr(0, anglePos);
+                std::string argsStr = concreteType.substr(anglePos + 1);
+                // Remove trailing '>'
+                if (!argsStr.empty() && argsStr.back() == '>') {
+                    argsStr.pop_back();
+                }
+                
+                // Parse generic arguments (simple comma-separated list for now)
+                std::vector<ast::TypeNodePtr> genericArgs;
+                size_t start = 0;
+                while (start < argsStr.length()) {
+                    size_t commaPos = argsStr.find(',', start);
+                    std::string argName;
+                    if (commaPos != std::string::npos) {
+                        argName = argsStr.substr(start, commaPos - start);
+                        start = commaPos + 1;
+                    } else {
+                        argName = argsStr.substr(start);
+                        start = argsStr.length();
+                    }
+                    
+                    // Trim whitespace
+                    argName.erase(0, argName.find_first_not_of(" \t"));
+                    argName.erase(argName.find_last_not_of(" \t") + 1);
+                    
+                    if (!argName.empty()) {
+                        // Create TypeName for this argument
+                        auto argId = std::make_unique<ast::Identifier>(typeName->loc, argName);
+                        genericArgs.push_back(std::make_unique<ast::TypeName>(typeName->loc, std::move(argId)));
+                    }
+                }
+                
+                // Create TypeName with base and generic args
+                auto baseId = std::make_unique<ast::Identifier>(typeName->loc, baseName);
+                return new ast::TypeName(typeName->loc, std::move(baseId), std::move(genericArgs));
+            } else {
+                // No generic arguments
+                return new ast::TypeName(typeName->loc, std::make_unique<ast::Identifier>(typeName->loc, concreteType));
+            }
         }
     }
     
@@ -548,6 +592,8 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
         if (arg) arg->accept(*this);
     }
     
+
+    
     // Handle intrinsics
     if (auto ident = dynamic_cast<ast::Identifier*>(node->callee.get())) {
         const std::string& name = ident->name;
@@ -781,8 +827,10 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                             for (const auto& method : implInfo->declaration->methods) {
                                                 if (method && method->id && method->id->name == methodName) {
                                                     if (method->returnTypeNode) {
-                                                        expressionTypes[node] = method->returnTypeNode.get();
-                                                        node->type = std::shared_ptr<ast::TypeNode>(method->returnTypeNode->clone());
+                                                        // Substitute Self with concrete type
+                                                        ast::TypeNode* actualReturnType = substituteSelfType(method->returnTypeNode.get(), typeNameStr);
+                                                        expressionTypes[node] = actualReturnType;
+                                                        node->type = std::shared_ptr<ast::TypeNode>(actualReturnType->clone());
                                                     }
                                                     return;
                                                 }
@@ -861,6 +909,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             // Get the object's type
             auto objTypeIt = expressionTypes.find(memberExpr->object.get());
             if (objTypeIt != expressionTypes.end() && objTypeIt->second) {
+                
                 // Check if the object's type is a Vec type
                 if (auto vecType = dynamic_cast<ast::VecType*>(objTypeIt->second)) {
                     // This is a Vec method call, handle it
@@ -913,10 +962,14 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                     if (implInfo && implInfo->declaration) {
                                         for (const auto& method : implInfo->declaration->methods) {
                                             if (method && method->id && method->id->name == methodName) {
-                                                // Found the generic trait method! Set the return type
+                                                // Found the generic trait method! Substitute Self with concrete type
                                                 if (method->returnTypeNode) {
-                                                    expressionTypes[node] = method->returnTypeNode.get();
-                                                    node->type = std::shared_ptr<ast::TypeNode>(method->returnTypeNode->clone());
+                                                    std::cout << "DEBUG: Generic trait method " << methodName 
+                                                              << " return type before substitution: " << method->returnTypeNode->toString() << std::endl;
+                                                    ast::TypeNode* actualReturnType = substituteSelfType(method->returnTypeNode.get(), typeNameStr);
+                                                    std::cout << "DEBUG: After Self substitution: " << actualReturnType->toString() << std::endl;
+                                                    expressionTypes[node] = actualReturnType;
+                                                    node->type = std::shared_ptr<ast::TypeNode>(actualReturnType->clone());
                                                 }
                                                 return;
                                             }
