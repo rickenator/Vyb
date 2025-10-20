@@ -138,6 +138,10 @@ private:
     std::map<std::string, vyn::ast::StructDeclaration*> genericStructTemplates; // Store generic struct AST nodes (e.g., Box<T>)
     std::map<std::string, llvm::StructType*> monomorphizedStructs; // Cache instantiated types (e.g., "Box<Int>" -> Box_Int LLVM type)
     
+    // Generic function templates
+    std::map<std::string, vyn::ast::FunctionDeclaration*> genericFunctionTemplates; // Store generic function AST nodes (e.g., printItem<T>)
+    std::map<std::string, llvm::Function*> monomorphizedFunctions; // Cache instantiated functions (e.g., "printItem_Point" -> Function*)
+    
     // Helper methods
     llvm::Type* codegenType(vyn::ast::TypeNode* typeNode); // Converts vyn::TypeNode to llvm::Type
     std::string mangleGenericTypeName(const std::string& baseName, const std::vector<vyn::ast::TypeNodePtr>& typeArgs); // Generate mangled name like Box_Int
@@ -179,6 +183,12 @@ private:
                                            const std::string& methodName);
     std::string extractBasePattern(const std::string& concreteType);
     std::string getFullTypeName(vyn::ast::Expression* expr);
+    
+    // Generic function monomorphization
+    llvm::Function* monomorphizeGenericFunction(const std::string& functionName,
+                                               const std::vector<std::string>& concreteTypeArgs);
+    std::string mangleGenericFunctionName(const std::string& baseName, 
+                                          const std::vector<std::string>& typeArgs);
     
     // Helper methods for monomorphization with type substitution
     llvm::Type* resolveTypeForMonomorphization(const TypePattern& pattern, 

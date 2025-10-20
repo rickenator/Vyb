@@ -562,25 +562,41 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                     std::cout << "DEBUG: Found type alias for " << typeNameStr << std::endl;
                     llvmType = typeAliasIt->second;
                 } else {
-                    auto userTypeIt = userTypeMap.find(typeNameStr);
-                    if (userTypeIt != userTypeMap.end()) {
-                        std::cout << "DEBUG: Found user type " << typeNameStr << " in userTypeMap, isOpaque: " 
-                                  << userTypeIt->second.llvmType->isOpaque() << std::endl;
-                        llvmType = userTypeIt->second.llvmType;
+                    // Check if this is a type parameter being substituted during monomorphization
+                    auto substitutionIt = currentTypeSubstitutions.find(typeNameStr);
+                    if (substitutionIt != currentTypeSubstitutions.end()) {
+                        std::cout << "DEBUG: Substituting type parameter " << typeNameStr 
+                                  << " -> " << substitutionIt->second << " during monomorphization" << std::endl;
+                        
+                        // Recursively resolve the substituted type
+                        // Create a TypeName node for the concrete type
+                        auto concreteTypeName = std::make_unique<ast::TypeName>(
+                            typeNode->loc,
+                            std::make_unique<ast::Identifier>(typeNode->loc, substitutionIt->second),
+                            std::vector<ast::TypeNodePtr>()
+                        );
+                        llvmType = codegenType(concreteTypeName.get());
                     } else {
-                        std::cout << "DEBUG: User type " << typeNameStr << " not found in userTypeMap, checking LLVM context" << std::endl;
-                        llvm::StructType* existingType = llvm::StructType::getTypeByName(*context, typeNameStr);
-                        if (existingType) {
-                            std::cout << "DEBUG: Found existing type " << typeNameStr << " in LLVM context, isOpaque: " 
-                                      << existingType->isOpaque() << std::endl;
-                            llvmType = existingType;
+                        auto userTypeIt = userTypeMap.find(typeNameStr);
+                        if (userTypeIt != userTypeMap.end()) {
+                            std::cout << "DEBUG: Found user type " << typeNameStr << " in userTypeMap, isOpaque: " 
+                                      << userTypeIt->second.llvmType->isOpaque() << std::endl;
+                            llvmType = userTypeIt->second.llvmType;
                         } else {
-                            // This case should ideally be caught by semantic analysis if it\'s an undefined type.
-                            // If it\'s a type that will be defined later (e.g. in a different module or due to ordering),
-                            // creating an opaque struct might be an option, but can be risky.
-                            // llvmType = llvm::StructType::create(*context, typeNameStr);
-                            logError(typeNode->loc, "Unknown type identifier: " + typeNameStr + ". It might be a forward-declared type not yet fully defined or an undeclared type.");
-                            return nullptr;
+                            std::cout << "DEBUG: User type " << typeNameStr << " not found in userTypeMap, checking LLVM context" << std::endl;
+                            llvm::StructType* existingType = llvm::StructType::getTypeByName(*context, typeNameStr);
+                            if (existingType) {
+                                std::cout << "DEBUG: Found existing type " << typeNameStr << " in LLVM context, isOpaque: " 
+                                          << existingType->isOpaque() << std::endl;
+                                llvmType = existingType;
+                            } else {
+                                // This case should ideally be caught by semantic analysis if it\'s an undefined type.
+                                // If it\'s a type that will be defined later (e.g. in a different module or due to ordering),
+                                // creating an opaque struct might be an option, but can be risky.
+                                // llvmType = llvm::StructType::create(*context, typeNameStr);
+                                logError(typeNode->loc, "Unknown type identifier: " + typeNameStr + ". It might be a forward-declared type not yet fully defined or an undeclared type.");
+                                return nullptr;
+                            }
                         }
                     }
                 }

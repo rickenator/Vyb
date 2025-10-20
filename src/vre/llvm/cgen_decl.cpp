@@ -217,9 +217,36 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
         builder->CreateStore(initialVal, alloca);
         // Register the variable in namedValues
         namedValues[node->id->name] = alloca;
-        // Store the type info for this variable
+        // Store the type info for this variable (with type substitution if in monomorphization)
         if (node->id->type) {
-            valueTypeMap[alloca] = node->id->type;
+            // Check if we need to substitute type parameters
+            if (!currentTypeSubstitutions.empty()) {
+                if (auto* typeName = dynamic_cast<ast::TypeName*>(node->id->type.get())) {
+                    if (typeName->identifier) {
+                        std::string typeStr = typeName->identifier->name;
+                        auto substIt = currentTypeSubstitutions.find(typeStr);
+                        if (substIt != currentTypeSubstitutions.end()) {
+                            // Create substituted TypeName
+                            auto substitutedType = std::make_unique<ast::TypeName>(
+                                typeName->loc,
+                                std::make_unique<ast::Identifier>(typeName->loc, substIt->second),
+                                std::vector<ast::TypeNodePtr>()
+                            );
+                            valueTypeMap[alloca] = std::shared_ptr<ast::TypeNode>(std::move(substitutedType));
+                            std::cout << "DEBUG: Variable '" << node->id->name << "' type substituted in valueTypeMap: " 
+                                      << typeStr << " -> " << substIt->second << std::endl;
+                        } else {
+                            valueTypeMap[alloca] = node->id->type;
+                        }
+                    } else {
+                        valueTypeMap[alloca] = node->id->type;
+                    }
+                } else {
+                    valueTypeMap[alloca] = node->id->type;
+                }
+            } else {
+                valueTypeMap[alloca] = node->id->type;
+            }
         }
         
         // Determine ownership kind from variable's type annotation
@@ -277,6 +304,19 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
 }
 
 void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
+    // Check if this is a generic function (has type parameters)
+    if (!node->genericParams.empty()) {
+        std::cout << "DEBUG: Storing generic function template: " << node->id->name 
+                  << " with " << node->genericParams.size() << " type parameters" << std::endl;
+        
+        // Store the generic function template for later monomorphization
+        genericFunctionTemplates[node->id->name] = node;
+        
+        // Don't codegen generic functions directly - they'll be monomorphized on call
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
     std::vector<llvm::Type*> paramTypes;
     std::vector<std::string> paramNames;
     for (const auto& paramNode : node->params) {
