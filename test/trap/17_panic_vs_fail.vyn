@@ -1,0 +1,35 @@
+# Test 17: Panic vs Fail - difference in behavior
+# Tests the distinction between recoverable fail and unrecoverable panic
+
+check_invariant(value<Int>)<Void> -> {
+    # Panic for "should never happen" conditions
+    if (value < 0) {
+        panic("INVARIANT VIOLATED: Value cannot be negative: " + value.to_string())
+    }
+}
+
+divide(a<Int>, b<Int>)<Int> -> {
+    # Fail for recoverable errors
+    if (b == 0) {
+        fail DivisionByZero { dividend = a }
+    }
+    return a / b
+}
+
+main()<Int> -> {
+    println("=== Recoverable Fail ===")
+    result<Int> = {
+        divide(10, 0)
+    } trap (e<DivisionByZero>) -> {
+        println("Caught division by zero, returning -1")
+        return -1
+    }
+    println("Result: " + result.to_string())
+    
+    println("\n=== Unrecoverable Panic ===")
+    # This will crash immediately, no trap can catch it
+    check_invariant(-5)
+    
+    println("This will never print")
+    return 0
+}

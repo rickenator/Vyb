@@ -1,0 +1,35 @@
+# Test 15: Freedom blocks with error handling
+# Tests that errors can be thrown from freedom blocks
+
+check_pointer(ptr<loc<Int>>)<Int> -> {
+    freedom {
+        if (ptr == null()) {
+            fail NullPointerError { address = 0 }
+        }
+        return at(ptr)
+    }
+}
+
+main()<Int> -> {
+    # Valid pointer
+    value<my<Int>> = 42
+    result1<Int> = {
+        check_pointer(addr_of(value))
+    } trap (e<NullPointerError>) -> {
+        println("Null pointer at address: " + e.address.to_string())
+        return -1
+    }
+    println("Result1: " + result1.to_string())
+    
+    # Null pointer
+    null_ptr<loc<Int>> = freedom { from_int_to_loc(0) }
+    result2<Int> = {
+        check_pointer(null_ptr)
+    } trap (e<NullPointerError>) -> {
+        println("Caught null pointer!")
+        return -1
+    }
+    println("Result2: " + result2.to_string())
+    
+    return 0
+}

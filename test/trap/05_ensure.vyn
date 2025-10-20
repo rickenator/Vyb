@@ -1,0 +1,31 @@
+# Test 05: Ensure clause - cleanup that always runs
+# Tests ensure block execution on both success and failure
+
+cleanup_called<my<Bool>> = false
+
+main()<Int> -> {
+    # Test ensure on success path
+    result1<Int> = {
+        println("Success path")
+        42
+    } ensure -> {
+        println("Cleanup on success")
+        cleanup_called = true
+    }
+    
+    println("Result1: " + result1.to_string())
+    
+    # Test ensure on failure path
+    result2<Int> = {
+        fail MyError { code = 99 }
+        return 0
+    } trap (e<MyError>) -> {
+        println("Caught error")
+        return -1
+    } ensure -> {
+        println("Cleanup on failure")
+    }
+    
+    println("Result2: " + result2.to_string())
+    return 0
+}

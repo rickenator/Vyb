@@ -1,0 +1,27 @@
+# Test 04: Rethrow statement
+# Tests propagating an error to the caller
+
+inner_function()<Int> -> {
+    fail NetworkError { message = "Connection timeout" }
+    return 0
+}
+
+outer_function()<Int> -> {
+    {
+        inner_function()
+    } trap (e<NetworkError>) -> {
+        println("Caught in outer, rethrowing...")
+        rethrow  # Propagate to caller
+    }
+    return 0
+}
+
+main()<Int> -> {
+    {
+        outer_function()
+    } trap (e<NetworkError>) -> {
+        println("Finally caught at main level")
+        return 1
+    }
+    return 0
+}

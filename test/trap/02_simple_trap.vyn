@@ -1,0 +1,15 @@
+# Test 02: Simple trap - catching a failure
+# Tests basic trap clause that handles a specific error type
+
+main()<Int> -> {
+    result<Int> = {
+        fail MyError { code = 42 }
+        return 100  # Never reached
+    } trap (e<MyError>) -> {
+        println("Caught error with code: " + e.code.to_string())
+        return -1
+    }
+    
+    println("Result: " + result.to_string())
+    return 0
+}
