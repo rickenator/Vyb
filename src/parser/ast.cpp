@@ -1584,15 +1584,25 @@ void RangeExpression::accept(Visitor& visitor) {
 }
 
 // --- BlockExpression ---
-BlockExpression::BlockExpression(SourceLocation loc, std::unique_ptr<BlockStatement> block)
-    : Expression(loc), block(std::move(block)) {}
+BlockExpression::BlockExpression(SourceLocation loc, std::unique_ptr<BlockStatement> block,
+                                 std::vector<std::unique_ptr<TrapClause>> trapClauses,
+                                 std::unique_ptr<EnsureClause> ensureClause)
+    : Expression(loc), block(std::move(block)), trapClauses(std::move(trapClauses)), 
+      ensureClause(std::move(ensureClause)) {}
 
 NodeType BlockExpression::getType() const {
     return NodeType::BLOCK_EXPRESSION;
 }
 
 std::string BlockExpression::toString() const {
-    return "{ " + (block ? block->toString() : "nullptr") + " }";
+    std::string result = "{ " + (block ? block->toString() : "nullptr") + " }";
+    for (const auto& trap : trapClauses) {
+        result += " " + trap->toString();
+    }
+    if (ensureClause) {
+        result += " " + ensureClause->toString();
+    }
+    return result;
 }
 
 void BlockExpression::accept(Visitor& visitor) {

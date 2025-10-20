@@ -148,8 +148,22 @@ namespace vyn {
                 if (check(TokenType::LBRACE) && stmt_parser_) {
                     // Parse block statement and wrap it in a BlockExpression
                     auto block_stmt = stmt_parser_->parse_block();
+                    
+                    // Check for trap clauses
+                    std::vector<std::unique_ptr<vyn::ast::TrapClause>> trapClauses;
+                    while (match(TokenType::KEYWORD_TRAP)) {
+                        trapClauses.push_back(parse_trap_clause());
+                    }
+                    
+                    // Check for ensure clause
+                    std::unique_ptr<vyn::ast::EnsureClause> ensureClause;
+                    if (match(TokenType::KEYWORD_ENSURE)) {
+                        ensureClause = parse_ensure_clause();
+                    }
+                    
                     result = std::make_unique<vyn::ast::BlockExpression>(
-                        block_stmt->loc, std::move(block_stmt)
+                        block_stmt->loc, std::move(block_stmt), 
+                        std::move(trapClauses), std::move(ensureClause)
                     );
                 } else {
                     // Parse naked expression
@@ -719,6 +733,85 @@ regular_array_literal:
             }
         }
 
+        // Block expressions with trap/ensure: { statements... } trap (...) -> {...} ensure -> {...}
+        // Disambiguate from object literals by looking ahead one token
+        if (check(TokenType::LBRACE) && stmt_parser_) {
+            // Lookahead to distinguish block vs object literal
+            size_t saved_pos = pos_;
+            consume(); // consume LBRACE to look at next token
+            
+            bool is_block = false;
+            TokenType next_type = peek().type;
+            
+            // Check if first token suggests a block (statement keyword) vs object literal (identifier for field)
+            if (next_type == TokenType::RBRACE) {
+                // Empty braces - treat as object literal {}
+                is_block = false;
+            } else if (next_type == TokenType::KEYWORD_FAIL ||
+                       next_type == TokenType::KEYWORD_PANIC ||
+                       next_type == TokenType::KEYWORD_RETHROW ||
+                       next_type == TokenType::KEYWORD_RETURN ||
+                       next_type == TokenType::KEYWORD_IF ||
+                       next_type == TokenType::KEYWORD_WHILE ||
+                       next_type == TokenType::KEYWORD_FOR ||
+                       next_type == TokenType::KEYWORD_BREAK ||
+                       next_type == TokenType::KEYWORD_CONTINUE ||
+                       next_type == TokenType::KEYWORD_PASS ||
+                       next_type == TokenType::KEYWORD_DEFER ||
+                       next_type == TokenType::KEYWORD_AWAIT ||
+                       next_type == TokenType::KEYWORD_MATCH ||
+                       next_type == TokenType::KEYWORD_TRY) {
+                // Starts with statement keyword - definitely a block
+                is_block = true;
+            } else if (next_type == TokenType::IDENTIFIER) {
+                // Need more lookahead - check what follows the identifier
+                consume(); // consume IDENTIFIER
+                TokenType after_ident = peek().type;
+                if (after_ident == TokenType::COLON || after_ident == TokenType::EQ) {
+                    // identifier: or identifier = means object literal
+                    is_block = false;
+                } else if (after_ident == TokenType::COMMA || after_ident == TokenType::RBRACE) {
+                    // identifier, or identifier} means object literal (shorthand)
+                    is_block = false;
+                } else if (after_ident == TokenType::LT) {
+                    // identifier< could be variable declaration with type
+                    is_block = true;
+                } else if (after_ident == TokenType::LPAREN) {
+                    // identifier( is a function call - statement
+                    is_block = true;
+                } else {
+                    // Default to block for other cases
+                    is_block = true;
+                }
+            }
+            
+            // Restore position
+            pos_ = saved_pos;
+            
+            if (is_block) {
+                // Parse as block expression
+                auto block_stmt = stmt_parser_->parse_block();
+                
+                // Check for trap clauses
+                std::vector<std::unique_ptr<vyn::ast::TrapClause>> trapClauses;
+                while (match(TokenType::KEYWORD_TRAP)) {
+                    trapClauses.push_back(parse_trap_clause());
+                }
+                
+                // Check for ensure clause
+                std::unique_ptr<vyn::ast::EnsureClause> ensureClause;
+                if (match(TokenType::KEYWORD_ENSURE)) {
+                    ensureClause = parse_ensure_clause();
+                }
+                
+                return std::make_unique<vyn::ast::BlockExpression>(
+                    block_stmt->loc, std::move(block_stmt), 
+                    std::move(trapClauses), std::move(ensureClause)
+                );
+            }
+            // Otherwise fall through to object literal parsing
+        }
+
         // Anonymous Struct literals: { field1: value1, field2 }
         if (match(TokenType::LBRACE)) {
             SourceLocation struct_loc = previous_token().location;
@@ -1137,6 +1230,104 @@ bool ExpressionParser::is_expression_start(vyn::TokenType type) const {
     // e.g. if \'new\' was a keyword for construction: case TokenType::KEYWORD_NEW: return true;
 
     return false;
+}
+
+// Parse trap clause: trap (errorName<ErrorType>) -> { handler }
+std::unique_ptr<vyn::ast::TrapClause> ExpressionParser::parse_trap_clause() {
+    auto loc = current_location();
+    
+    // Expect 'trap' keyword (already matched by caller)
+    
+    // Expect '('
+    expect(TokenType::LPAREN, "Expected '(' after 'trap'");
+    
+    // Parse error binding: errorName<ErrorType>
+    if (!check(TokenType::IDENTIFIER)) {
+        throw error(peek(), "Expected error variable name in trap clause");
+    }
+    auto errorToken = consume();
+    auto errorNameStr = errorToken.lexeme;
+    auto errorNameLoc = errorToken.location;
+    
+    // Create Identifier for error name
+    auto errorNameIdent = std::make_unique<vyn::ast::Identifier>(errorNameLoc, errorNameStr);
+    
+    // Expect '<'
+    expect(TokenType::LT, "Expected '<' after error variable name");
+    
+    // Parse error type - create identifier
+    if (!check(TokenType::IDENTIFIER)) {
+        throw error(peek(), "Expected error type name in trap clause");
+    }
+    
+    auto typeToken = consume();
+    std::vector<std::string> typePath;
+    typePath.push_back(typeToken.lexeme);
+    
+    // Handle module paths like module::ErrorType
+    while (match(TokenType::COLONCOLON)) {
+        if (!check(TokenType::IDENTIFIER)) {
+            throw error(peek(), "Expected identifier after '::'");
+        }
+        auto nextToken = consume();
+        typePath.push_back(nextToken.lexeme);
+    }
+    
+    // Create identifier from type path
+    // For simple names, just use the first element
+    std::string fullTypeName = typePath[0];
+    for (size_t i = 1; i < typePath.size(); ++i) {
+        fullTypeName += "::" + typePath[i];
+    }
+    auto typeIdentifier = std::make_unique<vyn::ast::Identifier>(typeToken.location, fullTypeName);
+    
+    // Create TypeName with the identifier
+    auto errorType = std::make_unique<vyn::ast::TypeName>(typeToken.location, std::move(typeIdentifier));
+    
+    // Expect '>'
+    expect(TokenType::GT, "Expected '>' after error type");
+    
+    // Expect ')'
+    expect(TokenType::RPAREN, "Expected ')' after error pattern");
+    
+    // Expect '->'
+    expect(TokenType::ARROW, "Expected '->' after trap pattern");
+    
+    // Parse handler block - don't consume LBRACE, let parse_block() do it
+    if (!stmt_parser_) {
+        throw error(peek(), "Statement parser not available for trap handler");
+    }
+    
+    if (!check(TokenType::LBRACE)) {
+        throw error(peek(), "Expected '{' for trap handler block");
+    }
+    auto handlerBlock = stmt_parser_->parse_block();
+    
+    return std::make_unique<vyn::ast::TrapClause>(
+        loc, std::move(errorNameIdent), std::move(errorType), std::move(handlerBlock)
+    );
+}
+
+// Parse ensure clause: ensure -> { cleanup }
+std::unique_ptr<vyn::ast::EnsureClause> ExpressionParser::parse_ensure_clause() {
+    auto loc = current_location();
+    
+    // Expect 'ensure' keyword (already matched by caller)
+    
+    // Expect '->'
+    expect(TokenType::ARROW, "Expected '->' after 'ensure'");
+    
+    // Parse cleanup block - don't consume LBRACE, let parse_block() do it
+    if (!stmt_parser_) {
+        throw error(peek(), "Statement parser not available for ensure handler");
+    }
+    
+    if (!check(TokenType::LBRACE)) {
+        throw error(peek(), "Expected '{' for ensure cleanup block");
+    }
+    auto cleanupBlock = stmt_parser_->parse_block();
+    
+    return std::make_unique<vyn::ast::EnsureClause>(loc, std::move(cleanupBlock));
 }
 
 } // namespace vyn

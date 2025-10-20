@@ -1346,8 +1346,12 @@ public:
 class BlockExpression : public Expression {
 public:
     std::unique_ptr<BlockStatement> block;
+    std::vector<std::unique_ptr<TrapClause>> trapClauses;  // trap clauses attached to block
+    std::unique_ptr<EnsureClause> ensureClause;            // optional ensure clause
     
-    BlockExpression(SourceLocation loc, std::unique_ptr<BlockStatement> block);
+    BlockExpression(SourceLocation loc, std::unique_ptr<BlockStatement> block,
+                    std::vector<std::unique_ptr<TrapClause>> trapClauses = {},
+                    std::unique_ptr<EnsureClause> ensureClause = nullptr);
     NodeType getType() const override;
     std::string toString() const override;
     void accept(Visitor& visitor) override;
