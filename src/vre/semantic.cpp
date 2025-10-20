@@ -988,10 +988,19 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                             std::cout << "DEBUG: CallExpression: Type parameter " << typeNameStr 
                                                       << " with bound " << boundName 
                                                       << " allows method " << methodName << std::endl;
-                                            // Found the method in bounds - allow it
+                                            // Found the method in bounds - substitute Self with type parameter
                                             if (method.returnType) {
-                                                expressionTypes[node] = method.returnType;
-                                                node->type = std::shared_ptr<ast::TypeNode>(method.returnType->clone());
+                                                // Check if return type is Self - if so, replace with type parameter
+                                                ast::TypeNode* actualReturnType = method.returnType;
+                                                if (auto returnTypeName = dynamic_cast<ast::TypeName*>(method.returnType)) {
+                                                    if (returnTypeName->identifier && returnTypeName->identifier->name == "Self") {
+                                                        // Return Self -> substitute with type parameter
+                                                        actualReturnType = typeName; // The type parameter itself
+                                                        std::cout << "DEBUG: Substituting Self return type with type parameter " << typeNameStr << std::endl;
+                                                    }
+                                                }
+                                                expressionTypes[node] = actualReturnType;
+                                                node->type = std::shared_ptr<ast::TypeNode>(actualReturnType->clone());
                                             }
                                             return;
                                         }
