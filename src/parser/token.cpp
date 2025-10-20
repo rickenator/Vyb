@@ -72,6 +72,8 @@ std::string token_type_to_string(vyn::TokenType type) { // Corrected namespace f
         {vyn::TokenType::KEYWORD_BORROW, "KEYWORD_BORROW"},
         {vyn::TokenType::KEYWORD_VIEW, "KEYWORD_VIEW"},
         {vyn::TokenType::KEYWORD_NIL, "KEYWORD_NIL"},
+        {vyn::TokenType::KEYWORD_FREEDOM, "KEYWORD_FREEDOM"},
+        {vyn::TokenType::KEYWORD_AUTO, "KEYWORD_AUTO"},
 
         // Operators
         {vyn::TokenType::PLUS, "PLUS"},

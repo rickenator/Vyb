@@ -89,11 +89,16 @@ The immediate focus for the next release:
 4. **Aspect Method Calls:** Complete method invocation on aspect-bound types
 5. **Generic Struct Instantiation:** Monomorphization for generic structs
 
-### 📋 CURRENT FOCUS
-1. **Standard Library Expansion:** Building core modules for collections, I/O, math
-2. **Enhanced Error Messages:** More detailed compilation feedback and suggestions
-3. **Tuple Element Access:** `.0`, `.1`, `.2` syntax for accessing tuple elements
-4. **String Comparison Operators:** Lexical ordering for String types
+### 📋 CURRENT FOCUS (v0.4.3)
+1. **Range Patterns in Match/Select:** Implement `a..b` range matching for elegant numeric range handling
+   - Syntax: `1..10 -> "single digit"` in match/select expressions
+   - Note: Conflicts with comparison patterns (`>= 90`) need resolution
+   - Design decision: May use different syntax or restrict to one pattern type
+2. **Aspect Method Calls:** Complete method invocation on aspect-bound types
+3. **Standard Library Expansion:** Building core modules for collections, I/O, math
+4. **Enhanced Error Messages:** More detailed compilation feedback and suggestions
+5. **Tuple Element Access:** `.0`, `.1`, `.2` syntax for accessing tuple elements
+6. **String Comparison Operators:** Lexical ordering for String types
 
 ## Project Structure and Organization
 
