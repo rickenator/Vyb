@@ -2988,19 +2988,158 @@ void LLVMCodegen::visit(ast::RangeExpression* node) {
 }
 
 void LLVMCodegen::visit(ast::BlockExpression* node) {
-    // Block as expression: execute the block and the last value becomes the result
+    // Block as expression with trap/ensure support:
+    // 1. Execute the block statements
+    // 2. If trap clauses exist, set up error handling
+    // 3. If ensure clause exists, generate cleanup code
+    // 4. The last value becomes the result
+    
     if (!node->block) {
         m_currentLLVMValue = nullptr;
         return;
     }
     
-    // Execute all statements in the block
-    for (const auto& stmt : node->block->body) {
-        stmt->accept(*this);
+    llvm::Function* func = getCurrentFunction();
+    if (!func) {
+        logError(node->loc, "BlockExpression outside function context");
+        m_currentLLVMValue = nullptr;
+        return;
     }
     
-    // The m_currentLLVMValue should be set by the last statement/expression in the block
-    // If the block ends with a return statement, that's handled by the return logic
+    // Check if this block has trap or ensure clauses
+    bool hasTrap = !node->trapClauses.empty();
+    bool hasEnsure = node->ensureClause != nullptr;
+    
+    if (!hasTrap && !hasEnsure) {
+        // Simple block without error handling - execute normally
+        for (const auto& stmt : node->block->body) {
+            stmt->accept(*this);
+        }
+        return;
+    }
+    
+    // Block with error handling - set up trap/ensure infrastructure
+    llvm::BasicBlock* normalBB = llvm::BasicBlock::Create(*context, "block.normal", func);
+    llvm::BasicBlock* ensureBB = hasEnsure ? llvm::BasicBlock::Create(*context, "block.ensure", func) : nullptr;
+    llvm::BasicBlock* continueBB = llvm::BasicBlock::Create(*context, "block.continue", func);
+    
+    // Create error slot and landing pad if we have trap clauses
+    llvm::AllocaInst* errorSlot = nullptr;
+    llvm::BasicBlock* landingPadBB = nullptr;
+    
+    if (hasTrap) {
+        // Determine error type from first trap clause
+        ast::TypeNode* errorType = node->trapClauses[0]->errorType.get();
+        llvm::Type* errorLLVMType = codegenType(errorType);
+        
+        if (!errorLLVMType) {
+            logError(node->loc, "Failed to generate type for error in trap clause");
+            m_currentLLVMValue = nullptr;
+            return;
+        }
+        
+        // Create alloca for error value
+        errorSlot = createEntryBlockAlloca(errorLLVMType, "trap_error");
+        
+        // Create landing pad for error handling
+        landingPadBB = llvm::BasicBlock::Create(*context, "trap.landing", func);
+        
+        // Push trap context onto stack
+        TrapContext trapCtx;
+        trapCtx.landingPad = landingPadBB;
+        trapCtx.resumeBlock = continueBB;
+        trapCtx.errorSlot = errorSlot;
+        trapCtx.errorType = errorType;
+        trapCtx.errorVarName = node->trapClauses[0]->errorName->name;
+        trapStack.push_back(trapCtx);
+    }
+    
+    // Execute normal block
+    builder->CreateBr(normalBB);
+    builder->SetInsertPoint(normalBB);
+    
+    // Save block result
+    llvm::Value* blockResult = nullptr;
+    
+    // Execute block statements
+    for (const auto& stmt : node->block->body) {
+        stmt->accept(*this);
+        blockResult = m_currentLLVMValue;
+        
+        // If block terminated (e.g., by fail), stop processing
+        if (builder->GetInsertBlock()->getTerminator()) {
+            break;
+        }
+    }
+    
+    // If block didn't terminate, branch to ensure/continue
+    if (!builder->GetInsertBlock()->getTerminator()) {
+        if (hasEnsure) {
+            builder->CreateBr(ensureBB);
+        } else {
+            builder->CreateBr(continueBB);
+        }
+    }
+    
+    // Generate trap handlers
+    if (hasTrap) {
+        builder->SetInsertPoint(landingPadBB);
+        
+        // Load the error from the error slot
+        llvm::Type* errorType = errorSlot->getAllocatedType();
+        llvm::Value* errorValue = builder->CreateLoad(errorType, errorSlot, "caught_error");
+        
+        // Generate trap handler code
+        for (const auto& trapClause : node->trapClauses) {
+            // TODO: Type checking for multiple trap clauses
+            // For now, assuming single trap clause
+            
+            // Add error variable to scope
+            auto oldNamedValues = namedValues;
+            namedValues[trapClause->errorName->name] = errorValue;
+            
+            // Execute trap handler
+            if (trapClause->handler) {
+                trapClause->handler->accept(*this);
+            }
+            
+            // Restore scope
+            namedValues = std::move(oldNamedValues);
+            
+            // Branch to ensure/continue after handling
+            if (!builder->GetInsertBlock()->getTerminator()) {
+                if (hasEnsure) {
+                    builder->CreateBr(ensureBB);
+                } else {
+                    builder->CreateBr(continueBB);
+                }
+            }
+        }
+        
+        // Pop trap context
+        trapStack.pop_back();
+    }
+    
+    // Generate ensure cleanup
+    if (hasEnsure) {
+        builder->SetInsertPoint(ensureBB);
+        
+        // Execute ensure cleanup code
+        if (node->ensureClause->cleanupBlock) {
+            node->ensureClause->cleanupBlock->accept(*this);
+        }
+        
+        // Branch to continue
+        if (!builder->GetInsertBlock()->getTerminator()) {
+            builder->CreateBr(continueBB);
+        }
+    }
+    
+    // Continue block
+    builder->SetInsertPoint(continueBB);
+    
+    // Set result value
+    m_currentLLVMValue = blockResult;
 }
 
 void LLVMCodegen::visit(ast::ComparisonPattern* node) {

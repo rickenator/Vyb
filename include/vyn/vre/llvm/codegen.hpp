@@ -134,6 +134,18 @@ private:
     std::map<std::string, uint32_t> refCounts; // For our<T> reference counting
     std::map<std::string, llvm::Value*> refCountStorage; // Storage for refcount variables
 
+    // Error handling state
+    struct TrapContext {
+        llvm::BasicBlock* landingPad;        // Landing pad for error handling
+        llvm::BasicBlock* resumeBlock;       // Block to resume to after handling
+        llvm::AllocaInst* errorSlot;         // Slot to store error value
+        ast::TypeNode* errorType;            // Expected error type
+        std::string errorVarName;            // Name of error variable
+    };
+    std::vector<TrapContext> trapStack;      // Stack of active trap contexts
+    std::vector<llvm::BasicBlock*> ensureBlocks; // Ensure cleanup blocks to execute
+    llvm::AllocaInst* currentErrorSlot = nullptr; // Current error being handled
+
     // Monomorphization: Generic type instantiation
     std::map<std::string, vyn::ast::StructDeclaration*> genericStructTemplates; // Store generic struct AST nodes (e.g., Box<T>)
     std::map<std::string, llvm::StructType*> monomorphizedStructs; // Cache instantiated types (e.g., "Box<Int>" -> Box_Int LLVM type)
@@ -225,6 +237,15 @@ private:
     llvm::Function* getPrintlnFunction();
     llvm::Function* getVynPrintlnFunction();
     llvm::Function* getSerializeToJsonFunction();
+    
+    // Error handling runtime functions
+    llvm::Function* getVynPanicFunction();
+    llvm::Function* getVynUntrappedErrorFunction();
+    
+    // Error handling helpers
+    void setupTrapContext(ast::BlockExpression* blockExpr, llvm::BasicBlock* continueBB);
+    void cleanupTrapContext();
+    llvm::Value* createErrorValue(ast::Expression* errorExpr, ast::TypeNode* errorType);
     
     // Vec operations
     void handleVecMethod(vyn::ast::CallExpression* node, const std::string& objectName, const std::string& methodName);

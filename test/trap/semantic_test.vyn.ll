@@ -4,6 +4,9 @@ source_filename = "VynModule"
 %MyError = type { i64, { ptr, i64 } }
 
 @0 = private unnamed_addr constant [17 x i8] c"Division by zero\00", align 1
+@1 = private unnamed_addr constant [15 x i8] c"Caught error: \00", align 1
+@2 = private unnamed_addr constant [17 x i8] c"Cleanup executed\00", align 1
+@type_name = private unnamed_addr constant [8 x i8] c"unknown\00", align 1
 
 define i64 @divide(i64 %a, i64 %b) !dbg !4 {
 entry:
@@ -24,9 +27,12 @@ then:                                             ; preds = %entry
   %message_ptr = getelementptr inbounds %MyError, ptr %MyError_obj, i32 0, i32 1, !dbg !11
   store { ptr, i64 } { ptr @0, i64 16 }, ptr %message_ptr, align 8, !dbg !11
   %MyError_val = load %MyError, ptr %MyError_obj, align 8, !dbg !11
-  br label %ifcont, !dbg !11
+  %error_temp = alloca %MyError, align 8, !dbg !11
+  store %MyError %MyError_val, ptr %error_temp, align 8, !dbg !11
+  call void @__vyn_runtime_untrapped_error(ptr %error_temp), !dbg !11
+  unreachable, !dbg !11
 
-ifcont:                                           ; preds = %then, %entry
+ifcont:                                           ; preds = %entry
   %a4 = load i64, ptr %a1, align 4, !dbg !11
   %b5 = load i64, ptr %b2, align 4, !dbg !11
   %sdivtmp = sdiv i64 %a4, %b5, !dbg !11
@@ -35,12 +41,40 @@ ifcont:                                           ; preds = %then, %entry
 
 define i64 @main() !dbg !14 {
 entry:
+  %trap_error = alloca %MyError, align 8
+  br label %block.normal, !dbg !17
+
+block.normal:                                     ; preds = %entry
   %calltmp = call i64 @divide(i64 10, i64 0), !dbg !17
+  br label %block.ensure, !dbg !17
+
+block.ensure:                                     ; preds = %block.normal
+  %serialize_temp = alloca { ptr, i64 }, align 8, !dbg !17
+  store { ptr, i64 } { ptr @2, i64 16 }, ptr %serialize_temp, align 8, !dbg !17
+  %serialized_json = call ptr @__vyn_serialize_to_json(ptr %serialize_temp, ptr @type_name), !dbg !17
+  call void @__vyn_println(ptr %serialized_json), !dbg !17
+  br label %block.continue, !dbg !17
+
+block.continue:                                   ; preds = %block.ensure
   ret i64 undef, !dbg !17
+
+trap.landing:                                     ; No predecessors!
+  %caught_error = load %MyError, ptr %trap_error, align 8, !dbg !17
+  %temp_struct = alloca %MyError, align 8, !dbg !17
+  store %MyError %caught_error, ptr %temp_struct, align 8, !dbg !17
+  %message_ptr = getelementptr inbounds %MyError, ptr %temp_struct, i32 0, i32 1, !dbg !17
+  %strcattmp = call ptr @__vyn_string_concat(ptr @1, ptr %message_ptr), !dbg !17
+  call void @__vyn_println(ptr %strcattmp), !dbg !17
+  ret i64 -1, !dbg !17
 }
 
 ; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)
 declare void @llvm.dbg.declare(metadata, metadata, metadata) #0
+
+; Function Attrs: noreturn
+declare void @__vyn_runtime_untrapped_error(ptr) #1
+
+declare ptr @__vyn_string_concat(ptr, ptr)
 
 declare void @__vyn_println(ptr)
 
@@ -49,6 +83,7 @@ declare ptr @__vyn_serialize_to_json(ptr, ptr)
 declare ptr @__vyn_convert_lit_string(ptr)
 
 attributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }
+attributes #1 = { noreturn }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!2, !3}
