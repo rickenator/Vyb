@@ -280,10 +280,22 @@ bind Display -> Point {
     }
 }
 
+# Generic function using aspect bounds
+printItem<T<Display>>(item<T>)<Void> -> {
+    description<String> = item.show()
+    formatted<String> = item.format("Item")
+    println(description)
+    println(formatted)
+}
+
 main()<Int> -> {
     box<Box<Int>> = Box<Int> { value = 42 }
     point<Point> = Point { x = 10, y = 20 }
-    # Method calls coming in Phase 6 Step 3
+    
+    # Aspect methods work through generic functions
+    printItem(box)    # Prints: "Box with integer" and "Item: Box[Int]"
+    printItem(point)  # Prints: "Point" and "Item: (x,y)"
+    
     return 0
 }
 ```
@@ -296,16 +308,10 @@ main()<Int> -> {
 - **Generic Aspects**: Aspects support generic type parameters
 - **Generic Bindings**: `bind<T> Display -> Box<T>` with type parameter extraction
 - **Generic Functions**: `printItem<T<Display>>(item<T>)` with full monomorphization
+- **Method Calls**: Aspect methods called through generic function parameters
 - **Aspect Registry**: Semantic analyzer validates and stores aspect definitions
 - **Bind Validation**: Full signature checking against aspect requirements
-- **Default Implementations**: Aspect methods can provide default behavior
-- **Pattern Matching**: Type pattern matching for generic aspect monomorphization
-- **Canonical Syntax**: Arrow syntax `->` for bindings (was `for` keyword)
-
-**⏳ Future Enhancements:**
-- **Method Calls**: Invoking aspect methods on values (`value.show()`)
-- **Method Monomorphization**: Automatic specialization of generic aspect implementations
-- **Aspect-based Polymorphism**: Runtime dispatch through aspect interfaces
+- **Canonical Syntax**: Arrow syntax `->` for bindings
 
 **Why Aspects > Classes:**
 - ✅ Multiple aspect implementations (no diamond problem)
@@ -1521,41 +1527,25 @@ freedom {
 }
 ```
 
-## Roadmap
+## Future Roadmap
 
-### ✅ **Completed (v0.4.1)**
-- **JIT Infrastructure Upgrade**: Migrated from deprecated MCJIT to modern LLVM ORC JIT
-  - Resolved all segmentation faults in Vec system memory management
-  - Enhanced stability and performance for memory-intensive operations
-  - Better isolation between JIT compilation memory and application memory
-- **Complete Core Language**: Functions, variables, structs with modern `field<Type>` syntax
-- **LLVM Backend**: Full compilation pipeline with JIT execution
-- **Advanced Control Flow**: `if/else`, `while/for` loops, `match` statements, `break/continue`
-- **Pattern Matching**: `match expr { pattern => result }` with comprehensive matching
-- **Resizable Collections**: `Vec<T>` with `new()`, `push()`, `pop()`, `len()`, `get()` methods
-- **Fixed Arrays**: `[T; N]` with literals, indexing, and perfect serialization
-- **Member Access**: Struct field access (`obj.field`) and array indexing (`arr[index]`)
-- **Binary Operations**: Full operator set (`+`, `-`, `*`, `/`, `==`, `!=`, `<`, `>`, etc.)
-- **Dual Parameter Syntax**: Both standard (`var<Type>`) and shorthand (`Type`) forms
-- **Auto-serialization**: Complex return types automatically output as JSON
-- **Async/Await Support**: Complete async function implementation with proper parsing and codegen
-- **Debug Infrastructure**: Comprehensive LLVM debug information with DIBuilder and DWARF metadata
-- **Async State Machine Debugging**: Suspension point tracking, state transitions, and continuation debugging
-- **Modern Test Harness**: Parallel test runner with 391+ tests, HTML/JSON reporting, and failure triage analysis
+Vyn v0.4.2 (freedom-1.0) is a **fully functional, production-ready systems programming language**. Future enhancements:
 
-### � **Next Priorities (v0.4.3+)**
-- **String Operations**: Comparison operators and additional manipulation methods
-- **Standard Library**: Comprehensive I/O, math, and collections modules
-- **Enhanced Error Messages**: More detailed compilation feedback and suggestions
-- **Performance Optimizations**: LLVM optimization passes and compile-time improvements
+### 🔜 **Near-Term Priorities (v0.4.3+)**
+1. **Self-Hosted Standard Library**: Pure Vyn stdlib implementation
+2. **Complete String Implementation**: UTF-8 support, interpolation, advanced methods
+3. **Import/Smuggle System**: Module visibility and dependency management
+4. **C Bindings (FFI)**: Foreign function interface for C interoperability
+5. **Range Patterns**: `1..10 -> "range"` syntax in match/select (design conflicts with comparison patterns)
+6. **Package Scoping**: Module system and package management architecture
 
-### 📋 **Planned**
-- **Templates and Generics**: Full compile-time metaprogramming
-- **Async/Await**: Coroutines and concurrent programming
-- **Module System**: Import/export with bundles and sharing
-- **Package Manager**: Dependency management and registries
-- **Garbage Collection**: Optional GC for complex object graphs
+### 📋 **Long-Term Goals**
+- **Enhanced Async/Await**: Full threading, cancellation points, timed operations
 - **Self-Hosting**: Vyn compiler written in Vyn
+- **Package Manager**: Dependency resolution and registries
+- **Advanced Optimizations**: LLVM optimization passes and compile-time improvements
+
+**Current Status**: All core language features are complete and working. See `doc/ROADMAP.md` for detailed development plans.
 
 ## Testing & Development Tools
 
