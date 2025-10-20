@@ -1,0 +1,13 @@
+# Semantic Test: Panic statement validation
+
+critical_failure(condition<Bool>)<Int> -> {
+    if (condition) {
+        panic("Critical system failure!")
+    }
+    return 0
+}
+
+main()<Int> -> {
+    result<Int> = critical_failure(true)
+    return result
+}

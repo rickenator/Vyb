@@ -304,6 +304,10 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
         delete funcSymbol;
     }
 
+    // Track current function for error handling validation
+    auto previousFunction = currentFunction;
+    currentFunction = node;
+
     enterScope();
     
     // Handle generic parameters if present (e.g., fn printItem<T<Display>>)
@@ -430,6 +434,9 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
     }
 
     exitScope();
+    
+    // Restore previous function context
+    currentFunction = previousFunction;
 }
 
 void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
@@ -1797,6 +1804,18 @@ void SemanticAnalyzer::visit(ast::BlockExpression* node) {
     if (node->block) {
         node->block->accept(*this);
     }
+    
+    // Process trap clauses attached to this block
+    for (auto& trapClause : node->trapClauses) {
+        if (trapClause) {
+            trapClause->accept(*this);
+        }
+    }
+    
+    // Process ensure clause if present
+    if (node->ensureClause) {
+        node->ensureClause->accept(*this);
+    }
 }
 void SemanticAnalyzer::visit(ast::SelectExpression* node) {
     // Visit the expression being matched
@@ -2827,54 +2846,163 @@ void SemanticAnalyzer::visit(ast::ThrowStatement* node) {}
 // --- Error Handling Visitor Implementations ---
 
 void SemanticAnalyzer::visit(ast::FailStatement* node) {
-    // TODO: Phase 1 implementation
-    // - Verify error expression is present
-    // - Type check error expression implements Errorable aspect
-    // - Capture stack trace information
-    if (node->error) {
-        node->error->accept(*this);
+    // Verify error expression is present
+    if (!node->error) {
+        addError("fail statement requires an error expression", node);
+        return;
     }
+    
+    // Type check the error expression
+    node->error->accept(*this);
+    
+    // Get the type of the error expression
+    auto it = expressionTypes.find(node->error.get());
+    if (it != expressionTypes.end() && it->second) {
+        ast::TypeNode* errorType = it->second;
+        
+        // TODO: Verify error type implements Errorable aspect when aspect system is complete
+        // For now, accept any struct/object type as potential error
+        
+        std::cout << "DEBUG: fail statement with error type: " << errorType->toString() << std::endl;
+    } else {
+        addError("Could not determine type of error expression in fail statement", node->error.get());
+    }
+    
+    // Note: Stack trace capture will be handled in codegen phase
 }
 
 void SemanticAnalyzer::visit(ast::TrapClause* node) {
-    // TODO: Phase 1 implementation
-    // - Verify error type is valid
-    // - Type check handler block
-    // - Ensure handler return type matches block expression type
-    if (node->errorType) {
-        node->errorType->accept(*this);
+    // Verify error name and type are present
+    if (!node->errorName) {
+        addError("trap clause requires an error variable name", node);
+        return;
     }
+    if (!node->errorType) {
+        addError("trap clause requires an error type", node);
+        return;
+    }
+    
+    // Type check the error type
+    node->errorType->accept(*this);
+    
+    // Enter new scope for trap handler
+    enterScope();
+    trapDepth++;
+    
+    // Add error type to active trap stack
+    activeTrapTypes.push_back(node->errorType.get());
+    
+    // Add error variable to scope (immutable binding)
+    SymbolInfo errorSymbol;
+    errorSymbol.name = node->errorName->name;
+    errorSymbol.type = node->errorType.get();
+    errorSymbol.isConst = true;  // Error binding is immutable (const)
+    errorSymbol.ownershipKind = ast::OwnershipKind::MY;  // Error value is owned
+    currentScope->add(errorSymbol);
+    
+    std::cout << "DEBUG: trap clause for error type: " << node->errorType->toString() << std::endl;
+    
+    // Type check handler block
     if (node->handler) {
         node->handler->accept(*this);
     }
+    
+    // Pop error type from trap stack
+    activeTrapTypes.pop_back();
+    trapDepth--;
+    
+    // Exit trap scope
+    exitScope();
+    
+    // TODO: Validate that handler return type matches the block expression's expected type
 }
 
 void SemanticAnalyzer::visit(ast::EnsureClause* node) {
-    // TODO: Phase 1 implementation
-    // - Type check cleanup block
-    // - Verify cleanup block returns Void or has expression statements
-    if (node->cleanupBlock) {
-        node->cleanupBlock->accept(*this);
+    // Verify cleanup block is present
+    if (!node->cleanupBlock) {
+        addError("ensure clause requires a cleanup block", node);
+        return;
     }
+    
+    std::cout << "DEBUG: processing ensure clause" << std::endl;
+    
+    // Enter new scope for ensure block
+    enterScope();
+    
+    // Type check cleanup block
+    node->cleanupBlock->accept(*this);
+    
+    // Exit ensure scope
+    exitScope();
+    
+    // Note: Cleanup blocks can return values but those are typically ignored
+    // They execute for side effects (cleanup resources)
 }
 
 void SemanticAnalyzer::visit(ast::RethrowStatement* node) {
-    // TODO: Phase 1 implementation
-    // - Verify rethrow is inside a trap clause
-    // - Type check transformed error if present
-    // - Ensure error type is compatible with outer trap clauses
+    // Verify rethrow is inside a trap clause
+    if (trapDepth == 0) {
+        addError("rethrow statement can only be used inside a trap clause", node);
+        return;
+    }
+    
+    std::cout << "DEBUG: rethrow statement at trap depth " << trapDepth << std::endl;
+    
+    // If transforming the error, type check the new error expression
     if (node->transformedError) {
         node->transformedError->accept(*this);
+        
+        // Get the type of the transformed error
+        auto it = expressionTypes.find(node->transformedError.get());
+        if (it != expressionTypes.end() && it->second) {
+            ast::TypeNode* newErrorType = it->second;
+            std::cout << "DEBUG: rethrow with transformed error type: " << newErrorType->toString() << std::endl;
+            
+            // TODO: Verify new error type is compatible with outer trap handlers
+        }
+    } else {
+        // Simple rethrow - propagates current error
+        if (!activeTrapTypes.empty()) {
+            ast::TypeNode* currentErrorType = activeTrapTypes.back();
+            std::cout << "DEBUG: rethrow current error type: " << currentErrorType->toString() << std::endl;
+        }
     }
 }
 
 void SemanticAnalyzer::visit(ast::PanicStatement* node) {
-    // TODO: Phase 1 implementation
-    // - Type check panic message (should be string)
-    // - Mark as noreturn for control flow analysis
-    if (node->message) {
-        node->message->accept(*this);
+    // Verify message expression is present
+    if (!node->message) {
+        addError("panic statement requires a message expression", node);
+        return;
     }
+    
+    // Type check the message expression
+    node->message->accept(*this);
+    
+    // Get the type of the message
+    auto it = expressionTypes.find(node->message.get());
+    if (it != expressionTypes.end() && it->second) {
+        ast::TypeNode* msgType = it->second;
+        
+        // Verify message is a string type
+        if (auto typeName = dynamic_cast<ast::TypeName*>(msgType)) {
+            if (typeName->identifier && 
+                (typeName->identifier->name == "String" || 
+                 typeName->identifier->name == "str" ||
+                 typeName->identifier->name == "string")) {
+                std::cout << "DEBUG: panic statement with string message" << std::endl;
+            } else {
+                addError("panic message must be a String type, got: " + typeName->toString(), node->message.get());
+            }
+        } else {
+            addError("panic message must be a String type", node->message.get());
+        }
+    } else {
+        addError("Could not determine type of panic message", node->message.get());
+    }
+    
+    // Note: panic is a noreturn operation - control flow never continues after panic
+    // This will be tracked in control flow analysis
 }
 
 void SemanticAnalyzer::visit(ast::TypeNode* node) {

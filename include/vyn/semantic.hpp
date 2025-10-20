@@ -406,6 +406,11 @@ private:
     // Context for resolving 'Self' type in aspect implementations
     ast::TypeNode* currentImplType = nullptr;  // Set to Box<T> when processing bind Display -> Box<T>
     bool processingTraitOrBindMethod = false;  // True when visiting methods inside aspect or bind
+    
+    // Error handling context
+    ast::FunctionDeclaration* currentFunction = nullptr;  // Track current function for error analysis
+    int trapDepth = 0;  // Track nesting depth of trap clauses
+    std::vector<ast::TypeNode*> activeTrapTypes;  // Stack of error types being trapped
 
     void enterScope();
     void exitScope();

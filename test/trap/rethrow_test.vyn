@@ -1,0 +1,39 @@
+# Semantic Test: Rethrow statement validation
+
+struct NetworkError {
+    code<Int>,
+    message<String>
+}
+
+struct TransformedError {
+    original_code<Int>,
+    new_message<String>
+}
+
+process_data()<Int> -> {
+    result<Int> = {
+        # This should fail
+        fail NetworkError { code = 404, message = "Not found" }
+        return 100
+    } trap (e<NetworkError>) -> {
+        println("Caught network error: " + e.message)
+        # Transform and rethrow
+        rethrow TransformedError { 
+            original_code = e.code, 
+            new_message = "Transformed: " + e.message 
+        }
+    }
+    
+    return result
+}
+
+main()<Int> -> {
+    final_result<Int> = {
+        process_data()
+    } trap (e<TransformedError>) -> {
+        println("Caught transformed error")
+        return -1
+    }
+    
+    return final_result
+}
