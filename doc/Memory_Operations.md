@@ -1,14 +1,14 @@
 # Vyn Memory Operations
 
-This document describes Vyn's memory model and the operations available for low-level memory manipulation. Vyn follows a hybrid approach to memory management, with safe memory operations by default and explicit unsafe operations when needed.
+This document describes Vyn's memory model and the operations available for low-level memory manipulation. Vyn follows a hybrid approach to memory management, with safe memory operations by default and explicit freedom operations when needed.
 
 ## 1. Memory Safety Philosophy
 
 Vyn's memory model is designed with these principles:
 
 - **Safe by Default**: Normal Vyn code operates with memory safety guarantees
-- **Explicit Unsafety**: Unsafe operations must be contained within `unsafe` blocks
-- **Minimal Unsafe Surface**: The language minimizes the number of unsafe operations needed
+- **Explicit Unsafety**: Freedom operations must be contained within `freedom` blocks
+- **Minimal Freedom Surface**: The language minimizes the number of freedom operations needed
 - **Clear Intent**: Memory operations use clear syntax that indicates their purpose
 
 ## 2. Pointer Types
@@ -19,14 +19,14 @@ The `loc<T>` type represents a raw pointer to memory containing a value of type 
 
 - **Syntax**: `loc<T>`
 - **AST Representation**: `GenericInstanceTypeNode` with a base type of "loc" and a type argument of `T`
-- **Safety**: Always considered unsafe to dereference or modify
+- **Safety**: Always considered freedom to dereference or modify
 
 Example:
 ```vyn
 var<Int> x = 42;
 var<loc<Int>> p; // Declares a pointer to Int
 
-unsafe {
+freedom {
     p = loc(x);  // Sets p to point to x
 }
 ```
@@ -49,12 +49,12 @@ The `loc()` operation creates a pointer to a variable.
 - **AST Representation**:
   - `ConstructionExpression` with type "loc" and the target expression as an argument
   - Or `CallExpression` with identifier "loc" and the target expression as an argument
-- **Safety**: Must be used within an `unsafe` block
+- **Safety**: Must be used within an `freedom` block
 
 Example:
 ```vyn
 var<Int> x = 42;
-unsafe {
+freedom {
     var<loc<Int>> p = loc(x);
 }
 ```
@@ -70,11 +70,11 @@ The `at()` operation accesses the value at a pointer's location.
 - **Behavior**:
   - When used on the right side of an assignment: Loads the value from the pointer
   - When used on the left side of an assignment: Sets up a store to the pointer
-- **Safety**: Must be used within an `unsafe` block
+- **Safety**: Must be used within an `freedom` block
 
 Examples:
 ```vyn
-unsafe {
+freedom {
     var<Int> y = at(p);  // Reading from a pointer (load)
     at(p) = 99;          // Writing to a pointer (store)
 }
@@ -87,11 +87,11 @@ The `from<loc<T>>()` operation converts between different pointer types or from 
 - **Syntax**: `from<loc<T>>(expr)`
 - **Return Type**: `loc<T>`
 - **AST Representation**: `ConstructionExpression` with a `GenericInstanceTypeNode` for "from" and the source expression as an argument
-- **Safety**: Must be used within an `unsafe` block
+- **Safety**: Must be used within an `freedom` block
 
 Examples:
 ```vyn
-unsafe {
+freedom {
      // Convert an integer to a pointer
     var<Int> addr = 0x12345678;
     var<loc<Int>> p = from<loc<Int>>(addr);
@@ -102,12 +102,12 @@ unsafe {
 }
 ```
 
-## 4. Unsafe Blocks
+## 4. Freedom Blocks
 
-All memory operations must be contained within `unsafe` blocks, which are represented as `UnsafeBlockStatement` nodes in the AST.
+All memory operations must be contained within `freedom` blocks, which are represented as `UnsafeBlockStatement` nodes in the AST.
 
-- **Syntax**: `unsafe { ... }`
-- **AST Representation**: `UnsafeBlockStatement` containing a `BlockStatement` with the unsafe operations
+- **Syntax**: `freedom { ... }`
+- **AST Representation**: `UnsafeBlockStatement` containing a `BlockStatement` with the freedom operations
 - **Purpose**: Explicitly marks code that may violate memory safety
 
 Example:
@@ -115,14 +115,14 @@ Example:
 var<Int> x = 42;
 var<loc<Int>> p;
 
-unsafe {
+freedom {
     p = loc(x);
     at(p) = 99;
 }
 
 // The following would cause a compile-time error:
-// p = loc(x);  // Error: 'loc' operation outside unsafe block
-// at(p) = 99;  // Error: 'at' operation outside unsafe block
+// p = loc(x);  // Error: 'loc' operation outside freedom block
+// at(p) = 99;  // Error: 'at' operation outside freedom block
 ```
 
 ## 5. Error Cases and Safety Checks
@@ -130,7 +130,7 @@ unsafe {
 The Vyn compiler and runtime perform various safety checks:
 
 1. **Compile-time checks**:
-   - Memory operations outside unsafe blocks are rejected
+   - Memory operations outside freedom blocks are rejected
    - Type mismatches in pointer operations are caught
    - Null pointer constants are detected
 

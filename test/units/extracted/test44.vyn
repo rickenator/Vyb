@@ -1,6 +1,6 @@
 // filepath: /home/rick/Projects/Vyn/test/units/extracted/test44.vyn
-// @test: Semantic: 'from(addr_val)' requires unsafe block (already covered but good to be explicit)
-// @description: Extracted from tests.cpp - Semantic: 'from(addr_val)' requires unsafe block (already covered but good to be explicit)
+// @test: Semantic: 'from(addr_val)' requires freedom block (already covered but good to be explicit)
+// @description: Extracted from tests.cpp - Semantic: 'from(addr_val)' requires freedom block (already covered but good to be explicit)
 // @category: parser
 // @expect: pass
 // @parse-only: true

@@ -146,10 +146,10 @@ As the Vyn project grows, a more structured directory layout will be beneficial 
 -   **Memory Layout**: Define and document memory layout guarantees for all types, ensuring consistent behavior across platforms.
 -   **FFI Compatibility**: Ensure all primitive types have well-defined mappings to C/C++ equivalents for FFI interoperability.
 
-### Refinement of Memory Model and Unsafe Operations
+### Refinement of Memory Model and Freedom Operations
 
 -   **Complete LLVM Codegen**: Finish the implementation and refinement of LLVM code generation for `LocationExpression`, `PointerDerefExpression`, `AddrOfExpression`, and `FromIntToLocExpression` in `src/vre/llvm/cgen_expr.cpp`.
--   **Enhance Semantic Analysis**: Strengthen semantic checks related to memory operations, including more robust type validation and analysis within `unsafe` blocks.
+-   **Enhance Semantic Analysis**: Strengthen semantic checks related to memory operations, including more robust type validation and analysis within `freedom` blocks.
 -   **Runtime Checks (Optional)**: Investigate adding optional runtime checks for null pointer dereferences and out-of-bounds access, potentially controlled by build flags.
 
 ### Formalization of Compiler Intrinsics
@@ -436,7 +436,7 @@ This feature will enable scripts and API-style binaries to return structured dat
     ```
 -   **Casting Operations**: Formalize and implement casting operations, including:
     -   `cast<T>(expr)`: Explicit casting of expression to type T
-    -   Safe versus unsafe casts, with appropriate compiler warnings or errors
+    -   Safe versus freedom casts, with appropriate compiler warnings or errors
     -   Rules for implicit conversions between compatible types
 
 ### Polymorphism and Type System

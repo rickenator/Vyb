@@ -6,7 +6,7 @@ main()<Int> -> {
     println("Created x = 42")
     
     // Test that borrow() and view() parse correctly with function-call syntax
-    unsafe {
+    freedom {
         p<loc<Int>> = loc(x)
         at(p) = 100
         println("Modified x through pointer to 100")

@@ -44,10 +44,10 @@ var<their<Foo>> b     = their<Foo>(owner)       // mutable borrow
 var<their<Foo const>> v = their<Foo const>(owner)  // immutable borrow
 ```
 
-Pointer declarations (inside `unsafe`):
+Pointer declarations (inside `freedom`):
 
 ```vyn
-unsafe {
+freedom {
   var<loc<Int>> p = loc(x)
   at(p) = 99
 }
@@ -141,13 +141,13 @@ fn view(owner)   -> their<T const>
 
 ---
 
-## 5. Memory Intrinsics (`unsafe` required)
+## 5. Memory Intrinsics (`freedom` required)
 
 ```vyn
-unsafe fn loc<T>(expr: T) -> loc<T>
-unsafe fn at<T>(pointer: loc<T>) -> T
-unsafe fn addr<T>(pointer: loc<T>) -> Int64
-unsafe fn from<P>(addr: Int64) -> P
+freedom fn loc<T>(expr: T) -> loc<T>
+freedom fn at<T>(pointer: loc<T>) -> T
+freedom fn addr<T>(pointer: loc<T>) -> Int64
+freedom fn from<P>(addr: Int64) -> P
 ```
 
 - **`loc<T>(expr)`**: address‑of a value → `loc<T>`.  
@@ -330,6 +330,6 @@ fn mem_set(ptr: loc<UInt8>, value: UInt8, n: UInt) -> Void
 1. **Declarations**: choose explicit (`var<T>`) or inferred (`var auto`).  
 2. **Functions**: return in `<Type>`, arrow mandatory, braces optional for single expressions.  
 3. **Ownership**: use `my<T>`, `our<T>`, `their<T>`, with optional `borrow()`/`view()` shorthand.  
-4. **Intrinsics**: memory ops only in `unsafe`, metadata always safe.  
+4. **Intrinsics**: memory ops only in `freedom`, metadata always safe.  
 5. **Serialization**: use auto-serialization for `main()` returns; mode intrinsics for customization.
 6. **Stability**: Sections 4–7 are stable; Section 8 is experimental.

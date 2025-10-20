@@ -79,7 +79,7 @@ vyn::ast::StmtPtr StatementParser::parse() {
             return parse_block();
         case vyn::TokenType::KEYWORD_TRY:
             return parse_try();
-        case vyn::TokenType::KEYWORD_UNSAFE:
+        case vyn::TokenType::KEYWORD_FREEDOM:
             return parse_unsafe();
         case vyn::TokenType::KEYWORD_DEFER:
             return parse_defer();
@@ -838,7 +838,7 @@ bool StatementParser::is_statement_start(vyn::TokenType type) const {
         case vyn::TokenType::LBRACE:
         case vyn::TokenType::KEYWORD_BREAK:
         case vyn::TokenType::KEYWORD_CONTINUE:
-        case vyn::TokenType::KEYWORD_UNSAFE:
+        case vyn::TokenType::KEYWORD_FREEDOM:
         case vyn::TokenType::IDENTIFIER: // Added identifier for relaxed syntax
             return true;
         default:
@@ -1120,9 +1120,9 @@ std::unique_ptr<vyn::ast::ContinueStatement> StatementParser::parse_continue() {
     return std::make_unique<vyn::ast::ContinueStatement>(continue_loc);
 }
 
-// Parses an unsafe block: 'unsafe { ... }'
+// Parses an freedom block: 'freedom { ... }'
 std::unique_ptr<vyn::ast::UnsafeStatement> StatementParser::parse_unsafe() {
-    SourceLocation loc = expect(vyn::TokenType::KEYWORD_UNSAFE, "Expected 'unsafe'").location;
+    SourceLocation loc = expect(vyn::TokenType::KEYWORD_FREEDOM, "Expected 'freedom'").location;
     auto blockStmt = parse_block(); // parse_block consumes '{' and '}'
     return std::make_unique<vyn::ast::UnsafeStatement>(loc, std::move(blockStmt));
 }

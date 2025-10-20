@@ -3,7 +3,7 @@
 main()<Int> -> {
     x<Int> = 10; // Not an owned type (missing my<> or our<>)
     
-    unsafe {
+    freedom {
         // Using borrow on non-owned type should fail
         b<their<Int>> = borrow x;
         b = 20;

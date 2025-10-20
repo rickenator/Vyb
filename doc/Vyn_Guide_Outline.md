@@ -45,7 +45,7 @@
 8. **Ownership & Memory Model**
    8.1. `my<T>`, `our<T>`, `their<T>` Semantics  
    8.2. Borrow-Checker Rules  
-   8.3. `unsafe {}` and Raw Pointers (`loc`, `at`, `addr`, `from`)  
+   8.3. `freedom {}` and Raw Pointers (`loc`, `at`, `addr`, `from`)  
    8.4. Intrinsics Reference  
 
 9. **Concurrency Primitives**

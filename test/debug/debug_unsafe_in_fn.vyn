@@ -1,1 +1,1 @@
-main()<Int> -> { unsafe { x<Int> = 5; } return 42; }
+main()<Int> -> { freedom { x<Int> = 5; } return 42; }

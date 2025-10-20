@@ -10,7 +10,7 @@
 main()<Int> -> {
     x<Int> = 77;
     p<loc<Int>>;
-    unsafe {
+    freedom {
         p = loc(x);
         at(p) = 99;
     }

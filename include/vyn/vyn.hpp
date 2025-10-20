@@ -16,7 +16,7 @@
  * ✅ Select expressions with pass keyword (expression-based pattern matching)
  * ✅ Comparison patterns (>=, <=, <, >, ==, !=) with unreachable pattern detection
  * ✅ Type system with ownership (my<T>, our<T>, their<T>)
- * ✅ Memory safety with borrowing (view, borrow) and unsafe blocks
+ * ✅ Memory safety with borrowing (view, borrow) and freedom blocks
  * ✅ Comprehensive parser supporting templates, async, classes
  * 📋 Standard library modules (planned)
  * 

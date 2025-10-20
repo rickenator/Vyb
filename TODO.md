@@ -23,7 +23,7 @@ Based on comprehensive implementation progress, approximately **50-60%** of core
 - **Expressions**: Binary ops, unary ops, member access, function calls
 - **Pattern matching**: match statements with destructuring
 - **LLVM Integration**: Complete codegen with JIT execution and DWARF debug info
-- **Unsafe blocks**: Full support with semantic validation
+- **Freedom blocks**: Full support with semantic validation
 
 ### Type System (Complete)
 - **Primitive types**: Int, Int8-64, UInt8-64, Float32/64, Bool, Char, Rune, String
@@ -81,9 +81,9 @@ Based on comprehensive implementation progress, approximately **50-60%** of core
   - [ ] LLVM codegen for ownership
 
 #### 4. **Memory Management** ⚠️ CRITICAL  
-- [🔶] **Unsafe blocks** - PARTIALLY IMPLEMENTED
-  - [x] `unsafe { ... }` parsing and tokenization
-  - [ ] Semantic validation (operations only allowed in unsafe)
+- [🔶] **Freedom blocks** - PARTIALLY IMPLEMENTED
+  - [x] `freedom { ... }` parsing and tokenization
+  - [ ] Semantic validation (operations only allowed in freedom)
 - [ ] **Memory intrinsics** - NOT IMPLEMENTED
   - [ ] `loc<T>()` pointer creation intrinsic
   - [ ] `at()` pointer dereferencing intrinsic
@@ -151,7 +151,7 @@ Based on comprehensive implementation progress, approximately **50-60%** of core
 
 ### Active Issues
 - [x] **LLVM Type Mismatches**: Return types show as `i32` instead of actual types *(IN PROGRESS)*
-- [x] **Unsafe Keyword**: ~~Tokenized as `UNKNOWN` instead of `KEYWORD_UNSAFE`~~ *(FIXED - works correctly in function context)*
+- [x] **Freedom Keyword**: ~~Tokenized as `UNKNOWN` instead of `KEYWORD_UNSAFE`~~ *(FIXED - works correctly in function context)*
 - [ ] **Semantic Analysis**: Incomplete type checking and validation
 - [ ] **Error Handling**: Parser error recovery needs improvement
 
@@ -233,7 +233,7 @@ Function return type does not match operand type of return inst!
 - ✅ `test/async/async_comprehensive.vyn` - Async with await expressions
 - ✅ `test/string/*.vyn` - String operations and methods
 - ✅ `examples/binary_tree*.vyn` - Complex data structures
-- ✅ Unsafe blocks with memory operations
+- ✅ Freedom blocks with memory operations
 
 ### Known Issues
 - ⚠️ Generic types fail LLVM codegen (needs Phase 5 monomorphization)

@@ -102,7 +102,7 @@ build/vyn tuple.vyn  # Outputs: [42, "Hello!"]
 *   **Borrowing**:
     *   `view(expr)`: Creates an immutable borrow `their<T const>`.
     *   `borrow(expr)`: Creates a mutable borrow `their<T>`.
-*   **`unsafe` Blocks**: Sections of code marked `unsafe { ... }` where raw pointers (`loc<T>`) can be used and some compiler guarantees are relaxed. Within these blocks, operations like `at(ptr)` for dereferencing and `from<loc<T>>()` for pointer conversion are available.
+*   **`freedom` Blocks**: Sections of code marked `freedom { ... }` where raw pointers (`loc<T>`) can be used and some compiler guarantees are relaxed. Within these blocks, operations like `at(ptr)` for dereferencing and `from<loc<T>>()` for pointer conversion are available.
 *   **Scoped Block**: Planned block prefixed with `scoped` that defers GC and cleans up at block exit.
 *   **Actor**: Planned lightweight concurrent entity with a built-in mailbox for message passing.
 *   **Tiered JIT**: Planned two-level execution—bytecode interpreter for startup, optimized native JIT for hot code.
@@ -370,7 +370,7 @@ main()<Int> -> {
 | `my<T>` | Unique ownership | Single owner, move semantics | `data<my<Person>> = my(Person{...})` |
 | `our<T>` | Shared ownership | Reference counting | `config<our<Settings>> = our(Settings{...})` |
 | `their<T>` | Borrowed reference | Non-owning access | `ref<their<Data>> = view(owner)` |
-| `loc<T>` | Raw pointer | Unsafe operations only | `ptr<loc<Int>> = loc(variable)` |
+| `loc<T>` | Raw pointer | Freedom operations only | `ptr<loc<Int>> = loc(variable)` |
 
 ### ✅ **Canonical Ownership Syntax** 
 
@@ -417,8 +417,8 @@ python3 migrate_syntax.py --migrate --directory . --backup --report
 ### ✅ **Memory Management**
 - **Ownership types**: `my<T>`, `our<T>`, `their<T>` for safe memory handling
 - **Borrowing**: `view(expr)` and `borrow(expr)` for references  
-- **Unsafe operations**: `loc<T>` pointers in `unsafe {}` blocks
-- **Raw Memory Operations**: Complete `unsafe` block system with `loc<T>` pointers
+- **Freedom operations**: `loc<T>` pointers in `freedom {}` blocks
+- **Raw Memory Operations**: Complete `freedom` block system with `loc<T>` pointers
 - **Memory Safety**: Borrow checking and lifetime analysis prevent dangling pointers
 - **Hybrid Model**: Combines ownership with planned GC for maximum flexibility
 
@@ -510,7 +510,7 @@ main()<Int> -> {
 }
 ```
 
-### Memory Safety & Unsafe Operations
+### Memory Safety & Freedom Operations
 
 Vyn's design philosophy emphasizes safety by default, but provides escape hatches for low-level memory manipulation when needed:
 
@@ -531,12 +531,12 @@ safe_memory_example()<Int> -> {
     return 42
 }
 
-# Unsafe operations for low-level control
+# Freedom operations for low-level control
 unsafe_memory_example()<Int> -> {
     x<Int> = 42
     result<Int> = 0
     
-    unsafe {
+    freedom {
         # Create raw pointers
         p<loc<Int>> = loc(x)     # Get pointer to x
         q<loc<Int>> = loc(result) # Get pointer to result
@@ -553,12 +553,12 @@ unsafe_memory_example()<Int> -> {
 }
 ```
 
-**Safety Guidelines for Unsafe Code:**
-1. Minimize the scope of `unsafe` blocks
+**Safety Guidelines for Freedom Code:**
+1. Minimize the scope of `freedom` blocks
 2. Document all invariants and assumptions
 3. Validate pointers before dereferencing
-4. Encapsulate unsafe operations behind safe abstractions
-5. Test unsafe code extensively
+4. Encapsulate freedom operations behind safe abstractions
+5. Test freedom code extensively
 
 ### Syntax and Literals
 
@@ -652,7 +652,7 @@ borrowed<their<String>> = borrow(safe_data)  # Non-owning reference
 - **Dynamic arrays**: `Vec<T>` resizable collections
 - **Tuples**: `Tuple<T,U,...>` variadic heterogeneous types
 
-**Ownership Types**: `my<T>` (unique), `our<T>` (shared), `their<T>` (borrowed), `loc<T>` (unsafe raw pointer)
+**Ownership Types**: `my<T>` (unique), `our<T>` (shared), `their<T>` (borrowed), `loc<T>` (freedom raw pointer)
 
 **Type Aliasing**: All numeric types support multiple naming conventions:
 - Vyn style: `Int32`, `Float64`, `UInt8`
@@ -1513,8 +1513,8 @@ another_ref<our<String>> = shared  # Reference count incremented
 view_ref<their<String>> = view(shared)      # Immutable borrow
 mut_ref<their<String>> = borrow(owned)      # Mutable borrow
 
-# Raw pointers for unsafe operations
-unsafe {
+# Raw pointers for freedom operations
+freedom {
     x<Int> = 42
     ptr<loc<Int>> = loc(x)  # Get pointer to x
     at(ptr) = 99           # Modify through pointer
@@ -1964,7 +1964,7 @@ BorrowExpr             ::= 'borrow' '(' Expression ')'
 - `view(expr)`: Creates `their<T const>` immutable borrow
 - `borrow(expr)`: Creates `their<T>` mutable borrow
 
-**Unsafe Operations:**
+**Freedom Operations:**
 - `loc<T>`: Raw pointer type
 - `loc(expr)`: Get pointer to expression
 - `at(ptr)`: Dereference pointer (read/write)

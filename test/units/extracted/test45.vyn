@@ -1,6 +1,6 @@
 // filepath: /home/rick/Projects/Vyn/test/units/extracted/test45.vyn
-// @test: Semantic: 'addr(loc_var)' is safe (does not require unsafe block)
-// @description: Extracted from tests.cpp - Semantic: 'addr(loc_var)' is safe (does not require unsafe block)
+// @test: Semantic: 'addr(loc_var)' is safe (does not require freedom block)
+// @description: Extracted from tests.cpp - Semantic: 'addr(loc_var)' is safe (does not require freedom block)
 // @category: parser
 // @expect: pass
 // @parse-only: true

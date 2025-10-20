@@ -2,7 +2,7 @@
 main()<Int> -> {
     x<Int> = 42;
     
-    unsafe {
+    freedom {
         p<loc<Int>> = loc(x);
         at(p) = 100;  // Change x through pointer
         b<their<Int>> = borrow(x);

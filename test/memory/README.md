@@ -80,7 +80,7 @@ build/vyn test/memory/borrow_test.vyn
 - Pointer dereferencing with `at()`
 - Creating borrows with `borrow()`
 - Creating views with `view()`
-- All inside `unsafe {}` blocks
+- All inside `freedom {}` blocks
 
 **Expected behavior**:
 - Returns 100 (modified value through pointer)
@@ -110,15 +110,15 @@ build/vyn test/memory/simple_memory_test.vyn
 |-----------|--------|---------|-------------|
 | Unique constructor | `my(expr)` | `my<T>` | Creates unique ownership |
 | Shared constructor | `our(expr)` | `our<T>` | Creates shared ownership |
-| Mutable borrow | `borrow(expr)` | `their<T>` | Borrows mutably (unsafe) |
-| Immutable borrow | `view(expr)` | `their<T const>` | Borrows immutably (unsafe) |
-| Pointer creation | `loc(expr)` | `loc<T>` | Gets memory location (unsafe) |
-| Pointer dereference | `at(ptr)` | `T` | Accesses value at pointer (unsafe) |
+| Mutable borrow | `borrow(expr)` | `their<T>` | Borrows mutably (freedom) |
+| Immutable borrow | `view(expr)` | `their<T const>` | Borrows immutably (freedom) |
+| Pointer creation | `loc(expr)` | `loc<T>` | Gets memory location (freedom) |
+| Pointer dereference | `at(ptr)` | `T` | Accesses value at pointer (freedom) |
 
 ### Safety Rules
 
-1. **`borrow()` and `view()` require `unsafe {}`** - These operations bypass ownership checks
-2. **`loc()` and `at()` require `unsafe {}`** - Direct memory access is inherently unsafe
+1. **`borrow()` and `view()` require `freedom {}`** - These operations bypass ownership checks
+2. **`loc()` and `at()` require `freedom {}`** - Direct memory access is inherently freedom
 3. **`my<T>` ownership is unique** - Only one owner at a time (moves invalidate original)
 4. **`our<T>` is reference counted** - Multiple owners share immutable data
 5. **`their<T>` is temporary** - Borrows must not outlive their owner
@@ -147,10 +147,10 @@ All tests should:
 
 ## Common Issues
 
-### "borrow() can only be used inside an unsafe block"
-**Solution**: Wrap `borrow()` and `view()` calls in `unsafe {}` blocks:
+### "borrow() can only be used inside an freedom block"
+**Solution**: Wrap `borrow()` and `view()` calls in `freedom {}` blocks:
 ```vyn
-unsafe {
+freedom {
     borrowed<their<Int>> = borrow(data)
 }
 ```
@@ -159,15 +159,15 @@ unsafe {
 **Solution**: Ensure you're borrowing from `my<T>` or `our<T>`, not plain `T`:
 ```vyn
 data<my<Int>> = my(42)  // Correct
-unsafe {
+freedom {
     borrowed<their<Int>> = borrow(data)  // Works
 }
 ```
 
 ### Pointer operations fail
-**Solution**: All pointer operations require `unsafe {}`:
+**Solution**: All pointer operations require `freedom {}`:
 ```vyn
-unsafe {
+freedom {
     ptr<loc<Int>> = loc(x)
     value<Int> = at(ptr)
 }

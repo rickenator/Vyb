@@ -28,7 +28,7 @@ enum class TokenType {
     KEYWORD_MY, KEYWORD_OUR, KEYWORD_THEIR, KEYWORD_PTR, // New ownership keywords
     KEYWORD_BORROW, KEYWORD_VIEW, // Changed from BORROW_MUT
     KEYWORD_NIL, // Added for nil literal
-    KEYWORD_UNSAFE, // Added for unsafe blocks
+    KEYWORD_FREEDOM, // Added for freedom blocks
     KEYWORD_AUTO, // Added for auto type inference
 
     // Operators

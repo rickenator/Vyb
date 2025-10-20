@@ -1,6 +1,6 @@
 // filepath: /home/rick/Projects/Vyn/test/units/extracted/test38.vyn
-// @test: Semantic: from(addr) only allowed in unsafe
-// @description: Extracted from tests.cpp - Semantic: from(addr) only allowed in unsafe
+// @test: Semantic: from(addr) only allowed in freedom
+// @description: Extracted from tests.cpp - Semantic: from(addr) only allowed in freedom
 // @category: parser
 // @expect: pass
 // @parse-only: true

@@ -1,6 +1,6 @@
 // filepath: /home/rick/Projects/Vyn/test/units/extracted/test51.vyn
-// @test: Codegen: 'loc()' and 'at()' for write in unsafe block
-// @description: Extracted from tests.cpp - Codegen: 'loc()' and 'at()' for write in unsafe block
+// @test: Codegen: 'loc()' and 'at()' for write in freedom block
+// @description: Extracted from tests.cpp - Codegen: 'loc()' and 'at()' for write in freedom block
 // @category: parser
 // @expect: pass
 // @parse-only: true

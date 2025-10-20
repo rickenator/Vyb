@@ -1,1 +1,1 @@
-unsafe { x<Int> = 5; }
+freedom { x<Int> = 5; }

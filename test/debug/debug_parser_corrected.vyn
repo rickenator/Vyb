@@ -1,7 +1,7 @@
 main()<Int> -> {
     addr<Int> = 0x1234;
     p<loc<Int>>;
-    unsafe {
+    freedom {
         p = from<loc<Int>>(addr);
     }
     return 0;

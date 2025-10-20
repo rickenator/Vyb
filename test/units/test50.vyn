@@ -2,7 +2,7 @@
 main()<Int> -> {
     x<my<Int>> = 10;
     
-    unsafe {
+    freedom {
         // Test borrow shorthand for mutable borrow
         b<their<Int>> = borrow x;
         b = 20; // Modify through the borrow

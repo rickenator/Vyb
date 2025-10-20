@@ -19,7 +19,7 @@
 - ✅ **Auto-Serialization**: Complex return types output JSON automatically
 - ✅ **Type Safety**: Strong type checking with clear error messages
 - ✅ **Memory Management**: Ownership types (my<T>, our<T>, their<T>)
-- ✅ **Unsafe Operations**: loc<T> pointers with proper unsafe blocks
+- ✅ **Freedom Operations**: loc<T> pointers with proper freedom blocks
 - ✅ **Source Locations**: Comprehensive error reporting with file/line info
 - ✅ **Parser Robustness**: Handles complex syntax including templates, async
 - ✅ **Git Workflow**: Regular commits, proper branching (v0.3.7)

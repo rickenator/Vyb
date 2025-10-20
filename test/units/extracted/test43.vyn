@@ -1,6 +1,6 @@
 // filepath: /home/rick/Projects/Vyn/test/units/extracted/test43.vyn
-// @test: Semantic: 'at(loc_var) = val' (write) requires unsafe block
-// @description: Extracted from tests.cpp - Semantic: 'at(loc_var) = val' (write) requires unsafe block
+// @test: Semantic: 'at(loc_var) = val' (write) requires freedom block
+// @description: Extracted from tests.cpp - Semantic: 'at(loc_var) = val' (write) requires freedom block
 // @category: parser
 // @expect: pass
 // @parse-only: true

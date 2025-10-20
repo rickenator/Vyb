@@ -1,6 +1,6 @@
 main()<Int> -> {
     x<Float>; // x is Float
-    unsafe {
+    freedom {
         p<loc<Int>> = loc(x); // Error: trying to get loc<Int> from Float
     }
     return 0;

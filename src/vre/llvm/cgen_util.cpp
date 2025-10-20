@@ -77,7 +77,7 @@ llvm::Value* LLVMCodegen::tryCast(llvm::Value* value, llvm::Type* targetType, co
     if (!value || !targetType) return nullptr;
     if (value->getType() == targetType) return value;
 
-    // Example: Integer to Pointer (potentially unsafe, use with care)
+    // Example: Integer to Pointer (potentially freedom, use with care)
     if (targetType->isPointerTy() && value->getType()->isIntegerTy()) {
         return builder->CreateIntToPtr(value, targetType, "inttoptr_cast");
     }

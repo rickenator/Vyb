@@ -596,13 +596,13 @@ void LLVMCodegen::visit(vyn::ast::TryStatement* node) {
 }
 
 void LLVMCodegen::visit(vyn::ast::UnsafeStatement* node) {
-    // For LLVM codegen, an unsafe block doesn't typically translate to specific LLVM instructions.
+    // For LLVM codegen, an freedom block doesn't typically translate to specific LLVM instructions.
     // Its purpose is to bypass semantic checks in the Vyn language itself.
     // So, we just visit the inner block.
     if (node->block) {
         node->block->accept(*this);
     }
-    // An unsafe statement, like a regular block, doesn't produce a value for further expressions.
+    // An freedom statement, like a regular block, doesn't produce a value for further expressions.
     m_currentLLVMValue = nullptr;
 }
 

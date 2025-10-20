@@ -37,7 +37,7 @@ test_borrow_mutable()<Int> -> {
     data<my<TestData>> = my(TestData { value = 100, name = "test" })
     println("Created TestData with value: 100")
     
-    unsafe {
+    freedom {
         borrowed<their<TestData>> = borrow(data)
         println("Created mutable borrow")
         
@@ -56,7 +56,7 @@ test_view_immutable()<Int> -> {
     data<my<Int>> = my(42)
     println("Created my<Int> with value: 42")
     
-    unsafe {
+    freedom {
         viewed<their<Int const>> = view(data)
         println("Created immutable view")
         
@@ -76,7 +76,7 @@ test_loc_at_pointers()<Int> -> {
     x<Int> = 42
     println("Created Int x = 42")
     
-    unsafe {
+    freedom {
         ptr<loc<Int>> = loc(x)
         println("Created pointer to x")
         
@@ -102,7 +102,7 @@ test_borrow_function_params()<Int> -> {
     data<my<TestData>> = my(TestData { value = 10, name = "param_test" })
     println("Created TestData with value: 10")
     
-    unsafe {
+    freedom {
         modify_through_borrow(borrow(data))
     }
     
@@ -121,7 +121,7 @@ test_view_function_params()<Int> -> {
     data<my<TestData>> = my(TestData { value = 99, name = "view_test" })
     println("Created TestData with value: 99")
     
-    unsafe {
+    freedom {
         result<Int> = read_through_view(view(data))
         println("Read value through view function: " + result.to_string())
     }
@@ -144,7 +144,7 @@ test_ownership_chain()<Int> -> {
     
     result<Int> = 0
     
-    unsafe {
+    freedom {
         // Borrow the unique
         borrowed_unique<their<Int>> = borrow(unique)
         borrowed_unique = 10
@@ -168,7 +168,7 @@ test_string_ownership()<Int> -> {
     text<my<String>> = my("Hello, Vyn!")
     println("Created my<String>: Hello, Vyn!")
     
-    unsafe {
+    freedom {
         viewed<their<String const>> = view(text)
         length<Int> = viewed.len()
         println("String length through view: " + length.to_string())
@@ -183,7 +183,7 @@ test_sequential_borrows()<Int> -> {
     data<my<Int>> = my(5)
     println("Created my<Int> = 5")
     
-    unsafe {
+    freedom {
         // First borrow
         borrow1<their<Int>> = borrow(data)
         borrow1 = borrow1 * 2
