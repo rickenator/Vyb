@@ -452,44 +452,71 @@ struct Person {
     scores<Vec<Int>>
 }
 
-# Pattern matching with comprehensive match statements
-grade_level(age<Int>)<String> -> {
-    match (age) {
-        0 -> "infant",
-        1 -> "toddler", 
-        5 -> "kindergarten",
-        18 -> "adult",
-        ? -> "student"
+# Define aspect for gradeable entities
+aspect Gradeable {
+    letter_grade(self<Self>)<String> -> { }
+    is_passing(self<Self>)<Bool> -> { }
+}
+
+# Bind aspect to Person using match in the implementation
+bind Gradeable -> Person {
+    letter_grade(self<Self>)<String> -> {
+        # Calculate average score
+        total<Int> = 0
+        i<Int> = 0
+        while (i < self.scores.len()) {
+            total = total + self.scores.get(i)
+            i = i + 1
+        }
+        
+        avg<Int> = total / self.scores.len()
+        
+        # Match statement with comparison patterns for grade ranges
+        match (avg) {
+            >= 90 -> return "A",
+            >= 80 -> return "B",
+            >= 70 -> return "C",
+            >= 60 -> return "D",
+            ? -> return "F"
+        }
+    }
+    
+    is_passing(self<Self>)<Bool> -> {
+        grade<String> = self.letter_grade()
+        match (grade) {
+            "F" -> return false,
+            ? -> return true
+        }
+    }
+}
+
+# Select expression with comparison patterns returning grade string
+get_grade_description(score<Int>)<String> -> {
+    grade<String> = select(score) -> {
+        >= 90 -> { pass "Excellent" },
+        >= 80 -> { pass "Good" },
+        >= 70 -> { pass "Satisfactory" },
+        >= 60 -> { pass "Passing" },
+        ? -> { pass "Needs Improvement" }
+    };
+    
+    println(grade)
+    return grade
+}
+
+# Generic function using aspect bounds
+print_student_status<T<Gradeable>>(student<T>)<Void> -> {
+    grade<String> = student.letter_grade()
+    passing<Bool> = student.is_passing()
+    println("Grade: " + grade)
+    if (passing) {
+        println("Status: PASSING")
+    } else {
+        println("Status: FAILING")
     }
 }
 
 # Resizable collections with full method support
-process_scores()<Int> -> {
-    scores<Vec<Int>> = Vec::new()
-    scores.push(95)
-    scores.push(87)
-    scores.push(92)
-    
-    total<Int> = 0
-    i<Int> = 0
-    while (i < scores.len()) {
-        score<Int> = scores.get(i)
-        total = total + score
-        i = i + 1
-        
-        # Loop control flow
-        if (score < 60) {
-            continue  # Skip failing grades
-        }
-        if (total > 300) {
-            break     # Stop if total exceeds threshold
-        }
-    }
-    
-    return total
-}
-
-# Dual parameter syntax and member access
 create_person(name<String>, age<Int>)<Person> -> {
     person<Person> = Person {
         name = name,
@@ -499,20 +526,24 @@ create_person(name<String>, age<Int>)<Person> -> {
     
     # Member access for both reading and modification
     person.scores.push(85)
-    person.scores.push(90)
+    person.scores.push(92)
+    person.scores.push(78)
     
     return person
 }
 
 main()<Int> -> {
     student<Person> = create_person("Alice", 20)
-    level<String> = grade_level(student.age)
-    total<Int> = process_scores()
+    
+    # Call aspect method through generic function
+    print_student_status(student)
+    
+    # Use select expression with comparison patterns
+    description<String> = get_grade_description(85)
     
     println(student)  # Auto-serialization of complex types
-    println(level)
     
-    return total
+    return 0
 }
 ```
 
