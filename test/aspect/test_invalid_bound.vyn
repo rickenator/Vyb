@@ -1,0 +1,19 @@
+// Test that invalid bounds are properly rejected
+
+aspect Display {
+    show(self<Self>)<Void>
+}
+
+struct Point {
+    x<Int>,
+    y<Int>
+}
+
+// This should FAIL - Point is not an aspect
+testFunc<T<Point>>(item<T>)<Void> -> {
+    // T bounded by Point (which is a struct, not an aspect)
+}
+
+main()<Int> -> {
+    return 0;
+}

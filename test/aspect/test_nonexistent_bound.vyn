@@ -1,0 +1,12 @@
+// Test that non-existent bounds are rejected
+
+aspect Display {
+    show(self<Self>)<Void>
+}
+
+// This should FAIL - Printable doesn't exist
+testFunc<T<Printable>>(item<T>)<Void> -> {}
+
+main()<Int> -> {
+    return 0;
+}

@@ -260,7 +260,35 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
         delete funcSymbol;
     }
 
-    enterScope(); 
+    enterScope();
+    
+    // Handle generic parameters if present (e.g., fn printItem<T<Display>>)
+    bool hasGenericParams = !node->genericParams.empty();
+    if (hasGenericParams) {
+        for (const auto& param : node->genericParams) {
+            if (param && param->name) {
+                std::string paramName = param->name->name;
+                
+                // Validate aspect bounds (if any)
+                for (const auto& bound : param->bounds) {
+                    if (bound) {
+                        std::string boundName = bound->toString();
+                        // Check that the bound is actually an aspect
+                        if (!findTrait(boundName)) {
+                            addError("Bound '" + boundName + "' on type parameter '" + paramName + "' is not a defined aspect.", param.get());
+                        }
+                    }
+                }
+                
+                // Register the type parameter as a TYPE_PARAMETER symbol
+                SymbolInfo typeParamSymbol;
+                typeParamSymbol.name = paramName;
+                typeParamSymbol.kind = SymbolInfo::Kind::TYPE_PARAMETER;
+                typeParamSymbol.type = nullptr;
+                currentScope->add(typeParamSymbol);
+            }
+        }
+    } 
 
     std::vector<std::unique_ptr<ast::TypeNode>> paramTypesVec;
     
@@ -2048,6 +2076,17 @@ void SemanticAnalyzer::visit(ast::StructDeclaration* node) {
             if (param && param->name) {
                 std::string paramName = param->name->name;
                 
+                // Validate aspect bounds (if any)
+                for (const auto& bound : param->bounds) {
+                    if (bound) {
+                        std::string boundName = bound->toString();
+                        // Check that the bound is actually an aspect
+                        if (!findTrait(boundName)) {
+                            addError("Bound '" + boundName + "' on type parameter '" + paramName + "' is not a defined aspect.", param.get());
+                        }
+                    }
+                }
+                
                 // Register the type parameter as a TYPE_PARAMETER symbol
                 SymbolInfo typeParamSymbol;
                 typeParamSymbol.name = paramName;
@@ -2281,6 +2320,17 @@ void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
             if (param && param->name) {
                 std::string paramName = param->name->name;
                 typeParamNames.push_back(paramName);
+                
+                // Validate aspect bounds (if any)
+                for (const auto& bound : param->bounds) {
+                    if (bound) {
+                        std::string boundName = bound->toString();
+                        // Check that the bound is actually an aspect
+                        if (!findTrait(boundName)) {
+                            addError("Bound '" + boundName + "' on type parameter '" + paramName + "' is not a defined aspect.", param.get());
+                        }
+                    }
+                }
                 
                 // Register the type parameter as a TYPE_PARAMETER symbol
                 SymbolInfo typeParamSymbol;

@@ -1,0 +1,39 @@
+// Phase 6 Step 5: Test aspect bounds validation
+// This test checks that:
+// 1. Valid aspect bounds are accepted
+// 2. Invalid bounds (non-existent aspects) are rejected
+// 3. Bounds must refer to actual aspects, not arbitrary types
+
+aspect Display {
+    show(self<Self>)<Void>
+}
+
+aspect Clone {
+    clone(self<Self>)<Self>
+}
+
+struct Point {
+    x<Int>,
+    y<Int>
+}
+
+// VALID: Display and Clone are defined aspects
+bind<T<Display, Clone>> Display -> GenericBox<T> {
+    show(self<Self>)<Void> -> {
+        // Implementation placeholder
+    }
+}
+
+// Test function with valid bounds
+validFunction<T<Display>>(item<T>)<Void> -> {
+    // This should work - T is bounded by Display
+}
+
+// TODO: Test function with INVALID bounds (should fail)
+// This would require uncommenting and should produce an error:
+// invalidFunction<T<NonExistentAspect>>(item<T>)<Void> -> {}
+
+main()<Int> -> {
+    println("Bounds validation test passed!");
+    return 0;
+}
