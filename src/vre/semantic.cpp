@@ -167,7 +167,51 @@ ast::TypeNode* SemanticAnalyzer::substituteSelfType(ast::TypeNode* returnType, c
     if (auto typeName = dynamic_cast<ast::TypeName*>(returnType)) {
         if (typeName->identifier && typeName->identifier->name == "Self") {
             // Replace Self with the concrete type
-            return new ast::TypeName(typeName->loc, std::make_unique<ast::Identifier>(typeName->loc, concreteType));
+            // Need to parse concreteType to extract base name and generic arguments
+            // E.g., "Box<Point>" -> base="Box", genericArgs=["Point"]
+            
+            size_t anglePos = concreteType.find('<');
+            if (anglePos != std::string::npos) {
+                // Has generic arguments
+                std::string baseName = concreteType.substr(0, anglePos);
+                std::string argsStr = concreteType.substr(anglePos + 1);
+                // Remove trailing '>'
+                if (!argsStr.empty() && argsStr.back() == '>') {
+                    argsStr.pop_back();
+                }
+                
+                // Parse generic arguments (simple comma-separated list for now)
+                std::vector<ast::TypeNodePtr> genericArgs;
+                size_t start = 0;
+                while (start < argsStr.length()) {
+                    size_t commaPos = argsStr.find(',', start);
+                    std::string argName;
+                    if (commaPos != std::string::npos) {
+                        argName = argsStr.substr(start, commaPos - start);
+                        start = commaPos + 1;
+                    } else {
+                        argName = argsStr.substr(start);
+                        start = argsStr.length();
+                    }
+                    
+                    // Trim whitespace
+                    argName.erase(0, argName.find_first_not_of(" \t"));
+                    argName.erase(argName.find_last_not_of(" \t") + 1);
+                    
+                    if (!argName.empty()) {
+                        // Create TypeName for this argument
+                        auto argId = std::make_unique<ast::Identifier>(typeName->loc, argName);
+                        genericArgs.push_back(std::make_unique<ast::TypeName>(typeName->loc, std::move(argId)));
+                    }
+                }
+                
+                // Create TypeName with base and generic args
+                auto baseId = std::make_unique<ast::Identifier>(typeName->loc, baseName);
+                return new ast::TypeName(typeName->loc, std::move(baseId), std::move(genericArgs));
+            } else {
+                // No generic arguments
+                return new ast::TypeName(typeName->loc, std::make_unique<ast::Identifier>(typeName->loc, concreteType));
+            }
         }
     }
     
@@ -548,6 +592,8 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
         if (arg) arg->accept(*this);
     }
     
+
+    
     // Handle intrinsics
     if (auto ident = dynamic_cast<ast::Identifier*>(node->callee.get())) {
         const std::string& name = ident->name;
@@ -781,8 +827,10 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                             for (const auto& method : implInfo->declaration->methods) {
                                                 if (method && method->id && method->id->name == methodName) {
                                                     if (method->returnTypeNode) {
-                                                        expressionTypes[node] = method->returnTypeNode.get();
-                                                        node->type = std::shared_ptr<ast::TypeNode>(method->returnTypeNode->clone());
+                                                        // Substitute Self with concrete type
+                                                        ast::TypeNode* actualReturnType = substituteSelfType(method->returnTypeNode.get(), typeNameStr);
+                                                        expressionTypes[node] = actualReturnType;
+                                                        node->type = std::shared_ptr<ast::TypeNode>(actualReturnType->clone());
                                                     }
                                                     return;
                                                 }
@@ -861,6 +909,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             // Get the object's type
             auto objTypeIt = expressionTypes.find(memberExpr->object.get());
             if (objTypeIt != expressionTypes.end() && objTypeIt->second) {
+                
                 // Check if the object's type is a Vec type
                 if (auto vecType = dynamic_cast<ast::VecType*>(objTypeIt->second)) {
                     // This is a Vec method call, handle it
@@ -913,10 +962,14 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                     if (implInfo && implInfo->declaration) {
                                         for (const auto& method : implInfo->declaration->methods) {
                                             if (method && method->id && method->id->name == methodName) {
-                                                // Found the generic trait method! Set the return type
+                                                // Found the generic trait method! Substitute Self with concrete type
                                                 if (method->returnTypeNode) {
-                                                    expressionTypes[node] = method->returnTypeNode.get();
-                                                    node->type = std::shared_ptr<ast::TypeNode>(method->returnTypeNode->clone());
+                                                    std::cout << "DEBUG: Generic trait method " << methodName 
+                                                              << " return type before substitution: " << method->returnTypeNode->toString() << std::endl;
+                                                    ast::TypeNode* actualReturnType = substituteSelfType(method->returnTypeNode.get(), typeNameStr);
+                                                    std::cout << "DEBUG: After Self substitution: " << actualReturnType->toString() << std::endl;
+                                                    expressionTypes[node] = actualReturnType;
+                                                    node->type = std::shared_ptr<ast::TypeNode>(actualReturnType->clone());
                                                 }
                                                 return;
                                             }
@@ -1539,9 +1592,109 @@ void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
         expressionTypes[node] = nullptr;
         return;
     }
-    // Set the type of the object literal to the typePath (e.g., Point)
-    expressionTypes[node] = node->typePath->clone().release();
-    // Optionally, check that all fields exist in the class/struct and types match (not implemented here)
+    
+    // Get the struct name (base name without generic args)
+    auto typeName = dynamic_cast<ast::TypeName*>(node->typePath.get());
+    if (!typeName || !typeName->identifier) {
+        addError("Object literal has invalid type path.", node);
+        expressionTypes[node] = node->typePath->clone().release();
+        return;
+    }
+    
+    std::string structName = typeName->identifier->name;
+    
+    // Visit all field values to determine their types
+    for (auto& prop : node->properties) {
+        if (prop.value) {
+            prop.value->accept(*this);
+        }
+    }
+    
+    // Check if this struct has generic parameters that need to be inferred
+    auto structFieldsIt = structFieldTypes.find(structName);
+    if (structFieldsIt == structFieldTypes.end()) {
+        // No field information, just use the type as-is
+        expressionTypes[node] = node->typePath->clone().release();
+        return;
+    }
+    
+    const auto& fieldTypes = structFieldsIt->second;
+    
+    // Map type parameters to their inferred types
+    // E.g., for Box<T> with field "value: T", if value=Point, then T → Point
+    std::map<std::string, ast::TypeNode*> typeParamMap;
+    
+    for (const auto& prop : node->properties) {
+        if (!prop.key || !prop.value) continue;
+        
+        std::string fieldName = prop.key->name;
+        
+        // Look up the field's declared type in the struct
+        auto fieldTypeIt = fieldTypes.find(fieldName);
+        if (fieldTypeIt == fieldTypes.end()) {
+            addError("Field '" + fieldName + "' does not exist in struct '" + structName + "'", node);
+            continue;
+        }
+        
+        ast::TypeNode* declaredFieldType = fieldTypeIt->second;
+        
+        // Get the actual type of the value
+        auto valueTypeIt = expressionTypes.find(prop.value.get());
+        if (valueTypeIt == expressionTypes.end() || !valueTypeIt->second) {
+            continue; // Can't infer if value type unknown
+        }
+        
+        ast::TypeNode* actualValueType = valueTypeIt->second;
+        
+        // Check if the declared field type is a type parameter
+        if (auto declaredTypeName = dynamic_cast<ast::TypeName*>(declaredFieldType)) {
+            if (declaredTypeName->identifier && declaredTypeName->genericArgs.empty()) {
+                std::string declaredTypeStr = declaredTypeName->identifier->name;
+                
+                // Check if this is a type parameter by looking for it as a primitive type
+                // Type parameters are NOT primitive types (Int, Float, String, Bool, etc.)
+                bool isPrimitive = (declaredTypeStr == "Int" || declaredTypeStr == "Float" || 
+                                   declaredTypeStr == "String" || declaredTypeStr == "Bool" ||
+                                   declaredTypeStr == "Void");
+                
+                if (!isPrimitive) {
+                    // Check if it's a known struct/type by looking it up
+                    SymbolInfo* sym = currentScope->lookup(declaredTypeStr);
+                    bool isKnownType = (sym && sym->kind == SymbolInfo::Kind::Type);
+                    
+                    if (!isKnownType) {
+                        // Not a primitive and not a known type - likely a type parameter
+                        typeParamMap[declaredTypeStr] = actualValueType;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Build the final type with inferred generic arguments
+    if (!typeParamMap.empty()) {
+        // Create TypeName with generic arguments
+        std::vector<ast::TypeNodePtr> genericArgs;
+        
+        // For now, assume single type parameter (works for Box<T>)
+        // In a full implementation, would need to track parameter order
+        for (const auto& entry : typeParamMap) {
+            genericArgs.push_back(std::unique_ptr<ast::TypeNode>(entry.second->clone()));
+        }
+        
+        auto resultType = new ast::TypeName(
+            typeName->loc,
+            std::make_unique<ast::Identifier>(typeName->loc, structName),
+            std::move(genericArgs)
+        );
+        
+        expressionTypes[node] = resultType;
+        node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
+    } else {
+        // No generic parameters or couldn't infer - use type as-is
+        expressionTypes[node] = node->typePath->clone().release();
+        node->type = std::shared_ptr<ast::TypeNode>(node->typePath->clone());
+    }
 }
 void SemanticAnalyzer::visit(ast::ArrayLiteral* node) {
     if (!node) {
