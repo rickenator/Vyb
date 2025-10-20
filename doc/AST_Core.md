@@ -125,7 +125,7 @@ enum class NodeType {
     TRY_STATEMENT,
     THROW_STATEMENT,        // Added as per ast.hpp
     SCOPED_STATEMENT,       // Added as per ast.hpp
-    UNSAFE_BLOCK_STATEMENT, // For unsafe memory operations
+    UNSAFE_BLOCK_STATEMENT, // For freedom memory operations
     // PATTERN_ASSIGNMENT_STATEMENT, // Not in ast.hpp, but in roadmap
 
     // Types

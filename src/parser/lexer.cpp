@@ -478,7 +478,7 @@ vyn::TokenType Lexer::get_keyword_type(const std::string& word) {
         {"my", vyn::TokenType::KEYWORD_MY},
         {"our", vyn::TokenType::KEYWORD_OUR},
         {"their", vyn::TokenType::KEYWORD_THEIR},
-        {"unsafe", vyn::TokenType::KEYWORD_UNSAFE},
+        {"freedom", vyn::TokenType::KEYWORD_FREEDOM},
         {"ptr", vyn::TokenType::KEYWORD_PTR},
         {"borrow", vyn::TokenType::KEYWORD_BORROW},
         {"view", vyn::TokenType::KEYWORD_VIEW},

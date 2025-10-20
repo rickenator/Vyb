@@ -1,6 +1,6 @@
 // filepath: /home/rick/Projects/Vyn/test/units/extracted/test56.vyn
-// @test: Semantic: Pointer operations require unsafe block - negative case
-// @description: Extracted from tests.cpp - Semantic: Pointer operations require unsafe block - negative case
+// @test: Semantic: Pointer operations require freedom block - negative case
+// @description: Extracted from tests.cpp - Semantic: Pointer operations require freedom block - negative case
 // @category: parser
 // @expect: pass
 // @parse-only: true

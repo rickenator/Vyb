@@ -177,12 +177,12 @@ TEST_CASE("Print parser version", "[parser]") {
     REQUIRE(true); // Placeholder to ensure test runs
 }
 
-TEST_CASE("Semantic: from(addr) only allowed in unsafe", "[semantic][pointer][unsafe][test38]") {
+TEST_CASE("Semantic: from(addr) only allowed in freedom", "[semantic][pointer][freedom][test38]") {
     std::string source_ok = R"(
 fn<Int> main() -> {
     addr<Int> = 0x1234;
     p<loc<Int>>;
-    unsafe {
+    freedom {
         p = from<loc<Int>>(addr);
     }
     return 0;

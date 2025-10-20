@@ -339,12 +339,12 @@ public:
 
 ## 13. `UnsafeBlockStatement`
 
-Represents an unsafe code block where memory operations are allowed.
+Represents an freedom code block where memory operations are allowed.
 
 -   **C++ Class**: `vyn::ast::UnsafeBlockStatement`
 -   **`NodeType`**: `UNSAFE_BLOCK_STATEMENT`
 -   **Fields**:
-    -   `body` (`BlockStatementPtr`): A pointer to the block statement containing the code in the unsafe block.
+    -   `body` (`BlockStatementPtr`): A pointer to the block statement containing the code in the freedom block.
 
 ```cpp
 // From include/vyn/parser/ast.hpp
@@ -359,7 +359,7 @@ public:
 } // namespace vyn::ast
 ```
 
-Unsafe blocks are used to contain low-level memory operations that could be unsafe if used incorrectly. Within an unsafe block, you can:
+Freedom blocks are used to contain low-level memory operations that could be freedom if used incorrectly. Within an freedom block, you can:
 
 1. Create raw pointers with `loc<T>(expr)`
 2. Dereference pointers with `at(ptr)`
@@ -367,13 +367,13 @@ Unsafe blocks are used to contain low-level memory operations that could be unsa
 
 Example:
 ```vyn
-unsafe {
+freedom {
     var<loc<Int>> p = loc(x);
     at(p) = 99;  // Modify the value at the pointer location
     var<Int> q = at(p); // Read the value at the pointer location
 }
 ```
 
-These operations are unsafe because they bypass Vyn's memory safety guarantees, allowing for potential errors like null pointer dereferences, dangling pointers, and memory corruption.
+These operations are freedom because they bypass Vyn's memory safety guarantees, allowing for potential errors like null pointer dereferences, dangling pointers, and memory corruption.
 
 *Note: `PatternAssignmentStatement` is mentioned in `AST_Roadmap.md` but not currently present in `vyn/parser/ast.hpp`'s statement definitions. It will be added here once implemented.*

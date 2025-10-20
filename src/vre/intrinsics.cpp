@@ -21,7 +21,7 @@ namespace intrinsics {
  *
  * MEMORY OPERATION IMPLEMENTATION LOCATIONS:
  * - AST Nodes: include/vyn/parser/ast.hpp (LocationExpression, PointerDerefExpression, etc.)
- * - Semantic Analysis: src/vre/semantic.cpp (type checking & unsafe block verification)
+ * - Semantic Analysis: src/vre/semantic.cpp (type checking & freedom block verification)
  * - Code Generation: src/vre/llvm/cgen_expr.cpp (LLVM IR generation)
  */
 

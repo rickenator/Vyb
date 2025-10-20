@@ -1,9 +1,9 @@
-//# EXPECTED ERROR: borrow() can only be used inside an unsafe block
+//# EXPECTED ERROR: borrow() can only be used inside an freedom block
 
 main()<Int> -> {
     x<my<Int>> = 10;
     
-    // Using borrow outside unsafe block should fail
+    // Using borrow outside freedom block should fail
     b<their<Int>> = borrow x;
     b = 20;
     

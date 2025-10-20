@@ -1,6 +1,6 @@
 // filepath: /home/rick/Projects/Vyn/test/units/extracted/test40.vyn
-// @test: Parser: Basic unsafe block
-// @description: Extracted from tests.cpp - Parser: Basic unsafe block
+// @test: Parser: Basic freedom block
+// @description: Extracted from tests.cpp - Parser: Basic freedom block
 // @category: parser
 // @expect: pass
 // @parse-only: true
@@ -10,5 +10,5 @@
 
     std::string source = R"(
 main()<Void> -> -> Int{
-    unsafe {
+    freedom {
         x<Int> = 1;

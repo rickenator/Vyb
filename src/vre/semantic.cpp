@@ -51,7 +51,7 @@ SemanticAnalyzer::SemanticAnalyzer(Driver& driver) : driver_(driver), currentSco
         "let", "var", "const", "fn", "struct", "enum", "trait", "impl", "type", "class",
         "if", "else", "while", "for", "return", "break", "continue", "loop", "match",
         "try", "catch", "finally", "defer", "throw", "async", "await", "my", "our", "their",
-        "ptr", "borrow", "view", "unsafe", "pub", "template", "operator", "as", "in", "ref",
+        "ptr", "borrow", "view", "freedom", "pub", "template", "operator", "as", "in", "ref",
         "extern", "import", "smuggle", "module", "use", "mut", "scoped", "bundle",
         "true", "false", "null", "nil",
         "addr", "at", "loc", "from",
@@ -629,9 +629,9 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
         
         // Handle borrow()/view() intrinsics
         if (name == "borrow" || name == "view") {
-            // Must be used within unsafe block
+            // Must be used within freedom block
             if (!isInUnsafeBlock()) {
-                addError(name + "() can only be used inside an unsafe block", node);
+                addError(name + "() can only be used inside an freedom block", node);
             }
             if (node->arguments.size() != 1) {
                 addError(name + "() expects exactly one argument", node);
@@ -1966,9 +1966,9 @@ void SemanticAnalyzer::visit(ast::GenericInstantiationExpression* node) {
     }
 }
 void SemanticAnalyzer::visit(ast::PointerDerefExpression* node) {
-    // at() intrinsic only allowed inside an unsafe block
+    // at() intrinsic only allowed inside an freedom block
     if (!isInUnsafeBlock()) {
-        addError("at() (pointer dereference) is only allowed inside an unsafe block.", node);
+        addError("at() (pointer dereference) is only allowed inside an freedom block.", node);
         expressionTypes[node] = nullptr;
         return;
     }
@@ -2020,9 +2020,9 @@ void SemanticAnalyzer::visit(ast::PointerDerefExpression* node) {
     node->type = std::shared_ptr<ast::TypeNode>(pointeeType->clone()); // node->type takes ownership of a new clone
 }
 void SemanticAnalyzer::visit(ast::AddrOfExpression* node) {
-    // addr() intrinsic only allowed inside an unsafe block
+    // addr() intrinsic only allowed inside an freedom block
     if (!isInUnsafeBlock()) {
-        addError("addr() is only allowed inside an unsafe block.", node);
+        addError("addr() is only allowed inside an freedom block.", node);
         expressionTypes[node] = nullptr;
         return;
     }
@@ -2055,9 +2055,9 @@ void SemanticAnalyzer::visit(ast::AddrOfExpression* node) {
     node->type = std::shared_ptr<ast::TypeNode>(addrAstType->clone());
 }
 void SemanticAnalyzer::visit(ast::FromIntToLocExpression* node) {
-    // from<T>() intrinsic only allowed inside an unsafe block
+    // from<T>() intrinsic only allowed inside an freedom block
     if (!isInUnsafeBlock()) {
-        addError("from<Type>(expr) is only allowed inside an unsafe block.", node);
+        addError("from<Type>(expr) is only allowed inside an freedom block.", node);
         expressionTypes[node] = nullptr;
         return;
     }
@@ -2110,9 +2110,9 @@ void SemanticAnalyzer::visit(ast::FromIntToLocExpression* node) {
     node->type = std::shared_ptr<ast::TypeNode>(targetType->clone());
 }
 void SemanticAnalyzer::visit(ast::LocationExpression* node) {
-    // Check if we're in an unsafe block
+    // Check if we're in an freedom block
     if (!isInUnsafeBlock()) {
-        addError("loc() (location-of) is only allowed inside an unsafe block.", node);
+        addError("loc() (location-of) is only allowed inside an freedom block.", node);
         expressionTypes[node] = nullptr;
         return;
     }
@@ -2241,7 +2241,7 @@ void SemanticAnalyzer::visit(ast::TryStatement* node) {
     }
 }
 void SemanticAnalyzer::visit(ast::UnsafeStatement* node) {
-    // Enter a new scope for the unsafe block
+    // Enter a new scope for the freedom block
     enterScope();
     currentScope->isUnsafeBlock = true;
     node->block->accept(*this);

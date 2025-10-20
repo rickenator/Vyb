@@ -1,6 +1,6 @@
 // filepath: /home/rick/Projects/Vyn/test/units/extracted/test39.vyn
-// @test: Codegen: addr(loc) and from(addr) round-trip in unsafe
-// @description: Extracted from tests.cpp - Codegen: addr(loc) and from(addr) round-trip in unsafe
+// @test: Codegen: addr(loc) and from(addr) round-trip in freedom
+// @description: Extracted from tests.cpp - Codegen: addr(loc) and from(addr) round-trip in freedom
 // @category: parser
 // @expect: pass
 // @parse-only: true

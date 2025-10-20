@@ -1,6 +1,6 @@
 // filepath: /home/rick/Projects/Vyn/test/units/extracted/test41.vyn
-// @test: Semantic: 'loc(var)' requires unsafe block
-// @description: Extracted from tests.cpp - Semantic: 'loc(var)' requires unsafe block
+// @test: Semantic: 'loc(var)' requires freedom block
+// @description: Extracted from tests.cpp - Semantic: 'loc(var)' requires freedom block
 // @category: parser
 // @expect: pass
 // @parse-only: true

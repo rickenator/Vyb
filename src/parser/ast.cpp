@@ -819,7 +819,7 @@ void IfExpression::accept(Visitor& visitor) {
 // Member in hpp: block
 // toString() is already declared in hpp.
 std::string UnsafeStatement::toString() const {
-    return "unsafe " + (block ? block->toString() : "{}");
+    return "freedom " + (block ? block->toString() : "{}");
 }
 
 // --- TypeName ---

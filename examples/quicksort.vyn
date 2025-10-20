@@ -125,7 +125,7 @@ fn<Void> swap(array<their<[T]>>, i<Int>, j<Int>) -> {
 
 // ----- Memory-Optimized Version -----
 
-// Higher performance version using unsafe operations for specific scenarios
+// Higher performance version using freedom operations for specific scenarios
 // where maximum performance is required
 fn<Void> quicksort_unsafe(array<their<[T]>>) -> {
     quicksort_range_unsafe(array, 0, array.len() - 1);
@@ -143,7 +143,7 @@ fn<Int> partition_unsafe(array<their<[T]>>, low<Int>, high<Int>) -> {
     const<T> pivot = array[high];
     i<Int> = low - 1;
     
-    unsafe {
+    freedom {
         // Use direct memory access for very large arrays as an optimization
         arr_ptr<loc<[T]>> = loc(array);
         
@@ -163,7 +163,7 @@ fn<Int> partition_unsafe(array<their<[T]>>, low<Int>, high<Int>) -> {
 fn<Void> swap_unsafe(array_ptr<loc<[T]>>, i<Int>, j<Int>) -> {
     if i == j { return; }
     
-    unsafe {
+    freedom {
         // Direct pointer arithmetic for maximum performance
         const<Int> elem_size = sizeof<T>();
         base_ptr<loc<T>> = from<loc<T>>(addr(array_ptr));

@@ -288,7 +288,7 @@ Represents a raw memory location (pointer) of type `T`.
   - `genericType`: `BasicTypeNode` with name "loc"
   - `typeArguments`: A vector containing a single entry of the pointee type `T`
 
-This type is used in unsafe code blocks to work with raw memory. Operations on `loc<T>` include:
+This type is used in freedom code blocks to work with raw memory. Operations on `loc<T>` include:
 - Getting the address of a variable: `loc(x)`
 - Dereferencing a pointer: `at(p)`
 - Converting between pointer types: `from<loc<T>>(addr)`

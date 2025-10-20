@@ -23,7 +23,7 @@ Vyn aims for memory safety without a traditional garbage collector by default.
     *   `Box<T>`: For heap-allocated data with a single owner.
     *   References (`&T`, `&mut T`): For borrowed data.
 *   **Automatic Reference Counting (ARC):** For shared ownership scenarios (`Shared<T>` or similar), ARC might be implemented. This would involve runtime overhead for reference count updates.
-*   **Manual Management:** Unsafe blocks might allow for manual memory management, but this should be rare.
+*   **Manual Management:** Freedom blocks might allow for manual memory management, but this should be rare.
 *   **Stack Allocation:** Value types (structs, enums, primitives) will primarily be stack-allocated where possible.
 
 ## 4. Type System and Data Representation

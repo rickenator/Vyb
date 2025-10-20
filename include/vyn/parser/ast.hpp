@@ -120,7 +120,7 @@ enum class OwnershipKind {
     MY,    // Unique ownership
     OUR,   // Shared ownership (e.g., reference counted)
     THEIR, // Borrowed/Viewed (non-owning), further specified by BorrowKind if applicable
-    PTR    // Raw pointer (potentially non-owning, unsafe)
+    PTR    // Raw pointer (potentially non-owning, freedom)
     // Add other kinds as needed
 };
 

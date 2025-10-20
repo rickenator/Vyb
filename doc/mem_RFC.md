@@ -10,9 +10,9 @@ Vyn’s memory model combines two primary axes for safe bindings plus a third fo
 
 1. **Binding Mutability** (`var` vs `const`)
 2. **Ownership & Data Mutability** (`my<T>` / `our<T>` / `their<T>` with optional `T const`)
-3. **Raw Locations** (`loc<T>`, gated by `unsafe { … }`)
+3. **Raw Locations** (`loc<T>`, gated by `freedom { … }`)
 
-Safe code uses only `my`/`our`/`their`; raw locations (`loc<T>`) live behind explicit `unsafe { … }` blocks.
+Safe code uses only `my`/`our`/`their`; raw locations (`loc<T>`) live behind explicit `freedom { … }` blocks.
 
 ---
 
@@ -39,7 +39,7 @@ const<Int> limit = 100  // immutable binding
 * **`my<T>`**: unique-own pointer (like Rust’s `Box<T>`)
 * **`our<T>`**: shared-own pointer (ref-counted, like `Rc<T>`/`Arc<T>`)
 * **`their<T>`**: borrowed pointer (non-owning reference, like `&T`/`&mut T`)
-* **`loc<T>`**: raw location (`T*`), operations gated by `unsafe { … }`
+* **`loc<T>`**: raw location (`T*`), operations gated by `freedom { … }`
 
 Data mutability is controlled by `const` on the pointee: e.g., `my<Foo const>` means unique-own pointer to immutable data.
 
@@ -149,15 +149,15 @@ Vyn’s `Mutex<T>` does not automatically detect deadlocks (e.g., lock cycles). 
 
 ### 7.5 Summary
 
-The `LockGuard<T>` scope defines the "baton" of lock ownership. Timeouts via `lock_timeout` prevent indefinite blocking. Poisoning signals an unsafe state after a panic during a critical section. Deadlock is a developer responsibility, mitigated by strategies like lock ordering, timeouts, or restructuring lock acquisitions. This design aims to balance simplicity (e.g., `lock()`) with safety features (timeouts, poisoning) and clear semantics for concurrent access.
+The `LockGuard<T>` scope defines the "baton" of lock ownership. Timeouts via `lock_timeout` prevent indefinite blocking. Poisoning signals an freedom state after a panic during a critical section. Deadlock is a developer responsibility, mitigated by strategies like lock ordering, timeouts, or restructuring lock acquisitions. This design aims to balance simplicity (e.g., `lock()`) with safety features (timeouts, poisoning) and clear semantics for concurrent access.
 
 ---
 
-## 8. Unsafe-Scoped Blocks
+## 8. Freedom-Scoped Blocks
 
 ```vyn
 fn use_raw()
-  unsafe {
+  freedom {
     var l: loc<Foo> = alloc(sizeof(Foo))
     (*l).field = 42
     free(l)
@@ -165,7 +165,7 @@ fn use_raw()
 // Outside, `l` can be moved or stored safely
 ```
 
-**Comment:** Scoped `unsafe { … }` blocks localize undefined behavior risks.
+**Comment:** Scoped `freedom { … }` blocks localize undefined behavior risks.
 
 ---
 
@@ -185,10 +185,10 @@ fn use_raw()
 | `const<their<Foo>> p`       | immutable | borrowed  | mutable         | ✔️           |
 | `var<their<Foo const>> p`   | mutable   | borrowed  | immutable       | ✔️           |
 | `const<their<Foo const>> p` | immutable | borrowed  | immutable       | ✔️           |
-| `var<loc<Foo>> l`           | mutable   | raw       | mutable         | ❌ (`unsafe`) |
-| `const<loc<Foo>> l`         | immutable | raw       | mutable         | ❌ (`unsafe`) |
-| `var<loc<Foo const>> l`     | mutable   | raw       | immutable       | ❌ (`unsafe`) |
-| `const<loc<Foo const>> l`   | immutable | raw       | immutable       | ❌ (`unsafe`) |
+| `var<loc<Foo>> l`           | mutable   | raw       | mutable         | ❌ (`freedom`) |
+| `const<loc<Foo>> l`         | immutable | raw       | mutable         | ❌ (`freedom`) |
+| `var<loc<Foo const>> l`     | mutable   | raw       | immutable       | ❌ (`freedom`) |
+| `const<loc<Foo const>> l`   | immutable | raw       | immutable       | ❌ (`freedom`) |
 
 ---
 
@@ -231,13 +231,13 @@ var v3: their<Baz const> = view v1     // creating an immutable view from an imm
 
 ```vyn
 fn alloc_foo() -> loc<Foo>
-  unsafe {
+  freedom {
     return alloc(sizeof(Foo))
   }
 
 fn main()
   var l: loc<Foo> = alloc_foo()
-  unsafe {
+  freedom {
     (*l).x = 123
     free(l)
   }

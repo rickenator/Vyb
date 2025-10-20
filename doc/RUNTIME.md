@@ -52,7 +52,7 @@ Vyn employs ownership types to manage memory and control data access:
 *   **`my<T>`**: Unique-owning pointer (similar to Rust's `Box<T>`). Only one `my<T>` can own the data. When a `my<T>` goes out of scope, the data is deallocated.
 *   **`our<T>`**: Shared-owning pointer (reference-counted, like `Rc<T>`/`Arc<T>`). Multiple `our<T>` pointers can co-own the data. The data is deallocated when the last `our<T>` is dropped.
 *   **`their<T>`**: Borrowed pointer (non-owning reference, like `&T`/`&mut T`). It provides temporary access to data owned by `my<T>` or `our<T>`, or other `their<T>`.
-*   **`ptr<T>`**: Raw pointer (like `T*`). Operations involving `ptr<T>` are typically restricted to `unsafe` blocks.
+*   **`ptr<T>`**: Raw pointer (like `T*`). Operations involving `ptr<T>` are typically restricted to `freedom` blocks.
 
 **Data Mutability** is controlled by applying `const` to the type `T` *within* the ownership wrapper:
 *   `my<T>`: Unique ownership of mutable data `T`.

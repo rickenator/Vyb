@@ -6,7 +6,7 @@ main()<Int> -> {
     x<my<Int>> = my(42)
     println("Test 1: Created my<Int> = 42")
     
-    unsafe {
+    freedom {
         b<their<Int>> = borrow(x)
         b = 99
         println("Test 2: Borrowed and modified to 99")
@@ -15,7 +15,7 @@ main()<Int> -> {
     println("Value after borrow: " + x.to_string())
     
     // Test 3: view (read-only)
-    unsafe {
+    freedom {
         v<their<Int const>> = view(x)
         println("Test 3: Viewed value through view")
     }
