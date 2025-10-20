@@ -23,7 +23,7 @@ void LLVMCodegen::visit(vyn::ast::BlockStatement* node) {
     for (size_t i = 0; i < node->body.size(); ++i) {
         const auto& stmt = node->body[i];
         if (stmt) {
-            std::cout << "DEBUG: Processing block statement " << i << ": " << stmt->toString() << std::endl;
+
             stmt->accept(*this);
         }
         if (builder->GetInsertBlock() && builder->GetInsertBlock()->getTerminator()) {
@@ -244,7 +244,7 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
 }
 
 void LLVMCodegen::visit(vyn::ast::ExpressionStatement* node) {
-    std::cout << "DEBUG: ExpressionStatement visitor called with expression: " << (node->expression ? node->expression->toString() : "null") << std::endl;
+
     if (node->expression) {
         node->expression->accept(*this);
         // The value of the expression is m_currentLLVMValue, but it's not used by the statement itself.

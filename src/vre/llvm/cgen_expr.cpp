@@ -652,12 +652,7 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
 
 void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
    
-    std::cout << "DEBUG: CallExpression visitor called with callee: " << (node->callee ? node->callee->toString() : "null") << std::endl;
-    if (node->type) {
-        std::cout << "DEBUG: CallExpression has inferred type: " << node->type->toString() << std::endl;
-    } else {
-        std::cout << "DEBUG: CallExpression has no inferred type" << std::endl;
-    }
+
     
     // Check for Vec::new() constructor calls
     // std::cout << "DEBUG: Checking if callee is MemberExpression..." << std::endl;
@@ -843,13 +838,15 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                         std::cout << "DEBUG: Checking aspect method call: " << concreteType 
                                   << "." << methodName << "()" << std::endl;
                         
-                        // First try to find a non-generic (concrete) aspect impl function
-                        // These are named just as their method name (e.g., "show", "add")
-                        llvm::Function* implFunc = module->getFunction(methodName);
+                        // First try to find a bind implementation with mangled name (Type_method)
+                        std::string mangledName = concreteType + "_" + methodName;
+                        llvm::Function* implFunc = module->getFunction(mangledName);
                         
-                        // If not found, try to monomorphize from generic aspect impl
-                        if (!implFunc) {
-                            std::cout << "DEBUG: No concrete impl found, trying generic monomorphization..." << std::endl;
+                        if (implFunc) {
+                            std::cout << "DEBUG: Found bind method implementation: " << mangledName << std::endl;
+                        } else {
+                            std::cout << "DEBUG: No bind implementation found (" << mangledName 
+                                      << "), trying generic monomorphization..." << std::endl;
                             
                             // Try to find which aspect this method belongs to
                             // We need to search through aspects to find which one declares this method
@@ -942,7 +939,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
     auto identCallee = dynamic_cast<vyn::ast::Identifier*>(node->callee.get());
     std::string calleeName = node->callee->toString();
     
-    std::cout << "DEBUG: CallExpression calleeName: '" << calleeName << "', identCallee: " << (identCallee ? "valid" : "null") << std::endl;
+
     
     // Special handling for intrinsic functions with potential variable name conflicts
     if (identCallee && node->arguments.size() == 1) {

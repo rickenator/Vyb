@@ -387,6 +387,18 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
             }
             std::string typeNameStr = typeNameNode->identifier->name; // Access name via identifier
 
+            // Handle Self type in bind/impl methods
+            if (typeNameStr == "Self") {
+                if (m_currentImplTypeNode) {
+                    std::cout << "DEBUG: Resolving Self to " << m_currentImplTypeNode->toString() << " in bind method" << std::endl;
+                    llvmType = codegenType(m_currentImplTypeNode);
+                    break;
+                } else {
+                    logError(typeNode->loc, "Self type used outside of bind/impl context");
+                    return nullptr;
+                }
+            }
+
             // Handle Tuple<T, U, ...> types
             if (typeNameStr == "Tuple") {
                 if (typeNameNode->genericArgs.empty()) {

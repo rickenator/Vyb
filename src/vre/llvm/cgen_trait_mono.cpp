@@ -132,14 +132,10 @@ std::string LLVMCodegen::getFullTypeName(vyn::ast::Expression* expr) {
 llvm::Function* LLVMCodegen::monomorphizeTraitMethod(const std::string& concreteType,
                                                      const std::string& traitName,
                                                      const std::string& methodName) {
-    std::cout << "DEBUG: Monomorphizing trait method: " << traitName << "::" << methodName 
-              << " for " << concreteType << std::endl;
-    
     // Check cache first
     std::string cacheKey = concreteType + "::" + methodName;
     auto cacheIt = monomorphizedMethods.find(cacheKey);
     if (cacheIt != monomorphizedMethods.end()) {
-        std::cout << "DEBUG: Found cached monomorphized method: " << cacheKey << std::endl;
         return cacheIt->second;
     }
     
@@ -154,8 +150,7 @@ llvm::Function* LLVMCodegen::monomorphizeTraitMethod(const std::string& concrete
     // Parse the concrete type to extract pattern matching info
     TypePattern concretePattern = TypePattern::parse(concreteType);
     
-    std::cout << "DEBUG: Parsed concrete type - base: " << concretePattern.base 
-              << ", args: " << concretePattern.args.size() << std::endl;
+
     
     // Search through generic trait impls to find a matching pattern
     const auto& genericImpls = semantic->getGenericTraitImpls();
@@ -163,15 +158,12 @@ llvm::Function* LLVMCodegen::monomorphizeTraitMethod(const std::string& concrete
         const std::string& pattern = typeEntry.first;
         TypePattern templatePattern = TypePattern::parse(pattern);
         
-        std::cout << "DEBUG: Checking pattern: " << pattern << " (base: " << templatePattern.base << ")" << std::endl;
+
         
         // Try to match the pattern
         std::map<std::string, std::string> typeSubstitutions;
         if (templatePattern.matchesPattern(concretePattern, typeSubstitutions)) {
-            std::cout << "DEBUG: Pattern matched! Type substitutions:" << std::endl;
-            for (const auto& sub : typeSubstitutions) {
-                std::cout << "  " << sub.first << " -> " << sub.second << std::endl;
-            }
+
             
             // Check if this pattern has an impl for the requested trait
             const auto& traitMap = typeEntry.second;
@@ -184,7 +176,7 @@ llvm::Function* LLVMCodegen::monomorphizeTraitMethod(const std::string& concrete
                 if (methodIt != implInfo->methods.end()) {
                     ast::FunctionDeclaration* methodAST = methodIt->second;
                     
-                    std::cout << "DEBUG: Found method in generic impl! Will monomorphize." << std::endl;
+
                     
                     // Clone the method AST for modification
                     // Since we don't have a deep clone method for FunctionDeclaration,
@@ -192,7 +184,7 @@ llvm::Function* LLVMCodegen::monomorphizeTraitMethod(const std::string& concrete
                     
                     // Build specialized function name: TypeName_MethodName (e.g., "Box_Int_show")
                     std::string specializedName = concretePattern.toMangled() + "_" + methodName;
-                    std::cout << "DEBUG: Generating specialized function: " << specializedName << std::endl;
+
                     
                     // Get the method's signature
                     std::vector<llvm::Type*> paramTypes;
@@ -252,7 +244,7 @@ llvm::Function* LLVMCodegen::monomorphizeTraitMethod(const std::string& concrete
                     monomorphizedMethods[cacheKey] = specializedFunc;
                     
                     // Generate the function body with type substitution active
-                    std::cout << "DEBUG: Generating specialized function body..." << std::endl;
+
                     
                     // Save current state - INCLUDING builder insert point!
                     auto savedTypeSubstitutions = currentTypeSubstitutions;
@@ -318,14 +310,14 @@ llvm::Function* LLVMCodegen::monomorphizeTraitMethod(const std::string& concrete
                         }
                     }
                     
-                    std::cout << "DEBUG: Successfully generated specialized function: " << specializedName << std::endl;
+
                     return specializedFunc;
                 }
             }
         }
     }
     
-    std::cout << "DEBUG: No matching generic impl found for " << concreteType << "::" << methodName << std::endl;
+
     return nullptr;
 }
 
@@ -334,24 +326,19 @@ llvm::Type* LLVMCodegen::resolveTypeForMonomorphization(const TypePattern& patte
                                                         const std::map<std::string, std::string>& substitutions) {
     std::string mangledName = pattern.toMangled();
     
-    std::cout << "DEBUG: Resolving type for pattern: " << mangledName << std::endl;
-    
     // Check if struct type already exists (without "struct." prefix - the name used in monomorphizeStruct)
     if (llvm::StructType* structType = llvm::StructType::getTypeByName(*context, mangledName)) {
-        std::cout << "DEBUG: Found existing struct type: " << mangledName << std::endl;
         return structType;
     }
     
     // Also try with "struct." prefix for compatibility
     std::string structName = "struct." + mangledName;
     if (llvm::StructType* structType = llvm::StructType::getTypeByName(*context, structName)) {
-        std::cout << "DEBUG: Found existing struct type: " << structName << std::endl;
         return structType;
     }
     
     // For now, return generic pointer if we can't find the struct
     // In production, this should trigger struct monomorphization
-    std::cout << "DEBUG: WARNING: Struct type not found, using i8* as fallback" << std::endl;
     return llvm::PointerType::get(llvm::Type::getInt8Ty(*context), 0);
 }
 
@@ -370,8 +357,6 @@ llvm::Type* LLVMCodegen::resolveParameterTypeWithSubstitution(vyn::ast::TypeNode
             // Check if it's a type parameter
             auto it = substitutions.find(name);
             if (it != substitutions.end()) {
-                std::cout << "DEBUG: Substituting type parameter " << name << " -> " << it->second << std::endl;
-                
                 // Resolve the concrete type by creating a TypeName node
                 auto concreteTypeNode = std::make_unique<ast::TypeName>(
                     SourceLocation(),

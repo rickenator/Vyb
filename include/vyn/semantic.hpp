@@ -108,6 +108,7 @@ struct SymbolInfo {
     bool isConst = false;
     ast::OwnershipKind ownershipKind = ast::OwnershipKind::MY; // Default to unique ownership
     ast::TypeNode* type = nullptr;
+    std::vector<std::string> bounds; // For TYPE_PARAMETER: aspect bounds (e.g., ["Display", "Clone"])
 };
 
 class Scope {
@@ -253,6 +254,7 @@ public:
     bool isLValue(ast::Expression* expr);
     bool areTypesCompatible(ast::TypeNode* typeA, ast::TypeNode* typeB); // Added
     std::shared_ptr<ast::TypeNode> cloneTypeNode(ast::TypeNode* type); // Helper to clone type nodes
+    ast::TypeNode* substituteSelfType(ast::TypeNode* returnType, const std::string& concreteType); // Substitute Self with concrete type
     void handleVecMethodCall(ast::CallExpression* node, const std::string& objectName, const std::string& methodName);
     void handleVecMethodCallOnMember(ast::CallExpression* node, ast::VecType* vecType, const std::string& methodName);
 
@@ -396,6 +398,7 @@ private:
     
     // Context for resolving 'Self' type in aspect implementations
     ast::TypeNode* currentImplType = nullptr;  // Set to Box<T> when processing bind Display -> Box<T>
+    bool processingTraitOrBindMethod = false;  // True when visiting methods inside aspect or bind
 
     void enterScope();
     void exitScope();
