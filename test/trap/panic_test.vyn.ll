@@ -12,9 +12,10 @@ entry:
   br i1 %condition2, label %then, label %ifcont, !dbg !11
 
 then:                                             ; preds = %entry
-  br label %ifcont, !dbg !11
+  call void @__vyn_runtime_panic(ptr @0), !dbg !11
+  unreachable, !dbg !11
 
-ifcont:                                           ; preds = %then, %entry
+ifcont:                                           ; preds = %entry
   ret i64 0, !dbg !11
 }
 
@@ -31,6 +32,9 @@ entry:
 ; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)
 declare void @llvm.dbg.declare(metadata, metadata, metadata) #0
 
+; Function Attrs: noreturn
+declare void @__vyn_runtime_panic(ptr) #1
+
 declare void @__vyn_println(ptr)
 
 declare ptr @__vyn_serialize_to_json(ptr, ptr)
@@ -38,6 +42,7 @@ declare ptr @__vyn_serialize_to_json(ptr, ptr)
 declare ptr @__vyn_convert_lit_string(ptr)
 
 attributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }
+attributes #1 = { noreturn }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!2, !3}

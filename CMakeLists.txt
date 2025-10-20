@@ -112,11 +112,13 @@ set(VRE_HEADERS
 # Runtime sources
 set(RUNTIME_SOURCES
     src/runtime/async_runtime.cpp
+    src/runtime/error_handling.cpp
 )
 
 # Runtime headers
 set(RUNTIME_HEADERS
     include/vyn/runtime/async_runtime.hpp
+    include/vyn/runtime/error_handling.hpp
 )
 
 # Main and tests
@@ -145,6 +147,18 @@ target_link_libraries(vyn PRIVATE
     Catch2::Catch2WithMain
     ${LLVM_LIBS} # Link against the mapped LLVM libraries
 )
+
+# Platform-specific libraries for error handling runtime
+if(UNIX AND NOT APPLE)
+    # Linux: backtrace() requires -ldl, pthread for thread safety
+    target_link_libraries(vyn PRIVATE dl pthread)
+elseif(APPLE)
+    # macOS: backtrace() is in system libraries, only need pthread
+    target_link_libraries(vyn PRIVATE pthread)
+elseif(WIN32)
+    # Windows: CaptureStackBackTrace requires dbghelp.lib
+    target_link_libraries(vyn PRIVATE dbghelp)
+endif()
 
 # Add debug flags for tests.cpp
 set_source_files_properties(src/tests.cpp PROPERTIES COMPILE_FLAGS "-DDEBUG_TESTS -DVERBOSE")

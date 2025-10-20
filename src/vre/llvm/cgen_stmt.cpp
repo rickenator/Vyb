@@ -1459,18 +1459,17 @@ void LLVMCodegen::visit(vyn::ast::PanicStatement* node) {
     // Get or create the panic runtime function
     llvm::Function* panicFn = getVynPanicFunction();
     
-    // Call the panic function with the message
-    // For now, if message is a String struct, extract the char* data pointer
+    // Extract the char* pointer from the String struct
+    // String literals in Vyn are { ptr, i64 } structs
     llvm::Value* messageStr = messageValue;
-    if (messageValue->getType()->isPointerTy()) {
-        // Try to get the struct type if this is a pointer to struct
-        if (auto* ptrType = llvm::dyn_cast<llvm::PointerType>(messageValue->getType())) {
-            // For newer LLVM: pointers are opaque, need to handle differently
-            // Assume String struct has char* data as first field
-            // Load the data pointer: GEP to field 0, then load
-            llvm::Value* dataGEP = builder->CreateStructGEP(nullptr, messageValue, 0, "panic_str_data_ptr");
-            messageStr = builder->CreateLoad(int8PtrType, dataGEP, "panic_str_data");
-        }
+    
+    if (messageValue->getType()->isStructTy()) {
+        // Extract field 0 (the char* pointer) from the String struct
+        messageStr = builder->CreateExtractValue(messageValue, 0, "panic_str_ptr");
+    } else if (messageValue->getType()->isPointerTy()) {
+        // If it's a pointer to a struct, load and extract
+        llvm::Value* loadedValue = builder->CreateLoad(stringType, messageValue, "panic_str_load");
+        messageStr = builder->CreateExtractValue(loadedValue, 0, "panic_str_ptr");
     }
     
     // Call panic function (noreturn)

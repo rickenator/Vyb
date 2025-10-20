@@ -44,6 +44,10 @@ extern "C" {
     char* __vyn_toString_rune(uint32_t value);
     char* __vyn_toString_byte(uint8_t value);
     
+    // Error handling runtime functions (from error_handling.cpp)
+    void __vyn_runtime_panic(const char* message) __attribute__((noreturn));
+    void __vyn_runtime_untrapped_error(void* error) __attribute__((noreturn));
+    
     // TODO: Future toString functions for compound types:
     // char* __vyn_toString_vec(void* vec_ptr, const char* element_type);
     // char* __vyn_toString_tuple(void* tuple_ptr, const char* type_spec);
@@ -194,6 +198,12 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             llvm::orc::ExecutorAddr::fromPtr(&__vyn_println), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyn_serialize_to_json")] = llvm::orc::ExecutorSymbolDef(
             llvm::orc::ExecutorAddr::fromPtr(&__vyn_serialize_to_json), llvm::JITSymbolFlags::Exported);
+        
+        // Register error handling runtime functions
+        runtimeSymbols[mangle("__vyn_runtime_panic")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr((void*)&__vyn_runtime_panic), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_runtime_untrapped_error")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr((void*)&__vyn_runtime_untrapped_error), llvm::JITSymbolFlags::Exported);
         
         // Register standard library functions
         runtimeSymbols[mangle("malloc")] = llvm::orc::ExecutorSymbolDef(
