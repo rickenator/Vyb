@@ -89,6 +89,12 @@ vyn::ast::StmtPtr StatementParser::parse() {
             return parse_break();
         case vyn::TokenType::KEYWORD_CONTINUE:
             return parse_continue();
+        case vyn::TokenType::KEYWORD_FAIL:
+            return parse_fail();
+        case vyn::TokenType::KEYWORD_PANIC:
+            return parse_panic();
+        case vyn::TokenType::KEYWORD_RETHROW:
+            return parse_rethrow();
         default:
             // Check if this could be a variable declaration with unified syntax (name<Type>)
             if (current_token.type == vyn::TokenType::IDENTIFIER) {
@@ -839,6 +845,9 @@ bool StatementParser::is_statement_start(vyn::TokenType type) const {
         case vyn::TokenType::KEYWORD_BREAK:
         case vyn::TokenType::KEYWORD_CONTINUE:
         case vyn::TokenType::KEYWORD_FREEDOM:
+        case vyn::TokenType::KEYWORD_FAIL:
+        case vyn::TokenType::KEYWORD_PANIC:
+        case vyn::TokenType::KEYWORD_RETHROW:
         case vyn::TokenType::IDENTIFIER: // Added identifier for relaxed syntax
             return true;
         default:
@@ -1126,4 +1135,62 @@ std::unique_ptr<vyn::ast::UnsafeStatement> StatementParser::parse_unsafe() {
     auto blockStmt = parse_block(); // parse_block consumes '{' and '}'
     return std::make_unique<vyn::ast::UnsafeStatement>(loc, std::move(blockStmt));
 }
+
+// --- Error Handling Statement Parsers ---
+
+// Parses a fail statement: 'fail ErrorType { field = value }'
+std::unique_ptr<vyn::ast::FailStatement> StatementParser::parse_fail() {
+    SourceLocation loc = expect(vyn::TokenType::KEYWORD_FAIL, "Expected 'fail'").location;
+    
+    // Parse the error expression (e.g., ErrorType { field = value })
+    // This is typically a construction expression or identifier
+    auto errorExpr = expr_parser_.parse_expression();
+    
+    if (!errorExpr) {
+        throw std::runtime_error("Expected error expression after 'fail' at " + location_to_string(loc));
+    }
+    
+    // Optional semicolon
+    match(vyn::TokenType::SEMICOLON);
+    
+    return std::make_unique<vyn::ast::FailStatement>(loc, std::move(errorExpr));
+}
+
+// Parses a panic statement: 'panic("message")'
+std::unique_ptr<vyn::ast::PanicStatement> StatementParser::parse_panic() {
+    SourceLocation loc = expect(vyn::TokenType::KEYWORD_PANIC, "Expected 'panic'").location;
+    
+    // Expect '('
+    expect(vyn::TokenType::LPAREN, "Expected '(' after 'panic'");
+    
+    // Parse the panic message (typically a string literal)
+    auto messageExpr = expr_parser_.parse_expression();
+    
+    if (!messageExpr) {
+        throw std::runtime_error("Expected panic message expression at " + location_to_string(loc));
+    }
+    
+    // Expect ')'
+    expect(vyn::TokenType::RPAREN, "Expected ')' after panic message");
+    
+    // Optional semicolon
+    match(vyn::TokenType::SEMICOLON);
+    
+    return std::make_unique<vyn::ast::PanicStatement>(loc, std::move(messageExpr));
+}
+
+// Parses a rethrow statement: 'rethrow' or 'fail NewError { cause = e }'
+std::unique_ptr<vyn::ast::RethrowStatement> StatementParser::parse_rethrow() {
+    SourceLocation loc = expect(vyn::TokenType::KEYWORD_RETHROW, "Expected 'rethrow'").location;
+    
+    // Check if there's an error transformation (currently we just support simple rethrow)
+    // In the future, we might support: rethrow NewError { cause = e }
+    // For now, just simple rethrow
+    
+    // Optional semicolon
+    match(vyn::TokenType::SEMICOLON);
+    
+    return std::make_unique<vyn::ast::RethrowStatement>(loc, nullptr);
+}
+
 } // namespace vyn

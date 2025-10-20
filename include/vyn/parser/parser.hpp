@@ -191,6 +191,9 @@ namespace vyn { // Changed Vyn to vyn
         std::unique_ptr<vyn::ast::PassStatement> parse_pass(); 
         std::unique_ptr<vyn::ast::BreakStatement> parse_break(); 
         std::unique_ptr<vyn::ast::ContinueStatement> parse_continue(); 
+        std::unique_ptr<vyn::ast::FailStatement> parse_fail(); 
+        std::unique_ptr<vyn::ast::PanicStatement> parse_panic(); 
+        std::unique_ptr<vyn::ast::RethrowStatement> parse_rethrow(); 
         std::unique_ptr<vyn::ast::VariableDeclaration> parse_var_decl(); 
         std::unique_ptr<vyn::ast::Node> parse_struct_pattern(); 
         std::unique_ptr<vyn::ast::Node> parse_tuple_pattern(); 
