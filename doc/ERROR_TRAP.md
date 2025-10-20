@@ -601,6 +601,196 @@ parse_expression(tokens<Vec<Token>>)<Expr> -> {
 
 ---
 
+## Stack Traces and Debugging
+
+### Overview
+
+When a `fail` occurs, Vyn captures a **source-level stack trace** showing the chain of Vyn function calls leading to the failure. This trace is stored with the error value and can be accessed during trap handling.
+
+### Vyn Source Stack Trace
+
+**Format:**
+```
+Error: DivisionByZero { dividend = 10 }
+  at divide (math.vyn:45:9)
+  at calculate_average (stats.vyn:23:15)
+  at process_data (main.vyn:67:5)
+  at main (main.vyn:12:5)
+```
+
+**Captured Information:**
+- Function name
+- File path (relative to project root)
+- Line and column number
+- Optionally: parameter values (for debugging)
+
+**Capture Timing:**
+- Stack is captured **at the point of `fail`**
+- Minimal runtime overhead (only when errors occur)
+- Stack is **preserved** through `rethrow` with additional frames appended
+
+**Example with Stack Access:**
+```vyn
+process()<Void> -> {
+    {
+        risky_operation()
+    } trap (e<NetworkError>) -> {
+        # Access the stack trace
+        println("Error occurred:")
+        println(e.stack_trace())
+        
+        # Optionally rethrow with additional context
+        rethrow NetworkError { 
+            message = "Failed in process()",
+            cause = e  # Preserves original trace
+        }
+    }
+}
+```
+
+### Native Stack Trace (Advanced)
+
+For debugging **C FFI boundaries** or **compiler issues**, Vyn provides access to the native system stack:
+
+**Access:**
+```vyn
+freedom {
+    # Access native stack (DWARF-based)
+    native_trace<Vec<StackFrame>> = error.native_stack()
+    
+    for (frame in native_trace) {
+        println(frame.function_name + " at " + frame.address.to_string())
+    }
+}
+```
+
+**Use Cases:**
+- Debugging crashes at C FFI boundaries
+- Compiler development and verification
+- Low-level systems programming
+
+**Implementation:**
+- Uses LLVM debug info (DWARF)
+- Stack walking via `libunwind` or platform APIs
+- Available only in `freedom` blocks (low-level access)
+
+### Stack Trace with Ownership Cleanup
+
+The stack trace **includes cleanup handlers** to show the full unwinding path:
+
+**Example:**
+```vyn
+process_file(path<String>)<String> -> {
+    {
+        file<File> = File.open(path)
+        defer file.close()  # Cleanup handler registered
+        
+        content<String> = file.read_all()  # May fail
+        return content
+    } trap (e<IOError>) -> {
+        # Stack trace shows:
+        # at File.read_all (file.vyn:102:9)
+        # at process_file (main.vyn:45:30)
+        # cleanup: file.close() at main.vyn:44:15  ← Shows defer
+        
+        println("Stack during error:")
+        println(e.stack_trace())
+        fail FileProcessingError { cause = e }
+    }
+}
+```
+
+### Performance Considerations
+
+**Lazy Stack Capture:**
+- Stack is captured **only when `fail` executes**
+- No overhead for success paths
+- Minimal overhead on error paths
+
+**Debug vs Release Builds:**
+- **Debug builds:** Full stack traces with parameter values
+- **Release builds:** Function names and locations only
+- **Compile flag:** `--strip-stack-traces` for minimal binary size
+
+### Integration with `rethrow`
+
+When rethrowing, the **original stack is preserved** and new frames are appended:
+
+**Example:**
+```vyn
+level1()<Void> -> {
+    {
+        level2()
+    } trap (e<DataError>) -> {
+        # Rethrow preserves original trace
+        rethrow ApplicationError {
+            message = "Failed in level1",
+            cause = e
+        }
+    }
+}
+
+level2()<Void> -> {
+    fail DataError { field = "invalid" }
+}
+
+# Resulting stack trace:
+# Error: ApplicationError { message = "Failed in level1", cause = ... }
+#   at level1 (main.vyn:15:9)  ← Rethrow frame
+# Caused by: DataError { field = "invalid" }
+#   at level2 (main.vyn:23:5)  ← Original fail
+#   at level1 (main.vyn:12:9)
+```
+
+### Stack Trace API
+
+Every error value provides:
+
+```vyn
+aspect Errorable {
+    # Get human-readable stack trace
+    stack_trace(self<their<Self>>)<String> -> { }
+    
+    # Get structured stack frames
+    stack_frames(self<their<Self>>)<Vec<StackFrame>> -> { }
+    
+    # Get native stack (freedom only)
+    native_stack(self<their<Self>>)<Vec<NativeFrame>> -> { }
+}
+
+struct StackFrame {
+    function_name<String>,
+    file_path<String>,
+    line<Int>,
+    column<Int>
+}
+
+struct NativeFrame {
+    function_name<String>,
+    address<UInt64>,
+    module_name<String>
+}
+```
+
+### Implementation Requirements
+
+**LLVM Backend:**
+- Generate DWARF debug info for all functions
+- Include line table information
+- Preserve function names even in release builds (optional)
+
+**Runtime Support:**
+- Stack walker using DWARF information
+- Platform-specific unwinding (`libunwind` on Unix, SEH on Windows)
+- Efficient storage for captured frames
+
+**Memory Management:**
+- Stack frames stored in error value
+- Cleaned up when error value is dropped
+- No leaks during unwinding
+
+---
+
 ## Open Questions
 
 1. **Error Type Hierarchy:** Composition vs inheritance vs aspects?
@@ -618,10 +808,7 @@ parse_expression(tokens<Vec<Token>>)<Expr> -> {
    ```
    - **Decision needed:** Union types or require common base
 
-4. **Stack Traces:** Should errors automatically capture stack traces?
-   - **Tradeoff:** Performance vs debuggability
-
-5. **Error Annotations:** Should functions declare what they can fail with?
+4. **Error Annotations:** Should functions declare what they can fail with?
    ```vyn
    risky_function()<Int> fails<NetworkError, TimeoutError> -> { ... }
    ```
