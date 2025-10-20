@@ -269,6 +269,33 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
             if (param && param->name) {
                 std::string paramName = param->name->name;
                 
+                // ============================================================================
+                // ASPECT BOUNDS VALIDATION
+                // ============================================================================
+                // Bounds constrain what types can be used for generic type parameters.
+                //
+                // CRITICAL CONCEPT:
+                // - Bounds affect what you can do INSIDE the generic implementation
+                // - Bounded generics let you call aspect methods on type parameters
+                // - Unbounded generics treat type parameters as opaque
+                //
+                // Example:
+                //   bind<T> Display -> Box<T>          // Unbounded: T is opaque
+                //     - Works for ANY T (Int, String, Point, etc.)
+                //     - Inside impl: CANNOT call self.value.show() - T might not have Display
+                //     - External: box.show() works for all Box<T>
+                //
+                //   bind<T<Display>> Display -> Box<T>  // Bounded: T must have Display
+                //     - Works ONLY when T has Display (Point if Point has Display)
+                //     - Inside impl: CAN call self.value.show() - bound guarantees it exists
+                //     - External: box.show() works ONLY for Box<DisplayTypes>
+                //
+                // Validation checks:
+                // 1. Bound names refer to actual aspects (not structs, not undefined types)
+                // 2. Bounds are stored in symbol table for later use
+                // 3. Method calls on bounded parameters are allowed (checked in MemberExpression)
+                // ============================================================================
+                
                 // Validate aspect bounds (if any)
                 for (const auto& bound : param->bounds) {
                     if (bound) {
@@ -285,14 +312,20 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
                 typeParamSymbol.name = paramName;
                 typeParamSymbol.kind = SymbolInfo::Kind::TYPE_PARAMETER;
                 typeParamSymbol.type = nullptr;
+                
+                // Store bounds for this type parameter
+                for (const auto& bound : param->bounds) {
+                    if (bound) {
+                        typeParamSymbol.bounds.push_back(bound->toString());
+                    }
+                }
+                
                 currentScope->add(typeParamSymbol);
             }
         }
-    } 
+    }
 
-    std::vector<std::unique_ptr<ast::TypeNode>> paramTypesVec;
-    
-    for (auto& param : node->params) { 
+    std::vector<std::unique_ptr<ast::TypeNode>> paramTypesVec;    for (auto& param : node->params) { 
         if (param.name) {
              if (isReservedWord(param.name->name)) {
                 addError("Identifier \\\"" + param.name->name + "\\\" is a reserved word and cannot be used as a parameter name.", param.name.get());
@@ -1005,6 +1038,31 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
     // Get the full type string (e.g., "Box<Int>") not just the base name
     std::string structTypeName = it->second->toString();
     const std::string& fieldName = propertyId->name;
+    
+    // Check if the object type is a type parameter with bounds
+    // If so, check if any of its bounds provide this method
+    SymbolInfo* typeParamSym = currentScope->lookup(structTypeName);
+    if (typeParamSym && typeParamSym->kind == SymbolInfo::Kind::TYPE_PARAMETER) {
+        // This is a type parameter - check its bounds for the method
+        for (const std::string& boundName : typeParamSym->bounds) {
+            TraitInfo* traitInfo = findTrait(boundName);
+            if (traitInfo) {
+                // Check if this aspect has the method
+                for (const auto& method : traitInfo->methods) {
+                    if (method.name == fieldName) {
+                        std::cout << "DEBUG: Type parameter " << structTypeName 
+                                  << " with bound " << boundName 
+                                  << " allows method " << fieldName << std::endl;
+                        // Found the method in one of the bounds - allow it
+                        return;
+                    }
+                }
+            }
+        }
+        // If we get here, no bound provides this method
+        addError("Type parameter '" + structTypeName + "' does not have bound that provides method '" + fieldName + "'", node);
+        return;
+    }
     
     // Before checking struct fields, check if this might be a trait method call
     // (MemberExpression can be part of CallExpression, where callee is the MemberExpression)
@@ -2092,6 +2150,14 @@ void SemanticAnalyzer::visit(ast::StructDeclaration* node) {
                 typeParamSymbol.name = paramName;
                 typeParamSymbol.kind = SymbolInfo::Kind::TYPE_PARAMETER;
                 typeParamSymbol.type = nullptr;
+                
+                // Store bounds for this type parameter
+                for (const auto& bound : param->bounds) {
+                    if (bound) {
+                        typeParamSymbol.bounds.push_back(bound->toString());
+                    }
+                }
+                
                 currentScope->add(typeParamSymbol);
                 
 
@@ -2337,6 +2403,14 @@ void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
                 typeParamSymbol.name = paramName;
                 typeParamSymbol.kind = SymbolInfo::Kind::TYPE_PARAMETER;
                 typeParamSymbol.type = nullptr; // Generic type parameter has no concrete type yet
+                
+                // Store bounds for this type parameter
+                for (const auto& bound : param->bounds) {
+                    if (bound) {
+                        typeParamSymbol.bounds.push_back(bound->toString());
+                    }
+                }
+                
                 currentScope->add(typeParamSymbol);
                 
                 std::cout << "DEBUG: Registered type parameter: " << paramName << std::endl;

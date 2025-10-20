@@ -108,6 +108,7 @@ struct SymbolInfo {
     bool isConst = false;
     ast::OwnershipKind ownershipKind = ast::OwnershipKind::MY; // Default to unique ownership
     ast::TypeNode* type = nullptr;
+    std::vector<std::string> bounds; // For TYPE_PARAMETER: aspect bounds (e.g., ["Display", "Clone"])
 };
 
 class Scope {
