@@ -277,6 +277,13 @@ public:
     void visit(ast::YieldReturnStatement* node) override;
     void visit(ast::ExternStatement* node) override; // Added
     void visit(ast::ThrowStatement* node) override; // Added
+    
+    // Error Handling
+    void visit(ast::FailStatement* node) override;
+    void visit(ast::TrapClause* node) override;
+    void visit(ast::EnsureClause* node) override;
+    void visit(ast::RethrowStatement* node) override;
+    void visit(ast::PanicStatement* node) override;
 
     // Expressions
     void visit(ast::Identifier* node) override;

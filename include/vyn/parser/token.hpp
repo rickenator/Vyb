@@ -30,6 +30,7 @@ enum class TokenType {
     KEYWORD_NIL, // Added for nil literal
     KEYWORD_FREEDOM, // Added for freedom blocks
     KEYWORD_AUTO, // Added for auto type inference
+    KEYWORD_FAIL, KEYWORD_TRAP, KEYWORD_RETHROW, KEYWORD_ENSURE, KEYWORD_PANIC, // Error handling keywords
 
     // Operators
     PLUS, MINUS, MULTIPLY, DIVIDE, MODULO, EQ, EQEQ, NOTEQ, LT, GT, LTEQ, GTEQ,

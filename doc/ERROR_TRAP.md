@@ -791,6 +791,242 @@ struct NativeFrame {
 
 ---
 
+## Runtime Error Handler (Untrapped Failures)
+
+### Philosophy
+
+**Untrapped errors should not silently crash** - they should be caught by the Vyn runtime and reported with full diagnostic information. This provides:
+1. **Better debugging** - See exactly what failed and where
+2. **Meaningful test results** - Tests can report specific failures
+3. **Production reliability** - Graceful degradation instead of segfaults
+
+### Runtime Handler Behavior
+
+When a `fail` occurs **without a matching trap**, the Vyn runtime automatically:
+
+1. **Captures the complete error context:**
+   - Error type and values
+   - Full Vyn source stack trace
+   - Ownership cleanup chain
+   - Timestamp and thread info
+
+2. **Executes all cleanup handlers:**
+   - Runs `defer` statements in reverse order
+   - Executes `ensure` blocks
+   - Properly drops all owned values
+   - Releases resources (files, memory, locks)
+
+3. **Reports the error:**
+   - Prints formatted error message to stderr
+   - Shows complete stack trace
+   - Optionally invokes custom error handler
+
+4. **Terminates gracefully:**
+   - Exit with non-zero status code (default: 1)
+   - Allows process cleanup to complete
+   - No resource leaks or corruption
+
+### Default Error Report Format
+
+```
+┌─ UNTRAPPED FAILURE ─────────────────────────────────────────┐
+│ Error: DivisionByZero { dividend = 10 }                      │
+│ Thread: main                                                  │
+│ Time: 2025-10-20 14:32:11.458                                │
+└───────────────────────────────────────────────────────────────┘
+
+Stack Trace:
+  at divide (math.vyn:45:9)
+  at calculate_average (stats.vyn:23:15)
+  at process_data (main.vyn:67:5)
+  at main (main.vyn:12:3)
+
+Cleanup Executed:
+  defer file.close() at main.vyn:65
+  drop temp_buffer at main.vyn:64
+
+Exit Code: 1
+```
+
+### Custom Error Handlers
+
+Users can install custom handlers for untrapped errors:
+
+```vyn
+# Set custom handler at program start
+main()<Int> -> {
+    Runtime.set_untrapped_handler(my_error_handler)
+    
+    # Rest of program...
+    run_application()
+    
+    return 0
+}
+
+# Custom handler signature
+my_error_handler(error<Error>, trace<StackTrace>)<Void> -> {
+    # Log to file
+    log_file<File> = File.open("errors.log", "append")
+    log_file.write("UNTRAPPED: " + error.message() + "\n")
+    log_file.write(trace.to_string() + "\n")
+    log_file.close()
+    
+    # Send to monitoring service
+    send_to_monitoring(error, trace)
+    
+    # Note: Handler cannot prevent termination
+    # Program will still exit after this runs
+}
+```
+
+### Test Harness Integration
+
+For testing, the runtime can capture untrapped errors instead of exiting:
+
+```vyn
+# In test harness
+test_division_by_zero()<TestResult> -> {
+    result<TestResult> = Runtime.capture_untrapped({
+        divide(10, 0)  # This will fail
+    })
+    
+    match (result) {
+        Trapped { error = e } -> {
+            # Test can verify the error
+            assert(e is DivisionByZero)
+            return TestResult::Pass
+        },
+        Success { value = v } -> {
+            return TestResult::Fail { reason = "Expected error but got: " + v.to_string() }
+        }
+    }
+}
+```
+
+### Runtime API
+
+```vyn
+aspect Runtime {
+    # Set custom handler (called before program exits)
+    set_untrapped_handler(handler<fn(Error, StackTrace) -> Void>)<Void>
+    
+    # Clear custom handler (back to default)
+    clear_untrapped_handler()<Void>
+    
+    # For testing: capture untrapped errors instead of exiting
+    capture_untrapped<T>(block<fn() -> T>)<CaptureResult<T>>
+}
+
+enum CaptureResult<T> {
+    Success { value<T> },
+    Trapped { error<Error>, trace<StackTrace> }
+}
+```
+
+### Implementation Details
+
+**C++ Runtime Support:**
+```cpp
+namespace vyn::runtime {
+    // Global untrapped error handler
+    struct UntrappedErrorHandler {
+        // Error context
+        struct ErrorContext {
+            void* error_object;       // Errorable value
+            const char* error_type;   // Type name
+            std::vector<StackFrame> stack_trace;
+            uint64_t thread_id;
+            uint64_t timestamp;
+        };
+        
+        // Handler function pointer
+        using HandlerFn = void(*)(const ErrorContext&);
+        
+        // Set custom handler
+        static void set_handler(HandlerFn handler);
+        
+        // Called when untrapped error occurs
+        static void handle_untrapped_error(
+            void* error_object,
+            const char* error_type,
+            const std::vector<StackFrame>& stack_trace
+        );
+        
+        // Default handler: print to stderr and exit(1)
+        static void default_handler(const ErrorContext& ctx);
+    };
+}
+```
+
+**LLVM Codegen Integration:**
+When a `fail` statement is generated without a trap, emit:
+```llvm
+; Call runtime error handler
+call void @__vyn_runtime_untrapped_error(
+    ptr %error_object,
+    ptr @error_type_name,
+    ptr %stack_trace_data
+)
+
+; Handler never returns (noreturn attribute)
+unreachable
+```
+
+### Panic vs Untrapped Fail
+
+**Important Distinction:**
+
+```vyn
+# UNTRAPPED FAIL - Goes through runtime handler
+divide(a<Int>, b<Int>)<Int> -> {
+    if (b == 0) {
+        fail DivisionByZero { dividend = a }
+    }
+    return a / b
+}
+# If caller doesn't trap, runtime handler catches it
+
+# PANIC - Immediate crash, no handler involvement
+check_invariant(value<Int>)<Void> -> {
+    if (value < 0) {
+        panic("Invariant violated: negative value!")
+        # Crashes immediately, no cleanup, no handler
+    }
+}
+```
+
+**When to use each:**
+- **Untrapped fail**: Recoverable errors that should be handled but weren't
+- **Panic**: Programming errors, corrupted state, "this should never happen"
+
+### Exit Codes
+
+```
+0   - Success (normal exit)
+1   - Untrapped error (default)
+2   - Panic
+101 - User-defined error (custom handler can set)
+```
+
+### Environment Variables
+
+Control runtime behavior:
+```bash
+# Verbose error reporting
+VYN_ERROR_VERBOSE=1 ./program
+
+# Stack trace depth limit
+VYN_STACK_TRACE_DEPTH=50 ./program
+
+# Save errors to file
+VYN_ERROR_LOG=/var/log/app.errors ./program
+
+# Disable colors in error output
+VYN_ERROR_NO_COLOR=1 ./program
+```
+
+---
+
 ## Open Questions
 
 1. **Error Type Hierarchy:** Composition vs inheritance vs aspects?

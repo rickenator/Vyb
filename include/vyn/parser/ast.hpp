@@ -79,6 +79,11 @@ class MatchStatement; // Added
 class YieldStatement; // Added
 class YieldReturnStatement; // Added
 class AssertStatement; // Added
+class FailStatement; // Error handling: fail with error value
+class TrapClause; // Error handling: trap clause for handling failures
+class EnsureClause; // Error handling: ensure clause for cleanup
+class RethrowStatement; // Error handling: rethrow current error
+class PanicStatement; // Error handling: unrecoverable panic
 
 // Declarations
 class VariableDeclaration;
@@ -224,6 +229,11 @@ enum class NodeType {
     YIELD_STATEMENT, // Added
     YIELD_RETURN_STATEMENT, // Added
     ASSERT_STATEMENT, // Added
+    FAIL_STATEMENT, // Error handling: fail
+    TRAP_CLAUSE, // Error handling: trap clause
+    ENSURE_CLAUSE, // Error handling: ensure clause
+    RETHROW_STATEMENT, // Error handling: rethrow
+    PANIC_STATEMENT, // Error handling: panic
 
     // Declarations
     VARIABLE_DECLARATION,
@@ -319,6 +329,13 @@ public:
     virtual void visit(YieldStatement* node) = 0;
     virtual void visit(YieldReturnStatement* node) = 0;
     virtual void visit(AssertStatement* node) = 0;
+    
+    // Error Handling
+    virtual void visit(FailStatement* node) = 0;
+    virtual void visit(TrapClause* node) = 0;
+    virtual void visit(EnsureClause* node) = 0;
+    virtual void visit(RethrowStatement* node) = 0;
+    virtual void visit(PanicStatement* node) = 0;
 
     // Declarations
     virtual void visit(VariableDeclaration* node) = 0;
@@ -1464,6 +1481,72 @@ public:
     std::string toString() const override;
     void accept(Visitor& visitor) override;
 };
+
+// --- Error Handling Statements ---
+
+// FailStatement - Trigger a failure with an error value
+class FailStatement : public Statement {
+public:
+    ExprPtr error; // The error value to fail with (must implement Errorable aspect)
+
+    FailStatement(SourceLocation loc, ExprPtr error);
+    ~FailStatement() override = default;
+    NodeType getType() const override;
+    std::string toString() const override;
+    void accept(Visitor& visitor) override;
+};
+
+// TrapClause - Error handler clause (attached to blocks)
+class TrapClause : public Node {
+public:
+    std::unique_ptr<Identifier> errorName; // Error parameter name (e.g., 'e')
+    TypeNodePtr errorType;                  // Error type (e.g., NetworkError)
+    StmtPtr handler;                        // Handler block
+
+    TrapClause(SourceLocation loc, std::unique_ptr<Identifier> errorName, 
+               TypeNodePtr errorType, StmtPtr handler);
+    ~TrapClause() override = default;
+    NodeType getType() const override;
+    std::string toString() const override;
+    void accept(Visitor& visitor) override;
+};
+
+// EnsureClause - Cleanup clause that always runs
+class EnsureClause : public Node {
+public:
+    StmtPtr cleanupBlock; // Cleanup code that always executes
+
+    EnsureClause(SourceLocation loc, StmtPtr cleanupBlock);
+    ~EnsureClause() override = default;
+    NodeType getType() const override;
+    std::string toString() const override;
+    void accept(Visitor& visitor) override;
+};
+
+// RethrowStatement - Propagate current error to caller
+class RethrowStatement : public Statement {
+public:
+    ExprPtr transformedError; // Optional: transform error before rethrowing
+
+    RethrowStatement(SourceLocation loc, ExprPtr transformedError = nullptr);
+    ~RethrowStatement() override = default;
+    NodeType getType() const override;
+    std::string toString() const override;
+    void accept(Visitor& visitor) override;
+};
+
+// PanicStatement - Unrecoverable error, immediate crash
+class PanicStatement : public Statement {
+public:
+    ExprPtr message; // Panic message (typically a string literal)
+
+    PanicStatement(SourceLocation loc, ExprPtr message);
+    ~PanicStatement() override = default;
+    NodeType getType() const override;
+    std::string toString() const override;
+    void accept(Visitor& visitor) override;
+};
+
 } // namespace ast
 } // namespace vyn
 

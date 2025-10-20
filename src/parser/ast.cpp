@@ -1845,5 +1845,117 @@ void YieldReturnStatement::accept(Visitor& visitor) {
     visitor.visit(this);
 }
 
+// --- Error Handling Statements ---
+
+// FailStatement implementation
+FailStatement::FailStatement(SourceLocation loc, ExprPtr error)
+    : Statement(loc), error(std::move(error)) {}
+
+NodeType FailStatement::getType() const {
+    return NodeType::FAIL_STATEMENT;
+}
+
+std::string FailStatement::toString() const {
+    std::stringstream ss;
+    ss << "fail " << (error ? error->toString() : "");
+    return ss.str();
+}
+
+void FailStatement::accept(Visitor& visitor) {
+    visitor.visit(this);
+}
+
+// TrapClause implementation
+TrapClause::TrapClause(SourceLocation loc, std::unique_ptr<Identifier> errorName,
+                       TypeNodePtr errorType, StmtPtr handler)
+    : Node(loc), errorName(std::move(errorName)), 
+      errorType(std::move(errorType)), handler(std::move(handler)) {}
+
+NodeType TrapClause::getType() const {
+    return NodeType::TRAP_CLAUSE;
+}
+
+std::string TrapClause::toString() const {
+    std::stringstream ss;
+    ss << "trap (";
+    if (errorName) {
+        ss << errorName->toString();
+    }
+    if (errorType) {
+        ss << "<" << errorType->toString() << ">";
+    }
+    ss << ") -> ";
+    if (handler) {
+        ss << handler->toString();
+    }
+    return ss.str();
+}
+
+void TrapClause::accept(Visitor& visitor) {
+    visitor.visit(this);
+}
+
+// EnsureClause implementation
+EnsureClause::EnsureClause(SourceLocation loc, StmtPtr cleanupBlock)
+    : Node(loc), cleanupBlock(std::move(cleanupBlock)) {}
+
+NodeType EnsureClause::getType() const {
+    return NodeType::ENSURE_CLAUSE;
+}
+
+std::string EnsureClause::toString() const {
+    std::stringstream ss;
+    ss << "ensure -> ";
+    if (cleanupBlock) {
+        ss << cleanupBlock->toString();
+    }
+    return ss.str();
+}
+
+void EnsureClause::accept(Visitor& visitor) {
+    visitor.visit(this);
+}
+
+// RethrowStatement implementation
+RethrowStatement::RethrowStatement(SourceLocation loc, ExprPtr transformedError)
+    : Statement(loc), transformedError(std::move(transformedError)) {}
+
+NodeType RethrowStatement::getType() const {
+    return NodeType::RETHROW_STATEMENT;
+}
+
+std::string RethrowStatement::toString() const {
+    if (transformedError) {
+        return "fail " + transformedError->toString();
+    }
+    return "rethrow";
+}
+
+void RethrowStatement::accept(Visitor& visitor) {
+    visitor.visit(this);
+}
+
+// PanicStatement implementation
+PanicStatement::PanicStatement(SourceLocation loc, ExprPtr message)
+    : Statement(loc), message(std::move(message)) {}
+
+NodeType PanicStatement::getType() const {
+    return NodeType::PANIC_STATEMENT;
+}
+
+std::string PanicStatement::toString() const {
+    std::stringstream ss;
+    ss << "panic(";
+    if (message) {
+        ss << message->toString();
+    }
+    ss << ")";
+    return ss.str();
+}
+
+void PanicStatement::accept(Visitor& visitor) {
+    visitor.visit(this);
+}
+
 } // namespace ast
 } // namespace vyn

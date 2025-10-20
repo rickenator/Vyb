@@ -613,6 +613,7 @@ void LLVMCodegen::visit(vyn::ast::EmptyStatement* node) {
 }
 
 void LLVMCodegen::visit(vyn::ast::ThrowStatement* node) {
+    // TODO: Old throw statement - consider deprecating in favor of fail
     // Get the current function
     llvm::Function* function = getCurrentFunction();
     if (!function) {
@@ -1266,6 +1267,125 @@ void LLVMCodegen::visit(ast::ExternStatement* node) {
     }
     
     m_currentLLVMValue = func;
+}
+
+// --- Error Handling Codegen Implementations ---
+
+void LLVMCodegen::visit(vyn::ast::FailStatement* node) {
+    // TODO: Phase 1 implementation
+    // Generate:
+    // 1. Evaluate error expression
+    // 2. Capture stack trace (lazy capture at fail point)
+    // 3. Check if there's a trap handler in scope
+    // 4. If no trap: call __vyn_runtime_untrapped_error() and unreachable
+    // 5. If trap: store error and jump to trap dispatcher
+    
+    llvm::Function* function = getCurrentFunction();
+    if (!function) {
+        logError(node->loc, "Fail statement outside function context");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    if (!node->error) {
+        logError(node->loc, "Fail statement missing error expression");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    // For now, just evaluate the error expression
+    node->error->accept(*this);
+    llvm::Value* errorValue = m_currentLLVMValue;
+    
+    // TODO: Call runtime handler and mark unreachable
+    // builder->CreateCall(untrappedErrorHandler, {errorValue, ...});
+    // builder->CreateUnreachable();
+    
+    logError(node->loc, "fail/trap error handling not yet implemented in codegen");
+    m_currentLLVMValue = nullptr;
+}
+
+void LLVMCodegen::visit(vyn::ast::TrapClause* node) {
+    // TODO: Phase 1 implementation
+    // TrapClause is not directly visited - it's processed as part of block expression
+    // with trap clauses. The block codegen will:
+    // 1. Set up landing pads for exception handling
+    // 2. Generate type checks for each trap clause
+    // 3. Jump to appropriate handler or continue unwinding
+    
+    logError(node->loc, "TrapClause should not be visited directly");
+    m_currentLLVMValue = nullptr;
+}
+
+void LLVMCodegen::visit(vyn::ast::EnsureClause* node) {
+    // TODO: Phase 1 implementation
+    // EnsureClause is not directly visited - it's processed as part of block expression
+    // The block codegen will:
+    // 1. Register cleanup handlers in scope
+    // 2. Generate cleanup code in landing pads
+    // 3. Ensure cleanup runs on both success and failure paths
+    
+    logError(node->loc, "EnsureClause should not be visited directly");
+    m_currentLLVMValue = nullptr;
+}
+
+void LLVMCodegen::visit(vyn::ast::RethrowStatement* node) {
+    // TODO: Phase 1 implementation
+    // Generate:
+    // 1. If transformedError: evaluate new error expression
+    // 2. Preserve original stack trace and append new frame
+    // 3. Re-invoke LLVM exception mechanism
+    // 4. Mark as unreachable (no return)
+    
+    llvm::Function* function = getCurrentFunction();
+    if (!function) {
+        logError(node->loc, "Rethrow statement outside function context");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    if (node->transformedError) {
+        node->transformedError->accept(*this);
+    }
+    
+    // TODO: Generate LLVM resume instruction or rethrow call
+    // builder->CreateResume(...);
+    
+    logError(node->loc, "rethrow error handling not yet implemented in codegen");
+    m_currentLLVMValue = nullptr;
+}
+
+void LLVMCodegen::visit(vyn::ast::PanicStatement* node) {
+    // TODO: Phase 1 implementation
+    // Generate:
+    // 1. Evaluate panic message
+    // 2. Call __vyn_runtime_panic(message)
+    // 3. Mark as noreturn with unreachable
+    
+    llvm::Function* function = getCurrentFunction();
+    if (!function) {
+        logError(node->loc, "Panic statement outside function context");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    if (!node->message) {
+        logError(node->loc, "Panic statement missing message");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    // Evaluate panic message
+    node->message->accept(*this);
+    llvm::Value* messageValue = m_currentLLVMValue;
+    
+    // TODO: Call runtime panic function
+    // llvm::Function* panicFn = getPanicFunction();
+    // builder->CreateCall(panicFn, {messageValue});
+    // builder->CreateUnreachable();
+    
+    logError(node->loc, "panic error handling not yet implemented in codegen");
+    m_currentLLVMValue = nullptr;
 }
 
 }  // namespace vyn
