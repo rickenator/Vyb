@@ -2,6 +2,7 @@
 #include "vyn/vre/llvm/codegen.hpp"
 #include "vyn/parser/ast.hpp"
 
+#include <set>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Instructions.h> // For AllocaInst, ReturnInst, BranchInst etc.
@@ -44,15 +45,25 @@ void LLVMCodegen::visit(ast::AspectDeclaration* node) {
         }
     }
     
-    // For now, we just store information about the trait methods without generating actual code
-    // In a full implementation, this information would be used for vtable generation when
-    // types implement this trait
+    // Generate code for aspect methods that have default implementations
+    // Methods without bodies are just signatures (no codegen needed)
+    // Methods with bodies need LLVM functions so they can be called when bind doesn't override
     
-    // Skip visiting trait method signatures - they contain placeholder types like 'Self'
-    // which have no concrete LLVM representation. The actual method implementations
-    // will be generated when processing impl blocks.
+    for (const auto& method : node->methods) {
+        if (method && method->body) {
+            std::cout << "DEBUG: Generating default implementation for aspect method: " 
+                      << traitName << "::" << method->id->name << std::endl;
+            
+            // Generate the method - but we can't use Self type directly
+            // We'll generate a generic version that will be instantiated per type
+            // For now, skip codegen for aspect default methods - they'll be generated
+            // on-demand when a concrete type needs them
+            // TODO: Implement on-demand generation or pre-generate for all implementing types
+            std::cout << "DEBUG: Skipping codegen for aspect default method (needs per-type instantiation)" << std::endl;
+        }
+    }
     
-    std::cout << "DEBUG: Trait '" << traitName << "' declaration skipped in codegen (interface only, no runtime code)" << std::endl;
+    std::cout << "DEBUG: Trait '" << traitName << "' declaration processed in codegen" << std::endl;
     
     // Traits don't produce runtime values
     m_currentLLVMValue = nullptr;
@@ -693,9 +704,51 @@ void LLVMCodegen::visit(vyn::ast::BindDeclaration* node) {
     currentClassType = llvm::dyn_cast<llvm::StructType>(targetType);
     m_currentImplTypeNode = node->selfType.get();
 
+    // Generate explicitly defined methods in the bind
     for (const auto& member : node->methods) {
         // Members are typically FunctionDeclarations (methods)
         member->accept(*this); // This will call visit(FunctionDeclaration*)
+    }
+
+    // Now generate default implementations for methods not explicitly defined
+    if (node->traitType && driver_.hasSemanticAnalyzer()) {
+        std::string aspectName = node->traitType->toString();
+        std::string typeName = node->selfType->toString();
+        
+        std::cout << "DEBUG: Checking for default methods to generate for " 
+                  << typeName << " implementing " << aspectName << std::endl;
+        
+        SemanticAnalyzer* semantic = driver_.getSemanticAnalyzer();
+        const auto& aspects = semantic->getTraitRegistry();
+        
+        auto aspectIt = aspects.find(aspectName);
+        if (aspectIt != aspects.end() && aspectIt->second) {
+            const TraitInfo* aspectInfo = aspectIt->second.get();
+            
+            // Get the list of methods explicitly defined in this bind
+            std::set<std::string> implementedMethods;
+            for (const auto& method : node->methods) {
+                if (method) {
+                    implementedMethods.insert(method->id->name);
+                }
+            }
+            
+            // Check each aspect method for default implementations
+            for (const auto& traitMethod : aspectInfo->methods) {
+                if (traitMethod.hasDefaultImpl && 
+                    implementedMethods.find(traitMethod.name) == implementedMethods.end()) {
+                    
+                    std::cout << "DEBUG: Generating default implementation for " 
+                              << typeName << "::" << traitMethod.name << std::endl;
+                    
+                    // Generate the default method by visiting the aspect's method declaration
+                    // with the current impl type set (so Self resolves to the concrete type)
+                    if (traitMethod.declaration) {
+                        traitMethod.declaration->accept(*this);
+                    }
+                }
+            }
+        }
     }
 
     currentClassType = oldCurrentClassType;
