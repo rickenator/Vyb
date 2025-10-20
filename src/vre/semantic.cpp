@@ -893,9 +893,48 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     }
                 }
                 
-                // If we reach here, try Vec method as fallback (for backward compatibility)
-                // This will generate an error if not found
-                handleVecMethodCall(node, objIdent->name, methodName);
+                // Check if this is a method call on a type parameter
+                if (objSymbol && objSymbol->type) {
+                    if (auto typeName = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
+                        if (typeName->identifier && typeName->genericArgs.empty()) {
+                            std::string typeStr = typeName->identifier->name;
+                            SymbolInfo* typeParamSym = currentScope->lookup(typeStr);
+                            if (typeParamSym && typeParamSym->kind == SymbolInfo::Kind::TYPE_PARAMETER) {
+                                // This is a type parameter - check its bounds for the method
+                                for (const std::string& boundName : typeParamSym->bounds) {
+                                    TraitInfo* traitInfo = findTrait(boundName);
+                                    if (traitInfo) {
+                                        for (const auto& method : traitInfo->methods) {
+                                            if (method.name == methodName) {
+                                                // Found! Set return type from the aspect
+                                                if (method.returnType) {
+                                                    // Return type might be Self - substitute with type parameter
+                                                    ast::TypeNode* actualReturnType = substituteSelfType(method.returnType, typeStr);
+                                                    expressionTypes[node] = actualReturnType;
+                                                    node->type = std::shared_ptr<ast::TypeNode>(actualReturnType->clone());
+                                                }
+                                                return;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // If we reach here and it's a Vec type, try Vec-specific methods
+                // Otherwise, it's an unknown method error
+                if (objSymbol && objSymbol->type) {
+                    if (dynamic_cast<ast::VecType*>(objSymbol->type)) {
+                        handleVecMethodCall(node, objIdent->name, methodName);
+                        return;
+                    }
+                }
+                
+                // Not a Vec and not a trait method - unknown method
+                std::string typeName = objSymbol && objSymbol->type ? objSymbol->type->toString() : "unknown";
+                addError("Unknown method '" + methodName + "' on type '" + typeName + "'", node);
                 return;
             }
         }
