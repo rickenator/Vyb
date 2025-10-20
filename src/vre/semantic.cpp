@@ -334,9 +334,21 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
                  addError("Redefinition of parameter \\\"" + param.name->name + "\\\".", param.name.get());
             }
             if (param.typeNode) {
-                param.typeNode->accept(*this); 
-                paramTypesVec.push_back(param.typeNode->clone());
-                currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, param.name->name, false, ast::OwnershipKind::MY, param.typeNode->clone().release()});
+                // Resolve Self type if we're in a bind/trait impl context
+                ast::TypeNode* resolvedType = param.typeNode.get();
+                if (currentImplType) {
+                    if (auto typeName = dynamic_cast<ast::TypeName*>(param.typeNode.get())) {
+                        if (typeName->identifier && typeName->identifier->name == "Self") {
+                            // Replace Self with the current impl type
+                            resolvedType = currentImplType;
+                            std::cout << "DEBUG: Resolved parameter type Self to " << currentImplType->toString() << std::endl;
+                        }
+                    }
+                }
+                
+                resolvedType->accept(*this); 
+                paramTypesVec.push_back(resolvedType->clone());
+                currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, param.name->name, false, ast::OwnershipKind::MY, resolvedType->clone().release()});
             } else {
                 addError("Parameter \\\"" + param.name->name + "\\\" missing type.", param.name.get());
                 paramTypesVec.push_back(nullptr); 
@@ -964,6 +976,30 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                             }
                         }
                         
+                        // Check if this is a type parameter with bounds
+                        SymbolInfo* typeParamSym = currentScope->lookup(typeNameStr);
+                        if (typeParamSym && typeParamSym->kind == SymbolInfo::Kind::TYPE_PARAMETER) {
+                            // Type parameter - check if any bound provides this method
+                            for (const std::string& boundName : typeParamSym->bounds) {
+                                TraitInfo* traitInfo = findTrait(boundName);
+                                if (traitInfo) {
+                                    for (const auto& method : traitInfo->methods) {
+                                        if (method.name == methodName) {
+                                            std::cout << "DEBUG: CallExpression: Type parameter " << typeNameStr 
+                                                      << " with bound " << boundName 
+                                                      << " allows method " << methodName << std::endl;
+                                            // Found the method in bounds - allow it
+                                            if (method.returnType) {
+                                                expressionTypes[node] = method.returnType;
+                                                node->type = std::shared_ptr<ast::TypeNode>(method.returnType->clone());
+                                            }
+                                            return;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
                         // If we didn't find a trait method, it might be a struct method (future feature)
                         // or it's an error
                         addError("Method '" + methodName + "' not found for type '" + typeNameStr + "'", node);
@@ -1039,8 +1075,78 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
     std::string structTypeName = it->second->toString();
     const std::string& fieldName = propertyId->name;
     
-    // Check if the object type is a type parameter with bounds
-    // If so, check if any of its bounds provide this method
+    std::cout << "DEBUG: MemberExpression type check: structTypeName=" << structTypeName 
+              << ", fieldName=" << fieldName 
+              << ", typeNodeKind=" << typeid(*it->second).name() << std::endl;
+    
+    // Check if the object's TYPE is a type parameter with bounds
+    // This handles both direct variable access (clonedValue.show()) and chained access (self.value.show())
+    if (auto objTypeName = dynamic_cast<ast::TypeName*>(it->second)) {
+        if (objTypeName->identifier) {
+            std::string objTypeStr = objTypeName->identifier->name;
+            // Check if this type is a type parameter
+            SymbolInfo* typeParamSym = currentScope->lookup(objTypeStr);
+            if (typeParamSym && typeParamSym->kind == SymbolInfo::Kind::TYPE_PARAMETER) {
+                // This object's type is a type parameter - check its bounds for the method
+                for (const std::string& boundName : typeParamSym->bounds) {
+                    TraitInfo* traitInfo = findTrait(boundName);
+                    if (traitInfo) {
+                        // Check if this aspect has the method
+                        for (const auto& method : traitInfo->methods) {
+                            if (method.name == fieldName) {
+                                std::cout << "DEBUG: Object of type parameter " << objTypeStr 
+                                          << " with bound " << boundName 
+                                          << " allows method " << fieldName << std::endl;
+                                // Found the method in one of the bounds - allow it
+                                return;
+                            }
+                        }
+                    }
+                }
+                // If we get here, no bound provides this method
+                addError("Type parameter '" + objTypeStr + "' does not have bound that provides method '" + fieldName + "'", node);
+                return;
+            }
+        }
+    }
+    
+    // Also check if the object is a variable whose type is a type parameter (for additional safety)
+    if (auto objIdent = dynamic_cast<ast::Identifier*>(node->object.get())) {
+        SymbolInfo* varSym = currentScope->lookup(objIdent->name);
+        if (varSym && varSym->type) {
+            if (auto varTypeName = dynamic_cast<ast::TypeName*>(varSym->type)) {
+                if (varTypeName->identifier) {
+                    std::string varTypeStr = varTypeName->identifier->name;
+                    // Check if this type is a type parameter
+                    SymbolInfo* typeParamSym = currentScope->lookup(varTypeStr);
+                    if (typeParamSym && typeParamSym->kind == SymbolInfo::Kind::TYPE_PARAMETER) {
+                        // This variable's type is a type parameter - check its bounds for the method
+                        for (const std::string& boundName : typeParamSym->bounds) {
+                            TraitInfo* traitInfo = findTrait(boundName);
+                            if (traitInfo) {
+                                // Check if this aspect has the method
+                                for (const auto& method : traitInfo->methods) {
+                                    if (method.name == fieldName) {
+                                        std::cout << "DEBUG: Variable " << objIdent->name 
+                                                  << " has type parameter " << varTypeStr 
+                                                  << " with bound " << boundName 
+                                                  << " allowing method " << fieldName << std::endl;
+                                        // Found the method in one of the bounds - allow it
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                        // If we get here, no bound provides this method
+                        addError("Type parameter '" + varTypeStr + "' does not have bound that provides method '" + fieldName + "'", node);
+                        return;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Also check if the type name itself is a type parameter (for direct type parameter method calls)
     SymbolInfo* typeParamSym = currentScope->lookup(structTypeName);
     if (typeParamSym && typeParamSym->kind == SymbolInfo::Kind::TYPE_PARAMETER) {
         // This is a type parameter - check its bounds for the method
