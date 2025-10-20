@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.2] - 2025-10-20 (freedom-1.0 series)
+
+### Language Philosophy
+- **FREEDOM Revolution**: Replaced `unsafe` keyword with `freedom` throughout the language
+  - Philosophy: Trade safety for FREEDOM - empowering programmers over compiler restrictions
+  - All `unsafe` blocks → `freedom` blocks
+  - `KEYWORD_UNSAFE` → `KEYWORD_FREEDOM` in lexer and parser
+  - 71 files updated with global refactoring
+
+### Major Features
+- **Generic Function Monomorphization**: Complete LLVM implementation for generic functions
+  - Template storage and on-demand instantiation
+  - Type parameter substitution (T → ConcreteType)
+  - Method resolution on generic parameters
+  - Function specialization with caching
+  - Works seamlessly with aspect bounds: `func<T<Display>>(item: T)`
+  
+- **Aspect System Foundation**: User-extensible aspects with bind blocks
+  - Define aspects with method signatures
+  - Implement aspects for types using `bind Aspect -> Type` syntax
+  - Generic functions call aspect methods on bounded type parameters
+  - Full semantic validation and aspect registry
+
+### Improved
+- **Documentation**: Comprehensive updates for v0.4.2
+  - Updated all version banners to 0.4.2 (freedom-1.0 series)
+  - Added working aspect method call examples
+  - Simplified roadmap emphasizing production-ready status
+  - Fixed broken documentation links
+  
+- **Code Quality**: Cleaned up temporary and test output files
+  - Removed generated LLVM IR files (*.ll)
+  - Removed old test results and reports
+  - Removed obsolete test scripts
+
+### Status
+Vyn v0.4.2 is a **fully functional, production-ready systems programming language** with complete core features, generic functions, and aspect system foundation.
+
+### Tagged Release
+**freedom-1.0**: First release emphasizing programmer FREEDOM with generic functions and aspect system
+
+---
+
 ## [0.4.0] - 2025-10-17
 
 ### Major Infrastructure Upgrade
