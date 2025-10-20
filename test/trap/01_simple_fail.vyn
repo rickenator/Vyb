@@ -1,0 +1,10 @@
+# Test 01: Simple fail statement
+# Tests basic fail syntax with a simple error value
+
+main()<Int> -> {
+    # Simple fail with error construction
+    fail DivisionByZero { dividend = 10 }
+    
+    # Should never reach here
+    return 0
+}

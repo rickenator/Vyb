@@ -1,0 +1,32 @@
+# Test 09: Rethrow with error transformation
+# Tests transforming an error before propagating it
+
+low_level_operation()<Int> -> {
+    fail LowLevelError { errno = 42, message = "Disk read failed" }
+    return 0
+}
+
+high_level_operation()<Int> -> {
+    {
+        low_level_operation()
+    } trap (e<LowLevelError>) -> {
+        # Transform low-level error into high-level error
+        fail HighLevelError { 
+            operation = "data_processing",
+            message = "Failed to read data: " + e.message,
+            cause = e
+        }
+    }
+    return 0
+}
+
+main()<Int> -> {
+    {
+        high_level_operation()
+    } trap (e<HighLevelError>) -> {
+        println("High-level error: " + e.message)
+        println("Operation: " + e.operation)
+        return 1
+    }
+    return 0
+}

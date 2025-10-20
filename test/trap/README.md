@@ -1,0 +1,105 @@
+# Error Handling Test Suite (fail/trap)
+
+This directory contains comprehensive tests for Vyn's error handling system using the `fail/trap/rethrow/ensure/panic` keywords.
+
+## Test Organization
+
+### Basic Tests (01-05)
+- **01_simple_fail.vyn**: Basic fail statement syntax
+- **02_simple_trap.vyn**: Basic trap clause catching an error
+- **03_panic.vyn**: Panic statement (unrecoverable)
+- **04_rethrow.vyn**: Rethrowing errors to caller
+- **05_ensure.vyn**: Ensure clause for cleanup
+
+### Multiple Handlers (06-07)
+- **06_multiple_traps.vyn**: Type-based dispatch with multiple trap clauses
+- **07_nested_traps.vyn**: Nested error handling contexts
+
+### Function Integration (08-09)
+- **08_fail_in_function.vyn**: Errors propagating from function calls
+- **09_rethrow_transform.vyn**: Transforming errors before rethrowing
+
+### Runtime Behavior (10-12)
+- **10_untrapped_error.vyn**: Untrapped errors caught by runtime
+- **11_ensure_with_trap.vyn**: Combined cleanup and error handling
+- **12_defer_with_fail.vyn**: Defer cleanup with error propagation
+
+### Advanced Integration (13-15)
+- **13_match_with_trap.vyn**: Errors in match expressions
+- **14_async_with_trap.vyn**: Async/await with error handling
+- **15_freedom_with_trap.vyn**: Freedom blocks with errors
+
+### Error Type System (16-17)
+- **16_error_hierarchy.vyn**: Composition-based error hierarchy
+- **17_panic_vs_fail.vyn**: Distinction between panic and fail
+
+## Expected Behavior
+
+### Fail/Trap
+- `fail` statements throw typed errors
+- `trap` clauses catch errors by type (first match wins)
+- Untrapped errors invoke runtime handler and exit(1)
+
+### Rethrow
+- Simple `rethrow` propagates current error
+- `fail NewError { cause = e }` transforms error before rethrowing
+- Stack traces are preserved and appended
+
+### Ensure
+- `ensure` blocks always run (success or failure)
+- Runs after trap handlers
+- Multiple ensure blocks execute in order
+
+### Panic
+- `panic()` crashes immediately
+- No trap can catch a panic
+- No cleanup handlers run
+- Used for invariant violations
+
+## Running Tests
+
+Individual test:
+```bash
+build/vyn test/trap/01_simple_fail.vyn
+```
+
+All trap tests:
+```bash
+for f in test/trap/*.vyn; do
+    echo "Testing: $f"
+    build/vyn "$f"
+done
+```
+
+## Implementation Phases
+
+### Phase 1: Foundation ✅
+- Keywords, tokens, AST nodes
+- Visitor pattern stubs
+
+### Phase 2: Parser (Current)
+- Parse fail/trap/rethrow/ensure/panic statements
+- Parse trap clauses attached to blocks
+- Parse ensure clauses
+
+### Phase 3: Semantic Analysis
+- Type checking error expressions
+- Verify trap type compatibility
+- Scope validation for rethrow
+
+### Phase 4: Codegen
+- LLVM exception handling integration
+- Runtime error handler calls
+- Stack trace capture
+- Cleanup handler execution
+
+## Test Expectations
+
+Each test file should either:
+1. **Succeed**: Exit code 0, expected output
+2. **Fail gracefully**: Runtime catches untrapped error, exit code 1
+3. **Panic**: Immediate crash, exit code 2
+
+Tests 01-09, 11-16 should parse successfully once Phase 2 is complete.
+Test 10 is designed to fail at runtime (untrapped error).
+Test 17 is designed to panic (unrecoverable).

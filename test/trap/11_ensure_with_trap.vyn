@@ -1,0 +1,30 @@
+# Test 11: Ensure with trap - combined cleanup and error handling
+# Tests that ensure runs even when error is trapped
+
+main()<Int> -> {
+    println("=== Test: Ensure + Trap ===")
+    
+    result<Int> = {
+        file<File> = File.open("/tmp/test.txt")
+        
+        {
+            # This might fail
+            content<String> = file.read_all()
+            println("Read: " + content)
+            100
+        } trap (e<IOError>) -> {
+            println("Error reading file: " + e.message)
+            -1
+        } ensure -> {
+            # This MUST run whether trap caught error or not
+            println("Closing file (ensure block)")
+            file.close()
+        }
+    } ensure -> {
+        # Outer ensure also runs
+        println("Outer cleanup")
+    }
+    
+    println("Final result: " + result.to_string())
+    return 0
+}
