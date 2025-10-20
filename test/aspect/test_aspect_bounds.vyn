@@ -1,0 +1,121 @@
+// Test aspect bounds on generic parameters
+// Step 5: Aspect bounds constrain what types can be used with generics
+//
+// WHAT IS AN ASPECT BOUND?
+// An aspect bound is a promise about what a generic type parameter can do.
+//
+// UNBOUNDED: bind<T> Display -> Box<T>
+//   - Meaning: "I'm implementing Display for Box holding ANY type T"
+//   - Box<Int>, Box<String>, Box<Anything> all get Display
+//   - Inside the impl, T is opaque - you only know what Box itself provides
+//   - You can access self.value but don't know what methods T has
+//
+// SINGLE BOUND: bind<T<Display>> Display -> Box<T>  
+//   - Meaning: "I'm implementing Display for Box, but ONLY when T also has Display"
+//   - Box<Point> gets Display (if Point has Display)
+//   - Box<Int> does NOT get this Display (Int doesn't have Display)
+//   - Inside the impl, you know T has Display methods - you can call self.value.show()
+//
+// MULTIPLE BOUNDS: bind<T<Display, Clone>> Wrapper -> Box<T>
+//   - Meaning: "T must have BOTH Display AND Clone aspects"
+//   - Inside impl, you can call methods from both aspects on T
+//   - Comma means AND - all bounds must be satisfied
+//
+// NOTE: To implement multiple aspects for one type, use separate bind declarations:
+//   bind<T<Display>> Display -> Box<T> { ... }
+//   bind<T> Clone -> Box<T> { ... }
+
+aspect Display {
+    show(self<Self>)<Void>
+}
+
+aspect Clone {
+    clone(self<Self>)<Self>
+}
+
+struct Point {
+    x<Int>,
+    y<Int>
+}
+
+struct Box<T> {
+    value<T>
+}
+
+// Simple concrete bind: Point implements Display
+bind Display -> Point {
+    show(self<Self>)<Void> -> {
+        println("Point(x, y)");
+    }
+}
+
+// Point also implements Clone (separate bind)
+bind Clone -> Point {
+    clone(self<Self>)<Self> -> {
+        result<Point> = Point { x = self.x, y = self.y };
+        return result;
+    }
+}
+
+// UNBOUNDED: Works for Box<AnyType> but can't use T's methods
+bind<T> Display -> Box<T> {
+    show(self<Self>)<Void> -> {
+        println("Box contains a value (generic for any T)");
+        // We know self.value exists (it's a Box field)
+        // But we DON'T know if T has .show() or any other methods
+        // This impl works for Box<Int>, Box<String>, anything
+    }
+}
+
+// SINGLE BOUND: Only works when T has Display
+// NOTE: This is Step 5 - semantic analysis not yet implemented
+bind<T<Display>> Display -> Box<T> {
+    show(self<Self>)<Void> -> {
+        println("Box containing:");
+        self.value.show();  // We can call this because bound says T has Display
+        // This impl ONLY applies to Box<Point>, Box<OtherDisplayType>, etc.
+    }
+}
+
+// MULTIPLE BOUNDS: T must have BOTH Display AND Clone
+bind<T<Display, Clone>> Clone -> Box<T> {
+    clone(self<Self>)<Self> -> {
+        println("Cloning box and its contents");
+        clonedValue<T> = self.value.clone();  // OK: T has Clone
+        clonedValue.show();  // OK: T has Display
+        result<Box<T>> = Box { value = clonedValue };
+        return result;
+    }
+}
+
+// Generic function with single bound
+printItem<T<Display>>(item<T>)<Void> -> {
+    item.show();  // We can call show() because bound guarantees T has Display
+}
+
+// Generic function with multiple bounds
+duplicateAndShow<T<Display, Clone>>(item<T>)<T> -> {
+    copy<T> = item.clone();  // OK: T has Clone
+    copy.show();  // OK: T has Display
+    return copy;
+}
+
+main()<Int> -> {
+    p<Point> = Point { x = 5, y = 10 };
+    
+    // Call function with single bound - works because Point has Display
+    printItem(p);
+    
+    // Call function with multiple bounds - works because Point has BOTH Display and Clone
+    p2<Point> = duplicateAndShow(p);
+    
+    // Box<Point> uses bounded impls because Point satisfies the bounds
+    box<Box<Point>> = Box { value = p };
+    box.show();  // Uses single-bounded Display impl
+    
+    box2<Box<Point>> = box.clone();  // Uses multi-bounded Clone impl
+    box2.show();
+    
+    println("Aspect bounds test passed!");
+    return 0;
+}

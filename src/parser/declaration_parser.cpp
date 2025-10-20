@@ -65,14 +65,14 @@ vyn::ast::DeclPtr DeclarationParser::parse() {
                current_token.type == vyn::TokenType::KEYWORD_AUTO) { // Accept auto
         return this->parse_global_var_declaration();
     } else if (current_token.type == vyn::TokenType::IDENTIFIER && next_token.type == vyn::TokenType::LT) {
-        // NEW UNIFIED SYNTAX: Could be name<Type> variable OR name<Type> -> function
-        // Look ahead to distinguish: if we see ARROW after the type annotation, it's a function
+        // NEW UNIFIED SYNTAX: Could be name<Type> variable OR name<GenericParams>(params)<ReturnType> -> function
+        // Look ahead to distinguish: if we see LPAREN after the generics, it's a function
         size_t saved_pos = this->pos_;
         bool is_function = false;
         
         try {
             this->consume(); // consume identifier
-            // Skip over <Type> or <Type1, Type2, ...>
+            // Skip over <GenericParams> which might have aspect bounds like <T<Display>>
             int angle_depth = 0;
             if (this->peek().type == vyn::TokenType::LT) {
                 this->consume();
@@ -83,8 +83,8 @@ vyn::ast::DeclPtr DeclarationParser::parse() {
                     this->consume();
                 }
             }
-            // Now check if we see ARROW (function) or something else (variable)
-            if (this->peek().type == vyn::TokenType::ARROW) {
+            // Check if we see LPAREN (function) or something else (variable)
+            if (this->peek().type == vyn::TokenType::LPAREN) {
                 is_function = true;
             }
         } catch (...) {
@@ -156,14 +156,16 @@ std::vector<std::unique_ptr<vyn::ast::GenericParameter>> DeclarationParser::pars
             auto param_name = std::make_unique<ast::Identifier>(param_loc, this->consume().lexeme);
 
             std::vector<ast::TypeNodePtr> bounds;
-            if (this->match(vyn::TokenType::COLON)) {
+            // Check for aspect bounds using nested angle brackets: <T<Display, Print>>
+            if (this->match(vyn::TokenType::LT)) {
                 do {
                     auto bound_type = this->type_parser_.parse();
                     if (!bound_type) {
-                        throw std::runtime_error("Expected trait bound type after \':\' for generic parameter at " + location_to_string(this->current_location()));
+                        throw std::runtime_error("Expected aspect bound type after \'<\' for generic parameter at " + location_to_string(this->current_location()));
                     }
                     bounds.push_back(std::move(bound_type));
-                } while (this->match(vyn::TokenType::PLUS));
+                } while (this->match(vyn::TokenType::COMMA));
+                this->expect(vyn::TokenType::GT); // Close the bounds list
             }
             generic_params.push_back(std::make_unique<vyn::ast::GenericParameter>(param_loc, std::move(param_name), std::move(bounds)));
         } while (this->match(vyn::TokenType::COMMA));
@@ -482,7 +484,9 @@ std::unique_ptr<vyn::ast::FunctionDeclaration> DeclarationParser::parse_function
             body = std::make_unique<ast::BlockStatement>(this->current_location(), std::move(statements));
         }
         
-        return std::make_unique<vyn::ast::FunctionDeclaration>(loc, std::move(name), std::move(params_structs), std::move(body), is_async, std::move(return_type_node));
+        // Legacy syntax doesn't support generics on functions
+        std::vector<std::unique_ptr<ast::GenericParameter>> empty_generics;
+        return std::make_unique<vyn::ast::FunctionDeclaration>(loc, std::move(name), std::move(params_structs), std::move(body), is_async, std::move(return_type_node), true, std::move(empty_generics));
     }
     
     // NEW UNIFIED SYNTAX: name(params)<ReturnType> pattern
@@ -514,6 +518,9 @@ std::unique_ptr<vyn::ast::FunctionDeclaration> DeclarationParser::parse_function
     } else {
         throw std::runtime_error("Expected function name at " + location_to_string(this->current_location()));
     }
+
+    // Parse generic parameters: name<T, U> or name<T<Display>>
+    std::vector<std::unique_ptr<ast::GenericParameter>> generic_params = this->parse_generic_params();
 
     // Parse parameters: name(params)
     this->expect(vyn::TokenType::LPAREN);
@@ -635,7 +642,7 @@ std::unique_ptr<vyn::ast::FunctionDeclaration> DeclarationParser::parse_function
         // 'body' remains nullptr
     }
 
-    return std::make_unique<vyn::ast::FunctionDeclaration>(loc, std::move(name), std::move(params_structs), std::move(body), is_async, std::move(return_type_node), hasArrow);
+    return std::make_unique<vyn::ast::FunctionDeclaration>(loc, std::move(name), std::move(params_structs), std::move(body), is_async, std::move(return_type_node), hasArrow, std::move(generic_params));
 }
 
 // StructDeclNode not in ast.hpp. Assuming a Declaration type for it.
