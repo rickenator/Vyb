@@ -1,201 +1,110 @@
-# Phase 6: Generic Trait Methods - Roadmap
+# Phase 6: Generic Aspects - Roadmap
 
 ## Overview
-Phase 6 extends the trait system to support generic method implementations. This builds on Phase 5's monomorphization infrastructure to enable traits like `From<T>` and implementations like `impl<T> From<T> for Box<T>`.
+Phase 6 extends the aspect system (Vyn's trait/interface system) to support:
+1. Generic aspects with type parameters
+2. Bounds on generic type parameters
+3. Generic implementations with Self type resolution
+4. Method monomorphization for generic implementations
 
-## Current Status (After Phase 5)
-✅ **Trait System**:
-- Trait declarations with method signatures
-- Trait implementations (non-generic)
-- Method calls on implementing types
-- Generic trait impls parse: `impl<T> Display for Box<T>`
+## Current Status (October 2025)
 
-✅ **Monomorphization**:
-- Generic struct storage and instantiation
-- Type parameter substitution
-- LLVM type generation for Box<Int>, Pair<Int, String>, etc.
-- Caching to avoid duplicates
+### ✅ COMPLETED Steps
 
-❌ **Not Yet Implemented**:
-- `Self` type resolution in generic trait impls
-- Method body monomorphization
-- Generic trait method calls
-- Type inference for method calls
+**Step 5: Aspect Bounds** ✅ (October 19, 2025)
+- Parser: `<T<Display, Clone>>` nested angle bracket syntax
+- Semantic: Bounds validation (must be aspects, not structs)
+- Storage: Bounds in symbol table for all type parameters
+- Method calls: Bounded parameters can call aspect methods
+- Documentation: ASPECT_BOUNDS.md comprehensive guide
+- Test: test_aspect_bounds.vyn validates all features
 
-## Phase 6 Goals
+### ⏳ IN PROGRESS / TODO Steps
 
-### 1. Self Type Resolution
-**Problem**: In `impl<T> Display for Box<T>`, what is `Self`?
+**Step 1: Self Type Resolution** (Partially Complete)
+- ❌ Self in parameter types: `show(self<Self>)` → needs resolution
+- ✅ Self in return types: Working in some contexts
+- ⏳ Self in generic impls: `impl<T> Display for Box<T>` where Self = Box<T>
 
-**Solution**:
+**Step 2: Method Body Monomorphization** (Future)
+- Generate specialized method implementations for concrete types
+- Cache monomorphized methods to avoid duplicates
+
+**Step 6: Associated Types** (Future)
+- Aspect-associated types like `trait Iterator { type Item; }`
+
+**Step 7: Type Inference** (Future)
+- Infer type arguments from call sites
+- Generic constructor inference: `Box { value = x }` → `Box<T>`
+
+## Phase 6 Architecture
+
+### Current Aspect System Features
+
+**Aspects** (Vyn's name for traits/interfaces):
 ```vyn
-impl<T> Display for Box<T> {
-    show(self<Self>)<String> -> {  # Self = Box<T>
-        return "Box"
-    }
+aspect Display {
+    show(self<Self>)<String> -> { }
 }
 ```
 
-**Implementation**:
-- Modify semantic analyzer's `visit(TraitImpl)`
-- When processing generic impl, store mapping: `Self -> Box<T>`
-- Resolve `Self` in method parameter types and return types
-- Handle `Box<T>` as an unmonomorphized type template
-
-### 2. Method Template Storage
-Similar to struct templates in Phase 5:
-
-```cpp
-// In codegen.hpp
-std::map<std::string, FunctionDeclaration*> genericMethodTemplates;
-// Key: "Display::show" or "From<T>::from"
-// Value: AST node for method body
-
-// Store during visit(TraitImpl) if impl has generic params
-if (!implNode->genericParams.empty()) {
-    for (auto& method : implNode->methods) {
-        std::string key = traitName + "::" + methodName;
-        genericMethodTemplates[key] = method;
-    }
-}
-```
-
-### 3. Method Call Detection & Monomorphization
-When encountering a trait method call like `box_int.show()`:
-
-```cpp
-// In method call codegen
-auto memberType = inferType(box_int);  // Returns: Box_Int
-auto originalType = memberType.genericSource;  // Returns: Box<T>
-auto typeArgs = memberType.typeArguments;  // Returns: [Int]
-
-// Find method template
-std::string methodKey = "Display::show";
-if (genericMethodTemplates.find(methodKey) != end) {
-    llvm::Function* specialized = monomorphizeMethod(
-        methodKey, 
-        typeArgs,  // [Int]
-        originalType  // Box<T>
-    );
-    // Call specialized function
-}
-```
-
-### 4. Method Monomorphization Algorithm
-```cpp
-llvm::Function* monomorphizeMethod(
-    const std::string& methodKey,
-    const std::vector<TypeNode*>& typeArgs,
-    TypeNode* implType
-) {
-    // 1. Generate mangled name
-    std::string mangledName = mangleMethodName(methodKey, typeArgs);
-    // "Display_show_Box_Int"
-    
-    // 2. Check cache
-    if (monomorphizedMethods.find(mangledName) != end) {
-        return cached;
-    }
-    
-    // 3. Get template
-    FunctionDeclaration* template = genericMethodTemplates[methodKey];
-    
-    // 4. Build substitution map
-    // T -> Int
-    // Self -> Box<Int>
-    std::map<std::string, TypeNode*> typeMap;
-    typeMap["T"] = typeArgs[0];
-    typeMap["Self"] = createMonomorphizedType(implType, typeArgs);
-    
-    // 5. Clone and substitute method body
-    FunctionDeclaration* specialized = cloneAndSubstitute(template, typeMap);
-    
-    // 6. Generate LLVM function
-    llvm::Function* func = codegenFunction(specialized);
-    
-    // 7. Cache
-    monomorphizedMethods[mangledName] = func;
-    
-    return func;
-}
-```
-
-## Example Test Case
-
+**Binds** (Vyn's name for trait implementations):
 ```vyn
-# Generic trait with type parameter
-trait From<T> {
-    from(value<T>)<Self> -> { }
-}
-
-# Generic struct
-struct Box<T> {
-    value<T>
-}
-
-# Generic implementation: any Box<U> can be created from a U
-impl<U> From<U> for Box<U> {
-    from(value<U>)<Self> -> {
-        return Box<U> { value = value }
-    }
-}
-
-main()<Int> -> {
-    # Call generic method - triggers monomorphization
-    box<Box<Int>> = Box<Int>.from(42)
-    
-    # Monomorphization creates:
-    # fn Display_from_Box_Int(value<Int>)<Box_Int> -> {
-    #     return Box_Int { value = value }
-    # }
-    
-    return 0
+bind Display -> Point {
+    show(self<Self>)<String> -> { return "Point" }
 }
 ```
 
-**Expected Behavior**:
-1. Parse `trait From<T>` and `impl<U> From<U> for Box<U>`
-2. Store method template for `from`
-3. When `Box<Int>.from(42)` is called:
-   - Detect call to generic method
-   - Infer type args: `U = Int`
-   - Monomorphize method body
-   - Generate `Display_from_Box_Int` LLVM function
-4. Cache and reuse for subsequent calls
+**Generic Binds**:
+```vyn
+bind<T> Display -> Box<T> {
+    show(self<Self>)<String> -> { return "Box" }
+}
+```
 
-## Implementation Steps
+**Bounded Generic Binds** ✅:
+```vyn
+bind<T<Display>> Display -> Box<T> {
+    show(self<Self>)<String> -> { 
+        self.value.show();  // ✅ Works! T has Display bound
+        return "Box containing: ..."
+    }
+}
+```
 
-### Step 1: Self Resolution (2-3 hours)
-- [ ] Modify `visit(TraitImpl)` in semantic analyzer
-- [ ] Create Self -> ImplementingType mapping
-- [ ] Update symbol table to resolve Self
-- [ ] Test with simple non-generic case first
+## Next Steps for Phase 6
 
-### Step 2: Method Template Storage (1-2 hours)
-- [ ] Add `genericMethodTemplates` map to codegen.hpp
-- [ ] Modify `visit(TraitImpl)` in codegen to store templates
-- [ ] Test that generic methods don't generate LLVM yet
+### Priority 1: Fix Self Type Resolution (Step 1)
+Currently blocking test_aspect_bounds.vyn with 6 errors.
 
-### Step 3: Call Detection (2-3 hours)
-- [ ] Modify method call codegen
-- [ ] Detect when receiver type is monomorphized
-- [ ] Extract original generic type and type arguments
-- [ ] Test with debug output
+**Problem**: `self<Self>` in bind methods doesn't resolve properly
+```vyn
+bind Display -> Point {
+    show(self<Self>)<String> -> {  // Self not resolving
+        return "Point"
+    }
+}
+```
 
-### Step 4: Monomorphization (4-5 hours)
-- [ ] Implement `monomorphizeMethod()`
-- [ ] Type substitution for method bodies
-- [ ] LLVM function generation
-- [ ] Caching logic
-- [ ] Test end-to-end
+**Files to Modify**:
+- `src/vre/semantic.cpp` - TraitImpl visitor
+- Enhance parameter type resolution to substitute Self
 
-### Step 5: Testing & Documentation (2 hours)
-- [ ] Create comprehensive test suite
-- [ ] Test multiple instantiations
-- [ ] Test cache behavior
-- [ ] Document in PHASE_6_SUMMARY.md
+### Priority 2: Generic Constructor Inference (Step 7)
+Quality of life improvement, blocking 3 test errors.
 
-**Total Estimate**: 11-15 hours
+**Problem**: Can't infer type arguments from constructor
+```vyn
+box<Box<Point>> = Box { value = point };  // Says "got Box" not "Box<Point>"
+```
+
+**Solution**: Infer from variable type annotation and field types
+
+### Priority 3: Method Monomorphization (Step 2)
+Generate specialized LLVM functions for generic bind methods.
+
+**Current**: Generic binds parse but don't generate specialized code
+**Goal**: `Box<Int>.show()` generates `Box_Int_show()` function
 
 ## Design Considerations
 
