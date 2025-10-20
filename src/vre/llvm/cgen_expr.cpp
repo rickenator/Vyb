@@ -826,10 +826,16 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 if (objIt != namedValues.end()) {
                     llvm::Value* objectAlloca = objIt->second;
                     
-                    // Try to get the full concrete type name from the AST (e.g., "Box<Int>")
+                    // Try to get the full concrete type name
+                    // First check valueTypeMap for substituted types (e.g., during monomorphization)
                     std::string concreteType;
-                    if (objIdent->type) {
+                    auto typeMapIt = valueTypeMap.find(objectAlloca);
+                    if (typeMapIt != valueTypeMap.end() && typeMapIt->second) {
+                        concreteType = typeMapIt->second->toString();
+                        std::cout << "DEBUG: Got type from valueTypeMap: " << concreteType << std::endl;
+                    } else if (objIdent->type) {
                         concreteType = objIdent->type->toString();
+                        std::cout << "DEBUG: Got type from AST: " << concreteType << std::endl;
                     }
                     
                     if (!concreteType.empty()) {
@@ -1440,6 +1446,68 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 return;
             }
         }
+    }
+
+    // Check if this is a call to a generic function that needs monomorphization
+    if (identCallee && genericFunctionTemplates.find(identCallee->name) != genericFunctionTemplates.end()) {
+        std::cout << "DEBUG: Detected call to generic function: " << identCallee->name << std::endl;
+        
+        // Infer concrete type arguments from call site
+        std::vector<std::string> concreteTypeArgs;
+        
+        // For each argument, get its type
+        for (size_t i = 0; i < node->arguments.size(); ++i) {
+            // Evaluate argument to infer type
+            node->arguments[i]->accept(*this);
+            llvm::Value* argValue = m_currentLLVMValue;
+            if (!argValue) {
+                logError(node->arguments[i]->loc, "Failed to evaluate argument for generic function call");
+                m_currentLLVMValue = nullptr;
+                return;
+            }
+            
+            // Get type name from AST type annotation if available
+            std::string argTypeName;
+            if (node->arguments[i]->type) {
+                argTypeName = node->arguments[i]->type->toString();
+            } else if (auto* identArg = dynamic_cast<ast::Identifier*>(node->arguments[i].get())) {
+                // Look up variable's type from valueTypeMap
+                auto varIt = namedValues.find(identArg->name);
+                if (varIt != namedValues.end()) {
+                    auto typeIt = valueTypeMap.find(varIt->second);
+                    if (typeIt != valueTypeMap.end()) {
+                        argTypeName = typeIt->second->toString();
+                    }
+                }
+            }
+            
+            // Fallback: use LLVM type name
+            if (argTypeName.empty()) {
+                argTypeName = getTypeName(argValue->getType());
+            }
+            
+            std::cout << "DEBUG: Argument " << i << " has type: " << argTypeName << std::endl;
+            
+            // For the first type parameter, use the first argument's type
+            // This is a simplified approach - full implementation needs to match
+            // type parameters to arguments based on function signature
+            if (i == 0) {
+                concreteTypeArgs.push_back(argTypeName);
+            }
+        }
+        
+        // Monomorphize the generic function
+        llvm::Function* monomorphizedFunc = monomorphizeGenericFunction(identCallee->name, concreteTypeArgs);
+        if (!monomorphizedFunc) {
+            logError(node->loc, "Failed to monomorphize generic function " + identCallee->name);
+            m_currentLLVMValue = nullptr;
+            return;
+        }
+        
+        std::cout << "DEBUG: Successfully monomorphized " << identCallee->name << std::endl;
+        
+        // Now proceed with the monomorphized function
+        calleeName = monomorphizedFunc->getName().str();
     }
 
     // Lookup the function in the module - standard function call handling

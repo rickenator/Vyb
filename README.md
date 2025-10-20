@@ -295,6 +295,7 @@ main()<Int> -> {
 - **Bind Blocks**: Implement aspects for types using `bind Aspect -> Type` syntax
 - **Generic Aspects**: Aspects support generic type parameters
 - **Generic Bindings**: `bind<T> Display -> Box<T>` with type parameter extraction
+- **Generic Functions**: `printItem<T<Display>>(item<T>)` with full monomorphization
 - **Aspect Registry**: Semantic analyzer validates and stores aspect definitions
 - **Bind Validation**: Full signature checking against aspect requirements
 - **Default Implementations**: Aspect methods can provide default behavior
@@ -1663,6 +1664,12 @@ See `doc/` directory for detailed design documents and RFCs.
 ## Recent Progress
 
 **v0.4.1 Complete Type System**: Full primitive type support with sized integers, floats, and character types
+- ✅ **Generic Functions (NEW!)**: Complete LLVM monomorphization system for generic functions with bounded type parameters
+  - **Type Parameter Substitution**: `T → Point` during codegen
+  - **On-Demand Instantiation**: Generate specialized functions like `printItem_Point` from templates
+  - **Method Resolution**: Call aspect methods on generic parameters (`item.show()` where `item: T<Display>`)
+  - **Caching**: Reuse monomorphized functions for same type combinations
+  - **Integration**: Works seamlessly with aspects, traits, and generic structs
 - ✅ **Select Expressions**: Pattern matching expressions with `select(expr) -> { pattern -> result };` syntax
   - **Naked expressions**: Simple values auto-return without `pass` keyword
   - **Complex blocks**: Use `pass` keyword to return from block without exiting function
