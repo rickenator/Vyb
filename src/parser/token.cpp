@@ -74,6 +74,11 @@ std::string token_type_to_string(vyn::TokenType type) { // Corrected namespace f
         {vyn::TokenType::KEYWORD_NIL, "KEYWORD_NIL"},
         {vyn::TokenType::KEYWORD_FREEDOM, "KEYWORD_FREEDOM"},
         {vyn::TokenType::KEYWORD_AUTO, "KEYWORD_AUTO"},
+        {vyn::TokenType::KEYWORD_FAIL, "KEYWORD_FAIL"},
+        {vyn::TokenType::KEYWORD_TRAP, "KEYWORD_TRAP"},
+        {vyn::TokenType::KEYWORD_RETHROW, "KEYWORD_RETHROW"},
+        {vyn::TokenType::KEYWORD_ENSURE, "KEYWORD_ENSURE"},
+        {vyn::TokenType::KEYWORD_PANIC, "KEYWORD_PANIC"},
 
         // Operators
         {vyn::TokenType::PLUS, "PLUS"},
