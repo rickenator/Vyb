@@ -159,6 +159,22 @@ std::shared_ptr<ast::TypeNode> SemanticAnalyzer::cloneTypeNode(ast::TypeNode* ty
     return std::shared_ptr<ast::TypeNode>(type->clone());
 }
 
+// Helper to substitute Self with concrete type in return types
+ast::TypeNode* SemanticAnalyzer::substituteSelfType(ast::TypeNode* returnType, const std::string& concreteType) {
+    if (!returnType) return nullptr;
+    
+    // Check if return type is Self
+    if (auto typeName = dynamic_cast<ast::TypeName*>(returnType)) {
+        if (typeName->identifier && typeName->identifier->name == "Self") {
+            // Replace Self with the concrete type
+            return new ast::TypeName(typeName->loc, std::make_unique<ast::Identifier>(typeName->loc, concreteType));
+        }
+    }
+    
+    // If not Self, return the original type
+    return returnType;
+}
+
 
 // Basic visit methods for expressions (Single definitions)
 void SemanticAnalyzer::visit(ast::Identifier* node) {
@@ -666,8 +682,10 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                     for (ast::FunctionDeclaration* method : methods) {
                                         if (method && method->id && method->id->name == methodName) {
                                             if (method->returnTypeNode) {
-                                                expressionTypes[node] = method->returnTypeNode.get();
-                                                node->type = std::shared_ptr<ast::TypeNode>(method->returnTypeNode->clone());
+                                                // Substitute Self with concrete type
+                                                ast::TypeNode* actualReturnType = substituteSelfType(method->returnTypeNode.get(), typeNameStr);
+                                                expressionTypes[node] = actualReturnType;
+                                                node->type = std::shared_ptr<ast::TypeNode>(actualReturnType->clone());
                                             }
                                             
                                             std::cout << "DEBUG: Resolved trait method call: " << typeNameStr 

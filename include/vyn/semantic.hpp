@@ -253,6 +253,7 @@ public:
     bool isLValue(ast::Expression* expr);
     bool areTypesCompatible(ast::TypeNode* typeA, ast::TypeNode* typeB); // Added
     std::shared_ptr<ast::TypeNode> cloneTypeNode(ast::TypeNode* type); // Helper to clone type nodes
+    ast::TypeNode* substituteSelfType(ast::TypeNode* returnType, const std::string& concreteType); // Substitute Self with concrete type
     void handleVecMethodCall(ast::CallExpression* node, const std::string& objectName, const std::string& methodName);
     void handleVecMethodCallOnMember(ast::CallExpression* node, ast::VecType* vecType, const std::string& methodName);
 
