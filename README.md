@@ -6,7 +6,7 @@
 
 ## 1. Introduction
 
-Welcome to the Vyn Programming Guide. This guide walks you through writing, building, and extending Vyn programs, from your first "Hello, Vyn!" to deep dives into the Vyn language internals and runtime. Version 0.4.1 delivers a robust systems programming language with LLVM backend, complete sized type system, pattern matching with `match` statements, comprehensive control flow including `break`/`continue`, resizable `Vec<T>` collections, unified syntax, and comprehensive auto-serialization capabilities.
+Welcome to the Vyn Programming Guide. This guide walks you through writing, building, and extending Vyn programs, from your first "Hello, Vyn!" to deep dives into the Vyn language internals and runtime. **Version 0.4.2** (freedom-1.0 series) delivers a robust systems programming language with LLVM backend, complete sized type system, pattern matching with `match` statements, comprehensive control flow including `break`/`continue`, resizable `Vec<T>` collections, unified syntax, generic function monomorphization, and comprehensive auto-serialization capabilities.
 
 ### 1.1 Purpose & Audience
 
@@ -43,7 +43,7 @@ Vyn is a statically typed, template-metaprogramming language designed to compile
 * **Concurrency Built In**: Async/await, with planned actors, threads, and typed channels.
 * **Self-Hosting & Extensible**: Planned compiler written in Vyn; add backends, macros, and modules at runtime.
 
-**Current Version:** 0.4.1 🚀 **COMPLETE TYPE SYSTEM**
+**Current Version:** 0.4.2 (freedom-1.0 series) 🚀 **COMPLETE TYPE SYSTEM + GENERIC FUNCTIONS**
 
 ## Quick Start
 
@@ -152,7 +152,7 @@ This unique `import`/`smuggle` distinction makes Vyn's module system both secure
 
 ## What's Working Now
 
-Vyn **v0.4.1** is a **complete systems programming language** with **aspect system foundation (Phase 1)** ready for production use:
+Vyn **v0.4.2** (freedom-1.0 series) is a **complete systems programming language** with **generic functions and aspect system** ready for production use:
 
 ### ✅ **Core Language Features**
 - **Functions**: `name(params)<ReturnType> -> body` with full LLVM compilation
@@ -235,9 +235,9 @@ main()<Void> -> {
 - ✅ LLVM codegen with debug metadata
 - ✅ Comprehensive test coverage
 
-### ✅ **Aspect System (v0.4.1)**
+### ✅ **Aspect System (v0.4.2)**
 
-**Philosophy:** Vyn uses **aspects + structs** instead of classes and inheritance. This provides polymorphism, code reuse, and composition without the complexity and pitfalls of OOP class hierarchies. See [`doc/WHY_ASPECTS_NOT_CLASSES.md`](doc/WHY_ASPECTS_NOT_CLASSES.md) for detailed rationale.
+**Philosophy:** Vyn uses **aspects + structs** instead of classes and inheritance. This provides polymorphism, code reuse, and composition without the complexity and pitfalls of OOP class hierarchies. See `doc/ASPECT_SYSTEM_DESIGN.md` for detailed design and rationale.
 
 #### **Complete Aspect Example**
 
@@ -302,7 +302,7 @@ main()<Int> -> {
 - **Pattern Matching**: Type pattern matching for generic aspect monomorphization
 - **Canonical Syntax**: Arrow syntax `->` for bindings (was `for` keyword)
 
-**🚧 In Progress (Phase 6 - Generic Aspect Methods):**
+**⏳ Future Enhancements:**
 - **Method Calls**: Invoking aspect methods on values (`value.show()`)
 - **Method Monomorphization**: Automatic specialization of generic aspect implementations
 - **Aspect-based Polymorphism**: Runtime dispatch through aspect interfaces
@@ -374,7 +374,7 @@ main()<Int> -> {
 
 ### ✅ **Canonical Ownership Syntax** 
 
-Vyn v0.4.1 features **unified canonical syntax** for ownership and borrowing operations, eliminating inconsistencies:
+Vyn v0.4.2 features **unified canonical syntax** for ownership and borrowing operations:
 
 #### **Type Annotations**
 ```vyn
@@ -432,7 +432,7 @@ python3 migrate_syntax.py --migrate --directory . --backup --report
 
 ## Language Overview
 
-Vyn v0.4.1 is a **complete, production-ready systems programming language** with modern syntax, complete sized type system, powerful pattern matching, and comprehensive collection support.
+Vyn v0.4.2 (freedom-1.0 series) is a **complete, production-ready systems programming language** with modern syntax, complete sized type system, powerful pattern matching, generic functions, and comprehensive collection support.
 
 ### Language Features Showcase
 
@@ -1543,8 +1543,8 @@ freedom {
 - **Async State Machine Debugging**: Suspension point tracking, state transitions, and continuation debugging
 - **Modern Test Harness**: Parallel test runner with 391+ tests, HTML/JSON reporting, and failure triage analysis
 
-### 🚧 **In Progress**
-- **String Operations**: Concatenation, comparison, and manipulation methods
+### � **Next Priorities (v0.4.3+)**
+- **String Operations**: Comparison operators and additional manipulation methods
 - **Standard Library**: Comprehensive I/O, math, and collections modules
 - **Enhanced Error Messages**: More detailed compilation feedback and suggestions
 - **Performance Optimizations**: LLVM optimization passes and compile-time improvements
@@ -1559,7 +1559,7 @@ freedom {
 
 ## Testing & Development Tools
 
-Vyn v0.4.1 includes a **modern, comprehensive testing infrastructure** designed for efficient development and quality assurance:
+Vyn v0.4.2 includes a **modern, comprehensive testing infrastructure** designed for efficient development and quality assurance:
 
 ### 🧪 **Modern Test Harness**
 
@@ -1663,8 +1663,8 @@ See `doc/` directory for detailed design documents and RFCs.
 
 ## Recent Progress
 
-**v0.4.1 Complete Type System**: Full primitive type support with sized integers, floats, and character types
-- ✅ **Generic Functions (NEW!)**: Complete LLVM monomorphization system for generic functions with bounded type parameters
+**v0.4.2 (freedom-1.0 series)**: Generic function monomorphization and FREEDOM blocks
+- ✅ **Generic Functions**: Complete LLVM monomorphization system for generic functions with bounded type parameters
   - **Type Parameter Substitution**: `T → Point` during codegen
   - **On-Demand Instantiation**: Generate specialized functions like `printItem_Point` from templates
   - **Method Resolution**: Call aspect methods on generic parameters (`item.show()` where `item: T<Display>`)
@@ -1689,7 +1689,7 @@ See `doc/` directory for detailed design documents and RFCs.
 - ✅ **Async/Await**: Complete asynchronous programming support with Future<T> types
 - ✅ **Debug Infrastructure**: Full LLVM debug metadata with async state machine debugging
 
-**Language Status**: Vyn v0.4.1 is now a **complete, production-ready systems programming language** with unified canonical syntax, comprehensive sized type system (Int8-Int64, UInt8-UInt64, Float32/64, Char, Rune, Bytes), comprehensive test infrastructure, and advanced debugging capabilities, suitable for real-world programming tasks with all core language constructs implemented, tested, and fully consistent.
+**Language Status**: Vyn v0.4.2 (freedom-1.0 series) is a **complete, production-ready systems programming language** with unified canonical syntax, comprehensive sized type system (Int8-Int64, UInt8-UInt64, Float32/64, Char, Rune, Bytes), generic function monomorphization, comprehensive test infrastructure, and advanced debugging capabilities, suitable for real-world programming tasks with all core language constructs implemented, tested, and fully consistent.
 
 ## Getting Help
 
@@ -1704,7 +1704,7 @@ See `doc/` directory for detailed design documents and RFCs.
 
 ### A. EBNF Grammar
 
-Vyn's syntax is defined by a comprehensive EBNF grammar reflecting v0.4.1 capabilities:
+Vyn's syntax is defined by a comprehensive EBNF grammar reflecting v0.4.2 capabilities:
 
 ```ebnf
 // Conventions:
@@ -2032,4 +2032,4 @@ Apache License - see LICENSE file for details.
 
 ---
 
-*Vyn v0.4.1: A complete systems programming language with comprehensive sized type system, unified syntax, pattern matching, resizable collections, and unique import/smuggle module system - ready for real-world development.*
+*Vyn v0.4.2 (freedom-1.0 series): A complete systems programming language with comprehensive sized type system, unified syntax, pattern matching, generic functions, resizable collections, and unique import/smuggle module system - ready for real-world development.*
