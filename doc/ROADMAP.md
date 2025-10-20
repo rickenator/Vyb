@@ -74,14 +74,20 @@ See `test/tuples/README.md` for detailed documentation and examples.
 The immediate focus for the next release:
 
 1. **✅ Template Scaffolding (COMPLETED v0.4.1):** Template declarations with type parameter recognition
-2. **🚧 Trait System (IN PROGRESS):** User-extensible traits with impl blocks
-   - Define traits with method signatures
-   - Implement traits for types (structs and primitives)
-   - Call trait methods on values (value.method())
-   - Validate trait bounds in templates
-   - See `doc/TRAIT_SYSTEM_DESIGN.md` for full specification
-3. **Template Instantiation:** Monomorphization of generic types/functions
-4. **Trait-Based Generics:** `max<T: Comparable>(a, b)` working end-to-end
+2. **✅ Generic Function Monomorphization (COMPLETED v0.4.1):** Full LLVM support for generic functions
+   - Template storage and on-demand instantiation
+   - Type parameter substitution (T → ConcreteType)
+   - Method resolution on generic parameters
+   - Function specialization with caching
+   - Works with aspect bounds: `func<T<Display>>(item: T)`
+3. **🚧 Aspect System (IN PROGRESS):** User-extensible aspects with bind blocks
+   - ✅ Define aspects with method signatures
+   - ✅ Implement aspects for types (bind blocks)
+   - 🚧 Call aspect methods on values (value.method())
+   - ✅ Validate aspect bounds in generics
+   - See `doc/ASPECT_SYSTEM_DESIGN.md` for full specification
+4. **Aspect Method Calls:** Complete method invocation on aspect-bound types
+5. **Generic Struct Instantiation:** Monomorphization for generic structs
 
 ### 📋 CURRENT FOCUS
 1. **Standard Library Expansion:** Building core modules for collections, I/O, math
