@@ -14,8 +14,10 @@ entry:
   br i1 %icmpeqtmp, label %then, label %ifcont, !dbg !12
 
 then:                                             ; preds = %entry
-  call void @__vyn_runtime_untrapped_error(ptr null), !dbg !12
-  unreachable, !dbg !12
+  %error.alloc = alloca i64, align 8, !dbg !12
+  store i64 42, ptr %error.alloc, align 4, !dbg !12
+  %error.ptr = insertvalue { i64, ptr } undef, ptr %error.alloc, 1, !dbg !12
+  ret { i64, ptr } %error.ptr, !dbg !12
 
 ifcont:                                           ; preds = %entry
   %a4 = load i64, ptr %a1, align 4, !dbg !12
@@ -28,8 +30,22 @@ ifcont:                                           ; preds = %entry
 
 define i64 @main() !dbg !15 {
 entry:
-  %calltmp = call { i64, ptr } @divide(i64 10, i64 2), !dbg !18
-  ret i64 undef, !dbg !18
+  %result = alloca i64, align 8, !dbg !20
+  %calltmp = call { i64, ptr } @divide(i64 10, i64 2), !dbg !20
+  %call.value = extractvalue { i64, ptr } %calltmp, 0, !dbg !20
+  %call.error = extractvalue { i64, ptr } %calltmp, 1, !dbg !20
+  %has.error = icmp ne ptr %call.error, null, !dbg !20
+  br i1 %has.error, label %call.error1, label %call.success, !dbg !20
+
+call.error1:                                      ; preds = %entry
+  call void @__vyn_runtime_untrapped_error(ptr %call.error), !dbg !20
+  unreachable, !dbg !20
+
+call.success:                                     ; preds = %entry
+  store i64 %call.value, ptr %result, align 4, !dbg !20
+  call void @llvm.dbg.declare(metadata ptr %result, metadata !19, metadata !DIExpression()), !dbg !21
+  %result2 = load i64, ptr %result, align 4, !dbg !20
+  ret i64 %result2, !dbg !20
 }
 
 ; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)
@@ -65,7 +81,10 @@ attributes #1 = { noreturn }
 !12 = !DILocation(line: 4, column: 1, scope: !4)
 !13 = !DILocation(line: 4, column: 9, scope: !4)
 !14 = !DILocation(line: 4, column: 17, scope: !4)
-!15 = distinct !DISubprogram(name: "main", linkageName: "main", scope: !1, file: !1, line: 11, type: !16, scopeLine: 11, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)
+!15 = distinct !DISubprogram(name: "main", linkageName: "main", scope: !1, file: !1, line: 11, type: !16, scopeLine: 11, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !18)
 !16 = !DISubroutineType(types: !17)
 !17 = !{!8}
-!18 = !DILocation(line: 11, column: 1, scope: !15)
+!18 = !{!19}
+!19 = !DILocalVariable(name: "result", scope: !15, file: !1, line: 12, type: !8)
+!20 = !DILocation(line: 11, column: 1, scope: !15)
+!21 = !DILocation(line: 12, column: 1, scope: !15)

@@ -1577,7 +1577,76 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         builder->CreateCall(calleeFunc, argValues);
         m_currentLLVMValue = nullptr; // No value for void calls
     } else {
-        m_currentLLVMValue = builder->CreateCall(calleeFunc, argValues, "calltmp");
+        llvm::Value* callResult = builder->CreateCall(calleeFunc, argValues, "calltmp");
+        
+        // Phase 4: Check if this is a call to a failable function (returns {T, ptr})
+        if (llvm::StructType* structRetType = llvm::dyn_cast<llvm::StructType>(calleeFunc->getReturnType())) {
+            if (structRetType->getNumElements() == 2 && 
+                structRetType->getElementType(1)->isPointerTy()) {
+                // This looks like a {T, ptr} return from a failable function
+                std::cout << "DEBUG: Extracting error from failable function call to " << calleeName << std::endl;
+                
+                // Extract the value (position 0)
+                llvm::Value* returnedValue = builder->CreateExtractValue(callResult, {0}, "call.value");
+                
+                // Extract the error pointer (position 1)
+                llvm::Value* errorPtr = builder->CreateExtractValue(callResult, {1}, "call.error");
+                
+                // Check if error occurred (error != NULL)
+                llvm::Value* hasError = builder->CreateICmpNE(
+                    errorPtr,
+                    llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(errorPtr->getType())),
+                    "has.error"
+                );
+                
+                // Create basic blocks for error handling
+                llvm::Function* currentFunc = getCurrentFunction();
+                llvm::BasicBlock* errorBB = llvm::BasicBlock::Create(*context, "call.error", currentFunc);
+                llvm::BasicBlock* successBB = llvm::BasicBlock::Create(*context, "call.success", currentFunc);
+                
+                builder->CreateCondBr(hasError, errorBB, successBB);
+                
+                // Error block: check if we have a trap handler or need to propagate
+                builder->SetInsertPoint(errorBB);
+                if (!trapStack.empty()) {
+                    // We have a trap handler - store error and jump to landing pad
+                    std::cout << "DEBUG: Error propagating to trap handler" << std::endl;
+                    TrapContext& trap = trapStack.back();
+                    builder->CreateStore(errorPtr, trap.errorSlot);
+                    builder->CreateBr(trap.landingPad);
+                } else if (currentFunctionAST && currentFunctionAST->needsErrorReturn) {
+                    // No trap but we're in a failable function - propagate to our caller
+                    std::cout << "DEBUG: Error propagating up to caller" << std::endl;
+                    
+                    // Clean up scope
+                    if (!scopeStack.empty()) {
+                        exitScope();
+                    }
+                    
+                    // Create return struct with propagated error
+                    llvm::StructType* ourReturnType = llvm::cast<llvm::StructType>(currentFunc->getReturnType());
+                    llvm::Value* propagatedStruct = llvm::UndefValue::get(ourReturnType);
+                    llvm::Value* dummyValue = llvm::UndefValue::get(ourReturnType->getElementType(0));
+                    propagatedStruct = builder->CreateInsertValue(propagatedStruct, dummyValue, {0}, "prop.dummy");
+                    propagatedStruct = builder->CreateInsertValue(propagatedStruct, errorPtr, {1}, "prop.error");
+                    builder->CreateRet(propagatedStruct);
+                } else {
+                    // No trap and not a failable function - call untrapped error handler
+                    std::cout << "DEBUG: Error reaching untrapped handler" << std::endl;
+                    llvm::Function* untrappedFn = getVynUntrappedErrorFunction();
+                    builder->CreateCall(untrappedFn, {errorPtr});
+                    builder->CreateUnreachable();
+                }
+                
+                // Success block: continue with the actual value
+                builder->SetInsertPoint(successBB);
+                m_currentLLVMValue = returnedValue;
+                return;
+            }
+        }
+        
+        // Not a failable function call - use result directly
+        m_currentLLVMValue = callResult;
     }
 }
 

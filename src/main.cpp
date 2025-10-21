@@ -178,6 +178,17 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             throw std::runtime_error("Missing required intrinsic functions in module");
         }
 
+        // Verify the module before JIT compilation
+        std::cout << "Verifying module..." << std::endl;
+        std::string verifyErrors;
+        llvm::raw_string_ostream verifyStream(verifyErrors);
+        if (llvm::verifyModule(*module, &verifyStream)) {
+            verifyStream.flush();
+            std::cerr << "Module verification failed:\n" << verifyErrors << std::endl;
+            throw std::runtime_error("Module verification failed: " + verifyErrors);
+        }
+        std::cout << "Module verified successfully" << std::endl;
+
         // Create the ORC JIT execution engine
         auto jitOrErr = llvm::orc::LLJITBuilder().create();
         if (!jitOrErr) {
@@ -328,7 +339,6 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             throw std::runtime_error("Failed to add module to JIT: " + errorMsg);
         }
         std::cout << "ORC JIT execution engine created successfully" << std::endl;
-        std::cout << "Finding main function..." << std::endl;
         
         // Look up the main function symbol
         auto symbolResult = jit->lookup("main");
