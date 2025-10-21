@@ -247,6 +247,7 @@ private:
     void setupTrapContext(ast::BlockExpression* blockExpr, llvm::BasicBlock* continueBB);
     void cleanupTrapContext();
     llvm::Value* createErrorValue(ast::Expression* errorExpr, ast::TypeNode* errorType);
+    void preCreateTrapAllocas(ast::Statement* stmt, llvm::Function* func, llvm::Instruction** lastAllocaInsertPt = nullptr);
     
     // Vec operations
     void handleVecMethod(vyn::ast::CallExpression* node, const std::string& objectName, const std::string& methodName);

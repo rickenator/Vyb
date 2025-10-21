@@ -480,6 +480,10 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
         // Initialize scope management for function body
         enterScope();
 
+        // PHASE 6.3 FIX: Pre-create trap_error allocas to ensure consistent stack layout
+        // This prevents alloca ordering issues that can corrupt struct return values
+        preCreateTrapAllocas(node->body.get(), func);
+
         // Create allocas for parameters and store initial argument values
         auto argIt = func->arg_begin();
         for (size_t i = 0; i < paramTypes.size(); ++i, ++argIt) {

@@ -1633,11 +1633,8 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                     std::cout << "DEBUG: Error reaching untrapped handler" << std::endl;
                     llvm::Function* untrappedFn = getVynUntrappedErrorFunction();
                     
-                    // TODO: Pass proper VynError structure instead of NULL
-                    // For now, pass NULL since errorPtr points to the error value (e.g., i64),
-                    // not a VynError struct, and the runtime expects VynError*
-                    llvm::Value* nullPtr = llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0));
-                    builder->CreateCall(untrappedFn, {nullPtr});
+                    // Pass the actual error pointer
+                    builder->CreateCall(untrappedFn, {errorPtr});
                     builder->CreateUnreachable();
                 }
                 
@@ -3112,8 +3109,28 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
         
         // Create alloca for error POINTER (not error value)
         // The error is passed as a pointer from failable functions
+        // PHASE 6.3 FIX: Look for pre-created trap_error alloca first
         llvm::Type* errorPtrType = llvm::PointerType::get(*context, 0);
-        errorSlot = createEntryBlockAlloca(errorPtrType, "trap_error");
+        errorSlot = nullptr;
+        
+        // Search for existing trap_error alloca in entry block
+        for (auto& inst : func->getEntryBlock()) {
+            if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(&inst)) {
+                if (alloca->getName() == "trap_error" && alloca->getAllocatedType() == errorPtrType) {
+                    errorSlot = alloca;
+                    std::cout << "DEBUG: Reusing pre-created trap_error alloca" << std::endl;
+                    break;
+                }
+            }
+        }
+        
+        // If not found, create it (shouldn't happen with pre-creation, but fallback)
+        if (!errorSlot) {
+            std::cout << "DEBUG: Creating new trap_error alloca (pre-creation missed this case)" << std::endl;
+            errorSlot = createEntryBlockAlloca(errorPtrType, "trap_error");
+            // Initialize to null to avoid reading garbage
+            builder->CreateStore(llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(errorPtrType)), errorSlot);
+        }
         
         // Create landing pad for error handling
         landingPadBB = llvm::BasicBlock::Create(*context, "trap.landing", func);

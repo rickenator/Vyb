@@ -154,8 +154,46 @@ llvm::Value* LLVMCodegen::createEntryBlockAlloca(llvm::Function* func, const std
         // logError (some location, "Cannot create alloca: type is null for variable " + varName);
         return nullptr;
     }
-    llvm::IRBuilder<> tmpB(&func->getEntryBlock(), func->getEntryBlock().begin());
-    return tmpB.CreateAlloca(type, nullptr, varName);
+    
+    // Find the last alloca in the entry block to maintain proper ordering
+    llvm::Instruction* insertPoint = nullptr;
+    for (auto& inst : func->getEntryBlock()) {
+        if (llvm::isa<llvm::AllocaInst>(&inst)) {
+            insertPoint = &inst;
+        } else {
+            // Stop at first non-alloca instruction
+            break;
+        }
+    }
+    
+    std::cerr << "DEBUG: createEntryBlockAlloca(3-param) - ";
+    if (insertPoint) {
+        std::cerr << "Found last alloca, inserting '" << varName << "' after it\n";
+    } else {
+        std::cerr << "No allocas found, inserting '" << varName << "' at beginning\n";
+    }
+    
+    llvm::IRBuilder<> tmpB(*context);
+    if (insertPoint) {
+        // Insert after the last alloca
+        tmpB.SetInsertPoint(insertPoint->getNextNode());
+    } else {
+        // No allocas yet, insert at beginning
+        tmpB.SetInsertPoint(&func->getEntryBlock(), func->getEntryBlock().begin());
+    }
+    
+    auto* alloca = tmpB.CreateAlloca(type, nullptr, varName);
+    
+    std::cerr << "DEBUG: createEntryBlockAlloca(3-param) - Created alloca '" << varName << "', current order:\n";
+    for (auto& inst : func->getEntryBlock()) {
+        if (auto* ai = llvm::dyn_cast<llvm::AllocaInst>(&inst)) {
+            std::cerr << "  - " << ai->getName().str() << "\n";
+        } else {
+            break;
+        }
+    }
+    
+    return alloca;
 }
 
 llvm::AllocaInst* LLVMCodegen::createEntryBlockAlloca(llvm::Type* type, const std::string& name) {
@@ -163,8 +201,45 @@ llvm::AllocaInst* LLVMCodegen::createEntryBlockAlloca(llvm::Type* type, const st
         // No error reporting mechanism available here, just return nullptr
         return nullptr;
     }
-    llvm::IRBuilder<> TmpB(&currentFunction->getEntryBlock(), currentFunction->getEntryBlock().begin());
-    return TmpB.CreateAlloca(type, nullptr, name);
+    
+    // Find the last alloca in the entry block to maintain proper ordering
+    llvm::Instruction* insertPoint = nullptr;
+    for (auto& inst : currentFunction->getEntryBlock()) {
+        if (llvm::isa<llvm::AllocaInst>(&inst)) {
+            insertPoint = &inst;
+        } else {
+            // Stop at first non-alloca instruction
+            break;
+        }
+    }
+    
+    if (insertPoint) {
+        std::cerr << "DEBUG: createEntryBlockAlloca - Found last alloca, inserting '" << name << "' after it\n";
+    } else {
+        std::cerr << "DEBUG: createEntryBlockAlloca - No allocas found, inserting '" << name << "' at beginning\n";
+    }
+    
+    llvm::IRBuilder<> TmpB(*context);
+    if (insertPoint) {
+        // Insert after the last alloca
+        TmpB.SetInsertPoint(insertPoint->getNextNode());
+    } else {
+        // No allocas yet, insert at beginning
+        TmpB.SetInsertPoint(&currentFunction->getEntryBlock(), currentFunction->getEntryBlock().begin());
+    }
+    
+    auto* alloca = TmpB.CreateAlloca(type, nullptr, name);
+    
+    std::cerr << "DEBUG: createEntryBlockAlloca - Created alloca '" << name << "', current order:\n";
+    for (auto& inst : currentFunction->getEntryBlock()) {
+        if (auto* ai = llvm::dyn_cast<llvm::AllocaInst>(&inst)) {
+            std::cerr << "  - " << ai->getName().str() << "\n";
+        } else {
+            break;
+        }
+    }
+    
+    return alloca;
 }
 
 void LLVMCodegen::pushLoop(llvm::BasicBlock* header, llvm::BasicBlock* body, llvm::BasicBlock* update, llvm::BasicBlock* exit) {
