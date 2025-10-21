@@ -269,21 +269,26 @@ VynUntrappedErrorHandler __vyn_runtime_get_untrapped_handler() {
 
 // ===== Panic Implementation =====
 
-void __vyn_runtime_panic(VynString message) {
+void __vyn_runtime_panic(const char* message) {
     char timestamp_buf[64];
     format_timestamp(get_timestamp_ns(), timestamp_buf, sizeof(timestamp_buf));
     
+    char thread_buf[128];
+    snprintf(thread_buf, sizeof(thread_buf), "Thread: %llu", (unsigned long long)get_thread_id());
+    
+    char time_buf[128];
+    snprintf(time_buf, sizeof(time_buf), "Time: %s", timestamp_buf);
+    
     fprintf(stderr, "\n");
     fprintf(stderr, "┌─ PANIC ──────────────────────────────────────────────────────┐\n");
-    fprintf(stderr, "│ Thread: %-55llu│\n", 
-            (unsigned long long)get_thread_id());
-    fprintf(stderr, "│ Time: %-57s│\n", timestamp_buf);
+    fprintf(stderr, "│ %-62s │\n", thread_buf);
+    fprintf(stderr, "│ %-62s │\n", time_buf);
     fprintf(stderr, "└──────────────────────────────────────────────────────────────┘\n");
     fprintf(stderr, "\n");
     
-    // Print message (null-terminated string from Vyn String struct)
-    if (message.data && message.length > 0) {
-        fprintf(stderr, "Message: %.*s\n", (int)message.length, message.data);
+    // Print message (null-terminated C string)
+    if (message) {
+        fprintf(stderr, "Message: %s\n", message);
     } else {
         fprintf(stderr, "Message: <no message>\n");
     }
@@ -304,24 +309,33 @@ void __vyn_runtime_untrapped_error(VynError* error) {
     fprintf(stderr, "\n");
     fprintf(stderr, "┌─ UNTRAPPED FAILURE ──────────────────────────────────────────┐\n");
     
+    char line_buf[128];
     if (error) {
-        fprintf(stderr, "│ Error: %-57s│\n", error->type_name);
-        fprintf(stderr, "│ Thread: %-55llu│\n", 
-                (unsigned long long)error->thread_id);
-        fprintf(stderr, "│ Time: %-57s│\n", timestamp_buf);
+        snprintf(line_buf, sizeof(line_buf), "Error: %s", error->type_name);
+        fprintf(stderr, "│ %-62s │\n", line_buf);
+        
+        snprintf(line_buf, sizeof(line_buf), "Thread: %llu", (unsigned long long)error->thread_id);
+        fprintf(stderr, "│ %-62s │\n", line_buf);
+        
+        snprintf(line_buf, sizeof(line_buf), "Time: %s", timestamp_buf);
+        fprintf(stderr, "│ %-62s │\n", line_buf);
+        
         if (error->location.file_path && error->location.line > 0) {
-            char location_buf[256];
-            snprintf(location_buf, sizeof(location_buf), "%s:%u:%u",
+            snprintf(line_buf, sizeof(line_buf), "Location: %s:%u:%u",
                     error->location.file_path,
                     error->location.line,
                     error->location.column);
-            fprintf(stderr, "│ Location: %-54s│\n", location_buf);
+            fprintf(stderr, "│ %-62s │\n", line_buf);
         }
     } else {
-        fprintf(stderr, "│ Error: <null error>                                          │\n");
-        fprintf(stderr, "│ Thread: %-55llu│\n", 
-                (unsigned long long)get_thread_id());
-        fprintf(stderr, "│ Time: %-57s│\n", timestamp_buf);
+        snprintf(line_buf, sizeof(line_buf), "Error: <null error>");
+        fprintf(stderr, "│ %-62s │\n", line_buf);
+        
+        snprintf(line_buf, sizeof(line_buf), "Thread: %llu", (unsigned long long)get_thread_id());
+        fprintf(stderr, "│ %-62s │\n", line_buf);
+        
+        snprintf(line_buf, sizeof(line_buf), "Time: %s", timestamp_buf);
+        fprintf(stderr, "│ %-62s │\n", line_buf);
     }
     
     fprintf(stderr, "└──────────────────────────────────────────────────────────────┘\n");

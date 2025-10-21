@@ -3062,9 +3062,25 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
     llvm::Value* blockResult = nullptr;
     
     // Execute block statements
-    for (const auto& stmt : node->block->body) {
-        stmt->accept(*this);
-        blockResult = m_currentLLVMValue;
+    for (size_t i = 0; i < node->block->body.size(); i++) {
+        const auto& stmt = node->block->body[i];
+        bool isLastStmt = (i == node->block->body.size() - 1);
+        
+        // For the last statement, if it's an ExpressionStatement, visit the expression directly
+        // to preserve its value
+        if (isLastStmt) {
+            if (auto* exprStmt = dynamic_cast<ast::ExpressionStatement*>(stmt.get())) {
+                if (exprStmt->expression) {
+                    exprStmt->expression->accept(*this);
+                    blockResult = m_currentLLVMValue;
+                }
+            } else {
+                stmt->accept(*this);
+                blockResult = m_currentLLVMValue;
+            }
+        } else {
+            stmt->accept(*this);
+        }
         
         // If block terminated (e.g., by fail), stop processing
         if (builder->GetInsertBlock()->getTerminator()) {

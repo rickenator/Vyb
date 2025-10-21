@@ -54,7 +54,7 @@ typedef void (*VynUntrappedErrorHandler)(VynError* error, VynStackTrace* trace);
 // ===== Runtime Function Declarations =====
 
 // Panic - immediate termination (noreturn)
-void __vyn_runtime_panic(VynString message) __attribute__((noreturn));
+void __vyn_runtime_panic(const char* message) __attribute__((noreturn));
 
 // Untrapped error - cleanup then exit (noreturn)
 void __vyn_runtime_untrapped_error(VynError* error) __attribute__((noreturn));
