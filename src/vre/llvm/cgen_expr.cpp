@@ -3060,6 +3060,7 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
     
     // Save block result
     llvm::Value* blockResult = nullptr;
+    llvm::BasicBlock* normalExitBB = nullptr;  // Track where normal path exits
     
     // Execute block statements
     for (size_t i = 0; i < node->block->body.size(); i++) {
@@ -3088,8 +3089,9 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
         }
     }
     
-    // If block didn't terminate, branch to ensure/continue
+    // If block didn't terminate, branch to ensure/continue and record exit block
     if (!builder->GetInsertBlock()->getTerminator()) {
+        normalExitBB = builder->GetInsertBlock();
         if (hasEnsure) {
             builder->CreateBr(ensureBB);
         } else {
@@ -3098,6 +3100,9 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
     }
     
     // Generate trap handlers
+    llvm::Value* trapResult = nullptr;
+    llvm::BasicBlock* trapExitBB = nullptr;  // Track where trap path exits
+    
     if (hasTrap) {
         builder->SetInsertPoint(landingPadBB);
         
@@ -3117,13 +3122,15 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
             // Execute trap handler
             if (trapClause->handler) {
                 trapClause->handler->accept(*this);
+                trapResult = m_currentLLVMValue;  // Capture trap handler result
             }
             
             // Restore scope
             namedValues = std::move(oldNamedValues);
             
-            // Branch to ensure/continue after handling
+            // Branch to ensure/continue after handling and record exit block
             if (!builder->GetInsertBlock()->getTerminator()) {
+                trapExitBB = builder->GetInsertBlock();
                 if (hasEnsure) {
                     builder->CreateBr(ensureBB);
                 } else {
@@ -3154,8 +3161,40 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
     // Continue block
     builder->SetInsertPoint(continueBB);
     
-    // Set result value
-    m_currentLLVMValue = blockResult;
+    // Create PHI node to merge results from different paths
+    if (hasTrap && (blockResult || trapResult)) {
+        // Determine result type
+        llvm::Type* resultType = blockResult ? blockResult->getType() : 
+                                 trapResult ? trapResult->getType() : nullptr;
+        
+        if (resultType) {
+            // Count incoming paths
+            unsigned numIncoming = 0;
+            if (normalExitBB && blockResult) numIncoming++;
+            if (trapExitBB && trapResult) numIncoming++;
+            
+            if (numIncoming > 0) {
+                llvm::PHINode* phi = builder->CreatePHI(resultType, numIncoming, "block.result");
+                
+                // Add incoming values
+                if (normalExitBB && blockResult) {
+                    phi->addIncoming(blockResult, normalExitBB);
+                }
+                if (trapExitBB && trapResult) {
+                    phi->addIncoming(trapResult, trapExitBB);
+                }
+                
+                m_currentLLVMValue = phi;
+            } else {
+                m_currentLLVMValue = blockResult ? blockResult : trapResult;
+            }
+        } else {
+            m_currentLLVMValue = nullptr;
+        }
+    } else {
+        // No trap or no results - just use block result
+        m_currentLLVMValue = blockResult;
+    }
 }
 
 void LLVMCodegen::visit(ast::ComparisonPattern* node) {
