@@ -1,37 +1,35 @@
 ; ModuleID = 'VynModule'
 source_filename = "VynModule"
 
-define i64 @divide(i64 %a, i64 %b) !dbg !4 {
+define { i64, ptr } @divide(i64 %a, i64 %b) !dbg !4 {
 entry:
   %b2 = alloca i64, align 8
   %a1 = alloca i64, align 8
-  store i64 %a, ptr %a1, align 4, !dbg !11
-  call void @llvm.dbg.declare(metadata ptr %a1, metadata !9, metadata !DIExpression()), !dbg !12
-  store i64 %b, ptr %b2, align 4, !dbg !11
-  call void @llvm.dbg.declare(metadata ptr %b2, metadata !10, metadata !DIExpression()), !dbg !13
-  %b3 = load i64, ptr %b2, align 4, !dbg !11
-  %icmpeqtmp = icmp eq i64 %b3, 0, !dbg !11
-  br i1 %icmpeqtmp, label %then, label %ifcont, !dbg !11
+  store i64 %a, ptr %a1, align 4, !dbg !12
+  call void @llvm.dbg.declare(metadata ptr %a1, metadata !10, metadata !DIExpression()), !dbg !13
+  store i64 %b, ptr %b2, align 4, !dbg !12
+  call void @llvm.dbg.declare(metadata ptr %b2, metadata !11, metadata !DIExpression()), !dbg !14
+  %b3 = load i64, ptr %b2, align 4, !dbg !12
+  %icmpeqtmp = icmp eq i64 %b3, 0, !dbg !12
+  br i1 %icmpeqtmp, label %then, label %ifcont, !dbg !12
 
 then:                                             ; preds = %entry
-  call void @__vyn_runtime_untrapped_error(ptr null), !dbg !11
-  unreachable, !dbg !11
+  call void @__vyn_runtime_untrapped_error(ptr null), !dbg !12
+  unreachable, !dbg !12
 
 ifcont:                                           ; preds = %entry
-  %a4 = load i64, ptr %a1, align 4, !dbg !11
-  %b5 = load i64, ptr %b2, align 4, !dbg !11
-  %sdivtmp = sdiv i64 %a4, %b5, !dbg !11
-  ret i64 %sdivtmp, !dbg !11
+  %a4 = load i64, ptr %a1, align 4, !dbg !12
+  %b5 = load i64, ptr %b2, align 4, !dbg !12
+  %sdivtmp = sdiv i64 %a4, %b5, !dbg !12
+  %result.value = insertvalue { i64, ptr } undef, i64 %sdivtmp, 0, !dbg !12
+  %result.error = insertvalue { i64, ptr } %result.value, ptr null, 1, !dbg !12
+  ret { i64, ptr } %result.error, !dbg !12
 }
 
-define i64 @main() !dbg !14 {
+define i64 @main() !dbg !15 {
 entry:
-  %result = alloca i64, align 8, !dbg !19
-  %calltmp = call i64 @divide(i64 10, i64 2), !dbg !19
-  store i64 %calltmp, ptr %result, align 4, !dbg !19
-  call void @llvm.dbg.declare(metadata ptr %result, metadata !18, metadata !DIExpression()), !dbg !20
-  %result1 = load i64, ptr %result, align 4, !dbg !19
-  ret i64 %result1, !dbg !19
+  %calltmp = call { i64, ptr } @divide(i64 10, i64 2), !dbg !18
+  ret i64 undef, !dbg !18
 }
 
 ; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)
@@ -56,20 +54,18 @@ attributes #1 = { noreturn }
 !1 = !DIFile(filename: "test_canfail.vyn.ll", directory: "/home/rick/Projects/Vyn/test/trap")
 !2 = !{i32 2, !"Debug Info Version", i32 3}
 !3 = !{i32 2, !"Dwarf Version", i32 4}
-!4 = distinct !DISubprogram(name: "divide", linkageName: "divide", scope: !1, file: !1, line: 4, type: !5, scopeLine: 4, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !8)
+!4 = distinct !DISubprogram(name: "divide", linkageName: "divide", scope: !1, file: !1, line: 4, type: !5, scopeLine: 4, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !9)
 !5 = !DISubroutineType(types: !6)
-!6 = !{!7, !7, !7}
-!7 = !DIBasicType(name: "i64", size: 64, encoding: DW_ATE_signed)
-!8 = !{!9, !10}
-!9 = !DILocalVariable(name: "a", scope: !4, file: !1, line: 4, type: !7)
-!10 = !DILocalVariable(name: "b", scope: !4, file: !1, line: 4, type: !7)
-!11 = !DILocation(line: 4, column: 1, scope: !4)
-!12 = !DILocation(line: 4, column: 9, scope: !4)
-!13 = !DILocation(line: 4, column: 17, scope: !4)
-!14 = distinct !DISubprogram(name: "main", linkageName: "main", scope: !1, file: !1, line: 11, type: !15, scopeLine: 11, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !17)
-!15 = !DISubroutineType(types: !16)
-!16 = !{!7}
-!17 = !{!18}
-!18 = !DILocalVariable(name: "result", scope: !14, file: !1, line: 12, type: !7)
-!19 = !DILocation(line: 11, column: 1, scope: !14)
-!20 = !DILocation(line: 12, column: 1, scope: !14)
+!6 = !{!7, !8, !8}
+!7 = !DICompositeType(tag: DW_TAG_structure_type, name: "struct_return", scope: !1, file: !1, size: 128, align: 8)
+!8 = !DIBasicType(name: "i64", size: 64, encoding: DW_ATE_signed)
+!9 = !{!10, !11}
+!10 = !DILocalVariable(name: "a", scope: !4, file: !1, line: 4, type: !8)
+!11 = !DILocalVariable(name: "b", scope: !4, file: !1, line: 4, type: !8)
+!12 = !DILocation(line: 4, column: 1, scope: !4)
+!13 = !DILocation(line: 4, column: 9, scope: !4)
+!14 = !DILocation(line: 4, column: 17, scope: !4)
+!15 = distinct !DISubprogram(name: "main", linkageName: "main", scope: !1, file: !1, line: 11, type: !16, scopeLine: 11, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)
+!16 = !DISubroutineType(types: !17)
+!17 = !{!8}
+!18 = !DILocation(line: 11, column: 1, scope: !15)

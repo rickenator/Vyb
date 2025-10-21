@@ -209,7 +209,25 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                     exitScope();
                 }
                 
-                builder->CreateRet(returnValue);
+                // Phase 2: Wrap return value in {T, ptr} for failable functions
+                if (currentFunctionAST && currentFunctionAST->needsErrorReturn) {
+                    std::cout << "DEBUG: Wrapping return value in {T, nullptr} tuple for failable function" << std::endl;
+                    
+                    // Create null pointer for error (success case)
+                    llvm::Value* nullErrorPtr = llvm::ConstantPointerNull::get(
+                        llvm::PointerType::get(*context, 0));
+                    
+                    // Create the {value, error} struct
+                    llvm::StructType* returnStructType = llvm::cast<llvm::StructType>(
+                        currentFunction->getReturnType());
+                    llvm::Value* resultStruct = llvm::UndefValue::get(returnStructType);
+                    resultStruct = builder->CreateInsertValue(resultStruct, returnValue, {0}, "result.value");
+                    resultStruct = builder->CreateInsertValue(resultStruct, nullErrorPtr, {1}, "result.error");
+                    
+                    builder->CreateRet(resultStruct);
+                } else {
+                    builder->CreateRet(returnValue);
+                }
             }
         } else {
             // Error during argument codegen or argument is null expression (should not happen for valid AST)

@@ -99,6 +99,7 @@ private:
 
     // Scope and symbol management
     llvm::Function* currentFunction = nullptr; // Initialize
+    vyn::ast::FunctionDeclaration* currentFunctionAST = nullptr; // Track AST node for error propagation
     llvm::StructType* currentClassType = nullptr; // Initialize
     LoopContext currentLoopContext;
     std::vector<LoopContext> loopStack;
