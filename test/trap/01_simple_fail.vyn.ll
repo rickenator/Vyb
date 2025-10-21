@@ -1,9 +1,9 @@
 ; ModuleID = 'VynModule'
 source_filename = "VynModule"
 
-define i64 @main() !dbg !4 {
+define { i64, ptr } @main() !dbg !4 {
 entry:
-  ret i64 0, !dbg !8
+  ret { i64, ptr } zeroinitializer, !dbg !8
 }
 
 declare void @__vyn_println(ptr)
@@ -22,5 +22,5 @@ declare ptr @__vyn_convert_lit_string(ptr)
 !4 = distinct !DISubprogram(name: "main", linkageName: "main", scope: !1, file: !1, line: 4, type: !5, scopeLine: 4, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)
 !5 = !DISubroutineType(types: !6)
 !6 = !{!7}
-!7 = !DIBasicType(name: "i64", size: 64, encoding: DW_ATE_signed)
+!7 = !DICompositeType(tag: DW_TAG_structure_type, name: "struct_return", scope: !1, file: !1, size: 128, align: 8)
 !8 = !DILocation(line: 4, column: 1, scope: !4)

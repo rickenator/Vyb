@@ -31,7 +31,7 @@ ifcont:                                           ; preds = %entry
 define i64 @main() !dbg !15 {
 entry:
   %result = alloca i64, align 8
-  %trap_error = alloca i64, align 8
+  %trap_error = alloca ptr, align 8
   br label %block.normal, !dbg !20
 
 block.normal:                                     ; preds = %entry
@@ -49,7 +49,7 @@ block.continue:                                   ; preds = %call.success
   ret i64 %result2, !dbg !20
 
 trap.landing:                                     ; preds = %call.error1
-  %caught_error = load i64, ptr %trap_error, align 4, !dbg !20
+  %caught_error = load ptr, ptr %trap_error, align 8, !dbg !20
   ret i64 -1, !dbg !20
 
 call.error1:                                      ; preds = %block.normal

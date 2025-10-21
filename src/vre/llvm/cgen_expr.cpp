@@ -1608,16 +1608,13 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 
                 // Error block: check if we have a trap handler or need to propagate
                 builder->SetInsertPoint(errorBB);
-                std::cout << "DEBUG: trapStack size = " << trapStack.size() << std::endl;
                 if (!trapStack.empty()) {
                     // We have a trap handler - store error and jump to landing pad
-                    std::cout << "DEBUG: Error propagating to trap handler" << std::endl;
                     TrapContext& trap = trapStack.back();
                     builder->CreateStore(errorPtr, trap.errorSlot);
                     builder->CreateBr(trap.landingPad);
                 } else if (currentFunctionAST && currentFunctionAST->needsErrorReturn) {
                     // No trap but we're in a failable function - propagate to our caller
-                    std::cout << "DEBUG: Error propagating up to caller" << std::endl;
                     
                     // Clean up scope
                     if (!scopeStack.empty()) {
@@ -3128,9 +3125,7 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
         trapCtx.errorSlot = errorSlot;
         trapCtx.errorType = errorType;
         trapCtx.errorVarName = node->trapClauses[0]->errorName->name;
-        std::cout << "DEBUG: Pushing trap context, stack size before: " << trapStack.size() << std::endl;
         trapStack.push_back(trapCtx);
-        std::cout << "DEBUG: Pushed trap context, stack size after: " << trapStack.size() << std::endl;
     }
     
     // Execute normal block
@@ -3195,17 +3190,9 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
             // For now, assuming single trap clause
             
             if (auto* blockStmt = dynamic_cast<ast::BlockStatement*>(trapClause->handler.get())) {
-                std::cout << "DEBUG: Trap handler is BlockStatement with " << blockStmt->body.size() << " statements" << std::endl;
-                if (!blockStmt->body.empty()) {
-                    std::cout << "DEBUG: First statement type: " << typeid(*blockStmt->body[0]).name() << std::endl;
-                    if (auto* exprStmt = dynamic_cast<ast::ExpressionStatement*>(blockStmt->body[0].get())) {
-                        if (exprStmt->expression) {
-                            std::cout << "DEBUG: Expression type: " << typeid(*exprStmt->expression).name() << std::endl;
-                        }
-                    }
-                }
+                // Block statement handler - need special handling for last expression
             } else {
-                std::cout << "DEBUG: Trap handler is " << (trapClause->handler ? typeid(*trapClause->handler).name() : "null") << std::endl;
+                // Non-block handler
             }
             
             // Add error variable to scope
@@ -3264,9 +3251,7 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
         }
         
         // Pop trap context
-        std::cout << "DEBUG: Popping trap context, stack size before: " << trapStack.size() << std::endl;
         trapStack.pop_back();
-        std::cout << "DEBUG: Popped trap context, stack size after: " << trapStack.size() << std::endl;
     }
     
     // Generate ensure cleanup

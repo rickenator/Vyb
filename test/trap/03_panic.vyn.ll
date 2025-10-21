@@ -4,8 +4,6 @@ source_filename = "VynModule"
 @0 = private unnamed_addr constant [13 x i8] c"Before panic\00", align 1
 @type_name = private unnamed_addr constant [8 x i8] c"unknown\00", align 1
 @1 = private unnamed_addr constant [29 x i8] c"Something terrible happened!\00", align 1
-@2 = private unnamed_addr constant [12 x i8] c"After panic\00", align 1
-@type_name.1 = private unnamed_addr constant [8 x i8] c"unknown\00", align 1
 
 define i64 @main() !dbg !4 {
 entry:
@@ -13,18 +11,20 @@ entry:
   store { ptr, i64 } { ptr @0, i64 12 }, ptr %serialize_temp, align 8, !dbg !8
   %serialized_json = call ptr @__vyn_serialize_to_json(ptr %serialize_temp, ptr @type_name), !dbg !8
   call void @__vyn_println(ptr %serialized_json), !dbg !8
-  %serialize_temp1 = alloca { ptr, i64 }, align 8, !dbg !8
-  store { ptr, i64 } { ptr @2, i64 11 }, ptr %serialize_temp1, align 8, !dbg !8
-  %serialized_json2 = call ptr @__vyn_serialize_to_json(ptr %serialize_temp1, ptr @type_name.1), !dbg !8
-  call void @__vyn_println(ptr %serialized_json2), !dbg !8
-  ret i64 0, !dbg !8
+  call void @__vyn_runtime_panic(ptr @1), !dbg !8
+  unreachable, !dbg !8
 }
 
 declare ptr @__vyn_serialize_to_json(ptr, ptr)
 
 declare void @__vyn_println(ptr)
 
+; Function Attrs: noreturn
+declare void @__vyn_runtime_panic(ptr) #0
+
 declare ptr @__vyn_convert_lit_string(ptr)
+
+attributes #0 = { noreturn }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!2, !3}
