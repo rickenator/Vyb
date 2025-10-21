@@ -90,15 +90,30 @@ The immediate focus for the next release:
 5. **Generic Struct Instantiation:** Monomorphization for generic structs
 
 ### 📋 CURRENT FOCUS (v0.4.3)
-1. **Range Patterns in Match/Select:** Implement `a..b` range matching for elegant numeric range handling
+
+1. **✅ Error Handling System (COMPLETED v0.4.2):** Production-ready `fail`/`trap` error handling
+   - Zero-cost success path with heap-allocated error contexts
+   - Type-safe pattern matching with struct field access
+   - Multi-level error propagation through call stacks
+   - Heap allocation with type ID + value storage (16 bytes)
+   - Untrapped error runtime handler with formatted output
+   - Complete LLVM codegen implementation
+   - See "Error Handling Roadmap" section below for future enhancements
+
+2. **Range Patterns in Match/Select:** Implement `a..b` range matching for elegant numeric range handling
    - Syntax: `1..10 -> "single digit"` in match/select expressions
    - Note: Conflicts with comparison patterns (`>= 90`) need resolution
    - Design decision: May use different syntax or restrict to one pattern type
-2. **Aspect Method Calls:** Complete method invocation on aspect-bound types
-3. **Standard Library Expansion:** Building core modules for collections, I/O, math
-4. **Enhanced Error Messages:** More detailed compilation feedback and suggestions
-5. **Tuple Element Access:** `.0`, `.1`, `.2` syntax for accessing tuple elements
-6. **String Comparison Operators:** Lexical ordering for String types
+
+3. **Aspect Method Calls:** Complete method invocation on aspect-bound types
+
+4. **Standard Library Expansion:** Building core modules for collections, I/O, math
+
+5. **Enhanced Error Messages:** More detailed compilation feedback and suggestions
+
+6. **Tuple Element Access:** `.0`, `.1`, `.2` syntax for accessing tuple elements
+
+7. **String Comparison Operators:** Lexical ordering for String types
 
 ## Project Structure and Organization
 
@@ -372,6 +387,342 @@ An enhancement to both `match` and `select` to support comparison-based patterns
   - `test/select_match/test_unreachable_patterns.vyn` - Error detection
 
 **Status**: ✅ Fully implemented for Int/Float types with unreachable pattern detection. String comparison operators remain as future enhancement.
+
+### Error Handling System ✅
+
+**Status**: ✅ **Fully implemented in v0.4.2** (October 2025)
+
+A production-ready error handling system combining explicit propagation with zero-cost success paths.
+
+#### **Core Philosophy**
+
+- **Explicit propagation**: Errors visible in type signatures
+- **Zero-cost success**: No overhead when operations succeed (Happy Path optimization!)
+- **Pattern matching**: Type-safe error handling with full struct field access
+- **Heap allocation**: Rich error contexts through 16-byte error structs (type_id + value)
+
+#### **Implemented Features** ✅
+
+**fail Statement:**
+```vyn
+# Primitive errors
+fail 42                    # Integer error code
+fail "not found"           # String error message
+fail 3.14                  # Float error value
+
+# Structured errors with context
+struct DivisionError {
+    code<Int>,
+    dividend<Int>,
+    divisor<Int>
+}
+fail DivisionError { code = 42, dividend = 10, divisor = 0 }
+```
+
+**trap Handlers:**
+```vyn
+# Postfix syntax with pattern matching
+result<Int> = {
+    risky_operation()
+} trap (e<ErrorType>) -> {
+    handle_error(e)
+    fallback_value
+}
+
+# Multiple error types
+{
+    operation()
+} trap (e<Int>) -> {
+    handle_int_error(e)
+} trap (e<String>) -> {
+    handle_string_error(e)
+} trap (e<CustomError>) -> {
+    handle_custom_error(e.field)  # Field access!
+}
+```
+
+**Error Memory Layout:**
+```
+Heap-allocated struct (16 bytes):
+  Offset 0-7:  Type ID hash (i64) - Runtime type dispatch
+  Offset 8-15: Error value/data    - Primitive or struct data
+```
+
+**Type ID Hashing:**
+- `Int` → hash("Int") = -3994496327427856726
+- `String` → hash("String") = unique value
+- Custom types → hash(type_name) for pattern matching
+
+**Features:**
+- ✅ Multi-level error propagation through call stacks
+- ✅ Type-safe trap handler matching with compile-time validation
+- ✅ Struct field access in trap handlers (`e.code`, `e.dividend`)
+- ✅ Automatic memory management (malloc on fail, free in trap)
+- ✅ Untrapped error runtime handler with formatted output boxes
+- ✅ Complete LLVM codegen with efficient IR generation
+- ✅ Zero allocation on success path (Happy Path!)
+
+#### **Planned Enhancements** 🔜
+
+**Phase 6.3 - Wildcard Pattern (v0.5.0):**
+```vyn
+# Catch-all handler for any error type
+{
+    operation()
+} trap (e<?>) -> {
+    # Handle any error type
+    println("Unknown error occurred")
+    default_value
+}
+```
+
+**Phase 6.4 - Multi-Type Trap Block (v0.5.0):**
+```vyn
+# Single trap handler for multiple error types
+{
+    operation()
+} trap (e<Int | String | CustomError>) -> {
+    # Handle multiple types in one block
+    # Requires introspection to determine actual type
+    match (typeof(e)) {
+        Int -> handle_int(e as Int),
+        String -> handle_string(e as String),
+        CustomError -> handle_custom(e as CustomError)
+    }
+}
+```
+
+**Phase 6.5 - ensure Keyword (v0.5.1):**
+```vyn
+# Cleanup/finally blocks that always execute
+process_with_cleanup(path<String>)<String> -> {
+    file<File> = open_file(path)
+    
+    result<String> = {
+        file.read()
+    } trap (e<IOError>) -> {
+        return ""
+    } ensure -> {
+        file.close()  # Always runs, success or failure
+    }
+    
+    return result
+}
+
+# Execution order:
+# 1. Block code executes
+# 2. On error: trap handler runs (if matches)
+# 3. ensure block always runs last
+# 4. Resources guaranteed to be cleaned up
+```
+
+**Phase 6.6 - Advanced Features (v0.6.0):**
+- Stack trace capture in error structs
+- Error context chaining (wrap errors with additional context)
+- Custom error formatting with Display aspect
+- Error metrics and telemetry hooks
+- Result<T,E> style error recovery without trap
+- Panic/abort for unrecoverable errors
+
+#### **Performance Characteristics**
+
+**Happy Path (No Errors):**
+- Zero allocation overhead
+- Single pointer comparison per call
+- Modern CPU branch prediction optimized
+- Small functions inline away checks
+
+**Error Path:**
+- Single 16-byte malloc allocation
+- O(1) type hash comparison
+- Single free operation in trap handler
+- Stack-based propagation (no exception tables)
+
+**Comparison Table:**
+| Approach | Success Overhead | Error Overhead | Hidden Control Flow | Compile-time Safety |
+|----------|-----------------|----------------|---------------------|---------------------|
+| **Vyn trap/fail** | ~1 comparison | 1 malloc + type match | No | Yes |
+| C++ exceptions | Exception tables | Stack unwinding + alloc | Yes | Partial |
+| Rust Result<T,E> | Match overhead | Enum size increase | No | Yes |
+| Go error returns | Comparison + check | Allocation | No | Weak |
+
+#### **Test Coverage**
+
+Complete test suite in `test/trap/`:
+- `test_multilevel_propagation.vyn` - Error propagation through 3 levels
+- `test_custom_error.vyn` - Struct errors with field access
+- `test_multiple_error_types.vyn` - Multiple trap handlers
+- `test_untrapped.vyn` - Runtime error termination
+- Plus 11 additional comprehensive tests
+
+**All 15 tests passing** ✅
+
+### Introspection System 🔮
+
+**Status**: 🔮 **Planned for v0.5.0** - Foundation for advanced language features
+
+A comprehensive introspection system enabling runtime type information and reflection capabilities.
+
+#### **Core Concepts**
+
+**Motivation:**
+- Enable multi-type trap handlers with type discrimination
+- Support wildcard `?` pattern across language features (match, select, trap)
+- Provide foundation for serialization, debugging, and metaprogramming
+- Enable safe downcasting and type narrowing
+
+**Fundamental Operations:**
+```vyn
+# Get runtime type information
+type_info<Type> = typeof(value)
+
+# Type comparison
+if (typeof(value) == typeof<Int>()) {
+    println("It's an integer")
+}
+
+# Safe downcasting
+if (typeof(error) == typeof<CustomError>()) {
+    custom<CustomError> = error as CustomError
+    println(custom.field)
+}
+
+# Type name as string
+name<String> = typename(value)  # "Int", "String", "CustomError"
+```
+
+#### **Integration Points**
+
+**1. Wildcard Pattern Support:**
+```vyn
+# In match/select
+result<String> = select(value) -> {
+    1 -> "one",
+    2 -> "two",
+    ? -> "other"  # Wildcard for any remaining value
+}
+
+# In trap handlers
+{
+    operation()
+} trap (e<?>) -> {
+    # Handle any error type
+    println("Error type: " + typename(e))
+    match (typeof(e)) {
+        typeof<Int>() -> handle_int(e as Int),
+        typeof<String>() -> handle_string(e as String),
+        ? -> handle_unknown(e)
+    }
+}
+```
+
+**2. Multi-Type Trap Blocks:**
+```vyn
+# Single handler for multiple types
+{
+    operation()
+} trap (e<ParseError | ValidationError | DatabaseError>) -> {
+    # Introspection determines actual type
+    name<String> = typename(e)
+    
+    if (typeof(e) == typeof<ParseError>()) {
+        parse_err<ParseError> = e as ParseError
+        println("Parse error at position: " + String::from_int(parse_err.position))
+    } else if (typeof(e) == typeof<ValidationError>()) {
+        valid_err<ValidationError> = e as ValidationError
+        println("Validation error: " + valid_err.constraint)
+    } else {
+        db_err<DatabaseError> = e as DatabaseError
+        println("Database error code: " + String::from_int(db_err.code))
+    }
+}
+```
+
+**3. Generic Serialization:**
+```vyn
+# Auto-derive serialization using introspection
+serialize<T>(value<T>)<String> -> {
+    match (typeof(value)) {
+        typeof<Int>() -> String::from_int(value as Int),
+        typeof<String>() -> value as String,
+        typeof<Bool>() -> if (value as Bool) { "true" } else { "false" },
+        ? -> {
+            # Use struct introspection for custom types
+            fields<Vec<FieldInfo>> = reflect_fields(value)
+            serialize_struct(value, fields)
+        }
+    }
+}
+```
+
+#### **Implementation Phases**
+
+**Phase 1: Basic Type Information (v0.5.0)**
+- `typeof(expr)` operator returning Type object
+- `typename(expr)` returning String type name
+- Type equality comparison (`==`, `!=`)
+- Hash-based type ID system (already implemented for errors)
+
+**Phase 2: Safe Downcasting (v0.5.0)**
+- `as` operator for safe type narrowing
+- Compile-time validation of cast compatibility
+- Runtime checks for type safety
+- Integration with error handling system
+
+**Phase 3: Struct Reflection (v0.5.1)**
+- `reflect_fields(value)` for struct introspection
+- Field name, type, and offset information
+- Read/write field values dynamically
+- Enable generic serialization/deserialization
+
+**Phase 4: Advanced Features (v0.6.0)**
+- Function signature reflection
+- Trait/aspect implementation queries
+- Generic type parameter inspection
+- Compile-time reflection (const evaluation)
+
+#### **Design Considerations**
+
+**Type Objects:**
+- Lightweight runtime representation of types
+- Pointer-sized values (8 bytes on x86-64)
+- Efficient hash-based comparison
+- Integration with existing type ID system
+
+**Safety Guarantees:**
+- All downcasts validated at runtime
+- Compile-time checks where possible
+- Clear error messages for failed casts
+- No undefined behavior from incorrect casts
+
+**Performance:**
+- Opt-in introspection (no cost if unused)
+- Inline typeof() for known types
+- Cache type information at function level
+- Minimal overhead for dynamic dispatch
+
+**Integration with `?` Wildcard:**
+- Consistent behavior across match, select, trap
+- Type-safe access to wildcard-matched values
+- Compiler enforces introspection usage
+- Clear error if accessing without type check
+
+#### **Benefits**
+
+1. **Error Handling**: Multi-type trap blocks reduce boilerplate
+2. **Debugging**: Runtime type inspection for diagnostics
+3. **Serialization**: Generic serialization without manual code
+4. **Metaprogramming**: Foundation for advanced compile-time features
+5. **Flexibility**: Safe downcasting when needed
+6. **Consistency**: Unified `?` wildcard across language
+
+**Dependencies:**
+- Foundation for wildcard trap handlers (Phase 6.3)
+- Required for multi-type trap blocks (Phase 6.4)
+- Enables generic serialization system
+- Supports advanced debugging and tooling
+
+**Status**: Design phase - implementation planned for v0.5.0 alongside error handling Phase 6.3
 
 ### Bundles & Sharing System
 
