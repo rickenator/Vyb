@@ -464,35 +464,7 @@ Heap-allocated struct (16 bytes):
 
 #### **Planned Enhancements** 🔜
 
-**Phase 6.3 - Wildcard Pattern (v0.5.0):**
-```vyn
-# Catch-all handler for any error type
-{
-    operation()
-} trap (e<?>) -> {
-    # Handle any error type
-    println("Unknown error occurred")
-    default_value
-}
-```
-
-**Phase 6.4 - Multi-Type Trap Block (v0.5.0):**
-```vyn
-# Single trap handler for multiple error types
-{
-    operation()
-} trap (e<Int | String | CustomError>) -> {
-    # Handle multiple types in one block
-    # Requires introspection to determine actual type
-    match (typeof(e)) {
-        Int -> handle_int(e as Int),
-        String -> handle_string(e as String),
-        CustomError -> handle_custom(e as CustomError)
-    }
-}
-```
-
-**Phase 6.5 - ensure Keyword (v0.5.1):**
+**Phase 6.3 - ensure Keyword (v0.5.0):**
 ```vyn
 # Cleanup/finally blocks that always execute
 process_with_cleanup(path<String>)<String> -> {
@@ -516,8 +488,69 @@ process_with_cleanup(path<String>)<String> -> {
 # 4. Resources guaranteed to be cleaned up
 ```
 
-**Phase 6.6 - Advanced Features (v0.6.0):**
-- Stack trace capture in error structs
+**Phase 6.4 - Stack Trace Capture (v0.5.1):**
+```vyn
+# Capture source-level stack traces on fail
+divide(a<Int>, b<Int>)<Int> -> {
+    if (b == 0) {
+        fail DivisionError { dividend = a, divisor = b }
+    }
+    return a / b
+}
+
+# Access stack trace in trap handler
+{
+    result<Int> = compute()
+} trap (e<DivisionError>) -> {
+    println("Error occurred:")
+    println(e.stack_trace())  # Shows full call chain
+    
+    # Output:
+    # Error: DivisionError { dividend = 10, divisor = 0 }
+    #   at divide (math.vyn:45:9)
+    #   at compute (calc.vyn:23:15)
+    #   at main (main.vyn:12:5)
+    
+    -1
+}
+
+# Stack trace API on all errors
+aspect Errorable {
+    stack_trace(self<their<Self>>)<String> -> { }
+    stack_frames(self<their<Self>>)<Vec<StackFrame>> -> { }
+}
+```
+
+**Phase 6.5 - Wildcard Pattern (v0.5.2):**
+```vyn
+# Catch-all handler for any error type
+{
+    operation()
+} trap (e<?>) -> {
+    # Handle any error type
+    println("Unknown error occurred")
+    println("Error type: " + typename(e))  # Requires introspection
+    default_value
+}
+```
+
+**Phase 6.6 - Multi-Type Trap Block (v0.6.0):**
+```vyn
+# Single trap handler for multiple error types
+{
+    operation()
+} trap (e<Int | String | CustomError>) -> {
+    # Handle multiple types in one block
+    # Requires introspection to determine actual type
+    match (typeof(e)) {
+        Int -> handle_int(e as Int),
+        String -> handle_string(e as String),
+        CustomError -> handle_custom(e as CustomError)
+    }
+}
+```
+
+**Phase 6.7 - Advanced Features (v0.6.1+):**
 - Error context chaining (wrap errors with additional context)
 - Custom error formatting with Display aspect
 - Error metrics and telemetry hooks
@@ -717,12 +750,12 @@ serialize<T>(value<T>)<String> -> {
 6. **Consistency**: Unified `?` wildcard across language
 
 **Dependencies:**
-- Foundation for wildcard trap handlers (Phase 6.3)
-- Required for multi-type trap blocks (Phase 6.4)
+- Foundation for wildcard trap handlers (Phase 6.5)
+- Required for multi-type trap blocks (Phase 6.6)
 - Enables generic serialization system
 - Supports advanced debugging and tooling
 
-**Status**: Design phase - implementation planned for v0.5.0 alongside error handling Phase 6.3
+**Status**: Design phase - implementation planned for v0.5.2 alongside error handling Phase 6.5
 
 ### Bundles & Sharing System
 
