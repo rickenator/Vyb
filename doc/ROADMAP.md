@@ -464,7 +464,7 @@ Heap-allocated struct (16 bytes):
 
 #### **Planned Enhancements** 🔜
 
-**Phase 6.3 - ensure Keyword (v0.5.0):**
+**Phase 6.3 - ensure Keyword (v0.5.0): ✅ COMPLETE**
 ```vyn
 # Cleanup/finally blocks that always execute
 process_with_cleanup(path<String>)<String> -> {
@@ -486,9 +486,16 @@ process_with_cleanup(path<String>)<String> -> {
 # 2. On error: trap handler runs (if matches)
 # 3. ensure block always runs last
 # 4. Resources guaranteed to be cleaned up
+
+# ✅ Implementation Status (v0.4.2):
+# - Parser: Full support for } ensure -> { } syntax
+# - AST: EnsureClause with cleanupBlock
+# - Semantic: Validates ensure placement
+# - Codegen: Inlined control flow (block.normal → block.ensure → block.continue)
+# - Test: test/trap/test_ensure_simple.vyn demonstrates working implementation
 ```
 
-**Phase 6.4 - Stack Trace Capture (v0.5.1):**
+**Phase 6.4 - Stack Trace Capture (v0.5.1):** 🚧 NEXT PRIORITY
 ```vyn
 # Capture source-level stack traces on fail
 divide(a<Int>, b<Int>)<Int> -> {

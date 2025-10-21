@@ -1636,12 +1636,12 @@ Validation failed:
   Line: 42
 ```
 
-### The ensure Keyword
+### The ensure Keyword ✅ IMPLEMENTED
 
-The `ensure` keyword provides a block for cleanup/finally semantics, guaranteeing code runs whether the block succeeds or fails:
+The `ensure` keyword provides cleanup/finally semantics, guaranteeing code runs whether the block succeeds or fails:
 
 ```vyn
-# Planned syntax - cleanup that always executes
+# Implemented in v0.4.2
 process_file(path<String>)<String> -> {
     file<File> = open_file(path)
     
@@ -1660,6 +1660,12 @@ process_file(path<String>)<String> -> {
 # 1. Block code executes and fails
 # 2. Matching trap handler runs (if present)
 # 3. ensure block always runs last
+
+# Implementation details:
+# - Parser fully supports } ensure -> { } syntax
+# - Codegen inlines ensure blocks into control flow
+# - Works with both success and failure paths
+# - See: test/trap/test_ensure_simple.vyn
 ```
 
 ### LLVM Code Generation
