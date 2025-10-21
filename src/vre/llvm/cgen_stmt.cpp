@@ -1324,6 +1324,40 @@ void LLVMCodegen::visit(vyn::ast::FailStatement* node) {
         return;
     }
     
+    // Phase 6.1: Handle struct error types
+    // If error is a struct value (not pointer), allocate it on heap
+    llvm::Value* errorPtr = errorValue;
+    if (!errorValue->getType()->isPointerTy()) {
+        // Allocate space for the error struct on the heap using malloc
+        llvm::Type* errorType = errorValue->getType();
+        llvm::DataLayout dataLayout(module.get());
+        uint64_t errorSize = dataLayout.getTypeAllocSize(errorType);
+        
+        // Call malloc to allocate heap memory
+        llvm::Function* mallocFn = module->getFunction("malloc");
+        if (!mallocFn) {
+            // Declare malloc if not already declared
+            llvm::FunctionType* mallocType = llvm::FunctionType::get(
+                llvm::PointerType::get(*context, 0),
+                {builder->getInt64Ty()},
+                false
+            );
+            mallocFn = llvm::Function::Create(
+                mallocType,
+                llvm::Function::ExternalLinkage,
+                "malloc",
+                module.get()
+            );
+        }
+        
+        llvm::Value* size = llvm::ConstantInt::get(builder->getInt64Ty(), errorSize);
+        llvm::Value* rawPtr = builder->CreateCall(mallocFn, {size}, "error.heap");
+        
+        // Cast to appropriate pointer type and store the struct
+        errorPtr = rawPtr;
+        builder->CreateStore(errorValue, errorPtr);
+    }
+    
     // Check if we're inside a trap context
     if (!trapStack.empty()) {
         // We have an active trap handler - store error and jump to landing pad

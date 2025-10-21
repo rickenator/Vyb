@@ -3180,14 +3180,34 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
     if (hasTrap) {
         builder->SetInsertPoint(landingPadBB);
         
-        // Load the error from the error slot
-        llvm::Type* errorType = errorSlot->getAllocatedType();
-        llvm::Value* errorValue = builder->CreateLoad(errorType, errorSlot, "caught_error");
+        // Load the error pointer from the error slot
+        // errorSlot contains a pointer to the error struct
+        llvm::Value* errorPtr = builder->CreateLoad(
+            errorSlot->getAllocatedType(),
+            errorSlot,
+            "error.ptr"
+        );
         
         // Generate trap handler code
         for (const auto& trapClause : node->trapClauses) {
             // TODO: Type checking for multiple trap clauses
             // For now, assuming single trap clause
+            
+            // Phase 6.1: Cast error pointer to expected struct type
+            llvm::Value* typedErrorValue = errorPtr;
+            
+            if (trapClause->errorType) {
+                // Get the expected error type
+                llvm::Type* expectedType = codegenType(trapClause->errorType.get());
+                
+                if (expectedType && !expectedType->isPointerTy()) {
+                    // Expected type is a struct - load it from the pointer
+                    typedErrorValue = builder->CreateLoad(expectedType, errorPtr, "error.value");
+                } else if (expectedType && expectedType->isPointerTy()) {
+                    // Expected type is already a pointer - just use it
+                    typedErrorValue = errorPtr;
+                }
+            }
             
             if (auto* blockStmt = dynamic_cast<ast::BlockStatement*>(trapClause->handler.get())) {
                 // Block statement handler - need special handling for last expression
@@ -3196,8 +3216,9 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
             }
             
             // Add error variable to scope
+            // The error variable should be the loaded struct value so member access works
             auto oldNamedValues = namedValues;
-            namedValues[trapClause->errorName->name] = errorValue;
+            namedValues[trapClause->errorName->name] = typedErrorValue;
             
             // Execute trap handler
             if (trapClause->handler) {

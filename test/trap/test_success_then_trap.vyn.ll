@@ -14,6 +14,8 @@ entry:
   br i1 %icmpeqtmp, label %then, label %ifcont, !dbg !12
 
 then:                                             ; preds = %entry
+  %error.heap = call ptr @malloc(i64 8), !dbg !12
+  store i64 42, ptr %error.heap, align 4, !dbg !12
   %error.alloc = alloca i64, align 8, !dbg !12
   store i64 42, ptr %error.alloc, align 4, !dbg !12
   %error.ptr = insertvalue { i64, ptr } undef, ptr %error.alloc, 1, !dbg !12
@@ -96,7 +98,8 @@ block.continue:                                   ; preds = %trap.landing, %call
   ret i64 %addtmp, !dbg !30
 
 trap.landing:                                     ; preds = %call.error6
-  %caught_error = load ptr, ptr %trap_error, align 8, !dbg !30
+  %error.ptr = load ptr, ptr %trap_error, align 8, !dbg !30
+  %error.value = load i64, ptr %error.ptr, align 4, !dbg !30
   br label %block.continue, !dbg !30
 
 call.error6:                                      ; preds = %block.normal
@@ -109,6 +112,8 @@ call.success7:                                    ; preds = %block.normal
 
 ; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)
 declare void @llvm.dbg.declare(metadata, metadata, metadata) #0
+
+declare ptr @malloc(i64)
 
 ; Function Attrs: noreturn
 declare void @__vyn_runtime_untrapped_error(ptr) #1
