@@ -7,10 +7,12 @@ Errors propagate up until caught by a trap handler or reach the top of the stack
 
 ## Implementation Phases
 
-### Phase 1: Track Failable Functions ✓
-- Semantic analysis identifies functions containing `fail` statements
-- Mark function declarations as potentially failable
-- Track error types that can be raised
+### Phase 1: Track Failable Functions ✅ COMPLETE
+- ✅ Semantic analysis identifies functions containing `fail` statements
+- ✅ Mark function declarations as potentially failable (`canFail`, `needsErrorReturn`)
+- ✅ Track error types that can be raised (`errorTypes` vector)
+- **Verified**: `divide()` with fail marked `canFail=1`, `main()` marked `canFail=0`
+- **Files**: ast.hpp, semantic.cpp, cgen_decl.cpp, test_canfail.vyn
 
 ### Phase 2: Dual Return Values
 - Functions that can fail return `{ T, ptr }` instead of `T`
@@ -90,8 +92,8 @@ main()
 
 ## Status Tracking
 
-- [ ] Phase 1: Semantic analysis for failable functions
-- [ ] Phase 2: Dual return value codegen
+- [x] Phase 1: Semantic analysis for failable functions ✅
+- [ ] Phase 2: Dual return value codegen ⏳
 - [ ] Phase 3: Fail statement returns error
 - [ ] Phase 4: Call site error checking
 - [ ] Phase 5: Top-level untrapped handling
