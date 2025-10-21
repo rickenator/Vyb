@@ -98,6 +98,7 @@ set(VRE_SOURCES
     src/vre/llvm/cgen_ownership.cpp
     src/vre/llvm/cgen_async.cpp
     src/vre/llvm/cgen_async_impl.cpp
+    src/vre/llvm/cgen_stack_trace.cpp
 )
 
 # VRE headers

@@ -489,6 +489,9 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
         // Set debug location for function entry
         setDebugLocation(node->loc);
 
+        // Phase 6.4: Push call frame for stack trace capture
+        generatePushFrameCall(functionName, node->loc);
+
         // Initialize scope management for function body
         enterScope();
 
@@ -547,6 +550,8 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
             if (!func->empty() && !func->back().getTerminator()) {
                 // Make sure we're inserting at the end of the last block
                 builder->SetInsertPoint(&func->back());
+                // Phase 6.4: Pop call frame before implicit return
+                generatePopFrameCall();
                 builder->CreateRetVoid();
             }
         } else {

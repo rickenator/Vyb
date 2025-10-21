@@ -147,6 +147,14 @@ private:
     std::vector<llvm::BasicBlock*> ensureBlocks; // Ensure cleanup blocks to execute
     llvm::AllocaInst* currentErrorSlot = nullptr; // Current error being handled
 
+    // Stack trace capture for error handling (Phase 6.4)
+    struct CallStackFrame {
+        std::string functionName;       // Vyn function name
+        SourceLocation location;        // Source location of function definition
+        llvm::Function* llvmFunction;   // LLVM function pointer
+    };
+    std::vector<CallStackFrame> callStack; // Runtime call stack for error reporting
+
     // Monomorphization: Generic type instantiation
     std::map<std::string, vyn::ast::StructDeclaration*> genericStructTemplates; // Store generic struct AST nodes (e.g., Box<T>)
     std::map<std::string, llvm::StructType*> monomorphizedStructs; // Cache instantiated types (e.g., "Box<Int>" -> Box_Int LLVM type)
@@ -248,6 +256,13 @@ private:
     void cleanupTrapContext();
     llvm::Value* createErrorValue(ast::Expression* errorExpr, ast::TypeNode* errorType);
     void preCreateTrapAllocas(ast::Statement* stmt, llvm::Function* func, llvm::Instruction** lastAllocaInsertPt = nullptr);
+    
+    // Stack trace helpers (Phase 6.4)
+    void pushCallStackFrame(const std::string& functionName, const SourceLocation& loc, llvm::Function* llvmFunc);
+    void popCallStackFrame();
+    llvm::GlobalVariable* createCallStackGlobal();
+    void generatePushFrameCall(const std::string& functionName, const SourceLocation& loc);
+    void generatePopFrameCall();
     
     // Vec operations
     void handleVecMethod(vyn::ast::CallExpression* node, const std::string& objectName, const std::string& methodName);

@@ -27,6 +27,11 @@ extern "C" {
 
 static std::atomic<VynUntrappedErrorHandler> g_custom_handler{nullptr};
 
+// Vyn-level call stack for source-level stack traces (Phase 6.4)
+static std::mutex g_call_stack_mutex;
+static std::vector<VynStackFrame> g_call_stack;
+static constexpr size_t MAX_CALL_STACK_DEPTH = 256;
+
 // ===== Helper Functions =====
 
 static uint64_t get_timestamp_ns() {
@@ -131,6 +136,54 @@ void __vyn_runtime_free_stack_trace(VynStackTrace* trace) {
     delete trace;
 }
 
+// ===== Vyn-Level Call Stack Management (Phase 6.4) =====
+
+void __vyn_runtime_push_call_frame(const char* function_name, const char* file_path, uint32_t line, uint32_t column) {
+    std::lock_guard<std::mutex> lock(g_call_stack_mutex);
+    
+    // Prevent stack overflow
+    if (g_call_stack.size() >= MAX_CALL_STACK_DEPTH) {
+        fprintf(stderr, "Warning: Call stack depth limit reached (%zu frames)\n", MAX_CALL_STACK_DEPTH);
+        return;
+    }
+    
+    VynStackFrame frame;
+    frame.function_name = function_name;
+    frame.location.file_path = file_path;
+    frame.location.line = line;
+    frame.location.column = column;
+    frame.native_address = nullptr;  // Not needed for Vyn-level traces
+    
+    g_call_stack.push_back(frame);
+}
+
+void __vyn_runtime_pop_call_frame() {
+    std::lock_guard<std::mutex> lock(g_call_stack_mutex);
+    
+    if (!g_call_stack.empty()) {
+        g_call_stack.pop_back();
+    } else {
+        fprintf(stderr, "Warning: Attempted to pop empty call stack\n");
+    }
+}
+
+VynStackTrace* __vyn_runtime_get_current_stack_trace() {
+    std::lock_guard<std::mutex> lock(g_call_stack_mutex);
+    
+    VynStackTrace* trace = new VynStackTrace;
+    trace->capacity = g_call_stack.size();
+    trace->frame_count = g_call_stack.size();
+    trace->frames = new VynStackFrame[trace->capacity];
+    
+    // Copy frames in reverse order (most recent first)
+    for (size_t i = 0; i < g_call_stack.size(); i++) {
+        size_t idx = g_call_stack.size() - 1 - i;
+        trace->frames[i] = g_call_stack[idx];
+    }
+    
+    return trace;
+}
+
 // ===== Error Management =====
 
 VynError* __vyn_runtime_create_error(
@@ -159,8 +212,8 @@ VynError* __vyn_runtime_create_error(
         error->data = nullptr;
     }
     
-    // Capture stack trace
-    error->stack_trace = __vyn_runtime_capture_stack_trace(50);
+    // Capture Vyn-level stack trace (Phase 6.4)
+    error->stack_trace = __vyn_runtime_get_current_stack_trace();
     
     return error;
 }

@@ -231,6 +231,9 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                     exitScope();
                 }
                 
+                // Phase 6.4: Pop call frame before return
+                generatePopFrameCall();
+                
                 // Return the value (already wrapped if needed)
                 std::cout << "DEBUG: FINAL return value type before CreateRet: " << getTypeName(returnValue->getType()) << std::endl;
                 std::cout << "DEBUG: Function return type: " << getTypeName(currentFunction->getReturnType()) << std::endl;
@@ -250,6 +253,8 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                     std::cout << "DEBUG: Cleaning up current scope before void return" << std::endl;
                     exitScope();
                 }
+                // Phase 6.4: Pop call frame before return
+                generatePopFrameCall();
                 builder->CreateRetVoid();
             } else if (currentFunction) {
                 // Return undef if function expects a non-void type and codegen failed
@@ -258,6 +263,8 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                     std::cout << "DEBUG: Cleaning up current scope before undef return" << std::endl;
                     exitScope();
                 }
+                // Phase 6.4: Pop call frame before return
+                generatePopFrameCall();
                 builder->CreateRet(llvm::UndefValue::get(currentFunction->getReturnType()));
                 logError(node->loc, "Return expression codegen failed, returning undef.");
             }
@@ -269,6 +276,8 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
             std::cout << "DEBUG: Cleaning up current scope before void return (no arg)" << std::endl;
             exitScope();
         }
+        // Phase 6.4: Pop call frame before return
+        generatePopFrameCall();
         builder->CreateRetVoid();
     }
 }
