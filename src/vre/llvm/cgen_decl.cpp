@@ -304,6 +304,11 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
 }
 
 void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
+    // DEBUG: Show error propagation metadata
+    std::cout << "DEBUG: Function '" << node->id->name << "' - canFail=" << node->canFail 
+              << ", needsErrorReturn=" << node->needsErrorReturn 
+              << ", errorTypes.size=" << node->errorTypes.size() << std::endl;
+    
     // Check if this is a generic function (has type parameters)
     if (!node->genericParams.empty()) {
         std::cout << "DEBUG: Storing generic function template: " << node->id->name 

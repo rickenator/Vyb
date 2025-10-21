@@ -6,7 +6,8 @@
 #include <memory>
 #include <unordered_set> 
 #include <string> 
-#include <map> 
+#include <map>
+#include <functional> 
 
 namespace vyn {
 
@@ -431,6 +432,70 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
 
     if (node->body) {
         node->body->accept(*this);
+        
+        // Phase 1: Detect if this function contains fail statements
+        // This enables automatic error propagation across function boundaries
+        // Simple recursive helper to scan AST for FailStatement nodes
+        std::function<bool(ast::Node*)> containsFailStatement = [&](ast::Node* n) -> bool {
+            if (!n) return false;
+            
+            // Check if this node is a FailStatement
+            if (dynamic_cast<ast::FailStatement*>(n)) {
+                return true;
+            }
+            
+            // Recursively check statement types
+            if (auto block = dynamic_cast<ast::BlockStatement*>(n)) {
+                for (auto& stmt : block->body) {
+                    if (stmt && containsFailStatement(stmt.get())) return true;
+                }
+            }
+            else if (auto ifStmt = dynamic_cast<ast::IfStatement*>(n)) {
+                if (containsFailStatement(ifStmt->consequent.get())) return true;
+                if (containsFailStatement(ifStmt->alternate.get())) return true;
+            }
+            else if (auto whileStmt = dynamic_cast<ast::WhileStatement*>(n)) {
+                if (containsFailStatement(whileStmt->body.get())) return true;
+            }
+            else if (auto forStmt = dynamic_cast<ast::ForStatement*>(n)) {
+                if (containsFailStatement(forStmt->body.get())) return true;
+            }
+            else if (auto tryStmt = dynamic_cast<ast::TryStatement*>(n)) {
+                if (containsFailStatement(tryStmt->tryBlock.get())) return true;
+                if (containsFailStatement(tryStmt->catchBlock.get())) return true;
+                if (containsFailStatement(tryStmt->finallyBlock.get())) return true;
+            }
+            else if (auto matchStmt = dynamic_cast<ast::MatchStatement*>(n)) {
+                for (auto& caseItem : matchStmt->cases) {
+                    if (containsFailStatement(caseItem.second.get())) return true;
+                }
+            }
+            else if (auto blockExpr = dynamic_cast<ast::BlockExpression*>(n)) {
+                if (containsFailStatement(blockExpr->block.get())) return true;
+                for (auto& clause : blockExpr->trapClauses) {
+                    if (clause && containsFailStatement(clause->handler.get())) return true;
+                }
+            }
+            else if (auto exprStmt = dynamic_cast<ast::ExpressionStatement*>(n)) {
+                if (containsFailStatement(exprStmt->expression.get())) return true;
+            }
+            else if (auto retStmt = dynamic_cast<ast::ReturnStatement*>(n)) {
+                if (containsFailStatement(retStmt->argument.get())) return true;
+            }
+            
+            return false;
+        };
+        
+        // Scan the function body for fail statements
+        bool hasFailStatement = containsFailStatement(node->body.get());
+        
+        // Update function metadata for error propagation
+        node->canFail = hasFailStatement;
+        node->needsErrorReturn = hasFailStatement;
+        if (hasFailStatement) {
+            // For now, use generic "Error" type - later we'll extract actual error types
+            node->errorTypes.push_back("Error");
+        }
     }
 
     exitScope();
