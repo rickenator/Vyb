@@ -322,25 +322,27 @@ void __vyn_runtime_untrapped_error(VynError* error) {
     
     fprintf(stderr, "└──────────────────────────────────────────────────────────────┘\n");
     
-    // Print stack trace
-    if (error && error->stack_trace) {
-        __vyn_runtime_print_stack_trace(error->stack_trace, stderr);
-    }
-    
-    // Call custom handler if registered
-    VynUntrappedErrorHandler custom_handler = g_custom_handler.load();
-    if (custom_handler && error) {
-        fprintf(stderr, "\nCalling custom error handler...\n");
-        custom_handler(error, error->stack_trace);
+    // Print stack trace if available
+    if (error) {
+        if (error->stack_trace) {
+            __vyn_runtime_print_stack_trace(error->stack_trace, stderr);
+        }
+        
+        // Call custom handler if registered
+        VynUntrappedErrorHandler custom_handler = g_custom_handler.load();
+        if (custom_handler) {
+            fprintf(stderr, "\nCalling custom error handler...\n");
+            custom_handler(error, error->stack_trace);
+        }
+        
+        // Cleanup error
+        __vyn_runtime_free_error(error);
+    } else {
+        fprintf(stderr, "\nNote: Error details not available (error structure not yet implemented)\n");
     }
     
     fprintf(stderr, "\nExit Code: 1\n");
     fflush(stderr);
-    
-    // Cleanup error
-    if (error) {
-        __vyn_runtime_free_error(error);
-    }
     
     exit(1);
 }

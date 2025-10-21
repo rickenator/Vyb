@@ -14,9 +14,7 @@ entry:
   br i1 %icmpeqtmp, label %then, label %ifcont, !dbg !11
 
 then:                                             ; preds = %entry
-  %error_temp = alloca i64, align 8, !dbg !11
-  store i64 42, ptr %error_temp, align 4, !dbg !11
-  call void @__vyn_runtime_untrapped_error(ptr %error_temp), !dbg !11
+  call void @__vyn_runtime_untrapped_error(ptr null), !dbg !11
   unreachable, !dbg !11
 
 ifcont:                                           ; preds = %entry

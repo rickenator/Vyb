@@ -1314,22 +1314,16 @@ void LLVMCodegen::visit(vyn::ast::FailStatement* node) {
         
     } else {
         // No trap handler - this is an untrapped error
-        // Call runtime untrapped error handler
+        // TODO: Create proper VynError structure with __vyn_runtime_create_error
+        // For now, pass NULL to indicate we don't have proper error structure yet
+        
         llvm::Function* untrappedFn = getVynUntrappedErrorFunction();
         
-        // Convert error to i8* for runtime handler
-        llvm::Value* errorPtr = errorValue;
-        if (!errorValue->getType()->isPointerTy()) {
-            // Create temporary alloca for error value
-            llvm::AllocaInst* tempAlloca = builder->CreateAlloca(errorValue->getType(), nullptr, "error_temp");
-            builder->CreateStore(errorValue, tempAlloca);
-            errorPtr = builder->CreateBitCast(tempAlloca, int8PtrType, "error_as_ptr");
-        } else {
-            errorPtr = builder->CreateBitCast(errorValue, int8PtrType, "error_as_ptr");
-        }
+        // Pass null pointer - runtime will handle gracefully
+        llvm::Value* nullPtr = llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0));
         
         // Call untrapped error handler (noreturn)
-        builder->CreateCall(untrappedFn, {errorPtr});
+        builder->CreateCall(untrappedFn, {nullPtr});
         
         // Mark as unreachable
         builder->CreateUnreachable();
