@@ -1859,13 +1859,14 @@ fail 503  # What does this mean?
 - Complete LLVM codegen for all error operations
 
 **🔜 Planned Enhancements:**
-- `ensure` keyword for precondition checking
-- Stack trace capture in error structs
+- `ensure` keyword for cleanup/finally blocks (v0.5.0)
+- Stack trace capture in error structs (v0.5.1)
+- Wildcard trap handlers `} trap (e<?>) -> { ... }` (v0.5.2)
+- Multi-type trap blocks `} trap (e<Type1 | Type2>) -> { ... }` (v0.6.0)
 - Error context chaining (wrap errors with additional context)
-- Wildcard trap handlers `} trap (e<?>) -> { ... }`
-- Error value recovery without trap (Result<T,E> style)
 - Custom error formatting with Display aspect
 - Error metrics and telemetry hooks
+- Result<T,E> style error recovery without trap
 
 ### Example: Complete Error Handling
 
