@@ -1634,7 +1634,12 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                     // No trap and not a failable function - call untrapped error handler
                     std::cout << "DEBUG: Error reaching untrapped handler" << std::endl;
                     llvm::Function* untrappedFn = getVynUntrappedErrorFunction();
-                    builder->CreateCall(untrappedFn, {errorPtr});
+                    
+                    // TODO: Pass proper VynError structure instead of NULL
+                    // For now, pass NULL since errorPtr points to the error value (e.g., i64),
+                    // not a VynError struct, and the runtime expects VynError*
+                    llvm::Value* nullPtr = llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0));
+                    builder->CreateCall(untrappedFn, {nullPtr});
                     builder->CreateUnreachable();
                 }
                 
