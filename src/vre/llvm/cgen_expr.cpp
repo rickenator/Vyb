@@ -3201,16 +3201,6 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
             "error.ptr"
         );
         
-        // DEBUG: Print the loaded error pointer to see if it's valid
-        llvm::Function* printfFunc = module->getFunction("printf");
-        if (!printfFunc) {
-            std::vector<llvm::Type*> printfArgs = {llvm::PointerType::get(builder->getInt8Ty(), 0)};
-            llvm::FunctionType* printfType = llvm::FunctionType::get(builder->getInt32Ty(), printfArgs, true);
-            printfFunc = llvm::Function::Create(printfType, llvm::Function::ExternalLinkage, "printf", module.get());
-        }
-        llvm::Value* formatStr = builder->CreateGlobalStringPtr("DEBUG RUNTIME: Loaded errorPtr = %p from errorSlot = %p\n");
-        builder->CreateCall(printfFunc, {formatStr, errorPtr, errorSlot});
-        
         // Phase 6.2: Handle multiple trap clauses with type checking
         // For each trap clause, check if error type matches, then execute handler
         llvm::BasicBlock* nextCheckBB = nullptr;

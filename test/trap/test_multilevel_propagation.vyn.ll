@@ -1,8 +1,6 @@
 ; ModuleID = 'VynModule'
 source_filename = "VynModule"
 
-@0 = private unnamed_addr constant [57 x i8] c"DEBUG RUNTIME: Loaded errorPtr = %p from errorSlot = %p\0A\00", align 1
-
 define { i64, ptr } @divide(i64 %a, i64 %b) !dbg !4 {
 entry:
   %a1 = alloca i64, align 8
@@ -103,7 +101,6 @@ block.continue:                                   ; preds = %trap.handler0, %cal
 
 trap.landing:                                     ; preds = %call.error6
   %error.ptr = load ptr, ptr %trap_error_heap, align 8, !dbg !30
-  %0 = call i32 (ptr, ...) @printf(ptr @0, ptr %error.ptr, ptr %trap_error_heap), !dbg !30
   %error.typeid = load i64, ptr %error.ptr, align 4, !dbg !30
   %type.matches = icmp eq i64 %error.typeid, -3994496327427856726, !dbg !30
   br i1 %type.matches, label %trap.handler0, label %trap.unmatched, !dbg !30
@@ -133,8 +130,6 @@ declare ptr @malloc(i64)
 
 ; Function Attrs: noreturn
 declare void @__vyn_runtime_untrapped_error(ptr) #1
-
-declare i32 @printf(ptr, ...)
 
 declare void @free(ptr)
 
