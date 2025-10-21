@@ -1,0 +1,16 @@
+# Test trap block
+divide(a<Int>, b<Int>)<Int> -> {
+    if (b == 0) {
+        fail 42
+    }
+    return a / b
+}
+
+main()<Int> -> {
+    result<Int> = {
+        divide(10, 2)
+    } trap (e<Int>) -> {
+        return -1
+    }
+    return result
+}
