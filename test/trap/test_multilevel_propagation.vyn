@@ -20,7 +20,7 @@ main()<Int> -> {
     val2<Int> = {
         compute(10, 0)
     } trap (e<Int>) -> {
-        return -1
+        -1
     }
     
     return val1 + val2  # 15 + (-1) = 14

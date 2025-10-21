@@ -1608,6 +1608,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 
                 // Error block: check if we have a trap handler or need to propagate
                 builder->SetInsertPoint(errorBB);
+                std::cout << "DEBUG: trapStack size = " << trapStack.size() << std::endl;
                 if (!trapStack.empty()) {
                     // We have a trap handler - store error and jump to landing pad
                     std::cout << "DEBUG: Error propagating to trap handler" << std::endl;
@@ -3112,8 +3113,10 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
             return;
         }
         
-        // Create alloca for error value
-        errorSlot = createEntryBlockAlloca(errorLLVMType, "trap_error");
+        // Create alloca for error POINTER (not error value)
+        // The error is passed as a pointer from failable functions
+        llvm::Type* errorPtrType = llvm::PointerType::get(*context, 0);
+        errorSlot = createEntryBlockAlloca(errorPtrType, "trap_error");
         
         // Create landing pad for error handling
         landingPadBB = llvm::BasicBlock::Create(*context, "trap.landing", func);
@@ -3125,7 +3128,9 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
         trapCtx.errorSlot = errorSlot;
         trapCtx.errorType = errorType;
         trapCtx.errorVarName = node->trapClauses[0]->errorName->name;
+        std::cout << "DEBUG: Pushing trap context, stack size before: " << trapStack.size() << std::endl;
         trapStack.push_back(trapCtx);
+        std::cout << "DEBUG: Pushed trap context, stack size after: " << trapStack.size() << std::endl;
     }
     
     // Execute normal block
@@ -3189,14 +3194,59 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
             // TODO: Type checking for multiple trap clauses
             // For now, assuming single trap clause
             
+            if (auto* blockStmt = dynamic_cast<ast::BlockStatement*>(trapClause->handler.get())) {
+                std::cout << "DEBUG: Trap handler is BlockStatement with " << blockStmt->body.size() << " statements" << std::endl;
+                if (!blockStmt->body.empty()) {
+                    std::cout << "DEBUG: First statement type: " << typeid(*blockStmt->body[0]).name() << std::endl;
+                    if (auto* exprStmt = dynamic_cast<ast::ExpressionStatement*>(blockStmt->body[0].get())) {
+                        if (exprStmt->expression) {
+                            std::cout << "DEBUG: Expression type: " << typeid(*exprStmt->expression).name() << std::endl;
+                        }
+                    }
+                }
+            } else {
+                std::cout << "DEBUG: Trap handler is " << (trapClause->handler ? typeid(*trapClause->handler).name() : "null") << std::endl;
+            }
+            
             // Add error variable to scope
             auto oldNamedValues = namedValues;
             namedValues[trapClause->errorName->name] = errorValue;
             
             // Execute trap handler
             if (trapClause->handler) {
-                trapClause->handler->accept(*this);
-                trapResult = m_currentLLVMValue;  // Capture trap handler result
+                // Treat handler like a block expression - capture last expression value
+                if (auto* blockStmt = dynamic_cast<ast::BlockStatement*>(trapClause->handler.get())) {
+                    // Execute all statements except the last
+                    for (size_t i = 0; i < blockStmt->body.size(); i++) {
+                        const auto& stmt = blockStmt->body[i];
+                        bool isLastStmt = (i == blockStmt->body.size() - 1);
+                        
+                        if (isLastStmt) {
+                            // For the last statement, capture its value
+                            if (auto* exprStmt = dynamic_cast<ast::ExpressionStatement*>(stmt.get())) {
+                                if (exprStmt->expression) {
+                                    exprStmt->expression->accept(*this);
+                                    trapResult = m_currentLLVMValue;
+                                }
+                            } else {
+                                stmt->accept(*this);
+                                trapResult = m_currentLLVMValue;
+                            }
+                        } else {
+                            stmt->accept(*this);
+                        }
+                        
+                        // If block terminated, stop processing
+                        if (builder->GetInsertBlock()->getTerminator()) {
+                            trapResult = nullptr;  // Can't use result if block terminated
+                            break;
+                        }
+                    }
+                } else {
+                    // Non-block handler - just visit it
+                    trapClause->handler->accept(*this);
+                    trapResult = m_currentLLVMValue;
+                }
             }
             
             // Restore scope
@@ -3214,7 +3264,9 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
         }
         
         // Pop trap context
+        std::cout << "DEBUG: Popping trap context, stack size before: " << trapStack.size() << std::endl;
         trapStack.pop_back();
+        std::cout << "DEBUG: Popped trap context, stack size after: " << trapStack.size() << std::endl;
     }
     
     // Generate ensure cleanup

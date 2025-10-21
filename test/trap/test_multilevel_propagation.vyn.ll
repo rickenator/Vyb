@@ -62,7 +62,7 @@ call.success:                                     ; preds = %entry
 define i64 @main() !dbg !24 {
 entry:
   %val2 = alloca i64, align 8, !dbg !30
-  %trap_error = alloca i64, align 8, !dbg !30
+  %trap_error = alloca ptr, align 8, !dbg !30
   %val1 = alloca i64, align 8, !dbg !30
   %calltmp = call { i64, ptr } @compute(i64 10, i64 2), !dbg !30
   %call.value = extractvalue { i64, ptr } %calltmp, 0, !dbg !30
@@ -86,8 +86,8 @@ block.normal:                                     ; preds = %call.success
   %has.error5 = icmp ne ptr %call.error4, null, !dbg !30
   br i1 %has.error5, label %call.error6, label %call.success7, !dbg !30
 
-block.continue:                                   ; preds = %call.success7
-  %block.result = phi i64 [ %call.value3, %call.success7 ], !dbg !30
+block.continue:                                   ; preds = %trap.landing, %call.success7
+  %block.result = phi i64 [ %call.value3, %call.success7 ], [ -1, %trap.landing ], !dbg !30
   store i64 %block.result, ptr %val2, align 4, !dbg !30
   call void @llvm.dbg.declare(metadata ptr %val2, metadata !29, metadata !DIExpression()), !dbg !32
   %val18 = load i64, ptr %val1, align 4, !dbg !30
@@ -96,8 +96,8 @@ block.continue:                                   ; preds = %call.success7
   ret i64 %addtmp, !dbg !30
 
 trap.landing:                                     ; preds = %call.error6
-  %caught_error = load i64, ptr %trap_error, align 4, !dbg !30
-  ret i64 -1, !dbg !30
+  %caught_error = load ptr, ptr %trap_error, align 8, !dbg !30
+  br label %block.continue, !dbg !30
 
 call.error6:                                      ; preds = %block.normal
   store ptr %call.error4, ptr %trap_error, align 8, !dbg !30
