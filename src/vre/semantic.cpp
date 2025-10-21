@@ -85,6 +85,59 @@ void SemanticAnalyzer::analyze(ast::Module* root) {
     }
 }
 
+bool SemanticAnalyzer::checkCallsFailableFunction(ast::Node* node) {
+    if (!node) return false;
+    
+    // Check if this node is a CallExpression to a failable function
+    if (auto callExpr = dynamic_cast<ast::CallExpression*>(node)) {
+        if (auto idExpr = dynamic_cast<ast::Identifier*>(callExpr->callee.get())) {
+            // Look up the function in the registry
+            auto it = functionRegistry.find(idExpr->name);
+            if (it != functionRegistry.end()) {
+                ast::FunctionDeclaration* funcDecl = it->second;
+                if (funcDecl->canFail) {
+                    return true;  // This calls a failable function!
+                }
+            }
+        }
+    }
+    
+    // Recursively check statement types
+    if (auto block = dynamic_cast<ast::BlockStatement*>(node)) {
+        for (auto& stmt : block->body) {
+            if (stmt && checkCallsFailableFunction(stmt.get())) return true;
+        }
+    }
+    else if (auto ifStmt = dynamic_cast<ast::IfStatement*>(node)) {
+        if (checkCallsFailableFunction(ifStmt->consequent.get())) return true;
+        if (checkCallsFailableFunction(ifStmt->alternate.get())) return true;
+    }
+    else if (auto whileStmt = dynamic_cast<ast::WhileStatement*>(node)) {
+        if (checkCallsFailableFunction(whileStmt->body.get())) return true;
+    }
+    else if (auto forStmt = dynamic_cast<ast::ForStatement*>(node)) {
+        if (checkCallsFailableFunction(forStmt->body.get())) return true;
+    }
+    else if (auto blockExpr = dynamic_cast<ast::BlockExpression*>(node)) {
+        if (checkCallsFailableFunction(blockExpr->block.get())) return true;
+    }
+    else if (auto exprStmt = dynamic_cast<ast::ExpressionStatement*>(node)) {
+        if (checkCallsFailableFunction(exprStmt->expression.get())) return true;
+    }
+    else if (auto varDecl = dynamic_cast<ast::VariableDeclaration*>(node)) {
+        if (checkCallsFailableFunction(varDecl->init.get())) return true;
+    }
+    else if (auto retStmt = dynamic_cast<ast::ReturnStatement*>(node)) {
+        if (checkCallsFailableFunction(retStmt->argument.get())) return true;
+    }
+    else if (auto binExpr = dynamic_cast<ast::BinaryExpression*>(node)) {
+        if (checkCallsFailableFunction(binExpr->left.get())) return true;
+        if (checkCallsFailableFunction(binExpr->right.get())) return true;
+    }
+    
+    return false;
+}
+
 bool SemanticAnalyzer::isInLoop() {
     SymbolTable* scope = currentScope;
     while (scope) {
@@ -283,8 +336,61 @@ void SemanticAnalyzer::visit(ast::EmptyStatement* node) {
 // --- More complex visit methods and specific logic follow ---
 
 void SemanticAnalyzer::visit(ast::Module* node) {
+    // Two-pass analysis for error propagation:
+    // Pass 1: Build function registry and detect explicit fail statements
+    // Pass 2: Propagate failability transitively through function calls
+    
+    // First pass: Build registry and visit all declarations
+    functionRegistry.clear();
+    for (auto& item : node->body) {
+        if (auto funcDecl = dynamic_cast<ast::FunctionDeclaration*>(item.get())) {
+            if (funcDecl->id) {
+                functionRegistry[funcDecl->id->name] = funcDecl;
+            }
+        }
+    }
+    
+    // Visit all declarations (this detects explicit fail statements)
     for (auto& item : node->body) {
         if (item) item->accept(*this);
+    }
+    
+    // Second pass: Propagate failability transitively
+    bool changed = true;
+    int iterations = 0;
+    const int MAX_ITERATIONS = 100; // Prevent infinite loops
+    
+    while (changed && iterations < MAX_ITERATIONS) {
+        changed = false;
+        iterations++;
+        
+        for (auto& item : node->body) {
+            if (auto funcDecl = dynamic_cast<ast::FunctionDeclaration*>(item.get())) {
+                // Skip main function - it's the entry point and should handle errors explicitly
+                if (funcDecl->id && funcDecl->id->name == "main") {
+                    continue;
+                }
+                
+                if (!funcDecl->canFail) {
+                    // Check if this function calls any failable functions
+                    bool callsFailableFunction = checkCallsFailableFunction(funcDecl->body.get());
+                    if (callsFailableFunction) {
+                        funcDecl->canFail = true;
+                        funcDecl->needsErrorReturn = true;
+                        if (funcDecl->errorTypes.empty()) {
+                            funcDecl->errorTypes.push_back("Error");
+                        }
+                        changed = true;
+                        std::cout << "DEBUG: Marked function '" << funcDecl->id->name 
+                                  << "' as failable (calls failable function)" << std::endl;
+                    }
+                }
+            }
+        }
+    }
+    
+    if (iterations >= MAX_ITERATIONS) {
+        std::cerr << "Warning: Error propagation analysis hit maximum iterations" << std::endl;
     }
 }
 
