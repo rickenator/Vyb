@@ -18,6 +18,7 @@ entry:
   %error.data.ptr = getelementptr i8, ptr %error.heap, i64 8, !dbg !8
   store { ptr, i64 } { ptr @1, i64 22 }, ptr %error.data.ptr, align 8, !dbg !8
   %error.ptr = insertvalue { i64, ptr } undef, ptr %error.heap, 1, !dbg !8
+  call void @__vyn_runtime_pop_call_frame(), !dbg !8
   ret { i64, ptr } %error.ptr, !dbg !8
 }
 
@@ -28,6 +29,8 @@ declare ptr @__vyn_serialize_to_json(ptr, ptr)
 declare void @__vyn_println(ptr)
 
 declare ptr @malloc(i64)
+
+declare void @__vyn_runtime_pop_call_frame()
 
 declare ptr @__vyn_convert_lit_string(ptr)
 
