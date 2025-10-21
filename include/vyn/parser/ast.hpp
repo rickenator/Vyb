@@ -1117,6 +1117,11 @@ public:
     bool isAsync;
     bool hasDefaultImpl; // true if method has arrow (-> {...}), false if mandatory (no arrow)
     TypeNodePtr returnTypeNode; // Optional return type annotation
+    
+    // Error propagation metadata (set during semantic analysis)
+    bool canFail = false;  // Contains fail statements
+    bool needsErrorReturn = false;  // Returns { T, error_ptr } instead of T
+    std::vector<std::string> errorTypes;  // Types that can be failed (for type checking)
 
     FunctionDeclaration(SourceLocation loc, std::unique_ptr<Identifier> id, std::vector<FunctionParameter> params, std::unique_ptr<BlockStatement> body, bool isAsync = false, TypeNodePtr returnTypeNode = nullptr, bool hasDefaultImpl = true, std::vector<std::unique_ptr<GenericParameter>> genericParams = std::vector<std::unique_ptr<GenericParameter>>());
     ~FunctionDeclaration() override = default;
@@ -1346,8 +1351,12 @@ public:
 class BlockExpression : public Expression {
 public:
     std::unique_ptr<BlockStatement> block;
+    std::vector<std::unique_ptr<TrapClause>> trapClauses;  // trap clauses attached to block
+    std::unique_ptr<EnsureClause> ensureClause;            // optional ensure clause
     
-    BlockExpression(SourceLocation loc, std::unique_ptr<BlockStatement> block);
+    BlockExpression(SourceLocation loc, std::unique_ptr<BlockStatement> block,
+                    std::vector<std::unique_ptr<TrapClause>> trapClauses = {},
+                    std::unique_ptr<EnsureClause> ensureClause = nullptr);
     NodeType getType() const override;
     std::string toString() const override;
     void accept(Visitor& visitor) override;

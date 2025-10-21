@@ -44,6 +44,10 @@ extern "C" {
     char* __vyn_toString_rune(uint32_t value);
     char* __vyn_toString_byte(uint8_t value);
     
+    // Error handling runtime functions (from error_handling.cpp)
+    void __vyn_runtime_panic(const char* message) __attribute__((noreturn));
+    void __vyn_runtime_untrapped_error(void* error) __attribute__((noreturn));
+    
     // TODO: Future toString functions for compound types:
     // char* __vyn_toString_vec(void* vec_ptr, const char* element_type);
     // char* __vyn_toString_tuple(void* tuple_ptr, const char* type_spec);
@@ -174,6 +178,17 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             throw std::runtime_error("Missing required intrinsic functions in module");
         }
 
+        // Verify the module before JIT compilation
+        std::cout << "Verifying module..." << std::endl;
+        std::string verifyErrors;
+        llvm::raw_string_ostream verifyStream(verifyErrors);
+        if (llvm::verifyModule(*module, &verifyStream)) {
+            verifyStream.flush();
+            std::cerr << "Module verification failed:\n" << verifyErrors << std::endl;
+            throw std::runtime_error("Module verification failed: " + verifyErrors);
+        }
+        std::cout << "Module verified successfully" << std::endl;
+
         // Create the ORC JIT execution engine
         auto jitOrErr = llvm::orc::LLJITBuilder().create();
         if (!jitOrErr) {
@@ -194,6 +209,12 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             llvm::orc::ExecutorAddr::fromPtr(&__vyn_println), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyn_serialize_to_json")] = llvm::orc::ExecutorSymbolDef(
             llvm::orc::ExecutorAddr::fromPtr(&__vyn_serialize_to_json), llvm::JITSymbolFlags::Exported);
+        
+        // Register error handling runtime functions
+        runtimeSymbols[mangle("__vyn_runtime_panic")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr((void*)&__vyn_runtime_panic), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_runtime_untrapped_error")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr((void*)&__vyn_runtime_untrapped_error), llvm::JITSymbolFlags::Exported);
         
         // Register standard library functions
         runtimeSymbols[mangle("malloc")] = llvm::orc::ExecutorSymbolDef(
@@ -318,7 +339,6 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             throw std::runtime_error("Failed to add module to JIT: " + errorMsg);
         }
         std::cout << "ORC JIT execution engine created successfully" << std::endl;
-        std::cout << "Finding main function..." << std::endl;
         
         // Look up the main function symbol
         auto symbolResult = jit->lookup("main");
@@ -525,6 +545,24 @@ int main(int argc, char* argv[]) {
                 auto ast = parser.parse_module();
                 
                 vyn::Driver driver;
+                
+                // CRITICAL: Run semantic analysis to mark functions with needsErrorReturn
+                std::cout << "Running semantic analysis..." << std::endl;
+                vyn::SemanticAnalyzer semanticAnalyzer(driver);
+                driver.setSemanticAnalyzer(&semanticAnalyzer);
+                semanticAnalyzer.analyze(ast.get());
+                
+                // Check for semantic errors
+                const auto& semanticErrors = semanticAnalyzer.getErrors();
+                if (!semanticErrors.empty()) {
+                    std::cerr << "\nSemantic Errors:" << std::endl;
+                    for (const auto& error : semanticErrors) {
+                        std::cerr << "  " << error << std::endl;
+                    }
+                    return 1;
+                }
+                std::cout << "Semantic analysis completed" << std::endl;
+                
                 vyn::LLVMCodegen codegen(driver);
                 
                 // Output file: <input>.ll

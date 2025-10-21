@@ -99,6 +99,7 @@ private:
 
     // Scope and symbol management
     llvm::Function* currentFunction = nullptr; // Initialize
+    vyn::ast::FunctionDeclaration* currentFunctionAST = nullptr; // Track AST node for error propagation
     llvm::StructType* currentClassType = nullptr; // Initialize
     LoopContext currentLoopContext;
     std::vector<LoopContext> loopStack;
@@ -133,6 +134,18 @@ private:
     std::vector<std::vector<ScopeVariable>> scopeStack;
     std::map<std::string, uint32_t> refCounts; // For our<T> reference counting
     std::map<std::string, llvm::Value*> refCountStorage; // Storage for refcount variables
+
+    // Error handling state
+    struct TrapContext {
+        llvm::BasicBlock* landingPad;        // Landing pad for error handling
+        llvm::BasicBlock* resumeBlock;       // Block to resume to after handling
+        llvm::Value* errorSlot;              // Heap-allocated slot for error pointer
+        ast::TypeNode* errorType;            // Expected error type
+        std::string errorVarName;            // Name of error variable
+    };
+    std::vector<TrapContext> trapStack;      // Stack of active trap contexts
+    std::vector<llvm::BasicBlock*> ensureBlocks; // Ensure cleanup blocks to execute
+    llvm::AllocaInst* currentErrorSlot = nullptr; // Current error being handled
 
     // Monomorphization: Generic type instantiation
     std::map<std::string, vyn::ast::StructDeclaration*> genericStructTemplates; // Store generic struct AST nodes (e.g., Box<T>)
@@ -225,6 +238,16 @@ private:
     llvm::Function* getPrintlnFunction();
     llvm::Function* getVynPrintlnFunction();
     llvm::Function* getSerializeToJsonFunction();
+    
+    // Error handling runtime functions
+    llvm::Function* getVynPanicFunction();
+    llvm::Function* getVynUntrappedErrorFunction();
+    
+    // Error handling helpers
+    void setupTrapContext(ast::BlockExpression* blockExpr, llvm::BasicBlock* continueBB);
+    void cleanupTrapContext();
+    llvm::Value* createErrorValue(ast::Expression* errorExpr, ast::TypeNode* errorType);
+    void preCreateTrapAllocas(ast::Statement* stmt, llvm::Function* func, llvm::Instruction** lastAllocaInsertPt = nullptr);
     
     // Vec operations
     void handleVecMethod(vyn::ast::CallExpression* node, const std::string& objectName, const std::string& methodName);

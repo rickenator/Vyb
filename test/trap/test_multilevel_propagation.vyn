@@ -1,0 +1,27 @@
+# Test multi-level error propagation: divide → compute → main
+
+divide(a<Int>, b<Int>)<Int> -> {
+    if (b == 0) { fail 42 }
+    return a / b
+}
+
+compute(x<Int>, y<Int>)<Int> -> {
+    # This function calls divide, which can fail
+    # Error should propagate through compute to main
+    result<Int> = divide(x, y)
+    return result + 10
+}
+
+main()<Int> -> {
+    # Test 1: Success path - should return 15 (10/2 + 10 = 15)
+    val1<Int> = compute(10, 2)
+    
+    # Test 2: Error path with trap - should catch error and return -1
+    val2<Int> = {
+        compute(10, 0)
+    } trap (e<Int>) -> {
+        -1
+    }
+    
+    return val1 + val2  # 15 + (-1) = 14
+}

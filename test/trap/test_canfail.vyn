@@ -1,0 +1,14 @@
+# Test that functions with fail are marked canFail
+# This test just verifies the semantic phase marks the function properly
+
+divide(a<Int>, b<Int>)<Int> -> {
+    if (b == 0) {
+        fail 42
+    }
+    return a / b
+}
+
+main()<Int> -> {
+    result<Int> = divide(10, 2)
+    return result
+}

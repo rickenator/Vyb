@@ -1,0 +1,12 @@
+# Test fail directly in trap block (not in called function)
+
+main()<Int> -> {
+    result<Int> = {
+        fail 42  # Fail directly in the block
+    } trap (e<Int>) -> {
+        # Caught the error
+        return -1
+    }
+    
+    return result
+}

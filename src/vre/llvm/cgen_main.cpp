@@ -117,7 +117,22 @@ void LLVMCodegen::generate(vyn::ast::Module* astModule, const std::string& outpu
     // Finalize debug information before verification
     finalizeDebugInfo();
 
+    // DEBUG: Print divide function RIGHT before verification
+    if (llvm::Function* divideFunc = module->getFunction("divide")) {
+        std::cout << "DEBUG: divide function RIGHT BEFORE VERIFICATION:" << std::endl;
+        divideFunc->print(llvm::outs());
+        std::cout << std::endl;
+    }
+
     bool verificationFailed = llvm::verifyModule(*module, &llvm::errs());
+    
+    // DEBUG: Print divide function RIGHT after verification
+    if (llvm::Function* divideFunc = module->getFunction("divide")) {
+        std::cout << "DEBUG: divide function RIGHT AFTER VERIFICATION:" << std::endl;
+        divideFunc->print(llvm::outs());
+        std::cout << std::endl;
+    }
+    
     if (verificationFailed) {
         logError(SourceLocation(), "LLVM module verification failed.");
         // Still print the IR for debugging purposes

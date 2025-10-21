@@ -1,0 +1,11 @@
+# Simple error propagation test
+divide(a<Int>, b<Int>)<Int> -> {
+    if (b == 0) { fail 42 }
+    return a / b
+}
+
+main()<Int> -> {
+    # Success case - should return 5
+    result<Int> = divide(10, 2)
+    return result
+}

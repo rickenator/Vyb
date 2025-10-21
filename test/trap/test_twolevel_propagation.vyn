@@ -1,0 +1,16 @@
+# Two-level propagation test
+divide(a<Int>, b<Int>)<Int> -> {
+    if (b == 0) { fail 42 }
+    return a / b
+}
+
+compute(x<Int>, y<Int>)<Int> -> {
+    result<Int> = divide(x, y)
+    return result
+}
+
+main()<Int> -> {
+    # Success case - should return 5
+    result<Int> = compute(10, 2)
+    return result
+}

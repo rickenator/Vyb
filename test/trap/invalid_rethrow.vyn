@@ -1,0 +1,15 @@
+# Semantic Test: Invalid rethrow outside trap clause
+
+struct MyError {
+    code<Int>
+}
+
+bad_function()<Int> -> {
+    # This should fail semantic analysis - rethrow outside trap
+    rethrow MyError { code = 1 }
+    return 0
+}
+
+main()<Int> -> {
+    return bad_function()
+}

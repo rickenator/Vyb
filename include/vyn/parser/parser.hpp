@@ -122,6 +122,10 @@ namespace vyn { // Changed Vyn to vyn
         vyn::ast::ExprPtr parse_expression(); // Removed override
         vyn::ast::ExprPtr parse_primary(); // For match patterns - parses literals, identifiers without binary ops
         bool is_expression_start(vyn::TokenType type) const; // Added declaration
+        
+        // Helpers for trap and ensure clauses
+        std::unique_ptr<vyn::ast::TrapClause> parse_trap_clause();
+        std::unique_ptr<vyn::ast::EnsureClause> parse_ensure_clause();
 
     private:
         // Add declarations for all private helper methods used in expression_parser.cpp

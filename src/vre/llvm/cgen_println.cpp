@@ -133,4 +133,70 @@ llvm::Function* LLVMCodegen::getSprintfFunction() {
     return sprintfFunc;
 }
 
+// Runtime function for panic - terminates program with message
+llvm::Function* LLVMCodegen::getVynPanicFunction() {
+    // Check if the panic function has already been declared
+    llvm::Function* panicFunc = module->getFunction("__vyn_runtime_panic");
+    
+    if (!panicFunc) {
+        // Create function signature for panic: void __vyn_runtime_panic(const char* message)
+        std::vector<llvm::Type*> paramTypes = {int8PtrType};
+        llvm::FunctionType* panicType = llvm::FunctionType::get(
+            llvm::Type::getVoidTy(*context),  // Return type: void (noreturn)
+            paramTypes,                       // Parameters: (const char*)
+            false                             // Not vararg
+        );
+        
+        // Declare the function in the module
+        panicFunc = llvm::Function::Create(
+            panicType,
+            llvm::Function::ExternalLinkage,
+            "__vyn_runtime_panic",
+            module.get()
+        );
+        
+        // Mark as noreturn
+        panicFunc->setDoesNotReturn();
+        
+        // Set parameter name
+        auto args = panicFunc->arg_begin();
+        args->setName("message");
+    }
+    
+    return panicFunc;
+}
+
+// Runtime function for untrapped errors - terminates program with error info
+llvm::Function* LLVMCodegen::getVynUntrappedErrorFunction() {
+    // Check if the untrapped error function has already been declared
+    llvm::Function* untrappedFunc = module->getFunction("__vyn_runtime_untrapped_error");
+    
+    if (!untrappedFunc) {
+        // Create function signature: void __vyn_runtime_untrapped_error(void* error)
+        std::vector<llvm::Type*> paramTypes = {int8PtrType};
+        llvm::FunctionType* untrappedType = llvm::FunctionType::get(
+            llvm::Type::getVoidTy(*context),  // Return type: void (noreturn)
+            paramTypes,                       // Parameters: (void*)
+            false                             // Not vararg
+        );
+        
+        // Declare the function in the module
+        untrappedFunc = llvm::Function::Create(
+            untrappedType,
+            llvm::Function::ExternalLinkage,
+            "__vyn_runtime_untrapped_error",
+            module.get()
+        );
+        
+        // Mark as noreturn
+        untrappedFunc->setDoesNotReturn();
+        
+        // Set parameter name
+        auto args = untrappedFunc->arg_begin();
+        args->setName("error");
+    }
+    
+    return untrappedFunc;
+}
+
 } // namespace vyn

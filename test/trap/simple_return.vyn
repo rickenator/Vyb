@@ -1,0 +1,5 @@
+# Simplest possible test
+
+main()<Int> -> {
+    return 42
+}

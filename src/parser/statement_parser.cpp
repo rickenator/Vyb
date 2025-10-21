@@ -75,8 +75,37 @@ vyn::ast::StmtPtr StatementParser::parse() {
             return parse_return();
         case vyn::TokenType::KEYWORD_PASS:
             return parse_pass();
-        case vyn::TokenType::LBRACE:
-            return parse_block();
+        case vyn::TokenType::LBRACE: {
+            // Parse block, but check if it's followed by trap/ensure
+            auto block_stmt = parse_block();
+            
+            // Check if followed by trap or ensure - if so, it's a block expression
+            if (check(vyn::TokenType::KEYWORD_TRAP) || check(vyn::TokenType::KEYWORD_ENSURE)) {
+                // Wrap in BlockExpression and parse trap/ensure clauses
+                std::vector<std::unique_ptr<vyn::ast::TrapClause>> trapClauses;
+                while (match(vyn::TokenType::KEYWORD_TRAP)) {
+                    trapClauses.push_back(expr_parser_.parse_trap_clause());
+                }
+                
+                std::unique_ptr<vyn::ast::EnsureClause> ensureClause;
+                if (match(vyn::TokenType::KEYWORD_ENSURE)) {
+                    ensureClause = expr_parser_.parse_ensure_clause();
+                }
+                
+                auto block_expr = std::make_unique<vyn::ast::BlockExpression>(
+                    block_stmt->loc, std::move(block_stmt),
+                    std::move(trapClauses), std::move(ensureClause)
+                );
+                
+                // Return as expression statement
+                return std::make_unique<vyn::ast::ExpressionStatement>(
+                    block_expr->loc, std::move(block_expr)
+                );
+            }
+            
+            // Otherwise return as plain block statement
+            return block_stmt;
+        }
         case vyn::TokenType::KEYWORD_TRY:
             return parse_try();
         case vyn::TokenType::KEYWORD_FREEDOM:

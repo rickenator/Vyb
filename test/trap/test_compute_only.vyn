@@ -1,0 +1,17 @@
+# Test compute only
+divide(a<Int>, b<Int>)<Int> -> {
+    if (b == 0) {
+        fail 42
+    }
+    return a / b
+}
+
+compute(x<Int>, y<Int>)<Int> -> {
+    result<Int> = divide(x, y)
+    return result + 10
+}
+
+main()<Int> -> {
+    result<Int> = compute(10, 2)
+    return result
+}

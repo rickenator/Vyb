@@ -304,6 +304,11 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
 }
 
 void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
+    // DEBUG: Show error propagation metadata
+    std::cout << "DEBUG: Function '" << node->id->name << "' - canFail=" << node->canFail 
+              << ", needsErrorReturn=" << node->needsErrorReturn 
+              << ", errorTypes.size=" << node->errorTypes.size() << std::endl;
+    
     // Check if this is a generic function (has type parameters)
     if (!node->genericParams.empty()) {
         std::cout << "DEBUG: Storing generic function template: " << node->id->name 
@@ -334,22 +339,34 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
     }
 
     llvm::Type* returnType = nullptr;
+    llvm::Type* originalReturnType = nullptr;  // Store original type before wrapping
+    
     if (node->returnTypeNode) {
         if (currentAsyncState.isAsync) {
             // For async functions, the actual return type is wrapped in Future<T>
-            llvm::Type* originalReturnType = codegenType(node->returnTypeNode.get());
+            originalReturnType = codegenType(node->returnTypeNode.get());
             if (!originalReturnType) {
                 logError(node->loc, "Could not determine LLVM return type for async function '" + node->id->name + "'.");
                 m_currentLLVMValue = nullptr; return;
             }
             returnType = createFutureStructType(originalReturnType);
         } else {
-            returnType = codegenType(node->returnTypeNode.get());
+            originalReturnType = codegenType(node->returnTypeNode.get());
             std::cerr << "DEBUG: Function " << node->id->name << " return type resolved to: " 
-                      << getTypeName(returnType) << " with pointer: " << returnType << std::endl;
-            if (!returnType) {
+                      << getTypeName(originalReturnType) << " with pointer: " << originalReturnType << std::endl;
+            if (!originalReturnType) {
                 logError(node->loc, "Could not determine LLVM return type for function '" + node->id->name + "'.");
                 m_currentLLVMValue = nullptr; return;
+            }
+            
+            // Phase 2: Wrap return type in {T, ptr} for failable functions
+            if (node->needsErrorReturn) {
+                std::cout << "DEBUG: Wrapping return type in {T, ptr} for failable function '" 
+                          << node->id->name << "'" << std::endl;
+                llvm::Type* errorPtrType = llvm::PointerType::get(*context, 0);  // i8*
+                returnType = llvm::StructType::get(*context, {originalReturnType, errorPtrType});
+            } else {
+                returnType = originalReturnType;
             }
         }
         
@@ -365,13 +382,31 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
     } else {
         if (currentAsyncState.isAsync) {
             // Async void function returns Future<void>
-            returnType = createFutureStructType(llvm::Type::getVoidTy(*context));
+            originalReturnType = llvm::Type::getVoidTy(*context);
+            returnType = createFutureStructType(originalReturnType);
         } else {
-            returnType = llvm::Type::getVoidTy(*context);
+            originalReturnType = llvm::Type::getVoidTy(*context);
+            
+            // Phase 2: Wrap void return in {void, ptr} for failable functions
+            if (node->needsErrorReturn) {
+                std::cout << "DEBUG: Wrapping void return in {i1, ptr} for failable function '" 
+                          << node->id->name << "' (using i1 as dummy)" << std::endl;
+                llvm::Type* errorPtrType = llvm::PointerType::get(*context, 0);
+                // Use i1 (bool) as dummy value for void functions
+                returnType = llvm::StructType::get(*context, {llvm::Type::getInt1Ty(*context), errorPtrType});
+            } else {
+                returnType = originalReturnType;
+            }
         }
     }
     
     llvm::FunctionType* funcType = llvm::FunctionType::get(returnType, paramTypes, false /*isVarArg*/);
+    
+    // DEBUG: Print the function type we're creating
+    std::string funcTypeStr;
+    llvm::raw_string_ostream typeStream(funcTypeStr);
+    funcType->print(typeStream);
+    std::cout << "DEBUG: Creating function '" << node->id->name << "' with type: " << typeStream.str() << std::endl;
     
     // Mangle function name if inside a bind/impl block
     std::string functionName = node->id->name;
@@ -397,10 +432,18 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
     } else {
         func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, functionName, module.get());
     }
+    
+    // DEBUG: Print the ACTUAL function type after creation/retrieval
+    std::string actualFuncTypeStr;
+    llvm::raw_string_ostream actualTypeStream(actualFuncTypeStr);
+    func->getFunctionType()->print(actualTypeStream);
+    std::cout << "DEBUG: ACTUAL function '" << functionName << "' has type: " << actualTypeStream.str() << std::endl;
 
     // Set current function for subsequent codegen (body, variable declarations)
     llvm::Function* oldFunction = currentFunction;
+    vyn::ast::FunctionDeclaration* oldFunctionAST = currentFunctionAST;
     currentFunction = func;
+    currentFunctionAST = node;  // Track AST node for error propagation
 
     // Create debug information for the function
     llvm::DISubprogram* debugFunction = nullptr;
@@ -461,6 +504,7 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
                 // Cleanup might be needed here
                 exitScope(); // Clean up function scope before exiting
                 currentFunction = oldFunction;
+                currentFunctionAST = oldFunctionAST;
                 namedValues.swap(oldNamedValues);
                 m_currentLLVMValue = nullptr; return;
             }
@@ -531,6 +575,7 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
 
     // Restore outer scope and async state
     currentFunction = oldFunction;
+    currentFunctionAST = oldFunctionAST;  // Restore AST node
     currentAsyncState = oldAsyncState;
     namedValues.swap(oldNamedValues); 
 
@@ -874,28 +919,51 @@ void LLVMCodegen::createFunctionForwardDeclaration(vyn::ast::FunctionDeclaration
 
     // Extract return type
     llvm::Type* returnType = nullptr;
+    llvm::Type* originalReturnType = nullptr;
+    
     if (node->returnTypeNode) {
         if (currentAsyncState.isAsync) {
             // For async functions, the actual return type is wrapped in Future<T>
-            llvm::Type* originalReturnType = codegenType(node->returnTypeNode.get());
+            originalReturnType = codegenType(node->returnTypeNode.get());
             if (!originalReturnType) {
                 logError(node->loc, "Could not determine LLVM return type for async function '" + node->id->name + "'.");
                 return;
             }
             returnType = createFutureStructType(originalReturnType);
         } else {
-            returnType = codegenType(node->returnTypeNode.get());
-            if (!returnType) {
+            originalReturnType = codegenType(node->returnTypeNode.get());
+            if (!originalReturnType) {
                 logError(node->loc, "Could not determine LLVM return type for function '" + node->id->name + "'.");
                 return;
+            }
+            
+            // Phase 2: Wrap return type in {T, ptr} for failable functions
+            if (node->needsErrorReturn) {
+                std::cout << "DEBUG: Forward decl - Wrapping return type in {T, ptr} for failable function '" 
+                          << node->id->name << "'" << std::endl;
+                llvm::Type* errorPtrType = llvm::PointerType::get(*context, 0);
+                returnType = llvm::StructType::get(*context, {originalReturnType, errorPtrType});
+            } else {
+                returnType = originalReturnType;
             }
         }
     } else {
         if (currentAsyncState.isAsync) {
             // Async void function returns Future<void>
-            returnType = createFutureStructType(llvm::Type::getVoidTy(*context));
+            originalReturnType = llvm::Type::getVoidTy(*context);
+            returnType = createFutureStructType(originalReturnType);
         } else {
-            returnType = llvm::Type::getVoidTy(*context);
+            originalReturnType = llvm::Type::getVoidTy(*context);
+            
+            // Phase 2: Wrap void return in {void, ptr} for failable functions
+            if (node->needsErrorReturn) {
+                std::cout << "DEBUG: Forward decl - Wrapping void return in {i1, ptr} for failable function '" 
+                          << node->id->name << "'" << std::endl;
+                llvm::Type* errorPtrType = llvm::PointerType::get(*context, 0);
+                returnType = llvm::StructType::get(*context, {llvm::Type::getInt1Ty(*context), errorPtrType});
+            } else {
+                returnType = originalReturnType;
+            }
         }
     }
     

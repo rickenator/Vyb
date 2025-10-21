@@ -1,0 +1,25 @@
+# Test custom error types (Phase 6.1)
+# Test failing with a struct error and accessing fields in trap handler
+
+struct DivisionError {
+    code<Int>,
+    dividend<Int>
+}
+
+divide(a<Int>, b<Int>)<Int> -> {
+    if (b == 0) {
+        fail DivisionError { code = 42, dividend = a }
+    }
+    return a / b
+}
+
+main()<Int> -> {
+    result<Int> = {
+        divide(10, 0)
+    } trap (e<DivisionError>) -> {
+        # Access error fields: code=42, dividend=10
+        # Should return 42 + 10 = 52
+        e.code + e.dividend
+    }
+    return result
+}
