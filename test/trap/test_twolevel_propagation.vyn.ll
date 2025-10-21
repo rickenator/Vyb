@@ -54,8 +54,7 @@ call.success:                                     ; preds = %entry
   store i64 %call.value, ptr %result, align 4, !dbg !20
   call void @llvm.dbg.declare(metadata ptr %result, metadata !19, metadata !DIExpression()), !dbg !23
   %result6 = load i64, ptr %result, align 4, !dbg !20
-  %addtmp = add i64 %result6, 10, !dbg !20
-  %result.value = insertvalue { i64, ptr } undef, i64 %addtmp, 0, !dbg !20
+  %result.value = insertvalue { i64, ptr } undef, i64 %result6, 0, !dbg !20
   %result.error = insertvalue { i64, ptr } %result.value, ptr null, 1, !dbg !20
   ret { i64, ptr } %result.error, !dbg !20
 }
@@ -101,7 +100,7 @@ attributes #1 = { noreturn }
 !llvm.module.flags = !{!2, !3}
 
 !0 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, file: !1, producer: "Vyn Compiler", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)
-!1 = !DIFile(filename: "test_compute_only.vyn.ll", directory: "/home/rick/Projects/Vyn/test/trap")
+!1 = !DIFile(filename: "test_twolevel_propagation.vyn.ll", directory: "/home/rick/Projects/Vyn/test/trap")
 !2 = !{i32 2, !"Debug Info Version", i32 3}
 !3 = !{i32 2, !"Dwarf Version", i32 4}
 !4 = distinct !DISubprogram(name: "divide", linkageName: "divide", scope: !1, file: !1, line: 2, type: !5, scopeLine: 2, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !9)
@@ -115,19 +114,19 @@ attributes #1 = { noreturn }
 !12 = !DILocation(line: 2, column: 1, scope: !4)
 !13 = !DILocation(line: 2, column: 9, scope: !4)
 !14 = !DILocation(line: 2, column: 17, scope: !4)
-!15 = distinct !DISubprogram(name: "compute", linkageName: "compute", scope: !1, file: !1, line: 9, type: !5, scopeLine: 9, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !16)
+!15 = distinct !DISubprogram(name: "compute", linkageName: "compute", scope: !1, file: !1, line: 7, type: !5, scopeLine: 7, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !16)
 !16 = !{!17, !18, !19}
-!17 = !DILocalVariable(name: "x", scope: !15, file: !1, line: 9, type: !8)
-!18 = !DILocalVariable(name: "y", scope: !15, file: !1, line: 9, type: !8)
-!19 = !DILocalVariable(name: "result", scope: !15, file: !1, line: 10, type: !8)
-!20 = !DILocation(line: 9, column: 1, scope: !15)
-!21 = !DILocation(line: 9, column: 10, scope: !15)
-!22 = !DILocation(line: 9, column: 18, scope: !15)
-!23 = !DILocation(line: 10, column: 1, scope: !15)
-!24 = distinct !DISubprogram(name: "main", linkageName: "main", scope: !1, file: !1, line: 14, type: !25, scopeLine: 14, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !27)
+!17 = !DILocalVariable(name: "x", scope: !15, file: !1, line: 7, type: !8)
+!18 = !DILocalVariable(name: "y", scope: !15, file: !1, line: 7, type: !8)
+!19 = !DILocalVariable(name: "result", scope: !15, file: !1, line: 8, type: !8)
+!20 = !DILocation(line: 7, column: 1, scope: !15)
+!21 = !DILocation(line: 7, column: 10, scope: !15)
+!22 = !DILocation(line: 7, column: 18, scope: !15)
+!23 = !DILocation(line: 8, column: 1, scope: !15)
+!24 = distinct !DISubprogram(name: "main", linkageName: "main", scope: !1, file: !1, line: 12, type: !25, scopeLine: 12, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !27)
 !25 = !DISubroutineType(types: !26)
 !26 = !{!8}
 !27 = !{!28}
-!28 = !DILocalVariable(name: "result", scope: !24, file: !1, line: 15, type: !8)
-!29 = !DILocation(line: 14, column: 1, scope: !24)
-!30 = !DILocation(line: 15, column: 1, scope: !24)
+!28 = !DILocalVariable(name: "result", scope: !24, file: !1, line: 14, type: !8)
+!29 = !DILocation(line: 12, column: 1, scope: !24)
+!30 = !DILocation(line: 14, column: 1, scope: !24)

@@ -14,9 +14,10 @@ entry:
   br i1 %icmpeqtmp, label %then, label %ifcont, !dbg !12
 
 then:                                             ; preds = %entry
-  %error.alloc = alloca i64, align 8, !dbg !12
-  store i64 42, ptr %error.alloc, align 4, !dbg !12
-  %error.ptr = insertvalue { i64, ptr } undef, ptr %error.alloc, 1, !dbg !12
+  %error.heap = call ptr @malloc(i64 16), !dbg !12
+  %error.data.ptr = getelementptr i8, ptr %error.heap, i64 8, !dbg !12
+  store i64 42, ptr %error.data.ptr, align 4, !dbg !12
+  %error.ptr = insertvalue { i64, ptr } undef, ptr %error.heap, 1, !dbg !12
   ret { i64, ptr } %error.ptr, !dbg !12
 
 ifcont:                                           ; preds = %entry
@@ -49,8 +50,10 @@ block.continue:                                   ; preds = %call.success
   ret i64 %result2, !dbg !20
 
 trap.landing:                                     ; preds = %call.error1
-  %caught_error = load ptr, ptr %trap_error, align 8, !dbg !20
-  ret i64 -1, !dbg !20
+  %error.ptr = load ptr, ptr %trap_error, align 8, !dbg !20
+  %error.typeid = load i64, ptr %error.ptr, align 4, !dbg !20
+  %type.matches = icmp eq i64 %error.typeid, -3994496327427856726, !dbg !20
+  br i1 %type.matches, label %trap.handler0, label %trap.unmatched, !dbg !20
 
 call.error1:                                      ; preds = %block.normal
   store ptr %call.error, ptr %trap_error, align 8, !dbg !20
@@ -58,10 +61,24 @@ call.error1:                                      ; preds = %block.normal
 
 call.success:                                     ; preds = %block.normal
   br label %block.continue, !dbg !20
+
+trap.unmatched:                                   ; preds = %trap.landing
+  call void @__vyn_runtime_untrapped_error(ptr %error.ptr), !dbg !20
+  unreachable, !dbg !20
+
+trap.handler0:                                    ; preds = %trap.landing
+  %error.data.i8ptr = getelementptr i8, ptr %error.ptr, i64 8, !dbg !20
+  %error.value = load i64, ptr %error.data.i8ptr, align 4, !dbg !20
+  ret i64 -1, !dbg !20
 }
 
 ; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)
 declare void @llvm.dbg.declare(metadata, metadata, metadata) #0
+
+declare ptr @malloc(i64)
+
+; Function Attrs: noreturn
+declare void @__vyn_runtime_untrapped_error(ptr) #1
 
 declare void @__vyn_println(ptr)
 
@@ -70,6 +87,7 @@ declare ptr @__vyn_serialize_to_json(ptr, ptr)
 declare ptr @__vyn_convert_lit_string(ptr)
 
 attributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }
+attributes #1 = { noreturn }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!2, !3}

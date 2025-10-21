@@ -67,8 +67,8 @@ block.normal:                                     ; preds = %entry
   %has.error = icmp ne ptr %call.error, null, !dbg !19
   br i1 %has.error, label %call.error1, label %call.success, !dbg !19
 
-block.continue:                                   ; preds = %trap.unmatched, %trap.handler1, %trap.handler0, %call.success
-  %block.result = phi i64 [ %call.value, %call.success ], [ %code_val, %trap.handler0 ], [ %value_val, %trap.handler1 ], [ 0, %trap.unmatched ], !dbg !19
+block.continue:                                   ; preds = %trap.handler1, %trap.handler0, %call.success
+  %block.result = phi i64 [ %call.value, %call.success ], [ %code_val, %trap.handler0 ], [ %value_val, %trap.handler1 ], !dbg !19
   store i64 %block.result, ptr %r1, align 4, !dbg !19
   call void @llvm.dbg.declare(metadata ptr %r1, metadata !17, metadata !DIExpression()), !dbg !20
   br label %block.normal7, !dbg !19
@@ -87,7 +87,8 @@ call.success:                                     ; preds = %block.normal
   br label %block.continue, !dbg !19
 
 trap.unmatched:                                   ; preds = %trap.check1
-  br label %block.continue, !dbg !19
+  call void @__vyn_runtime_untrapped_error(ptr %error.ptr), !dbg !19
+  unreachable, !dbg !19
 
 trap.handler0:                                    ; preds = %trap.landing
   %error.data.i8ptr = getelementptr i8, ptr %error.ptr, i64 8, !dbg !19
@@ -96,6 +97,7 @@ trap.handler0:                                    ; preds = %trap.landing
   store %ErrorA %error.value, ptr %temp_struct, align 4, !dbg !19
   %code_ptr = getelementptr inbounds %ErrorA, ptr %temp_struct, i32 0, i32 0, !dbg !19
   %code_val = load i64, ptr %code_ptr, align 4, !dbg !19
+  call void @free(ptr %error.ptr), !dbg !19
   br label %block.continue, !dbg !19
 
 trap.check1:                                      ; preds = %trap.landing
@@ -110,6 +112,7 @@ trap.handler1:                                    ; preds = %trap.check1
   store %ErrorB %error.value5, ptr %temp_struct6, align 4, !dbg !19
   %value_ptr = getelementptr inbounds %ErrorB, ptr %temp_struct6, i32 0, i32 0, !dbg !19
   %value_val = load i64, ptr %value_ptr, align 4, !dbg !19
+  call void @free(ptr %error.ptr), !dbg !19
   br label %block.continue, !dbg !19
 
 block.normal7:                                    ; preds = %block.continue
@@ -119,8 +122,8 @@ block.normal7:                                    ; preds = %block.continue
   %has.error14 = icmp ne ptr %call.error13, null, !dbg !19
   br i1 %has.error14, label %call.error15, label %call.success16, !dbg !19
 
-block.continue8:                                  ; preds = %trap.unmatched18, %trap.handler125, %trap.handler019, %call.success16
-  %block.result33 = phi i64 [ %call.value12, %call.success16 ], [ 1, %trap.handler019 ], [ %value_val32, %trap.handler125 ], [ 0, %trap.unmatched18 ], !dbg !19
+block.continue8:                                  ; preds = %trap.handler125, %trap.handler019, %call.success16
+  %block.result33 = phi i64 [ %call.value12, %call.success16 ], [ 1, %trap.handler019 ], [ %value_val32, %trap.handler125 ], !dbg !19
   store i64 %block.result33, ptr %r2, align 4, !dbg !19
   call void @llvm.dbg.declare(metadata ptr %r2, metadata !18, metadata !DIExpression()), !dbg !21
   %r134 = load i64, ptr %r1, align 4, !dbg !19
@@ -142,11 +145,13 @@ call.success16:                                   ; preds = %block.normal7
   br label %block.continue8, !dbg !19
 
 trap.unmatched18:                                 ; preds = %trap.check120
-  br label %block.continue8, !dbg !19
+  call void @__vyn_runtime_untrapped_error(ptr %error.ptr17), !dbg !19
+  unreachable, !dbg !19
 
 trap.handler019:                                  ; preds = %trap.landing10
   %error.data.i8ptr23 = getelementptr i8, ptr %error.ptr17, i64 8, !dbg !19
   %error.value24 = load %ErrorA, ptr %error.data.i8ptr23, align 4, !dbg !19
+  call void @free(ptr %error.ptr17), !dbg !19
   br label %block.continue8, !dbg !19
 
 trap.check120:                                    ; preds = %trap.landing10
@@ -161,6 +166,7 @@ trap.handler125:                                  ; preds = %trap.check120
   store %ErrorB %error.value29, ptr %temp_struct30, align 4, !dbg !19
   %value_ptr31 = getelementptr inbounds %ErrorB, ptr %temp_struct30, i32 0, i32 0, !dbg !19
   %value_val32 = load i64, ptr %value_ptr31, align 4, !dbg !19
+  call void @free(ptr %error.ptr17), !dbg !19
   br label %block.continue8, !dbg !19
 }
 
@@ -169,6 +175,11 @@ declare void @llvm.dbg.declare(metadata, metadata, metadata) #0
 
 declare ptr @malloc(i64)
 
+declare void @free(ptr)
+
+; Function Attrs: noreturn
+declare void @__vyn_runtime_untrapped_error(ptr) #1
+
 declare void @__vyn_println(ptr)
 
 declare ptr @__vyn_serialize_to_json(ptr, ptr)
@@ -176,6 +187,7 @@ declare ptr @__vyn_serialize_to_json(ptr, ptr)
 declare ptr @__vyn_convert_lit_string(ptr)
 
 attributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }
+attributes #1 = { noreturn }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!2, !3}

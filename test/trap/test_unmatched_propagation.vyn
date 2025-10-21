@@ -1,0 +1,34 @@
+// Test unmatched error propagation
+// When a trap clause doesn't match the error type, it should propagate to outer handler
+
+ErrorA = { code<Int> }
+ErrorB = { message<Int> }
+
+// Function that fails with ErrorA
+inner()<Int, ErrorA> -> {
+    fail ErrorA{code: 25}
+}
+
+// Function with trap that only catches ErrorB (should propagate ErrorA)
+middle()<Int, ErrorA> -> {
+    result<Int> = try {
+        inner()  // This will fail with ErrorA
+    } trap ErrorB e -> {
+        return e.message  // This won't execute - wrong error type
+    }
+    return result
+}
+
+// Function that catches ErrorA (should receive propagated error)
+outer()<Int> -> {
+    result<Int> = try {
+        middle()  // This will propagate ErrorA
+    } trap ErrorA e -> {
+        return e.code  // Should return 25
+    }
+    return result
+}
+
+main()<Int> -> {
+    return outer()  // Should return 25
+}

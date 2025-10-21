@@ -87,8 +87,8 @@ block.normal:                                     ; preds = %call.success
   %has.error5 = icmp ne ptr %call.error4, null, !dbg !30
   br i1 %has.error5, label %call.error6, label %call.success7, !dbg !30
 
-block.continue:                                   ; preds = %trap.unmatched, %trap.handler0, %call.success7
-  %block.result = phi i64 [ %call.value3, %call.success7 ], [ -1, %trap.handler0 ], [ 0, %trap.unmatched ], !dbg !30
+block.continue:                                   ; preds = %trap.handler0, %call.success7
+  %block.result = phi i64 [ %call.value3, %call.success7 ], [ -1, %trap.handler0 ], !dbg !30
   store i64 %block.result, ptr %val2, align 4, !dbg !30
   call void @llvm.dbg.declare(metadata ptr %val2, metadata !29, metadata !DIExpression()), !dbg !32
   %val18 = load i64, ptr %val1, align 4, !dbg !30
@@ -110,11 +110,13 @@ call.success7:                                    ; preds = %block.normal
   br label %block.continue, !dbg !30
 
 trap.unmatched:                                   ; preds = %trap.landing
-  br label %block.continue, !dbg !30
+  call void @__vyn_runtime_untrapped_error(ptr %error.ptr), !dbg !30
+  unreachable, !dbg !30
 
 trap.handler0:                                    ; preds = %trap.landing
   %error.data.i8ptr = getelementptr i8, ptr %error.ptr, i64 8, !dbg !30
   %error.value = load i64, ptr %error.data.i8ptr, align 4, !dbg !30
+  call void @free(ptr %error.ptr), !dbg !30
   br label %block.continue, !dbg !30
 }
 
@@ -125,6 +127,8 @@ declare ptr @malloc(i64)
 
 ; Function Attrs: noreturn
 declare void @__vyn_runtime_untrapped_error(ptr) #1
+
+declare void @free(ptr)
 
 declare void @__vyn_println(ptr)
 

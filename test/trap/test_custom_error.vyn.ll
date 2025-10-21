@@ -53,8 +53,8 @@ block.normal:                                     ; preds = %entry
   %has.error = icmp ne ptr %call.error, null, !dbg !20
   br i1 %has.error, label %call.error1, label %call.success, !dbg !20
 
-block.continue:                                   ; preds = %trap.unmatched, %trap.handler0, %call.success
-  %block.result = phi i64 [ %call.value, %call.success ], [ %addtmp, %trap.handler0 ], [ 0, %trap.unmatched ], !dbg !20
+block.continue:                                   ; preds = %trap.handler0, %call.success
+  %block.result = phi i64 [ %call.value, %call.success ], [ %addtmp, %trap.handler0 ], !dbg !20
   store i64 %block.result, ptr %result, align 4, !dbg !20
   call void @llvm.dbg.declare(metadata ptr %result, metadata !19, metadata !DIExpression()), !dbg !21
   %result3 = load i64, ptr %result, align 4, !dbg !20
@@ -74,7 +74,8 @@ call.success:                                     ; preds = %block.normal
   br label %block.continue, !dbg !20
 
 trap.unmatched:                                   ; preds = %trap.landing
-  br label %block.continue, !dbg !20
+  call void @__vyn_runtime_untrapped_error(ptr %error.ptr), !dbg !20
+  unreachable, !dbg !20
 
 trap.handler0:                                    ; preds = %trap.landing
   %error.data.i8ptr = getelementptr i8, ptr %error.ptr, i64 8, !dbg !20
@@ -88,6 +89,7 @@ trap.handler0:                                    ; preds = %trap.landing
   %dividend_ptr = getelementptr inbounds %DivisionError, ptr %temp_struct2, i32 0, i32 1, !dbg !20
   %dividend_val = load i64, ptr %dividend_ptr, align 4, !dbg !20
   %addtmp = add i64 %code_val, %dividend_val, !dbg !20
+  call void @free(ptr %error.ptr), !dbg !20
   br label %block.continue, !dbg !20
 }
 
@@ -96,6 +98,11 @@ declare void @llvm.dbg.declare(metadata, metadata, metadata) #0
 
 declare ptr @malloc(i64)
 
+declare void @free(ptr)
+
+; Function Attrs: noreturn
+declare void @__vyn_runtime_untrapped_error(ptr) #1
+
 declare void @__vyn_println(ptr)
 
 declare ptr @__vyn_serialize_to_json(ptr, ptr)
@@ -103,6 +110,7 @@ declare ptr @__vyn_serialize_to_json(ptr, ptr)
 declare ptr @__vyn_convert_lit_string(ptr)
 
 attributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }
+attributes #1 = { noreturn }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!2, !3}

@@ -3346,7 +3346,17 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
             namedValues = std::move(oldNamedValues);
             
             // Branch to ensure/continue after handling and record exit block
+            // PHASE 6.3: Free heap-allocated errors ONLY if block hasn't terminated
+            // (if block terminated with return, error cleanup already happened in return statement)
             if (!builder->GetInsertBlock()->getTerminator()) {
+                // Free heap-allocated errors before branching
+                // Only free if error is a pointer (struct type with type ID header)
+                // Integer errors are passed by value and don't need cleanup
+                if (errorPtr->getType()->isPointerTy()) {
+                    llvm::Function* freeFunc = getOrCreateFreeFunction();
+                    builder->CreateCall(freeFunc, {errorPtr});
+                }
+                
                 llvm::BasicBlock* handlerExitBB = builder->GetInsertBlock();
                 if (hasEnsure) {
                     builder->CreateBr(ensureBB);
@@ -3365,16 +3375,30 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
         
         // Handle unmatched case - error doesn't match any trap clause
         builder->SetInsertPoint(unmatchedBB);
-        // If no trap matched, propagate error up or call untrapped handler
-        // For now, just return a dummy value and continue
-        // TODO: Proper error propagation for unmatched traps
-        llvm::Value* unmatchedResult = llvm::Constant::getNullValue(builder->getInt64Ty());
-        if (hasEnsure) {
-            builder->CreateBr(ensureBB);
+        
+        // PHASE 6.3: Propagate unmatched error to caller if in failable function
+        if (currentFunctionAST && currentFunctionAST->needsErrorReturn) {
+            // This function can propagate errors - return {T, errorPtr}
+            llvm::StructType* returnStructType = llvm::cast<llvm::StructType>(func->getReturnType());
+            llvm::Value* resultStruct = llvm::UndefValue::get(returnStructType);
+            
+            // Insert dummy value for position 0 (unused on error)
+            llvm::Type* valueType = returnStructType->getElementType(0);
+            llvm::Value* dummyValue = llvm::UndefValue::get(valueType);
+            resultStruct = builder->CreateInsertValue(resultStruct, dummyValue, {0}, "error.dummy");
+            
+            // Insert error pointer at position 1 (still has type ID header)
+            resultStruct = builder->CreateInsertValue(resultStruct, errorPtr, {1}, "error.ptr");
+            
+            // Return the error tuple
+            builder->CreateRet(resultStruct);
         } else {
-            builder->CreateBr(continueBB);
+            // Not in failable function - call untrapped error handler
+            llvm::Function* untrappedFn = getVynUntrappedErrorFunction();
+            builder->CreateCall(untrappedFn, {errorPtr});
+            builder->CreateUnreachable();
         }
-        trapExits.push_back({unmatchedBB, unmatchedResult});
+        // No need to add to trapExits since we terminated above
         
         // Set trapExitBB to the last handler exit for backward compatibility
         if (!trapExits.empty()) {
