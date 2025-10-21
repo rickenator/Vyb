@@ -281,8 +281,8 @@ void __vyn_runtime_panic(const char* message) {
     
     fprintf(stderr, "\n");
     fprintf(stderr, "┌─ PANIC ──────────────────────────────────────────────────────┐\n");
-    fprintf(stderr, "│ %-62s│\n", thread_buf);
-    fprintf(stderr, "│ %-62s│\n", time_buf);
+    fprintf(stderr, "│ %-61s│\n", thread_buf);
+    fprintf(stderr, "│ %-61s│\n", time_buf);
     fprintf(stderr, "└──────────────────────────────────────────────────────────────┘\n");
     fprintf(stderr, "\n");
     
@@ -312,13 +312,13 @@ void __vyn_runtime_untrapped_error(VynError* error) {
     
     // For now, just print generic error - proper VynError support needs more work
     snprintf(line_buf, sizeof(line_buf), "Error: <runtime error>");
-    fprintf(stderr, "│ %-62s│\n", line_buf);
+    fprintf(stderr, "│ %-61s│\n", line_buf);
     
     snprintf(line_buf, sizeof(line_buf), "Thread: %llu", (unsigned long long)get_thread_id());
-    fprintf(stderr, "│ %-62s│\n", line_buf);
+    fprintf(stderr, "│ %-61s│\n", line_buf);
     
     snprintf(line_buf, sizeof(line_buf), "Time: %s", timestamp_buf);
-    fprintf(stderr, "│ %-62s│\n", line_buf);
+    fprintf(stderr, "│ %-61s│\n", line_buf);
     
     fprintf(stderr, "└──────────────────────────────────────────────────────────────┘\n");
     
