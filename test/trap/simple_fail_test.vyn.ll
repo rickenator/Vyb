@@ -37,7 +37,8 @@ block.normal:                                     ; preds = %entry
   br label %block.continue, !dbg !19
 
 block.continue:                                   ; preds = %block.normal
-  store i64 %calltmp, ptr %result, align 4, !dbg !19
+  %block.result = phi i64 [ %calltmp, %block.normal ], !dbg !19
+  store i64 %block.result, ptr %result, align 4, !dbg !19
   call void @llvm.dbg.declare(metadata ptr %result, metadata !18, metadata !DIExpression()), !dbg !20
   %result1 = load i64, ptr %result, align 4, !dbg !19
   ret i64 %result1, !dbg !19
