@@ -4,6 +4,9 @@ source_filename = "VynModule"
 %ErrorA = type { i64 }
 %ErrorB = type { i64 }
 
+@0 = private unnamed_addr constant [57 x i8] c"DEBUG RUNTIME: Loaded errorPtr = %p from errorSlot = %p\0A\00", align 1
+@1 = private unnamed_addr constant [57 x i8] c"DEBUG RUNTIME: Loaded errorPtr = %p from errorSlot = %p\0A\00", align 1
+
 define { i64, ptr } @test_error(i64 %n) !dbg !4 {
 entry:
   %n1 = alloca i64, align 8
@@ -19,8 +22,7 @@ then:                                             ; preds = %entry
   store i64 42, ptr %code_ptr, align 4, !dbg !11
   %ErrorA_val = load %ErrorA, ptr %ErrorA_obj, align 4, !dbg !11
   %error.heap = call ptr @malloc(i64 16), !dbg !11
-  %error.typeid.ptr = getelementptr i64, ptr %error.heap, i32 0, !dbg !11
-  store i64 -1117103444634275797, ptr %error.typeid.ptr, align 4, !dbg !11
+  store i64 -1117103444634275797, ptr %error.heap, align 4, !dbg !11
   %error.data.ptr = getelementptr i8, ptr %error.heap, i64 8, !dbg !11
   store %ErrorA %ErrorA_val, ptr %error.data.ptr, align 4, !dbg !11
   %error.ptr = insertvalue { i64, ptr } undef, ptr %error.heap, 1, !dbg !11
@@ -29,7 +31,7 @@ then:                                             ; preds = %entry
 ifcont:                                           ; preds = %entry
   %n3 = load i64, ptr %n1, align 4, !dbg !11
   %icmpeqtmp4 = icmp eq i64 %n3, 2, !dbg !11
-  br i1 %icmpeqtmp4, label %then5, label %ifcont10, !dbg !11
+  br i1 %icmpeqtmp4, label %then5, label %ifcont9, !dbg !11
 
 then5:                                            ; preds = %ifcont
   %ErrorB_obj = alloca %ErrorB, align 8, !dbg !11
@@ -37,16 +39,15 @@ then5:                                            ; preds = %ifcont
   store i64 99, ptr %value_ptr, align 4, !dbg !11
   %ErrorB_val = load %ErrorB, ptr %ErrorB_obj, align 4, !dbg !11
   %error.heap6 = call ptr @malloc(i64 16), !dbg !11
-  %error.typeid.ptr7 = getelementptr i64, ptr %error.heap6, i32 0, !dbg !11
-  store i64 -121108893005291215, ptr %error.typeid.ptr7, align 4, !dbg !11
-  %error.data.ptr8 = getelementptr i8, ptr %error.heap6, i64 8, !dbg !11
-  store %ErrorB %ErrorB_val, ptr %error.data.ptr8, align 4, !dbg !11
-  %error.ptr9 = insertvalue { i64, ptr } undef, ptr %error.heap6, 1, !dbg !11
-  ret { i64, ptr } %error.ptr9, !dbg !11
+  store i64 -121108893005291215, ptr %error.heap6, align 4, !dbg !11
+  %error.data.ptr7 = getelementptr i8, ptr %error.heap6, i64 8, !dbg !11
+  store %ErrorB %ErrorB_val, ptr %error.data.ptr7, align 4, !dbg !11
+  %error.ptr8 = insertvalue { i64, ptr } undef, ptr %error.heap6, 1, !dbg !11
+  ret { i64, ptr } %error.ptr8, !dbg !11
 
-ifcont10:                                         ; preds = %ifcont
-  %n11 = load i64, ptr %n1, align 4, !dbg !11
-  %multmp = mul i64 %n11, 10, !dbg !11
+ifcont9:                                          ; preds = %ifcont
+  %n10 = load i64, ptr %n1, align 4, !dbg !11
+  %multmp = mul i64 %n10, 10, !dbg !11
   %result.value = insertvalue { i64, ptr } undef, i64 %multmp, 0, !dbg !11
   %result.error = insertvalue { i64, ptr } %result.value, ptr null, 1, !dbg !11
   ret { i64, ptr } %result.error, !dbg !11
@@ -54,10 +55,10 @@ ifcont10:                                         ; preds = %ifcont
 
 define i64 @main() !dbg !13 {
 entry:
-  %r2 = alloca i64, align 8
-  %trap_error9 = alloca ptr, align 8
-  %r1 = alloca i64, align 8
-  %trap_error = alloca ptr, align 8
+  %r1 = alloca i64, align 8, !dbg !19
+  %r2 = alloca i64, align 8, !dbg !19
+  %trap_error_heap = call ptr @malloc(i64 8), !dbg !19
+  store ptr null, ptr %trap_error_heap, align 8, !dbg !19
   br label %block.normal, !dbg !19
 
 block.normal:                                     ; preds = %entry
@@ -69,18 +70,22 @@ block.normal:                                     ; preds = %entry
 
 block.continue:                                   ; preds = %trap.handler1, %trap.handler0, %call.success
   %block.result = phi i64 [ %call.value, %call.success ], [ %code_val, %trap.handler0 ], [ %value_val, %trap.handler1 ], !dbg !19
+  call void @free(ptr %trap_error_heap), !dbg !19
   store i64 %block.result, ptr %r1, align 4, !dbg !19
   call void @llvm.dbg.declare(metadata ptr %r1, metadata !17, metadata !DIExpression()), !dbg !20
+  %trap_error_heap9 = call ptr @malloc(i64 8), !dbg !19
+  store ptr null, ptr %trap_error_heap9, align 8, !dbg !19
   br label %block.normal7, !dbg !19
 
 trap.landing:                                     ; preds = %call.error1
-  %error.ptr = load ptr, ptr %trap_error, align 8, !dbg !19
+  %error.ptr = load ptr, ptr %trap_error_heap, align 8, !dbg !19
+  %0 = call i32 (ptr, ...) @printf(ptr @0, ptr %error.ptr, ptr %trap_error_heap), !dbg !19
   %error.typeid = load i64, ptr %error.ptr, align 4, !dbg !19
   %type.matches = icmp eq i64 %error.typeid, -1117103444634275797, !dbg !19
   br i1 %type.matches, label %trap.handler0, label %trap.check1, !dbg !19
 
 call.error1:                                      ; preds = %block.normal
-  store ptr %call.error, ptr %trap_error, align 8, !dbg !19
+  store ptr %call.error, ptr %trap_error_heap, align 8, !dbg !19
   br label %trap.landing, !dbg !19
 
 call.success:                                     ; preds = %block.normal
@@ -124,6 +129,7 @@ block.normal7:                                    ; preds = %block.continue
 
 block.continue8:                                  ; preds = %trap.handler125, %trap.handler019, %call.success16
   %block.result33 = phi i64 [ %call.value12, %call.success16 ], [ 1, %trap.handler019 ], [ %value_val32, %trap.handler125 ], !dbg !19
+  call void @free(ptr %trap_error_heap9), !dbg !19
   store i64 %block.result33, ptr %r2, align 4, !dbg !19
   call void @llvm.dbg.declare(metadata ptr %r2, metadata !18, metadata !DIExpression()), !dbg !21
   %r134 = load i64, ptr %r1, align 4, !dbg !19
@@ -132,13 +138,14 @@ block.continue8:                                  ; preds = %trap.handler125, %t
   ret i64 %addtmp, !dbg !19
 
 trap.landing10:                                   ; preds = %call.error15
-  %error.ptr17 = load ptr, ptr %trap_error9, align 8, !dbg !19
+  %error.ptr17 = load ptr, ptr %trap_error_heap9, align 8, !dbg !19
+  %1 = call i32 (ptr, ...) @printf(ptr @1, ptr %error.ptr17, ptr %trap_error_heap9), !dbg !19
   %error.typeid21 = load i64, ptr %error.ptr17, align 4, !dbg !19
   %type.matches22 = icmp eq i64 %error.typeid21, -1117103444634275797, !dbg !19
   br i1 %type.matches22, label %trap.handler019, label %trap.check120, !dbg !19
 
 call.error15:                                     ; preds = %block.normal7
-  store ptr %call.error13, ptr %trap_error9, align 8, !dbg !19
+  store ptr %call.error13, ptr %trap_error_heap9, align 8, !dbg !19
   br label %trap.landing10, !dbg !19
 
 call.success16:                                   ; preds = %block.normal7
@@ -174,6 +181,8 @@ trap.handler125:                                  ; preds = %trap.check120
 declare void @llvm.dbg.declare(metadata, metadata, metadata) #0
 
 declare ptr @malloc(i64)
+
+declare i32 @printf(ptr, ...)
 
 declare void @free(ptr)
 

@@ -232,7 +232,14 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                 }
                 
                 // Return the value (already wrapped if needed)
+                std::cout << "DEBUG: FINAL return value type before CreateRet: " << getTypeName(returnValue->getType()) << std::endl;
+                std::cout << "DEBUG: Function return type: " << getTypeName(currentFunction->getReturnType()) << std::endl;
                 builder->CreateRet(returnValue);
+                
+                // DEBUG: Print function IR immediately after CreateRet
+                std::cout << "DEBUG: Function IR after CreateRet for '" << currentFunction->getName().str() << "':" << std::endl;
+                currentFunction->print(llvm::outs());
+                std::cout << std::endl;
             }
         } else {
             // Error during argument codegen or argument is null expression (should not happen for valid AST)
@@ -1338,6 +1345,16 @@ void LLVMCodegen::visit(vyn::ast::FailStatement* node) {
                     }
                 }
             }
+        } else {
+            // For non-struct errors (like integer literals), infer Vyn type name from LLVM type
+            llvm::Type* errorType = errorValue->getType();
+            if (errorType->isIntegerTy()) {
+                typeName = "Int";  // Integer literals in Vyn are type Int
+            } else if (errorType->isFloatingPointTy()) {
+                typeName = "Float";
+            } else if (errorType->isPointerTy()) {
+                typeName = "String";  // Assuming string pointers
+            }
         }
         
         // Allocate space for type ID (8 bytes) + error struct on heap
@@ -1370,13 +1387,13 @@ void LLVMCodegen::visit(vyn::ast::FailStatement* node) {
         if (!typeName.empty()) {
             uint64_t typeHash = std::hash<std::string>{}(typeName);
             llvm::Value* typeId = llvm::ConstantInt::get(builder->getInt64Ty(), typeHash);
-            llvm::Value* typeIdPtr = builder->CreateGEP(
-                builder->getInt64Ty(),
+            // Cast malloc result to i64* for proper type handling
+            llvm::Value* typeIdPtr = builder->CreateBitCast(
                 rawPtr,
-                llvm::ConstantInt::get(builder->getInt32Ty(), 0),
+                llvm::PointerType::get(builder->getInt64Ty(), 0),
                 "error.typeid.ptr"
             );
-            builder->CreateStore(typeId, typeIdPtr);
+            builder->CreateStore(typeId, typeIdPtr, false);  // Not volatile
         }
         
         // Store error data after type ID (at offset 8)
@@ -1507,7 +1524,8 @@ void LLVMCodegen::visit(vyn::ast::RethrowStatement* node) {
     } else {
         // Rethrow the current error (load from error slot)
         TrapContext& currentTrap = trapStack.back();
-        llvm::Type* errorType = currentTrap.errorSlot->getAllocatedType();
+        // errorSlot is now a heap pointer, always stores ptr type
+        llvm::Type* errorType = llvm::PointerType::get(*context, 0);
         errorToRethrow = builder->CreateLoad(errorType, currentTrap.errorSlot, "rethrow_error");
     }
     

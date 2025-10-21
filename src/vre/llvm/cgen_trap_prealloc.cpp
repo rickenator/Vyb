@@ -24,8 +24,7 @@ void LLVMCodegen::preCreateTrapAllocas(ast::Statement* stmt, llvm::Function* fun
                 std::cout << "DEBUG: Pre-creating trap_error alloca for expression statement block" << std::endl;
                 llvm::Type* errorPtrType = llvm::PointerType::get(*context, 0);
                 auto* alloca = createEntryBlockAlloca(errorPtrType, "trap_error");
-                // Initialize to null to avoid reading garbage
-                builder->CreateStore(llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(errorPtrType)), alloca);
+                // Don't initialize here - will be initialized when the block expression is processed
             }
         }
         return;
@@ -40,8 +39,7 @@ void LLVMCodegen::preCreateTrapAllocas(ast::Statement* stmt, llvm::Function* fun
                               << blockExpr->trapClauses.size() << " trap clauses" << std::endl;
                     llvm::Type* errorPtrType = llvm::PointerType::get(*context, 0);
                     auto* alloca = createEntryBlockAlloca(errorPtrType, "trap_error");
-                    // Initialize to null to avoid reading garbage
-                    builder->CreateStore(llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(errorPtrType)), alloca);
+                    // Don't initialize here - will be initialized when the block expression is processed
                 }
             }
         }
@@ -81,8 +79,7 @@ void LLVMCodegen::preCreateTrapAllocas(ast::Statement* stmt, llvm::Function* fun
                                   << blockExpr->trapClauses.size() << " trap clauses" << std::endl;
                         llvm::Type* errorPtrType = llvm::PointerType::get(*context, 0);
                         auto* alloca = createEntryBlockAlloca(errorPtrType, "trap_error");
-                        // Initialize to null to avoid reading garbage
-                        builder->CreateStore(llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(errorPtrType)), alloca);
+                        // Don't initialize here - will be initialized when the block expression is processed
                     }
                 }
             }

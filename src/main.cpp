@@ -545,6 +545,24 @@ int main(int argc, char* argv[]) {
                 auto ast = parser.parse_module();
                 
                 vyn::Driver driver;
+                
+                // CRITICAL: Run semantic analysis to mark functions with needsErrorReturn
+                std::cout << "Running semantic analysis..." << std::endl;
+                vyn::SemanticAnalyzer semanticAnalyzer(driver);
+                driver.setSemanticAnalyzer(&semanticAnalyzer);
+                semanticAnalyzer.analyze(ast.get());
+                
+                // Check for semantic errors
+                const auto& semanticErrors = semanticAnalyzer.getErrors();
+                if (!semanticErrors.empty()) {
+                    std::cerr << "\nSemantic Errors:" << std::endl;
+                    for (const auto& error : semanticErrors) {
+                        std::cerr << "  " << error << std::endl;
+                    }
+                    return 1;
+                }
+                std::cout << "Semantic analysis completed" << std::endl;
+                
                 vyn::LLVMCodegen codegen(driver);
                 
                 // Output file: <input>.ll

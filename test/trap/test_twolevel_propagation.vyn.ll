@@ -3,8 +3,8 @@ source_filename = "VynModule"
 
 define { i64, ptr } @divide(i64 %a, i64 %b) !dbg !4 {
 entry:
-  %b2 = alloca i64, align 8
   %a1 = alloca i64, align 8
+  %b2 = alloca i64, align 8, !dbg !12
   store i64 %a, ptr %a1, align 4, !dbg !12
   call void @llvm.dbg.declare(metadata ptr %a1, metadata !10, metadata !DIExpression()), !dbg !13
   store i64 %b, ptr %b2, align 4, !dbg !12
@@ -15,6 +15,7 @@ entry:
 
 then:                                             ; preds = %entry
   %error.heap = call ptr @malloc(i64 16), !dbg !12
+  store i64 -3994496327427856726, ptr %error.heap, align 4, !dbg !12
   %error.data.ptr = getelementptr i8, ptr %error.heap, i64 8, !dbg !12
   store i64 42, ptr %error.data.ptr, align 4, !dbg !12
   %error.ptr = insertvalue { i64, ptr } undef, ptr %error.heap, 1, !dbg !12
@@ -31,9 +32,9 @@ ifcont:                                           ; preds = %entry
 
 define { i64, ptr } @compute(i64 %x, i64 %y) !dbg !15 {
 entry:
-  %result = alloca i64, align 8
-  %y2 = alloca i64, align 8
   %x1 = alloca i64, align 8
+  %y2 = alloca i64, align 8, !dbg !20
+  %result = alloca i64, align 8, !dbg !20
   store i64 %x, ptr %x1, align 4, !dbg !20
   call void @llvm.dbg.declare(metadata ptr %x1, metadata !17, metadata !DIExpression()), !dbg !21
   store i64 %y, ptr %y2, align 4, !dbg !20
@@ -69,7 +70,7 @@ entry:
   br i1 %has.error, label %call.error1, label %call.success, !dbg !29
 
 call.error1:                                      ; preds = %entry
-  call void @__vyn_runtime_untrapped_error(ptr null), !dbg !29
+  call void @__vyn_runtime_untrapped_error(ptr %call.error), !dbg !29
   unreachable, !dbg !29
 
 call.success:                                     ; preds = %entry

@@ -1,10 +1,12 @@
 ; ModuleID = 'VynModule'
 source_filename = "VynModule"
 
+@0 = private unnamed_addr constant [57 x i8] c"DEBUG RUNTIME: Loaded errorPtr = %p from errorSlot = %p\0A\00", align 1
+
 define { i64, ptr } @divide(i64 %a, i64 %b) !dbg !4 {
 entry:
-  %b2 = alloca i64, align 8
   %a1 = alloca i64, align 8
+  %b2 = alloca i64, align 8, !dbg !12
   store i64 %a, ptr %a1, align 4, !dbg !12
   call void @llvm.dbg.declare(metadata ptr %a1, metadata !10, metadata !DIExpression()), !dbg !13
   store i64 %b, ptr %b2, align 4, !dbg !12
@@ -15,6 +17,7 @@ entry:
 
 then:                                             ; preds = %entry
   %error.heap = call ptr @malloc(i64 16), !dbg !12
+  store i64 -3994496327427856726, ptr %error.heap, align 4, !dbg !12
   %error.data.ptr = getelementptr i8, ptr %error.heap, i64 8, !dbg !12
   store i64 42, ptr %error.data.ptr, align 4, !dbg !12
   %error.ptr = insertvalue { i64, ptr } undef, ptr %error.heap, 1, !dbg !12
@@ -31,8 +34,9 @@ ifcont:                                           ; preds = %entry
 
 define i64 @main() !dbg !15 {
 entry:
-  %result = alloca i64, align 8
-  %trap_error = alloca ptr, align 8
+  %result = alloca i64, align 8, !dbg !20
+  %trap_error_heap = call ptr @malloc(i64 8), !dbg !20
+  store ptr null, ptr %trap_error_heap, align 8, !dbg !20
   br label %block.normal, !dbg !20
 
 block.normal:                                     ; preds = %entry
@@ -44,19 +48,21 @@ block.normal:                                     ; preds = %entry
 
 block.continue:                                   ; preds = %call.success
   %block.result = phi i64 [ %call.value, %call.success ], !dbg !20
+  call void @free(ptr %trap_error_heap), !dbg !20
   store i64 %block.result, ptr %result, align 4, !dbg !20
   call void @llvm.dbg.declare(metadata ptr %result, metadata !19, metadata !DIExpression()), !dbg !21
   %result2 = load i64, ptr %result, align 4, !dbg !20
   ret i64 %result2, !dbg !20
 
 trap.landing:                                     ; preds = %call.error1
-  %error.ptr = load ptr, ptr %trap_error, align 8, !dbg !20
+  %error.ptr = load ptr, ptr %trap_error_heap, align 8, !dbg !20
+  %0 = call i32 (ptr, ...) @printf(ptr @0, ptr %error.ptr, ptr %trap_error_heap), !dbg !20
   %error.typeid = load i64, ptr %error.ptr, align 4, !dbg !20
   %type.matches = icmp eq i64 %error.typeid, -3994496327427856726, !dbg !20
   br i1 %type.matches, label %trap.handler0, label %trap.unmatched, !dbg !20
 
 call.error1:                                      ; preds = %block.normal
-  store ptr %call.error, ptr %trap_error, align 8, !dbg !20
+  store ptr %call.error, ptr %trap_error_heap, align 8, !dbg !20
   br label %trap.landing, !dbg !20
 
 call.success:                                     ; preds = %block.normal
@@ -77,8 +83,12 @@ declare void @llvm.dbg.declare(metadata, metadata, metadata) #0
 
 declare ptr @malloc(i64)
 
+declare i32 @printf(ptr, ...)
+
 ; Function Attrs: noreturn
 declare void @__vyn_runtime_untrapped_error(ptr) #1
+
+declare void @free(ptr)
 
 declare void @__vyn_println(ptr)
 

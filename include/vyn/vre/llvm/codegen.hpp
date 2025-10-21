@@ -139,7 +139,7 @@ private:
     struct TrapContext {
         llvm::BasicBlock* landingPad;        // Landing pad for error handling
         llvm::BasicBlock* resumeBlock;       // Block to resume to after handling
-        llvm::AllocaInst* errorSlot;         // Slot to store error value
+        llvm::Value* errorSlot;              // Heap-allocated slot for error pointer
         ast::TypeNode* errorType;            // Expected error type
         std::string errorVarName;            // Name of error variable
     };

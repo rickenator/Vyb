@@ -1608,8 +1608,10 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 
                 // Error block: check if we have a trap handler or need to propagate
                 builder->SetInsertPoint(errorBB);
+                std::cout << "DEBUG: Error detected, trapStack.size() = " << trapStack.size() << std::endl;
                 if (!trapStack.empty()) {
                     // We have a trap handler - store error and jump to landing pad
+                    std::cout << "DEBUG: Storing error to trap.errorSlot and branching to landing pad" << std::endl;
                     TrapContext& trap = trapStack.back();
                     builder->CreateStore(errorPtr, trap.errorSlot);
                     builder->CreateBr(trap.landingPad);
@@ -3093,7 +3095,7 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
     llvm::BasicBlock* continueBB = llvm::BasicBlock::Create(*context, "block.continue", func);
     
     // Create error slot and landing pad if we have trap clauses
-    llvm::AllocaInst* errorSlot = nullptr;
+    llvm::Value* errorSlot = nullptr;
     llvm::BasicBlock* landingPadBB = nullptr;
     
     if (hasTrap) {
@@ -3107,30 +3109,24 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
             return;
         }
         
-        // Create alloca for error POINTER (not error value)
-        // The error is passed as a pointer from failable functions
-        // PHASE 6.3 FIX: Look for pre-created trap_error alloca first
+        // HEAP ALLOCATION: Use malloc for error pointer storage to avoid x86-64 ABI corruption
+        // Allocate 8 bytes on heap to store the error pointer
+        llvm::Function* mallocFunc = module->getFunction("malloc");
+        if (!mallocFunc) {
+            llvm::FunctionType* mallocType = llvm::FunctionType::get(
+                llvm::PointerType::get(*context, 0),
+                {builder->getInt64Ty()},
+                false
+            );
+            mallocFunc = llvm::Function::Create(mallocType, llvm::Function::ExternalLinkage, "malloc", module.get());
+        }
+        
+        llvm::Value* size = builder->getInt64(8); // sizeof(void*)
+        errorSlot = builder->CreateCall(mallocFunc, {size}, "trap_error_heap");
+        
+        // Initialize heap memory to NULL
         llvm::Type* errorPtrType = llvm::PointerType::get(*context, 0);
-        errorSlot = nullptr;
-        
-        // Search for existing trap_error alloca in entry block
-        for (auto& inst : func->getEntryBlock()) {
-            if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(&inst)) {
-                if (alloca->getName() == "trap_error" && alloca->getAllocatedType() == errorPtrType) {
-                    errorSlot = alloca;
-                    std::cout << "DEBUG: Reusing pre-created trap_error alloca" << std::endl;
-                    break;
-                }
-            }
-        }
-        
-        // If not found, create it (shouldn't happen with pre-creation, but fallback)
-        if (!errorSlot) {
-            std::cout << "DEBUG: Creating new trap_error alloca (pre-creation missed this case)" << std::endl;
-            errorSlot = createEntryBlockAlloca(errorPtrType, "trap_error");
-            // Initialize to null to avoid reading garbage
-            builder->CreateStore(llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(errorPtrType)), errorSlot);
-        }
+        builder->CreateStore(llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(errorPtrType)), errorSlot);
         
         // Create landing pad for error handling
         landingPadBB = llvm::BasicBlock::Create(*context, "trap.landing", func);
@@ -3198,12 +3194,22 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
     if (hasTrap) {
         builder->SetInsertPoint(landingPadBB);
         
-        // Load the error pointer from the error slot
+        // Load the error pointer from the error slot (heap-allocated)
         llvm::Value* errorPtr = builder->CreateLoad(
-            errorSlot->getAllocatedType(),
+            llvm::PointerType::get(*context, 0),
             errorSlot,
             "error.ptr"
         );
+        
+        // DEBUG: Print the loaded error pointer to see if it's valid
+        llvm::Function* printfFunc = module->getFunction("printf");
+        if (!printfFunc) {
+            std::vector<llvm::Type*> printfArgs = {llvm::PointerType::get(builder->getInt8Ty(), 0)};
+            llvm::FunctionType* printfType = llvm::FunctionType::get(builder->getInt32Ty(), printfArgs, true);
+            printfFunc = llvm::Function::Create(printfType, llvm::Function::ExternalLinkage, "printf", module.get());
+        }
+        llvm::Value* formatStr = builder->CreateGlobalStringPtr("DEBUG RUNTIME: Loaded errorPtr = %p from errorSlot = %p\n");
+        builder->CreateCall(printfFunc, {formatStr, errorPtr, errorSlot});
         
         // Phase 6.2: Handle multiple trap clauses with type checking
         // For each trap clause, check if error type matches, then execute handler
@@ -3481,6 +3487,12 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
     } else {
         // No trap or no results - just use block result
         m_currentLLVMValue = blockResult;
+    }
+    
+    // Free heap-allocated trap error slot AFTER PHI node (PHI must be first in block)
+    if (hasTrap && errorSlot) {
+        llvm::Function* freeFunc = getOrCreateFreeFunction();
+        builder->CreateCall(freeFunc, {errorSlot});
     }
 }
 

@@ -402,6 +402,12 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
     
     llvm::FunctionType* funcType = llvm::FunctionType::get(returnType, paramTypes, false /*isVarArg*/);
     
+    // DEBUG: Print the function type we're creating
+    std::string funcTypeStr;
+    llvm::raw_string_ostream typeStream(funcTypeStr);
+    funcType->print(typeStream);
+    std::cout << "DEBUG: Creating function '" << node->id->name << "' with type: " << typeStream.str() << std::endl;
+    
     // Mangle function name if inside a bind/impl block
     std::string functionName = node->id->name;
     if (m_currentImplTypeNode) {
@@ -426,6 +432,12 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
     } else {
         func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, functionName, module.get());
     }
+    
+    // DEBUG: Print the ACTUAL function type after creation/retrieval
+    std::string actualFuncTypeStr;
+    llvm::raw_string_ostream actualTypeStream(actualFuncTypeStr);
+    func->getFunctionType()->print(actualTypeStream);
+    std::cout << "DEBUG: ACTUAL function '" << functionName << "' has type: " << actualTypeStream.str() << std::endl;
 
     // Set current function for subsequent codegen (body, variable declarations)
     llvm::Function* oldFunction = currentFunction;
@@ -479,10 +491,6 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
 
         // Initialize scope management for function body
         enterScope();
-
-        // PHASE 6.3 FIX: Pre-create trap_error allocas to ensure consistent stack layout
-        // This prevents alloca ordering issues that can corrupt struct return values
-        preCreateTrapAllocas(node->body.get(), func);
 
         // Create allocas for parameters and store initial argument values
         auto argIt = func->arg_begin();
