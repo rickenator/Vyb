@@ -23,11 +23,12 @@ then:                                             ; preds = %entry
   %dividend_ptr = getelementptr inbounds %DivisionError, ptr %DivisionError_obj, i32 0, i32 1, !dbg !12
   store i64 %a4, ptr %dividend_ptr, align 4, !dbg !12
   %DivisionError_val = load %DivisionError, ptr %DivisionError_obj, align 4, !dbg !12
-  %error.heap = call ptr @malloc(i64 16), !dbg !12
-  store %DivisionError %DivisionError_val, ptr %error.heap, align 4, !dbg !12
-  %error.alloc = alloca %DivisionError, align 8, !dbg !12
-  store %DivisionError %DivisionError_val, ptr %error.alloc, align 4, !dbg !12
-  %error.ptr = insertvalue { i64, ptr } undef, ptr %error.alloc, 1, !dbg !12
+  %error.heap = call ptr @malloc(i64 24), !dbg !12
+  %error.typeid.ptr = getelementptr i64, ptr %error.heap, i32 0, !dbg !12
+  store i64 1794997878183821407, ptr %error.typeid.ptr, align 4, !dbg !12
+  %error.data.ptr = getelementptr i8, ptr %error.heap, i64 8, !dbg !12
+  store %DivisionError %DivisionError_val, ptr %error.data.ptr, align 4, !dbg !12
+  %error.ptr = insertvalue { i64, ptr } undef, ptr %error.heap, 1, !dbg !12
   ret { i64, ptr } %error.ptr, !dbg !12
 
 ifcont:                                           ; preds = %entry
@@ -52,8 +53,8 @@ block.normal:                                     ; preds = %entry
   %has.error = icmp ne ptr %call.error, null, !dbg !20
   br i1 %has.error, label %call.error1, label %call.success, !dbg !20
 
-block.continue:                                   ; preds = %trap.landing, %call.success
-  %block.result = phi i64 [ %call.value, %call.success ], [ %addtmp, %trap.landing ], !dbg !20
+block.continue:                                   ; preds = %trap.unmatched, %trap.handler0, %call.success
+  %block.result = phi i64 [ %call.value, %call.success ], [ %addtmp, %trap.handler0 ], [ 0, %trap.unmatched ], !dbg !20
   store i64 %block.result, ptr %result, align 4, !dbg !20
   call void @llvm.dbg.declare(metadata ptr %result, metadata !19, metadata !DIExpression()), !dbg !21
   %result3 = load i64, ptr %result, align 4, !dbg !20
@@ -61,7 +62,23 @@ block.continue:                                   ; preds = %trap.landing, %call
 
 trap.landing:                                     ; preds = %call.error1
   %error.ptr = load ptr, ptr %trap_error, align 8, !dbg !20
-  %error.value = load %DivisionError, ptr %error.ptr, align 4, !dbg !20
+  %error.typeid = load i64, ptr %error.ptr, align 4, !dbg !20
+  %type.matches = icmp eq i64 %error.typeid, 1794997878183821407, !dbg !20
+  br i1 %type.matches, label %trap.handler0, label %trap.unmatched, !dbg !20
+
+call.error1:                                      ; preds = %block.normal
+  store ptr %call.error, ptr %trap_error, align 8, !dbg !20
+  br label %trap.landing, !dbg !20
+
+call.success:                                     ; preds = %block.normal
+  br label %block.continue, !dbg !20
+
+trap.unmatched:                                   ; preds = %trap.landing
+  br label %block.continue, !dbg !20
+
+trap.handler0:                                    ; preds = %trap.landing
+  %error.data.i8ptr = getelementptr i8, ptr %error.ptr, i64 8, !dbg !20
+  %error.value = load %DivisionError, ptr %error.data.i8ptr, align 4, !dbg !20
   %temp_struct = alloca %DivisionError, align 8, !dbg !20
   store %DivisionError %error.value, ptr %temp_struct, align 4, !dbg !20
   %code_ptr = getelementptr inbounds %DivisionError, ptr %temp_struct, i32 0, i32 0, !dbg !20
@@ -71,13 +88,6 @@ trap.landing:                                     ; preds = %call.error1
   %dividend_ptr = getelementptr inbounds %DivisionError, ptr %temp_struct2, i32 0, i32 1, !dbg !20
   %dividend_val = load i64, ptr %dividend_ptr, align 4, !dbg !20
   %addtmp = add i64 %code_val, %dividend_val, !dbg !20
-  br label %block.continue, !dbg !20
-
-call.error1:                                      ; preds = %block.normal
-  store ptr %call.error, ptr %trap_error, align 8, !dbg !20
-  br label %trap.landing, !dbg !20
-
-call.success:                                     ; preds = %block.normal
   br label %block.continue, !dbg !20
 }
 

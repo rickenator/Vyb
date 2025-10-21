@@ -1324,14 +1324,27 @@ void LLVMCodegen::visit(vyn::ast::FailStatement* node) {
         return;
     }
     
-    // Phase 6.1: Handle struct error types
-    // If error is a struct value (not pointer), allocate it on heap
+    // Phase 6.2: Handle struct error types with type ID header
+    // Allocate error struct with 8-byte type ID prefix
     llvm::Value* errorPtr = errorValue;
     if (!errorValue->getType()->isPointerTy()) {
-        // Allocate space for the error struct on the heap using malloc
+        // Get type name for hash
+        std::string typeName;
+        if (auto* objLit = dynamic_cast<ast::ObjectLiteral*>(node->error.get())) {
+            if (objLit->typePath) {
+                if (auto* typeName_node = dynamic_cast<ast::TypeName*>(objLit->typePath.get())) {
+                    if (typeName_node->identifier) {
+                        typeName = typeName_node->identifier->name;
+                    }
+                }
+            }
+        }
+        
+        // Allocate space for type ID (8 bytes) + error struct on heap
         llvm::Type* errorType = errorValue->getType();
         llvm::DataLayout dataLayout(module.get());
-        uint64_t errorSize = dataLayout.getTypeAllocSize(errorType);
+        uint64_t errorDataSize = dataLayout.getTypeAllocSize(errorType);
+        uint64_t totalSize = 8 + errorDataSize;  // 8 bytes for type ID + error data
         
         // Call malloc to allocate heap memory
         llvm::Function* mallocFn = module->getFunction("malloc");
@@ -1350,12 +1363,32 @@ void LLVMCodegen::visit(vyn::ast::FailStatement* node) {
             );
         }
         
-        llvm::Value* size = llvm::ConstantInt::get(builder->getInt64Ty(), errorSize);
+        llvm::Value* size = llvm::ConstantInt::get(builder->getInt64Ty(), totalSize);
         llvm::Value* rawPtr = builder->CreateCall(mallocFn, {size}, "error.heap");
         
-        // Cast to appropriate pointer type and store the struct
+        // Store type ID in first 8 bytes
+        if (!typeName.empty()) {
+            uint64_t typeHash = std::hash<std::string>{}(typeName);
+            llvm::Value* typeId = llvm::ConstantInt::get(builder->getInt64Ty(), typeHash);
+            llvm::Value* typeIdPtr = builder->CreateGEP(
+                builder->getInt64Ty(),
+                rawPtr,
+                llvm::ConstantInt::get(builder->getInt32Ty(), 0),
+                "error.typeid.ptr"
+            );
+            builder->CreateStore(typeId, typeIdPtr);
+        }
+        
+        // Store error data after type ID (at offset 8)
+        llvm::Value* dataPtr = builder->CreateGEP(
+            builder->getInt8Ty(),
+            rawPtr,
+            llvm::ConstantInt::get(builder->getInt64Ty(), 8),
+            "error.data.ptr"
+        );
+        builder->CreateStore(errorValue, dataPtr);
+        
         errorPtr = rawPtr;
-        builder->CreateStore(errorValue, errorPtr);
     }
     
     // Check if we're inside a trap context
@@ -1363,8 +1396,9 @@ void LLVMCodegen::visit(vyn::ast::FailStatement* node) {
         // We have an active trap handler - store error and jump to landing pad
         TrapContext& trap = trapStack.back();
         
-        // Store the error value in the error slot
-        builder->CreateStore(errorValue, trap.errorSlot);
+        // Store the error pointer in the error slot
+        // Error pointer now contains type ID header, so no separate type storage needed
+        builder->CreateStore(errorPtr, trap.errorSlot);
         
         // Jump to the landing pad for error handling
         builder->CreateBr(trap.landingPad);
@@ -1393,14 +1427,7 @@ void LLVMCodegen::visit(vyn::ast::FailStatement* node) {
             resultStruct = builder->CreateInsertValue(resultStruct, dummyValue, {0}, "error.dummy");
             
             // Insert error pointer at position 1
-            // TODO: For now, using the error value directly. Later we'll wrap it in VynError structure
-            llvm::Value* errorPtr = errorValue;
-            if (!errorPtr->getType()->isPointerTy()) {
-                // If error is not a pointer, we need to allocate and store it
-                llvm::AllocaInst* errorAlloca = builder->CreateAlloca(errorPtr->getType(), nullptr, "error.alloc");
-                builder->CreateStore(errorPtr, errorAlloca);
-                errorPtr = errorAlloca;
-            }
+            // errorPtr already contains the heap-allocated error with type ID header
             resultStruct = builder->CreateInsertValue(resultStruct, errorPtr, {1}, "error.ptr");
             
             // Return the error tuple

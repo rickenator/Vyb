@@ -3176,69 +3176,154 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
     // Generate trap handlers
     llvm::Value* trapResult = nullptr;
     llvm::BasicBlock* trapExitBB = nullptr;  // Track where trap path exits
+    std::vector<std::pair<llvm::BasicBlock*, llvm::Value*>> trapExits;  // {exitBB, result} - for Phase 6.2
     
     if (hasTrap) {
         builder->SetInsertPoint(landingPadBB);
         
         // Load the error pointer from the error slot
-        // errorSlot contains a pointer to the error struct
         llvm::Value* errorPtr = builder->CreateLoad(
             errorSlot->getAllocatedType(),
             errorSlot,
             "error.ptr"
         );
         
-        // Generate trap handler code
-        for (const auto& trapClause : node->trapClauses) {
-            // TODO: Type checking for multiple trap clauses
-            // For now, assuming single trap clause
+        // Phase 6.2: Handle multiple trap clauses with type checking
+        // For each trap clause, check if error type matches, then execute handler
+        llvm::BasicBlock* nextCheckBB = nullptr;
+        llvm::BasicBlock* unmatchedBB = llvm::BasicBlock::Create(*context, "trap.unmatched", func);
+        
+        llvm::BasicBlock* currentCheckBB = landingPadBB;
+        
+        for (size_t i = 0; i < node->trapClauses.size(); i++) {
+            const auto& trapClause = node->trapClauses[i];
+            bool isLastClause = (i == node->trapClauses.size() - 1);
             
-            // Phase 6.1: Cast error pointer to expected struct type
-            llvm::Value* typedErrorValue = errorPtr;
+            // Create blocks for this trap clause
+            llvm::BasicBlock* handlerBB = llvm::BasicBlock::Create(
+                *context,
+                "trap.handler" + std::to_string(i),
+                func
+            );
             
-            if (trapClause->errorType) {
-                // Get the expected error type
-                llvm::Type* expectedType = codegenType(trapClause->errorType.get());
-                
-                if (expectedType && !expectedType->isPointerTy()) {
-                    // Expected type is a struct - load it from the pointer
-                    typedErrorValue = builder->CreateLoad(expectedType, errorPtr, "error.value");
-                } else if (expectedType && expectedType->isPointerTy()) {
-                    // Expected type is already a pointer - just use it
-                    typedErrorValue = errorPtr;
-                }
+            if (!isLastClause) {
+                nextCheckBB = llvm::BasicBlock::Create(
+                    *context,
+                    "trap.check" + std::to_string(i + 1),
+                    func
+                );
             }
             
-            if (auto* blockStmt = dynamic_cast<ast::BlockStatement*>(trapClause->handler.get())) {
-                // Block statement handler - need special handling for last expression
+            // Generate type check in current check block
+            builder->SetInsertPoint(currentCheckBB);
+            
+            // Get the expected error type
+            llvm::Type* expectedType = codegenType(trapClause->errorType.get());
+            
+            // Runtime type check: compare stored type ID with expected type ID
+            // Type ID is stored as first i64 field in error struct header
+            llvm::Value* typeMatches = nullptr;
+            
+            if (trapClause->errorType && errorSlot) {
+                // Extract type name from TypeNode
+                std::string expectedTypeName;
+                if (auto* typeName_node = dynamic_cast<ast::TypeName*>(trapClause->errorType.get())) {
+                    if (typeName_node->identifier) {
+                        expectedTypeName = typeName_node->identifier->name;
+                    }
+                }
+                
+                if (!expectedTypeName.empty()) {
+                    // Compute expected type hash
+                    uint64_t expectedTypeHash = std::hash<std::string>{}(expectedTypeName);
+                    llvm::Value* expectedTypeId = llvm::ConstantInt::get(builder->getInt64Ty(), expectedTypeHash);
+                    
+                    // Load the actual error type ID from the error struct header
+                    // Error pointer points to memory with first 8 bytes being type ID
+                    llvm::Value* typeIdPtr = builder->CreateBitCast(
+                        errorPtr,
+                        llvm::PointerType::get(builder->getInt64Ty(), 0),
+                        "error.typeid.ptr"
+                    );
+                    llvm::Value* actualTypeId = builder->CreateLoad(
+                        builder->getInt64Ty(),
+                        typeIdPtr,
+                        "error.typeid"
+                    );
+                    
+                    // Compare type IDs
+                    typeMatches = builder->CreateICmpEQ(actualTypeId, expectedTypeId, "type.matches");
+                } else {
+                    // Couldn't extract type name - shouldn't happen
+                    typeMatches = builder->getFalse();
+                }
             } else {
-                // Non-block handler
+                // No type to check - shouldn't happen, but default to false
+                typeMatches = builder->getFalse();
+            }
+            
+            // Branch based on type match
+            if (isLastClause) {
+                // Last clause - if doesn't match, go to unmatched handler
+                builder->CreateCondBr(typeMatches, handlerBB, unmatchedBB);
+            } else {
+                // Not last clause - if doesn't match, check next clause
+                builder->CreateCondBr(typeMatches, handlerBB, nextCheckBB);
+            }
+            
+            // Generate handler code
+            builder->SetInsertPoint(handlerBB);
+            
+            // Cast error pointer to expected struct type
+            // Error struct has type ID as first field, actual data starts at offset 8 bytes
+            llvm::Value* typedErrorValue = errorPtr;
+            if (expectedType && !expectedType->isPointerTy()) {
+                // Cast error pointer to i8* for byte offset calculation
+                llvm::Value* errorI8Ptr = builder->CreateBitCast(
+                    errorPtr,
+                    llvm::PointerType::get(builder->getInt8Ty(), 0),
+                    "error.i8ptr"
+                );
+                // Skip the type ID header (8 bytes) to get to actual error data
+                llvm::Value* dataI8Ptr = builder->CreateGEP(
+                    builder->getInt8Ty(),
+                    errorI8Ptr,
+                    llvm::ConstantInt::get(builder->getInt64Ty(), 8),
+                    "error.data.i8ptr"
+                );
+                // Cast back to expected struct pointer type and load
+                llvm::Value* dataPtr = builder->CreateBitCast(
+                    dataI8Ptr,
+                    llvm::PointerType::get(expectedType, 0),
+                    "error.data.ptr"
+                );
+                typedErrorValue = builder->CreateLoad(expectedType, dataPtr, "error.value");
             }
             
             // Add error variable to scope
-            // The error variable should be the loaded struct value so member access works
             auto oldNamedValues = namedValues;
             namedValues[trapClause->errorName->name] = typedErrorValue;
             
             // Execute trap handler
+            llvm::Value* clauseResult = nullptr;
             if (trapClause->handler) {
                 // Treat handler like a block expression - capture last expression value
                 if (auto* blockStmt = dynamic_cast<ast::BlockStatement*>(trapClause->handler.get())) {
-                    // Execute all statements except the last
-                    for (size_t i = 0; i < blockStmt->body.size(); i++) {
-                        const auto& stmt = blockStmt->body[i];
-                        bool isLastStmt = (i == blockStmt->body.size() - 1);
+                    // Execute all statements
+                    for (size_t j = 0; j < blockStmt->body.size(); j++) {
+                        const auto& stmt = blockStmt->body[j];
+                        bool isLastStmt = (j == blockStmt->body.size() - 1);
                         
                         if (isLastStmt) {
                             // For the last statement, capture its value
                             if (auto* exprStmt = dynamic_cast<ast::ExpressionStatement*>(stmt.get())) {
                                 if (exprStmt->expression) {
                                     exprStmt->expression->accept(*this);
-                                    trapResult = m_currentLLVMValue;
+                                    clauseResult = m_currentLLVMValue;
                                 }
                             } else {
                                 stmt->accept(*this);
-                                trapResult = m_currentLLVMValue;
+                                clauseResult = m_currentLLVMValue;
                             }
                         } else {
                             stmt->accept(*this);
@@ -3246,14 +3331,14 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
                         
                         // If block terminated, stop processing
                         if (builder->GetInsertBlock()->getTerminator()) {
-                            trapResult = nullptr;  // Can't use result if block terminated
+                            clauseResult = nullptr;
                             break;
                         }
                     }
                 } else {
                     // Non-block handler - just visit it
                     trapClause->handler->accept(*this);
-                    trapResult = m_currentLLVMValue;
+                    clauseResult = m_currentLLVMValue;
                 }
             }
             
@@ -3262,13 +3347,39 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
             
             // Branch to ensure/continue after handling and record exit block
             if (!builder->GetInsertBlock()->getTerminator()) {
-                trapExitBB = builder->GetInsertBlock();
+                llvm::BasicBlock* handlerExitBB = builder->GetInsertBlock();
                 if (hasEnsure) {
                     builder->CreateBr(ensureBB);
                 } else {
                     builder->CreateBr(continueBB);
                 }
+                // Store this exit point for PHI node
+                trapExits.push_back({handlerExitBB, clauseResult});
             }
+            
+            // Move to next check block for next iteration
+            if (!isLastClause) {
+                currentCheckBB = nextCheckBB;
+            }
+        }
+        
+        // Handle unmatched case - error doesn't match any trap clause
+        builder->SetInsertPoint(unmatchedBB);
+        // If no trap matched, propagate error up or call untrapped handler
+        // For now, just return a dummy value and continue
+        // TODO: Proper error propagation for unmatched traps
+        llvm::Value* unmatchedResult = llvm::Constant::getNullValue(builder->getInt64Ty());
+        if (hasEnsure) {
+            builder->CreateBr(ensureBB);
+        } else {
+            builder->CreateBr(continueBB);
+        }
+        trapExits.push_back({unmatchedBB, unmatchedResult});
+        
+        // Set trapExitBB to the last handler exit for backward compatibility
+        if (!trapExits.empty()) {
+            trapExitBB = trapExits.back().first;
+            trapResult = trapExits.back().second;
         }
         
         // Pop trap context
@@ -3294,31 +3405,34 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
     builder->SetInsertPoint(continueBB);
     
     // Create PHI node to merge results from different paths
-    if (hasTrap && (blockResult || trapResult)) {
+    if (hasTrap && (blockResult || !trapExits.empty())) {
         // Determine result type
         llvm::Type* resultType = blockResult ? blockResult->getType() : 
-                                 trapResult ? trapResult->getType() : nullptr;
+                                 !trapExits.empty() && trapExits[0].second ? trapExits[0].second->getType() : nullptr;
         
         if (resultType) {
             // Count incoming paths
             unsigned numIncoming = 0;
             if (normalExitBB && blockResult) numIncoming++;
-            if (trapExitBB && trapResult) numIncoming++;
+            numIncoming += trapExits.size();
             
             if (numIncoming > 0) {
                 llvm::PHINode* phi = builder->CreatePHI(resultType, numIncoming, "block.result");
                 
-                // Add incoming values
+                // Add incoming value from normal path
                 if (normalExitBB && blockResult) {
                     phi->addIncoming(blockResult, normalExitBB);
                 }
-                if (trapExitBB && trapResult) {
-                    phi->addIncoming(trapResult, trapExitBB);
+                
+                // Add incoming values from all trap exits
+                for (const auto& [exitBB, result] : trapExits) {
+                    llvm::Value* incomingValue = result ? result : llvm::Constant::getNullValue(resultType);
+                    phi->addIncoming(incomingValue, exitBB);
                 }
                 
                 m_currentLLVMValue = phi;
             } else {
-                m_currentLLVMValue = blockResult ? blockResult : trapResult;
+                m_currentLLVMValue = blockResult ? blockResult : (!trapExits.empty() ? trapExits[0].second : nullptr);
             }
         } else {
             m_currentLLVMValue = nullptr;

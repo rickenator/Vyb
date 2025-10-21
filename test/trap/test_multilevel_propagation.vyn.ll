@@ -14,11 +14,10 @@ entry:
   br i1 %icmpeqtmp, label %then, label %ifcont, !dbg !12
 
 then:                                             ; preds = %entry
-  %error.heap = call ptr @malloc(i64 8), !dbg !12
-  store i64 42, ptr %error.heap, align 4, !dbg !12
-  %error.alloc = alloca i64, align 8, !dbg !12
-  store i64 42, ptr %error.alloc, align 4, !dbg !12
-  %error.ptr = insertvalue { i64, ptr } undef, ptr %error.alloc, 1, !dbg !12
+  %error.heap = call ptr @malloc(i64 16), !dbg !12
+  %error.data.ptr = getelementptr i8, ptr %error.heap, i64 8, !dbg !12
+  store i64 42, ptr %error.data.ptr, align 4, !dbg !12
+  %error.ptr = insertvalue { i64, ptr } undef, ptr %error.heap, 1, !dbg !12
   ret { i64, ptr } %error.ptr, !dbg !12
 
 ifcont:                                           ; preds = %entry
@@ -88,8 +87,8 @@ block.normal:                                     ; preds = %call.success
   %has.error5 = icmp ne ptr %call.error4, null, !dbg !30
   br i1 %has.error5, label %call.error6, label %call.success7, !dbg !30
 
-block.continue:                                   ; preds = %trap.landing, %call.success7
-  %block.result = phi i64 [ %call.value3, %call.success7 ], [ -1, %trap.landing ], !dbg !30
+block.continue:                                   ; preds = %trap.unmatched, %trap.handler0, %call.success7
+  %block.result = phi i64 [ %call.value3, %call.success7 ], [ -1, %trap.handler0 ], [ 0, %trap.unmatched ], !dbg !30
   store i64 %block.result, ptr %val2, align 4, !dbg !30
   call void @llvm.dbg.declare(metadata ptr %val2, metadata !29, metadata !DIExpression()), !dbg !32
   %val18 = load i64, ptr %val1, align 4, !dbg !30
@@ -99,14 +98,23 @@ block.continue:                                   ; preds = %trap.landing, %call
 
 trap.landing:                                     ; preds = %call.error6
   %error.ptr = load ptr, ptr %trap_error, align 8, !dbg !30
-  %error.value = load i64, ptr %error.ptr, align 4, !dbg !30
-  br label %block.continue, !dbg !30
+  %error.typeid = load i64, ptr %error.ptr, align 4, !dbg !30
+  %type.matches = icmp eq i64 %error.typeid, -3994496327427856726, !dbg !30
+  br i1 %type.matches, label %trap.handler0, label %trap.unmatched, !dbg !30
 
 call.error6:                                      ; preds = %block.normal
   store ptr %call.error4, ptr %trap_error, align 8, !dbg !30
   br label %trap.landing, !dbg !30
 
 call.success7:                                    ; preds = %block.normal
+  br label %block.continue, !dbg !30
+
+trap.unmatched:                                   ; preds = %trap.landing
+  br label %block.continue, !dbg !30
+
+trap.handler0:                                    ; preds = %trap.landing
+  %error.data.i8ptr = getelementptr i8, ptr %error.ptr, i64 8, !dbg !30
+  %error.value = load i64, ptr %error.data.i8ptr, align 4, !dbg !30
   br label %block.continue, !dbg !30
 }
 
