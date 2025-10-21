@@ -375,6 +375,23 @@ void __vyn_runtime_untrapped_error(VynError* error) {
     
     fprintf(stderr, "└──────────────────────────────────────────────────────────────┘\n");
     
+    // Phase 6.4: Print Vyn-level call stack
+    fprintf(stderr, "\nStack Trace:\n");
+    VynStackTrace* stack_trace = __vyn_runtime_get_current_stack_trace();
+    if (stack_trace && stack_trace->frame_count > 0) {
+        for (size_t i = 0; i < stack_trace->frame_count; i++) {
+            const VynStackFrame* frame = &stack_trace->frames[i];
+            fprintf(stderr, "  at %s (%s:%u:%u)\n", 
+                    frame->function_name ? frame->function_name : "<unknown>",
+                    frame->location.file_path ? frame->location.file_path : "<unknown>",
+                    frame->location.line,
+                    frame->location.column);
+        }
+        __vyn_runtime_free_stack_trace(stack_trace);
+    } else {
+        fprintf(stderr, "  (no stack trace available)\n");
+    }
+    
     // Print stack trace if available
     // NOTE: Currently error is just a heap-allocated error struct (type_id + value)
     // not a full VynError* with stack trace. We'll improve this in Phase 6.3.

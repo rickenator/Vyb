@@ -1456,8 +1456,10 @@ void LLVMCodegen::visit(vyn::ast::FailStatement* node) {
             // errorPtr already contains the heap-allocated error with type ID header
             resultStruct = builder->CreateInsertValue(resultStruct, errorPtr, {1}, "error.ptr");
             
-            // Phase 6.4: Pop call frame before returning error
-            generatePopFrameCall();
+            // Phase 6.4: DON'T pop call frame when failing!
+            // The frame should remain on the stack so it appears in the stack trace
+            // when the error is displayed. It will be cleaned up when the program exits.
+            // generatePopFrameCall();  // Removed - keep frame for stack trace
             
             // Return the error tuple
             builder->CreateRet(resultStruct);
