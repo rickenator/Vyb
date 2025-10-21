@@ -1,0 +1,20 @@
+# Test if the problem is the first call or interaction
+divide(a<Int>, b<Int>)<Int> -> {
+    if (b == 0) { fail 42 }
+    return a / b
+}
+
+compute(x<Int>, y<Int>)<Int> -> {
+    result<Int> = divide(x, y)
+    return result + 10
+}
+
+main()<Int> -> {
+    # Call 1: This should succeed
+    val1<Int> = compute(10, 2)
+    
+    # Call 2: Simple value, no trap needed
+    val2<Int> = 100
+    
+    return val1 + val2  # Should return 115
+}
