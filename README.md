@@ -150,7 +150,7 @@ utils = { git = "https://github.com/user/utils" }  # External, smuggled
 
 This unique `import`/`smuggle` distinction makes Vyn's module system both secure and flexible, clearly marking the trust level of your dependencies.
 
-## What's Working Now
+## In This Release
 
 Vyn **v0.4.2** (freedom-1.0 series) is a **complete systems programming language** with **generic functions and aspect system** ready for production use:
 
@@ -168,6 +168,7 @@ Vyn **v0.4.2** (freedom-1.0 series) is a **complete systems programming language
 - **Select Expressions**: `select(expr) -> { pattern -> result };` with auto-return and explicit `pass` keyword
 - **Arithmetic**: Full binary operators (`+`, `-`, `*`, `/`, `==`, `!=`, `<`, `>`, etc.)
 - **Pattern Matching**: `match (expr) { pattern -> result }` with comprehensive patterns
+- **Error Handling**: `fail`/`trap` system with zero-cost success path and heap-allocated error contexts for type-safe exception handling
 - **I/O**: `println()` for output, works with all data types including vectors
 
 ### ✅ **Advanced Type System**
@@ -1396,6 +1397,607 @@ advanced<String> = data
 
 **String Theory Achievement Unlocked:** You now understand Vyn Strings better than most physicists understand actual string theory! 🎻✨
 
+## Error Handling with trap/fail/ensure
+
+Vyn v0.4.2 features an **explicit error handling system** that combines the clarity of exceptions with the safety of Result types. The `trap`/`fail`/`ensure` trio provides compile-time error tracking with zero runtime overhead for the happy path.
+
+### The Philosophy
+
+Traditional error handling offers two flawed extremes:
+- **Exceptions**: Hidden control flow, unclear what can fail, runtime overhead
+- **Result Types**: Verbose unwrapping, easy to ignore errors, cluttered code
+
+Vyn's approach:
+- **Explicit propagation**: Errors visible in type signatures
+- **Zero-cost success**: No overhead when operations succeed  
+- **Pattern matching**: Handle errors elegantly with full type safety
+- **Heap allocation**: Errors carry rich context through pointer passing
+
+### Error Fundamentals
+
+Functions declare error returns in their signatures using **failable types**:
+
+```vyn
+# Functions that can fail return (T, error_ptr) tuples
+divide(a<Int>, b<Int>)<Int> -> {
+    if (b == 0) {
+        fail 42  # Return error with code 42
+    }
+    return a / b
+}
+
+# The compiler wraps this as: { i64 result, i8* error } in LLVM
+```
+
+**Type System Integration:**
+- Success path: Returns `(value, null_ptr)` tuple
+- Error path: Returns `(undefined, error_ptr)` tuple  
+- Error pointers carry heap-allocated error structs
+- Type IDs enable pattern matching on error types
+
+### The fail Keyword
+
+Create and propagate errors with `fail`:
+
+```vyn
+# Simple error codes (primitive types)
+fail 404                    # Integer error
+fail "not found"            # String error  
+fail 3.14                   # Float error
+
+# Structured errors (custom types)
+struct DivisionError {
+    code<Int>,
+    dividend<Int>,
+    divisor<Int>
+}
+
+divide_structured(a<Int>, b<Int>)<Int> -> {
+    if (b == 0) {
+        fail DivisionError {
+            code = 42,
+            dividend = a,
+            divisor = b
+        }
+    }
+    return a / b
+}
+```
+
+**Error Memory Layout:**
+```
+Heap-allocated error struct (16 bytes):
+  Offset 0-7:  Type ID hash (i64) - For pattern matching
+  Offset 8-15: Error value/data    - Primitive or struct data
+```
+
+**Type ID Hashing:**
+- `Int` → hash("Int") = -3994496327427856726
+- `String` → hash("String") = unique value
+- `DivisionError` → hash("DivisionError") = unique value
+- Enables runtime type dispatch in trap handlers
+
+### The trap Block
+
+Handle errors with pattern matching:
+
+```vyn
+# Basic trap with single error type
+compute_safely(x<Int>, y<Int>)<Int> -> {
+    result<Int> = {
+        value<Int> = divide(x, y)  # May fail
+        value * 2
+    } trap (e<Int>) -> {
+        println("Division failed with code: " + String::from_int(e))
+        -1  # Return fallback value
+    }
+    return result
+}
+
+# Multiple error types with pattern matching
+process_data(x<Int>)<String> -> {
+    {
+        value<Int> = risky_operation(x)
+        "Success: " + String::from_int(value)
+    } trap (e<Int>) -> {
+        "Integer error: " + String::from_int(e)
+    } trap (e<String>) -> {
+        "String error: " + e
+    } trap (e<DivisionError>) -> {
+        "Division error code: " + String::from_int(e.code)
+    }
+}
+```
+
+**Pattern Matching Features:**
+- Type-safe: Only valid error types accepted
+- Exhaustive: Compiler ensures all error types handled
+- Field access: Access struct fields in trap handlers (`e.code`, `e.dividend`)
+- Wildcard: Use `} trap (e<?>) -> { }` to handle any error (planned)
+
+### Error Propagation
+
+Errors automatically propagate through call stacks:
+
+```vyn
+# Three-level error propagation
+divide(a<Int>, b<Int>)<Int> -> {
+    if (b == 0) {
+        fail 42  # Create error at bottom
+    }
+    return a / b
+}
+
+compute(x<Int>, y<Int>)<Int> -> {
+    result<Int> = divide(x, y)  # Propagates error if divide fails
+    return result + 10           # Only reached if divide succeeds
+}
+
+main()<Int> -> {
+    val1<Int> = compute(10, 2)   # OK: 10/2 + 10 = 15
+    
+    val2<Int> = {
+        compute(10, 0)  # Fails: division by zero
+    } trap (e<Int>) -> {
+        println("Caught error: " + String::from_int(e))
+        -1  # Return fallback
+    }
+    
+    return val1 + val2  # Returns 15 + (-1) = 14
+}
+```
+
+**Propagation Mechanics:**
+1. `divide(10, 0)` allocates error on heap, returns `(undef, error_ptr)`
+2. `compute` checks error pointer, finds non-null, propagates `(undef, error_ptr)`
+3. `main` trap block catches error, extracts type and value
+4. Error memory freed after handling
+
+### Untrapped Errors
+
+Errors that escape without trap handlers trigger runtime termination:
+
+```vyn
+divide(a<Int>, b<Int>)<Int> -> {
+    if (b == 0) {
+        fail 42
+    }
+    return a / b
+}
+
+main()<Int> -> {
+    result<Int> = divide(10, 0)  # No trap handler!
+    return result
+}
+```
+
+**Runtime Output:**
+```
+┌─ UNTRAPPED FAILURE ──────────────────────────────────────────┐
+│ Error: <runtime error>                                       │
+│ Thread: 6472648897627130861                                  │
+│ Time: 2025-10-21 10:01:29.810                                │
+└──────────────────────────────────────────────────────────────┘
+
+Exit Code: 1
+```
+
+**Safety Guarantees:**
+- No silent failures
+- No undefined behavior
+- Clear error location (planned: stack traces)
+- Graceful termination
+
+### Struct Errors with Context
+
+Rich error types carry debugging context:
+
+```vyn
+struct ValidationError {
+    field_name<String>,
+    expected<String>,
+    actual<String>,
+    line_number<Int>
+}
+
+validate_input(input<String>)<Bool> -> {
+    if (input.len() == 0) {
+        fail ValidationError {
+            field_name = "input",
+            expected = "non-empty string",
+            actual = "empty string",
+            line_number = 42
+        }
+    }
+    return true
+}
+
+main()<Int> -> {
+    {
+        is_valid<Bool> = validate_input("")
+        0
+    } trap (e<ValidationError>) -> {
+        println("Validation failed:")
+        println("  Field: " + e.field_name)
+        println("  Expected: " + e.expected)
+        println("  Actual: " + e.actual)
+        println("  Line: " + String::from_int(e.line_number))
+        1
+    }
+}
+```
+
+**Output:**
+```
+Validation failed:
+  Field: input
+  Expected: non-empty string
+  Actual: empty string
+  Line: 42
+```
+
+### The ensure Keyword
+
+The `ensure` keyword provides a block for cleanup/finally semantics, guaranteeing code runs whether the block succeeds or fails:
+
+```vyn
+# Planned syntax - cleanup that always executes
+process_file(path<String>)<String> -> {
+    file<File> = open_file(path)
+    
+    result<String> = {
+        file.read()
+    } trap (e<IOError>) -> {
+        return ""
+    } ensure -> {
+        file.close()  # Always runs, success or failure
+    }
+    
+    return result
+}
+
+# Execution order on error:
+# 1. Block code executes and fails
+# 2. Matching trap handler runs (if present)
+# 3. ensure block always runs last
+```
+
+### LLVM Code Generation
+
+The error handling system compiles to efficient LLVM IR:
+
+```llvm
+; Failable function returning {i64 result, i8* error}
+define { i64, ptr } @divide(i64 %a, i64 %b) {
+entry:
+  %is_zero = icmp eq i64 %b, 0
+  br i1 %is_zero, label %error_path, label %success_path
+
+error_path:
+  ; Allocate error struct: 8 bytes type_id + 8 bytes value
+  %error_mem = call ptr @malloc(i64 16)
+  
+  ; Store type ID at offset 0
+  %type_id = i64 -3994496327427856726  ; hash("Int")
+  store i64 %type_id, ptr %error_mem
+  
+  ; Store error value at offset 8  
+  %value_ptr = getelementptr i8, ptr %error_mem, i64 8
+  store i64 42, ptr %value_ptr
+  
+  ; Return (undef, error_ptr) tuple
+  %result = insertvalue { i64, ptr } undef, ptr %error_mem, 1
+  ret { i64, ptr } %result
+
+success_path:
+  %quotient = sdiv i64 %a, %b
+  ; Return (quotient, null) tuple
+  %success = insertvalue { i64, ptr } undef, i64 %quotient, 0
+  %success2 = insertvalue { i64, ptr } %success, ptr null, 1
+  ret { i64, ptr } %success2
+}
+
+; Call site with error checking
+define { i64, ptr } @compute(i64 %x, i64 %y) {
+entry:
+  %call = call { i64, ptr } @divide(i64 %x, i64 %y)
+  %value = extractvalue { i64, ptr } %call, 0
+  %error = extractvalue { i64, ptr } %call, 1
+  
+  ; Check if error occurred
+  %has_error = icmp ne ptr %error, null
+  br i1 %has_error, label %error_propagate, label %success
+
+error_propagate:
+  ; Propagate error up the stack
+  %prop = insertvalue { i64, ptr } undef, ptr %error, 1
+  ret { i64, ptr } %prop
+
+success:
+  %result = add i64 %value, 10
+  %ret = insertvalue { i64, ptr } undef, i64 %result, 0
+  %ret2 = insertvalue { i64, ptr } %ret, ptr null, 1
+  ret { i64, ptr } %ret2
+}
+
+; Trap handler with type matching
+define i64 @main() {
+entry:
+  %trap_error = alloca ptr
+  store ptr null, ptr %trap_error
+  br label %try_block
+
+try_block:
+  %call = call { i64, ptr } @compute(i64 10, i64 0)
+  %value = extractvalue { i64, ptr } %call, 0
+  %error = extractvalue { i64, ptr } %call, 1
+  %has_error = icmp ne ptr %error, null
+  br i1 %has_error, label %trap_landing, label %try_success
+
+trap_landing:
+  ; Load error and check type
+  %error_typeid = load i64, ptr %error
+  %type_matches = icmp eq i64 %error_typeid, -3994496327427856726
+  br i1 %type_matches, label %catch_handler, label %unmatched
+
+catch_handler:
+  ; Extract error value from offset 8
+  %value_ptr = getelementptr i8, ptr %error, i64 8
+  %error_value = load i64, ptr %value_ptr
+  
+  ; Free error memory
+  call void @free(ptr %error)
+  
+  ; Handle error (return -1)
+  br label %after_trap
+
+unmatched:
+  ; No matching handler - call runtime
+  call void @__vyn_runtime_untrapped_error(ptr %error)
+  unreachable
+
+try_success:
+  br label %after_trap
+
+after_trap:
+  %result = phi i64 [ %value, %try_success ], [ -1, %catch_handler ]
+  ret i64 %result
+}
+```
+
+### Performance Characteristics
+
+**Happy Path (No Errors):**
+- **Zero allocation**: No heap operations when no errors occur
+- **Zero branching overhead**: Modern CPUs predict success path well
+- **Single comparison**: `icmp ne ptr %error, null` per call
+- **Optimal inlining**: Small functions inline away error checks
+
+**Error Path:**
+- **One malloc**: 16-byte allocation for error struct
+- **Type matching**: O(1) hash comparison per trap handler
+- **Single free**: Clean error memory in trap handler
+- **Stack unwinding**: Return through call frames (no exception tables)
+
+**Comparison to Alternatives:**
+
+| Approach | Success Overhead | Error Overhead | Hidden Control Flow | Compile-time Safety |
+|----------|-----------------|----------------|---------------------|---------------------|
+| **Vyn trap/fail** | ~1 comparison | 1 malloc + type match | No | Yes |
+| C++ exceptions | Exception tables | Stack unwinding + allocation | Yes | Partial |
+| Rust Result<T,E> | Match overhead | Enum size increase | No | Yes |
+| Go error returns | Comparison + check | Allocation | No | Weak (can ignore) |
+| Java checked exceptions | Exception tables | Stack trace + allocation | Yes | Partial |
+
+### Error Handling Best Practices
+
+**1. Use Specific Error Types**
+```vyn
+# Good: Rich context
+struct FileError {
+    path<String>,
+    operation<String>,
+    reason<String>
+}
+
+# Less good: Generic integer codes
+fail 404
+```
+
+**2. Handle Errors Close to Source**
+```vyn
+# Good: Handle immediately if recovery is possible
+result<String> = {
+    read_file(path)
+} trap (e<FileError>) -> {
+    println("Using default config due to: " + e.reason)
+    default_config()
+}
+
+# Sometimes okay: Let errors propagate if caller should decide
+data<String> = read_file(path)  # Propagates error to caller
+```
+
+**3. Document Error Conditions**
+```vyn
+# Read configuration from file
+# 
+# Errors:
+#   FileError { operation = "open", ... } - File doesn't exist
+#   FileError { operation = "read", ... } - Permission denied
+#   ParseError { ... } - Invalid TOML format
+read_config(path<String>)<Config> -> {
+    # Implementation...
+}
+```
+
+**4. Prefer Structured Errors Over Codes**
+```vyn
+# Good: Self-documenting
+struct NetworkError {
+    url<String>,
+    status_code<Int>,
+    retry_after<Int>
+}
+
+# Less good: Requires external documentation
+fail 503  # What does this mean?
+```
+
+### Current Implementation Status
+
+**✅ In This Release (v0.4.2):**
+- fail statements with primitives (Int, Float, String)
+- fail statements with custom struct types
+- Error heap allocation with type ID + value storage
+- Multi-level error propagation through call stacks
+- trap blocks with pattern matching on error types
+- Struct field access in trap handlers
+- Type-safe trap handler matching
+- Automatic memory management (malloc/free)
+- Untrapped error runtime handler with formatted output
+- Complete LLVM codegen for all error operations
+
+**🔜 Planned Enhancements:**
+- `ensure` keyword for precondition checking
+- Stack trace capture in error structs
+- Error context chaining (wrap errors with additional context)
+- Wildcard trap handlers `} trap (e<?>) -> { ... }`
+- Error value recovery without trap (Result<T,E> style)
+- Custom error formatting with Display aspect
+- Error metrics and telemetry hooks
+
+### Example: Complete Error Handling
+
+A comprehensive example showing all error handling features:
+
+```vyn
+# Define domain-specific error types
+struct ParseError {
+    input<String>,
+    position<Int>,
+    expected<String>
+}
+
+struct ValidationError {
+    field<String>,
+    constraint<String>
+}
+
+struct DatabaseError {
+    query<String>,
+    code<Int>
+}
+
+# Parse integer from string
+parse_int(s<String>)<Int> -> {
+    # Actual parsing logic would go here
+    if (s.len() == 0) {
+        fail ParseError {
+            input = s,
+            position = 0,
+            expected = "non-empty string"
+        }
+    }
+    return 42  # Simplified
+}
+
+# Validate age constraint
+validate_age(age<Int>)<Bool> -> {
+    if (age < 0) {
+        fail ValidationError {
+            field = "age",
+            constraint = "must be non-negative"
+        }
+    }
+    if (age > 150) {
+        fail ValidationError {
+            field = "age",
+            constraint = "must be <= 150"
+        }
+    }
+    return true
+}
+
+# Store user in database (can fail)
+store_user(name<String>, age<Int>)<Int> -> {
+    valid<Bool> = validate_age(age)  # Propagates ValidationError
+    
+    # Simulate database operation
+    if (age == 42) {
+        fail DatabaseError {
+            query = "INSERT INTO users",
+            code = 1062  # Duplicate entry
+        }
+    }
+    
+    return 1  # User ID
+}
+
+# Process user registration with comprehensive error handling
+register_user(name<String>, age_str<String>)<String> -> {
+    # Multi-level error handling with different error types
+    result<String> = {
+        # Parse age (may fail with ParseError)
+        age<Int> = parse_int(age_str)
+        
+        # Store user (may fail with ValidationError or DatabaseError)
+        user_id<Int> = store_user(name, age)
+        
+        "User registered with ID: " + String::from_int(user_id)
+        
+    } trap (e<ParseError>) -> {
+        msg<String> = "Parse failed: " + e.expected + 
+                     " at position " + String::from_int(e.position)
+        println(msg)
+        "PARSE_ERROR"
+        
+    } trap (e<ValidationError>) -> {
+        msg<String> = "Validation failed for " + e.field + 
+                     ": " + e.constraint
+        println(msg)
+        "VALIDATION_ERROR"
+        
+    } trap (e<DatabaseError>) -> {
+        msg<String> = "Database error " + String::from_int(e.code) + 
+                     " in query: " + e.query
+        println(msg)
+        "DATABASE_ERROR"
+    }
+    
+    return result
+}
+
+main()<Int> -> {
+    # Test success path
+    result1<String> = register_user("Alice", "25")
+    println(result1)  # "User registered with ID: 1"
+    
+    # Test ParseError
+    result2<String> = register_user("Bob", "")
+    println(result2)  # "PARSE_ERROR"
+    
+    # Test ValidationError  
+    result3<String> = register_user("Charlie", "-5")
+    println(result3)  # "VALIDATION_ERROR"
+    
+    # Test DatabaseError
+    result4<String> = register_user("Dave", "42")
+    println(result4)  # "DATABASE_ERROR"
+    
+    return 0
+}
+```
+
+**Key Takeaways:**
+- **Type Safety**: Each error type is distinct and statically checked
+- **Composability**: Errors propagate through multiple function layers
+- **Clarity**: Error handling is explicit in code structure
+- **Performance**: Only allocates memory when errors actually occur
+- **Ergonomics**: Pattern matching makes error handling elegant
+
+The Vyn error handling system achieves the rare combination of **safety, performance, and ergonomics** that makes robust error handling a joy rather than a chore.
+
 ## Build System
 
 Vyn uses CMake for building:
@@ -1855,8 +2457,8 @@ defer_statement        ::= 'defer' ( expression_statement | block_statement )
 throw_statement        ::= 'throw' expression [';']
 scoped_statement       ::= 'scoped' block_statement
 
-try_statement          ::= 'try' block_statement { catch_clause } [ 'finally' block_statement ]
-catch_clause           ::= 'catch' [ '(' IDENTIFIER ':' type ')' | IDENTIFIER ] block_statement
+try_statement          ::= 'try' block_statement { trap_clause } [ 'finally' block_statement ]
+trap_clause            ::= 'trap' '(' IDENTIFIER '<' type '>' ')' '->' block_statement
 
 pattern_assignment_statement ::= pattern '=' expression [';']
 statement_without_block ::= expression_statement | return_statement | break_statement 
