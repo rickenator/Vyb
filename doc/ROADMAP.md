@@ -1,6 +1,6 @@
 # Vyn Language Roadmap
 
-**Last Updated:** October 16, 2025
+**Last Updated:** October 22, 2025
 
 This document outlines the completed features, ongoing development, and future considerations for the Vyn programming language.
 
@@ -61,11 +61,9 @@ Vyn now supports **fully variadic tuple types** with comprehensive 1-to-N type p
 - Compatible with C ABI for struct returns
 
 **Current Limitations** (future enhancements):
-- ⏳ Tuple element access (`.0`, `.1`, `.2` syntax)
-- ⏳ Tuple variables (only return values currently)
-- ⏳ Tuple destructuring (`let (a, b, c) = tuple`)
 - ⏳ Tuple serialization/output (compiles but no JSON output yet)
 - ⏳ Tuple pattern matching in match expressions
+- ⏳ Tuple element access via `.0`, `.1`, `.2` syntax
 
 See `test/tuples/README.md` for detailed documentation and examples.
 
@@ -112,9 +110,9 @@ The immediate focus for the next release:
 
 5. **Enhanced Error Messages:** More detailed compilation feedback and suggestions
 
-6. **Tuple Element Access:** `.0`, `.1`, `.2` syntax for accessing tuple elements
+7. **Tuple Element Access:** `.0`, `.1`, `.2` syntax for accessing tuple elements
 
-7. **String Comparison Operators:** Lexical ordering for String types
+8. **✅ String Comparison Operators (COMPLETED v0.4.2):** Lexical ordering for String types with all 6 operators (==, !=, <, <=, >, >=) using efficient memcmp-based comparison
 
 ## Project Structure and Organization
 
@@ -162,7 +160,7 @@ As the Vyn project grows, a more structured directory layout will be beneficial 
 -   **Complete Type Library**: Implement and optimize the full type system including:
     -   **Core Primitives**: Complete implementation of `Int` variants (`Int8`, `Int16`, `Int32`), `Float` variants (`Float32`, `Float64`), `Char`, `Rune`, `Bool`, `Bytes`, and `Void`.
     -   **Compound Types**: Complete implementation of tuples `(T1, T2, ...)`, fixed-size arrays `[T; N]`, dynamic vectors `Vec<T>`.
-    -   **✅ String Type (COMPLETED v0.4.0)**: Base `String` type complete with fat pointer struct `{ptr: *i8, len: i64}`, natural literal syntax, and comprehensive methods (len, substring, char_at, starts_with, ends_with, contains, to_upper, to_lower, +). Future: UTF-8 operations, `String<Char>` for raw code units, `String<Rune>` for Unicode support.
+    -   **✅ String Type (COMPLETED v0.4.0, enhanced v0.4.2)**: Base `String` type complete with fat pointer struct `{ptr: *i8, len: i64}`, natural literal syntax, comprehensive methods (len, substring, char_at, starts_with, ends_with, contains, to_upper, to_lower, +), and full comparison operators (==, !=, <, <=, >, >=) with lexical ordering. Future: UTF-8 operations, `String<Char>` for raw code units, `String<Rune>` for Unicode support.
 -   **Performance Optimization**: Investigate performance optimizations for primitive types, particularly in tight loops and math-intensive operations.
 -   **Memory Layout**: Define and document memory layout guarantees for all types, ensuring consistent behavior across platforms.
 -   **FFI Compatibility**: Ensure all primitive types have well-defined mappings to C/C++ equivalents for FFI interoperability.
@@ -465,7 +463,7 @@ Heap-allocated struct (16 bytes):
 
 #### **Planned Enhancements** 🔜
 
-**Phase 6.3 - ensure Keyword (v0.5.0): ✅ COMPLETE**
+**Phase 6.3 - ensure Keyword: ✅ COMPLETED v0.4.2**
 ```vyn
 # Cleanup/finally blocks that always execute
 process_with_cleanup(path<String>)<String> -> {
@@ -496,7 +494,7 @@ process_with_cleanup(path<String>)<String> -> {
 # - Test: test/trap/test_ensure_simple.vyn demonstrates working implementation
 ```
 
-**Phase 6.4 - Stack Trace Capture (v0.5.1):** 🚧 NEXT PRIORITY
+**Phase 6.4 - Stack Trace Capture (Planned for v0.4.3):** � HIGH PRIORITY
 ```vyn
 # Capture source-level stack traces on fail
 divide(a<Int>, b<Int>)<Int> -> {
@@ -529,7 +527,7 @@ aspect Errable {
 }
 ```
 
-**Phase 6.5 - Wildcard Pattern (v0.5.2):**
+**Phase 6.5 - Wildcard Pattern (Planned for v0.4.4):**
 ```vyn
 # Catch-all handler for any error type
 {
@@ -542,7 +540,7 @@ aspect Errable {
 }
 ```
 
-**Note**: Phase 1 introspection (typeof/typename) completed in v0.4.2, enabling wildcard trap implementation.
+**Note**: ✅ Phase 1 introspection (typeof/typename) completed in v0.4.2, enabling wildcard trap implementation. Wildcard patterns now ready for implementation.
 
 **Phase 6.6 - Multi-Type Trap Block (v0.6.0):**
 ```vyn
@@ -913,7 +911,6 @@ The following features are planned for future releases (no particular priority o
    - String interpolation syntax
    - Advanced string methods (split, join, replace, regex)
    - Efficient substring operations
-   - String comparison operators (lexical ordering)
 
 3. **Import/Smuggle System**: Module visibility and dependency management
    - `import` for normal module imports
