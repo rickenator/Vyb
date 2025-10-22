@@ -1507,13 +1507,27 @@ process_data(x<Int>)<String> -> {
         "Division error code: " + String::from_int(e.code)
     }
 }
+
+# Wildcard trap - catch any error type
+safe_operation(x<Int>)<Int> -> {
+    result<Int> = {
+        risky_call(x)
+    } trap (e<DivisionError>) -> {
+        println("Known error: division by zero")
+        return 0
+    } trap (e<?>) -> {
+        println("Unknown error caught by wildcard!")
+        return -1
+    }
+    return result
+}
 ```
 
 **Pattern Matching Features:**
 - Type-safe: Only valid error types accepted
 - Exhaustive: Compiler ensures all error types handled
 - Field access: Access struct fields in trap handlers (`e.code`, `e.dividend`)
-- Wildcard: Use `} trap (e<?>) -> { }` to handle any error (planned)
+- Wildcard: Use `} trap (e<?>) -> { }` to catch any error type 
 
 ### Error Propagation
 
@@ -1863,12 +1877,13 @@ fail 503  # What does this mean?
 - Automatic memory management (malloc/free)
 - Untrapped error runtime handler with formatted output
 - Complete LLVM codegen for all error operations
+- `ensure` keyword for cleanup/finally blocks 
+- Stack trace capture in error structs (v0.5.1)
+- Wildcard trap handlers `} trap (e<?>) -> { ... }` 
 
 **🔜 Planned Enhancements:**
-- `ensure` keyword for cleanup/finally blocks (v0.5.0)
-- Stack trace capture in error structs (v0.5.1)
-- Wildcard trap handlers `} trap (e<?>) -> { ... }` (v0.5.2)
-- Multi-type trap blocks `} trap (e<Type1 | Type2>) -> { ... }` (v0.6.0)
+
+- Multi-type trap blocks `} trap (e<Type1 | Type2>) -> { ... }`
 - Error context chaining (wrap errors with additional context)
 - Custom error formatting with Display aspect
 - Error metrics and telemetry hooks
@@ -2053,7 +2068,7 @@ Vyn includes a modern, comprehensive test harness for managing 391+ test files:
 ```
 
 ### Test Features
-- **391 Test Files**: Comprehensive coverage across all language features
+- **544 Test Files**: Comprehensive coverage across all language features
 - **Parallel Execution**: Multi-threaded test runner for fast feedback
 - **Rich Reporting**: HTML, JSON, and console output with detailed metrics
 - **Smart Categorization**: Automatic test categorization and filtering
