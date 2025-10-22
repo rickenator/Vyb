@@ -90,9 +90,45 @@ echo 'main()<Int,String> -> { return 42, "Hello!" }' > tuple.vyn
 build/vyn tuple.vyn  # Outputs: [42, "Hello!"]
 ```
 
-### Compilation to Native Code (NEW in v0.4.3!)
+### Compilation to Native Code (v0.4.3+)
 
-Vyn now compiles to native object files for deployment and linking with existing systems:
+Vyn provides a complete compilation pipeline from source to standalone executables:
+
+#### Building Standalone Executables (NEW in v0.4.4!)
+
+```bash
+# Build executable (simplest form)
+build/vyn hello.vyn --build hello
+./hello  # Run directly!
+
+# Build with custom name
+build/vyn program.vyn --build myapp
+./myapp
+
+# Build with optimization
+build/vyn program.vyn -b myapp -O3  # Maximum optimization
+
+# Static linking (fully standalone, no runtime dependencies)
+build/vyn program.vyn -b myapp --static
+
+# What happens:
+# 1. Compiles hello.vyn → hello.o (LLVM object file)
+# 2. Compiles runtime/vyn_runtime.c → vyn_runtime.o (C runtime)
+# 3. Links with system linker (lld/ld) + CRT files + libc/libm
+# 4. Creates executable: hello
+
+# Verify the executable
+file myapp
+# Output: myapp: ELF 64-bit LSB executable, x86-64, dynamically linked, with debug_info
+
+ldd myapp
+# Output: 
+#   linux-vdso.so.1 (0x00007fff...)
+#   libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f...)
+#   libm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007f...)
+```
+
+#### Compiling to Object Files (v0.4.3)
 
 ```bash
 # Compile to object file (default -O2 optimization)
@@ -111,29 +147,46 @@ file hello.o
 # Inspect symbols in object file
 objdump -t hello.o | grep main
 # Output: 0000000000000000 g     F .text  000000000000005c main
-
-# Cross-compilation ready: Supports 20+ architectures!
-# x86-64, ARM, AArch64 (ARM64), RISC-V, PowerPC, MIPS, SPARC, WebAssembly,
-# SystemZ (IBM mainframe), Hexagon (Qualcomm DSP), LoongArch, M68k, Xtensa,
-# AVR, MSP430, BPF, NVPTX (NVIDIA), AMDGPU, VE (NEC Vector), Lanai, XCore
 ```
 
-**What This Means:**
-- **AOT Compilation**: Ahead-of-time compilation to native machine code
-- **Zero Dependencies**: Compiled .o files ready for distribution
-- **Standard Toolchain**: Works with ld, lld, gold linkers
-- **Debug Support**: Full DWARF debug information included
-- **Production Ready**: Optimized code for deployment
-- **Future Linking**: Static linking coming in v0.4.4 to create standalone executables
+#### Cross-Compilation Support
 
-**Current Status:**
-- ✅ Object file emission (.o files)
-- ✅ All optimization levels (-O0 through -O3)
-- ✅ Cross-compilation for 20+ architectures
-- ✅ DWARF debug information
-- 🔜 Static linking (Phase 3.2 - planned for v0.4.4)
-- 🔜 Dynamic linking and shared libraries
-- 🔜 Package building with dependency resolution
+Supports 20+ architectures out of the box:
+- **x86-64** (default for most systems)
+- **ARM/AArch64** (ARM64, Raspberry Pi, mobile)
+- **RISC-V** (open ISA, embedded systems)
+- **PowerPC** (servers, embedded)
+- **MIPS** (routers, embedded)
+- **SPARC** (Sun/Oracle systems)
+- **WebAssembly** (browsers, serverless)
+- **SystemZ** (IBM mainframe)
+- **Hexagon** (Qualcomm DSP)
+- **LoongArch** (Chinese CPUs)
+- **M68k** (retro computing)
+- **Xtensa** (ESP32 microcontrollers)
+- **AVR** (Arduino)
+- **MSP430** (ultra-low-power MCU)
+- **BPF** (Linux kernel filtering)
+- **NVPTX** (NVIDIA GPUs)
+- **AMDGPU** (AMD GPUs)
+- **VE** (NEC Vector Engine)
+- **Lanai** (research processor)
+- **XCore** (XMOS processors)
+
+**Complete Compilation Features:**
+- ✅ **Executable Generation** (v0.4.4): Full build pipeline with `--build` flag
+- ✅ **Runtime Library** (v0.4.4): Automatic compilation and linking of Vyn runtime
+- ✅ **System Linker Integration** (v0.4.4): Platform-aware linker selection (lld, ld, ld64)
+- ✅ **Dynamic Linking** (v0.4.4): Links against system libc and libm
+- ✅ **Static Linking** (v0.4.4): Optional `--static` flag for standalone binaries
+- ✅ **Object File Emission** (v0.4.3): AOT compilation to .o files
+- ✅ **Optimization Levels** (v0.4.3): -O0 through -O3 with LLVM optimizations
+- ✅ **Cross-Compilation** (v0.4.3): 20+ target architectures
+- ✅ **Debug Information** (v0.4.3): Full DWARF debug metadata
+- 🔜 **Optimization Pipeline** (v0.5.2): Advanced LLVM passes, LTO
+- 🔜 **Multi-File Compilation**: Link multiple .vyn files together
+- 🔜 **Dynamic Libraries**: Shared object (.so/.dylib) generation
+- 🔜 **Package Building**: Full project management with dependency resolution
 
 **See:** `doc/MODULE_FFI_BINARY_ROADMAP.md` for the complete compilation roadmap
 
@@ -199,14 +252,24 @@ This unique `import`/`smuggle` distinction makes Vyn's module system both secure
 
 ## In This Release
 
-Vyn **v0.4.3** (freedom-1.0 series) is a **complete systems programming language** with **native code compilation** ready for production use:
+Vyn **v0.4.4** (freedom-1.0 series) is a **complete systems programming language** with **full native executable generation** ready for production use:
 
-### ✅ **Native Code Compilation (NEW in v0.4.3!)**
+### ✅ **Binary Executable Generation (NEW in v0.4.4!)**
+- **Full Compilation Pipeline**: Complete source → object → executable workflow
+- **Build Command**: `vyn program.vyn --build myapp` creates standalone executables
+- **Runtime Library**: Automatic compilation and linking of Vyn runtime (vyn_runtime.c)
+- **System Linker Integration**: Platform-aware linker selection (lld, ld for Linux; ld64 for macOS)
+- **C Runtime Initialization**: Automatic discovery and linking of CRT files (crt1.o, crti.o, crtn.o)
+- **Dynamic Linking**: Links against system libc and libm by default
+- **Static Linking**: Optional `--static` flag for fully standalone binaries
+- **Production Ready**: Deploy native executables without any runtime dependencies
+- **Cross-Platform**: Linux and macOS support with proper platform detection
+
+### ✅ **Native Code Compilation (v0.4.3)**
 - **Object File Emission**: Compile to .o files with `--compile/-c` flag
 - **Optimization Levels**: -O0 (none), -O1 (basic), -O2 (default), -O3 (aggressive)
 - **Cross-Compilation**: Supports 20+ target architectures out of the box
 - **Debug Information**: Full DWARF metadata for debugging compiled code
-- **Production Ready**: AOT compilation for deployment without JIT runtime
 - **Standard Toolchain**: Compatible with system linkers (ld, lld, gold)
 - **ELF Format**: Standard relocatable object files for linking
 
