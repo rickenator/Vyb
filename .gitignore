@@ -5,3 +5,5 @@ build
 .project
 # Backup files
 *.bak
+# Generated LLVM IR files
+*.ll
