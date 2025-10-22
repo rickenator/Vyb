@@ -1507,13 +1507,44 @@ process_data(x<Int>)<String> -> {
         "Division error code: " + String::from_int(e.code)
     }
 }
+
+# Wildcard trap - catch any error type
+safe_operation(x<Int>)<Int> -> {
+    result<Int> = {
+        risky_call(x)
+    } trap (e<DivisionError>) -> {
+        println("Known error: division by zero")
+        return 0
+    } trap (e<?>) -> {
+        println("Unknown error caught by wildcard!")
+        return -1
+    }
+    return result
+}
+
+# Multi-type trap - catch union of error types
+process_data(input<String>)<Int> -> {
+    result<Int> = {
+        parse_and_validate(input)
+    } trap (e<ParseError | ValidationError>) -> {
+        # Handler matches either ParseError or ValidationError
+        println("Input processing failed")
+        return -1
+    } trap (e<NetworkError | TimeoutError>) -> {
+        # Different handler for network-related errors
+        println("Network issue, retrying...")
+        return retry_operation(input)
+    }
+    return result
+}
 ```
 
 **Pattern Matching Features:**
 - Type-safe: Only valid error types accepted
 - Exhaustive: Compiler ensures all error types handled
 - Field access: Access struct fields in trap handlers (`e.code`, `e.dividend`)
-- Wildcard: Use `} trap (e<?>) -> { }` to handle any error (planned)
+- Wildcard: Use `} trap (e<?>) -> { }` to catch any error type 
+- Multi-type: Use `} trap (e<Type1 | Type2>) -> { }` to catch union of types 
 
 ### Error Propagation
 
@@ -1636,12 +1667,12 @@ Validation failed:
   Line: 42
 ```
 
-### The ensure Keyword
+### The ensure Keyword ✅ IMPLEMENTED
 
-The `ensure` keyword provides a block for cleanup/finally semantics, guaranteeing code runs whether the block succeeds or fails:
+The `ensure` keyword provides cleanup/finally semantics, guaranteeing code runs whether the block succeeds or fails:
 
 ```vyn
-# Planned syntax - cleanup that always executes
+# Implemented in v0.4.2
 process_file(path<String>)<String> -> {
     file<File> = open_file(path)
     
@@ -1660,6 +1691,12 @@ process_file(path<String>)<String> -> {
 # 1. Block code executes and fails
 # 2. Matching trap handler runs (if present)
 # 3. ensure block always runs last
+
+# Implementation details:
+# - Parser fully supports } ensure -> { } syntax
+# - Codegen inlines ensure blocks into control flow
+# - Works with both success and failure paths
+# - See: test/trap/test_ensure_simple.vyn
 ```
 
 ### LLVM Code Generation
@@ -1857,16 +1894,17 @@ fail 503  # What does this mean?
 - Automatic memory management (malloc/free)
 - Untrapped error runtime handler with formatted output
 - Complete LLVM codegen for all error operations
+- `ensure` keyword for cleanup/finally blocks 
+- Stack trace capture in error structs (v0.5.1)
+- Wildcard trap handlers `} trap (e<?>) -> { ... }` 
 
 **🔜 Planned Enhancements:**
-- `ensure` keyword for cleanup/finally blocks (v0.5.0)
-- Stack trace capture in error structs (v0.5.1)
-- Wildcard trap handlers `} trap (e<?>) -> { ... }` (v0.5.2)
-- Multi-type trap blocks `} trap (e<Type1 | Type2>) -> { ... }` (v0.6.0)
+
 - Error context chaining (wrap errors with additional context)
 - Custom error formatting with Display aspect
 - Error metrics and telemetry hooks
 - Result<T,E> style error recovery without trap
+- Type introspection (`typeof`, `as`) for discriminating multi-type traps
 
 ### Example: Complete Error Handling
 
@@ -2047,7 +2085,7 @@ Vyn includes a modern, comprehensive test harness for managing 391+ test files:
 ```
 
 ### Test Features
-- **391 Test Files**: Comprehensive coverage across all language features
+- **544 Test Files**: Comprehensive coverage across all language features
 - **Parallel Execution**: Multi-threaded test runner for fast feedback
 - **Rich Reporting**: HTML, JSON, and console output with detailed metrics
 - **Smart Categorization**: Automatic test categorization and filtering

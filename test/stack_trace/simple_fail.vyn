@@ -1,0 +1,12 @@
+// Simple test: just a fail statement
+
+failer()<Int> -> {
+    println("About to fail")
+    fail "Test error"
+    return 0
+}
+
+main()<Int> -> {
+    println("Calling failer")
+    return failer()
+}

@@ -464,7 +464,7 @@ Heap-allocated struct (16 bytes):
 
 #### **Planned Enhancements** 🔜
 
-**Phase 6.3 - ensure Keyword (v0.5.0):**
+**Phase 6.3 - ensure Keyword (v0.5.0): ✅ COMPLETE**
 ```vyn
 # Cleanup/finally blocks that always execute
 process_with_cleanup(path<String>)<String> -> {
@@ -486,9 +486,16 @@ process_with_cleanup(path<String>)<String> -> {
 # 2. On error: trap handler runs (if matches)
 # 3. ensure block always runs last
 # 4. Resources guaranteed to be cleaned up
+
+# ✅ Implementation Status (v0.4.2):
+# - Parser: Full support for } ensure -> { } syntax
+# - AST: EnsureClause with cleanupBlock
+# - Semantic: Validates ensure placement
+# - Codegen: Inlined control flow (block.normal → block.ensure → block.continue)
+# - Test: test/trap/test_ensure_simple.vyn demonstrates working implementation
 ```
 
-**Phase 6.4 - Stack Trace Capture (v0.5.1):**
+**Phase 6.4 - Stack Trace Capture (v0.5.1):** 🚧 NEXT PRIORITY
 ```vyn
 # Capture source-level stack traces on fail
 divide(a<Int>, b<Int>)<Int> -> {
@@ -515,7 +522,7 @@ divide(a<Int>, b<Int>)<Int> -> {
 }
 
 # Stack trace API on all errors
-aspect Errorable {
+aspect Errable {
     stack_trace(self<their<Self>>)<String> -> { }
     stack_frames(self<their<Self>>)<Vec<StackFrame>> -> { }
 }
@@ -550,12 +557,20 @@ aspect Errorable {
 }
 ```
 
-**Phase 6.7 - Advanced Features (v0.6.1+):**
-- Error context chaining (wrap errors with additional context)
-- Custom error formatting with Display aspect
-- Error metrics and telemetry hooks
-- Result<T,E> style error recovery without trap
-- Panic/abort for unrecoverable errors
+**Phase 6.7 - Standard Library Error Types (v0.6.1+):**
+
+Note: Runtime error infrastructure (VynError struct, heap allocation, type IDs) already exists.
+This phase is about exposing it to Vyn code through standard library types:
+
+- **Errable aspect**: Define aspect for types that can be used as errors
+- **Error base type**: Standard Vyn struct wrapping runtime VynError
+- **Display aspect**: General formatting aspect for all types
+- **bind implementations**: Implement Errable and Display for common error types
+- **Error context chaining**: Wrap errors with additional context (needs aspect system)
+- **Custom error formatting**: User-defined error display (needs Display aspect)
+- **Error metrics hooks**: Optional telemetry integration
+
+**NOT NEEDED**: Result<T,E> - Vyn's trap/fail system is superior for systems programming
 
 #### **Performance Characteristics**
 

@@ -1,16 +1,28 @@
 ; ModuleID = 'VynModule'
 source_filename = "VynModule"
 
-define { i64, ptr } @main() !dbg !4 {
+@main.str = private unnamed_addr constant [5 x i8] c"main\00", align 1
+@filepath.str = private unnamed_addr constant [29 x i8] c"test/trap/01_simple_fail.vyn\00", align 1
+
+; Function Attrs: noinline
+define { i64, ptr } @main() #0 !dbg !4 {
 entry:
+  call void @__vyn_runtime_push_call_frame(ptr @main.str, ptr @filepath.str, i32 4, i32 1), !dbg !8
+  call void @__vyn_runtime_pop_call_frame(), !dbg !8
   ret { i64, ptr } zeroinitializer, !dbg !8
 }
+
+declare void @__vyn_runtime_push_call_frame(ptr, ptr, i32, i32)
+
+declare void @__vyn_runtime_pop_call_frame()
 
 declare void @__vyn_println(ptr)
 
 declare ptr @__vyn_serialize_to_json(ptr, ptr)
 
 declare ptr @__vyn_convert_lit_string(ptr)
+
+attributes #0 = { noinline }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!2, !3}

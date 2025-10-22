@@ -231,6 +231,9 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                     exitScope();
                 }
                 
+                // Phase 6.4: Pop call frame before return
+                generatePopFrameCall();
+                
                 // Return the value (already wrapped if needed)
                 std::cout << "DEBUG: FINAL return value type before CreateRet: " << getTypeName(returnValue->getType()) << std::endl;
                 std::cout << "DEBUG: Function return type: " << getTypeName(currentFunction->getReturnType()) << std::endl;
@@ -250,6 +253,8 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                     std::cout << "DEBUG: Cleaning up current scope before void return" << std::endl;
                     exitScope();
                 }
+                // Phase 6.4: Pop call frame before return
+                generatePopFrameCall();
                 builder->CreateRetVoid();
             } else if (currentFunction) {
                 // Return undef if function expects a non-void type and codegen failed
@@ -258,6 +263,8 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                     std::cout << "DEBUG: Cleaning up current scope before undef return" << std::endl;
                     exitScope();
                 }
+                // Phase 6.4: Pop call frame before return
+                generatePopFrameCall();
                 builder->CreateRet(llvm::UndefValue::get(currentFunction->getReturnType()));
                 logError(node->loc, "Return expression codegen failed, returning undef.");
             }
@@ -269,6 +276,8 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
             std::cout << "DEBUG: Cleaning up current scope before void return (no arg)" << std::endl;
             exitScope();
         }
+        // Phase 6.4: Pop call frame before return
+        generatePopFrameCall();
         builder->CreateRetVoid();
     }
 }
@@ -1446,6 +1455,11 @@ void LLVMCodegen::visit(vyn::ast::FailStatement* node) {
             // Insert error pointer at position 1
             // errorPtr already contains the heap-allocated error with type ID header
             resultStruct = builder->CreateInsertValue(resultStruct, errorPtr, {1}, "error.ptr");
+            
+            // Phase 6.4: DON'T pop call frame when failing!
+            // The frame should remain on the stack so it appears in the stack trace
+            // when the error is displayed. It will be cleaned up when the program exits.
+            // generatePopFrameCall();  // Removed - keep frame for stack trace
             
             // Return the error tuple
             builder->CreateRet(resultStruct);

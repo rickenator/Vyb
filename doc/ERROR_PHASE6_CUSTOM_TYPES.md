@@ -182,10 +182,6 @@ fn main()<Int> -> {
 - [ ] Memory cleanup for error structs
 - [ ] Test with custom error types returning correct values
 
-## Next Steps (Phase 7+)
-
-- Stack traces in errors
-- Error message formatting
-- Multiple trap clauses per block
-- Error type hierarchy
-- Aspect-based error types (Errorable aspect)
+**What's Missing:**
+- Aspect-based error types (Errable aspect)
+- Standard library error hierarchy

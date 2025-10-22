@@ -7,6 +7,7 @@
 #include <unordered_set> 
 #include <string> 
 #include <map>
+#include <set>
 #include <functional> 
 
 namespace vyn {
@@ -3031,7 +3032,7 @@ void SemanticAnalyzer::visit(ast::FailStatement* node) {
     if (it != expressionTypes.end() && it->second) {
         ast::TypeNode* errorType = it->second;
         
-        // TODO: Verify error type implements Errorable aspect when aspect system is complete
+        // TODO: Verify error type implements Errable aspect when aspect system is complete
         // For now, accept any struct/object type as potential error
         
         std::cout << "DEBUG: fail statement with error type: " << errorType->toString() << std::endl;
@@ -3048,38 +3049,99 @@ void SemanticAnalyzer::visit(ast::TrapClause* node) {
         addError("trap clause requires an error variable name", node);
         return;
     }
-    if (!node->errorType) {
+    
+    // Phase 6.5: Allow wildcard traps (e<?>) - errorType is nullptr but isWildcard is true
+    // Phase 6.6: Allow multi-type traps (e<Type1 | Type2>) - errorTypes vector populated
+    if (!node->isWildcard && !node->isMultiType && !node->errorType) {
         addError("trap clause requires an error type", node);
         return;
     }
     
-    // Type check the error type
-    node->errorType->accept(*this);
+    // Validate multi-type trap
+    if (node->isMultiType) {
+        if (node->errorTypes.empty()) {
+            addError("multi-type trap clause requires at least one error type", node);
+            return;
+        }
+        
+        // Check for duplicate types in union
+        std::set<std::string> seenTypes;
+        for (auto& errorType : node->errorTypes) {
+            if (!errorType) {
+                addError("invalid null type in multi-type trap clause", node);
+                return;
+            }
+            
+            std::string typeName = errorType->toString();
+            if (seenTypes.count(typeName) > 0) {
+                addError("duplicate type '" + typeName + "' in multi-type trap clause", node);
+                return;
+            }
+            seenTypes.insert(typeName);
+            
+            // Type check each error type
+            errorType->accept(*this);
+        }
+    } else if (node->errorType) {
+        // Type check single error type (unless wildcard)
+        node->errorType->accept(*this);
+    }
     
     // Enter new scope for trap handler
     enterScope();
     trapDepth++;
     
-    // Add error type to active trap stack
-    activeTrapTypes.push_back(node->errorType.get());
+    // Add error types to active trap stack
+    if (node->isWildcard) {
+        activeTrapTypes.push_back(nullptr);
+    } else if (node->isMultiType) {
+        // For multi-type, add each type to the active trap stack
+        for (auto& errorType : node->errorTypes) {
+            activeTrapTypes.push_back(errorType.get());
+        }
+    } else {
+        activeTrapTypes.push_back(node->errorType.get());
+    }
     
     // Add error variable to scope (immutable binding)
+    // For multi-type traps, use first type or mark as union (future: actual union type)
     SymbolInfo errorSymbol;
     errorSymbol.name = node->errorName->name;
-    errorSymbol.type = node->errorType.get();
+    if (node->isMultiType && !node->errorTypes.empty()) {
+        errorSymbol.type = node->errorTypes[0].get();  // Temporary: use first type
+    } else {
+        errorSymbol.type = node->errorType.get();
+    }
     errorSymbol.isConst = true;  // Error binding is immutable (const)
     errorSymbol.ownershipKind = ast::OwnershipKind::MY;  // Error value is owned
     currentScope->add(errorSymbol);
     
-    std::cout << "DEBUG: trap clause for error type: " << node->errorType->toString() << std::endl;
+    if (node->isWildcard) {
+        std::cout << "DEBUG: trap clause for wildcard error type" << std::endl;
+    } else if (node->isMultiType) {
+        std::cout << "DEBUG: trap clause for multi-type union: ";
+        for (size_t i = 0; i < node->errorTypes.size(); ++i) {
+            if (i > 0) std::cout << " | ";
+            std::cout << node->errorTypes[i]->toString();
+        }
+        std::cout << std::endl;
+    } else if (node->errorType) {
+        std::cout << "DEBUG: trap clause for error type: " << node->errorType->toString() << std::endl;
+    }
     
     // Type check handler block
     if (node->handler) {
         node->handler->accept(*this);
     }
     
-    // Pop error type from trap stack
-    activeTrapTypes.pop_back();
+    // Pop error types from trap stack
+    if (node->isMultiType) {
+        for (size_t i = 0; i < node->errorTypes.size(); ++i) {
+            activeTrapTypes.pop_back();
+        }
+    } else {
+        activeTrapTypes.pop_back();
+    }
     trapDepth--;
     
     // Exit trap scope

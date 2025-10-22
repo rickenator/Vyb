@@ -48,6 +48,11 @@ extern "C" {
     void __vyn_runtime_panic(const char* message) __attribute__((noreturn));
     void __vyn_runtime_untrapped_error(void* error) __attribute__((noreturn));
     
+    // Stack trace runtime functions (Phase 6.4 - from error_handling.cpp)
+    void __vyn_runtime_push_call_frame(const char* function_name, const char* file_path, uint32_t line, uint32_t column);
+    void __vyn_runtime_pop_call_frame();
+    void* __vyn_runtime_get_current_stack_trace();  // Returns VynStackTrace*
+    
     // TODO: Future toString functions for compound types:
     // char* __vyn_toString_vec(void* vec_ptr, const char* element_type);
     // char* __vyn_toString_tuple(void* tuple_ptr, const char* type_spec);
@@ -215,6 +220,14 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             llvm::orc::ExecutorAddr::fromPtr((void*)&__vyn_runtime_panic), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyn_runtime_untrapped_error")] = llvm::orc::ExecutorSymbolDef(
             llvm::orc::ExecutorAddr::fromPtr((void*)&__vyn_runtime_untrapped_error), llvm::JITSymbolFlags::Exported);
+        
+        // Register stack trace runtime functions (Phase 6.4)
+        runtimeSymbols[mangle("__vyn_runtime_push_call_frame")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr((void*)&__vyn_runtime_push_call_frame), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_runtime_pop_call_frame")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr((void*)&__vyn_runtime_pop_call_frame), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_runtime_get_current_stack_trace")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr((void*)&__vyn_runtime_get_current_stack_trace), llvm::JITSymbolFlags::Exported);
         
         // Register standard library functions
         runtimeSymbols[mangle("malloc")] = llvm::orc::ExecutorSymbolDef(

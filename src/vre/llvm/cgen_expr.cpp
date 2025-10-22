@@ -3100,8 +3100,24 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
     
     if (hasTrap) {
         // Determine error type from first trap clause
-        ast::TypeNode* errorType = node->trapClauses[0]->errorType.get();
-        llvm::Type* errorLLVMType = codegenType(errorType);
+        // Phase 6.5: For wildcard traps, error type is nullptr, use generic i8* pointer
+        // Phase 6.6: For multi-type traps, use generic pointer (error binding will be opaque)
+        llvm::Type* errorLLVMType = nullptr;
+        if (node->trapClauses[0]->isWildcard) {
+            // Wildcard trap: use generic pointer type
+            errorLLVMType = llvm::PointerType::get(*context, 0);
+        } else if (node->trapClauses[0]->isMultiType) {
+            // Multi-type trap: use generic pointer type (handler can't access typed fields yet)
+            errorLLVMType = llvm::PointerType::get(*context, 0);
+        } else {
+            ast::TypeNode* errorType = node->trapClauses[0]->errorType.get();
+            if (!errorType) {
+                logError(node->loc, "Trap clause missing error type");
+                m_currentLLVMValue = nullptr;
+                return;
+            }
+            errorLLVMType = codegenType(errorType);
+        }
         
         if (!errorLLVMType) {
             logError(node->loc, "Failed to generate type for error in trap clause");
@@ -3136,7 +3152,7 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
         trapCtx.landingPad = landingPadBB;
         trapCtx.resumeBlock = continueBB;
         trapCtx.errorSlot = errorSlot;
-        trapCtx.errorType = errorType;
+        trapCtx.errorType = node->trapClauses[0]->isWildcard ? nullptr : node->trapClauses[0]->errorType.get();
         trapCtx.errorVarName = node->trapClauses[0]->errorName->name;
         trapStack.push_back(trapCtx);
     }
@@ -3230,14 +3246,61 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
             // Generate type check in current check block
             builder->SetInsertPoint(currentCheckBB);
             
-            // Get the expected error type
-            llvm::Type* expectedType = codegenType(trapClause->errorType.get());
-            
             // Runtime type check: compare stored type ID with expected type ID
             // Type ID is stored as first i64 field in error struct header
             llvm::Value* typeMatches = nullptr;
             
-            if (trapClause->errorType && errorSlot) {
+            // Phase 6.5: Check for wildcard trap (e<?>) - matches any error type
+            // Phase 6.6: Check for multi-type trap (e<Type1 | Type2>) - matches any of the types
+            if (trapClause->isWildcard) {
+                // Wildcard trap: always matches
+                typeMatches = builder->getTrue();
+            } else if (trapClause->isMultiType && !trapClause->errorTypes.empty()) {
+                // Multi-type trap: check each type with OR-chain
+                // Start with false, OR with each type check
+                typeMatches = builder->getFalse();
+                
+                for (auto& errorType : trapClause->errorTypes) {
+                    if (!errorType) continue;
+                    
+                    // Extract type name from TypeNode
+                    std::string expectedTypeName;
+                    if (auto* typeName_node = dynamic_cast<ast::TypeName*>(errorType.get())) {
+                        if (typeName_node->identifier) {
+                            expectedTypeName = typeName_node->identifier->name;
+                        }
+                    }
+                    
+                    if (!expectedTypeName.empty()) {
+                        // Compute expected type hash
+                        uint64_t expectedTypeHash = std::hash<std::string>{}(expectedTypeName);
+                        llvm::Value* expectedTypeId = llvm::ConstantInt::get(builder->getInt64Ty(), expectedTypeHash);
+                        
+                        // Load the actual error type ID from the error struct header
+                        llvm::Value* typeIdPtr = builder->CreateBitCast(
+                            errorPtr,
+                            llvm::PointerType::get(builder->getInt64Ty(), 0),
+                            "error.typeid.ptr"
+                        );
+                        llvm::Value* actualTypeId = builder->CreateLoad(
+                            builder->getInt64Ty(),
+                            typeIdPtr,
+                            "error.typeid"
+                        );
+                        
+                        // Compare type IDs
+                        llvm::Value* thisTypeMatches = builder->CreateICmpEQ(actualTypeId, expectedTypeId, "type.matches." + expectedTypeName);
+                        
+                        // OR with previous checks
+                        typeMatches = builder->CreateOr(typeMatches, thisTypeMatches, "type.matches.or");
+                    }
+                }
+            } else if (trapClause->errorType && errorSlot) {
+                // Specific type trap: check type ID
+                
+                // Get the expected error type
+                llvm::Type* expectedType = codegenType(trapClause->errorType.get());
+                
                 // Extract type name from TypeNode
                 std::string expectedTypeName;
                 if (auto* typeName_node = dynamic_cast<ast::TypeName*>(trapClause->errorType.get())) {
@@ -3290,27 +3353,39 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
             // Cast error pointer to expected struct type
             // Error struct has type ID as first field, actual data starts at offset 8 bytes
             llvm::Value* typedErrorValue = errorPtr;
-            if (expectedType && !expectedType->isPointerTy()) {
-                // Cast error pointer to i8* for byte offset calculation
-                llvm::Value* errorI8Ptr = builder->CreateBitCast(
-                    errorPtr,
-                    llvm::PointerType::get(builder->getInt8Ty(), 0),
-                    "error.i8ptr"
-                );
-                // Skip the type ID header (8 bytes) to get to actual error data
-                llvm::Value* dataI8Ptr = builder->CreateGEP(
-                    builder->getInt8Ty(),
-                    errorI8Ptr,
-                    llvm::ConstantInt::get(builder->getInt64Ty(), 8),
-                    "error.data.i8ptr"
-                );
-                // Cast back to expected struct pointer type and load
-                llvm::Value* dataPtr = builder->CreateBitCast(
-                    dataI8Ptr,
-                    llvm::PointerType::get(expectedType, 0),
-                    "error.data.ptr"
-                );
-                typedErrorValue = builder->CreateLoad(expectedType, dataPtr, "error.value");
+            
+            if (trapClause->isWildcard) {
+                // Phase 6.5: Wildcard trap - error variable gets the raw error pointer
+                // This allows the handler to access type ID and data
+                typedErrorValue = errorPtr;
+            } else if (trapClause->isMultiType) {
+                // Phase 6.6: Multi-type trap - error variable gets the raw error pointer
+                // Handler would use typeof/as to discriminate types (when introspection exists)
+                typedErrorValue = errorPtr;
+            } else if (trapClause->errorType) {
+                llvm::Type* expectedType = codegenType(trapClause->errorType.get());
+                if (expectedType && !expectedType->isPointerTy()) {
+                    // Cast error pointer to i8* for byte offset calculation
+                    llvm::Value* errorI8Ptr = builder->CreateBitCast(
+                        errorPtr,
+                        llvm::PointerType::get(builder->getInt8Ty(), 0),
+                        "error.i8ptr"
+                    );
+                    // Skip the type ID header (8 bytes) to get to actual error data
+                    llvm::Value* dataI8Ptr = builder->CreateGEP(
+                        builder->getInt8Ty(),
+                        errorI8Ptr,
+                        llvm::ConstantInt::get(builder->getInt64Ty(), 8),
+                        "error.data.i8ptr"
+                    );
+                    // Cast back to expected struct pointer type and load
+                    llvm::Value* dataPtr = builder->CreateBitCast(
+                        dataI8Ptr,
+                        llvm::PointerType::get(expectedType, 0),
+                        "error.data.ptr"
+                    );
+                    typedErrorValue = builder->CreateLoad(expectedType, dataPtr, "error.value");
+                }
             }
             
             // Add error variable to scope

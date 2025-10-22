@@ -1,0 +1,15 @@
+# Test: Multi-type trap as fallback after specific trap
+# Expected: Multi-type trap catches String, return 50
+
+main()<Int> -> {
+    result<Int> = {
+        fail "error message"
+    } trap (e<Int>) -> {
+        # Specific Int trap - won't match
+        return 99
+    } trap (e<String | Bool>) -> {
+        # Multi-type trap - should match String
+        return 50
+    }
+    return result
+}

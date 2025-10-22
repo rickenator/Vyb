@@ -1,16 +1,25 @@
 ; ModuleID = 'VynModule'
 source_filename = "VynModule"
 
+@risky_operation.str = private unnamed_addr constant [16 x i8] c"risky_operation\00", align 1
+@filepath.str = private unnamed_addr constant [33 x i8] c"test/trap/10_untrapped_error.vyn\00", align 1
+@main.str = private unnamed_addr constant [5 x i8] c"main\00", align 1
+@filepath.str.1 = private unnamed_addr constant [33 x i8] c"test/trap/10_untrapped_error.vyn\00", align 1
 @0 = private unnamed_addr constant [22 x i8] c"This should not print\00", align 1
 @type_name = private unnamed_addr constant [8 x i8] c"unknown\00", align 1
 
-define { i64, ptr } @risky_operation() !dbg !4 {
+; Function Attrs: noinline
+define { i64, ptr } @risky_operation() #0 !dbg !4 {
 entry:
+  call void @__vyn_runtime_push_call_frame(ptr @risky_operation.str, ptr @filepath.str, i32 4, i32 1), !dbg !8
+  call void @__vyn_runtime_pop_call_frame(), !dbg !8
   ret { i64, ptr } zeroinitializer, !dbg !8
 }
 
-define i64 @main() !dbg !9 {
+; Function Attrs: noinline
+define i64 @main() #0 !dbg !9 {
 entry:
+  call void @__vyn_runtime_push_call_frame(ptr @main.str, ptr @filepath.str.1, i32 9, i32 1), !dbg !13
   %calltmp = call { i64, ptr } @risky_operation(), !dbg !13
   %call.value = extractvalue { i64, ptr } %calltmp, 0, !dbg !13
   %call.error = extractvalue { i64, ptr } %calltmp, 1, !dbg !13
@@ -18,7 +27,7 @@ entry:
   br i1 %has.error, label %call.error1, label %call.success, !dbg !13
 
 call.error1:                                      ; preds = %entry
-  call void @__vyn_runtime_untrapped_error(ptr null), !dbg !13
+  call void @__vyn_runtime_untrapped_error(ptr %call.error), !dbg !13
   unreachable, !dbg !13
 
 call.success:                                     ; preds = %entry
@@ -26,11 +35,16 @@ call.success:                                     ; preds = %entry
   store { ptr, i64 } { ptr @0, i64 21 }, ptr %serialize_temp, align 8, !dbg !13
   %serialized_json = call ptr @__vyn_serialize_to_json(ptr %serialize_temp, ptr @type_name), !dbg !13
   call void @__vyn_println(ptr %serialized_json), !dbg !13
+  call void @__vyn_runtime_pop_call_frame(), !dbg !13
   ret i64 0, !dbg !13
 }
 
+declare void @__vyn_runtime_push_call_frame(ptr, ptr, i32, i32)
+
+declare void @__vyn_runtime_pop_call_frame()
+
 ; Function Attrs: noreturn
-declare void @__vyn_runtime_untrapped_error(ptr) #0
+declare void @__vyn_runtime_untrapped_error(ptr) #1
 
 declare ptr @__vyn_serialize_to_json(ptr, ptr)
 
@@ -38,7 +52,8 @@ declare void @__vyn_println(ptr)
 
 declare ptr @__vyn_convert_lit_string(ptr)
 
-attributes #0 = { noreturn }
+attributes #0 = { noinline }
+attributes #1 = { noreturn }
 
 !llvm.dbg.cu = !{!0}
 !llvm.module.flags = !{!2, !3}

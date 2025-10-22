@@ -1,0 +1,12 @@
+# Test: Basic two-type union trap
+# Expected: Should catch Int and return 10
+
+main()<Int> -> {
+    result<Int> = {
+        fail 42
+    } trap (e<Int | String>) -> {
+        # Caught Int or String error
+        return 10
+    }
+    return result
+}

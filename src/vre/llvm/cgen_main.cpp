@@ -150,6 +150,12 @@ void LLVMCodegen::generate(vyn::ast::Module* astModule, const std::string& outpu
         return;
     }
 
+    // Phase 6.4: DEBUG - List all functions in module before printing
+    std::cout << "DEBUG: Functions in module before printing IR:" << std::endl;
+    for (llvm::Function& func : module->functions()) {
+        std::cout << "  - " << func.getName().str() << " (blocks: " << func.size() << ")" << std::endl;
+    }
+
     module->print(dest, nullptr);
     dest.flush();
 }

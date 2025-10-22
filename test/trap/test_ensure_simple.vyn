@@ -1,0 +1,32 @@
+# Simple ensure test - cleanup that always runs
+
+main()<Int> -> {
+    println("=== Test 1: ensure on success path ===")
+    
+    # Test 1: ensure on success path
+    result1<Int> = {
+        println("  Executing success path")
+        42
+    } ensure -> {
+        println("  ** ENSURE cleanup executed **")
+    }
+    
+    println("  After ensure, result stored")
+    
+    println("=== Test 2: ensure with trap ===")
+    
+    # Test 2: ensure on failure path with trap
+    result2<Int> = {
+        println("  About to fail with error 99")
+        fail 99
+    } trap (e<Int>) -> {
+        println("  Caught error in trap handler")
+        -1
+    } ensure -> {
+        println("  ** ENSURE cleanup executed (failure path) **")
+    }
+    
+    println("  After ensure+trap, result stored")
+    
+    return 0
+}

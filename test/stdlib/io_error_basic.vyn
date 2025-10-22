@@ -1,0 +1,52 @@
+# Test IOError with path information
+
+aspect Errable {
+    message(self<Self>)<String> -> { }
+    code(self<Self>)<Int> -> { }
+}
+
+aspect Display {
+    display(self<Self>)<String> -> { }
+}
+
+struct IOError {
+    message<String>,
+    code<Int>,
+    path<String>
+}
+
+bind Errable -> IOError {
+    message(self<Self>)<String> -> {
+        return self.message;
+    }
+    
+    code(self<Self>)<Int> -> {
+        return self.code;
+    }
+}
+
+bind Display -> IOError {
+    display(self<Self>)<String> -> {
+        return self.message;
+    }
+}
+
+readFile(path<String>)<String> -> {
+    fail IOError { 
+        message = "File not found", 
+        code = 2,
+        path = path
+    };
+}
+
+main()<Int> -> {
+    result<Int> = {
+        content<String> = readFile("/tmp/missing.txt");
+        return 0;
+    } trap (e<IOError>) -> {
+        # Successfully caught IOError
+        return 2;
+    }
+    
+    return result;
+}

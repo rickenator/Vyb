@@ -433,6 +433,10 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
         func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, functionName, module.get());
     }
     
+    // Phase 6.4: Prevent inlining to preserve stack traces
+    // Add noinline attribute so functions appear in call stack
+    func->addFnAttr(llvm::Attribute::NoInline);
+    
     // DEBUG: Print the ACTUAL function type after creation/retrieval
     std::string actualFuncTypeStr;
     llvm::raw_string_ostream actualTypeStream(actualFuncTypeStr);
@@ -488,6 +492,9 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
 
         // Set debug location for function entry
         setDebugLocation(node->loc);
+
+        // Phase 6.4: Push call frame for stack trace capture
+        generatePushFrameCall(functionName, node->loc);
 
         // Initialize scope management for function body
         enterScope();
@@ -547,6 +554,8 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
             if (!func->empty() && !func->back().getTerminator()) {
                 // Make sure we're inserting at the end of the last block
                 builder->SetInsertPoint(&func->back());
+                // Phase 6.4: Pop call frame before implicit return
+                generatePopFrameCall();
                 builder->CreateRetVoid();
             }
         } else {
@@ -565,6 +574,10 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
             // Consider erasing the function: func->eraseFromParent();
             // For now, let it be, so errors are visible.
         }
+        
+        // Phase 6.4: DEBUG - Check if function still exists after verification
+        std::cout << "DEBUG: Function '" << functionName << "' completed codegen, has " 
+                  << func->size() << " basic blocks" << std::endl;
 
         // Pop debug scope for function
         if (debugFunction) {

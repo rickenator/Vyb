@@ -1496,7 +1496,7 @@ public:
 // FailStatement - Trigger a failure with an error value
 class FailStatement : public Statement {
 public:
-    ExprPtr error; // The error value to fail with (must implement Errorable aspect)
+    ExprPtr error; // The error value to fail with (must implement Errable aspect)
 
     FailStatement(SourceLocation loc, ExprPtr error);
     ~FailStatement() override = default;
@@ -1509,11 +1509,14 @@ public:
 class TrapClause : public Node {
 public:
     std::unique_ptr<Identifier> errorName; // Error parameter name (e.g., 'e')
-    TypeNodePtr errorType;                  // Error type (e.g., NetworkError)
+    TypeNodePtr errorType;                  // Error type (e.g., NetworkError), nullptr if wildcard (backward compat)
+    std::vector<TypeNodePtr> errorTypes;    // Multiple error types for union (Type1 | Type2 | Type3)
     StmtPtr handler;                        // Handler block
+    bool isWildcard;                        // True if trap (e<?>) - catch any error
+    bool isMultiType;                       // True if trap (e<Type1 | Type2>) - union of types
 
     TrapClause(SourceLocation loc, std::unique_ptr<Identifier> errorName, 
-               TypeNodePtr errorType, StmtPtr handler);
+               TypeNodePtr errorType, StmtPtr handler, bool isWildcard = false, bool isMultiType = false);
     ~TrapClause() override = default;
     NodeType getType() const override;
     std::string toString() const override;

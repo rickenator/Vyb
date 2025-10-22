@@ -79,6 +79,11 @@ VynStackTrace* __vyn_runtime_capture_stack_trace(size_t max_frames);
 void __vyn_runtime_print_stack_trace(VynStackTrace* trace, FILE* output);
 void __vyn_runtime_free_stack_trace(VynStackTrace* trace);
 
+// Call stack management for Vyn-level stack traces (Phase 6.4)
+void __vyn_runtime_push_call_frame(const char* function_name, const char* file_path, uint32_t line, uint32_t column);
+void __vyn_runtime_pop_call_frame();
+VynStackTrace* __vyn_runtime_get_current_stack_trace();
+
 // Custom handler registration
 void __vyn_runtime_set_untrapped_handler(VynUntrappedErrorHandler handler);
 void __vyn_runtime_clear_untrapped_handler();

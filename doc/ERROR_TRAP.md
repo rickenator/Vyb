@@ -6,6 +6,23 @@
 
 ---
 
+## Current Status (v0.4.2)
+
+**✅ CORE ERROR HANDLING COMPLETE**
+
+Vyn has a **production-ready error handling system** with:
+- Runtime infrastructure: VynError struct, heap allocation, type IDs (C++ level)
+- Language features: fail/trap/rethrow/ensure/panic keywords
+- Advanced patterns: wildcard `trap (e<?>) ->`, multi-type `trap (e<A|B>) ->`
+- Stack traces with source locations
+- Zero-cost success path
+- Comprehensive test coverage
+
+**What's Missing**: Standard library types (Error struct, Errable aspect) to expose
+the runtime system to Vyn code. See "Implementation Roadmap" section below.
+
+---
+
 ## Core Philosophy
 
 Error handling should be:
@@ -215,12 +232,12 @@ struct Error {
     timestamp<Int64>
 }
 
-aspect Errorable {
+aspect Errable {
     message(self<Self>)<String> -> { }
     details(self<Self>)<String> -> { }
 }
 
-bind Errorable -> Error {
+bind Errable -> Error {
     message(self<Self>)<String> -> {
         return self.message
     }
@@ -241,7 +258,7 @@ struct DivisionByZero {
     dividend<Int>
 }
 
-bind Errorable -> DivisionByZero {
+bind Errable -> DivisionByZero {
     message(self<Self>)<String> -> {
         return "Division by zero: dividend=" + self.dividend.to_string()
     }
@@ -272,7 +289,7 @@ struct MyError {
     code<Int>
 }
 
-bind Errorable -> MyError {
+bind Errable -> MyError {
     message(self<Self>)<String> -> {
         return "[" + self.code.to_string() + "] " + self.msg
     }
@@ -282,7 +299,7 @@ bind Errorable -> MyError {
     }
 }
 
-# Any type implementing Errorable can be failed
+# Any type implementing Errable can be failed
 fail MyError { msg = "Something broke", code = 42 }
 ```
 
@@ -291,11 +308,10 @@ fail MyError { msg = "Something broke", code = 42 }
 ```vyn
 # Macro-generated error type
 error FileError : Error {
-    path<String>,
-    operation<String>
+    path<String>
 }
 
-# Expands to struct + Errorable binding automatically
+# Expands to struct + Errable binding automatically
 
 # Usage
 fail FileError {
@@ -350,7 +366,7 @@ enum ParseError {
     InvalidSyntax { message<String>, line<Int>, column<Int> }
 }
 
-bind Errorable -> ParseError {
+bind Errable -> ParseError {
     message(self<Self>)<String> -> {
         match (self) {
             UnexpectedToken -> return "Expected " + self.expected + ", got " + self.got,
@@ -450,7 +466,7 @@ async fetch_data(url<String>)<Future<String>> -> {
 2. **Return Type Unification:** All trap bodies must return same type as block expression
 3. **Ensure Type Validation:** Ensure blocks must return `Void` or be expression statements
 4. **Rethrow Context:** `rethrow` only valid inside trap clauses
-5. **Fail Type Requirement:** `fail` argument must implement `Errorable` aspect
+5. **Fail Type Requirement:** `fail` argument must implement `Errable` aspect
 
 ### Codegen Strategy
 
@@ -747,7 +763,7 @@ level2()<Void> -> {
 Every error value provides:
 
 ```vyn
-aspect Errorable {
+aspect Errable {
     # Get human-readable stack trace
     stack_trace(self<their<Self>>)<String> -> { }
     
@@ -932,7 +948,7 @@ namespace vyn::runtime {
     struct UntrappedErrorHandler {
         // Error context
         struct ErrorContext {
-            void* error_object;       // Errorable value
+            void* error_object;       // Errable value
             const char* error_type;   // Type name
             std::vector<StackFrame> stack_trace;
             uint64_t thread_id;
@@ -1054,28 +1070,64 @@ VYN_ERROR_NO_COLOR=1 ./program
 
 ## Implementation Roadmap
 
-### Phase 1: Core Mechanism (v0.4.3)
-- [ ] `fail` statement parsing and semantic analysis
-- [ ] `trap` clause parsing and type checking
-- [ ] Basic Error type and Errorable aspect
-- [ ] Simple trap-based error handling (single trap)
+### Phase 1-6: Core Error Handling (v0.4.2 - COMPLETE ✅)
+- ✅ `fail` statement parsing and semantic analysis
+- ✅ `trap` clause parsing and type checking
+- ✅ Multiple trap clauses with type dispatch
+- ✅ `rethrow` statement for error propagation
+- ✅ `ensure` clause for cleanup
+- ✅ `panic` for unrecoverable errors
+- ✅ Runtime VynError infrastructure (C++ level)
+- ✅ Heap allocation with type ID + value storage
+- ✅ Stack trace capture with source locations
+- ✅ Wildcard patterns `trap (e<?>) -> { }`
+- ✅ Multi-type patterns `trap (e<A | B>) -> { }`
+- ✅ Integration with ownership system
+- ✅ Comprehensive test coverage (15+ tests passing)
 
-### Phase 2: Advanced Features (v0.4.4)
-- [ ] Multiple trap clauses with type dispatch
-- [ ] `rethrow` statement
-- [ ] `ensure` clause
-- [ ] Integration with ownership system for cleanup
+### Phase 7: Standard Library Error Types (v0.6.1+ - PLANNED)
 
-### Phase 3: Error Hierarchy (v0.4.5)
-- [ ] Custom error types
-- [ ] Error composition patterns
-- [ ] Standard library errors (IOError, ParseError, etc.)
+Expose runtime error system to Vyn code through stdlib:
 
-### Phase 4: Advanced Patterns (v0.5.0)
-- [ ] Result<T, E> type in standard library
-- [ ] `?` operator for auto-propagation
-- [ ] Error annotations on function signatures
-- [ ] Stack trace capture
+- [ ] **Errable aspect**: Define aspect for error types
+  ```vyn
+  aspect Errable {
+      message()<String> -> {}
+      code()<Int> -> {}
+  }
+  ```
+
+- [ ] **Error base struct**: Standard Vyn error type
+  ```vyn
+  struct Error {
+      message<String>,
+      code<Int>,
+      context<Vec<String>>
+  }
+  ```
+
+- [ ] **Display aspect**: General formatting (not error-specific)
+  ```vyn
+  aspect Display {
+      display()<String> -> {}
+  }
+  ```
+
+- [ ] **bind implementations**: Implement aspects for Error and common types
+  ```vyn
+  bind Errable -> Error { ... }
+  bind Display -> Error { ... }
+  bind Display -> Int { ... }
+  ```
+
+- [ ] **Standard library errors**: IOError, ParseError, NetworkError, etc.
+- [ ] **Error context chaining**: Wrap errors with additional context
+- [ ] **Custom user error types**: User-defined structs implementing Errable
+
+**NOT PLANNED**: 
+- ❌ Result<T,E> type (trap/fail is superior)
+- ❌ `?` operator (errors propagate automatically)
+- ❌ Error annotations (type system handles this)
 
 ---
 

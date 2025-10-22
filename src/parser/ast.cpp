@@ -1877,9 +1877,10 @@ void FailStatement::accept(Visitor& visitor) {
 
 // TrapClause implementation
 TrapClause::TrapClause(SourceLocation loc, std::unique_ptr<Identifier> errorName,
-                       TypeNodePtr errorType, StmtPtr handler)
+                       TypeNodePtr errorType, StmtPtr handler, bool isWildcard, bool isMultiType)
     : Node(loc), errorName(std::move(errorName)), 
-      errorType(std::move(errorType)), handler(std::move(handler)) {}
+      errorType(std::move(errorType)), handler(std::move(handler)),
+      isWildcard(isWildcard), isMultiType(isMultiType) {}
 
 NodeType TrapClause::getType() const {
     return NodeType::TRAP_CLAUSE;
@@ -1891,7 +1892,16 @@ std::string TrapClause::toString() const {
     if (errorName) {
         ss << errorName->toString();
     }
-    if (errorType) {
+    if (isWildcard) {
+        ss << "<?>";
+    } else if (isMultiType && !errorTypes.empty()) {
+        ss << "<";
+        for (size_t i = 0; i < errorTypes.size(); ++i) {
+            if (i > 0) ss << " | ";
+            ss << errorTypes[i]->toString();
+        }
+        ss << ">";
+    } else if (errorType) {
         ss << "<" << errorType->toString() << ">";
     }
     ss << ") -> ";

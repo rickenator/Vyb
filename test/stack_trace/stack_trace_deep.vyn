@@ -1,0 +1,33 @@
+// Test: Deep call stack (5 levels)
+// Demonstrates stack trace with more depth
+
+level5()<Int> -> {
+    println("Level 5: Deepest call - failing here")
+    fail "Error at depth 5"
+    return 0
+}
+
+level4()<Int> -> {
+    println("Level 4: Calling level 5")
+    return level5()
+}
+
+level3()<Int> -> {
+    println("Level 3: Calling level 4")
+    return level4()
+}
+
+level2()<Int> -> {
+    println("Level 2: Calling level 3")
+    return level3()
+}
+
+level1()<Int> -> {
+    println("Level 1: Calling level 2")
+    return level2()
+}
+
+main()<Int> -> {
+    println("=== Stack Trace Test: Deep Call Stack (5 levels) ===")
+    return level1()
+}

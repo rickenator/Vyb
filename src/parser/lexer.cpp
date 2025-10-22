@@ -260,6 +260,13 @@ std::vector<vyn::token::Token> Lexer::tokenize() {
           emit_token(vyn::TokenType::AMPERSAND, "&");
         }
         break;
+      case '|':
+        if (pos_ + 1 < source_.size() && source_[pos_ + 1] == '|') {
+          emit_token(vyn::TokenType::OR, "||");
+        } else {
+          emit_token(vyn::TokenType::PIPE, "|");
+        }
+        break;
       case '-':
         if (pos_ + 1 < source_.size() && source_[pos_ + 1] == '>') {
           emit_token(vyn::TokenType::ARROW, "->");
