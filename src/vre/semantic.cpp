@@ -3048,20 +3048,24 @@ void SemanticAnalyzer::visit(ast::TrapClause* node) {
         addError("trap clause requires an error variable name", node);
         return;
     }
-    if (!node->errorType) {
+    
+    // Phase 6.5: Allow wildcard traps (e<?>) - errorType is nullptr but isWildcard is true
+    if (!node->isWildcard && !node->errorType) {
         addError("trap clause requires an error type", node);
         return;
     }
     
-    // Type check the error type
-    node->errorType->accept(*this);
+    // Type check the error type (unless wildcard)
+    if (node->errorType) {
+        node->errorType->accept(*this);
+    }
     
     // Enter new scope for trap handler
     enterScope();
     trapDepth++;
     
-    // Add error type to active trap stack
-    activeTrapTypes.push_back(node->errorType.get());
+    // Add error type to active trap stack (or nullptr for wildcard)
+    activeTrapTypes.push_back(node->isWildcard ? nullptr : node->errorType.get());
     
     // Add error variable to scope (immutable binding)
     SymbolInfo errorSymbol;
@@ -3071,7 +3075,11 @@ void SemanticAnalyzer::visit(ast::TrapClause* node) {
     errorSymbol.ownershipKind = ast::OwnershipKind::MY;  // Error value is owned
     currentScope->add(errorSymbol);
     
-    std::cout << "DEBUG: trap clause for error type: " << node->errorType->toString() << std::endl;
+    if (node->isWildcard) {
+        std::cout << "DEBUG: trap clause for wildcard error type" << std::endl;
+    } else if (node->errorType) {
+        std::cout << "DEBUG: trap clause for error type: " << node->errorType->toString() << std::endl;
+    }
     
     // Type check handler block
     if (node->handler) {

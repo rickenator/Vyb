@@ -1232,7 +1232,7 @@ bool ExpressionParser::is_expression_start(vyn::TokenType type) const {
     return false;
 }
 
-// Parse trap clause: trap (errorName<ErrorType>) -> { handler }
+// Parse trap clause: trap (errorName<ErrorType>) -> { handler } or trap (e<?>) -> { handler }
 std::unique_ptr<vyn::ast::TrapClause> ExpressionParser::parse_trap_clause() {
     auto loc = current_location();
     
@@ -1241,7 +1241,7 @@ std::unique_ptr<vyn::ast::TrapClause> ExpressionParser::parse_trap_clause() {
     // Expect '('
     expect(TokenType::LPAREN, "Expected '(' after 'trap'");
     
-    // Parse error binding: errorName<ErrorType>
+    // Parse error binding: errorName<ErrorType> or errorName<?>
     if (!check(TokenType::IDENTIFIER)) {
         throw error(peek(), "Expected error variable name in trap clause");
     }
@@ -1255,34 +1255,43 @@ std::unique_ptr<vyn::ast::TrapClause> ExpressionParser::parse_trap_clause() {
     // Expect '<'
     expect(TokenType::LT, "Expected '<' after error variable name");
     
-    // Parse error type - create identifier
-    if (!check(TokenType::IDENTIFIER)) {
-        throw error(peek(), "Expected error type name in trap clause");
-    }
+    // Check for wildcard '?'
+    bool isWildcard = false;
+    vyn::ast::TypeNodePtr errorType = nullptr;
     
-    auto typeToken = consume();
-    std::vector<std::string> typePath;
-    typePath.push_back(typeToken.lexeme);
-    
-    // Handle module paths like module::ErrorType
-    while (match(TokenType::COLONCOLON)) {
+    if (check(TokenType::QUESTION_MARK)) {
+        // Wildcard trap: trap (e<?>) -> { ... }
+        consume(); // Consume '?'
+        isWildcard = true;
+    } else {
+        // Specific type trap: trap (e<ErrorType>) -> { ... }
         if (!check(TokenType::IDENTIFIER)) {
-            throw error(peek(), "Expected identifier after '::'");
+            throw error(peek(), "Expected error type name or '?' in trap clause");
         }
-        auto nextToken = consume();
-        typePath.push_back(nextToken.lexeme);
+        
+        auto typeToken = consume();
+        std::vector<std::string> typePath;
+        typePath.push_back(typeToken.lexeme);
+        
+        // Handle module paths like module::ErrorType
+        while (match(TokenType::COLONCOLON)) {
+            if (!check(TokenType::IDENTIFIER)) {
+                throw error(peek(), "Expected identifier after '::'");
+            }
+            auto nextToken = consume();
+            typePath.push_back(nextToken.lexeme);
+        }
+        
+        // Create identifier from type path
+        std::string fullTypeName = typePath[0];
+        for (size_t i = 1; i < typePath.size(); ++i) {
+            fullTypeName += "::" + typePath[i];
+        }
+        auto typeIdentifier = std::make_unique<vyn::ast::Identifier>(typeToken.location, fullTypeName);
+        
+        // Create TypeName with the identifier
+        errorType = std::make_unique<vyn::ast::TypeName>(typeToken.location, std::move(typeIdentifier));
     }
-    
-    // Create identifier from type path
-    // For simple names, just use the first element
-    std::string fullTypeName = typePath[0];
-    for (size_t i = 1; i < typePath.size(); ++i) {
-        fullTypeName += "::" + typePath[i];
-    }
-    auto typeIdentifier = std::make_unique<vyn::ast::Identifier>(typeToken.location, fullTypeName);
-    
-    // Create TypeName with the identifier
-    auto errorType = std::make_unique<vyn::ast::TypeName>(typeToken.location, std::move(typeIdentifier));
     
     // Expect '>'
     expect(TokenType::GT, "Expected '>' after error type");
@@ -1304,7 +1313,7 @@ std::unique_ptr<vyn::ast::TrapClause> ExpressionParser::parse_trap_clause() {
     auto handlerBlock = stmt_parser_->parse_block();
     
     return std::make_unique<vyn::ast::TrapClause>(
-        loc, std::move(errorNameIdent), std::move(errorType), std::move(handlerBlock)
+        loc, std::move(errorNameIdent), std::move(errorType), std::move(handlerBlock), isWildcard
     );
 }
 

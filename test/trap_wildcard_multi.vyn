@@ -1,0 +1,54 @@
+// Phase 6.5: Wildcard trap with specific trap handlers
+// Specific traps first, wildcard as catch-all
+
+divide(a<Int>, b<Int>)<Int> -> {
+    if (b == 0) {
+        fail "DivisionByZero"
+    }
+    return a / b
+}
+
+other_operation(value<Int>)<Int> -> {
+    if (value < 0) {
+        fail "NegativeValue"
+    }
+    return value * 2
+}
+
+safe_compute(mode<Int>)<Int> -> {
+    result<Int> = {
+        if (mode == 0) {
+            divide(10, 0)
+        } else if (mode == 1) {
+            other_operation(-5)
+        } else {
+            // Trigger different error
+            fail "UnknownMode"
+        }
+    } trap (e<DivisionByZero>) -> {
+        println("Caught division by zero")
+        return -1
+    } trap (e<?>) -> {
+        // Catch all other errors
+        println("Caught unknown error type")
+        return -2
+    }
+    
+    return result
+}
+
+main()<Int> -> {
+    println("Test 1: Division by zero (specific trap)")
+    r1<Int> = safe_compute(0)
+    println(r1)
+    
+    println("Test 2: Negative value (wildcard trap)")
+    r2<Int> = safe_compute(1)
+    println(r2)
+    
+    println("Test 3: Unknown mode (wildcard trap)")
+    r3<Int> = safe_compute(2)
+    println(r3)
+    
+    return 0
+}

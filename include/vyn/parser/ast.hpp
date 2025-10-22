@@ -1509,11 +1509,12 @@ public:
 class TrapClause : public Node {
 public:
     std::unique_ptr<Identifier> errorName; // Error parameter name (e.g., 'e')
-    TypeNodePtr errorType;                  // Error type (e.g., NetworkError)
+    TypeNodePtr errorType;                  // Error type (e.g., NetworkError), nullptr if wildcard
     StmtPtr handler;                        // Handler block
+    bool isWildcard;                        // True if trap (e<?>) - catch any error
 
     TrapClause(SourceLocation loc, std::unique_ptr<Identifier> errorName, 
-               TypeNodePtr errorType, StmtPtr handler);
+               TypeNodePtr errorType, StmtPtr handler, bool isWildcard = false);
     ~TrapClause() override = default;
     NodeType getType() const override;
     std::string toString() const override;
