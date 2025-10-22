@@ -612,26 +612,86 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
             break;
         // Comparison operators
         case vyn::TokenType::EQEQ: // Reverted to vyn::TokenType::EQEQ
+            // Check for String comparison first
+            if (L->getType()->isStructTy() && R->getType()->isStructTy()) {
+                llvm::StructType* leftStruct = llvm::cast<llvm::StructType>(L->getType());
+                llvm::StructType* rightStruct = llvm::cast<llvm::StructType>(R->getType());
+                // String struct: { ptr, len }
+                if (leftStruct->getNumElements() == 2 && rightStruct->getNumElements() == 2) {
+                    m_currentLLVMValue = generateStringComparison(L, R, vyn::TokenType::EQEQ);
+                    break;
+                }
+            }
             if (isFloatOp) m_currentLLVMValue = builder->CreateFCmpOEQ(L, R, "fcmpoeqtmp");
             else m_currentLLVMValue = builder->CreateICmpEQ(L, R, "icmpeqtmp");
             break;
         case vyn::TokenType::NOTEQ: // Reverted to vyn::TokenType::NOTEQ
+            // Check for String comparison first
+            if (L->getType()->isStructTy() && R->getType()->isStructTy()) {
+                llvm::StructType* leftStruct = llvm::cast<llvm::StructType>(L->getType());
+                llvm::StructType* rightStruct = llvm::cast<llvm::StructType>(R->getType());
+                // String struct: { ptr, len }
+                if (leftStruct->getNumElements() == 2 && rightStruct->getNumElements() == 2) {
+                    m_currentLLVMValue = generateStringComparison(L, R, vyn::TokenType::NOTEQ);
+                    break;
+                }
+            }
             if (isFloatOp) m_currentLLVMValue = builder->CreateFCmpONE(L, R, "fcmponeqtmp");
             else m_currentLLVMValue = builder->CreateICmpNE(L, R, "icmpneqtmp");
             break;
         case vyn::TokenType::LT: // Reverted to vyn::TokenType::LT
+            // Check for String comparison first
+            if (L->getType()->isStructTy() && R->getType()->isStructTy()) {
+                llvm::StructType* leftStruct = llvm::cast<llvm::StructType>(L->getType());
+                llvm::StructType* rightStruct = llvm::cast<llvm::StructType>(R->getType());
+                // String struct: { ptr, len }
+                if (leftStruct->getNumElements() == 2 && rightStruct->getNumElements() == 2) {
+                    m_currentLLVMValue = generateStringComparison(L, R, vyn::TokenType::LT);
+                    break;
+                }
+            }
             if (isFloatOp) m_currentLLVMValue = builder->CreateFCmpOLT(L, R, "fcmpltmp");
             else m_currentLLVMValue = builder->CreateICmpSLT(L, R, "icmpslttmp"); 
             break;
         case vyn::TokenType::LTEQ: // Reverted to vyn::TokenType::LTEQ:
+            // Check for String comparison first
+            if (L->getType()->isStructTy() && R->getType()->isStructTy()) {
+                llvm::StructType* leftStruct = llvm::cast<llvm::StructType>(L->getType());
+                llvm::StructType* rightStruct = llvm::cast<llvm::StructType>(R->getType());
+                // String struct: { ptr, len }
+                if (leftStruct->getNumElements() == 2 && rightStruct->getNumElements() == 2) {
+                    m_currentLLVMValue = generateStringComparison(L, R, vyn::TokenType::LTEQ);
+                    break;
+                }
+            }
             if (isFloatOp) m_currentLLVMValue = builder->CreateFCmpOLE(L, R, "fcmpletmp");
             else m_currentLLVMValue = builder->CreateICmpSLE(L, R, "icmpsletmp"); 
             break;
         case vyn::TokenType::GT: // Reverted to vyn::TokenType::GT
+            // Check for String comparison first
+            if (L->getType()->isStructTy() && R->getType()->isStructTy()) {
+                llvm::StructType* leftStruct = llvm::cast<llvm::StructType>(L->getType());
+                llvm::StructType* rightStruct = llvm::cast<llvm::StructType>(R->getType());
+                // String struct: { ptr, len }
+                if (leftStruct->getNumElements() == 2 && rightStruct->getNumElements() == 2) {
+                    m_currentLLVMValue = generateStringComparison(L, R, vyn::TokenType::GT);
+                    break;
+                }
+            }
             if (isFloatOp) m_currentLLVMValue = builder->CreateFCmpOGT(L, R, "fcmpgtmp");
             else m_currentLLVMValue = builder->CreateICmpSGT(L, R, "icmpsgttmp"); 
             break;
         case vyn::TokenType::GTEQ: // Reverted to vyn::TokenType::GTEQ:
+            // Check for String comparison first
+            if (L->getType()->isStructTy() && R->getType()->isStructTy()) {
+                llvm::StructType* leftStruct = llvm::cast<llvm::StructType>(L->getType());
+                llvm::StructType* rightStruct = llvm::cast<llvm::StructType>(R->getType());
+                // String struct: { ptr, len }
+                if (leftStruct->getNumElements() == 2 && rightStruct->getNumElements() == 2) {
+                    m_currentLLVMValue = generateStringComparison(L, R, vyn::TokenType::GTEQ);
+                    break;
+                }
+            }
             if (isFloatOp) m_currentLLVMValue = builder->CreateFCmpOGE(L, R, "fcmpgetmp");
             else m_currentLLVMValue = builder->CreateICmpSGE(L, R, "icmpsgetmp"); 
             break;
