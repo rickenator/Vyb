@@ -1496,7 +1496,7 @@ public:
 // FailStatement - Trigger a failure with an error value
 class FailStatement : public Statement {
 public:
-    ExprPtr error; // The error value to fail with (must implement Errorable aspect)
+    ExprPtr error; // The error value to fail with (must implement Errable aspect)
 
     FailStatement(SourceLocation loc, ExprPtr error);
     ~FailStatement() override = default;

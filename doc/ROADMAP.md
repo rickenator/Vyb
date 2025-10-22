@@ -522,7 +522,7 @@ divide(a<Int>, b<Int>)<Int> -> {
 }
 
 # Stack trace API on all errors
-aspect Errorable {
+aspect Errable {
     stack_trace(self<their<Self>>)<String> -> { }
     stack_frames(self<their<Self>>)<Vec<StackFrame>> -> { }
 }
@@ -562,10 +562,10 @@ aspect Errorable {
 Note: Runtime error infrastructure (VynError struct, heap allocation, type IDs) already exists.
 This phase is about exposing it to Vyn code through standard library types:
 
-- **Errorable aspect**: Define aspect for types that can be used as errors
+- **Errable aspect**: Define aspect for types that can be used as errors
 - **Error base type**: Standard Vyn struct wrapping runtime VynError
 - **Display aspect**: General formatting aspect for all types
-- **bind implementations**: Implement Errorable and Display for common error types
+- **bind implementations**: Implement Errable and Display for common error types
 - **Error context chaining**: Wrap errors with additional context (needs aspect system)
 - **Custom error formatting**: User-defined error display (needs Display aspect)
 - **Error metrics hooks**: Optional telemetry integration

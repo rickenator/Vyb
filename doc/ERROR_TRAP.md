@@ -18,7 +18,7 @@ Vyn has a **production-ready error handling system** with:
 - Zero-cost success path
 - Comprehensive test coverage
 
-**What's Missing**: Standard library types (Error struct, Errorable aspect) to expose
+**What's Missing**: Standard library types (Error struct, Errable aspect) to expose
 the runtime system to Vyn code. See "Implementation Roadmap" section below.
 
 ---
@@ -232,12 +232,12 @@ struct Error {
     timestamp<Int64>
 }
 
-aspect Errorable {
+aspect Errable {
     message(self<Self>)<String> -> { }
     details(self<Self>)<String> -> { }
 }
 
-bind Errorable -> Error {
+bind Errable -> Error {
     message(self<Self>)<String> -> {
         return self.message
     }
@@ -258,7 +258,7 @@ struct DivisionByZero {
     dividend<Int>
 }
 
-bind Errorable -> DivisionByZero {
+bind Errable -> DivisionByZero {
     message(self<Self>)<String> -> {
         return "Division by zero: dividend=" + self.dividend.to_string()
     }
@@ -289,7 +289,7 @@ struct MyError {
     code<Int>
 }
 
-bind Errorable -> MyError {
+bind Errable -> MyError {
     message(self<Self>)<String> -> {
         return "[" + self.code.to_string() + "] " + self.msg
     }
@@ -299,7 +299,7 @@ bind Errorable -> MyError {
     }
 }
 
-# Any type implementing Errorable can be failed
+# Any type implementing Errable can be failed
 fail MyError { msg = "Something broke", code = 42 }
 ```
 
@@ -308,11 +308,10 @@ fail MyError { msg = "Something broke", code = 42 }
 ```vyn
 # Macro-generated error type
 error FileError : Error {
-    path<String>,
-    operation<String>
+    path<String>
 }
 
-# Expands to struct + Errorable binding automatically
+# Expands to struct + Errable binding automatically
 
 # Usage
 fail FileError {
@@ -367,7 +366,7 @@ enum ParseError {
     InvalidSyntax { message<String>, line<Int>, column<Int> }
 }
 
-bind Errorable -> ParseError {
+bind Errable -> ParseError {
     message(self<Self>)<String> -> {
         match (self) {
             UnexpectedToken -> return "Expected " + self.expected + ", got " + self.got,
@@ -467,7 +466,7 @@ async fetch_data(url<String>)<Future<String>> -> {
 2. **Return Type Unification:** All trap bodies must return same type as block expression
 3. **Ensure Type Validation:** Ensure blocks must return `Void` or be expression statements
 4. **Rethrow Context:** `rethrow` only valid inside trap clauses
-5. **Fail Type Requirement:** `fail` argument must implement `Errorable` aspect
+5. **Fail Type Requirement:** `fail` argument must implement `Errable` aspect
 
 ### Codegen Strategy
 
@@ -764,7 +763,7 @@ level2()<Void> -> {
 Every error value provides:
 
 ```vyn
-aspect Errorable {
+aspect Errable {
     # Get human-readable stack trace
     stack_trace(self<their<Self>>)<String> -> { }
     
@@ -949,7 +948,7 @@ namespace vyn::runtime {
     struct UntrappedErrorHandler {
         // Error context
         struct ErrorContext {
-            void* error_object;       // Errorable value
+            void* error_object;       // Errable value
             const char* error_type;   // Type name
             std::vector<StackFrame> stack_trace;
             uint64_t thread_id;
@@ -1090,9 +1089,9 @@ VYN_ERROR_NO_COLOR=1 ./program
 
 Expose runtime error system to Vyn code through stdlib:
 
-- [ ] **Errorable aspect**: Define aspect for error types
+- [ ] **Errable aspect**: Define aspect for error types
   ```vyn
-  aspect Errorable {
+  aspect Errable {
       message()<String> -> {}
       code()<Int> -> {}
   }
@@ -1116,14 +1115,14 @@ Expose runtime error system to Vyn code through stdlib:
 
 - [ ] **bind implementations**: Implement aspects for Error and common types
   ```vyn
-  bind Errorable -> Error { ... }
+  bind Errable -> Error { ... }
   bind Display -> Error { ... }
   bind Display -> Int { ... }
   ```
 
 - [ ] **Standard library errors**: IOError, ParseError, NetworkError, etc.
 - [ ] **Error context chaining**: Wrap errors with additional context
-- [ ] **Custom user error types**: User-defined structs implementing Errorable
+- [ ] **Custom user error types**: User-defined structs implementing Errable
 
 **NOT PLANNED**: 
 - ❌ Result<T,E> type (trap/fail is superior)

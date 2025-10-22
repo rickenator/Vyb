@@ -3032,7 +3032,7 @@ void SemanticAnalyzer::visit(ast::FailStatement* node) {
     if (it != expressionTypes.end() && it->second) {
         ast::TypeNode* errorType = it->second;
         
-        // TODO: Verify error type implements Errorable aspect when aspect system is complete
+        // TODO: Verify error type implements Errable aspect when aspect system is complete
         // For now, accept any struct/object type as potential error
         
         std::cout << "DEBUG: fail statement with error type: " << errorType->toString() << std::endl;
