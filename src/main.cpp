@@ -74,6 +74,11 @@ extern "C" {
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/Target/TargetOptions.h>
 
+// System includes for linking
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/stat.h>  // For chmod
+
 // Globals for test verbose control
 std::set<std::string> g_verbose_test_specifiers;
 bool g_make_all_tests_verbose = false;
@@ -210,6 +215,185 @@ int compile_vyn_to_object(const std::string& source, const std::string& fileName
     } catch (const std::exception& e) {
         std::cerr << "Error compiling to object file: " << e.what() << std::endl;
         return 1;
+    }
+}
+
+// Function to link object files into executable
+int link_vyn_executable(const std::vector<std::string>& objectFiles,
+                        const std::string& outputExecutable,
+                        bool staticLink = false) {
+    std::cout << "Linking executable: " << outputExecutable << std::endl;
+    
+    // First, compile the runtime library if needed
+    std::string runtimeSource = "runtime/vyn_runtime.c";
+    std::string runtimeObject = "runtime/vyn_runtime.o";
+    
+    // Check if runtime source exists and compile it
+    if (access(runtimeSource.c_str(), F_OK) == 0) {
+        std::cout << "Compiling Vyn runtime library..." << std::endl;
+        
+        // Compile runtime with gcc/clang
+        std::string compileCmd = "cc -c " + runtimeSource + " -o " + runtimeObject + " -O2";
+        int compileResult = system(compileCmd.c_str());
+        if (compileResult != 0) {
+            std::cerr << "Failed to compile runtime library" << std::endl;
+            return 1;
+        }
+        std::cout << "Runtime library compiled successfully" << std::endl;
+    }
+    
+    // Detect platform and choose linker
+    std::string linker = "ld";
+    std::vector<std::string> linkerArgs;
+    
+#ifdef __APPLE__
+    // macOS uses different linker and flags
+    linker = "ld";
+    linkerArgs.push_back("-macosx_version_min");
+    linkerArgs.push_back("10.15");
+    linkerArgs.push_back("-arch");
+    linkerArgs.push_back("x86_64");
+    // macOS dynamic linker
+    linkerArgs.push_back("-dynamic");
+    linkerArgs.push_back("-dylib");
+    // System library search paths
+    linkerArgs.push_back("-L/usr/lib");
+    linkerArgs.push_back("-L/usr/local/lib");
+#else
+    // Linux - try lld first (faster), fallback to ld
+    if (system("which lld >/dev/null 2>&1") == 0) {
+        linker = "lld";
+    } else if (system("which ld.lld >/dev/null 2>&1") == 0) {
+        linker = "ld.lld";
+    } else {
+        linker = "ld";
+    }
+    
+    // Dynamic linker path for Linux
+    linkerArgs.push_back("-dynamic-linker");
+    linkerArgs.push_back("/lib64/ld-linux-x86-64.so.2");
+#endif
+    
+    // Output file
+    linkerArgs.push_back("-o");
+    linkerArgs.push_back(outputExecutable);
+    
+    // Add CRT startup files for proper C runtime initialization
+#ifdef __APPLE__
+    // macOS doesn't need crt files explicitly in modern versions
+#else
+    // Linux needs crt files
+    std::vector<std::string> crtPaths = {
+        "/usr/lib/x86_64-linux-gnu/",
+        "/usr/lib64/",
+        "/usr/lib/",
+        "/lib/x86_64-linux-gnu/",
+        "/lib64/",
+        "/lib/"
+    };
+    
+    auto findCrtFile = [&](const std::string& filename) -> std::string {
+        for (const auto& path : crtPaths) {
+            std::string fullPath = path + filename;
+            if (access(fullPath.c_str(), F_OK) == 0) {
+                return fullPath;
+            }
+        }
+        return "";
+    };
+    
+    std::string crt1 = findCrtFile("crt1.o");
+    std::string crti = findCrtFile("crti.o");
+    std::string crtn = findCrtFile("crtn.o");
+    
+    if (!crt1.empty()) linkerArgs.push_back(crt1);
+    if (!crti.empty()) linkerArgs.push_back(crti);
+#endif
+    
+    // Add all object files
+    for (const auto& objFile : objectFiles) {
+        linkerArgs.push_back(objFile);
+    }
+    
+    // Add runtime library if it was compiled
+    if (access(runtimeObject.c_str(), F_OK) == 0) {
+        linkerArgs.push_back(runtimeObject);
+    }
+    
+    // Add C runtime library paths
+#ifndef __APPLE__
+    linkerArgs.push_back("-L/usr/lib/x86_64-linux-gnu");
+    linkerArgs.push_back("-L/usr/lib64");
+    linkerArgs.push_back("-L/usr/lib");
+#endif
+    
+    // Link against C standard library and math library
+    if (staticLink) {
+        linkerArgs.push_back("-static");
+        linkerArgs.push_back("-lc");
+        linkerArgs.push_back("-lm");
+    } else {
+        linkerArgs.push_back("-lc");
+        linkerArgs.push_back("-lm");
+    }
+    
+    // Add crtn at the end (Linux)
+#ifdef __APPLE__
+    // macOS doesn't need this
+#else
+    if (!crtn.empty()) linkerArgs.push_back(crtn);
+#endif
+    
+    // Build command for display
+    std::string command = linker;
+    for (const auto& arg : linkerArgs) {
+        command += " " + arg;
+    }
+    std::cout << "Linker command: " << command << std::endl;
+    
+    // Execute linker using fork/exec for better control
+    pid_t pid = fork();
+    if (pid == -1) {
+        std::cerr << "Failed to fork process" << std::endl;
+        return 1;
+    }
+    
+    if (pid == 0) {
+        // Child process - execute linker
+        std::vector<char*> args;
+        args.push_back(const_cast<char*>(linker.c_str()));
+        for (const auto& arg : linkerArgs) {
+            args.push_back(const_cast<char*>(arg.c_str()));
+        }
+        args.push_back(nullptr);
+        
+        execvp(linker.c_str(), args.data());
+        
+        // If execvp returns, it failed
+        std::cerr << "Failed to execute linker: " << linker << std::endl;
+        exit(1);
+    } else {
+        // Parent process - wait for linker to complete
+        int status;
+        waitpid(pid, &status, 0);
+        
+        if (WIFEXITED(status)) {
+            int exitCode = WEXITSTATUS(status);
+            if (exitCode == 0) {
+                std::cout << "Successfully linked executable: " << outputExecutable << std::endl;
+                
+                // Make executable
+                chmod(outputExecutable.c_str(), 0755);
+                
+                return 0;
+            } else {
+                std::cerr << "Linker failed with exit code: " << exitCode << std::endl;
+                return exitCode;
+            }
+        } else {
+            std::cerr << "Linker process terminated abnormally" << std::endl;
+            return 1;
+        }
     }
 }
 
@@ -540,7 +724,11 @@ int main(int argc, char* argv[]) {
     bool semantic_only_mode = false;
     bool emit_llvm_ir = false;
     bool compile_mode = false;
+    bool build_mode = false;
     std::string compile_output;
+    std::string build_output;
+    bool static_link = false;
+    std::vector<std::string> input_files;
     int optimization_level = 2;  // Default -O2
     bool execute_jit = true;  // By default, execute the code with JIT
 
@@ -570,6 +758,16 @@ int main(int argc, char* argv[]) {
             if (i + 1 < argc && argv[i + 1][0] != '-') {
                 compile_output = argv[++i];
             }
+            continue;
+        } else if (arg == "--build" || arg == "-b") {
+            build_mode = true;
+            execute_jit = false;
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                build_output = argv[++i];
+            }
+            continue;
+        } else if (arg == "--static") {
+            static_link = true;
             continue;
         } else if (arg.substr(0, 2) == "-O") {
             // Parse optimization level: -O0, -O1, -O2, -O3
@@ -770,6 +968,41 @@ int main(int argc, char* argv[]) {
                 return compile_vyn_to_object(source, filename, objFile, optimization_level);
             }
             
+            // Build mode: compile and link to executable
+            if (build_mode) {
+                std::string executableName = build_output;
+                if (executableName.empty()) {
+                    // Default: replace extension with no extension (executable name)
+                    executableName = filename;
+                    size_t dot = executableName.find_last_of('.');
+                    if (dot != std::string::npos) {
+                        executableName = executableName.substr(0, dot);
+                    }
+                }
+                
+                // Step 1: Compile to object file
+                std::string objFile = executableName + ".o";
+                std::cout << "Step 1: Compiling to object file..." << std::endl;
+                int compileResult = compile_vyn_to_object(source, filename, objFile, optimization_level);
+                if (compileResult != 0) {
+                    std::cerr << "Compilation failed" << std::endl;
+                    return compileResult;
+                }
+                
+                // Step 2: Link to executable
+                std::cout << "\nStep 2: Linking to executable..." << std::endl;
+                std::vector<std::string> objectFiles = { objFile };
+                int linkResult = link_vyn_executable(objectFiles, executableName, static_link);
+                
+                if (linkResult == 0) {
+                    std::cout << "\n✅ Build successful!" << std::endl;
+                    std::cout << "Executable: " << executableName << std::endl;
+                    std::cout << "Run with: ./" << executableName << std::endl;
+                }
+                
+                return linkResult;
+            }
+            
             // Default behavior: JIT compile and execute the code
             if (execute_jit) {
                 try {
@@ -794,8 +1027,16 @@ int main(int argc, char* argv[]) {
         std::cout << "  --semantic-only       Stop after semantic analysis" << std::endl;
         std::cout << "  --emit-llvm           Generate LLVM IR to a .ll file" << std::endl;
         std::cout << "  --compile, -c [file]  Compile to object file (.o)" << std::endl;
+        std::cout << "  --build, -b [file]    Compile and link to executable (NEW!)" << std::endl;
+        std::cout << "  --static              Use static linking (with --build)" << std::endl;
         std::cout << "  -O0, -O1, -O2, -O3    Set optimization level (default: -O2)" << std::endl;
         std::cout << "  --no-execute          Do not execute the code (JIT is on by default)" << std::endl;
+        std::cout << std::endl;
+        std::cout << "Examples:" << std::endl;
+        std::cout << "  " << argv[0] << " program.vyn                    # JIT compile and run" << std::endl;
+        std::cout << "  " << argv[0] << " program.vyn --build myapp      # Build executable" << std::endl;
+        std::cout << "  " << argv[0] << " program.vyn -b myapp -O3       # Build with max optimization" << std::endl;
+        std::cout << "  " << argv[0] << " program.vyn --compile prog.o   # Compile to object file" << std::endl;
         std::cout << std::endl;
         std::cout << "Test Mode Options:" << std::endl;
         std::cout << "  --test                Run test suite" << std::endl;
