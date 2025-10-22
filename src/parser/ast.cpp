@@ -849,10 +849,9 @@ void TypeName::accept(Visitor& visitor) {
 }
 
 bool TypeName::isIntegerTy() const {
-    // Assuming integer types are named like "int", "int32", "int64", etc.
-    // This might need to be more robust depending on the language's type system.
-    if (identifier && (identifier->name == "int" || identifier->name == "int8" || identifier->name == "int16" || identifier->name == "int32" || identifier->name == "int64" ||
-                       identifier->name == "uint" || identifier->name == "uint8" || identifier->name == "uint16" || identifier->name == "uint32" || identifier->name == "uint64")) {
+    // Integer types use capitalized names: Int, Int8, Int16, Int32, Int64, UInt, UInt8, etc.
+    if (identifier && (identifier->name == "Int" || identifier->name == "Int8" || identifier->name == "Int16" || identifier->name == "Int32" || identifier->name == "Int64" ||
+                       identifier->name == "UInt" || identifier->name == "UInt8" || identifier->name == "UInt16" || identifier->name == "UInt32" || identifier->name == "UInt64")) {
         return true;
     }
     return false;
