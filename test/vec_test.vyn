@@ -1,0 +1,16 @@
+// Test Vec<T> in struct fields
+
+struct TreeNode {
+    key<Int>,
+    value<String>
+}
+
+struct BinaryTree {
+    nodes<Vec<TreeNode>>,
+    size<Int>
+}
+
+main()<Int> -> {
+    println("Testing Vec in struct")
+    return 0
+}

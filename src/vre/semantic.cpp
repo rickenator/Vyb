@@ -277,6 +277,15 @@ ast::TypeNode* SemanticAnalyzer::substituteSelfType(ast::TypeNode* returnType, c
 
 // Basic visit methods for expressions (Single definitions)
 void SemanticAnalyzer::visit(ast::Identifier* node) {
+    // Handle built-in type identifiers that don't need to be in symbol table
+    // These are used in contexts like Vec::new(), Int::from_string() where the type is a namespace
+    if (node->name == "Vec" || node->name == "Int" || node->name == "Float" || 
+        node->name == "Bool" || node->name == "String") {
+        // Built-in types - don't error on them
+        // They will be properly typed in the context where they're used (e.g., Int::from_string())
+        return;
+    }
+    
     SymbolInfo* symbol = currentScope->lookup(node->name);
     if (!symbol) {
         addError("Undefined identifier: " + node->name, node);
@@ -634,6 +643,28 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
     }
 
     if (node->init) { 
+        // Special case: if initializer is Vec::new(), propagate the variable's type to it BEFORE visiting
+        if (auto callExpr = dynamic_cast<ast::CallExpression*>(node->init.get())) {
+            if (auto memberExpr = dynamic_cast<ast::MemberExpression*>(callExpr->callee.get())) {
+                if (auto vecIdent = dynamic_cast<ast::Identifier*>(memberExpr->object.get())) {
+                    if (auto newIdent = dynamic_cast<ast::Identifier*>(memberExpr->property.get())) {
+                        if (vecIdent->name == "Vec" && newIdent->name == "new" && node->typeNode) {
+                            // This is Vec::new() - extract element type from variable's type
+                            ast::TypeNode* varType = node->typeNode->type ? node->typeNode->type.get() : node->typeNode.get();
+                            if (auto vecVarType = dynamic_cast<ast::VecType*>(varType)) {
+                                // Set the Vec::new() call to return the correct Vec<T> type
+                                if (vecVarType->elementType) {
+                                    auto vecType = std::make_unique<ast::VecType>(callExpr->loc, vecVarType->elementType->clone());
+                                    expressionTypes[callExpr] = vecType.get();
+                                    callExpr->type = std::shared_ptr<ast::TypeNode>(std::move(vecType));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
         node->init->accept(*this);
         
         // Handle type inference for auto variables
@@ -749,7 +780,76 @@ void SemanticAnalyzer::visit(ast::TypeAliasDeclaration* node) {
 // --- Type and expression analysis ---
 
 void SemanticAnalyzer::visit(ast::UnaryExpression* node) {}
-void SemanticAnalyzer::visit(ast::BinaryExpression* node) {}
+void SemanticAnalyzer::visit(ast::BinaryExpression* node) {
+    if (!node || !node->left || !node->right) {
+        addError("Malformed binary expression.", node);
+        return;
+    }
+
+    // Visit left and right operands
+    node->left->accept(*this);
+    node->right->accept(*this);
+
+    // Get the types of the operands
+    auto leftTypeIt = expressionTypes.find(node->left.get());
+    auto rightTypeIt = expressionTypes.find(node->right.get());
+
+    ast::TypeNode* leftType = (leftTypeIt != expressionTypes.end()) ? leftTypeIt->second : nullptr;
+    ast::TypeNode* rightType = (rightTypeIt != expressionTypes.end()) ? rightTypeIt->second : nullptr;
+
+    if (!leftType || !rightType) {
+        // Cannot determine type without both operands
+        std::cout << "DEBUG: Binary expression - could not determine operand types" << std::endl;
+        return;
+    }
+
+    // For arithmetic operators (+, -, *, /, %), the result type is typically the same as the operands
+    // For comparison operators (<, >, <=, >=, ==, !=), the result is Bool
+    // For logical operators (&&, ||), the result is Bool
+    
+    ast::TypeNode* resultType = nullptr;
+    
+    switch (node->op.type) {
+        case TokenType::PLUS:
+        case TokenType::MINUS:
+        case TokenType::MULTIPLY:
+        case TokenType::DIVIDE:
+        case TokenType::MODULO:
+            // Arithmetic operations: result type is the same as operands (assuming compatible types)
+            resultType = leftType;
+            break;
+            
+        case TokenType::LT:
+        case TokenType::LTEQ:
+        case TokenType::GT:
+        case TokenType::GTEQ:
+        case TokenType::EQEQ:
+        case TokenType::NOTEQ:
+            // Comparison operations: result is Bool
+            resultType = new ast::TypeName(node->loc, 
+                std::make_unique<ast::Identifier>(node->loc, "Bool"));
+            break;
+            
+        case TokenType::AND:
+        case TokenType::OR:
+            // Logical operations: result is Bool
+            resultType = new ast::TypeName(node->loc, 
+                std::make_unique<ast::Identifier>(node->loc, "Bool"));
+            break;
+            
+        default:
+            // Unknown operator
+            addError("Unknown binary operator in expression.", node);
+            return;
+    }
+    
+    if (resultType) {
+        expressionTypes[node] = resultType;
+        node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
+        
+        std::cout << "DEBUG: Binary expression result type: " << resultType->toString() << std::endl;
+    }
+}
 void SemanticAnalyzer::visit(ast::CallExpression* node) {
     // Check if this is an intrinsic function call before visiting the callee
     bool isIntrinsic = false;
@@ -937,6 +1037,13 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                         }
                     }
                     
+                    // Check if type was already set by VariableDeclaration (type propagation)
+                    if (expressionTypes.count(node) && expressionTypes[node]) {
+                        // Type already set - use it
+                        std::cout << "DEBUG: Vec::new() type already propagated: " << expressionTypes[node]->toString() << std::endl;
+                        return;
+                    }
+                    
                     // Need to infer element type from context or default to a generic type
                     // For now, we'll default to Vec<Int> if no context is available
                     // TODO: In a full implementation, this should be inferred from the variable declaration
@@ -946,6 +1053,57 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     
                     expressionTypes[node] = vecType.get();
                     node->type = std::shared_ptr<ast::TypeNode>(std::move(vecType));
+                    return;
+                }
+                
+                // Handle T::from_string() static method calls for type conversion
+                const std::string& typeName = vecIdent->name;
+                const std::string& methodName = newIdent->name;
+                
+                if (methodName == "from_string") {
+                    // Validate arguments
+                    if (node->arguments.size() != 1) {
+                        addError(typeName + "::from_string() expects exactly 1 argument (string to parse)", node);
+                        return;
+                    }
+                    
+                    // Visit the string argument
+                    node->arguments[0]->accept(*this);
+                    
+                    // Validate argument is String type
+                    auto argTypeIt = expressionTypes.find(node->arguments[0].get());
+                    if (argTypeIt != expressionTypes.end() && argTypeIt->second) {
+                        if (auto argTypeName = dynamic_cast<ast::TypeName*>(argTypeIt->second)) {
+                            if (!argTypeName->identifier || argTypeName->identifier->name != "String") {
+                                addError(typeName + "::from_string() argument must be of type String", node);
+                                return;
+                            }
+                        }
+                    }
+                    
+                    // Return the target type (Int, Float, Bool, String, or custom struct)
+                    // For primitives, return the type directly
+                    if (typeName == "Int" || typeName == "Float" || typeName == "Bool" || typeName == "String") {
+                        auto resultType = new ast::TypeName(node->loc,
+                            std::make_unique<ast::Identifier>(node->loc, typeName));
+                        expressionTypes[node] = resultType;
+                        node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
+                        std::cout << "DEBUG: " << typeName << "::from_string() returns " << typeName << std::endl;
+                        return;
+                    }
+                    
+                    // For complex types (structs), check if type exists and return it
+                    auto structIt = structFieldTypes.find(typeName);
+                    if (structIt != structFieldTypes.end()) {
+                        auto resultType = new ast::TypeName(node->loc,
+                            std::make_unique<ast::Identifier>(node->loc, typeName));
+                        expressionTypes[node] = resultType;
+                        node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
+                        std::cout << "DEBUG: " << typeName << "::from_string() returns " << typeName << " (custom struct)" << std::endl;
+                        return;
+                    }
+                    
+                    addError("Unknown type '" + typeName + "' in from_string() call", node);
                     return;
                 }
             }
@@ -1126,6 +1284,23 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                         handleVecMethodCall(node, objIdent->name, methodName);
                         return;
                     }
+                    
+                    // Check for primitive type methods (Int.to_string(), etc.)
+                    if (auto objTypeName = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
+                        if (objTypeName->identifier) {
+                            std::string typeStr = objTypeName->identifier->name;
+                            if (methodName == "to_string" && 
+                                (typeStr == "Int" || typeStr == "Float" || typeStr == "Bool")) {
+                                // Return String type for .to_string() on primitives
+                                auto stringType = new ast::TypeName(node->loc,
+                                    std::make_unique<ast::Identifier>(node->loc, "String"));
+                                expressionTypes[node] = stringType;
+                                node->type = std::shared_ptr<ast::TypeNode>(stringType->clone());
+                                std::cout << "DEBUG: Primitive method " << typeStr << ".to_string() returns String (early path)" << std::endl;
+                                return;
+                            }
+                        }
+                    }
                 }
                 
                 // Not a Vec and not a trait method - unknown method
@@ -1297,6 +1472,31 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                             }
                         }
                         
+                        // Check for primitive type methods (Int.to_string(), Float.to_string(), Bool.to_string())
+                        if (methodName == "to_string") {
+                            if (typeNameStr == "Int" || typeNameStr == "Float" || typeNameStr == "Bool") {
+                                // Return String type for .to_string() on primitives
+                                auto stringType = new ast::TypeName(node->loc,
+                                    std::make_unique<ast::Identifier>(node->loc, "String"));
+                                expressionTypes[node] = stringType;
+                                node->type = std::shared_ptr<ast::TypeNode>(stringType->clone());
+                                std::cout << "DEBUG: Primitive method " << typeNameStr << ".to_string() returns String" << std::endl;
+                                return;
+                            }
+                            
+                            // Check if this is a complex/struct type
+                            auto structIt = structFieldTypes.find(typeNameStr);
+                            if (structIt != structFieldTypes.end()) {
+                                // Complex type .to_string() → JSON serialization
+                                auto stringType = new ast::TypeName(node->loc,
+                                    std::make_unique<ast::Identifier>(node->loc, "String"));
+                                expressionTypes[node] = stringType;
+                                node->type = std::shared_ptr<ast::TypeNode>(stringType->clone());
+                                std::cout << "DEBUG: Complex type " << typeNameStr << ".to_string() returns JSON String" << std::endl;
+                                return;
+                            }
+                        }
+                        
                         // If we didn't find a trait method, it might be a struct method (future feature)
                         // or it's an error
                         addError("Method '" + methodName + "' not found for type '" + typeNameStr + "'", node);
@@ -1359,6 +1559,36 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
     if (!propertyId) {
         addError("Member property must be an identifier.", node);
         return;
+    }
+
+    // Check for static method calls (e.g., Vec::new(), Int::from_string())
+    // In these cases, the object is a type identifier, not a value
+    if (auto objectIdent = dynamic_cast<ast::Identifier*>(node->object.get())) {
+        const std::string& typeName = objectIdent->name;
+        const std::string& methodName = propertyId->name;
+        
+        // Vec::new() - create vector
+        if (typeName == "Vec" && methodName == "new") {
+            // Don't try to resolve the type of Vec as a value
+            // The actual typing will be handled in CallExpression visitor
+            return;
+        }
+        
+        // Primitive type static methods: Int::from_string(), Float::from_string(), etc.
+        if (methodName == "from_string" && 
+            (typeName == "Int" || typeName == "Float" || typeName == "Bool" || typeName == "String")) {
+            // Static method call for type conversion
+            // The actual typing will be handled in CallExpression visitor
+            return;
+        }
+        
+        // Complex type static methods: Struct::from_string() for JSON deserialization
+        // Check if this is a user-defined struct
+        auto structIt = structFieldTypes.find(typeName);
+        if (structIt != structFieldTypes.end() && methodName == "from_string") {
+            // User-defined struct with from_string() static method
+            return;
+        }
     }
 
     // Now get the object's type from expressionTypes map
@@ -1563,10 +1793,46 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
     }
     
     // Extract base struct name for field lookup (Box<Int> -> Box)
+    // Special handling for ownership wrappers: their<Counter> -> Counter
     std::string baseStructName = structTypeName;
     size_t anglePos = structTypeName.find('<');
     if (anglePos != std::string::npos) {
         baseStructName = structTypeName.substr(0, anglePos);
+        
+        // Check if this is an ownership keyword (their, my, view, our, etc.)
+        if (baseStructName == "their" || baseStructName == "my" || baseStructName == "view" || 
+            baseStructName == "our" || baseStructName == "borrow") {
+            // Extract the inner type: their<Counter> -> Counter
+            size_t closeAnglePos = structTypeName.find('>');
+            if (closeAnglePos != std::string::npos && closeAnglePos > anglePos + 1) {
+                std::string innerType = structTypeName.substr(anglePos + 1, closeAnglePos - anglePos - 1);
+                // Recursively extract base name from inner type (handles their<Box<Int>> -> Box)
+                size_t innerAnglePos = innerType.find('<');
+                if (innerAnglePos != std::string::npos) {
+                    baseStructName = innerType.substr(0, innerAnglePos);
+                } else {
+                    baseStructName = innerType;
+                }
+                // Update structTypeName to be the inner type for subsequent operations
+                structTypeName = innerType;
+            }
+        }
+    }
+    
+    // Special handling for built-in types with methods (Vec, Future, etc.)
+    // These are not user-defined structs, so they won't be in structFieldTypes
+    // Their methods are handled in CallExpression visitor
+    if (baseStructName == "Vec" || baseStructName == "Future") {
+        // This is a built-in type - don't check struct fields
+        // The actual method resolution will happen in CallExpression visitor
+        return;
+    }
+    
+    // Special handling for primitive types with methods (Int.to_string(), etc.)
+    if (baseStructName == "Int" || baseStructName == "Float" || baseStructName == "Bool" || baseStructName == "String") {
+        // Primitive types can have methods like to_string()
+        // The actual method resolution will happen in CallExpression visitor
+        return;
     }
     
     // Check if we have field information for this struct
@@ -1640,6 +1906,11 @@ void SemanticAnalyzer::visit(ast::AssignmentExpression* node) {
 
     ast::TypeNode* leftType = (leftTypeIt != expressionTypes.end()) ? leftTypeIt->second : nullptr;
     ast::TypeNode* rightType = (rightTypeIt != expressionTypes.end()) ? rightTypeIt->second : nullptr;
+
+    std::cout << "DEBUG: Assignment type check - LHS type: " 
+              << (leftType ? leftType->toString() : "null")
+              << ", RHS type: " 
+              << (rightType ? rightType->toString() : "null") << std::endl;
 
     if (!leftType || !rightType) {
         addError("Type error in assignment: could not determine type of LHS or RHS.", node);

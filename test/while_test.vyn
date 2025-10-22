@@ -1,0 +1,10 @@
+// Test while loop with variable
+
+main()<Int> -> {
+    i<Int> = 0
+    while (i < 5) {
+        println("Loop iteration")
+        i = i + 1
+    }
+    return i
+}

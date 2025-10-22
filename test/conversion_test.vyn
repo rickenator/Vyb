@@ -1,0 +1,52 @@
+// Comprehensive test for to_string() and from_string() methods
+
+main()<Int> -> {
+    println("=== Testing Primitive to_string() ===")
+    
+    // Test Int.to_string()
+    num<Int> = 42
+    num_str<String> = num.to_string()
+    println("Int 42 to_string: " + num_str)
+    
+    // Test Int::from_string()
+    parsed_int<Int> = Int::from_string("123")
+    println("Parsed int from '123':")
+    println(parsed_int.to_string())
+    
+    // Test Float::from_string()
+    parsed_float<Float> = Float::from_string("3.14")
+    float_str<String> = parsed_float.to_string()
+    println("Parsed float from '3.14':")
+    println(float_str)
+    
+    // Test Bool::from_string()
+    parsed_bool<Bool> = Bool::from_string("true")
+    if (parsed_bool) {
+        println("Bool parsing works!")
+    }
+    
+    println("")
+    println("=== Testing String conversions ===")
+    
+    // String identity
+    original<String> = "Hello, Vyn!"
+    copied<String> = String::from_string(original)
+    println("String copy: " + copied)
+    
+    println("")
+    println("=== Round-trip tests ===")
+    
+    // Int round-trip
+    val1<Int> = 999
+    str1<String> = val1.to_string()
+    val2<Int> = Int::from_string(str1)
+    println("Int round-trip: 999 -> string -> " + val2.to_string())
+    
+    // Verify result
+    if (val2 == 999) {
+        println("Round-trip SUCCESS!")
+        return 0
+    }
+    
+    return 1
+}

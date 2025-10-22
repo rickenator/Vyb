@@ -119,6 +119,7 @@ set(VRE_HEADERS
 set(RUNTIME_SOURCES
     src/runtime/async_runtime.cpp
     src/runtime/error_handling.cpp
+    runtime/vyn_runtime.c
 )
 
 # Runtime headers

@@ -44,6 +44,17 @@ extern "C" {
     char* __vyn_toString_rune(uint32_t value);
     char* __vyn_toString_byte(uint8_t value);
     
+    // New type conversion functions (primitive to_string/from_string)
+    char* __vyn_int_to_string(int64_t value);
+    char* __vyn_float_to_string(double value);
+    char* __vyn_bool_to_string(bool value);
+    char* __vyn_string_to_string(const char* str);
+    
+    int64_t __vyn_int_from_string(const char* str, bool* success);
+    double __vyn_float_from_string(const char* str, bool* success);
+    bool __vyn_bool_from_string(const char* str, bool* success);
+    char* __vyn_string_from_string(const char* str, bool* success);
+    
     // Error handling runtime functions (from error_handling.cpp)
     void __vyn_runtime_panic(const char* message) __attribute__((noreturn));
     void __vyn_runtime_untrapped_error(void* error) __attribute__((noreturn));
@@ -633,6 +644,25 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             runtimeSymbols[mangle("__vyn_toString_byte")] = llvm::orc::ExecutorSymbolDef(
                 llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_byte), llvm::JITSymbolFlags::Exported);
         }
+        
+        // Register new type conversion functions (to_string/from_string)
+        runtimeSymbols[mangle("__vyn_int_to_string")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_int_to_string), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_float_to_string")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_float_to_string), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_bool_to_string")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_bool_to_string), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_string_to_string")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_string_to_string), llvm::JITSymbolFlags::Exported);
+        
+        runtimeSymbols[mangle("__vyn_int_from_string")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_int_from_string), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_float_from_string")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_float_from_string), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_bool_from_string")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_bool_from_string), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_string_from_string")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_string_from_string), llvm::JITSymbolFlags::Exported);
         
         // Add all the runtime symbols to the main dylib
         auto defineErr = mainDylib.define(llvm::orc::absoluteSymbols(runtimeSymbols));

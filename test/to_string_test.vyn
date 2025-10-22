@@ -1,0 +1,15 @@
+main()<Int> -> {
+    i<Int> = 42
+    s<String> = i.to_string()
+    println("Number as string")
+    
+    f<Float> = 3.14
+    fs<String> = f.to_string()
+    println("Float as string")
+    
+    b<Bool> = true
+    bs<String> = b.to_string()
+    println("Bool as string")
+    
+    return 0
+}

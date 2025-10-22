@@ -261,26 +261,28 @@ llvm::Value* LLVMCodegen::generateToStringCall(llvm::Value* value, llvm::Type* v
     llvm::FunctionType* toStringFuncType = nullptr;
     
     if (valueType == int64Type || typeName == "Int") {
-        toStringFuncName = "__vyn_toString_int";
+        toStringFuncName = "__vyn_int_to_string";
         toStringFuncType = llvm::FunctionType::get(int8PtrType, {int64Type}, false);
     } else if (valueType == int8Type || typeName == "Int8") {
-        toStringFuncName = "__vyn_toString_int8";
-        toStringFuncType = llvm::FunctionType::get(int8PtrType, {int8Type}, false);
+        toStringFuncName = "__vyn_int_to_string";  // Reuse same function, will cast
+        toStringFuncType = llvm::FunctionType::get(int8PtrType, {int64Type}, false);
+        value = builder->CreateSExt(value, int64Type, "int8_to_int64");
     } else if (valueType == int32Type || typeName == "Int32") {
-        toStringFuncName = "__vyn_toString_int32";
-        toStringFuncType = llvm::FunctionType::get(int8PtrType, {int32Type}, false);
+        toStringFuncName = "__vyn_int_to_string";  // Reuse same function, will cast
+        toStringFuncType = llvm::FunctionType::get(int8PtrType, {int64Type}, false);
+        value = builder->CreateSExt(value, int64Type, "int32_to_int64");
     } else if (valueType == int1Type || typeName == "Bool") {
-        toStringFuncName = "__vyn_toString_bool";
+        toStringFuncName = "__vyn_bool_to_string";
         toStringFuncType = llvm::FunctionType::get(int8PtrType, {int1Type}, false);
     } else if (valueType->isFloatingPointTy() || typeName == "Float" || typeName == "Double") {
-        toStringFuncName = "__vyn_toString_float";
+        toStringFuncName = "__vyn_float_to_string";
         toStringFuncType = llvm::FunctionType::get(int8PtrType, {doubleType}, false);
         // Cast to double if needed
         if (valueType != doubleType) {
             value = builder->CreateFPExt(value, doubleType, "todouble");
         }
     } else if (valueType == int8PtrType || typeName == "String") {
-        toStringFuncName = "__vyn_toString_string";
+        toStringFuncName = "__vyn_string_to_string";
         toStringFuncType = llvm::FunctionType::get(int8PtrType, {int8PtrType}, false);
     } else {
         logError(loc, "Unsupported type for toString conversion: " + (astType ? astType->toString() : "unknown"));
