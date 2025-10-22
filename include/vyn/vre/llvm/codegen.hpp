@@ -401,6 +401,8 @@ public:
     void visit(vyn::ast::IfExpression* node) override; // Added this line
     void visit(vyn::ast::ConstructionExpression* node) override; // Existing "Added"
     void visit(vyn::ast::ArrayInitializationExpression* node) override; // Existing "Added
+    void visit(vyn::ast::TypeofExpression* node) override;
+    void visit(vyn::ast::TypenameExpression* node) override;
     void visit(vyn::ast::LogicalExpression* node) override;
     void visit(vyn::ast::ConditionalExpression* node) override;
     void visit(vyn::ast::SequenceExpression* node) override;

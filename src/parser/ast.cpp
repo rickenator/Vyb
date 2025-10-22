@@ -1646,6 +1646,38 @@ void ComparisonPattern::accept(Visitor& visitor) {
     visitor.visit(this);
 }
 
+// --- TypeofExpression ---
+TypeofExpression::TypeofExpression(SourceLocation loc, ExprPtr operand)
+    : Expression(loc), operand(std::move(operand)) {}
+
+NodeType TypeofExpression::getType() const {
+    return NodeType::TYPEOF_EXPRESSION;
+}
+
+std::string TypeofExpression::toString() const {
+    return "typeof(" + (operand ? operand->toString() : "nullptr") + ")";
+}
+
+void TypeofExpression::accept(Visitor& visitor) {
+    visitor.visit(this);
+}
+
+// --- TypenameExpression ---
+TypenameExpression::TypenameExpression(SourceLocation loc, ExprPtr operand)
+    : Expression(loc), operand(std::move(operand)) {}
+
+NodeType TypenameExpression::getType() const {
+    return NodeType::TYPENAME_EXPRESSION;
+}
+
+std::string TypenameExpression::toString() const {
+    return "typename(" + (operand ? operand->toString() : "nullptr") + ")";
+}
+
+void TypenameExpression::accept(Visitor& visitor) {
+    visitor.visit(this);
+}
+
 // --- ThrowStatement ---
 ThrowStatement::ThrowStatement(SourceLocation loc, ExprPtr expr)
     : Statement(loc), expr(std::move(expr)) {}

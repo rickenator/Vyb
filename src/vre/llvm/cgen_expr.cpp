@@ -4085,3 +4085,57 @@ llvm::Value* LLVMCodegen::generateBoolToString(llvm::Value* boolValue) {
     
     return result;
 }
+// Introspection: typeof(expr) - returns 8-byte type ID
+void LLVMCodegen::visit(vyn::ast::TypeofExpression* node) {
+    if (!node || !node->operand) {
+        logError(node->loc, "typeof() requires an operand expression");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Get the type name of the operand by visiting it first (type already resolved in semantic analysis)
+    // For now, we need to determine the type name from the operand's resolved type
+    // This is a placeholder - we'll need to extract type information properly
+    
+    // TODO: Implement proper type name extraction from semantic analysis
+    // For now, generate a placeholder hash
+    std::string typeName = "Unknown";  // This should come from semantic analysis
+    
+    // Generate type hash as compile-time constant
+    uint64_t typeHash = std::hash<std::string>{}(typeName);
+    llvm::Value* typeId = llvm::ConstantInt::get(builder->getInt64Ty(), typeHash);
+    
+    m_currentLLVMValue = typeId;
+}
+
+// Introspection: typename(expr) - returns String with type name
+void LLVMCodegen::visit(vyn::ast::TypenameExpression* node) {
+    if (!node || !node->operand) {
+        logError(node->loc, "typename() requires an operand expression");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Get the type name of the operand
+    // TODO: Implement proper type name extraction from semantic analysis
+    std::string typeName = "Unknown";  // This should come from semantic analysis
+    
+    // Create a string literal containing the type name
+    // Similar to StringLiteral::visit implementation
+    llvm::Value* strPtr = builder->CreateGlobalStringPtr(typeName);
+    
+    // Create String struct {ptr, len}
+    llvm::Type* int8PtrType = llvm::PointerType::get(*context, 0);
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(*context);
+    llvm::StructType* stringStructType = llvm::StructType::get(*context, {int8PtrType, int64Type});
+    
+    // Calculate length
+    llvm::Value* lenValue = llvm::ConstantInt::get(int64Type, typeName.length());
+    
+    // Build the String struct
+    llvm::Value* stringStruct = llvm::UndefValue::get(stringStructType);
+    stringStruct = builder->CreateInsertValue(stringStruct, strPtr, 0, "typename.ptr");
+    stringStruct = builder->CreateInsertValue(stringStruct, lenValue, 1, "typename.len");
+    
+    m_currentLLVMValue = stringStruct;
+}
