@@ -6,7 +6,7 @@
 
 ## 1. Introduction
 
-Welcome to the Vyn Programming Guide. This guide walks you through writing, building, and extending Vyn programs, from your first "Hello, Vyn!" to deep dives into the Vyn language internals and runtime. **Version 0.4.2** (freedom-1.0 series) delivers a robust systems programming language with LLVM backend, complete sized type system, pattern matching with `match` statements, comprehensive control flow including `break`/`continue`, resizable `Vec<T>` collections, unified syntax, generic function monomorphization, and comprehensive auto-serialization capabilities.
+Welcome to the Vyn Programming Guide. This guide walks you through writing, building, and extending Vyn programs, from your first "Hello, Vyn!" to deep dives into the Vyn language internals and runtime. **Version 0.4.3** (freedom-1.0 series) delivers a robust systems programming language with LLVM backend, native code compilation to object files, complete sized type system, pattern matching with `match` statements, comprehensive control flow including `break`/`continue`, resizable `Vec<T>` collections, unified syntax, generic function monomorphization, and comprehensive auto-serialization capabilities.
 
 ### 1.1 Purpose & Audience
 
@@ -43,7 +43,7 @@ Vyn is a statically typed, template-metaprogramming language designed to compile
 * **Concurrency Built In**: Async/await, with planned actors, threads, and typed channels.
 * **Self-Hosting & Extensible**: Planned compiler written in Vyn; add backends, macros, and modules at runtime.
 
-**Current Version:** 0.4.2 (freedom-1.0 series) 🚀 **COMPLETE TYPE SYSTEM + GENERIC FUNCTIONS**
+**Current Version:** 0.4.3 (freedom-1.0 series) 🚀 **AOT COMPILATION + CROSS-PLATFORM SUPPORT**
 
 ## Quick Start
 
@@ -89,6 +89,53 @@ build/vyn example.vyn  # Returns 30
 echo 'main()<Int,String> -> { return 42, "Hello!" }' > tuple.vyn
 build/vyn tuple.vyn  # Outputs: [42, "Hello!"]
 ```
+
+### Compilation to Native Code (NEW in v0.4.3!)
+
+Vyn now compiles to native object files for deployment and linking with existing systems:
+
+```bash
+# Compile to object file (default -O2 optimization)
+build/vyn hello.vyn --compile hello.o
+
+# Specify optimization level
+build/vyn program.vyn -c program.o -O0  # No optimization (fast compile)
+build/vyn program.vyn -c program.o -O1  # Basic optimization
+build/vyn program.vyn -c program.o -O2  # Moderate optimization (default)
+build/vyn program.vyn -c program.o -O3  # Aggressive optimization
+
+# Verify object file was created
+file hello.o
+# Output: hello.o: ELF 64-bit LSB relocatable, x86-64, version 1 (SYSV), with debug_info, not stripped
+
+# Inspect symbols in object file
+objdump -t hello.o | grep main
+# Output: 0000000000000000 g     F .text  000000000000005c main
+
+# Cross-compilation ready: Supports 20+ architectures!
+# x86-64, ARM, AArch64 (ARM64), RISC-V, PowerPC, MIPS, SPARC, WebAssembly,
+# SystemZ (IBM mainframe), Hexagon (Qualcomm DSP), LoongArch, M68k, Xtensa,
+# AVR, MSP430, BPF, NVPTX (NVIDIA), AMDGPU, VE (NEC Vector), Lanai, XCore
+```
+
+**What This Means:**
+- **AOT Compilation**: Ahead-of-time compilation to native machine code
+- **Zero Dependencies**: Compiled .o files ready for distribution
+- **Standard Toolchain**: Works with ld, lld, gold linkers
+- **Debug Support**: Full DWARF debug information included
+- **Production Ready**: Optimized code for deployment
+- **Future Linking**: Static linking coming in v0.4.4 to create standalone executables
+
+**Current Status:**
+- ✅ Object file emission (.o files)
+- ✅ All optimization levels (-O0 through -O3)
+- ✅ Cross-compilation for 20+ architectures
+- ✅ DWARF debug information
+- 🔜 Static linking (Phase 3.2 - planned for v0.4.4)
+- 🔜 Dynamic linking and shared libraries
+- 🔜 Package building with dependency resolution
+
+**See:** `doc/MODULE_FFI_BINARY_ROADMAP.md` for the complete compilation roadmap
 
 ### 1.3 Key Concepts & Terminology
 
@@ -152,7 +199,16 @@ This unique `import`/`smuggle` distinction makes Vyn's module system both secure
 
 ## In This Release
 
-Vyn **v0.4.2** (freedom-1.0 series) is a **complete systems programming language** with **generic functions and aspect system** ready for production use:
+Vyn **v0.4.3** (freedom-1.0 series) is a **complete systems programming language** with **native code compilation** ready for production use:
+
+### ✅ **Native Code Compilation (NEW in v0.4.3!)**
+- **Object File Emission**: Compile to .o files with `--compile/-c` flag
+- **Optimization Levels**: -O0 (none), -O1 (basic), -O2 (default), -O3 (aggressive)
+- **Cross-Compilation**: Supports 20+ target architectures out of the box
+- **Debug Information**: Full DWARF metadata for debugging compiled code
+- **Production Ready**: AOT compilation for deployment without JIT runtime
+- **Standard Toolchain**: Compatible with system linkers (ld, lld, gold)
+- **ELF Format**: Standard relocatable object files for linking
 
 ### ✅ **Core Language Features**
 - **Functions**: `name(params)<ReturnType> -> body` with full LLVM compilation
