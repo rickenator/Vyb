@@ -698,12 +698,27 @@ std::unique_ptr<vyn::ast::VariableDeclaration> StatementParser::parse_var_decl()
         is_const_decl = false;
         // Legacy var<Type> syntax - parse type in angle brackets
         this->expect(vyn::TokenType::LT, "Expected '<' after 'var'.");
-        ast::TypeNodePtr type_expr = this->type_parser_.parse();
-        if (!type_expr) {
-            throw std::runtime_error("Expected type inside '<>' in variable declaration at " + 
-                                   location_to_string(this->peek().location));
-        }
+        
+        // Parse comma-separated types for inline tuple syntax
+        std::vector<ast::TypeNodePtr> types;
+        do {
+            ast::TypeNodePtr type_expr = this->type_parser_.parse();
+            if (!type_expr) {
+                throw std::runtime_error("Expected type inside '<>' in variable declaration at " + 
+                                       location_to_string(this->peek().location));
+            }
+            types.push_back(std::move(type_expr));
+        } while (this->match(vyn::TokenType::COMMA));
+        
         this->expect(vyn::TokenType::GT, "Expected '>' after type in variable declaration.");
+        
+        // If multiple types, create TupleTypeNode; otherwise use single type
+        ast::TypeNodePtr type_expr;
+        if (types.size() == 1) {
+            type_expr = std::move(types[0]);
+        } else {
+            type_expr = std::make_unique<ast::TupleTypeNode>(decl_loc, std::move(types));
+        }
         
         // Parse variable name
         vyn::token::Token name_token = this->expect(vyn::TokenType::IDENTIFIER, "Expected variable name.");
@@ -743,12 +758,27 @@ std::unique_ptr<vyn::ast::VariableDeclaration> StatementParser::parse_var_decl()
         is_const_decl = true;
         // Legacy const<Type> syntax - parse type in angle brackets
         this->expect(vyn::TokenType::LT, "Expected '<' after 'const'.");
-        ast::TypeNodePtr type_expr = this->type_parser_.parse();
-        if (!type_expr) {
-            throw std::runtime_error("Expected type inside '<>' in variable declaration at " + 
-                                   location_to_string(this->peek().location));
-        }
+        
+        // Parse comma-separated types for inline tuple syntax
+        std::vector<ast::TypeNodePtr> types;
+        do {
+            ast::TypeNodePtr type_expr = this->type_parser_.parse();
+            if (!type_expr) {
+                throw std::runtime_error("Expected type inside '<>' in variable declaration at " + 
+                                       location_to_string(this->peek().location));
+            }
+            types.push_back(std::move(type_expr));
+        } while (this->match(vyn::TokenType::COMMA));
+        
         this->expect(vyn::TokenType::GT, "Expected '>' after type in variable declaration.");
+        
+        // If multiple types, create TupleTypeNode; otherwise use single type
+        ast::TypeNodePtr type_expr;
+        if (types.size() == 1) {
+            type_expr = std::move(types[0]);
+        } else {
+            type_expr = std::make_unique<ast::TupleTypeNode>(decl_loc, std::move(types));
+        }
         
         // Parse variable name
         vyn::token::Token name_token = this->expect(vyn::TokenType::IDENTIFIER, "Expected variable name.");
@@ -793,11 +823,17 @@ std::unique_ptr<vyn::ast::VariableDeclaration> StatementParser::parse_var_decl()
     
     // Parse the type in angle brackets: name<Type>
     this->expect(vyn::TokenType::LT, "Expected '<' after variable name in unified syntax.");
-    ast::TypeNodePtr type_expr = this->type_parser_.parse();
-    if (!type_expr) {
-        throw std::runtime_error("Expected type inside '<>' in variable declaration at " + 
-                               location_to_string(this->peek().location));
-    }
+    
+    // Parse comma-separated types for inline tuple syntax
+    std::vector<ast::TypeNodePtr> types;
+    do {
+        ast::TypeNodePtr type = this->type_parser_.parse();
+        if (!type) {
+            throw std::runtime_error("Expected type inside '<>' in variable declaration at " + 
+                                   location_to_string(this->peek().location));
+        }
+        types.push_back(std::move(type));
+    } while (this->match(vyn::TokenType::COMMA));
     
     // Check for const modifier: name<Type const>
     if ((this->peek().type == vyn::TokenType::IDENTIFIER && this->peek().lexeme == "const") ||
@@ -807,6 +843,14 @@ std::unique_ptr<vyn::ast::VariableDeclaration> StatementParser::parse_var_decl()
     }
     
     this->expect(vyn::TokenType::GT, "Expected '>' after type in variable declaration.");
+    
+    // If multiple types, create TupleTypeNode; otherwise use single type
+    ast::TypeNodePtr type_expr;
+    if (types.size() == 1) {
+        type_expr = std::move(types[0]);
+    } else {
+        type_expr = std::make_unique<ast::TupleTypeNode>(decl_loc, std::move(types));
+    }
 
     
     // Handle initializer

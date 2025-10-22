@@ -1389,31 +1389,67 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 }
             }
             
-            // Handle Vec and String method calls
+            // Handle Vec, String, and Tuple method calls
             if (auto objIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->object.get())) {
                 std::string objectName = objIdent->name;
                 
-                // Check if this is a String or Vec variable by looking at its type
+                // Check if this is a Tuple, String, or Vec variable by looking at AST type info first
                 auto varIt = namedValues.find(objectName);
+                bool isTupleVar = false;
                 bool isStringVar = false;
                 bool isVecVar = false;
+                unsigned tupleSize = 0;
                 
                 if (varIt != namedValues.end()) {
-                    llvm::Value* varValue = varIt->second;
-                    // For AllocaInst, we can get the allocated type
-                    if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(varValue)) {
-                        llvm::Type* allocatedType = allocaInst->getAllocatedType();
-                        if (allocatedType->isStructTy()) {
-                            llvm::StructType* structType = llvm::cast<llvm::StructType>(allocatedType);
-                            // String struct has 2 fields: { ptr, len }
-                            // Vec struct has 3 fields: { ptr, size, capacity }
-                            if (structType->getNumElements() == 2) {
+                    // First check valueTypeMap for AST type information (most reliable)
+                    auto typeIt = valueTypeMap.find(varIt->second);
+                    if (typeIt != valueTypeMap.end() && typeIt->second) {
+                        vyn::ast::TypeNode* astType = typeIt->second.get();
+                        // Check for TupleTypeNode
+                        if (auto tupleType = dynamic_cast<vyn::ast::TupleTypeNode*>(astType)) {
+                            isTupleVar = true;
+                            tupleSize = tupleType->memberTypes.size();
+                        }
+                        // Check for VecType
+                        else if (dynamic_cast<vyn::ast::VecType*>(astType)) {
+                            isVecVar = true;
+                        }
+                        // Check for String (represented as TypeName with identifier "String")
+                        else if (auto typeName = dynamic_cast<vyn::ast::TypeName*>(astType)) {
+                            if (typeName->identifier && typeName->identifier->name == "String") {
                                 isStringVar = true;
-                            } else if (structType->getNumElements() == 3) {
-                                isVecVar = true;
                             }
                         }
                     }
+                    
+                    // Fall back to LLVM type analysis if no AST type info available
+                    if (!isTupleVar && !isStringVar && !isVecVar) {
+                        if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(varIt->second)) {
+                            llvm::Type* allocatedType = allocaInst->getAllocatedType();
+                            if (allocatedType->isStructTy()) {
+                                llvm::StructType* structType = llvm::cast<llvm::StructType>(allocatedType);
+                                unsigned numElements = structType->getNumElements();
+                                // String struct has 2 fields: { ptr, len }
+                                // Vec struct has 3 fields: { ptr, size, capacity }
+                                // This is a heuristic fallback only
+                                if (numElements == 2) {
+                                    isStringVar = true;
+                                } else if (numElements == 3) {
+                                    isVecVar = true;
+                                } else {
+                                    // Assume tuple for other struct sizes
+                                    isTupleVar = true;
+                                    tupleSize = numElements;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Handle Tuple methods first (highest priority)
+                if (isTupleVar && methodName == "len") {
+                    m_currentLLVMValue = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), tupleSize);
+                    return;
                 }
                 
                 // Handle String methods
@@ -1428,7 +1464,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 }
                 
                 // Handle Vec methods
-                if (isVecVar || (!isStringVar && (methodName == "push" || methodName == "pop" || methodName == "get" ||
+                if (isVecVar || (!isTupleVar && !isStringVar && (methodName == "push" || methodName == "pop" || methodName == "get" ||
                     methodName == "push_array" || methodName == "to_array" || methodName == "get_array" ||
                     methodName == "clear" || methodName == "is_empty" || methodName == "capacity" ||
                     methodName == "remove_at" || methodName == "get_vec"))) {
@@ -1440,30 +1476,6 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                         methodName == "get_vec") {
                         handleVecMethod(node, objectName, methodName);
                         return;
-                    }
-                }
-                
-                // Handle Tuple methods
-                // Check if the variable is a tuple type by examining AST type info
-                if (methodName == "len") {
-                    // Look up variable in symbol table to get AST type
-                    auto varIt = namedValues.find(objectName);
-                    if (varIt != namedValues.end()) {
-                        // Try to find the declaration for this variable
-                        // For now, check if the LLVM type is a struct with known tuple characteristics
-                        if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(varIt->second)) {
-                            llvm::Type* allocatedType = allocaInst->getAllocatedType();
-                            if (allocatedType->isStructTy()) {
-                                llvm::StructType* structType = llvm::cast<llvm::StructType>(allocatedType);
-                                // Tuples have variable number of elements, but not 2 (String) or 3 (Vec)
-                                unsigned numElements = structType->getNumElements();
-                                if (numElements != 2 && numElements != 3) {
-                                    // Likely a tuple, return its size
-                                    m_currentLLVMValue = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), numElements);
-                                    return;
-                                }
-                            }
-                        }
                     }
                 }
             }
