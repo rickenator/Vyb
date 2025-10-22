@@ -491,41 +491,41 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
             }
 
             // Signed integer types (64-bit default)
-            if (typeNameStr == "Int" || typeNameStr == "int" || typeNameStr == "i64") {
+            if (typeNameStr == "Int" || typeNameStr == "i64") {
                 llvmType = int64Type;
-            } else if (typeNameStr == "Int32" || typeNameStr == "int32" || typeNameStr == "i32") {
+            } else if (typeNameStr == "Int32" || typeNameStr == "i32") {
                 llvmType = int32Type;
-            } else if (typeNameStr == "Int16" || typeNameStr == "int16" || typeNameStr == "i16") {
+            } else if (typeNameStr == "Int16" || typeNameStr == "i16") {
                 llvmType = llvm::Type::getInt16Ty(*context);
-            } else if (typeNameStr == "Int8" || typeNameStr == "int8" || typeNameStr == "i8") {
+            } else if (typeNameStr == "Int8" || typeNameStr == "i8") {
                 llvmType = int8Type;
             
             // Unsigned integer types
-            } else if (typeNameStr == "UInt64" || typeNameStr == "uint64" || typeNameStr == "u64") {
+            } else if (typeNameStr == "UInt64" || typeNameStr == "u64") {
                 llvmType = llvm::Type::getInt64Ty(*context);  // Same as i64 at LLVM level
-            } else if (typeNameStr == "UInt32" || typeNameStr == "uint32" || typeNameStr == "u32") {
+            } else if (typeNameStr == "UInt32" || typeNameStr == "u32") {
                 llvmType = llvm::Type::getInt32Ty(*context);  // Same as i32 at LLVM level
-            } else if (typeNameStr == "UInt16" || typeNameStr == "uint16" || typeNameStr == "u16") {
+            } else if (typeNameStr == "UInt16" || typeNameStr == "u16") {
                 llvmType = llvm::Type::getInt16Ty(*context);  // Same as i16 at LLVM level
-            } else if (typeNameStr == "UInt8" || typeNameStr == "uint8" || typeNameStr == "u8") {
+            } else if (typeNameStr == "UInt8" || typeNameStr == "u8") {
                 llvmType = llvm::Type::getInt8Ty(*context);   // Same as i8 at LLVM level
             
             // Floating point types
-            } else if (typeNameStr == "Float" || typeNameStr == "float" || typeNameStr == "f64") {
+            } else if (typeNameStr == "Float" || typeNameStr == "f64") {
                 llvmType = doubleType;
-            } else if (typeNameStr == "Float32" || typeNameStr == "float32" || typeNameStr == "f32") {
+            } else if (typeNameStr == "Float32" || typeNameStr == "f32") {
                 llvmType = floatType;
             
             // Boolean type
-            } else if (typeNameStr == "Bool" || typeNameStr == "bool") {
+            } else if (typeNameStr == "Bool") {
                 llvmType = int1Type;
             
             // Void type
-            } else if (typeNameStr == "Void" || typeNameStr == "void") {
+            } else if (typeNameStr == "Void") {
                 llvmType = voidType;
             
             // String type (fat pointer: { ptr, len })
-            } else if (typeNameStr == "String" || typeNameStr == "string") {
+            } else if (typeNameStr == "String") {
                 // String is a struct: { ptr: *i8, len: i64 }
                 std::vector<llvm::Type*> strFields = {
                     llvm::PointerType::get(*context, 0), // ptr to bytes
@@ -534,10 +534,10 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                 llvmType = llvm::StructType::get(*context, strFields, false);
             
             // Character types
-            } else if (typeNameStr == "Char" || typeNameStr == "char") {
+            } else if (typeNameStr == "Char") {
                 // Char represents a single UTF-8 code unit (1 byte)
                 llvmType = int8Type;
-            } else if (typeNameStr == "Rune" || typeNameStr == "rune") {
+            } else if (typeNameStr == "Rune") {
                 // Rune represents a full Unicode code point (up to 32 bits)
                 llvmType = int32Type;
             

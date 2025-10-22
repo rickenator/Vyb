@@ -168,7 +168,7 @@ bool SemanticAnalyzer::isIntegerType(ast::TypeNode* type) {
     if (auto tn = dynamic_cast<ast::TypeName*>(type)) {
         if (!tn->identifier) return false;
         const std::string& name = tn->identifier->name;
-        return name == "int" || name == "Int" || name == "i8" || name == "i16" || name == "i32" || name == "i64" ||
+        return name == "Int" || name == "i8" || name == "i16" || name == "i32" || name == "i64" ||
                name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "size_t" || 
                name == "isize" || name == "usize";
     }
@@ -297,15 +297,15 @@ void SemanticAnalyzer::visit(ast::IntegerLiteral* node) {
 }
 
 void SemanticAnalyzer::visit(ast::FloatLiteral* node) {
-    expressionTypes[node] = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "float"));
+    expressionTypes[node] = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Float"));
 }
 
 void SemanticAnalyzer::visit(ast::StringLiteral* node) {
-    expressionTypes[node] = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "string"));
+    expressionTypes[node] = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "String"));
 }
 
 void SemanticAnalyzer::visit(ast::BooleanLiteral* node) {
-    expressionTypes[node] = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "bool"));
+    expressionTypes[node] = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Bool"));
 }
 
 void SemanticAnalyzer::visit(ast::NilLiteral* node) {
@@ -3320,7 +3320,7 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
                typeNameStr == "u8" || typeNameStr == "u16" || typeNameStr == "u32" || typeNameStr == "u64" ||
                typeNameStr == "f32" || typeNameStr == "f64" ||
                typeNameStr == "bool" || typeNameStr == "Bool" || typeNameStr == "string" || typeNameStr == "void" ||
-               typeNameStr == "int" || typeNameStr == "float" ||
+               typeNameStr == "Int" || typeNameStr == "Float" ||
                typeNameStr == "Int" || typeNameStr == "String" || typeNameStr == "Int8" ||
                typeNameStr == "Future" || typeNameStr == "Void" ||
                typeNameStr == "my" || typeNameStr == "their" || typeNameStr == "view" || typeNameStr == "borrow") { 
