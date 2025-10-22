@@ -1,10 +1,10 @@
 # Vyn Language Roadmap
 
-**Last Updated:** October 22, 2025
+**Last Updated:** October 22, 2025 (v0.4.3)
 
 This document outlines the completed features, ongoing development, and future considerations for the Vyn programming language.
 
-## Current Status (v0.4.2)
+## Current Status (v0.4.3)
 
 **✅ MAJOR ACHIEVEMENTS COMPLETED:**
 1.  **LLVM Backend:** Fully functional LLVM IR generation and JIT execution
@@ -18,9 +18,11 @@ This document outlines the completed features, ongoing development, and future c
 9.  **✅ Vec Iteration (COMPLETED v0.4.1):** `for (item in vec)` with mandatory parentheses, full break/continue support
 10. **✅ Range-Based For Loops (COMPLETED v0.4.1):** `for (i in 0..10)` inclusive ranges with optional step
 11. **✅ Member Access (COMPLETED):** Object field access (obj.field) and array indexing (arr[index])
-12. **✅ Binary Operations (COMPLETED):** Complete operator precedence system with all arithmetic, comparison, and logical operators
-13. **✅ Variadic Tuples (COMPLETED v0.4.0):** `Tuple<T,U,V,...>` with full 1-N type parameter support and dual syntax
-14. **✅ Introspection System (COMPLETED v0.4.2):** typeof/typename operators for runtime type reflection
+13. **✅ Binary Operations (COMPLETED):** Complete operator precedence system with all arithmetic, comparison, and logical operators
+14. **✅ Variadic Tuples (COMPLETED v0.4.0):** `Tuple<T,U,V,...>` with full 1-N type parameter support and dual syntax
+15. **✅ Introspection System (COMPLETED v0.4.2):** typeof/typename operators for runtime type reflection
+16. **✅ Aspect System (COMPLETED v0.4.2):** User-extensible aspects with bind blocks for polymorphism
+17. **✅ Object File Emission (COMPLETED v0.4.3):** AOT compilation to native .o files with optimization levels
 
 ### Variadic Tuple System (v0.4.0)
 
@@ -79,18 +81,27 @@ The immediate focus for the next release:
    - Method resolution on generic parameters
    - Function specialization with caching
    - Works with aspect bounds: `func<T<Display>>(item: T)`
-3. **🚧 Aspect System (IN PROGRESS):** User-extensible aspects with bind blocks
+3. **✅ Aspect System (COMPLETED v0.4.2):** User-extensible aspects with bind blocks
    - ✅ Define aspects with method signatures
    - ✅ Implement aspects for types (bind blocks)
-   - 🚧 Call aspect methods on values (value.method())
+   - ✅ Call aspect methods on values (value.method())
    - ✅ Validate aspect bounds in generics
    - See `doc/ASPECT_SYSTEM_DESIGN.md` for full specification
-4. **Aspect Method Calls:** Complete method invocation on aspect-bound types
-5. **Generic Struct Instantiation:** Monomorphization for generic structs
+4. **Generic Struct Instantiation:** Monomorphization for generic structs
 
-### 📋 CURRENT FOCUS (v0.4.3)
+### 📋 COMPLETED IN v0.4.3
 
-1. **✅ Error Handling System (COMPLETED v0.4.2):** Production-ready `fail`/`trap` error handling
+1. **✅ Object File Emission (COMPLETED v0.4.3):** AOT compilation to native object files
+   - Compile to .o files with `--compile/-c` flag
+   - Support all optimization levels: -O0, -O1, -O2 (default), -O3
+   - Full LLVM target machine integration for all architectures
+   - Cross-compilation support (x86-64, ARM, AArch64, RISC-V, etc.)
+   - ELF relocatable object files with debug info (DWARF)
+   - LLVM 18 API compatibility (CodeGenFileType, CodeGenOptLevel)
+   - Foundation for static linking and standalone executables
+   - See `doc/MODULE_FFI_BINARY_ROADMAP.md` Phase 3.1
+
+2. **✅ Error Handling System (COMPLETED v0.4.2):** Production-ready `fail`/`trap` error handling
    - Zero-cost success path with heap-allocated error contexts
    - Type-safe pattern matching with struct field access
    - Multi-level error propagation through call stacks
@@ -99,14 +110,21 @@ The immediate focus for the next release:
    - Complete LLVM codegen implementation
    - See "Error Handling Roadmap" section below for future enhancements
 
+### 📋 CURRENT FOCUS (v0.4.4)
+
+1. **Static Linking:** Link .o files into standalone executables
+   - Invoke system linker (ld, lld, or gold)
+   - Link against libc and runtime libraries
+   - Support multi-file compilation
+   - Command: `vyn build main.vyn -o myapp`
+   - See `doc/MODULE_FFI_BINARY_ROADMAP.md` Phase 3.2
+
 2. **Range Patterns in Match/Select:** Implement `a..b` range matching for elegant numeric range handling
    - Syntax: `1..10 -> "single digit"` in match/select expressions
    - Note: Conflicts with comparison patterns (`>= 90`) need resolution
    - Design decision: May use different syntax or restrict to one pattern type
 
-3. **Aspect Method Calls:** Complete method invocation on aspect-bound types
-
-4. **Standard Library Expansion:** Building core modules for collections, I/O, math
+3. **Standard Library Expansion:** Building core modules for collections, I/O, math
 
 5. **Enhanced Error Messages:** More detailed compilation feedback and suggestions
 
@@ -494,7 +512,7 @@ process_with_cleanup(path<String>)<String> -> {
 # - Test: test/trap/test_ensure_simple.vyn demonstrates working implementation
 ```
 
-**Phase 6.4 - Stack Trace Capture (Planned for v0.4.3):** � HIGH PRIORITY
+**Phase 6.4 - Stack Trace Capture (Planned for v0.4.4):** 📍 HIGH PRIORITY
 ```vyn
 # Capture source-level stack traces on fail
 divide(a<Int>, b<Int>)<Int> -> {
@@ -527,7 +545,7 @@ aspect Errable {
 }
 ```
 
-**Phase 6.5 - Wildcard Pattern (Planned for v0.4.4):**
+**Phase 6.5 - Wildcard Pattern (Planned for v0.4.5):**
 ```vyn
 # Catch-all handler for any error type
 {

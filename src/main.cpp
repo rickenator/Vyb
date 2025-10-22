@@ -66,6 +66,14 @@ extern "C" {
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/Error.h>
 
+// LLVM includes for object file emission
+#include <llvm/IR/LegacyPassManager.h>
+#include <llvm/Support/FileSystem.h>
+#include <llvm/TargetParser/Host.h>
+#include <llvm/MC/TargetRegistry.h>
+#include <llvm/Target/TargetMachine.h>
+#include <llvm/Target/TargetOptions.h>
+
 // Globals for test verbose control
 std::set<std::string> g_verbose_test_specifiers;
 bool g_make_all_tests_verbose = false;
@@ -82,6 +90,128 @@ namespace vyn {
 
 
 
+
+// Function to compile Vyn code to object file
+int compile_vyn_to_object(const std::string& source, const std::string& fileName, 
+                          const std::string& outputFile, int optLevel = 2) {
+    std::cout << "Compiling " << fileName << " to object file..." << std::endl;
+    
+    // Initialize LLVM targets
+    llvm::InitializeAllTargetInfos();
+    llvm::InitializeAllTargets();
+    llvm::InitializeAllTargetMCs();
+    llvm::InitializeAllAsmParsers();
+    llvm::InitializeAllAsmPrinters();
+    
+    try {
+        std::cout << "Creating driver instance..." << std::endl;
+        vyn::Driver driver;
+
+        std::cout << "Tokenizing source code..." << std::endl;
+        Lexer lexer(source, fileName);
+        std::vector<vyn::token::Token> tokens = lexer.tokenize();
+        std::cout << "Tokens generated: " << tokens.size() << " tokens" << std::endl;
+
+        std::cout << "Parsing tokens into AST..." << std::endl;
+        vyn::Parser parser(tokens, fileName);
+        auto ast = parser.parse_module();
+        if (!ast) {
+            throw std::runtime_error("Failed to parse source code");
+        }
+        std::cout << "AST created successfully" << std::endl;
+
+        std::cout << "Running semantic analysis..." << std::endl;
+        vyn::SemanticAnalyzer semanticAnalyzer(driver);
+        driver.setSemanticAnalyzer(&semanticAnalyzer);
+        semanticAnalyzer.analyze(ast.get());
+        
+        const auto& semanticErrors = semanticAnalyzer.getErrors();
+        if (!semanticErrors.empty()) {
+            std::cerr << "\nSemantic Errors:" << std::endl;
+            for (const auto& error : semanticErrors) {
+                std::cerr << "  " << error << std::endl;
+            }
+            throw std::runtime_error("Semantic analysis failed with " + 
+                std::to_string(semanticErrors.size()) + " error(s)");
+        }
+        std::cout << "Semantic analysis completed" << std::endl;
+
+        std::cout << "Generating LLVM IR code..." << std::endl;
+        vyn::LLVMCodegen codegen(driver);
+        codegen.generate(ast.get(), fileName + ".ll");
+        std::cout << "LLVM IR generation completed" << std::endl;
+
+        // Get the LLVM module
+        llvm::Module* module = codegen.getModule();
+        
+        // Verify the module
+        std::cout << "Verifying module..." << std::endl;
+        std::string verifyErrors;
+        llvm::raw_string_ostream verifyStream(verifyErrors);
+        if (llvm::verifyModule(*module, &verifyStream)) {
+            verifyStream.flush();
+            std::cerr << "Module verification failed:\n" << verifyErrors << std::endl;
+            throw std::runtime_error("Module verification failed: " + verifyErrors);
+        }
+        std::cout << "Module verified successfully" << std::endl;
+        
+        // Setup target machine
+        auto targetTriple = llvm::sys::getDefaultTargetTriple();
+        std::cout << "Target triple: " << targetTriple << std::endl;
+        module->setTargetTriple(targetTriple);
+        
+        std::string error;
+        auto target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
+        if (!target) {
+            throw std::runtime_error("Failed to lookup target: " + error);
+        }
+        
+        auto CPU = "generic";
+        auto features = "";
+        
+        llvm::TargetOptions opt;
+        auto relocModel = std::optional<llvm::Reloc::Model>(llvm::Reloc::PIC_);
+        auto targetMachine = target->createTargetMachine(targetTriple, CPU, features, 
+                                                         opt, relocModel);
+        
+        module->setDataLayout(targetMachine->createDataLayout());
+        
+        // Open output file
+        std::error_code EC;
+        llvm::raw_fd_ostream dest(outputFile, EC, llvm::sys::fs::OF_None);
+        if (EC) {
+            throw std::runtime_error("Could not open file: " + EC.message());
+        }
+        
+        // Set optimization level
+        llvm::CodeGenOptLevel cgOptLevel;
+        switch (optLevel) {
+            case 0: cgOptLevel = llvm::CodeGenOptLevel::None; break;
+            case 1: cgOptLevel = llvm::CodeGenOptLevel::Less; break;
+            case 3: cgOptLevel = llvm::CodeGenOptLevel::Aggressive; break;
+            default: cgOptLevel = llvm::CodeGenOptLevel::Default; break;
+        }
+        
+        // Emit object file
+        llvm::legacy::PassManager pass;
+        auto fileType = llvm::CodeGenFileType::ObjectFile;
+        
+        if (targetMachine->addPassesToEmitFile(pass, dest, nullptr, fileType)) {
+            throw std::runtime_error("TargetMachine can't emit a file of this type");
+        }
+        
+        std::cout << "Emitting object file with optimization level -O" << optLevel << "..." << std::endl;
+        pass.run(*module);
+        dest.flush();
+        
+        std::cout << "Successfully compiled to: " << outputFile << std::endl;
+        return 0;
+        
+    } catch (const std::exception& e) {
+        std::cerr << "Error compiling to object file: " << e.what() << std::endl;
+        return 1;
+    }
+}
 
 // Function to execute Vyn code using LLVM JIT
 int run_vyn_code(const std::string& source, const std::string& fileName, bool generateLLVMIR) {
@@ -409,6 +539,9 @@ int main(int argc, char* argv[]) {
     bool parse_only_mode = false;
     bool semantic_only_mode = false;
     bool emit_llvm_ir = false;
+    bool compile_mode = false;
+    std::string compile_output;
+    int optimization_level = 2;  // Default -O2
     bool execute_jit = true;  // By default, execute the code with JIT
 
     for (int i = 1; i < argc; ++i) {
@@ -430,6 +563,23 @@ int main(int argc, char* argv[]) {
             continue;
         } else if (arg == "--no-execute") {
             execute_jit = false;  // Explicitly disable JIT execution
+            continue;
+        } else if (arg == "--compile" || arg == "-c") {
+            compile_mode = true;
+            execute_jit = false;
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                compile_output = argv[++i];
+            }
+            continue;
+        } else if (arg.substr(0, 2) == "-O") {
+            // Parse optimization level: -O0, -O1, -O2, -O3
+            if (arg.length() > 2) {
+                optimization_level = arg[2] - '0';
+                if (optimization_level < 0 || optimization_level > 3) {
+                    std::cerr << "Invalid optimization level: " << arg << std::endl;
+                    optimization_level = 2;
+                }
+            }
             continue;
         } else if (arg == "--debug-verbose") {
             if (i + 1 < argc) {
@@ -605,6 +755,21 @@ int main(int argc, char* argv[]) {
                 return 0;
             }
             
+            // Compile mode: emit object file
+            if (compile_mode) {
+                std::string objFile = compile_output;
+                if (objFile.empty()) {
+                    // Default: replace extension with .o
+                    objFile = filename;
+                    size_t dot = objFile.find_last_of('.');
+                    if (dot != std::string::npos) {
+                        objFile = objFile.substr(0, dot);
+                    }
+                    objFile += ".o";
+                }
+                return compile_vyn_to_object(source, filename, objFile, optimization_level);
+            }
+            
             // Default behavior: JIT compile and execute the code
             if (execute_jit) {
                 try {
@@ -628,6 +793,8 @@ int main(int argc, char* argv[]) {
         std::cout << "  --parse-only          Stop after parsing (validates syntax only)" << std::endl;
         std::cout << "  --semantic-only       Stop after semantic analysis" << std::endl;
         std::cout << "  --emit-llvm           Generate LLVM IR to a .ll file" << std::endl;
+        std::cout << "  --compile, -c [file]  Compile to object file (.o)" << std::endl;
+        std::cout << "  -O0, -O1, -O2, -O3    Set optimization level (default: -O2)" << std::endl;
         std::cout << "  --no-execute          Do not execute the code (JIT is on by default)" << std::endl;
         std::cout << std::endl;
         std::cout << "Test Mode Options:" << std::endl;

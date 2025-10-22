@@ -48,6 +48,11 @@ llvm_map_components_to_libnames(LLVM_LIBS
   X86CodeGen       # X86 backend (was X86)
   RuntimeDyld
   X86AsmParser
+  # Target components for object file emission (all architectures)
+  AllTargetsInfos
+  AllTargetsDescs
+  AllTargetsCodeGens
+  AllTargetsAsmParsers
 )
 message(STATUS "LLVM libraries: ${LLVM_LIBS}")
 
