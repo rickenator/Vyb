@@ -47,6 +47,7 @@ echo
 
 test_compile "test/compilation/test_compile.vyn" 49
 test_compile "test/compilation/binary_tree.vyn" 60
+test_compile "test/compilation/binary_tree_complex.vyn" 94
 
 echo
 echo "=========================================="
