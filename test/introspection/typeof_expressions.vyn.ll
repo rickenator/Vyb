@@ -4,7 +4,6 @@ source_filename = "VynModule"
 @main.str = private unnamed_addr constant [5 x i8] c"main\00", align 1
 @filepath.str = private unnamed_addr constant [42 x i8] c"test/introspection/typeof_expressions.vyn\00", align 1
 @0 = private unnamed_addr constant [29 x i8] c"typeof on expressions works!\00", align 1
-@type_name = private unnamed_addr constant [8 x i8] c"unknown\00", align 1
 @get_number.str = private unnamed_addr constant [11 x i8] c"get_number\00", align 1
 @filepath.str.1 = private unnamed_addr constant [42 x i8] c"test/introspection/typeof_expressions.vyn\00", align 1
 
@@ -21,10 +20,7 @@ entry:
   call void @llvm.dbg.declare(metadata ptr %expr_match, metadata !10, metadata !DIExpression()), !dbg !15
   store i1 true, ptr %func_match, align 1, !dbg !13
   call void @llvm.dbg.declare(metadata ptr %func_match, metadata !12, metadata !DIExpression()), !dbg !16
-  %serialize_temp = alloca { ptr, i64 }, align 8, !dbg !13
-  store { ptr, i64 } { ptr @0, i64 28 }, ptr %serialize_temp, align 8, !dbg !13
-  %serialized_json = call ptr @__vyn_serialize_to_json(ptr %serialize_temp, ptr @type_name), !dbg !13
-  call void @__vyn_println(ptr %serialized_json), !dbg !13
+  call void @__vyn_println(ptr @0), !dbg !13
   call void @__vyn_runtime_pop_call_frame(), !dbg !13
   ret i64 0, !dbg !13
 }
@@ -42,11 +38,11 @@ declare void @__vyn_runtime_push_call_frame(ptr, ptr, i32, i32)
 ; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)
 declare void @llvm.dbg.declare(metadata, metadata, metadata) #1
 
-declare ptr @__vyn_serialize_to_json(ptr, ptr)
-
 declare void @__vyn_println(ptr)
 
 declare void @__vyn_runtime_pop_call_frame()
+
+declare ptr @__vyn_serialize_to_json(ptr, ptr)
 
 declare ptr @__vyn_convert_lit_string(ptr)
 

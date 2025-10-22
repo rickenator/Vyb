@@ -4,11 +4,10 @@ source_filename = "VynModule"
 @main.str = private unnamed_addr constant [5 x i8] c"main\00", align 1
 @filepath.str = private unnamed_addr constant [38 x i8] c"test/introspection/typename_basic.vyn\00", align 1
 @0 = private unnamed_addr constant [6 x i8] c"hello\00", align 1
-@1 = private unnamed_addr constant [8 x i8] c"Unknown\00", align 1
-@2 = private unnamed_addr constant [8 x i8] c"Unknown\00", align 1
-@3 = private unnamed_addr constant [8 x i8] c"Unknown\00", align 1
+@1 = private unnamed_addr constant [4 x i8] c"Int\00", align 1
+@2 = private unnamed_addr constant [6 x i8] c"float\00", align 1
+@3 = private unnamed_addr constant [7 x i8] c"string\00", align 1
 @4 = private unnamed_addr constant [19 x i8] c"typename(x) works!\00", align 1
-@type_name = private unnamed_addr constant [8 x i8] c"unknown\00", align 1
 
 ; Function Attrs: noinline
 define i64 @main() #0 !dbg !4 {
@@ -26,16 +25,13 @@ entry:
   call void @llvm.dbg.declare(metadata ptr %y, metadata !10, metadata !DIExpression()), !dbg !19
   store { ptr, i64 } { ptr @0, i64 5 }, ptr %s, align 8, !dbg !17
   call void @llvm.dbg.declare(metadata ptr %s, metadata !12, metadata !DIExpression()), !dbg !20
-  store { ptr, i64 } { ptr @1, i64 7 }, ptr %name_x, align 8, !dbg !17
+  store { ptr, i64 } { ptr @1, i64 3 }, ptr %name_x, align 8, !dbg !17
   call void @llvm.dbg.declare(metadata ptr %name_x, metadata !14, metadata !DIExpression()), !dbg !21
-  store { ptr, i64 } { ptr @2, i64 7 }, ptr %name_y, align 8, !dbg !17
+  store { ptr, i64 } { ptr @2, i64 5 }, ptr %name_y, align 8, !dbg !17
   call void @llvm.dbg.declare(metadata ptr %name_y, metadata !15, metadata !DIExpression()), !dbg !22
-  store { ptr, i64 } { ptr @3, i64 7 }, ptr %name_s, align 8, !dbg !17
+  store { ptr, i64 } { ptr @3, i64 6 }, ptr %name_s, align 8, !dbg !17
   call void @llvm.dbg.declare(metadata ptr %name_s, metadata !16, metadata !DIExpression()), !dbg !23
-  %serialize_temp = alloca { ptr, i64 }, align 8, !dbg !17
-  store { ptr, i64 } { ptr @4, i64 18 }, ptr %serialize_temp, align 8, !dbg !17
-  %serialized_json = call ptr @__vyn_serialize_to_json(ptr %serialize_temp, ptr @type_name), !dbg !17
-  call void @__vyn_println(ptr %serialized_json), !dbg !17
+  call void @__vyn_println(ptr @4), !dbg !17
   call void @__vyn_runtime_pop_call_frame(), !dbg !17
   ret i64 0, !dbg !17
 }
@@ -45,11 +41,11 @@ declare void @__vyn_runtime_push_call_frame(ptr, ptr, i32, i32)
 ; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)
 declare void @llvm.dbg.declare(metadata, metadata, metadata) #1
 
-declare ptr @__vyn_serialize_to_json(ptr, ptr)
-
 declare void @__vyn_println(ptr)
 
 declare void @__vyn_runtime_pop_call_frame()
+
+declare ptr @__vyn_serialize_to_json(ptr, ptr)
 
 declare ptr @__vyn_convert_lit_string(ptr)
 

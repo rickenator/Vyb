@@ -1251,30 +1251,49 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         
         llvm::Value* serializedValue = nullptr;
         
-        // Priority 1: Check for arrays first (before string check)
+        // Check for string type first (Vyn string struct {ptr, len})
         if (node->arguments[0]->type) {
             auto* argType = node->arguments[0]->type.get();
-            if (auto* arrayType = dynamic_cast<ast::ArrayType*>(argType)) {
+            std::string typeStr = argType->toString();
+            
+            // Priority 1: Check if it's a Vyn string type
+            if (typeStr == "string" || typeStr == "String") {
+                // It's a Vyn string struct {ptr, len} - extract the ptr field
+                if (arg->getType()->isStructTy()) {
+                    // Extract the ptr field (index 0) from the string struct
+                    serializedValue = builder->CreateExtractValue(arg, 0, "str.ptr");
+                } else {
+                    // Fallback
+                    serializedValue = generateGenericSerialization(arg, argType);
+                }
+            }
+            // Priority 2: Check for arrays
+            else if (auto* arrayType = dynamic_cast<ast::ArrayType*>(argType)) {
                 // Generate array serialization code
                 serializedValue = generateArraySerialization(arg, arrayType);
             }
+            // Priority 3: Check if the argument is already a string (char*) for non-array types
+            else if (arg->getType()->isPointerTy() && arg->getType() == int8PtrType) {
+                // It's already a string pointer (char*), use it directly
+                serializedValue = arg;
+            }
+            // Priority 4: Use generic serialization for other types
             else {
-                // Check if the argument is already a string (char*) for non-array types
-                if (arg->getType()->isPointerTy() && arg->getType() == int8PtrType) {
-                    // It's already a string pointer (char*), use it directly
-                    serializedValue = arg;
-                } else {
-                    // Use generic serialization for non-array types
-                    serializedValue = generateGenericSerialization(arg, node->arguments[0]->type.get());
-                }
+                serializedValue = generateGenericSerialization(arg, argType);
             }
         }
         else {
-            // Check if the argument is already a string (char*)
+            // No type info - check if the argument is already a string (char*)
             if (arg->getType()->isPointerTy() && arg->getType() == int8PtrType) {
                 // It's already a string pointer (char*), use it directly
                 serializedValue = arg;
-            } else {
+            } 
+            // Check if it's a struct (might be a string struct)
+            else if (arg->getType()->isStructTy() && arg->getType()->getStructNumElements() == 2) {
+                // Might be a string struct {ptr, len} - extract ptr
+                serializedValue = builder->CreateExtractValue(arg, 0, "str.ptr");
+            }
+            else {
                 // Fallback to generic serialization
                 serializedValue = generateGenericSerialization(arg, nullptr);
             }
