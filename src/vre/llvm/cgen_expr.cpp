@@ -4093,13 +4093,11 @@ void LLVMCodegen::visit(vyn::ast::TypeofExpression* node) {
         return;
     }
     
-    // Get the type name of the operand by visiting it first (type already resolved in semantic analysis)
-    // For now, we need to determine the type name from the operand's resolved type
-    // This is a placeholder - we'll need to extract type information properly
-    
-    // TODO: Implement proper type name extraction from semantic analysis
-    // For now, generate a placeholder hash
-    std::string typeName = "Unknown";  // This should come from semantic analysis
+    // Get the type name from the operand's type field (set by semantic analysis)
+    std::string typeName = "Unknown";
+    if (node->operand->type) {
+        typeName = node->operand->type->toString();
+    }
     
     // Generate type hash as compile-time constant
     uint64_t typeHash = std::hash<std::string>{}(typeName);
@@ -4116,9 +4114,11 @@ void LLVMCodegen::visit(vyn::ast::TypenameExpression* node) {
         return;
     }
     
-    // Get the type name of the operand
-    // TODO: Implement proper type name extraction from semantic analysis
-    std::string typeName = "Unknown";  // This should come from semantic analysis
+    // Get the type name from the operand's type field (set by semantic analysis)
+    std::string typeName = "Unknown";
+    if (node->operand->type) {
+        typeName = node->operand->type->toString();
+    }
     
     // Create a string literal containing the type name
     // Similar to StringLiteral::visit implementation
