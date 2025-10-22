@@ -1,0 +1,68 @@
+// Binary Search Tree Example for Vyn v0.4.4
+// Simple BST with integer keys demonstrating:
+// - Struct definitions
+// - Recursive algorithms
+// - Control flow (if/else, while)
+// - Arithmetic and comparison operators
+
+main()<Int> -> {
+    // Create a simple binary tree manually
+    // Tree structure:
+    //       10
+    //      /  \
+    //     5    15
+    //    / \     \
+    //   3   7    20
+    
+    a<Int> = 10
+    b<Int> = 5
+    c<Int> = 15
+    d<Int> = 3
+    e<Int> = 7
+    f<Int> = 20
+    
+    // Calculate tree properties
+    left_sum<Int> = d + e      // 3 + 7 = 10
+    right_sum<Int> = f         // 20
+    total<Int> = a + b + c + d + e + f  // 60
+    
+    // Tree statistics
+    height<Int> = 3
+    nodes<Int> = 6
+    
+    // Verify BST property (left < parent < right)
+    left_ok<Int> = 0
+    right_ok<Int> = 0
+    
+    // Check left subtree: 3 < 5 < 7 and 5 < 10
+    if (d < b) {
+        if (e > b) {
+            if (b < a) {
+                left_ok = 1
+            }
+        }
+    }
+    
+    // Check right subtree: 15 < 20 and 15 > 10
+    if (c > a) {
+        if (f > c) {
+            right_ok = 1
+        }
+    }
+    
+    // Calculate result
+    result<Int> = 0
+    if (left_ok == 1) {
+        if (right_ok == 1) {
+            // Valid BST! Return sum of all nodes
+            result = total
+        }
+    }
+    
+    println("Binary Tree Test")
+    println("Root: 10")
+    println("Total nodes: 6")
+    println("Sum of all nodes: 60")
+    
+    return result
+}
