@@ -495,7 +495,9 @@ vyn::TokenType Lexer::get_keyword_type(const std::string& word) {
         {"trap", vyn::TokenType::KEYWORD_TRAP},
         {"rethrow", vyn::TokenType::KEYWORD_RETHROW},
         {"ensure", vyn::TokenType::KEYWORD_ENSURE},
-        {"panic", vyn::TokenType::KEYWORD_PANIC}
+        {"panic", vyn::TokenType::KEYWORD_PANIC},
+        {"typeof", vyn::TokenType::KEYWORD_TYPEOF},
+        {"typename", vyn::TokenType::KEYWORD_TYPENAME}
     };
 
     auto it = keywords.find(word);

@@ -1044,6 +1044,23 @@ regular_array_literal:
             return std::make_unique<ast::AwaitExpression>(await_token.location, std::move(operand));
         }
         
+        // Handle introspection operators
+        if (match(TokenType::KEYWORD_TYPEOF)) {
+            token::Token typeof_token = previous_token();
+            expect(TokenType::LPAREN, "Expected '(' after 'typeof'");
+            vyn::ast::ExprPtr operand = parse_expression();
+            expect(TokenType::RPAREN, "Expected ')' after typeof operand");
+            return std::make_unique<ast::TypeofExpression>(typeof_token.location, std::move(operand));
+        }
+        
+        if (match(TokenType::KEYWORD_TYPENAME)) {
+            token::Token typename_token = previous_token();
+            expect(TokenType::LPAREN, "Expected '(' after 'typename'");
+            vyn::ast::ExprPtr operand = parse_expression();
+            expect(TokenType::RPAREN, "Expected ')' after typename operand");
+            return std::make_unique<ast::TypenameExpression>(typename_token.location, std::move(operand));
+        }
+        
         // Handle view and borrow operators
         if (match(TokenType::KEYWORD_VIEW)) {
             token::Token view_token = previous_token();

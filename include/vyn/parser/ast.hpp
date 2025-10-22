@@ -59,6 +59,8 @@ class RangeExpression; // Added for range-based for loops
 class BlockExpression; // Block as expression for match arms
 class SelectExpression; // Select expression for pattern matching with returns
 class ComparisonPattern; // Comparison pattern for match/select (e.g., >= 18)
+class TypeofExpression; // Introspection: typeof(expr) returns Type
+class TypenameExpression; // Introspection: typename(expr) returns String
 
 // Statements
 class BlockStatement;
@@ -208,6 +210,8 @@ enum class NodeType {
     BLOCK_EXPRESSION, // Block as expression for match arms
     SELECT_EXPRESSION, // Select expression for pattern matching
     COMPARISON_PATTERN, // Comparison pattern for match/select
+    TYPEOF_EXPRESSION, // Introspection: typeof(expr) returns Type
+    TYPENAME_EXPRESSION, // Introspection: typename(expr) returns String
 
 
     // Statements
@@ -309,6 +313,8 @@ public:
     virtual void visit(BlockExpression* node) = 0;
     virtual void visit(SelectExpression* node) = 0;
     virtual void visit(ComparisonPattern* node) = 0;
+    virtual void visit(TypeofExpression* node) = 0;
+    virtual void visit(TypenameExpression* node) = 0;
 
     // Statements
     virtual void visit(BlockStatement* node) = 0;
@@ -1382,6 +1388,32 @@ public:
     ExprPtr value;    // Value to compare against
     
     ComparisonPattern(SourceLocation loc, token::Token op, ExprPtr value);
+    NodeType getType() const override;
+    std::string toString() const override;
+    void accept(Visitor& visitor) override;
+};
+
+// --- TypeofExpression ---
+// Returns runtime type identity as opaque Type value
+// typeof(value) -> Type (8-byte type ID hash)
+class TypeofExpression : public Expression {
+public:
+    ExprPtr operand;  // Expression to get type of
+    
+    TypeofExpression(SourceLocation loc, ExprPtr operand);
+    NodeType getType() const override;
+    std::string toString() const override;
+    void accept(Visitor& visitor) override;
+};
+
+// --- TypenameExpression ---
+// Returns human-readable type name as String
+// typename(value) -> String (e.g., "Int", "ParseError")
+class TypenameExpression : public Expression {
+public:
+    ExprPtr operand;  // Expression to get type name of
+    
+    TypenameExpression(SourceLocation loc, ExprPtr operand);
     NodeType getType() const override;
     std::string toString() const override;
     void accept(Visitor& visitor) override;

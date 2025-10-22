@@ -1251,30 +1251,49 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         
         llvm::Value* serializedValue = nullptr;
         
-        // Priority 1: Check for arrays first (before string check)
+        // Check for string type first (Vyn string struct {ptr, len})
         if (node->arguments[0]->type) {
             auto* argType = node->arguments[0]->type.get();
-            if (auto* arrayType = dynamic_cast<ast::ArrayType*>(argType)) {
+            std::string typeStr = argType->toString();
+            
+            // Priority 1: Check if it's a Vyn string type
+            if (typeStr == "string" || typeStr == "String") {
+                // It's a Vyn string struct {ptr, len} - extract the ptr field
+                if (arg->getType()->isStructTy()) {
+                    // Extract the ptr field (index 0) from the string struct
+                    serializedValue = builder->CreateExtractValue(arg, 0, "str.ptr");
+                } else {
+                    // Fallback
+                    serializedValue = generateGenericSerialization(arg, argType);
+                }
+            }
+            // Priority 2: Check for arrays
+            else if (auto* arrayType = dynamic_cast<ast::ArrayType*>(argType)) {
                 // Generate array serialization code
                 serializedValue = generateArraySerialization(arg, arrayType);
             }
+            // Priority 3: Check if the argument is already a string (char*) for non-array types
+            else if (arg->getType()->isPointerTy() && arg->getType() == int8PtrType) {
+                // It's already a string pointer (char*), use it directly
+                serializedValue = arg;
+            }
+            // Priority 4: Use generic serialization for other types
             else {
-                // Check if the argument is already a string (char*) for non-array types
-                if (arg->getType()->isPointerTy() && arg->getType() == int8PtrType) {
-                    // It's already a string pointer (char*), use it directly
-                    serializedValue = arg;
-                } else {
-                    // Use generic serialization for non-array types
-                    serializedValue = generateGenericSerialization(arg, node->arguments[0]->type.get());
-                }
+                serializedValue = generateGenericSerialization(arg, argType);
             }
         }
         else {
-            // Check if the argument is already a string (char*)
+            // No type info - check if the argument is already a string (char*)
             if (arg->getType()->isPointerTy() && arg->getType() == int8PtrType) {
                 // It's already a string pointer (char*), use it directly
                 serializedValue = arg;
-            } else {
+            } 
+            // Check if it's a struct (might be a string struct)
+            else if (arg->getType()->isStructTy() && arg->getType()->getStructNumElements() == 2) {
+                // Might be a string struct {ptr, len} - extract ptr
+                serializedValue = builder->CreateExtractValue(arg, 0, "str.ptr");
+            }
+            else {
                 // Fallback to generic serialization
                 serializedValue = generateGenericSerialization(arg, nullptr);
             }
@@ -4084,4 +4103,58 @@ llvm::Value* LLVMCodegen::generateBoolToString(llvm::Value* boolValue) {
     result->addIncoming(falseStr, falseBB);
     
     return result;
+}
+// Introspection: typeof(expr) - returns 8-byte type ID
+void LLVMCodegen::visit(vyn::ast::TypeofExpression* node) {
+    if (!node || !node->operand) {
+        logError(node->loc, "typeof() requires an operand expression");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Get the type name from the operand's type field (set by semantic analysis)
+    std::string typeName = "Unknown";
+    if (node->operand->type) {
+        typeName = node->operand->type->toString();
+    }
+    
+    // Generate type hash as compile-time constant
+    uint64_t typeHash = std::hash<std::string>{}(typeName);
+    llvm::Value* typeId = llvm::ConstantInt::get(builder->getInt64Ty(), typeHash);
+    
+    m_currentLLVMValue = typeId;
+}
+
+// Introspection: typename(expr) - returns String with type name
+void LLVMCodegen::visit(vyn::ast::TypenameExpression* node) {
+    if (!node || !node->operand) {
+        logError(node->loc, "typename() requires an operand expression");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    
+    // Get the type name from the operand's type field (set by semantic analysis)
+    std::string typeName = "Unknown";
+    if (node->operand->type) {
+        typeName = node->operand->type->toString();
+    }
+    
+    // Create a string literal containing the type name
+    // Similar to StringLiteral::visit implementation
+    llvm::Value* strPtr = builder->CreateGlobalStringPtr(typeName);
+    
+    // Create String struct {ptr, len}
+    llvm::Type* int8PtrType = llvm::PointerType::get(*context, 0);
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(*context);
+    llvm::StructType* stringStructType = llvm::StructType::get(*context, {int8PtrType, int64Type});
+    
+    // Calculate length
+    llvm::Value* lenValue = llvm::ConstantInt::get(int64Type, typeName.length());
+    
+    // Build the String struct
+    llvm::Value* stringStruct = llvm::UndefValue::get(stringStructType);
+    stringStruct = builder->CreateInsertValue(stringStruct, strPtr, 0, "typename.ptr");
+    stringStruct = builder->CreateInsertValue(stringStruct, lenValue, 1, "typename.len");
+    
+    m_currentLLVMValue = stringStruct;
 }

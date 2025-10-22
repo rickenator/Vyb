@@ -1,0 +1,6 @@
+// Test simple string println
+main()<Int> -> {
+    s<string> = "Hello World";
+    println(s);
+    return 0;
+}

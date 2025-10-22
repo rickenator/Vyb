@@ -321,6 +321,8 @@ public:
     void visit(ast::BorrowExpression* node) override;
     void visit(ast::IfExpression* node) override;
     void visit(ast::ArrayInitializationExpression* node) override;
+    void visit(ast::TypeofExpression* node) override;
+    void visit(ast::TypenameExpression* node) override;
 
     // Declarations
     void visit(ast::Module* node) override; // Added declaration

@@ -4575,4 +4575,40 @@ bool SemanticAnalyzer::matchesPattern(const std::string& concreteType, const std
     return true;
 }
 
+// Introspection: typeof(expr) returns Type (8-byte type ID)
+void SemanticAnalyzer::visit(ast::TypeofExpression* node) {
+    if (!node || !node->operand) {
+        addError("typeof() requires an operand expression.", node);
+        expressionTypes[node] = nullptr;
+        return;
+    }
+    
+    // Analyze operand to determine its type
+    node->operand->accept(*this);
+    
+    // Result type is always "Type" (primitive introspection type)
+    auto typeIdent = std::make_unique<ast::Identifier>(node->loc, "Type");
+    ast::TypeNode* resultType = new ast::TypeName(node->loc, std::move(typeIdent));
+    expressionTypes[node] = resultType;
+    node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
+}
+
+// Introspection: typename(expr) returns String
+void SemanticAnalyzer::visit(ast::TypenameExpression* node) {
+    if (!node || !node->operand) {
+        addError("typename() requires an operand expression.", node);
+        expressionTypes[node] = nullptr;
+        return;
+    }
+    
+    // Analyze operand to determine its type
+    node->operand->accept(*this);
+    
+    // Result type is always "string" (lowercase to match Vyn convention)
+    auto stringIdent = std::make_unique<ast::Identifier>(node->loc, "string");
+    ast::TypeNode* resultType = new ast::TypeName(node->loc, std::move(stringIdent));
+    expressionTypes[node] = resultType;
+    node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
+}
+
 } // Added missing closing brace for namespace vyn

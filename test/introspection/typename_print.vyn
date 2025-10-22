@@ -1,0 +1,7 @@
+// Test typename output with actual type names
+main()<Int> -> {
+    x<Int> = 42;
+    name<string> = typename(x);
+    println(name);
+    return 0;
+}
