@@ -236,6 +236,59 @@ main()<Void> -> {
 - ✅ LLVM codegen with debug metadata
 - ✅ Comprehensive test coverage
 
+### ✅ **Introspection System (v0.4.2)**
+
+Vyn features **runtime type introspection** for self-aware programs:
+
+#### Type Reflection Operators
+```vyn
+# Get runtime type hash
+var x<Int> = 42
+type_id<i64> = typeof(x)      # Returns hash of "Int"
+
+# Get type name as string
+type_name<String> = typename(x)  # Returns "Int"
+println(type_name)             # Prints: Int
+
+# Works on any expression
+result<i64> = typeof(10 + 20)  # Type of expression result
+func_type<String> = typename(compute())  # Type of function return
+```
+
+#### Key Features
+- **typeof(expr)**: Returns i64 hash of type name for runtime type comparison
+- **typename(expr)**: Returns String with human-readable type name
+- **Expression-based**: Works on variables, literals, function calls, any expression
+- **LLVM Integration**: Uses operand->type->toString() for actual type extraction
+- **Zero-cost**: Type information extracted at compile-time, hashes computed via std::hash
+
+#### Usage Examples
+```vyn
+# Type comparison
+if (typeof(x) == typeof(y)) {
+    println("Same types")
+}
+
+# Debug output
+println("Processing " + typename(data) + " value")
+
+# Foundation for advanced features (planned):
+# - Multi-type trap handlers: } trap (e<?>) -> { ... }
+# - Generic serialization based on runtime type
+# - Type-safe downcasting: value as TargetType
+```
+
+**Implementation Status:**
+- ✅ KEYWORD_TYPEOF and KEYWORD_TYPENAME tokens
+- ✅ TypeofExpression and TypenameExpression AST nodes
+- ✅ Parser support for typeof(expr) and typename(expr) syntax
+- ✅ Semantic analysis (typeof returns "Type", typename returns "string")
+- ✅ LLVM codegen with std::hash for typeof, string struct for typename
+- ✅ Comprehensive test coverage (4+ test files)
+- ✅ println() fix to properly handle Vyn string output
+
+**See:** `test/introspection/` for working examples and `doc/INTROSPECTION_DESIGN.md` for design philosophy
+
 ### ✅ **Aspect System (v0.4.2)**
 
 **Philosophy:** Vyn uses **aspects + structs** instead of classes and inheritance. This provides polymorphism, code reuse, and composition without the complexity and pitfalls of OOP class hierarchies. See `doc/ASPECT_SYSTEM_DESIGN.md` for detailed design and rationale.
@@ -1897,14 +1950,14 @@ fail 503  # What does this mean?
 - `ensure` keyword for cleanup/finally blocks 
 - Stack trace capture in error structs (v0.5.1)
 - Wildcard trap handlers `} trap (e<?>) -> { ... }` 
+- Type introspection (`typeof`, `as`) for discriminating multi-type traps
 
 **🔜 Planned Enhancements:**
 
 - Error context chaining (wrap errors with additional context)
 - Custom error formatting with Display aspect
 - Error metrics and telemetry hooks
-- Result<T,E> style error recovery without trap
-- Type introspection (`typeof`, `as`) for discriminating multi-type traps
+
 
 ### Example: Complete Error Handling
 

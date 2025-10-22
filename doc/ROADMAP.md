@@ -4,7 +4,7 @@
 
 This document outlines the completed features, ongoing development, and future considerations for the Vyn programming language.
 
-## Current Status (v0.4.1)
+## Current Status (v0.4.2)
 
 **✅ MAJOR ACHIEVEMENTS COMPLETED:**
 1.  **LLVM Backend:** Fully functional LLVM IR generation and JIT execution
@@ -20,6 +20,7 @@ This document outlines the completed features, ongoing development, and future c
 11. **✅ Member Access (COMPLETED):** Object field access (obj.field) and array indexing (arr[index])
 12. **✅ Binary Operations (COMPLETED):** Complete operator precedence system with all arithmetic, comparison, and logical operators
 13. **✅ Variadic Tuples (COMPLETED v0.4.0):** `Tuple<T,U,V,...>` with full 1-N type parameter support and dual syntax
+14. **✅ Introspection System (COMPLETED v0.4.2):** typeof/typename operators for runtime type reflection
 
 ### Variadic Tuple System (v0.4.0)
 
@@ -536,10 +537,12 @@ aspect Errable {
 } trap (e<?>) -> {
     # Handle any error type
     println("Unknown error occurred")
-    println("Error type: " + typename(e))  # Requires introspection
+    println("Error type: " + typename(e))  # ✅ Introspection now available!
     default_value
 }
 ```
+
+**Note**: Phase 1 introspection (typeof/typename) completed in v0.4.2, enabling wildcard trap implementation.
 
 **Phase 6.6 - Multi-Type Trap Block (v0.6.0):**
 ```vyn
@@ -605,11 +608,11 @@ Complete test suite in `test/trap/`:
 
 **All 15 tests passing** ✅
 
-### Introspection System 🔮
+### Introspection System ✅
 
-**Status**: 🔮 **Planned for v0.5.0** - Foundation for advanced language features
+**Status**: ✅ **COMPLETED in v0.4.2** (October 2025) - Phase 1 runtime type reflection
 
-A comprehensive introspection system enabling runtime type information and reflection capabilities.
+A runtime type introspection system providing typeof and typename operators for self-aware programs.
 
 #### **Core Concepts**
 
@@ -705,11 +708,14 @@ serialize<T>(value<T>)<String> -> {
 
 #### **Implementation Phases**
 
-**Phase 1: Basic Type Information (v0.5.0)**
-- `typeof(expr)` operator returning Type object
-- `typename(expr)` returning String type name
-- Type equality comparison (`==`, `!=`)
-- Hash-based type ID system (already implemented for errors)
+**✅ Phase 1: Basic Type Information (COMPLETED v0.4.2)**
+- ✅ `typeof(expr)` operator returning i64 type hash
+- ✅ `typename(expr)` returning String type name
+- ✅ Type equality comparison (hash-based `==`, `!=`)
+- ✅ Hash-based type ID system using std::hash<std::string>
+- ✅ LLVM codegen with string struct creation for typename
+- ✅ Comprehensive test suite in test/introspection/
+- ✅ println() fixed to properly output Vyn string types
 
 **Phase 2: Safe Downcasting (v0.5.0)**
 - `as` operator for safe type narrowing
