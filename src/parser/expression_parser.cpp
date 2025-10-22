@@ -1257,18 +1257,21 @@ std::unique_ptr<vyn::ast::TrapClause> ExpressionParser::parse_trap_clause() {
     
     // Check for wildcard '?'
     bool isWildcard = false;
+    bool isMultiType = false;
     vyn::ast::TypeNodePtr errorType = nullptr;
+    std::vector<vyn::ast::TypeNodePtr> errorTypes;
     
     if (check(TokenType::QUESTION_MARK)) {
         // Wildcard trap: trap (e<?>) -> { ... }
         consume(); // Consume '?'
         isWildcard = true;
     } else {
-        // Specific type trap: trap (e<ErrorType>) -> { ... }
+        // Specific type trap: trap (e<ErrorType>) or multi-type: trap (e<Type1 | Type2>)
         if (!check(TokenType::IDENTIFIER)) {
             throw error(peek(), "Expected error type name or '?' in trap clause");
         }
         
+        // Parse first type
         auto typeToken = consume();
         std::vector<std::string> typePath;
         typePath.push_back(typeToken.lexeme);
@@ -1290,7 +1293,47 @@ std::unique_ptr<vyn::ast::TrapClause> ExpressionParser::parse_trap_clause() {
         auto typeIdentifier = std::make_unique<vyn::ast::Identifier>(typeToken.location, fullTypeName);
         
         // Create TypeName with the identifier
-        errorType = std::make_unique<vyn::ast::TypeName>(typeToken.location, std::move(typeIdentifier));
+        auto firstType = std::make_unique<vyn::ast::TypeName>(typeToken.location, std::move(typeIdentifier));
+        
+        // Check for union operator '|' for multi-type traps
+        if (check(TokenType::PIPE)) {
+            // Multi-type trap: trap (e<Type1 | Type2 | Type3>) -> { ... }
+            isMultiType = true;
+            errorTypes.push_back(std::move(firstType));
+            
+            // Parse additional types separated by '|'
+            while (match(TokenType::PIPE)) {
+                if (!check(TokenType::IDENTIFIER)) {
+                    throw error(peek(), "Expected type name after '|' in trap clause");
+                }
+                
+                auto nextTypeToken = consume();
+                std::vector<std::string> nextTypePath;
+                nextTypePath.push_back(nextTypeToken.lexeme);
+                
+                // Handle module paths
+                while (match(TokenType::COLONCOLON)) {
+                    if (!check(TokenType::IDENTIFIER)) {
+                        throw error(peek(), "Expected identifier after '::'");
+                    }
+                    auto pathToken = consume();
+                    nextTypePath.push_back(pathToken.lexeme);
+                }
+                
+                // Create identifier from type path
+                std::string nextFullTypeName = nextTypePath[0];
+                for (size_t i = 1; i < nextTypePath.size(); ++i) {
+                    nextFullTypeName += "::" + nextTypePath[i];
+                }
+                auto nextTypeIdentifier = std::make_unique<vyn::ast::Identifier>(nextTypeToken.location, nextFullTypeName);
+                auto nextType = std::make_unique<vyn::ast::TypeName>(nextTypeToken.location, std::move(nextTypeIdentifier));
+                
+                errorTypes.push_back(std::move(nextType));
+            }
+        } else {
+            // Single type trap
+            errorType = std::move(firstType);
+        }
     }
     
     // Expect '>'
@@ -1312,9 +1355,17 @@ std::unique_ptr<vyn::ast::TrapClause> ExpressionParser::parse_trap_clause() {
     }
     auto handlerBlock = stmt_parser_->parse_block();
     
-    return std::make_unique<vyn::ast::TrapClause>(
-        loc, std::move(errorNameIdent), std::move(errorType), std::move(handlerBlock), isWildcard
+    // Create trap clause
+    auto trapClause = std::make_unique<vyn::ast::TrapClause>(
+        loc, std::move(errorNameIdent), std::move(errorType), std::move(handlerBlock), isWildcard, isMultiType
     );
+    
+    // Move errorTypes vector into the trap clause
+    if (isMultiType) {
+        trapClause->errorTypes = std::move(errorTypes);
+    }
+    
+    return trapClause;
 }
 
 // Parse ensure clause: ensure -> { cleanup }

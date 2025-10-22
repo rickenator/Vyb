@@ -1521,6 +1521,22 @@ safe_operation(x<Int>)<Int> -> {
     }
     return result
 }
+
+# Multi-type trap - catch union of error types
+process_data(input<String>)<Int> -> {
+    result<Int> = {
+        parse_and_validate(input)
+    } trap (e<ParseError | ValidationError>) -> {
+        # Handler matches either ParseError or ValidationError
+        println("Input processing failed")
+        return -1
+    } trap (e<NetworkError | TimeoutError>) -> {
+        # Different handler for network-related errors
+        println("Network issue, retrying...")
+        return retry_operation(input)
+    }
+    return result
+}
 ```
 
 **Pattern Matching Features:**
@@ -1528,6 +1544,7 @@ safe_operation(x<Int>)<Int> -> {
 - Exhaustive: Compiler ensures all error types handled
 - Field access: Access struct fields in trap handlers (`e.code`, `e.dividend`)
 - Wildcard: Use `} trap (e<?>) -> { }` to catch any error type 
+- Multi-type: Use `} trap (e<Type1 | Type2>) -> { }` to catch union of types 
 
 ### Error Propagation
 
@@ -1883,11 +1900,11 @@ fail 503  # What does this mean?
 
 **🔜 Planned Enhancements:**
 
-- Multi-type trap blocks `} trap (e<Type1 | Type2>) -> { ... }`
 - Error context chaining (wrap errors with additional context)
 - Custom error formatting with Display aspect
 - Error metrics and telemetry hooks
 - Result<T,E> style error recovery without trap
+- Type introspection (`typeof`, `as`) for discriminating multi-type traps
 
 ### Example: Complete Error Handling
 

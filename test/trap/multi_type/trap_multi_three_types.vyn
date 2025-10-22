@@ -1,0 +1,12 @@
+# Test: Three-type union trap
+# Expected: Should catch any of three types and return 30
+
+main()<Int> -> {
+    result<Int> = {
+        fail 100
+    } trap (e<Int | String | Bool>) -> {
+        # Caught Int, String, or Bool error
+        return 30
+    }
+    return result
+}

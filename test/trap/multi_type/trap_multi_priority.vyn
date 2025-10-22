@@ -1,0 +1,15 @@
+# Test: Multi-type trap with specific trap before it
+# Expected: Specific trap should match first, return 40
+
+main()<Int> -> {
+    result<Int> = {
+        fail 123
+    } trap (e<Int>) -> {
+        # Specific Int trap - should match first
+        return 40
+    } trap (e<Int | String>) -> {
+        # Multi-type trap - should NOT match  
+        return 99
+    }
+    return result
+}

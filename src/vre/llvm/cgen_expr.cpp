@@ -3101,9 +3101,13 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
     if (hasTrap) {
         // Determine error type from first trap clause
         // Phase 6.5: For wildcard traps, error type is nullptr, use generic i8* pointer
+        // Phase 6.6: For multi-type traps, use generic pointer (error binding will be opaque)
         llvm::Type* errorLLVMType = nullptr;
         if (node->trapClauses[0]->isWildcard) {
             // Wildcard trap: use generic pointer type
+            errorLLVMType = llvm::PointerType::get(*context, 0);
+        } else if (node->trapClauses[0]->isMultiType) {
+            // Multi-type trap: use generic pointer type (handler can't access typed fields yet)
             errorLLVMType = llvm::PointerType::get(*context, 0);
         } else {
             ast::TypeNode* errorType = node->trapClauses[0]->errorType.get();
@@ -3247,9 +3251,50 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
             llvm::Value* typeMatches = nullptr;
             
             // Phase 6.5: Check for wildcard trap (e<?>) - matches any error type
+            // Phase 6.6: Check for multi-type trap (e<Type1 | Type2>) - matches any of the types
             if (trapClause->isWildcard) {
                 // Wildcard trap: always matches
                 typeMatches = builder->getTrue();
+            } else if (trapClause->isMultiType && !trapClause->errorTypes.empty()) {
+                // Multi-type trap: check each type with OR-chain
+                // Start with false, OR with each type check
+                typeMatches = builder->getFalse();
+                
+                for (auto& errorType : trapClause->errorTypes) {
+                    if (!errorType) continue;
+                    
+                    // Extract type name from TypeNode
+                    std::string expectedTypeName;
+                    if (auto* typeName_node = dynamic_cast<ast::TypeName*>(errorType.get())) {
+                        if (typeName_node->identifier) {
+                            expectedTypeName = typeName_node->identifier->name;
+                        }
+                    }
+                    
+                    if (!expectedTypeName.empty()) {
+                        // Compute expected type hash
+                        uint64_t expectedTypeHash = std::hash<std::string>{}(expectedTypeName);
+                        llvm::Value* expectedTypeId = llvm::ConstantInt::get(builder->getInt64Ty(), expectedTypeHash);
+                        
+                        // Load the actual error type ID from the error struct header
+                        llvm::Value* typeIdPtr = builder->CreateBitCast(
+                            errorPtr,
+                            llvm::PointerType::get(builder->getInt64Ty(), 0),
+                            "error.typeid.ptr"
+                        );
+                        llvm::Value* actualTypeId = builder->CreateLoad(
+                            builder->getInt64Ty(),
+                            typeIdPtr,
+                            "error.typeid"
+                        );
+                        
+                        // Compare type IDs
+                        llvm::Value* thisTypeMatches = builder->CreateICmpEQ(actualTypeId, expectedTypeId, "type.matches." + expectedTypeName);
+                        
+                        // OR with previous checks
+                        typeMatches = builder->CreateOr(typeMatches, thisTypeMatches, "type.matches.or");
+                    }
+                }
             } else if (trapClause->errorType && errorSlot) {
                 // Specific type trap: check type ID
                 
@@ -3312,6 +3357,10 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
             if (trapClause->isWildcard) {
                 // Phase 6.5: Wildcard trap - error variable gets the raw error pointer
                 // This allows the handler to access type ID and data
+                typedErrorValue = errorPtr;
+            } else if (trapClause->isMultiType) {
+                // Phase 6.6: Multi-type trap - error variable gets the raw error pointer
+                // Handler would use typeof/as to discriminate types (when introspection exists)
                 typedErrorValue = errorPtr;
             } else if (trapClause->errorType) {
                 llvm::Type* expectedType = codegenType(trapClause->errorType.get());

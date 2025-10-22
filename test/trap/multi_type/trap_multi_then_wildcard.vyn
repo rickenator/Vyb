@@ -1,0 +1,15 @@
+# Test: Multi-type trap followed by wildcard catch-all
+# Expected: Multi-type catches Int, return 60
+
+main()<Int> -> {
+    result<Int> = {
+        fail 777
+    } trap (e<Int | String>) -> {
+        # Multi-type trap should match
+        return 60
+    } trap (e<?>) -> {
+        # Wildcard fallback - should NOT match
+        return 99
+    }
+    return result
+}

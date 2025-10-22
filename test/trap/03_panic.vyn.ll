@@ -1,0 +1,47 @@
+; ModuleID = 'VynModule'
+source_filename = "VynModule"
+
+@main.str = private unnamed_addr constant [5 x i8] c"main\00", align 1
+@filepath.str = private unnamed_addr constant [23 x i8] c"test/trap/03_panic.vyn\00", align 1
+@0 = private unnamed_addr constant [13 x i8] c"Before panic\00", align 1
+@type_name = private unnamed_addr constant [8 x i8] c"unknown\00", align 1
+@1 = private unnamed_addr constant [29 x i8] c"Something terrible happened!\00", align 1
+
+; Function Attrs: noinline
+define i64 @main() #0 !dbg !4 {
+entry:
+  call void @__vyn_runtime_push_call_frame(ptr @main.str, ptr @filepath.str, i32 4, i32 1), !dbg !8
+  %serialize_temp = alloca { ptr, i64 }, align 8, !dbg !8
+  store { ptr, i64 } { ptr @0, i64 12 }, ptr %serialize_temp, align 8, !dbg !8
+  %serialized_json = call ptr @__vyn_serialize_to_json(ptr %serialize_temp, ptr @type_name), !dbg !8
+  call void @__vyn_println(ptr %serialized_json), !dbg !8
+  call void @__vyn_runtime_panic(ptr @1), !dbg !8
+  unreachable, !dbg !8
+}
+
+declare void @__vyn_runtime_push_call_frame(ptr, ptr, i32, i32)
+
+declare ptr @__vyn_serialize_to_json(ptr, ptr)
+
+declare void @__vyn_println(ptr)
+
+; Function Attrs: noreturn
+declare void @__vyn_runtime_panic(ptr) #1
+
+declare ptr @__vyn_convert_lit_string(ptr)
+
+attributes #0 = { noinline }
+attributes #1 = { noreturn }
+
+!llvm.dbg.cu = !{!0}
+!llvm.module.flags = !{!2, !3}
+
+!0 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, file: !1, producer: "Vyn Compiler", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)
+!1 = !DIFile(filename: "03_panic.vyn.ll", directory: "/home/rick/Projects/Vyn/test/trap")
+!2 = !{i32 2, !"Debug Info Version", i32 3}
+!3 = !{i32 2, !"Dwarf Version", i32 4}
+!4 = distinct !DISubprogram(name: "main", linkageName: "main", scope: !1, file: !1, line: 4, type: !5, scopeLine: 4, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)
+!5 = !DISubroutineType(types: !6)
+!6 = !{!7}
+!7 = !DIBasicType(name: "i64", size: 64, encoding: DW_ATE_signed)
+!8 = !DILocation(line: 4, column: 1, scope: !4)

@@ -327,7 +327,7 @@ void __vyn_runtime_panic(const char* message) {
     format_timestamp(get_timestamp_ns(), timestamp_buf, sizeof(timestamp_buf));
     
     char thread_buf[128];
-    snprintf(thread_buf, sizeof(thread_buf), "Thread: %llu", (unsigned long long)get_thread_id());
+    snprintf(thread_buf, sizeof(thread_buf), "Thread: 0x%llx", (unsigned long long)get_thread_id());
     
     char time_buf[128];
     snprintf(time_buf, sizeof(time_buf), "Time: %s", timestamp_buf);
@@ -367,7 +367,7 @@ void __vyn_runtime_untrapped_error(VynError* error) {
     snprintf(line_buf, sizeof(line_buf), "Error: <runtime error>");
     fprintf(stderr, "│ %-61s│\n", line_buf);
     
-    snprintf(line_buf, sizeof(line_buf), "Thread: %llu", (unsigned long long)get_thread_id());
+    snprintf(line_buf, sizeof(line_buf), "Thread: 0x%llx", (unsigned long long)get_thread_id());
     fprintf(stderr, "│ %-61s│\n", line_buf);
     
     snprintf(line_buf, sizeof(line_buf), "Time: %s", timestamp_buf);

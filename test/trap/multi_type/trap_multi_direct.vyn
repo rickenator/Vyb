@@ -1,0 +1,11 @@
+# Test: Direct block with multi-type trap (no assignment)
+# Expected: Should catch Int error and return 11
+
+main()<Int> -> {
+    result<Int> = {
+        fail 42
+    } trap (e<Int | String>) -> {
+        return 11
+    }
+    return result
+}
