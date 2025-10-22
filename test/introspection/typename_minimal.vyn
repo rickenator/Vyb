@@ -1,0 +1,7 @@
+// Test typename - prints type name
+main()<Int> -> {
+    x<Int> = 42;
+    name = typename(x);
+    println(name);
+    return 0;
+}

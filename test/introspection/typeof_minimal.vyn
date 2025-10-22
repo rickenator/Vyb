@@ -1,0 +1,10 @@
+// Minimal typeof test - verify parsing
+main()<Int> -> {
+    x<Int> = 42;
+    y<Int> = 100;
+    
+    // Compare types using typeof
+    same<Bool> = (typeof(x) == typeof(y));
+    
+    return 0;
+}

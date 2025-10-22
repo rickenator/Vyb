@@ -1,0 +1,16 @@
+// Test basic typeof operator
+// typeof(expr) returns a Type (8-byte type ID)
+
+main()<Int> -> {
+    x<Int> = 42;
+    y<float> = 3.14;
+    s<string> = "hello";
+    
+    // Compare type IDs directly
+    same_int<Bool> = (typeof(x) == typeof(100));
+    diff_types<Bool> = (typeof(x) != typeof(y));
+    
+    println("typeof(x) works!");
+    
+    return 0;
+}
