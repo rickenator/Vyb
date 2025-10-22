@@ -649,7 +649,8 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
         
         // Now check types match (for both explicit types and inferred types)
         if (node->typeNode && expressionTypes.count(node->init.get())) {
-            ast::TypeNode* varType = node->typeNode.get();
+            // Use resolved type if available (e.g., TypeName with ->type set to VecType or TupleTypeNode)
+            ast::TypeNode* varType = node->typeNode->type ? node->typeNode->type.get() : node->typeNode.get();
             ast::TypeNode* initType = expressionTypes[node->init.get()];
             if (initType) { 
                 if (!areTypesCompatible(varType, initType)) { 
@@ -1801,34 +1802,37 @@ void SemanticAnalyzer::visit(ast::ConditionalExpression* node) {
 void SemanticAnalyzer::visit(ast::SequenceExpression* node) {
     // Process each expression in the sequence
     if (node->expressions.empty()) {
-        addError("Empty sequence expression.", node);
-        expressionTypes[node] = nullptr;
+        // Empty tuple - create empty TupleTypeNode
+        auto emptyTupleType = std::make_unique<ast::TupleTypeNode>(node->loc, std::vector<ast::TypeNodePtr>{});
+        expressionTypes[node] = emptyTupleType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(emptyTupleType.release());
         return;
     }
     
+    // Visit all expressions and collect their types
+    std::vector<ast::TypeNodePtr> elementTypes;
     for (auto& expr : node->expressions) {
         if (expr) {
             expr->accept(*this);
+            auto exprTypeIt = expressionTypes.find(expr.get());
+            if (exprTypeIt != expressionTypes.end() && exprTypeIt->second) {
+                elementTypes.push_back(exprTypeIt->second->clone());
+            } else {
+                addError("Cannot determine type of expression in tuple literal.", node);
+                expressionTypes[node] = nullptr;
+                return;
+            }
         } else {
             addError("Null expression in sequence.", node);
+            expressionTypes[node] = nullptr;
+            return;
         }
     }
     
-    // The type of a sequence expression is the type of its last expression
-    auto& lastExpr = node->expressions.back();
-    if (lastExpr) {
-        auto lastTypeIt = expressionTypes.find(lastExpr.get());
-        if (lastTypeIt != expressionTypes.end() && lastTypeIt->second) {
-            expressionTypes[node] = lastTypeIt->second;
-            node->type = std::shared_ptr<ast::TypeNode>(lastTypeIt->second->clone());
-        } else {
-            addError("Cannot determine type of last expression in sequence.", node);
-            expressionTypes[node] = nullptr;
-        }
-    } else {
-        addError("Last expression in sequence is null.", node);
-        expressionTypes[node] = nullptr;
-    }
+    // Create a TupleTypeNode with all element types
+    auto tupleType = std::make_unique<ast::TupleTypeNode>(node->loc, std::move(elementTypes));
+    expressionTypes[node] = tupleType.get();
+    node->type = std::shared_ptr<ast::TypeNode>(tupleType.release());
 }
 void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
     // Try to determine the type from the typePath field (e.g., Point in Point { ... })

@@ -608,13 +608,44 @@ regular_array_literal:
         }
 
         if (match(TokenType::LPAREN)) {
-            DEBUG_PRINT("Parsing grouped expression (LPAREN)");
+            DEBUG_PRINT("Parsing grouped expression or tuple literal (LPAREN)");
             DEBUG_TOKEN(previous_token());
-            vyn::ast::ExprPtr expr = parse_expression();
-            expect(TokenType::RPAREN);
-            DEBUG_PRINT("Exiting grouped expression (RPAREN)");
-            DEBUG_TOKEN(previous_token());
-            return expr;
+            SourceLocation lparen_loc = previous_token().location;
+            
+            // Check for empty tuple ()
+            if (check(TokenType::RPAREN)) {
+                consume(); // consume RPAREN
+                // Empty tuple - create sequence with no elements
+                return std::make_unique<vyn::ast::SequenceExpression>(lparen_loc, std::vector<vyn::ast::ExprPtr>{});
+            }
+            
+            // Parse first expression
+            vyn::ast::ExprPtr first_expr = parse_expression();
+            
+            // Check if this is a tuple (has comma) or just a grouped expression
+            if (check(TokenType::COMMA)) {
+                // This is a tuple literal - collect all expressions
+                std::vector<vyn::ast::ExprPtr> elements;
+                elements.push_back(std::move(first_expr));
+                
+                while (match(TokenType::COMMA)) {
+                    // Allow trailing comma
+                    if (check(TokenType::RPAREN)) {
+                        break;
+                    }
+                    elements.push_back(parse_expression());
+                }
+                
+                expect(TokenType::RPAREN);
+                DEBUG_PRINT("Parsed tuple literal with " + std::to_string(elements.size()) + " elements");
+                return std::make_unique<vyn::ast::SequenceExpression>(lparen_loc, std::move(elements));
+            } else {
+                // Just a grouped expression
+                expect(TokenType::RPAREN);
+                DEBUG_PRINT("Exiting grouped expression (RPAREN)");
+                DEBUG_TOKEN(previous_token());
+                return first_expr;
+            }
         }
         
         // Array literals and list comprehensions: [element1, element2] or [expr for var in iterable ...]
