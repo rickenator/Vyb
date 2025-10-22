@@ -1442,6 +1442,30 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                         return;
                     }
                 }
+                
+                // Handle Tuple methods
+                // Check if the variable is a tuple type by examining AST type info
+                if (methodName == "len") {
+                    // Look up variable in symbol table to get AST type
+                    auto varIt = namedValues.find(objectName);
+                    if (varIt != namedValues.end()) {
+                        // Try to find the declaration for this variable
+                        // For now, check if the LLVM type is a struct with known tuple characteristics
+                        if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(varIt->second)) {
+                            llvm::Type* allocatedType = allocaInst->getAllocatedType();
+                            if (allocatedType->isStructTy()) {
+                                llvm::StructType* structType = llvm::cast<llvm::StructType>(allocatedType);
+                                // Tuples have variable number of elements, but not 2 (String) or 3 (Vec)
+                                unsigned numElements = structType->getNumElements();
+                                if (numElements != 2 && numElements != 3) {
+                                    // Likely a tuple, return its size
+                                    m_currentLLVMValue = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), numElements);
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
             }
             
             // Handle Vec method calls on member expressions (e.g., tree.nodes.push())
@@ -1986,9 +2010,58 @@ void LLVMCodegen::visit(vyn::ast::AssignmentExpression *node) {
 
 
 void LLVMCodegen::visit(vyn::ast::ArrayElementExpression *node) {
-    // This is for using array[index] as an R-value (i.e., loading the value)
+    // This is for using array[index] or tuple[index] as an R-value (i.e., loading the value)
     // LHS usage is handled in AssignmentExpression
     
+    // Check if the base expression is a tuple type
+    bool isTupleAccess = false;
+    if (node->array->type) {
+        if (auto* tupleType = dynamic_cast<vyn::ast::TupleTypeNode*>(node->array->type.get())) {
+            isTupleAccess = true;
+        }
+    }
+    
+    // For tuple access, we need the actual struct value, not a pointer
+    if (isTupleAccess) {
+        // Visit the tuple expression to get the struct value
+        node->array->accept(*this);
+        llvm::Value *tupleValue = m_currentLLVMValue;
+        
+        // Visit the index expression
+        node->index->accept(*this);
+        llvm::Value *indexVal = m_currentLLVMValue;
+        
+        if (!tupleValue || !indexVal) {
+            logError(node->loc, "Tuple or index expression failed to codegen.");
+            m_currentLLVMValue = nullptr;
+            return;
+        }
+        
+        // Index must be a constant integer for tuple access
+        if (auto* constIndex = llvm::dyn_cast<llvm::ConstantInt>(indexVal)) {
+            uint64_t index = constIndex->getZExtValue();
+            
+            // Verify index is within bounds
+            auto* tupleType = dynamic_cast<vyn::ast::TupleTypeNode*>(node->array->type.get());
+            if (index >= tupleType->memberTypes.size()) {
+                logError(node->loc, "Tuple index " + std::to_string(index) + " out of bounds (size: " + 
+                         std::to_string(tupleType->memberTypes.size()) + ")");
+                m_currentLLVMValue = nullptr;
+                return;
+            }
+            
+            // Extract the element from the tuple struct
+            llvm::Value* element = builder->CreateExtractValue(tupleValue, {static_cast<unsigned>(index)}, "tuple_elem");
+            m_currentLLVMValue = element;
+            return;
+        } else {
+            logError(node->loc, "Tuple index must be a constant integer");
+            m_currentLLVMValue = nullptr;
+            return;
+        }
+    }
+    
+    // Original array access logic
     llvm::Value *arrayPtr = nullptr;
     
     // Special handling for identifier expressions to get the alloca directly
