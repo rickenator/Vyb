@@ -1299,6 +1299,20 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                 std::cout << "DEBUG: Primitive method " << typeStr << ".to_string() returns String (early path)" << std::endl;
                                 return;
                             }
+                            
+                            // Check for complex/struct type methods
+                            if (methodName == "to_string") {
+                                auto structIt = structFieldTypes.find(typeStr);
+                                if (structIt != structFieldTypes.end()) {
+                                    // Complex type .to_string() → JSON serialization
+                                    auto stringType = new ast::TypeName(node->loc,
+                                        std::make_unique<ast::Identifier>(node->loc, "String"));
+                                    expressionTypes[node] = stringType;
+                                    node->type = std::shared_ptr<ast::TypeNode>(stringType->clone());
+                                    std::cout << "DEBUG: Complex type " << typeStr << ".to_string() returns JSON String (early path)" << std::endl;
+                                    return;
+                                }
+                            }
                         }
                     }
                 }
@@ -1835,8 +1849,21 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
         return;
     }
     
-    // Check if we have field information for this struct
+    // Check if this is a user-defined struct type accessing a method (not a field)
+    // We need to allow method calls on structs (like .to_string()) to pass through to CallExpression
+    // So if the member name is a known method, don't treat it as a field access
     auto structIt = structFieldTypes.find(baseStructName);
+    if (structIt != structFieldTypes.end()) {
+        // This is a known struct type
+        // Check if propertyId is a method name (to_string, from_string, etc.)
+        if (propertyId->name == "to_string") {
+            // This is a method call, not a field access
+            // Let CallExpression visitor handle it
+            return;
+        }
+    }
+    
+    // Check if we have field information for this struct
     if (structIt == structFieldTypes.end()) {
         addError("Unknown struct type: " + baseStructName, node);
         return;

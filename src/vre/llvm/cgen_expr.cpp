@@ -947,9 +947,45 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                         m_currentLLVMValue = stringStruct;
                         return;
                     } else {
-                        // Complex type - call generic JSON deserializer (stub for now)
-                        logError(node->loc, "Complex type deserialization not yet implemented for " + typeName);
-                        m_currentLLVMValue = nullptr;
+                        // Complex type - call generic JSON deserializer
+                        std::cout << "DEBUG: Generating JSON deserialization for type: " << typeName << std::endl;
+                        
+                        // Check if this is a known struct type
+                        auto structIt = monomorphizedStructs.find(typeName);
+                        if (structIt == monomorphizedStructs.end()) {
+                            logError(node->loc, "Unknown struct type for deserialization: " + typeName);
+                            m_currentLLVMValue = nullptr;
+                            return;
+                        }
+                        
+                        llvm::StructType* targetStructType = structIt->second;
+                        
+                        // Declare __vyn_complex_from_json(json_str, type_name) -> void*
+                        llvm::FunctionType* fromJsonType = llvm::FunctionType::get(
+                            llvm::PointerType::get(*context, 0),  // returns void*
+                            {int8PtrType, int8PtrType},  // (json_str, type_name)
+                            false
+                        );
+                        llvm::Function* fromJsonFunc = module->getFunction("__vyn_complex_from_json");
+                        if (!fromJsonFunc) {
+                            fromJsonFunc = llvm::Function::Create(fromJsonType,
+                                llvm::Function::ExternalLinkage, "__vyn_complex_from_json", module.get());
+                        }
+                        
+                        // Create type name string constant
+                        llvm::Value* typeNameStr = builder->CreateGlobalStringPtr(typeName, "type.name");
+                        
+                        // Call deserializer
+                        llvm::Value* resultPtr = builder->CreateCall(fromJsonFunc, {charPtr, typeNameStr}, "from_json.ptr");
+                        
+                        // Cast void* to struct type pointer
+                        llvm::Value* structPtr = builder->CreateBitCast(resultPtr,
+                            llvm::PointerType::get(targetStructType, 0), "struct.ptr");
+                        
+                        // Load the struct value
+                        llvm::Value* structValue = builder->CreateLoad(targetStructType, structPtr, "struct.value");
+                        
+                        m_currentLLVMValue = structValue;
                         return;
                     }
                 }

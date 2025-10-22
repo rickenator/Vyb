@@ -55,6 +55,10 @@ extern "C" {
     bool __vyn_bool_from_string(const char* str, bool* success);
     char* __vyn_string_from_string(const char* str, bool* success);
     
+    // JSON serialization for complex types
+    char* __vyn_complex_to_json(void* data);
+    void* __vyn_complex_from_json(const char* json_str, const char* type_name);
+    
     // Error handling runtime functions (from error_handling.cpp)
     void __vyn_runtime_panic(const char* message) __attribute__((noreturn));
     void __vyn_runtime_untrapped_error(void* error) __attribute__((noreturn));
@@ -663,6 +667,12 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             llvm::orc::ExecutorAddr::fromPtr(&__vyn_bool_from_string), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyn_string_from_string")] = llvm::orc::ExecutorSymbolDef(
             llvm::orc::ExecutorAddr::fromPtr(&__vyn_string_from_string), llvm::JITSymbolFlags::Exported);
+        
+        // Register JSON serialization functions
+        runtimeSymbols[mangle("__vyn_complex_to_json")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_complex_to_json), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_complex_from_json")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_complex_from_json), llvm::JITSymbolFlags::Exported);
         
         // Add all the runtime symbols to the main dylib
         auto defineErr = mainDylib.define(llvm::orc::absoluteSymbols(runtimeSymbols));

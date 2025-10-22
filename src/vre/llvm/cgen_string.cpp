@@ -247,6 +247,43 @@ llvm::Value* LLVMCodegen::generateToStringCall(llvm::Value* value, llvm::Type* v
             llvm::Value* dataPtr = builder->CreateExtractValue(value, 0, "str.data_for_concat");
             return dataPtr;
         }
+        
+        // Check if this is a complex/custom struct type that needs JSON serialization
+        if (astType) {
+            std::string typeName = astType->toString();
+            // Look up if this is a user-defined struct
+            auto structIt = monomorphizedStructs.find(typeName);
+            if (structIt != monomorphizedStructs.end()) {
+                // This is a custom struct - serialize to JSON
+                std::cout << "DEBUG: Generating JSON serialization for struct type: " << typeName << std::endl;
+                
+                // For now, call a generic JSON serialization function
+                // TODO: Generate type-specific serialization metadata
+                llvm::FunctionType* jsonFuncType = llvm::FunctionType::get(
+                    int8PtrType,
+                    {llvm::PointerType::get(*context, 0)},  // void* for struct pointer
+                    false
+                );
+                llvm::Function* jsonFunc = module->getFunction("__vyn_complex_to_json");
+                if (!jsonFunc) {
+                    jsonFunc = llvm::Function::Create(jsonFuncType,
+                        llvm::Function::ExternalLinkage, "__vyn_complex_to_json", module.get());
+                }
+                
+                // Allocate space for the struct if it's a value (not already a pointer)
+                llvm::Value* structPtr = value;
+                if (!valueType->isPointerTy()) {
+                    structPtr = builder->CreateAlloca(valueType, nullptr, "struct.tmp");
+                    builder->CreateStore(value, structPtr);
+                }
+                
+                // Cast to void*
+                llvm::Value* voidPtr = builder->CreateBitCast(structPtr, llvm::PointerType::get(*context, 0), "struct.void_ptr");
+                
+                // Call JSON serialization
+                return builder->CreateCall(jsonFunc, {voidPtr}, "json.str");
+            }
+        }
     }
     
     // Get the base type name, resolving type aliases

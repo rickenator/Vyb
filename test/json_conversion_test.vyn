@@ -1,12 +1,12 @@
 // Test JSON serialization/deserialization for complex types
 
-struct Person -> {
+struct Person {
     name<String>,
     age<Int>,
     active<Bool>
 }
 
-struct Point -> {
+struct Point {
     x<Float>,
     y<Float>
 }
