@@ -6,6 +6,23 @@
 
 ---
 
+## Current Status (v0.4.2)
+
+**✅ CORE ERROR HANDLING COMPLETE**
+
+Vyn has a **production-ready error handling system** with:
+- Runtime infrastructure: VynError struct, heap allocation, type IDs (C++ level)
+- Language features: fail/trap/rethrow/ensure/panic keywords
+- Advanced patterns: wildcard `trap (e<?>) ->`, multi-type `trap (e<A|B>) ->`
+- Stack traces with source locations
+- Zero-cost success path
+- Comprehensive test coverage
+
+**What's Missing**: Standard library types (Error struct, Errorable aspect) to expose
+the runtime system to Vyn code. See "Implementation Roadmap" section below.
+
+---
+
 ## Core Philosophy
 
 Error handling should be:
@@ -1054,28 +1071,64 @@ VYN_ERROR_NO_COLOR=1 ./program
 
 ## Implementation Roadmap
 
-### Phase 1: Core Mechanism (v0.4.3)
-- [ ] `fail` statement parsing and semantic analysis
-- [ ] `trap` clause parsing and type checking
-- [ ] Basic Error type and Errorable aspect
-- [ ] Simple trap-based error handling (single trap)
+### Phase 1-6: Core Error Handling (v0.4.2 - COMPLETE ✅)
+- ✅ `fail` statement parsing and semantic analysis
+- ✅ `trap` clause parsing and type checking
+- ✅ Multiple trap clauses with type dispatch
+- ✅ `rethrow` statement for error propagation
+- ✅ `ensure` clause for cleanup
+- ✅ `panic` for unrecoverable errors
+- ✅ Runtime VynError infrastructure (C++ level)
+- ✅ Heap allocation with type ID + value storage
+- ✅ Stack trace capture with source locations
+- ✅ Wildcard patterns `trap (e<?>) -> { }`
+- ✅ Multi-type patterns `trap (e<A | B>) -> { }`
+- ✅ Integration with ownership system
+- ✅ Comprehensive test coverage (15+ tests passing)
 
-### Phase 2: Advanced Features (v0.4.4)
-- [ ] Multiple trap clauses with type dispatch
-- [ ] `rethrow` statement
-- [ ] `ensure` clause
-- [ ] Integration with ownership system for cleanup
+### Phase 7: Standard Library Error Types (v0.6.1+ - PLANNED)
 
-### Phase 3: Error Hierarchy (v0.4.5)
-- [ ] Custom error types
-- [ ] Error composition patterns
-- [ ] Standard library errors (IOError, ParseError, etc.)
+Expose runtime error system to Vyn code through stdlib:
 
-### Phase 4: Advanced Patterns (v0.5.0)
-- [ ] Result<T, E> type in standard library
-- [ ] `?` operator for auto-propagation
-- [ ] Error annotations on function signatures
-- [ ] Stack trace capture
+- [ ] **Errorable aspect**: Define aspect for error types
+  ```vyn
+  aspect Errorable {
+      message()<String> -> {}
+      code()<Int> -> {}
+  }
+  ```
+
+- [ ] **Error base struct**: Standard Vyn error type
+  ```vyn
+  struct Error {
+      message<String>,
+      code<Int>,
+      context<Vec<String>>
+  }
+  ```
+
+- [ ] **Display aspect**: General formatting (not error-specific)
+  ```vyn
+  aspect Display {
+      display()<String> -> {}
+  }
+  ```
+
+- [ ] **bind implementations**: Implement aspects for Error and common types
+  ```vyn
+  bind Errorable -> Error { ... }
+  bind Display -> Error { ... }
+  bind Display -> Int { ... }
+  ```
+
+- [ ] **Standard library errors**: IOError, ParseError, NetworkError, etc.
+- [ ] **Error context chaining**: Wrap errors with additional context
+- [ ] **Custom user error types**: User-defined structs implementing Errorable
+
+**NOT PLANNED**: 
+- ❌ Result<T,E> type (trap/fail is superior)
+- ❌ `?` operator (errors propagate automatically)
+- ❌ Error annotations (type system handles this)
 
 ---
 

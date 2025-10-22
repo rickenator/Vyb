@@ -557,12 +557,20 @@ aspect Errorable {
 }
 ```
 
-**Phase 6.7 - Advanced Features (v0.6.1+):**
-- Error context chaining (wrap errors with additional context)
-- Custom error formatting with Display aspect
-- Error metrics and telemetry hooks
-- Result<T,E> style error recovery without trap
-- Panic/abort for unrecoverable errors
+**Phase 6.7 - Standard Library Error Types (v0.6.1+):**
+
+Note: Runtime error infrastructure (VynError struct, heap allocation, type IDs) already exists.
+This phase is about exposing it to Vyn code through standard library types:
+
+- **Errorable aspect**: Define aspect for types that can be used as errors
+- **Error base type**: Standard Vyn struct wrapping runtime VynError
+- **Display aspect**: General formatting aspect for all types
+- **bind implementations**: Implement Errorable and Display for common error types
+- **Error context chaining**: Wrap errors with additional context (needs aspect system)
+- **Custom error formatting**: User-defined error display (needs Display aspect)
+- **Error metrics hooks**: Optional telemetry integration
+
+**NOT NEEDED**: Result<T,E> - Vyn's trap/fail system is superior for systems programming
 
 #### **Performance Characteristics**
 
