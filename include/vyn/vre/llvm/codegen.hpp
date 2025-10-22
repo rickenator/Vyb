@@ -227,6 +227,7 @@ private:
     
     // String operations
     llvm::Value* generateStringConcatenation(llvm::Value* leftStr, llvm::Value* rightStr, SourceLocation loc);
+    llvm::Value* generateStringComparison(llvm::Value* leftStr, llvm::Value* rightStr, vyn::TokenType op);
     
     // Array serialization
     llvm::Value* generateArraySerialization(llvm::Value* arrayPtr, vyn::ast::ArrayType* arrayType);

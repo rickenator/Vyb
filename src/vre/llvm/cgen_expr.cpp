@@ -612,26 +612,86 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
             break;
         // Comparison operators
         case vyn::TokenType::EQEQ: // Reverted to vyn::TokenType::EQEQ
+            // Check for String comparison first
+            if (L->getType()->isStructTy() && R->getType()->isStructTy()) {
+                llvm::StructType* leftStruct = llvm::cast<llvm::StructType>(L->getType());
+                llvm::StructType* rightStruct = llvm::cast<llvm::StructType>(R->getType());
+                // String struct: { ptr, len }
+                if (leftStruct->getNumElements() == 2 && rightStruct->getNumElements() == 2) {
+                    m_currentLLVMValue = generateStringComparison(L, R, vyn::TokenType::EQEQ);
+                    break;
+                }
+            }
             if (isFloatOp) m_currentLLVMValue = builder->CreateFCmpOEQ(L, R, "fcmpoeqtmp");
             else m_currentLLVMValue = builder->CreateICmpEQ(L, R, "icmpeqtmp");
             break;
         case vyn::TokenType::NOTEQ: // Reverted to vyn::TokenType::NOTEQ
+            // Check for String comparison first
+            if (L->getType()->isStructTy() && R->getType()->isStructTy()) {
+                llvm::StructType* leftStruct = llvm::cast<llvm::StructType>(L->getType());
+                llvm::StructType* rightStruct = llvm::cast<llvm::StructType>(R->getType());
+                // String struct: { ptr, len }
+                if (leftStruct->getNumElements() == 2 && rightStruct->getNumElements() == 2) {
+                    m_currentLLVMValue = generateStringComparison(L, R, vyn::TokenType::NOTEQ);
+                    break;
+                }
+            }
             if (isFloatOp) m_currentLLVMValue = builder->CreateFCmpONE(L, R, "fcmponeqtmp");
             else m_currentLLVMValue = builder->CreateICmpNE(L, R, "icmpneqtmp");
             break;
         case vyn::TokenType::LT: // Reverted to vyn::TokenType::LT
+            // Check for String comparison first
+            if (L->getType()->isStructTy() && R->getType()->isStructTy()) {
+                llvm::StructType* leftStruct = llvm::cast<llvm::StructType>(L->getType());
+                llvm::StructType* rightStruct = llvm::cast<llvm::StructType>(R->getType());
+                // String struct: { ptr, len }
+                if (leftStruct->getNumElements() == 2 && rightStruct->getNumElements() == 2) {
+                    m_currentLLVMValue = generateStringComparison(L, R, vyn::TokenType::LT);
+                    break;
+                }
+            }
             if (isFloatOp) m_currentLLVMValue = builder->CreateFCmpOLT(L, R, "fcmpltmp");
             else m_currentLLVMValue = builder->CreateICmpSLT(L, R, "icmpslttmp"); 
             break;
         case vyn::TokenType::LTEQ: // Reverted to vyn::TokenType::LTEQ:
+            // Check for String comparison first
+            if (L->getType()->isStructTy() && R->getType()->isStructTy()) {
+                llvm::StructType* leftStruct = llvm::cast<llvm::StructType>(L->getType());
+                llvm::StructType* rightStruct = llvm::cast<llvm::StructType>(R->getType());
+                // String struct: { ptr, len }
+                if (leftStruct->getNumElements() == 2 && rightStruct->getNumElements() == 2) {
+                    m_currentLLVMValue = generateStringComparison(L, R, vyn::TokenType::LTEQ);
+                    break;
+                }
+            }
             if (isFloatOp) m_currentLLVMValue = builder->CreateFCmpOLE(L, R, "fcmpletmp");
             else m_currentLLVMValue = builder->CreateICmpSLE(L, R, "icmpsletmp"); 
             break;
         case vyn::TokenType::GT: // Reverted to vyn::TokenType::GT
+            // Check for String comparison first
+            if (L->getType()->isStructTy() && R->getType()->isStructTy()) {
+                llvm::StructType* leftStruct = llvm::cast<llvm::StructType>(L->getType());
+                llvm::StructType* rightStruct = llvm::cast<llvm::StructType>(R->getType());
+                // String struct: { ptr, len }
+                if (leftStruct->getNumElements() == 2 && rightStruct->getNumElements() == 2) {
+                    m_currentLLVMValue = generateStringComparison(L, R, vyn::TokenType::GT);
+                    break;
+                }
+            }
             if (isFloatOp) m_currentLLVMValue = builder->CreateFCmpOGT(L, R, "fcmpgtmp");
             else m_currentLLVMValue = builder->CreateICmpSGT(L, R, "icmpsgttmp"); 
             break;
         case vyn::TokenType::GTEQ: // Reverted to vyn::TokenType::GTEQ:
+            // Check for String comparison first
+            if (L->getType()->isStructTy() && R->getType()->isStructTy()) {
+                llvm::StructType* leftStruct = llvm::cast<llvm::StructType>(L->getType());
+                llvm::StructType* rightStruct = llvm::cast<llvm::StructType>(R->getType());
+                // String struct: { ptr, len }
+                if (leftStruct->getNumElements() == 2 && rightStruct->getNumElements() == 2) {
+                    m_currentLLVMValue = generateStringComparison(L, R, vyn::TokenType::GTEQ);
+                    break;
+                }
+            }
             if (isFloatOp) m_currentLLVMValue = builder->CreateFCmpOGE(L, R, "fcmpgetmp");
             else m_currentLLVMValue = builder->CreateICmpSGE(L, R, "icmpsgetmp"); 
             break;
@@ -1389,31 +1449,67 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 }
             }
             
-            // Handle Vec and String method calls
+            // Handle Vec, String, and Tuple method calls
             if (auto objIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->object.get())) {
                 std::string objectName = objIdent->name;
                 
-                // Check if this is a String or Vec variable by looking at its type
+                // Check if this is a Tuple, String, or Vec variable by looking at AST type info first
                 auto varIt = namedValues.find(objectName);
+                bool isTupleVar = false;
                 bool isStringVar = false;
                 bool isVecVar = false;
+                unsigned tupleSize = 0;
                 
                 if (varIt != namedValues.end()) {
-                    llvm::Value* varValue = varIt->second;
-                    // For AllocaInst, we can get the allocated type
-                    if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(varValue)) {
-                        llvm::Type* allocatedType = allocaInst->getAllocatedType();
-                        if (allocatedType->isStructTy()) {
-                            llvm::StructType* structType = llvm::cast<llvm::StructType>(allocatedType);
-                            // String struct has 2 fields: { ptr, len }
-                            // Vec struct has 3 fields: { ptr, size, capacity }
-                            if (structType->getNumElements() == 2) {
+                    // First check valueTypeMap for AST type information (most reliable)
+                    auto typeIt = valueTypeMap.find(varIt->second);
+                    if (typeIt != valueTypeMap.end() && typeIt->second) {
+                        vyn::ast::TypeNode* astType = typeIt->second.get();
+                        // Check for TupleTypeNode
+                        if (auto tupleType = dynamic_cast<vyn::ast::TupleTypeNode*>(astType)) {
+                            isTupleVar = true;
+                            tupleSize = tupleType->memberTypes.size();
+                        }
+                        // Check for VecType
+                        else if (dynamic_cast<vyn::ast::VecType*>(astType)) {
+                            isVecVar = true;
+                        }
+                        // Check for String (represented as TypeName with identifier "String")
+                        else if (auto typeName = dynamic_cast<vyn::ast::TypeName*>(astType)) {
+                            if (typeName->identifier && typeName->identifier->name == "String") {
                                 isStringVar = true;
-                            } else if (structType->getNumElements() == 3) {
-                                isVecVar = true;
                             }
                         }
                     }
+                    
+                    // Fall back to LLVM type analysis if no AST type info available
+                    if (!isTupleVar && !isStringVar && !isVecVar) {
+                        if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(varIt->second)) {
+                            llvm::Type* allocatedType = allocaInst->getAllocatedType();
+                            if (allocatedType->isStructTy()) {
+                                llvm::StructType* structType = llvm::cast<llvm::StructType>(allocatedType);
+                                unsigned numElements = structType->getNumElements();
+                                // String struct has 2 fields: { ptr, len }
+                                // Vec struct has 3 fields: { ptr, size, capacity }
+                                // This is a heuristic fallback only
+                                if (numElements == 2) {
+                                    isStringVar = true;
+                                } else if (numElements == 3) {
+                                    isVecVar = true;
+                                } else {
+                                    // Assume tuple for other struct sizes
+                                    isTupleVar = true;
+                                    tupleSize = numElements;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Handle Tuple methods first (highest priority)
+                if (isTupleVar && methodName == "len") {
+                    m_currentLLVMValue = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), tupleSize);
+                    return;
                 }
                 
                 // Handle String methods
@@ -1428,7 +1524,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 }
                 
                 // Handle Vec methods
-                if (isVecVar || (!isStringVar && (methodName == "push" || methodName == "pop" || methodName == "get" ||
+                if (isVecVar || (!isTupleVar && !isStringVar && (methodName == "push" || methodName == "pop" || methodName == "get" ||
                     methodName == "push_array" || methodName == "to_array" || methodName == "get_array" ||
                     methodName == "clear" || methodName == "is_empty" || methodName == "capacity" ||
                     methodName == "remove_at" || methodName == "get_vec"))) {
@@ -1986,9 +2082,58 @@ void LLVMCodegen::visit(vyn::ast::AssignmentExpression *node) {
 
 
 void LLVMCodegen::visit(vyn::ast::ArrayElementExpression *node) {
-    // This is for using array[index] as an R-value (i.e., loading the value)
+    // This is for using array[index] or tuple[index] as an R-value (i.e., loading the value)
     // LHS usage is handled in AssignmentExpression
     
+    // Check if the base expression is a tuple type
+    bool isTupleAccess = false;
+    if (node->array->type) {
+        if (auto* tupleType = dynamic_cast<vyn::ast::TupleTypeNode*>(node->array->type.get())) {
+            isTupleAccess = true;
+        }
+    }
+    
+    // For tuple access, we need the actual struct value, not a pointer
+    if (isTupleAccess) {
+        // Visit the tuple expression to get the struct value
+        node->array->accept(*this);
+        llvm::Value *tupleValue = m_currentLLVMValue;
+        
+        // Visit the index expression
+        node->index->accept(*this);
+        llvm::Value *indexVal = m_currentLLVMValue;
+        
+        if (!tupleValue || !indexVal) {
+            logError(node->loc, "Tuple or index expression failed to codegen.");
+            m_currentLLVMValue = nullptr;
+            return;
+        }
+        
+        // Index must be a constant integer for tuple access
+        if (auto* constIndex = llvm::dyn_cast<llvm::ConstantInt>(indexVal)) {
+            uint64_t index = constIndex->getZExtValue();
+            
+            // Verify index is within bounds
+            auto* tupleType = dynamic_cast<vyn::ast::TupleTypeNode*>(node->array->type.get());
+            if (index >= tupleType->memberTypes.size()) {
+                logError(node->loc, "Tuple index " + std::to_string(index) + " out of bounds (size: " + 
+                         std::to_string(tupleType->memberTypes.size()) + ")");
+                m_currentLLVMValue = nullptr;
+                return;
+            }
+            
+            // Extract the element from the tuple struct
+            llvm::Value* element = builder->CreateExtractValue(tupleValue, {static_cast<unsigned>(index)}, "tuple_elem");
+            m_currentLLVMValue = element;
+            return;
+        } else {
+            logError(node->loc, "Tuple index must be a constant integer");
+            m_currentLLVMValue = nullptr;
+            return;
+        }
+    }
+    
+    // Original array access logic
     llvm::Value *arrayPtr = nullptr;
     
     // Special handling for identifier expressions to get the alloca directly

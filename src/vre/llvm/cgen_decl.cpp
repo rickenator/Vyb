@@ -298,7 +298,9 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
         m_currentLLVMValue = alloca;
         // Propagate type info for struct/class variables
         if (node->typeNode) {
-            valueTypeMap[alloca] = std::shared_ptr<vyn::ast::TypeNode>(node->typeNode->clone());
+            // Use resolved type if available (e.g., TypeName->type contains resolved TupleTypeNode or VecType)
+            vyn::ast::TypeNode* typeToStore = node->typeNode->type ? node->typeNode->type.get() : node->typeNode.get();
+            valueTypeMap[alloca] = std::shared_ptr<vyn::ast::TypeNode>(typeToStore->clone());
         }
     }
 }

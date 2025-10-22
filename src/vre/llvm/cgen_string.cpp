@@ -57,6 +57,149 @@ llvm::Value* LLVMCodegen::generateStringConcatenation(llvm::Value* leftStr, llvm
     return builder->CreateCall(concatFunc, args, "strcattmp");
 }
 
+// Implementation for string comparison (==, !=, <, <=, >, >=)
+llvm::Value* LLVMCodegen::generateStringComparison(llvm::Value* leftStr, llvm::Value* rightStr, vyn::TokenType op) {
+    if (!leftStr || !rightStr) {
+        return llvm::ConstantInt::getFalse(*context);
+    }
+    
+    // Extract data pointers and lengths from String structs { ptr, len }
+    llvm::Value* leftData = builder->CreateExtractValue(leftStr, 0, "left.str.data");
+    llvm::Value* leftLen = builder->CreateExtractValue(leftStr, 1, "left.str.len");
+    llvm::Value* rightData = builder->CreateExtractValue(rightStr, 0, "right.str.data");
+    llvm::Value* rightLen = builder->CreateExtractValue(rightStr, 1, "right.str.len");
+    
+    // For equality/inequality, check lengths first for quick return
+    if (op == vyn::TokenType::EQEQ || op == vyn::TokenType::NOTEQ) {
+        // Save the current block (where length comparison happens)
+        llvm::BasicBlock* lenCheckBB = builder->GetInsertBlock();
+        
+        llvm::Value* lenEqual = builder->CreateICmpEQ(leftLen, rightLen, "str.len.eq");
+        
+        // Create basic blocks for conditional memcmp
+        llvm::BasicBlock* memcmpBB = llvm::BasicBlock::Create(*context, "str.memcmp", currentFunction);
+        llvm::BasicBlock* endBB = llvm::BasicBlock::Create(*context, "str.cmp.end", currentFunction);
+        
+        builder->CreateCondBr(lenEqual, memcmpBB, endBB);
+        
+        // memcmp block: lengths are equal, compare content
+        builder->SetInsertPoint(memcmpBB);
+        
+        // Declare memcmp: int memcmp(const void* s1, const void* s2, size_t n)
+        llvm::FunctionType* memcmpType = llvm::FunctionType::get(
+            llvm::Type::getInt32Ty(*context),
+            {llvm::PointerType::get(*context, 0), llvm::PointerType::get(*context, 0), llvm::Type::getInt64Ty(*context)},
+            false
+        );
+        llvm::Function* memcmpFunc = module->getFunction("memcmp");
+        if (!memcmpFunc) {
+            memcmpFunc = llvm::Function::Create(memcmpType, llvm::Function::ExternalLinkage, "memcmp", module.get());
+        }
+        
+        // Call memcmp
+        llvm::Value* cmpResult = builder->CreateCall(memcmpFunc, {leftData, rightData, leftLen}, "str.memcmp.result");
+        llvm::Value* contentEqual = builder->CreateICmpEQ(cmpResult, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0), "str.content.eq");
+        
+        builder->CreateBr(endBB);
+        llvm::BasicBlock* memcmpEndBB = builder->GetInsertBlock();
+        
+        // End block: merge results
+        builder->SetInsertPoint(endBB);
+        llvm::PHINode* phi = builder->CreatePHI(llvm::Type::getInt1Ty(*context), 2, "str.eq.result");
+        phi->addIncoming(llvm::ConstantInt::getFalse(*context), lenCheckBB);  // lengths not equal
+        phi->addIncoming(contentEqual, memcmpEndBB);  // lengths equal, use memcmp result
+        
+        // For NOTEQ, invert the result
+        if (op == vyn::TokenType::NOTEQ) {
+            return builder->CreateNot(phi, "str.ne.result");
+        }
+        return phi;
+    }
+    
+    // For ordering comparisons (<, <=, >, >=), use memcmp on the shorter length
+    // then compare lengths if memcmp returns 0
+    llvm::Value* minLen = builder->CreateSelect(
+        builder->CreateICmpULT(leftLen, rightLen),
+        leftLen, rightLen, "str.minlen"
+    );
+    
+    // Declare memcmp
+    llvm::FunctionType* memcmpType = llvm::FunctionType::get(
+        llvm::Type::getInt32Ty(*context),
+        {llvm::PointerType::get(*context, 0), llvm::PointerType::get(*context, 0), llvm::Type::getInt64Ty(*context)},
+        false
+    );
+    llvm::Function* memcmpFunc = module->getFunction("memcmp");
+    if (!memcmpFunc) {
+        memcmpFunc = llvm::Function::Create(memcmpType, llvm::Function::ExternalLinkage, "memcmp", module.get());
+    }
+    
+    // Call memcmp with minimum length
+    llvm::Value* cmpResult = builder->CreateCall(memcmpFunc, {leftData, rightData, minLen}, "str.memcmp.result");
+    
+    // Create blocks for memcmp result handling
+    llvm::BasicBlock* cmpZeroBB = llvm::BasicBlock::Create(*context, "str.cmp.zero", currentFunction);
+    llvm::BasicBlock* cmpNonZeroBB = llvm::BasicBlock::Create(*context, "str.cmp.nonzero", currentFunction);
+    llvm::BasicBlock* endBB = llvm::BasicBlock::Create(*context, "str.cmp.end", currentFunction);
+    
+    llvm::Value* cmpIsZero = builder->CreateICmpEQ(cmpResult, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0), "str.cmp.iszero");
+    builder->CreateCondBr(cmpIsZero, cmpZeroBB, cmpNonZeroBB);
+    
+    // If memcmp == 0, compare lengths
+    builder->SetInsertPoint(cmpZeroBB);
+    llvm::Value* lenCmpResult;
+    switch (op) {
+        case vyn::TokenType::LT:
+            lenCmpResult = builder->CreateICmpULT(leftLen, rightLen, "str.len.lt");
+            break;
+        case vyn::TokenType::LTEQ:
+            lenCmpResult = builder->CreateICmpULE(leftLen, rightLen, "str.len.le");
+            break;
+        case vyn::TokenType::GT:
+            lenCmpResult = builder->CreateICmpUGT(leftLen, rightLen, "str.len.gt");
+            break;
+        case vyn::TokenType::GTEQ:
+            lenCmpResult = builder->CreateICmpUGE(leftLen, rightLen, "str.len.ge");
+            break;
+        default:
+            lenCmpResult = llvm::ConstantInt::getFalse(*context);
+            break;
+    }
+    builder->CreateBr(endBB);
+    llvm::BasicBlock* cmpZeroEndBB = builder->GetInsertBlock();
+    
+    // If memcmp != 0, use memcmp result directly
+    builder->SetInsertPoint(cmpNonZeroBB);
+    llvm::Value* memcmpBoolResult;
+    switch (op) {
+        case vyn::TokenType::LT:
+            memcmpBoolResult = builder->CreateICmpSLT(cmpResult, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0), "str.memcmp.lt");
+            break;
+        case vyn::TokenType::LTEQ:
+            memcmpBoolResult = builder->CreateICmpSLE(cmpResult, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0), "str.memcmp.le");
+            break;
+        case vyn::TokenType::GT:
+            memcmpBoolResult = builder->CreateICmpSGT(cmpResult, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0), "str.memcmp.gt");
+            break;
+        case vyn::TokenType::GTEQ:
+            memcmpBoolResult = builder->CreateICmpSGE(cmpResult, llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0), "str.memcmp.ge");
+            break;
+        default:
+            memcmpBoolResult = llvm::ConstantInt::getFalse(*context);
+            break;
+    }
+    builder->CreateBr(endBB);
+    llvm::BasicBlock* cmpNonZeroEndBB = builder->GetInsertBlock();
+    
+    // End block: merge results
+    builder->SetInsertPoint(endBB);
+    llvm::PHINode* phi = builder->CreatePHI(llvm::Type::getInt1Ty(*context), 2, "str.cmp.final");
+    phi->addIncoming(lenCmpResult, cmpZeroEndBB);
+    phi->addIncoming(memcmpBoolResult, cmpNonZeroEndBB);
+    
+    return phi;
+}
+
 // Helper method to resolve type aliases to their base type names
 std::string LLVMCodegen::resolveTypeAliasToBaseName(vyn::ast::TypeNode* typeNode) {
     if (!typeNode) return "";

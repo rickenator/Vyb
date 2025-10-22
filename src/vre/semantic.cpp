@@ -649,7 +649,8 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
         
         // Now check types match (for both explicit types and inferred types)
         if (node->typeNode && expressionTypes.count(node->init.get())) {
-            ast::TypeNode* varType = node->typeNode.get();
+            // Use resolved type if available (e.g., TypeName with ->type set to VecType or TupleTypeNode)
+            ast::TypeNode* varType = node->typeNode->type ? node->typeNode->type.get() : node->typeNode.get();
             ast::TypeNode* initType = expressionTypes[node->init.get()];
             if (initType) { 
                 if (!areTypesCompatible(varType, initType)) { 
@@ -963,6 +964,22 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     if (auto vecType = dynamic_cast<ast::VecType*>(objSymbol->type)) {
                         handleVecMethodCall(node, objIdent->name, methodName);
                         return;
+                    }
+                    
+                    // Check if it's a Tuple type
+                    if (auto tupleType = dynamic_cast<ast::TupleTypeNode*>(objSymbol->type)) {
+                        if (methodName == "len") {
+                            // len() -> Int
+                            if (node->arguments.size() != 0) {
+                                addError("Tuple::len expects no arguments", node);
+                                return;
+                            }
+                            auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+                            auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+                            expressionTypes[node] = intType.get();
+                            node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
+                            return;
+                        }
                     }
                     
                     // Otherwise check for trait methods
@@ -1534,6 +1551,17 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
         }
     }
     
+    // Check if this is a tuple type - tuples only support len() method
+    if (auto tupleType = dynamic_cast<ast::TupleTypeNode*>(it->second)) {
+        if (fieldName == "len") {
+            // This is handled in CallExpression visitor, just allow it here
+            return;
+        } else {
+            addError("Tuple type only supports len() method, not '" + fieldName + "'", node);
+            return;
+        }
+    }
+    
     // Extract base struct name for field lookup (Box<Int> -> Box)
     std::string baseStructName = structTypeName;
     size_t anglePos = structTypeName.find('<');
@@ -1774,34 +1802,37 @@ void SemanticAnalyzer::visit(ast::ConditionalExpression* node) {
 void SemanticAnalyzer::visit(ast::SequenceExpression* node) {
     // Process each expression in the sequence
     if (node->expressions.empty()) {
-        addError("Empty sequence expression.", node);
-        expressionTypes[node] = nullptr;
+        // Empty tuple - create empty TupleTypeNode
+        auto emptyTupleType = std::make_unique<ast::TupleTypeNode>(node->loc, std::vector<ast::TypeNodePtr>{});
+        expressionTypes[node] = emptyTupleType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(emptyTupleType.release());
         return;
     }
     
+    // Visit all expressions and collect their types
+    std::vector<ast::TypeNodePtr> elementTypes;
     for (auto& expr : node->expressions) {
         if (expr) {
             expr->accept(*this);
+            auto exprTypeIt = expressionTypes.find(expr.get());
+            if (exprTypeIt != expressionTypes.end() && exprTypeIt->second) {
+                elementTypes.push_back(exprTypeIt->second->clone());
+            } else {
+                addError("Cannot determine type of expression in tuple literal.", node);
+                expressionTypes[node] = nullptr;
+                return;
+            }
         } else {
             addError("Null expression in sequence.", node);
+            expressionTypes[node] = nullptr;
+            return;
         }
     }
     
-    // The type of a sequence expression is the type of its last expression
-    auto& lastExpr = node->expressions.back();
-    if (lastExpr) {
-        auto lastTypeIt = expressionTypes.find(lastExpr.get());
-        if (lastTypeIt != expressionTypes.end() && lastTypeIt->second) {
-            expressionTypes[node] = lastTypeIt->second;
-            node->type = std::shared_ptr<ast::TypeNode>(lastTypeIt->second->clone());
-        } else {
-            addError("Cannot determine type of last expression in sequence.", node);
-            expressionTypes[node] = nullptr;
-        }
-    } else {
-        addError("Last expression in sequence is null.", node);
-        expressionTypes[node] = nullptr;
-    }
+    // Create a TupleTypeNode with all element types
+    auto tupleType = std::make_unique<ast::TupleTypeNode>(node->loc, std::move(elementTypes));
+    expressionTypes[node] = tupleType.get();
+    node->type = std::shared_ptr<ast::TypeNode>(tupleType.release());
 }
 void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
     // Try to determine the type from the typePath field (e.g., Point in Point { ... })
@@ -3285,6 +3316,28 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
         // Create a VecType instance
         auto vecType = std::make_unique<ast::VecType>(node->loc, node->genericArgs[0]->clone());
         node->type = std::shared_ptr<ast::TypeNode>(vecType.release());
+    } else if (typeNameStr == "Tuple") {
+        // Convert Tuple<T, U, ...> TypeName to TupleTypeNode
+        if (node->genericArgs.empty()) {
+            addError("Tuple type requires at least one type parameter (e.g., Tuple<Int, String>).", node);
+            return; 
+        }
+        
+        // Visit all element types
+        std::vector<ast::TypeNodePtr> memberTypes;
+        for (const auto& argTypeNode : node->genericArgs) {
+            if (argTypeNode) {
+                argTypeNode->accept(*this);
+                memberTypes.push_back(argTypeNode->clone());
+            } else {
+                addError("Null generic argument in Tuple type.", node);
+                return;
+            }
+        }
+        
+        // Create a TupleTypeNode instance
+        auto tupleType = std::make_unique<ast::TupleTypeNode>(node->loc, std::move(memberTypes));
+        node->type = std::shared_ptr<ast::TypeNode>(tupleType.release());
     } else if (typeNameStr == "Future") {
         // Convert Future<T> TypeName to FutureType
         if (node->genericArgs.empty() || !node->genericArgs[0]) {

@@ -1,10 +1,10 @@
 # Vyn Language Roadmap
 
-**Last Updated:** October 16, 2025
+**Last Updated:** October 22, 2025 (v0.4.3)
 
 This document outlines the completed features, ongoing development, and future considerations for the Vyn programming language.
 
-## Current Status (v0.4.2)
+## Current Status (v0.4.3)
 
 **✅ MAJOR ACHIEVEMENTS COMPLETED:**
 1.  **LLVM Backend:** Fully functional LLVM IR generation and JIT execution
@@ -18,9 +18,11 @@ This document outlines the completed features, ongoing development, and future c
 9.  **✅ Vec Iteration (COMPLETED v0.4.1):** `for (item in vec)` with mandatory parentheses, full break/continue support
 10. **✅ Range-Based For Loops (COMPLETED v0.4.1):** `for (i in 0..10)` inclusive ranges with optional step
 11. **✅ Member Access (COMPLETED):** Object field access (obj.field) and array indexing (arr[index])
-12. **✅ Binary Operations (COMPLETED):** Complete operator precedence system with all arithmetic, comparison, and logical operators
-13. **✅ Variadic Tuples (COMPLETED v0.4.0):** `Tuple<T,U,V,...>` with full 1-N type parameter support and dual syntax
-14. **✅ Introspection System (COMPLETED v0.4.2):** typeof/typename operators for runtime type reflection
+13. **✅ Binary Operations (COMPLETED):** Complete operator precedence system with all arithmetic, comparison, and logical operators
+14. **✅ Variadic Tuples (COMPLETED v0.4.0):** `Tuple<T,U,V,...>` with full 1-N type parameter support and dual syntax
+15. **✅ Introspection System (COMPLETED v0.4.2):** typeof/typename operators for runtime type reflection
+16. **✅ Aspect System (COMPLETED v0.4.2):** User-extensible aspects with bind blocks for polymorphism
+17. **✅ Object File Emission (COMPLETED v0.4.3):** AOT compilation to native .o files with optimization levels
 
 ### Variadic Tuple System (v0.4.0)
 
@@ -61,11 +63,9 @@ Vyn now supports **fully variadic tuple types** with comprehensive 1-to-N type p
 - Compatible with C ABI for struct returns
 
 **Current Limitations** (future enhancements):
-- ⏳ Tuple element access (`.0`, `.1`, `.2` syntax)
-- ⏳ Tuple variables (only return values currently)
-- ⏳ Tuple destructuring (`let (a, b, c) = tuple`)
 - ⏳ Tuple serialization/output (compiles but no JSON output yet)
 - ⏳ Tuple pattern matching in match expressions
+- ⏳ Tuple element access via `.0`, `.1`, `.2` syntax
 
 See `test/tuples/README.md` for detailed documentation and examples.
 
@@ -81,18 +81,27 @@ The immediate focus for the next release:
    - Method resolution on generic parameters
    - Function specialization with caching
    - Works with aspect bounds: `func<T<Display>>(item: T)`
-3. **🚧 Aspect System (IN PROGRESS):** User-extensible aspects with bind blocks
+3. **✅ Aspect System (COMPLETED v0.4.2):** User-extensible aspects with bind blocks
    - ✅ Define aspects with method signatures
    - ✅ Implement aspects for types (bind blocks)
-   - 🚧 Call aspect methods on values (value.method())
+   - ✅ Call aspect methods on values (value.method())
    - ✅ Validate aspect bounds in generics
    - See `doc/ASPECT_SYSTEM_DESIGN.md` for full specification
-4. **Aspect Method Calls:** Complete method invocation on aspect-bound types
-5. **Generic Struct Instantiation:** Monomorphization for generic structs
+4. **Generic Struct Instantiation:** Monomorphization for generic structs
 
-### 📋 CURRENT FOCUS (v0.4.3)
+### 📋 COMPLETED IN v0.4.3
 
-1. **✅ Error Handling System (COMPLETED v0.4.2):** Production-ready `fail`/`trap` error handling
+1. **✅ Object File Emission (COMPLETED v0.4.3):** AOT compilation to native object files
+   - Compile to .o files with `--compile/-c` flag
+   - Support all optimization levels: -O0, -O1, -O2 (default), -O3
+   - Full LLVM target machine integration for all architectures
+   - Cross-compilation support (x86-64, ARM, AArch64, RISC-V, etc.)
+   - ELF relocatable object files with debug info (DWARF)
+   - LLVM 18 API compatibility (CodeGenFileType, CodeGenOptLevel)
+   - Foundation for static linking and standalone executables
+   - See `doc/MODULE_FFI_BINARY_ROADMAP.md` Phase 3.1
+
+2. **✅ Error Handling System (COMPLETED v0.4.2):** Production-ready `fail`/`trap` error handling
    - Zero-cost success path with heap-allocated error contexts
    - Type-safe pattern matching with struct field access
    - Multi-level error propagation through call stacks
@@ -101,20 +110,27 @@ The immediate focus for the next release:
    - Complete LLVM codegen implementation
    - See "Error Handling Roadmap" section below for future enhancements
 
+### 📋 CURRENT FOCUS (v0.4.4)
+
+1. **Static Linking:** Link .o files into standalone executables
+   - Invoke system linker (ld, lld, or gold)
+   - Link against libc and runtime libraries
+   - Support multi-file compilation
+   - Command: `vyn build main.vyn -o myapp`
+   - See `doc/MODULE_FFI_BINARY_ROADMAP.md` Phase 3.2
+
 2. **Range Patterns in Match/Select:** Implement `a..b` range matching for elegant numeric range handling
    - Syntax: `1..10 -> "single digit"` in match/select expressions
    - Note: Conflicts with comparison patterns (`>= 90`) need resolution
    - Design decision: May use different syntax or restrict to one pattern type
 
-3. **Aspect Method Calls:** Complete method invocation on aspect-bound types
-
-4. **Standard Library Expansion:** Building core modules for collections, I/O, math
+3. **Standard Library Expansion:** Building core modules for collections, I/O, math
 
 5. **Enhanced Error Messages:** More detailed compilation feedback and suggestions
 
-6. **Tuple Element Access:** `.0`, `.1`, `.2` syntax for accessing tuple elements
+7. **Tuple Element Access:** `.0`, `.1`, `.2` syntax for accessing tuple elements
 
-7. **String Comparison Operators:** Lexical ordering for String types
+8. **✅ String Comparison Operators (COMPLETED v0.4.2):** Lexical ordering for String types with all 6 operators (==, !=, <, <=, >, >=) using efficient memcmp-based comparison
 
 ## Project Structure and Organization
 
@@ -162,7 +178,7 @@ As the Vyn project grows, a more structured directory layout will be beneficial 
 -   **Complete Type Library**: Implement and optimize the full type system including:
     -   **Core Primitives**: Complete implementation of `Int` variants (`Int8`, `Int16`, `Int32`), `Float` variants (`Float32`, `Float64`), `Char`, `Rune`, `Bool`, `Bytes`, and `Void`.
     -   **Compound Types**: Complete implementation of tuples `(T1, T2, ...)`, fixed-size arrays `[T; N]`, dynamic vectors `Vec<T>`.
-    -   **✅ String Type (COMPLETED v0.4.0)**: Base `String` type complete with fat pointer struct `{ptr: *i8, len: i64}`, natural literal syntax, and comprehensive methods (len, substring, char_at, starts_with, ends_with, contains, to_upper, to_lower, +). Future: UTF-8 operations, `String<Char>` for raw code units, `String<Rune>` for Unicode support.
+    -   **✅ String Type (COMPLETED v0.4.0, enhanced v0.4.2)**: Base `String` type complete with fat pointer struct `{ptr: *i8, len: i64}`, natural literal syntax, comprehensive methods (len, substring, char_at, starts_with, ends_with, contains, to_upper, to_lower, +), and full comparison operators (==, !=, <, <=, >, >=) with lexical ordering. Future: UTF-8 operations, `String<Char>` for raw code units, `String<Rune>` for Unicode support.
 -   **Performance Optimization**: Investigate performance optimizations for primitive types, particularly in tight loops and math-intensive operations.
 -   **Memory Layout**: Define and document memory layout guarantees for all types, ensuring consistent behavior across platforms.
 -   **FFI Compatibility**: Ensure all primitive types have well-defined mappings to C/C++ equivalents for FFI interoperability.
@@ -465,7 +481,7 @@ Heap-allocated struct (16 bytes):
 
 #### **Planned Enhancements** 🔜
 
-**Phase 6.3 - ensure Keyword (v0.5.0): ✅ COMPLETE**
+**Phase 6.3 - ensure Keyword: ✅ COMPLETED v0.4.2**
 ```vyn
 # Cleanup/finally blocks that always execute
 process_with_cleanup(path<String>)<String> -> {
@@ -496,7 +512,7 @@ process_with_cleanup(path<String>)<String> -> {
 # - Test: test/trap/test_ensure_simple.vyn demonstrates working implementation
 ```
 
-**Phase 6.4 - Stack Trace Capture (v0.5.1):** 🚧 NEXT PRIORITY
+**Phase 6.4 - Stack Trace Capture (Planned for v0.4.4):** 📍 HIGH PRIORITY
 ```vyn
 # Capture source-level stack traces on fail
 divide(a<Int>, b<Int>)<Int> -> {
@@ -529,7 +545,7 @@ aspect Errable {
 }
 ```
 
-**Phase 6.5 - Wildcard Pattern (v0.5.2):**
+**Phase 6.5 - Wildcard Pattern (Planned for v0.4.5):**
 ```vyn
 # Catch-all handler for any error type
 {
@@ -542,7 +558,7 @@ aspect Errable {
 }
 ```
 
-**Note**: Phase 1 introspection (typeof/typename) completed in v0.4.2, enabling wildcard trap implementation.
+**Note**: ✅ Phase 1 introspection (typeof/typename) completed in v0.4.2, enabling wildcard trap implementation. Wildcard patterns now ready for implementation.
 
 **Phase 6.6 - Multi-Type Trap Block (v0.6.0):**
 ```vyn
@@ -913,7 +929,6 @@ The following features are planned for future releases (no particular priority o
    - String interpolation syntax
    - Advanced string methods (split, join, replace, regex)
    - Efficient substring operations
-   - String comparison operators (lexical ordering)
 
 3. **Import/Smuggle System**: Module visibility and dependency management
    - `import` for normal module imports

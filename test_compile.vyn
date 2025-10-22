@@ -1,0 +1,8 @@
+# Simple test program for object file compilation
+main()<Int> -> {
+    a<Int> = 42
+    b<Int> = 7
+    result<Int> = a + b
+    println("Result: ")
+    return result
+}
