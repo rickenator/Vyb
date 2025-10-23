@@ -198,6 +198,7 @@ Supports 20+ architectures out of the box:
     *   `my<T>`: Unique ownership of data `T`.
     *   `our<T>`: Shared (reference-counted) ownership of data `T`.
     *   `their<T>`: Non-owning borrow/reference to data `T`.
+    *   `mild<T>`: Weak reference that can detect when target is destroyed.
 *   **Data Mutability**: Indicated by `const` on the type itself (e.g., `my<T const>` for unique ownership of immutable data).
 *   **Borrowing**:
     *   `view(expr)`: Creates an immutable borrow `their<T const>`.
@@ -604,12 +605,56 @@ python3 migrate_syntax.py --migrate --directory . --backup --report
 **Migration Results:** ✅ 346 syntax updates applied across 22 files, ensuring consistent canonical syntax throughout the entire codebase.
 
 ### ✅ **Memory Management**
-- **Ownership types**: `my<T>`, `our<T>`, `their<T>` for safe memory handling
+- **Ownership types**: `my<T>`, `our<T>`, `their<T>`, `mild<T>` for safe memory handling
+- **Weak references**: `mild<T>` for breaking circular references with `grab()` and `released()` methods
 - **Borrowing**: `view(expr)` and `borrow(expr)` for references  
 - **Freedom operations**: `loc<T>` pointers in `freedom {}` blocks
 - **Raw Memory Operations**: Complete `freedom` block system with `loc<T>` pointers
 - **Memory Safety**: Borrow checking and lifetime analysis prevent dangling pointers
 - **Hybrid Model**: Combines ownership with planned GC for maximum flexibility
+
+#### Weak References with mild<T>
+
+Vyn v0.4.4 introduces **`mild<T>`** - weak references that solve circular reference problems without preventing cleanup:
+
+**Why mild<T>?**
+- **Break Cycles**: Tree nodes with parent pointers, doubly-linked lists
+- **Observer Pattern**: Subjects don't keep observers alive
+- **Caches**: Entries that can be collected when memory is needed
+- **Safe Access**: Can detect when target object has been destroyed
+
+**Key Methods:**
+```vyn
+# grab() -> our<T>?
+# Attempts to upgrade weak reference to strong reference
+# Returns nil if target has been destroyed
+parent_strong<our<TreeNode>> = node.parent.grab()
+
+# released() -> Bool
+# Check if target object has been freed
+# Returns true if destroyed, false if still alive
+is_alive<Bool> = !node.parent.released()
+```
+
+**Example: Tree with Parent Pointers**
+```vyn
+struct TreeNode {
+    value<Int>,
+    children<Vec<our<TreeNode>>>,  # Strong refs to children
+    parent<mild<TreeNode>>          # Weak ref to parent (breaks cycle)
+}
+
+access_parent(node<our<TreeNode>>)<Int> -> {
+    # Safely access parent through weak reference
+    if (parent<our<TreeNode>> = node.parent.grab()) {
+        return parent.value  # Success - parent still alive
+    } else {
+        return -1  # Parent was destroyed
+    }
+}
+```
+
+**See:** `doc/OWNERSHIP_MILD.md` for complete documentation and `test/ownership/mild_test.vyn` for examples
 
 ### ✅ **Developer Experience**
 - **LLVM backend**: Direct compilation to native code with JIT execution
@@ -855,6 +900,7 @@ process_value(val<Int>)<String> -> {
 safe_data<my<String>> = my("unique")      # Unique ownership
 shared_data<our<String>> = our("shared")  # Reference counted
 borrowed<their<String>> = borrow(safe_data)  # Non-owning reference
+weak_ref<mild<String>> = mild(shared_data)   # Weak reference (breaks cycles)
 ```
 
 #### Type System Features
@@ -872,7 +918,7 @@ borrowed<their<String>> = borrow(safe_data)  # Non-owning reference
 - **Dynamic arrays**: `Vec<T>` resizable collections
 - **Tuples**: `Tuple<T,U,...>` variadic heterogeneous types
 
-**Ownership Types**: `my<T>` (unique), `our<T>` (shared), `their<T>` (borrowed), `loc<T>` (freedom raw pointer)
+**Ownership Types**: `my<T>` (unique), `our<T>` (shared), `their<T>` (borrowed), `mild<T>` (weak reference), `loc<T>` (freedom raw pointer)
 
 **Type Aliasing**: All numeric types support multiple naming conventions:
 - Vyn style: `Int32`, `Float64`, `UInt8`
@@ -2855,6 +2901,7 @@ BorrowExpr             ::= 'borrow' '(' Expression ')'
 - `my<T>`: Unique ownership, RAII cleanup
 - `our<T>`: Shared ownership, reference counted
 - `their<T>`: Non-owning borrow, lifetime checked
+- `mild<T>`: Weak reference, can detect destruction via `grab()` and `released()`
 
 **Borrowing Operations:**
 - `view(expr)`: Creates `their<T const>` immutable borrow
@@ -2906,7 +2953,7 @@ Low Level Virtual Machine - compiler infrastructure used by Vyn's backend.
 Compile-time process of creating specialized versions of generic functions/types.
 
 **Ownership**
-Memory management system using `my<T>`, `our<T>`, `their<T>` types.
+Memory management system using `my<T>`, `our<T>`, `their<T>`, `mild<T>` types.
 
 **Pattern Matching**
 `match` statements that destructure and test values against patterns.
