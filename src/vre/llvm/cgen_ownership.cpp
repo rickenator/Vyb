@@ -6,6 +6,35 @@
 
 using namespace vyn;
 
+// ============================================================================
+// CONTROL BLOCK STRUCTURE FOR our<T> AND mild<T>
+// ============================================================================
+// 
+// Control blocks enable mild<T> references to detect when our<T> objects
+// are freed while allowing the control block to survive for weak reference
+// tracking.
+//
+// Memory Layout:
+//   struct ControlBlock {
+//     i32 strong_count;    // Number of our<T> references (shared ownership)
+//     i32 weak_count;      // Number of mild<T> references (weak references)
+//     i1  object_freed;    // True when object destroyed (for .released() check)
+//     T*  object_ptr;      // Pointer to actual object data
+//   }
+//
+// Lifecycle:
+//   1. our() allocates control block + object
+//   2. soft() increments weak_count
+//   3. our<T> destructor: decrements strong_count, if 0 frees object & sets object_freed
+//   4. mild<T> destructor: decrements weak_count
+//   5. Control block freed when BOTH strong_count==0 AND weak_count==0
+//
+// Thread Safety:
+//   - All count increments/decrements use atomic operations
+//   - object_freed reads use atomic load with acquire semantics
+//
+// ============================================================================
+
 // --- Scope Management ---
 void LLVMCodegen::enterScope() {
     std::cout << "DEBUG: Entering new scope (depth: " << scopeStack.size() + 1 << ")" << std::endl;
