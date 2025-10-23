@@ -157,31 +157,21 @@ static const char* parse_string_value(const char* json, char* out, size_t max_le
 
 static const char* parse_number_value(const char* json, int64_t* out) {
     json = skip_whitespace(json);
-    if (*json != '"') return NULL;
-    json++; // Skip opening quote
-    
+    // Numbers in JSON are NOT quoted
     *out = strtoll(json, (char**)&json, 10);
-    
-    if (*json == '"') json++; // Skip closing quote
     return json;
 }
 
 static const char* parse_float_value(const char* json, double* out) {
     json = skip_whitespace(json);
-    if (*json != '"') return NULL;
-    json++; // Skip opening quote
-    
+    // Numbers in JSON are NOT quoted
     *out = strtod(json, (char**)&json);
-    
-    if (*json == '"') json++; // Skip closing quote
     return json;
 }
 
 static const char* parse_bool_value(const char* json, bool* out) {
     json = skip_whitespace(json);
-    if (*json != '"') return NULL;
-    json++; // Skip opening quote
-    
+    // Booleans in JSON are NOT quoted
     if (strncmp(json, "true", 4) == 0) {
         *out = true;
         json += 4;
@@ -189,8 +179,6 @@ static const char* parse_bool_value(const char* json, bool* out) {
         *out = false;
         json += 5;
     }
-    
-    if (*json == '"') json++; // Skip closing quote
     return json;
 }
 
@@ -237,6 +225,8 @@ void* __vyn_complex_from_json_with_metadata(const char* json_str, VynTypeMetadat
         }
         field_name[i] = '\0';
         
+        fprintf(stderr, "DEBUG FROM_JSON: Parsing field '%s'\n", field_name);
+        
         if (*p == '"') p++; // Skip closing quote
         p = skip_whitespace(p);
         if (*p != ':') break;
@@ -252,6 +242,8 @@ void* __vyn_complex_from_json_with_metadata(const char* json_str, VynTypeMetadat
         }
         
         if (field) {
+            fprintf(stderr, "DEBUG FROM_JSON: Found field '%s', type '%s', offset %zu\n",
+                    field->name, field->type_name, field->offset);
             void* field_ptr = (char*)instance + field->offset;
             
             if (field->is_primitive) {
@@ -259,14 +251,17 @@ void* __vyn_complex_from_json_with_metadata(const char* json_str, VynTypeMetadat
                     int64_t val;
                     p = parse_number_value(p, &val);
                     *(int64_t*)field_ptr = val;
+                    fprintf(stderr, "DEBUG FROM_JSON: Set Int field to %ld\n", val);
                 } else if (strcmp(field->type_name, "Float") == 0) {
                     double val;
                     p = parse_float_value(p, &val);
                     *(double*)field_ptr = val;
+                    fprintf(stderr, "DEBUG FROM_JSON: Set Float field to %f\n", val);
                 } else if (strcmp(field->type_name, "Bool") == 0) {
                     bool val;
                     p = parse_bool_value(p, &val);
                     *(bool*)field_ptr = val;
+                    fprintf(stderr, "DEBUG FROM_JSON: Set Bool field to %d\n", val);
                 } else if (strcmp(field->type_name, "String") == 0) {
                     char str_val[1024];
                     p = parse_string_value(p, str_val, sizeof(str_val));
@@ -275,9 +270,13 @@ void* __vyn_complex_from_json_with_metadata(const char* json_str, VynTypeMetadat
                     VynString* vyn_str = (VynString*)field_ptr;
                     vyn_str->data = strdup(str_val);
                     vyn_str->length = strlen(str_val);
+                    fprintf(stderr, "DEBUG FROM_JSON: Set String field to '%s' (len=%ld)\n", 
+                            str_val, vyn_str->length);
                 }
             }
             // TODO: Handle nested structs and Vec
+        } else {
+            fprintf(stderr, "DEBUG FROM_JSON: Field '%s' not found in metadata\n", field_name);
         }
         
         // Skip to next field or end
@@ -285,5 +284,6 @@ void* __vyn_complex_from_json_with_metadata(const char* json_str, VynTypeMetadat
         if (*p == ',') p++;
     }
     
+    fprintf(stderr, "DEBUG FROM_JSON: Returning instance at %p\n", instance);
     return instance;
 }
