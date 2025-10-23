@@ -6,7 +6,7 @@
 
 ## 1. Introduction
 
-Welcome to the Vyn Programming Guide. This guide walks you through writing, building, and extending Vyn programs, from your first "Hello, Vyn!" to deep dives into the Vyn language internals and runtime. **Version 0.4.3** (freedom-1.0 series) delivers a robust systems programming language with LLVM backend, native code compilation to object files, complete sized type system, pattern matching with `match` statements, comprehensive control flow including `break`/`continue`, resizable `Vec<T>` collections, unified syntax, generic function monomorphization, and comprehensive auto-serialization capabilities.
+Welcome to the Vyn Programming Guide. This guide walks you through writing, building, and extending Vyn programs, from your first "Hello, Vyn!" to deep dives into the Vyn language internals and runtime. **Version 0.4.4** (freedom-1.0 series) delivers a robust systems programming language with LLVM backend, native code compilation to object files, complete sized type system, pattern matching with `match` statements, comprehensive control flow including `break`/`continue`, resizable `Vec<T>` collections, unified syntax, generic function monomorphization, and comprehensive auto-serialization capabilities.
 
 ### 1.1 Purpose & Audience
 
@@ -2496,7 +2496,7 @@ freedom {
 
 Vyn v0.4.2 (freedom-1.0) is a **fully functional, production-ready systems programming language**. Future enhancements:
 
-### 🔜 **Near-Term Priorities (v0.4.3+)**
+### 🔜 **Near-Term Priorities (v0.4.4++)**
 1. **Self-Hosted Standard Library**: Pure Vyn stdlib implementation
 2. **Complete String Implementation**: UTF-8 support, interpolation, advanced methods
 3. **Import/Smuggle System**: Module visibility and dependency management
