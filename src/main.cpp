@@ -56,8 +56,11 @@ extern "C" {
     char* __vyn_string_from_string(const char* str, bool* success);
     
     // JSON serialization for complex types
-    char* __vyn_complex_to_json(void* data);
+    char* __vyn_complex_to_json(void* instance, const char* type_name);
     void* __vyn_complex_from_json(const char* json_str, const char* type_name);
+    
+    // Type metadata registration
+    void __vyn_register_type(void* metadata);
     
     // Error handling runtime functions (from error_handling.cpp)
     void __vyn_runtime_panic(const char* message) __attribute__((noreturn));
@@ -674,6 +677,10 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
         runtimeSymbols[mangle("__vyn_complex_from_json")] = llvm::orc::ExecutorSymbolDef(
             llvm::orc::ExecutorAddr::fromPtr(&__vyn_complex_from_json), llvm::JITSymbolFlags::Exported);
         
+        // Register type metadata functions
+        runtimeSymbols[mangle("__vyn_register_type")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_register_type), llvm::JITSymbolFlags::Exported);
+        
         // Add all the runtime symbols to the main dylib
         auto defineErr = mainDylib.define(llvm::orc::absoluteSymbols(runtimeSymbols));
         if (defineErr) {
@@ -706,6 +713,18 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             throw std::runtime_error("Failed to add module to JIT: " + errorMsg);
         }
         std::cout << "ORC JIT execution engine created successfully" << std::endl;
+        
+        // Call type registration function before main (simulates global constructors)
+        auto registerTypesResult = jit->lookup("__vyn_register_all_types");
+        if (registerTypesResult) {
+            typedef void (*RegisterTypesFuncType)();
+            RegisterTypesFuncType registerFunc = reinterpret_cast<RegisterTypesFuncType>(
+                static_cast<void*>(registerTypesResult->toPtr<void*>()));
+            registerFunc();
+            std::cout << "Type metadata registered successfully" << std::endl;
+        } else {
+            std::cout << "No type registration function found (no custom types in program)" << std::endl;
+        }
         
         // Look up the main function symbol
         auto symbolResult = jit->lookup("main");

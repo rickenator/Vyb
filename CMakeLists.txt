@@ -90,6 +90,7 @@ set(VRE_SOURCES
     src/vre/llvm/cgen_expr.cpp
     src/vre/llvm/cgen_decl.cpp
     src/vre/llvm/cgen_monomorph.cpp
+    src/vre/llvm/cgen_metadata.cpp
     src/vre/llvm/cgen_function_mono.cpp
     src/vre/llvm/cgen_trait_mono.cpp
     src/vre/llvm/cgen_stmt.cpp
@@ -120,6 +121,7 @@ set(RUNTIME_SOURCES
     src/runtime/async_runtime.cpp
     src/runtime/error_handling.cpp
     runtime/vyn_runtime.c
+    runtime/vyn_type_metadata.c
 )
 
 # Runtime headers

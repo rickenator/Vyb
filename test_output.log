@@ -1,0 +1,1362 @@
+Filters: "test/json_conversion_test.vyn"
+Randomness seeded to: 641515420
+No test cases matched '"test/json_conversion_test.vyn"'
+===============================================================================
+No tests ran
+
+Processing file: test/json_conversion_test.vyn
+Starting JIT execution of test/json_conversion_test.vyn
+Starting run_vyn_code for file: test/json_conversion_test.vyn
+Initializing LLVM targets...
+Setting up ORC JIT options...
+LLVM components ready for ORC JIT.
+Creating driver instance...
+Tokenizing source code...
+Tokens generated: 225 tokens
+Parsing tokens into AST...
+[PEEK] KEYWORD_STRUCT (struct) at test/json_conversion_test.vyn:3:1
+[PEEK] KEYWORD_STRUCT (struct) at test/json_conversion_test.vyn:3:1
+[PEEK] KEYWORD_STRUCT (struct) at test/json_conversion_test.vyn:3:1
+[PEEK] KEYWORD_STRUCT (struct) at test/json_conversion_test.vyn:3:1
+[PEEK] KEYWORD_STRUCT (struct) at test/json_conversion_test.vyn:3:1
+[EXPECT] KEYWORD_STRUCT checking against KEYWORD_STRUCT (struct)
+[CONSUME] KEYWORD_STRUCT (struct) at test/json_conversion_test.vyn:3:1
+[PEEK] IDENTIFIER (Person) at test/json_conversion_test.vyn:3:8
+[CONSUME] IDENTIFIER (Person) at test/json_conversion_test.vyn:3:8
+[PEEK] LBRACE ({) at test/json_conversion_test.vyn:3:15
+[EXPECT] LBRACE checking against LBRACE ({)
+[CONSUME] LBRACE ({) at test/json_conversion_test.vyn:3:15
+[PEEK] IDENTIFIER (name) at test/json_conversion_test.vyn:4:5
+[PEEK] IDENTIFIER (name) at test/json_conversion_test.vyn:4:5
+[PEEK] IDENTIFIER (name) at test/json_conversion_test.vyn:4:5
+[CONSUME] IDENTIFIER (name) at test/json_conversion_test.vyn:4:5
+[PEEK] LT (<) at test/json_conversion_test.vyn:4:9
+[EXPECT] LT checking against LT (<)
+[CONSUME] LT (<) at test/json_conversion_test.vyn:4:9
+[PEEK] IDENTIFIER (String) at test/json_conversion_test.vyn:4:10
+[CONSUME] IDENTIFIER (String) at test/json_conversion_test.vyn:4:10
+[PEEK] GT (>) at test/json_conversion_test.vyn:4:16
+[PEEK] GT (>) at test/json_conversion_test.vyn:4:16
+[EXPECT] GT checking against GT (>)
+[CONSUME] GT (>) at test/json_conversion_test.vyn:4:16
+[CONSUME] COMMA (,) at test/json_conversion_test.vyn:4:17
+[PEEK] IDENTIFIER (age) at test/json_conversion_test.vyn:5:5
+[PEEK] IDENTIFIER (age) at test/json_conversion_test.vyn:5:5
+[PEEK] IDENTIFIER (age) at test/json_conversion_test.vyn:5:5
+[PEEK] IDENTIFIER (age) at test/json_conversion_test.vyn:5:5
+[CONSUME] IDENTIFIER (age) at test/json_conversion_test.vyn:5:5
+[PEEK] LT (<) at test/json_conversion_test.vyn:5:8
+[EXPECT] LT checking against LT (<)
+[CONSUME] LT (<) at test/json_conversion_test.vyn:5:8
+[PEEK] IDENTIFIER (Int) at test/json_conversion_test.vyn:5:9
+[CONSUME] IDENTIFIER (Int) at test/json_conversion_test.vyn:5:9
+[PEEK] GT (>) at test/json_conversion_test.vyn:5:12
+[PEEK] GT (>) at test/json_conversion_test.vyn:5:12
+[EXPECT] GT checking against GT (>)
+[CONSUME] GT (>) at test/json_conversion_test.vyn:5:12
+[CONSUME] COMMA (,) at test/json_conversion_test.vyn:5:13
+[PEEK] IDENTIFIER (active) at test/json_conversion_test.vyn:6:5
+[PEEK] IDENTIFIER (active) at test/json_conversion_test.vyn:6:5
+[PEEK] IDENTIFIER (active) at test/json_conversion_test.vyn:6:5
+[PEEK] IDENTIFIER (active) at test/json_conversion_test.vyn:6:5
+[CONSUME] IDENTIFIER (active) at test/json_conversion_test.vyn:6:5
+[PEEK] LT (<) at test/json_conversion_test.vyn:6:11
+[EXPECT] LT checking against LT (<)
+[CONSUME] LT (<) at test/json_conversion_test.vyn:6:11
+[PEEK] IDENTIFIER (Bool) at test/json_conversion_test.vyn:6:12
+[CONSUME] IDENTIFIER (Bool) at test/json_conversion_test.vyn:6:12
+[PEEK] GT (>) at test/json_conversion_test.vyn:6:16
+[PEEK] GT (>) at test/json_conversion_test.vyn:6:16
+[EXPECT] GT checking against GT (>)
+[CONSUME] GT (>) at test/json_conversion_test.vyn:6:16
+[PEEK] RBRACE (}) at test/json_conversion_test.vyn:7:1
+[PEEK] RBRACE (}) at test/json_conversion_test.vyn:7:1
+[PEEK] RBRACE (}) at test/json_conversion_test.vyn:7:1
+[EXPECT] RBRACE checking against RBRACE (})
+[CONSUME] RBRACE (}) at test/json_conversion_test.vyn:7:1
+[ModuleParser] Before consuming semicolons, next token: [PEEK] KEYWORD_STRUCT (struct) at test/json_conversion_test.vyn:9:1
+KEYWORD_STRUCT ([PEEK] KEYWORD_STRUCT (struct) at test/json_conversion_test.vyn:9:1
+struct)\\n[PEEK] KEYWORD_STRUCT (struct) at test/json_conversion_test.vyn:9:1
+[ModuleParser] After consuming semicolons, next token: [PEEK] KEYWORD_STRUCT (struct) at test/json_conversion_test.vyn:9:1
+KEYWORD_STRUCT ([PEEK] KEYWORD_STRUCT (struct) at test/json_conversion_test.vyn:9:1
+struct)\\n[PEEK] KEYWORD_STRUCT (struct) at test/json_conversion_test.vyn:9:1
+[PEEK] KEYWORD_STRUCT (struct) at test/json_conversion_test.vyn:9:1
+[PEEK] KEYWORD_STRUCT (struct) at test/json_conversion_test.vyn:9:1
+[PEEK] KEYWORD_STRUCT (struct) at test/json_conversion_test.vyn:9:1
+[PEEK] KEYWORD_STRUCT (struct) at test/json_conversion_test.vyn:9:1
+[EXPECT] KEYWORD_STRUCT checking against KEYWORD_STRUCT (struct)
+[CONSUME] KEYWORD_STRUCT (struct) at test/json_conversion_test.vyn:9:1
+[PEEK] IDENTIFIER (Point) at test/json_conversion_test.vyn:9:8
+[CONSUME] IDENTIFIER (Point) at test/json_conversion_test.vyn:9:8
+[PEEK] LBRACE ({) at test/json_conversion_test.vyn:9:14
+[EXPECT] LBRACE checking against LBRACE ({)
+[CONSUME] LBRACE ({) at test/json_conversion_test.vyn:9:14
+[PEEK] IDENTIFIER (x) at test/json_conversion_test.vyn:10:5
+[PEEK] IDENTIFIER (x) at test/json_conversion_test.vyn:10:5
+[PEEK] IDENTIFIER (x) at test/json_conversion_test.vyn:10:5
+[CONSUME] IDENTIFIER (x) at test/json_conversion_test.vyn:10:5
+[PEEK] LT (<) at test/json_conversion_test.vyn:10:6
+[EXPECT] LT checking against LT (<)
+[CONSUME] LT (<) at test/json_conversion_test.vyn:10:6
+[PEEK] IDENTIFIER (Float) at test/json_conversion_test.vyn:10:7
+[CONSUME] IDENTIFIER (Float) at test/json_conversion_test.vyn:10:7
+[PEEK] GT (>) at test/json_conversion_test.vyn:10:12
+[PEEK] GT (>) at test/json_conversion_test.vyn:10:12
+[EXPECT] GT checking against GT (>)
+[CONSUME] GT (>) at test/json_conversion_test.vyn:10:12
+[CONSUME] COMMA (,) at test/json_conversion_test.vyn:10:13
+[PEEK] IDENTIFIER (y) at test/json_conversion_test.vyn:11:5
+[PEEK] IDENTIFIER (y) at test/json_conversion_test.vyn:11:5
+[PEEK] IDENTIFIER (y) at test/json_conversion_test.vyn:11:5
+[PEEK] IDENTIFIER (y) at test/json_conversion_test.vyn:11:5
+[CONSUME] IDENTIFIER (y) at test/json_conversion_test.vyn:11:5
+[PEEK] LT (<) at test/json_conversion_test.vyn:11:6
+[EXPECT] LT checking against LT (<)
+[CONSUME] LT (<) at test/json_conversion_test.vyn:11:6
+[PEEK] IDENTIFIER (Float) at test/json_conversion_test.vyn:11:7
+[CONSUME] IDENTIFIER (Float) at test/json_conversion_test.vyn:11:7
+[PEEK] GT (>) at test/json_conversion_test.vyn:11:12
+[PEEK] GT (>) at test/json_conversion_test.vyn:11:12
+[EXPECT] GT checking against GT (>)
+[CONSUME] GT (>) at test/json_conversion_test.vyn:11:12
+[PEEK] RBRACE (}) at test/json_conversion_test.vyn:12:1
+[PEEK] RBRACE (}) at test/json_conversion_test.vyn:12:1
+[PEEK] RBRACE (}) at test/json_conversion_test.vyn:12:1
+[EXPECT] RBRACE checking against RBRACE (})
+[CONSUME] RBRACE (}) at test/json_conversion_test.vyn:12:1
+[ModuleParser] Before consuming semicolons, next token: [PEEK] IDENTIFIER (main) at test/json_conversion_test.vyn:14:1
+IDENTIFIER ([PEEK] IDENTIFIER (main) at test/json_conversion_test.vyn:14:1
+main)\\n[PEEK] IDENTIFIER (main) at test/json_conversion_test.vyn:14:1
+[ModuleParser] After consuming semicolons, next token: [PEEK] IDENTIFIER (main) at test/json_conversion_test.vyn:14:1
+IDENTIFIER ([PEEK] IDENTIFIER (main) at test/json_conversion_test.vyn:14:1
+main)\\n[PEEK] IDENTIFIER (main) at test/json_conversion_test.vyn:14:1
+[PEEK] IDENTIFIER (main) at test/json_conversion_test.vyn:14:1
+[PEEK] IDENTIFIER (main) at test/json_conversion_test.vyn:14:1
+[PEEK] IDENTIFIER (main) at test/json_conversion_test.vyn:14:1
+[DECL_PARSER] Checking function declaration context at pos 41
+[DECL_PARSER] Function is sync
+[PEEK] IDENTIFIER (main) at test/json_conversion_test.vyn:14:1
+[PEEK] IDENTIFIER (main) at test/json_conversion_test.vyn:14:1
+[PEEK] IDENTIFIER (main) at test/json_conversion_test.vyn:14:1
+[CONSUME] IDENTIFIER (main) at test/json_conversion_test.vyn:14:1
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:14:5
+[EXPECT] LPAREN checking against LPAREN (()
+[CONSUME] LPAREN (() at test/json_conversion_test.vyn:14:5
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:14:6
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:14:6
+[EXPECT] RPAREN checking against RPAREN ())
+[CONSUME] RPAREN ()) at test/json_conversion_test.vyn:14:6
+[CONSUME] LT (<) at test/json_conversion_test.vyn:14:7
+[PEEK] IDENTIFIER (Int) at test/json_conversion_test.vyn:14:8
+[CONSUME] IDENTIFIER (Int) at test/json_conversion_test.vyn:14:8
+[PEEK] GT (>) at test/json_conversion_test.vyn:14:11
+[PEEK] GT (>) at test/json_conversion_test.vyn:14:11
+[EXPECT] GT checking against GT (>)
+[CONSUME] GT (>) at test/json_conversion_test.vyn:14:11
+[PEEK] ARROW (->) at test/json_conversion_test.vyn:14:13
+[CONSUME] ARROW (->) at test/json_conversion_test.vyn:14:13
+[PEEK] LBRACE ({) at test/json_conversion_test.vyn:14:16
+[PEEK] LBRACE ({) at test/json_conversion_test.vyn:14:16
+[PEEK] LBRACE ({) at test/json_conversion_test.vyn:14:16
+[PEEK] LBRACE ({) at test/json_conversion_test.vyn:14:16
+[EXPECT] LBRACE (custom msg: "Expected '{' to start a block.") checking against LBRACE ({)
+[CONSUME] LBRACE ({) at test/json_conversion_test.vyn:14:16
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:15:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:15:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:15:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:15:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:15:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:15:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:15:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:15:5
+[CONSUME] IDENTIFIER (println) at test/json_conversion_test.vyn:15:5
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:15:12
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:15:12
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:15:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:15:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:15:5
+DEBUG: Skipping type parsing for intrinsic function: println
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:15:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:15:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:15:5
+[CONSUME] IDENTIFIER (println) at test/json_conversion_test.vyn:15:5
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:15:12
+[CONSUME] LPAREN (() at test/json_conversion_test.vyn:15:12
+[PEEK] STRING_LITERAL (=== Testing Complex Type JSON Conversion ===) at test/json_conversion_test.vyn:15:13
+[PEEK] STRING_LITERAL (=== Testing Complex Type JSON Conversion ===) at test/json_conversion_test.vyn:15:13
+[PEEK] STRING_LITERAL (=== Testing Complex Type JSON Conversion ===) at test/json_conversion_test.vyn:15:13
+[PEEK] STRING_LITERAL (=== Testing Complex Type JSON Conversion ===) at test/json_conversion_test.vyn:15:13
+[PEEK] STRING_LITERAL (=== Testing Complex Type JSON Conversion ===) at test/json_conversion_test.vyn:15:13
+[PEEK] STRING_LITERAL (=== Testing Complex Type JSON Conversion ===) at test/json_conversion_test.vyn:15:13
+[PEEK] STRING_LITERAL (=== Testing Complex Type JSON Conversion ===) at test/json_conversion_test.vyn:15:13
+DEBUG: Attempting type parsing for identifier: [PEEK] STRING_LITERAL (=== Testing Complex Type JSON Conversion ===) at test/json_conversion_test.vyn:15:13
+=== Testing Complex Type JSON Conversion ===
+[PEEK] STRING_LITERAL (=== Testing Complex Type JSON Conversion ===) at test/json_conversion_test.vyn:15:13
+[PEEK] STRING_LITERAL (=== Testing Complex Type JSON Conversion ===) at test/json_conversion_test.vyn:15:13
+[PEEK] STRING_LITERAL (=== Testing Complex Type JSON Conversion ===) at test/json_conversion_test.vyn:15:13
+[PEEK] STRING_LITERAL (=== Testing Complex Type JSON Conversion ===) at test/json_conversion_test.vyn:15:13
+[PEEK] STRING_LITERAL (=== Testing Complex Type JSON Conversion ===) at test/json_conversion_test.vyn:15:13
+[PEEK] STRING_LITERAL (=== Testing Complex Type JSON Conversion ===) at test/json_conversion_test.vyn:15:13
+[PEEK] STRING_LITERAL (=== Testing Complex Type JSON Conversion ===) at test/json_conversion_test.vyn:15:13
+[PEEK] STRING_LITERAL (=== Testing Complex Type JSON Conversion ===) at test/json_conversion_test.vyn:15:13
+[PEEK] STRING_LITERAL (=== Testing Complex Type JSON Conversion ===) at test/json_conversion_test.vyn:15:13
+[PEEK] STRING_LITERAL (=== Testing Complex Type JSON Conversion ===) at test/json_conversion_test.vyn:15:13
+[PEEK] STRING_LITERAL (=== Testing Complex Type JSON Conversion ===) at test/json_conversion_test.vyn:15:13
+[PEEK] STRING_LITERAL (=== Testing Complex Type JSON Conversion ===) at test/json_conversion_test.vyn:15:13
+[PEEK] STRING_LITERAL (=== Testing Complex Type JSON Conversion ===) at test/json_conversion_test.vyn:15:13
+[CONSUME] STRING_LITERAL (=== Testing Complex Type JSON Conversion ===) at test/json_conversion_test.vyn:15:13
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:15:59
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:15:59
+[EXPECT] RPAREN checking against RPAREN ())
+[CONSUME] RPAREN ()) at test/json_conversion_test.vyn:15:59
+[PEEK] IDENTIFIER (person) at test/json_conversion_test.vyn:18:5
+[PEEK] IDENTIFIER (person) at test/json_conversion_test.vyn:18:5
+[PEEK] IDENTIFIER (person) at test/json_conversion_test.vyn:18:5
+[PEEK] IDENTIFIER (person) at test/json_conversion_test.vyn:18:5
+[PEEK] IDENTIFIER (person) at test/json_conversion_test.vyn:18:5
+[PEEK] IDENTIFIER (person) at test/json_conversion_test.vyn:18:5
+[PEEK] IDENTIFIER (person) at test/json_conversion_test.vyn:18:5
+[PEEK] IDENTIFIER (person) at test/json_conversion_test.vyn:18:5
+[PEEK] IDENTIFIER (person) at test/json_conversion_test.vyn:18:5
+[PEEK] IDENTIFIER (person) at test/json_conversion_test.vyn:18:5
+[PEEK] IDENTIFIER (person) at test/json_conversion_test.vyn:18:5
+[PEEK] IDENTIFIER (person) at test/json_conversion_test.vyn:18:5
+[PEEK] IDENTIFIER (person) at test/json_conversion_test.vyn:18:5
+[PEEK] IDENTIFIER (person) at test/json_conversion_test.vyn:18:5
+[PEEK] IDENTIFIER (person) at test/json_conversion_test.vyn:18:5
+[PEEK] IDENTIFIER (person) at test/json_conversion_test.vyn:18:5
+[EXPECT] IDENTIFIER (custom msg: "Expected variable name.") checking against IDENTIFIER (person)
+[CONSUME] IDENTIFIER (person) at test/json_conversion_test.vyn:18:5
+[PEEK] LT (<) at test/json_conversion_test.vyn:18:11
+[EXPECT] LT (custom msg: "Expected '<' after variable name in unified syntax.") checking against LT (<)
+[CONSUME] LT (<) at test/json_conversion_test.vyn:18:11
+[PEEK] IDENTIFIER (Person) at test/json_conversion_test.vyn:18:12
+[CONSUME] IDENTIFIER (Person) at test/json_conversion_test.vyn:18:12
+[PEEK] GT (>) at test/json_conversion_test.vyn:18:18
+[PEEK] GT (>) at test/json_conversion_test.vyn:18:18
+[PEEK] GT (>) at test/json_conversion_test.vyn:18:18
+[PEEK] GT (>) at test/json_conversion_test.vyn:18:18
+[EXPECT] GT (custom msg: "Expected '>' after type in variable declaration.") checking against GT (>)
+[CONSUME] GT (>) at test/json_conversion_test.vyn:18:18
+[CONSUME] EQ (=) at test/json_conversion_test.vyn:18:20
+[PEEK] IDENTIFIER (Person) at test/json_conversion_test.vyn:18:22
+[PEEK] IDENTIFIER (Person) at test/json_conversion_test.vyn:18:22
+[PEEK] IDENTIFIER (Person) at test/json_conversion_test.vyn:18:22
+DEBUG: Attempting type parsing for identifier: [PEEK] IDENTIFIER (Person) at test/json_conversion_test.vyn:18:22
+Person
+[PEEK] IDENTIFIER (Person) at test/json_conversion_test.vyn:18:22
+[CONSUME] IDENTIFIER (Person) at test/json_conversion_test.vyn:18:22
+[PEEK] LBRACE ({) at test/json_conversion_test.vyn:18:29
+[PEEK] IDENTIFIER (Person) at test/json_conversion_test.vyn:18:22
+[PEEK] IDENTIFIER (Person) at test/json_conversion_test.vyn:18:22
+[PEEK] IDENTIFIER (Person) at test/json_conversion_test.vyn:18:22
+[CONSUME] IDENTIFIER (Person) at test/json_conversion_test.vyn:18:22
+[PEEK] LBRACE ({) at test/json_conversion_test.vyn:18:29
+[EXPECT] LBRACE checking against LBRACE ({)
+[CONSUME] LBRACE ({) at test/json_conversion_test.vyn:18:29
+[PEEK] IDENTIFIER (name) at test/json_conversion_test.vyn:19:9
+[CONSUME] IDENTIFIER (name) at test/json_conversion_test.vyn:19:9
+[CONSUME] COLON (:) at test/json_conversion_test.vyn:19:13
+[PEEK] STRING_LITERAL (Alice) at test/json_conversion_test.vyn:19:15
+[PEEK] STRING_LITERAL (Alice) at test/json_conversion_test.vyn:19:15
+[PEEK] STRING_LITERAL (Alice) at test/json_conversion_test.vyn:19:15
+[PEEK] STRING_LITERAL (Alice) at test/json_conversion_test.vyn:19:15
+[PEEK] STRING_LITERAL (Alice) at test/json_conversion_test.vyn:19:15
+[PEEK] STRING_LITERAL (Alice) at test/json_conversion_test.vyn:19:15
+[PEEK] STRING_LITERAL (Alice) at test/json_conversion_test.vyn:19:15
+DEBUG: Attempting type parsing for identifier: [PEEK] STRING_LITERAL (Alice) at test/json_conversion_test.vyn:19:15
+Alice
+[PEEK] STRING_LITERAL (Alice) at test/json_conversion_test.vyn:19:15
+[PEEK] STRING_LITERAL (Alice) at test/json_conversion_test.vyn:19:15
+[PEEK] STRING_LITERAL (Alice) at test/json_conversion_test.vyn:19:15
+[PEEK] STRING_LITERAL (Alice) at test/json_conversion_test.vyn:19:15
+[PEEK] STRING_LITERAL (Alice) at test/json_conversion_test.vyn:19:15
+[PEEK] STRING_LITERAL (Alice) at test/json_conversion_test.vyn:19:15
+[PEEK] STRING_LITERAL (Alice) at test/json_conversion_test.vyn:19:15
+[PEEK] STRING_LITERAL (Alice) at test/json_conversion_test.vyn:19:15
+[PEEK] STRING_LITERAL (Alice) at test/json_conversion_test.vyn:19:15
+[PEEK] STRING_LITERAL (Alice) at test/json_conversion_test.vyn:19:15
+[PEEK] STRING_LITERAL (Alice) at test/json_conversion_test.vyn:19:15
+[PEEK] STRING_LITERAL (Alice) at test/json_conversion_test.vyn:19:15
+[PEEK] STRING_LITERAL (Alice) at test/json_conversion_test.vyn:19:15
+[CONSUME] STRING_LITERAL (Alice) at test/json_conversion_test.vyn:19:15
+[PEEK] COMMA (,) at test/json_conversion_test.vyn:19:22
+[CONSUME] COMMA (,) at test/json_conversion_test.vyn:19:22
+[PEEK] IDENTIFIER (age) at test/json_conversion_test.vyn:20:9
+[PEEK] IDENTIFIER (age) at test/json_conversion_test.vyn:20:9
+[CONSUME] IDENTIFIER (age) at test/json_conversion_test.vyn:20:9
+[CONSUME] COLON (:) at test/json_conversion_test.vyn:20:12
+[PEEK] INT_LITERAL (30) at test/json_conversion_test.vyn:20:14
+[PEEK] INT_LITERAL (30) at test/json_conversion_test.vyn:20:14
+[PEEK] INT_LITERAL (30) at test/json_conversion_test.vyn:20:14
+[PEEK] INT_LITERAL (30) at test/json_conversion_test.vyn:20:14
+[PEEK] INT_LITERAL (30) at test/json_conversion_test.vyn:20:14
+[PEEK] INT_LITERAL (30) at test/json_conversion_test.vyn:20:14
+[PEEK] INT_LITERAL (30) at test/json_conversion_test.vyn:20:14
+DEBUG: Attempting type parsing for identifier: [PEEK] INT_LITERAL (30) at test/json_conversion_test.vyn:20:14
+30
+[PEEK] INT_LITERAL (30) at test/json_conversion_test.vyn:20:14
+[PEEK] INT_LITERAL (30) at test/json_conversion_test.vyn:20:14
+[PEEK] INT_LITERAL (30) at test/json_conversion_test.vyn:20:14
+[PEEK] INT_LITERAL (30) at test/json_conversion_test.vyn:20:14
+[PEEK] INT_LITERAL (30) at test/json_conversion_test.vyn:20:14
+[PEEK] INT_LITERAL (30) at test/json_conversion_test.vyn:20:14
+[PEEK] INT_LITERAL (30) at test/json_conversion_test.vyn:20:14
+[PEEK] INT_LITERAL (30) at test/json_conversion_test.vyn:20:14
+[PEEK] INT_LITERAL (30) at test/json_conversion_test.vyn:20:14
+[PEEK] INT_LITERAL (30) at test/json_conversion_test.vyn:20:14
+[PEEK] INT_LITERAL (30) at test/json_conversion_test.vyn:20:14
+[PEEK] INT_LITERAL (30) at test/json_conversion_test.vyn:20:14
+[PEEK] INT_LITERAL (30) at test/json_conversion_test.vyn:20:14
+[CONSUME] INT_LITERAL (30) at test/json_conversion_test.vyn:20:14
+[PEEK] COMMA (,) at test/json_conversion_test.vyn:20:16
+[CONSUME] COMMA (,) at test/json_conversion_test.vyn:20:16
+[PEEK] IDENTIFIER (active) at test/json_conversion_test.vyn:21:9
+[PEEK] IDENTIFIER (active) at test/json_conversion_test.vyn:21:9
+[CONSUME] IDENTIFIER (active) at test/json_conversion_test.vyn:21:9
+[CONSUME] COLON (:) at test/json_conversion_test.vyn:21:15
+[PEEK] KEYWORD_TRUE (true) at test/json_conversion_test.vyn:21:17
+[PEEK] KEYWORD_TRUE (true) at test/json_conversion_test.vyn:21:17
+[PEEK] KEYWORD_TRUE (true) at test/json_conversion_test.vyn:21:17
+[PEEK] KEYWORD_TRUE (true) at test/json_conversion_test.vyn:21:17
+[PEEK] KEYWORD_TRUE (true) at test/json_conversion_test.vyn:21:17
+[PEEK] KEYWORD_TRUE (true) at test/json_conversion_test.vyn:21:17
+[PEEK] KEYWORD_TRUE (true) at test/json_conversion_test.vyn:21:17
+DEBUG: Attempting type parsing for identifier: [PEEK] KEYWORD_TRUE (true) at test/json_conversion_test.vyn:21:17
+true
+[PEEK] KEYWORD_TRUE (true) at test/json_conversion_test.vyn:21:17
+[PEEK] KEYWORD_TRUE (true) at test/json_conversion_test.vyn:21:17
+[PEEK] KEYWORD_TRUE (true) at test/json_conversion_test.vyn:21:17
+[PEEK] KEYWORD_TRUE (true) at test/json_conversion_test.vyn:21:17
+[PEEK] KEYWORD_TRUE (true) at test/json_conversion_test.vyn:21:17
+[PEEK] KEYWORD_TRUE (true) at test/json_conversion_test.vyn:21:17
+[PEEK] KEYWORD_TRUE (true) at test/json_conversion_test.vyn:21:17
+[PEEK] KEYWORD_TRUE (true) at test/json_conversion_test.vyn:21:17
+[PEEK] KEYWORD_TRUE (true) at test/json_conversion_test.vyn:21:17
+[PEEK] KEYWORD_TRUE (true) at test/json_conversion_test.vyn:21:17
+[PEEK] KEYWORD_TRUE (true) at test/json_conversion_test.vyn:21:17
+[PEEK] KEYWORD_TRUE (true) at test/json_conversion_test.vyn:21:17
+[PEEK] KEYWORD_TRUE (true) at test/json_conversion_test.vyn:21:17
+[CONSUME] KEYWORD_TRUE (true) at test/json_conversion_test.vyn:21:17
+[PEEK] RBRACE (}) at test/json_conversion_test.vyn:22:5
+[PEEK] RBRACE (}) at test/json_conversion_test.vyn:22:5
+[EXPECT] RBRACE checking against RBRACE (})
+[CONSUME] RBRACE (}) at test/json_conversion_test.vyn:22:5
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:25:5
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:25:5
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:25:5
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:25:5
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:25:5
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:25:5
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:25:5
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:25:5
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:25:5
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:25:5
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:25:5
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:25:5
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:25:5
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:25:5
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:25:5
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:25:5
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:25:5
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:25:5
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:25:5
+[EXPECT] IDENTIFIER (custom msg: "Expected variable name.") checking against IDENTIFIER (json_str)
+[CONSUME] IDENTIFIER (json_str) at test/json_conversion_test.vyn:25:5
+[PEEK] LT (<) at test/json_conversion_test.vyn:25:13
+[EXPECT] LT (custom msg: "Expected '<' after variable name in unified syntax.") checking against LT (<)
+[CONSUME] LT (<) at test/json_conversion_test.vyn:25:13
+[PEEK] IDENTIFIER (String) at test/json_conversion_test.vyn:25:14
+[CONSUME] IDENTIFIER (String) at test/json_conversion_test.vyn:25:14
+[PEEK] GT (>) at test/json_conversion_test.vyn:25:20
+[PEEK] GT (>) at test/json_conversion_test.vyn:25:20
+[PEEK] GT (>) at test/json_conversion_test.vyn:25:20
+[PEEK] GT (>) at test/json_conversion_test.vyn:25:20
+[EXPECT] GT (custom msg: "Expected '>' after type in variable declaration.") checking against GT (>)
+[CONSUME] GT (>) at test/json_conversion_test.vyn:25:20
+[CONSUME] EQ (=) at test/json_conversion_test.vyn:25:22
+[PEEK] IDENTIFIER (person) at test/json_conversion_test.vyn:25:24
+[PEEK] IDENTIFIER (person) at test/json_conversion_test.vyn:25:24
+[PEEK] IDENTIFIER (person) at test/json_conversion_test.vyn:25:24
+[PEEK] IDENTIFIER (person) at test/json_conversion_test.vyn:25:24
+[PEEK] IDENTIFIER (person) at test/json_conversion_test.vyn:25:24
+[PEEK] IDENTIFIER (person) at test/json_conversion_test.vyn:25:24
+[CONSUME] IDENTIFIER (person) at test/json_conversion_test.vyn:25:24
+[PEEK] DOT (.) at test/json_conversion_test.vyn:25:30
+[CONSUME] DOT (.) at test/json_conversion_test.vyn:25:30
+[PEEK] IDENTIFIER (to_string) at test/json_conversion_test.vyn:25:31
+[PEEK] IDENTIFIER (to_string) at test/json_conversion_test.vyn:25:31
+[CONSUME] IDENTIFIER (to_string) at test/json_conversion_test.vyn:25:31
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:25:40
+[CONSUME] LPAREN (() at test/json_conversion_test.vyn:25:40
+[CONSUME] RPAREN ()) at test/json_conversion_test.vyn:25:41
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[CONSUME] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:26:12
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:26:12
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+DEBUG: Skipping type parsing for intrinsic function: println
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[CONSUME] IDENTIFIER (println) at test/json_conversion_test.vyn:26:5
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:26:12
+[CONSUME] LPAREN (() at test/json_conversion_test.vyn:26:12
+[PEEK] STRING_LITERAL (Person to JSON:) at test/json_conversion_test.vyn:26:13
+[PEEK] STRING_LITERAL (Person to JSON:) at test/json_conversion_test.vyn:26:13
+[PEEK] STRING_LITERAL (Person to JSON:) at test/json_conversion_test.vyn:26:13
+[PEEK] STRING_LITERAL (Person to JSON:) at test/json_conversion_test.vyn:26:13
+[PEEK] STRING_LITERAL (Person to JSON:) at test/json_conversion_test.vyn:26:13
+[PEEK] STRING_LITERAL (Person to JSON:) at test/json_conversion_test.vyn:26:13
+[PEEK] STRING_LITERAL (Person to JSON:) at test/json_conversion_test.vyn:26:13
+DEBUG: Attempting type parsing for identifier: [PEEK] STRING_LITERAL (Person to JSON:) at test/json_conversion_test.vyn:26:13
+Person to JSON:
+[PEEK] STRING_LITERAL (Person to JSON:) at test/json_conversion_test.vyn:26:13
+[PEEK] STRING_LITERAL (Person to JSON:) at test/json_conversion_test.vyn:26:13
+[PEEK] STRING_LITERAL (Person to JSON:) at test/json_conversion_test.vyn:26:13
+[PEEK] STRING_LITERAL (Person to JSON:) at test/json_conversion_test.vyn:26:13
+[PEEK] STRING_LITERAL (Person to JSON:) at test/json_conversion_test.vyn:26:13
+[PEEK] STRING_LITERAL (Person to JSON:) at test/json_conversion_test.vyn:26:13
+[PEEK] STRING_LITERAL (Person to JSON:) at test/json_conversion_test.vyn:26:13
+[PEEK] STRING_LITERAL (Person to JSON:) at test/json_conversion_test.vyn:26:13
+[PEEK] STRING_LITERAL (Person to JSON:) at test/json_conversion_test.vyn:26:13
+[PEEK] STRING_LITERAL (Person to JSON:) at test/json_conversion_test.vyn:26:13
+[PEEK] STRING_LITERAL (Person to JSON:) at test/json_conversion_test.vyn:26:13
+[PEEK] STRING_LITERAL (Person to JSON:) at test/json_conversion_test.vyn:26:13
+[PEEK] STRING_LITERAL (Person to JSON:) at test/json_conversion_test.vyn:26:13
+[CONSUME] STRING_LITERAL (Person to JSON:) at test/json_conversion_test.vyn:26:13
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:26:30
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:26:30
+[EXPECT] RPAREN checking against RPAREN ())
+[CONSUME] RPAREN ()) at test/json_conversion_test.vyn:26:30
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:27:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:27:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:27:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:27:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:27:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:27:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:27:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:27:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:27:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:27:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:27:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:27:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:27:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:27:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:27:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:27:5
+[CONSUME] IDENTIFIER (println) at test/json_conversion_test.vyn:27:5
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:27:12
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:27:12
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:27:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:27:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:27:5
+DEBUG: Skipping type parsing for intrinsic function: println
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:27:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:27:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:27:5
+[CONSUME] IDENTIFIER (println) at test/json_conversion_test.vyn:27:5
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:27:12
+[CONSUME] LPAREN (() at test/json_conversion_test.vyn:27:12
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:27:13
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:27:13
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:27:13
+DEBUG: Attempting type parsing for identifier: [PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:27:13
+json_str
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:27:13
+[CONSUME] IDENTIFIER (json_str) at test/json_conversion_test.vyn:27:13
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:27:21
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:27:13
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:27:13
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:27:13
+[CONSUME] IDENTIFIER (json_str) at test/json_conversion_test.vyn:27:13
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:27:21
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:27:21
+[EXPECT] RPAREN checking against RPAREN ())
+[CONSUME] RPAREN ()) at test/json_conversion_test.vyn:27:21
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:30:5
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:30:5
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:30:5
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:30:5
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:30:5
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:30:5
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:30:5
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:30:5
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:30:5
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:30:5
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:30:5
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:30:5
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:30:5
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:30:5
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:30:5
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:30:5
+[EXPECT] IDENTIFIER (custom msg: "Expected variable name.") checking against IDENTIFIER (person2)
+[CONSUME] IDENTIFIER (person2) at test/json_conversion_test.vyn:30:5
+[PEEK] LT (<) at test/json_conversion_test.vyn:30:12
+[EXPECT] LT (custom msg: "Expected '<' after variable name in unified syntax.") checking against LT (<)
+[CONSUME] LT (<) at test/json_conversion_test.vyn:30:12
+[PEEK] IDENTIFIER (Person) at test/json_conversion_test.vyn:30:13
+[CONSUME] IDENTIFIER (Person) at test/json_conversion_test.vyn:30:13
+[PEEK] GT (>) at test/json_conversion_test.vyn:30:19
+[PEEK] GT (>) at test/json_conversion_test.vyn:30:19
+[PEEK] GT (>) at test/json_conversion_test.vyn:30:19
+[PEEK] GT (>) at test/json_conversion_test.vyn:30:19
+[EXPECT] GT (custom msg: "Expected '>' after type in variable declaration.") checking against GT (>)
+[CONSUME] GT (>) at test/json_conversion_test.vyn:30:19
+[CONSUME] EQ (=) at test/json_conversion_test.vyn:30:21
+[PEEK] IDENTIFIER (Person) at test/json_conversion_test.vyn:30:23
+[PEEK] IDENTIFIER (Person) at test/json_conversion_test.vyn:30:23
+[PEEK] IDENTIFIER (Person) at test/json_conversion_test.vyn:30:23
+[PEEK] IDENTIFIER (Person) at test/json_conversion_test.vyn:30:23
+[PEEK] IDENTIFIER (Person) at test/json_conversion_test.vyn:30:23
+[PEEK] IDENTIFIER (Person) at test/json_conversion_test.vyn:30:23
+[CONSUME] IDENTIFIER (Person) at test/json_conversion_test.vyn:30:23
+[PEEK] COLONCOLON (::) at test/json_conversion_test.vyn:30:29
+[CONSUME] COLONCOLON (::) at test/json_conversion_test.vyn:30:29
+[PEEK] IDENTIFIER (from_string) at test/json_conversion_test.vyn:30:31
+[PEEK] IDENTIFIER (from_string) at test/json_conversion_test.vyn:30:31
+[CONSUME] IDENTIFIER (from_string) at test/json_conversion_test.vyn:30:31
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:30:42
+[CONSUME] LPAREN (() at test/json_conversion_test.vyn:30:42
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:30:43
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:30:43
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:30:43
+DEBUG: Attempting type parsing for identifier: [PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:30:43
+json_str
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:30:43
+[CONSUME] IDENTIFIER (json_str) at test/json_conversion_test.vyn:30:43
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:30:51
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:30:43
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:30:43
+[PEEK] IDENTIFIER (json_str) at test/json_conversion_test.vyn:30:43
+[CONSUME] IDENTIFIER (json_str) at test/json_conversion_test.vyn:30:43
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:30:51
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:30:51
+[EXPECT] RPAREN checking against RPAREN ())
+[CONSUME] RPAREN ()) at test/json_conversion_test.vyn:30:51
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[CONSUME] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:31:12
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:31:12
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+DEBUG: Skipping type parsing for intrinsic function: println
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[CONSUME] IDENTIFIER (println) at test/json_conversion_test.vyn:31:5
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:31:12
+[CONSUME] LPAREN (() at test/json_conversion_test.vyn:31:12
+[PEEK] STRING_LITERAL (Deserialized Person:) at test/json_conversion_test.vyn:31:13
+[PEEK] STRING_LITERAL (Deserialized Person:) at test/json_conversion_test.vyn:31:13
+[PEEK] STRING_LITERAL (Deserialized Person:) at test/json_conversion_test.vyn:31:13
+[PEEK] STRING_LITERAL (Deserialized Person:) at test/json_conversion_test.vyn:31:13
+[PEEK] STRING_LITERAL (Deserialized Person:) at test/json_conversion_test.vyn:31:13
+[PEEK] STRING_LITERAL (Deserialized Person:) at test/json_conversion_test.vyn:31:13
+[PEEK] STRING_LITERAL (Deserialized Person:) at test/json_conversion_test.vyn:31:13
+DEBUG: Attempting type parsing for identifier: [PEEK] STRING_LITERAL (Deserialized Person:) at test/json_conversion_test.vyn:31:13
+Deserialized Person:
+[PEEK] STRING_LITERAL (Deserialized Person:) at test/json_conversion_test.vyn:31:13
+[PEEK] STRING_LITERAL (Deserialized Person:) at test/json_conversion_test.vyn:31:13
+[PEEK] STRING_LITERAL (Deserialized Person:) at test/json_conversion_test.vyn:31:13
+[PEEK] STRING_LITERAL (Deserialized Person:) at test/json_conversion_test.vyn:31:13
+[PEEK] STRING_LITERAL (Deserialized Person:) at test/json_conversion_test.vyn:31:13
+[PEEK] STRING_LITERAL (Deserialized Person:) at test/json_conversion_test.vyn:31:13
+[PEEK] STRING_LITERAL (Deserialized Person:) at test/json_conversion_test.vyn:31:13
+[PEEK] STRING_LITERAL (Deserialized Person:) at test/json_conversion_test.vyn:31:13
+[PEEK] STRING_LITERAL (Deserialized Person:) at test/json_conversion_test.vyn:31:13
+[PEEK] STRING_LITERAL (Deserialized Person:) at test/json_conversion_test.vyn:31:13
+[PEEK] STRING_LITERAL (Deserialized Person:) at test/json_conversion_test.vyn:31:13
+[PEEK] STRING_LITERAL (Deserialized Person:) at test/json_conversion_test.vyn:31:13
+[PEEK] STRING_LITERAL (Deserialized Person:) at test/json_conversion_test.vyn:31:13
+[CONSUME] STRING_LITERAL (Deserialized Person:) at test/json_conversion_test.vyn:31:13
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:31:35
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:31:35
+[EXPECT] RPAREN checking against RPAREN ())
+[CONSUME] RPAREN ()) at test/json_conversion_test.vyn:31:35
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:32:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:32:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:32:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:32:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:32:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:32:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:32:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:32:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:32:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:32:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:32:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:32:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:32:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:32:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:32:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:32:5
+[CONSUME] IDENTIFIER (println) at test/json_conversion_test.vyn:32:5
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:32:12
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:32:12
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:32:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:32:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:32:5
+DEBUG: Skipping type parsing for intrinsic function: println
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:32:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:32:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:32:5
+[CONSUME] IDENTIFIER (println) at test/json_conversion_test.vyn:32:5
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:32:12
+[CONSUME] LPAREN (() at test/json_conversion_test.vyn:32:12
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:32:13
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:32:13
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:32:13
+DEBUG: Attempting type parsing for identifier: [PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:32:13
+person2
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:32:13
+[CONSUME] IDENTIFIER (person2) at test/json_conversion_test.vyn:32:13
+[CONSUME] DOT (.) at test/json_conversion_test.vyn:32:20
+[CONSUME] IDENTIFIER (name) at test/json_conversion_test.vyn:32:21
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:32:25
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:32:13
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:32:13
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:32:13
+[CONSUME] IDENTIFIER (person2) at test/json_conversion_test.vyn:32:13
+[PEEK] DOT (.) at test/json_conversion_test.vyn:32:20
+[CONSUME] DOT (.) at test/json_conversion_test.vyn:32:20
+[PEEK] IDENTIFIER (name) at test/json_conversion_test.vyn:32:21
+[PEEK] IDENTIFIER (name) at test/json_conversion_test.vyn:32:21
+[CONSUME] IDENTIFIER (name) at test/json_conversion_test.vyn:32:21
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:32:25
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:32:25
+[EXPECT] RPAREN checking against RPAREN ())
+[CONSUME] RPAREN ()) at test/json_conversion_test.vyn:32:25
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:33:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:33:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:33:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:33:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:33:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:33:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:33:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:33:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:33:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:33:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:33:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:33:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:33:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:33:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:33:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:33:5
+[CONSUME] IDENTIFIER (println) at test/json_conversion_test.vyn:33:5
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:33:12
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:33:12
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:33:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:33:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:33:5
+DEBUG: Skipping type parsing for intrinsic function: println
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:33:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:33:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:33:5
+[CONSUME] IDENTIFIER (println) at test/json_conversion_test.vyn:33:5
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:33:12
+[CONSUME] LPAREN (() at test/json_conversion_test.vyn:33:12
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:33:13
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:33:13
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:33:13
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:33:13
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:33:13
+[PEEK] IDENTIFIER (person2) at test/json_conversion_test.vyn:33:13
+[CONSUME] IDENTIFIER (person2) at test/json_conversion_test.vyn:33:13
+[PEEK] DOT (.) at test/json_conversion_test.vyn:33:20
+[CONSUME] DOT (.) at test/json_conversion_test.vyn:33:20
+[PEEK] IDENTIFIER (age) at test/json_conversion_test.vyn:33:21
+[PEEK] IDENTIFIER (age) at test/json_conversion_test.vyn:33:21
+[CONSUME] IDENTIFIER (age) at test/json_conversion_test.vyn:33:21
+[PEEK] DOT (.) at test/json_conversion_test.vyn:33:24
+[CONSUME] DOT (.) at test/json_conversion_test.vyn:33:24
+[PEEK] IDENTIFIER (to_string) at test/json_conversion_test.vyn:33:25
+[PEEK] IDENTIFIER (to_string) at test/json_conversion_test.vyn:33:25
+[CONSUME] IDENTIFIER (to_string) at test/json_conversion_test.vyn:33:25
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:33:34
+[CONSUME] LPAREN (() at test/json_conversion_test.vyn:33:34
+[CONSUME] RPAREN ()) at test/json_conversion_test.vyn:33:35
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:33:36
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:33:36
+[EXPECT] RPAREN checking against RPAREN ())
+[CONSUME] RPAREN ()) at test/json_conversion_test.vyn:33:36
+[PEEK] IDENTIFIER (pt) at test/json_conversion_test.vyn:36:5
+[PEEK] IDENTIFIER (pt) at test/json_conversion_test.vyn:36:5
+[PEEK] IDENTIFIER (pt) at test/json_conversion_test.vyn:36:5
+[PEEK] IDENTIFIER (pt) at test/json_conversion_test.vyn:36:5
+[PEEK] IDENTIFIER (pt) at test/json_conversion_test.vyn:36:5
+[PEEK] IDENTIFIER (pt) at test/json_conversion_test.vyn:36:5
+[PEEK] IDENTIFIER (pt) at test/json_conversion_test.vyn:36:5
+[PEEK] IDENTIFIER (pt) at test/json_conversion_test.vyn:36:5
+[PEEK] IDENTIFIER (pt) at test/json_conversion_test.vyn:36:5
+[PEEK] IDENTIFIER (pt) at test/json_conversion_test.vyn:36:5
+[PEEK] IDENTIFIER (pt) at test/json_conversion_test.vyn:36:5
+[PEEK] IDENTIFIER (pt) at test/json_conversion_test.vyn:36:5
+[PEEK] IDENTIFIER (pt) at test/json_conversion_test.vyn:36:5
+[PEEK] IDENTIFIER (pt) at test/json_conversion_test.vyn:36:5
+[PEEK] IDENTIFIER (pt) at test/json_conversion_test.vyn:36:5
+[PEEK] IDENTIFIER (pt) at test/json_conversion_test.vyn:36:5
+[EXPECT] IDENTIFIER (custom msg: "Expected variable name.") checking against IDENTIFIER (pt)
+[CONSUME] IDENTIFIER (pt) at test/json_conversion_test.vyn:36:5
+[PEEK] LT (<) at test/json_conversion_test.vyn:36:7
+[EXPECT] LT (custom msg: "Expected '<' after variable name in unified syntax.") checking against LT (<)
+[CONSUME] LT (<) at test/json_conversion_test.vyn:36:7
+[PEEK] IDENTIFIER (Point) at test/json_conversion_test.vyn:36:8
+[CONSUME] IDENTIFIER (Point) at test/json_conversion_test.vyn:36:8
+[PEEK] GT (>) at test/json_conversion_test.vyn:36:13
+[PEEK] GT (>) at test/json_conversion_test.vyn:36:13
+[PEEK] GT (>) at test/json_conversion_test.vyn:36:13
+[PEEK] GT (>) at test/json_conversion_test.vyn:36:13
+[EXPECT] GT (custom msg: "Expected '>' after type in variable declaration.") checking against GT (>)
+[CONSUME] GT (>) at test/json_conversion_test.vyn:36:13
+[CONSUME] EQ (=) at test/json_conversion_test.vyn:36:15
+[PEEK] IDENTIFIER (Point) at test/json_conversion_test.vyn:36:17
+[PEEK] IDENTIFIER (Point) at test/json_conversion_test.vyn:36:17
+[PEEK] IDENTIFIER (Point) at test/json_conversion_test.vyn:36:17
+DEBUG: Attempting type parsing for identifier: [PEEK] IDENTIFIER (Point) at test/json_conversion_test.vyn:36:17
+Point
+[PEEK] IDENTIFIER (Point) at test/json_conversion_test.vyn:36:17
+[CONSUME] IDENTIFIER (Point) at test/json_conversion_test.vyn:36:17
+[PEEK] LBRACE ({) at test/json_conversion_test.vyn:36:23
+[PEEK] IDENTIFIER (Point) at test/json_conversion_test.vyn:36:17
+[PEEK] IDENTIFIER (Point) at test/json_conversion_test.vyn:36:17
+[PEEK] IDENTIFIER (Point) at test/json_conversion_test.vyn:36:17
+[CONSUME] IDENTIFIER (Point) at test/json_conversion_test.vyn:36:17
+[PEEK] LBRACE ({) at test/json_conversion_test.vyn:36:23
+[EXPECT] LBRACE checking against LBRACE ({)
+[CONSUME] LBRACE ({) at test/json_conversion_test.vyn:36:23
+[PEEK] IDENTIFIER (x) at test/json_conversion_test.vyn:36:25
+[CONSUME] IDENTIFIER (x) at test/json_conversion_test.vyn:36:25
+[CONSUME] COLON (:) at test/json_conversion_test.vyn:36:26
+[PEEK] FLOAT_LITERAL (3.14) at test/json_conversion_test.vyn:36:28
+[PEEK] FLOAT_LITERAL (3.14) at test/json_conversion_test.vyn:36:28
+[PEEK] FLOAT_LITERAL (3.14) at test/json_conversion_test.vyn:36:28
+[PEEK] FLOAT_LITERAL (3.14) at test/json_conversion_test.vyn:36:28
+[PEEK] FLOAT_LITERAL (3.14) at test/json_conversion_test.vyn:36:28
+[PEEK] FLOAT_LITERAL (3.14) at test/json_conversion_test.vyn:36:28
+[PEEK] FLOAT_LITERAL (3.14) at test/json_conversion_test.vyn:36:28
+DEBUG: Attempting type parsing for identifier: [PEEK] FLOAT_LITERAL (3.14) at test/json_conversion_test.vyn:36:28
+3.14
+[PEEK] FLOAT_LITERAL (3.14) at test/json_conversion_test.vyn:36:28
+[PEEK] FLOAT_LITERAL (3.14) at test/json_conversion_test.vyn:36:28
+[PEEK] FLOAT_LITERAL (3.14) at test/json_conversion_test.vyn:36:28
+[PEEK] FLOAT_LITERAL (3.14) at test/json_conversion_test.vyn:36:28
+[PEEK] FLOAT_LITERAL (3.14) at test/json_conversion_test.vyn:36:28
+[PEEK] FLOAT_LITERAL (3.14) at test/json_conversion_test.vyn:36:28
+[PEEK] FLOAT_LITERAL (3.14) at test/json_conversion_test.vyn:36:28
+[PEEK] FLOAT_LITERAL (3.14) at test/json_conversion_test.vyn:36:28
+[PEEK] FLOAT_LITERAL (3.14) at test/json_conversion_test.vyn:36:28
+[PEEK] FLOAT_LITERAL (3.14) at test/json_conversion_test.vyn:36:28
+[PEEK] FLOAT_LITERAL (3.14) at test/json_conversion_test.vyn:36:28
+[PEEK] FLOAT_LITERAL (3.14) at test/json_conversion_test.vyn:36:28
+[PEEK] FLOAT_LITERAL (3.14) at test/json_conversion_test.vyn:36:28
+[CONSUME] FLOAT_LITERAL (3.14) at test/json_conversion_test.vyn:36:28
+[PEEK] COMMA (,) at test/json_conversion_test.vyn:36:32
+[CONSUME] COMMA (,) at test/json_conversion_test.vyn:36:32
+[PEEK] IDENTIFIER (y) at test/json_conversion_test.vyn:36:34
+[PEEK] IDENTIFIER (y) at test/json_conversion_test.vyn:36:34
+[CONSUME] IDENTIFIER (y) at test/json_conversion_test.vyn:36:34
+[CONSUME] COLON (:) at test/json_conversion_test.vyn:36:35
+[PEEK] FLOAT_LITERAL (2.71) at test/json_conversion_test.vyn:36:37
+[PEEK] FLOAT_LITERAL (2.71) at test/json_conversion_test.vyn:36:37
+[PEEK] FLOAT_LITERAL (2.71) at test/json_conversion_test.vyn:36:37
+[PEEK] FLOAT_LITERAL (2.71) at test/json_conversion_test.vyn:36:37
+[PEEK] FLOAT_LITERAL (2.71) at test/json_conversion_test.vyn:36:37
+[PEEK] FLOAT_LITERAL (2.71) at test/json_conversion_test.vyn:36:37
+[PEEK] FLOAT_LITERAL (2.71) at test/json_conversion_test.vyn:36:37
+DEBUG: Attempting type parsing for identifier: [PEEK] FLOAT_LITERAL (2.71) at test/json_conversion_test.vyn:36:37
+2.71
+[PEEK] FLOAT_LITERAL (2.71) at test/json_conversion_test.vyn:36:37
+[PEEK] FLOAT_LITERAL (2.71) at test/json_conversion_test.vyn:36:37
+[PEEK] FLOAT_LITERAL (2.71) at test/json_conversion_test.vyn:36:37
+[PEEK] FLOAT_LITERAL (2.71) at test/json_conversion_test.vyn:36:37
+[PEEK] FLOAT_LITERAL (2.71) at test/json_conversion_test.vyn:36:37
+[PEEK] FLOAT_LITERAL (2.71) at test/json_conversion_test.vyn:36:37
+[PEEK] FLOAT_LITERAL (2.71) at test/json_conversion_test.vyn:36:37
+[PEEK] FLOAT_LITERAL (2.71) at test/json_conversion_test.vyn:36:37
+[PEEK] FLOAT_LITERAL (2.71) at test/json_conversion_test.vyn:36:37
+[PEEK] FLOAT_LITERAL (2.71) at test/json_conversion_test.vyn:36:37
+[PEEK] FLOAT_LITERAL (2.71) at test/json_conversion_test.vyn:36:37
+[PEEK] FLOAT_LITERAL (2.71) at test/json_conversion_test.vyn:36:37
+[PEEK] FLOAT_LITERAL (2.71) at test/json_conversion_test.vyn:36:37
+[CONSUME] FLOAT_LITERAL (2.71) at test/json_conversion_test.vyn:36:37
+[PEEK] RBRACE (}) at test/json_conversion_test.vyn:36:42
+[PEEK] RBRACE (}) at test/json_conversion_test.vyn:36:42
+[EXPECT] RBRACE checking against RBRACE (})
+[CONSUME] RBRACE (}) at test/json_conversion_test.vyn:36:42
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:37:5
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:37:5
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:37:5
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:37:5
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:37:5
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:37:5
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:37:5
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:37:5
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:37:5
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:37:5
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:37:5
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:37:5
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:37:5
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:37:5
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:37:5
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:37:5
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:37:5
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:37:5
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:37:5
+[EXPECT] IDENTIFIER (custom msg: "Expected variable name.") checking against IDENTIFIER (pt_json)
+[CONSUME] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:37:5
+[PEEK] LT (<) at test/json_conversion_test.vyn:37:12
+[EXPECT] LT (custom msg: "Expected '<' after variable name in unified syntax.") checking against LT (<)
+[CONSUME] LT (<) at test/json_conversion_test.vyn:37:12
+[PEEK] IDENTIFIER (String) at test/json_conversion_test.vyn:37:13
+[CONSUME] IDENTIFIER (String) at test/json_conversion_test.vyn:37:13
+[PEEK] GT (>) at test/json_conversion_test.vyn:37:19
+[PEEK] GT (>) at test/json_conversion_test.vyn:37:19
+[PEEK] GT (>) at test/json_conversion_test.vyn:37:19
+[PEEK] GT (>) at test/json_conversion_test.vyn:37:19
+[EXPECT] GT (custom msg: "Expected '>' after type in variable declaration.") checking against GT (>)
+[CONSUME] GT (>) at test/json_conversion_test.vyn:37:19
+[CONSUME] EQ (=) at test/json_conversion_test.vyn:37:21
+[PEEK] IDENTIFIER (pt) at test/json_conversion_test.vyn:37:23
+[PEEK] IDENTIFIER (pt) at test/json_conversion_test.vyn:37:23
+[PEEK] IDENTIFIER (pt) at test/json_conversion_test.vyn:37:23
+[PEEK] IDENTIFIER (pt) at test/json_conversion_test.vyn:37:23
+[PEEK] IDENTIFIER (pt) at test/json_conversion_test.vyn:37:23
+[PEEK] IDENTIFIER (pt) at test/json_conversion_test.vyn:37:23
+[CONSUME] IDENTIFIER (pt) at test/json_conversion_test.vyn:37:23
+[PEEK] DOT (.) at test/json_conversion_test.vyn:37:25
+[CONSUME] DOT (.) at test/json_conversion_test.vyn:37:25
+[PEEK] IDENTIFIER (to_string) at test/json_conversion_test.vyn:37:26
+[PEEK] IDENTIFIER (to_string) at test/json_conversion_test.vyn:37:26
+[CONSUME] IDENTIFIER (to_string) at test/json_conversion_test.vyn:37:26
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:37:35
+[CONSUME] LPAREN (() at test/json_conversion_test.vyn:37:35
+[CONSUME] RPAREN ()) at test/json_conversion_test.vyn:37:36
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[CONSUME] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:38:12
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:38:12
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+DEBUG: Skipping type parsing for intrinsic function: println
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[CONSUME] IDENTIFIER (println) at test/json_conversion_test.vyn:38:5
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:38:12
+[CONSUME] LPAREN (() at test/json_conversion_test.vyn:38:12
+[PEEK] STRING_LITERAL () at test/json_conversion_test.vyn:38:13
+[PEEK] STRING_LITERAL () at test/json_conversion_test.vyn:38:13
+[PEEK] STRING_LITERAL () at test/json_conversion_test.vyn:38:13
+[PEEK] STRING_LITERAL () at test/json_conversion_test.vyn:38:13
+[PEEK] STRING_LITERAL () at test/json_conversion_test.vyn:38:13
+[PEEK] STRING_LITERAL () at test/json_conversion_test.vyn:38:13
+[PEEK] STRING_LITERAL () at test/json_conversion_test.vyn:38:13
+DEBUG: Attempting type parsing for identifier: [PEEK] STRING_LITERAL () at test/json_conversion_test.vyn:38:13
+
+[PEEK] STRING_LITERAL () at test/json_conversion_test.vyn:38:13
+[PEEK] STRING_LITERAL () at test/json_conversion_test.vyn:38:13
+[PEEK] STRING_LITERAL () at test/json_conversion_test.vyn:38:13
+[PEEK] STRING_LITERAL () at test/json_conversion_test.vyn:38:13
+[PEEK] STRING_LITERAL () at test/json_conversion_test.vyn:38:13
+[PEEK] STRING_LITERAL () at test/json_conversion_test.vyn:38:13
+[PEEK] STRING_LITERAL () at test/json_conversion_test.vyn:38:13
+[PEEK] STRING_LITERAL () at test/json_conversion_test.vyn:38:13
+[PEEK] STRING_LITERAL () at test/json_conversion_test.vyn:38:13
+[PEEK] STRING_LITERAL () at test/json_conversion_test.vyn:38:13
+[PEEK] STRING_LITERAL () at test/json_conversion_test.vyn:38:13
+[PEEK] STRING_LITERAL () at test/json_conversion_test.vyn:38:13
+[PEEK] STRING_LITERAL () at test/json_conversion_test.vyn:38:13
+[CONSUME] STRING_LITERAL () at test/json_conversion_test.vyn:38:13
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:38:15
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:38:15
+[EXPECT] RPAREN checking against RPAREN ())
+[CONSUME] RPAREN ()) at test/json_conversion_test.vyn:38:15
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:39:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:39:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:39:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:39:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:39:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:39:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:39:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:39:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:39:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:39:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:39:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:39:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:39:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:39:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:39:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:39:5
+[CONSUME] IDENTIFIER (println) at test/json_conversion_test.vyn:39:5
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:39:12
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:39:12
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:39:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:39:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:39:5
+DEBUG: Skipping type parsing for intrinsic function: println
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:39:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:39:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:39:5
+[CONSUME] IDENTIFIER (println) at test/json_conversion_test.vyn:39:5
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:39:12
+[CONSUME] LPAREN (() at test/json_conversion_test.vyn:39:12
+[PEEK] STRING_LITERAL (Point to JSON:) at test/json_conversion_test.vyn:39:13
+[PEEK] STRING_LITERAL (Point to JSON:) at test/json_conversion_test.vyn:39:13
+[PEEK] STRING_LITERAL (Point to JSON:) at test/json_conversion_test.vyn:39:13
+[PEEK] STRING_LITERAL (Point to JSON:) at test/json_conversion_test.vyn:39:13
+[PEEK] STRING_LITERAL (Point to JSON:) at test/json_conversion_test.vyn:39:13
+[PEEK] STRING_LITERAL (Point to JSON:) at test/json_conversion_test.vyn:39:13
+[PEEK] STRING_LITERAL (Point to JSON:) at test/json_conversion_test.vyn:39:13
+DEBUG: Attempting type parsing for identifier: [PEEK] STRING_LITERAL (Point to JSON:) at test/json_conversion_test.vyn:39:13
+Point to JSON:
+[PEEK] STRING_LITERAL (Point to JSON:) at test/json_conversion_test.vyn:39:13
+[PEEK] STRING_LITERAL (Point to JSON:) at test/json_conversion_test.vyn:39:13
+[PEEK] STRING_LITERAL (Point to JSON:) at test/json_conversion_test.vyn:39:13
+[PEEK] STRING_LITERAL (Point to JSON:) at test/json_conversion_test.vyn:39:13
+[PEEK] STRING_LITERAL (Point to JSON:) at test/json_conversion_test.vyn:39:13
+[PEEK] STRING_LITERAL (Point to JSON:) at test/json_conversion_test.vyn:39:13
+[PEEK] STRING_LITERAL (Point to JSON:) at test/json_conversion_test.vyn:39:13
+[PEEK] STRING_LITERAL (Point to JSON:) at test/json_conversion_test.vyn:39:13
+[PEEK] STRING_LITERAL (Point to JSON:) at test/json_conversion_test.vyn:39:13
+[PEEK] STRING_LITERAL (Point to JSON:) at test/json_conversion_test.vyn:39:13
+[PEEK] STRING_LITERAL (Point to JSON:) at test/json_conversion_test.vyn:39:13
+[PEEK] STRING_LITERAL (Point to JSON:) at test/json_conversion_test.vyn:39:13
+[PEEK] STRING_LITERAL (Point to JSON:) at test/json_conversion_test.vyn:39:13
+[CONSUME] STRING_LITERAL (Point to JSON:) at test/json_conversion_test.vyn:39:13
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:39:29
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:39:29
+[EXPECT] RPAREN checking against RPAREN ())
+[CONSUME] RPAREN ()) at test/json_conversion_test.vyn:39:29
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:40:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:40:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:40:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:40:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:40:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:40:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:40:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:40:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:40:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:40:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:40:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:40:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:40:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:40:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:40:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:40:5
+[CONSUME] IDENTIFIER (println) at test/json_conversion_test.vyn:40:5
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:40:12
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:40:12
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:40:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:40:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:40:5
+DEBUG: Skipping type parsing for intrinsic function: println
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:40:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:40:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:40:5
+[CONSUME] IDENTIFIER (println) at test/json_conversion_test.vyn:40:5
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:40:12
+[CONSUME] LPAREN (() at test/json_conversion_test.vyn:40:12
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:40:13
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:40:13
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:40:13
+DEBUG: Attempting type parsing for identifier: [PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:40:13
+pt_json
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:40:13
+[CONSUME] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:40:13
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:40:20
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:40:13
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:40:13
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:40:13
+[CONSUME] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:40:13
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:40:20
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:40:20
+[EXPECT] RPAREN checking against RPAREN ())
+[CONSUME] RPAREN ()) at test/json_conversion_test.vyn:40:20
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:42:5
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:42:5
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:42:5
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:42:5
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:42:5
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:42:5
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:42:5
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:42:5
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:42:5
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:42:5
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:42:5
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:42:5
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:42:5
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:42:5
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:42:5
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:42:5
+[EXPECT] IDENTIFIER (custom msg: "Expected variable name.") checking against IDENTIFIER (pt2)
+[CONSUME] IDENTIFIER (pt2) at test/json_conversion_test.vyn:42:5
+[PEEK] LT (<) at test/json_conversion_test.vyn:42:8
+[EXPECT] LT (custom msg: "Expected '<' after variable name in unified syntax.") checking against LT (<)
+[CONSUME] LT (<) at test/json_conversion_test.vyn:42:8
+[PEEK] IDENTIFIER (Point) at test/json_conversion_test.vyn:42:9
+[CONSUME] IDENTIFIER (Point) at test/json_conversion_test.vyn:42:9
+[PEEK] GT (>) at test/json_conversion_test.vyn:42:14
+[PEEK] GT (>) at test/json_conversion_test.vyn:42:14
+[PEEK] GT (>) at test/json_conversion_test.vyn:42:14
+[PEEK] GT (>) at test/json_conversion_test.vyn:42:14
+[EXPECT] GT (custom msg: "Expected '>' after type in variable declaration.") checking against GT (>)
+[CONSUME] GT (>) at test/json_conversion_test.vyn:42:14
+[CONSUME] EQ (=) at test/json_conversion_test.vyn:42:16
+[PEEK] IDENTIFIER (Point) at test/json_conversion_test.vyn:42:18
+[PEEK] IDENTIFIER (Point) at test/json_conversion_test.vyn:42:18
+[PEEK] IDENTIFIER (Point) at test/json_conversion_test.vyn:42:18
+[PEEK] IDENTIFIER (Point) at test/json_conversion_test.vyn:42:18
+[PEEK] IDENTIFIER (Point) at test/json_conversion_test.vyn:42:18
+[PEEK] IDENTIFIER (Point) at test/json_conversion_test.vyn:42:18
+[CONSUME] IDENTIFIER (Point) at test/json_conversion_test.vyn:42:18
+[PEEK] COLONCOLON (::) at test/json_conversion_test.vyn:42:23
+[CONSUME] COLONCOLON (::) at test/json_conversion_test.vyn:42:23
+[PEEK] IDENTIFIER (from_string) at test/json_conversion_test.vyn:42:25
+[PEEK] IDENTIFIER (from_string) at test/json_conversion_test.vyn:42:25
+[CONSUME] IDENTIFIER (from_string) at test/json_conversion_test.vyn:42:25
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:42:36
+[CONSUME] LPAREN (() at test/json_conversion_test.vyn:42:36
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:42:37
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:42:37
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:42:37
+DEBUG: Attempting type parsing for identifier: [PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:42:37
+pt_json
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:42:37
+[CONSUME] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:42:37
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:42:44
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:42:37
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:42:37
+[PEEK] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:42:37
+[CONSUME] IDENTIFIER (pt_json) at test/json_conversion_test.vyn:42:37
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:42:44
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:42:44
+[EXPECT] RPAREN checking against RPAREN ())
+[CONSUME] RPAREN ()) at test/json_conversion_test.vyn:42:44
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[CONSUME] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:43:12
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:43:12
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+DEBUG: Skipping type parsing for intrinsic function: println
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[CONSUME] IDENTIFIER (println) at test/json_conversion_test.vyn:43:5
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:43:12
+[CONSUME] LPAREN (() at test/json_conversion_test.vyn:43:12
+[PEEK] STRING_LITERAL (Point x: ) at test/json_conversion_test.vyn:43:13
+[PEEK] STRING_LITERAL (Point x: ) at test/json_conversion_test.vyn:43:13
+[PEEK] STRING_LITERAL (Point x: ) at test/json_conversion_test.vyn:43:13
+[PEEK] STRING_LITERAL (Point x: ) at test/json_conversion_test.vyn:43:13
+[PEEK] STRING_LITERAL (Point x: ) at test/json_conversion_test.vyn:43:13
+[PEEK] STRING_LITERAL (Point x: ) at test/json_conversion_test.vyn:43:13
+[PEEK] STRING_LITERAL (Point x: ) at test/json_conversion_test.vyn:43:13
+DEBUG: Attempting type parsing for identifier: [PEEK] STRING_LITERAL (Point x: ) at test/json_conversion_test.vyn:43:13
+Point x: 
+[PEEK] STRING_LITERAL (Point x: ) at test/json_conversion_test.vyn:43:13
+[PEEK] STRING_LITERAL (Point x: ) at test/json_conversion_test.vyn:43:13
+[PEEK] STRING_LITERAL (Point x: ) at test/json_conversion_test.vyn:43:13
+[PEEK] STRING_LITERAL (Point x: ) at test/json_conversion_test.vyn:43:13
+[PEEK] STRING_LITERAL (Point x: ) at test/json_conversion_test.vyn:43:13
+[PEEK] STRING_LITERAL (Point x: ) at test/json_conversion_test.vyn:43:13
+[PEEK] STRING_LITERAL (Point x: ) at test/json_conversion_test.vyn:43:13
+[PEEK] STRING_LITERAL (Point x: ) at test/json_conversion_test.vyn:43:13
+[PEEK] STRING_LITERAL (Point x: ) at test/json_conversion_test.vyn:43:13
+[PEEK] STRING_LITERAL (Point x: ) at test/json_conversion_test.vyn:43:13
+[PEEK] STRING_LITERAL (Point x: ) at test/json_conversion_test.vyn:43:13
+[PEEK] STRING_LITERAL (Point x: ) at test/json_conversion_test.vyn:43:13
+[PEEK] STRING_LITERAL (Point x: ) at test/json_conversion_test.vyn:43:13
+[CONSUME] STRING_LITERAL (Point x: ) at test/json_conversion_test.vyn:43:13
+[PEEK] PLUS (+) at test/json_conversion_test.vyn:43:25
+[CONSUME] PLUS (+) at test/json_conversion_test.vyn:43:25
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:43:27
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:43:27
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:43:27
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:43:27
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:43:27
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:43:27
+[CONSUME] IDENTIFIER (pt2) at test/json_conversion_test.vyn:43:27
+[PEEK] DOT (.) at test/json_conversion_test.vyn:43:30
+[CONSUME] DOT (.) at test/json_conversion_test.vyn:43:30
+[PEEK] IDENTIFIER (x) at test/json_conversion_test.vyn:43:31
+[PEEK] IDENTIFIER (x) at test/json_conversion_test.vyn:43:31
+[CONSUME] IDENTIFIER (x) at test/json_conversion_test.vyn:43:31
+[PEEK] DOT (.) at test/json_conversion_test.vyn:43:32
+[CONSUME] DOT (.) at test/json_conversion_test.vyn:43:32
+[PEEK] IDENTIFIER (to_string) at test/json_conversion_test.vyn:43:33
+[PEEK] IDENTIFIER (to_string) at test/json_conversion_test.vyn:43:33
+[CONSUME] IDENTIFIER (to_string) at test/json_conversion_test.vyn:43:33
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:43:42
+[CONSUME] LPAREN (() at test/json_conversion_test.vyn:43:42
+[CONSUME] RPAREN ()) at test/json_conversion_test.vyn:43:43
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:43:44
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:43:44
+[EXPECT] RPAREN checking against RPAREN ())
+[CONSUME] RPAREN ()) at test/json_conversion_test.vyn:43:44
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:44:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:44:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:44:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:44:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:44:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:44:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:44:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:44:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:44:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:44:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:44:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:44:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:44:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:44:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:44:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:44:5
+[CONSUME] IDENTIFIER (println) at test/json_conversion_test.vyn:44:5
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:44:12
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:44:12
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:44:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:44:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:44:5
+DEBUG: Skipping type parsing for intrinsic function: println
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:44:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:44:5
+[PEEK] IDENTIFIER (println) at test/json_conversion_test.vyn:44:5
+[CONSUME] IDENTIFIER (println) at test/json_conversion_test.vyn:44:5
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:44:12
+[CONSUME] LPAREN (() at test/json_conversion_test.vyn:44:12
+[PEEK] STRING_LITERAL (Point y: ) at test/json_conversion_test.vyn:44:13
+[PEEK] STRING_LITERAL (Point y: ) at test/json_conversion_test.vyn:44:13
+[PEEK] STRING_LITERAL (Point y: ) at test/json_conversion_test.vyn:44:13
+[PEEK] STRING_LITERAL (Point y: ) at test/json_conversion_test.vyn:44:13
+[PEEK] STRING_LITERAL (Point y: ) at test/json_conversion_test.vyn:44:13
+[PEEK] STRING_LITERAL (Point y: ) at test/json_conversion_test.vyn:44:13
+[PEEK] STRING_LITERAL (Point y: ) at test/json_conversion_test.vyn:44:13
+DEBUG: Attempting type parsing for identifier: [PEEK] STRING_LITERAL (Point y: ) at test/json_conversion_test.vyn:44:13
+Point y: 
+[PEEK] STRING_LITERAL (Point y: ) at test/json_conversion_test.vyn:44:13
+[PEEK] STRING_LITERAL (Point y: ) at test/json_conversion_test.vyn:44:13
+[PEEK] STRING_LITERAL (Point y: ) at test/json_conversion_test.vyn:44:13
+[PEEK] STRING_LITERAL (Point y: ) at test/json_conversion_test.vyn:44:13
+[PEEK] STRING_LITERAL (Point y: ) at test/json_conversion_test.vyn:44:13
+[PEEK] STRING_LITERAL (Point y: ) at test/json_conversion_test.vyn:44:13
+[PEEK] STRING_LITERAL (Point y: ) at test/json_conversion_test.vyn:44:13
+[PEEK] STRING_LITERAL (Point y: ) at test/json_conversion_test.vyn:44:13
+[PEEK] STRING_LITERAL (Point y: ) at test/json_conversion_test.vyn:44:13
+[PEEK] STRING_LITERAL (Point y: ) at test/json_conversion_test.vyn:44:13
+[PEEK] STRING_LITERAL (Point y: ) at test/json_conversion_test.vyn:44:13
+[PEEK] STRING_LITERAL (Point y: ) at test/json_conversion_test.vyn:44:13
+[PEEK] STRING_LITERAL (Point y: ) at test/json_conversion_test.vyn:44:13
+[CONSUME] STRING_LITERAL (Point y: ) at test/json_conversion_test.vyn:44:13
+[PEEK] PLUS (+) at test/json_conversion_test.vyn:44:25
+[CONSUME] PLUS (+) at test/json_conversion_test.vyn:44:25
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:44:27
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:44:27
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:44:27
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:44:27
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:44:27
+[PEEK] IDENTIFIER (pt2) at test/json_conversion_test.vyn:44:27
+[CONSUME] IDENTIFIER (pt2) at test/json_conversion_test.vyn:44:27
+[PEEK] DOT (.) at test/json_conversion_test.vyn:44:30
+[CONSUME] DOT (.) at test/json_conversion_test.vyn:44:30
+[PEEK] IDENTIFIER (y) at test/json_conversion_test.vyn:44:31
+[PEEK] IDENTIFIER (y) at test/json_conversion_test.vyn:44:31
+[CONSUME] IDENTIFIER (y) at test/json_conversion_test.vyn:44:31
+[PEEK] DOT (.) at test/json_conversion_test.vyn:44:32
+[CONSUME] DOT (.) at test/json_conversion_test.vyn:44:32
+[PEEK] IDENTIFIER (to_string) at test/json_conversion_test.vyn:44:33
+[PEEK] IDENTIFIER (to_string) at test/json_conversion_test.vyn:44:33
+[CONSUME] IDENTIFIER (to_string) at test/json_conversion_test.vyn:44:33
+[PEEK] LPAREN (() at test/json_conversion_test.vyn:44:42
+[CONSUME] LPAREN (() at test/json_conversion_test.vyn:44:42
+[CONSUME] RPAREN ()) at test/json_conversion_test.vyn:44:43
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:44:44
+[PEEK] RPAREN ()) at test/json_conversion_test.vyn:44:44
+[EXPECT] RPAREN checking against RPAREN ())
+[CONSUME] RPAREN ()) at test/json_conversion_test.vyn:44:44
+[PEEK] KEYWORD_RETURN (return) at test/json_conversion_test.vyn:46:5
+[PEEK] KEYWORD_RETURN (return) at test/json_conversion_test.vyn:46:5
+[PEEK] KEYWORD_RETURN (return) at test/json_conversion_test.vyn:46:5
+[PEEK] KEYWORD_RETURN (return) at test/json_conversion_test.vyn:46:5
+[PEEK] KEYWORD_RETURN (return) at test/json_conversion_test.vyn:46:5
+[PEEK] KEYWORD_RETURN (return) at test/json_conversion_test.vyn:46:5
+[PEEK] KEYWORD_RETURN (return) at test/json_conversion_test.vyn:46:5
+[PEEK] KEYWORD_RETURN (return) at test/json_conversion_test.vyn:46:5
+[PEEK] KEYWORD_RETURN (return) at test/json_conversion_test.vyn:46:5
+[PEEK] KEYWORD_RETURN (return) at test/json_conversion_test.vyn:46:5
+[PEEK] KEYWORD_RETURN (return) at test/json_conversion_test.vyn:46:5
+[PEEK] KEYWORD_RETURN (return) at test/json_conversion_test.vyn:46:5
+[PEEK] KEYWORD_RETURN (return) at test/json_conversion_test.vyn:46:5
+[PEEK] KEYWORD_RETURN (return) at test/json_conversion_test.vyn:46:5
+[PEEK] KEYWORD_RETURN (return) at test/json_conversion_test.vyn:46:5
+[PEEK] KEYWORD_RETURN (return) at test/json_conversion_test.vyn:46:5
+[EXPECT] KEYWORD_RETURN (custom msg: "Expected 'return'.") checking against KEYWORD_RETURN (return)
+[CONSUME] KEYWORD_RETURN (return) at test/json_conversion_test.vyn:46:5
+[PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+[PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+[PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+[PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+[PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+[PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+[PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+[PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+[PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+[PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+[PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+DEBUG: Attempting type parsing for identifier: [PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+0
+[PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+[PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+[PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+[PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+[PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+[PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+[PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+[PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+[PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+[PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+[PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+[PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+[PEEK] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+[CONSUME] INT_LITERAL (0) at test/json_conversion_test.vyn:46:12
+[PEEK] RBRACE (}) at test/json_conversion_test.vyn:47:1
+[PEEK] RBRACE (}) at test/json_conversion_test.vyn:47:1
+[PEEK] RBRACE (}) at test/json_conversion_test.vyn:47:1
+[PEEK] RBRACE (}) at test/json_conversion_test.vyn:47:1
+[PEEK] RBRACE (}) at test/json_conversion_test.vyn:47:1
+[PEEK] RBRACE (}) at test/json_conversion_test.vyn:47:1
+[PEEK] RBRACE (}) at test/json_conversion_test.vyn:47:1
+[PEEK] RBRACE (}) at test/json_conversion_test.vyn:47:1
+[EXPECT] RBRACE (custom msg: "Expected '}' to end a block.") checking against RBRACE (})
+[CONSUME] RBRACE (}) at test/json_conversion_test.vyn:47:1
+[ModuleParser] Before consuming semicolons, next token: [PEEK] END_OF_FILE () at test/json_conversion_test.vyn:48:1
+END_OF_FILE ([PEEK] END_OF_FILE () at test/json_conversion_test.vyn:48:1
+)\\n[PEEK] END_OF_FILE () at test/json_conversion_test.vyn:48:1
+[ModuleParser] After consuming semicolons, next token: [PEEK] END_OF_FILE () at test/json_conversion_test.vyn:48:1
+END_OF_FILE ([PEEK] END_OF_FILE () at test/json_conversion_test.vyn:48:1
+)\\n[PEEK] END_OF_FILE () at test/json_conversion_test.vyn:48:1
+AST created successfully
+Running semantic analysis...
+DEBUG: Registered struct field Person.name with type: String
+DEBUG: Registered struct field Person.age with type: Int
+DEBUG: Registered struct field Person.active with type: Bool
+DEBUG: Registered struct field Point.x with type: Float
+DEBUG: Registered struct field Point.y with type: Float
+DEBUG: MemberExpression type check: structTypeName=Person, fieldName=to_string, typeNodeKind=N3vyn3ast8TypeNameE
+DEBUG: Complex type Person.to_string() returns JSON String (early path)
+DEBUG: Person::from_string() returns Person (custom struct)
+DEBUG: MemberExpression type check: structTypeName=Person, fieldName=name, typeNodeKind=N3vyn3ast8TypeNameE
+DEBUG: Resolved member access Person.name to type: String
+DEBUG: MemberExpression type check: structTypeName=Person, fieldName=age, typeNodeKind=N3vyn3ast8TypeNameE
+DEBUG: Resolved member access Person.age to type: Int
+DEBUG: MemberExpression type check: structTypeName=Int, fieldName=to_string, typeNodeKind=N3vyn3ast8TypeNameE
+DEBUG: MemberExpression type check: structTypeName=Person, fieldName=age, typeNodeKind=N3vyn3ast8TypeNameE
+DEBUG: Resolved member access Person.age to type: Int
+DEBUG: Primitive method Int.to_string() returns String
+DEBUG: MemberExpression type check: structTypeName=Point, fieldName=to_string, typeNodeKind=N3vyn3ast8TypeNameE
+DEBUG: Complex type Point.to_string() returns JSON String (early path)
+DEBUG: Point::from_string() returns Point (custom struct)
+DEBUG: MemberExpression type check: structTypeName=Point, fieldName=x, typeNodeKind=N3vyn3ast8TypeNameE
+DEBUG: Resolved member access Point.x to type: Float
+DEBUG: MemberExpression type check: structTypeName=Float, fieldName=to_string, typeNodeKind=N3vyn3ast8TypeNameE
+DEBUG: MemberExpression type check: structTypeName=Point, fieldName=x, typeNodeKind=N3vyn3ast8TypeNameE
+DEBUG: Resolved member access Point.x to type: Float
+DEBUG: Primitive method Float.to_string() returns String
+DEBUG: Binary expression result type: String
+DEBUG: MemberExpression type check: structTypeName=Point, fieldName=y, typeNodeKind=N3vyn3ast8TypeNameE
+DEBUG: Resolved member access Point.y to type: Float
+DEBUG: MemberExpression type check: structTypeName=Float, fieldName=to_string, typeNodeKind=N3vyn3ast8TypeNameE
+DEBUG: MemberExpression type check: structTypeName=Point, fieldName=y, typeNodeKind=N3vyn3ast8TypeNameE
+DEBUG: Resolved member access Point.y to type: Float
+DEBUG: Primitive method Float.to_string() returns String
+DEBUG: Binary expression result type: String
+Semantic analysis completed
+Generating LLVM IR code...
+DEBUG: Initialized debug info for file: json_conversion_test.vyn.ll in directory: /home/rick/Projects/Vyn/test
+DEBUG: Module visitor called with 3 statements
+DEBUG: First pass - processing struct declarations
+DEBUG: Processing struct declaration statement 0
+DEBUG: Stored Person in userTypeMap with LLVM type pointer: 0x6433e4f9a550
+DEBUG: Processing field 'name' with type: String
+DEBUG: Successfully generated LLVM type for field 'name'
+DEBUG: Processing field 'age' with type: Int
+DEBUG: Successfully generated LLVM type for field 'age'
+DEBUG: Processing field 'active' with type: Bool
+DEBUG: Successfully generated LLVM type for field 'active'
+DEBUG: Set struct body for Person with 3 fields, struct is opaque: 0
+DEBUG: Generating type metadata for: Person

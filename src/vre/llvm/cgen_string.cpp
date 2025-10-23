@@ -257,11 +257,11 @@ llvm::Value* LLVMCodegen::generateToStringCall(llvm::Value* value, llvm::Type* v
                 // This is a custom struct - serialize to JSON
                 std::cout << "DEBUG: Generating JSON serialization for struct type: " << typeName << std::endl;
                 
-                // For now, call a generic JSON serialization function
-                // TODO: Generate type-specific serialization metadata
+                // Call __vyn_complex_to_json(void* instance, const char* type_name)
+                llvm::PointerType* int8PtrType = llvm::PointerType::get(llvm::Type::getInt8Ty(*context), 0);
                 llvm::FunctionType* jsonFuncType = llvm::FunctionType::get(
                     int8PtrType,
-                    {llvm::PointerType::get(*context, 0)},  // void* for struct pointer
+                    {llvm::PointerType::get(*context, 0), int8PtrType},  // void* instance, const char* type_name
                     false
                 );
                 llvm::Function* jsonFunc = module->getFunction("__vyn_complex_to_json");
@@ -280,8 +280,17 @@ llvm::Value* LLVMCodegen::generateToStringCall(llvm::Value* value, llvm::Type* v
                 // Cast to void*
                 llvm::Value* voidPtr = builder->CreateBitCast(structPtr, llvm::PointerType::get(*context, 0), "struct.void_ptr");
                 
-                // Call JSON serialization
-                return builder->CreateCall(jsonFunc, {voidPtr}, "json.str");
+                // Create type name constant
+                llvm::Constant* typeNameStrConst = llvm::ConstantDataArray::getString(*context, typeName, /*AddNull=*/true);
+                llvm::GlobalVariable* typeNameGlobal = new llvm::GlobalVariable(
+                    *module, typeNameStrConst->getType(), true,
+                    llvm::GlobalValue::PrivateLinkage, typeNameStrConst,
+                    ".str.typename." + typeName
+                );
+                llvm::Value* typeNamePtr = builder->CreateBitCast(typeNameGlobal, int8PtrType);
+                
+                // Call JSON serialization with instance and type name
+                return builder->CreateCall(jsonFunc, {voidPtr, typeNamePtr}, "json.str");
             }
         }
     }

@@ -641,8 +641,16 @@ void LLVMCodegen::visit(vyn::ast::StructDeclaration* node) {
 
     structType->setBody(fieldTypes, /*isPacked=*/false);
     std::cout << "DEBUG: Set struct body for " << nameStr << " with " << fieldTypes.size() << " fields, struct is opaque: " << structType->isOpaque() << std::endl;
+    
     // Update the map entry with complete field information
     userTypeMap[nameStr] = typeInfo;
+    
+    // Add struct to monomorphizedStructs for metadata generation
+    monomorphizedStructs[nameStr] = structType;
+    
+    // Generate type metadata for JSON serialization
+    generateTypeMetadata(nameStr, node);
+    
     m_currentLLVMValue = nullptr; // structType is an llvm::Type*, not llvm::Value*
 }
 

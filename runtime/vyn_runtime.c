@@ -113,21 +113,28 @@ char* __vyn_string_from_string(const char* str, bool* success) {
 }
 
 // ============================================================================
-// COMPLEX TYPE CONVERSIONS: JSON serialization (stubs for now)
+// COMPLEX TYPE CONVERSIONS: JSON serialization using type metadata
 // ============================================================================
 
-// Generic JSON serialization stub
-// In a full implementation, this would use reflection/RTTI to serialize complex types
-char* __vyn_complex_to_json(void* data) {
-    (void)data;
-    return strdup("{}");
+#include "vyn_type_metadata.h"
+
+// Generic JSON serialization using type metadata
+char* __vyn_complex_to_json(void* instance, const char* type_name) {
+    VynTypeMetadata* metadata = __vyn_lookup_type(type_name);
+    if (!metadata) {
+        fprintf(stderr, "Error: Type '%s' not found in registry\n", type_name);
+        return strdup("{}");
+    }
+    return __vyn_complex_to_json_with_metadata(instance, metadata);
 }
 
-// Generic JSON deserialization stub
-// In a full implementation, this would parse JSON and construct the type
+// Generic JSON deserialization using type metadata
 void* __vyn_complex_from_json(const char* json_str, const char* type_name) {
-    (void)json_str;
-    (void)type_name;
-    return NULL;
+    VynTypeMetadata* metadata = __vyn_lookup_type(type_name);
+    if (!metadata) {
+        fprintf(stderr, "Error: Type '%s' not found in registry\n", type_name);
+        return NULL;
+    }
+    return __vyn_complex_from_json_with_metadata(json_str, metadata);
 }
 
