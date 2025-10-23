@@ -92,6 +92,16 @@ extern "C" {
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/Target/TargetOptions.h>
 
+// LLVM includes for IR optimization passes (new pass manager)
+#include <llvm/Passes/PassBuilder.h>
+#include <llvm/Passes/StandardInstrumentations.h>
+#include <llvm/Analysis/LoopAnalysisManager.h>
+#include <llvm/Analysis/CGSCCPassManager.h>
+#include <llvm/Transforms/InstCombine/InstCombine.h>
+#include <llvm/Transforms/Scalar/GVN.h>
+#include <llvm/Transforms/Scalar/Reassociate.h>
+#include <llvm/Transforms/Scalar/SimplifyCFG.h>
+
 // System includes for linking
 #include <unistd.h>
 #include <sys/wait.h>
@@ -111,6 +121,66 @@ namespace vyn {
 
 // Concrete implementation of SemanticAnalyzer
 
+
+// Function to optimize LLVM IR module based on optimization level
+void optimize_module(llvm::Module* module, llvm::TargetMachine* targetMachine, int optLevel) {
+    if (optLevel == 0) {
+        std::cout << "Skipping IR optimization (-O0)" << std::endl;
+        return;  // No optimization at -O0
+    }
+    
+    std::cout << "Applying IR optimization passes (-O" << optLevel << ")..." << std::endl;
+    
+    // Create analysis managers
+    llvm::LoopAnalysisManager LAM;
+    llvm::FunctionAnalysisManager FAM;
+    llvm::CGSCCAnalysisManager CGAM;
+    llvm::ModuleAnalysisManager MAM;
+    
+    // Create pass builder
+    llvm::PassBuilder PB(targetMachine);
+    
+    // Register all analysis passes
+    PB.registerModuleAnalyses(MAM);
+    PB.registerCGSCCAnalyses(CGAM);
+    PB.registerFunctionAnalyses(FAM);
+    PB.registerLoopAnalyses(LAM);
+    PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+    
+    // Create module pass manager based on optimization level
+    llvm::ModulePassManager MPM;
+    
+    switch (optLevel) {
+        case 1: {
+            // -O1: Basic optimizations (minimal compile time impact)
+            std::cout << "  Using O1 optimization pipeline (basic)" << std::endl;
+            MPM = PB.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O1);
+            break;
+        }
+        case 2: {
+            // -O2: Moderate optimizations (default, good balance)
+            std::cout << "  Using O2 optimization pipeline (default)" << std::endl;
+            MPM = PB.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O2);
+            break;
+        }
+        case 3: {
+            // -O3: Aggressive optimizations (may increase code size)
+            std::cout << "  Using O3 optimization pipeline (aggressive)" << std::endl;
+            MPM = PB.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3);
+            break;
+        }
+        default: {
+            // Default to O2
+            std::cout << "  Using O2 optimization pipeline (default)" << std::endl;
+            MPM = PB.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O2);
+            break;
+        }
+    }
+    
+    // Run the optimization pipeline
+    MPM.run(*module, MAM);
+    std::cout << "  IR optimization completed" << std::endl;
+}
 
 
 
@@ -198,6 +268,9 @@ int compile_vyn_to_object(const std::string& source, const std::string& fileName
                                                          opt, relocModel);
         
         module->setDataLayout(targetMachine->createDataLayout());
+        
+        // Apply IR optimization passes before code generation
+        optimize_module(module, targetMachine, optLevel);
         
         // Open output file
         std::error_code EC;
@@ -701,6 +774,24 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             mainReturnsStruct = returnType->isStructTy();
             mainReturnsInt = returnType->isIntegerTy();
             mainReturnsVoid = returnType->isVoidTy();
+        }
+        
+        // Apply IR optimizations before JIT execution (default -O2 for JIT)
+        // Note: We need a target machine for optimization, but JIT uses default target
+        std::string targetTriple = llvm::sys::getDefaultTargetTriple();
+        std::string error;
+        auto target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
+        if (!target) {
+            std::cerr << "Warning: Could not create target for optimization: " << error << std::endl;
+        } else {
+            llvm::TargetOptions opt;
+            auto targetMachine = target->createTargetMachine(targetTriple, "generic", "", 
+                                                             opt, std::optional<llvm::Reloc::Model>());
+            if (targetMachine) {
+                module->setDataLayout(targetMachine->createDataLayout());
+                optimize_module(module.get(), targetMachine, 2);  // Use O2 for JIT by default
+                delete targetMachine;
+            }
         }
         
         // Add the module to the JIT
