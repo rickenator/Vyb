@@ -198,11 +198,12 @@ Supports 20+ architectures out of the box:
     *   `my<T>`: Unique ownership of data `T`.
     *   `our<T>`: Shared (reference-counted) ownership of data `T`.
     *   `their<T>`: Non-owning borrow/reference to data `T`.
-    *   `mild<T>`: Weak reference that can detect when target is destroyed.
+    *   `mild<T>`: Mild reference that can detect when target is destroyed.
 *   **Data Mutability**: Indicated by `const` on the type itself (e.g., `my<T const>` for unique ownership of immutable data).
 *   **Borrowing**:
     *   `view(expr)`: Creates an immutable borrow `their<T const>`.
     *   `borrow(expr)`: Creates a mutable borrow `their<T>`.
+    *   `soft(expr)`: Creates a weak reference `mild<T>` from `our<T>`.
 *   **`freedom` Blocks**: Sections of code marked `freedom { ... }` where raw pointers (`loc<T>`) can be used and some compiler guarantees are relaxed. Within these blocks, operations like `at(ptr)` for dereferencing and `from<loc<T>>()` for pointer conversion are available.
 *   **Scoped Block**: Planned block prefixed with `scoped` that defers GC and cleans up at block exit.
 *   **Actor**: Planned lightweight concurrent entity with a built-in mailbox for message passing.
@@ -584,9 +585,10 @@ result<my<Data>>     = my(compute_data())
 
 #### **Borrowing Operations**
 ```vyn
-# Create temporary references with view/borrow functions
+# Create temporary references with view/borrow/soft functions
 readonly<their<String const>> = view(data)     # Immutable borrow
 writable<their<String>>       = borrow(data)   # Mutable borrow
+weak_ref<mild<Node>>          = soft(shared)   # Weak reference
 length<Int>                   = view(data).len()
 borrow(data).clear()
 ```
@@ -606,7 +608,7 @@ python3 migrate_syntax.py --migrate --directory . --backup --report
 
 ### ✅ **Memory Management**
 - **Ownership types**: `my<T>`, `our<T>`, `their<T>`, `mild<T>` for safe memory handling
-- **Weak references**: `mild<T>` for breaking circular references with `grab()` and `released()` methods
+- **Weak references**: `mild<T>` created with `soft()` for breaking circular references with `grab()` and `released()` methods
 - **Borrowing**: `view(expr)` and `borrow(expr)` for references  
 - **Freedom operations**: `loc<T>` pointers in `freedom {}` blocks
 - **Raw Memory Operations**: Complete `freedom` block system with `loc<T>` pointers
@@ -636,12 +638,27 @@ parent_strong<our<TreeNode>> = node.parent.grab()
 is_alive<Bool> = !node.parent.released()
 ```
 
+**Creating Weak References:**
+```vyn
+# Use soft() to create mild<T> from our<T>
+shared_data<our<Config>> = our(Config::new())
+weak_ref<mild<Config>> = soft(shared_data)  # Create weak reference
+```
+
 **Example: Tree with Parent Pointers**
 ```vyn
 struct TreeNode {
     value<Int>,
     children<Vec<our<TreeNode>>>,  # Strong refs to children
     parent<mild<TreeNode>>          # Weak ref to parent (breaks cycle)
+}
+
+create_child(parent<our<TreeNode>>, value<Int>)<our<TreeNode>> -> {
+    return our(TreeNode {
+        value: value,
+        children: Vec::new(),
+        parent: soft(parent)  # Create weak reference with soft()
+    })
 }
 
 access_parent(node<our<TreeNode>>)<Int> -> {
@@ -900,7 +917,7 @@ process_value(val<Int>)<String> -> {
 safe_data<my<String>> = my("unique")      # Unique ownership
 shared_data<our<String>> = our("shared")  # Reference counted
 borrowed<their<String>> = borrow(safe_data)  # Non-owning reference
-weak_ref<mild<String>> = mild(shared_data)   # Weak reference (breaks cycles)
+weak_ref<mild<String>> = soft(shared_data)   # Weak reference (breaks cycles)
 ```
 
 #### Type System Features
@@ -2890,7 +2907,7 @@ BorrowExpr             ::= 'borrow' '(' Expression ')'
 - **Unified Syntax**: All declarations use `name<Type>` pattern
 - **Comparison Patterns**: `>= expr`, `<= expr`, etc. for match/select
 - **Select Expressions**: Pattern matching that returns values with `pass` keyword
-- **Ownership Types**: `my<T>`, `our<T>`, `their<T>`, `loc<T>` wrappers
+- **Ownership Types**: `my<T>`, `our<T>`, `their<T>`, `mild<T>`, `loc<T>` wrappers
 - **Import/Smuggle**: Dual module system for verified vs. flexible imports
 - **Async/Await**: Full async function and expression support
 - **Multiple Returns**: Functions can return multiple values (tuples)
@@ -2906,6 +2923,7 @@ BorrowExpr             ::= 'borrow' '(' Expression ')'
 **Borrowing Operations:**
 - `view(expr)`: Creates `their<T const>` immutable borrow
 - `borrow(expr)`: Creates `their<T>` mutable borrow
+- `soft(expr)`: Creates `mild<T>` weak reference from `our<T>`
 
 **Freedom Operations:**
 - `loc<T>`: Raw pointer type
