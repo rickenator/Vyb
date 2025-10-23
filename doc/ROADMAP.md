@@ -1,10 +1,10 @@
 # Vyn Language Roadmap
 
-**Last Updated:** October 22, 2025 (v0.4.3)
+**Last Updated:** January 2025 (v0.4.4)
 
 This document outlines the completed features, ongoing development, and future considerations for the Vyn programming language.
 
-## Current Status (v0.4.3)
+## Current Status (v0.4.4)
 
 **✅ MAJOR ACHIEVEMENTS COMPLETED:**
 1.  **LLVM Backend:** Fully functional LLVM IR generation and JIT execution
@@ -23,6 +23,7 @@ This document outlines the completed features, ongoing development, and future c
 15. **✅ Introspection System (COMPLETED v0.4.2):** typeof/typename operators for runtime type reflection
 16. **✅ Aspect System (COMPLETED v0.4.2):** User-extensible aspects with bind blocks for polymorphism
 17. **✅ Object File Emission (COMPLETED v0.4.3):** AOT compilation to native .o files with optimization levels
+18. **✅ Static Linking (COMPLETED v0.4.4):** Full executable generation with runtime library and system linker
 
 ### Variadic Tuple System (v0.4.0)
 
@@ -110,27 +111,50 @@ The immediate focus for the next release:
    - Complete LLVM codegen implementation
    - See "Error Handling Roadmap" section below for future enhancements
 
-### 📋 CURRENT FOCUS (v0.4.4)
+### 📋 COMPLETED IN v0.4.4
 
-1. **Static Linking:** Link .o files into standalone executables
-   - Invoke system linker (ld, lld, or gold)
-   - Link against libc and runtime libraries
-   - Support multi-file compilation
-   - Command: `vyn build main.vyn -o myapp`
-   - See `doc/MODULE_FFI_BINARY_ROADMAP.md` Phase 3.2
+1. **✅ Static Linking (COMPLETED v0.4.4):** Link .o files into standalone executables
+   - ✅ Invoke system linker (ld, lld) with platform detection
+   - ✅ Link against libc and runtime libraries
+   - ✅ Runtime library implementation (vyn_runtime.c)
+   - ✅ Command: `vyn program.vyn --build myapp`
+   - ✅ Full compilation pipeline: source → object → executable
+   - See `doc/MODULE_FFI_BINARY_ROADMAP.md` Phase 3.2 ✅ COMPLETED
 
-2. **Range Patterns in Match/Select:** Implement `a..b` range matching for elegant numeric range handling
+2. **✅ JSON Serialization & Deserialization (COMPLETED v0.4.4):** Bidirectional struct-JSON conversion
+   - ✅ Runtime type metadata system with field introspection
+   - ✅ Global type registry with automatic registration
+   - ✅ `.to_string()` method on structs generates JSON
+   - ✅ `T::from_string(json)` creates instances from JSON strings
+   - ✅ Support for Int, Float, Bool, String primitive types
+   - ✅ Full round-trip conversion: struct → JSON → struct → field access
+   - ✅ String conversion: char* to VynString{data, length} struct
+   - ✅ Member access fix: always load field values (critical bug resolved)
+   - ✅ Comprehensive test suite in `test/json/`
+   - ✅ Production-ready with clean codebase (debug output removed)
+   - See `runtime/vyn_type_metadata.c` for implementation
+   - Future: Nested structs, Vec<T> serialization, aspect metadata
+
+### 📋 CURRENT FOCUS (v0.5.0+)
+
+1. **Optimization Pipeline (v0.5.2):** LLVM optimization pass configuration
+   - Apply optimization passes for -O0 through -O3
+   - Implement LTO (Link-Time Optimization)
+   - Benchmark JIT vs AOT performance
+   - See `doc/MODULE_FFI_BINARY_ROADMAP.md` Phase 3.3
+
+3. **Range Patterns in Match/Select:** Implement `a..b` range matching for elegant numeric range handling
    - Syntax: `1..10 -> "single digit"` in match/select expressions
    - Note: Conflicts with comparison patterns (`>= 90`) need resolution
    - Design decision: May use different syntax or restrict to one pattern type
 
-3. **Standard Library Expansion:** Building core modules for collections, I/O, math
+4. **Standard Library Expansion:** Building core modules for collections, I/O, math
 
 5. **Enhanced Error Messages:** More detailed compilation feedback and suggestions
 
-7. **Tuple Element Access:** `.0`, `.1`, `.2` syntax for accessing tuple elements
+6. **Tuple Element Access:** `.0`, `.1`, `.2` syntax for accessing tuple elements
 
-8. **✅ String Comparison Operators (COMPLETED v0.4.2):** Lexical ordering for String types with all 6 operators (==, !=, <, <=, >, >=) using efficient memcmp-based comparison
+7. **✅ String Comparison Operators (COMPLETED v0.4.2):** Lexical ordering for String types with all 6 operators (==, !=, <, <=, >, >=) using efficient memcmp-based comparison
 
 ## Project Structure and Organization
 

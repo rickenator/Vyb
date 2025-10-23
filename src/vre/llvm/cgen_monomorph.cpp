@@ -196,6 +196,9 @@ llvm::StructType* LLVMCodegen::monomorphizeStruct(const std::string& baseName,
     // Cache the monomorphized struct
     monomorphizedStructs[mangledName] = specializedType;
     
+    // Generate type metadata for JSON serialization
+    generateTypeMetadata(mangledName, templateNode);
+    
     return specializedType;
 }
 

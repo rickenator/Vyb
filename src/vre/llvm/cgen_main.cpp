@@ -211,6 +211,10 @@ void LLVMCodegen::visit(vyn::ast::Module* node) {
             stmt->accept(*this);
         }
     }
+    
+    // FOURTH PASS: Register all type metadata for runtime JSON serialization
+    std::cout << "DEBUG: Fourth pass - registering type metadata" << std::endl;
+    registerTypeMetadata();
 
     m_currentVynModule = previousModule;
     m_currentLLVMValue = nullptr;

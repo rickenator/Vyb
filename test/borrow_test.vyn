@@ -1,0 +1,16 @@
+// Test their<T> and borrow keyword
+
+struct Counter {
+    count<Int>
+}
+
+increment(c<their<Counter>>)<Void> -> {
+    c.count = c.count + 1
+}
+
+main()<Int> -> {
+    counter<Counter> = Counter { count = 0 }
+    increment(borrow counter)
+    println("Count after increment")
+    return counter.count
+}

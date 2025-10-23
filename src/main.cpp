@@ -44,6 +44,24 @@ extern "C" {
     char* __vyn_toString_rune(uint32_t value);
     char* __vyn_toString_byte(uint8_t value);
     
+    // New type conversion functions (primitive to_string/from_string)
+    char* __vyn_int_to_string(int64_t value);
+    char* __vyn_float_to_string(double value);
+    char* __vyn_bool_to_string(bool value);
+    char* __vyn_string_to_string(const char* str);
+    
+    int64_t __vyn_int_from_string(const char* str, bool* success);
+    double __vyn_float_from_string(const char* str, bool* success);
+    bool __vyn_bool_from_string(const char* str, bool* success);
+    char* __vyn_string_from_string(const char* str, bool* success);
+    
+    // JSON serialization for complex types
+    char* __vyn_complex_to_json(void* instance, const char* type_name);
+    void* __vyn_complex_from_json(const char* json_str, const char* type_name);
+    
+    // Type metadata registration
+    void __vyn_register_type(void* metadata);
+    
     // Error handling runtime functions (from error_handling.cpp)
     void __vyn_runtime_panic(const char* message) __attribute__((noreturn));
     void __vyn_runtime_untrapped_error(void* error) __attribute__((noreturn));
@@ -74,6 +92,21 @@ extern "C" {
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/Target/TargetOptions.h>
 
+// LLVM includes for IR optimization passes (new pass manager)
+#include <llvm/Passes/PassBuilder.h>
+#include <llvm/Passes/StandardInstrumentations.h>
+#include <llvm/Analysis/LoopAnalysisManager.h>
+#include <llvm/Analysis/CGSCCPassManager.h>
+#include <llvm/Transforms/InstCombine/InstCombine.h>
+#include <llvm/Transforms/Scalar/GVN.h>
+#include <llvm/Transforms/Scalar/Reassociate.h>
+#include <llvm/Transforms/Scalar/SimplifyCFG.h>
+
+// System includes for linking
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/stat.h>  // For chmod
+
 // Globals for test verbose control
 std::set<std::string> g_verbose_test_specifiers;
 bool g_make_all_tests_verbose = false;
@@ -88,6 +121,66 @@ namespace vyn {
 
 // Concrete implementation of SemanticAnalyzer
 
+
+// Function to optimize LLVM IR module based on optimization level
+void optimize_module(llvm::Module* module, llvm::TargetMachine* targetMachine, int optLevel) {
+    if (optLevel == 0) {
+        std::cout << "Skipping IR optimization (-O0)" << std::endl;
+        return;  // No optimization at -O0
+    }
+    
+    std::cout << "Applying IR optimization passes (-O" << optLevel << ")..." << std::endl;
+    
+    // Create analysis managers
+    llvm::LoopAnalysisManager LAM;
+    llvm::FunctionAnalysisManager FAM;
+    llvm::CGSCCAnalysisManager CGAM;
+    llvm::ModuleAnalysisManager MAM;
+    
+    // Create pass builder
+    llvm::PassBuilder PB(targetMachine);
+    
+    // Register all analysis passes
+    PB.registerModuleAnalyses(MAM);
+    PB.registerCGSCCAnalyses(CGAM);
+    PB.registerFunctionAnalyses(FAM);
+    PB.registerLoopAnalyses(LAM);
+    PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+    
+    // Create module pass manager based on optimization level
+    llvm::ModulePassManager MPM;
+    
+    switch (optLevel) {
+        case 1: {
+            // -O1: Basic optimizations (minimal compile time impact)
+            std::cout << "  Using O1 optimization pipeline (basic)" << std::endl;
+            MPM = PB.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O1);
+            break;
+        }
+        case 2: {
+            // -O2: Moderate optimizations (default, good balance)
+            std::cout << "  Using O2 optimization pipeline (default)" << std::endl;
+            MPM = PB.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O2);
+            break;
+        }
+        case 3: {
+            // -O3: Aggressive optimizations (may increase code size)
+            std::cout << "  Using O3 optimization pipeline (aggressive)" << std::endl;
+            MPM = PB.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3);
+            break;
+        }
+        default: {
+            // Default to O2
+            std::cout << "  Using O2 optimization pipeline (default)" << std::endl;
+            MPM = PB.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O2);
+            break;
+        }
+    }
+    
+    // Run the optimization pipeline
+    MPM.run(*module, MAM);
+    std::cout << "  IR optimization completed" << std::endl;
+}
 
 
 
@@ -176,6 +269,9 @@ int compile_vyn_to_object(const std::string& source, const std::string& fileName
         
         module->setDataLayout(targetMachine->createDataLayout());
         
+        // Apply IR optimization passes before code generation
+        optimize_module(module, targetMachine, optLevel);
+        
         // Open output file
         std::error_code EC;
         llvm::raw_fd_ostream dest(outputFile, EC, llvm::sys::fs::OF_None);
@@ -210,6 +306,185 @@ int compile_vyn_to_object(const std::string& source, const std::string& fileName
     } catch (const std::exception& e) {
         std::cerr << "Error compiling to object file: " << e.what() << std::endl;
         return 1;
+    }
+}
+
+// Function to link object files into executable
+int link_vyn_executable(const std::vector<std::string>& objectFiles,
+                        const std::string& outputExecutable,
+                        bool staticLink = false) {
+    std::cout << "Linking executable: " << outputExecutable << std::endl;
+    
+    // First, compile the runtime library if needed
+    std::string runtimeSource = "runtime/vyn_runtime.c";
+    std::string runtimeObject = "runtime/vyn_runtime.o";
+    
+    // Check if runtime source exists and compile it
+    if (access(runtimeSource.c_str(), F_OK) == 0) {
+        std::cout << "Compiling Vyn runtime library..." << std::endl;
+        
+        // Compile runtime with gcc/clang
+        std::string compileCmd = "cc -c " + runtimeSource + " -o " + runtimeObject + " -O2";
+        int compileResult = system(compileCmd.c_str());
+        if (compileResult != 0) {
+            std::cerr << "Failed to compile runtime library" << std::endl;
+            return 1;
+        }
+        std::cout << "Runtime library compiled successfully" << std::endl;
+    }
+    
+    // Detect platform and choose linker
+    std::string linker = "ld";
+    std::vector<std::string> linkerArgs;
+    
+#ifdef __APPLE__
+    // macOS uses different linker and flags
+    linker = "ld";
+    linkerArgs.push_back("-macosx_version_min");
+    linkerArgs.push_back("10.15");
+    linkerArgs.push_back("-arch");
+    linkerArgs.push_back("x86_64");
+    // macOS dynamic linker
+    linkerArgs.push_back("-dynamic");
+    linkerArgs.push_back("-dylib");
+    // System library search paths
+    linkerArgs.push_back("-L/usr/lib");
+    linkerArgs.push_back("-L/usr/local/lib");
+#else
+    // Linux - try lld first (faster), fallback to ld
+    if (system("which lld >/dev/null 2>&1") == 0) {
+        linker = "lld";
+    } else if (system("which ld.lld >/dev/null 2>&1") == 0) {
+        linker = "ld.lld";
+    } else {
+        linker = "ld";
+    }
+    
+    // Dynamic linker path for Linux
+    linkerArgs.push_back("-dynamic-linker");
+    linkerArgs.push_back("/lib64/ld-linux-x86-64.so.2");
+#endif
+    
+    // Output file
+    linkerArgs.push_back("-o");
+    linkerArgs.push_back(outputExecutable);
+    
+    // Add CRT startup files for proper C runtime initialization
+#ifdef __APPLE__
+    // macOS doesn't need crt files explicitly in modern versions
+#else
+    // Linux needs crt files
+    std::vector<std::string> crtPaths = {
+        "/usr/lib/x86_64-linux-gnu/",
+        "/usr/lib64/",
+        "/usr/lib/",
+        "/lib/x86_64-linux-gnu/",
+        "/lib64/",
+        "/lib/"
+    };
+    
+    auto findCrtFile = [&](const std::string& filename) -> std::string {
+        for (const auto& path : crtPaths) {
+            std::string fullPath = path + filename;
+            if (access(fullPath.c_str(), F_OK) == 0) {
+                return fullPath;
+            }
+        }
+        return "";
+    };
+    
+    std::string crt1 = findCrtFile("crt1.o");
+    std::string crti = findCrtFile("crti.o");
+    std::string crtn = findCrtFile("crtn.o");
+    
+    if (!crt1.empty()) linkerArgs.push_back(crt1);
+    if (!crti.empty()) linkerArgs.push_back(crti);
+#endif
+    
+    // Add all object files
+    for (const auto& objFile : objectFiles) {
+        linkerArgs.push_back(objFile);
+    }
+    
+    // Add runtime library if it was compiled
+    if (access(runtimeObject.c_str(), F_OK) == 0) {
+        linkerArgs.push_back(runtimeObject);
+    }
+    
+    // Add C runtime library paths
+#ifndef __APPLE__
+    linkerArgs.push_back("-L/usr/lib/x86_64-linux-gnu");
+    linkerArgs.push_back("-L/usr/lib64");
+    linkerArgs.push_back("-L/usr/lib");
+#endif
+    
+    // Link against C standard library and math library
+    if (staticLink) {
+        linkerArgs.push_back("-static");
+        linkerArgs.push_back("-lc");
+        linkerArgs.push_back("-lm");
+    } else {
+        linkerArgs.push_back("-lc");
+        linkerArgs.push_back("-lm");
+    }
+    
+    // Add crtn at the end (Linux)
+#ifdef __APPLE__
+    // macOS doesn't need this
+#else
+    if (!crtn.empty()) linkerArgs.push_back(crtn);
+#endif
+    
+    // Build command for display
+    std::string command = linker;
+    for (const auto& arg : linkerArgs) {
+        command += " " + arg;
+    }
+    std::cout << "Linker command: " << command << std::endl;
+    
+    // Execute linker using fork/exec for better control
+    pid_t pid = fork();
+    if (pid == -1) {
+        std::cerr << "Failed to fork process" << std::endl;
+        return 1;
+    }
+    
+    if (pid == 0) {
+        // Child process - execute linker
+        std::vector<char*> args;
+        args.push_back(const_cast<char*>(linker.c_str()));
+        for (const auto& arg : linkerArgs) {
+            args.push_back(const_cast<char*>(arg.c_str()));
+        }
+        args.push_back(nullptr);
+        
+        execvp(linker.c_str(), args.data());
+        
+        // If execvp returns, it failed
+        std::cerr << "Failed to execute linker: " << linker << std::endl;
+        exit(1);
+    } else {
+        // Parent process - wait for linker to complete
+        int status;
+        waitpid(pid, &status, 0);
+        
+        if (WIFEXITED(status)) {
+            int exitCode = WEXITSTATUS(status);
+            if (exitCode == 0) {
+                std::cout << "Successfully linked executable: " << outputExecutable << std::endl;
+                
+                // Make executable
+                chmod(outputExecutable.c_str(), 0755);
+                
+                return 0;
+            } else {
+                std::cerr << "Linker failed with exit code: " << exitCode << std::endl;
+                return exitCode;
+            }
+        } else {
+            std::cerr << "Linker process terminated abnormally" << std::endl;
+            return 1;
+        }
     }
 }
 
@@ -450,6 +725,35 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
                 llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_byte), llvm::JITSymbolFlags::Exported);
         }
         
+        // Register new type conversion functions (to_string/from_string)
+        runtimeSymbols[mangle("__vyn_int_to_string")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_int_to_string), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_float_to_string")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_float_to_string), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_bool_to_string")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_bool_to_string), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_string_to_string")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_string_to_string), llvm::JITSymbolFlags::Exported);
+        
+        runtimeSymbols[mangle("__vyn_int_from_string")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_int_from_string), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_float_from_string")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_float_from_string), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_bool_from_string")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_bool_from_string), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_string_from_string")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_string_from_string), llvm::JITSymbolFlags::Exported);
+        
+        // Register JSON serialization functions
+        runtimeSymbols[mangle("__vyn_complex_to_json")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_complex_to_json), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_complex_from_json")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_complex_from_json), llvm::JITSymbolFlags::Exported);
+        
+        // Register type metadata functions
+        runtimeSymbols[mangle("__vyn_register_type")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_register_type), llvm::JITSymbolFlags::Exported);
+        
         // Add all the runtime symbols to the main dylib
         auto defineErr = mainDylib.define(llvm::orc::absoluteSymbols(runtimeSymbols));
         if (defineErr) {
@@ -472,6 +776,24 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             mainReturnsVoid = returnType->isVoidTy();
         }
         
+        // Apply IR optimizations before JIT execution (default -O2 for JIT)
+        // Note: We need a target machine for optimization, but JIT uses default target
+        std::string targetTriple = llvm::sys::getDefaultTargetTriple();
+        std::string error;
+        auto target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
+        if (!target) {
+            std::cerr << "Warning: Could not create target for optimization: " << error << std::endl;
+        } else {
+            llvm::TargetOptions opt;
+            auto targetMachine = target->createTargetMachine(targetTriple, "generic", "", 
+                                                             opt, std::optional<llvm::Reloc::Model>());
+            if (targetMachine) {
+                module->setDataLayout(targetMachine->createDataLayout());
+                optimize_module(module.get(), targetMachine, 2);  // Use O2 for JIT by default
+                delete targetMachine;
+            }
+        }
+        
         // Add the module to the JIT
         auto tsm = llvm::orc::ThreadSafeModule(std::move(module), std::move(context));
         auto addErr = jit->addIRModule(std::move(tsm));
@@ -482,6 +804,18 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             throw std::runtime_error("Failed to add module to JIT: " + errorMsg);
         }
         std::cout << "ORC JIT execution engine created successfully" << std::endl;
+        
+        // Call type registration function before main (simulates global constructors)
+        auto registerTypesResult = jit->lookup("__vyn_register_all_types");
+        if (registerTypesResult) {
+            typedef void (*RegisterTypesFuncType)();
+            RegisterTypesFuncType registerFunc = reinterpret_cast<RegisterTypesFuncType>(
+                static_cast<void*>(registerTypesResult->toPtr<void*>()));
+            registerFunc();
+            std::cout << "Type metadata registered successfully" << std::endl;
+        } else {
+            std::cout << "No type registration function found (no custom types in program)" << std::endl;
+        }
         
         // Look up the main function symbol
         auto symbolResult = jit->lookup("main");
@@ -540,7 +874,11 @@ int main(int argc, char* argv[]) {
     bool semantic_only_mode = false;
     bool emit_llvm_ir = false;
     bool compile_mode = false;
+    bool build_mode = false;
     std::string compile_output;
+    std::string build_output;
+    bool static_link = false;
+    std::vector<std::string> input_files;
     int optimization_level = 2;  // Default -O2
     bool execute_jit = true;  // By default, execute the code with JIT
 
@@ -570,6 +908,16 @@ int main(int argc, char* argv[]) {
             if (i + 1 < argc && argv[i + 1][0] != '-') {
                 compile_output = argv[++i];
             }
+            continue;
+        } else if (arg == "--build" || arg == "-b") {
+            build_mode = true;
+            execute_jit = false;
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                build_output = argv[++i];
+            }
+            continue;
+        } else if (arg == "--static") {
+            static_link = true;
             continue;
         } else if (arg.substr(0, 2) == "-O") {
             // Parse optimization level: -O0, -O1, -O2, -O3
@@ -770,6 +1118,41 @@ int main(int argc, char* argv[]) {
                 return compile_vyn_to_object(source, filename, objFile, optimization_level);
             }
             
+            // Build mode: compile and link to executable
+            if (build_mode) {
+                std::string executableName = build_output;
+                if (executableName.empty()) {
+                    // Default: replace extension with no extension (executable name)
+                    executableName = filename;
+                    size_t dot = executableName.find_last_of('.');
+                    if (dot != std::string::npos) {
+                        executableName = executableName.substr(0, dot);
+                    }
+                }
+                
+                // Step 1: Compile to object file
+                std::string objFile = executableName + ".o";
+                std::cout << "Step 1: Compiling to object file..." << std::endl;
+                int compileResult = compile_vyn_to_object(source, filename, objFile, optimization_level);
+                if (compileResult != 0) {
+                    std::cerr << "Compilation failed" << std::endl;
+                    return compileResult;
+                }
+                
+                // Step 2: Link to executable
+                std::cout << "\nStep 2: Linking to executable..." << std::endl;
+                std::vector<std::string> objectFiles = { objFile };
+                int linkResult = link_vyn_executable(objectFiles, executableName, static_link);
+                
+                if (linkResult == 0) {
+                    std::cout << "\n✅ Build successful!" << std::endl;
+                    std::cout << "Executable: " << executableName << std::endl;
+                    std::cout << "Run with: ./" << executableName << std::endl;
+                }
+                
+                return linkResult;
+            }
+            
             // Default behavior: JIT compile and execute the code
             if (execute_jit) {
                 try {
@@ -794,8 +1177,16 @@ int main(int argc, char* argv[]) {
         std::cout << "  --semantic-only       Stop after semantic analysis" << std::endl;
         std::cout << "  --emit-llvm           Generate LLVM IR to a .ll file" << std::endl;
         std::cout << "  --compile, -c [file]  Compile to object file (.o)" << std::endl;
+        std::cout << "  --build, -b [file]    Compile and link to executable (NEW!)" << std::endl;
+        std::cout << "  --static              Use static linking (with --build)" << std::endl;
         std::cout << "  -O0, -O1, -O2, -O3    Set optimization level (default: -O2)" << std::endl;
         std::cout << "  --no-execute          Do not execute the code (JIT is on by default)" << std::endl;
+        std::cout << std::endl;
+        std::cout << "Examples:" << std::endl;
+        std::cout << "  " << argv[0] << " program.vyn                    # JIT compile and run" << std::endl;
+        std::cout << "  " << argv[0] << " program.vyn --build myapp      # Build executable" << std::endl;
+        std::cout << "  " << argv[0] << " program.vyn -b myapp -O3       # Build with max optimization" << std::endl;
+        std::cout << "  " << argv[0] << " program.vyn --compile prog.o   # Compile to object file" << std::endl;
         std::cout << std::endl;
         std::cout << "Test Mode Options:" << std::endl;
         std::cout << "  --test                Run test suite" << std::endl;

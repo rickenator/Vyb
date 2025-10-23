@@ -247,6 +247,78 @@ llvm::Value* LLVMCodegen::generateToStringCall(llvm::Value* value, llvm::Type* v
             llvm::Value* dataPtr = builder->CreateExtractValue(value, 0, "str.data_for_concat");
             return dataPtr;
         }
+        
+        // Check if this is a complex/custom struct type that needs JSON serialization
+        if (astType) {
+            std::string typeName = astType->toString();
+            // Look up if this is a user-defined struct
+            auto structIt = monomorphizedStructs.find(typeName);
+            if (structIt != monomorphizedStructs.end()) {
+                // This is a custom struct - serialize to JSON
+                std::cout << "DEBUG: Generating JSON serialization for struct type: " << typeName << std::endl;
+                
+                // Call __vyn_complex_to_json(void* instance, const char* type_name)
+                llvm::PointerType* int8PtrType = llvm::PointerType::get(llvm::Type::getInt8Ty(*context), 0);
+                llvm::FunctionType* jsonFuncType = llvm::FunctionType::get(
+                    int8PtrType,
+                    {llvm::PointerType::get(*context, 0), int8PtrType},  // void* instance, const char* type_name
+                    false
+                );
+                llvm::Function* jsonFunc = module->getFunction("__vyn_complex_to_json");
+                if (!jsonFunc) {
+                    jsonFunc = llvm::Function::Create(jsonFuncType,
+                        llvm::Function::ExternalLinkage, "__vyn_complex_to_json", module.get());
+                }
+                
+                // Allocate space for the struct if it's a value (not already a pointer)
+                llvm::Value* structPtr = value;
+                if (!valueType->isPointerTy()) {
+                    structPtr = builder->CreateAlloca(valueType, nullptr, "struct.tmp");
+                    builder->CreateStore(value, structPtr);
+                }
+                
+                // Cast to void*
+                llvm::Value* voidPtr = builder->CreateBitCast(structPtr, llvm::PointerType::get(*context, 0), "struct.void_ptr");
+                
+                // Create type name constant
+                llvm::Constant* typeNameStrConst = llvm::ConstantDataArray::getString(*context, typeName, /*AddNull=*/true);
+                llvm::GlobalVariable* typeNameGlobal = new llvm::GlobalVariable(
+                    *module, typeNameStrConst->getType(), true,
+                    llvm::GlobalValue::PrivateLinkage, typeNameStrConst,
+                    ".str.typename." + typeName
+                );
+                llvm::Value* typeNamePtr = builder->CreateBitCast(typeNameGlobal, int8PtrType);
+                
+                // Call JSON serialization with instance and type name
+                llvm::Value* jsonCStr = builder->CreateCall(jsonFunc, {voidPtr, typeNamePtr}, "json.cstr");
+                
+                // Convert char* to Vyn String struct {char* data, int64_t length}
+                llvm::StructType* stringStructType = llvm::StructType::get(*context, {
+                    int8PtrType,  // data
+                    llvm::Type::getInt64Ty(*context)  // length
+                });
+                
+                // Call strlen to get length
+                llvm::FunctionType* strlenType = llvm::FunctionType::get(
+                    llvm::Type::getInt64Ty(*context),
+                    {int8PtrType},
+                    false
+                );
+                llvm::Function* strlenFunc = module->getFunction("strlen");
+                if (!strlenFunc) {
+                    strlenFunc = llvm::Function::Create(strlenType,
+                        llvm::Function::ExternalLinkage, "strlen", module.get());
+                }
+                llvm::Value* jsonLen = builder->CreateCall(strlenFunc, {jsonCStr}, "json.len");
+                
+                // Create String struct
+                llvm::Value* stringStruct = llvm::UndefValue::get(stringStructType);
+                stringStruct = builder->CreateInsertValue(stringStruct, jsonCStr, 0, "string.with_data");
+                stringStruct = builder->CreateInsertValue(stringStruct, jsonLen, 1, "string.complete");
+                
+                return stringStruct;
+            }
+        }
     }
     
     // Get the base type name, resolving type aliases
@@ -261,26 +333,28 @@ llvm::Value* LLVMCodegen::generateToStringCall(llvm::Value* value, llvm::Type* v
     llvm::FunctionType* toStringFuncType = nullptr;
     
     if (valueType == int64Type || typeName == "Int") {
-        toStringFuncName = "__vyn_toString_int";
+        toStringFuncName = "__vyn_int_to_string";
         toStringFuncType = llvm::FunctionType::get(int8PtrType, {int64Type}, false);
     } else if (valueType == int8Type || typeName == "Int8") {
-        toStringFuncName = "__vyn_toString_int8";
-        toStringFuncType = llvm::FunctionType::get(int8PtrType, {int8Type}, false);
+        toStringFuncName = "__vyn_int_to_string";  // Reuse same function, will cast
+        toStringFuncType = llvm::FunctionType::get(int8PtrType, {int64Type}, false);
+        value = builder->CreateSExt(value, int64Type, "int8_to_int64");
     } else if (valueType == int32Type || typeName == "Int32") {
-        toStringFuncName = "__vyn_toString_int32";
-        toStringFuncType = llvm::FunctionType::get(int8PtrType, {int32Type}, false);
+        toStringFuncName = "__vyn_int_to_string";  // Reuse same function, will cast
+        toStringFuncType = llvm::FunctionType::get(int8PtrType, {int64Type}, false);
+        value = builder->CreateSExt(value, int64Type, "int32_to_int64");
     } else if (valueType == int1Type || typeName == "Bool") {
-        toStringFuncName = "__vyn_toString_bool";
+        toStringFuncName = "__vyn_bool_to_string";
         toStringFuncType = llvm::FunctionType::get(int8PtrType, {int1Type}, false);
     } else if (valueType->isFloatingPointTy() || typeName == "Float" || typeName == "Double") {
-        toStringFuncName = "__vyn_toString_float";
+        toStringFuncName = "__vyn_float_to_string";
         toStringFuncType = llvm::FunctionType::get(int8PtrType, {doubleType}, false);
         // Cast to double if needed
         if (valueType != doubleType) {
             value = builder->CreateFPExt(value, doubleType, "todouble");
         }
     } else if (valueType == int8PtrType || typeName == "String") {
-        toStringFuncName = "__vyn_toString_string";
+        toStringFuncName = "__vyn_string_to_string";
         toStringFuncType = llvm::FunctionType::get(int8PtrType, {int8PtrType}, false);
     } else {
         logError(loc, "Unsupported type for toString conversion: " + (astType ? astType->toString() : "unknown"));

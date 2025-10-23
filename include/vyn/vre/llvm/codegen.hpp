@@ -158,6 +158,7 @@ private:
     // Monomorphization: Generic type instantiation
     std::map<std::string, vyn::ast::StructDeclaration*> genericStructTemplates; // Store generic struct AST nodes (e.g., Box<T>)
     std::map<std::string, llvm::StructType*> monomorphizedStructs; // Cache instantiated types (e.g., "Box<Int>" -> Box_Int LLVM type)
+    std::map<std::string, llvm::GlobalVariable*> typeMetadataGlobals; // Type metadata for JSON serialization
     
     // Generic function templates
     std::map<std::string, vyn::ast::FunctionDeclaration*> genericFunctionTemplates; // Store generic function AST nodes (e.g., printItem<T>)
@@ -167,6 +168,8 @@ private:
     llvm::Type* codegenType(vyn::ast::TypeNode* typeNode); // Converts vyn::TypeNode to llvm::Type
     std::string mangleGenericTypeName(const std::string& baseName, const std::vector<vyn::ast::TypeNodePtr>& typeArgs); // Generate mangled name like Box_Int
     llvm::StructType* monomorphizeStruct(const std::string& baseName, const std::vector<vyn::ast::TypeNodePtr>& typeArgs); // Generate specialized struct
+    void generateTypeMetadata(const std::string& typeName, vyn::ast::StructDeclaration* structDecl); // Generate type metadata for JSON/reflection
+    void registerTypeMetadata(); // Register all type metadata at program startup
     llvm::Function* getCurrentFunction();
     llvm::BasicBlock* getCurrentBasicBlock();
     void createFunctionForwardDeclaration(vyn::ast::FunctionDeclaration* funcDecl); // Forward declaration helper

@@ -829,6 +829,167 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                     return;
                 }
                 
+                // Handle T::from_string() static method calls
+                const std::string& typeName = vecIdent->name;
+                const std::string& methodName = newIdent->name;
+                
+                if (methodName == "from_string") {
+                    std::cout << "DEBUG: Processing " << typeName << "::from_string() call" << std::endl;
+                    
+                    // Validate arguments
+                    if (node->arguments.size() != 1) {
+                        logError(node->loc, typeName + "::from_string() expects exactly 1 argument (string to parse)");
+                        m_currentLLVMValue = nullptr;
+                        return;
+                    }
+                    
+                    // Evaluate the string argument
+                    node->arguments[0]->accept(*this);
+                    llvm::Value* stringArg = m_currentLLVMValue;
+                    if (!stringArg) {
+                        logError(node->loc, "Failed to evaluate string argument for " + typeName + "::from_string()");
+                        m_currentLLVMValue = nullptr;
+                        return;
+                    }
+                    
+                    // Extract the char* from the Vyn String struct { ptr, i64 }
+                    llvm::Value* charPtr = builder->CreateExtractValue(stringArg, 0, "str.ptr");
+                    
+                    // Handle primitive types
+                    if (typeName == "Int") {
+                        // Call __vyn_int_from_string(str, success_ptr)
+                        llvm::FunctionType* fromStringType = llvm::FunctionType::get(
+                            int64Type,
+                            {int8PtrType, llvm::PointerType::get(int1Type, 0)},
+                            false
+                        );
+                        llvm::Function* fromStringFunc = module->getFunction("__vyn_int_from_string");
+                        if (!fromStringFunc) {
+                            fromStringFunc = llvm::Function::Create(fromStringType, 
+                                llvm::Function::ExternalLinkage, "__vyn_int_from_string", module.get());
+                        }
+                        
+                        // Allocate success flag
+                        llvm::Value* successPtr = builder->CreateAlloca(int1Type, nullptr, "success");
+                        
+                        // Call from_string with char*
+                        llvm::Value* result = builder->CreateCall(fromStringFunc, {charPtr, successPtr}, "from_string.result");
+                        
+                        // TODO: Check success flag and handle errors
+                        m_currentLLVMValue = result;
+                        return;
+                    } else if (typeName == "Float") {
+                        // Call __vyn_float_from_string(str, success_ptr)
+                        llvm::FunctionType* fromStringType = llvm::FunctionType::get(
+                            doubleType,
+                            {int8PtrType, llvm::PointerType::get(int1Type, 0)},
+                            false
+                        );
+                        llvm::Function* fromStringFunc = module->getFunction("__vyn_float_from_string");
+                        if (!fromStringFunc) {
+                            fromStringFunc = llvm::Function::Create(fromStringType,
+                                llvm::Function::ExternalLinkage, "__vyn_float_from_string", module.get());
+                        }
+                        
+                        llvm::Value* successPtr = builder->CreateAlloca(int1Type, nullptr, "success");
+                        llvm::Value* result = builder->CreateCall(fromStringFunc, {charPtr, successPtr}, "from_string.result");
+                        m_currentLLVMValue = result;
+                        return;
+                    } else if (typeName == "Bool") {
+                        // Call __vyn_bool_from_string(str, success_ptr)
+                        llvm::FunctionType* fromStringType = llvm::FunctionType::get(
+                            int1Type,
+                            {int8PtrType, llvm::PointerType::get(int1Type, 0)},
+                            false
+                        );
+                        llvm::Function* fromStringFunc = module->getFunction("__vyn_bool_from_string");
+                        if (!fromStringFunc) {
+                            fromStringFunc = llvm::Function::Create(fromStringType,
+                                llvm::Function::ExternalLinkage, "__vyn_bool_from_string", module.get());
+                        }
+                        
+                        llvm::Value* successPtr = builder->CreateAlloca(int1Type, nullptr, "success");
+                        llvm::Value* result = builder->CreateCall(fromStringFunc, {charPtr, successPtr}, "from_string.result");
+                        m_currentLLVMValue = result;
+                        return;
+                    } else if (typeName == "String") {
+                        // String::from_string() is identity - just return a copy as Vyn String struct
+                        llvm::FunctionType* fromStringType = llvm::FunctionType::get(
+                            int8PtrType,
+                            {int8PtrType, llvm::PointerType::get(int1Type, 0)},
+                            false
+                        );
+                        llvm::Function* fromStringFunc = module->getFunction("__vyn_string_from_string");
+                        if (!fromStringFunc) {
+                            fromStringFunc = llvm::Function::Create(fromStringType,
+                                llvm::Function::ExternalLinkage, "__vyn_string_from_string", module.get());
+                        }
+                        
+                        llvm::Value* successPtr = builder->CreateAlloca(int1Type, nullptr, "success");
+                        llvm::Value* charResult = builder->CreateCall(fromStringFunc, {charPtr, successPtr}, "from_string.char_result");
+                        
+                        // Convert char* to Vyn String struct { ptr, len }
+                        // Declare strlen
+                        llvm::FunctionType* strlenType = llvm::FunctionType::get(int64Type, {int8PtrType}, false);
+                        llvm::Function* strlenFunc = module->getFunction("strlen");
+                        if (!strlenFunc) {
+                            strlenFunc = llvm::Function::Create(strlenType, llvm::Function::ExternalLinkage, "strlen", module.get());
+                        }
+                        
+                        llvm::Value* strLen = builder->CreateCall(strlenFunc, {charResult}, "str.len");
+                        
+                        // Build String struct
+                        llvm::StructType* stringStructType = llvm::StructType::get(*context, {int8PtrType, int64Type});
+                        llvm::Value* stringStruct = llvm::UndefValue::get(stringStructType);
+                        stringStruct = builder->CreateInsertValue(stringStruct, charResult, 0, "str.ptr");
+                        stringStruct = builder->CreateInsertValue(stringStruct, strLen, 1, "str.len");
+                        
+                        m_currentLLVMValue = stringStruct;
+                        return;
+                    } else {
+                        // Complex type - call generic JSON deserializer
+                        std::cout << "DEBUG: Generating JSON deserialization for type: " << typeName << std::endl;
+                        
+                        // Check if this is a known struct type
+                        auto structIt = monomorphizedStructs.find(typeName);
+                        if (structIt == monomorphizedStructs.end()) {
+                            logError(node->loc, "Unknown struct type for deserialization: " + typeName);
+                            m_currentLLVMValue = nullptr;
+                            return;
+                        }
+                        
+                        llvm::StructType* targetStructType = structIt->second;
+                        
+                        // Declare __vyn_complex_from_json(json_str, type_name) -> void*
+                        llvm::FunctionType* fromJsonType = llvm::FunctionType::get(
+                            llvm::PointerType::get(*context, 0),  // returns void*
+                            {int8PtrType, int8PtrType},  // (json_str, type_name)
+                            false
+                        );
+                        llvm::Function* fromJsonFunc = module->getFunction("__vyn_complex_from_json");
+                        if (!fromJsonFunc) {
+                            fromJsonFunc = llvm::Function::Create(fromJsonType,
+                                llvm::Function::ExternalLinkage, "__vyn_complex_from_json", module.get());
+                        }
+                        
+                        // Create type name string constant
+                        llvm::Value* typeNameStr = builder->CreateGlobalStringPtr(typeName, "type.name");
+                        
+                        // Call deserializer
+                        llvm::Value* resultPtr = builder->CreateCall(fromJsonFunc, {charPtr, typeNameStr}, "from_json.ptr");
+                        
+                        // Cast void* to struct type pointer
+                        llvm::Value* structPtr = builder->CreateBitCast(resultPtr,
+                            llvm::PointerType::get(targetStructType, 0), "struct.ptr");
+                        
+                        // Load the struct value - this copies the struct to the stack
+                        // but preserves internal pointers (e.g., String.data still points to heap)
+                        llvm::Value* structValue = builder->CreateLoad(targetStructType, structPtr, "struct.value");
+                        m_currentLLVMValue = structValue;
+                        return;
+                    }
+                }
+                
                 // Check for String::from_bytes() constructor
                 if (vecIdent->name == "String" && newIdent->name == "from_bytes") {
                     std::cout << "DEBUG: Creating String::from_bytes() constructor" << std::endl;
@@ -2452,13 +2613,9 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
         if (m_isLHSOfAssignment) {
             m_currentLLVMValue = fieldPtr;
         } else {
-            // For reading, load the value for primitive types (Int, Float, Bool, etc.)
-            if (fieldType->isIntegerTy() || fieldType->isFloatingPointTy()) {
-                m_currentLLVMValue = builder->CreateLoad(fieldType, fieldPtr, fieldName + "_val");
-            } else {
-                // For non-primitive types (structs, arrays, etc.), return the pointer
-                m_currentLLVMValue = fieldPtr;
-            }
+            // For reading, always load the value
+            // Even for struct types (like String), we want the value, not a pointer to temporary storage
+            m_currentLLVMValue = builder->CreateLoad(fieldType, fieldPtr, fieldName + "_val");
         }
     }
 }
