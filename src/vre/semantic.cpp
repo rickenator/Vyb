@@ -1030,18 +1030,18 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             
             // Validate that argument is our<T>
             ast::TypeName* argTypeName = dynamic_cast<ast::TypeName*>(argType);
-            if (!argTypeName || !argTypeName->name || argTypeName->name->name != "our") {
+            if (!argTypeName || !argTypeName->identifier || argTypeName->identifier->name != "our") {
                 addError("soft() can only be applied to our<T> (shared ownership) types", node);
                 return;
             }
             
             // Extract inner type T from our<T>
-            if (argTypeName->typeArguments.empty()) {
+            if (argTypeName->genericArgs.empty()) {
                 addError("soft() argument our<T> is missing type parameter", node);
                 return;
             }
             
-            ast::TypeNode* innerType = argTypeName->typeArguments[0].get();
+            ast::TypeNode* innerType = argTypeName->genericArgs[0].get();
             
             // Create mild<T> type
             auto mildId = std::make_unique<ast::Identifier>(node->loc, "mild");
@@ -3729,7 +3729,8 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
                typeNameStr == "Int" || typeNameStr == "Float" ||
                typeNameStr == "Int" || typeNameStr == "String" || typeNameStr == "Int8" ||
                typeNameStr == "Future" || typeNameStr == "Void" ||
-               typeNameStr == "my" || typeNameStr == "their" || typeNameStr == "view" || typeNameStr == "borrow") { 
+               typeNameStr == "my" || typeNameStr == "our" || typeNameStr == "their" || 
+               typeNameStr == "mild" || typeNameStr == "view" || typeNameStr == "borrow") { 
         node->type = std::shared_ptr<ast::TypeNode>(node->clone());
         // For ownership types, visit generic arguments if present
         for (auto& argTypeNode : node->genericArgs) {

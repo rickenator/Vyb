@@ -1,0 +1,18 @@
+# Test basic mild<T> functionality with soft()
+# This is a minimal test - full functionality (grab(), released()) to be implemented
+
+struct Node {
+    value<Int>
+}
+
+main()<Int> -> {
+    # Create shared ownership
+    shared<our<Node>> = our(Node { value: 42 })
+    
+    # Create mild reference using soft()
+    shadow<mild<Node>> = soft(shared)
+    
+    println("Created mild<Node> reference successfully")
+    
+    return 0
+}
