@@ -265,6 +265,16 @@ Vyn **v0.4.4** (freedom-1.0 series) is a **complete systems programming language
 - **Production Ready**: Deploy native executables without any runtime dependencies
 - **Cross-Platform**: Linux and macOS support with proper platform detection
 
+### ✅ **JSON Serialization & Deserialization (NEW in v0.4.4!)**
+- **Runtime Type Metadata**: Complete type registration system with field introspection
+- **Automatic Serialization**: `.to_string()` method on structs generates JSON
+- **JSON Deserialization**: `T::from_string(json)` creates instances from JSON strings
+- **Type Safety**: Runtime validation of JSON structure against type definitions
+- **Supported Types**: Int, Float, Bool, String primitives fully working
+- **Round-Trip Conversion**: Full bidirectional struct ↔ JSON conversion
+- **Zero Boilerplate**: No manual serialization code needed
+- **Test Suite**: Comprehensive tests in `test/json/` directory
+
 ### ✅ **Native Code Compilation (v0.4.3)**
 - **Object File Emission**: Compile to .o files with `--compile/-c` flag
 - **Optimization Levels**: -O0 (none), -O1 (basic), -O2 (default), -O3 (aggressive)
@@ -2336,16 +2346,68 @@ main()<Result> -> {
 # Outputs structured JSON for the Result
 ```
 
-## Auto-Serialization Feature
+## JSON Serialization & Deserialization
 
-One of Vyn's standout features is automatic serialization of complex return types:
+Vyn v0.4.4 includes a **complete JSON serialization system** with bidirectional conversion between structs and JSON:
+
+### Automatic Serialization
+
+```vyn
+struct Person {
+    name<String>,
+    age<Int>,
+    active<Bool>
+}
+
+main()<Int> -> {
+    person<Person> = Person { name: "Alice", age: 30, active: true }
+    
+    # Serialize to JSON string
+    json<String> = person.to_string()
+    println(json)  # Output: {"name": "Alice", "age": 30, "active": true}
+    
+    return 0
+}
+```
+
+### JSON Deserialization
+
+```vyn
+# Deserialize JSON back to struct
+person2<Person> = Person::from_string(json)
+
+# Access fields normally
+println(person2.name)  # Output: Alice
+println(person2.age.to_string())  # Output: 30
+```
+
+### Supported Types
+
+- **Primitives**: Int, Float, Bool, String
+- **Struct Fields**: All primitive types within structs
+- **Round-Trip**: Full struct → JSON → struct → field access
+- **Type Safety**: Runtime validation of JSON structure
+
+### Auto-Serialization for main() Returns
+
+One of Vyn's standout features is automatic serialization of complex return types from `main()`:
 
 - **Simple integers**: Return as exit codes (`main()<Int> -> { return 42 }`)
 - **Complex types**: Automatically serialize to JSON-like format
 - **Tuples**: `main()<Int,String> -> { return 10, "hello" }` outputs `[10, "hello"]`
 - **Structs**: Full structured output with field names and values
 
-This makes Vyn excellent for data processing scripts and API-style programs.
+### Implementation Details
+
+The JSON system is built on:
+- **Runtime Type Metadata**: Global type registry with field information
+- **C Runtime Functions**: `__vyn_complex_to_json()` and `__vyn_complex_from_json()`
+- **Type Registration**: Automatic registration via global constructors
+- **String Conversion**: Seamless char* to VynString{data, length} struct conversion
+
+See `test/json/` for comprehensive examples and `runtime/vyn_type_metadata.c` for implementation.
+
+This makes Vyn excellent for data processing scripts, API services, and configuration management.
 
 ## Memory Safety
 

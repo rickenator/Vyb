@@ -111,7 +111,7 @@ The immediate focus for the next release:
    - Complete LLVM codegen implementation
    - See "Error Handling Roadmap" section below for future enhancements
 
-### 📋 CURRENT FOCUS (v0.5.0+)
+### 📋 COMPLETED IN v0.4.4
 
 1. **✅ Static Linking (COMPLETED v0.4.4):** Link .o files into standalone executables
    - ✅ Invoke system linker (ld, lld) with platform detection
@@ -121,7 +121,23 @@ The immediate focus for the next release:
    - ✅ Full compilation pipeline: source → object → executable
    - See `doc/MODULE_FFI_BINARY_ROADMAP.md` Phase 3.2 ✅ COMPLETED
 
-2. **Optimization Pipeline (v0.5.2):** LLVM optimization pass configuration
+2. **✅ JSON Serialization & Deserialization (COMPLETED v0.4.4):** Bidirectional struct-JSON conversion
+   - ✅ Runtime type metadata system with field introspection
+   - ✅ Global type registry with automatic registration
+   - ✅ `.to_string()` method on structs generates JSON
+   - ✅ `T::from_string(json)` creates instances from JSON strings
+   - ✅ Support for Int, Float, Bool, String primitive types
+   - ✅ Full round-trip conversion: struct → JSON → struct → field access
+   - ✅ String conversion: char* to VynString{data, length} struct
+   - ✅ Member access fix: always load field values (critical bug resolved)
+   - ✅ Comprehensive test suite in `test/json/`
+   - ✅ Production-ready with clean codebase (debug output removed)
+   - See `runtime/vyn_type_metadata.c` for implementation
+   - Future: Nested structs, Vec<T> serialization, aspect metadata
+
+### 📋 CURRENT FOCUS (v0.5.0+)
+
+1. **Optimization Pipeline (v0.5.2):** LLVM optimization pass configuration
    - Apply optimization passes for -O0 through -O3
    - Implement LTO (Link-Time Optimization)
    - Benchmark JIT vs AOT performance
