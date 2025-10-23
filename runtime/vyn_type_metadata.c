@@ -75,12 +75,8 @@ static void serialize_primitive_field(char* buffer, size_t* pos, void* field_ptr
 // Serialize a complex type to JSON using its metadata
 char* __vyn_complex_to_json_with_metadata(void* instance, VynTypeMetadata* metadata) {
     if (!instance || !metadata) {
-        fprintf(stderr, "DEBUG JSON: instance=%p, metadata=%p\n", instance, metadata);
         return strdup("null");
     }
-    
-    fprintf(stderr, "DEBUG JSON: Serializing type '%s' with %zu fields\n", 
-            metadata->type_name, metadata->num_fields);
     
     // Allocate buffer (TODO: dynamic sizing)
     char* buffer = (char*)malloc(4096);
@@ -100,15 +96,10 @@ char* __vyn_complex_to_json_with_metadata(void* instance, VynTypeMetadata* metad
         // Field name
         pos += sprintf(buffer + pos, "\"%s\": ", field->name);
         
-        fprintf(stderr, "DEBUG JSON:   After field name, pos=%zu\n", pos);
-        
         if (field->is_primitive) {
             // Primitive types
-            size_t old_pos = pos;
             serialize_primitive_field(buffer, &pos, field_ptr, field->type_name, 
                                      i == metadata->num_fields - 1);
-            fprintf(stderr, "DEBUG JSON:   After primitive, added %zu chars, pos=%zu\n", 
-                    pos - old_pos, pos);
         } else if (field->is_vec) {
             // Vec types (TODO: implement)
             pos += sprintf(buffer + pos, "[]%s", i == metadata->num_fields - 1 ? "" : ", ");
@@ -129,8 +120,6 @@ char* __vyn_complex_to_json_with_metadata(void* instance, VynTypeMetadata* metad
     // End JSON object
     pos += sprintf(buffer + pos, "}");
     buffer[pos] = '\0';
-    
-    fprintf(stderr, "DEBUG JSON: Final buffer (len=%zu): '%s'\n", pos, buffer);
     return buffer;
 }
 
@@ -185,21 +174,12 @@ static const char* parse_bool_value(const char* json, bool* out) {
 // Deserialize JSON to a complex type using metadata
 void* __vyn_complex_from_json_with_metadata(const char* json_str, VynTypeMetadata* metadata) {
     if (!json_str || !metadata) {
-        fprintf(stderr, "DEBUG FROM_JSON: json_str=%p, metadata=%p\n", (void*)json_str, metadata);
         return NULL;
     }
-    
-    fprintf(stderr, "DEBUG FROM_JSON: Deserializing type '%s' from JSON: '%s'\n",
-            metadata->type_name, json_str);
     
     // Allocate instance
     void* instance = calloc(1, metadata->struct_size);
-    if (!instance) {
-        fprintf(stderr, "DEBUG FROM_JSON: Failed to allocate %zu bytes\n", metadata->struct_size);
-        return NULL;
-    }
-    
-    fprintf(stderr, "DEBUG FROM_JSON: Allocated instance at %p\n", instance);
+    if (!instance) return NULL;
     
     // Parse JSON (very simplified parser - expects {"field": "value", ...})
     const char* p = skip_whitespace(json_str);
@@ -225,8 +205,6 @@ void* __vyn_complex_from_json_with_metadata(const char* json_str, VynTypeMetadat
         }
         field_name[i] = '\0';
         
-        fprintf(stderr, "DEBUG FROM_JSON: Parsing field '%s'\n", field_name);
-        
         if (*p == '"') p++; // Skip closing quote
         p = skip_whitespace(p);
         if (*p != ':') break;
@@ -242,8 +220,6 @@ void* __vyn_complex_from_json_with_metadata(const char* json_str, VynTypeMetadat
         }
         
         if (field) {
-            fprintf(stderr, "DEBUG FROM_JSON: Found field '%s', type '%s', offset %zu\n",
-                    field->name, field->type_name, field->offset);
             void* field_ptr = (char*)instance + field->offset;
             
             if (field->is_primitive) {
@@ -251,17 +227,14 @@ void* __vyn_complex_from_json_with_metadata(const char* json_str, VynTypeMetadat
                     int64_t val;
                     p = parse_number_value(p, &val);
                     *(int64_t*)field_ptr = val;
-                    fprintf(stderr, "DEBUG FROM_JSON: Set Int field to %ld\n", val);
                 } else if (strcmp(field->type_name, "Float") == 0) {
                     double val;
                     p = parse_float_value(p, &val);
                     *(double*)field_ptr = val;
-                    fprintf(stderr, "DEBUG FROM_JSON: Set Float field to %f\n", val);
                 } else if (strcmp(field->type_name, "Bool") == 0) {
                     bool val;
                     p = parse_bool_value(p, &val);
                     *(bool*)field_ptr = val;
-                    fprintf(stderr, "DEBUG FROM_JSON: Set Bool field to %d\n", val);
                 } else if (strcmp(field->type_name, "String") == 0) {
                     char str_val[1024];
                     p = parse_string_value(p, str_val, sizeof(str_val));
@@ -270,13 +243,9 @@ void* __vyn_complex_from_json_with_metadata(const char* json_str, VynTypeMetadat
                     VynString* vyn_str = (VynString*)field_ptr;
                     vyn_str->data = strdup(str_val);
                     vyn_str->length = strlen(str_val);
-                    fprintf(stderr, "DEBUG FROM_JSON: Set String field to '%s' (len=%ld)\n", 
-                            str_val, vyn_str->length);
                 }
             }
             // TODO: Handle nested structs and Vec
-        } else {
-            fprintf(stderr, "DEBUG FROM_JSON: Field '%s' not found in metadata\n", field_name);
         }
         
         // Skip to next field or end
@@ -284,6 +253,5 @@ void* __vyn_complex_from_json_with_metadata(const char* json_str, VynTypeMetadat
         if (*p == ',') p++;
     }
     
-    fprintf(stderr, "DEBUG FROM_JSON: Returning instance at %p\n", instance);
     return instance;
 }

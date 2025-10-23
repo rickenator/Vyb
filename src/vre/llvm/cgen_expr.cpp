@@ -985,28 +985,6 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                         // Load the struct value - this copies the struct to the stack
                         // but preserves internal pointers (e.g., String.data still points to heap)
                         llvm::Value* structValue = builder->CreateLoad(targetStructType, structPtr, "struct.value");
-                        
-                        // Debug: print the struct pointer to verify it's valid
-                        if (typeName == "Person") {
-                            llvm::Function* printfFunc = module->getFunction("printf");
-                            if (!printfFunc) {
-                                llvm::FunctionType* printfType = llvm::FunctionType::get(
-                                    llvm::Type::getInt32Ty(*context),
-                                    {llvm::PointerType::get(llvm::Type::getInt8Ty(*context), 0)},
-                                    true);
-                                printfFunc = llvm::Function::Create(printfType,
-                                    llvm::Function::ExternalLinkage, "printf", module.get());
-                            }
-                            llvm::Value* debugStr = builder->CreateGlobalStringPtr(
-                                "DEBUG CODEGEN: Loaded Person struct from ptr %p, first field (name.data) = %p\n");
-                            
-                            // Extract name.data pointer from loaded struct
-                            llvm::Value* nameField = builder->CreateExtractValue(structValue, 0, "name.field");
-                            llvm::Value* nameDataPtr = builder->CreateExtractValue(nameField, 0, "name.data");
-                            
-                            builder->CreateCall(printfFunc, {debugStr, structPtr, nameDataPtr});
-                        }
-                        
                         m_currentLLVMValue = structValue;
                         return;
                     }
@@ -2635,13 +2613,9 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
         if (m_isLHSOfAssignment) {
             m_currentLLVMValue = fieldPtr;
         } else {
-            // For reading, load the value for primitive types (Int, Float, Bool, etc.)
-            if (fieldType->isIntegerTy() || fieldType->isFloatingPointTy()) {
-                m_currentLLVMValue = builder->CreateLoad(fieldType, fieldPtr, fieldName + "_val");
-            } else {
-                // For non-primitive types (structs, arrays, etc.), return the pointer
-                m_currentLLVMValue = fieldPtr;
-            }
+            // For reading, always load the value
+            // Even for struct types (like String), we want the value, not a pointer to temporary storage
+            m_currentLLVMValue = builder->CreateLoad(fieldType, fieldPtr, fieldName + "_val");
         }
     }
 }
