@@ -71,6 +71,7 @@ vyn::ast::TypeNodePtr TypeParser::parse_atomic_or_group_type() { // Corrected na
         match(vyn::TokenType::KEYWORD_MY) ||
         match(vyn::TokenType::KEYWORD_OUR) ||
         match(vyn::TokenType::KEYWORD_THEIR) ||
+        match(vyn::TokenType::KEYWORD_MILD) ||
         match(vyn::TokenType::KEYWORD_CONST)) { // Added KEYWORD_CONST for const<T>
         
         vyn::SourceLocation path_loc = this->previous_token().location; 
