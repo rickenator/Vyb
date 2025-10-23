@@ -982,8 +982,30 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                         llvm::Value* structPtr = builder->CreateBitCast(resultPtr,
                             llvm::PointerType::get(targetStructType, 0), "struct.ptr");
                         
-                        // Load the struct value
+                        // Load the struct value - this copies the struct to the stack
+                        // but preserves internal pointers (e.g., String.data still points to heap)
                         llvm::Value* structValue = builder->CreateLoad(targetStructType, structPtr, "struct.value");
+                        
+                        // Debug: print the struct pointer to verify it's valid
+                        if (typeName == "Person") {
+                            llvm::Function* printfFunc = module->getFunction("printf");
+                            if (!printfFunc) {
+                                llvm::FunctionType* printfType = llvm::FunctionType::get(
+                                    llvm::Type::getInt32Ty(*context),
+                                    {llvm::PointerType::get(llvm::Type::getInt8Ty(*context), 0)},
+                                    true);
+                                printfFunc = llvm::Function::Create(printfType,
+                                    llvm::Function::ExternalLinkage, "printf", module.get());
+                            }
+                            llvm::Value* debugStr = builder->CreateGlobalStringPtr(
+                                "DEBUG CODEGEN: Loaded Person struct from ptr %p, first field (name.data) = %p\n");
+                            
+                            // Extract name.data pointer from loaded struct
+                            llvm::Value* nameField = builder->CreateExtractValue(structValue, 0, "name.field");
+                            llvm::Value* nameDataPtr = builder->CreateExtractValue(nameField, 0, "name.data");
+                            
+                            builder->CreateCall(printfFunc, {debugStr, structPtr, nameDataPtr});
+                        }
                         
                         m_currentLLVMValue = structValue;
                         return;
