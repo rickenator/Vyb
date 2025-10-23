@@ -152,7 +152,7 @@ read_item(borrowed_c_const);
 *   **Language Semantics**:
     *   `their`: Purely syntactic for borrows; underlying borrow checking rules remain.
     *   `my`: Formalizes explicit unique ownership in the type system. Default `let` bindings of value types already imply this.
-    *   `our`: Introduces shared (reference-counted) ownership as a language type. This has significant semantic implications (heap allocation, reference counting, potential cycle issues if not handled with weak references – which are beyond this initial proposal).
+    *   `our`: Introduces shared (reference-counted) ownership as a language type. This has significant semantic implications (heap allocation, reference counting, potential cycle issues if not handled with mild references – which are beyond this initial proposal).
 *   **Parser**: Needs updates for new keywords (`my`, `our`, `their`) in type expressions, `their` in unary expressions and patterns.
 *   **Type System**: Must recognize `my Type`, `our Type`, `their Type`, `their const Type`.
 *   **VRE Integration**: `my`, `our`, `their` types in Vyn will map directly to VRE's `my<T>`, `our<T>`, `their<T>` mechanisms.
@@ -172,7 +172,7 @@ read_item(borrowed_c_const);
 
 *   **Verbosity**: Keywords are more verbose than sigils (for `their` vs `&`).
 *   **Keyword Collision**: `my`, `our`, `their` are common words.
-*   **Complexity of `our`**: Shared ownership introduces complexities (reference counting overhead, cycles). The initial proposal is for the *type*; robust library support and potentially weak references would be needed.
+*   **Complexity of `our`**: Shared ownership introduces complexities (reference counting overhead, cycles). The initial proposal is for the *type*; robust library support and potentially mild references would be needed.
 *   **Tooling Effort**: Significant effort for parser, type checker, documentation, and migration tools.
 *   **Learning Curve**: While aiming for clarity, three distinct ownership keywords might initially seem like more to learn than a sigil-based system combined with library types.
 

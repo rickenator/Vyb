@@ -203,11 +203,8 @@ Supports 20+ architectures out of the box:
 *   **Borrowing**:
     *   `view(expr)`: Creates an immutable borrow `their<T const>`.
     *   `borrow(expr)`: Creates a mutable borrow `their<T>`.
-    *   `soft(expr)`: Creates a weak reference `mild<T>` from `our<T>`.
+    *   `soft(expr)`: Creates a mild reference `mild<T>` from `our<T>`.
 *   **`freedom` Blocks**: Sections of code marked `freedom { ... }` where raw pointers (`loc<T>`) can be used and some compiler guarantees are relaxed. Within these blocks, operations like `at(ptr)` for dereferencing and `from<loc<T>>()` for pointer conversion are available.
-*   **Scoped Block**: Planned block prefixed with `scoped` that defers GC and cleans up at block exit.
-*   **Actor**: Planned lightweight concurrent entity with a built-in mailbox for message passing.
-*   **Tiered JIT**: Planned two-level execution—bytecode interpreter for startup, optimized native JIT for hot code.
 
 ### 1.4 Import vs Smuggle - Vyn's Unique Module System
 
@@ -588,7 +585,7 @@ result<my<Data>>     = my(compute_data())
 # Create temporary references with view/borrow/soft functions
 readonly<their<String const>> = view(data)     # Immutable borrow
 writable<their<String>>       = borrow(data)   # Mutable borrow
-weak_ref<mild<Node>>          = soft(shared)   # Weak reference
+weak<mild<Node>>              = soft(shared)   # Weak reference
 length<Int>                   = view(data).len()
 borrow(data).clear()
 ```
@@ -608,12 +605,11 @@ python3 migrate_syntax.py --migrate --directory . --backup --report
 
 ### ✅ **Memory Management**
 - **Ownership types**: `my<T>`, `our<T>`, `their<T>`, `mild<T>` for safe memory handling
-- **Weak references**: `mild<T>` created with `soft()` for breaking circular references with `grab()` and `released()` methods
+- **Mild references**: `mild<T>` created with `soft()` for breaking circular references with `grab()` and `released()` methods
 - **Borrowing**: `view(expr)` and `borrow(expr)` for references  
 - **Freedom operations**: `loc<T>` pointers in `freedom {}` blocks
 - **Raw Memory Operations**: Complete `freedom` block system with `loc<T>` pointers
 - **Memory Safety**: Borrow checking and lifetime analysis prevent dangling pointers
-- **Hybrid Model**: Combines ownership with planned GC for maximum flexibility
 
 #### Weak References with mild<T>
 
@@ -628,7 +624,7 @@ Vyn v0.4.4 introduces **`mild<T>`** - weak references that solve circular refere
 **Key Methods:**
 ```vyn
 # grab() -> our<T>?
-# Attempts to upgrade weak reference to strong reference
+# Attempts to upgrade mild reference to strong reference
 # Returns nil if target has been destroyed
 parent_strong<our<TreeNode>> = node.parent.grab()
 
@@ -638,11 +634,11 @@ parent_strong<our<TreeNode>> = node.parent.grab()
 is_alive<Bool> = !node.parent.released()
 ```
 
-**Creating Weak References:**
+**Creating Mild References:**
 ```vyn
 # Use soft() to create mild<T> from our<T>
 shared_data<our<Config>> = our(Config::new())
-weak_ref<mild<Config>> = soft(shared_data)  # Create weak reference
+shadow<mild<Config>> = soft(shared_data)  # Create mild reference
 ```
 
 **Example: Tree with Parent Pointers**
@@ -650,7 +646,7 @@ weak_ref<mild<Config>> = soft(shared_data)  # Create weak reference
 struct TreeNode {
     value<Int>,
     children<Vec<our<TreeNode>>>,  # Strong refs to children
-    parent<mild<TreeNode>>          # Weak ref to parent (breaks cycle)
+    parent<mild<TreeNode>>          # Mild ref to parent (breaks cycle)
 }
 
 create_child(parent<our<TreeNode>>, value<Int>)<our<TreeNode>> -> {
@@ -917,7 +913,7 @@ process_value(val<Int>)<String> -> {
 safe_data<my<String>> = my("unique")      # Unique ownership
 shared_data<our<String>> = our("shared")  # Reference counted
 borrowed<their<String>> = borrow(safe_data)  # Non-owning reference
-weak_ref<mild<String>> = soft(shared_data)   # Weak reference (breaks cycles)
+shadow<mild<String>> = soft(shared_data)   # Mild reference (breaks cycles)
 ```
 
 #### Type System Features
@@ -935,7 +931,7 @@ weak_ref<mild<String>> = soft(shared_data)   # Weak reference (breaks cycles)
 - **Dynamic arrays**: `Vec<T>` resizable collections
 - **Tuples**: `Tuple<T,U,...>` variadic heterogeneous types
 
-**Ownership Types**: `my<T>` (unique), `our<T>` (shared), `their<T>` (borrowed), `mild<T>` (weak reference), `loc<T>` (freedom raw pointer)
+**Ownership Types**: `my<T>` (unique), `our<T>` (shared), `their<T>` (borrowed), `mild<T>` (mild reference), `loc<T>` (freedom raw pointer)
 
 **Type Aliasing**: All numeric types support multiple naming conventions:
 - Vyn style: `Int32`, `Float64`, `UInt8`
@@ -2918,12 +2914,12 @@ BorrowExpr             ::= 'borrow' '(' Expression ')'
 - `my<T>`: Unique ownership, RAII cleanup
 - `our<T>`: Shared ownership, reference counted
 - `their<T>`: Non-owning borrow, lifetime checked
-- `mild<T>`: Weak reference, can detect destruction via `grab()` and `released()`
+- `mild<T>`: Mild reference, can detect destruction via `grab()` and `released()`
 
 **Borrowing Operations:**
 - `view(expr)`: Creates `their<T const>` immutable borrow
 - `borrow(expr)`: Creates `their<T>` mutable borrow
-- `soft(expr)`: Creates `mild<T>` weak reference from `our<T>`
+- `soft(expr)`: Creates `mild<T>` mild reference from `our<T>`
 
 **Freedom Operations:**
 - `loc<T>`: Raw pointer type
