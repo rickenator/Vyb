@@ -2,7 +2,7 @@
 
 ## Overview
 
-`mild<T>` is Vyn's fourth ownership type, providing **weak references** to `our<T>` (shared ownership) objects. It solves the circular reference problem and enables patterns like observers, caches, and back-pointers in tree structures.
+`mild<T>` is Vyn's fourth ownership type, providing **mild references** to `our<T>` (shared ownership) objects. It solves the circular reference problem and enables patterns like observers, caches, and back-pointers in tree structures.
 
 ## The Four Ownership Types
 
@@ -11,7 +11,7 @@
 | `my<T>` | Unique | Move only | Never null | Exclusive ownership |
 | `our<T>` | Shared (ref-counted) | Clone via `our(x)` | Never null | Multiple owners |
 | `their<T>` | Borrowed | Temporary | Never null | Function parameters |
-| `mild<T>` | Weak (non-owning) | Clone via `mild(x)` | Can become null | Break cycles, observers |
+| `mild<T>` | Mild (non-owning) | Clone via `soft(x)` | Can become null | Break cycles, observers |
 
 ## Why `mild<T>`?
 
@@ -27,13 +27,13 @@ struct Node {
 # Reference counts never reach zero → memory leak
 ```
 
-### Solution: Weak References
+### Solution: Mild References
 
 ```vyn
 # With mild: No leak!
 struct Node {
     next: our<Node>,   # Strong reference (owns)
-    prev: mild<Node>   # Weak reference (doesn't own, breaks cycle)
+    prev: mild<Node>   # Mild reference (doesn't own, breaks cycle)
 }
 # When next is dropped, prev doesn't prevent cleanup
 ```
@@ -42,14 +42,14 @@ struct Node {
 
 ### `grab() -> our<T>?`
 
-Attempts to upgrade the weak reference to a strong reference. Returns `our<T>` if the target is still alive, or `nil` if it has been released.
+Attempts to upgrade the mild reference to a strong reference. Returns `our<T>` if the target is still alive, or `nil` if it has been released.
 
 ```vyn
 node<our<Node>> = get_node()
-weak_ref<mild<Node>> = mild(node)
+shadow<mild<Node>> = soft(node)
 
 # Try to access the object
-if (strong<our<Node>> = weak_ref.grab()) {
+if (strong<our<Node>> = shadow.grab()) {
     # Success! Object is still alive
     println(strong.value)
 } else {
@@ -63,14 +63,14 @@ if (strong<our<Node>> = weak_ref.grab()) {
 Checks if the referenced object has been destroyed. Returns `true` if the object is dead, `false` if still alive.
 
 ```vyn
-if (weak_ref.released()) {
+if (shadow.released()) {
     println("Object was released")
 } else {
     println("Object is still alive")
 }
 
 # More idiomatically
-if (!weak_ref.released()) {
+if (!shadow.released()) {
     # Safe to try grab()
 }
 ```
@@ -102,8 +102,8 @@ struct Subject {
 }
 
 fn notify(subject: our<Subject>) -> Void {
-    for (weak_observer in subject.observers) {
-        if let observer = weak_observer.grab() {
+    for (shadow in subject.observers) {
+        if let observer = shadow.grab() {
             observer.update()  # Still alive
         }
         # Otherwise skip - observer was destroyed
@@ -123,12 +123,12 @@ struct Cache {
 
 # Cache doesn't prevent entries from being freed
 # When user drops all strong references to an entry,
-# the cache's weak reference becomes invalid
+# the cache's mild reference becomes invalid
 
 fn get_valid_entries(cache: our<Cache>) -> Vec<our<Entry>> {
     result: Vec<our<Entry>> = Vec()
-    for (weak_entry in cache.entries) {
-        if let entry = weak_entry.grab() {
+    for (shadow in cache.entries) {
+        if let entry = shadow.grab() {
             result.push(entry)
         }
     }
@@ -142,12 +142,12 @@ fn get_valid_entries(cache: our<Cache>) -> Vec<our<Entry>> {
 struct ListNode {
     value: Int,
     next: our<ListNode>?,    # Strong reference (owns next)
-    prev: mild<ListNode>     # Weak reference (doesn't own prev)
+    prev: mild<ListNode>     # Mild reference (doesn't own prev)
 }
 
 fn insert_after(node: our<ListNode>, new_node: our<ListNode>) -> Void {
     new_node.next = node.next
-    new_node.prev = mild(node)
+    new_node.prev = soft(node)
     node.next = our(new_node)
 }
 ```
@@ -183,7 +183,7 @@ fn insert_after(node: our<ListNode>, new_node: our<ListNode>) -> Void {
 
 ## Comparison with Other Languages
 
-| Language | Weak Reference Type | Upgrade Method | Check Method |
+| Language | Mild/Weak Reference Type | Upgrade Method | Check Method |
 |----------|---------------------|----------------|--------------|
 | **Vyn** | `mild<T>` | `grab() -> our<T>?` | `released() -> Bool` |
 | C++ | `std::weak_ptr<T>` | `lock() -> shared_ptr<T>` | `expired() -> bool` |
@@ -228,7 +228,7 @@ fn create_node(value: Int, parent: mild<TreeNode>) -> our<TreeNode> {
 }
 
 fn add_child(parent: our<TreeNode>, value: Int) -> our<TreeNode> {
-    child: our<TreeNode> = create_node(value, mild(parent))
+    child: our<TreeNode> = create_node(value, soft(parent))
     parent.children.push(child)
     return child
 }
@@ -264,7 +264,7 @@ fn main() -> Int {
 ## Summary
 
 `mild<T>` is Vyn's solution to circular references and the observer pattern. It provides:
-- **Non-owning references** to `our<T>` objects
+- **Mild (non-owning) references** to `our<T>` objects
 - **Safe access** via `grab()` that returns `our<T>?`
 - **Lifecycle detection** via `released()`
 - **Zero cost** when not used (no impact on `my<T>`, `our<T>`, or `their<T>`)
