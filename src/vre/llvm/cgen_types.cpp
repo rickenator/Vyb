@@ -449,8 +449,9 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                 break;
             }
 
-            // Handle ownership types: my<T>, their<T>, view<T>, borrow<T>
-            if (typeNameStr == "my" || typeNameStr == "their" || typeNameStr == "view" || typeNameStr == "borrow") {
+            // Handle ownership types: my<T>, our<T>, their<T>, mild<T>, view<T>, borrow<T>
+            if (typeNameStr == "my" || typeNameStr == "our" || typeNameStr == "their" || 
+                typeNameStr == "mild" || typeNameStr == "view" || typeNameStr == "borrow") {
                 if (typeNameNode->genericArgs.empty() || !typeNameNode->genericArgs[0]) {
                     logError(typeNode->loc, typeNameStr + " type requires a type parameter (e.g., " + typeNameStr + "<TreeNode>)");
                     return nullptr;

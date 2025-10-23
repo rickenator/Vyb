@@ -857,7 +857,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
         const std::string& name = ident->name;
         if (name == "lit" || name == "notype" || name == "bare" || name == "deserial" || 
             name == "borrow" || name == "view" || name == "my" || name == "their" || name == "our" ||
-            name == "println") {
+            name == "soft" || name == "println") {
             isIntrinsic = true;
         }
     }
@@ -994,6 +994,61 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             ownershipArgs.push_back(argType->clone());
             
             ast::TypeNode* resultType = new ast::TypeName(node->loc, std::move(ownershipId), std::move(ownershipArgs));
+            expressionTypes[node] = resultType;
+            node->type = std::shared_ptr<ast::TypeNode>(resultType->clone().release());
+            return;
+        }
+        
+        // Handle soft() constructor: creates mild<T> from our<T>
+        if (name == "soft") {
+            if (node->arguments.size() != 1) {
+                addError("soft() expects exactly one argument", node);
+                return;
+            }
+            
+            ast::Expression* argExpr = node->arguments[0].get();
+            if (!argExpr) {
+                addError("soft() argument cannot be null", node);
+                return;
+            }
+            
+            // Get the argument type
+            ast::TypeNode* argType = nullptr;
+            if (argExpr->type) {
+                argType = argExpr->type.get();
+            } else {
+                auto typeIt = expressionTypes.find(argExpr);
+                if (typeIt != expressionTypes.end()) {
+                    argType = typeIt->second;
+                }
+            }
+            
+            if (!argType) {
+                addError("Cannot determine type of argument to soft()", node);
+                return;
+            }
+            
+            // Validate that argument is our<T>
+            ast::TypeName* argTypeName = dynamic_cast<ast::TypeName*>(argType);
+            if (!argTypeName || !argTypeName->identifier || argTypeName->identifier->name != "our") {
+                addError("soft() can only be applied to our<T> (shared ownership) types", node);
+                return;
+            }
+            
+            // Extract inner type T from our<T>
+            if (argTypeName->genericArgs.empty()) {
+                addError("soft() argument our<T> is missing type parameter", node);
+                return;
+            }
+            
+            ast::TypeNode* innerType = argTypeName->genericArgs[0].get();
+            
+            // Create mild<T> type
+            auto mildId = std::make_unique<ast::Identifier>(node->loc, "mild");
+            std::vector<ast::TypeNodePtr> mildArgs;
+            mildArgs.push_back(innerType->clone());
+            
+            ast::TypeNode* resultType = new ast::TypeName(node->loc, std::move(mildId), std::move(mildArgs));
             expressionTypes[node] = resultType;
             node->type = std::shared_ptr<ast::TypeNode>(resultType->clone().release());
             return;
@@ -3674,7 +3729,8 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
                typeNameStr == "Int" || typeNameStr == "Float" ||
                typeNameStr == "Int" || typeNameStr == "String" || typeNameStr == "Int8" ||
                typeNameStr == "Future" || typeNameStr == "Void" ||
-               typeNameStr == "my" || typeNameStr == "their" || typeNameStr == "view" || typeNameStr == "borrow") { 
+               typeNameStr == "my" || typeNameStr == "our" || typeNameStr == "their" || 
+               typeNameStr == "mild" || typeNameStr == "view" || typeNameStr == "borrow") { 
         node->type = std::shared_ptr<ast::TypeNode>(node->clone());
         // For ownership types, visit generic arguments if present
         for (auto& argTypeNode : node->genericArgs) {

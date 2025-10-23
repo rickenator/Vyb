@@ -1436,6 +1436,30 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         return;
     }
     
+    // Handle soft() operation: creates mild<T> from our<T>
+    if (identCallee && identCallee->name == "soft" && node->arguments.size() == 1) {
+        std::cout << "DEBUG: Processing soft() operation in LLVM codegen" << std::endl;
+        
+        // Evaluate the argument to get the our<T> value
+        node->arguments[0]->accept(*this);
+        if (!m_currentLLVMValue) {
+            logError(node->arguments[0]->loc, "Argument to soft() evaluated to null");
+            return;
+        }
+        
+        llvm::Value* ourValue = m_currentLLVMValue;
+        
+        // For now, soft() just passes through the pointer
+        // TODO: In full implementation, this should:
+        // 1. Extract control block pointer from our<T>
+        // 2. Increment weak_count in control block
+        // 3. Return mild<T> struct with control block reference
+        // For simplicity, we're using the same pointer representation
+        m_currentLLVMValue = ourValue;
+        std::cout << "DEBUG: Successfully processed soft() operation - returned mild<T> pointer" << std::endl;
+        return;
+    }
+    
     // Special handling for println with auto-serialization
     if (identCallee && identCallee->name == "println" && node->arguments.size() == 1) {
         llvm::Value* arg = nullptr;
