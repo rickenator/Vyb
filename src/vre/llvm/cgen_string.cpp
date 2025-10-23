@@ -290,7 +290,33 @@ llvm::Value* LLVMCodegen::generateToStringCall(llvm::Value* value, llvm::Type* v
                 llvm::Value* typeNamePtr = builder->CreateBitCast(typeNameGlobal, int8PtrType);
                 
                 // Call JSON serialization with instance and type name
-                return builder->CreateCall(jsonFunc, {voidPtr, typeNamePtr}, "json.str");
+                llvm::Value* jsonCStr = builder->CreateCall(jsonFunc, {voidPtr, typeNamePtr}, "json.cstr");
+                
+                // Convert char* to Vyn String struct {char* data, int64_t length}
+                llvm::StructType* stringStructType = llvm::StructType::get(*context, {
+                    int8PtrType,  // data
+                    llvm::Type::getInt64Ty(*context)  // length
+                });
+                
+                // Call strlen to get length
+                llvm::FunctionType* strlenType = llvm::FunctionType::get(
+                    llvm::Type::getInt64Ty(*context),
+                    {int8PtrType},
+                    false
+                );
+                llvm::Function* strlenFunc = module->getFunction("strlen");
+                if (!strlenFunc) {
+                    strlenFunc = llvm::Function::Create(strlenType,
+                        llvm::Function::ExternalLinkage, "strlen", module.get());
+                }
+                llvm::Value* jsonLen = builder->CreateCall(strlenFunc, {jsonCStr}, "json.len");
+                
+                // Create String struct
+                llvm::Value* stringStruct = llvm::UndefValue::get(stringStructType);
+                stringStruct = builder->CreateInsertValue(stringStruct, jsonCStr, 0, "string.with_data");
+                stringStruct = builder->CreateInsertValue(stringStruct, jsonLen, 1, "string.complete");
+                
+                return stringStruct;
             }
         }
     }
