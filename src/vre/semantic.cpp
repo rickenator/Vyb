@@ -1200,6 +1200,35 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                         if (typeName->identifier) {
                             std::string typeNameStr = typeName->toString(); // Use full type with generic args
                             
+                            // Handle mild<T>.grab() and mild<T>.released() intrinsic methods
+                            if (typeNameStr.find("mild<") == 0) {
+                                if (methodName == "grab") {
+                                    // mild<T>.grab() returns our<T>
+                                    std::cout << "DEBUG: Setting return type for mild<T>.grab()" << std::endl;
+                                    // Extract T from mild<T>
+                                    if (!typeName->genericArgs.empty()) {
+                                        auto innerType = typeName->genericArgs[0].get();
+                                        // Create our<T> type
+                                        auto ourId = std::make_unique<ast::Identifier>(node->loc, "our");
+                                        std::vector<ast::TypeNodePtr> ourArgs;
+                                        ourArgs.push_back(innerType->clone());
+                                        auto resultType = new ast::TypeName(node->loc, std::move(ourId), std::move(ourArgs));
+                                        expressionTypes[node] = resultType;
+                                        node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
+                                        std::cout << "DEBUG: mild<T>.grab() returns " << resultType->toString() << std::endl;
+                                        return;
+                                    }
+                                } else if (methodName == "released") {
+                                    // mild<T>.released() returns Bool
+                                    std::cout << "DEBUG: Setting return type for mild<T>.released() to Bool" << std::endl;
+                                    auto boolType = new ast::TypeName(node->loc,
+                                        std::make_unique<ast::Identifier>(node->loc, "Bool"));
+                                    expressionTypes[node] = boolType;
+                                    node->type = std::shared_ptr<ast::TypeNode>(boolType->clone());
+                                    return;
+                                }
+                            }
+                            
                             // Look for concrete trait implementations
                             auto typeImplsIt = traitImpls.find(typeNameStr);
                             if (typeImplsIt != traitImpls.end()) {
@@ -1388,6 +1417,41 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             // Get the object's type
             auto objTypeIt = expressionTypes.find(memberExpr->object.get());
             if (objTypeIt != expressionTypes.end() && objTypeIt->second) {
+                
+                // Handle mild<T>.grab() and mild<T>.released() method calls
+                std::string objTypeStr = objTypeIt->second->toString();
+                std::string methodName = methodIdent->name;
+                if (objTypeStr.find("mild<") == 0) {
+                    if (methodName == "grab") {
+                        // mild<T>.grab() returns our<T>? (optional)
+                        // For now, just return the inner type wrapped in our<> (will be nil)
+                        // TODO: Implement proper optional/result type
+                        std::cout << "DEBUG: Setting return type for mild<T>.grab()" << std::endl;
+                        // Extract T from mild<T>
+                        if (auto typeName = dynamic_cast<ast::TypeName*>(objTypeIt->second)) {
+                            if (!typeName->genericArgs.empty()) {
+                                auto innerType = typeName->genericArgs[0].get();
+                                // Create our<T> type
+                                auto ourId = std::make_unique<ast::Identifier>(node->loc, "our");
+                                std::vector<ast::TypeNodePtr> ourArgs;
+                                ourArgs.push_back(innerType->clone());
+                                auto resultType = new ast::TypeName(node->loc, std::move(ourId), std::move(ourArgs));
+                                expressionTypes[node] = resultType;
+                                node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
+                                std::cout << "DEBUG: mild<T>.grab() returns " << resultType->toString() << std::endl;
+                                return;
+                            }
+                        }
+                    } else if (methodName == "released") {
+                        // mild<T>.released() returns Bool
+                        std::cout << "DEBUG: Setting return type for mild<T>.released() to Bool" << std::endl;
+                        auto boolType = new ast::TypeName(node->loc,
+                            std::make_unique<ast::Identifier>(node->loc, "Bool"));
+                        expressionTypes[node] = boolType;
+                        node->type = std::shared_ptr<ast::TypeNode>(boolType->clone());
+                        return;
+                    }
+                }
                 
                 // Check if the object's type is a Vec type
                 if (auto vecType = dynamic_cast<ast::VecType*>(objTypeIt->second)) {
@@ -1674,6 +1738,16 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
     std::cout << "DEBUG: MemberExpression type check: structTypeName=" << structTypeName 
               << ", fieldName=" << fieldName 
               << ", typeNodeKind=" << typeid(*it->second).name() << std::endl;
+    
+    // Handle mild<T>.grab() and mild<T>.released() intrinsic methods
+    if (structTypeName.find("mild<") == 0) {
+        if (fieldName == "grab" || fieldName == "released") {
+            std::cout << "DEBUG: Recognized mild<T>." << fieldName << "() method" << std::endl;
+            // These are intrinsic methods on mild<T>, allow them
+            // Type will be set in CallExpression visitor
+            return;
+        }
+    }
     
     // Check if the object's TYPE is a type parameter with bounds
     // This handles both direct variable access (clonedValue.show()) and chained access (self.value.show())

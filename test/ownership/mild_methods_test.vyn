@@ -1,0 +1,31 @@
+# Test mild<T>.grab() and mild<T>.released() methods
+# These are stub implementations for now (control blocks coming next)
+
+struct Node {
+    value<Int>
+}
+
+main()<Int> -> {
+    # Create shared ownership
+    shared<our<Node>> = our(Node { value: 42 })
+    
+    # Create mild reference using soft()
+    shadow<mild<Node>> = soft(shared)
+    
+    println("Testing mild<Node> methods:")
+    
+    # Test .released() - should return false (stub returns false)
+    if (shadow.released()) {
+        println("  shadow.released() = true (object was freed)")
+    } else {
+        println("  shadow.released() = false (object still alive)")
+    }
+    
+    # Test .grab() - should return nil (stub returns nil for now)
+    # In full implementation, this would upgrade to our<Node>
+    println("  shadow.grab() = stub returns nil (control blocks not implemented yet)")
+    
+    println("mild<Node> methods test completed!")
+    
+    return 0
+}

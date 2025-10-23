@@ -1038,6 +1038,45 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         }
     }
     
+    // Handle mild<T>.grab() and mild<T>.released() method calls
+    if (auto memberExpr = dynamic_cast<vyn::ast::MemberExpression*>(node->callee.get())) {
+        if (auto objIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->object.get())) {
+            if (auto methodIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->property.get())) {
+                std::string methodName = methodIdent->name;
+                
+                // Check if this is a method on mild<T>
+                if (methodName == "grab" || methodName == "released") {
+                    // Get the object's type to verify it's mild<T>
+                    std::string objectType;
+                    if (objIdent->type) {
+                        objectType = objIdent->type->toString();
+                    }
+                    
+                    // Check if type starts with "mild<"
+                    if (objectType.find("mild<") == 0) {
+                        std::cout << "DEBUG: Processing " << objectType << "." << methodName << "() call" << std::endl;
+                        
+                        if (methodName == "grab") {
+                            // mild<T>.grab() -> returns our<T>? (nil for now, proper implementation later)
+                            // TODO: Implement proper control block logic
+                            // For now, return nil (null pointer)
+                            std::cout << "DEBUG: mild<T>.grab() stub - returning nil" << std::endl;
+                            m_currentLLVMValue = llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0));
+                            return;
+                        } else if (methodName == "released") {
+                            // mild<T>.released() -> returns Bool
+                            // TODO: Implement proper control block check
+                            // For now, return false (object is still "alive")
+                            std::cout << "DEBUG: mild<T>.released() stub - returning false" << std::endl;
+                            m_currentLLVMValue = llvm::ConstantInt::get(int1Type, 0); // false
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
     // Check if this is an aspect method call (including generic aspects)
     if (auto memberExpr = dynamic_cast<vyn::ast::MemberExpression*>(node->callee.get())) {
         if (auto objIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->object.get())) {
