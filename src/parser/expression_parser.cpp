@@ -219,6 +219,7 @@ namespace vyn {
         bool skip_type_parsing = false;
         if (peek().type == TokenType::IDENTIFIER || peek().type == TokenType::KEYWORD_MY || 
             peek().type == TokenType::KEYWORD_THEIR || peek().type == TokenType::KEYWORD_OUR ||
+            peek().type == TokenType::KEYWORD_MILD ||
             peek().type == TokenType::KEYWORD_BORROW || peek().type == TokenType::KEYWORD_VIEW) {
             std::string identifier_name = peek().lexeme;
             
@@ -428,6 +429,7 @@ regular_array_literal:
         // Handle 'from<Type>(expr)' syntax, Typed Struct Literals, and Plain Identifiers
         if (peek().type == TokenType::IDENTIFIER || peek().type == TokenType::KEYWORD_MY || 
             peek().type == TokenType::KEYWORD_THEIR || peek().type == TokenType::KEYWORD_OUR ||
+            peek().type == TokenType::KEYWORD_MILD ||
             peek().type == TokenType::KEYWORD_BORROW || peek().type == TokenType::KEYWORD_VIEW) {
             token::Token current_id_token = peek(); // Peek, don't consume yet
 
@@ -1242,6 +1244,7 @@ bool ExpressionParser::is_expression_start(vyn::TokenType type) const {
         type == TokenType::KEYWORD_MY ||
         type == TokenType::KEYWORD_THEIR ||
         type == TokenType::KEYWORD_OUR ||
+        type == TokenType::KEYWORD_MILD ||
         type == TokenType::KEYWORD_BORROW ||
         type == TokenType::KEYWORD_VIEW ||
         type == TokenType::INT_LITERAL ||
