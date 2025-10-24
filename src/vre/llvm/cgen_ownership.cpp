@@ -283,6 +283,98 @@ void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
             std::cout << "DEBUG: No cleanup needed for borrowed reference: " << var.name << std::endl;
             break;
         }
+        
+        case ast::OwnershipKind::MILD: {
+            // Weak reference - decrement weak_count in control block
+            std::cout << "DEBUG: Cleaning up MILD ownership for variable: " << var.name << std::endl;
+            
+            // Load the control block pointer from the alloca
+            llvm::Value* controlBlockPtr = builder->CreateLoad(var.type, var.allocaInst, var.name + "_mild_cb_load");
+            
+            // Check if control block is null
+            llvm::Value* isNull = builder->CreateICmpEQ(controlBlockPtr,
+                llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0)),
+                var.name + "_mild_null_check");
+            
+            llvm::BasicBlock* cleanupBlock = llvm::BasicBlock::Create(*context, var.name + "_mild_cleanup", currentFunction);
+            llvm::BasicBlock* continueBlock = llvm::BasicBlock::Create(*context, var.name + "_mild_continue", currentFunction);
+            
+            builder->CreateCondBr(isNull, continueBlock, cleanupBlock);
+            
+            // Cleanup block: decrement weak_count atomically
+            builder->SetInsertPoint(cleanupBlock);
+            
+            // Reconstruct control block type: { i32, i32, i1, ptr }
+            std::vector<llvm::Type*> cbFields = {
+                llvm::Type::getInt32Ty(*context),  // strong_count
+                llvm::Type::getInt32Ty(*context),  // weak_count
+                llvm::Type::getInt1Ty(*context),   // object_freed
+                llvm::PointerType::get(*context, 0) // object_ptr
+            };
+            llvm::StructType* controlBlockType = llvm::StructType::get(*context, cbFields, /*isPacked=*/false);
+            
+            // Get pointer to weak_count (field 1)
+            llvm::Value* weakCountPtr = builder->CreateStructGEP(controlBlockType, controlBlockPtr, 1,
+                var.name + "_mild_weak_count_ptr");
+            
+            // Atomic decrement: weak_count--
+            llvm::AtomicRMWInst* decremented = builder->CreateAtomicRMW(
+                llvm::AtomicRMWInst::Sub,
+                weakCountPtr,
+                llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 1),
+                llvm::MaybeAlign(),
+                llvm::AtomicOrdering::AcquireRelease
+            );
+            
+            // Check if we just decremented to zero (returned value is OLD value)
+            llvm::Value* wasOne = builder->CreateICmpEQ(decremented,
+                llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 1),
+                var.name + "_mild_weak_was_one");
+            
+            llvm::BasicBlock* checkCBFreeBlock = llvm::BasicBlock::Create(*context, var.name + "_mild_check_cb_free", currentFunction);
+            llvm::BasicBlock* doneMildBlock = llvm::BasicBlock::Create(*context, var.name + "_mild_done", currentFunction);
+            
+            builder->CreateCondBr(wasOne, checkCBFreeBlock, doneMildBlock);
+            
+            // Check if control block can be freed (both counts must be zero)
+            builder->SetInsertPoint(checkCBFreeBlock);
+            
+            // Get pointer to strong_count (field 0)
+            llvm::Value* strongCountPtr = builder->CreateStructGEP(controlBlockType, controlBlockPtr, 0,
+                var.name + "_mild_strong_count_ptr");
+            
+            // Load strong_count
+            llvm::Value* strongCount = builder->CreateLoad(llvm::Type::getInt32Ty(*context), strongCountPtr,
+                var.name + "_mild_strong_count");
+            
+            // Free control block only if strong_count is also zero
+            llvm::Value* strongIsZero = builder->CreateICmpEQ(strongCount,
+                llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0),
+                var.name + "_mild_strong_is_zero");
+            
+            llvm::BasicBlock* freeCBBlock = llvm::BasicBlock::Create(*context, var.name + "_mild_free_cb", currentFunction);
+            llvm::BasicBlock* skipFreeCBBlock = llvm::BasicBlock::Create(*context, var.name + "_mild_skip_free_cb", currentFunction);
+            
+            builder->CreateCondBr(strongIsZero, freeCBBlock, skipFreeCBBlock);
+            
+            // Free control block
+            builder->SetInsertPoint(freeCBBlock);
+            llvm::Function* freeFunc = getOrCreateFreeFunction();
+            builder->CreateCall(freeFunc, {controlBlockPtr});
+            builder->CreateBr(skipFreeCBBlock);
+            
+            // Skip free block
+            builder->SetInsertPoint(skipFreeCBBlock);
+            builder->CreateBr(doneMildBlock);
+            
+            // Done with mild cleanup
+            builder->SetInsertPoint(doneMildBlock);
+            builder->CreateBr(continueBlock);
+            
+            // Continue block
+            builder->SetInsertPoint(continueBlock);
+            break;
+        }
     }
 }
 

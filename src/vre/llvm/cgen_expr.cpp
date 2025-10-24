@@ -1528,23 +1528,44 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
     if (identCallee && identCallee->name == "soft" && node->arguments.size() == 1) {
         std::cout << "DEBUG: Processing soft() operation in LLVM codegen" << std::endl;
         
-        // Evaluate the argument to get the our<T> value
+        // Evaluate the argument to get the our<T> value (control block pointer)
         node->arguments[0]->accept(*this);
         if (!m_currentLLVMValue) {
             logError(node->arguments[0]->loc, "Argument to soft() evaluated to null");
             return;
         }
         
-        llvm::Value* ourValue = m_currentLLVMValue;
+        llvm::Value* controlBlockPtr = m_currentLLVMValue;
         
-        // For now, soft() just passes through the pointer
-        // TODO: In full implementation, this should:
-        // 1. Extract control block pointer from our<T>
-        // 2. Increment weak_count in control block
-        // 3. Return mild<T> struct with control block reference
-        // For simplicity, we're using the same pointer representation
-        m_currentLLVMValue = ourValue;
-        std::cout << "DEBUG: Successfully processed soft() operation - returned mild<T> pointer" << std::endl;
+        // Soft() increments weak_count in the control block and returns mild<T>
+        // Control block: { i32 strong_count, i32 weak_count, i1 object_freed, ptr object_ptr }
+        
+        // Reconstruct control block type
+        std::vector<llvm::Type*> cbFields = {
+            llvm::Type::getInt32Ty(*context),  // strong_count
+            llvm::Type::getInt32Ty(*context),  // weak_count
+            llvm::Type::getInt1Ty(*context),   // object_freed
+            llvm::PointerType::get(*context, 0) // object_ptr
+        };
+        llvm::StructType* controlBlockType = llvm::StructType::get(*context, cbFields, /*isPacked=*/false);
+        
+        // Get pointer to weak_count (field 1)
+        llvm::Value* weakCountPtr = builder->CreateStructGEP(controlBlockType, controlBlockPtr, 1,
+            "soft_weak_count_ptr");
+        
+        // Atomic increment: weak_count++
+        builder->CreateAtomicRMW(
+            llvm::AtomicRMWInst::Add,
+            weakCountPtr,
+            llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 1),
+            llvm::MaybeAlign(),
+            llvm::AtomicOrdering::AcquireRelease
+        );
+        
+        // Return the control block pointer as mild<T>
+        // Both our<T> and mild<T> are represented as control block pointers
+        m_currentLLVMValue = controlBlockPtr;
+        std::cout << "DEBUG: Successfully processed soft() operation - incremented weak_count and returned mild<T> pointer" << std::endl;
         return;
     }
     
