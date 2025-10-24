@@ -253,22 +253,46 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
         ast::OwnershipKind ownership = ast::OwnershipKind::MY; // Default to MY ownership
         bool needsCleanup = false;
         
-        // Check if this is a Vec type that needs memory management
-        bool isVecType = false;
-        
-        // Check AST type information first
+        // Extract ownership from type annotation
         if (node->typeNode) {
             std::string typeString = node->typeNode->toString();
             std::cout << "DEBUG: Variable '" << node->id->name << "' has AST type: '" << typeString << "'" << std::endl;
+            
+            // Check for ownership type wrappers
+            if (auto* typeName = dynamic_cast<ast::TypeName*>(node->typeNode.get())) {
+                if (typeName->identifier) {
+                    std::string typeNameStr = typeName->identifier->name;
+                    
+                    // Detect ownership types
+                    if (typeNameStr == "my") {
+                        ownership = ast::OwnershipKind::MY;
+                        needsCleanup = true;
+                        std::cout << "DEBUG: Variable '" << node->id->name << "' has MY ownership - needs cleanup" << std::endl;
+                    } else if (typeNameStr == "our") {
+                        ownership = ast::OwnershipKind::OUR;
+                        needsCleanup = true;
+                        std::cout << "DEBUG: Variable '" << node->id->name << "' has OUR ownership - needs cleanup" << std::endl;
+                    } else if (typeNameStr == "their") {
+                        ownership = ast::OwnershipKind::THEIR;
+                        needsCleanup = false;
+                        std::cout << "DEBUG: Variable '" << node->id->name << "' has THEIR ownership - no cleanup" << std::endl;
+                    } else if (typeNameStr == "mild") {
+                        ownership = ast::OwnershipKind::MILD;
+                        needsCleanup = true;
+                        std::cout << "DEBUG: Variable '" << node->id->name << "' has MILD ownership - needs cleanup" << std::endl;
+                    }
+                }
+            }
+            
+            // Also check for Vec types that need cleanup
             if (typeString.find("Vec") != std::string::npos) {
-                isVecType = true;
                 needsCleanup = true;
-                std::cout << "DEBUG: Variable '" << node->id->name << "' is a Vec type (from AST) requiring cleanup" << std::endl;
+                std::cout << "DEBUG: Variable '" << node->id->name << "' is a Vec type requiring cleanup" << std::endl;
             }
         }
         
-        // Fall back to LLVM struct type name check
-        if (!isVecType) {
+        // Fall back to LLVM struct type name check for Vec
+        if (!needsCleanup) {
             if (auto structType = llvm::dyn_cast<llvm::StructType>(varType)) {
                 std::string typeName = structType->getName().str();
                 std::cout << "DEBUG: Variable '" << node->id->name << "' has struct type: '" << typeName << "'" << std::endl;
