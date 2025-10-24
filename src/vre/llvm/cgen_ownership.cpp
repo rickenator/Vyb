@@ -35,6 +35,19 @@ using namespace vyn;
 //
 // ============================================================================
 
+// Helper function to get or create control block struct type
+llvm::StructType* LLVMCodegen::getControlBlockType(llvm::Type* objectPtrType) {
+    // Control block: { i32 strong_count, i32 weak_count, i1 object_freed, T* object_ptr }
+    std::vector<llvm::Type*> fields = {
+        llvm::Type::getInt32Ty(*context),  // strong_count
+        llvm::Type::getInt32Ty(*context),  // weak_count
+        llvm::Type::getInt1Ty(*context),   // object_freed
+        objectPtrType                       // object_ptr (pointer to actual object)
+    };
+    
+    return llvm::StructType::get(*context, fields, /*isPacked=*/false);
+}
+
 // --- Scope Management ---
 void LLVMCodegen::enterScope() {
     std::cout << "DEBUG: Entering new scope (depth: " << scopeStack.size() + 1 << ")" << std::endl;

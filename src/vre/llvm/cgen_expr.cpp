@@ -1440,6 +1440,55 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
             // Return the pointer
             m_currentLLVMValue = structPtr;
             std::cout << "DEBUG: Successfully processed ownership constructor my() - allocated and returned pointer" << std::endl;
+        } else if (identCallee->name == "our") {
+            // For our(), allocate control block + object on heap
+            if (!structType->isStructTy()) {
+                logError(node->loc, "our() can only be used with struct types");
+                return;
+            }
+            
+            // Get malloc function
+            llvm::Function* mallocFunc = getOrCreateMallocFunction();
+            llvm::DataLayout dataLayout(module.get());
+            
+            // 1. Allocate memory for the object
+            uint64_t objectSize = dataLayout.getTypeAllocSize(structType);
+            llvm::Value* objectSizeValue = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), objectSize);
+            llvm::Value* mallocObjectPtr = builder->CreateCall(mallocFunc, {objectSizeValue}, "malloc_object");
+            llvm::Type* objectPtrType = llvm::PointerType::get(structType, 0);
+            llvm::Value* objectPtr = builder->CreateBitCast(mallocObjectPtr, objectPtrType, "object_ptr");
+            
+            // Store the struct value into allocated memory
+            builder->CreateStore(structValue, objectPtr);
+            
+            // 2. Allocate memory for control block
+            llvm::StructType* controlBlockType = getControlBlockType(objectPtrType);
+            uint64_t cbSize = dataLayout.getTypeAllocSize(controlBlockType);
+            llvm::Value* cbSizeValue = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), cbSize);
+            llvm::Value* mallocCBPtr = builder->CreateCall(mallocFunc, {cbSizeValue}, "malloc_cb");
+            llvm::Type* cbPtrType = llvm::PointerType::get(controlBlockType, 0);
+            llvm::Value* cbPtr = builder->CreateBitCast(mallocCBPtr, cbPtrType, "cb_ptr");
+            
+            // 3. Initialize control block fields: { strong_count=1, weak_count=0, object_freed=false, object_ptr }
+            llvm::Value* strongCountPtr = builder->CreateStructGEP(controlBlockType, cbPtr, 0, "strong_count_ptr");
+            builder->CreateStore(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 1), strongCountPtr);
+            
+            llvm::Value* weakCountPtr = builder->CreateStructGEP(controlBlockType, cbPtr, 1, "weak_count_ptr");
+            builder->CreateStore(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0), weakCountPtr);
+            
+            llvm::Value* objectFreedPtr = builder->CreateStructGEP(controlBlockType, cbPtr, 2, "object_freed_ptr");
+            builder->CreateStore(llvm::ConstantInt::get(llvm::Type::getInt1Ty(*context), 0), objectFreedPtr);
+            
+            llvm::Value* objectPtrFieldPtr = builder->CreateStructGEP(controlBlockType, cbPtr, 3, "object_ptr_field_ptr");
+            builder->CreateStore(objectPtr, objectPtrFieldPtr);
+            
+            // 4. Return the control block pointer (our<T> is represented as control block pointer)
+            m_currentLLVMValue = cbPtr;
+            std::cout << "DEBUG: Successfully processed ownership constructor our() - allocated control block and object" << std::endl;
+        } else if (identCallee->name == "their") {
+            // For their(), just pass through the value for now
+            // In a real implementation, these would have different semantics
+            std::cout << "DEBUG: Successfully processed ownership constructor their()" << std::endl;
         } else {
             // For their() and our(), just pass through the value for now
             // In a real implementation, these would have different semantics

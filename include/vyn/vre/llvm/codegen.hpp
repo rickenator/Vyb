@@ -311,6 +311,7 @@ private:
     llvm::Function* getOrCreateFreeFunction();
     llvm::Function* getOrCreateMallocFunction();
     llvm::Function* getOrCreateMemsetFunction();
+    llvm::StructType* getControlBlockType(llvm::Type* objectPtrType);
 
     // Async/await support
     struct AsyncState {
