@@ -37,11 +37,12 @@ using namespace vyn;
 
 // Helper function to get or create control block struct type
 llvm::StructType* LLVMCodegen::getControlBlockType(llvm::Type* objectPtrType) {
-    // Control block: { i32 strong_count, i32 weak_count, i1 object_freed, T* object_ptr }
+    // Control block: { i32 strong_count, i32 weak_count, i8 object_freed, T* object_ptr }
+    // Note: object_freed is i8 (not i1) because LLVM requires atomic loads to be byte-sized
     std::vector<llvm::Type*> fields = {
         llvm::Type::getInt32Ty(*context),  // strong_count
         llvm::Type::getInt32Ty(*context),  // weak_count
-        llvm::Type::getInt1Ty(*context),   // object_freed
+        llvm::Type::getInt8Ty(*context),   // object_freed (i8 for atomic compatibility)
         objectPtrType                       // object_ptr (pointer to actual object)
     };
     
@@ -181,11 +182,11 @@ void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
             // Cleanup block: decrement strong_count atomically
             builder->SetInsertPoint(cleanupBlock);
             
-            // Reconstruct control block type: { i32, i32, i1, ptr }
+            // Reconstruct control block type: { i32, i32, i8, ptr }
             std::vector<llvm::Type*> cbFields = {
                 llvm::Type::getInt32Ty(*context),  // strong_count
                 llvm::Type::getInt32Ty(*context),  // weak_count
-                llvm::Type::getInt1Ty(*context),   // object_freed
+                llvm::Type::getInt8Ty(*context),   // object_freed (i8 for atomic)
                 llvm::PointerType::get(*context, 0) // object_ptr
             };
             llvm::StructType* controlBlockType = llvm::StructType::get(*context, cbFields, /*isPacked=*/false);
@@ -232,7 +233,7 @@ void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
             llvm::Value* objectFreedPtr = builder->CreateStructGEP(controlBlockType, controlBlockPtr, 2,
                 var.name + "_obj_freed_ptr");
             builder->CreateStore(
-                llvm::ConstantInt::get(llvm::Type::getInt1Ty(*context), 1),
+                llvm::ConstantInt::get(llvm::Type::getInt8Ty(*context), 1),
                 objectFreedPtr);
             
             builder->CreateBr(checkCBFreeBlock);
@@ -304,11 +305,11 @@ void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
             // Cleanup block: decrement weak_count atomically
             builder->SetInsertPoint(cleanupBlock);
             
-            // Reconstruct control block type: { i32, i32, i1, ptr }
+            // Reconstruct control block type: { i32, i32, i8, ptr }
             std::vector<llvm::Type*> cbFields = {
                 llvm::Type::getInt32Ty(*context),  // strong_count
                 llvm::Type::getInt32Ty(*context),  // weak_count
-                llvm::Type::getInt1Ty(*context),   // object_freed
+                llvm::Type::getInt8Ty(*context),   // object_freed (i8 for atomic)
                 llvm::PointerType::get(*context, 0) // object_ptr
             };
             llvm::StructType* controlBlockType = llvm::StructType::get(*context, cbFields, /*isPacked=*/false);

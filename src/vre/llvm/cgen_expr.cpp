@@ -1065,10 +1065,54 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                             return;
                         } else if (methodName == "released") {
                             // mild<T>.released() -> returns Bool
-                            // TODO: Implement proper control block check
-                            // For now, return false (object is still "alive")
-                            std::cout << "DEBUG: mild<T>.released() stub - returning false" << std::endl;
-                            m_currentLLVMValue = llvm::ConstantInt::get(int1Type, 0); // false
+                            // Check object_freed flag in control block
+                            std::cout << "DEBUG: mild<T>.released() - checking object_freed flag" << std::endl;
+                            
+                            // Get the mild<T> value (control block pointer) from namedValues
+                            auto objIt = namedValues.find(objIdent->name);
+                            if (objIt == namedValues.end()) {
+                                logError(node->loc, "Unknown variable: " + objIdent->name);
+                                return;
+                            }
+                            
+                            // Load the control block pointer
+                            llvm::Value* controlBlockPtr = builder->CreateLoad(
+                                llvm::PointerType::get(*context, 0),
+                                objIt->second,
+                                objIdent->name + "_released_cb_load"
+                            );
+                            
+                            // Reconstruct control block type: { i32, i32, i8, ptr }
+                            std::vector<llvm::Type*> cbFields = {
+                                llvm::Type::getInt32Ty(*context),  // strong_count
+                                llvm::Type::getInt32Ty(*context),  // weak_count
+                                llvm::Type::getInt8Ty(*context),   // object_freed (i8 for atomic)
+                                llvm::PointerType::get(*context, 0) // object_ptr
+                            };
+                            llvm::StructType* controlBlockType = llvm::StructType::get(*context, cbFields, /*isPacked=*/false);
+                            
+                            // Get pointer to object_freed flag (field 2)
+                            llvm::Value* objectFreedPtr = builder->CreateStructGEP(controlBlockType, controlBlockPtr, 2,
+                                objIdent->name + "_released_obj_freed_ptr");
+                            
+                            // Load the object_freed flag with atomic acquire semantics
+                            llvm::LoadInst* objectFreedValue = builder->CreateLoad(
+                                llvm::Type::getInt8Ty(*context),
+                                objectFreedPtr,
+                                objIdent->name + "_released_obj_freed"
+                            );
+                            objectFreedValue->setAtomic(llvm::AtomicOrdering::Acquire);
+                            
+                            // Convert i8 to i1 (bool) for return
+                            llvm::Value* boolValue = builder->CreateICmpNE(
+                                objectFreedValue,
+                                llvm::ConstantInt::get(llvm::Type::getInt8Ty(*context), 0),
+                                objIdent->name + "_released_bool"
+                            );
+                            
+                            // Return the flag value (true if freed, false if alive)
+                            m_currentLLVMValue = boolValue;
+                            std::cout << "DEBUG: mild<T>.released() - returning object_freed flag" << std::endl;
                             return;
                         }
                     }
@@ -1477,7 +1521,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
             builder->CreateStore(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0), weakCountPtr);
             
             llvm::Value* objectFreedPtr = builder->CreateStructGEP(controlBlockType, cbPtr, 2, "object_freed_ptr");
-            builder->CreateStore(llvm::ConstantInt::get(llvm::Type::getInt1Ty(*context), 0), objectFreedPtr);
+            builder->CreateStore(llvm::ConstantInt::get(llvm::Type::getInt8Ty(*context), 0), objectFreedPtr);
             
             llvm::Value* objectPtrFieldPtr = builder->CreateStructGEP(controlBlockType, cbPtr, 3, "object_ptr_field_ptr");
             builder->CreateStore(objectPtr, objectPtrFieldPtr);
@@ -1538,13 +1582,13 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         llvm::Value* controlBlockPtr = m_currentLLVMValue;
         
         // Soft() increments weak_count in the control block and returns mild<T>
-        // Control block: { i32 strong_count, i32 weak_count, i1 object_freed, ptr object_ptr }
+        // Control block: { i32 strong_count, i32 weak_count, i8 object_freed, ptr object_ptr }
         
         // Reconstruct control block type
         std::vector<llvm::Type*> cbFields = {
             llvm::Type::getInt32Ty(*context),  // strong_count
             llvm::Type::getInt32Ty(*context),  // weak_count
-            llvm::Type::getInt1Ty(*context),   // object_freed
+            llvm::Type::getInt8Ty(*context),   // object_freed (i8 for atomic)
             llvm::PointerType::get(*context, 0) // object_ptr
         };
         llvm::StructType* controlBlockType = llvm::StructType::get(*context, cbFields, /*isPacked=*/false);
