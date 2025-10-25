@@ -1,0 +1,311 @@
+# Lambda Expressions and Closures in Vyn
+
+## Overview
+
+Vyn supports **lambda expressions** (anonymous functions) with **closure capture**, enabling functional programming patterns like map/filter/reduce, callbacks, and higher-order functions.
+
+## Syntax
+
+### Basic Lambda
+
+```vyn
+// Syntax: |param1, param2| -> expression
+add = |x, y| -> x + y
+
+result<Int> = add(5, 3)  // result = 8
+```
+
+### Lambda with Type Annotations
+
+Parameter types can be explicitly specified:
+
+```vyn
+// Optional type annotations for clarity
+multiply = |x<Int>, y<Int>| -> x * y
+```
+
+### Lambda with Block Body
+
+For multi-line lambdas, use a block with explicit `return`:
+
+```vyn
+compute = |n| -> {
+    result<Int> = n * 2
+    result = result + 1
+    return result
+}
+```
+
+### Empty Parameter List
+
+```vyn
+// No parameters: || -> expression
+getRandom = || -> 42
+```
+
+## Closure Capture
+
+Lambdas can **capture** variables from their enclosing scope, creating **closures**:
+
+```vyn
+makeAdder(base<Int>) -> {
+    // Lambda captures 'base' from outer scope
+    return |x| -> x + base
+}
+
+addTen = makeAdder(10)
+result<Int> = addTen(5)  // result = 15
+```
+
+### Capture Semantics
+
+- **Captured by value**: Variables are copied into the closure at creation time
+- **Ownership types**: Captured variables with ownership types (`my<T>`, `our<T>`, `mild<T>`) follow standard ownership rules
+- **Thread-safety**: Closures with `our<T>` captures use atomic reference counting
+
+**Example with ownership:**
+
+```vyn
+makeObserver(data<our<Data>>) -> {
+    // 'data' is captured - increments strong reference count
+    return || -> {
+        return data  // Returns shared reference
+    }
+}
+```
+
+## Higher-Order Functions
+
+Functions that accept or return lambdas:
+
+### Map
+
+```vyn
+map(arr<[Int]>, transform) -> {
+    result<[Int]> = []
+    for item in arr {
+        result.push(transform(item))
+    }
+    return result
+}
+
+numbers<[Int]> = [1, 2, 3, 4]
+doubled<[Int]> = map(numbers, |x| -> x * 2)  // [2, 4, 6, 8]
+```
+
+### Filter
+
+```vyn
+filter(arr<[Int]>, predicate) -> {
+    result<[Int]> = []
+    for item in arr {
+        if predicate(item) {
+            result.push(item)
+        }
+    }
+    return result
+}
+
+numbers<[Int]> = [1, 2, 3, 4, 5, 6]
+evens<[Int]> = filter(numbers, |x| -> x % 2 == 0)  // [2, 4, 6]
+```
+
+### Reduce
+
+```vyn
+reduce(arr<[Int]>, initial<Int>, accumulator) -> {
+    result<Int> = initial
+    for item in arr {
+        result = accumulator(result, item)
+    }
+    return result
+}
+
+numbers<[Int]> = [1, 2, 3, 4]
+sum<Int> = reduce(numbers, 0, |acc, x| -> acc + x)  // 10
+```
+
+## Async Lambdas
+
+Lambdas can be asynchronous when combined with `async`/`await`:
+
+```vyn
+// TODO: Async lambda syntax (future feature)
+// asyncOp<async fn(String) -> String> = async |name| -> {
+//     result<String> = await fetchData(name)
+//     return result
+// }
+```
+
+## Implementation Details
+
+### Parsing
+
+Lambdas are parsed in `parse_primary()` when a `|` (PIPE) token is encountered:
+
+1. Parse parameter list: `|param1, param2|`
+2. Optionally parse type annotations: `|x<Int>, y<String>|`
+3. Expect `->` arrow token
+4. Parse body (expression or block)
+5. Create `FunctionExpression` AST node
+
+### Semantic Analysis
+
+The semantic analyzer:
+
+1. **Detects captured variables**: Identifies identifiers used in lambda body that are not parameters
+2. **Type inference**: Infers parameter types from usage if not explicitly annotated
+3. **Closure validation**: Ensures captured variables are in scope and have valid lifetimes
+
+### Code Generation (LLVM)
+
+For each lambda:
+
+1. **Generate unique function**: Create LLVM function with mangled name (`lambda_1`, `lambda_2`, etc.)
+2. **Closure struct**: If captures exist, create heap-allocated struct containing captured values
+3. **Hidden parameter**: Pass closure struct as `i8*` first parameter
+4. **Extract captures**: In function body, bitcast and GEP to access captured values
+5. **Return function pointer**: Lambda value is function pointer (can be stored, passed, called)
+
+**Example IR for closure:**
+
+```llvm
+; Closure struct for: |x| -> x + base
+%closure_t = type { i32 }  ; Contains 'base' (Int)
+
+; Lambda function with closure parameter
+define i32 @lambda_1(i8* %closure_ptr, i32 %x) {
+entry:
+  ; Extract 'base' from closure
+  %closure = bitcast i8* %closure_ptr to %closure_t*
+  %base_ptr = getelementptr %closure_t, %closure_t* %closure, i32 0, i32 0
+  %base = load i32, i32* %base_ptr
+  
+  ; Compute: x + base
+  %result = add i32 %x, %base
+  ret i32 %result
+}
+```
+
+## Examples
+
+### Event Handlers
+
+```vyn
+struct Button {
+    onClick
+}
+
+counter<Int> = 0
+button<Button> = Button {
+    onClick: || -> {
+        counter = counter + 1
+        println("Clicked: " + counter)
+    }
+}
+```
+
+### Custom Iterators
+
+```vyn
+forEach(arr<[Int]>, action) -> {
+    for item in arr {
+        action(item)
+    }
+}
+
+numbers<[Int]> = [1, 2, 3]
+forEach(numbers, |n| -> println(n))
+```
+
+### Function Composition
+
+```vyn
+compose(f, g) -> {
+    return |x| -> f(g(x))
+}
+
+addTwo = |x| -> x + 2
+mulThree = |x| -> x * 3
+
+combined = compose(addTwo, mulThree)
+result<Int> = combined(5)  // (5 * 3) + 2 = 17
+```
+
+### Observer Pattern with Closures
+
+```vyn
+struct Subject {
+    observers
+    
+    notify(self, message<String>) -> {
+        for observer in self.observers {
+            observer(message)
+        }
+    }
+}
+
+subject<Subject> = Subject { observers: [] }
+
+// Add observers that capture different contexts
+name<String> = "Alice"
+subject.observers.push(|msg| -> {
+    println(name + " received: " + msg)
+})
+
+subject.notify("Hello!")  // "Alice received: Hello!"
+```
+
+## Current Limitations
+
+1. **Codegen not yet implemented**: Lambda parsing and semantic analysis work, but LLVM code generation is TODO
+2. **No async lambdas**: Async support requires integration with the async runtime
+3. **No move semantics**: Closures currently copy captures; move semantics for `my<T>` captures not yet supported
+4. **No generic lambdas**: Type parameters on lambdas not yet supported
+
+## Future Enhancements
+
+- **Move capture**: Transfer ownership of captured variables into the lambda
+- **Mutable capture**: Allow modifying captured variables
+- **Generic lambdas**: `|x<T>| -> ...` with type parameters
+- **Async lambdas**: `async |x| -> await process(x)`
+
+## Comparison with Other Languages
+
+### Rust
+
+```rust
+// Rust
+let add = |x, y| x + y;
+let adder = |x| move |y| x + y;  // Move capture
+```
+
+### JavaScript
+
+```javascript
+// JavaScript
+const add = (x, y) => x + y;
+const adder = (x) => (y) => x + y;  // Closure
+```
+
+### Python
+
+```python
+# Python
+add = lambda x, y: x + y
+adder = lambda x: lambda y: x + y  # Closure
+```
+
+### Vyn
+
+```vyn
+// Vyn
+add = |x, y| -> x + y
+adder = |x| -> |y| -> x + y  // Closure
+```
+
+## See Also
+
+- [AST Overview](AST_Overview.md) - `FunctionExpression` node
+- [Ownership System](PROPOSAL_OWNERSHIP_KEYWORDS.md) - Ownership in closures
+- [Async/Await](ROADMAP.md) - Future async lambda support
