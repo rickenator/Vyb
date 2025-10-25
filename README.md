@@ -23,7 +23,7 @@ Here's a comparison of Vyn against several modern systems languages, showing key
 
 | Language | Templates / Generics               | Memory Model                                                       | Concurrency                            | Syntax Style                      | Unique Feature                                     | Comment                                                      |
 | -------- | ---------------------------------- | ------------------------------------------------------------------ | -------------------------------------- | --------------------------------- | -------------------------------------------------- | ------------------------------------------------------------ |
-| **Vyn**  | Monomorphized templates everywhere | Planned hybrid GC (lazy, scoped) + manual free + RC                | Async/await, planned actors, threads, channels | Indentation-based, optional braces | Planned self-hosting compiler; dual VM/JIT backend, hybrid indentation | Combines zero-cost templates with flexible memory management |
+| **Vyn**  | Monomorphized templates everywhere | Ownership types (my/our/mild/their) + reference counting        | Async/await, planned actors, threads, channels | Indentation-based, optional braces | Planned self-hosting compiler; dual VM/JIT backend, hybrid indentation | Combines zero-cost templates with flexible memory management |
 | **Rust** | Monomorphized generics             | Ownership/borrow checker; optional `Arc`/`Rc`                      | `async`/`await`, threads, channels     | C-style braces, macros            | Zero-cost abstractions; strong compile-time safety | No global GC; all memory safety enforced at compile time     |
 | **D**    | Runtime & compile-time templates   | GC by default; `@nogc` for manual alloc/free                       | `std.concurrency` fibers, threads      | C-style; mixins                   | Compile-time function execution (CTFE)             | Blend of high-level features with systems control            |
 | **C++**  | Templates & concepts (20+)         | Manual `new`/`delete`; smart pointers (`unique_ptr`, `shared_ptr`) | Threads, coroutines (`co_await`)       | C-style braces                    | Metaprogramming via templates & concepts           | Extensive ecosystem; highest portability                     |
@@ -38,8 +38,8 @@ Vyn is a statically typed, template-metaprogramming language designed to compile
 
 * **Terse Syntax**: Indentation-based or bracket-based blocks, optional semicolons, clear constructs.
 * **Templates Everywhere**: Monomorphized generics for types and functions.
-* **Canonical Ownership Syntax**: Unified `my(expr)`, `our(expr)`, `view`, `borrow` operators for memory management.
-* **Hybrid Memory Model**: Planned default GC, optional manual free, reference counting, and scoped cleanup.
+* **Canonical Ownership Syntax**: Unified `my(expr)`, `our(expr)`, `soft()`, `view`, `borrow` operators for memory management.
+* **Reference Counting with Weak References**: `our<T>` for shared ownership, `mild<T>` for weak references that don't prevent cleanup.
 * **Concurrency Built In**: Async/await, with planned actors, threads, and typed channels.
 * **Self-Hosting & Extensible**: Planned compiler written in Vyn; add backends, macros, and modules at runtime.
 

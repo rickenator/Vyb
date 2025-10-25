@@ -208,6 +208,78 @@ namespace vyn {
             return std::make_unique<ast::IfExpression>(loc, std::move(condition), std::move(then_branch), std::move(else_branch));
         }
 
+        // Handle lambda expressions: |param1, param2| -> expression
+        // Syntax: |x, y| -> x + y  or  |x| -> { return x * 2 }
+        if (check(TokenType::PIPE)) {
+            SourceLocation lambda_loc = peek().location;
+            bool isAsync = false;  // TODO: Support async keyword before pipe
+            
+            consume(); // consume opening |
+            
+            // Parse parameters
+            std::vector<ast::FunctionParameter> params;
+            
+            if (!check(TokenType::PIPE)) {
+                // Parse parameter list: x, y, z
+                do {
+                    if (check(TokenType::PIPE)) {
+                        break; // End of parameters
+                    }
+                    
+                    if (!check(TokenType::IDENTIFIER)) {
+                        throw error(peek(), "Expected parameter name in lambda expression");
+                    }
+                    
+                    token::Token param_token = consume();
+                    auto param_name = std::make_unique<ast::Identifier>(
+                        param_token.location, param_token.lexeme
+                    );
+                    
+                    // Optional type annotation: |x<Int>, y<String>|
+                    ast::TypeNodePtr param_type = nullptr;
+                    if (match(TokenType::LT)) {
+                        // Create TypeParser to parse the type
+                        TypeParser type_parser(tokens_, pos_, current_file_path_, *this);
+                        param_type = type_parser.parse();
+                        
+                        expect(TokenType::GT, "Expected '>' after parameter type in lambda");
+                    }
+                    
+                    params.emplace_back(std::move(param_name), std::move(param_type));
+                    
+                } while (match(TokenType::COMMA));
+            }
+            
+            expect(TokenType::PIPE, "Expected closing '|' after lambda parameters");
+            
+            // Expect arrow: ->
+            expect(TokenType::ARROW, "Expected '->' after lambda parameters");
+            
+            // Parse body: either { block } or expression
+            ast::ExprPtr body;
+            if (check(TokenType::LBRACE) && stmt_parser_) {
+                // Block body: |x| -> { result<Int> = x * 2; return result }
+                auto block_stmt = stmt_parser_->parse_block();
+                body = std::make_unique<ast::BlockExpression>(
+                    block_stmt->loc, 
+                    std::move(block_stmt),
+                    std::vector<std::unique_ptr<ast::TrapClause>>{},
+                    nullptr // no ensure clause
+                );
+            } else {
+                // Expression body: |x| -> x * 2
+                body = parse_expression();
+                if (!body) {
+                    throw error(peek(), "Expected expression or block after '->' in lambda");
+                }
+            }
+            
+            // Return FunctionExpression (represents lambda)
+            return std::make_unique<ast::FunctionExpression>(
+                lambda_loc, std::move(params), std::move(body), isAsync
+            );
+        }
+
         // Try to parse TypeName(arguments) - Constructor Call
         // This requires being able to parse a TypeNode first.
         // We need a TypeParser instance here.
