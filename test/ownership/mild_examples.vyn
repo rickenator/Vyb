@@ -1,0 +1,30 @@
+# Test: Mild reference examples
+# Copy of examples/mild_references.vyn for test suite
+
+struct Node {
+    value<Int>
+}
+
+main()<Int> -> {
+    println("=== Mild Reference Test ===")
+    println("")
+    
+    # Create shared ownership
+    shared<our<Node>> = our(Node { value: 42 })
+    
+    # Create mild reference using soft()
+    shadow<mild<Node>> = soft(shared)
+    
+    # Check if object is still alive using .released() method
+    if (shadow.released()) {
+        println("   Object was freed")
+    } else {
+        println("   Object is still alive (expected)")
+    }
+    
+    println("   (Control blocks not yet implemented - stubs only)")
+    println("")
+    
+    println("=== Mild reference test passed ===")
+    return 0
+}

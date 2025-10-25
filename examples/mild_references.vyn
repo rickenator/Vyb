@@ -1,0 +1,48 @@
+// Example: Mild References (soft ownership)
+// Demonstrates mild<T> for breaking reference cycles and safe weak references
+
+struct Node {
+    value<Int>
+}
+
+main()<Int> -> {
+    println("=== Mild Reference Examples ===")
+    println("")
+    
+    // Example 1: Basic mild reference usage
+    println("1. Basic mild<T> usage:")
+    
+    // Create shared ownership
+    shared<our<Node>> = our(Node { value: 42 })
+    
+    // Create mild reference using soft()
+    shadow<mild<Node>> = soft(shared)
+    
+    // Check if object is still alive using .released() method
+    if (shadow.released()) {
+        println("   Object was freed")
+    } else {
+        println("   Object is still alive (expected)")
+    }
+    
+    println("   (Control blocks not yet implemented - stubs only)")
+    println("")
+    
+    // Example 2: Tree nodes with mild parent references
+    println("2. Tree structure concept:")
+    println("   Parent nodes use our<Node> (strong ownership)")
+    println("   Child nodes reference parent via mild<Node> (breaks cycle)")
+    println("   This prevents memory leaks from circular references")
+    println("")
+    
+    // Example 3: Observer pattern concept
+    println("3. Observer pattern concept:")
+    println("   Subject owns its data (our<Subject>)")
+    println("   Observers hold mild<Subject> references")
+    println("   Observers don't prevent subject cleanup")
+    println("   If subject is freed, observers can detect via .released()")
+    println("")
+    
+    println("=== All examples completed ===")
+    return 0
+}

@@ -1,0 +1,58 @@
+// Example: Generics in Vyn
+// NOTE: Generic FUNCTIONS work (v0.4.1), but generic STRUCTS are not yet fully implemented
+// This example shows the syntax - full struct monomorphization coming soon
+
+// Generic struct: Pair holds two values of the same type
+template Pair<T> {
+    struct Pair {
+        first<T>,
+        second<T>
+    }
+}
+
+// Generic struct: Box wrapper around a single value  
+template Box<T> {
+    struct Box {
+        value<T>
+    }
+}
+
+// Generic struct: Container with metadata
+template Container<T> {
+    struct Container {
+        count<Int>,
+        capacity<Int>
+    }
+}
+
+// Generic struct: Result type (like Rust)
+template Result<T, E> {
+    struct Result {
+        value<T>,
+        is_ok<Bool>
+    }
+}
+
+main()<Int> -> {
+    println("=== Vyn Generics Syntax Examples ===")
+    println("")
+    println("Generic FUNCTIONS are fully implemented (v0.4.1)")
+    println("Generic STRUCTS are syntax-complete, awaiting monomorphization")
+    println("")
+    
+    println("Syntax shown above:")
+    println("  - template Pair<T> { struct Pair { first<T>, second<T> } }")
+    println("  - template Box<T> { struct Box { value<T> } }")
+    println("  - template Container<T> { ... }")
+    println("  - template Result<T, E> { ... } // Multiple type params")
+    println("")
+    
+    println("TODO: Implement struct monomorphization to enable:")
+    println("  int_pair<Pair<Int>> = Pair { first: 10, second: 20 }")
+    println("  box<Box<String>> = Box { value: hello }")
+    println("  result<Result<Int, String>> = Result { value: 42, is_ok: true }")
+    println("")
+    
+    println("See test/template/ for generic function examples that DO work")
+    return 0
+}

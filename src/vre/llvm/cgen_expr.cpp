@@ -1057,18 +1057,154 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                         std::cout << "DEBUG: Processing " << objectType << "." << methodName << "() call" << std::endl;
                         
                         if (methodName == "grab") {
-                            // mild<T>.grab() -> returns our<T>? (nil for now, proper implementation later)
-                            // TODO: Implement proper control block logic
-                            // For now, return nil (null pointer)
-                            std::cout << "DEBUG: mild<T>.grab() stub - returning nil" << std::endl;
-                            m_currentLLVMValue = llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0));
+                            // mild<T>.grab() -> returns our<T>? (nil if object freed, strong ref if alive)
+                            std::cout << "DEBUG: mild<T>.grab() - attempting to upgrade to our<T>" << std::endl;
+                            
+                            // Get the mild<T> value (control block pointer)
+                            auto objIt = namedValues.find(objIdent->name);
+                            if (objIt == namedValues.end()) {
+                                logError(node->loc, "Unknown variable: " + objIdent->name);
+                                return;
+                            }
+                            
+                            // Load the control block pointer
+                            llvm::Value* controlBlockPtr = builder->CreateLoad(
+                                llvm::PointerType::get(*context, 0),
+                                objIt->second,
+                                objIdent->name + "_grab_cb_load"
+                            );
+                            
+                            // Reconstruct control block type: { i32, i32, i8, ptr }
+                            std::vector<llvm::Type*> cbFields = {
+                                llvm::Type::getInt32Ty(*context),  // strong_count
+                                llvm::Type::getInt32Ty(*context),  // weak_count
+                                llvm::Type::getInt8Ty(*context),   // object_freed (i8 for atomic)
+                                llvm::PointerType::get(*context, 0) // object_ptr
+                            };
+                            llvm::StructType* controlBlockType = llvm::StructType::get(*context, cbFields, /*isPacked=*/false);
+                            
+                            // Get pointer to object_freed (field 2)
+                            llvm::Value* objectFreedPtr = builder->CreateStructGEP(
+                                controlBlockType,
+                                controlBlockPtr,
+                                2,
+                                objIdent->name + "_grab_obj_freed_ptr"
+                            );
+                            
+                            // Atomic load object_freed flag (acquire semantics)
+                            llvm::LoadInst* freedValue = builder->CreateLoad(
+                                llvm::Type::getInt8Ty(*context),
+                                objectFreedPtr,
+                                objIdent->name + "_grab_obj_freed"
+                            );
+                            freedValue->setAtomic(llvm::AtomicOrdering::Acquire);
+                            
+                            // Convert i8 to bool
+                            llvm::Value* isFreed = builder->CreateICmpNE(
+                                freedValue,
+                                llvm::ConstantInt::get(llvm::Type::getInt8Ty(*context), 0),
+                                objIdent->name + "_grab_is_freed"
+                            );
+                            
+                            // Create blocks for conditional logic
+                            llvm::Function* function = builder->GetInsertBlock()->getParent();
+                            llvm::BasicBlock* objAliveBlock = llvm::BasicBlock::Create(*context, "grab_alive", function);
+                            llvm::BasicBlock* objFreedBlock = llvm::BasicBlock::Create(*context, "grab_freed", function);
+                            llvm::BasicBlock* grabContinue = llvm::BasicBlock::Create(*context, "grab_continue", function);
+                            
+                            // Branch based on object_freed flag
+                            builder->CreateCondBr(isFreed, objFreedBlock, objAliveBlock);
+                            
+                            // Object still alive: increment strong_count and return control block
+                            builder->SetInsertPoint(objAliveBlock);
+                            
+                            // Get pointer to strong_count (field 0)
+                            llvm::Value* strongCountPtr = builder->CreateStructGEP(
+                                controlBlockType,
+                                controlBlockPtr,
+                                0,
+                                objIdent->name + "_grab_strong_count_ptr"
+                            );
+                            
+                            // Atomic increment: strong_count++
+                            builder->CreateAtomicRMW(
+                                llvm::AtomicRMWInst::Add,
+                                strongCountPtr,
+                                llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 1),
+                                llvm::MaybeAlign(),
+                                llvm::AtomicOrdering::AcquireRelease
+                            );
+                            
+                            std::cout << "DEBUG: mild<T>.grab() - incremented strong_count, returning our<T>" << std::endl;
+                            
+                            // Return the control block as our<T>
+                            llvm::Value* ourPtr = controlBlockPtr;
+                            builder->CreateBr(grabContinue);
+                            
+                            // Object freed: return nil (null pointer)
+                            builder->SetInsertPoint(objFreedBlock);
+                            std::cout << "DEBUG: mild<T>.grab() - object freed, returning nil" << std::endl;
+                            llvm::Value* nilPtr = llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0));
+                            builder->CreateBr(grabContinue);
+                            
+                            // Continue block: phi node to select result
+                            builder->SetInsertPoint(grabContinue);
+                            llvm::PHINode* resultPhi = builder->CreatePHI(llvm::PointerType::get(*context, 0), 2, "grab_result");
+                            resultPhi->addIncoming(ourPtr, objAliveBlock);
+                            resultPhi->addIncoming(nilPtr, objFreedBlock);
+                            
+                            m_currentLLVMValue = resultPhi;
                             return;
                         } else if (methodName == "released") {
                             // mild<T>.released() -> returns Bool
-                            // TODO: Implement proper control block check
-                            // For now, return false (object is still "alive")
-                            std::cout << "DEBUG: mild<T>.released() stub - returning false" << std::endl;
-                            m_currentLLVMValue = llvm::ConstantInt::get(int1Type, 0); // false
+                            // Check object_freed flag in control block
+                            std::cout << "DEBUG: mild<T>.released() - checking object_freed flag" << std::endl;
+                            
+                            // Get the mild<T> value (control block pointer) from namedValues
+                            auto objIt = namedValues.find(objIdent->name);
+                            if (objIt == namedValues.end()) {
+                                logError(node->loc, "Unknown variable: " + objIdent->name);
+                                return;
+                            }
+                            
+                            // Load the control block pointer
+                            llvm::Value* controlBlockPtr = builder->CreateLoad(
+                                llvm::PointerType::get(*context, 0),
+                                objIt->second,
+                                objIdent->name + "_released_cb_load"
+                            );
+                            
+                            // Reconstruct control block type: { i32, i32, i8, ptr }
+                            std::vector<llvm::Type*> cbFields = {
+                                llvm::Type::getInt32Ty(*context),  // strong_count
+                                llvm::Type::getInt32Ty(*context),  // weak_count
+                                llvm::Type::getInt8Ty(*context),   // object_freed (i8 for atomic)
+                                llvm::PointerType::get(*context, 0) // object_ptr
+                            };
+                            llvm::StructType* controlBlockType = llvm::StructType::get(*context, cbFields, /*isPacked=*/false);
+                            
+                            // Get pointer to object_freed flag (field 2)
+                            llvm::Value* objectFreedPtr = builder->CreateStructGEP(controlBlockType, controlBlockPtr, 2,
+                                objIdent->name + "_released_obj_freed_ptr");
+                            
+                            // Load the object_freed flag with atomic acquire semantics
+                            llvm::LoadInst* objectFreedValue = builder->CreateLoad(
+                                llvm::Type::getInt8Ty(*context),
+                                objectFreedPtr,
+                                objIdent->name + "_released_obj_freed"
+                            );
+                            objectFreedValue->setAtomic(llvm::AtomicOrdering::Acquire);
+                            
+                            // Convert i8 to i1 (bool) for return
+                            llvm::Value* boolValue = builder->CreateICmpNE(
+                                objectFreedValue,
+                                llvm::ConstantInt::get(llvm::Type::getInt8Ty(*context), 0),
+                                objIdent->name + "_released_bool"
+                            );
+                            
+                            // Return the flag value (true if freed, false if alive)
+                            m_currentLLVMValue = boolValue;
+                            std::cout << "DEBUG: mild<T>.released() - returning object_freed flag" << std::endl;
                             return;
                         }
                     }
@@ -1440,6 +1576,55 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
             // Return the pointer
             m_currentLLVMValue = structPtr;
             std::cout << "DEBUG: Successfully processed ownership constructor my() - allocated and returned pointer" << std::endl;
+        } else if (identCallee->name == "our") {
+            // For our(), allocate control block + object on heap
+            if (!structType->isStructTy()) {
+                logError(node->loc, "our() can only be used with struct types");
+                return;
+            }
+            
+            // Get malloc function
+            llvm::Function* mallocFunc = getOrCreateMallocFunction();
+            llvm::DataLayout dataLayout(module.get());
+            
+            // 1. Allocate memory for the object
+            uint64_t objectSize = dataLayout.getTypeAllocSize(structType);
+            llvm::Value* objectSizeValue = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), objectSize);
+            llvm::Value* mallocObjectPtr = builder->CreateCall(mallocFunc, {objectSizeValue}, "malloc_object");
+            llvm::Type* objectPtrType = llvm::PointerType::get(structType, 0);
+            llvm::Value* objectPtr = builder->CreateBitCast(mallocObjectPtr, objectPtrType, "object_ptr");
+            
+            // Store the struct value into allocated memory
+            builder->CreateStore(structValue, objectPtr);
+            
+            // 2. Allocate memory for control block
+            llvm::StructType* controlBlockType = getControlBlockType(objectPtrType);
+            uint64_t cbSize = dataLayout.getTypeAllocSize(controlBlockType);
+            llvm::Value* cbSizeValue = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), cbSize);
+            llvm::Value* mallocCBPtr = builder->CreateCall(mallocFunc, {cbSizeValue}, "malloc_cb");
+            llvm::Type* cbPtrType = llvm::PointerType::get(controlBlockType, 0);
+            llvm::Value* cbPtr = builder->CreateBitCast(mallocCBPtr, cbPtrType, "cb_ptr");
+            
+            // 3. Initialize control block fields: { strong_count=1, weak_count=0, object_freed=false, object_ptr }
+            llvm::Value* strongCountPtr = builder->CreateStructGEP(controlBlockType, cbPtr, 0, "strong_count_ptr");
+            builder->CreateStore(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 1), strongCountPtr);
+            
+            llvm::Value* weakCountPtr = builder->CreateStructGEP(controlBlockType, cbPtr, 1, "weak_count_ptr");
+            builder->CreateStore(llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0), weakCountPtr);
+            
+            llvm::Value* objectFreedPtr = builder->CreateStructGEP(controlBlockType, cbPtr, 2, "object_freed_ptr");
+            builder->CreateStore(llvm::ConstantInt::get(llvm::Type::getInt8Ty(*context), 0), objectFreedPtr);
+            
+            llvm::Value* objectPtrFieldPtr = builder->CreateStructGEP(controlBlockType, cbPtr, 3, "object_ptr_field_ptr");
+            builder->CreateStore(objectPtr, objectPtrFieldPtr);
+            
+            // 4. Return the control block pointer (our<T> is represented as control block pointer)
+            m_currentLLVMValue = cbPtr;
+            std::cout << "DEBUG: Successfully processed ownership constructor our() - allocated control block and object" << std::endl;
+        } else if (identCallee->name == "their") {
+            // For their(), just pass through the value for now
+            // In a real implementation, these would have different semantics
+            std::cout << "DEBUG: Successfully processed ownership constructor their()" << std::endl;
         } else {
             // For their() and our(), just pass through the value for now
             // In a real implementation, these would have different semantics
@@ -1479,23 +1664,44 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
     if (identCallee && identCallee->name == "soft" && node->arguments.size() == 1) {
         std::cout << "DEBUG: Processing soft() operation in LLVM codegen" << std::endl;
         
-        // Evaluate the argument to get the our<T> value
+        // Evaluate the argument to get the our<T> value (control block pointer)
         node->arguments[0]->accept(*this);
         if (!m_currentLLVMValue) {
             logError(node->arguments[0]->loc, "Argument to soft() evaluated to null");
             return;
         }
         
-        llvm::Value* ourValue = m_currentLLVMValue;
+        llvm::Value* controlBlockPtr = m_currentLLVMValue;
         
-        // For now, soft() just passes through the pointer
-        // TODO: In full implementation, this should:
-        // 1. Extract control block pointer from our<T>
-        // 2. Increment weak_count in control block
-        // 3. Return mild<T> struct with control block reference
-        // For simplicity, we're using the same pointer representation
-        m_currentLLVMValue = ourValue;
-        std::cout << "DEBUG: Successfully processed soft() operation - returned mild<T> pointer" << std::endl;
+        // Soft() increments weak_count in the control block and returns mild<T>
+        // Control block: { i32 strong_count, i32 weak_count, i8 object_freed, ptr object_ptr }
+        
+        // Reconstruct control block type
+        std::vector<llvm::Type*> cbFields = {
+            llvm::Type::getInt32Ty(*context),  // strong_count
+            llvm::Type::getInt32Ty(*context),  // weak_count
+            llvm::Type::getInt8Ty(*context),   // object_freed (i8 for atomic)
+            llvm::PointerType::get(*context, 0) // object_ptr
+        };
+        llvm::StructType* controlBlockType = llvm::StructType::get(*context, cbFields, /*isPacked=*/false);
+        
+        // Get pointer to weak_count (field 1)
+        llvm::Value* weakCountPtr = builder->CreateStructGEP(controlBlockType, controlBlockPtr, 1,
+            "soft_weak_count_ptr");
+        
+        // Atomic increment: weak_count++
+        builder->CreateAtomicRMW(
+            llvm::AtomicRMWInst::Add,
+            weakCountPtr,
+            llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 1),
+            llvm::MaybeAlign(),
+            llvm::AtomicOrdering::AcquireRelease
+        );
+        
+        // Return the control block pointer as mild<T>
+        // Both our<T> and mild<T> are represented as control block pointers
+        m_currentLLVMValue = controlBlockPtr;
+        std::cout << "DEBUG: Successfully processed soft() operation - incremented weak_count and returned mild<T> pointer" << std::endl;
         return;
     }
     
