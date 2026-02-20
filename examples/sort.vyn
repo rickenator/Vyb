@@ -1,0 +1,77 @@
+// Insertion Sort in Vyn
+//
+// Demonstrates a functional-style insertion sort that builds a new
+// sorted Vec<Int> without needing an in-place set() operation.
+// Uses only: Vec::new(), push(), get(), len() — all available in v0.4.x.
+//
+// Algorithm: for each input element, insert it into its correct
+// position in an already-sorted output Vec.
+
+// Insert `val` into `sorted` (already sorted ascending), returning
+// a new Vec with val in the correct position.
+insert_sorted(sorted<Vec<Int>>, val<Int>)<Vec<Int>> -> {
+    result<Vec<Int>> = Vec::new()
+    inserted<Bool> = false
+    i<Int> = 0
+    while (i < sorted.len()) {
+        if (!inserted && val <= sorted.get(i)) {
+            result.push(val)
+            inserted = true
+        }
+        result.push(sorted.get(i))
+        i = i + 1
+    }
+    if (!inserted) {
+        result.push(val)
+    }
+    return result
+}
+
+// Sort a Vec<Int> in ascending order using insertion sort.
+sort_ints(nums<Vec<Int>>)<Vec<Int>> -> {
+    sorted<Vec<Int>> = Vec::new()
+    i<Int> = 0
+    while (i < nums.len()) {
+        sorted = insert_sorted(sorted, nums.get(i))
+        i = i + 1
+    }
+    return sorted
+}
+
+// Return true if nums is sorted in non-decreasing order.
+is_sorted(nums<Vec<Int>>)<Bool> -> {
+    i<Int> = 1
+    while (i < nums.len()) {
+        if (nums.get(i) < nums.get(i - 1)) {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+main()<Int> -> {
+    nums<Vec<Int>> = Vec::new()
+    nums.push(64)
+    nums.push(34)
+    nums.push(25)
+    nums.push(12)
+    nums.push(22)
+    nums.push(11)
+    nums.push(90)
+
+    println("Insertion Sort — Vyn Example")
+    println("=============================")
+    println("Input:  " + nums.to_string())
+
+    sorted<Vec<Int>> = sort_ints(nums)
+    println("Sorted: " + sorted.to_string())
+
+    if (is_sorted(sorted)) {
+        println("Verification: PASSED")
+    } else {
+        println("Verification: FAILED")
+    }
+
+    return 0
+}

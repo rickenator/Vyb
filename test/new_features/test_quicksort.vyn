@@ -1,29 +1,17 @@
-// Quicksort in Vyn — Functional style using Vec<Int>
-//
-// This example demonstrates:
-//   - Recursive function calls
-//   - Vec<Int> operations (push, get, len)
-//   - Struct-free algorithm design
-//   - Proper Vyn name-first function syntax
-//
-// Note: Uses Int directly rather than a generic Comparable aspect,
-// since aspect bounds on generic functions are still in progress (see ROADMAP.md).
-// A generic version using aspect Comparable will be the canonical form once
-// generic monomorphization with bounds validation is complete.
+// @test: Quicksort
+// @description: Recursive quicksort on Vec<Int>; verifies output is sorted by checking pairwise order
+// @category: algorithms, vec
+// @expect: pass
+// @expect-output: 1
 
-// Partition nums into three Vecs: less-than, equal-to, greater-than pivot
 quicksort(nums<Vec<Int>>)<Vec<Int>> -> {
     if (nums.len() <= 1) {
         return nums
     }
-
-    // Pick middle element as pivot (reduces worst-case on sorted input)
     pivot<Int> = nums.get(nums.len() / 2)
-
     left<Vec<Int>>  = Vec::new()
     equal<Vec<Int>> = Vec::new()
     right<Vec<Int>> = Vec::new()
-
     i<Int> = 0
     while (i < nums.len()) {
         elem<Int> = nums.get(i)
@@ -36,11 +24,8 @@ quicksort(nums<Vec<Int>>)<Vec<Int>> -> {
         }
         i = i + 1
     }
-
     left_sorted<Vec<Int>>  = quicksort(left)
     right_sorted<Vec<Int>> = quicksort(right)
-
-    // Concatenate: left_sorted ++ equal ++ right_sorted
     result<Vec<Int>> = Vec::new()
     i = 0
     while (i < left_sorted.len()) {
@@ -60,7 +45,6 @@ quicksort(nums<Vec<Int>>)<Vec<Int>> -> {
     return result
 }
 
-// Verify that a Vec<Int> is sorted in non-decreasing order
 is_sorted(nums<Vec<Int>>)<Bool> -> {
     i<Int> = 1
     while (i < nums.len()) {
@@ -83,19 +67,11 @@ main()<Int> -> {
     nums.push(2)
     nums.push(6)
     nums.push(4)
-
-    println("Quicksort — Vyn Example")
-    println("=======================")
-    println("Input:  " + nums.to_string())
-
     sorted<Vec<Int>> = quicksort(nums)
-    println("Sorted: " + sorted.to_string())
-
     if (is_sorted(sorted)) {
-        println("Verification: PASSED")
+        println_int(1)
     } else {
-        println("Verification: FAILED")
+        println_int(0)
     }
-
     return 0
 }

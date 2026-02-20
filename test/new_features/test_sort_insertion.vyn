@@ -1,0 +1,60 @@
+// @test: Insertion Sort
+// @description: Sort Vec<Int> using functional insertion sort; verify result is sorted and sum matches
+// @category: algorithms, vec
+// @expect: pass
+// @expect-output: 12
+
+// Insert val into already-sorted Vec, returning a new sorted Vec
+insert_sorted(sorted<Vec<Int>>, val<Int>)<Vec<Int>> -> {
+    result<Vec<Int>> = Vec::new()
+    inserted<Bool> = false
+    i<Int> = 0
+    while (i < sorted.len()) {
+        if (!inserted && val <= sorted.get(i)) {
+            result.push(val)
+            inserted = true
+        }
+        result.push(sorted.get(i))
+        i = i + 1
+    }
+    if (!inserted) {
+        result.push(val)
+    }
+    return result
+}
+
+sort_ints(nums<Vec<Int>>)<Vec<Int>> -> {
+    sorted<Vec<Int>> = Vec::new()
+    i<Int> = 0
+    while (i < nums.len()) {
+        sorted = insert_sorted(sorted, nums.get(i))
+        i = i + 1
+    }
+    return sorted
+}
+
+main()<Int> -> {
+    nums<Vec<Int>> = Vec::new()
+    nums.push(4)
+    nums.push(2)
+    nums.push(5)
+    nums.push(1)
+
+    sorted<Vec<Int>> = sort_ints(nums)
+
+    // Verify ascending order and compute sum
+    sum<Int> = 0
+    ok<Bool> = true
+    i<Int> = 0
+    while (i < sorted.len()) {
+        sum = sum + sorted.get(i)
+        if (i > 0 && sorted.get(i) < sorted.get(i - 1)) {
+            ok = false
+        }
+        i = i + 1
+    }
+
+    // sum = 1+2+4+5 = 12
+    println_int(sum)
+    return 0
+}
