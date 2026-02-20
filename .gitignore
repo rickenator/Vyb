@@ -5,6 +5,7 @@ build
 .project
 # Backup files
 *.bak
+*.backup
 # Generated LLVM IR files
 *.ll
 _codeql_build_dir/

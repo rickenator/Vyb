@@ -1,0 +1,98 @@
+// Stack Data Structure in Vyn
+//
+// Demonstrates struct composition with Vec<Int> as backing storage.
+// All stack operations are free functions taking `their<Stack>` (borrowed)
+// or `Stack` (by value for read-only queries).
+//
+// This pattern—struct + free functions using `borrow`—is idiomatic Vyn:
+// method dispatch via aspect/bind can layer on top once the aspect system
+// is complete, but the underlying logic is identical.
+
+struct Stack {
+    items<Vec<Int>>,
+    size<Int>
+}
+
+// Create a new empty stack.
+stack_new()<Stack> -> {
+    return Stack {
+        items = Vec::new(),
+        size  = 0
+    }
+}
+
+// Push val onto the top of the stack.
+stack_push(s<their<Stack>>, val<Int>)<Void> -> {
+    s.items.push(val)
+    s.size = s.size + 1
+}
+
+// Pop and return the top value.  Returns -1 if the stack is empty.
+// (A proper implementation would use Option<Int> once sum types land.)
+stack_pop(s<their<Stack>>)<Int> -> {
+    if (s.size == 0) {
+        return -1
+    }
+    top<Int> = s.items.get(s.size - 1)
+    s.items.pop()
+    s.size = s.size - 1
+    return top
+}
+
+// Return the top value without removing it.  Returns -1 if empty.
+stack_peek(s<Stack>)<Int> -> {
+    if (s.size == 0) {
+        return -1
+    }
+    return s.items.get(s.size - 1)
+}
+
+// Return true if the stack has no elements.
+stack_empty(s<Stack>)<Bool> -> {
+    return s.size == 0
+}
+
+main()<Int> -> {
+    stack<Stack> = stack_new()
+
+    println("Stack Example — Vyn")
+    println("====================")
+
+    // Push three values
+    stack_push(borrow stack, 10)
+    stack_push(borrow stack, 20)
+    stack_push(borrow stack, 30)
+
+    println("After push(10), push(20), push(30)")
+    println("  size: " + stack.size.to_string())
+    println("  peek: " + stack_peek(stack).to_string())
+    println("")
+
+    // Pop values (LIFO order: 30, 20, 10)
+    v1<Int> = stack_pop(borrow stack)
+    println("pop → " + v1.to_string())
+
+    v2<Int> = stack_pop(borrow stack)
+    println("pop → " + v2.to_string())
+
+    println("  size after two pops: " + stack.size.to_string())
+    println("")
+
+    // Push more values to show continued use
+    stack_push(borrow stack, 100)
+    stack_push(borrow stack, 200)
+    println("After push(100), push(200)")
+    println("  size: " + stack.size.to_string())
+    println("  peek: " + stack_peek(stack).to_string())
+    println("")
+
+    // Drain the stack
+    println("Draining:")
+    while (!stack_empty(stack)) {
+        val<Int> = stack_pop(borrow stack)
+        println("  pop → " + val.to_string())
+    }
+
+    println("Is empty: " + stack_empty(stack).to_string())
+    return 0
+}

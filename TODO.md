@@ -501,6 +501,7 @@ For Vyn to be considered production-ready at 1.0, **all of the following must be
 
 ### Post-1.0 Roadmap
 - [ ] Channels + actors (design doc first!)
+- [ ] Networking + Sockets (see section below)
 - [ ] Self-hosting compiler (Vyn written in Vyn)
 - [ ] Macros / metaprogramming
 - [ ] Package registry
@@ -509,6 +510,63 @@ For Vyn to be considered production-ready at 1.0, **all of the following must be
 - [ ] Compile-time function evaluation (CTFE)
 - [ ] `pipe` operator (`|>`)
 - [ ] `with` scope blocks
+
+---
+
+## Networking and Sockets
+
+Networking is a post-1.0 feature that **depends entirely on FFI being complete first**.
+Raw sockets are POSIX system calls (`socket`, `connect`, `bind`, `recv`, `send`), so Vyn
+networking is FFI + a thin standard-library wrapper — not a language feature per se.
+
+### Design Approach (Vyn-native)
+
+Once `extern "C"` FFI lands (v0.5), networking follows naturally:
+
+```vyn
+// stdlib/net/tcp.vyn — thin wrapper over POSIX sockets
+extern "C" {
+    socket(domain<Int>, type<Int>, protocol<Int>)<Int>
+    connect(sockfd<Int>, addr<loc<SockAddr>>, addrlen<Int>)<Int>
+    send(sockfd<Int>, buf<loc<Void>>, len<Int>, flags<Int>)<Int>
+    recv(sockfd<Int>, buf<loc<Void>>, len<Int>, flags<Int>)<Int>
+    close(fd<Int>)<Int>
+}
+
+struct TcpStream {
+    fd<Int>
+}
+
+// Higher-level async API (requires real event loop in async runtime)
+async tcp_connect(host<String>, port<Int>)<TcpStream> -> {
+    // ... resolve address, call connect(), wrap in TcpStream
+}
+```
+
+### Networking Roadmap
+
+- [ ] **v0.5 — FFI foundation** (`extern "C"` blocks, C type mapping)
+- [ ] **v0.5 — Raw socket FFI bindings** — `stdlib/net/raw.vyn` wrapping POSIX socket API
+- [ ] **v0.6 — `TcpStream` / `UdpSocket`** — Safe Vyn wrappers with `fail`/`trap` error handling
+- [ ] **v0.6 — `TcpListener`** — Server-side accept loop integrated with async runtime
+- [ ] **v0.6 — Async I/O** — Non-blocking socket I/O using the async executor (requires real event loop)
+- [ ] **v0.7 — HTTP/1.1 client** — Built on `TcpStream`, pure Vyn implementation
+- [ ] **Post-1.0 — TLS** — Via `extern "C"` bindings to OpenSSL or mbedTLS
+- [ ] **Post-1.0 — UDP multicast, raw packets** — Advanced socket options
+
+### Key Design Decisions
+
+**Q: Is networking a language feature or a library?**
+Networking is *stdlib*, not a language feature. The only language feature required is
+`extern "C"` FFI, which is planned for v0.5. Everything else is library code written in Vyn.
+
+**Q: How do errors surface?**
+Socket errors surface as Vyn `fail`/`trap`: failable functions return `{value, error}` pairs.
+There is no exception for network I/O — the `fail`/`trap` system handles it uniformly.
+
+**Q: What about async I/O?**
+Async socket I/O requires a real event loop in the Vyn async runtime (currently a stub).
+Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `TcpStream`.
 
 ---
 

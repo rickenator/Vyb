@@ -1,0 +1,48 @@
+// @test: Stack Data Structure
+// @description: Stack using struct + Vec<Int>; push, pop, peek, empty operations
+// @category: data_structures, struct, vec
+// @expect: pass
+// @expect-output: 30
+
+struct Stack {
+    items<Vec<Int>>,
+    size<Int>
+}
+
+stack_new()<Stack> -> {
+    return Stack { items = Vec::new(), size = 0 }
+}
+
+stack_push(s<their<Stack>>, val<Int>)<Void> -> {
+    s.items.push(val)
+    s.size = s.size + 1
+}
+
+stack_pop(s<their<Stack>>)<Int> -> {
+    if (s.size == 0) {
+        return -1
+    }
+    top<Int> = s.items.get(s.size - 1)
+    s.items.pop()
+    s.size = s.size - 1
+    return top
+}
+
+stack_peek(s<Stack>)<Int> -> {
+    if (s.size == 0) {
+        return -1
+    }
+    return s.items.get(s.size - 1)
+}
+
+main()<Int> -> {
+    s<Stack> = stack_new()
+    stack_push(borrow s, 10)
+    stack_push(borrow s, 20)
+    stack_push(borrow s, 30)
+
+    // Peek should return 30 without removing it
+    top<Int> = stack_peek(s)
+    println_int(top)
+    return 0
+}

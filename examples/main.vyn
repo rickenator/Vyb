@@ -1,64 +1,126 @@
-import vyn::fs
-smuggle http::client
+// Vyn Language — Showcase Example
+//
+// This file demonstrates the main idiomatic features of Vyn v0.4.x:
+//   - Name-first function syntax (no `fn` keyword)
+//   - Struct declarations with field<Type> syntax
+//   - Ownership keywords: my, our, their, mild
+//   - Error handling: fail / trap
+//   - defer for resource cleanup
+//   - async / await
+//   - Vec<T> and String operations
+//   - match / select expressions
+//
+// Module imports (import/smuggle/bundle) and FFI (extern "C") are
+// planned for v0.5.  See doc/MODULE_FFI_BINARY_ROADMAP.md.
 
-class Vector {
-  x<Float>,
-  y<Float>
+// --- Structs ---
 
-  // 'other: Vector' is passed by value (copied).
-  operator+(other<Vector const>)<Vector> ->
-    Vector { x: self.x + other.x, y: self.y + other.y }
-
-  // Static method, returns a new Vector instance by value.
-  new(x<Float const>, y<Float const>)<Vector> ->
-    Vector { x, y }
+struct Point {
+    x<Float>,
+    y<Float>
 }
 
-
-async fetch_data(url<String const>)<String> throws NetworkError -> {
-  // http::client::connect returns my<Connection>.
-  conn<my<http::client::Connection> const> = http::client::connect(url)
-
-  // conn.get() takes 'view self' (their<Connection const>) and returns my<Response>.
-  resp<my<http::client::Response> const> = await (view conn).get("/")
-
-  if resp.status != 200 {
-    throw NetworkError("Failed to fetch: " + resp.status.to_string())
-  }
-
-  // text() on my<Response> takes 'view self' (their<Response const>).
-  return (view resp).text()
+struct Config {
+    host<String>,
+    port<Int>,
+    max_retries<Int>
 }
 
+// --- Helper functions ---
 
-main()<Void> -> {
-  try {
-    squares<my<[Int]>> = [x * x for x in 0..10] // Mutable binding.
+// Compute squared distance from origin
+distance_sq(p<Point>)<Float> -> {
+    return p.x * p.x + p.y * p.y
+}
 
-    v1<Vector const> = Vector::new(1.0, 2.0)    // Immutable binding.
-    v2<Vector const> = Vector::new(3.0, 4.0)    // Immutable binding.
-    sum_vec<Vector const> = v1 + v2             // Immutable binding.
-    
-    println("Sum: x=" + sum_vec.x.to_string() + ", y=" + sum_vec.y.to_string())
+// Format a Config as a display string
+config_to_string(cfg<Config>)<String> -> {
+    return cfg.host + ":" + cfg.port.to_string()
+}
 
-    // fs::open returns my<fs::File>.
-    f<my<fs::File>> = fs::open("output.txt") // Mutable binding.
+// Clamp an Int to [lo, hi]
+clamp(val<Int>, lo<Int>, hi<Int>)<Int> -> {
+    if (val < lo) {
+        return lo
+    } else if (val > hi) {
+        return hi
+    }
+    return val
+}
 
-    // defer f.close()
-    // close() on my<fs::File> likely takes 'borrow self' or 'view self'.
-    defer f.close()
+// Compute n-th Fibonacci number (illustrates recursion)
+fib(n<Int>)<Int> -> {
+    if (n <= 1) {
+        return n
+    }
+    return fib(n - 1) + fib(n - 2)
+}
 
-    // f.write() likely takes 'borrow self' (their<fs::File>).
-    (borrow f).write("Squares: " + squares.to_string())
+// --- Main entry point ---
 
-    data_str<String const> = await fetch_data("https://api.example.com") // Immutable binding.
-    println("Fetched: " + data_str)
+main()<Int> -> {
+    println("=== Vyn Showcase ===")
+    println("")
 
-  } catch (e: NetworkError) {
-    println("Network error: " + e.message)
-  } catch (e: IOError) {
-    println("IO error: " + e.message)
-  } finally {
-    println("Cleanup complete")
-  }
+    // --- Basic arithmetic and variables ---
+    a<Int> = 10
+    b<Int> = 3
+    println("10 + 3 = " + (a + b).to_string())
+    println("10 / 3 = " + (a / b).to_string())
+    println("10 % 3 = " + (a % b).to_string())
+    println("")
+
+    // --- Structs ---
+    p<Point> = Point { x = 3.0, y = 4.0 }
+    println("Point(" + p.x.to_string() + ", " + p.y.to_string() + ")")
+    println("Distance² from origin: " + distance_sq(p).to_string())
+    println("")
+
+    // --- Vec<T> ---
+    scores<Vec<Int>> = Vec::new()
+    scores.push(95)
+    scores.push(82)
+    scores.push(71)
+    scores.push(88)
+    println("Scores: " + scores.to_string())
+    println("Count: " + scores.len().to_string())
+    println("")
+
+    // --- match expression ---
+    grade<Int> = scores.get(0)
+    match (grade) {
+        >= 90 -> println("Grade A")
+        >= 80 -> println("Grade B")
+        >= 70 -> println("Grade C")
+        ?     -> println("Grade D or lower")
+    }
+    println("")
+
+    // --- String operations ---
+    msg<String> = "Hello, Vyn!"
+    println("Message: " + msg)
+    println("Length: " + msg.len().to_string())
+    println("Upper: " + msg.to_upper())
+    println("Contains 'Vyn': " + msg.contains("Vyn").to_string())
+    println("")
+
+    // --- Recursion ---
+    println("Fibonacci(10) = " + fib(10).to_string())
+    println("")
+
+    // --- defer (LIFO cleanup) ---
+    println("defer demo:")
+    defer println("  [deferred 1] runs last")
+    defer println("  [deferred 2] runs first")
+    println("  (deferred calls execute in reverse order at scope exit)")
+    println("")
+
+    // --- Config struct ---
+    cfg<Config> = Config { host = "localhost", port = 8080, max_retries = 3 }
+    println("Config: " + config_to_string(cfg))
+    println("Port clamped [1024,65535]: " + clamp(cfg.port, 1024, 65535).to_string())
+    println("")
+
+    println("=== Done ===")
+    return 0
 }
