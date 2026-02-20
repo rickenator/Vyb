@@ -1,0 +1,18 @@
+// @test: Recursion - factorial
+// @description: Test recursive function computing factorial
+// @category: functions
+// @expect: pass
+// @expect-output: 120
+
+factorial(n<Int>)<Int> -> {
+    if (n <= 1) {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+
+main()<Int> -> {
+    result<Int> = factorial(5)
+    println_int(result)
+    return 0
+}

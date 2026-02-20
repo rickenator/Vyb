@@ -1,0 +1,12 @@
+// @test: String contains
+// @description: Test String::contains() checks for substring
+// @category: string
+// @expect: pass
+
+main()<Int> -> {
+    haystack<String> = String::from_bytes("hello world", 11)
+    needle<String> = String::from_bytes("world", 5)
+    result<Bool> = haystack.contains(needle)
+    println_bool(result)
+    return 0
+}

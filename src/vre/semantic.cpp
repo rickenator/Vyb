@@ -3818,6 +3818,15 @@ void SemanticAnalyzer::visit(ast::PanicStatement* node) {
     // This will be tracked in control flow analysis
 }
 
+void SemanticAnalyzer::visit(ast::DeferStatement* node) {
+    if (!node->statement) {
+        addError("defer statement requires a body", node);
+        return;
+    }
+    // Validate the deferred statement semantically
+    node->statement->accept(*this);
+}
+
 void SemanticAnalyzer::visit(ast::TypeNode* node) {
     // This is a base class, specific derived type visitors should be called.
     // If this is ever called directly, it might indicate an issue or a need

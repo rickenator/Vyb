@@ -1,0 +1,13 @@
+// @test: Math min and max
+// @description: Test min and max functions on integers
+// @category: math
+// @expect: pass
+// @expect-output: 3
+
+main()<Int> -> {
+    a<Int> = min(3, 7)
+    b<Int> = max(3, 7)
+    println_int(a)
+    println_int(b)
+    return 0
+}

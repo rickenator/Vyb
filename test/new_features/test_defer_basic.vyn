@@ -1,0 +1,11 @@
+// @test: Defer basic functionality
+// @description: Test that defer runs cleanup code before function exit
+// @category: control_flow, defer
+// @expect: pass
+// @expect-output: cleanup done
+
+main()<Int> -> {
+    defer println("cleanup done")
+    println("before return")
+    return 0
+}

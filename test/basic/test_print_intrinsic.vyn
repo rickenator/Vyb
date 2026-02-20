@@ -1,0 +1,11 @@
+// @test: Print intrinsic no-newline
+// @description: Test print() outputs text without a trailing newline
+// @category: basic, io
+// @expect: pass
+// @expect-output: Hello, World!
+
+main()<Int> -> {
+    print("Hello, ")
+    println("World!")
+    return 0
+}

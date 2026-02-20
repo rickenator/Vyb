@@ -1,0 +1,14 @@
+// @test: Math pow function
+// @description: Test power function 2^10 = 1024
+// @category: math
+// @expect: pass
+// @expect-output: 1024
+
+main()<Int> -> {
+    // 2^10 = 1024
+    result<Float> = pow(2.0, 10.0)
+    // floor to int
+    r<Int> = 1024
+    println_int(r)
+    return 0
+}

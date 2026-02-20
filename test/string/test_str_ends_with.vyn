@@ -1,0 +1,13 @@
+// @test: String ends_with
+// @description: Test String::ends_with() suffix check
+// @category: string
+// @expect: pass
+// @expect-output: true
+
+main()<Int> -> {
+    s<String> = String::from_bytes("hello world", 11)
+    suffix<String> = String::from_bytes("world", 5)
+    result<Bool> = s.ends_with(suffix)
+    println_bool(result)
+    return 0
+}

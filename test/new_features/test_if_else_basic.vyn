@@ -1,0 +1,15 @@
+// @test: If-else basic
+// @description: Test basic if-else control flow
+// @category: control_flow
+// @expect: pass
+// @expect-output: yes
+
+main()<Int> -> {
+    x<Int> = 10
+    if (x > 5) {
+        println("yes")
+    } else {
+        println("no")
+    }
+    return 0
+}

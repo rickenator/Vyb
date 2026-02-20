@@ -1,0 +1,11 @@
+// @test: Math abs function
+// @description: Test absolute value for integers and verify result
+// @category: math
+// @expect: pass
+// @expect-output: 5
+
+main()<Int> -> {
+    x<Int> = abs(-5)
+    println_int(x)
+    return 0
+}

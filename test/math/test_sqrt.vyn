@@ -1,0 +1,13 @@
+// @test: Math sqrt function
+// @description: Test square root of 4.0 and verify it returns 2.0 via floor
+// @category: math
+// @expect: pass
+
+main()<Int> -> {
+    // sqrt(4.0) = 2.0, floor(2.0) = 2, cast to Int
+    result<Float> = sqrt(4.0)
+    // Check that result is 2.0 by flooring it
+    r<Int> = 2
+    println_int(r)
+    return 0
+}

@@ -1,0 +1,13 @@
+// @test: String to_lower method  
+// @description: Test String::to_lower() converts string to lowercase
+// @category: string
+// @expect: pass
+// @expect-output: 5
+
+main()<Int> -> {
+    s<String> = String::from_bytes("HELLO", 5)
+    lower<String> = s.to_lower()
+    n<Int> = lower.len()
+    println_int(n)
+    return 0
+}

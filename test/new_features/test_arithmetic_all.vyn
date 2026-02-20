@@ -1,0 +1,21 @@
+// @test: Integer arithmetic operations
+// @description: Test all basic arithmetic operations
+// @category: basic, arithmetic
+// @expect: pass
+// @expect-output: 7
+
+main()<Int> -> {
+    a<Int> = 10
+    b<Int> = 3
+    add<Int> = a + b
+    sub<Int> = a - b
+    mul<Int> = a * b
+    div<Int> = a / b
+    mod<Int> = a % b
+    println_int(add)  // 13
+    println_int(sub)  // 7
+    println_int(mul)  // 30
+    println_int(div)  // 3
+    println_int(mod)  // 1
+    return 0
+}

@@ -1,0 +1,17 @@
+// @test: Struct construction and field access
+// @description: Test struct creation and reading fields
+// @category: structs
+// @expect: pass
+// @expect-output: 3
+
+struct Point {
+    x<Int>,
+    y<Int>
+}
+
+main()<Int> -> {
+    p<Point> = Point{ x: 1, y: 2 }
+    sum<Int> = p.x + p.y
+    println_int(sum)
+    return 0
+}

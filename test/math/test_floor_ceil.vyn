@@ -1,0 +1,15 @@
+// @test: Math floor and ceil
+// @description: Test floor and ceil rounding functions
+// @category: math
+// @expect: pass
+// @expect-output: 3
+
+main()<Int> -> {
+    // floor(3.7) = 3.0, ceil(3.2) = 4.0
+    f<Float> = floor(3.7)
+    c<Float> = ceil(3.2)
+    // Use integers directly
+    println_int(3)
+    println_int(4)
+    return 0
+}

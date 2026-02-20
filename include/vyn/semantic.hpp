@@ -284,6 +284,7 @@ public:
     void visit(ast::EnsureClause* node) override;
     void visit(ast::RethrowStatement* node) override;
     void visit(ast::PanicStatement* node) override;
+    void visit(ast::DeferStatement* node) override;
 
     // Expressions
     void visit(ast::Identifier* node) override;

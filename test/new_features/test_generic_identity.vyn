@@ -1,0 +1,15 @@
+// @test: Generic function with type parameter
+// @description: Test a generic function that works with different types
+// @category: generics
+// @expect: pass
+// @expect-output: 42
+
+identity<T>(x<T>)<T> -> {
+    return x
+}
+
+main()<Int> -> {
+    n<Int> = identity(42)
+    println_int(n)
+    return 0
+}

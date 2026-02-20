@@ -1,0 +1,14 @@
+// @test: For loop C-style
+// @description: Test C-style for loop counting
+// @category: control_flow
+// @expect: pass
+// @expect-output: 5
+
+main()<Int> -> {
+    sum<Int> = 0
+    for (i = 0; i < 5; i = i + 1) {
+        sum = sum + 1
+    }
+    println_int(sum)
+    return 0
+}

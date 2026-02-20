@@ -1,0 +1,11 @@
+// @test: println_int intrinsic
+// @description: Test println_int() outputs an integer with newline
+// @category: basic, io
+// @expect: pass
+// @expect-output: 42
+
+main()<Int> -> {
+    x<Int> = 42
+    println_int(x)
+    return 0
+}

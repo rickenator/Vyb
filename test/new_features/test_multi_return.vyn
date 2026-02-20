@@ -1,0 +1,15 @@
+// @test: Multiple return values
+// @description: Test function returning multiple values as tuple
+// @category: functions, tuples
+// @expect: pass
+
+divmod(a<Int>, b<Int>)<Int, Int> -> {
+    return a / b, a % b
+}
+
+main()<Int> -> {
+    q<Int>, r<Int> = divmod(17, 5)
+    println_int(q)
+    println_int(r)
+    return 0
+}

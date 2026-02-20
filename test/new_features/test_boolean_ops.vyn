@@ -1,0 +1,17 @@
+// @test: Boolean operations
+// @description: Test logical AND, OR, NOT operations
+// @category: basic, boolean
+// @expect: pass
+// @expect-output: true
+
+main()<Int> -> {
+    a<Bool> = true
+    b<Bool> = false
+    c<Bool> = a && !b
+    println_bool(c)
+    d<Bool> = a || b
+    println_bool(d)
+    e<Bool> = !a
+    println_bool(e)
+    return 0
+}

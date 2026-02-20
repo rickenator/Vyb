@@ -1,0 +1,14 @@
+// @test: Range-based for loop
+// @description: Test range-based for loop sum
+// @category: control_flow
+// @expect: pass
+// @expect-output: 10
+
+main()<Int> -> {
+    sum<Int> = 0
+    for (i in 1..4) {
+        sum = sum + i
+    }
+    println_int(sum)
+    return 0
+}

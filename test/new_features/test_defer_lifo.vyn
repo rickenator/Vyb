@@ -1,0 +1,12 @@
+// @test: Defer LIFO order
+// @description: Multiple defers run in reverse (LIFO) order
+// @category: control_flow, defer
+// @expect: pass
+// @expect-output: third
+
+main()<Int> -> {
+    defer println("first")
+    defer println("second")
+    defer println("third")
+    return 0
+}

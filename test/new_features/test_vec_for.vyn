@@ -1,0 +1,18 @@
+// @test: Vec iteration with for loop
+// @description: Test iterating over Vec elements
+// @category: vec, control_flow
+// @expect: pass
+// @expect-output: 6
+
+main()<Int> -> {
+    v<Vec<Int>> = Vec::new()
+    v.push(1)
+    v.push(2)
+    v.push(3)
+    sum<Int> = 0
+    for (item in v) {
+        sum = sum + item
+    }
+    println_int(sum)
+    return 0
+}

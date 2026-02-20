@@ -107,6 +107,7 @@ public:
     void visit(vyn::ast::FunctionType* node) override {};
     void visit(vyn::ast::OptionalType* node) override {};
     void visit(vyn::ast::AssertStatement* node) override {};
+    void visit(vyn::ast::DeferStatement* node) override {};
 };
 
 class DummyLLVMCodegen : public vyn::LLVMCodegen {
@@ -129,6 +130,7 @@ public:
     void visit(vyn::ast::YieldStatement* node) override {};
     void visit(vyn::ast::YieldReturnStatement* node) override {};
     void visit(vyn::ast::AssertStatement* node) override {};
+    void visit(vyn::ast::DeferStatement* node) override {};
     void visit(vyn::ast::AspectDeclaration* node) override {};
     void visit(vyn::ast::NamespaceDeclaration* node) override {};
     void visit(vyn::ast::TypeName* node) override {};

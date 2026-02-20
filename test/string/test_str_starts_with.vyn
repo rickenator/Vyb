@@ -1,0 +1,13 @@
+// @test: String starts_with
+// @description: Test String::starts_with() prefix check
+// @category: string
+// @expect: pass
+// @expect-output: true
+
+main()<Int> -> {
+    s<String> = String::from_bytes("hello world", 11)
+    prefix<String> = String::from_bytes("hello", 5)
+    result<Bool> = s.starts_with(prefix)
+    println_bool(result)
+    return 0
+}

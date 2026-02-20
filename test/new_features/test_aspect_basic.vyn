@@ -1,0 +1,26 @@
+// @test: Aspect bind basic
+// @description: Test a simple aspect definition and binding
+// @category: aspect
+// @expect: pass
+// @expect-output: Greeter: hello
+
+aspect Greet {
+    greet()<Void>
+}
+
+struct Person {
+    name<String>
+}
+
+bind Greet -> Person {
+    greet()<Void> -> {
+        print("Greeter: ")
+        println("hello")
+    }
+}
+
+main()<Int> -> {
+    p<Person> = Person{ name: "Alice" }
+    p.greet()
+    return 0
+}

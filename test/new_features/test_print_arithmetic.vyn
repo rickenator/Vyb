@@ -1,0 +1,12 @@
+// @test: Print_int with arithmetic
+// @description: Test printing results of arithmetic with println_int
+// @category: basic, io
+// @expect: pass
+// @expect-output: 100
+
+main()<Int> -> {
+    x<Int> = 50
+    y<Int> = x + x
+    println_int(y)
+    return 0
+}

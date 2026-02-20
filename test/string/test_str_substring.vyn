@@ -1,0 +1,13 @@
+// @test: String substring
+// @description: Test String::substring() for extracting a portion
+// @category: string
+// @expect: pass
+// @expect-output: 5
+
+main()<Int> -> {
+    s<String> = String::from_bytes("hello world", 11)
+    sub<String> = s.substring(0, 5)
+    n<Int> = sub.len()
+    println_int(n)
+    return 0
+}

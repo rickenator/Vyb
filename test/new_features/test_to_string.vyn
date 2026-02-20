@@ -1,0 +1,12 @@
+// @test: toString conversions
+// @description: Test .to_string() method on Int and Bool types
+// @category: types, string
+// @expect: pass
+// @expect-output: 42
+
+main()<Int> -> {
+    x<Int> = 42
+    s<String> = x.to_string()
+    println(s)
+    return 0
+}

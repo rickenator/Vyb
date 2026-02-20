@@ -1,0 +1,20 @@
+// @test: Nested functions and closures
+// @description: Test calling a helper function from main
+// @category: functions
+// @expect: pass
+// @expect-output: 15
+
+add(a<Int>, b<Int>)<Int> -> {
+    return a + b
+}
+
+multiply(a<Int>, b<Int>)<Int> -> {
+    return a * b
+}
+
+main()<Int> -> {
+    x<Int> = add(3, 7)
+    y<Int> = multiply(x, 1)
+    println_int(y)
+    return 0
+}
