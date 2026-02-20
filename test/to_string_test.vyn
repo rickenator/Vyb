@@ -1,15 +1,17 @@
 main()<Int> -> {
     i<Int> = 42
-    s<String> = i.to_string()
-    println("Number as string")
-    
     f<Float> = 3.14
-    fs<String> = f.to_string()
-    println("Float as string")
-    
     b<Bool> = true
-    bs<String> = b.to_string()
-    println("Bool as string")
-    
+
+    // to_string() converts any primitive to a String
+    println(i.to_string())
+    println(f.to_string())
+    println(b.to_string())
+
+    // String concatenation with + auto-converts via to_string()
+    println("Value: " + i.to_string())
+    println("Float: " + f.to_string())
+    println("Bool: " + b.to_string())
+
     return 0
 }

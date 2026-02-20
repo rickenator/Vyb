@@ -97,7 +97,7 @@ class Node {
 
 ## 3. Intrinsics Overview
 
-Intrinsics are compiler-handled operations, split into **stable** (Sections 4–6) and **proposed/experimental** (Section 7).
+Intrinsics are compiler-handled operations, split into **stable** (Sections 4–8) and **proposed/experimental** (Section 9).
 
 ### 3.1 Reserved Keywords
 
@@ -171,7 +171,79 @@ fn offsetof<T>(field: identifier) -> UInt
 
 ---
 
-## 7. Auto-Serialization Intrinsics (stable)
+## 7. Print & String Conversion Intrinsics (stable)
+
+### 7.1 Generic Print Intrinsics
+
+`println` and `print` accept **any type** and convert it to a string automatically:
+
+```vyn
+fn println(value: T) -> Void    // print with newline
+fn print(value: T) -> Void      // print without newline
+```
+
+- Works with `Int`, `Float`, `Bool`, `String`, and any type with `to_string()`.
+- No type-specific variants like `println_int` or `println_bool` are needed.
+
+#### Examples
+
+```vyn
+i<Int> = 42
+println(i)         // 42
+
+f<Float> = 3.14
+println(f)         // 3.14
+
+b<Bool> = true
+println(b)         // true
+
+s<String> = "hello"
+println(s)         // hello
+```
+
+### 7.2 String Concatenation with `+`
+
+The `+` operator supports **automatic string coercion**: when at least one operand is a `String`, non-string values are automatically converted via `to_string()`. Both explicit and implicit forms work:
+
+```vyn
+i<Int> = 42
+// Explicit: call to_string() yourself
+println("Value: " + i.to_string())   // Value: 42
+
+// Implicit: println handles conversion automatically
+println("Value: " + i)               // Value: 42 (i auto-converted)
+
+f<Float> = 3.14
+println("Pi ≈ " + f.to_string())     // Pi ≈ 3.14
+```
+
+### 7.3 `to_string()` Method
+
+Every primitive type has a `to_string()` method returning a `String`:
+
+```vyn
+fn<String> Int.to_string()    -> String
+fn<String> Float.to_string()  -> String
+fn<String> Bool.to_string()   -> String
+fn<String> String.to_string() -> String
+```
+
+#### Examples
+
+```vyn
+x<Int> = 99
+s<String> = x.to_string()     // "99"
+
+pi<Float> = 3.14
+ps<String> = pi.to_string()   // "3.14"
+
+flag<Bool> = false
+fs<String> = flag.to_string() // "false"
+```
+
+---
+
+## 8. Auto-Serialization Intrinsics (stable)
 
 Vyn provides built-in serialization support for automatic JSON generation of data structures, particularly for values returned from `main()`. These intrinsics are stable and ready for production use.
 
@@ -312,7 +384,7 @@ For comprehensive documentation on auto-serialization capabilities and configura
 
 ---
 
-## 8. Proposed/Experimental Intrinsics
+## 9. Proposed/Experimental Intrinsics
 
 ```vyn
 fn offset<T>(ptr: loc<T>, count: Int) -> loc<T>
@@ -325,11 +397,12 @@ fn mem_set(ptr: loc<UInt8>, value: UInt8, n: UInt) -> Void
 
 ---
 
-## 9. Usage Guidelines
+## 10. Usage Guidelines
 
 1. **Declarations**: choose explicit (`var<T>`) or inferred (`var auto`).  
 2. **Functions**: return in `<Type>`, arrow mandatory, braces optional for single expressions.  
 3. **Ownership**: use `my<T>`, `our<T>`, `their<T>`, with optional `borrow()`/`view()` shorthand.  
 4. **Intrinsics**: memory ops only in `freedom`, metadata always safe.  
-5. **Serialization**: use auto-serialization for `main()` returns; mode intrinsics for customization.
-6. **Stability**: Sections 4–7 are stable; Section 8 is experimental.
+5. **Print**: use generic `println(value)` for any type; prefer `to_string()` for explicit conversion.
+6. **Serialization**: use auto-serialization for `main()` returns; mode intrinsics for customization.
+7. **Stability**: Sections 4–8 are stable; Section 9 is experimental.
