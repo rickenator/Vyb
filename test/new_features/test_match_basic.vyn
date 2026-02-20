@@ -1,0 +1,15 @@
+// @test: Match statement basic
+// @description: Test match with literal and wildcard patterns
+// @category: control_flow, match
+// @expect: pass
+// @expect-output: one
+
+main()<Int> -> {
+    x<Int> = 1
+    match (x) {
+        1 -> println("one")
+        2 -> println("two")
+        ? -> println("other")
+    }
+    return 0
+}

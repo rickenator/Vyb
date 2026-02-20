@@ -19,6 +19,11 @@
 extern "C" {
     // This is just a declaration - implementation is in intrinsics.cpp
     void __vyn_println(const char* str);
+    void __vyn_print(const char* str);
+    void __vyn_println_int(int64_t val);
+    void __vyn_print_int(int64_t val);
+    void __vyn_println_bool(int64_t val);
+    void __vyn_print_bool(int64_t val);
     char* __vyn_serialize_to_json(void* obj, const char* type_name);
     char* __vyn_convert_lit_string(const char* str);
     char* __vyn_string_concat(const char* left, const char* right);
@@ -617,6 +622,16 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
         llvm::orc::SymbolMap runtimeSymbols;
         runtimeSymbols[mangle("__vyn_println")] = llvm::orc::ExecutorSymbolDef(
             llvm::orc::ExecutorAddr::fromPtr(&__vyn_println), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_print")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_print), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_println_int")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_println_int), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_print_int")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_print_int), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_println_bool")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_println_bool), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_print_bool")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_print_bool), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyn_serialize_to_json")] = llvm::orc::ExecutorSymbolDef(
             llvm::orc::ExecutorAddr::fromPtr(&__vyn_serialize_to_json), llvm::JITSymbolFlags::Exported);
         

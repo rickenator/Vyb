@@ -921,6 +921,7 @@ bool StatementParser::is_statement_start(vyn::TokenType type) const {
         case vyn::TokenType::KEYWORD_FAIL:
         case vyn::TokenType::KEYWORD_PANIC:
         case vyn::TokenType::KEYWORD_RETHROW:
+        case vyn::TokenType::KEYWORD_DEFER:
         case vyn::TokenType::IDENTIFIER: // Added identifier for relaxed syntax
             return true;
         default:
@@ -1065,9 +1066,17 @@ vyn::ast::StmtPtr StatementParser::parse_try() {
 
 // Minimal stub implementations for defer and await
 vyn::ast::StmtPtr StatementParser::parse_defer() {
-    this->consume(); // Consume 'defer'
-    // TODO: Properly parse defer statement
-    return nullptr; // Replace with a real DeferStatement node when implemented
+    SourceLocation defer_loc = consume().location; // Consume 'defer'
+    // Parse the deferred expression statement
+    vyn::ast::ExprPtr expr = expr_parser_.parse_expression();
+    if (!expr) {
+        throw error(peek(), "Expected expression after 'defer'.");
+    }
+    // Consume optional semicolon
+    if (peek().type == vyn::TokenType::SEMICOLON) consume();
+    // Wrap the expression in an ExpressionStatement
+    auto innerStmt = std::make_unique<vyn::ast::ExpressionStatement>(defer_loc, std::move(expr));
+    return std::make_unique<vyn::ast::DeferStatement>(defer_loc, std::move(innerStmt));
 }
 vyn::ast::StmtPtr StatementParser::parse_await() {
     SourceLocation await_loc = consume().location; // Consume 'await' and get its location

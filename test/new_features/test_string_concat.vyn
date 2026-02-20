@@ -1,0 +1,13 @@
+// @test: String concatenation
+// @description: Test string concatenation with + operator
+// @category: string
+// @expect: pass
+// @expect-output: hello world
+
+main()<Int> -> {
+    s1<String> = "hello"
+    s2<String> = " world"
+    s3<String> = s1 + s2
+    println(s3)
+    return 0
+}

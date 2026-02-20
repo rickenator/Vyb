@@ -103,6 +103,61 @@ llvm::Function* LLVMCodegen::getVynPrintlnFunction() {
     return vynPrintlnFunc;
 }
 
+llvm::Function* LLVMCodegen::getVynPrintFunction() {
+    llvm::Function* f = module->getFunction("__vyn_print");
+    if (!f) {
+        std::vector<llvm::Type*> paramTypes = {int8PtrType};
+        llvm::FunctionType* ft = llvm::FunctionType::get(llvm::Type::getVoidTy(*context), paramTypes, false);
+        f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "__vyn_print", module.get());
+        f->arg_begin()->setName("str");
+    }
+    return f;
+}
+
+llvm::Function* LLVMCodegen::getVynPrintlnIntFunction() {
+    llvm::Function* f = module->getFunction("__vyn_println_int");
+    if (!f) {
+        std::vector<llvm::Type*> paramTypes = {llvm::Type::getInt64Ty(*context)};
+        llvm::FunctionType* ft = llvm::FunctionType::get(llvm::Type::getVoidTy(*context), paramTypes, false);
+        f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "__vyn_println_int", module.get());
+        f->arg_begin()->setName("val");
+    }
+    return f;
+}
+
+llvm::Function* LLVMCodegen::getVynPrintIntFunction() {
+    llvm::Function* f = module->getFunction("__vyn_print_int");
+    if (!f) {
+        std::vector<llvm::Type*> paramTypes = {llvm::Type::getInt64Ty(*context)};
+        llvm::FunctionType* ft = llvm::FunctionType::get(llvm::Type::getVoidTy(*context), paramTypes, false);
+        f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "__vyn_print_int", module.get());
+        f->arg_begin()->setName("val");
+    }
+    return f;
+}
+
+llvm::Function* LLVMCodegen::getVynPrintlnBoolFunction() {
+    llvm::Function* f = module->getFunction("__vyn_println_bool");
+    if (!f) {
+        std::vector<llvm::Type*> paramTypes = {llvm::Type::getInt64Ty(*context)};
+        llvm::FunctionType* ft = llvm::FunctionType::get(llvm::Type::getVoidTy(*context), paramTypes, false);
+        f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "__vyn_println_bool", module.get());
+        f->arg_begin()->setName("val");
+    }
+    return f;
+}
+
+llvm::Function* LLVMCodegen::getVynPrintBoolFunction() {
+    llvm::Function* f = module->getFunction("__vyn_print_bool");
+    if (!f) {
+        std::vector<llvm::Type*> paramTypes = {llvm::Type::getInt64Ty(*context)};
+        llvm::FunctionType* ft = llvm::FunctionType::get(llvm::Type::getVoidTy(*context), paramTypes, false);
+        f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "__vyn_print_bool", module.get());
+        f->arg_begin()->setName("val");
+    }
+    return f;
+}
+
 llvm::Function* LLVMCodegen::getSprintfFunction() {
     // Check if sprintf function already exists
     llvm::Function* sprintfFunc = module->getFunction("sprintf");

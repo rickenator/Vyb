@@ -1798,6 +1798,165 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         return;
     }
 
+    // Handle print() intrinsic (no newline)
+    if (identCallee && identCallee->name == "print" && node->arguments.size() == 1) {
+        node->arguments[0]->accept(*this);
+        llvm::Value* arg = m_currentLLVMValue;
+        if (!arg) {
+            logError(node->arguments[0]->loc, "Argument to print() evaluated to null");
+            return;
+        }
+        // Serialize to string then print without newline (same logic as println)
+        llvm::Value* serializedValue = nullptr;
+        if (node->arguments[0]->type) {
+            auto* argType = node->arguments[0]->type.get();
+            std::string typeStr = argType->toString();
+            if (typeStr == "String" || typeStr == "string") {
+                serializedValue = arg->getType()->isStructTy()
+                    ? builder->CreateExtractValue(arg, 0, "str.ptr")
+                    : arg;
+            } else {
+                serializedValue = generateGenericSerialization(arg, argType);
+            }
+        } else {
+            // No type info - mirror println fallback logic
+            if (arg->getType()->isPointerTy()) {
+                serializedValue = arg;
+            } else if (arg->getType()->isStructTy() && arg->getType()->getStructNumElements() == 2) {
+                serializedValue = builder->CreateExtractValue(arg, 0, "str.ptr");
+            } else {
+                serializedValue = generateGenericSerialization(arg, nullptr);
+            }
+        }
+        if (serializedValue) {
+            llvm::Function* printFunc = getVynPrintFunction();
+            builder->CreateCall(printFunc, {serializedValue});
+        }
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    // Handle println_int() / print_int() intrinsics
+    if (identCallee && (identCallee->name == "println_int" || identCallee->name == "print_int") && node->arguments.size() == 1) {
+        node->arguments[0]->accept(*this);
+        llvm::Value* arg = m_currentLLVMValue;
+        if (!arg) {
+            logError(node->arguments[0]->loc, "Argument to " + identCallee->name + "() evaluated to null");
+            return;
+        }
+        // Ensure i64
+        if (!arg->getType()->isIntegerTy(64)) {
+            arg = builder->CreateIntCast(arg, llvm::Type::getInt64Ty(*context), true, "cast_i64");
+        }
+        llvm::Function* f = (identCallee->name == "println_int") ? getVynPrintlnIntFunction() : getVynPrintIntFunction();
+        builder->CreateCall(f, {arg});
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    // Handle println_bool() / print_bool() intrinsics
+    if (identCallee && (identCallee->name == "println_bool" || identCallee->name == "print_bool") && node->arguments.size() == 1) {
+        node->arguments[0]->accept(*this);
+        llvm::Value* arg = m_currentLLVMValue;
+        if (!arg) {
+            logError(node->arguments[0]->loc, "Argument to " + identCallee->name + "() evaluated to null");
+            return;
+        }
+        if (!arg->getType()->isIntegerTy(64)) {
+            arg = builder->CreateIntCast(arg, llvm::Type::getInt64Ty(*context), false, "cast_bool_i64");
+        }
+        llvm::Function* f = (identCallee->name == "println_bool") ? getVynPrintlnBoolFunction() : getVynPrintBoolFunction();
+        builder->CreateCall(f, {arg});
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    // Handle math library intrinsics
+    if (identCallee) {
+        const std::string& mathName = identCallee->name;
+        auto getLibmFunc1 = [&](const std::string& fname) -> llvm::Function* {
+            llvm::Function* mf = module->getFunction(fname);
+            if (!mf) {
+                llvm::FunctionType* ft = llvm::FunctionType::get(
+                    llvm::Type::getDoubleTy(*context),
+                    {llvm::Type::getDoubleTy(*context)}, false);
+                mf = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, fname, module.get());
+            }
+            return mf;
+        };
+        auto getLibmFunc2 = [&](const std::string& fname) -> llvm::Function* {
+            llvm::Function* mf = module->getFunction(fname);
+            if (!mf) {
+                llvm::FunctionType* ft = llvm::FunctionType::get(
+                    llvm::Type::getDoubleTy(*context),
+                    {llvm::Type::getDoubleTy(*context), llvm::Type::getDoubleTy(*context)}, false);
+                mf = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, fname, module.get());
+            }
+            return mf;
+        };
+        auto toDouble = [&](llvm::Value* v) -> llvm::Value* {
+            if (!v) return v;
+            if (v->getType()->isDoubleTy()) return v;
+            if (v->getType()->isIntegerTy())
+                return builder->CreateSIToFP(v, llvm::Type::getDoubleTy(*context), "to_dbl");
+            if (v->getType()->isFloatingPointTy())
+                return builder->CreateFPCast(v, llvm::Type::getDoubleTy(*context), "fp_cast");
+            return v;
+        };
+        auto evalMathArg = [&](size_t i) -> llvm::Value* {
+            if (i >= node->arguments.size()) return nullptr;
+            node->arguments[i]->accept(*this);
+            return m_currentLLVMValue;
+        };
+        if (mathName == "sqrt" || mathName == "sin" || mathName == "cos" || mathName == "tan" ||
+            mathName == "exp" || mathName == "log" || mathName == "log2" || mathName == "log10" ||
+            mathName == "floor" || mathName == "ceil" || mathName == "round") {
+            llvm::Value* a = toDouble(evalMathArg(0)); if (!a) return;
+            m_currentLLVMValue = builder->CreateCall(getLibmFunc1(mathName), {a}, mathName);
+            return;
+        } else if (mathName == "pow") {
+            llvm::Value* a = toDouble(evalMathArg(0)); if (!a) return;
+            llvm::Value* b = toDouble(evalMathArg(1)); if (!b) return;
+            m_currentLLVMValue = builder->CreateCall(getLibmFunc2("pow"), {a, b}, "pow");
+            return;
+        } else if (mathName == "abs") {
+            llvm::Value* a = evalMathArg(0); if (!a) return;
+            if (a->getType()->isIntegerTy()) {
+                llvm::Value* neg = builder->CreateNeg(a, "neg");
+                llvm::Value* cmp = builder->CreateICmpSGT(a, neg, "abs_cmp");
+                m_currentLLVMValue = builder->CreateSelect(cmp, a, neg, "abs");
+            } else {
+                llvm::Value* d = toDouble(a);
+                m_currentLLVMValue = builder->CreateCall(getLibmFunc1("fabs"), {d}, "fabs");
+            }
+            return;
+        } else if (mathName == "min") {
+            llvm::Value* a = evalMathArg(0); if (!a) return;
+            llvm::Value* b = evalMathArg(1); if (!b) return;
+            if (a->getType()->isIntegerTy() && b->getType()->isIntegerTy()) {
+                llvm::Value* cmp = builder->CreateICmpSLT(a, b, "min_cmp");
+                m_currentLLVMValue = builder->CreateSelect(cmp, a, b, "min");
+            } else {
+                llvm::Value* da = toDouble(a), *db = toDouble(b);
+                llvm::Value* cmp = builder->CreateFCmpOLT(da, db, "min_cmp");
+                m_currentLLVMValue = builder->CreateSelect(cmp, da, db, "min");
+            }
+            return;
+        } else if (mathName == "max") {
+            llvm::Value* a = evalMathArg(0); if (!a) return;
+            llvm::Value* b = evalMathArg(1); if (!b) return;
+            if (a->getType()->isIntegerTy() && b->getType()->isIntegerTy()) {
+                llvm::Value* cmp = builder->CreateICmpSGT(a, b, "max_cmp");
+                m_currentLLVMValue = builder->CreateSelect(cmp, a, b, "max");
+            } else {
+                llvm::Value* da = toDouble(a), *db = toDouble(b);
+                llvm::Value* cmp = builder->CreateFCmpOGT(da, db, "max_cmp");
+                m_currentLLVMValue = builder->CreateSelect(cmp, da, db, "max");
+            }
+            return;
+        }
+    }
+
     // Handle serialization mode intrinsics: lit(), notype(), bare(), deserial()
     if (identCallee && node->arguments.size() == 1) {
         if (identCallee->name == "lit") {

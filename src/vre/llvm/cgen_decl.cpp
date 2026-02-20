@@ -568,7 +568,20 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
         }
         
         std::cout << "DEBUG: FunctionDeclaration - about to process function body" << std::endl;
+        // Push a new defer scope for this function
+        m_deferStack.push_back({});
         node->body->accept(*this); // Generate code for the function body
+        // Pop defer scope (any remaining deferred statements for implicit returns)
+        if (!m_deferStack.empty()) {
+            if (!m_deferStack.back().empty() && !func->empty() && !func->back().getTerminator()) {
+                // Emit remaining deferred statements before implicit return
+                auto& defers = m_deferStack.back();
+                for (auto it = defers.rbegin(); it != defers.rend(); ++it) {
+                    if (*it) (*it)->accept(*this);
+                }
+            }
+            m_deferStack.pop_back();
+        }
         std::cout << "DEBUG: FunctionDeclaration - finished processing function body" << std::endl;
 
         // Clean up function scope before return

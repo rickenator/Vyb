@@ -2008,5 +2008,21 @@ void PanicStatement::accept(Visitor& visitor) {
     visitor.visit(this);
 }
 
+// DeferStatement implementation
+DeferStatement::DeferStatement(SourceLocation loc, StmtPtr statement)
+    : Statement(loc), statement(std::move(statement)) {}
+
+NodeType DeferStatement::getType() const {
+    return NodeType::DEFER_STATEMENT;
+}
+
+std::string DeferStatement::toString() const {
+    return "defer " + (statement ? statement->toString() : "<empty>");
+}
+
+void DeferStatement::accept(Visitor& visitor) {
+    visitor.visit(this);
+}
+
 } // namespace ast
 } // namespace vyn

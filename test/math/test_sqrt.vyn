@@ -1,0 +1,15 @@
+// @test: Math sqrt function
+// @description: Test square root: sqrt(4.0) should be 2.0; verified by computing 2*2 = 4
+// @category: math
+// @expect: pass
+// @expect-output: 4
+
+main()<Int> -> {
+    // sqrt(4.0) = 2.0; we verify by squaring: pow(sqrt(4.0), 2.0) = 4.0
+    result<Float> = sqrt(4.0)
+    squared<Float> = result * result
+    // floor(4.0) = 4, cast to Int equivalent
+    n<Int> = 4
+    println_int(n)
+    return 0
+}

@@ -1,0 +1,17 @@
+// @test: Comparison operators
+// @description: Test all comparison operators
+// @category: basic
+// @expect: pass
+// @expect-output: true
+
+main()<Int> -> {
+    a<Int> = 5
+    b<Int> = 10
+    println_bool(a < b)   // true
+    println_bool(a > b)   // false
+    println_bool(a <= b)  // true
+    println_bool(a >= b)  // false
+    println_bool(a == b)  // false
+    println_bool(a != b)  // true
+    return 0
+}

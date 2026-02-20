@@ -1,0 +1,14 @@
+// @test: While loop basic
+// @description: Test basic while loop
+// @category: control_flow
+// @expect: pass
+// @expect-output: done
+
+main()<Int> -> {
+    i<Int> = 0
+    while (i < 5) {
+        i = i + 1
+    }
+    println("done")
+    return 0
+}

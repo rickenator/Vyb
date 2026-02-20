@@ -1,0 +1,12 @@
+// @test: Defer order
+// @description: Tests defers run after non-deferred code; output order is "3", "2", "1"
+// @category: control_flow, defer
+// @expect: pass
+// @expect-output: 3
+
+main()<Int> -> {
+    defer println("1")
+    defer println("2")
+    println("3")
+    return 0
+}

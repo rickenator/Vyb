@@ -86,6 +86,7 @@ class TrapClause; // Error handling: trap clause for handling failures
 class EnsureClause; // Error handling: ensure clause for cleanup
 class RethrowStatement; // Error handling: rethrow current error
 class PanicStatement; // Error handling: unrecoverable panic
+class DeferStatement; // Deferred execution at scope exit
 
 // Declarations
 class VariableDeclaration;
@@ -239,6 +240,7 @@ enum class NodeType {
     ENSURE_CLAUSE, // Error handling: ensure clause
     RETHROW_STATEMENT, // Error handling: rethrow
     PANIC_STATEMENT, // Error handling: panic
+    DEFER_STATEMENT, // Deferred execution at scope exit
 
     // Declarations
     VARIABLE_DECLARATION,
@@ -343,6 +345,7 @@ public:
     virtual void visit(EnsureClause* node) = 0;
     virtual void visit(RethrowStatement* node) = 0;
     virtual void visit(PanicStatement* node) = 0;
+    virtual void visit(DeferStatement* node) = 0;
 
     // Declarations
     virtual void visit(VariableDeclaration* node) = 0;
@@ -1587,6 +1590,18 @@ public:
 
     PanicStatement(SourceLocation loc, ExprPtr message);
     ~PanicStatement() override = default;
+    NodeType getType() const override;
+    std::string toString() const override;
+    void accept(Visitor& visitor) override;
+};
+
+// DeferStatement - Deferred execution at function exit (LIFO order)
+class DeferStatement : public Statement {
+public:
+    StmtPtr statement; // The statement to defer
+
+    DeferStatement(SourceLocation loc, StmtPtr statement);
+    ~DeferStatement() override = default;
     NodeType getType() const override;
     std::string toString() const override;
     void accept(Visitor& visitor) override;

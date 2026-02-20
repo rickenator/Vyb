@@ -1,0 +1,16 @@
+// @test: Array indexing
+// @description: Test fixed array creation and indexing
+// @category: arrays
+// @expect: pass
+// @expect-return: 0
+
+main()<Int> -> {
+    arr<[Int; 3]> = [10, 20, 30]
+    first<Int> = arr[0]
+    second<Int> = arr[1]
+    third<Int> = arr[2]
+    println_int(first)
+    println_int(second)
+    println_int(third)
+    return 0
+}

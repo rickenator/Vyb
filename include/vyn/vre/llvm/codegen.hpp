@@ -107,6 +107,9 @@ private:
     bool infer_types_only = false;  // Flag for type inference without codegen
     std::map<std::string, llvm::AllocaInst*> m_currentFunctionNamedValues;
 
+    // Defer support: stack of deferred statement lists, one per function scope
+    std::vector<std::vector<vyn::ast::Statement*>> m_deferStack;
+
 
     // Global and type information
     std::map<std::string, llvm::Value*> namedValues;
@@ -249,6 +252,11 @@ private:
     // IO operations
     llvm::Function* getPrintlnFunction();
     llvm::Function* getVynPrintlnFunction();
+    llvm::Function* getVynPrintFunction();   // print() - no newline
+    llvm::Function* getVynPrintlnIntFunction();  // println_int()
+    llvm::Function* getVynPrintIntFunction();    // print_int()
+    llvm::Function* getVynPrintlnBoolFunction(); // println_bool()
+    llvm::Function* getVynPrintBoolFunction();   // print_bool()
     llvm::Function* getSerializeToJsonFunction();
     
     // Error handling runtime functions
@@ -470,6 +478,7 @@ public:
     void visit(vyn::ast::EnsureClause* node) override;
     void visit(vyn::ast::RethrowStatement* node) override;
     void visit(vyn::ast::PanicStatement* node) override;
+    void visit(vyn::ast::DeferStatement* node) override;
     
     void visit(vyn::ast::TypeNode* node) override;
     void visit(vyn::ast::AssertStatement* node) override;

@@ -55,6 +55,13 @@ void LLVMCodegen::visit(vyn::ast::BlockStatement* node) {
 }
 
 void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
+    // Emit deferred statements (LIFO) before returning
+    if (!m_deferStack.empty() && !m_deferStack.back().empty()) {
+        auto& defers = m_deferStack.back();
+        for (auto it = defers.rbegin(); it != defers.rend(); ++it) {
+            if (*it) (*it)->accept(*this);
+        }
+    }
     if (node->argument) {
         // Codegen the argument expression. The result will be in m_currentLLVMValue.
         node->argument->accept(*this); 
@@ -1629,5 +1636,16 @@ void LLVMCodegen::visit(vyn::ast::PanicStatement* node) {
     m_currentLLVMValue = nullptr;
 }
 
-}  // namespace vyn
+void LLVMCodegen::visit(vyn::ast::DeferStatement* node) {
+    // DeferStatement: register the statement to run at function exit
+    if (m_deferStack.empty()) {
+        // No active defer scope - shouldn't happen inside a function body
+        return;
+    }
+    // Add to the current defer scope (innermost)
+    if (node->statement) {
+        m_deferStack.back().push_back(node->statement.get());
+    }
+}
 
+}  // namespace vyn

@@ -1,0 +1,11 @@
+// @test: println_bool intrinsic
+// @description: Test println_bool() outputs true/false with newline
+// @category: basic, io
+// @expect: pass
+// @expect-output: true
+
+main()<Int> -> {
+    println_bool(1)
+    println_bool(0)
+    return 0
+}

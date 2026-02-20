@@ -629,14 +629,13 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
         addError("Redefinition of variable \"" + node->id->name + "\" in the same scope.", node->id.get());
     }
 
-    // Enforce mandatory type annotation for var<T> and const<T>
-    if (!node->typeNode) {
-        if (node->isConst) {
-            addError("Missing type annotation on constant declaration '" + node->id->name + "'; expected const<T> name.", node);
-        } else {
-            addError("Missing type annotation on variable declaration '" + node->id->name + "'; expected var<T> name.", node);
-        }
-    }
+    // Enforce mandatory type annotation for Vyn variables (name<Type> = value syntax)
+    // Allow compiler-generated internal variables (starting with __) to skip this check
+    // Allow variables with initializers to use type inference (error if type can't be inferred)
+    const std::string& varName = node->id ? node->id->name : "";
+    bool isInternalVar = varName.size() >= 2 && varName[0] == '_' && varName[1] == '_';
+    bool needsTypeCheck = !node->typeNode && node->id && !isInternalVar;
+    // We defer the type-missing error until after visiting the initializer (to allow type inference)
 
     if (node->typeNode) {
         node->typeNode->accept(*this);
@@ -667,14 +666,21 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
         
         node->init->accept(*this);
         
-        // Handle type inference for auto variables
-        if (!node->typeNode && expressionTypes.count(node->init.get())) {
-            // Auto type inference - set the type based on initializer
+        // Type inference: if no annotation given, infer from initializer
+        if (needsTypeCheck && expressionTypes.count(node->init.get())) {
             ast::TypeNode* initType = expressionTypes[node->init.get()];
             if (initType) {
+                // Successfully inferred - no error needed
                 node->typeNode = std::unique_ptr<ast::TypeNode>(initType->clone());
+                needsTypeCheck = false; // resolved via inference
+            }
+        }
+        // If still no type, report error with correct Vyn syntax
+        if (needsTypeCheck) {
+            if (node->isConst) {
+                addError("Missing type annotation on constant '" + node->id->name + "'; use const<Type> name = value syntax.", node);
             } else {
-                addError("Cannot infer type for 'auto' variable \\\"" + node->id->name + "\\\", initializer has no type", node);
+                addError("Missing type annotation on '" + node->id->name + "'; use name<Type> = value syntax.", node);
             }
         }
         
@@ -685,13 +691,17 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
             ast::TypeNode* initType = expressionTypes[node->init.get()];
             if (initType) { 
                 if (!areTypesCompatible(varType, initType)) { 
-                    addError("Initializer type does not match variable type for \\\"" + node->id->name + "\\\". Expected " + varType->toString() + " but got " + initType->toString(), node);
+                    addError("Initializer type does not match variable type for '" + node->id->name + "'. Expected " + varType->toString() + " but got " + initType->toString(), node);
                 }
             }
         }
-    } else if (!node->typeNode) {
-        // Auto variables must have an initializer for type inference
-        addError("'auto' variable \\\"" + node->id->name + "\\\" must have an initializer for type inference", node);
+    } else if (needsTypeCheck) {
+        // No initializer and no type annotation
+        if (node->isConst) {
+            addError("Missing type annotation on constant '" + node->id->name + "'; use const<Type> name = value syntax.", node);
+        } else {
+            addError("Missing type annotation on '" + node->id->name + "'; use name<Type> = value syntax.", node);
+        }
     }
     
     // Get the resolved type - prefer the resolved type from typeNode->type if available
@@ -857,7 +867,11 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
         const std::string& name = ident->name;
         if (name == "lit" || name == "notype" || name == "bare" || name == "deserial" || 
             name == "borrow" || name == "view" || name == "my" || name == "their" || name == "our" ||
-            name == "soft" || name == "println") {
+            name == "soft" || name == "println" || name == "print" || name == "println_int" ||
+            name == "print_int" || name == "println_bool" || name == "print_bool" ||
+            name == "abs" || name == "sqrt" || name == "pow" || name == "sin" || name == "cos" ||
+            name == "tan" || name == "exp" || name == "log" || name == "log2" || name == "log10" ||
+            name == "floor" || name == "ceil" || name == "round" || name == "min" || name == "max") {
             isIntrinsic = true;
         }
     }
@@ -1069,6 +1083,73 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             node->type = std::shared_ptr<ast::TypeNode>(voidType->clone().release());
             return;
         }
+
+        // Handle print intrinsic (no newline)
+        if (name == "print") {
+            if (node->arguments.size() != 1) {
+                addError("print() expects exactly one argument", node);
+                return;
+            }
+            auto voidId = std::make_unique<ast::Identifier>(node->loc, "Void");
+            ast::TypeNode* voidType = new ast::TypeName(node->loc, std::move(voidId), std::vector<ast::TypeNodePtr>{});
+            expressionTypes[node] = voidType;
+            node->type = std::shared_ptr<ast::TypeNode>(voidType->clone().release());
+            return;
+        }
+
+        // Handle println_int / print_int intrinsics
+        if (name == "println_int" || name == "print_int" || name == "println_bool" || name == "print_bool") {
+            if (node->arguments.size() != 1) {
+                addError(name + "() expects exactly one argument", node);
+                return;
+            }
+            auto voidId = std::make_unique<ast::Identifier>(node->loc, "Void");
+            ast::TypeNode* voidType = new ast::TypeName(node->loc, std::move(voidId), std::vector<ast::TypeNodePtr>{});
+            expressionTypes[node] = voidType;
+            node->type = std::shared_ptr<ast::TypeNode>(voidType->clone().release());
+            return;
+        }
+
+        // Handle math library intrinsics
+        {
+            static const std::set<std::string> floatMathFuncs = {
+                "sqrt", "sin", "cos", "tan", "exp", "log", "log2", "log10",
+                "floor", "ceil", "round", "pow"
+            };
+            static const std::set<std::string> intOrFloatFuncs = {
+                "abs", "min", "max"
+            };
+            if (floatMathFuncs.count(name)) {
+                size_t expected = (name == "pow") ? 2 : 1;
+                if (node->arguments.size() != expected) {
+                    addError(name + "() expects " + std::to_string(expected) + " argument(s)", node);
+                    return;
+                }
+                for (auto& arg : node->arguments) if (arg) arg->accept(*this);
+                auto floatType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Float"));
+                expressionTypes[node] = floatType;
+                node->type = std::shared_ptr<ast::TypeNode>(floatType->clone());
+                return;
+            }
+            if (intOrFloatFuncs.count(name)) {
+                if (node->arguments.size() < 1 || node->arguments.size() > 2) {
+                    addError(name + "() expects 1 or 2 arguments", node);
+                    return;
+                }
+                for (auto& arg : node->arguments) if (arg) arg->accept(*this);
+                // Return type matches first argument - default to Int
+                auto firstArgTypeIt = (node->arguments.size() > 0) ? expressionTypes.find(node->arguments[0].get()) : expressionTypes.end();
+                if (firstArgTypeIt != expressionTypes.end() && firstArgTypeIt->second) {
+                    expressionTypes[node] = firstArgTypeIt->second;
+                    node->type = std::shared_ptr<ast::TypeNode>(firstArgTypeIt->second->clone());
+                } else {
+                    auto intType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Int"));
+                    expressionTypes[node] = intType;
+                    node->type = std::shared_ptr<ast::TypeNode>(intType->clone());
+                }
+                return;
+            }
+        }
     }
     
     // Handle Vec::new() constructor calls
@@ -1159,6 +1240,19 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     }
                     
                     addError("Unknown type '" + typeName + "' in from_string() call", node);
+                    return;
+                }
+
+                // Handle String::from_bytes() static factory method
+                if (typeName == "String" && methodName == "from_bytes") {
+                    if (node->arguments.size() != 2) {
+                        addError("String::from_bytes() expects exactly 2 arguments (byte_ptr, length)", node);
+                        return;
+                    }
+                    for (auto& arg : node->arguments) arg->accept(*this);
+                    auto strType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "String"));
+                    expressionTypes[node] = strType;
+                    node->type = std::shared_ptr<ast::TypeNode>(strType->clone());
                     return;
                 }
             }
@@ -1401,6 +1495,44 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     }
                 }
                 
+                // Check for String type methods
+                if (objSymbol && objSymbol->type) {
+                    if (auto objTypeName = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
+                        if (objTypeName->identifier && objTypeName->identifier->name == "String") {
+                            // String methods: len/length -> Int, contains/starts_with/ends_with -> Bool,
+                            // substring/to_upper/to_lower/concat -> String, char_at -> Int
+                            if (methodName == "len" || methodName == "length") {
+                                auto intType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Int"));
+                                expressionTypes[node] = intType;
+                                node->type = std::shared_ptr<ast::TypeNode>(intType->clone());
+                                return;
+                            } else if (methodName == "contains" || methodName == "starts_with" || methodName == "ends_with") {
+                                auto boolType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Bool"));
+                                expressionTypes[node] = boolType;
+                                node->type = std::shared_ptr<ast::TypeNode>(boolType->clone());
+                                return;
+                            } else if (methodName == "substring" || methodName == "substr" ||
+                                       methodName == "to_upper" || methodName == "to_lower" ||
+                                       methodName == "concat" || methodName == "trim") {
+                                auto strType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "String"));
+                                expressionTypes[node] = strType;
+                                node->type = std::shared_ptr<ast::TypeNode>(strType->clone());
+                                return;
+                            } else if (methodName == "char_at") {
+                                auto intType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Int"));
+                                expressionTypes[node] = intType;
+                                node->type = std::shared_ptr<ast::TypeNode>(intType->clone());
+                                return;
+                            } else if (methodName == "to_bytes") {
+                                auto intPtrType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Int"));
+                                expressionTypes[node] = intPtrType;
+                                node->type = std::shared_ptr<ast::TypeNode>(intPtrType->clone());
+                                return;
+                            }
+                        }
+                    }
+                }
+
                 // Not a Vec and not a trait method - unknown method
                 std::string typeName = objSymbol && objSymbol->type ? objSymbol->type->toString() : "unknown";
                 addError("Unknown method '" + methodName + "' on type '" + typeName + "'", node);
@@ -1712,6 +1844,11 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
             (typeName == "Int" || typeName == "Float" || typeName == "Bool" || typeName == "String")) {
             // Static method call for type conversion
             // The actual typing will be handled in CallExpression visitor
+            return;
+        }
+
+        // String::from_bytes() - static factory for String from raw bytes
+        if (typeName == "String" && methodName == "from_bytes") {
             return;
         }
         
@@ -3694,6 +3831,15 @@ void SemanticAnalyzer::visit(ast::PanicStatement* node) {
     
     // Note: panic is a noreturn operation - control flow never continues after panic
     // This will be tracked in control flow analysis
+}
+
+void SemanticAnalyzer::visit(ast::DeferStatement* node) {
+    if (!node->statement) {
+        addError("defer statement requires a body", node);
+        return;
+    }
+    // Validate the deferred statement semantically
+    node->statement->accept(*this);
 }
 
 void SemanticAnalyzer::visit(ast::TypeNode* node) {

@@ -1,0 +1,21 @@
+// @test: Nested struct access
+// @description: Test struct with nested computation
+// @category: structs
+// @expect: pass
+// @expect-output: 25
+
+struct Rectangle {
+    width<Int>,
+    height<Int>
+}
+
+area(r<Rectangle>)<Int> -> {
+    return r.width * r.height
+}
+
+main()<Int> -> {
+    r<Rectangle> = Rectangle{ width: 5, height: 5 }
+    a<Int> = area(r)
+    println_int(a)
+    return 0
+}

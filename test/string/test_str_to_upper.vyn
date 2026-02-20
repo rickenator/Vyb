@@ -1,0 +1,13 @@
+// @test: String to_upper method
+// @description: Test String::to_upper() converts string to uppercase
+// @category: string
+// @expect: pass
+// @expect-output: 5
+
+main()<Int> -> {
+    s<String> = String::from_bytes("hello", 5)
+    upper<String> = s.to_upper()
+    n<Int> = upper.len()
+    println_int(n)
+    return 0
+}

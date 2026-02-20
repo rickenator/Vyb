@@ -1,0 +1,12 @@
+// @test: String length
+// @description: Test String::len() returns the length of a string
+// @category: string
+// @expect: pass
+// @expect-output: 5
+
+main()<Int> -> {
+    s<String> = String::from_bytes("hello", 5)
+    n<Int> = s.len()
+    println_int(n)
+    return 0
+}

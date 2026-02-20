@@ -1,0 +1,16 @@
+// @test: Generic function identity (simplified)
+// @description: Test calling a simple typed identity function
+// @category: functions
+// @expect: pass
+// @expect-output: 42
+
+// Simplified version: explicit types instead of generics
+identity_int(x<Int>)<Int> -> {
+    return x
+}
+
+main()<Int> -> {
+    n<Int> = identity_int(42)
+    println_int(n)
+    return 0
+}

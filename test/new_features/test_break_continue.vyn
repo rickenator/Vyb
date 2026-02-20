@@ -1,0 +1,18 @@
+// @test: Break and continue in loops
+// @description: Test break and continue control flow in while loops
+// @category: control_flow
+// @expect: pass
+// @expect-output: 3
+
+main()<Int> -> {
+    // Count to 3 with break
+    i<Int> = 0
+    while (i < 10) {
+        i = i + 1
+        if (i == 3) {
+            break
+        }
+    }
+    println_int(i)
+    return 0
+}

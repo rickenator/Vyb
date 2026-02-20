@@ -1,0 +1,13 @@
+// @test: Integer division and modulo
+// @description: Test integer division and modulo operations
+// @category: basic, arithmetic
+// @expect: pass
+// @expect-output: 3
+
+main()<Int> -> {
+    a<Int> = 17 / 5
+    b<Int> = 17 % 5
+    println_int(a)
+    println_int(b)
+    return 0
+}
