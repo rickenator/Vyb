@@ -5231,8 +5231,8 @@ void SemanticAnalyzer::visit(ast::TypenameExpression* node) {
     // Analyze operand to determine its type
     node->operand->accept(*this);
     
-    // Result type is always "string" (lowercase to match Vyn convention)
-    auto stringIdent = std::make_unique<ast::Identifier>(node->loc, "string");
+    // Result type is always "String" — Vyn's string type uses PascalCase
+    auto stringIdent = std::make_unique<ast::Identifier>(node->loc, "String");
     ast::TypeNode* resultType = new ast::TypeName(node->loc, std::move(stringIdent));
     expressionTypes[node] = resultType;
     node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());

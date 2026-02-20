@@ -1,0 +1,36 @@
+// @test: Aspect inheritance (future)
+// @description: Aspect inheritance (aspect A : B) is planned; documents the intended syntax
+// @category: aspect, types
+// @expect: fail
+// @tags: future, unimplemented
+
+// When implemented, aspects can inherit from other aspects:
+//
+//   aspect Equatable {
+//       eq(self<Self>, other<Self>)<Bool>
+//   }
+//
+//   aspect Comparable : Equatable {
+//       lt(self<Self>, other<Self>)<Bool>
+//       lte(self<Self>, other<Self>)<Bool> -> {
+//           return self.lt(other) || self.eq(other)
+//       }
+//   }
+//
+//   struct Score { value<Int> }
+//
+//   bind Comparable -> Score {
+//       eq(self<Self>, other<Self>)<Bool>  -> { return self.value == other.value }
+//       lt(self<Self>, other<Self>)<Bool>  -> { return self.value < other.value }
+//   }
+//
+// Aspect inheritance allows building rich hierarchies like:
+//   Equatable <- Comparable <- Orderable <- Sortable
+
+aspect Printable : Display {
+    render(self<Self>)<String>
+}
+
+main()<Int> -> {
+    return 0
+}

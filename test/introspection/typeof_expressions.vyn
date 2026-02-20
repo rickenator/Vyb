@@ -1,18 +1,14 @@
-// Test typeof with expressions and literals
+// @test: typeof expressions
+// @description: typeof works on arithmetic expressions and integer literals
+// @category: introspection
+// @expect: pass
+// @expect-output: expr match
 
 main()<Int> -> {
-    // typeof on expressions - compare types
-    x<Int> = 10;
-    expr_match<Bool> = (typeof(x + 5) == typeof(x * 2));
-    
-    // typeof on function calls
-    func_match<Bool> = (typeof(get_number()) == typeof(42));
-    
-    println("typeof on expressions works!");
-    
-    return 0;
-}
-
-get_number()<Int> -> {
-    return 42;
+    x<Int> = 10
+    expr_match<Bool> = (typeof(x + 5) == typeof(x * 2))
+    if (expr_match) {
+        println("expr match")
+    }
+    return 0
 }

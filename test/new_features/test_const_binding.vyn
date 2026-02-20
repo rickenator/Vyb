@@ -1,0 +1,11 @@
+// @test: Const binding
+// @description: Immutable bindings using name<Type const> syntax
+// @category: types, const
+// @expect: pass
+// @expect-output: 42
+
+main()<Int> -> {
+    x<Int const> = 42
+    println_int(x)
+    return 0
+}

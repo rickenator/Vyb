@@ -1,0 +1,26 @@
+// @test: Named arguments (future)
+// @description: Named arguments at call sites are planned for improved readability
+// @category: functions
+// @expect: fail
+// @tags: future, unimplemented
+
+// When implemented, callers can pass arguments by name in any order:
+//
+//   add(x<Int>, y<Int>)<Int> -> { return x + y }
+//
+//   main()<Int> -> {
+//       result<Int> = add(y: 20, x: 10)  // order-independent named args
+//       println_int(result)               // prints 30
+//       return 0
+//   }
+//
+// Named arguments make function calls with many parameters self-documenting
+// and order-independent, reducing bugs from argument transposition.
+
+add(x<Int>, y<Int>)<Int> -> { return x + y }
+
+main()<Int> -> {
+    result<Int> = add(y: 20, x: 10)
+    println_int(result)
+    return 0
+}

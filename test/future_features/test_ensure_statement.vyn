@@ -1,0 +1,22 @@
+// @test: ensure statement (future)
+// @description: ensure is a planned post-condition statement that fails if condition is false
+// @category: control_flow, error_handling
+// @expect: fail
+// @tags: future, unimplemented
+
+// ensure is not yet implemented; this test verifies that the feature is
+// planned and documents the intended syntax:
+//
+//   divide(a<Int>, b<Int>)<Int> -> {
+//       ensure b != 0 else fail<DivisionError>(...)
+//       return a / b
+//   }
+//
+// When implemented, ensure integrates with fail/trap for contract-style
+// programming. For now the keyword is not recognized.
+
+main()<Int> -> {
+    x<Int> = 10
+    ensure x > 0 else return -1
+    return 0
+}
