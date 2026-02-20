@@ -1,0 +1,20 @@
+// @test: Generic println accepts any type
+// @description: Test that println() works with Int, Float, Bool, and String without type-specific variants
+// @category: basic, io
+// @expect: pass
+// @expect-output: 42
+// @expect-output: 3.14
+// @expect-output: true
+// @expect-output: hello
+
+main()<Int> -> {
+    i<Int> = 42
+    f<Float> = 3.14
+    b<Bool> = true
+    s<String> = "hello"
+    println(i)
+    println(f)
+    println(b)
+    println(s)
+    return 0
+}

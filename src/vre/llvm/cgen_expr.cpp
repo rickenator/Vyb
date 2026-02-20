@@ -1752,9 +1752,15 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 if (arg->getType()->isStructTy()) {
                     // Extract the ptr field (index 0) from the string struct
                     serializedValue = builder->CreateExtractValue(arg, 0, "str.ptr");
+                } else if (arg->getType()->isPointerTy()) {
+                    // Already a char* (e.g. result of string concatenation or to_string())
+                    serializedValue = arg;
                 } else {
-                    // Fallback
-                    serializedValue = generateGenericSerialization(arg, argType);
+                    // Fallback for other representations
+                    serializedValue = generateToStringCall(arg, arg->getType(), argType, node->loc);
+                    if (!serializedValue) {
+                        serializedValue = generateGenericSerialization(arg, argType);
+                    }
                 }
             }
             // Priority 2: Check for arrays
@@ -1767,9 +1773,13 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 // It's already a string pointer (char*), use it directly
                 serializedValue = arg;
             }
-            // Priority 4: Use generic serialization for other types
+            // Priority 4: Convert to string via to_string() for any type (Int, Float, Bool, etc.)
             else {
-                serializedValue = generateGenericSerialization(arg, argType);
+                serializedValue = generateToStringCall(arg, arg->getType(), argType, node->loc);
+                if (!serializedValue) {
+                    // Fall back to generic serialization for complex/unrecognized types
+                    serializedValue = generateGenericSerialization(arg, argType);
+                }
             }
         }
         else {
@@ -1784,8 +1794,11 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 serializedValue = builder->CreateExtractValue(arg, 0, "str.ptr");
             }
             else {
-                // Fallback to generic serialization
-                serializedValue = generateGenericSerialization(arg, nullptr);
+                // Try to_string() first, fall back to generic serialization
+                serializedValue = generateToStringCall(arg, arg->getType(), nullptr, node->loc);
+                if (!serializedValue) {
+                    serializedValue = generateGenericSerialization(arg, nullptr);
+                }
             }
         }
         
@@ -1816,7 +1829,11 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                     ? builder->CreateExtractValue(arg, 0, "str.ptr")
                     : arg;
             } else {
-                serializedValue = generateGenericSerialization(arg, argType);
+                // Convert to string via to_string() for any type (Int, Float, Bool, etc.)
+                serializedValue = generateToStringCall(arg, arg->getType(), argType, node->loc);
+                if (!serializedValue) {
+                    serializedValue = generateGenericSerialization(arg, argType);
+                }
             }
         } else {
             // No type info - mirror println fallback logic
@@ -1825,7 +1842,10 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
             } else if (arg->getType()->isStructTy() && arg->getType()->getStructNumElements() == 2) {
                 serializedValue = builder->CreateExtractValue(arg, 0, "str.ptr");
             } else {
-                serializedValue = generateGenericSerialization(arg, nullptr);
+                serializedValue = generateToStringCall(arg, arg->getType(), nullptr, node->loc);
+                if (!serializedValue) {
+                    serializedValue = generateGenericSerialization(arg, nullptr);
+                }
             }
         }
         if (serializedValue) {
@@ -1836,7 +1856,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         return;
     }
 
-    // Handle println_int() / print_int() intrinsics
+    // Handle println_int() / print_int() intrinsics - route through generic to_string path
     if (identCallee && (identCallee->name == "println_int" || identCallee->name == "print_int") && node->arguments.size() == 1) {
         node->arguments[0]->accept(*this);
         llvm::Value* arg = m_currentLLVMValue;
@@ -1844,17 +1864,21 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
             logError(node->arguments[0]->loc, "Argument to " + identCallee->name + "() evaluated to null");
             return;
         }
-        // Ensure i64
         if (!arg->getType()->isIntegerTy(64)) {
             arg = builder->CreateIntCast(arg, llvm::Type::getInt64Ty(*context), true, "cast_i64");
         }
-        llvm::Function* f = (identCallee->name == "println_int") ? getVynPrintlnIntFunction() : getVynPrintIntFunction();
-        builder->CreateCall(f, {arg});
+        vyn::ast::TypeNode* argType = node->arguments[0]->type.get();
+        llvm::Value* strVal = generateToStringCall(arg, arg->getType(), argType, node->loc);
+        if (identCallee->name == "println_int") {
+            builder->CreateCall(getVynPrintlnFunction(), {strVal});
+        } else {
+            builder->CreateCall(getVynPrintFunction(), {strVal});
+        }
         m_currentLLVMValue = nullptr;
         return;
     }
 
-    // Handle println_bool() / print_bool() intrinsics
+    // Handle println_bool() / print_bool() intrinsics - route through generic to_string path
     if (identCallee && (identCallee->name == "println_bool" || identCallee->name == "print_bool") && node->arguments.size() == 1) {
         node->arguments[0]->accept(*this);
         llvm::Value* arg = m_currentLLVMValue;
@@ -1862,11 +1886,17 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
             logError(node->arguments[0]->loc, "Argument to " + identCallee->name + "() evaluated to null");
             return;
         }
-        if (!arg->getType()->isIntegerTy(64)) {
-            arg = builder->CreateIntCast(arg, llvm::Type::getInt64Ty(*context), false, "cast_bool_i64");
+        // Ensure i1 for bool to_string conversion
+        if (!arg->getType()->isIntegerTy(1)) {
+            arg = builder->CreateICmpNE(arg, llvm::ConstantInt::get(arg->getType(), 0), "to_bool");
         }
-        llvm::Function* f = (identCallee->name == "println_bool") ? getVynPrintlnBoolFunction() : getVynPrintBoolFunction();
-        builder->CreateCall(f, {arg});
+        vyn::ast::TypeNode* argType = node->arguments[0]->type.get();
+        llvm::Value* strVal = generateToStringCall(arg, arg->getType(), argType, node->loc);
+        if (identCallee->name == "println_bool") {
+            builder->CreateCall(getVynPrintlnFunction(), {strVal});
+        } else {
+            builder->CreateCall(getVynPrintFunction(), {strVal});
+        }
         m_currentLLVMValue = nullptr;
         return;
     }
