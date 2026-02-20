@@ -629,14 +629,11 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
         addError("Redefinition of variable \"" + node->id->name + "\" in the same scope.", node->id.get());
     }
 
-    // Enforce mandatory type annotation for var<T> and const<T>
-    if (!node->typeNode) {
-        if (node->isConst) {
-            addError("Missing type annotation on constant declaration '" + node->id->name + "'; expected const<T> name.", node);
-        } else {
-            addError("Missing type annotation on variable declaration '" + node->id->name + "'; expected var<T> name.", node);
-        }
-    }
+    // Enforce mandatory type annotation for Vyn variables (name<Type> = value syntax)
+    // Allow compiler-generated internal variables (starting with __) to skip this check
+    // Allow variables with initializers to use type inference (error if type can't be inferred)
+    bool needsTypeCheck = !node->typeNode && node->id && node->id->name.substr(0, 2) != "__";
+    // We defer the type-missing error until after visiting the initializer (to allow type inference)
 
     if (node->typeNode) {
         node->typeNode->accept(*this);
@@ -667,14 +664,21 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
         
         node->init->accept(*this);
         
-        // Handle type inference for auto variables
-        if (!node->typeNode && expressionTypes.count(node->init.get())) {
-            // Auto type inference - set the type based on initializer
+        // Type inference: if no annotation given, infer from initializer
+        if (needsTypeCheck && expressionTypes.count(node->init.get())) {
             ast::TypeNode* initType = expressionTypes[node->init.get()];
             if (initType) {
+                // Successfully inferred - no error needed
                 node->typeNode = std::unique_ptr<ast::TypeNode>(initType->clone());
+                needsTypeCheck = false; // resolved via inference
+            }
+        }
+        // If still no type, report error with correct Vyn syntax
+        if (needsTypeCheck) {
+            if (node->isConst) {
+                addError("Missing type annotation on constant '" + node->id->name + "'; use const<Type> name = value syntax.", node);
             } else {
-                addError("Cannot infer type for 'auto' variable \\\"" + node->id->name + "\\\", initializer has no type", node);
+                addError("Missing type annotation on '" + node->id->name + "'; use name<Type> = value syntax.", node);
             }
         }
         
@@ -685,13 +689,17 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
             ast::TypeNode* initType = expressionTypes[node->init.get()];
             if (initType) { 
                 if (!areTypesCompatible(varType, initType)) { 
-                    addError("Initializer type does not match variable type for \\\"" + node->id->name + "\\\". Expected " + varType->toString() + " but got " + initType->toString(), node);
+                    addError("Initializer type does not match variable type for '" + node->id->name + "'. Expected " + varType->toString() + " but got " + initType->toString(), node);
                 }
             }
         }
-    } else if (!node->typeNode) {
-        // Auto variables must have an initializer for type inference
-        addError("'auto' variable \\\"" + node->id->name + "\\\" must have an initializer for type inference", node);
+    } else if (needsTypeCheck) {
+        // No initializer and no type annotation
+        if (node->isConst) {
+            addError("Missing type annotation on constant '" + node->id->name + "'; use const<Type> name = value syntax.", node);
+        } else {
+            addError("Missing type annotation on '" + node->id->name + "'; use name<Type> = value syntax.", node);
+        }
     }
     
     // Get the resolved type - prefer the resolved type from typeNode->type if available
@@ -1834,6 +1842,11 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
             (typeName == "Int" || typeName == "Float" || typeName == "Bool" || typeName == "String")) {
             // Static method call for type conversion
             // The actual typing will be handled in CallExpression visitor
+            return;
+        }
+
+        // String::from_bytes() - static factory for String from raw bytes
+        if (typeName == "String" && methodName == "from_bytes") {
             return;
         }
         

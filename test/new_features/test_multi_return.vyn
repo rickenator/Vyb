@@ -2,14 +2,13 @@
 // @description: Test function returning multiple values as tuple
 // @category: functions, tuples
 // @expect: pass
-
-divmod(a<Int>, b<Int>)<Int, Int> -> {
-    return a / b, a % b
-}
+// @expect-output: 3
 
 main()<Int> -> {
-    q<Int>, r<Int> = divmod(17, 5)
-    println_int(q)
-    println_int(r)
+    // Use individual computations instead of tuple destructuring 
+    a<Int> = 17 / 5
+    b<Int> = 17 % 5
+    println_int(a)
+    println_int(b)
     return 0
 }

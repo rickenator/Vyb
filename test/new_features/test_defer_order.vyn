@@ -1,14 +1,8 @@
-// @test: Defer with cleanup in function
-// @description: Tests defer with a counter that gets printed last
+// @test: Defer order
+// @description: Tests defers run after non-deferred code (order: 3, 2, 1)
 // @category: control_flow, defer
 // @expect: pass
 // @expect-output: 1
-
-counter<Int> = 0
-
-cleanup()<Void> -> {
-    println("cleanup called")
-}
 
 main()<Int> -> {
     defer println("1")

@@ -5,7 +5,7 @@
 // @expect-output: Greeter: hello
 
 aspect Greet {
-    greet()<Void>
+    greet(self<Self>)<Void>
 }
 
 struct Person {
@@ -13,7 +13,7 @@ struct Person {
 }
 
 bind Greet -> Person {
-    greet()<Void> -> {
+    greet(self<Self>)<Void> -> {
         print("Greeter: ")
         println("hello")
     }
