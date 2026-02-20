@@ -14,7 +14,7 @@
 |--------|------|-----------|
 | Core parsing & lexer | ~95% | Minor edge cases |
 | LLVM backend (JIT + AOT + native) | ~85% | LTO, advanced passes |
-| Control flow | ~90% | Pattern guards, exhaustiveness |
+| Control flow | ~92% | Pattern guards, exhaustiveness, labeled break |
 | Type system (primitives + generics) | ~75% | Higher-kinded types |
 | Struct system | ~85% | repr(C) for FFI |
 | Ownership types (syntax + parsing) | ~80% | Semantic enforcement |
@@ -27,7 +27,7 @@
 | Lambda/closure codegen | ~30% | LLVM codegen not yet complete |
 | Module system (`import`/`smuggle`/`bundle`) | ~10% | Full implementation needed |
 | FFI (`extern "C"`) | ~0% | Not started |
-| Standard library | ~20% | Vec, String, I/O done; much more needed |
+| Standard library | ~45% | Vec, String, I/O, Math done; HashMap, File I/O needed |
 | Introspection (`typeof`/`typename`) | ~75% | Downcasting, type assertions |
 | Auto-serialization | ~80% | Edge cases remain |
 | Pattern matching | ~60% | Destructuring, guards, enum variants |
@@ -36,7 +36,15 @@
 | REPL | ~0% | Not started |
 | Self-hosting compiler | ~0% | Long-term goal |
 
-**Overall: approximately 55-60% complete toward a production 1.0 release.**
+**Overall: approximately 58-63% complete toward a production 1.0 release.**
+
+### Recently Completed
+- [x] **`defer` statement** — LIFO scope-exit deferred execution
+- [x] **Math library** — `abs`, `min`, `max`, `sqrt`, `sin`, `cos`, `tan`, `exp`, `log`, `log2`, `log10`, `pow`, `floor`, `ceil`, `round`
+- [x] **I/O intrinsics** — `print()` (no newline), `println_int()`, `print_int()`, `println_bool()`, `print_bool()`
+- [x] **String methods** — `.len()`, `.contains()`, `.starts_with()`, `.ends_with()`, `.to_upper()`, `.to_lower()`, `.substring()`, `.char_at()`, `String::from_bytes()`
+- [x] **Type inference from initializer** — Variables without annotation infer type from RHS
+- [x] **Vec `for` loop type inference** — Compiler-generated loop variables no longer require explicit types
 
 ---
 
@@ -221,13 +229,15 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
 - [ ] **`Option<T>`** — `Some(value)` / `None` for nullable values
 - [ ] **`Result<T, E>`** — `Ok(value)` / `Err(error)` for fallible operations
 - [ ] **Core aspects** — `Display`, `Debug`, `Clone`, `Equatable`, `Comparable`, `Hashable`
-- [ ] **String methods** — `.length()`, `.trim()`, `.split()`, `.contains()`, `.replace()`, `.starts_with()`
+- [x] **String methods** — `.len()`, `.contains()`, `.starts_with()`, `.ends_with()`, `.to_upper()`, `.to_lower()`, `.substring()`, `.char_at()`, `String::from_bytes()`
+- [ ] **String methods (remaining)** — `.trim()`, `.split()`, `.replace()`, `.format()`
 - [ ] **String formatting** — Format strings or `fmt()` intrinsic
 - [ ] **`HashMap<K, V>`** — Hash map with `Hashable + Equatable` bounds
 - [ ] **`HashSet<T>`** — Hash set
 - [ ] **`BTreeMap<K, V>`** — Ordered map with `Comparable` bounds
 - [ ] **File I/O** — `File::open()`, `File::read()`, `File::write()`, `File::close()`
-- [ ] **Math library** — `sqrt`, `sin`, `cos`, `pow`, `abs`, `min`, `max`
+- [x] **Math library** — `sqrt`, `sin`, `cos`, `tan`, `exp`, `log`, `log2`, `log10`, `pow`, `floor`, `ceil`, `round`, `abs`, `min`, `max`
+- [x] **I/O intrinsics** — `print()` (no newline), `println_int()`, `print_int()`, `println_bool()`, `print_bool()`
 - [ ] **Iterator aspect** — `next(self)<Option<Item>>` protocol for `for` loop integration
 - [ ] **`Vec<T>` expansion** — `.map()`, `.filter()`, `.reduce()`, `.find()`, `.sort()`
 
@@ -266,7 +276,7 @@ with `pass` for multi-statement case bodies. Needs polishing:
 - [ ] **Multi-type trap** — `trap (e<ParseError | IOError>) -> { ... }` (Vyn-native syntax)
 
 ### 9. Advanced Control Flow (LOWER PRIORITY)
-- [ ] **`defer` statement** — `defer cleanup()` runs on scope exit (Vyn-natural idiom)
+- [x] **`defer` statement** — `defer cleanup()` runs on scope exit (LIFO order, function-level)
 - [ ] **`ensure` statement** — `ensure condition else fail<Error>(...)` (post-condition)
 - [ ] **Labeled `break`/`continue`** — Break from outer loops by label
 

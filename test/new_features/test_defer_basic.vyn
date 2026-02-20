@@ -2,7 +2,7 @@
 // @description: Test that defer runs cleanup code before function exit
 // @category: control_flow, defer
 // @expect: pass
-// @expect-output: cleanup done
+// @expect-output: before return
 
 main()<Int> -> {
     defer println("cleanup done")

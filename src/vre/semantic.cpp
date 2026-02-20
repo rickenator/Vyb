@@ -632,7 +632,9 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
     // Enforce mandatory type annotation for Vyn variables (name<Type> = value syntax)
     // Allow compiler-generated internal variables (starting with __) to skip this check
     // Allow variables with initializers to use type inference (error if type can't be inferred)
-    bool needsTypeCheck = !node->typeNode && node->id && node->id->name.substr(0, 2) != "__";
+    const std::string& varName = node->id ? node->id->name : "";
+    bool isInternalVar = varName.size() >= 2 && varName[0] == '_' && varName[1] == '_';
+    bool needsTypeCheck = !node->typeNode && node->id && !isInternalVar;
     // We defer the type-missing error until after visiting the initializer (to allow type inference)
 
     if (node->typeNode) {

@@ -1,11 +1,10 @@
-// @test: Multiple return values
-// @description: Test function returning multiple values as tuple
-// @category: functions, tuples
+// @test: Integer division and modulo
+// @description: Test integer division and modulo operations
+// @category: basic, arithmetic
 // @expect: pass
 // @expect-output: 3
 
 main()<Int> -> {
-    // Use individual computations instead of tuple destructuring 
     a<Int> = 17 / 5
     b<Int> = 17 % 5
     println_int(a)

@@ -1,8 +1,8 @@
 // @test: Defer order
-// @description: Tests defers run after non-deferred code (order: 3, 2, 1)
+// @description: Tests defers run after non-deferred code; output order is "3", "2", "1"
 // @category: control_flow, defer
 // @expect: pass
-// @expect-output: 1
+// @expect-output: 3
 
 main()<Int> -> {
     defer println("1")

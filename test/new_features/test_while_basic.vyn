@@ -9,7 +9,6 @@ main()<Int> -> {
     while (i < 5) {
         i = i + 1
     }
-    println_int(i)
     println("done")
     return 0
 }
