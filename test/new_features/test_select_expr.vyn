@@ -1,0 +1,16 @@
+// @test: Select expression basic
+// @description: select returns a value based on pattern matching
+// @category: control_flow, select
+// @expect: pass
+// @expect-output: 50
+
+main()<Int> -> {
+    x<Int> = 5
+    result<Int> = select(x) -> {
+        1 -> 10,
+        5 -> 50,
+        ? -> 0
+    }
+    println_int(result)
+    return 0
+}

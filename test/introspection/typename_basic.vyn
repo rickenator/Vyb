@@ -1,17 +1,15 @@
-// Test basic typename operator
-// typename(expr) returns a String with the type name
+// @test: typename basic
+// @description: typename(expr) returns the type name as a String
+// @category: introspection
+// @expect: pass
+// @expect-output: typename works
 
 main()<Int> -> {
-    x<Int> = 42;
-    y<float> = 3.14;
-    s<string> = "hello";
-    
-    // Get type names as strings
-    name_x<string> = typename(x);
-    name_y<string> = typename(y);
-    name_s<string> = typename(s);
-    
-    println("typename(x) works!");
-    
-    return 0;
+    x<Int> = 42
+    y<Float> = 3.14
+    s<String> = "hello"
+    name_x<String> = typename(x)
+    name_y<String> = typename(y)
+    println("typename works")
+    return 0
 }

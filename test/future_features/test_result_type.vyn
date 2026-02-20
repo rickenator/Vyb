@@ -1,0 +1,27 @@
+// @test: Result type (future)
+// @description: Result<T,E> with Ok/Err variants is a planned stdlib type
+// @category: types, result, error_handling
+// @expect: fail
+// @tags: future, unimplemented
+
+// When implemented, Result<T,E> will work like:
+//
+//   parse_int(s<String>)<Result<Int,String>> -> {
+//       // ... parse logic ...
+//       return Ok(42)
+//       // or: return Err("invalid number")
+//   }
+//
+//   main()<Int> -> {
+//       r<Result<Int,String>> = parse_int("42")
+//       match (r) {
+//           Ok(val)  -> println_int(val),
+//           Err(msg) -> println(msg)
+//       }
+//       return 0
+//   }
+
+main()<Int> -> {
+    r<Result<Int,String>> = Ok(42)
+    return 0
+}

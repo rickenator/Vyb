@@ -6,7 +6,7 @@
 
 ## 1. Introduction
 
-Welcome to the Vyn Programming Guide. This guide walks you through writing, building, and extending Vyn programs, from your first "Hello, Vyn!" to deep dives into the Vyn language internals and runtime. **Version 0.4.4** (freedom-1.0 series) delivers a robust systems programming language with LLVM backend, native code compilation to object files, complete sized type system, pattern matching with `match` statements, comprehensive control flow including `break`/`continue`, resizable `Vec<T>` collections, unified syntax, generic function monomorphization, and comprehensive auto-serialization capabilities.
+Welcome to the Vyn Programming Guide. This guide walks you through writing, building, and extending Vyn programs, from your first "Hello, Vyn!" to deep dives into the Vyn language internals and runtime. **Version 0.4.4** (freedom-1.0 series) delivers a robust systems programming language with an LLVM backend, native code compilation to standalone executables, a complete sized type system, pattern matching with `match` and `select` expressions, comprehensive control flow including `defer`, `break`/`continue`, resizable `Vec<T>` collections, complete string methods, a full math library, runtime type introspection (`typeof`/`typename`), unified name-first function syntax, generic function monomorphization, aspect/bind polymorphism, and comprehensive auto-serialization capabilities.
 
 ### 1.1 Purpose & Audience
 
@@ -23,7 +23,7 @@ Here's a comparison of Vyn against several modern systems languages, showing key
 
 | Language | Templates / Generics               | Memory Model                                                       | Concurrency                            | Syntax Style                      | Unique Feature                                     | Comment                                                      |
 | -------- | ---------------------------------- | ------------------------------------------------------------------ | -------------------------------------- | --------------------------------- | -------------------------------------------------- | ------------------------------------------------------------ |
-| **Vyn**  | Monomorphized templates everywhere | Ownership types (my/our/mild/their) reference counting        | Async/await, planned actors, threads, channels | Indentation-based, optional braces | Planned self-hosting compiler; dual VM/JIT backend, hybrid indentation | Combines zero-cost templates with flexible memory management |
+| **Vyn**  | Monomorphized generics everywhere | Ownership types (`my`/`our`/`mild`/`their`), reference counting | Async/await, planned actors, threads, channels | Name-first syntax `name(params)<Type> ->`, aspect/bind polymorphism | `select` expressions, `defer`, `freedom` blocks, `fail`/`trap` error system | Combines zero-cost generics with readable ownership semantics |
 | **Rust** | Monomorphized generics             | Ownership/borrow checker; optional `Arc`/`Rc`                      | `async`/`await`, threads, channels     | C-style braces, macros            | Zero-cost abstractions; strong compile-time safety | No global GC; all memory safety enforced at compile time     |
 | **D**    | Runtime & compile-time templates   | GC by default; `@nogc` for manual alloc/free                       | `std.concurrency` fibers, threads      | C-style; mixins                   | Compile-time function execution (CTFE)             | Blend of high-level features with systems control            |
 | **C++**  | Templates & concepts (20+)         | Manual `new`/`delete`; smart pointers (`unique_ptr`, `shared_ptr`) | Threads, coroutines (`co_await`)       | C-style braces                    | Metaprogramming via templates & concepts           | Extensive ecosystem; highest portability                     |
@@ -34,16 +34,20 @@ Here's a comparison of Vyn against several modern systems languages, showing key
 
 ### 1.2 What is Vyn?
 
-Vyn is a statically typed, template-metaprogramming language designed to compile to native code via LLVM. Its key differentiators:
+Vyn is a statically typed, compiled systems language targeting native code via LLVM. Its key differentiators:
 
-* **Terse Syntax**: Indentation-based or bracket-based blocks, optional semicolons, clear constructs.
-* **Templates Everywhere**: Monomorphized generics for types and functions.
-* **Canonical Ownership Syntax**: Unified `my(expr)`, `our(expr)`, `soft()`, `view`, `borrow` operators for memory management.
-* **Reference Counting with Weak References**: `our<T>` for shared ownership, `mild<T>` for weak references that don't prevent cleanup.
-* **Concurrency Built In**: Async/await, with planned actors, threads, and typed channels.
-* **Self-Hosting & Extensible**: Planned compiler written in Vyn; add backends, macros, and modules at runtime.
+* **Name-First Syntax**: `name(params)<ReturnType> ->` — no `fn` keyword noise; function names come first.
+* **Aspect/Bind Polymorphism**: Aspects (`aspect`) + struct binding (`bind Aspect -> Type`) instead of classes — more composable, no inheritance pitfalls.
+* **Readable Ownership**: `my<T>` (unique), `our<T>` (shared), `their<T>` (borrowed), `mild<T>` (weak) — ownership intent is explicit without cryptic lifetime annotations.
+* **Programmer FREEDOM**: `freedom { ... }` blocks for low-level control; `loc<T>` raw pointers within them — no hidden tax on safe code.
+* **`select` Expressions**: Pattern matching that yields a value with a `pass` keyword for multi-statement arms — uniquely Vyn, not found in other languages.
+* **`fail`/`trap` Error System**: Typed error propagation with zero-cost success path; no try/catch/finally.
+* **`defer` Statement**: LIFO scope-exit cleanup without RAII ceremony.
+* **Monomorphized Generics**: Zero-cost generics with aspect bounds (`<T<Display>>`).
+* **Concurrency Built In**: Async/await today; actors, channels, and typed streams planned.
+* **Native Compilation**: Full JIT (LLVM ORC), AOT (object files), and executable generation pipeline.
 
-**Current Version:** 0.4.3 (freedom-1.0 series) 🚀 **AOT COMPILATION + CROSS-PLATFORM SUPPORT**
+**Current Version:** 0.4.4 (freedom-1.0 series) 🚀 **AOT COMPILATION + CROSS-PLATFORM SUPPORT**
 
 ## Quick Start
 
@@ -51,15 +55,10 @@ Vyn is a statically typed, template-metaprogramming language designed to compile
 # Clone and build
 git clone https://github.com/rickenator/Vyn.git
 cd Vyn
-make -C build -j
+mkdir -p build && cd build && LLVM_DIR=/usr/lib/llvm-18/cmake cmake .. && make -j$(nproc) && cd ..
 
-# Run with modern test harness (391+ tests)
-python3 test_harness.py --parallel --html-report --triage
-
-# Try examples with canonical syntax
-build/vyn examples/main.vyn
-cd Vyn
-make -C build -j
+# Run with modern test harness (400+ tests)
+python3 test_harness.py --vyn ./build/vyn --test-dirs test/new_features --workers 4
 
 # Run your first Vyn program
 echo 'main()<Int> -> { return 42 }' > hello.vyn
@@ -68,18 +67,18 @@ build/vyn hello.vyn  # Returns exit code 42
 # Try select expressions with pattern matching
 cat > example.vyn << 'EOF'
 main()<Int> -> {
-    numbers<Vec<Int>> = Vec::new();
-    numbers.push(10);
-    numbers.push(20);
-    
+    numbers<Vec<Int>> = Vec::new()
+    numbers.push(10)
+    numbers.push(20)
+
     result<Int> = select(numbers.len()) -> {
         0 -> 0,
         2 -> {
-            sum<Int> = numbers.get(0) + numbers.get(1);
+            sum<Int> = numbers.get(0) + numbers.get(1)
             pass sum
         },
         ? -> -1
-    };
+    }
     return result
 }
 EOF
@@ -253,6 +252,71 @@ This unique `import`/`smuggle` distinction makes Vyn's module system both secure
 
 Vyn **v0.4.4** (freedom-1.0 series) is a **complete systems programming language** with **full native executable generation** ready for production use:
 
+### ✅ **Recently Completed in v0.4.4**
+These features were completed in the current release cycle and are fully tested:
+
+- **`defer` statement** — `defer cleanup()` executes at scope exit in LIFO order; ideal for resource cleanup
+  ```vyn
+  main()<Int> -> {
+      defer println("cleanup done")
+      println("before return")
+      return 0
+  }
+  // Output: before return \n cleanup done
+  ```
+- **Math library** — `abs`, `min`, `max`, `sqrt`, `sin`, `cos`, `tan`, `exp`, `log`, `log2`, `log10`, `pow`, `floor`, `ceil`, `round`
+  ```vyn
+  main()<Int> -> {
+      x<Float> = sqrt(2.0)
+      y<Int> = abs(-5)
+      println_int(y)    // 5
+      return 0
+  }
+  ```
+- **String methods** — `.len()`, `.contains()`, `.starts_with()`, `.ends_with()`, `.to_upper()`, `.to_lower()`, `.substring()`, `.char_at()`, `String::from_bytes()`
+  ```vyn
+  main()<Int> -> {
+      s<String> = "Hello, Vyn!"
+      if (s.contains("Vyn")) {
+          println(s.to_upper())   // HELLO, VYN!
+      }
+      return 0
+  }
+  ```
+- **Type inference from initializer** — Variables without annotation infer type from RHS
+  ```vyn
+  x = 42          // inferred as Int
+  msg = "hello"   // inferred as String
+  ok = true       // inferred as Bool
+  ```
+- **Vec `for` loop type inference** — Compiler-generated loop variables require no explicit types
+  ```vyn
+  nums<Vec<Int>> = Vec::new()
+  nums.push(10)
+  for (n in nums) {
+      println_int(n)   // n is automatically Int
+  }
+  ```
+- **`select` expressions** — Pattern matching that yields a value; Vyn-original concept
+  ```vyn
+  grade<String> = select(score) -> {
+      >= 90 -> "A",
+      >= 80 -> "B",
+      >= 70 -> "C",
+      ? -> "F"
+  }
+  ```
+- **`typeof` / `typename` intrinsics** — Runtime type introspection
+  ```vyn
+  x<Int> = 42
+  same<Bool> = (typeof(x) == typeof(100))    // true
+  name<String> = typename(x)                  // "Int"
+  ```
+- **Immutable bindings (`const`)** — `name<Type const>` declares an immutable variable
+  ```vyn
+  pi<Float const> = 3.14159
+  ```
+
 ### ✅ **Binary Executable Generation (NEW in v0.4.4!)**
 - **Full Compilation Pipeline**: Complete source → object → executable workflow
 - **Build Command**: `vyn program.vyn --build myapp` creates standalone executables
@@ -284,28 +348,53 @@ Vyn **v0.4.4** (freedom-1.0 series) is a **complete systems programming language
 
 ### ✅ **Core Language Features**
 - **Functions**: `name(params)<ReturnType> -> body` with full LLVM compilation
-  - **Standard parameters**: `param<Type>` or `param<Type const>` 
-  - **Shorthand parameters**: `Type param` or `const Type param`
-  - **Mixed syntax**: Both forms can be used in the same function
+  - **Standard parameters**: `param<Type>` or `param<Type const>`
+  - **Immutable parameters**: `param<Type const>` for read-only arguments
 - **Variables**: `name<Type> = value` with type inference and explicit typing
+- **Immutable bindings**: `name<Type const> = value` — cannot be reassigned
 - **Resizable Arrays**: `Vec<T>` with `new()`, `push()`, `pop()`, `len()`, `get()` methods
-- **Vec Iteration**: `for (item in vec)` loops with full break/continue support
-- **Fixed Arrays**: `[T; N]` with indexing and beautiful println() output
+- **Vec Iteration**: `for (item in vec)` loops with inferred element type and `break`/`continue`
+- **Fixed Arrays**: `[T; N]` with indexing
 - **Structs**: `struct Point { x<Int>, y<Int> }` with field access (`p.x`, `p.y`)
 - **Control Flow**: `if/else`, `while/for` loops, `match` statements, `break/continue`
-- **Select Expressions**: `select(expr) -> { pattern -> result };` with auto-return and explicit `pass` keyword
+- **`defer` statement**: `defer expr` — LIFO scope-exit execution for cleanup
+- **Select Expressions**: `select(expr) -> { pattern -> result }` — pattern matching that returns a value; `pass` keyword for multi-statement arms
 - **Arithmetic**: Full binary operators (`+`, `-`, `*`, `/`, `==`, `!=`, `<`, `>`, etc.)
-- **Pattern Matching**: `match (expr) { pattern -> result }` with comprehensive patterns
-- **Error Handling**: `fail`/`trap` system with zero-cost success path and heap-allocated error contexts for type-safe exception handling
-- **I/O**: `println()` for output, works with all data types including vectors
+- **Pattern Matching**: `match (expr) { pattern -> result }` with comparison patterns (`>= 90`, `< 0`) and wildcard `?`
+- **Error Handling**: `fail`/`trap` system with zero-cost success path and type-safe error propagation
+- **I/O**: `println()` for all types; `print()` without newline; `println_int()`, `println_bool()` variants
+- **Math**: `sqrt`, `abs`, `min`, `max`, `sin`, `cos`, `tan`, `pow`, `log`, `floor`, `ceil`, `round`
 
 ### ✅ **Advanced Type System**
-- **Multi-value returns**: `main()<Int,String> -> return 42, "hello"`
-- **Variadic Tuples**: `Tuple<T,U,V,...>` supports 1 to N type parameters with both inline `(T,U,V)` and generic `Tuple<T,U,V>` syntax
+- **Multi-value returns**: `main()<Int,String> -> return 42, "hello"` — auto-serialized as JSON
+- **Variadic Tuples**: `Tuple<T,U,V,...>` with inline `(T,U,V)` syntax
 - **Auto-serialization**: Complex return types automatically output as JSON
-- **Type safety**: Full type checking and inference with modern struct syntax
+- **Type inference**: Full type checking and inference — `x = 42` infers `Int`
 - **Generic collections**: `Vec<Int>`, `Vec<String>` with full method support
 - **Member access**: Struct field access (`obj.field`) and array indexing (`arr[index]`)
+- **Ownership types** (syntax fully parsed): `my<T>`, `our<T>`, `their<T>`, `mild<T>`
+- **`freedom` blocks**: `freedom { ... }` for programmer-controlled sections with raw `loc<T>` pointers
+
+### ✅ **String Methods**
+Comprehensive string manipulation built into the `String` type:
+
+| Method | Description | Example |
+|--------|-------------|---------|
+| `.len()` | Length in bytes | `s.len()` → `Int` |
+| `.contains(sub)` | Substring test | `s.contains("Vyn")` → `Bool` |
+| `.starts_with(pre)` | Prefix test | `s.starts_with("He")` → `Bool` |
+| `.ends_with(suf)` | Suffix test | `s.ends_with("!")` → `Bool` |
+| `.to_upper()` | Uppercase copy | `s.to_upper()` → `String` |
+| `.to_lower()` | Lowercase copy | `s.to_lower()` → `String` |
+| `.substring(start, len)` | Slice | `s.substring(0, 5)` → `String` |
+| `.char_at(i)` | ASCII code at index | `s.char_at(1)` → `Int` |
+| `String::from_bytes(ptr, len)` | Construct from bytes | `String::from_bytes(p, n)` |
+
+**String concatenation** with `+` auto-converts non-String operands:
+```vyn
+id<Int> = 42
+msg<String> = "User ID: " + id    // "User ID: 42"
+```
 
 ### ✅ **Async Programming & Debugging**
 
@@ -370,50 +459,46 @@ Vyn features **runtime type introspection** for self-aware programs:
 
 #### Type Reflection Operators
 ```vyn
-# Get runtime type hash
-var x<Int> = 42
-type_id<i64> = typeof(x)      # Returns hash of "Int"
+// Get runtime type hash — use for equality comparison
+x<Int> = 42
+same<Bool> = (typeof(x) == typeof(100))   // true — both Int
 
-# Get type name as string
-type_name<String> = typename(x)  # Returns "Int"
-println(type_name)             # Prints: Int
+// Get type name as String
+name<String> = typename(x)                // "Int"
 
-# Works on any expression
-result<i64> = typeof(10 + 20)  # Type of expression result
-func_type<String> = typename(compute())  # Type of function return
+// Works on any expression
+same_expr<Bool> = (typeof(x + 5) == typeof(x * 2))   // true
 ```
 
 #### Key Features
-- **typeof(expr)**: Returns i64 hash of type name for runtime type comparison
-- **typename(expr)**: Returns String with human-readable type name
-- **Expression-based**: Works on variables, literals, function calls, any expression
-- **LLVM Integration**: Uses operand->type->toString() for actual type extraction
-- **Zero-cost**: Type information extracted at compile-time, hashes computed via std::hash
+- **`typeof(expr)`**: Returns a type discriminant for runtime type comparison; same types always compare equal
+- **`typename(expr)`**: Returns `String` with the human-readable type name (e.g., `"Int"`, `"Float"`, `"Bool"`)
+- **Expression-based**: Works on variables, literals, arithmetic expressions
+- **Zero-cost**: Type information extracted at compile-time, evaluated at runtime via std::hash
+- **Note**: `typeof` result is an opaque `Type` value; use only for `==`/`!=` comparisons
 
 #### Usage Examples
 ```vyn
-# Type comparison
-if (typeof(x) == typeof(y)) {
-    println("Same types")
+// Type comparison
+x<Int> = 42
+y<Float> = 3.14
+if (typeof(x) != typeof(y)) {
+    println("different types")
 }
 
-# Debug output
-println("Processing " + typename(data) + " value")
-
-# Foundation for advanced features (planned):
-# - Multi-type trap handlers: } trap (e<?>) -> { ... }
-# - Generic serialization based on runtime type
-# - Type-safe downcasting: value as TargetType
+// Foundation for advanced features (planned):
+// - Wildcard trap: trap (e<?>) -> { if typeof(e) == typeof<IOError>() ... }
+// - Type-safe downcasting: value as TargetType
+// - Generic serialization based on runtime type
 ```
 
 **Implementation Status:**
-- ✅ KEYWORD_TYPEOF and KEYWORD_TYPENAME tokens
-- ✅ TypeofExpression and TypenameExpression AST nodes
-- ✅ Parser support for typeof(expr) and typename(expr) syntax
-- ✅ Semantic analysis (typeof returns "Type", typename returns "string")
-- ✅ LLVM codegen with std::hash for typeof, string struct for typename
-- ✅ Comprehensive test coverage (4+ test files)
-- ✅ println() fix to properly handle Vyn string output
+- ✅ `KEYWORD_TYPEOF` and `KEYWORD_TYPENAME` tokens
+- ✅ `TypeofExpression` and `TypenameExpression` AST nodes
+- ✅ Parser support for `typeof(expr)` and `typename(expr)` syntax
+- ✅ Semantic analysis — `typeof` returns opaque `Type`, `typename` returns `String`
+- ✅ LLVM codegen — `typeof` uses `std::hash`, `typename` creates a `{ptr, len}` string struct
+- ✅ Comprehensive test coverage in `test/introspection/`
 
 **See:** `test/introspection/` for working examples and `doc/INTROSPECTION_DESIGN.md` for design philosophy
 
@@ -670,12 +755,28 @@ access_parent(node<our<TreeNode>>)<Int> -> {
 **See:** `doc/OWNERSHIP_MILD.md` for complete documentation and `test/ownership/mild_test.vyn` for examples
 
 ### ✅ **Developer Experience**
-- **LLVM backend**: Direct compilation to native code with JIT execution
-- **Comprehensive parser**: Handles complex syntax including templates, async, traits
-- **Rich error messages**: Clear compilation feedback
+- **LLVM backend**: JIT execution, AOT object files, and standalone executable generation
+- **Comprehensive parser**: Handles all documented syntax including generics, async, aspects
+- **Rich error messages**: Clear compilation feedback with file, line, and column info
 - **Advanced Test Harness**: Modern parallel test runner with HTML/JSON reporting and triage analysis
-- **Debug Information**: Complete DWARF debug metadata generation for debugging async state machines
+- **Debug Information**: Complete DWARF debug metadata for source-level debugging in gdb/lldb
 - **Git integration**: Regular commits track development progress
+- **Migration Tool**: `python3 migrate_syntax.py` for automated syntax upgrades
+
+### 🔜 **Native Bridge / FFI Status**
+Vyn's native bridge to C libraries is the highest-priority upcoming feature:
+
+| Layer | Status | Description |
+|-------|--------|-------------|
+| **Vyn Runtime** | ✅ Complete | `runtime/vyn_runtime.c` — GC, Vec, String, Math, I/O all linked automatically |
+| **LLVM intrinsics** | ✅ Complete | `malloc`, `free`, `memset`, `printf`-style print all registered in JIT |
+| **C stdlib (math)** | ✅ Complete | `libm` linked; `sqrt`, `sin`, `cos`, `pow`, etc. all working |
+| **C stdlib (I/O)** | ✅ Complete | `libc` linked; I/O built on top of C runtime |
+| **`extern "C"` blocks** | 🔜 Planned | Declare C functions callable from Vyn; maps types: `Int`→`int64_t`, `loc<T>`→`T*` |
+| **`#[repr(C)]` structs** | 🔜 Planned | Force C-compatible struct layout for FFI |
+| **`vyn bindgen`** | 🔜 Future | Auto-generate Vyn bindings from C headers |
+
+**Design goal**: Once `extern "C"` lands, the entire POSIX API becomes available with a thin Vyn wrapper, enabling networking, file I/O, threading, and more without any language-level changes. See `doc/FFI_DESIGN.md` for the complete design.
 
 ## Language Overview
 
@@ -684,35 +785,34 @@ Vyn v0.4.2 (freedom-1.0 series) is a **complete, production-ready systems progra
 ### Language Features Showcase
 
 ```vyn
-# Complete language demonstration showing all major features
+// Complete language demonstration showing all major features
 
-# Modern struct syntax with typed fields
+// Modern struct syntax with typed fields
 struct Person {
     name<String>,
     age<Int>,
     scores<Vec<Int>>
 }
 
-# Define aspect for gradeable entities
+// Define aspect for gradeable entities
 aspect Gradeable {
     letter_grade(self<Self>)<String> -> { }
     is_passing(self<Self>)<Bool> -> { }
 }
 
-# Bind aspect to Person using match in the implementation
+// Bind aspect to Person using match in the implementation
 bind Gradeable -> Person {
     letter_grade(self<Self>)<String> -> {
-        # Calculate average score
+        // Calculate average score
         total<Int> = 0
         i<Int> = 0
         while (i < self.scores.len()) {
             total = total + self.scores.get(i)
             i = i + 1
         }
-        
         avg<Int> = total / self.scores.len()
-        
-        # Match statement with comparison patterns for grade ranges
+
+        // Match statement with comparison patterns for grade ranges
         match (avg) {
             >= 90 -> return "A",
             >= 80 -> return "B",
@@ -721,7 +821,7 @@ bind Gradeable -> Person {
             ? -> return "F"
         }
     }
-    
+
     is_passing(self<Self>)<Bool> -> {
         grade<String> = self.letter_grade()
         match (grade) {
@@ -731,21 +831,20 @@ bind Gradeable -> Person {
     }
 }
 
-# Select expression with comparison patterns returning grade string
+// select expression — Vyn-original: pattern matching that returns a value
 get_grade_description(score<Int>)<String> -> {
     grade<String> = select(score) -> {
-        >= 90 -> { pass "Excellent" },
-        >= 80 -> { pass "Good" },
-        >= 70 -> { pass "Satisfactory" },
-        >= 60 -> { pass "Passing" },
-        ? -> { pass "Needs Improvement" }
-    };
-    
+        >= 90 -> "Excellent",
+        >= 80 -> "Good",
+        >= 70 -> "Satisfactory",
+        >= 60 -> "Passing",
+        ? -> "Needs Improvement"
+    }
     println(grade)
     return grade
 }
 
-# Generic function using aspect bounds
+// Generic function using aspect bounds
 print_student_status<T<Gradeable>>(student<T>)<Void> -> {
     grade<String> = student.letter_grade()
     passing<Bool> = student.is_passing()
@@ -757,33 +856,34 @@ print_student_status<T<Gradeable>>(student<T>)<Void> -> {
     }
 }
 
-# Resizable collections with full method support
+// Resizable collections with full method support
 create_person(name<String>, age<Int>)<Person> -> {
     person<Person> = Person {
         name = name,
         age = age,
         scores = Vec::new()
     }
-    
-    # Member access for both reading and modification
     person.scores.push(85)
     person.scores.push(92)
     person.scores.push(78)
-    
     return person
 }
 
 main()<Int> -> {
     student<Person> = create_person("Alice", 20)
-    
-    # Call aspect method through generic function
+
+    // Defer for guaranteed cleanup
+    defer println("done")
+
+    // Type introspection
+    same<Bool> = (typeof(student.age) == typeof(42))
+
+    // Call aspect method through generic function
     print_student_status(student)
-    
-    # Use select expression with comparison patterns
+
+    // Use select with comparison patterns
     description<String> = get_grade_description(85)
-    
-    println(student)  # Auto-serialization of complex types
-    
+
     return 0
 }
 ```
@@ -793,41 +893,23 @@ main()<Int> -> {
 Vyn's design philosophy: **FREEDOM over restrictions**. The language provides compiler-managed ownership by default, but empowers programmers with low-level control when needed:
 
 ```vyn
-# Restricted memory management with ownership types
+// Ownership type syntax (runtime enforcement planned for v0.5)
 restricted_memory_example()<Int> -> {
-    # Unique ownership - automatically freed when out of scope
-    owned<my<String>> = my("unique data")
-    
-    # Shared ownership - reference counted
-    shared<our<String>> = our("shared data")
-    another_ref<our<String>> = shared  # Reference count incremented
-    
-    # Borrowing - non-owning references
-    view_ref<their<String const>> = view(shared)      # Immutable borrow
-    mut_ref<their<String>> = borrow(owned)           # Mutable borrow
-    
+    owned<my<String>> = my("unique data")         // Unique ownership
+    shared<our<String>> = our("shared data")      // Shared, ref-counted
+    another_ref<our<String>> = shared             // Reference count +1
+    view_ref<their<String const>> = view(shared)  // Immutable borrow
     return 42
 }
 
-# FREEDOM operations for low-level control
+// freedom block — low-level pointer access
 freedom_memory_example()<Int> -> {
     x<Int> = 42
-    result<Int> = 0
-    
     freedom {
-        # Create raw pointers
-        p<loc<Int>> = loc(x)     # Get pointer to x
-        q<loc<Int>> = loc(result) # Get pointer to result
-        
-        # Read and write through pointers
-        at(q) = at(p) * 2           # Write x*2 to result through pointers
-        
-        # Pointer type conversion
-        p_void<loc<Void>> = from<loc<Void>>(p)
-        p_back<loc<Int>> = from<loc<Int>>(p_void)
+        p<loc<Int>> = loc(x)       // Get pointer to x
+        println("in freedom block")
     }
-    
-    return result  # Returns 84
+    return x
 }
 ```
 
@@ -845,75 +927,74 @@ Vyn uses indentation-sensitive syntax with optional braces and semicolons. White
 #### Literal Forms
 
 ```vyn
-# Integer literals
-x<Int> = 42                      # 64-bit signed integer (default)
-small<Int> = 123                 # All integers default to 64-bit
-large<Int> = -9223372036854775808  # Full 64-bit range
+// Integer literals
+x<Int> = 42                       // 64-bit signed integer (default)
+large<Int> = -9223372036854775808  // Full 64-bit range
 
-# Floating point literals  
-pi<Float> = 3.14159              # 64-bit IEEE 754 double precision
-scientific<Float> = 1.23e-4      # Scientific notation supported
-negative<Float> = -2.718         # Negative floats
+// Floating point literals
+pi<Float> = 3.14159               // 64-bit IEEE 754 double precision
+e<Float> = 2.71828
 
-# Boolean literals
-flag<Bool> = true                # Boolean true
-active<Bool> = false             # Boolean false
+// Boolean literals
+flag<Bool> = true
+active<Bool> = false
 
-# String literals
-name<String> = "Alice"           # UTF-8 string literals
-multiline<String> = "Line 1\nLine 2"  # Escape sequences supported
-empty<String> = ""               # Empty strings
+// String literals
+name<String> = "Alice"            // UTF-8 string
+greeting<String> = "Hello\nVyn"  // Escape sequences supported
+empty<String> = ""
 
-# Character and Unicode (planned)
-# ch<Char> = 'A'                 # Single byte UTF-8 code unit (planned)
-# rune<Rune> = '💡'              # Full Unicode code point (planned)
+// Array literals (fixed-size)
+numbers<[Int; 5]> = [1, 2, 3, 4, 5]
+floats<[Float; 3]> = [1.0, 2.5, -3.14]
 
-# Array literals
-numbers<[Int; 5]> = [1, 2, 3, 4, 5]     # Fixed-size arrays
-mixed<[Float; 3]> = [1.0, 2.5, -3.14]   # Different element types
-empty_array<[Int; 0]> = []               # Empty arrays
+// Dynamic arrays (Vec<T>)
+items<Vec<Int>> = Vec::new()
 
-# Vector literals (dynamic arrays)
-items<Vec<Int>> = Vec::new()             # Empty dynamic vector
-# Dynamic vector literals with vec![] syntax planned
-
-# Raw bytes (planned)
-# raw<Bytes> = [0xDE, 0xAD, 0xBE]       # Raw byte sequences (planned)
-
-# Null/void
-# No explicit null literal - use Option<T> pattern when implemented
+// Immutable binding
+PI<Float const> = 3.14159
 ```
 
 #### Syntax Examples
 
 ```vyn
-# Variable declarations with unified syntax
-x<Int> = 42                      # Mutable variable
-PI<Float const> = 3.14159        # Immutable constant
+// Variable declarations with unified syntax
+x<Int> = 42                  // Mutable variable
+PI<Float const> = 3.14159    // Immutable constant (name<Type const>)
 
-# Function declarations follow execution order
+// Function declarations — name comes first
 add(a<Int>, b<Int>)<Int> -> a + b
 
-# Struct definitions with typed fields
+// Struct definitions with typed fields
 struct Point {
     x<Float>,
-    y<Float> = 0.0               # Default values supported
+    y<Float>
 }
 
-# Pattern matching with comprehensive patterns
+// Pattern matching with comparison operators and wildcard ?
 process_value(val<Int>)<String> -> {
     match (val) {
         0 -> "zero",
-        1 -> "small",             # More patterns planned
-        ? -> "large"
+        >= 1 -> "positive",
+        ? -> "negative"
     }
 }
 
-# Memory safety with ownership types
-safe_data<my<String>> = my("unique")      # Unique ownership
-shared_data<our<String>> = our("shared")  # Reference counted
-borrowed<their<String>> = borrow(safe_data)  # Non-owning reference
-shadow<mild<String>> = soft(shared_data)   # Mild reference (breaks cycles)
+// select — pattern matching that returns a value (Vyn-original)
+classify(score<Int>)<String> -> {
+    return select(score) -> {
+        >= 90 -> "A",
+        >= 80 -> "B",
+        ? -> "C-or-below"
+    }
+}
+
+// defer — LIFO scope-exit cleanup
+open_and_process()<Int> -> {
+    defer println("cleanup")
+    println("working")
+    return 0
+}
 ```
 
 #### Type System Features
@@ -2494,23 +2575,27 @@ freedom {
 
 ## Future Roadmap
 
-Vyn v0.4.2 (freedom-1.0) is a **fully functional, production-ready systems programming language**. Future enhancements:
+Vyn v0.4.4 (freedom-1.0) delivers a **complete, production-ready systems programming language** with full native code generation. Future enhancements:
 
-### 🔜 **Near-Term Priorities (v0.4.4++)**
-1. **Self-Hosted Standard Library**: Pure Vyn stdlib implementation
-2. **Complete String Implementation**: UTF-8 support, interpolation, advanced methods
-3. **Import/Smuggle System**: Module visibility and dependency management
-4. **C Bindings (FFI)**: Foreign function interface for C interoperability
-5. **Range Patterns**: `1..10 -> "range"` syntax in match/select (design conflicts with comparison patterns)
-6. **Package Scoping**: Module system and package management architecture
+### 🔜 **Near-Term Priorities (v0.5)**
+1. **FFI / `extern "C"`**: Foreign function interface for calling C libraries directly from Vyn — the key enabler for networking, file I/O, and ecosystem integration. See `doc/FFI_DESIGN.md`.
+2. **Module System**: `import`/`smuggle`/`bundle`/`share` for multi-file programs. See `doc/bundles_and_sharing.md`.
+3. **Lambda/Closure Codegen**: LLVM codegen for `|x<Int>| -> x * 2` closures (parsing is complete).
+4. **Error Propagation Phases 2-5**: `fail` propagation through call stacks; wildcard `trap (e<?>)`.
+5. **Enum / Sum Types**: `enum Direction { North, South, East, West }` with pattern matching.
+6. **`Option<T>` and `Result<T,E>`**: Standard library sum types built on enums.
 
 ### 📋 **Long-Term Goals**
-- **Enhanced Async/Await**: Full threading, cancellation points, timed operations
+- **Ownership Runtime Enforcement**: Borrow checking, move semantics, `mild<T>` control block
+- **Iterator Aspect**: `aspect Iterator { type Item; next(self)<Option<Item>> }` for `for` loop generalization
+- **Associated Types**: `aspect Iterator { type Item }` (requires aspect system extension)
+- **Enhanced Async/Await**: Real event loop, `spawn`, typed channels, async lambdas
 - **Self-Hosting**: Vyn compiler written in Vyn
-- **Package Manager**: Dependency resolution and registries
-- **Advanced Optimizations**: LLVM optimization passes and compile-time improvements
+- **Package Manager**: `vyn.toml`, `vyn build`, dependency resolution
+- **Language Server (LSP)**: Completion, go-to-definition, diagnostics in editors
+- **REPL**: `vyn repl` backed by ORC JIT
 
-**Current Status**: All core language features are complete and working. See `doc/ROADMAP.md` for detailed development plans.
+**Current Status**: All core language features work end-to-end. See `TODO.md` for a comprehensive feature status table.
 
 ## Testing & Development Tools
 
@@ -2543,10 +2628,10 @@ python3 test_harness.py --directory test/units --timeout 30
 - **Error Context**: Detailed failure information with context and suggestions
 
 #### **Test Statistics**
-- **Total Tests**: 391+ comprehensive test cases
-- **Coverage Areas**: Language features, edge cases, error conditions, performance
-- **Test Types**: Unit tests, integration tests, syntax validation, runtime verification
-- **Success Rate**: >95% pass rate maintained across all features
+- **Total Tests**: 400+ comprehensive test cases (growing)
+- **Coverage Areas**: Language features, control flow, error handling, type system, math, strings, introspection
+- **Test Types**: Feature tests (with `@expect: pass`), future-feature docs (with `@expect: fail`), parser tests
+- **Success Rate**: >90% pass rate maintained across all implemented features
 
 ### 🔧 **Syntax Migration Tools**
 

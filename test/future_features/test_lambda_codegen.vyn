@@ -1,0 +1,28 @@
+// @test: Lambda / closure codegen (future)
+// @description: Lambda LLVM codegen is planned; parsing works, execution is not yet complete
+// @category: functions, lambda
+// @expect: fail
+// @tags: future, partial
+
+// Lambdas are parsed correctly but LLVM codegen is not yet complete.
+// The intended syntax is:
+//
+//   main()<Int> -> {
+//       double<|Int| -> Int> = |x<Int>| -> x * 2
+//       result<Int> = double(21)
+//       println_int(result)
+//       return 0
+//   }
+//
+// Lambdas will support:
+//   - Simple expression bodies: |x<Int>| -> x * 2
+//   - Block bodies: |x<Int>| -> { ... }
+//   - Captures from outer scope
+//   - Move captures: |move x| -> x + 1
+
+main()<Int> -> {
+    double<|Int| -> Int> = |x<Int>| -> x * 2
+    result<Int> = double(21)
+    println_int(result)
+    return 0
+}

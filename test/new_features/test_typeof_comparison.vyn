@@ -1,0 +1,15 @@
+// @test: typeof intrinsic - type comparison
+// @description: typeof(expr) returns a type hash; same types compare equal, different types do not
+// @category: introspection, types
+// @expect: pass
+// @expect-output: same
+
+main()<Int> -> {
+    x<Int> = 42
+    y<Int> = 100
+    same<Bool> = (typeof(x) == typeof(y))
+    if (same) {
+        println("same")
+    }
+    return 0
+}

@@ -1,0 +1,26 @@
+// @test: Pipe operator (future)
+// @description: |> pipe operator for functional pipelines is planned
+// @category: control_flow, functional
+// @expect: fail
+// @tags: future, unimplemented
+
+// When implemented, the pipe operator will thread the left-hand value as the
+// first argument to the right-hand function:
+//
+//   double(x<Int>)<Int> -> { return x * 2 }
+//   inc(x<Int>)<Int>    -> { return x + 1 }
+//
+//   main()<Int> -> {
+//       result<Int> = 5 |> double() |> inc()
+//       // Equivalent to: inc(double(5)) = 11
+//       println_int(result)
+//       return 0
+//   }
+//
+// The pipe operator improves readability of data transformation chains
+// without requiring method-chain API design.
+
+main()<Int> -> {
+    result<Int> = 5 |> double()
+    return 0
+}

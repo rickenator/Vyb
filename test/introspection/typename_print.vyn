@@ -1,7 +1,12 @@
-// Test typename output with actual type names
+// @test: typename print output
+// @description: typename(expr) returns the type name as a String and println shows it
+// @category: introspection
+// @expect: pass
+// @expect-output: Int
+
 main()<Int> -> {
-    x<Int> = 42;
-    name<string> = typename(x);
-    println(name);
-    return 0;
+    x<Int> = 42
+    name<String> = typename(x)
+    println(name)
+    return 0
 }

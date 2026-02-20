@@ -1,7 +1,10 @@
-// Test typename - prints type name
+// @test: typename minimal
+// @description: typename() minimal usage — result type is String
+// @category: introspection
+// @expect: pass
+
 main()<Int> -> {
-    x<Int> = 42;
-    name = typename(x);
-    println(name);
-    return 0;
+    x<Int> = 42
+    name<String> = typename(x)
+    return 0
 }

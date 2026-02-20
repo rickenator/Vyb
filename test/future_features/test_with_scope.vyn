@@ -1,0 +1,34 @@
+// @test: with scope blocks (future)
+// @description: 'with' scope blocks for automatic resource cleanup are planned
+// @category: memory, resources
+// @expect: fail
+// @tags: future, unimplemented
+
+// When implemented, 'with' will provide RAII-style resource management:
+//
+//   struct File {
+//       fd<Int>
+//   }
+//
+//   bind Drop -> File {
+//       drop(self<Self>)<Void> -> {
+//           println("File closed")
+//       }
+//   }
+//
+//   main()<Int> -> {
+//       with file<File> = File { fd: 42 } {
+//           println("Reading file")
+//       }  // file.drop() called automatically here
+//       return 0
+//   }
+//
+// The 'with' block calls the Drop aspect's drop() method on scope exit,
+// ensuring resources are always released even if early returns occur.
+
+main()<Int> -> {
+    with file<File> = File { fd: 42 } {
+        println("using resource")
+    }
+    return 0
+}

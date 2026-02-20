@@ -1,0 +1,12 @@
+// @test: String char_at method
+// @description: String.char_at(index) returns the ASCII code of the character at index
+// @category: string
+// @expect: pass
+// @expect-output: 101
+
+main()<Int> -> {
+    s<String> = "hello"
+    c<Int> = s.char_at(1)
+    println_int(c)
+    return 0
+}

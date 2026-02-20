@@ -1,0 +1,14 @@
+// @test: Vec pop operation
+// @description: Vec.pop() removes the last element; len() reflects the change
+// @category: vec, data_structures
+// @expect: pass
+// @expect-output: 1
+
+main()<Int> -> {
+    v<Vec<Int>> = Vec::new()
+    v.push(10)
+    v.push(20)
+    v.pop()
+    println_int(v.len())
+    return 0
+}

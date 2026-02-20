@@ -1,0 +1,26 @@
+// @test: Enum declaration (future)
+// @description: Enum sum types are planned; this documents the intended syntax
+// @category: types, enum
+// @expect: fail
+// @tags: future, unimplemented
+
+// When implemented, Vyn enums will look like:
+//
+//   enum Direction { North, South, East, West }
+//
+//   enum Shape {
+//       Circle(Float),
+//       Rect(Float, Float)
+//   }
+//
+//   // Bind aspects to enums just like structs
+//   bind Display -> Direction {
+//       show(self<Self>)<String> -> { return "North" }
+//   }
+//
+// For now enum is not a recognized keyword.
+
+main()<Int> -> {
+    enum Color { Red, Green, Blue }
+    return 0
+}

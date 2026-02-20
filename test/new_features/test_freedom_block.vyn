@@ -1,0 +1,14 @@
+// @test: Freedom block syntax
+// @description: freedom blocks allow unsafe code sections; loc<T> pointer declarations are parsed
+// @category: memory, freedom
+// @expect: pass
+// @expect-output: in freedom
+
+main()<Int> -> {
+    x<Int> = 42
+    freedom {
+        p<loc<Int>> = loc(x)
+        println("in freedom")
+    }
+    return 0
+}

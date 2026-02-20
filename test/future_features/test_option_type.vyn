@@ -1,0 +1,35 @@
+// @test: Option type (future)
+// @description: Option<T> with Some/None variants is a planned stdlib type
+// @category: types, option
+// @expect: fail
+// @tags: future, unimplemented
+
+// When implemented, Option<T> will work like:
+//
+//   find_first(v<Vec<Int>>, target<Int>)<Option<Int>> -> {
+//       i<Int> = 0
+//       while (i < v.len()) {
+//           if (v.get(i) == target) {
+//               return Some(v.get(i))
+//           }
+//           i = i + 1
+//       }
+//       return None
+//   }
+//
+//   main()<Int> -> {
+//       v<Vec<Int>> = Vec::new()
+//       v.push(10)
+//       v.push(20)
+//       result<Option<Int>> = find_first(v, 20)
+//       match (result) {
+//           Some(val) -> println_int(val),
+//           None -> println("not found")
+//       }
+//       return 0
+//   }
+
+main()<Int> -> {
+    result<Option<Int>> = None
+    return 0
+}

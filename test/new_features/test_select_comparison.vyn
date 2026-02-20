@@ -1,0 +1,17 @@
+// @test: Select expression with comparison patterns
+// @description: select uses >= and < comparison patterns to classify a value
+// @category: control_flow, select
+// @expect: pass
+// @expect-output: B
+
+main()<Int> -> {
+    score<Int> = 85
+    grade<String> = select(score) -> {
+        >= 90 -> "A",
+        >= 80 -> "B",
+        >= 70 -> "C",
+        ? -> "F"
+    }
+    println(grade)
+    return 0
+}
