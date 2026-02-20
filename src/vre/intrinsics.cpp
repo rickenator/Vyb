@@ -133,6 +133,33 @@ extern "C" void __vyn_println(const char* str) {
     }
 }
 
+// print intrinsic - no newline
+extern "C" void __vyn_print(const char* str) {
+    if (!str) {
+        std::cout << "null";
+    } else {
+        std::cout << str;
+    }
+}
+
+// println_int / print_int intrinsics for integer output
+extern "C" void __vyn_println_int(int64_t val) {
+    std::cout << val << std::endl;
+}
+
+extern "C" void __vyn_print_int(int64_t val) {
+    std::cout << val;
+}
+
+// println_bool / print_bool intrinsics for boolean output
+extern "C" void __vyn_println_bool(int64_t val) {
+    std::cout << (val ? "true" : "false") << std::endl;
+}
+
+extern "C" void __vyn_print_bool(int64_t val) {
+    std::cout << (val ? "true" : "false");
+}
+
 // Serialization helper for auto-serializing complex types to JSON
 extern "C" char* __vyn_serialize_to_json(void* obj, const char* type_name) {
     // This function handles the serialization of objects to JSON

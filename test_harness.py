@@ -332,7 +332,14 @@ class TestRunner:
     def _evaluate_test_result(self, test: TestCase, process: subprocess.CompletedProcess) -> bool:
         """Evaluate whether a test result matches expectations."""
         # Check return code
-        expected_return_code = 0 if test.expect == "pass" else 1
+        if test.expect_return is not None:
+            # @expect-return: N means the test expects exactly that return code
+            try:
+                expected_return_code = int(test.expect_return)
+            except ValueError:
+                expected_return_code = 0
+        else:
+            expected_return_code = 0 if test.expect == "pass" else 1
         if process.returncode != expected_return_code:
             return False
         

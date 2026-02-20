@@ -249,6 +249,11 @@ private:
     // IO operations
     llvm::Function* getPrintlnFunction();
     llvm::Function* getVynPrintlnFunction();
+    llvm::Function* getVynPrintFunction();   // print() - no newline
+    llvm::Function* getVynPrintlnIntFunction();  // println_int()
+    llvm::Function* getVynPrintIntFunction();    // print_int()
+    llvm::Function* getVynPrintlnBoolFunction(); // println_bool()
+    llvm::Function* getVynPrintBoolFunction();   // print_bool()
     llvm::Function* getSerializeToJsonFunction();
     
     // Error handling runtime functions
