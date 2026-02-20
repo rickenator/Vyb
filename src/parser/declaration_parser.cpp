@@ -1044,13 +1044,22 @@ std::unique_ptr<vyn::ast::ImportDeclaration> DeclarationParser::parse_import_dec
         }
         alias = std::make_unique<ast::Identifier>(this->current_location(), this->consume().lexeme);
     }
+    // Parse optional `from <string-literal>`
+    std::unique_ptr<ast::StringLiteral> locator = nullptr;
+    if (this->peek().type == vyn::TokenType::KEYWORD_FROM) {
+        this->consume(); // consume 'from'
+        if (this->peek().type != vyn::TokenType::STRING_LITERAL) {
+            throw std::runtime_error("Expected string literal after \'from\' in import at " + location_to_string(this->current_location()));
+        }
+        locator = std::make_unique<ast::StringLiteral>(this->current_location(), this->consume().lexeme);
+    }
     this->match(vyn::TokenType::SEMICOLON);
     auto source = std::make_unique<ast::StringLiteral>(loc, path);
     std::vector<ast::ImportSpecifier> specifiers;
     if (alias) {
         specifiers.emplace_back(nullptr, std::move(alias));
     }
-    return std::make_unique<vyn::ast::ImportDeclaration>(loc, std::move(source), std::move(specifiers));
+    return std::make_unique<vyn::ast::ImportDeclaration>(loc, vyn::ast::ImportKind::TrustedImport, std::move(source), std::move(locator), std::move(specifiers));
 }
 
 std::unique_ptr<vyn::ast::ImportDeclaration> DeclarationParser::parse_smuggle_declaration() {
@@ -1068,6 +1077,17 @@ std::unique_ptr<vyn::ast::ImportDeclaration> DeclarationParser::parse_smuggle_de
         path += "::" + this->consume().lexeme;
     }
     std::unique_ptr<ast::Identifier> alias = nullptr;
+    // Parse optional `from <string-literal>`.
+    // Per the v0.5.0 spec, `from` is required for smuggle; however, it is kept optional
+    // here to preserve backward compatibility with existing code that uses bare `smuggle foo`.
+    std::unique_ptr<ast::StringLiteral> locator = nullptr;
+    if (this->peek().type == vyn::TokenType::KEYWORD_FROM) {
+        this->consume(); // consume 'from'
+        if (this->peek().type != vyn::TokenType::STRING_LITERAL) {
+            throw std::runtime_error("Expected string literal after \'from\' in smuggle at " + location_to_string(this->current_location()));
+        }
+        locator = std::make_unique<ast::StringLiteral>(this->current_location(), this->consume().lexeme);
+    }
     if (this->match(vyn::TokenType::KEYWORD_AS)) {
         if (this->peek().type != vyn::TokenType::IDENTIFIER) {
             throw std::runtime_error("Expected identifier after \'as\' in smuggle at " + location_to_string(this->current_location()));
@@ -1080,7 +1100,7 @@ std::unique_ptr<vyn::ast::ImportDeclaration> DeclarationParser::parse_smuggle_de
     if (alias) {
         specifiers.emplace_back(nullptr, std::move(alias));
     }
-    return std::make_unique<vyn::ast::ImportDeclaration>(loc, std::move(source), std::move(specifiers));
+    return std::make_unique<vyn::ast::ImportDeclaration>(loc, vyn::ast::ImportKind::Smuggle, std::move(source), std::move(locator), std::move(specifiers));
 }
 
 std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_class_declaration() {

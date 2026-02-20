@@ -1,0 +1,16 @@
+// @test: Parser handles smuggle with from locator
+// @description: Tests smuggle with from "..." locator syntax (v0.5.0)
+// @category: parser
+// @expect: pass
+// @parse-only: true
+// @expect-output: n/a
+// @expect-error: n/a
+// @expect-return: n/a
+
+smuggle debug::trace from "github.com/dev/tools"
+smuggle experimental::feature from "./local/experiments"
+smuggle http::client from "https://github.com/user/http"
+
+main()<Int> -> {
+    return 0
+}

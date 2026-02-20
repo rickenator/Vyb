@@ -800,18 +800,9 @@ void LLVMCodegen::visit(vyn::ast::TypeAliasDeclaration* node) {
 }
 
 void LLVMCodegen::visit(vyn::ast::ImportDeclaration* node) {
-    // Imports are typically handled by a module loader or linker phase before/during codegen.
-    // The codegen itself might not do much other than note that symbols from `node->modulePath` are available.
-    // If Vyn compiles modules separately and links them, this is a linker concern.
-    // If it\'s more like C++ #include, then parsing of the imported module would happen earlier.
-    // ast.hpp: std::unique_ptr<StringLiteral> source;
-    // std::vector<ImportSpecifier> specifiers;
-    // std::unique_ptr<Identifier> defaultImport;
-    // std::unique_ptr<Identifier> namespaceImport;
-
-    std::string importSource = node->source ? node->source->value : "unknown"; // Using 'source' from ast.hpp
-
-    logError(node->loc, "ImportDeclaration handling is typically a pre-codegen or linking step. Module source: " + importSource);
+    // Import declarations are resolved in a pre-codegen module-resolution pass.
+    // During codegen, treat them as no-ops.
+    (void)node;
     m_currentLLVMValue = nullptr;
 }
 

@@ -464,6 +464,16 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
                     m_currentLLVMValue = resultStr;
                     break;
                 }
+
+                // Handle String struct + non-string concatenation (e.g. "Hello" + 1000)
+                if (leftIsStringStruct || rightIsStringStruct) {
+                    m_currentLLVMValue = generateMixedStringConcatenation(L, R, leftTypeNode, rightTypeNode, node->loc);
+                    if (!m_currentLLVMValue) {
+                        logError(node->loc, "Failed to generate mixed string concatenation");
+                        return;
+                    }
+                    break;
+                }
                 
                 // First check for old-style string types using LLVM types directly (more reliable)
                 bool leftIsString = (L->getType() == int8PtrType);

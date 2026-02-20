@@ -205,7 +205,7 @@ Supports 20+ architectures out of the box:
     *   `soft(expr)`: Creates a mild reference `mild<T>` from `our<T>`.
 *   **`freedom` Blocks**: Sections of code marked `freedom { ... }` where raw pointers (`loc<T>`) can be used and some compiler guarantees are relaxed. Within these blocks, operations like `at(ptr)` for dereferencing and `from<loc<T>>()` for pointer conversion are available.
 
-### 1.4 Import vs Smuggle - Vyn's Unique Module System
+### 1.4 Import vs Smuggle - Vyn's Unique Module System (v0.5.0)
 
 Vyn introduces a distinctive approach to module imports with two keywords that serve different security and trust models:
 
@@ -213,20 +213,34 @@ Vyn introduces a distinctive approach to module imports with two keywords that s
 - Used for modules from signed repositories or project-local sources verified in `vyn.toml`
 - Enforces security checks and version verification
 - Ideal for production dependencies and standard library modules
+- Optional `from "<locator>"` specifies the source URL or local path
 - Example: `import std::collections::Vec`
+- Example: `import utils::math::calculate from "./utils"`
 
 **`smuggle`** - Flexible, External Sources:
 - Allows including symbols from external sources (e.g., GitHub repositories) or unsigned modules
 - Bypasses some security checks for rapid prototyping and third-party integration
 - Perfect for experimental dependencies, development tools, or one-off utilities
-- Example: `smuggle debug::Logger from "https://github.com/user/debug-tools"`
+- `from "<locator>"` specifies the source (local path, GitHub shorthand, or full URL)
+- Example: `smuggle debug::Logger from "github.com/user/debug-tools"`
+
+**Syntax:**
+```
+import <module::path> [as <alias>] [from "<locator>"] [;]
+smuggle <module::path> [from "<locator>"] [as <alias>] [;]
+```
+
+**Locator formats** for `from`:
+- Local path: `"./local/experiments"`
+- GitHub shorthand: `"github.com/dev/tools"`
+- Full URL: `"https://github.com/dev/tools"`
 
 This dual system provides both safety for production code and flexibility for development:
 
 ```vyn
 # Production imports - verified and trusted
 import std::io::println
-import utils::math::calculate
+import utils::math::calculate from "./utils"
 
 # Development/experimental - flexible but marked as such
 smuggle debug::trace from "github.com/dev/tools"
@@ -246,7 +260,7 @@ std = "^1.0.0"  # Signed, from Vyn registry
 utils = { git = "https://github.com/user/utils" }  # External, smuggled
 ```
 
-This unique `import`/`smuggle` distinction makes Vyn's module system both secure and flexible, clearly marking the trust level of your dependencies.
+This unique `import`/`smuggle` distinction makes Vyn's module system both secure and flexible, clearly marking the trust level of your dependencies. See [doc/FEATURE_STATUS.md](doc/FEATURE_STATUS.md) for implementation status.
 
 ## In This Release
 
@@ -294,7 +308,7 @@ These features were completed in the current release cycle and are fully tested:
   nums<Vec<Int>> = Vec::new()
   nums.push(10)
   for (n in nums) {
-      println_int(n)   // n is automatically Int
+      println(n)   // n is automatically Int
   }
   ```
 - **`select` expressions** — Pattern matching that yields a value; Vyn-original concept
@@ -362,7 +376,7 @@ These features were completed in the current release cycle and are fully tested:
 - **Arithmetic**: Full binary operators (`+`, `-`, `*`, `/`, `==`, `!=`, `<`, `>`, etc.)
 - **Pattern Matching**: `match (expr) { pattern -> result }` with comparison patterns (`>= 90`, `< 0`) and wildcard `?`
 - **Error Handling**: `fail`/`trap` system with zero-cost success path and type-safe error propagation
-- **I/O**: `println()` for all types; `print()` without newline; `println_int()`, `println_bool()` variants
+- **I/O**: `println()` for all types (auto-stringifies primitives); `print()` without newline
 - **Math**: `sqrt`, `abs`, `min`, `max`, `sin`, `cos`, `tan`, `pow`, `log`, `floor`, `ceil`, `round`
 
 ### ✅ **Advanced Type System**

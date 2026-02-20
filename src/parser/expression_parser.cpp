@@ -499,7 +499,8 @@ namespace vyn {
 
 regular_array_literal:
         // Handle 'from<Type>(expr)' syntax, Typed Struct Literals, and Plain Identifiers
-        if (peek().type == TokenType::IDENTIFIER || peek().type == TokenType::KEYWORD_MY || 
+        if (peek().type == TokenType::IDENTIFIER || peek().type == TokenType::KEYWORD_FROM ||
+            peek().type == TokenType::KEYWORD_MY || 
             peek().type == TokenType::KEYWORD_THEIR || peek().type == TokenType::KEYWORD_OUR ||
             peek().type == TokenType::KEYWORD_MILD ||
             peek().type == TokenType::KEYWORD_BORROW || peek().type == TokenType::KEYWORD_VIEW) {
@@ -1313,6 +1314,7 @@ bool ExpressionParser::is_literal(TokenType type) const {
 bool ExpressionParser::is_expression_start(vyn::TokenType type) const {
     // Primary expression starters
     if (type == TokenType::IDENTIFIER ||
+        type == TokenType::KEYWORD_FROM ||
         type == TokenType::KEYWORD_MY ||
         type == TokenType::KEYWORD_THEIR ||
         type == TokenType::KEYWORD_OUR ||
@@ -1347,10 +1349,10 @@ bool ExpressionParser::is_expression_start(vyn::TokenType type) const {
         return true;
     }
     
-    // Keywords that can start expressions (like \'from<T>(e)\' or constructor calls if types are keywords)
-    // This might overlap with IDENTIFIER if \'from\' is just an identifier.
-    // Add specific keywords if they are distinct token types and can start expressions.
-    // e.g. if \'new\' was a keyword for construction: case TokenType::KEYWORD_NEW: return true;
+    // Keywords that can start expressions (like 'from<T>(e)' or constructor calls if types are keywords)
+    if (type == TokenType::KEYWORD_FROM) {
+        return true;
+    }
 
     return false;
 }

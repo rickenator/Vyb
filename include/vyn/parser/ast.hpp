@@ -1084,15 +1084,21 @@ public:
 // --- Declarations (ensure full definitions are here) ---
 
 // ImportDeclaration (Example, ensure others follow suit if not already complete)
+enum class ImportKind { TrustedImport, Smuggle };
+
 class ImportDeclaration : public Declaration {
 public:
-    std::unique_ptr<StringLiteral> source; // e.g., "module_name" or "./file.vyn"
+    ImportKind kind;                                       // TrustedImport or Smuggle
+    std::unique_ptr<StringLiteral> source;                 // module path (e.g. "std::io::println")
+    std::unique_ptr<StringLiteral> locator;                // optional: from "..." locator string
     std::vector<ImportSpecifier> specifiers; // For named imports: { A, B as C }
     std::unique_ptr<Identifier> defaultImport; // For default import: import X from ...
     std::unique_ptr<Identifier> namespaceImport; // For namespace import: import * as M from ...
 
     ImportDeclaration(SourceLocation loc,
+                      ImportKind kind,
                       std::unique_ptr<StringLiteral> source,
+                      std::unique_ptr<StringLiteral> locator = nullptr,
                       std::vector<ImportSpecifier> specifiers = {},
                       std::unique_ptr<Identifier> defaultImport = nullptr,
                       std::unique_ptr<Identifier> namespaceImport = nullptr);
