@@ -178,12 +178,14 @@ fn offsetof<T>(field: identifier) -> UInt
 `println` and `print` accept **any type** and convert it to a string automatically:
 
 ```vyn
-fn println(value: T) -> Void    // print with newline
-fn print(value: T) -> Void      // print without newline
+println(value)    // print with newline (auto-stringifies any type)
+print(value)      // print without newline (auto-stringifies any type)
 ```
 
-- Works with `Int`, `Float`, `Bool`, `String`, and any type with `to_string()`.
+- Works with `Int`, `Float`, `Bool`, `String`, arrays, Vec, and structs.
 - No type-specific variants like `println_int` or `println_bool` are needed.
+- String concatenation with `+` auto-coerces non-string operands when either side is a `String`.
+- Example: `println("Hello" + 1000)` prints `Hello1000`.
 
 #### Examples
 

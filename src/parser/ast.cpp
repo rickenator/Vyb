@@ -1063,12 +1063,16 @@ std::unique_ptr<TypeNode> TupleTypeNode::clone() const {
 
 // --- ImportDeclaration ---
 ImportDeclaration::ImportDeclaration(SourceLocation loc_param,
+                                     ImportKind kind_param,
                                      std::unique_ptr<StringLiteral> source_param,
+                                     std::unique_ptr<StringLiteral> locator_param,
                                      std::vector<ImportSpecifier> specifiers_param,
                                      std::unique_ptr<Identifier> defaultImport_param,
                                      std::unique_ptr<Identifier> namespaceImport_param)
     : Declaration(loc_param),
+      kind(kind_param),
       source(std::move(source_param)),
+      locator(std::move(locator_param)),
       specifiers(std::move(specifiers_param)),
       defaultImport(std::move(defaultImport_param)),
       namespaceImport(std::move(namespaceImport_param)) {}
@@ -1078,58 +1082,16 @@ NodeType ImportDeclaration::getType() const {
 }
 
 std::string ImportDeclaration::toString() const {
-    std::string result = "import ";
-    bool needsFrom = false;
-    if (defaultImport) {
-        result += defaultImport->toString();
-        needsFrom = true;
+    std::string result = (kind == ImportKind::Smuggle) ? "smuggle " : "import ";
+    if (source) {
+        result += source->value;
     }
-
-    if (!specifiers.empty()) {
-        if (needsFrom) result += ", ";
-        result += "{";
-        for (size_t i = 0; i < specifiers.size(); ++i) {
-            if (specifiers[i].importedName) { // Should always be true for a valid specifier
-                result += specifiers[i].importedName->toString();
-            }
-            if (specifiers[i].localName) {
-                result += " as " + specifiers[i].localName->toString();
-            }
-            if (i < specifiers.size() - 1) {
-                result += ", ";
-            }
-        }
-        result += "}";
-        needsFrom = true;
+    if (!specifiers.empty() && specifiers[0].localName) {
+        result += " as " + specifiers[0].localName->toString();
     }
-
-    if (namespaceImport) {
-        if (needsFrom && (defaultImport || !specifiers.empty())) result += ", "; // Comma if other imports precede
-        result += "* as " + namespaceImport->toString();
-        needsFrom = true;
+    if (locator) {
+        result += " from \"" + locator->value + "\"";
     }
-    
-    if (needsFrom) {
-         result += " from ";
-    }
-    // If none of defaultImport, specifiers, or namespaceImport are present,
-    // it implies a direct import of the source, e.g. import "module";
-    // The parser currently creates specifiers like { null as alias } for 'import "path" as alias'
-    // which is a bit unusual. The toString needs to handle specifiers[i].importedName being potentially null
-    // if the parser logic for `import "path" as alias;` creates an ImportSpecifier with `importedName=nullptr` and `localName=alias`.
-    // However, the current `ImportSpecifier` struct implies `importedName` is primary.
-    // The `declaration_parser.cpp` for `import path as alias` does:
-    // `specifiers.emplace_back(nullptr, std::move(alias));`
-    // This means `importedName` can be null.
-    // A more typical structure for `import "path" as M;` would use `namespaceImport`.
-    // The current `ImportDeclaration` constructor call from `parse_import_declaration` is:
-    // `std::make_unique<vyn::ast::ImportDeclaration>(loc, std::move(source), std::move(specifiers));`
-    // If `alias` was present, `specifiers` contains one item: `{importedName=nullptr, localName=alias}`.
-    // This is not ideal. `toString()` will try to print `specifiers[i].importedName->toString()`.
-    // For now, let's assume `importedName` is always valid if a specifier exists.
-    // The parser logic might need adjustment for `import "path" as M;` to use `namespaceImport`.
-
-    result += source->toString();
     result += ";";
     return result;
 }

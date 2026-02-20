@@ -479,6 +479,7 @@ vyn::TokenType Lexer::get_keyword_type(const std::string& word) {
         {"template", vyn::TokenType::KEYWORD_TEMPLATE},
         {"import", vyn::TokenType::KEYWORD_IMPORT},
         {"smuggle", vyn::TokenType::KEYWORD_SMUGGLE},
+        {"from", vyn::TokenType::KEYWORD_FROM},
         {"await", vyn::TokenType::KEYWORD_AWAIT},
         {"async", vyn::TokenType::KEYWORD_ASYNC},
         {"operator", vyn::TokenType::KEYWORD_OPERATOR},

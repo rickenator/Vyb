@@ -62,6 +62,7 @@ std::string token_type_to_string(vyn::TokenType type) { // Corrected namespace f
         {vyn::TokenType::KEYWORD_TEMPLATE, "KEYWORD_TEMPLATE"},
         {vyn::TokenType::KEYWORD_IMPORT, "KEYWORD_IMPORT"},
         {vyn::TokenType::KEYWORD_SMUGGLE, "KEYWORD_SMUGGLE"},
+        {vyn::TokenType::KEYWORD_FROM, "KEYWORD_FROM"},
         {vyn::TokenType::KEYWORD_AWAIT, "KEYWORD_AWAIT"},
         {vyn::TokenType::KEYWORD_ASYNC, "KEYWORD_ASYNC"},
         {vyn::TokenType::KEYWORD_OPERATOR, "KEYWORD_OPERATOR"},

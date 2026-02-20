@@ -1,0 +1,16 @@
+// @test: Parser handles import with from locator
+// @description: Tests import with from "..." locator syntax (v0.5.0)
+// @category: parser
+// @expect: pass
+// @parse-only: true
+// @expect-output: n/a
+// @expect-error: n/a
+// @expect-return: n/a
+
+import std::io::println
+import utils::math::calculate from "./utils"
+import utils::math::calculate as calc from "./utils"
+
+main()<Int> -> {
+    return 0
+}
