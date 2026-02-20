@@ -68,7 +68,7 @@ attributes #1 = { noreturn }
 !llvm.module.flags = !{!2, !3}
 
 !0 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, file: !1, producer: "Vyn Compiler", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)
-!1 = !DIFile(filename: "trap_multi_basic.vyn.ll", directory: "/home/rick/Projects/Vyn/test/trap/multi_type")
+!1 = !DIFile(filename: "trap_multi_basic.vyn.ll", directory: "/home/runner/work/Vyn/Vyn/test/trap/multi_type")
 !2 = !{i32 2, !"Debug Info Version", i32 3}
 !3 = !{i32 2, !"Dwarf Version", i32 4}
 !4 = distinct !DISubprogram(name: "main", linkageName: "main", scope: !1, file: !1, line: 4, type: !5, scopeLine: 4, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)

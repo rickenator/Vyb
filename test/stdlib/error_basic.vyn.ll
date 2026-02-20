@@ -3,6 +3,13 @@ source_filename = "VynModule"
 
 %Error = type { { ptr, i64 }, i64 }
 
+@field_name_Error_message = private constant [8 x i8] c"message\00"
+@field_type_Error_message = private constant [7 x i8] c"String\00"
+@field_name_Error_code = private constant [5 x i8] c"code\00"
+@field_type_Error_code = private constant [4 x i8] c"Int\00"
+@__vyn_fields_Error = private constant [2 x { ptr, ptr, i64, i64, i1, i1, ptr }] [{ ptr, ptr, i64, i64, i1, i1, ptr } { ptr @field_name_Error_message, ptr @field_type_Error_message, i64 0, i64 16, i1 true, i1 false, ptr null }, { ptr, ptr, i64, i64, i1, i1, ptr } { ptr @field_name_Error_code, ptr @field_type_Error_code, i64 16, i64 8, i1 true, i1 false, ptr null }]
+@type_name_Error = private constant [6 x i8] c"Error\00"
+@__vyn_metadata_Error = constant { ptr, i64, i64, ptr, i64, ptr } { ptr @type_name_Error, i64 24, i64 2, ptr @__vyn_fields_Error, i64 0, ptr null }
 @Error_message.str = private unnamed_addr constant [14 x i8] c"Error_message\00", align 1
 @filepath.str = private unnamed_addr constant [28 x i8] c"test/stdlib/error_basic.vyn\00", align 1
 @Error_code.str = private unnamed_addr constant [11 x i8] c"Error_code\00", align 1
@@ -14,6 +21,7 @@ source_filename = "VynModule"
 @0 = private unnamed_addr constant [21 x i8] c"Something went wrong\00", align 1
 @main.str = private unnamed_addr constant [5 x i8] c"main\00", align 1
 @filepath.str.4 = private unnamed_addr constant [28 x i8] c"test/stdlib/error_basic.vyn\00", align 1
+@llvm.global_ctors = appending global [1 x { i32, ptr, ptr }] [{ i32, ptr, ptr } { i32 65535, ptr @__vyn_register_all_types, ptr null }]
 
 ; Function Attrs: noinline
 define { i64, ptr } @risky() #0 !dbg !4 {
@@ -93,9 +101,9 @@ entry:
   %temp_struct = alloca %Error, align 8, !dbg !23
   store %Error %self2, ptr %temp_struct, align 8, !dbg !23
   %message_ptr = getelementptr inbounds %Error, ptr %temp_struct, i32 0, i32 0, !dbg !23
-  %member_load = load { ptr, i64 }, ptr %message_ptr, align 8, !dbg !23
+  %message_val = load { ptr, i64 }, ptr %message_ptr, align 8, !dbg !23
   call void @__vyn_runtime_pop_call_frame(), !dbg !23
-  ret { ptr, i64 } %member_load, !dbg !23
+  ret { ptr, i64 } %message_val, !dbg !23
 }
 
 declare void @__vyn_runtime_push_call_frame(ptr, ptr, i32, i32)
@@ -132,9 +140,9 @@ entry:
   %temp_struct = alloca %Error, align 8, !dbg !35
   store %Error %self2, ptr %temp_struct, align 8, !dbg !35
   %message_ptr = getelementptr inbounds %Error, ptr %temp_struct, i32 0, i32 0, !dbg !35
-  %member_load = load { ptr, i64 }, ptr %message_ptr, align 8, !dbg !35
+  %message_val = load { ptr, i64 }, ptr %message_ptr, align 8, !dbg !35
   call void @__vyn_runtime_pop_call_frame(), !dbg !35
-  ret { ptr, i64 } %member_load, !dbg !35
+  ret { ptr, i64 } %message_val, !dbg !35
 }
 
 declare ptr @malloc(i64)
@@ -143,6 +151,14 @@ declare ptr @malloc(i64)
 declare void @__vyn_runtime_untrapped_error(ptr) #2
 
 declare void @free(ptr)
+
+declare void @__vyn_register_type(ptr)
+
+define void @__vyn_register_all_types() {
+entry:
+  call void @__vyn_register_type(ptr @__vyn_metadata_Error)
+  ret void
+}
 
 declare void @__vyn_println(ptr)
 
@@ -158,7 +174,7 @@ attributes #2 = { noreturn }
 !llvm.module.flags = !{!2, !3}
 
 !0 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, file: !1, producer: "Vyn Compiler", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)
-!1 = !DIFile(filename: "error_basic.vyn.ll", directory: "/home/rick/Projects/Vyn/test/stdlib")
+!1 = !DIFile(filename: "error_basic.vyn.ll", directory: "/home/runner/work/Vyn/Vyn/test/stdlib")
 !2 = !{i32 2, !"Debug Info Version", i32 3}
 !3 = !{i32 2, !"Dwarf Version", i32 4}
 !4 = distinct !DISubprogram(name: "risky", linkageName: "risky", scope: !1, file: !1, line: 40, type: !5, scopeLine: 40, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)

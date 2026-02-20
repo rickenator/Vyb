@@ -3,6 +3,15 @@ source_filename = "VynModule"
 
 %IOError = type { { ptr, i64 }, i64, { ptr, i64 } }
 
+@field_name_IOError_message = private constant [8 x i8] c"message\00"
+@field_type_IOError_message = private constant [7 x i8] c"String\00"
+@field_name_IOError_code = private constant [5 x i8] c"code\00"
+@field_type_IOError_code = private constant [4 x i8] c"Int\00"
+@field_name_IOError_path = private constant [5 x i8] c"path\00"
+@field_type_IOError_path = private constant [7 x i8] c"String\00"
+@__vyn_fields_IOError = private constant [3 x { ptr, ptr, i64, i64, i1, i1, ptr }] [{ ptr, ptr, i64, i64, i1, i1, ptr } { ptr @field_name_IOError_message, ptr @field_type_IOError_message, i64 0, i64 16, i1 true, i1 false, ptr null }, { ptr, ptr, i64, i64, i1, i1, ptr } { ptr @field_name_IOError_code, ptr @field_type_IOError_code, i64 16, i64 8, i1 true, i1 false, ptr null }, { ptr, ptr, i64, i64, i1, i1, ptr } { ptr @field_name_IOError_path, ptr @field_type_IOError_path, i64 24, i64 16, i1 true, i1 false, ptr null }]
+@type_name_IOError = private constant [8 x i8] c"IOError\00"
+@__vyn_metadata_IOError = constant { ptr, i64, i64, ptr, i64, ptr } { ptr @type_name_IOError, i64 40, i64 3, ptr @__vyn_fields_IOError, i64 0, ptr null }
 @IOError_message.str = private unnamed_addr constant [16 x i8] c"IOError_message\00", align 1
 @filepath.str = private unnamed_addr constant [31 x i8] c"test/stdlib/io_error_basic.vyn\00", align 1
 @IOError_code.str = private unnamed_addr constant [13 x i8] c"IOError_code\00", align 1
@@ -15,6 +24,7 @@ source_filename = "VynModule"
 @main.str = private unnamed_addr constant [5 x i8] c"main\00", align 1
 @filepath.str.4 = private unnamed_addr constant [31 x i8] c"test/stdlib/io_error_basic.vyn\00", align 1
 @1 = private unnamed_addr constant [17 x i8] c"/tmp/missing.txt\00", align 1
+@llvm.global_ctors = appending global [1 x { i32, ptr, ptr }] [{ i32, ptr, ptr } { i32 65535, ptr @__vyn_register_all_types, ptr null }]
 
 ; Function Attrs: noinline
 define { { ptr, i64 }, ptr } @readFile({ ptr, i64 } %path) #0 !dbg !4 {
@@ -103,9 +113,9 @@ entry:
   %temp_struct = alloca %IOError, align 8, !dbg !30
   store %IOError %self2, ptr %temp_struct, align 8, !dbg !30
   %message_ptr = getelementptr inbounds %IOError, ptr %temp_struct, i32 0, i32 0, !dbg !30
-  %member_load = load { ptr, i64 }, ptr %message_ptr, align 8, !dbg !30
+  %message_val = load { ptr, i64 }, ptr %message_ptr, align 8, !dbg !30
   call void @__vyn_runtime_pop_call_frame(), !dbg !30
-  ret { ptr, i64 } %member_load, !dbg !30
+  ret { ptr, i64 } %message_val, !dbg !30
 }
 
 declare void @__vyn_runtime_push_call_frame(ptr, ptr, i32, i32)
@@ -142,9 +152,9 @@ entry:
   %temp_struct = alloca %IOError, align 8, !dbg !42
   store %IOError %self2, ptr %temp_struct, align 8, !dbg !42
   %message_ptr = getelementptr inbounds %IOError, ptr %temp_struct, i32 0, i32 0, !dbg !42
-  %member_load = load { ptr, i64 }, ptr %message_ptr, align 8, !dbg !42
+  %message_val = load { ptr, i64 }, ptr %message_ptr, align 8, !dbg !42
   call void @__vyn_runtime_pop_call_frame(), !dbg !42
-  ret { ptr, i64 } %member_load, !dbg !42
+  ret { ptr, i64 } %message_val, !dbg !42
 }
 
 declare ptr @malloc(i64)
@@ -153,6 +163,14 @@ declare ptr @malloc(i64)
 declare void @__vyn_runtime_untrapped_error(ptr) #2
 
 declare void @free(ptr)
+
+declare void @__vyn_register_type(ptr)
+
+define void @__vyn_register_all_types() {
+entry:
+  call void @__vyn_register_type(ptr @__vyn_metadata_IOError)
+  ret void
+}
 
 declare void @__vyn_println(ptr)
 
@@ -168,7 +186,7 @@ attributes #2 = { noreturn }
 !llvm.module.flags = !{!2, !3}
 
 !0 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, file: !1, producer: "Vyn Compiler", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)
-!1 = !DIFile(filename: "io_error_basic.vyn.ll", directory: "/home/rick/Projects/Vyn/test/stdlib")
+!1 = !DIFile(filename: "io_error_basic.vyn.ll", directory: "/home/runner/work/Vyn/Vyn/test/stdlib")
 !2 = !{i32 2, !"Debug Info Version", i32 3}
 !3 = !{i32 2, !"Dwarf Version", i32 4}
 !4 = distinct !DISubprogram(name: "readFile", linkageName: "readFile", scope: !1, file: !1, line: 34, type: !5, scopeLine: 34, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !9)

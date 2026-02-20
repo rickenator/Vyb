@@ -3,6 +3,17 @@ source_filename = "VynModule"
 
 %ParseError = type { { ptr, i64 }, i64, i64, i64 }
 
+@field_name_ParseError_message = private constant [8 x i8] c"message\00"
+@field_type_ParseError_message = private constant [7 x i8] c"String\00"
+@field_name_ParseError_code = private constant [5 x i8] c"code\00"
+@field_type_ParseError_code = private constant [4 x i8] c"Int\00"
+@field_name_ParseError_line = private constant [5 x i8] c"line\00"
+@field_type_ParseError_line = private constant [4 x i8] c"Int\00"
+@field_name_ParseError_column = private constant [7 x i8] c"column\00"
+@field_type_ParseError_column = private constant [4 x i8] c"Int\00"
+@__vyn_fields_ParseError = private constant [4 x { ptr, ptr, i64, i64, i1, i1, ptr }] [{ ptr, ptr, i64, i64, i1, i1, ptr } { ptr @field_name_ParseError_message, ptr @field_type_ParseError_message, i64 0, i64 16, i1 true, i1 false, ptr null }, { ptr, ptr, i64, i64, i1, i1, ptr } { ptr @field_name_ParseError_code, ptr @field_type_ParseError_code, i64 16, i64 8, i1 true, i1 false, ptr null }, { ptr, ptr, i64, i64, i1, i1, ptr } { ptr @field_name_ParseError_line, ptr @field_type_ParseError_line, i64 24, i64 8, i1 true, i1 false, ptr null }, { ptr, ptr, i64, i64, i1, i1, ptr } { ptr @field_name_ParseError_column, ptr @field_type_ParseError_column, i64 32, i64 8, i1 true, i1 false, ptr null }]
+@type_name_ParseError = private constant [11 x i8] c"ParseError\00"
+@__vyn_metadata_ParseError = constant { ptr, i64, i64, ptr, i64, ptr } { ptr @type_name_ParseError, i64 40, i64 4, ptr @__vyn_fields_ParseError, i64 0, ptr null }
 @ParseError_message.str = private unnamed_addr constant [19 x i8] c"ParseError_message\00", align 1
 @filepath.str = private unnamed_addr constant [34 x i8] c"test/stdlib/parse_error_basic.vyn\00", align 1
 @ParseError_code.str = private unnamed_addr constant [16 x i8] c"ParseError_code\00", align 1
@@ -15,6 +26,7 @@ source_filename = "VynModule"
 @main.str = private unnamed_addr constant [5 x i8] c"main\00", align 1
 @filepath.str.4 = private unnamed_addr constant [34 x i8] c"test/stdlib/parse_error_basic.vyn\00", align 1
 @1 = private unnamed_addr constant [17 x i8] c"{ invalid json }\00", align 1
+@llvm.global_ctors = appending global [1 x { i32, ptr, ptr }] [{ i32, ptr, ptr } { i32 65535, ptr @__vyn_register_all_types, ptr null }]
 
 ; Function Attrs: noinline
 define { i64, ptr } @parseJson({ ptr, i64 } %input) #0 !dbg !4 {
@@ -101,9 +113,9 @@ entry:
   %temp_struct = alloca %ParseError, align 8, !dbg !28
   store %ParseError %self2, ptr %temp_struct, align 8, !dbg !28
   %message_ptr = getelementptr inbounds %ParseError, ptr %temp_struct, i32 0, i32 0, !dbg !28
-  %member_load = load { ptr, i64 }, ptr %message_ptr, align 8, !dbg !28
+  %message_val = load { ptr, i64 }, ptr %message_ptr, align 8, !dbg !28
   call void @__vyn_runtime_pop_call_frame(), !dbg !28
-  ret { ptr, i64 } %member_load, !dbg !28
+  ret { ptr, i64 } %message_val, !dbg !28
 }
 
 declare void @__vyn_runtime_push_call_frame(ptr, ptr, i32, i32)
@@ -140,9 +152,9 @@ entry:
   %temp_struct = alloca %ParseError, align 8, !dbg !40
   store %ParseError %self2, ptr %temp_struct, align 8, !dbg !40
   %message_ptr = getelementptr inbounds %ParseError, ptr %temp_struct, i32 0, i32 0, !dbg !40
-  %member_load = load { ptr, i64 }, ptr %message_ptr, align 8, !dbg !40
+  %message_val = load { ptr, i64 }, ptr %message_ptr, align 8, !dbg !40
   call void @__vyn_runtime_pop_call_frame(), !dbg !40
-  ret { ptr, i64 } %member_load, !dbg !40
+  ret { ptr, i64 } %message_val, !dbg !40
 }
 
 declare ptr @malloc(i64)
@@ -151,6 +163,14 @@ declare ptr @malloc(i64)
 declare void @__vyn_runtime_untrapped_error(ptr) #2
 
 declare void @free(ptr)
+
+declare void @__vyn_register_type(ptr)
+
+define void @__vyn_register_all_types() {
+entry:
+  call void @__vyn_register_type(ptr @__vyn_metadata_ParseError)
+  ret void
+}
 
 declare void @__vyn_println(ptr)
 
@@ -166,7 +186,7 @@ attributes #2 = { noreturn }
 !llvm.module.flags = !{!2, !3}
 
 !0 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, file: !1, producer: "Vyn Compiler", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)
-!1 = !DIFile(filename: "parse_error_basic.vyn.ll", directory: "/home/rick/Projects/Vyn/test/stdlib")
+!1 = !DIFile(filename: "parse_error_basic.vyn.ll", directory: "/home/runner/work/Vyn/Vyn/test/stdlib")
 !2 = !{i32 2, !"Debug Info Version", i32 3}
 !3 = !{i32 2, !"Dwarf Version", i32 4}
 !4 = distinct !DISubprogram(name: "parseJson", linkageName: "parseJson", scope: !1, file: !1, line: 35, type: !5, scopeLine: 35, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0, retainedNodes: !9)

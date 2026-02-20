@@ -7,10 +7,8 @@ source_filename = "VynModule"
 @main.str = private unnamed_addr constant [5 x i8] c"main\00", align 1
 @filepath.str.1 = private unnamed_addr constant [44 x i8] c"test/trap/wildcard/trap_wildcard_simple.vyn\00", align 1
 @1 = private unnamed_addr constant [21 x i8] c"Caught unknown error\00", align 1
-@type_name = private unnamed_addr constant [8 x i8] c"unknown\00", align 1
 @2 = private unnamed_addr constant [8 x i8] c"Result:\00", align 1
-@type_name.2 = private unnamed_addr constant [8 x i8] c"unknown\00", align 1
-@type_name.3 = private unnamed_addr constant [4 x i8] c"Int\00", align 1
+@type_name = private unnamed_addr constant [4 x i8] c"Int\00", align 1
 
 ; Function Attrs: noinline
 define { i64, ptr } @risky_operation() #0 !dbg !4 {
@@ -44,15 +42,12 @@ block.continue:                                   ; preds = %call.success
   call void @free(ptr %trap_error_heap), !dbg !15
   store i64 %block.result, ptr %result, align 4, !dbg !15
   call void @llvm.dbg.declare(metadata ptr %result, metadata !14, metadata !DIExpression()), !dbg !16
-  %serialize_temp2 = alloca { ptr, i64 }, align 8, !dbg !15
-  store { ptr, i64 } { ptr @2, i64 7 }, ptr %serialize_temp2, align 8, !dbg !15
-  %serialized_json3 = call ptr @__vyn_serialize_to_json(ptr %serialize_temp2, ptr @type_name.2), !dbg !15
-  call void @__vyn_println(ptr %serialized_json3), !dbg !15
-  %result4 = load i64, ptr %result, align 4, !dbg !15
-  %serialize_temp5 = alloca i64, align 8, !dbg !15
-  store i64 %result4, ptr %serialize_temp5, align 4, !dbg !15
-  %serialized_json6 = call ptr @__vyn_serialize_to_json(ptr %serialize_temp5, ptr @type_name.3), !dbg !15
-  call void @__vyn_println(ptr %serialized_json6), !dbg !15
+  call void @__vyn_println(ptr @2), !dbg !15
+  %result2 = load i64, ptr %result, align 4, !dbg !15
+  %serialize_temp = alloca i64, align 8, !dbg !15
+  store i64 %result2, ptr %serialize_temp, align 4, !dbg !15
+  %serialized_json = call ptr @__vyn_serialize_to_json(ptr %serialize_temp, ptr @type_name), !dbg !15
+  call void @__vyn_println(ptr %serialized_json), !dbg !15
   call void @__vyn_runtime_pop_call_frame(), !dbg !15
   ret i64 0, !dbg !15
 
@@ -72,10 +67,7 @@ trap.unmatched:                                   ; preds = %trap.landing
   unreachable, !dbg !15
 
 trap.handler0:                                    ; preds = %trap.landing
-  %serialize_temp = alloca { ptr, i64 }, align 8, !dbg !15
-  store { ptr, i64 } { ptr @1, i64 20 }, ptr %serialize_temp, align 8, !dbg !15
-  %serialized_json = call ptr @__vyn_serialize_to_json(ptr %serialize_temp, ptr @type_name), !dbg !15
-  call void @__vyn_println(ptr %serialized_json), !dbg !15
+  call void @__vyn_println(ptr @1), !dbg !15
   call void @__vyn_runtime_pop_call_frame(), !dbg !15
   ret i64 42, !dbg !15
 }
@@ -83,8 +75,6 @@ trap.handler0:                                    ; preds = %trap.landing
 declare void @__vyn_runtime_push_call_frame(ptr, ptr, i32, i32)
 
 declare ptr @malloc(i64)
-
-declare ptr @__vyn_serialize_to_json(ptr, ptr)
 
 declare void @__vyn_println(ptr)
 
@@ -98,6 +88,8 @@ declare void @free(ptr)
 ; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)
 declare void @llvm.dbg.declare(metadata, metadata, metadata) #2
 
+declare ptr @__vyn_serialize_to_json(ptr, ptr)
+
 declare ptr @__vyn_convert_lit_string(ptr)
 
 attributes #0 = { noinline }
@@ -108,7 +100,7 @@ attributes #2 = { nocallback nofree nosync nounwind speculatable willreturn memo
 !llvm.module.flags = !{!2, !3}
 
 !0 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, file: !1, producer: "Vyn Compiler", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)
-!1 = !DIFile(filename: "trap_wildcard_simple.vyn.ll", directory: "/home/rick/Projects/Vyn/test/trap/wildcard")
+!1 = !DIFile(filename: "trap_wildcard_simple.vyn.ll", directory: "/home/runner/work/Vyn/Vyn/test/trap/wildcard")
 !2 = !{i32 2, !"Debug Info Version", i32 3}
 !3 = !{i32 2, !"Dwarf Version", i32 4}
 !4 = distinct !DISubprogram(name: "risky_operation", linkageName: "risky_operation", scope: !1, file: !1, line: 3, type: !5, scopeLine: 3, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)
