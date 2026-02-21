@@ -1070,9 +1070,9 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
         
         // Handle println intrinsic
         if (name == "println") {
-            // println accepts one argument of any type and returns Void
-            if (node->arguments.size() != 1) {
-                addError("println() expects exactly one argument", node);
+            // println accepts one or more arguments of any type and returns Void
+            if (node->arguments.empty()) {
+                addError("println() requires at least one argument", node);
                 return;
             }
             
@@ -1086,8 +1086,8 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
 
         // Handle print intrinsic (no newline)
         if (name == "print") {
-            if (node->arguments.size() != 1) {
-                addError("print() expects exactly one argument", node);
+            if (node->arguments.empty()) {
+                addError("print() requires at least one argument", node);
                 return;
             }
             auto voidId = std::make_unique<ast::Identifier>(node->loc, "Void");

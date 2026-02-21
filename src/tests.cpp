@@ -181,11 +181,11 @@ TEST_CASE("Print parser version", "[parser]") {
 
 TEST_CASE("Semantic: from(addr) only allowed in freedom", "[semantic][pointer][freedom][test38]") {
     std::string source_ok = R"(
-fn<Int> main() -> {
-    addr<Int> = 0x1234;
+main()<Int> -> {
+    rawAddr<Int> = 0x1234;
     p<loc<Int>>;
     freedom {
-        p = from<loc<Int>>(addr);
+        p = from<loc<Int>>(rawAddr);
     }
     return 0;
 }
@@ -193,7 +193,7 @@ fn<Int> main() -> {
     REQUIRE_NOTHROW(run_vyn_code(source_ok, "test_source_ok.vyn", false));
 
     std::string source_err = R"(
-fn<Int> main() -> {
+main()<Int> -> {
     a<Int> = 0x1234;
     p<loc<Int>> = from<loc<Int>>(a);
     return 0;

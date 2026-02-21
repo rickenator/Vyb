@@ -190,11 +190,14 @@ class TestDiscovery:
                 elif directive == 'expect':
                     test.expect = value.lower()
                 elif directive == 'expect-error':
-                    test.expect_error = value
+                    if value and value.lower() != 'n/a':
+                        test.expect_error = value
                 elif directive == 'expect-output':
-                    test.expect_output = value
+                    if value and value.lower() != 'n/a':
+                        test.expect_output = value
                 elif directive == 'expect-return':
-                    test.expect_return = value
+                    if value and value.lower() != 'n/a':
+                        test.expect_return = value
                 elif directive == 'timeout':
                     test.timeout = int(value)
                 elif directive == 'parse-only':
@@ -266,11 +269,13 @@ class TestRunner:
         """Run a single test and return comprehensive results."""
         start_time = time.time()
         
-        cmd = [self.vyn_executable, test.filename]
+        cmd = [self.vyn_executable]
         
-        # Note: The current vyn executable doesn't support parse-only or semantic-only flags
-        # These would need to be implemented in the main.cpp file to be used
-        # For now, we just run the file normally
+        # Pass --parse-only flag when the test requests parse-only mode
+        if test.parse_only:
+            cmd.append("--parse-only")
+        
+        cmd.append(test.filename)
         
         try:
             # Find the vyn root to run from the correct directory
