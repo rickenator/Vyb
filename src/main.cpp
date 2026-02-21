@@ -30,6 +30,11 @@ extern "C" {
     
     // String concatenation intrinsic function
     char* __vyn_string_concat(const char* left, const char* right);
+
+    // String replace runtime helper
+    char* __vyn_string_replace(const char* src, int64_t src_len,
+                               const char* old_s, const char* new_s,
+                               int64_t* out_len);
     
     // ToString intrinsic functions for automatic string conversion - all basic types
     char* __vyn_toString_int(int64_t value);
@@ -673,6 +678,10 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             runtimeSymbols[mangle("__vyn_string_concat")] = llvm::orc::ExecutorSymbolDef(
                 llvm::orc::ExecutorAddr::fromPtr(&__vyn_string_concat), llvm::JITSymbolFlags::Exported);
         }
+
+        // Register string replace helper (always export — codegen may emit the symbol)
+        runtimeSymbols[mangle("__vyn_string_replace")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_string_replace), llvm::JITSymbolFlags::Exported);
         
         // Register toString functions
         if (toStringIntFunc) {

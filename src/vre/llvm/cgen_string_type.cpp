@@ -58,6 +58,10 @@ void LLVMCodegen::handleStringMethod(vyn::ast::CallExpression* node, const std::
         handleStringToUpper(node, strPtr, strStructType);
     } else if (methodName == "to_lower") {
         handleStringToLower(node, strPtr, strStructType);
+    } else if (methodName == "trim" || methodName == "strip") {
+        handleStringTrim(node, strPtr, strStructType);
+    } else if (methodName == "replace") {
+        handleStringReplace(node, strPtr, strStructType);
     } else {
         logError(node->loc, "Unknown String method: " + methodName);
         m_currentLLVMValue = nullptr;
@@ -721,6 +725,207 @@ void LLVMCodegen::handleStringToLower(vyn::ast::CallExpression* node, llvm::Valu
     resultStr = builder->CreateInsertValue(resultStr, len, 1, "result.len");
     
     std::cout << "DEBUG: String::to_lower() called" << std::endl;
+    m_currentLLVMValue = resultStr;
+}
+
+// String::trim() — remove leading and trailing ASCII whitespace
+void LLVMCodegen::handleStringTrim(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType) {
+    if (!node->arguments.empty()) {
+        logError(node->loc, "String::trim expects no arguments");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    // Load string fields
+    llvm::Value* dataPtr = builder->CreateStructGEP(strStructType, strPtr, 0, "str.data_ptr");
+    llvm::Value* lenPtr  = builder->CreateStructGEP(strStructType, strPtr, 1, "str.len_ptr");
+    llvm::Value* data    = builder->CreateLoad(llvm::PointerType::get(*context, 0), dataPtr, "str.data");
+    llvm::Value* len     = builder->CreateLoad(llvm::Type::getInt64Ty(*context), lenPtr, "str.len");
+
+    // Declare helper intrinsics (libc)
+    llvm::FunctionType* isspaceTy = llvm::FunctionType::get(
+        llvm::Type::getInt32Ty(*context),
+        {llvm::Type::getInt32Ty(*context)}, false);
+    llvm::FunctionCallee isspaceFunc = module->getOrInsertFunction("isspace", isspaceTy);
+
+    llvm::FunctionType* mallocTy = llvm::FunctionType::get(
+        llvm::PointerType::get(*context, 0),
+        {llvm::Type::getInt64Ty(*context)}, false);
+    llvm::FunctionCallee mallocFunc = module->getOrInsertFunction("malloc", mallocTy);
+
+    llvm::FunctionType* memcpyTy = llvm::FunctionType::get(
+        llvm::PointerType::get(*context, 0),
+        {llvm::PointerType::get(*context, 0),
+         llvm::PointerType::get(*context, 0),
+         llvm::Type::getInt64Ty(*context)}, false);
+    llvm::FunctionCallee memcpyFunc = module->getOrInsertFunction("memcpy", memcpyTy);
+
+    llvm::Type* i64 = llvm::Type::getInt64Ty(*context);
+    llvm::Type* i32 = llvm::Type::getInt32Ty(*context);
+    llvm::Type* i8  = llvm::Type::getInt8Ty(*context);
+    llvm::Value* zero64 = llvm::ConstantInt::get(i64, 0);
+    llvm::Value* one64  = llvm::ConstantInt::get(i64, 1);
+
+    // Find start (first non-whitespace)
+    llvm::Value* startPtr = builder->CreateAlloca(i64, nullptr, "trim.start");
+    builder->CreateStore(zero64, startPtr);
+    llvm::BasicBlock* startCond = llvm::BasicBlock::Create(*context, "trim.start.cond", currentFunction);
+    llvm::BasicBlock* startBody = llvm::BasicBlock::Create(*context, "trim.start.body", currentFunction);
+    llvm::BasicBlock* endFind   = llvm::BasicBlock::Create(*context, "trim.end.find", currentFunction);
+    builder->CreateBr(startCond);
+
+    builder->SetInsertPoint(startCond);
+    llvm::Value* si  = builder->CreateLoad(i64, startPtr, "si");
+    llvm::Value* siLtLen = builder->CreateICmpSLT(si, len, "si.lt.len");
+    builder->CreateCondBr(siLtLen, startBody, endFind);
+
+    builder->SetInsertPoint(startBody);
+    llvm::Value* siChar = builder->CreateGEP(i8, data, si, "si.char.ptr");
+    llvm::Value* siCh   = builder->CreateLoad(i8, siChar, "si.ch");
+    llvm::Value* siCh32 = builder->CreateZExt(siCh, i32, "si.ch32");
+    llvm::Value* siIsWs = builder->CreateCall(isspaceFunc, {siCh32}, "si.is.ws");
+    llvm::Value* siIsWsBool = builder->CreateICmpNE(siIsWs, llvm::ConstantInt::get(i32, 0), "si.is.ws.bool");
+    llvm::BasicBlock* incSi    = llvm::BasicBlock::Create(*context, "trim.inc.si", currentFunction);
+    llvm::BasicBlock* stopSi   = llvm::BasicBlock::Create(*context, "trim.stop.si", currentFunction);
+    builder->CreateCondBr(siIsWsBool, incSi, stopSi);
+
+    builder->SetInsertPoint(incSi);
+    builder->CreateStore(builder->CreateAdd(si, one64), startPtr);
+    builder->CreateBr(startCond);
+
+    builder->SetInsertPoint(stopSi);
+    builder->CreateBr(endFind);
+
+    // Find end (last non-whitespace)
+    builder->SetInsertPoint(endFind);
+    llvm::Value* endIdx = builder->CreateAlloca(i64, nullptr, "trim.end");
+    builder->CreateStore(len, endIdx);
+    llvm::BasicBlock* endCond = llvm::BasicBlock::Create(*context, "trim.end.cond", currentFunction);
+    llvm::BasicBlock* endBody = llvm::BasicBlock::Create(*context, "trim.end.body", currentFunction);
+    llvm::BasicBlock* doTrim  = llvm::BasicBlock::Create(*context, "trim.do", currentFunction);
+    builder->CreateBr(endCond);
+
+    builder->SetInsertPoint(endCond);
+    llvm::Value* startVal = builder->CreateLoad(i64, startPtr);
+    llvm::Value* ei       = builder->CreateLoad(i64, endIdx, "ei");
+    llvm::Value* eiGtStart = builder->CreateICmpSGT(ei, startVal, "ei.gt.start");
+    builder->CreateCondBr(eiGtStart, endBody, doTrim);
+
+    builder->SetInsertPoint(endBody);
+    llvm::Value* eiM1  = builder->CreateSub(ei, one64, "ei.m1");
+    llvm::Value* eiChar = builder->CreateGEP(i8, data, eiM1, "ei.char.ptr");
+    llvm::Value* eiCh   = builder->CreateLoad(i8, eiChar, "ei.ch");
+    llvm::Value* eiCh32 = builder->CreateZExt(eiCh, i32, "ei.ch32");
+    llvm::Value* eiIsWs = builder->CreateCall(isspaceFunc, {eiCh32}, "ei.is.ws");
+    llvm::Value* eiIsWsBool = builder->CreateICmpNE(eiIsWs, llvm::ConstantInt::get(i32, 0), "ei.is.ws.bool");
+    llvm::BasicBlock* decEi  = llvm::BasicBlock::Create(*context, "trim.dec.ei", currentFunction);
+    llvm::BasicBlock* stopEi = llvm::BasicBlock::Create(*context, "trim.stop.ei", currentFunction);
+    builder->CreateCondBr(eiIsWsBool, decEi, stopEi);
+
+    builder->SetInsertPoint(decEi);
+    builder->CreateStore(eiM1, endIdx);
+    builder->CreateBr(endCond);
+
+    builder->SetInsertPoint(stopEi);
+    builder->CreateBr(doTrim);
+
+    // Allocate result and copy [start, end)
+    builder->SetInsertPoint(doTrim);
+    llvm::Value* sv  = builder->CreateLoad(i64, startPtr, "sv");
+    llvm::Value* ev  = builder->CreateLoad(i64, endIdx,   "ev");
+    llvm::Value* newLen = builder->CreateSub(ev, sv, "trim.new.len");
+    llvm::Value* allocSz = builder->CreateAdd(newLen, one64, "trim.alloc.sz");
+    llvm::Value* newData = builder->CreateCall(mallocFunc, {allocSz}, "trim.new.data");
+    llvm::Value* srcStart = builder->CreateGEP(i8, data, sv, "trim.src.start");
+    builder->CreateCall(memcpyFunc, {newData, srcStart, newLen});
+    // Null terminator
+    llvm::Value* nullPtr = builder->CreateGEP(i8, newData, newLen, "trim.null.ptr");
+    builder->CreateStore(llvm::ConstantInt::get(i8, 0), nullPtr);
+
+    llvm::Value* resultStr = llvm::UndefValue::get(strStructType);
+    resultStr = builder->CreateInsertValue(resultStr, newData, 0, "trim.result.data");
+    resultStr = builder->CreateInsertValue(resultStr, newLen, 1, "trim.result.len");
+
+    std::cout << "DEBUG: String::trim() called" << std::endl;
+    m_currentLLVMValue = resultStr;
+}
+
+// String::replace(old<String>, new<String>) -> String
+// Replaces all non-overlapping occurrences of 'old' with 'new'.
+void LLVMCodegen::handleStringReplace(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType) {
+    if (node->arguments.size() != 2) {
+        logError(node->loc, "String::replace expects exactly 2 arguments (old, new)");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    // Evaluate old and new string arguments
+    node->arguments[0]->accept(*this);
+    llvm::Value* oldStr = m_currentLLVMValue;
+    if (!oldStr) { logError(node->loc, "replace: failed to evaluate 'old' argument"); return; }
+
+    node->arguments[1]->accept(*this);
+    llvm::Value* newStr = m_currentLLVMValue;
+    if (!newStr) { logError(node->loc, "replace: failed to evaluate 'new' argument"); return; }
+
+    // Extract fields
+    llvm::Value* srcDataPtr = builder->CreateStructGEP(strStructType, strPtr, 0, "src.data_ptr");
+    llvm::Value* srcLenPtr  = builder->CreateStructGEP(strStructType, strPtr, 1, "src.len_ptr");
+    llvm::Value* srcData    = builder->CreateLoad(llvm::PointerType::get(*context, 0), srcDataPtr, "src.data");
+    llvm::Value* srcLen     = builder->CreateLoad(llvm::Type::getInt64Ty(*context), srcLenPtr, "src.len");
+
+    llvm::Type* i8ptr = llvm::PointerType::get(*context, 0);
+    llvm::Type* i64   = llvm::Type::getInt64Ty(*context);
+    llvm::Type* i8    = llvm::Type::getInt8Ty(*context);
+
+    // Declare strstr and malloc/memcpy/strlen
+    llvm::FunctionCallee strstrFunc = module->getOrInsertFunction(
+        "strstr", llvm::FunctionType::get(i8ptr, {i8ptr, i8ptr}, false));
+    llvm::FunctionCallee mallocFunc = module->getOrInsertFunction(
+        "malloc", llvm::FunctionType::get(i8ptr, {i64}, false));
+    llvm::FunctionCallee memcpyFunc = module->getOrInsertFunction(
+        "memcpy", llvm::FunctionType::get(i8ptr, {i8ptr, i8ptr, i64}, false));
+    llvm::FunctionCallee strlenFunc = module->getOrInsertFunction(
+        "strlen", llvm::FunctionType::get(i64, {i8ptr}, false));
+
+    // For simplicity, delegate to a runtime helper implemented in C.
+    // Declare: char* __vyn_string_replace(const char* src, int64_t src_len,
+    //                                     const char* old_s, const char* new_s,
+    //                                     int64_t* out_len)
+    llvm::FunctionType* replaceRT = llvm::FunctionType::get(
+        i8ptr,
+        {i8ptr, i64, i8ptr, i8ptr, i8ptr},
+        false);
+    llvm::FunctionCallee replaceFunc = module->getOrInsertFunction("__vyn_string_replace", replaceRT);
+
+    // Extract old and new data pointers
+    llvm::Value* oldData, *newData2;
+    if (oldStr->getType()->isPointerTy()) {
+        llvm::Value* odp = builder->CreateStructGEP(strStructType, oldStr, 0);
+        oldData = builder->CreateLoad(i8ptr, odp);
+    } else {
+        oldData = builder->CreateExtractValue(oldStr, 0, "old.data");
+    }
+    if (newStr->getType()->isPointerTy()) {
+        llvm::Value* ndp = builder->CreateStructGEP(strStructType, newStr, 0);
+        newData2 = builder->CreateLoad(i8ptr, ndp);
+    } else {
+        newData2 = builder->CreateExtractValue(newStr, 0, "new.data");
+    }
+
+    // Allocate an i64 for out_len on the stack
+    llvm::Value* outLenPtr = builder->CreateAlloca(i64, nullptr, "replace.out_len");
+    builder->CreateStore(llvm::ConstantInt::get(i64, 0), outLenPtr);
+
+    llvm::Value* resultData = builder->CreateCall(
+        replaceFunc, {srcData, srcLen, oldData, newData2, outLenPtr}, "replace.data");
+    llvm::Value* resultLen = builder->CreateLoad(i64, outLenPtr, "replace.len");
+
+    llvm::Value* resultStr = llvm::UndefValue::get(strStructType);
+    resultStr = builder->CreateInsertValue(resultStr, resultData, 0, "replace.result.data");
+    resultStr = builder->CreateInsertValue(resultStr, resultLen, 1, "replace.result.len");
+
+    std::cout << "DEBUG: String::replace() called" << std::endl;
     m_currentLLVMValue = resultStr;
 }
 

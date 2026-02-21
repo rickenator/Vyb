@@ -2146,7 +2146,8 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                     if (methodName == "len" || methodName == "length" || methodName == "concat" || methodName == "substring" || 
                         methodName == "substr" || methodName == "char_at" || methodName == "to_bytes" ||
                         methodName == "from_bytes" || methodName == "starts_with" || methodName == "ends_with" ||
-                        methodName == "contains" || methodName == "to_upper" || methodName == "to_lower") {
+                        methodName == "contains" || methodName == "to_upper" || methodName == "to_lower" ||
+                        methodName == "trim" || methodName == "strip" || methodName == "replace") {
                         handleStringMethod(node, objectName, methodName);
                         return;
                     }

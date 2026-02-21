@@ -1513,7 +1513,8 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                 return;
                             } else if (methodName == "substring" || methodName == "substr" ||
                                        methodName == "to_upper" || methodName == "to_lower" ||
-                                       methodName == "concat" || methodName == "trim") {
+                                       methodName == "concat" || methodName == "trim" ||
+                                       methodName == "strip" || methodName == "replace") {
                                 auto strType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "String"));
                                 expressionTypes[node] = strType;
                                 node->type = std::shared_ptr<ast::TypeNode>(strType->clone());
@@ -2588,11 +2589,11 @@ void SemanticAnalyzer::visit(ast::FunctionExpression* node) {
 
     exitScope();
 
-    // Build a FunctionType for this lambda so variable declarations can infer its type
-    auto funcType = std::make_unique<ast::FunctionType>(
-        node->loc, std::move(paramTypes), /*returnType=*/nullptr);
-    expressionTypes[node] = funcType.release();
-    node->type = std::shared_ptr<ast::TypeNode>(expressionTypes[node]->clone());
+    // Build a FunctionType for this lambda so variable declarations can infer its type.
+    // Use the same raw-pointer ownership convention as the rest of expressionTypes.
+    auto* funcType = new ast::FunctionType(node->loc, std::move(paramTypes), /*returnType=*/nullptr);
+    expressionTypes[node] = funcType;
+    node->type = std::shared_ptr<ast::TypeNode>(funcType->clone());
 }
 void SemanticAnalyzer::visit(ast::ThisExpression* node) {}
 void SemanticAnalyzer::visit(ast::SuperExpression* node) {}

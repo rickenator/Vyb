@@ -785,5 +785,57 @@ extern "C" char* __vyn_toString_byte(uint8_t value) {
 // char* __vyn_toString_array(void* array_ptr, const char* element_type, size_t length);
 // char* __vyn_toString_struct(void* struct_ptr, const char* struct_type);
 
+// String::replace runtime helper — replaces all non-overlapping occurrences of old_s with new_s.
+// Returns malloc'd result (caller must free). Sets *out_len to the byte length (excluding NUL).
+extern "C" char* __vyn_string_replace(const char* src, int64_t src_len,
+                                       const char* old_s, const char* new_s,
+                                       int64_t* out_len) {
+    if (!src || !old_s || !new_s) {
+        *out_len = 0;
+        char* empty = (char*)malloc(1);
+        if (empty) empty[0] = '\0';
+        return empty;
+    }
+    size_t old_len = strlen(old_s);
+    size_t new_len = strlen(new_s);
+    if (old_len == 0) {
+        // Nothing to replace — return copy
+        char* copy = (char*)malloc((size_t)src_len + 1);
+        if (copy) { memcpy(copy, src, (size_t)src_len); copy[src_len] = '\0'; }
+        *out_len = src_len;
+        return copy;
+    }
+
+    // First pass: count occurrences to compute result size
+    size_t count = 0;
+    const char* p = src;
+    while ((p = strstr(p, old_s)) != nullptr) { ++count; p += old_len; }
+
+    size_t result_len = (size_t)src_len + count * (new_len - old_len);
+    char* result = (char*)malloc(result_len + 1);
+    if (!result) { *out_len = 0; return nullptr; }
+
+    // Second pass: build result
+    char* dst = result;
+    p = src;
+    const char* match;
+    while ((match = strstr(p, old_s)) != nullptr) {
+        size_t before = (size_t)(match - p);
+        memcpy(dst, p, before);
+        dst += before;
+        memcpy(dst, new_s, new_len);
+        dst += new_len;
+        p = match + old_len;
+    }
+    // Copy remainder
+    size_t tail = (size_t)src_len - (size_t)(p - src);
+    memcpy(dst, p, tail);
+    dst += tail;
+    *dst = '\0';
+
+    *out_len = (int64_t)result_len;
+    return result;
+}
+
 } // namespace intrinsics
 } // namespace vyn
