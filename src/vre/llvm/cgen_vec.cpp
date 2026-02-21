@@ -480,8 +480,94 @@ void LLVMCodegen::handleVecContains(vyn::ast::CallExpression* node, llvm::Value*
     
     std::cout << "DEBUG: Vec::contains() called - searching for value" << std::endl;
     
-    // For now, return false as placeholder
-    m_currentLLVMValue = llvm::ConstantInt::get(llvm::Type::getInt1Ty(*context), 0);
+    // Get the element type size (default to 8 bytes for i64)
+    llvm::Type* elementLLVMType = llvm::Type::getInt64Ty(*context);
+    uint64_t elementSizeBytes = 8;
+    if (node->type) {
+        // The contains() return type is Bool, not the element type
+        // We need the element type from the Vec type context
+    }
+    // Try to infer element type from search value
+    if (searchValue->getType()->isIntegerTy()) {
+        // Ensure 64-bit for consistency
+        if (searchValue->getType() != llvm::Type::getInt64Ty(*context)) {
+            searchValue = builder->CreateSExtOrTrunc(searchValue, llvm::Type::getInt64Ty(*context), "contains.cast");
+        }
+        elementLLVMType = llvm::Type::getInt64Ty(*context);
+        elementSizeBytes = 8;
+    } else if (searchValue->getType()->isFloatingPointTy()) {
+        elementLLVMType = searchValue->getType();
+        llvm::DataLayout dl(module.get());
+        elementSizeBytes = dl.getTypeAllocSize(elementLLVMType);
+    } else if (searchValue->getType()->isPointerTy()) {
+        elementLLVMType = searchValue->getType();
+        elementSizeBytes = 8;
+    }
+    
+    // Get pointers to struct fields
+    llvm::Value* dataFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 0, "vec.data_ptr");
+    llvm::Value* sizeFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 1, "vec.size_ptr");
+    llvm::Value* dataPtr = builder->CreateLoad(llvm::PointerType::get(*context, 0), dataFieldPtr, "vec.data");
+    llvm::Value* vecSize = builder->CreateLoad(llvm::Type::getInt64Ty(*context), sizeFieldPtr, "vec.size");
+    
+    // Generate loop: for i in 0..size, check if element[i] == searchValue
+    llvm::Function* currentFunc = builder->GetInsertBlock()->getParent();
+    llvm::BasicBlock* loopHeader = llvm::BasicBlock::Create(*context, "contains.loop", currentFunc);
+    llvm::BasicBlock* loopBody   = llvm::BasicBlock::Create(*context, "contains.body", currentFunc);
+    llvm::BasicBlock* loopNext   = llvm::BasicBlock::Create(*context, "contains.next", currentFunc);
+    llvm::BasicBlock* loopEnd    = llvm::BasicBlock::Create(*context, "contains.end", currentFunc);
+    
+    // Save entry block to add incoming values to PHI nodes
+    llvm::BasicBlock* entryBlock = builder->GetInsertBlock();
+    
+    // Start loop
+    builder->CreateBr(loopHeader);
+    
+    // Loop header: i = PHI(0, i+1)
+    builder->SetInsertPoint(loopHeader);
+    llvm::PHINode* indexPhi = builder->CreatePHI(llvm::Type::getInt64Ty(*context), 2, "contains.i");
+    indexPhi->addIncoming(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0), entryBlock);
+    
+    // Check: i < size
+    llvm::Value* cond = builder->CreateICmpULT(indexPhi, vecSize, "contains.cond");
+    builder->CreateCondBr(cond, loopBody, loopEnd);
+    
+    // Loop body: load element and compare
+    builder->SetInsertPoint(loopBody);
+    llvm::Value* elemSize = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), elementSizeBytes);
+    llvm::Value* offset = builder->CreateMul(indexPhi, elemSize, "contains.offset");
+    llvm::Value* elemPtr = builder->CreateGEP(llvm::Type::getInt8Ty(*context), dataPtr, offset, "contains.elemptr");
+    llvm::Value* elemVal = builder->CreateLoad(elementLLVMType, elemPtr, "contains.elem");
+    
+    // Compare element with searchValue
+    llvm::Value* isEqual;
+    if (elementLLVMType->isIntegerTy()) {
+        isEqual = builder->CreateICmpEQ(elemVal, searchValue, "contains.eq");
+    } else if (elementLLVMType->isFloatingPointTy()) {
+        isEqual = builder->CreateFCmpOEQ(elemVal, searchValue, "contains.eq");
+    } else {
+        // Default: integer compare (for pointers, compare addresses)
+        isEqual = builder->CreateICmpEQ(
+            builder->CreatePtrToInt(elemVal, llvm::Type::getInt64Ty(*context)),
+            builder->CreatePtrToInt(searchValue, llvm::Type::getInt64Ty(*context)),
+            "contains.eq");
+    }
+    builder->CreateCondBr(isEqual, loopEnd, loopNext);
+    
+    // Loop next: i++
+    builder->SetInsertPoint(loopNext);
+    llvm::Value* nextIndex = builder->CreateAdd(indexPhi, 
+        llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1), "contains.next_i");
+    indexPhi->addIncoming(nextIndex, loopNext);
+    builder->CreateBr(loopHeader);
+    
+    // End block: PHI result
+    builder->SetInsertPoint(loopEnd);
+    llvm::PHINode* resultPhi = builder->CreatePHI(llvm::Type::getInt1Ty(*context), 2, "contains.result");
+    resultPhi->addIncoming(llvm::ConstantInt::get(llvm::Type::getInt1Ty(*context), 0), loopHeader); // false: loop ended
+    resultPhi->addIncoming(llvm::ConstantInt::get(llvm::Type::getInt1Ty(*context), 1), loopBody);   // true: found
+    
+    m_currentLLVMValue = resultPhi;
 }
 
 void LLVMCodegen::handleVecRemoveAt(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {

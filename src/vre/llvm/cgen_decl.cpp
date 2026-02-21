@@ -142,6 +142,13 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
             return;
         }
         
+        // Track lambda function types for later indirect calling
+        if (dynamic_cast<vyn::ast::FunctionExpression*>(node->init.get())) {
+            if (auto* lambdaFunc = llvm::dyn_cast<llvm::Function>(initialVal)) {
+                localLambdaTypes[node->id->name] = lambdaFunc->getFunctionType();
+            }
+        }
+        
         // If the initializer was an ObjectLiteral, ensure we properly set up type information
         if (auto* objLiteral = dynamic_cast<vyn::ast::ObjectLiteral*>(node->init.get())) {
             if (objLiteral->typePath && !node->typeNode) {

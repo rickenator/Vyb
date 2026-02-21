@@ -2343,9 +2343,55 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         // Try special functions that might not be in the module yet
         if (identCallee && identCallee->name == "println") {
             calleeFunc = getPrintlnFunction();
-        } else {
+        } else if (identCallee) {
+            // Check if it's a local lambda variable
+            auto lambdaTypeIt = localLambdaTypes.find(identCallee->name);
+            if (lambdaTypeIt != localLambdaTypes.end()) {
+                // It's a lambda stored in a local variable - use indirect call
+                auto varIt = namedValues.find(identCallee->name);
+                if (varIt != namedValues.end()) {
+                    llvm::Value* funcPtrAlloca = varIt->second;
+                    llvm::FunctionType* lambdaFuncType = lambdaTypeIt->second;
+                    
+                    // Load the function pointer from the alloca
+                    llvm::Value* funcPtr = builder->CreateLoad(
+                        llvm::PointerType::get(*context, 0), funcPtrAlloca, "lambda.fptr");
+                    
+                    // Build argument values
+                    std::vector<llvm::Value*> lambdaArgValues;
+                    for (size_t i = 0; i < node->arguments.size(); ++i) {
+                        node->arguments[i]->accept(*this);
+                        llvm::Value* argVal = m_currentLLVMValue;
+                        if (!argVal) {
+                            logError(node->arguments[i]->loc, "Argument codegen failed for lambda call");
+                            m_currentLLVMValue = nullptr;
+                            return;
+                        }
+                        // Cast if needed
+                        if (i < lambdaFuncType->getNumParams()) {
+                            llvm::Type* expectedType = lambdaFuncType->getParamType(i);
+                            if (argVal->getType() != expectedType) {
+                                if (expectedType->isIntegerTy() && argVal->getType()->isIntegerTy()) {
+                                    argVal = builder->CreateSExtOrTrunc(argVal, expectedType, "lambda.argcast");
+                                } else if (expectedType->isFloatingPointTy() && argVal->getType()->isIntegerTy()) {
+                                    argVal = builder->CreateSIToFP(argVal, expectedType, "lambda.argcast");
+                                }
+                            }
+                        }
+                        lambdaArgValues.push_back(argVal);
+                    }
+                    
+                    // Create indirect call
+                    m_currentLLVMValue = builder->CreateCall(lambdaFuncType, funcPtr, lambdaArgValues, "lambda.result");
+                    return;
+                }
+            }
             // Try mangled name if it's a method or from a namespace
             // This part needs a robust name mangling and lookup scheme
+            logError(node->callee->loc, "Function " + calleeName + " not found.");
+            m_currentLLVMValue = nullptr;
+            return;
+        } else {
             logError(node->callee->loc, "Function " + calleeName + " not found.");
             m_currentLLVMValue = nullptr;
             return;
@@ -3738,9 +3784,16 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
         }
     }
     
-    // Process return type - FunctionExpression doesn't have returnTypeNode
-    // For lambda expressions, default to void unless we can infer otherwise
+    // Process return type - try to infer from body expression type
     llvm::Type* returnType = llvm::Type::getVoidTy(*context);
+    
+    // For expression-body lambdas, infer return type from body's AST type annotation
+    if (node->body && node->body->type) {
+        llvm::Type* inferredType = codegenType(node->body->type.get());
+        if (inferredType && !inferredType->isVoidTy()) {
+            returnType = inferredType;
+        }
+    }
     
     // Create function type
     llvm::FunctionType* funcType = llvm::FunctionType::get(
@@ -3795,11 +3848,15 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
     // Generate code for function body if provided
     if (node->body) {
         node->body->accept(*this);
+        llvm::Value* bodyValue = m_currentLLVMValue;
         
         // If body doesn't end with a return statement, add one
         if (!builder->GetInsertBlock()->getTerminator()) {
             if (returnType->isVoidTy()) {
                 builder->CreateRetVoid();
+            } else if (bodyValue && bodyValue->getType() == returnType) {
+                // Expression body: return the computed value directly
+                builder->CreateRet(bodyValue);
             } else {
                 // For non-void return type, return a default value for the type
                 llvm::Value* defaultValue = nullptr;
