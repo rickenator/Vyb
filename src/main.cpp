@@ -655,20 +655,40 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             llvm::orc::ExecutorAddr::fromPtr((void*)&__vyn_runtime_get_current_stack_trace), llvm::JITSymbolFlags::Exported);
         
         // Register standard library functions
-        runtimeSymbols[mangle("malloc")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr((void*)&malloc), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("malloc.1")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr((void*)&malloc), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("free")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr((void*)&free), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("free.1")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr((void*)&free), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("memset")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr((void*)&memset), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("memset.1")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr((void*)&memset), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("memset.2")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr((void*)&memset), llvm::JITSymbolFlags::Exported);
+        // Register malloc/free/memset/memcpy variants with numeric suffixes
+        // LLVM may create renamed variants (malloc.1, malloc.2, etc.) when the same
+        // function type is declared multiple times in the module.
+        {
+            auto mallocPtr = llvm::orc::ExecutorAddr::fromPtr((void*)&malloc);
+            auto freePtr = llvm::orc::ExecutorAddr::fromPtr((void*)&free);
+            auto memsetPtr = llvm::orc::ExecutorAddr::fromPtr((void*)&memset);
+            auto memcpyPtr = llvm::orc::ExecutorAddr::fromPtr((void*)&memcpy);
+            auto memmovePtr = llvm::orc::ExecutorAddr::fromPtr((void*)&memmove);
+            auto strlenPtr = llvm::orc::ExecutorAddr::fromPtr((void*)&strlen);
+            auto strcpyPtr = llvm::orc::ExecutorAddr::fromPtr((void*)&strcpy);
+            auto strdupPtr = llvm::orc::ExecutorAddr::fromPtr((void*)&strdup);
+
+            // Register base names
+            runtimeSymbols[mangle("malloc")] = llvm::orc::ExecutorSymbolDef(mallocPtr, llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("free")] = llvm::orc::ExecutorSymbolDef(freePtr, llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("memset")] = llvm::orc::ExecutorSymbolDef(memsetPtr, llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("memcpy")] = llvm::orc::ExecutorSymbolDef(memcpyPtr, llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("memmove")] = llvm::orc::ExecutorSymbolDef(memmovePtr, llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("strlen")] = llvm::orc::ExecutorSymbolDef(strlenPtr, llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("strcpy")] = llvm::orc::ExecutorSymbolDef(strcpyPtr, llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("strdup")] = llvm::orc::ExecutorSymbolDef(strdupPtr, llvm::JITSymbolFlags::Exported);
+
+            // Register numbered variants (LLVM auto-renames when same function declared multiple times)
+            for (int i = 1; i <= 20; ++i) {
+                std::string suffix = "." + std::to_string(i);
+                runtimeSymbols[mangle("malloc" + suffix)] = llvm::orc::ExecutorSymbolDef(mallocPtr, llvm::JITSymbolFlags::Exported);
+                runtimeSymbols[mangle("free" + suffix)] = llvm::orc::ExecutorSymbolDef(freePtr, llvm::JITSymbolFlags::Exported);
+                runtimeSymbols[mangle("memset" + suffix)] = llvm::orc::ExecutorSymbolDef(memsetPtr, llvm::JITSymbolFlags::Exported);
+                runtimeSymbols[mangle("memcpy" + suffix)] = llvm::orc::ExecutorSymbolDef(memcpyPtr, llvm::JITSymbolFlags::Exported);
+                runtimeSymbols[mangle("memmove" + suffix)] = llvm::orc::ExecutorSymbolDef(memmovePtr, llvm::JITSymbolFlags::Exported);
+                runtimeSymbols[mangle("strlen" + suffix)] = llvm::orc::ExecutorSymbolDef(strlenPtr, llvm::JITSymbolFlags::Exported);
+            }
+        }
         
         if (litConvertFunc) {
             runtimeSymbols[mangle("__vyn_convert_lit_string")] = llvm::orc::ExecutorSymbolDef(
