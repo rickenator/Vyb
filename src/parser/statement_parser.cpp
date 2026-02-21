@@ -133,6 +133,32 @@ vyn::ast::StmtPtr StatementParser::parse() {
                 if (next_token.type == vyn::TokenType::LT) {
                     return parse_var_decl();
                 }
+
+                // Check for type-inferred lambda declaration: name = |params| -> body
+                // Per LAMBDAS.md, `add = |x, y| -> x + y` is valid Vyn syntax (type inferred from RHS).
+                if (next_token.type == vyn::TokenType::EQ) {
+                    size_t saved_pos = this->pos_;
+                    this->consume(); // consume identifier
+                    this->consume(); // consume '='
+                    if (this->peek().type == vyn::TokenType::PIPE) {
+                        // It IS: name = |params| -> body — parse as VariableDeclaration with inferred type
+                        SourceLocation decl_loc = current_token.location;
+                        auto identifier_node = std::make_unique<vyn::ast::Identifier>(
+                            current_token.location, current_token.lexeme);
+                        auto init = this->expr_parser_.parse_expression();
+                        if (this->peek().type == vyn::TokenType::SEMICOLON) {
+                            this->consume();
+                        }
+                        return std::make_unique<vyn::ast::VariableDeclaration>(
+                            decl_loc,
+                            std::move(identifier_node),
+                            /*isConst=*/false,
+                            /*typeNode=*/nullptr,
+                            std::move(init));
+                    }
+                    // Not a lambda — restore and fall through to expression statement parsing
+                    this->pos_ = saved_pos;
+                }
                 
                 // Check if this could be a legacy relaxed syntax variable declaration (Type name)
                 size_t saved_pos = this->pos_;

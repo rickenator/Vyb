@@ -30,6 +30,11 @@ extern "C" {
     
     // String concatenation intrinsic function
     char* __vyn_string_concat(const char* left, const char* right);
+
+    // String replace runtime helper
+    char* __vyn_string_replace(const char* src, int64_t src_len,
+                               const char* old_s, const char* new_s,
+                               int64_t* out_len);
     
     // ToString intrinsic functions for automatic string conversion - all basic types
     char* __vyn_toString_int(int64_t value);
@@ -673,6 +678,10 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             runtimeSymbols[mangle("__vyn_string_concat")] = llvm::orc::ExecutorSymbolDef(
                 llvm::orc::ExecutorAddr::fromPtr(&__vyn_string_concat), llvm::JITSymbolFlags::Exported);
         }
+
+        // Register string replace helper (always export — codegen may emit the symbol)
+        runtimeSymbols[mangle("__vyn_string_replace")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyn_string_replace), llvm::JITSymbolFlags::Exported);
         
         // Register toString functions
         if (toStringIntFunc) {
@@ -986,9 +995,12 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--no-parser-debug-output") {
             vyn::g_suppress_all_parser_debug_output = true;
         }
-        else {
-            // If in test mode, or it\'s a general Catch2 arg, pass it along
-             catch_args.push_back(arg);
+        else if (test_mode_active || arg[0] == '-' || arg[0] == '+' || arg[0] == '[') {
+            // In test mode, or it's a Catch2 flag/tag/filter — pass it along
+            catch_args.push_back(arg);
+        } else {
+            // Non-option argument: treat as an input file, not a Catch2 filter
+            input_files.push_back(arg);
         }
     }
 
@@ -1011,27 +1023,10 @@ int main(int argc, char* argv[]) {
     }
 
     // If not in test mode, proceed with original file processing logic
-    if (argc > 1) {
-        // Find the file name to process (skip options)
-        std::string filename;
-        for (int i = 1; i < argc; i++) {
-            std::string arg = argv[i];
-            // Skip known option flags and their arguments
-            if (arg == "--debug-verbose" || arg == "--debug-parser-verbose" || arg == "--emit-llvm") {
-                i++; // Skip the next argument for debug flags, skip for emit-llvm
-                continue;
-            }
-            // Not an option (doesn't start with --), assume it's the file
-            if (arg.substr(0, 2) != "--") {
-                filename = arg;
-                break;
-            }
-        }
-        
-        if (filename.empty()) {
-            std::cerr << "Error: No input file specified" << std::endl;
-            return 1;
-        }            std::cout << "Processing file: " << filename << std::endl;
+    if (!input_files.empty()) {
+        // Use the first input file collected during argument parsing
+        std::string filename = input_files[0];
+        std::cout << "Processing file: " << filename << std::endl;
         try {
             // Read the source file
             std::ifstream file(filename);
@@ -1180,7 +1175,30 @@ int main(int argc, char* argv[]) {
                 }
             }
 
+            // --no-execute: parse + semantic analysis to validate the file without running it
+            {
+                Lexer lexer(source, filename);
+                auto tokens = lexer.tokenize();
+                vyn::Parser parser(tokens, filename);
+                auto ast = parser.parse_module();
 
+                vyn::Driver driver;
+                vyn::SemanticAnalyzer semanticAnalyzer(driver);
+                driver.setSemanticAnalyzer(&semanticAnalyzer);
+                semanticAnalyzer.analyze(ast.get());
+
+                const auto& semanticErrors = semanticAnalyzer.getErrors();
+                if (!semanticErrors.empty()) {
+                    std::cerr << "\nSemantic Errors:" << std::endl;
+                    for (const auto& err : semanticErrors) {
+                        std::cerr << "  " << err << std::endl;
+                    }
+                    std::cerr << "Error running Vyn code: Semantic analysis failed with "
+                              << semanticErrors.size() << " error(s)" << std::endl;
+                    return 1;
+                }
+                return 0;
+            }
         } catch (const std::exception& e) {
             std::cerr << "Exception: " << e.what() << std::endl;
             return 1;
@@ -1211,5 +1229,5 @@ int main(int argc, char* argv[]) {
         std::cout << "  --no-parser-debug-output Suppress parser debug output" << std::endl;
     }
 
-    return result; // Or 0 if not running tests and successful
+    return 0; // Reached only when no input file given and not in test mode (usage printed above)
 }

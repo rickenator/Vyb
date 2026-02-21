@@ -308,6 +308,8 @@ private:
     void handleStringContains(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
     void handleStringToUpper(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
     void handleStringToLower(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
+    void handleStringTrim(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
+    void handleStringReplace(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType);
 
     // Scope and ownership management
     void enterScope();

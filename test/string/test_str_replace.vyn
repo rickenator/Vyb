@@ -1,0 +1,14 @@
+// @test: String replace method
+// @description: Tests .replace(old, new) substitutes all occurrences
+// @category: string
+// @expect: pass
+// @expect-output: 9
+
+main()<Int> -> {
+    s<String> = String::from_bytes("Hello World", 11)
+    old<String> = String::from_bytes("World", 5)
+    new_s<String> = String::from_bytes("Vyn", 3)
+    result<String> = s.replace(old, new_s)
+    println_int(result.len())
+    return 0
+}

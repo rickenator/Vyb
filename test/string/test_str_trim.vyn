@@ -1,0 +1,12 @@
+// @test: String trim method
+// @description: Tests .trim() strips leading and trailing whitespace
+// @category: string
+// @expect: pass
+// @expect-output: 5
+
+main()<Int> -> {
+    s<String> = String::from_bytes("  hello  ", 9)
+    trimmed<String> = s.trim()
+    println_int(trimmed.len())
+    return 0
+}

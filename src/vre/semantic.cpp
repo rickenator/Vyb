@@ -1513,7 +1513,8 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                 return;
                             } else if (methodName == "substring" || methodName == "substr" ||
                                        methodName == "to_upper" || methodName == "to_lower" ||
-                                       methodName == "concat" || methodName == "trim") {
+                                       methodName == "concat" || methodName == "trim" ||
+                                       methodName == "strip" || methodName == "replace") {
                                 auto strType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "String"));
                                 expressionTypes[node] = strType;
                                 node->type = std::shared_ptr<ast::TypeNode>(strType->clone());
@@ -2551,7 +2552,49 @@ void SemanticAnalyzer::visit(ast::ArrayLiteral* node) {
         node->type = std::shared_ptr<ast::TypeNode>(expressionTypes[node]->clone());
     }
 }
-void SemanticAnalyzer::visit(ast::FunctionExpression* node) {}
+void SemanticAnalyzer::visit(ast::FunctionExpression* node) {
+    // Collect parameter types for the FunctionType
+    std::vector<ast::TypeNodePtr> paramTypes;
+    for (const auto& param : node->params) {
+        if (param.typeNode) {
+            paramTypes.push_back(param.typeNode->clone());
+        } else {
+            // Unknown parameter type — use a generic placeholder
+            paramTypes.push_back(std::make_unique<ast::TypeName>(
+                node->loc, std::make_unique<ast::Identifier>(node->loc, "?")));
+        }
+    }
+
+    // Enter a new scope for the lambda body
+    enterScope();
+
+    // Register each parameter in the lambda's scope
+    for (const auto& param : node->params) {
+        if (param.name) {
+            ast::TypeNode* paramTypeRaw = param.typeNode ? param.typeNode.get() : nullptr;
+            currentScope->add(SymbolInfo{
+                SymbolInfo::Kind::Variable,
+                param.name->name,
+                /*isConst=*/false,
+                ast::OwnershipKind::MY,
+                paramTypeRaw ? paramTypeRaw->clone().release() : nullptr
+            });
+        }
+    }
+
+    // Visit body to detect captures and validate inner expressions
+    if (node->body) {
+        node->body->accept(*this);
+    }
+
+    exitScope();
+
+    // Build a FunctionType for this lambda so variable declarations can infer its type.
+    // Use the same raw-pointer ownership convention as the rest of expressionTypes.
+    auto* funcType = new ast::FunctionType(node->loc, std::move(paramTypes), /*returnType=*/nullptr);
+    expressionTypes[node] = funcType;
+    node->type = std::shared_ptr<ast::TypeNode>(funcType->clone());
+}
 void SemanticAnalyzer::visit(ast::ThisExpression* node) {}
 void SemanticAnalyzer::visit(ast::SuperExpression* node) {}
 void SemanticAnalyzer::visit(ast::AwaitExpression* node) {}
@@ -4157,13 +4200,31 @@ void SemanticAnalyzer::visit(ast::GenericParameter* node) {
     // if (!symbol) { addError("Generic parameter " + node->name->name + " not found.", node); }
 }
 
+// Normalize LLVM-internal type names to their canonical Vyn surface-type names.
+// The LLVM backend accepts e.g. "i32" as an alias for "Int32"; the semantic
+// analyzer must honour the same aliases so validation is consistent with codegen.
+static std::string normalizeTypeName(const std::string& name) {
+    if (name == "i64" || name == "int" || name == "long")  return "Int";
+    if (name == "i32" || name == "int32")                  return "Int32";
+    if (name == "i16" || name == "int16" || name == "short") return "Int16";
+    if (name == "i8"  || name == "int8"  || name == "char") return "Int8";
+    if (name == "u64" || name == "uint64")                 return "UInt64";
+    if (name == "u32" || name == "uint32")                 return "UInt32";
+    if (name == "u16" || name == "uint16")                 return "UInt16";
+    if (name == "u8"  || name == "uint8" || name == "byte") return "UInt8";
+    if (name == "f64" || name == "double")                 return "Float";
+    if (name == "f32" || name == "float")                  return "Float32";
+    if (name == "bool")                                    return "Bool";
+    if (name == "void")                                    return "Void";
+    return name; // already canonical
+}
+
 // Implementation for areTypesCompatible
 // Checks if valueType can be assigned to targetType
 bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNode* valueType) {
     if (!targetType || !valueType) {
-        // If one or both types are unresolved (likely due to a previous error),
-        // consider them incompatible to prevent cascading issues.
-        return false;
+        // Both null → same unresolved type; otherwise incompatible
+        return (!targetType && !valueType);
     }
 
     // If they are the exact same type object.
@@ -4187,18 +4248,24 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
         }
     }
 
-    // Special Case 2: Assigning a generic integer literal (type "int") to a specific integer type
+    // Special Case 2: Integer literal (typed as "Int" or "int") can be assigned to any integer type.
     if (categoryTarget == ast::TypeNode::Category::IDENTIFIER &&
         categoryValue == ast::TypeNode::Category::IDENTIFIER) {
         auto* tnTarget = static_cast<ast::TypeName*>(targetType);
         auto* tnValue = static_cast<ast::TypeName*>(valueType);
         if (tnTarget->identifier && tnValue->identifier) {
-            bool isSpecificIntTarget = isIntegerType(tnTarget); // Checks for i8, i16, etc.
-            bool isGenericIntValue = (tnValue->identifier->name == "int"); // Literal int
-
+            bool isSpecificIntTarget = isIntegerType(tnTarget);
+            const std::string& valName = tnValue->identifier->name;
+            // Integer literals are typed as "Int" (64-bit) in the semantic analyser
+            bool isGenericIntValue = (valName == "Int" || valName == "int");
             if (isSpecificIntTarget && isGenericIntValue) {
-                // e.g., let x: i32 = 10; (10 is "int", x is "i32")
-                return true;
+                return true; // e.g., x<i32> = 10  or  x<Int8> = 255
+            }
+
+            // Also allow any integer-alias → any other integer-alias (e.g. i32 → Int32)
+            if (isIntegerType(tnTarget) && isIntegerType(tnValue)) {
+                return normalizeTypeName(tnTarget->identifier->name) ==
+                       normalizeTypeName(tnValue->identifier->name);
             }
         }
     }
@@ -4214,20 +4281,16 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
         case ast::TypeNode::Category::IDENTIFIER: {
             auto* tnTarget = static_cast<ast::TypeName*>(targetType);
             auto* tnValue = static_cast<ast::TypeName*>(valueType);
-            if (!tnTarget->identifier || !tnValue->identifier) return false; // Should not happen
+            if (!tnTarget->identifier || !tnValue->identifier) return false;
 
-            // Check for specific integer types (e.g., i32, u64).
-            // The generic "int" literal case is handled above.
-            if (isIntegerType(tnTarget) && isIntegerType(tnValue)) {
-                // For now, require exact match for specific integer types (e.g., i32 compatible with i32).
-                // Vyn might allow implicit widening (e.g., i32 to i64), which would need to be added here.
-                return tnTarget->identifier->name == tnValue->identifier->name;
-            }
+            // Normalize type names: treat LLVM aliases (i32, i64, …) as their
+            // canonical Vyn equivalents (Int32, Int, …) for compatibility checks.
+            std::string nameTarget = normalizeTypeName(tnTarget->identifier->name);
+            std::string nameValue  = normalizeTypeName(tnValue->identifier->name);
 
-            // General identifier type comparison (e.g., custom struct names, bool, string).
-            // This implies nominal typing.
-            if (tnTarget->identifier->name == tnValue->identifier->name) {
-                // If they are generic types, check compatibility of generic arguments.
+            // For integer types, require the same normalised name.
+            // (isIntegerType checks the original name; recheck after normalisation)
+            if (nameTarget == nameValue) {
                 if (tnTarget->genericArgs.size() != tnValue->genericArgs.size()) return false;
                 for (size_t i = 0; i < tnTarget->genericArgs.size(); ++i) {
                     if (!areTypesCompatible(tnTarget->genericArgs[i].get(), tnValue->genericArgs[i].get())) {
@@ -4236,7 +4299,7 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
                 }
                 return true;
             }
-            return false; // Different names or failed generic arg check.
+            return false;
         }
         case ast::TypeNode::Category::POINTER: {
             auto* ptTarget = static_cast<ast::PointerType*>(targetType);
@@ -4263,20 +4326,23 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
             auto* ftTarget = static_cast<ast::FunctionType*>(targetType);
             auto* ftValue = static_cast<ast::FunctionType*>(valueType);
 
-            // Return types: Target's return type must be compatible with Value's return type (covariance).
-            // fn_target_ret = fn_value_ret  => areTypesCompatible(fn_target_ret, fn_value_ret)
-            if (!areTypesCompatible(ftTarget->returnType.get(), ftValue->returnType.get())) return false;
+            // Return types: both null (unspecified) counts as compatible
+            if (ftTarget->returnType || ftValue->returnType) {
+                if (!areTypesCompatible(ftTarget->returnType.get(), ftValue->returnType.get())) return false;
+            }
 
-            // Parameter types: Value's param types must be compatible with Target's param types (contravariance).
-            // fn_target_param = fn_value_param => areTypesCompatible(fn_value_param, fn_target_param)
-            // For simplicity, using invariance for now: types must be identical.
+            // Parameter types: invariant comparison; unknown types ("?") are always compatible
             if (ftTarget->parameterTypes.size() != ftValue->parameterTypes.size()) return false;
             for (size_t i = 0; i < ftTarget->parameterTypes.size(); ++i) {
-                if (!areTypesCompatible(ftTarget->parameterTypes[i].get(), ftValue->parameterTypes[i].get())) {
-                // For contravariance:
-                // if (!areTypesCompatible(ftValue->parameterTypes[i].get(), ftTarget->parameterTypes[i].get()))
-                    return false;
-                }
+                auto* pt = ftTarget->parameterTypes[i].get();
+                auto* pv = ftValue->parameterTypes[i].get();
+                // If either side is the "?" placeholder, skip the comparison
+                auto* ptName = dynamic_cast<ast::TypeName*>(pt);
+                auto* pvName = dynamic_cast<ast::TypeName*>(pv);
+                bool targetIsUnknown = ptName && ptName->identifier && ptName->identifier->name == "?";
+                bool valueIsUnknown  = pvName && pvName->identifier && pvName->identifier->name == "?";
+                if (targetIsUnknown || valueIsUnknown) continue;
+                if (!areTypesCompatible(pt, pv)) return false;
             }
             return true;
         }
