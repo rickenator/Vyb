@@ -3863,6 +3863,13 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
             } else if (bodyValue && bodyValue->getType() == returnType) {
                 // Expression body: return the computed value directly
                 builder->CreateRet(bodyValue);
+            } else if (bodyValue && returnType->isIntegerTy() && bodyValue->getType()->isIntegerTy()) {
+                // Integer width mismatch: extend or truncate
+                llvm::Value* cast = builder->CreateSExtOrTrunc(bodyValue, returnType, "lambda.intcast");
+                builder->CreateRet(cast);
+            } else if (bodyValue && returnType->isFloatingPointTy() && bodyValue->getType()->isIntegerTy()) {
+                llvm::Value* cast = builder->CreateSIToFP(bodyValue, returnType, "lambda.fpcast");
+                builder->CreateRet(cast);
             } else {
                 // For non-void return type, return a default value for the type
                 llvm::Value* defaultValue = nullptr;

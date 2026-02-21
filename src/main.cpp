@@ -678,8 +678,10 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             runtimeSymbols[mangle("strcpy")] = llvm::orc::ExecutorSymbolDef(strcpyPtr, llvm::JITSymbolFlags::Exported);
             runtimeSymbols[mangle("strdup")] = llvm::orc::ExecutorSymbolDef(strdupPtr, llvm::JITSymbolFlags::Exported);
 
-            // Register numbered variants (LLVM auto-renames when same function declared multiple times)
-            for (int i = 1; i <= 20; ++i) {
+            // Register numbered variants (LLVM auto-renames when same function declared multiple times
+            // in the module; e.g. malloc.1, malloc.2, ... up to MAX_LIBC_SYMBOL_VARIANTS)
+            static constexpr int MAX_LIBC_SYMBOL_VARIANTS = 20;
+            for (int i = 1; i <= MAX_LIBC_SYMBOL_VARIANTS; ++i) {
                 std::string suffix = "." + std::to_string(i);
                 runtimeSymbols[mangle("malloc" + suffix)] = llvm::orc::ExecutorSymbolDef(mallocPtr, llvm::JITSymbolFlags::Exported);
                 runtimeSymbols[mangle("free" + suffix)] = llvm::orc::ExecutorSymbolDef(freePtr, llvm::JITSymbolFlags::Exported);
