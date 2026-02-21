@@ -792,12 +792,22 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
         bool mainReturnsStruct = false;
         bool mainReturnsInt = false;
         bool mainReturnsVoid = false;
+        bool mainReturnsString = false;    // { ptr, i64 } Vyn string struct
         
         if (mainFuncForTypeCheck) {
             llvm::Type* returnType = mainFuncForTypeCheck->getReturnType();
             mainReturnsStruct = returnType->isStructTy();
             mainReturnsInt = returnType->isIntegerTy();
             mainReturnsVoid = returnType->isVoidTy();
+            // Detect if this is a Vyn string struct: { ptr, i64 } with 2 elements
+            if (mainReturnsStruct) {
+                llvm::StructType* st = llvm::cast<llvm::StructType>(returnType);
+                if (st->getNumElements() == 2 &&
+                    st->getElementType(0)->isPointerTy() &&
+                    st->getElementType(1)->isIntegerTy(64)) {
+                    mainReturnsString = true;
+                }
+            }
         }
         
         // Apply IR optimizations before JIT execution (default -O2 for JIT)
@@ -850,15 +860,30 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
         
         auto executorAddr = *symbolResult;
         
-        // Check if return type is a struct (tuple)
+        // Check if return type is a struct (tuple or single complex type)
         if (mainReturnsStruct) {
-            // Tuple return - need to handle struct return properly
-            // For now, print a note and return 0
-            // TODO: Properly allocate space for struct return and serialize result
-            std::cout << "Note: main returns a tuple. Execution completed successfully." << std::endl;
-            
-            // We can't safely call struct-returning functions without proper ABI handling
-            // For now, just indicate success
+            if (mainReturnsString) {
+                // Single String return: call as struct { char*, int64_t } returning function
+                // On x86_64 SysV ABI, { ptr, i64 } is returned in registers (rax + rdx)
+                struct VynStringResult { const char* ptr; int64_t len; };
+                typedef VynStringResult (*StringMainFuncType)();
+                StringMainFuncType strMainFunc = reinterpret_cast<StringMainFuncType>(
+                    static_cast<void*>(executorAddr.toPtr<void*>()));
+                VynStringResult result = strMainFunc();
+                if (result.ptr) {
+                    // Output as JSON-encoded string with quotes
+                    std::cout << "\"" << result.ptr << "\"" << std::endl;
+                } else {
+                    std::cout << "null" << std::endl;
+                }
+                return 0;
+            }
+            // Other struct types: call as void function (output was handled via println)
+            // TODO: Implement proper multi-value tuple serialization
+            typedef void (*VoidMainFuncType)();
+            VoidMainFuncType voidMainFunc = reinterpret_cast<VoidMainFuncType>(
+                static_cast<void*>(executorAddr.toPtr<void*>()));
+            voidMainFunc();
             return 0;
         } else if (mainReturnsInt) {
             // Integer return - standard main

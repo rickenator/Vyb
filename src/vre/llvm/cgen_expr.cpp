@@ -2091,6 +2091,12 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 return;
             }
             
+            // If the argument is a Vyn string struct { ptr, i64 }, extract the ptr field
+            if (arg->getType()->isStructTy() && arg->getType()->getStructNumElements() == 2 &&
+                arg->getType()->getStructElementType(1)->isIntegerTy(64)) {
+                arg = builder->CreateExtractValue(arg, 0, "lit.strptr");
+            }
+            
             // Call the lit conversion function
             std::cout << "DEBUG: Getting lit conversion function..." << std::endl;
             llvm::Function* litFunc = getLitConversionFunction();

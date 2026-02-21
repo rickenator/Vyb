@@ -125,6 +125,30 @@ llvm::Value* LLVMCodegen::tryCast(llvm::Value* value, llvm::Type* targetType, co
         }
         return builder->CreateBitCast(value, targetType, "ptr_bitcast");
     }
+    // Pointer to Vyn String struct { ptr, i64 }: wrap char* in a string struct
+    if (targetType->isStructTy() && value->getType()->isPointerTy()) {
+        llvm::StructType* st = llvm::dyn_cast<llvm::StructType>(targetType);
+        if (st && st->getNumElements() == 2 &&
+            st->getElementType(0)->isPointerTy() &&
+            st->getElementType(1)->isIntegerTy(64)) {
+            // Create { ptr, i64 } struct with the pointer and a length of -1 (unknown)
+            // Use strlen to compute actual length via __vyn_strlen if needed
+            llvm::Value* strStruct = llvm::UndefValue::get(targetType);
+            strStruct = builder->CreateInsertValue(strStruct, value, 0, "strwrap.ptr");
+            // Compute strlen for the length field
+            llvm::Function* strlenFunc = module->getFunction("strlen");
+            if (!strlenFunc) {
+                llvm::FunctionType* strlenType = llvm::FunctionType::get(
+                    llvm::Type::getInt64Ty(*context),
+                    {llvm::PointerType::get(*context, 0)},
+                    false);
+                strlenFunc = llvm::Function::Create(strlenType, llvm::Function::ExternalLinkage, "strlen", module.get());
+            }
+            llvm::Value* lenVal = builder->CreateCall(strlenFunc, {value}, "strwrap.len");
+            strStruct = builder->CreateInsertValue(strStruct, lenVal, 1, "strwrap.result");
+            return strStruct;
+        }
+    }
     // Example: Integer to Integer (trunc or sext/zext)
     if (targetType->isIntegerTy() && value->getType()->isIntegerTy()) {
         llvm::IntegerType* targetIntTy = llvm::dyn_cast<llvm::IntegerType>(targetType);
