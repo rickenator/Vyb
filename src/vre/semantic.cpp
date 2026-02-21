@@ -899,6 +899,34 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 return;
             }
             
+            // For notype(): validate that argument is a struct type, not a primitive
+            if (name == "notype") {
+                ast::Expression* argExpr = node->arguments[0].get();
+                ast::TypeNode* argType = nullptr;
+                if (argExpr) {
+                    argType = argExpr->type.get();
+                    if (!argType) {
+                        auto it = expressionTypes.find(argExpr);
+                        if (it != expressionTypes.end()) argType = it->second;
+                    }
+                }
+                if (argType) {
+                    std::string argTypeName = argType->toString();
+                    // Check if it's a primitive type
+                    static const std::set<std::string> primitiveTypes = {
+                        "Int", "Int8", "Int16", "Int32", "Int64",
+                        "UInt8", "UInt16", "UInt32", "UInt64",
+                        "Float", "Float32", "Float64",
+                        "Bool", "Char", "Rune",
+                        "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64"
+                    };
+                    if (primitiveTypes.count(argTypeName)) {
+                        addError("notype() requires struct input, but got primitive " + argTypeName, node);
+                        return;
+                    }
+                }
+            }
+            
             // Get the argument type
             ast::Expression* argExpr = node->arguments[0].get();
             if (argExpr) {
@@ -3990,8 +4018,11 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
                typeNameStr == "f32" || typeNameStr == "f64" ||
                typeNameStr == "bool" || typeNameStr == "Bool" || typeNameStr == "string" || typeNameStr == "void" ||
                typeNameStr == "Int" || typeNameStr == "Float" ||
-               typeNameStr == "Int" || typeNameStr == "String" || typeNameStr == "Int8" ||
-               typeNameStr == "Future" || typeNameStr == "Void" ||
+               typeNameStr == "Int8" || typeNameStr == "Int16" || typeNameStr == "Int32" || typeNameStr == "Int64" ||
+               typeNameStr == "UInt8" || typeNameStr == "UInt16" || typeNameStr == "UInt32" || typeNameStr == "UInt64" ||
+               typeNameStr == "Float32" || typeNameStr == "Float64" ||
+               typeNameStr == "Char" || typeNameStr == "Rune" ||
+               typeNameStr == "String" || typeNameStr == "Future" || typeNameStr == "Void" ||
                typeNameStr == "my" || typeNameStr == "our" || typeNameStr == "their" || 
                typeNameStr == "mild" || typeNameStr == "view" || typeNameStr == "borrow") { 
         node->type = std::shared_ptr<ast::TypeNode>(node->clone());
