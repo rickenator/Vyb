@@ -118,6 +118,7 @@ private:
     std::map<std::string, llvm::Type*> typeAliasMap; // Maps type alias names to their underlying LLVM types
     std::map<vyn::ast::TypeNode*, llvm::Type*> m_typeCache;
     std::map<llvm::Value*, std::shared_ptr<vyn::ast::TypeNode>> valueTypeMap; // Maps LLVM values to AST types
+    std::map<std::string, llvm::FunctionType*> localLambdaTypes; // Maps lambda variable name to its function type
     vyn::ast::TypeNode* m_currentImplTypeNode = nullptr; // Initialize
     vyn::ast::Module* m_currentVynModule = nullptr;
     bool m_isLHSOfAssignment = false;

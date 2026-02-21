@@ -1716,11 +1716,60 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
     }
     
     // Special handling for println with auto-serialization
-    if (identCallee && identCallee->name == "println" && node->arguments.size() == 1) {
-        llvm::Value* arg = nullptr;
-        
-        // For array arguments, we need the pointer, not the loaded value
-        if (node->arguments[0]->type) {
+    if (identCallee && identCallee->name == "println" && node->arguments.size() >= 1) {
+        // Helper lambda to serialize one argument to char* for printing
+        auto serializeOneArg = [&](ast::ExprPtr& argExpr) -> llvm::Value* {
+            llvm::Value* arg = nullptr;
+            // For array arguments, get pointer directly
+            if (argExpr->type && dynamic_cast<ast::ArrayType*>(argExpr->type.get())) {
+                if (auto* identArg = dynamic_cast<ast::Identifier*>(argExpr.get())) {
+                    auto it = namedValues.find(identArg->name);
+                    if (it != namedValues.end()) arg = it->second;
+                    else {
+                        auto funcIt = m_currentFunctionNamedValues.find(identArg->name);
+                        if (funcIt != m_currentFunctionNamedValues.end()) arg = funcIt->second;
+                    }
+                }
+            }
+            if (!arg) {
+                argExpr->accept(*this);
+                arg = m_currentLLVMValue;
+            }
+            if (!arg) return nullptr;
+            llvm::Value* serialized = nullptr;
+            if (argExpr->type) {
+                auto* argType = argExpr->type.get();
+                std::string typeStr = argType->toString();
+                if (typeStr == "string" || typeStr == "String") {
+                    serialized = arg->getType()->isStructTy()
+                        ? builder->CreateExtractValue(arg, 0, "str.ptr")
+                        : arg;
+                } else if (auto* arrayType = dynamic_cast<ast::ArrayType*>(argType)) {
+                    serialized = generateArraySerialization(arg, arrayType);
+                } else if (arg->getType()->isPointerTy() && arg->getType() == int8PtrType) {
+                    serialized = arg;
+                } else {
+                    serialized = generateToStringCall(arg, arg->getType(), argType, argExpr->loc);
+                    if (!serialized) serialized = generateGenericSerialization(arg, argType);
+                }
+            } else {
+                if (arg->getType()->isPointerTy() && arg->getType() == int8PtrType) {
+                    serialized = arg;
+                } else if (arg->getType()->isStructTy() && arg->getType()->getStructNumElements() == 2) {
+                    serialized = builder->CreateExtractValue(arg, 0, "str.ptr");
+                } else {
+                    serialized = generateToStringCall(arg, arg->getType(), nullptr, argExpr->loc);
+                    if (!serialized) serialized = generateGenericSerialization(arg, nullptr);
+                }
+            }
+            return serialized;
+        };
+
+        if (node->arguments.size() == 1) {
+            // Single argument: use existing serialization logic
+            llvm::Value* arg = nullptr;
+            // For array arguments, we need the pointer, not the loaded value
+            if (node->arguments[0]->type) {
             auto* argType = node->arguments[0]->type.get();
             if (dynamic_cast<ast::ArrayType*>(argType)) {
                 // For arrays, get the alloca pointer directly instead of loading
@@ -1819,48 +1868,81 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         
         m_currentLLVMValue = nullptr; // println returns void
         return;
+        } else {
+            // Multiple arguments: print each with space separator, last with newline
+            llvm::Function* printFunc = getVynPrintFunction();
+            llvm::Function* printlnFunc = getVynPrintlnFunction();
+            // Space constant
+            llvm::Value* spaceStr = builder->CreateGlobalStringPtr(" ", "println.space");
+            for (size_t i = 0; i < node->arguments.size(); ++i) {
+                llvm::Value* serialized = serializeOneArg(node->arguments[i]);
+                if (!serialized) {
+                    logError(node->arguments[i]->loc, "Argument to println() evaluated to null");
+                    m_currentLLVMValue = nullptr;
+                    return;
+                }
+                if (i < node->arguments.size() - 1) {
+                    // Print arg then space
+                    builder->CreateCall(printFunc, {serialized});
+                    builder->CreateCall(printFunc, {spaceStr});
+                } else {
+                    // Last arg: println (adds newline)
+                    builder->CreateCall(printlnFunc, {serialized});
+                }
+            }
+            m_currentLLVMValue = nullptr;
+            return;
+        }
     }
 
     // Handle print() intrinsic (no newline)
-    if (identCallee && identCallee->name == "print" && node->arguments.size() == 1) {
-        node->arguments[0]->accept(*this);
-        llvm::Value* arg = m_currentLLVMValue;
-        if (!arg) {
-            logError(node->arguments[0]->loc, "Argument to print() evaluated to null");
-            return;
+    if (identCallee && identCallee->name == "print" && node->arguments.size() >= 1) {
+        llvm::Function* printFunc = getVynPrintFunction();
+        llvm::Value* spaceStr = nullptr;
+        if (node->arguments.size() > 1) {
+            spaceStr = builder->CreateGlobalStringPtr(" ", "print.space");
         }
-        // Serialize to string then print without newline (same logic as println)
-        llvm::Value* serializedValue = nullptr;
-        if (node->arguments[0]->type) {
-            auto* argType = node->arguments[0]->type.get();
-            std::string typeStr = argType->toString();
-            if (typeStr == "String" || typeStr == "string") {
-                serializedValue = arg->getType()->isStructTy()
-                    ? builder->CreateExtractValue(arg, 0, "str.ptr")
-                    : arg;
+        for (size_t argIdx = 0; argIdx < node->arguments.size(); ++argIdx) {
+            node->arguments[argIdx]->accept(*this);
+            llvm::Value* arg = m_currentLLVMValue;
+            if (!arg) {
+                logError(node->arguments[argIdx]->loc, "Argument to print() evaluated to null");
+                return;
+            }
+            // Serialize to string then print without newline
+            llvm::Value* serializedValue = nullptr;
+            if (node->arguments[argIdx]->type) {
+                auto* argType = node->arguments[argIdx]->type.get();
+                std::string typeStr = argType->toString();
+                if (typeStr == "String" || typeStr == "string") {
+                    serializedValue = arg->getType()->isStructTy()
+                        ? builder->CreateExtractValue(arg, 0, "str.ptr")
+                        : arg;
+                } else {
+                    serializedValue = generateToStringCall(arg, arg->getType(), argType, node->loc);
+                    if (!serializedValue) {
+                        serializedValue = generateGenericSerialization(arg, argType);
+                    }
+                }
             } else {
-                // Convert to string via to_string() for any type (Int, Float, Bool, etc.)
-                serializedValue = generateToStringCall(arg, arg->getType(), argType, node->loc);
-                if (!serializedValue) {
-                    serializedValue = generateGenericSerialization(arg, argType);
+                if (arg->getType()->isPointerTy()) {
+                    serializedValue = arg;
+                } else if (arg->getType()->isStructTy() && arg->getType()->getStructNumElements() == 2) {
+                    serializedValue = builder->CreateExtractValue(arg, 0, "str.ptr");
+                } else {
+                    serializedValue = generateToStringCall(arg, arg->getType(), nullptr, node->loc);
+                    if (!serializedValue) {
+                        serializedValue = generateGenericSerialization(arg, nullptr);
+                    }
                 }
             }
-        } else {
-            // No type info - mirror println fallback logic
-            if (arg->getType()->isPointerTy()) {
-                serializedValue = arg;
-            } else if (arg->getType()->isStructTy() && arg->getType()->getStructNumElements() == 2) {
-                serializedValue = builder->CreateExtractValue(arg, 0, "str.ptr");
-            } else {
-                serializedValue = generateToStringCall(arg, arg->getType(), nullptr, node->loc);
-                if (!serializedValue) {
-                    serializedValue = generateGenericSerialization(arg, nullptr);
-                }
+            if (serializedValue) {
+                builder->CreateCall(printFunc, {serializedValue});
             }
-        }
-        if (serializedValue) {
-            llvm::Function* printFunc = getVynPrintFunction();
-            builder->CreateCall(printFunc, {serializedValue});
+            // Print space between args (not after last)
+            if (spaceStr && argIdx < node->arguments.size() - 1) {
+                builder->CreateCall(printFunc, {spaceStr});
+            }
         }
         m_currentLLVMValue = nullptr;
         return;
@@ -2007,6 +2089,12 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
             if (!arg) {
                 logError(node->arguments[0]->loc, "Argument to lit() evaluated to null");
                 return;
+            }
+            
+            // If the argument is a Vyn string struct { ptr, i64 }, extract the ptr field
+            if (arg->getType()->isStructTy() && arg->getType()->getStructNumElements() == 2 &&
+                arg->getType()->getStructElementType(1)->isIntegerTy(64)) {
+                arg = builder->CreateExtractValue(arg, 0, "lit.strptr");
             }
             
             // Call the lit conversion function
@@ -2261,9 +2349,55 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         // Try special functions that might not be in the module yet
         if (identCallee && identCallee->name == "println") {
             calleeFunc = getPrintlnFunction();
-        } else {
+        } else if (identCallee) {
+            // Check if it's a local lambda variable
+            auto lambdaTypeIt = localLambdaTypes.find(identCallee->name);
+            if (lambdaTypeIt != localLambdaTypes.end()) {
+                // It's a lambda stored in a local variable - use indirect call
+                auto varIt = namedValues.find(identCallee->name);
+                if (varIt != namedValues.end()) {
+                    llvm::Value* funcPtrAlloca = varIt->second;
+                    llvm::FunctionType* lambdaFuncType = lambdaTypeIt->second;
+                    
+                    // Load the function pointer from the alloca
+                    llvm::Value* funcPtr = builder->CreateLoad(
+                        llvm::PointerType::get(*context, 0), funcPtrAlloca, "lambda.fptr");
+                    
+                    // Build argument values
+                    std::vector<llvm::Value*> lambdaArgValues;
+                    for (size_t i = 0; i < node->arguments.size(); ++i) {
+                        node->arguments[i]->accept(*this);
+                        llvm::Value* argVal = m_currentLLVMValue;
+                        if (!argVal) {
+                            logError(node->arguments[i]->loc, "Argument codegen failed for lambda call");
+                            m_currentLLVMValue = nullptr;
+                            return;
+                        }
+                        // Cast if needed
+                        if (i < lambdaFuncType->getNumParams()) {
+                            llvm::Type* expectedType = lambdaFuncType->getParamType(i);
+                            if (argVal->getType() != expectedType) {
+                                if (expectedType->isIntegerTy() && argVal->getType()->isIntegerTy()) {
+                                    argVal = builder->CreateSExtOrTrunc(argVal, expectedType, "lambda.argcast");
+                                } else if (expectedType->isFloatingPointTy() && argVal->getType()->isIntegerTy()) {
+                                    argVal = builder->CreateSIToFP(argVal, expectedType, "lambda.argcast");
+                                }
+                            }
+                        }
+                        lambdaArgValues.push_back(argVal);
+                    }
+                    
+                    // Create indirect call
+                    m_currentLLVMValue = builder->CreateCall(lambdaFuncType, funcPtr, lambdaArgValues, "lambda.result");
+                    return;
+                }
+            }
             // Try mangled name if it's a method or from a namespace
             // This part needs a robust name mangling and lookup scheme
+            logError(node->callee->loc, "Function " + calleeName + " not found.");
+            m_currentLLVMValue = nullptr;
+            return;
+        } else {
             logError(node->callee->loc, "Function " + calleeName + " not found.");
             m_currentLLVMValue = nullptr;
             return;
@@ -3656,9 +3790,16 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
         }
     }
     
-    // Process return type - FunctionExpression doesn't have returnTypeNode
-    // For lambda expressions, default to void unless we can infer otherwise
+    // Process return type - try to infer from body expression type
     llvm::Type* returnType = llvm::Type::getVoidTy(*context);
+    
+    // For expression-body lambdas, infer return type from body's AST type annotation
+    if (node->body && node->body->type) {
+        llvm::Type* inferredType = codegenType(node->body->type.get());
+        if (inferredType && !inferredType->isVoidTy()) {
+            returnType = inferredType;
+        }
+    }
     
     // Create function type
     llvm::FunctionType* funcType = llvm::FunctionType::get(
@@ -3713,11 +3854,22 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
     // Generate code for function body if provided
     if (node->body) {
         node->body->accept(*this);
+        llvm::Value* bodyValue = m_currentLLVMValue;
         
         // If body doesn't end with a return statement, add one
         if (!builder->GetInsertBlock()->getTerminator()) {
             if (returnType->isVoidTy()) {
                 builder->CreateRetVoid();
+            } else if (bodyValue && bodyValue->getType() == returnType) {
+                // Expression body: return the computed value directly
+                builder->CreateRet(bodyValue);
+            } else if (bodyValue && returnType->isIntegerTy() && bodyValue->getType()->isIntegerTy()) {
+                // Integer width mismatch: extend or truncate
+                llvm::Value* cast = builder->CreateSExtOrTrunc(bodyValue, returnType, "lambda.intcast");
+                builder->CreateRet(cast);
+            } else if (bodyValue && returnType->isFloatingPointTy() && bodyValue->getType()->isIntegerTy()) {
+                llvm::Value* cast = builder->CreateSIToFP(bodyValue, returnType, "lambda.fpcast");
+                builder->CreateRet(cast);
             } else {
                 // For non-void return type, return a default value for the type
                 llvm::Value* defaultValue = nullptr;

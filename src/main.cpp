@@ -655,20 +655,42 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             llvm::orc::ExecutorAddr::fromPtr((void*)&__vyn_runtime_get_current_stack_trace), llvm::JITSymbolFlags::Exported);
         
         // Register standard library functions
-        runtimeSymbols[mangle("malloc")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr((void*)&malloc), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("malloc.1")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr((void*)&malloc), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("free")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr((void*)&free), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("free.1")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr((void*)&free), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("memset")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr((void*)&memset), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("memset.1")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr((void*)&memset), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("memset.2")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr((void*)&memset), llvm::JITSymbolFlags::Exported);
+        // Register malloc/free/memset/memcpy variants with numeric suffixes
+        // LLVM may create renamed variants (malloc.1, malloc.2, etc.) when the same
+        // function type is declared multiple times in the module.
+        {
+            auto mallocPtr = llvm::orc::ExecutorAddr::fromPtr((void*)&malloc);
+            auto freePtr = llvm::orc::ExecutorAddr::fromPtr((void*)&free);
+            auto memsetPtr = llvm::orc::ExecutorAddr::fromPtr((void*)&memset);
+            auto memcpyPtr = llvm::orc::ExecutorAddr::fromPtr((void*)&memcpy);
+            auto memmovePtr = llvm::orc::ExecutorAddr::fromPtr((void*)&memmove);
+            auto strlenPtr = llvm::orc::ExecutorAddr::fromPtr((void*)&strlen);
+            auto strcpyPtr = llvm::orc::ExecutorAddr::fromPtr((void*)&strcpy);
+            auto strdupPtr = llvm::orc::ExecutorAddr::fromPtr((void*)&strdup);
+
+            // Register base names
+            runtimeSymbols[mangle("malloc")] = llvm::orc::ExecutorSymbolDef(mallocPtr, llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("free")] = llvm::orc::ExecutorSymbolDef(freePtr, llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("memset")] = llvm::orc::ExecutorSymbolDef(memsetPtr, llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("memcpy")] = llvm::orc::ExecutorSymbolDef(memcpyPtr, llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("memmove")] = llvm::orc::ExecutorSymbolDef(memmovePtr, llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("strlen")] = llvm::orc::ExecutorSymbolDef(strlenPtr, llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("strcpy")] = llvm::orc::ExecutorSymbolDef(strcpyPtr, llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("strdup")] = llvm::orc::ExecutorSymbolDef(strdupPtr, llvm::JITSymbolFlags::Exported);
+
+            // Register numbered variants (LLVM auto-renames when same function declared multiple times
+            // in the module; e.g. malloc.1, malloc.2, ... up to MAX_LIBC_SYMBOL_VARIANTS)
+            static constexpr int MAX_LIBC_SYMBOL_VARIANTS = 20;
+            for (int i = 1; i <= MAX_LIBC_SYMBOL_VARIANTS; ++i) {
+                std::string suffix = "." + std::to_string(i);
+                runtimeSymbols[mangle("malloc" + suffix)] = llvm::orc::ExecutorSymbolDef(mallocPtr, llvm::JITSymbolFlags::Exported);
+                runtimeSymbols[mangle("free" + suffix)] = llvm::orc::ExecutorSymbolDef(freePtr, llvm::JITSymbolFlags::Exported);
+                runtimeSymbols[mangle("memset" + suffix)] = llvm::orc::ExecutorSymbolDef(memsetPtr, llvm::JITSymbolFlags::Exported);
+                runtimeSymbols[mangle("memcpy" + suffix)] = llvm::orc::ExecutorSymbolDef(memcpyPtr, llvm::JITSymbolFlags::Exported);
+                runtimeSymbols[mangle("memmove" + suffix)] = llvm::orc::ExecutorSymbolDef(memmovePtr, llvm::JITSymbolFlags::Exported);
+                runtimeSymbols[mangle("strlen" + suffix)] = llvm::orc::ExecutorSymbolDef(strlenPtr, llvm::JITSymbolFlags::Exported);
+            }
+        }
         
         if (litConvertFunc) {
             runtimeSymbols[mangle("__vyn_convert_lit_string")] = llvm::orc::ExecutorSymbolDef(
@@ -792,12 +814,22 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
         bool mainReturnsStruct = false;
         bool mainReturnsInt = false;
         bool mainReturnsVoid = false;
+        bool mainReturnsString = false;    // { ptr, i64 } Vyn string struct
         
         if (mainFuncForTypeCheck) {
             llvm::Type* returnType = mainFuncForTypeCheck->getReturnType();
             mainReturnsStruct = returnType->isStructTy();
             mainReturnsInt = returnType->isIntegerTy();
             mainReturnsVoid = returnType->isVoidTy();
+            // Detect if this is a Vyn string struct: { ptr, i64 } with 2 elements
+            if (mainReturnsStruct) {
+                llvm::StructType* st = llvm::cast<llvm::StructType>(returnType);
+                if (st->getNumElements() == 2 &&
+                    st->getElementType(0)->isPointerTy() &&
+                    st->getElementType(1)->isIntegerTy(64)) {
+                    mainReturnsString = true;
+                }
+            }
         }
         
         // Apply IR optimizations before JIT execution (default -O2 for JIT)
@@ -850,15 +882,30 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
         
         auto executorAddr = *symbolResult;
         
-        // Check if return type is a struct (tuple)
+        // Check if return type is a struct (tuple or single complex type)
         if (mainReturnsStruct) {
-            // Tuple return - need to handle struct return properly
-            // For now, print a note and return 0
-            // TODO: Properly allocate space for struct return and serialize result
-            std::cout << "Note: main returns a tuple. Execution completed successfully." << std::endl;
-            
-            // We can't safely call struct-returning functions without proper ABI handling
-            // For now, just indicate success
+            if (mainReturnsString) {
+                // Single String return: call as struct { char*, int64_t } returning function
+                // On x86_64 SysV ABI, { ptr, i64 } is returned in registers (rax + rdx)
+                struct VynStringResult { const char* ptr; int64_t len; };
+                typedef VynStringResult (*StringMainFuncType)();
+                StringMainFuncType strMainFunc = reinterpret_cast<StringMainFuncType>(
+                    static_cast<void*>(executorAddr.toPtr<void*>()));
+                VynStringResult result = strMainFunc();
+                if (result.ptr) {
+                    // Output as JSON-encoded string with quotes
+                    std::cout << "\"" << result.ptr << "\"" << std::endl;
+                } else {
+                    std::cout << "null" << std::endl;
+                }
+                return 0;
+            }
+            // Other struct types: call as void function (output was handled via println)
+            // TODO: Implement proper multi-value tuple serialization
+            typedef void (*VoidMainFuncType)();
+            VoidMainFuncType voidMainFunc = reinterpret_cast<VoidMainFuncType>(
+                static_cast<void*>(executorAddr.toPtr<void*>()));
+            voidMainFunc();
             return 0;
         } else if (mainReturnsInt) {
             // Integer return - standard main

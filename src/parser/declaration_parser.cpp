@@ -674,17 +674,38 @@ std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_struct() {
         if (this->peek().type != vyn::TokenType::IDENTIFIER) {
             throw std::runtime_error("Expected field name in struct \'" + name->name + "\' at " + location_to_string(this->current_location()));
         }
-        auto field_name = std::make_unique<ast::Identifier>(this->current_location(), this->consume().lexeme);
         
-        // Use Vyn's consistent template syntax: field<Type>
-        this->expect(vyn::TokenType::LT);
+        // Support both Vyn syntax: fieldName<Type>
+        // and relaxed C-style syntax: TypeName fieldName
+        // Detect C-style: current token is IDENTIFIER and next token (after consuming) is also IDENTIFIER
+        std::unique_ptr<ast::Identifier> field_name;
+        std::unique_ptr<ast::TypeNode> field_type_node;
         
-        auto field_type_node = this->type_parser_.parse();
-        if (!field_type_node) {
-            throw std::runtime_error("Expected type for field \'" + field_name->name + "\' in struct \'" + name->name + "\' at " + location_to_string(this->current_location()));
+        auto firstIdent = this->consume(); // Read first identifier
+        
+        if (this->peek().type == vyn::TokenType::IDENTIFIER) {
+            // C-style: first token is TypeName, second token is fieldName
+            // e.g.: String name, Int id
+            std::string typeName = firstIdent.lexeme;
+            field_name = std::make_unique<ast::Identifier>(field_loc, this->consume().lexeme);
+            // Parse the type from the type name string
+            // Create a TypeName node directly from the type name
+            auto typeIdent = std::make_unique<ast::Identifier>(field_loc, typeName);
+            field_type_node = std::make_unique<ast::TypeName>(field_loc, std::move(typeIdent), std::vector<std::unique_ptr<ast::TypeNode>>{});
+        } else {
+            // Vyn-style: field<Type>
+            field_name = std::make_unique<ast::Identifier>(field_loc, firstIdent.lexeme);
+            
+            // Use Vyn's consistent template syntax: field<Type>
+            this->expect(vyn::TokenType::LT);
+            
+            field_type_node = this->type_parser_.parse();
+            if (!field_type_node) {
+                throw std::runtime_error("Expected type for field \'" + field_name->name + "\' in struct \'" + name->name + "\' at " + location_to_string(this->current_location()));
+            }
+            
+            this->expect(vyn::TokenType::GT);
         }
-        
-        this->expect(vyn::TokenType::GT);
         
         fields.push_back(std::make_unique<ast::FieldDeclaration>(field_loc, std::move(field_name), std::move(field_type_node), nullptr, false));
 
