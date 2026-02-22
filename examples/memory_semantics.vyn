@@ -3,15 +3,15 @@
 
 main()<Int> -> {
     x<Int> = 42;
-    
+
     freedom {
         p<loc<Int>> = loc(x);
         at(p) = 42;
-        // Test the new view and borrow operators
-        b<their<Int>> = borrow x;       // Now implemented!
-        v<their<Int>> = view x;         // Now implemented!
-        length<Int> = (view x).len();   // This should work once String methods are added
     }
-    
+
+    // Canonical borrow()/view() syntax for borrowed references
+    b<their<Int>> = borrow(x);   // mutable borrow
+    v<their<Int>> = view(x);     // immutable view
+
     return x;  // Returns 42
 }
