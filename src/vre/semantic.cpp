@@ -4289,6 +4289,29 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
         return (!targetType && !valueType);
     }
 
+    // Resolve type aliases: if either type is a TypeName that's defined as a type alias
+    // in the current scope, use the aliased type instead.
+    auto resolveAlias = [this](ast::TypeNode* t) -> ast::TypeNode* {
+        if (t && t->getCategory() == ast::TypeNode::Category::IDENTIFIER) {
+            auto* tn = static_cast<ast::TypeName*>(t);
+            if (tn->identifier && tn->genericArgs.empty()) {
+                auto* sym = currentScope->lookup(tn->identifier->name);
+                if (sym && sym->kind == SymbolInfo::Kind::Type && sym->type) {
+                    return sym->type;
+                }
+            }
+        }
+        return t;
+    };
+    ast::TypeNode* resolvedTarget = resolveAlias(targetType);
+    ast::TypeNode* resolvedValue = resolveAlias(valueType);
+    // If aliases resolved to different nodes, recurse with resolved types
+    if (resolvedTarget != targetType || resolvedValue != valueType) {
+        if (resolvedTarget != targetType || resolvedValue != valueType) {
+            return areTypesCompatible(resolvedTarget, resolvedValue);
+        }
+    }
+
     // If they are the exact same type object.
     if (targetType == valueType) {
         return true;

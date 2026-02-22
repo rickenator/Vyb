@@ -8,7 +8,7 @@ struct Box<T> {
 # Function that creates Box<Int>
 make_int_box(val<Int>)<Box<Int>> -> {
     # Create Box value directly without type annotation
-    return { value = val }
+    return Box<Int> { value = val }
 }
 
 main()<Int> -> {
