@@ -2113,7 +2113,12 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 }
                 // Cast to i64 if needed
                 if (argType != int64Type) {
-                    arg = builder->CreateSExt(arg, int64Type, "lit.int64");
+                    // Use ZExt for i1 (bool), SExt for other integers
+                    if (argType->isIntegerTy(1)) {
+                        arg = builder->CreateZExt(arg, int64Type, "lit.int64");
+                    } else {
+                        arg = builder->CreateSExt(arg, int64Type, "lit.int64");
+                    }
                 }
                 m_currentLLVMValue = builder->CreateCall(toStringFunc, {arg}, "lit_result");
                 std::cout << "DEBUG: Created call to lit conversion function" << std::endl;

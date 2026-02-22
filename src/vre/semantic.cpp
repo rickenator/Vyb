@@ -4320,9 +4320,7 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
     ast::TypeNode* resolvedValue = resolveAlias(valueType);
     // If aliases resolved to different nodes, recurse with resolved types
     if (resolvedTarget != targetType || resolvedValue != valueType) {
-        if (resolvedTarget != targetType || resolvedValue != valueType) {
-            return areTypesCompatible(resolvedTarget, resolvedValue);
-        }
+        return areTypesCompatible(resolvedTarget, resolvedValue);
     }
 
     // If they are the exact same type object.
