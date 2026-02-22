@@ -51,6 +51,10 @@
 - [x] **Semantic type recognition** — `Int16`, `Int32`, `Int64`, `UInt8`–`UInt64`, `Float32`, `Float64`, `Char`, `Rune` now fully recognized in semantic analysis (were silently rejected)
 - [x] **Relaxed struct field syntax** — C-style `Type fieldName` accepted alongside canonical `fieldName<Type>`; helps parse legacy/interop fixtures
 - [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; test count now **657 tests, 315 passing (47.9%)**
+- [x] **Vec parameter deep copy** — Vec parameters receive an independent copy of the data on function entry, eliminating double-free bugs (e.g. recursive quicksort base-case return)
+- [x] **Vec mutation through borrowed struct fields** — `s.items.push(val)` where `s<their<T>>` now correctly mutates in-place; member-expression Vec calls now get a field *pointer* (not a loaded copy)
+- [x] **Semantic use-after-free fix** — `handleVecMethodCallOnMember` no longer stores raw pointers from temporary `VecType` objects into `expressionTypes`; all return types are cloned into `node->type` first
+- [x] **`test/new_features` 100% pass** — All new-features tests pass (quicksort, stack, insertion sort, etc.)
 
 ---
 
