@@ -369,13 +369,17 @@ namespace vyn {
                 identifier_name == "lit" || identifier_name == "notype" || identifier_name == "bare" || 
                 identifier_name == "deserial" || identifier_name == "my" || identifier_name == "their" || 
                 identifier_name == "our" || identifier_name == "borrow" || identifier_name == "view") {
-                std::cout << "DEBUG: Skipping type parsing for intrinsic function: " << identifier_name << std::endl;
+                #ifdef VERBOSE
+                std::cerr << "DEBUG: Skipping type parsing for intrinsic function: " << identifier_name << std::endl;
+                #endif
                 skip_type_parsing = true;
             }
         }
         
         if (!skip_type_parsing) {
-            std::cout << "DEBUG: Attempting type parsing for identifier: " << peek().lexeme << std::endl;
+            #ifdef VERBOSE
+            std::cerr << "DEBUG: Attempting type parsing for identifier: " << peek().lexeme << std::endl;
+            #endif
             try {
                 TypeParser type_parser(tokens_, pos_, current_file_path_, *this); // Pass *this for ExpressionParser reference
                 ast::TypeNodePtr type_node = type_parser.parse(); // Call parse() instead of parse_type_annotation()
