@@ -216,7 +216,7 @@ void LLVMCodegen::handleVecPush(vyn::ast::CallExpression* node, llvm::Value* vec
     llvm::Value* newSize = builder->CreateAdd(reloadedSize, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1), "vec.new_size");
     builder->CreateStore(newSize, sizeFieldPtr);
     
-    std::cout << "DEBUG: Vec::push() called - element stored, returning Vec for chaining" << std::endl;
+    VDBG(std::cout << "DEBUG: Vec::push() called - element stored, returning Vec for chaining" << std::endl);
     
     // Return the Vec pointer to enable method chaining
     m_currentLLVMValue = vecPtr;
@@ -254,7 +254,7 @@ void LLVMCodegen::handleVecPop(vyn::ast::CallExpression* node, llvm::Value* vecP
     // Store new size
     builder->CreateStore(safeNewSize, sizeFieldPtr);
     
-    std::cout << "DEBUG: Vec::pop() called - size decremented" << std::endl;
+    VDBG(std::cout << "DEBUG: Vec::pop() called - size decremented" << std::endl);
     
     // Return the popped value (for now, return 0 as placeholder)
     m_currentLLVMValue = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0);
@@ -273,7 +273,7 @@ void LLVMCodegen::handleVecLen(vyn::ast::CallExpression* node, llvm::Value* vecP
     // Load and return current size
     m_currentLLVMValue = builder->CreateLoad(llvm::Type::getInt64Ty(*context), sizeFieldPtr, "vec.len");
     
-    std::cout << "DEBUG: Vec::len() called" << std::endl;
+    VDBG(std::cout << "DEBUG: Vec::len() called" << std::endl);
 }
 
 void LLVMCodegen::handleVecGet(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
@@ -332,13 +332,13 @@ void LLVMCodegen::handleVecGet(vyn::ast::CallExpression* node, llvm::Value* vecP
         llvm::Value* structValue = builder->CreateLoad(elementLLVMType, elementPtr, "vec.element_struct");
         m_currentLLVMValue = structValue;
         
-        std::cout << "DEBUG: Vec::get() called - returning struct value" << std::endl;
+        VDBG(std::cout << "DEBUG: Vec::get() called - returning struct value" << std::endl);
     } else {
         // For primitives, load the value directly
         llvm::Value* element = builder->CreateLoad(elementLLVMType, elementPtr, "vec.element");
         m_currentLLVMValue = element;
         
-        std::cout << "DEBUG: Vec::get() called - element retrieved" << std::endl;
+        VDBG(std::cout << "DEBUG: Vec::get() called - element retrieved" << std::endl);
     }
 }
 
@@ -357,7 +357,7 @@ void LLVMCodegen::handleVecPushArray(vyn::ast::CallExpression* node, llvm::Value
         return;
     }
     
-    std::cout << "DEBUG: Vec::push_array() called - pushing entire array" << std::endl;
+    VDBG(std::cout << "DEBUG: Vec::push_array() called - pushing entire array" << std::endl);
     
     // For now, placeholder implementation - would need proper array iteration
     // Return the Vec reference for method chaining
@@ -379,7 +379,7 @@ void LLVMCodegen::handleVecToArray(vyn::ast::CallExpression* node, llvm::Value* 
         return;
     }
     
-    std::cout << "DEBUG: Vec::to_array() called - converting to fixed array" << std::endl;
+    VDBG(std::cout << "DEBUG: Vec::to_array() called - converting to fixed array" << std::endl);
     
     // For now, return a placeholder array
     // In full implementation, would create array from Vec elements
@@ -397,7 +397,7 @@ void LLVMCodegen::handleVecClear(vyn::ast::CallExpression* node, llvm::Value* ve
     llvm::Value* sizeFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 1, "vec.size_ptr");
     builder->CreateStore(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0), sizeFieldPtr);
     
-    std::cout << "DEBUG: Vec::clear() called - size reset to 0" << std::endl;
+    VDBG(std::cout << "DEBUG: Vec::clear() called - size reset to 0" << std::endl);
     
     // Return void
     m_currentLLVMValue = nullptr;
@@ -419,7 +419,7 @@ void LLVMCodegen::handleVecIsEmpty(vyn::ast::CallExpression* node, llvm::Value* 
                                                 llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0),
                                                 "vec.is_empty");
     
-    std::cout << "DEBUG: Vec::is_empty() called" << std::endl;
+    VDBG(std::cout << "DEBUG: Vec::is_empty() called" << std::endl);
     
     // Return boolean result
     m_currentLLVMValue = isEmpty;
@@ -438,7 +438,7 @@ void LLVMCodegen::handleVecCapacity(vyn::ast::CallExpression* node, llvm::Value*
     // Load and return current capacity
     m_currentLLVMValue = builder->CreateLoad(llvm::Type::getInt64Ty(*context), capacityFieldPtr, "vec.capacity");
     
-    std::cout << "DEBUG: Vec::capacity() called" << std::endl;
+    VDBG(std::cout << "DEBUG: Vec::capacity() called" << std::endl);
 }
 
 void LLVMCodegen::handleVecConcat(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
@@ -456,7 +456,7 @@ void LLVMCodegen::handleVecConcat(vyn::ast::CallExpression* node, llvm::Value* v
         return;
     }
     
-    std::cout << "DEBUG: Vec::concat() called - concatenating with another Vec" << std::endl;
+    VDBG(std::cout << "DEBUG: Vec::concat() called - concatenating with another Vec" << std::endl);
     
     // For now, placeholder implementation
     // Return the original Vec reference
@@ -478,7 +478,7 @@ void LLVMCodegen::handleVecContains(vyn::ast::CallExpression* node, llvm::Value*
         return;
     }
     
-    std::cout << "DEBUG: Vec::contains() called - searching for value" << std::endl;
+    VDBG(std::cout << "DEBUG: Vec::contains() called - searching for value" << std::endl);
     
     // Get the element type size (default to 8 bytes for i64)
     llvm::Type* elementLLVMType = llvm::Type::getInt64Ty(*context);
@@ -697,7 +697,7 @@ void LLVMCodegen::handleVecRemoveAt(vyn::ast::CallExpression* node, llvm::Value*
     }
     resultPhi->addIncoming(defaultValue, builder->GetInsertBlock()->getUniquePredecessor());
     
-    std::cout << "DEBUG: Vec::remove_at() called - element removed and Vec compacted" << std::endl;
+    VDBG(std::cout << "DEBUG: Vec::remove_at() called - element removed and Vec compacted" << std::endl);
     
     m_currentLLVMValue = resultPhi;
 }
@@ -721,7 +721,7 @@ void LLVMCodegen::handleVecGetArray(vyn::ast::CallExpression* node, llvm::Value*
     llvm::Value* sizeFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 1, "vec.size_ptr");
     llvm::Value* vecSize = builder->CreateLoad(llvm::Type::getInt64Ty(*context), sizeFieldPtr, "vec.size");
     
-    std::cout << "DEBUG: Vec::get_array() called - copying to pre-allocated array" << std::endl;
+    VDBG(std::cout << "DEBUG: Vec::get_array() called - copying to pre-allocated array" << std::endl);
     
     // In a full implementation, this would:
     // 1. Check array size compatibility
@@ -761,7 +761,7 @@ void LLVMCodegen::handleVecGetVec(vyn::ast::CallExpression* node, llvm::Value* v
     llvm::Value* targetCapacityFieldPtr = builder->CreateStructGEP(vecStructType, targetVecPtr, 2, "target_vec.capacity_ptr");
     llvm::Value* targetDataFieldPtr = builder->CreateStructGEP(vecStructType, targetVecPtr, 0, "target_vec.data_ptr");
     
-    std::cout << "DEBUG: Vec::get_vec() called - extracting contents from 'their Vec' to target Vec" << std::endl;
+    VDBG(std::cout << "DEBUG: Vec::get_vec() called - extracting contents from 'their Vec' to target Vec" << std::endl);
     
     // In a full implementation, this would:
     // 1. Allocate new storage in target Vec if needed
@@ -933,7 +933,7 @@ void LLVMCodegen::handleVecResize(vyn::ast::CallExpression* node, llvm::Value* v
     // Merge block
     builder->SetInsertPoint(mergeBlock);
     
-    std::cout << "DEBUG: Vec::resize() called - Vec resized" << std::endl;
+    VDBG(std::cout << "DEBUG: Vec::resize() called - Vec resized" << std::endl);
     
     // Return void
     m_currentLLVMValue = nullptr;

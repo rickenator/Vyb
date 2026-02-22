@@ -18,6 +18,19 @@
 #include <map>
 
 namespace vyn {
+    // Runtime debug-output flag — shared with codegen. Defined in main.cpp.
+    // Enable with --verbose CLI flag; off by default so programs run silently.
+    extern bool g_debug_codegen;
+}
+
+// Convenience macro — wraps a debug statement so it only runs in verbose mode.
+// Defined here (in semantic.hpp) so both semantic.cpp and codegen.cpp files can use it.
+// codegen.hpp re-exports the same macro for clarity.
+#ifndef VDBG
+#define VDBG(stmt) do { if (vyn::g_debug_codegen) { stmt; } } while(0)
+#endif
+
+namespace vyn {
 
 class Driver; // Forward declaration
 

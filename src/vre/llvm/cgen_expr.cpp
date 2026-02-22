@@ -103,9 +103,9 @@ void LLVMCodegen::visit(vyn::ast::ObjectLiteral* node) {
     }
 
     // Get the struct type for the object
-    std::cerr << "DEBUG: ObjectLiteral resolving type: " << node->typePath->toString() << std::endl;
+    VDBG(std::cerr << "DEBUG: ObjectLiteral resolving type: " << node->typePath->toString() << std::endl);
     llvm::Type* structTy = codegenType(node->typePath.get());
-    std::cerr << "DEBUG: ObjectLiteral resolved type to: " << getTypeName(structTy) << " with pointer: " << structTy << std::endl;
+    VDBG(std::cerr << "DEBUG: ObjectLiteral resolved type to: " << getTypeName(structTy) << " with pointer: " << structTy << std::endl);
     if (!structTy || !structTy->isStructTy()) {
         logError(node->loc, "Object literal type is not a struct type");
         m_currentLLVMValue = nullptr;
@@ -200,8 +200,8 @@ void LLVMCodegen::visit(vyn::ast::ObjectLiteral* node) {
     // This ensures type compatibility with value semantics.
     llvm::Value* structValue = builder->CreateLoad(structTy, allocaInst, structName + "_val");
     
-    std::cerr << "DEBUG: ObjectLiteral created struct value with type: " << getTypeName(structValue->getType()) << std::endl;
-    std::cerr << "DEBUG: Expected struct type was: " << getTypeName(structTy) << std::endl;
+    VDBG(std::cerr << "DEBUG: ObjectLiteral created struct value with type: " << getTypeName(structValue->getType()) << std::endl);
+    VDBG(std::cerr << "DEBUG: Expected struct type was: " << getTypeName(structTy) << std::endl);
     
     // Return the loaded struct value
     m_currentLLVMValue = structValue;
@@ -731,12 +731,12 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         // std::cout << "DEBUG: MemberExpression object: " << (memberExpr->object ? memberExpr->object->toString() : "null") << std::endl;
         // std::cout << "DEBUG: MemberExpression property: " << (memberExpr->property ? memberExpr->property->toString() : "null") << std::endl;
         if (auto vecIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->object.get())) {
-            std::cout << "DEBUG: MemberExpression object is Identifier: " << vecIdent->name << std::endl;
+            VDBG(std::cout << "DEBUG: MemberExpression object is Identifier: " << vecIdent->name << std::endl);
             if (auto newIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->property.get())) {
-                std::cout << "DEBUG: MemberExpression property is Identifier: " << newIdent->name << std::endl;
+                VDBG(std::cout << "DEBUG: MemberExpression property is Identifier: " << newIdent->name << std::endl);
                 if (vecIdent->name == "Vec" && newIdent->name == "new") {
                     // This is Vec::new() or Vec::new(size) - create a vector
-                    std::cout << "DEBUG: Creating Vec::new() constructor" << std::endl;
+                    VDBG(std::cout << "DEBUG: Creating Vec::new() constructor" << std::endl);
                     
                     // Create Vec struct: { ptr, size, capacity }
                     std::vector<llvm::Type*> vecFields = {
@@ -753,7 +753,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                     // Check if size argument is provided
                     if (node->arguments.empty()) {
                         // Vec::new() - empty vector
-                        std::cout << "DEBUG: Creating empty Vec" << std::endl;
+                        VDBG(std::cout << "DEBUG: Creating empty Vec" << std::endl);
                         
                         // Initialize fields: ptr = null, size = 0, capacity = 0
                         llvm::Value* nullPtr = llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0));
@@ -773,7 +773,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                         
                     } else if (node->arguments.size() == 1) {
                         // Vec::new(size) - preallocated vector with zero-initialized elements
-                        std::cout << "DEBUG: Creating preallocated Vec with size" << std::endl;
+                        VDBG(std::cout << "DEBUG: Creating preallocated Vec with size" << std::endl);
                         
                         // Evaluate size argument
                         node->arguments[0]->accept(*this);
@@ -844,7 +844,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 const std::string& methodName = newIdent->name;
                 
                 if (methodName == "from_string") {
-                    std::cout << "DEBUG: Processing " << typeName << "::from_string() call" << std::endl;
+                    VDBG(std::cout << "DEBUG: Processing " << typeName << "::from_string() call" << std::endl);
                     
                     // Validate arguments
                     if (node->arguments.size() != 1) {
@@ -958,7 +958,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                         return;
                     } else {
                         // Complex type - call generic JSON deserializer
-                        std::cout << "DEBUG: Generating JSON deserialization for type: " << typeName << std::endl;
+                        VDBG(std::cout << "DEBUG: Generating JSON deserialization for type: " << typeName << std::endl);
                         
                         // Check if this is a known struct type
                         auto structIt = monomorphizedStructs.find(typeName);
@@ -1002,7 +1002,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 
                 // Check for String::from_bytes() constructor
                 if (vecIdent->name == "String" && newIdent->name == "from_bytes") {
-                    std::cout << "DEBUG: Creating String::from_bytes() constructor" << std::endl;
+                    VDBG(std::cout << "DEBUG: Creating String::from_bytes() constructor" << std::endl);
                     
                     if (node->arguments.size() != 2) {
                         logError(node->loc, "String::from_bytes expects exactly 2 arguments (byte_ptr, length)");
@@ -1041,7 +1041,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                     resultStr = builder->CreateInsertValue(resultStr, length, 1, "str.from_bytes_len");
                     
                     m_currentLLVMValue = resultStr;
-                    std::cout << "DEBUG: String::from_bytes() created successfully" << std::endl;
+                    VDBG(std::cout << "DEBUG: String::from_bytes() created successfully" << std::endl);
                     return;
                 }
             }
@@ -1064,11 +1064,11 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                     
                     // Check if type starts with "mild<"
                     if (objectType.find("mild<") == 0) {
-                        std::cout << "DEBUG: Processing " << objectType << "." << methodName << "() call" << std::endl;
+                        VDBG(std::cout << "DEBUG: Processing " << objectType << "." << methodName << "() call" << std::endl);
                         
                         if (methodName == "grab") {
                             // mild<T>.grab() -> returns our<T>? (nil if object freed, strong ref if alive)
-                            std::cout << "DEBUG: mild<T>.grab() - attempting to upgrade to our<T>" << std::endl;
+                            VDBG(std::cout << "DEBUG: mild<T>.grab() - attempting to upgrade to our<T>" << std::endl);
                             
                             // Get the mild<T> value (control block pointer)
                             auto objIt = namedValues.find(objIdent->name);
@@ -1145,7 +1145,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                                 llvm::AtomicOrdering::AcquireRelease
                             );
                             
-                            std::cout << "DEBUG: mild<T>.grab() - incremented strong_count, returning our<T>" << std::endl;
+                            VDBG(std::cout << "DEBUG: mild<T>.grab() - incremented strong_count, returning our<T>" << std::endl);
                             
                             // Return the control block as our<T>
                             llvm::Value* ourPtr = controlBlockPtr;
@@ -1153,7 +1153,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                             
                             // Object freed: return nil (null pointer)
                             builder->SetInsertPoint(objFreedBlock);
-                            std::cout << "DEBUG: mild<T>.grab() - object freed, returning nil" << std::endl;
+                            VDBG(std::cout << "DEBUG: mild<T>.grab() - object freed, returning nil" << std::endl);
                             llvm::Value* nilPtr = llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0));
                             builder->CreateBr(grabContinue);
                             
@@ -1168,7 +1168,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                         } else if (methodName == "released") {
                             // mild<T>.released() -> returns Bool
                             // Check object_freed flag in control block
-                            std::cout << "DEBUG: mild<T>.released() - checking object_freed flag" << std::endl;
+                            VDBG(std::cout << "DEBUG: mild<T>.released() - checking object_freed flag" << std::endl);
                             
                             // Get the mild<T> value (control block pointer) from namedValues
                             auto objIt = namedValues.find(objIdent->name);
@@ -1214,7 +1214,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                             
                             // Return the flag value (true if freed, false if alive)
                             m_currentLLVMValue = boolValue;
-                            std::cout << "DEBUG: mild<T>.released() - returning object_freed flag" << std::endl;
+                            VDBG(std::cout << "DEBUG: mild<T>.released() - returning object_freed flag" << std::endl);
                             return;
                         }
                     }
@@ -1238,27 +1238,27 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                     auto typeMapIt = valueTypeMap.find(objectAlloca);
                     if (typeMapIt != valueTypeMap.end() && typeMapIt->second) {
                         concreteType = typeMapIt->second->toString();
-                        std::cout << "DEBUG: Got type from valueTypeMap: " << concreteType << std::endl;
+                        VDBG(std::cout << "DEBUG: Got type from valueTypeMap: " << concreteType << std::endl);
                     } else if (objIdent->type) {
                         concreteType = objIdent->type->toString();
-                        std::cout << "DEBUG: Got type from AST: " << concreteType << std::endl;
+                        VDBG(std::cout << "DEBUG: Got type from AST: " << concreteType << std::endl);
                     }
                     
                     if (!concreteType.empty()) {
                         std::string methodName = methodIdent->name;
                         
-                        std::cout << "DEBUG: Checking aspect method call: " << concreteType 
-                                  << "." << methodName << "()" << std::endl;
+                        VDBG(std::cout << "DEBUG: Checking aspect method call: " << concreteType
+                                  << "." << methodName << "()" << std::endl);
                         
                         // First try to find a bind implementation with mangled name (Type_method)
                         std::string mangledName = concreteType + "_" + methodName;
                         llvm::Function* implFunc = module->getFunction(mangledName);
                         
                         if (implFunc) {
-                            std::cout << "DEBUG: Found bind method implementation: " << mangledName << std::endl;
+                            VDBG(std::cout << "DEBUG: Found bind method implementation: " << mangledName << std::endl);
                         } else {
-                            std::cout << "DEBUG: No bind implementation found (" << mangledName 
-                                      << "), trying generic monomorphization..." << std::endl;
+                            VDBG(std::cout << "DEBUG: No bind implementation found (" << mangledName
+                                      << "), trying generic monomorphization..." << std::endl);
                             
                             // Try to find which aspect this method belongs to
                             // We need to search through aspects to find which one declares this method
@@ -1283,13 +1283,13 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                                     }
                                     
                                     if (hasMethod) {
-                                        std::cout << "DEBUG: Found method " << methodName 
-                                                  << " in aspect " << aspectName << std::endl;
+                                        VDBG(std::cout << "DEBUG: Found method " << methodName
+                                                  << " in aspect " << aspectName << std::endl);
                                         
                                         // Try to monomorphize the method for the concrete type
                                         implFunc = monomorphizeTraitMethod(concreteType, aspectName, methodName);
                                         if (implFunc) {
-                                            std::cout << "DEBUG: Successfully monomorphized method!" << std::endl;
+                                            VDBG(std::cout << "DEBUG: Successfully monomorphized method!" << std::endl);
                                             break;
                                         }
                                     }
@@ -1298,8 +1298,8 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                         }
                         
                         if (implFunc) {
-                            std::cout << "DEBUG: Found aspect method implementation: " << methodName 
-                                      << " for type " << concreteType << std::endl;
+                            VDBG(std::cout << "DEBUG: Found aspect method implementation: " << methodName
+                                      << " for type " << concreteType << std::endl);
                             
                             // Build arguments: first arg is the object, rest are the call arguments
                             std::vector<llvm::Value*> argValues;
@@ -1335,11 +1335,11 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                                 m_currentLLVMValue = builder->CreateCall(implFunc, argValues, "aspect.method.result");
                             }
                             
-                            std::cout << "DEBUG: Successfully generated call to aspect method: " << methodName << std::endl;
+                            VDBG(std::cout << "DEBUG: Successfully generated call to aspect method: " << methodName << std::endl);
                             return;
                         } else {
-                            std::cout << "DEBUG: No aspect implementation found for " << concreteType 
-                                      << "." << methodName << "()" << std::endl;
+                            VDBG(std::cout << "DEBUG: No aspect implementation found for " << concreteType
+                                      << "." << methodName << "()" << std::endl);
                         }
                     }
                 }
@@ -1532,7 +1532,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
     
     // Handle ownership constructors: my(), their(), our()
     if (identCallee && (identCallee->name == "my" || identCallee->name == "their" || identCallee->name == "our") && node->arguments.size() == 1) {
-        std::cout << "DEBUG: Processing ownership constructor " << identCallee->name << "() in LLVM codegen" << std::endl;
+        VDBG(std::cout << "DEBUG: Processing ownership constructor " << identCallee->name << "() in LLVM codegen" << std::endl);
         
         // Evaluate the argument to get the struct value
         node->arguments[0]->accept(*this);
@@ -1585,7 +1585,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
             
             // Return the pointer
             m_currentLLVMValue = structPtr;
-            std::cout << "DEBUG: Successfully processed ownership constructor my() - allocated and returned pointer" << std::endl;
+            VDBG(std::cout << "DEBUG: Successfully processed ownership constructor my() - allocated and returned pointer" << std::endl);
         } else if (identCallee->name == "our") {
             // For our(), allocate control block + object on heap
             if (!structType->isStructTy()) {
@@ -1630,22 +1630,22 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
             
             // 4. Return the control block pointer (our<T> is represented as control block pointer)
             m_currentLLVMValue = cbPtr;
-            std::cout << "DEBUG: Successfully processed ownership constructor our() - allocated control block and object" << std::endl;
+            VDBG(std::cout << "DEBUG: Successfully processed ownership constructor our() - allocated control block and object" << std::endl);
         } else if (identCallee->name == "their") {
             // For their(), just pass through the value for now
             // In a real implementation, these would have different semantics
-            std::cout << "DEBUG: Successfully processed ownership constructor their()" << std::endl;
+            VDBG(std::cout << "DEBUG: Successfully processed ownership constructor their()" << std::endl);
         } else {
             // For their() and our(), just pass through the value for now
             // In a real implementation, these would have different semantics
-            std::cout << "DEBUG: Successfully processed ownership constructor " << identCallee->name << "()" << std::endl;
+            VDBG(std::cout << "DEBUG: Successfully processed ownership constructor " << identCallee->name << "()" << std::endl);
         }
         return;
     }
 
     // Handle borrowing operations: borrow(), view()
     if (identCallee && (identCallee->name == "borrow" || identCallee->name == "view") && node->arguments.size() == 1) {
-        std::cout << "DEBUG: Processing borrowing operation " << identCallee->name << "() in LLVM codegen" << std::endl;
+        VDBG(std::cout << "DEBUG: Processing borrowing operation " << identCallee->name << "() in LLVM codegen" << std::endl);
         
         // Evaluate the argument to get the value to borrow
         node->arguments[0]->accept(*this);
@@ -1660,7 +1660,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         if (valueToBorrow->getType()->isPointerTy()) {
             // If it's already a pointer (e.g., alloca), use it directly
             m_currentLLVMValue = valueToBorrow;
-            std::cout << "DEBUG: Successfully processed borrowing operation " << identCallee->name << "() - returned pointer" << std::endl;
+            VDBG(std::cout << "DEBUG: Successfully processed borrowing operation " << identCallee->name << "() - returned pointer" << std::endl);
         } else {
             // If it's a value, we need to create a temporary and get its address
             // This shouldn't normally happen for well-formed borrow operations
@@ -1672,7 +1672,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
     
     // Handle soft() operation: creates mild<T> from our<T>
     if (identCallee && identCallee->name == "soft" && node->arguments.size() == 1) {
-        std::cout << "DEBUG: Processing soft() operation in LLVM codegen" << std::endl;
+        VDBG(std::cout << "DEBUG: Processing soft() operation in LLVM codegen" << std::endl);
         
         // Evaluate the argument to get the our<T> value (control block pointer)
         node->arguments[0]->accept(*this);
@@ -1711,7 +1711,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         // Return the control block pointer as mild<T>
         // Both our<T> and mild<T> are represented as control block pointers
         m_currentLLVMValue = controlBlockPtr;
-        std::cout << "DEBUG: Successfully processed soft() operation - incremented weak_count and returned mild<T> pointer" << std::endl;
+        VDBG(std::cout << "DEBUG: Successfully processed soft() operation - incremented weak_count and returned mild<T> pointer" << std::endl);
         return;
     }
     
@@ -2083,7 +2083,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
     if (identCallee && node->arguments.size() == 1) {
         if (identCallee->name == "lit") {
             // lit() intrinsic - convert value to its raw string/JSON literal representation
-            std::cout << "DEBUG: Processing lit() intrinsic" << std::endl;
+            VDBG(std::cout << "DEBUG: Processing lit() intrinsic" << std::endl);
             node->arguments[0]->accept(*this);
             llvm::Value* arg = m_currentLLVMValue;
             if (!arg) {
@@ -2121,7 +2121,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                     }
                 }
                 m_currentLLVMValue = builder->CreateCall(toStringFunc, {arg}, "lit_result");
-                std::cout << "DEBUG: Created call to lit conversion function" << std::endl;
+                VDBG(std::cout << "DEBUG: Created call to lit conversion function" << std::endl);
                 return;
             } else if (argType->isFloatingPointTy()) {
                 // Float: use __vyn_float_to_string
@@ -2137,22 +2137,22 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                     arg = builder->CreateFPExt(arg, doubleType, "lit.double");
                 }
                 m_currentLLVMValue = builder->CreateCall(toStringFunc, {arg}, "lit_result");
-                std::cout << "DEBUG: Created call to lit conversion function" << std::endl;
+                VDBG(std::cout << "DEBUG: Created call to lit conversion function" << std::endl);
                 return;
             }
             
             // For pointer types (strings), call the lit conversion function
-            std::cout << "DEBUG: Getting lit conversion function..." << std::endl;
+            VDBG(std::cout << "DEBUG: Getting lit conversion function..." << std::endl);
             llvm::Function* litFunc = getLitConversionFunction();
             if (!litFunc) {
-                std::cout << "DEBUG: Failed to get lit conversion function!" << std::endl;
+                VDBG(std::cout << "DEBUG: Failed to get lit conversion function!" << std::endl);
                 logError(node->loc, "Failed to get lit conversion function");
                 return;
             }
-            std::cout << "DEBUG: Got lit conversion function: " << litFunc->getName().str() << std::endl;
+            VDBG(std::cout << "DEBUG: Got lit conversion function: " << litFunc->getName().str() << std::endl);
             std::vector<llvm::Value*> args = {arg};
             m_currentLLVMValue = builder->CreateCall(litFunc, args, "lit_result");
-            std::cout << "DEBUG: Created call to lit conversion function" << std::endl;
+            VDBG(std::cout << "DEBUG: Created call to lit conversion function" << std::endl);
             return;
         }
         else if (identCallee->name == "notype" || identCallee->name == "bare") {
@@ -2176,7 +2176,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
             
             // Handle to_string method calls
             if (methodName == "to_string") {
-                std::cout << "DEBUG: Processing to_string method call" << std::endl;
+                VDBG(std::cout << "DEBUG: Processing to_string method call" << std::endl);
                 
                 // Evaluate the object (the thing we're calling to_string on)
                 memberExpr->object->accept(*this);
@@ -2200,7 +2200,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 // Generate the to_string call
                 llvm::Value* result = generateToStringCall(objectValue, objectType, objectASTType, node->loc);
                 if (result) {
-                    std::cout << "DEBUG: Successfully generated to_string call" << std::endl;
+                    VDBG(std::cout << "DEBUG: Successfully generated to_string call" << std::endl);
                     m_currentLLVMValue = result;
                     return;
                 } else {
@@ -2332,7 +2332,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
 
     // Check if this is a call to a generic function that needs monomorphization
     if (identCallee && genericFunctionTemplates.find(identCallee->name) != genericFunctionTemplates.end()) {
-        std::cout << "DEBUG: Detected call to generic function: " << identCallee->name << std::endl;
+        VDBG(std::cout << "DEBUG: Detected call to generic function: " << identCallee->name << std::endl);
         
         // Infer concrete type arguments from call site
         std::vector<std::string> concreteTypeArgs;
@@ -2368,7 +2368,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 argTypeName = getTypeName(argValue->getType());
             }
             
-            std::cout << "DEBUG: Argument " << i << " has type: " << argTypeName << std::endl;
+            VDBG(std::cout << "DEBUG: Argument " << i << " has type: " << argTypeName << std::endl);
             
             // For the first type parameter, use the first argument's type
             // This is a simplified approach - full implementation needs to match
@@ -2386,7 +2386,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
             return;
         }
         
-        std::cout << "DEBUG: Successfully monomorphized " << identCallee->name << std::endl;
+        VDBG(std::cout << "DEBUG: Successfully monomorphized " << identCallee->name << std::endl);
         
         // Now proceed with the monomorphized function
         calleeName = monomorphizedFunc->getName().str();
@@ -2512,7 +2512,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
             if (structRetType->getNumElements() == 2 && 
                 structRetType->getElementType(1)->isPointerTy()) {
                 // This looks like a {T, ptr} return from a failable function
-                std::cout << "DEBUG: Extracting error from failable function call to " << calleeName << std::endl;
+                VDBG(std::cout << "DEBUG: Extracting error from failable function call to " << calleeName << std::endl);
                 
                 // Extract the value (position 0)
                 llvm::Value* returnedValue = builder->CreateExtractValue(callResult, {0}, "call.value");
@@ -2536,10 +2536,10 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 
                 // Error block: check if we have a trap handler or need to propagate
                 builder->SetInsertPoint(errorBB);
-                std::cout << "DEBUG: Error detected, trapStack.size() = " << trapStack.size() << std::endl;
+                VDBG(std::cout << "DEBUG: Error detected, trapStack.size() = " << trapStack.size() << std::endl);
                 if (!trapStack.empty()) {
                     // We have a trap handler - store error and jump to landing pad
-                    std::cout << "DEBUG: Storing error to trap.errorSlot and branching to landing pad" << std::endl;
+                    VDBG(std::cout << "DEBUG: Storing error to trap.errorSlot and branching to landing pad" << std::endl);
                     TrapContext& trap = trapStack.back();
                     builder->CreateStore(errorPtr, trap.errorSlot);
                     builder->CreateBr(trap.landingPad);
@@ -2560,7 +2560,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                     builder->CreateRet(propagatedStruct);
                 } else {
                     // No trap and not a failable function - call untrapped error handler
-                    std::cout << "DEBUG: Error reaching untrapped handler" << std::endl;
+                    VDBG(std::cout << "DEBUG: Error reaching untrapped handler" << std::endl);
                     llvm::Function* untrappedFn = getVynUntrappedErrorFunction();
                     
                     // Pass the actual error pointer
@@ -2742,8 +2742,8 @@ void LLVMCodegen::visit(vyn::ast::AssignmentExpression *node) {
         // This helps propagate type info for variables
         if (identLeft->type && RHS) {
             valueTypeMap[RHS] = identLeft->type;
-            std::cout << "DEBUG: In assignment, associated RHS value with identifier type: " 
-                      << identLeft->type->toString() << std::endl;
+            VDBG(std::cout << "DEBUG: In assignment, associated RHS value with identifier type: "
+                      << identLeft->type->toString() << std::endl);
         }
     }
     
@@ -3049,7 +3049,7 @@ void LLVMCodegen::visit(ast::Identifier* node) {
                 auto typeIt = valueTypeMap.find(alloca);
                 if (typeIt != valueTypeMap.end()) {
                     valueTypeMap[loadedValue] = typeIt->second;
-                    std::cout << "DEBUG: Propagated type mapping from alloca to loaded value for '" << node->name << "'" << std::endl;
+                    VDBG(std::cout << "DEBUG: Propagated type mapping from alloca to loaded value for '" << node->name << "'" << std::endl);
                 }
                 
                 m_currentLLVMValue = loadedValue;
@@ -3072,7 +3072,7 @@ void LLVMCodegen::visit(ast::Identifier* node) {
         auto typeIt = valueTypeMap.find(funcIt->second);
         if (typeIt != valueTypeMap.end()) {
             valueTypeMap[loadedValue] = typeIt->second;
-            std::cout << "DEBUG: Propagated type mapping from function alloca to loaded value for '" << node->name << "'" << std::endl;
+            VDBG(std::cout << "DEBUG: Propagated type mapping from function alloca to loaded value for '" << node->name << "'" << std::endl);
         }
         
         m_currentLLVMValue = loadedValue;
@@ -3168,11 +3168,11 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
             // Get the pointee type from alloca instruction if available
             if (llvm::AllocaInst* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(objectValue)) {
                 structType = allocaInst->getAllocatedType();
-                std::cerr << "DEBUG: Got struct type from alloca: " << getTypeName(structType) << std::endl;
+                VDBG(std::cerr << "DEBUG: Got struct type from alloca: " << getTypeName(structType) << std::endl);
             } else {
                 // Handle function parameters and other pointer values
-                std::cerr << "DEBUG: Object is a pointer but not an alloca, checking pointee type" << std::endl;
-                std::cerr << "DEBUG: Object pointer type: " << getTypeName(objectValue->getType()) << std::endl;
+                VDBG(std::cerr << "DEBUG: Object is a pointer but not an alloca, checking pointee type" << std::endl);
+                VDBG(std::cerr << "DEBUG: Object pointer type: " << getTypeName(objectValue->getType()) << std::endl);
                 if (llvm::PointerType* ptrType = llvm::dyn_cast<llvm::PointerType>(objectValue->getType())) {
                     // For newer LLVM versions, we need to use a different approach
                     // Since we can't easily get the pointee type, try to get it from the value type map
@@ -3188,35 +3188,35 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
                                      typeNameStr == "borrow" || typeNameStr == "view") && 
                                     !typeNameNode->genericArgs.empty() && typeNameNode->genericArgs[0]) {
                                     underlyingType = typeNameNode->genericArgs[0].get();
-                                    std::cerr << "DEBUG: Extracted underlying type from ownership type: " << typeNameStr 
-                                              << " -> " << underlyingType->toString() << std::endl;
+                                    VDBG(std::cerr << "DEBUG: Extracted underlying type from ownership type: " << typeNameStr
+                                              << " -> " << underlyingType->toString() << std::endl);
                                 }
                             }
                             
                             llvm::Type* astLLVMType = codegenType(underlyingType);
                             if (astLLVMType && astLLVMType->isStructTy()) {
                                 structType = astLLVMType;
-                                std::cerr << "DEBUG: Got struct type from AST type mapping: " << getTypeName(structType) << std::endl;
+                                VDBG(std::cerr << "DEBUG: Got struct type from AST type mapping: " << getTypeName(structType) << std::endl);
                             } else {
-                                std::cerr << "DEBUG: AST type mapping didn't yield struct type, got: " << (astLLVMType ? getTypeName(astLLVMType) : "null") << std::endl;
+                                VDBG(std::cerr << "DEBUG: AST type mapping didn't yield struct type, got: " << (astLLVMType ? getTypeName(astLLVMType) : "null") << std::endl);
                                 logError(node->loc, "Cannot determine struct type for member access");
                                 m_currentLLVMValue = nullptr;
                                 return;
                             }
                         } else {
-                            std::cerr << "DEBUG: No AST type information available" << std::endl;
+                            VDBG(std::cerr << "DEBUG: No AST type information available" << std::endl);
                             logError(node->loc, "Cannot determine struct type for member access");
                             m_currentLLVMValue = nullptr;
                             return;
                         }
                     } else {
-                        std::cerr << "DEBUG: No type mapping found for pointer value" << std::endl;
+                        VDBG(std::cerr << "DEBUG: No type mapping found for pointer value" << std::endl);
                         logError(node->loc, "Cannot determine struct type for member access");
                         m_currentLLVMValue = nullptr;
                         return;
                     }
                 } else {
-                    std::cerr << "DEBUG: Pointer type cast failed" << std::endl;
+                    VDBG(std::cerr << "DEBUG: Pointer type cast failed" << std::endl);
                     logError(node->loc, "Cannot determine struct type for member access");
                     m_currentLLVMValue = nullptr;
                     return;
@@ -3227,7 +3227,7 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
             structType = objectValue->getType();
             structPtr = builder->CreateAlloca(structType, nullptr, "temp_struct");
             builder->CreateStore(objectValue, structPtr);
-            std::cerr << "DEBUG: Created temporary alloca for struct value: " << getTypeName(structType) << std::endl;
+            VDBG(std::cerr << "DEBUG: Created temporary alloca for struct value: " << getTypeName(structType) << std::endl);
         } else {
             logError(node->object->loc, "Property member access on non-struct type");
             m_currentLLVMValue = nullptr;
@@ -3251,15 +3251,15 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
         }
 
        
-        std::cerr << "DEBUG: MemberExpression - Field '" << fieldName << "' at index " << fieldIndex 
-                  << " in struct " << llvmStructType->getName().str() << std::endl;
+        VDBG(std::cerr << "DEBUG: MemberExpression - Field '" << fieldName << "' at index " << fieldIndex
+                  << " in struct " << llvmStructType->getName().str() << std::endl);
 
         // Create a GEP to get a pointer to the field
         llvm::Value* fieldPtr = builder->CreateStructGEP(llvmStructType, structPtr, fieldIndex, fieldName + "_ptr");
         
        
         llvm::Type* fieldType = llvmStructType->getElementType(fieldIndex);
-        std::cerr << "DEBUG: Field type: " << getTypeName(fieldType) << std::endl;
+        VDBG(std::cerr << "DEBUG: Field type: " << getTypeName(fieldType) << std::endl);
         
         // Check if we're on the LHS of an assignment - in that case return the pointer
         if (m_isLHSOfAssignment) {
@@ -3491,7 +3491,7 @@ void LLVMCodegen::visit(ast::ConstructionExpression* node) {
         return;
     }
     
-    std::cout << "DEBUG: ConstructionExpression processing type: " << node->constructedType->toString() << std::endl;
+    VDBG(std::cout << "DEBUG: ConstructionExpression processing type: " << node->constructedType->toString() << std::endl);
     
     // Get the type being constructed
     llvm::Type* constructedLLVMType = codegenType(node->constructedType.get());
@@ -3501,7 +3501,7 @@ void LLVMCodegen::visit(ast::ConstructionExpression* node) {
         return;
     }
     
-    std::cout << "DEBUG: Successfully resolved constructed type: " << node->constructedType->toString() << std::endl;
+    VDBG(std::cout << "DEBUG: Successfully resolved constructed type: " << node->constructedType->toString() << std::endl);
     
     // For now, implement basic construction with default values
     if (constructedLLVMType->isStructTy()) {
@@ -4839,8 +4839,8 @@ void LLVMCodegen::visit(ast::AwaitExpression* node) {
     llvm::BasicBlock* continuationBlock = llvm::BasicBlock::Create(
         *context, "await_continuation_" + std::to_string(currentState), currentFunction);
     
-    std::cout << "DEBUG: Creating await suspension point at line " << node->loc.line 
-              << " column " << node->loc.column << " (state " << currentState << ")" << std::endl;
+    VDBG(std::cout << "DEBUG: Creating await suspension point at line " << node->loc.line
+              << " column " << node->loc.column << " (state " << currentState << ")" << std::endl);
     
     // Create debug information for this suspension point
     std::string suspensionDesc = "await_expression_" + std::to_string(currentState);
@@ -4857,7 +4857,7 @@ void LLVMCodegen::visit(ast::AwaitExpression* node) {
         int previousState = currentState - 1;
         insertAsyncStateTransitionDebugInfo(previousState, currentState, node->loc);
     } else {
-        std::cout << "DEBUG: Async state infrastructure not initialized, skipping state storage" << std::endl;
+        VDBG(std::cout << "DEBUG: Async state infrastructure not initialized, skipping state storage" << std::endl);
     }
     
     // Call runtime to await the future

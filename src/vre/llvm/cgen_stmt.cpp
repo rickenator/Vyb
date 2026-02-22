@@ -19,7 +19,7 @@ void LLVMCodegen::visit(vyn::ast::BlockStatement* node) {
     // Enter new scope for ownership tracking
     enterScope();
     
-    std::cout << "DEBUG: BlockStatement visitor called with " << node->body.size() << " statements" << std::endl;
+    VDBG(std::cout << "DEBUG: BlockStatement visitor called with " << node->body.size() << " statements" << std::endl);
     for (size_t i = 0; i < node->body.size(); ++i) {
         const auto& stmt = node->body[i];
         if (stmt) {
@@ -41,7 +41,7 @@ void LLVMCodegen::visit(vyn::ast::BlockStatement* node) {
     if (builder->GetInsertBlock() && builder->GetInsertBlock()->getTerminator()) {
         // Block is terminated - can't insert cleanup code here
         // This case should be handled by inserting cleanup before return statements
-        std::cout << "DEBUG: Block terminated, skipping cleanup insertion (cleanup should have happened before terminator)" << std::endl;
+        VDBG(std::cout << "DEBUG: Block terminated, skipping cleanup insertion (cleanup should have happened before terminator)" << std::endl);
         if (!scopeStack.empty()) {
             scopeStack.pop_back();
         }
@@ -69,10 +69,10 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
 
         if (returnValue) {
             // Debug output to see what we're returning
-            std::cerr << "DEBUG: ReturnStatement - Type: " << getTypeName(returnValue->getType()) 
-                << ", Function Return Type: " << (currentFunction ? getTypeName(currentFunction->getReturnType()) : "null") << std::endl;
-            std::cerr << "DEBUG: Return value LLVM type pointer: " << returnValue->getType() << std::endl;
-            std::cerr << "DEBUG: Function return LLVM type pointer: " << (currentFunction ? currentFunction->getReturnType() : nullptr) << std::endl;
+            VDBG(std::cerr << "DEBUG: ReturnStatement - Type: " << getTypeName(returnValue->getType())
+                << ", Function Return Type: " << (currentFunction ? getTypeName(currentFunction->getReturnType()) : "null") << std::endl);
+            VDBG(std::cerr << "DEBUG: Return value LLVM type pointer: " << returnValue->getType() << std::endl);
+            VDBG(std::cerr << "DEBUG: Function return LLVM type pointer: " << (currentFunction ? currentFunction->getReturnType() : nullptr) << std::endl);
             
             // Check if we're in main function for auto-serialization
             // BUT skip auto-serialization if this is a lit() intrinsic call
@@ -138,14 +138,14 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                 builder->CreateRet(llvm::ConstantInt::get(int32Type, 0));
             } else {
                 // Not in main function - normal return
-                std::cerr << "DEBUG: Return value type: " << getTypeName(returnValue->getType())
-                          << ", Function return type: " << getTypeName(currentFunction->getReturnType()) << std::endl;
+                VDBG(std::cerr << "DEBUG: Return value type: " << getTypeName(returnValue->getType())
+                          << ", Function return type: " << getTypeName(currentFunction->getReturnType()) << std::endl);
                 
                 // CRITICAL: Phase 2 wrapping must happen BEFORE type checking
                 // If this is a failable function, we need to wrap the return value
                 // in {T, ptr} BEFORE checking type compatibility
                 if (currentFunctionAST && currentFunctionAST->needsErrorReturn) {
-                    std::cout << "DEBUG: Wrapping return value in {T, nullptr} tuple for failable function" << std::endl;
+                    VDBG(std::cout << "DEBUG: Wrapping return value in {T, nullptr} tuple for failable function" << std::endl);
                     
                     // Create null pointer for error (success case)
                     llvm::Value* nullErrorPtr = llvm::ConstantPointerNull::get(
@@ -159,7 +159,7 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                     resultStruct = builder->CreateInsertValue(resultStruct, nullErrorPtr, {1}, "result.error");
                     
                     returnValue = resultStruct;
-                    std::cout << "DEBUG: Wrapped return value type: " << getTypeName(returnValue->getType()) << std::endl;
+                    VDBG(std::cout << "DEBUG: Wrapped return value type: " << getTypeName(returnValue->getType()) << std::endl);
                 }
                 
                 // Now check type compatibility (after wrapping if needed)
@@ -170,24 +170,24 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                         if (structRetType->getNumElements() == 1 && 
                             !returnValue->getType()->isStructTy() &&
                             structRetType->getElementType(0) == returnValue->getType()) {
-                            std::cerr << "DEBUG: Wrapping scalar value in single-element tuple struct" << std::endl;
+                            VDBG(std::cerr << "DEBUG: Wrapping scalar value in single-element tuple struct" << std::endl);
                             
                             // Create a single-element struct
                             llvm::Value* tupleStruct = llvm::UndefValue::get(structRetType);
                             returnValue = builder->CreateInsertValue(tupleStruct, returnValue, {0}, "tuple_wrap");
                             
-                            std::cerr << "DEBUG: Wrapped value type: " << getTypeName(returnValue->getType()) << std::endl;
+                            VDBG(std::cerr << "DEBUG: Wrapped value type: " << getTypeName(returnValue->getType()) << std::endl);
                         } else {
                             // Try normal cast
                             llvm::Value* castedValue = tryCast(returnValue, currentFunction->getReturnType(), node->loc);
                             if (castedValue) {
-                                std::cerr << "DEBUG: Successfully cast return value to " << getTypeName(castedValue->getType()) << std::endl;
+                                VDBG(std::cerr << "DEBUG: Successfully cast return value to " << getTypeName(castedValue->getType()) << std::endl);
                                 returnValue = castedValue;
                             } else {
                                 // For member expressions (e.g., p.x) load the value if needed
                                 if (returnValue->getType()->isPointerTy() && 
                                     !currentFunction->getReturnType()->isPointerTy()) {
-                                    std::cerr << "DEBUG: Loading pointer value for return" << std::endl;
+                                    VDBG(std::cerr << "DEBUG: Loading pointer value for return" << std::endl);
                                     
                                     // For loading, we need to know the element type
                                     llvm::Type* elementType = nullptr;
@@ -199,7 +199,7 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                                     }
                                     
                                     returnValue = builder->CreateLoad(elementType, returnValue, "member_load");
-                                    std::cerr << "DEBUG: After loading, return value type: " << getTypeName(returnValue->getType()) << std::endl;
+                                    VDBG(std::cerr << "DEBUG: After loading, return value type: " << getTypeName(returnValue->getType()) << std::endl);
                                 }
                             }
                         }
@@ -207,13 +207,13 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                         // Not a struct return type, try normal cast
                         llvm::Value* castedValue = tryCast(returnValue, currentFunction->getReturnType(), node->loc);
                         if (castedValue) {
-                            std::cerr << "DEBUG: Successfully cast return value to " << getTypeName(castedValue->getType()) << std::endl;
+                            VDBG(std::cerr << "DEBUG: Successfully cast return value to " << getTypeName(castedValue->getType()) << std::endl);
                             returnValue = castedValue;
                         } else {
                             // For member expressions (e.g., p.x) load the value if needed
                             if (returnValue->getType()->isPointerTy() && 
                                 !currentFunction->getReturnType()->isPointerTy()) {
-                                std::cerr << "DEBUG: Loading pointer value for return" << std::endl;
+                                VDBG(std::cerr << "DEBUG: Loading pointer value for return" << std::endl);
                                 
                                 // For loading, we need to know the element type
                                 llvm::Type* elementType = nullptr;
@@ -225,7 +225,7 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                                 }
                                 
                                 returnValue = builder->CreateLoad(elementType, returnValue, "member_load");
-                                std::cerr << "DEBUG: After loading, return value type: " << getTypeName(returnValue->getType()) << std::endl;
+                                VDBG(std::cerr << "DEBUG: After loading, return value type: " << getTypeName(returnValue->getType()) << std::endl);
                             }
                         }
                     }
@@ -234,7 +234,7 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                 // IMPORTANT: Clean up current block scope before returning
                 // This prevents the block scope cleanup from happening after the terminator
                 if (!scopeStack.empty()) {
-                    std::cout << "DEBUG: Cleaning up current scope before return" << std::endl;
+                    VDBG(std::cout << "DEBUG: Cleaning up current scope before return" << std::endl);
                     // If returning a Vec variable, skip its cleanup to avoid double-free
                     // (ownership is transferred to the caller)
                     if (node->argument) {
@@ -257,8 +257,8 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                 generatePopFrameCall();
                 
                 // Return the value (already wrapped if needed)
-                std::cout << "DEBUG: FINAL return value type before CreateRet: " << getTypeName(returnValue->getType()) << std::endl;
-                std::cout << "DEBUG: Function return type: " << getTypeName(currentFunction->getReturnType()) << std::endl;
+                VDBG(std::cout << "DEBUG: FINAL return value type before CreateRet: " << getTypeName(returnValue->getType()) << std::endl);
+                VDBG(std::cout << "DEBUG: Function return type: " << getTypeName(currentFunction->getReturnType()) << std::endl);
                 // If the function is declared void, discard the return value and emit ret void
                 if (currentFunction->getReturnType()->isVoidTy()) {
                     builder->CreateRetVoid();
@@ -272,7 +272,7 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
             if (currentFunction && currentFunction->getReturnType()->isVoidTy()) {
                 // IMPORTANT: Clean up current block scope before returning
                 if (!scopeStack.empty()) {
-                    std::cout << "DEBUG: Cleaning up current scope before void return" << std::endl;
+                    VDBG(std::cout << "DEBUG: Cleaning up current scope before void return" << std::endl);
                     exitScope();
                 }
                 // Phase 6.4: Pop call frame before return
@@ -282,7 +282,7 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                 // Return undef if function expects a non-void type and codegen failed
                 // IMPORTANT: Clean up current block scope before returning
                 if (!scopeStack.empty()) {
-                    std::cout << "DEBUG: Cleaning up current scope before undef return" << std::endl;
+                    VDBG(std::cout << "DEBUG: Cleaning up current scope before undef return" << std::endl);
                     exitScope();
                 }
                 // Phase 6.4: Pop call frame before return
@@ -295,7 +295,7 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
         // No argument, so it's a void return
         // IMPORTANT: Clean up current block scope before returning
         if (!scopeStack.empty()) {
-            std::cout << "DEBUG: Cleaning up current scope before void return (no arg)" << std::endl;
+            VDBG(std::cout << "DEBUG: Cleaning up current scope before void return (no arg)" << std::endl);
             exitScope();
         }
         // Phase 6.4: Pop call frame before return
@@ -1457,11 +1457,11 @@ void LLVMCodegen::visit(vyn::ast::FailStatement* node) {
         // Phase 3: Check if we're in a failable function that can propagate errors
         if (currentFunctionAST && currentFunctionAST->needsErrorReturn) {
             // This function returns {T, ptr} - propagate error to caller
-            std::cout << "DEBUG: Fail statement propagating error to caller in failable function" << std::endl;
+            VDBG(std::cout << "DEBUG: Fail statement propagating error to caller in failable function" << std::endl);
             
             // Clean up scope before returning
             if (!scopeStack.empty()) {
-                std::cout << "DEBUG: Cleaning up scope before fail return" << std::endl;
+                VDBG(std::cout << "DEBUG: Cleaning up scope before fail return" << std::endl);
                 exitScope();
             }
             

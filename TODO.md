@@ -55,6 +55,8 @@
 - [x] **Vec mutation through borrowed struct fields** — `s.items.push(val)` where `s<their<T>>` now correctly mutates in-place; member-expression Vec calls now get a field *pointer* (not a loaded copy)
 - [x] **Semantic use-after-free fix** — `handleVecMethodCallOnMember` no longer stores raw pointers from temporary `VecType` objects into `expressionTypes`; all return types are cloned into `node->type` first
 - [x] **`test/new_features` 100% pass** — All new-features tests pass (quicksort, stack, insertion sort, etc.)
+- [x] **Codegen DEBUG output silenced** — All 300+ `std::cout << "DEBUG:"` / `std::cerr << "DEBUG:"` prints in `src/vre/` gated behind `vyn::g_debug_codegen` flag (default: `false`); enabled with new `--verbose` CLI flag. `VDBG(stmt)` macro added to `semantic.hpp` and `codegen.hpp`.
+- [x] **Parser tracing silenced by default** — Removed `add_compile_definitions(VERBOSE)` from `CMakeLists.txt`; unguarded `[ModuleParser]` traces in `module_parser.cpp` wrapped in `#ifdef VERBOSE`. Parser output is now off by default for all builds.
 
 ---
 
@@ -290,7 +292,33 @@ with `pass` for multi-statement case bodies. Needs polishing:
 - [ ] **`ensure` statement** — `ensure condition else fail<Error>(...)` (post-condition)
 - [ ] **Labeled `break`/`continue`** — Break from outer loops by label
 
-### 10. Async System — Completion (LOWER PRIORITY)
+### 10. Consistency & Polish (HIGH PRIORITY)
+These targeted changes make Vyn dramatically more professional:
+
+- [x] **Silence codegen DEBUG output** — All `std::cout << "DEBUG:"` / `std::cerr << "DEBUG:"` prints
+  in `src/vre/` are now gated behind `vyn::g_debug_codegen`; enable with `--verbose` CLI flag.
+  300+ previously unconditional debug prints are now silent in normal mode.
+- [x] **Parser tracing silenced** — `[PEEK]`, `[CONSUME]`, `[EXPECT]` output gated behind `#ifdef VERBOSE`
+  (compile-time opt-in); global `add_compile_definitions(VERBOSE)` removed from CMakeLists.txt so
+  output is off by default. `[ModuleParser]` traces also gated.
+- [ ] **Consolidate doc files** — `doc/` has overlapping documents (`ROADMAP.md` vs `TODO_CURRENT.md`
+  vs top-level `TODO.md`; multiple ownership design docs). Keep `TODO.md`, `doc/FEATURE_STATUS.md`,
+  `CHANGELOG.md`. Archive or delete the rest into `doc/archive/`. Add/update `doc/README.md` as index.
+- [ ] **Canonical syntax in all docs** — Audit `*.md` files: replace `unsafe` with `freedom`, old `:` struct
+  field syntax with `<Type>`, `trait`/`impl` references with `aspect`/`bind`.
+- [ ] **`Vec::last()` / `Vec::peek()`** — `pop()` removes the last element but there is no non-removing
+  equivalent. Add `Vec::last()` or `Vec::peek()`.
+- [ ] **String indexing** — `str.char_at(i)` vs `str[i]` — pick one canonical form and document the other
+  as deprecated.
+- [ ] **`borrow` prefix vs `borrow()` function** — Commit to `borrow(expr)` as canonical (per
+  `Canonical_Reference_Syntax.md`); document `borrow expr` prefix form as deprecated/discouraged.
+- [ ] **`their<T>` transitive member access** — Audit all places where `their<T>` fields are accessed
+  transitively; semantic analyzer sometimes fails to dereference through it for nested member access.
+- [ ] **Fix pre-existing test failures** — `test/basic/test_basic_functionality.vyn` (empty file),
+  `test/basic/circular_struct.vyn` (document expected behavior), `test/basic/direct_return.vyn`
+  (fix multi-value codegen, see Error Propagation Phase 2).
+
+### 11. Async System — Completion (LOWER PRIORITY)
 - [ ] **Real event loop / executor** — Single-threaded and multi-threaded runtimes
 - [ ] **`spawn` for concurrent tasks** — `task<Future<T>> = spawn compute()`
 - [ ] **Typed channels** — `chan<T>` for message passing between tasks (planned)
@@ -333,6 +361,33 @@ with `pass` for multi-statement case bodies. Needs polishing:
 - [ ] **Code formatter** — `vyn fmt` for canonical formatting
 - [ ] **Linter** — `vyn check` for warnings beyond errors
 - [ ] **Debugger integration** — `gdb`/`lldb` with Vyn source stepping (DWARF done, validate end-to-end)
+
+---
+
+## Architecture Notes
+
+These are structural improvements to the compiler that will pay off as the language matures.
+They are not blockers for any single feature but should be addressed before 1.0 to prevent
+technical debt from compounding.
+
+### A. Separate semantic analysis from AST mutation
+
+The semantic analyzer currently mutates AST nodes (sets `node->type`, `expressionTypes[node]`,
+etc.). This creates fragile dependencies between semantic passes. Consider:
+- Using an immutable AST + a separate `TypeTable` (map from node ID → type)
+- Avoiding raw pointer storage in `expressionTypes` (use stable IDs or `shared_ptr`)
+
+### B. IR optimization as a separate phase
+
+Currently IR optimization is applied inline during JIT setup. Separating it into an explicit
+`optimize(module)` step would allow it to be controlled per-compilation-target (AOT vs JIT,
+debug vs release).
+
+### C. Error recovery in parsing
+
+The parser currently throws on the first error. Adding error recovery (synchronize to the next
+statement/declaration boundary) would allow reporting multiple errors per file, greatly
+improving the developer experience. This is a well-understood technique (panic-mode recovery).
 
 ---
 
@@ -492,12 +547,16 @@ For Vyn to be considered production-ready at 1.0, **all of the following must be
 - [ ] Core aspects (`Display`, `Debug`, `Clone`, `Equatable`, `Comparable`, `Hashable`)
 - [ ] Iterator aspect with `for` loop desugaring
 - [ ] Enum/sum types with pattern matching
-- [ ] String methods complete
+- [ ] String methods complete (`split`, `join`, `format`, `trim`, `replace`)
 - [ ] `HashMap<K, V>` and basic collections
 - [ ] FFI (`extern "C"`) working
 - [ ] `vyn.toml` and `vyn build` project system
 - [ ] Wildcard trap handler (`trap (e<?>)`) with `typeof` discrimination
+- [ ] Silent by default — no DEBUG output in normal mode; `--verbose` shows compiler internals
 - [ ] All open contradictions resolved (see section above)
+- [ ] Ownership tests — `my<T>` move semantics, `our<T>` ref-counting, `their<T>` lifetime enforcement
+- [ ] FFI tests — `extern "C"` declarations and `freedom` block pointer arithmetic
+- [ ] Error propagation tests — across multiple calls, specific type trapping, untrapped error stack traces
 
 ### Should-Have for 1.0
 - [ ] REPL (`vyn repl`)
@@ -594,3 +653,4 @@ Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `
 *Last Updated: February 2026*
 *Current Version: Vyn v0.5.0 (freedom-1.0 series)*
 *Overall Status: ~60-65% complete toward 1.0 — 657 tests, 315 passing (47.9%)*
+*SUGGESTIONS.md merged into this file and deleted — 2026-02-22*

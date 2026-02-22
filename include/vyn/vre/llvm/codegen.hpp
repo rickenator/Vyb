@@ -14,7 +14,7 @@
 #include <vector>
 
 #include "vyn/parser/ast.hpp"
-#include "vyn/semantic.hpp" // For SourceLocation, UserTypeInfo
+#include "vyn/semantic.hpp" // Provides g_debug_codegen extern and VDBG macro
 #include "vyn/driver.hpp"   // Added to resolve Driver type
 
 // Forward declarations

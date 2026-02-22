@@ -127,6 +127,8 @@ namespace vyn {
     std::set<std::string> g_verbose_parser_test_specifiers;
     bool g_make_all_parser_verbose = false;
     bool g_suppress_all_parser_debug_output = false;
+    // Codegen/semantic debug output — off by default; enable with --verbose
+    bool g_debug_codegen = false;
 }
 
 // Concrete implementation of SemanticAnalyzer
@@ -1041,6 +1043,8 @@ int main(int argc, char* argv[]) {
             }
         } else if (arg == "--no-parser-debug-output") {
             vyn::g_suppress_all_parser_debug_output = true;
+        } else if (arg == "--verbose") {
+            vyn::g_debug_codegen = true;
         }
         else if (test_mode_active || arg[0] == '-' || arg[0] == '+' || arg[0] == '[') {
             // In test mode, or it's a Catch2 flag/tag/filter — pass it along

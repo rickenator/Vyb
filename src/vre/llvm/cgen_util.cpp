@@ -211,11 +211,13 @@ llvm::Value* LLVMCodegen::createEntryBlockAlloca(llvm::Function* func, const std
         }
     }
     
-    std::cerr << "DEBUG: createEntryBlockAlloca(3-param) - ";
-    if (insertPoint) {
-        std::cerr << "Found last alloca, inserting '" << varName << "' after it\n";
-    } else {
-        std::cerr << "No allocas found, inserting '" << varName << "' at beginning\n";
+    if (vyn::g_debug_codegen) {
+        std::cerr << "DEBUG: createEntryBlockAlloca(3-param) - ";
+        if (insertPoint) {
+            std::cerr << "Found last alloca, inserting '" << varName << "' after it\n";
+        } else {
+            std::cerr << "No allocas found, inserting '" << varName << "' at beginning\n";
+        }
     }
     
     llvm::IRBuilder<> tmpB(*context);
@@ -229,12 +231,14 @@ llvm::Value* LLVMCodegen::createEntryBlockAlloca(llvm::Function* func, const std
     
     auto* alloca = tmpB.CreateAlloca(type, nullptr, varName);
     
-    std::cerr << "DEBUG: createEntryBlockAlloca(3-param) - Created alloca '" << varName << "', current order:\n";
-    for (auto& inst : func->getEntryBlock()) {
-        if (auto* ai = llvm::dyn_cast<llvm::AllocaInst>(&inst)) {
-            std::cerr << "  - " << ai->getName().str() << "\n";
-        } else {
-            break;
+    if (vyn::g_debug_codegen) {
+        std::cerr << "DEBUG: createEntryBlockAlloca(3-param) - Created alloca '" << varName << "', current order:\n";
+        for (auto& inst : func->getEntryBlock()) {
+            if (auto* ai = llvm::dyn_cast<llvm::AllocaInst>(&inst)) {
+                std::cerr << "  - " << ai->getName().str() << "\n";
+            } else {
+                break;
+            }
         }
     }
     
@@ -259,9 +263,9 @@ llvm::AllocaInst* LLVMCodegen::createEntryBlockAlloca(llvm::Type* type, const st
     }
     
     if (insertPoint) {
-        std::cerr << "DEBUG: createEntryBlockAlloca - Found last alloca, inserting '" << name << "' after it\n";
+        VDBG(std::cerr << "DEBUG: createEntryBlockAlloca - Found last alloca, inserting '" << name << "' after it\n");
     } else {
-        std::cerr << "DEBUG: createEntryBlockAlloca - No allocas found, inserting '" << name << "' at beginning\n";
+        VDBG(std::cerr << "DEBUG: createEntryBlockAlloca - No allocas found, inserting '" << name << "' at beginning\n");
     }
     
     llvm::IRBuilder<> TmpB(*context);
@@ -275,12 +279,14 @@ llvm::AllocaInst* LLVMCodegen::createEntryBlockAlloca(llvm::Type* type, const st
     
     auto* alloca = TmpB.CreateAlloca(type, nullptr, name);
     
-    std::cerr << "DEBUG: createEntryBlockAlloca - Created alloca '" << name << "', current order:\n";
-    for (auto& inst : currentFunction->getEntryBlock()) {
-        if (auto* ai = llvm::dyn_cast<llvm::AllocaInst>(&inst)) {
-            std::cerr << "  - " << ai->getName().str() << "\n";
-        } else {
-            break;
+    if (vyn::g_debug_codegen) {
+        std::cerr << "DEBUG: createEntryBlockAlloca - Created alloca '" << name << "', current order:\n";
+        for (auto& inst : currentFunction->getEntryBlock()) {
+            if (auto* ai = llvm::dyn_cast<llvm::AllocaInst>(&inst)) {
+                std::cerr << "  - " << ai->getName().str() << "\n";
+            } else {
+                break;
+            }
         }
     }
     
@@ -300,23 +306,23 @@ void LLVMCodegen::popLoop() {
 // Helper function to get field index
 int LLVMCodegen::getStructFieldIndex(llvm::StructType* structType, const std::string& fieldName) {
    
-    std::cerr << "DEBUG: getStructFieldIndex - Looking for field '" << fieldName << "'" << std::endl;
+    VDBG(std::cerr << "DEBUG: getStructFieldIndex - Looking for field '" << fieldName << "'" << std::endl);
     
     if (!structType) {
-        std::cerr << "DEBUG: structType is null" << std::endl;
+        VDBG(std::cerr << "DEBUG: structType is null" << std::endl);
         return -1;
     }
     
-    std::cerr << "DEBUG: structType has " << structType->getNumElements() << " elements" << std::endl;
+    VDBG(std::cerr << "DEBUG: structType has " << structType->getNumElements() << " elements" << std::endl);
     
     if (structType->getName().empty()) {
-        std::cerr << "DEBUG: structType is anonymous" << std::endl;
+        VDBG(std::cerr << "DEBUG: structType is anonymous" << std::endl);
         // This can happen for anonymous structs (like tuples) or if structType is null.
         // For anonymous structs, field access is by index, not name.
         return -1; 
     }
     std::string structName = structType->getName().str();
-    std::cerr << "DEBUG: structName = '" << structName << "'" << std::endl;
+    VDBG(std::cerr << "DEBUG: structName = '" << structName << "'" << std::endl);
     
     // Strip numeric suffix from LLVM struct names (e.g., "TreeNode.0" -> "TreeNode")
     std::string baseStructName = structName;
@@ -327,13 +333,13 @@ int LLVMCodegen::getStructFieldIndex(llvm::StructType* structType, const std::st
         bool isNumeric = !suffix.empty() && std::all_of(suffix.begin(), suffix.end(), ::isdigit);
         if (isNumeric) {
             baseStructName = structName.substr(0, dotPos);
-            std::cerr << "DEBUG: Stripped numeric suffix, baseStructName = '" << baseStructName << "'" << std::endl;
+            VDBG(std::cerr << "DEBUG: Stripped numeric suffix, baseStructName = '" << baseStructName << "'" << std::endl);
         }
     }
     
     // Simple hardcoded mapping for TestPoint struct fields
     if (structName.find("TestPoint") != std::string::npos) {
-        std::cerr << "DEBUG: Found TestPoint struct" << std::endl;
+        VDBG(std::cerr << "DEBUG: Found TestPoint struct" << std::endl);
         if (fieldName == "x") return 0;
         if (fieldName == "y") return 1;
     }
@@ -343,13 +349,13 @@ int LLVMCodegen::getStructFieldIndex(llvm::StructType* structType, const std::st
         const auto& typeInfo = it->second;
         auto fieldIt = typeInfo.fieldIndices.find(fieldName);
         if (fieldIt != typeInfo.fieldIndices.end()) {
-            std::cerr << "DEBUG: Found field in userTypeMap at index " << fieldIt->second << std::endl;
+            VDBG(std::cerr << "DEBUG: Found field in userTypeMap at index " << fieldIt->second << std::endl);
             return fieldIt->second;
         } else {
-            std::cerr << "DEBUG: Field not found in userTypeMap" << std::endl;
+            VDBG(std::cerr << "DEBUG: Field not found in userTypeMap" << std::endl);
         }
     } else {
-        std::cerr << "DEBUG: Struct not found in userTypeMap" << std::endl;
+        VDBG(std::cerr << "DEBUG: Struct not found in userTypeMap" << std::endl);
         // This case means the struct type (though named in LLVM) is not in our userTypeMap.
         // Let's try to dynamically register it if it's a well-known struct
         if (!structType->isOpaque() && structType->getNumElements() > 0) {

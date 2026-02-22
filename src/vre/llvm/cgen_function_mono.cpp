@@ -38,9 +38,11 @@ std::string LLVMCodegen::mangleGenericFunctionName(const std::string& baseName,
 // Example: printItem<T<Display>> called with Point -> generate printItem_Point
 llvm::Function* LLVMCodegen::monomorphizeGenericFunction(const std::string& functionName,
                                                          const std::vector<std::string>& concreteTypeArgs) {
-    std::cout << "DEBUG: Monomorphizing generic function: " << functionName << " with types: ";
-    for (const auto& t : concreteTypeArgs) std::cout << t << " ";
-    std::cout << std::endl;
+    if (vyn::g_debug_codegen) {
+        std::cout << "DEBUG: Monomorphizing generic function: " << functionName << " with types: ";
+        for (const auto& t : concreteTypeArgs) std::cout << t << " ";
+        std::cout << std::endl;
+    }
     
     // Look up the generic function template
     auto templateIt = genericFunctionTemplates.find(functionName);
@@ -55,7 +57,7 @@ llvm::Function* LLVMCodegen::monomorphizeGenericFunction(const std::string& func
     std::string mangledName = mangleGenericFunctionName(functionName, concreteTypeArgs);
     auto cacheIt = monomorphizedFunctions.find(mangledName);
     if (cacheIt != monomorphizedFunctions.end()) {
-        std::cout << "DEBUG: Found cached monomorphized function: " << mangledName << std::endl;
+        VDBG(std::cout << "DEBUG: Found cached monomorphized function: " << mangledName << std::endl);
         return cacheIt->second;
     }
     
@@ -73,7 +75,7 @@ llvm::Function* LLVMCodegen::monomorphizeGenericFunction(const std::string& func
         if (param && param->name) {
             std::string typeParamName = param->name->name;
             typeSubstitutions[typeParamName] = concreteTypeArgs[i];
-            std::cout << "DEBUG: Type substitution: " << typeParamName << " -> " << concreteTypeArgs[i] << std::endl;
+            VDBG(std::cout << "DEBUG: Type substitution: " << typeParamName << " -> " << concreteTypeArgs[i] << std::endl);
         }
     }
     
@@ -126,7 +128,7 @@ llvm::Function* LLVMCodegen::monomorphizeGenericFunction(const std::string& func
         module.get()
     );
     
-    std::cout << "DEBUG: Created specialized function: " << mangledName << std::endl;
+    VDBG(std::cout << "DEBUG: Created specialized function: " << mangledName << std::endl);
     
     // Generate function body if template has a body
     if (templateFunc->body) {
@@ -180,8 +182,8 @@ llvm::Function* LLVMCodegen::monomorphizeGenericFunction(const std::string& func
                                 std::vector<ast::TypeNodePtr>()
                             );
                             valueTypeMap[alloca] = std::shared_ptr<ast::TypeNode>(std::move(concreteTypeName));
-                            std::cout << "DEBUG: Parameter '" << paramNames[i] << "' type substituted: " 
-                                      << paramTypeStr << " -> " << substIt->second << std::endl;
+                            VDBG(std::cout << "DEBUG: Parameter '" << paramNames[i] << "' type substituted: "
+                                      << paramTypeStr << " -> " << substIt->second << std::endl);
                         } else {
                             // Not a type parameter, clone as-is
                             valueTypeMap[alloca] = std::shared_ptr<ast::TypeNode>(templateFunc->params[i].typeNode->clone());
@@ -221,7 +223,7 @@ llvm::Function* LLVMCodegen::monomorphizeGenericFunction(const std::string& func
     // Restore substitutions
     currentTypeSubstitutions = oldSubstitutions;
     
-    std::cout << "DEBUG: Successfully monomorphized function: " << mangledName << std::endl;
+    VDBG(std::cout << "DEBUG: Successfully monomorphized function: " << mangledName << std::endl);
     return specializedFunc;
 }
 

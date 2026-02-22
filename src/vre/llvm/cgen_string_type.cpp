@@ -81,7 +81,7 @@ void LLVMCodegen::handleStringLen(vyn::ast::CallExpression* node, llvm::Value* s
     // Load and return length
     m_currentLLVMValue = builder->CreateLoad(llvm::Type::getInt64Ty(*context), lenFieldPtr, "str.len");
     
-    std::cout << "DEBUG: String::len() called" << std::endl;
+    VDBG(std::cout << "DEBUG: String::len() called" << std::endl);
 }
 
 void LLVMCodegen::handleStringConcat(vyn::ast::CallExpression* node, llvm::Value* strPtr, llvm::Type* strStructType) {
@@ -168,7 +168,7 @@ void LLVMCodegen::handleStringConcat(vyn::ast::CallExpression* node, llvm::Value
     resultStr = builder->CreateInsertValue(resultStr, newData, 0, "str.result_data");
     resultStr = builder->CreateInsertValue(resultStr, newLen, 1, "str.result_len");
     
-    std::cout << "DEBUG: String::concat() called" << std::endl;
+    VDBG(std::cout << "DEBUG: String::concat() called" << std::endl);
     
     m_currentLLVMValue = resultStr;
 }
@@ -280,7 +280,7 @@ void LLVMCodegen::handleStringSubstring(vyn::ast::CallExpression* node, llvm::Va
     phi->addIncoming(emptyStr, boundsFailBlock);
     phi->addIncoming(resultStr, boundsOkBlock);
     
-    std::cout << "DEBUG: String::substring() called" << std::endl;
+    VDBG(std::cout << "DEBUG: String::substring() called" << std::endl);
     m_currentLLVMValue = phi;
 }
 
@@ -334,7 +334,7 @@ void LLVMCodegen::handleStringCharAt(vyn::ast::CallExpression* node, llvm::Value
     phi->addIncoming(defaultChar, outOfBoundsBlock);
     phi->addIncoming(charVal, inBoundsBlock);
     
-    std::cout << "DEBUG: String::char_at() called" << std::endl;
+    VDBG(std::cout << "DEBUG: String::char_at() called" << std::endl);
     m_currentLLVMValue = phi;
 }
 
@@ -349,7 +349,7 @@ void LLVMCodegen::handleStringToBytes(vyn::ast::CallExpression* node, llvm::Valu
     llvm::Value* dataPtr = builder->CreateStructGEP(strStructType, strPtr, 0, "str.data_ptr");
     llvm::Value* data = builder->CreateLoad(llvm::PointerType::get(*context, 0), dataPtr, "str.data");
     
-    std::cout << "DEBUG: String::to_bytes() called" << std::endl;
+    VDBG(std::cout << "DEBUG: String::to_bytes() called" << std::endl);
     
     // Return the byte array pointer
     m_currentLLVMValue = data;
@@ -379,7 +379,7 @@ void LLVMCodegen::handleStringFromBytes(vyn::ast::CallExpression* node, llvm::Va
     resultStr = builder->CreateInsertValue(resultStr, bytePtr, 0, "str.from_bytes_data");
     resultStr = builder->CreateInsertValue(resultStr, length, 1, "str.from_bytes_len");
     
-    std::cout << "DEBUG: String::from_bytes() called" << std::endl;
+    VDBG(std::cout << "DEBUG: String::from_bytes() called" << std::endl);
     
     m_currentLLVMValue = resultStr;
 }
@@ -450,7 +450,7 @@ void LLVMCodegen::handleStringStartsWith(vyn::ast::CallExpression* node, llvm::V
     phi->addIncoming(llvm::ConstantInt::get(llvm::Type::getInt1Ty(*context), 1), lenOkBlock);
     phi->addIncoming(isMatch, compareBlock);
     
-    std::cout << "DEBUG: String::starts_with() called" << std::endl;
+    VDBG(std::cout << "DEBUG: String::starts_with() called" << std::endl);
     m_currentLLVMValue = phi;
 }
 
@@ -523,7 +523,7 @@ void LLVMCodegen::handleStringEndsWith(vyn::ast::CallExpression* node, llvm::Val
     phi->addIncoming(llvm::ConstantInt::get(llvm::Type::getInt1Ty(*context), 1), lenOkBlock);
     phi->addIncoming(isMatch, compareBlock);
     
-    std::cout << "DEBUG: String::ends_with() called" << std::endl;
+    VDBG(std::cout << "DEBUG: String::ends_with() called" << std::endl);
     m_currentLLVMValue = phi;
 }
 
@@ -568,7 +568,7 @@ void LLVMCodegen::handleStringContains(vyn::ast::CallExpression* node, llvm::Val
     // Check if result is not NULL
     llvm::Value* isFound = builder->CreateICmpNE(result, llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0)), "contains.result");
     
-    std::cout << "DEBUG: String::contains() called" << std::endl;
+    VDBG(std::cout << "DEBUG: String::contains() called" << std::endl);
     m_currentLLVMValue = isFound;
 }
 
@@ -646,7 +646,7 @@ void LLVMCodegen::handleStringToUpper(vyn::ast::CallExpression* node, llvm::Valu
     resultStr = builder->CreateInsertValue(resultStr, newData, 0, "result.data");
     resultStr = builder->CreateInsertValue(resultStr, len, 1, "result.len");
     
-    std::cout << "DEBUG: String::to_upper() called" << std::endl;
+    VDBG(std::cout << "DEBUG: String::to_upper() called" << std::endl);
     m_currentLLVMValue = resultStr;
 }
 
@@ -724,7 +724,7 @@ void LLVMCodegen::handleStringToLower(vyn::ast::CallExpression* node, llvm::Valu
     resultStr = builder->CreateInsertValue(resultStr, newData, 0, "result.data");
     resultStr = builder->CreateInsertValue(resultStr, len, 1, "result.len");
     
-    std::cout << "DEBUG: String::to_lower() called" << std::endl;
+    VDBG(std::cout << "DEBUG: String::to_lower() called" << std::endl);
     m_currentLLVMValue = resultStr;
 }
 
@@ -846,7 +846,7 @@ void LLVMCodegen::handleStringTrim(vyn::ast::CallExpression* node, llvm::Value* 
     resultStr = builder->CreateInsertValue(resultStr, newData, 0, "trim.result.data");
     resultStr = builder->CreateInsertValue(resultStr, newLen, 1, "trim.result.len");
 
-    std::cout << "DEBUG: String::trim() called" << std::endl;
+    VDBG(std::cout << "DEBUG: String::trim() called" << std::endl);
     m_currentLLVMValue = resultStr;
 }
 
@@ -925,7 +925,7 @@ void LLVMCodegen::handleStringReplace(vyn::ast::CallExpression* node, llvm::Valu
     resultStr = builder->CreateInsertValue(resultStr, resultData, 0, "replace.result.data");
     resultStr = builder->CreateInsertValue(resultStr, resultLen, 1, "replace.result.len");
 
-    std::cout << "DEBUG: String::replace() called" << std::endl;
+    VDBG(std::cout << "DEBUG: String::replace() called" << std::endl);
     m_currentLLVMValue = resultStr;
 }
 
