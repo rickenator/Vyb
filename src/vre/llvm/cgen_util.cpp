@@ -157,7 +157,10 @@ llvm::Value* LLVMCodegen::tryCast(llvm::Value* value, llvm::Type* targetType, co
             if (targetIntTy->getBitWidth() < valueIntTy->getBitWidth()) {
                 return builder->CreateTrunc(value, targetType, "int_trunc");
             } else if (targetIntTy->getBitWidth() > valueIntTy->getBitWidth()) {
-                // Assuming signed extension for now, Vyn semantics might specify
+                // Bool (i1) should be zero-extended; other integers use sign extension
+                if (valueIntTy->getBitWidth() == 1) {
+                    return builder->CreateZExt(value, targetType, "bool_zext");
+                }
                 return builder->CreateSExt(value, targetType, "int_sext");
             }
             // else same width, should have been caught by value->getType() == targetType

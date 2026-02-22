@@ -4340,6 +4340,17 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
             if (isFloatTarget && isGenericFloatValue) {
                 return true; // e.g., x<Float32> = 3.14
             }
+            
+            // Special Case: Ownership wrappers. my<T>, their<T>, our<T>, mild<T> are compatible
+            // with the inner type T for initialization (e.g., x<my<Int>> = 42).
+            static const std::set<std::string> ownershipWrappers = {"my", "their", "our", "mild", "view"};
+            if (tnTarget->identifier && ownershipWrappers.count(tnTarget->identifier->name) > 0
+                && tnTarget->genericArgs.size() == 1) {
+                // Check if value type is compatible with the inner type
+                if (areTypesCompatible(tnTarget->genericArgs[0].get(), valueType)) {
+                    return true;
+                }
+            }
         }
     }
     
@@ -4353,6 +4364,35 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
     if (categoryTarget != categoryValue) {
         if (targetType->toString() == valueType->toString()) {
             return true;
+        }
+        // Cross-category: Tuple<T,U> TypeName vs TupleTypeNode
+        auto isTupleTypeName = [](ast::TypeNode* t) -> ast::TypeName* {
+            if (t->getCategory() != ast::TypeNode::Category::IDENTIFIER) return nullptr;
+            auto* tn = static_cast<ast::TypeName*>(t);
+            if (tn->identifier && tn->identifier->name == "Tuple") return tn;
+            return nullptr;
+        };
+        ast::TypeName* tupleTarget = isTupleTypeName(targetType);
+        ast::TypeName* tupleValue = isTupleTypeName(valueType);
+        if (tupleTarget && categoryValue == ast::TypeNode::Category::TUPLE) {
+            auto* tt = static_cast<ast::TupleTypeNode*>(valueType);
+            if (tupleTarget->genericArgs.size() == tt->memberTypes.size()) {
+                bool ok = true;
+                for (size_t i = 0; i < tt->memberTypes.size(); ++i) {
+                    if (!areTypesCompatible(tupleTarget->genericArgs[i].get(), tt->memberTypes[i].get())) { ok = false; break; }
+                }
+                if (ok) return true;
+            }
+        }
+        if (tupleValue && categoryTarget == ast::TypeNode::Category::TUPLE) {
+            auto* tt = static_cast<ast::TupleTypeNode*>(targetType);
+            if (tupleValue->genericArgs.size() == tt->memberTypes.size()) {
+                bool ok = true;
+                for (size_t i = 0; i < tt->memberTypes.size(); ++i) {
+                    if (!areTypesCompatible(tt->memberTypes[i].get(), tupleValue->genericArgs[i].get())) { ok = false; break; }
+                }
+                if (ok) return true;
+            }
         }
         return false;
     }
