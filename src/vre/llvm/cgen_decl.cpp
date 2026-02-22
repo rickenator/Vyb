@@ -556,9 +556,41 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
                 valueTypeMap[alloca] = std::shared_ptr<vyn::ast::TypeNode>(node->params[i].typeNode->clone());
                 std::cout << "DEBUG: Stored type mapping for parameter '" << paramNames[i] << "'" << std::endl;
             }
-            
-            // Register parameter for scope-based cleanup (parameters have MY ownership by default)
-            registerVariable(paramNames[i], alloca, argVal, ast::OwnershipKind::MY, paramTypes[i], false);
+
+            // Deep-copy Vec parameters so that the callee owns independent data.
+            // Without this, passing a Vec by value shares the data pointer between caller
+            // and callee, causing double-frees when both try to clean up (e.g. in quicksort).
+            bool vecParam = false;
+            if (node->params[i].typeNode) {
+                // Vec<T> can be represented as VecType OR as TypeName with identifier "Vec"
+                ast::TypeNode* elemTypeNode = nullptr;
+                if (auto* vecAstType = dynamic_cast<ast::VecType*>(node->params[i].typeNode.get())) {
+                    if (vecAstType->elementType) elemTypeNode = vecAstType->elementType.get();
+                } else if (auto* tnNode = dynamic_cast<ast::TypeName*>(node->params[i].typeNode.get())) {
+                    if (tnNode->identifier && tnNode->identifier->name == "Vec" && !tnNode->genericArgs.empty()) {
+                        elemTypeNode = tnNode->genericArgs[0].get();
+                    }
+                }
+                if (elemTypeNode) {
+                    llvm::Type* elemLLVMType = codegenType(elemTypeNode);
+                    if (elemLLVMType) {
+                        // Load the struct stored so far (the shallow copy)
+                        llvm::Value* shallowVec = builder->CreateLoad(paramTypes[i], alloca, paramNames[i] + "_shallow");
+                        // Clone the data
+                        llvm::Value* deepVec = generateVecDeepCopy(shallowVec, elemLLVMType, paramTypes[i]);
+                        if (deepVec) {
+                            builder->CreateStore(deepVec, alloca);
+                            std::cout << "DEBUG: Deep-copied Vec parameter '" << paramNames[i] << "'" << std::endl;
+                            vecParam = true;
+                        }
+                    }
+                }
+            }
+
+            // Register parameter for scope-based cleanup.
+            // Vec parameters now own their data (deep-copied above) so they need cleanup.
+            // Non-Vec parameters do not own heap data and are cleaned up by the caller.
+            registerVariable(paramNames[i], alloca, argVal, ast::OwnershipKind::MY, paramTypes[i], vecParam);
             
             // Create debug information for the parameter
             if (debugBuilder && !debugScopeStack.empty()) {

@@ -2309,8 +2309,13 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 methodName == "clear" || methodName == "is_empty" || methodName == "capacity" ||
                 methodName == "concat" || methodName == "contains" || methodName == "remove_at" ||
                 methodName == "get_vec") {
-                // Evaluate the object to get the Vec value
+                // Evaluate the object in "LHS mode" (pointer mode) to get a pointer to the Vec field.
+                // Without this, evaluating `s.items` loads a copy of the Vec struct and mutations
+                // (like push) would be applied to a temporary, losing the changes.
+                bool savedLHS = m_isLHSOfAssignment;
+                m_isLHSOfAssignment = true;
                 memberExpr->object->accept(*this);
+                m_isLHSOfAssignment = savedLHS;
                 llvm::Value* vecValue = m_currentLLVMValue;
                 if (!vecValue) {
                     logError(memberExpr->object->loc, "Failed to evaluate object for Vec method call");

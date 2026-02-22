@@ -510,3 +510,67 @@ llvm::Function* LLVMCodegen::getOrCreateMemsetFunction() {
     }
     return memsetFunc;
 }
+llvm::Function* LLVMCodegen::getOrCreateMemcpyFunction() {
+    llvm::Function* memcpyFunc = module->getFunction("memcpy");
+    if (!memcpyFunc) {
+        llvm::FunctionType* memcpyFuncType = llvm::FunctionType::get(
+            llvm::PointerType::get(*context, 0),                // return type: void*
+            {llvm::PointerType::get(*context, 0),               // void* dest
+             llvm::PointerType::get(*context, 0),               // const void* src
+             llvm::Type::getInt64Ty(*context)},                 // size_t n
+            false
+        );
+        memcpyFunc = llvm::Function::Create(memcpyFuncType, llvm::Function::ExternalLinkage, "memcpy", module.get());
+    }
+    return memcpyFunc;
+}
+
+// Generate a deep copy of a Vec struct value.
+// Returns an updated Vec struct value whose data field points to freshly malloc'd memory.
+// The caller's original Vec is unmodified; each function invocation owns independent data.
+llvm::Value* LLVMCodegen::generateVecDeepCopy(llvm::Value* vecStructValue,
+                                               llvm::Type* elemType,
+                                               llvm::Type* vecStructType) {
+    if (!vecStructValue || !elemType || !vecStructType) return vecStructValue;
+
+    llvm::Function* currentFunc = builder->GetInsertBlock()->getParent();
+    if (!currentFunc) return vecStructValue;
+
+    // Extract the three Vec fields: { ptr, size, capacity }
+    llvm::Value* srcDataPtr = builder->CreateExtractValue(vecStructValue, 0, "vdc.src_ptr");
+    llvm::Value* vecSize    = builder->CreateExtractValue(vecStructValue, 1, "vdc.size");
+    llvm::Value* vecCap     = builder->CreateExtractValue(vecStructValue, 2, "vdc.cap");
+
+    // Compute element size in bytes
+    llvm::DataLayout dataLayout(module.get());
+    uint64_t elemSizeBytes = dataLayout.getTypeAllocSize(elemType);
+    llvm::Value* elemSizeVal = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), elemSizeBytes);
+
+    // Total bytes to copy = size * elemSize
+    llvm::Value* totalBytes = builder->CreateMul(vecSize, elemSizeVal, "vdc.bytes");
+
+    // Malloc a new buffer
+    llvm::Function* mallocFunc = getOrCreateMallocFunction();
+    llvm::Value* newDataPtr = builder->CreateCall(mallocFunc, {totalBytes}, "vdc.new_ptr");
+
+    // If size > 0, memcpy the data; otherwise leave newDataPtr (may be garbage but won't be accessed)
+    llvm::BasicBlock* copyBB  = llvm::BasicBlock::Create(*context, "vdc.copy", currentFunc);
+    llvm::BasicBlock* doneBB  = llvm::BasicBlock::Create(*context, "vdc.done", currentFunc);
+    llvm::Value* hasData = builder->CreateICmpSGT(
+        vecSize, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0), "vdc.has_data");
+    builder->CreateCondBr(hasData, copyBB, doneBB);
+
+    builder->SetInsertPoint(copyBB);
+    llvm::Function* memcpyFunc = getOrCreateMemcpyFunction();
+    builder->CreateCall(memcpyFunc, {newDataPtr, srcDataPtr, totalBytes});
+    builder->CreateBr(doneBB);
+
+    builder->SetInsertPoint(doneBB);
+
+    // Build a new Vec struct with the cloned data pointer
+    llvm::Value* newVecStruct = llvm::UndefValue::get(vecStructType);
+    newVecStruct = builder->CreateInsertValue(newVecStruct, newDataPtr, 0, "vdc.new_vec0");
+    newVecStruct = builder->CreateInsertValue(newVecStruct, vecSize,    1, "vdc.new_vec1");
+    newVecStruct = builder->CreateInsertValue(newVecStruct, vecCap,     2, "vdc.new_vec2");
+    return newVecStruct;
+}
