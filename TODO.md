@@ -334,6 +334,41 @@ with `pass` for multi-statement case bodies. Needs polishing:
 - [ ] **Linter** — `vyn check` for warnings beyond errors
 - [ ] **Debugger integration** — `gdb`/`lldb` with Vyn source stepping (DWARF done, validate end-to-end)
 
+### Polish — Silent by Default (HIGH PRIORITY)
+The compiler must be silent in normal use. DEBUG output makes the language feel unfinished.
+
+- [x] **Silence codegen DEBUG output** — All `std::cout << "DEBUG: ..."` and `std::cerr << "DEBUG: ..."` in `src/vre/` and `src/vre/llvm/` (~320 statements) are now gated behind `g_debug_codegen` (default `false`) via the `VYN_CDBG` macro. Enable with `--debug-codegen` CLI flag.
+- [x] **Silence parser trace output** — Parser `[PEEK]`/`[CONSUME]`/`[EXPECT]` traces gated behind `#ifdef VERBOSE` and `VERBOSE` no longer defined globally in `CMakeLists.txt`; off by default. Re-enable with `-DVERBOSE` in the build.
+- [ ] **Silence optimization pass messages** — `"Skipping IR optimization"` / `"Applying IR optimization passes"` printed to stdout unconditionally; gate behind `--verbose` or `-v`.
+- [ ] **Doc consolidation** — `doc/` has overlapping files (`ROADMAP.md`, `TODO_CURRENT.md`, multiple ownership docs). Keep `TODO.md`, `doc/FEATURE_STATUS.md`, `CHANGELOG.md` as living docs; archive or delete the rest into `doc/archive/`; update `doc/README.md` as index.
+- [ ] **Canonical syntax audit** — Audit all `*.md` files for outdated syntax (`unsafe` → `freedom`, old `:` field syntax → `<Type>`, `T: Aspect` → `<T<Aspect>>`).
+
+---
+
+## Architecture & Technical Debt
+
+These are architectural improvements that will pay dividends as the codebase grows toward 1.0.
+
+### A. Separate Semantic Analysis from AST Mutation
+The semantic analyzer currently mutates AST nodes directly (sets `node->type`,
+`expressionTypes[node]`, etc.), creating fragile cross-pass dependencies.
+
+- [ ] Use an immutable AST + a separate `TypeTable` (map from node ID → type)
+- [ ] Avoid raw pointer storage in `expressionTypes` (use stable IDs or `shared_ptr`)
+
+### B. IR Optimization as a Separate Phase
+IR optimization is currently applied inline during JIT setup.
+
+- [ ] Extract into an explicit `optimize(module)` step controllable per compilation target
+- [ ] Expose `-O0`–`-O3` flags consistently for both JIT and AOT paths
+
+### C. Error Recovery in Parsing
+The parser throws on the first error. Adding error recovery would allow reporting
+multiple errors per file — a significant developer experience improvement.
+
+- [ ] Synchronize to the next statement/declaration boundary on parse error
+- [ ] Collect and report all errors before aborting
+
 ---
 
 ## Contradictions and Undecided Items
@@ -584,6 +619,17 @@ Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `
 2. Standardize tests/examples to use auto-stringifying `println` and Java-like string concatenation.
 3. Reconcile docs vs runtime regarding `println_int`/`println_bool` intrinsics.
 
+### Syntax Consistency
+- [ ] **`Vec::last()` / `Vec::peek()`** — `pop()` removes the last element but there is no non-removing accessor. Add `Vec::last()` or `Vec::peek()`.
+- [ ] **String indexing** — `str.char_at(i)` vs `str[i]` — pick one canonical form and document the other as deprecated.
+- [ ] **Struct construction** — Document whether both named-field `Point { x = 1, y = 2 }` and positional `Point(1, 2)` are supported, or only the named form.
+- [ ] **`for (item in vec)` mutation** — Iteration currently copies each element. Document copy semantics clearly. Consider `for (ref item in vec)` or `for (borrow item in vec)` syntax for mutable iteration.
+
+### Implementation Consistency
+- [ ] **`borrow` prefix vs `borrow()` function call** — Both syntaxes work. The canonical form per `Canonical_Reference_Syntax.md` is `borrow(expr)`. Document `borrow expr` prefix as deprecated.
+- [ ] **`their<T>` nested member access** — The semantic analyzer sometimes fails to dereference through `their<T>` for nested member access. Audit all transitive field access paths.
+- [ ] **Vec cleanup on return** — The heuristic checking whether the returned identifier matches a Vec variable may miss returns via expressions. Consider a more robust ownership-transfer-on-return pass.
+
 ### Action Items
 
 - Fix or move non-Vyn *.vyn fixtures (e.g. extracted tests containing C++ snippets).
@@ -594,3 +640,4 @@ Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `
 *Last Updated: February 2026*
 *Current Version: Vyn v0.5.0 (freedom-1.0 series)*
 *Overall Status: ~60-65% complete toward 1.0 — 657 tests, 315 passing (47.9%)*
+*SUGGESTIONS.md merged into this document.*

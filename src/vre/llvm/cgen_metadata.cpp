@@ -11,7 +11,7 @@ namespace vyn {
 void LLVMCodegen::generateTypeMetadata(const std::string& typeName, ast::StructDeclaration* structDecl) {
     if (!structDecl) return;
     
-    std::cout << "DEBUG: Generating type metadata for: " << typeName << std::endl;
+    VYN_CDBG << "DEBUG: Generating type metadata for: " << typeName << std::endl;
     
     // Get the LLVM struct type
     auto structIt = monomorphizedStructs.find(typeName);
@@ -107,7 +107,7 @@ void LLVMCodegen::generateTypeMetadata(const std::string& typeName, ast::StructD
     
     // Create global array of field metadata
     if (fieldMetadataArray.empty()) {
-        std::cout << "DEBUG: No fields to generate metadata for " << typeName << std::endl;
+        VYN_CDBG << "DEBUG: No fields to generate metadata for " << typeName << std::endl;
         return;
     }
     
@@ -186,18 +186,18 @@ void LLVMCodegen::generateTypeMetadata(const std::string& typeName, ast::StructD
     // For now, we'll just store the metadata global and register it later
     typeMetadataGlobals[typeName] = typeMetadataGlobal;
     
-    std::cout << "DEBUG: Generated metadata for " << typeName 
+    VYN_CDBG << "DEBUG: Generated metadata for " << typeName 
               << " with " << fieldMetadataArray.size() << " fields" << std::endl;
 }
 
 // Register all type metadata at runtime
 void LLVMCodegen::registerTypeMetadata() {
     if (typeMetadataGlobals.empty()) {
-        std::cout << "DEBUG: No type metadata to register" << std::endl;
+        VYN_CDBG << "DEBUG: No type metadata to register" << std::endl;
         return;
     }
     
-    std::cout << "DEBUG: Registering " << typeMetadataGlobals.size() << " type metadata entries" << std::endl;
+    VYN_CDBG << "DEBUG: Registering " << typeMetadataGlobals.size() << " type metadata entries" << std::endl;
     
     // Declare __vyn_register_type function
     llvm::PointerType* int8PtrType = llvm::PointerType::get(llvm::Type::getInt8Ty(*context), 0);
@@ -237,7 +237,7 @@ void LLVMCodegen::registerTypeMetadata() {
     for (const auto& pair : typeMetadataGlobals) {
         llvm::Value* metadataPtr = ctorBuilder.CreateBitCast(pair.second, int8PtrType);
         ctorBuilder.CreateCall(registerFunc, {metadataPtr});
-        std::cout << "DEBUG: Added registration call for type: " << pair.first << std::endl;
+        VYN_CDBG << "DEBUG: Added registration call for type: " << pair.first << std::endl;
     }
     
     ctorBuilder.CreateRetVoid();
@@ -274,7 +274,7 @@ void LLVMCodegen::registerTypeMetadata() {
         "llvm.global_ctors"
     );
     
-    std::cout << "DEBUG: Type metadata registration complete" << std::endl;
+    VYN_CDBG << "DEBUG: Type metadata registration complete" << std::endl;
 }
 
 } // namespace vyn

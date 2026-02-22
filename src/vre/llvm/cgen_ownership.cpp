@@ -51,7 +51,7 @@ llvm::StructType* LLVMCodegen::getControlBlockType(llvm::Type* objectPtrType) {
 
 // --- Scope Management ---
 void LLVMCodegen::enterScope() {
-    std::cout << "DEBUG: Entering new scope (depth: " << scopeStack.size() + 1 << ")" << std::endl;
+    VYN_CDBG << "DEBUG: Entering new scope (depth: " << scopeStack.size() + 1 << ")" << std::endl;
     scopeStack.emplace_back(); // Create new scope level
 }
 
@@ -61,7 +61,7 @@ void LLVMCodegen::exitScope() {
         return;
     }
     
-    std::cout << "DEBUG: Exiting scope (depth: " << scopeStack.size() << "), cleaning up " 
+    VYN_CDBG << "DEBUG: Exiting scope (depth: " << scopeStack.size() << "), cleaning up " 
               << scopeStack.back().size() << " variables" << std::endl;
     
     // Clean up all variables in current scope in reverse order (LIFO)
@@ -80,7 +80,7 @@ void LLVMCodegen::registerVariable(const std::string& name, llvm::Value* allocaI
         return;
     }
     
-    std::cout << "DEBUG: Registering variable '" << name << "' with ownership: " 
+    VYN_CDBG << "DEBUG: Registering variable '" << name << "' with ownership: " 
               << static_cast<int>(ownership) << ", needsCleanup: " << needsCleanup << std::endl;
     
     ScopeVariable var;
@@ -93,7 +93,7 @@ void LLVMCodegen::registerVariable(const std::string& name, llvm::Value* allocaI
     var.isVecWithMallocData = needsCleanup; // Vec types that need cleanup have malloc'd data
     
     if (var.isVecWithMallocData) {
-        std::cout << "DEBUG: Variable '" << name << "' identified as Vec with malloc'd data" << std::endl;
+        VYN_CDBG << "DEBUG: Variable '" << name << "' identified as Vec with malloc'd data" << std::endl;
     }
     
     scopeStack.back().push_back(var);
@@ -105,12 +105,12 @@ void LLVMCodegen::registerVariable(const std::string& name, llvm::Value* allocaI
 }
 
 void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
-    std::cout << "DEBUG: Cleaning up variable '" << var.name << "', needsCleanup: " 
+    VYN_CDBG << "DEBUG: Cleaning up variable '" << var.name << "', needsCleanup: " 
               << var.needsCleanup << ", isVecWithMallocData: " << var.isVecWithMallocData << std::endl;
     
     // Skip cleanup if not needed
     if (!var.needsCleanup) {
-        std::cout << "DEBUG: Skipping cleanup for '" << var.name << "' (needsCleanup=false)" << std::endl;
+        VYN_CDBG << "DEBUG: Skipping cleanup for '" << var.name << "' (needsCleanup=false)" << std::endl;
         return;
     }
     
@@ -118,7 +118,7 @@ void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
         case ast::OwnershipKind::MY: {
             // Unique ownership - immediate cleanup
             if (var.isVecWithMallocData) {
-                std::cout << "DEBUG: Performing MY cleanup for Vec with malloc'd data: " << var.name << std::endl;
+                VYN_CDBG << "DEBUG: Performing MY cleanup for Vec with malloc'd data: " << var.name << std::endl;
                 
                 // Safety check: ensure we have valid alloca and builder
                 if (!var.allocaInst || !builder || !currentFunction) {
@@ -146,7 +146,7 @@ void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
                 builder->SetInsertPoint(freeBlock);
                 llvm::Function* freeFunc = getOrCreateFreeFunction();
                 builder->CreateCall(freeFunc, {dataPtr});
-                std::cout << "DEBUG: Generated free() call for " << var.name << std::endl;
+                VYN_CDBG << "DEBUG: Generated free() call for " << var.name << std::endl;
                 builder->CreateBr(continueBlock);
                 
                 // Continue block
@@ -156,7 +156,7 @@ void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
                 // ensure the continue block has proper termination
                 // This will be handled by the subsequent return statement
             } else {
-                std::cout << "DEBUG: Skipping MY cleanup for non-Vec variable: " << var.name << std::endl;
+                VYN_CDBG << "DEBUG: Skipping MY cleanup for non-Vec variable: " << var.name << std::endl;
             }
             break;
         }
@@ -164,7 +164,7 @@ void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
         case ast::OwnershipKind::OUR: {
             // Control block-based reference counting
             // The var.value is a pointer to the control block
-            std::cout << "DEBUG: Cleaning up OUR ownership for variable: " << var.name << std::endl;
+            VYN_CDBG << "DEBUG: Cleaning up OUR ownership for variable: " << var.name << std::endl;
             
             // Load the control block pointer from the alloca
             llvm::Value* controlBlockPtr = builder->CreateLoad(var.type, var.allocaInst, var.name + "_cb_load");
@@ -281,13 +281,13 @@ void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
         
         case ast::OwnershipKind::THEIR: {
             // Borrowed reference - no cleanup needed
-            std::cout << "DEBUG: No cleanup needed for borrowed reference: " << var.name << std::endl;
+            VYN_CDBG << "DEBUG: No cleanup needed for borrowed reference: " << var.name << std::endl;
             break;
         }
         
         case ast::OwnershipKind::MILD: {
             // Weak reference - decrement weak_count in control block
-            std::cout << "DEBUG: Cleaning up MILD ownership for variable: " << var.name << std::endl;
+            VYN_CDBG << "DEBUG: Cleaning up MILD ownership for variable: " << var.name << std::endl;
             
             // Load the control block pointer from the alloca
             llvm::Value* controlBlockPtr = builder->CreateLoad(var.type, var.allocaInst, var.name + "_mild_cb_load");
@@ -380,7 +380,7 @@ void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
 }
 
 void LLVMCodegen::incrementRefCount(const std::string& name) {
-    std::cout << "DEBUG: Incrementing refcount for: " << name << std::endl;
+    VYN_CDBG << "DEBUG: Incrementing refcount for: " << name << std::endl;
     
     // Check if refcount storage already exists
     auto it = refCountStorage.find(name);
@@ -401,7 +401,7 @@ void LLVMCodegen::incrementRefCount(const std::string& name) {
 }
 
 void LLVMCodegen::decrementRefCount(const std::string& name) {
-    std::cout << "DEBUG: Decrementing refcount for: " << name << std::endl;
+    VYN_CDBG << "DEBUG: Decrementing refcount for: " << name << std::endl;
     
     auto it = refCountStorage.find(name);
     if (it == refCountStorage.end()) {
@@ -429,7 +429,7 @@ void LLVMCodegen::decrementRefCount(const std::string& name) {
     for (auto& scope : scopeStack) {
         for (auto& var : scope) {
             if (var.name == name && var.isVecWithMallocData) {
-                std::cout << "DEBUG: Performing OUR cleanup for Vec with malloc'd data: " << name << std::endl;
+                VYN_CDBG << "DEBUG: Performing OUR cleanup for Vec with malloc'd data: " << name << std::endl;
                 
                 // Same cleanup logic as MY ownership but triggered by refcount
                 llvm::Value* vecPtr = builder->CreateLoad(var.type, var.allocaInst, name + "_refcount_cleanup_load");
@@ -470,7 +470,7 @@ void LLVMCodegen::decrementRefCount(const std::string& name) {
 llvm::Function* LLVMCodegen::getOrCreateFreeFunction() {
     llvm::Function* freeFunc = module->getFunction("free");
     if (!freeFunc) {
-        std::cout << "DEBUG: Creating free() function declaration" << std::endl;
+        VYN_CDBG << "DEBUG: Creating free() function declaration" << std::endl;
         llvm::FunctionType* freeFuncType = llvm::FunctionType::get(
             llvm::Type::getVoidTy(*context),                    // return type
             {llvm::PointerType::get(*context, 0)},              // parameter: void*
@@ -484,7 +484,7 @@ llvm::Function* LLVMCodegen::getOrCreateFreeFunction() {
 llvm::Function* LLVMCodegen::getOrCreateMallocFunction() {
     llvm::Function* mallocFunc = module->getFunction("malloc");
     if (!mallocFunc) {
-        std::cout << "DEBUG: Creating malloc() function declaration" << std::endl;
+        VYN_CDBG << "DEBUG: Creating malloc() function declaration" << std::endl;
         llvm::FunctionType* mallocFuncType = llvm::FunctionType::get(
             llvm::PointerType::get(*context, 0),                // return type: void*
             {llvm::Type::getInt64Ty(*context)},                 // parameter: size_t
@@ -498,7 +498,7 @@ llvm::Function* LLVMCodegen::getOrCreateMallocFunction() {
 llvm::Function* LLVMCodegen::getOrCreateMemsetFunction() {
     llvm::Function* memsetFunc = module->getFunction("memset");
     if (!memsetFunc) {
-        std::cout << "DEBUG: Creating memset() function declaration" << std::endl;
+        VYN_CDBG << "DEBUG: Creating memset() function declaration" << std::endl;
         llvm::FunctionType* memsetFuncType = llvm::FunctionType::get(
             llvm::PointerType::get(*context, 0),                // return type: void*
             {llvm::PointerType::get(*context, 0),               // void* ptr

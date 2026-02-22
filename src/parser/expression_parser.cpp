@@ -5,11 +5,14 @@
 #include <algorithm> // Required for std::any_of, if used by match or other helpers
 #include <functional> // Required for std::function
 #include <vector> // Required for std::vector
-// Add iostream if not already pulled in by parser.hpp for std::cerr, though DEBUG_PRINT should handle it.
-// #include <iostream> 
-// Add string if not already pulled in for std::to_string, though DEBUG_PRINT should handle it.
-// #include <string>
 
+namespace vyn {
+// Forward-declare g_debug_codegen so the parser can share the same flag.
+extern bool g_debug_codegen;
+} // namespace vyn
+#ifndef VYN_CDBG
+#define VYN_CDBG if (vyn::g_debug_codegen) std::cerr
+#endif
 
 namespace vyn {
 
@@ -370,7 +373,7 @@ namespace vyn {
                 identifier_name == "deserial" || identifier_name == "my" || identifier_name == "their" || 
                 identifier_name == "our" || identifier_name == "borrow" || identifier_name == "view") {
                 #ifdef VERBOSE
-                std::cerr << "DEBUG: Skipping type parsing for intrinsic function: " << identifier_name << std::endl;
+                VYN_CDBG << "DEBUG: Skipping type parsing for intrinsic function: " << identifier_name << std::endl;
                 #endif
                 skip_type_parsing = true;
             }
@@ -378,7 +381,7 @@ namespace vyn {
         
         if (!skip_type_parsing) {
             #ifdef VERBOSE
-            std::cerr << "DEBUG: Attempting type parsing for identifier: " << peek().lexeme << std::endl;
+            VYN_CDBG << "DEBUG: Attempting type parsing for identifier: " << peek().lexeme << std::endl;
             #endif
             try {
                 TypeParser type_parser(tokens_, pos_, current_file_path_, *this); // Pass *this for ExpressionParser reference

@@ -170,10 +170,10 @@ elseif(WIN32)
 endif()
 
 # Add debug flags for tests.cpp
-set_source_files_properties(src/tests.cpp PROPERTIES COMPILE_FLAGS "-DDEBUG_TESTS -DVERBOSE")
+set_source_files_properties(src/tests.cpp PROPERTIES COMPILE_FLAGS "-DDEBUG_TESTS")
 
-# Enable verbose debugging for all parser files
-add_compile_definitions(VERBOSE)
+# Parser verbose tracing is off by default. Define VERBOSE (e.g. -DVERBOSE in cmake)
+# or use --debug-codegen at runtime to re-enable detailed diagnostics.
 
 # Add a custom target for running tests
 find_package(Python3 REQUIRED)

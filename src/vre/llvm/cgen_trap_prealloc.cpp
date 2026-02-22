@@ -21,7 +21,7 @@ void LLVMCodegen::preCreateTrapAllocas(ast::Statement* stmt, llvm::Function* fun
         if (auto* blockExpr = dynamic_cast<ast::BlockExpression*>(exprStmt->expression.get())) {
             // This block expression has trap clauses - pre-create the alloca
             if (!blockExpr->trapClauses.empty()) {
-                std::cout << "DEBUG: Pre-creating trap_error alloca for expression statement block" << std::endl;
+                VYN_CDBG << "DEBUG: Pre-creating trap_error alloca for expression statement block" << std::endl;
                 llvm::Type* errorPtrType = llvm::PointerType::get(*context, 0);
                 auto* alloca = createEntryBlockAlloca(errorPtrType, "trap_error");
                 // Don't initialize here - will be initialized when the block expression is processed
@@ -35,7 +35,7 @@ void LLVMCodegen::preCreateTrapAllocas(ast::Statement* stmt, llvm::Function* fun
         if (varDecl->init) {
             if (auto* blockExpr = dynamic_cast<ast::BlockExpression*>(varDecl->init.get())) {
                 if (!blockExpr->trapClauses.empty()) {
-                    std::cout << "DEBUG: Pre-creating trap_error alloca for variable initializer with " 
+                    VYN_CDBG << "DEBUG: Pre-creating trap_error alloca for variable initializer with " 
                               << blockExpr->trapClauses.size() << " trap clauses" << std::endl;
                     llvm::Type* errorPtrType = llvm::PointerType::get(*context, 0);
                     auto* alloca = createEntryBlockAlloca(errorPtrType, "trap_error");
@@ -75,7 +75,7 @@ void LLVMCodegen::preCreateTrapAllocas(ast::Statement* stmt, llvm::Function* fun
                 // Body might be a BlockExpression
                 if (auto* blockExpr = dynamic_cast<ast::BlockExpression*>(matchCase.second.get())) {
                     if (!blockExpr->trapClauses.empty()) {
-                        std::cout << "DEBUG: Pre-creating trap_error alloca for match case with " 
+                        VYN_CDBG << "DEBUG: Pre-creating trap_error alloca for match case with " 
                                   << blockExpr->trapClauses.size() << " trap clauses" << std::endl;
                         llvm::Type* errorPtrType = llvm::PointerType::get(*context, 0);
                         auto* alloca = createEntryBlockAlloca(errorPtrType, "trap_error");

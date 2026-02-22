@@ -390,7 +390,7 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
             // Handle Self type in bind/impl methods
             if (typeNameStr == "Self") {
                 if (m_currentImplTypeNode) {
-                    std::cout << "DEBUG: Resolving Self to " << m_currentImplTypeNode->toString() << " in bind method" << std::endl;
+                    VYN_CDBG << "DEBUG: Resolving Self to " << m_currentImplTypeNode->toString() << " in bind method" << std::endl;
                     llvmType = codegenType(m_currentImplTypeNode);
                     break;
                 } else {
@@ -456,7 +456,7 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                     logError(typeNode->loc, typeNameStr + " type requires a type parameter (e.g., " + typeNameStr + "<TreeNode>)");
                     return nullptr;
                 }
-                std::cout << "DEBUG: Processing ownership type " << typeNameStr << " with underlying type: " 
+                VYN_CDBG << "DEBUG: Processing ownership type " << typeNameStr << " with underlying type: " 
                           << typeNameNode->genericArgs[0]->toString() << std::endl;
                 // For LLVM code generation, ownership types become pointers to the underlying type
                 // This solves circular reference issues and matches the runtime semantics
@@ -467,7 +467,7 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                 }
                 // Create pointer to the underlying type
                 llvmType = llvm::PointerType::getUnqual(underlyingType);
-                std::cout << "DEBUG: Successfully resolved ownership type " << typeNameStr << " to pointer type" << std::endl;
+                VYN_CDBG << "DEBUG: Successfully resolved ownership type " << typeNameStr << " to pointer type" << std::endl;
                 break;
             }
 
@@ -476,7 +476,7 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
             if (!typeNameNode->genericArgs.empty()) {
                 auto templateIt = genericStructTemplates.find(typeNameStr);
                 if (templateIt != genericStructTemplates.end()) {
-                    std::cout << "DEBUG: Detected generic struct instantiation: " << typeNameStr 
+                    VYN_CDBG << "DEBUG: Detected generic struct instantiation: " << typeNameStr 
                               << " with " << typeNameNode->genericArgs.size() << " type arguments" << std::endl;
                     
                     // Trigger monomorphization
@@ -560,13 +560,13 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                 // Check type alias map first
                 auto typeAliasIt = typeAliasMap.find(typeNameStr);
                 if (typeAliasIt != typeAliasMap.end()) {
-                    std::cout << "DEBUG: Found type alias for " << typeNameStr << std::endl;
+                    VYN_CDBG << "DEBUG: Found type alias for " << typeNameStr << std::endl;
                     llvmType = typeAliasIt->second;
                 } else {
                     // Check if this is a type parameter being substituted during monomorphization
                     auto substitutionIt = currentTypeSubstitutions.find(typeNameStr);
                     if (substitutionIt != currentTypeSubstitutions.end()) {
-                        std::cout << "DEBUG: Substituting type parameter " << typeNameStr 
+                        VYN_CDBG << "DEBUG: Substituting type parameter " << typeNameStr 
                                   << " -> " << substitutionIt->second << " during monomorphization" << std::endl;
                         
                         // Recursively resolve the substituted type
@@ -580,14 +580,14 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                     } else {
                         auto userTypeIt = userTypeMap.find(typeNameStr);
                         if (userTypeIt != userTypeMap.end()) {
-                            std::cout << "DEBUG: Found user type " << typeNameStr << " in userTypeMap, isOpaque: " 
+                            VYN_CDBG << "DEBUG: Found user type " << typeNameStr << " in userTypeMap, isOpaque: " 
                                       << userTypeIt->second.llvmType->isOpaque() << std::endl;
                             llvmType = userTypeIt->second.llvmType;
                         } else {
-                            std::cout << "DEBUG: User type " << typeNameStr << " not found in userTypeMap, checking LLVM context" << std::endl;
+                            VYN_CDBG << "DEBUG: User type " << typeNameStr << " not found in userTypeMap, checking LLVM context" << std::endl;
                             llvm::StructType* existingType = llvm::StructType::getTypeByName(*context, typeNameStr);
                             if (existingType) {
-                                std::cout << "DEBUG: Found existing type " << typeNameStr << " in LLVM context, isOpaque: " 
+                                VYN_CDBG << "DEBUG: Found existing type " << typeNameStr << " in LLVM context, isOpaque: " 
                                           << existingType->isOpaque() << std::endl;
                                 llvmType = existingType;
                             } else {
