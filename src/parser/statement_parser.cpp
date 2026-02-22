@@ -857,7 +857,8 @@ std::unique_ptr<vyn::ast::VariableDeclaration> StatementParser::parse_var_decl()
                 decl_loc, std::move(identifier_node), is_const_decl,
                 std::move(type_expr), std::move(initializer));
         } else {
-            throw std::runtime_error("Expected '<' or type name after 'const' at " + location_to_string(this->peek().location));
+            throw std::runtime_error("Expected '<' or type name after 'const', but found '" + 
+                token_type_to_string(this->peek().type) + "' at " + location_to_string(this->peek().location));
         }
     }
     

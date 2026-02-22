@@ -1826,8 +1826,14 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
         }
     }
     
-    // Fallback: default CallExpression analysis (no additional checks)
-    // ...existing code...
+    // Fallback: look up return type from function registry for plain function calls
+    if (auto ident = dynamic_cast<ast::Identifier*>(node->callee.get())) {
+        auto it = functionRegistry.find(ident->name);
+        if (it != functionRegistry.end() && it->second->returnTypeNode) {
+            expressionTypes[node] = it->second->returnTypeNode.get();
+            node->type = std::shared_ptr<ast::TypeNode>(it->second->returnTypeNode->clone());
+        }
+    }
 }
 
 void SemanticAnalyzer::visit(ast::ArrayElementExpression* node) {

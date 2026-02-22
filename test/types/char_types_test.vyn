@@ -1,3 +1,8 @@
+// @test: Char and Rune types test
+// @description: Char and Rune types test
+// @category: types
+// @expect: pass
+// @expect-return: 57
 # Test character types: Char (UTF-8 code unit) and Rune (Unicode code point)
 
 test_char()<Int> -> {

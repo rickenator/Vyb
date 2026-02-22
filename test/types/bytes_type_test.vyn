@@ -1,3 +1,8 @@
+// @test: Bytes type test
+// @description: Bytes type test
+// @category: types
+// @expect: pass
+// @expect-return: 42
 # Test Bytes type for raw binary data
 
 # Note: Bytes is a fat pointer like String but for binary data
