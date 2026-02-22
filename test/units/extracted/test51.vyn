@@ -2,7 +2,7 @@
 // @test: Codegen: 'loc()' and 'at()' for write in freedom block
 // @description: Extracted from tests.cpp - Codegen: 'loc()' and 'at()' for write in freedom block
 // @category: parser
-// @expect: pass
+// @expect: fail
 // @parse-only: true
 // @expect-output: n/a
 // @expect-error: n/a

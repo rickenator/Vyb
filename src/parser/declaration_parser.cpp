@@ -172,6 +172,19 @@ std::vector<std::unique_ptr<vyn::ast::GenericParameter>> DeclarationParser::pars
                 } while (this->match(vyn::TokenType::COMMA));
                 this->expect(vyn::TokenType::GT); // Close the bounds list
             }
+            // Also support colon-separated bounds: <T: Bound1 + Bound2>
+            else if (this->match(vyn::TokenType::COLON)) {
+                do {
+                    SourceLocation bound_loc = this->current_location();
+                    if (this->peek().type != vyn::TokenType::IDENTIFIER) {
+                        throw std::runtime_error("Expected aspect name for bound after ':' at " + location_to_string(bound_loc));
+                    }
+                    std::string aspect_name = this->consume().lexeme;
+                    auto aspect_ident = std::make_unique<ast::Identifier>(bound_loc, aspect_name);
+                    auto bound_type = std::make_unique<ast::TypeName>(bound_loc, std::move(aspect_ident));
+                    bounds.push_back(std::move(bound_type));
+                } while (this->match(vyn::TokenType::PLUS));
+            }
             generic_params.push_back(std::make_unique<vyn::ast::GenericParameter>(param_loc, std::move(param_name), std::move(bounds)));
         } while (this->match(vyn::TokenType::COMMA));
         this->expect(vyn::TokenType::GT); // >

@@ -2,6 +2,7 @@
 // by demonstrating that invalid constraints fail and valid ones pass
 
 // Valid: T bounded by Comparable trait
+// @expect-return: 42
 template ValidContainer<T: Comparable> {
     struct Data {
         value<T>

@@ -4,6 +4,7 @@
 // ===== BASIC TEMPLATE FUNCTIONALITY =====
 
 // Simple template with no constraints
+// @expect-return: 42
 template BasicContainer<T> {
     struct Data {
         value<T>

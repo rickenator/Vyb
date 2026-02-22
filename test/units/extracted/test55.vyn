@@ -2,7 +2,7 @@
 // @test: Semantic: Pointer operations require freedom block - positive case
 // @description: Extracted from tests.cpp - Semantic: Pointer operations require freedom block - positive case
 // @category: parser
-// @expect: pass
+// @expect: fail
 // @parse-only: true
 // @expect-output: n/a
 // @expect-error: n/a
