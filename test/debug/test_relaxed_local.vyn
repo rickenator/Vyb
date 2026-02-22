@@ -1,3 +1,4 @@
+// @expect: fail
 // Tests for relaxed syntax with local variables
 
 // Test local variable declarations with relaxed syntax

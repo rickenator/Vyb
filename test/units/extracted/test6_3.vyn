@@ -1,7 +1,7 @@
 // @test: Parser rejects unmatched brace
 // @description: Extracted from tests.cpp - Parser rejects unmatched brace
 // @category: parser
-// @expect: pass
+// @expect: fail
 // @parse-only: true
 // @expect-output: n/a
 // @expect-error: n/a

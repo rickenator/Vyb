@@ -2486,7 +2486,20 @@ void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
     // Check if this struct has generic parameters that need to be inferred
     auto structFieldsIt = structFieldTypes.find(structName);
     if (structFieldsIt == structFieldTypes.end()) {
-        // No field information, just use the type as-is
+        // No field information. If this is an error type literal (used in fail statement),
+        // register it with the fields from the literal so member access works in trap clauses.
+        std::map<std::string, ast::TypeNode*> implicitFields;
+        for (auto& prop : node->properties) {
+            if (prop.key && prop.value) {
+                auto valueTypeIt = expressionTypes.find(prop.value.get());
+                if (valueTypeIt != expressionTypes.end() && valueTypeIt->second) {
+                    implicitFields[prop.key->name] = valueTypeIt->second;
+                }
+            }
+        }
+        if (!implicitFields.empty()) {
+            structFieldTypes[structName] = implicitFields;
+        }
         expressionTypes[node] = node->typePath->clone().release();
         return;
     }

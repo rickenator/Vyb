@@ -1,25 +1,25 @@
 // Test file to demonstrate multi-return values and JSON formatting
 
 struct Point {
-    Int x,     // Type name format
-    Int y
+    x<Int>,     // Type name format
+    y<Int>
 }
 
 class Rectangle {
-    Int width,   // Type name format  
-    Int height
+    width<Int>,   // Type name format  
+    height<Int>
 }
 
 struct Person {
-    Int id,
-    String name,
-    Float salary
+    id<Int>,
+    name<String>,
+    salary<Float>
 }
 
 struct Company {
-    String name,
-    Int employeeCount,
-    Bool isPublic
+    name<String>,
+    employeeCount<Int>,
+    isPublic<Bool>
 }
 
 // Function that returns multiple values (a Point and a Rectangle)

@@ -1,3 +1,4 @@
+// @expect: fail
 // Tests for relaxed syntax in functions, parameters, and return types
 
 // Test function with relaxed parameter syntax

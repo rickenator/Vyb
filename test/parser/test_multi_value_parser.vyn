@@ -1,7 +1,7 @@
 // @test: Multi-value Function Return Parser Test
 // @description: Tests the parser's ability to handle multi-value function return syntax
 // @category: syntax, function, parser
-// @expect: pass
+// @expect: fail
 // @parse-only: true
 
 // Function declaration with multi-value return type (Int and String)

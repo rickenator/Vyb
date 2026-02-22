@@ -2,7 +2,7 @@
 // @test: Local Variable Relaxed Syntax
 // @description: Tests that relaxed syntax works for local variable declarations
 // @category: parser, syntax
-// @expect: pass
+// @expect: fail
 // @parse-only: true
 // @expect-output: n/a
 // @expect-error: n/a

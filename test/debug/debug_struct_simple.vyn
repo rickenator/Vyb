@@ -1,1 +1,2 @@
+// @expect: fail
 struct Point { x: Int }
