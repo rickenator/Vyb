@@ -1,3 +1,4 @@
+// @expect-return: 11
 # Test: Direct block with multi-type trap (no assignment)
 # Expected: Should catch Int error and return 11
 

@@ -1,3 +1,4 @@
+// @expect-return: 14
 # Minimal reproduction of the bug
 divide(a<Int>, b<Int>)<Int> -> {
     if (b == 0) { fail 42 }

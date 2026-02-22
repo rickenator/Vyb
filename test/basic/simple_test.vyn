@@ -1,1 +1,2 @@
+// @expect-return: 42
 test()<Int> -> { return 42; } main()<Int> -> { return test(); }

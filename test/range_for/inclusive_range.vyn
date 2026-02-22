@@ -1,4 +1,5 @@
 // Test: Range-based for loop (all ranges are inclusive now)
+// @expect-return: 15
 main()<Int> -> {
     var<Int> sum = 0;
     for (i in 0..5) {

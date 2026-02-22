@@ -1,3 +1,4 @@
+// @expect-return: 115
 # Test if the problem is the first call or interaction
 divide(a<Int>, b<Int>)<Int> -> {
     if (b == 0) { fail 42 }

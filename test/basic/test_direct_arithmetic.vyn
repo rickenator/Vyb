@@ -1,3 +1,4 @@
+// @expect-return: 30
 main()<i32> -> {
     return 10 + 20;
 }

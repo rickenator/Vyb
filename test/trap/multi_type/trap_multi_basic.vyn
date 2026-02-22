@@ -1,3 +1,4 @@
+// @expect-return: 10
 # Test: Basic two-type union trap
 # Expected: Should catch Int and return 10
 

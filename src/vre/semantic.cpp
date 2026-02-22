@@ -4345,7 +4345,15 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
     
     // If categories are different and not covered by the above special cases,
     // they are generally not compatible without an explicit cast.
+    // Exception: if both types produce the same string representation, treat them as
+    // compatible. This handles cases like Vec<Int> TypeName vs VecType, Future<T>
+    // TypeName vs FutureType, etc., which arise from different paths through the
+    // semantic analyzer and parser that produce structurally identical types in
+    // different internal representations.
     if (categoryTarget != categoryValue) {
+        if (targetType->toString() == valueType->toString()) {
+            return true;
+        }
         return false;
     }
 

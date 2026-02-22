@@ -1,3 +1,4 @@
+// @expect-return: 42
 # Simplest possible test
 
 main()<Int> -> {

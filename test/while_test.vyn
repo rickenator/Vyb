@@ -1,4 +1,5 @@
 // Test while loop with variable
+// @expect-return: 5
 
 main()<Int> -> {
     i<Int> = 0

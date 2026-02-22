@@ -1,4 +1,5 @@
 // Test with int return
+// @expect-return: 42
 
 test()<Int> -> {
     println("Hello from test")

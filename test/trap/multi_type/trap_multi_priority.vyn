@@ -1,3 +1,4 @@
+// @expect-return: 40
 # Test: Multi-type trap with specific trap before it
 # Expected: Specific trap should match first, return 40
 

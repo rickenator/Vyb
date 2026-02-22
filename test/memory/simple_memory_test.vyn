@@ -1,4 +1,5 @@
 // Simple memory semantics test
+// @expect-return: 42
 main()<Int> -> {
     x<Int> = 42;
     

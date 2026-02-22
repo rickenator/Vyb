@@ -4,6 +4,7 @@
 // - Recursive algorithms
 // - Control flow (if/else, while)
 // - Arithmetic and comparison operators
+// @expect-return: 60
 
 main()<Int> -> {
     // Create a simple binary tree manually

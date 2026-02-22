@@ -1,4 +1,5 @@
 // Test just the desugaring without Vec - use a simple counter
+// @expect-return: 3
 main()<Int> -> {
     var<Int> s = 0;
     for (i in 0..2) {

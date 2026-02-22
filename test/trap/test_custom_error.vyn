@@ -1,3 +1,4 @@
+// @expect-return: 52
 # Test custom error types (Phase 6.1)
 # Test failing with a struct error and accessing fields in trap handler
 

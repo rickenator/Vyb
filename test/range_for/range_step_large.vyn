@@ -1,4 +1,5 @@
 // Test: Range with large step
+// @expect-return: 10
 main()<Int> -> {
     var<Int> count = 0;
     for (i in 1..100, 10) {

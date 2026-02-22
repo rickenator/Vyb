@@ -1,4 +1,5 @@
 // Phase 6.5: Simple wildcard trap test - catch any error type
+// @expect-return: 42
 
 risky_operation()<Int> -> {
     fail "Something went wrong"

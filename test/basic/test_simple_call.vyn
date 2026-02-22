@@ -1,4 +1,5 @@
 // Test simple function call parsing
+// @expect-return: 42
 
 simple_function()<Int> -> {
     return 42;

@@ -1,4 +1,5 @@
 // Test Vec with chained push operations
+// @expect-return: 150
 
 main()<Int> -> {
     // Test chained push - more concise syntax

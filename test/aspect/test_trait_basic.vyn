@@ -1,5 +1,6 @@
 // Basic aspect declaration test
 // Tests Phase 1: Trait declarations with method signatures
+// @expect-return: 42
 
 aspect Printable {
     print(self<Self>)<Void> -> { }

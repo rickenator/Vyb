@@ -1,4 +1,5 @@
 // Test snake_case function call parsing
+// @expect-return: 44
 
 some_test_function()<Int> -> {
     return 100;

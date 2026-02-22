@@ -1,4 +1,5 @@
 // Test template instantiation with GenericInstantiationExpression
+// @expect-return: 42
 template Container<T> {
     struct Data {
         value<T>

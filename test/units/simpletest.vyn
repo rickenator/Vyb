@@ -1,3 +1,4 @@
+// @expect-return: 55
 main()<Int> -> {
     x<Int> = 55;
     return x;

@@ -1,3 +1,4 @@
+// @expect-return: 10
 # Test multiple stdlib error types in one program
 
 aspect Errable {

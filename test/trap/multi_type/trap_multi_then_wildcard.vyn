@@ -1,3 +1,4 @@
+// @expect-return: 60
 # Test: Multi-type trap followed by wildcard catch-all
 # Expected: Multi-type catches Int, return 60
 
