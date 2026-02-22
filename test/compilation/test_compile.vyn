@@ -1,3 +1,4 @@
+// @expect-return: 49
 # Simple test program for object file compilation
 main()<Int> -> {
     a<Int> = 42

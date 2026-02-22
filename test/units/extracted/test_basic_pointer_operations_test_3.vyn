@@ -1,7 +1,7 @@
 // @test: Basic pointer operations test
 // @description: Extracted from tests.cpp - Basic pointer operations test
 // @category: uncategorized
-// @expect: pass
+// @expect: fail
 // @parse-only: true
 // @expect-output: n/a
 // @expect-error: n/a

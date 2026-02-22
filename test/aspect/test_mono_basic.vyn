@@ -1,3 +1,4 @@
+// @expect-return: 42
 # Working test -> monomorphization with explicit object literal types
 
 struct Box<T> {

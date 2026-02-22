@@ -1,3 +1,4 @@
+// @expect-return: 5
 # Test that functions with fail are marked canFail
 # This test just verifies the semantic phase marks the function properly
 

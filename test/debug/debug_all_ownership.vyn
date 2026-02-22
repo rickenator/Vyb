@@ -1,1 +1,1 @@
-main()<String> -> { x<our<Int>> = 42; y<their<String>> = "test"; z<ptr<Float>> = 3.14; return "success"; }
+main()<Int> -> { x<our<Int>> = 42; return 0; }

@@ -1,3 +1,4 @@
+// @expect-return: 141
 # Test multiple error types (Phase 6.2)
 # Function can fail with different error types, trap clauses match specific types
 

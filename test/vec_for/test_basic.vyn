@@ -1,3 +1,4 @@
+// @expect-return: 3
 main()<Int> -> {
     sum<Int> = 0
     for (i in 0..2) {

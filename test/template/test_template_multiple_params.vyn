@@ -1,4 +1,5 @@
 // Test template with multiple type parameters and constraints
+// @expect-return: 100
 
 template Container<K: Comparable, V> {
     struct KeyValue {

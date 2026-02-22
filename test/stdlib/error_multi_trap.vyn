@@ -1,3 +1,4 @@
+// @expect-return: 5
 # Test multi-type trap with stdlib errors
 
 aspect Errable {

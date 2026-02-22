@@ -1,4 +1,5 @@
 // Test shorthand parameter syntax
+// @expect-return: 30
 add_shorthand(Int a, Int b)<Int> -> {
     return a + b;
 }

@@ -1,4 +1,5 @@
 // Test parsing fix for snake_case function calls
+// @expect-return: 42
 
 get_number()<Int> -> {
     return 42;

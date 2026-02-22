@@ -1,6 +1,7 @@
 // Test all working features with correct v0.4.0 syntax
 
 // Global variable for testing
+// @expect-return: 42
 global_x<Int> = 100;
 
 test_vec_operations()<Int> -> {

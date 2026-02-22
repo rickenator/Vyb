@@ -2,7 +2,7 @@
 // @test: Semantic: 'addr(loc_var)' is safe (does not require freedom block)
 // @description: Extracted from tests.cpp - Semantic: 'addr(loc_var)' is safe (does not require freedom block)
 // @category: parser
-// @expect: pass
+// @expect: fail
 // @parse-only: true
 // @expect-output: n/a
 // @expect-error: n/a

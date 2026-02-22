@@ -1,3 +1,4 @@
+// @expect-return: 30
 # Test: Three-type union trap
 # Expected: Should catch any of three types and return 30
 

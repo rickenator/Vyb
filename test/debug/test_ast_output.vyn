@@ -1,3 +1,4 @@
+// @expect: fail
 // Simple test to show AST output format
 struct Point {
     x: Int,

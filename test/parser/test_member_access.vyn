@@ -1,4 +1,5 @@
 // Test member access with angle bracket syntax
+// @expect-return: 10
 
 struct TestPoint {
     x<Int>,

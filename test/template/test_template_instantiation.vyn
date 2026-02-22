@@ -1,4 +1,5 @@
 // Test template instantiation - using parser expected syntax
+// @expect-return: 42
 template Container<T> {
     struct Data {
         value<T>

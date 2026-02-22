@@ -1,5 +1,6 @@
 // Phase 2: Simple aspect implementation test without println
 // Tests bind Trait -> Type with method returning values
+// @expect-return: 25
 
 aspect Calculator {
     add(self<Self>, value<Int>)<Int> -> { }

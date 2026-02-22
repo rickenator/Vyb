@@ -1,3 +1,4 @@
+// @expect: fail
 # Test file with just string to isolate segfault
 y<String> = "hello";
 

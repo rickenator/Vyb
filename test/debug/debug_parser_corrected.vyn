@@ -1,8 +1,8 @@
 main()<Int> -> {
-    addr<Int> = 0x1234;
+    address<Int> = 0x1234;
     p<loc<Int>>;
     freedom {
-        p = from<loc<Int>>(addr);
+        p = from<loc<Int>>(address);
     }
     return 0;
 }

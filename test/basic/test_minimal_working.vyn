@@ -1,4 +1,5 @@
 // Minimal working test that should execute successfully
+// @expect-return: 42
 main()<Int> -> {
     // Test basic Int32 variable declaration
     i32<Int32> = 42;

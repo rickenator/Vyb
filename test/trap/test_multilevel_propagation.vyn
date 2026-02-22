@@ -1,3 +1,4 @@
+// @expect-return: 14
 # Test multi-level error propagation: divide → compute → main
 
 divide(a<Int>, b<Int>)<Int> -> {

@@ -1,4 +1,5 @@
 // Even simpler test - just basic assignment and return
+// @expect-return: 100
 main()<Int> -> {
     x<Int> = 42;
     x = 100;  // Direct assignment

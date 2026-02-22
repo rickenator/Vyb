@@ -1,3 +1,4 @@
+// @expect-return: 70
 main()<i32> -> {
     return 100 - 30;
 }

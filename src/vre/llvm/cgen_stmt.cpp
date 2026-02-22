@@ -259,12 +259,12 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                 // Return the value (already wrapped if needed)
                 std::cout << "DEBUG: FINAL return value type before CreateRet: " << getTypeName(returnValue->getType()) << std::endl;
                 std::cout << "DEBUG: Function return type: " << getTypeName(currentFunction->getReturnType()) << std::endl;
-                builder->CreateRet(returnValue);
-                
-                // DEBUG: Print function IR immediately after CreateRet
-                std::cout << "DEBUG: Function IR after CreateRet for '" << currentFunction->getName().str() << "':" << std::endl;
-                currentFunction->print(llvm::outs());
-                std::cout << std::endl;
+                // If the function is declared void, discard the return value and emit ret void
+                if (currentFunction->getReturnType()->isVoidTy()) {
+                    builder->CreateRetVoid();
+                } else {
+                    builder->CreateRet(returnValue);
+                }
             }
         } else {
             // Error during argument codegen or argument is null expression (should not happen for valid AST)

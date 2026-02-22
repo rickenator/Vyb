@@ -1,3 +1,4 @@
+// @expect-return: 3
 # Test ParseError with line/column info
 
 aspect Errable {

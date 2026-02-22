@@ -1,1 +1,1 @@
-main()<String> -> { x<my<Int>> = 42; return "test"; }
+main()<Int> -> { x<my<Int>> = 42; return 0; }

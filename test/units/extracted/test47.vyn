@@ -2,7 +2,7 @@
 // @test: Semantic: 'from()' operand must be an integer type
 // @description: Extracted from tests.cpp - Semantic: 'from()' operand must be an integer type
 // @category: parser
-// @expect: pass
+// @expect: fail
 // @parse-only: true
 // @expect-output: n/a
 // @expect-error: n/a

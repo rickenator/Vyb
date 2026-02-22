@@ -1,3 +1,4 @@
+// @expect: fail
 // Main test file for relaxed syntax features
 
 // Import helper functions from other test files

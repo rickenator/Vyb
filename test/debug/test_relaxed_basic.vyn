@@ -1,3 +1,4 @@
+// @expect: fail
 // Tests for basic relaxed syntax features with variable declarations
 
 // Basic variable declarations with relaxed syntax

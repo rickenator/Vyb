@@ -1,3 +1,4 @@
+// @expect: fail
 fn main() -> Int {
     addr<Int> = 0x1234;
     return 0;

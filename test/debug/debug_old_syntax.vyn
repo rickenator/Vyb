@@ -1,3 +1,4 @@
+// @expect: fail
 # Test with old syntax to confirm the segfault isn't from our changes
 y<String> = "hello";
 

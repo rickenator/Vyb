@@ -1,3 +1,4 @@
+// @expect-return: 7
 main()<Int> -> {
     count<Int> = 0;
     

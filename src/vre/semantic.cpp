@@ -2486,7 +2486,20 @@ void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
     // Check if this struct has generic parameters that need to be inferred
     auto structFieldsIt = structFieldTypes.find(structName);
     if (structFieldsIt == structFieldTypes.end()) {
-        // No field information, just use the type as-is
+        // No field information. If this is an error type literal (used in fail statement),
+        // register it with the fields from the literal so member access works in trap clauses.
+        std::map<std::string, ast::TypeNode*> implicitFields;
+        for (auto& prop : node->properties) {
+            if (prop.key && prop.value) {
+                auto valueTypeIt = expressionTypes.find(prop.value.get());
+                if (valueTypeIt != expressionTypes.end() && valueTypeIt->second) {
+                    implicitFields[prop.key->name] = valueTypeIt->second;
+                }
+            }
+        }
+        if (!implicitFields.empty()) {
+            structFieldTypes[structName] = implicitFields;
+        }
         expressionTypes[node] = node->typePath->clone().release();
         return;
     }
@@ -4289,6 +4302,27 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
         return (!targetType && !valueType);
     }
 
+    // Resolve type aliases: if either type is a TypeName that's defined as a type alias
+    // in the current scope, use the aliased type instead.
+    auto resolveAlias = [this](ast::TypeNode* t) -> ast::TypeNode* {
+        if (t && t->getCategory() == ast::TypeNode::Category::IDENTIFIER) {
+            auto* tn = static_cast<ast::TypeName*>(t);
+            if (tn->identifier && tn->genericArgs.empty()) {
+                auto* sym = currentScope->lookup(tn->identifier->name);
+                if (sym && sym->kind == SymbolInfo::Kind::Type && sym->type) {
+                    return sym->type;
+                }
+            }
+        }
+        return t;
+    };
+    ast::TypeNode* resolvedTarget = resolveAlias(targetType);
+    ast::TypeNode* resolvedValue = resolveAlias(valueType);
+    // If aliases resolved to different nodes, recurse with resolved types
+    if (resolvedTarget != targetType || resolvedValue != valueType) {
+        return areTypesCompatible(resolvedTarget, resolvedValue);
+    }
+
     // If they are the exact same type object.
     if (targetType == valueType) {
         return true;
@@ -4340,12 +4374,60 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
             if (isFloatTarget && isGenericFloatValue) {
                 return true; // e.g., x<Float32> = 3.14
             }
+            
+            // Special Case: Ownership wrappers. my<T>, their<T>, our<T>, mild<T> are compatible
+            // with the inner type T for initialization (e.g., x<my<Int>> = 42).
+            static const std::set<std::string> ownershipWrappers = {"my", "their", "our", "mild", "view"};
+            if (tnTarget->identifier && ownershipWrappers.count(tnTarget->identifier->name) > 0
+                && tnTarget->genericArgs.size() == 1) {
+                // Check if value type is compatible with the inner type
+                if (areTypesCompatible(tnTarget->genericArgs[0].get(), valueType)) {
+                    return true;
+                }
+            }
         }
     }
     
     // If categories are different and not covered by the above special cases,
     // they are generally not compatible without an explicit cast.
+    // Exception: if both types produce the same string representation, treat them as
+    // compatible. This handles cases like Vec<Int> TypeName vs VecType, Future<T>
+    // TypeName vs FutureType, etc., which arise from different paths through the
+    // semantic analyzer and parser that produce structurally identical types in
+    // different internal representations.
     if (categoryTarget != categoryValue) {
+        if (targetType->toString() == valueType->toString()) {
+            return true;
+        }
+        // Cross-category: Tuple<T,U> TypeName vs TupleTypeNode
+        auto isTupleTypeName = [](ast::TypeNode* t) -> ast::TypeName* {
+            if (t->getCategory() != ast::TypeNode::Category::IDENTIFIER) return nullptr;
+            auto* tn = static_cast<ast::TypeName*>(t);
+            if (tn->identifier && tn->identifier->name == "Tuple") return tn;
+            return nullptr;
+        };
+        ast::TypeName* tupleTarget = isTupleTypeName(targetType);
+        ast::TypeName* tupleValue = isTupleTypeName(valueType);
+        if (tupleTarget && categoryValue == ast::TypeNode::Category::TUPLE) {
+            auto* tt = static_cast<ast::TupleTypeNode*>(valueType);
+            if (tupleTarget->genericArgs.size() == tt->memberTypes.size()) {
+                bool ok = true;
+                for (size_t i = 0; i < tt->memberTypes.size(); ++i) {
+                    if (!areTypesCompatible(tupleTarget->genericArgs[i].get(), tt->memberTypes[i].get())) { ok = false; break; }
+                }
+                if (ok) return true;
+            }
+        }
+        if (tupleValue && categoryTarget == ast::TypeNode::Category::TUPLE) {
+            auto* tt = static_cast<ast::TupleTypeNode*>(targetType);
+            if (tupleValue->genericArgs.size() == tt->memberTypes.size()) {
+                bool ok = true;
+                for (size_t i = 0; i < tt->memberTypes.size(); ++i) {
+                    if (!areTypesCompatible(tt->memberTypes[i].get(), tupleValue->genericArgs[i].get())) { ok = false; break; }
+                }
+                if (ok) return true;
+            }
+        }
         return false;
     }
 

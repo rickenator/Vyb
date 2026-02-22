@@ -1,4 +1,5 @@
 // Test updated borrow/view syntax without full ownership implementation
+// @expect-return: 42
 main()<Int> -> {
     println("=== Testing borrow() and view() syntax ===")
     

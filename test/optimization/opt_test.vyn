@@ -1,3 +1,4 @@
+// @expect-return: 80
 # Test optimization passes
 # This program has opportunities for optimization:
 # - Dead code elimination

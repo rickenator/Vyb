@@ -1,4 +1,5 @@
 // Test template constraint validation with trait bounds
+// @expect-return: 42
 template Container<T: Comparable> {
     struct Data {
         value<T>

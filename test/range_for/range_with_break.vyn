@@ -1,4 +1,5 @@
 // Test: Range-based for loop with break
+// @expect-return: 10
 main()<Int> -> {
     var<Int> sum = 0;
     for (i in 0..9) {

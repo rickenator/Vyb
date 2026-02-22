@@ -1,5 +1,6 @@
 // Simple template constraint validation test
 // Tests template instantiation and constraint validation
+// @expect-return: 42
 
 template Container<T: Comparable> {
     struct Data {

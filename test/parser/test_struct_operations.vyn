@@ -1,4 +1,5 @@
 // Test comprehensive struct operations
+// @expect-return: 50
 
 struct Point {
     x<Int>,

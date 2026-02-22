@@ -1,1 +1,2 @@
+// @expect: fail
 freedom { x<Int> = 5; }

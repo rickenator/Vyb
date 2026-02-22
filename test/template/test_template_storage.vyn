@@ -1,4 +1,5 @@
 // Test template storage system
+// @expect-return: 42
 template Container {
     struct Data {
         value<Int>

@@ -1,4 +1,5 @@
 // Test both parameter syntax forms
+// @expect-return: 100
 add_standard(a<Int>, b<Int>)<Int> -> {
     return a + b;
 }

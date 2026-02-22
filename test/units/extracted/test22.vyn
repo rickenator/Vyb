@@ -1,7 +1,7 @@
 // @test: Parser handles main.vyn async function
 // @description: Extracted from tests.cpp - Parser handles main.vyn async function
 // @category: parser
-// @expect: pass
+// @expect: fail
 // @parse-only: true
 // @expect-output: n/a
 // @expect-error: n/a

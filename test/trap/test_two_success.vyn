@@ -1,3 +1,4 @@
+// @expect-return: 27
 # Test two calls - both success
 divide(a<Int>, b<Int>)<Int> -> {
     if (b == 0) {

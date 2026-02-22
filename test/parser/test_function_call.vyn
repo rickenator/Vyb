@@ -1,3 +1,4 @@
+// @expect-return: 8
 add(i32 a, i32 b)<i32> -> {
     return a + b;
 }

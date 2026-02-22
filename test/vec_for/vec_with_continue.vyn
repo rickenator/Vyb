@@ -1,4 +1,5 @@
 // Test Vec iteration with continue
+// @expect-return: 12
 main()<Int> -> {
     v<Vec<Int>> = Vec::new();
     v.push(1);

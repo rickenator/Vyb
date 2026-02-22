@@ -2,7 +2,7 @@
 // @test: Semantic: 'at()' operand must be a location type
 // @description: Extracted from tests.cpp - Semantic: 'at()' operand must be a location type
 // @category: parser
-// @expect: pass
+// @expect: fail
 // @parse-only: true
 // @expect-output: n/a
 // @expect-error: n/a

@@ -1,3 +1,4 @@
+// @expect-return: 10
 main()<i32> -> {
     counter<i32> = 0;
     sum<i32> = 0;

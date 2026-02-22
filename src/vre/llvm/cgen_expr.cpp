@@ -2082,7 +2082,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
     // Handle serialization mode intrinsics: lit(), notype(), bare(), deserial()
     if (identCallee && node->arguments.size() == 1) {
         if (identCallee->name == "lit") {
-            // lit() intrinsic - convert string literal to raw JSON
+            // lit() intrinsic - convert value to its raw string/JSON literal representation
             std::cout << "DEBUG: Processing lit() intrinsic" << std::endl;
             node->arguments[0]->accept(*this);
             llvm::Value* arg = m_currentLLVMValue;
@@ -2091,13 +2091,57 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 return;
             }
             
+            llvm::Type* argType = arg->getType();
+
             // If the argument is a Vyn string struct { ptr, i64 }, extract the ptr field
-            if (arg->getType()->isStructTy() && arg->getType()->getStructNumElements() == 2 &&
-                arg->getType()->getStructElementType(1)->isIntegerTy(64)) {
+            if (argType->isStructTy() && argType->getStructNumElements() == 2 &&
+                argType->getStructElementType(1)->isIntegerTy(64)) {
                 arg = builder->CreateExtractValue(arg, 0, "lit.strptr");
+                argType = arg->getType();
+            }
+
+            // If the argument is a non-pointer scalar (Int, Float, Bool), convert to string first
+            if (argType->isIntegerTy() && !argType->isIntegerTy(8)) {
+                // Integer: use __vyn_int_to_string (always cast to i64)
+                std::string toStringFuncName = "__vyn_int_to_string";
+                llvm::FunctionType* toStringFuncType = llvm::FunctionType::get(
+                    int8PtrType, {int64Type}, false);
+                llvm::Function* toStringFunc = module->getFunction(toStringFuncName);
+                if (!toStringFunc) {
+                    toStringFunc = llvm::Function::Create(toStringFuncType,
+                        llvm::Function::ExternalLinkage, toStringFuncName, module.get());
+                }
+                // Cast to i64 if needed
+                if (argType != int64Type) {
+                    // Use ZExt for i1 (bool), SExt for other integers
+                    if (argType->isIntegerTy(1)) {
+                        arg = builder->CreateZExt(arg, int64Type, "lit.int64");
+                    } else {
+                        arg = builder->CreateSExt(arg, int64Type, "lit.int64");
+                    }
+                }
+                m_currentLLVMValue = builder->CreateCall(toStringFunc, {arg}, "lit_result");
+                std::cout << "DEBUG: Created call to lit conversion function" << std::endl;
+                return;
+            } else if (argType->isFloatingPointTy()) {
+                // Float: use __vyn_float_to_string
+                std::string toStringFuncName = "__vyn_float_to_string";
+                llvm::FunctionType* toStringFuncType = llvm::FunctionType::get(
+                    int8PtrType, {doubleType}, false);
+                llvm::Function* toStringFunc = module->getFunction(toStringFuncName);
+                if (!toStringFunc) {
+                    toStringFunc = llvm::Function::Create(toStringFuncType,
+                        llvm::Function::ExternalLinkage, toStringFuncName, module.get());
+                }
+                if (argType != doubleType) {
+                    arg = builder->CreateFPExt(arg, doubleType, "lit.double");
+                }
+                m_currentLLVMValue = builder->CreateCall(toStringFunc, {arg}, "lit_result");
+                std::cout << "DEBUG: Created call to lit conversion function" << std::endl;
+                return;
             }
             
-            // Call the lit conversion function
+            // For pointer types (strings), call the lit conversion function
             std::cout << "DEBUG: Getting lit conversion function..." << std::endl;
             llvm::Function* litFunc = getLitConversionFunction();
             if (!litFunc) {
