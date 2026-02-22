@@ -322,7 +322,11 @@ private:
     llvm::Function* getOrCreateFreeFunction();
     llvm::Function* getOrCreateMallocFunction();
     llvm::Function* getOrCreateMemsetFunction();
+    llvm::Function* getOrCreateMemcpyFunction();
     llvm::StructType* getControlBlockType(llvm::Type* objectPtrType);
+    // Deep-copy a Vec struct value (clones malloc'd data so caller and callee are independent).
+    // Returns an updated Vec struct value with a freshly malloc'd data buffer.
+    llvm::Value* generateVecDeepCopy(llvm::Value* vecStructValue, llvm::Type* elemType, llvm::Type* vecStructType);
 
     // Async/await support
     struct AsyncState {

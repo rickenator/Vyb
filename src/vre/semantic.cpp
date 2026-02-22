@@ -5195,6 +5195,10 @@ void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, as
     // Get the element type from the Vec<T>
     ast::TypeNode* elementType = vecType->elementType.get();
     
+    // IMPORTANT: vecType may point to a temporary unique_ptr in the caller (e.g. tempVecType).
+    // To avoid use-after-free when that temporary is destroyed, always clone types into node->type
+    // FIRST, then store node->type.get() in expressionTypes so the pointer is stable.
+    
     if (methodName == "push") {
         // push(element) -> Vec<T> (for chaining)
         if (node->arguments.size() != 1) {
@@ -5204,9 +5208,9 @@ void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, as
         // Accept the argument to ensure it gets analyzed
         node->arguments[0]->accept(*this);
         
-        // Return type is the Vec itself for chaining
-        expressionTypes[node] = vecType;
+        // Clone type into node->type first, then store stable pointer
         node->type = std::shared_ptr<ast::TypeNode>(vecType->clone());
+        expressionTypes[node] = node->type.get();
         
     } else if (methodName == "pop") {
         // pop() -> T (element type)
@@ -5216,8 +5220,8 @@ void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, as
         }
         // Return element type
         if (elementType) {
-            expressionTypes[node] = elementType;
             node->type = std::shared_ptr<ast::TypeNode>(elementType->clone());
+            expressionTypes[node] = node->type.get();
         }
         
     } else if (methodName == "len") {
@@ -5243,8 +5247,8 @@ void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, as
         }
         // Return element type
         if (elementType) {
-            expressionTypes[node] = elementType;
             node->type = std::shared_ptr<ast::TypeNode>(elementType->clone());
+            expressionTypes[node] = node->type.get();
         }
         
     } else if (methodName == "clear") {

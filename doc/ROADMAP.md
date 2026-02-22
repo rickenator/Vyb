@@ -1,10 +1,12 @@
 # Vyn Language Roadmap
 
-**Last Updated:** January 2025 (v0.4.4)
+**Last Updated:** February 2026 (v0.5.1)
+
+> For actionable sprint-organized suggestions, see [`../SUGGESTIONS.md`](../SUGGESTIONS.md).
 
 This document outlines the completed features, ongoing development, and future considerations for the Vyn programming language.
 
-## Current Status (v0.4.4)
+## Current Status (v0.5.1)
 
 **✅ MAJOR ACHIEVEMENTS COMPLETED:**
 1.  **LLVM Backend:** Fully functional LLVM IR generation and JIT execution

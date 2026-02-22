@@ -79,6 +79,8 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 | `Vec::len()` | ✅ | Returns element count |
 | `Vec::get()` | ✅ | Index access |
 | `Vec::contains()` | ✅ | Fixed: now emits correct LLVM comparison loop (was hardcoded `false`) |
+| `Vec::push()` on borrowed struct fields | ✅ | Fixed: `s.items.push(val)` where `s<their<T>>` now mutates in-place |
+| Vec parameter deep copy | ✅ | Vec parameters receive an independent copy on function entry (fixes double-free in recursive algorithms) |
 | `Vec::map()` / `filter()` / `reduce()` | 📋 | Requires lambda codegen + Iterator aspect |
 | `for (item in vec)` iteration | ✅ | Compiler-generated loop with break/continue |
 
@@ -107,4 +109,4 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 
 ---
 
-*Last updated: v0.5.0*
+*Last updated: v0.5.1 (2026-02-22)*

@@ -67,7 +67,11 @@ result<String> = view(connection).send_request();
 borrow(buffer).write(data);
 ```
 
-> **Design Note**: The function-call syntax `view(expr)` and `borrow(expr)` provides syntactic consistency with other ownership operations `my(expr)` and `our(expr)`. This unified approach makes the language more regular and easier to parse, while still clearly distinguishing borrowing operations from value construction. The function-call style emphasizes that these are fundamental language operations, not external functions.
+> **Design Note**: Vyn supports two equivalent syntactic forms for borrowing:
+> - **Prefix form** (canonical in practice): `borrow expr`, `view expr` — used in most Vyn code and tests
+> - **Function-call form** (also supported): `borrow(expr)`, `view(expr)` — consistent with `my(expr)`, `our(expr)` ownership construction
+>
+> Both forms parse to the same `BorrowExpression` AST node and generate identical code. The prefix form is typically preferred for brevity (e.g. `stack_push(borrow s, 10)`). The function-call form is useful when the expression is complex or parentheses aid readability.
 
 ### **4. Complete Real-World Example**
 
