@@ -1,3 +1,8 @@
+// @test: Capitalized function test
+// @description: Test that capitalized type constructors still work as regular functions
+// @category: debug
+// @expect: pass
+// @expect-return: 30
 // Test that capitalized type constructors still work
 
 Point(x<Int>, y<Int>)<Int> -> {

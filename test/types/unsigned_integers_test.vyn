@@ -1,3 +1,8 @@
+// @test: Unsigned integers test
+// @description: Unsigned integers test
+// @category: types
+// @expect: pass
+// @expect-return: 120
 # Test all unsigned integer types: UInt8, UInt16, UInt32, UInt64
 
 test_uint8()<Int> -> {

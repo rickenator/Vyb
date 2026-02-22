@@ -782,8 +782,11 @@ std::unique_ptr<vyn::ast::VariableDeclaration> StatementParser::parse_var_decl()
         );
     } else if (this->match(vyn::TokenType::KEYWORD_CONST)) {
         is_const_decl = true;
-        // Legacy const<Type> syntax - parse type in angle brackets
-        this->expect(vyn::TokenType::LT, "Expected '<' after 'const'.");
+        
+        // Support both const<Type> syntax and relaxed "const Type name" syntax
+        if (this->peek().type == vyn::TokenType::LT) {
+            // Vyn const<Type> syntax - parse type in angle brackets
+            this->consume(); // consume '<'
         
         // Parse comma-separated types for inline tuple syntax
         std::vector<ast::TypeNodePtr> types;
@@ -840,6 +843,23 @@ std::unique_ptr<vyn::ast::VariableDeclaration> StatementParser::parse_var_decl()
             std::move(type_expr),
             std::move(initializer)
         );
+        } else if (this->peek().type == vyn::TokenType::IDENTIFIER) {
+            // Relaxed syntax: const TypeName varName = value
+            ast::TypeNodePtr type_expr = this->type_parser_.parse();
+            vyn::token::Token name_token = this->expect(vyn::TokenType::IDENTIFIER, "Expected variable name.");
+            auto identifier_node = std::make_unique<vyn::ast::Identifier>(name_token.location, name_token.lexeme);
+            vyn::ast::ExprPtr initializer = nullptr;
+            if (this->match(vyn::TokenType::EQ)) {
+                initializer = this->expr_parser_.parse_expression();
+            }
+            if (this->peek().type == vyn::TokenType::SEMICOLON) this->consume();
+            return std::make_unique<vyn::ast::VariableDeclaration>(
+                decl_loc, std::move(identifier_node), is_const_decl,
+                std::move(type_expr), std::move(initializer));
+        } else {
+            throw std::runtime_error("Expected '<' or type name after 'const', but found '" + 
+                token_type_to_string(this->peek().type) + "' at " + location_to_string(this->peek().location));
+        }
     }
     
     // NEW UNIFIED SYNTAX: name<Type> pattern

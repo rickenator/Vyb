@@ -8,6 +8,7 @@
 // @expect-error: n/a
 // @expect-return: n/a
 
-    std::string source = R"(
-main()<Void> -> -> Int {
+main()<Int> -> {
     data<Int> = 25;
+    return 0
+}

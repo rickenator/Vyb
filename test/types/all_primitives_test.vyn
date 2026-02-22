@@ -1,3 +1,8 @@
+// @test: All primitive types test
+// @description: All primitive types test
+// @category: types
+// @expect: pass
+// @expect-return: 120
 # Comprehensive test showing all primitive types together
 
 test_all_integers()<Int> -> {

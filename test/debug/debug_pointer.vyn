@@ -1,3 +1,8 @@
+// @test: Debug: Pointer Return
+// @description: Debug: Pointer Return
+// @category: debug
+// @expect: pass
+// @expect-return: 42
 // Debug pointer assignment step by step
 main()<Int> -> {
     x<Int> = 42;

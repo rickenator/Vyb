@@ -1,3 +1,8 @@
+// @test: Debug: Simple Function Return
+// @description: Debug: Simple Function Return
+// @category: debug
+// @expect: pass
+// @expect-return: 42
 main()<Int> -> {
     return 42;
 }

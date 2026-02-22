@@ -170,7 +170,10 @@ bool SemanticAnalyzer::isIntegerType(ast::TypeNode* type) {
         const std::string& name = tn->identifier->name;
         return name == "Int" || name == "i8" || name == "i16" || name == "i32" || name == "i64" ||
                name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "size_t" || 
-               name == "isize" || name == "usize";
+               name == "isize" || name == "usize" ||
+               name == "Int8" || name == "Int16" || name == "Int32" || name == "Int64" ||
+               name == "UInt8" || name == "UInt16" || name == "UInt32" || name == "UInt64" ||
+               name == "Byte" || name == "Char" || name == "Rune";
     }
     
     // Handle array size expressions which might be integer literals
@@ -1295,10 +1298,16 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 // Look up the object's type
                 SymbolInfo* objSymbol = currentScope->lookup(objIdent->name);
                 if (objSymbol && objSymbol->type) {
-                    // Check if it's a Vec type
-                    if (auto vecType = dynamic_cast<ast::VecType*>(objSymbol->type)) {
+                    // Check if it's a Vec type (directly or as TypeName "Vec<T>" from function params)
+                    if (dynamic_cast<ast::VecType*>(objSymbol->type)) {
                         handleVecMethodCall(node, objIdent->name, methodName);
                         return;
+                    }
+                    if (auto tn = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
+                        if (tn->identifier && tn->identifier->name == "Vec") {
+                            handleVecMethodCall(node, objIdent->name, methodName);
+                            return;
+                        }
                     }
                     
                     // Check if it's a Tuple type
@@ -1493,6 +1502,10 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     
                     // Check for primitive type methods (Int.to_string(), etc.)
                     if (auto objTypeName = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
+                        if (objTypeName->identifier && objTypeName->identifier->name == "Vec") {
+                            handleVecMethodCall(node, objIdent->name, methodName);
+                            return;
+                        }
                         if (objTypeName->identifier) {
                             std::string typeStr = objTypeName->identifier->name;
                             if (methodName == "to_string" && 
@@ -1620,6 +1633,18 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     // We pass a dummy name since we're working with member expressions
                     handleVecMethodCallOnMember(node, vecType, methodIdent->name);
                     return;
+                }
+                // Also handle TypeName "Vec<T>" (e.g., struct fields of Vec type)
+                if (auto tn = dynamic_cast<ast::TypeName*>(objTypeIt->second)) {
+                    if (tn->identifier && tn->identifier->name == "Vec") {
+                        // Create a temporary VecType to pass to handleVecMethodCallOnMember
+                        ast::TypeNodePtr elemType = tn->genericArgs.empty()
+                            ? std::make_unique<ast::TypeName>(node->loc, std::make_unique<ast::Identifier>(node->loc, "Int"))
+                            : tn->genericArgs[0]->clone();
+                        auto tempVecType = std::make_unique<ast::VecType>(node->loc, std::move(elemType));
+                        handleVecMethodCallOnMember(node, tempVecType.get(), methodIdent->name);
+                        return;
+                    }
                 }
                 
                 // Check if this is a trait method call
@@ -1801,8 +1826,14 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
         }
     }
     
-    // Fallback: default CallExpression analysis (no additional checks)
-    // ...existing code...
+    // Fallback: look up return type from function registry for plain function calls
+    if (auto ident = dynamic_cast<ast::Identifier*>(node->callee.get())) {
+        auto it = functionRegistry.find(ident->name);
+        if (it != functionRegistry.end() && it->second->returnTypeNode) {
+            expressionTypes[node] = it->second->returnTypeNode.get();
+            node->type = std::shared_ptr<ast::TypeNode>(it->second->returnTypeNode->clone());
+        }
+    }
 }
 
 void SemanticAnalyzer::visit(ast::ArrayElementExpression* node) {
@@ -4298,6 +4329,17 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
                 return normalizeTypeName(tnTarget->identifier->name) ==
                        normalizeTypeName(tnValue->identifier->name);
             }
+            
+            // Float literal (typed as "Float") can be assigned to any float type
+            bool isFloatTarget = (tnTarget->identifier->name == "Float" || 
+                                  tnTarget->identifier->name == "Float32" || 
+                                  tnTarget->identifier->name == "Float64" ||
+                                  tnTarget->identifier->name == "f32" || 
+                                  tnTarget->identifier->name == "f64");
+            bool isGenericFloatValue = (valName == "Float" || valName == "Float64" || valName == "f64");
+            if (isFloatTarget && isGenericFloatValue) {
+                return true; // e.g., x<Float32> = 3.14
+            }
         }
     }
     
@@ -4896,6 +4938,17 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
                     expressionTypes[node] = clonedElementType.get();
                     node->type = clonedElementType;
                     return;
+                }
+            }
+            // Also handle TypeName "Vec<T>" (e.g., function parameters)
+            if (auto* typeName = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
+                if (typeName->identifier && typeName->identifier->name == "Vec" && !typeName->genericArgs.empty()) {
+                    if (typeName->genericArgs[0]) {
+                        std::shared_ptr<ast::TypeNode> clonedElementType = typeName->genericArgs[0]->clone();
+                        expressionTypes[node] = clonedElementType.get();
+                        node->type = clonedElementType;
+                        return;
+                    }
                 }
             }
         }

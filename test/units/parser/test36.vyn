@@ -8,6 +8,7 @@
 // @expect-error: n/a
 // @expect-return: n/a
 
-    std::string source = R"(
-main()<Void> -> -> Int {
-    arr<[[Int>; 2]; 2] = [[1, 2], [3, 4]];
+main()<Int> -> {
+    arr<[[Int; 2]; 2]> = [[1, 2], [3, 4]]
+    return 0
+}
