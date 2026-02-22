@@ -164,6 +164,24 @@ llvm::Value* LLVMCodegen::tryCast(llvm::Value* value, llvm::Type* targetType, co
         }
     }
     // Add more casting rules as needed (float to int, int to float, etc.)
+    // Float to float (e.g., double to float for Float32)
+    if (targetType->isFloatingPointTy() && value->getType()->isFloatingPointTy()) {
+        if (targetType == value->getType()) return value;
+        if (targetType->isFloatTy() && value->getType()->isDoubleTy()) {
+            return builder->CreateFPTrunc(value, targetType, "fp_trunc");
+        }
+        if (targetType->isDoubleTy() && value->getType()->isFloatTy()) {
+            return builder->CreateFPExt(value, targetType, "fp_ext");
+        }
+    }
+    // Integer to float
+    if (targetType->isFloatingPointTy() && value->getType()->isIntegerTy()) {
+        return builder->CreateSIToFP(value, targetType, "int_to_fp");
+    }
+    // Float to integer
+    if (targetType->isIntegerTy() && value->getType()->isFloatingPointTy()) {
+        return builder->CreateFPToSI(value, targetType, "fp_to_int");
+    }
 
     logError(loc, "Unsupported or invalid cast from type " + getTypeName(value->getType()) + " to " + getTypeName(targetType));
     return nullptr; 

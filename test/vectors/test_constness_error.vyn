@@ -1,3 +1,7 @@
+// @test: Test that demonstrates constness error catching
+// @description: Test that demonstrates constness error catching
+// @category: vectors
+// @expect: fail
 // Test that demonstrates constness error catching
 
 main()<Int> -> {

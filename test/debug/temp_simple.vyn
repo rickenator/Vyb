@@ -1,1 +1,6 @@
+// @test: Debug: Simple Return
+// @description: Debug: Simple Return
+// @category: debug
+// @expect: pass
+// @expect-return: 42
 main()<i32> -> { return 42; }

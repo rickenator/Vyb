@@ -1,3 +1,8 @@
+// @test: Debug: Function Call Return
+// @description: Debug: Function Call Return
+// @category: debug
+// @expect: pass
+// @expect-return: 42
 // Simple function call test to isolate segfault
 create_vec() <Int> -> {
     v<Vec<Int32>> = Vec.new(2);

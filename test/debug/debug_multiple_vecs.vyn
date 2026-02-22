@@ -1,3 +1,8 @@
+// @test: Debug: Multiple Vecs Return
+// @description: Debug: Multiple Vecs Return
+// @category: debug
+// @expect: pass
+// @expect-return: 99
 // Test multiple Vec objects in one function
 test_multiple_vecs() <Int> -> {
     v1<Vec<Int32>> = Vec.new(3);

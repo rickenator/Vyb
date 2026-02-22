@@ -1634,6 +1634,18 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     handleVecMethodCallOnMember(node, vecType, methodIdent->name);
                     return;
                 }
+                // Also handle TypeName "Vec<T>" (e.g., struct fields of Vec type)
+                if (auto tn = dynamic_cast<ast::TypeName*>(objTypeIt->second)) {
+                    if (tn->identifier && tn->identifier->name == "Vec") {
+                        // Create a temporary VecType to pass to handleVecMethodCallOnMember
+                        ast::TypeNodePtr elemType = tn->genericArgs.empty()
+                            ? std::make_unique<ast::TypeName>(node->loc, std::make_unique<ast::Identifier>(node->loc, "Int"))
+                            : tn->genericArgs[0]->clone();
+                        auto tempVecType = std::make_unique<ast::VecType>(node->loc, std::move(elemType));
+                        handleVecMethodCallOnMember(node, tempVecType.get(), methodIdent->name);
+                        return;
+                    }
+                }
                 
                 // Check if this is a trait method call
                 // Get the type name to look up trait implementations
@@ -4310,6 +4322,17 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
             if (isIntegerType(tnTarget) && isIntegerType(tnValue)) {
                 return normalizeTypeName(tnTarget->identifier->name) ==
                        normalizeTypeName(tnValue->identifier->name);
+            }
+            
+            // Float literal (typed as "Float") can be assigned to any float type
+            bool isFloatTarget = (tnTarget->identifier->name == "Float" || 
+                                  tnTarget->identifier->name == "Float32" || 
+                                  tnTarget->identifier->name == "Float64" ||
+                                  tnTarget->identifier->name == "f32" || 
+                                  tnTarget->identifier->name == "f64");
+            bool isGenericFloatValue = (valName == "Float" || valName == "Float64" || valName == "f64");
+            if (isFloatTarget && isGenericFloatValue) {
+                return true; // e.g., x<Float32> = 3.14
             }
         }
     }
