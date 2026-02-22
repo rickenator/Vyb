@@ -2,7 +2,7 @@
 // @description: Test calling a helper function from main
 // @category: functions
 // @expect: pass
-// @expect-output: 15
+// @expect-output: 10
 
 add(a<Int>, b<Int>)<Int> -> {
     return a + b

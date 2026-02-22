@@ -1062,10 +1062,9 @@ int main(int argc, char* argv[]) {
         C_catch_args.push_back(const_cast<char*>(s.c_str()));
     }
 
-    int result = session.run(C_catch_args.size(), C_catch_args.data());
-
-    // If tests were run, we might want to exit here.
+    // Only run Catch2 tests when --test flag is explicitly provided
     if (test_mode_active) {
+        int result = session.run(C_catch_args.size(), C_catch_args.data());
         return result;
     }
 

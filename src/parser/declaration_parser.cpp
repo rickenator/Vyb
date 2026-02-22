@@ -692,6 +692,14 @@ std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_struct() {
             // Create a TypeName node directly from the type name
             auto typeIdent = std::make_unique<ast::Identifier>(field_loc, typeName);
             field_type_node = std::make_unique<ast::TypeName>(field_loc, std::move(typeIdent), std::vector<std::unique_ptr<ast::TypeNode>>{});
+        } else if (this->peek().type == vyn::TokenType::COLON) {
+            // Vyn colon-style: fieldName: Type
+            field_name = std::make_unique<ast::Identifier>(field_loc, firstIdent.lexeme);
+            this->consume(); // consume ':'
+            field_type_node = this->type_parser_.parse();
+            if (!field_type_node) {
+                throw std::runtime_error("Expected type for field \'" + field_name->name + "\' in struct \'" + name->name + "\' at " + location_to_string(this->current_location()));
+            }
         } else {
             // Vyn-style: field<Type>
             field_name = std::make_unique<ast::Identifier>(field_loc, firstIdent.lexeme);

@@ -170,7 +170,10 @@ bool SemanticAnalyzer::isIntegerType(ast::TypeNode* type) {
         const std::string& name = tn->identifier->name;
         return name == "Int" || name == "i8" || name == "i16" || name == "i32" || name == "i64" ||
                name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "size_t" || 
-               name == "isize" || name == "usize";
+               name == "isize" || name == "usize" ||
+               name == "Int8" || name == "Int16" || name == "Int32" || name == "Int64" ||
+               name == "UInt8" || name == "UInt16" || name == "UInt32" || name == "UInt64" ||
+               name == "Byte" || name == "Char" || name == "Rune";
     }
     
     // Handle array size expressions which might be integer literals
@@ -1295,10 +1298,16 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 // Look up the object's type
                 SymbolInfo* objSymbol = currentScope->lookup(objIdent->name);
                 if (objSymbol && objSymbol->type) {
-                    // Check if it's a Vec type
-                    if (auto vecType = dynamic_cast<ast::VecType*>(objSymbol->type)) {
+                    // Check if it's a Vec type (directly or as TypeName "Vec<T>" from function params)
+                    if (dynamic_cast<ast::VecType*>(objSymbol->type)) {
                         handleVecMethodCall(node, objIdent->name, methodName);
                         return;
+                    }
+                    if (auto tn = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
+                        if (tn->identifier && tn->identifier->name == "Vec") {
+                            handleVecMethodCall(node, objIdent->name, methodName);
+                            return;
+                        }
                     }
                     
                     // Check if it's a Tuple type
@@ -1493,6 +1502,10 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     
                     // Check for primitive type methods (Int.to_string(), etc.)
                     if (auto objTypeName = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
+                        if (objTypeName->identifier && objTypeName->identifier->name == "Vec") {
+                            handleVecMethodCall(node, objIdent->name, methodName);
+                            return;
+                        }
                         if (objTypeName->identifier) {
                             std::string typeStr = objTypeName->identifier->name;
                             if (methodName == "to_string" && 
@@ -4896,6 +4909,17 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
                     expressionTypes[node] = clonedElementType.get();
                     node->type = clonedElementType;
                     return;
+                }
+            }
+            // Also handle TypeName "Vec<T>" (e.g., function parameters)
+            if (auto* typeName = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
+                if (typeName->identifier && typeName->identifier->name == "Vec" && !typeName->genericArgs.empty()) {
+                    if (typeName->genericArgs[0]) {
+                        std::shared_ptr<ast::TypeNode> clonedElementType = typeName->genericArgs[0]->clone();
+                        expressionTypes[node] = clonedElementType.get();
+                        node->type = clonedElementType;
+                        return;
+                    }
                 }
             }
         }

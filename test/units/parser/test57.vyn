@@ -8,9 +8,10 @@
 // @expect-error: n/a
 // @expect-return: n/a
 
-    std::string source = R"(
-struct MyData {
-    val: Int
+main()<Int> -> {
+    addr<Int> = 0x1234
+    freedom {
+        p<loc<Int>> = from<loc<Int>>(addr)
+    }
+    return 0
 }
-main()<Void> -> -> Int {
-    d<MyData> = MyData{val: 777};
