@@ -24,9 +24,9 @@
 | Generic monomorphization | ~70% | Bounds-checked instantiation |
 | Async/await | ~80% | Real scheduler/executor |
 | Error propagation (`fail`/`trap`) | ~40% | Phases 2-5 |
-| Lambda/closure codegen | ~30% | LLVM codegen not yet complete |
-| Module system (`import`/`smuggle`/`bundle`) | ~10% | Full implementation needed |
-| FFI (`extern "C"`) | ~0% | Not started |
+| Lambda/closure codegen | ~50% | Full closure struct, captured-var codegen |
+| Module system (`import`/`smuggle`/`bundle`) | ~20% | Import/smuggle parsing done; resolution, bundle, share pending |
+| FFI (`extern "C"`) | ~15% | extern modifier + ExternStatement codegen work; block syntax and C-type mapping pending |
 | Standard library | ~45% | Vec, String, I/O, Math done; HashMap, File I/O needed |
 | Introspection (`typeof`/`typename`) | ~75% | Downcasting, type assertions |
 | Auto-serialization | ~80% | Edge cases remain |
@@ -36,7 +36,7 @@
 | REPL | ~0% | Not started |
 | Self-hosting compiler | ~0% | Long-term goal |
 
-**Overall: approximately 58-63% complete toward a production 1.0 release.**
+**Overall: approximately 60-65% complete toward a production 1.0 release.**
 
 ### Recently Completed
 - [x] **`defer` statement** — LIFO scope-exit deferred execution
@@ -45,6 +45,12 @@
 - [x] **String methods** — `.len()`, `.contains()`, `.starts_with()`, `.ends_with()`, `.to_upper()`, `.to_lower()`, `.substring()`, `.char_at()`, `String::from_bytes()`
 - [x] **Type inference from initializer** — Variables without annotation infer type from RHS
 - [x] **Vec `for` loop type inference** — Compiler-generated loop variables no longer require explicit types
+- [x] **`Vec::contains()`** — Fixed: was returning hardcoded `false`; now emits correct LLVM loop with element comparison
+- [x] **Lambda indirect calls** — Lambdas stored in local variables can now be invoked; `localLambdaTypes` map tracks inferred function types for correct indirect call codegen
+- [x] **`println()`/`print()` with multiple arguments** — Space-separated output; all args formatted into a single call
+- [x] **Semantic type recognition** — `Int16`, `Int32`, `Int64`, `UInt8`–`UInt64`, `Float32`, `Float64`, `Char`, `Rune` now fully recognized in semantic analysis (were silently rejected)
+- [x] **Relaxed struct field syntax** — C-style `Type fieldName` accepted alongside canonical `fieldName<Type>`; helps parse legacy/interop fixtures
+- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; test count now **657 tests, 315 passing (47.9%)**
 
 ---
 
@@ -139,7 +145,7 @@
 
 ### Infrastructure
 - [x] **CMake build system** — LLVM integration
-- [x] **Test harness** — 391+ tests, parallel execution, HTML/JSON reports
+- [x] **Test harness** — 657+ tests, parallel execution, HTML/JSON reports; `--parse-only` mode; 315 passing (47.9%)
 - [x] **`println()`** — Works with all data types including Vec<T>
 
 ---
@@ -173,7 +179,8 @@
 ### Lambda / Closures (MEDIUM PRIORITY)
 - [x] Parsing — `|x, y| -> x + y` and `|x<Int>| -> { ... }`
 - [x] Semantic analysis — capture detection, type inference
-- [ ] **LLVM codegen** — Generate closure structs, function pointers, capture extraction
+- [x] **Indirect call codegen** — Lambda stored in a local variable can be called; `localLambdaTypes` map tracks inferred function types; body return value coerced to declared return type
+- [ ] **Full LLVM closure struct codegen** — Generate closure structs with capture fields, function pointers
 - [ ] **Move capture** — Transfer ownership of `my<T>` into closure
 - [ ] **Mutable capture** — Captured variables in mutable context
 - [ ] **`our<T>` capture** — Atomic ref-count increment for shared captures
@@ -186,10 +193,8 @@
 Vyn's `import`/`smuggle`/`bundle`/`share` system is a unique approach to module visibility.
 See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
 
-- [ ] **Phase 1.1 — Basic Import Infrastructure**
-  - `ModuleRegistry` class — module loading and caching
-  - `loadModule(path)` — parse and register imported files
-  - `resolveImport()` — symbol lookup across modules
+- [x] **Phase 1.1 — Import Parsing** — `import <path>`, `import <path> as <alias>`, `import <path> from "<locator>"`, `smuggle <path> as <alias>`, `ImportKind` (TrustedImport / Smuggle) captured in AST
+- [ ] **Phase 1.1 — Module Registry** — `ModuleRegistry` class; `loadModule(path)`, `resolveImport()` (currently no-ops at codegen)
   - Circular dependency detection
 - [ ] **Phase 1.2 — `bundle(...)` Declaration Parsing**
   - `BundleDeclaration` AST node
@@ -210,7 +215,8 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
   - Auto-import of `core::*` (opt-out with directive)
 
 ### 2. FFI — C Interop (HIGH PRIORITY)
-- [ ] **`extern "C" { }` blocks** — Declare C functions callable from Vyn
+- [x] **`extern` function modifier** — Individual extern function declarations compile to LLVM `ExternalLinkage` via `ExternStatement` codegen; syntax: `extern funcName(params)<ReturnType>`
+- [ ] **`extern "C" { }` block syntax** — Multi-declaration block (AST node exists; parser not yet wired)
 - [ ] **C type mapping** — `Int` to `int64_t`, `Int32` to `int32_t`, `*i8` to `char*`
 - [ ] **`#[repr(C)]` on structs** — Force C-compatible memory layout
 - [ ] **Variadic C functions** — `printf(format: *i8, ...) -> Int`
@@ -239,7 +245,7 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
 - [x] **Math library** — `sqrt`, `sin`, `cos`, `tan`, `exp`, `log`, `log2`, `log10`, `pow`, `floor`, `ceil`, `round`, `abs`, `min`, `max`
 - [x] **I/O intrinsics** — `print()` (no newline), `println_int()`, `print_int()`, `println_bool()`, `print_bool()`
 - [ ] **Iterator aspect** — `next(self)<Option<Item>>` protocol for `for` loop integration
-- [ ] **`Vec<T>` expansion** — `.map()`, `.filter()`, `.reduce()`, `.find()`, `.sort()`
+- [ ] **`Vec<T>` expansion** — `.map()`, `.filter()`, `.reduce()`, `.find()`, `.sort()`; `.contains()` is now correctly implemented
 
 ### 5. Sum Types / Enums (MEDIUM PRIORITY)
 Vyn needs a way to express sum types. Essential for `Option<T>`, `Result<T,E>`, and
@@ -582,5 +588,5 @@ Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `
 ---
 
 *Last Updated: February 2026*
-*Current Version: Vyn v0.4.4 (freedom-1.0 series)*
-*Overall Status: ~55-60% complete toward 1.0*
+*Current Version: Vyn v0.5.0 (freedom-1.0 series)*
+*Overall Status: ~60-65% complete toward 1.0 — 657 tests, 315 passing (47.9%)*

@@ -34,6 +34,7 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 | `println(x)` for Vec/arrays | ✅ | Array serialization |
 | `println(x)` for structs | ✅ | JSON/generic serialization |
 | `print(x)` (no newline) | ✅ | Same auto-stringify as println |
+| `println(a, b, c, ...)` multiple args | ✅ | Space-separated; all args formatted into one output call |
 | `println_int()` / `println_bool()` variants | 🚧 | Still present for compatibility; prefer `println()` |
 
 ## String Concatenation
@@ -53,7 +54,7 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 |---------|--------|-------|
 | Functions (name-first syntax) | ✅ | |
 | Structs | ✅ | |
-| Enums | ✅ | |
+| Enums | 🚧 | Parsing + AST complete; codegen not yet implemented (C-like integer enum stub only) |
 | Generics (monomorphization) | ✅ | |
 | Aspect/Bind polymorphism | ✅ | |
 | Ownership: `my`, `our`, `their`, `mild` | ✅ | |
@@ -68,7 +69,33 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 | `typeof` / `typename` | ✅ | |
 | Templates | ✅ | |
 
-## Compilation Pipeline
+## Vec<T>
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `Vec::new()` | ✅ | Heap-allocated dynamic array |
+| `Vec::push()` | ✅ | Append element |
+| `Vec::pop()` | ✅ | Remove last element |
+| `Vec::len()` | ✅ | Returns element count |
+| `Vec::get()` | ✅ | Index access |
+| `Vec::contains()` | ✅ | Fixed: now emits correct LLVM comparison loop (was hardcoded `false`) |
+| `Vec::map()` / `filter()` / `reduce()` | 📋 | Requires lambda codegen + Iterator aspect |
+| `for (item in vec)` iteration | ✅ | Compiler-generated loop with break/continue |
+
+## Lambdas / Closures
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Lambda parsing `\|x, y\| -> expr` | ✅ | |
+| Lambda parsing `\|x<Int>\| -> { block }` | ✅ | |
+| Capture detection (semantic) | ✅ | |
+| Type inference on lambda body | ✅ | |
+| Indirect call from local variable | ✅ | `localLambdaTypes` map; return type coercion working |
+| Full closure struct codegen | 📋 | Capture extraction + struct allocation |
+| Move capture (`my<T>` into closure) | 📋 | |
+| `our<T>` shared capture | 📋 | |
+
+
 
 | Feature | Status | Notes |
 |---------|--------|-------|
@@ -76,7 +103,7 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 | JIT execution | ✅ | |
 | AOT native executable | ✅ | `--build` flag |
 | Multi-file compilation | 📋 | v0.5.x (module resolution) |
-| `extern "C"` FFI | ✅ | |
+| `extern "C"` FFI | 🚧 | `extern` function modifier compiles to ExternalLinkage; `extern "C" { }` block parser not yet wired |
 
 ---
 
