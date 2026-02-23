@@ -13,7 +13,7 @@ This document outlines the completed features, ongoing development, and future c
 2.  **Auto-Serialization:** Complex return types automatically serialize to JSON-like output
 3.  **Type System:** Working functions, variables, structs, control flow
 4.  **Memory Safety:** Ownership types (`my<T>`, `our<T>`, `their<T>`) with borrowing
-5.  **Parser:** Comprehensive syntax support including templates, async, classes
+5.  **Parser:** Comprehensive syntax support including templates, async, aspects
 6.  **✅ Pattern Matching (COMPLETED):** Match statements with `->` arrow syntax and `?` wildcard; no-match continues as NOP
 7.  **✅ Loop Control Flow (COMPLETED):** Break and continue statements working in all loop constructs
 8.  **✅ Resizable Collections (COMPLETED):** Vec<T> with full method support (new, push, pop, len, get)
@@ -413,7 +413,7 @@ An enhancement to both `match` and `select` to support comparison-based patterns
   - Natural expression of range-based logic
   - Compile-time detection of unreachable code
   - Avoids verbose chained if-else statements
-  - Works without complex type system (interfaces/traits)
+  - Works without complex type system (aspects)
   - Clear, readable code for categorization problems
 
 - **Implementation Details**:
@@ -861,7 +861,7 @@ See `doc/bundles_and_sharing.md` for detailed documentation.
 - **Built-in Auto-Derive**:
   - Primitives (`Int`, `Float`, `Bool`, `String`) will have built-in `to_json`
   - Collections (`[T]`, `Map<K,V>`, `Maybe<T>`) will auto-serialize if their elements do
-  - Structs and classes will have auto-derived `ToJson` implementations
+  - Structs will have auto-derived `ToJson` implementations
 
 - **Customization**:
   - `#[jsonIgnore]` attribute to skip specific fields
@@ -894,48 +894,48 @@ This feature will enable scripts and API-style binaries to return structured dat
 ### Polymorphism and Type System
 
 -   **Advanced Polymorphism**: Define and implement advanced polymorphic features including:
-    -   Dynamic dispatch mechanisms for trait objects
+    -   Dynamic dispatch mechanisms for aspect objects
     -   Performance considerations for virtual method tables versus monomorphization
-    -   Trait object safety rules
+    -   Aspect object safety rules
 
-### Trait System Implementation (v0.4.2+)
+### Aspect System Implementation (v0.4.2+)
 
-**HIGH PRIORITY** - Comprehensive trait system for user-extensible polymorphism:
+**HIGH PRIORITY** - Comprehensive aspect system for user-extensible polymorphism.
+Vyn uses `aspect`/`bind` — not `trait`/`impl` (Rust vocabulary).
 
-#### Phase 1: Trait Declarations (v0.4.2)
-- **Trait Definition Syntax**: `trait Comparable { lt(self, other: Self)<Bool> -> { ... } }`
-- **Trait Registry**: Store trait definitions with method signatures
-- **Trait Validation**: Check method signatures and return types
-- **Trait Inheritance**: `trait Ord : Comparable { ... }` for trait hierarchies
-- **Default Methods**: Trait methods with default implementations
+#### Phase 1: Aspect Declarations (v0.4.2) — COMPLETED
+- **Aspect Definition Syntax**: `aspect Comparable { lt(self<their<Self>>, other<their<Self>>)<Bool> -> }`
+- **Aspect Registry**: Store aspect definitions with method signatures
+- **Aspect Validation**: Check method signatures and return types
+- **Aspect Composition**: `aspect Comparable requires Equatable { ... }`
+- **Default Methods**: Aspect methods with default implementations
 
-#### Phase 2: Trait Implementations (v0.4.2)
-- **Impl Block Syntax**: `impl Comparable for Point { ... }`
-- **Implementation Validation**: Verify all required methods implemented
-- **Trait Method Calls**: Enable `value.method()` syntax for trait methods
-- **Generic Implementations**: `impl<T: Comparable> Comparable for Vec<T> { ... }`
+#### Phase 2: Aspect Binding (v0.4.2) — IN PROGRESS
+- **Bind Block Syntax**: `bind Comparable -> Point { ... }`
+- **Binding Validation**: Verify all required methods implemented
+- **Aspect Method Calls**: Enable `value.method()` syntax for bound methods
+- **Generic Bindings**: `bind<T<Comparable>> Comparable -> Vec<T> { ... }`
 
-#### Phase 3: Template Instantiation (v0.4.3)
+#### Phase 3: Generic Monomorphization (v0.4.3)
 - **Monomorphization**: Generate specialized code for concrete types
-- **Trait Bound Validation**: Check `T: Comparable` constraints during instantiation
+- **Aspect Bound Validation**: Check `<T<Comparable>>` constraints during instantiation
 - **Instantiation Cache**: Avoid duplicate code generation
 - **Error Messages**: Clear feedback on constraint violations
 
-#### Phase 4: Advanced Trait Features (v0.5.0)
-- **Associated Types**: `trait Iterator { type Item; ... }`
-- **Associated Constants**: `trait Numeric { const ZERO: Self; ... }`
-- **Trait Objects**: Dynamic dispatch with `dyn Comparable`
-- **Multiple Trait Bounds**: `T: Comparable + Hashable`
+#### Phase 4: Advanced Aspect Features (v0.5.0)
+- **Associated Types**: `aspect Iterator { type Item; ... }`
+- **Associated Constants**: `aspect Numeric { const ZERO: Self; ... }`
+- **Aspect Objects**: Dynamic dispatch with `dyn Comparable`
+- **Multiple Aspect Bounds**: `<T<Comparable><Hashable>>`
 
-#### Phase 5: Advanced Trait Features (v0.6.0)
-- **Trait Objects**: Dynamic dispatch when static dispatch isn't possible
-- **Associated Types**: `trait Iterator { type Item; ... }`
-- **Higher-Kinded Types**: Traits over type constructors
+#### Phase 5: Higher-Order Features (v0.6.0+)
+- **Higher-Kinded Types**: Aspects over type constructors
 - **Visibility System**: Module-level privacy for encapsulation
 - **Default Type Parameters**: `struct Vec<T, Alloc = DefaultAllocator>`
-- **Design Philosophy**: Traits + Structs provide complete polymorphism without classes
 
-**Note**: Vyn deliberately avoids classes and inheritance hierarchies. The trait system provides all necessary polymorphism and code reuse without the complexity and pitfalls of OOP inheritance. See `doc/WHY_TRAITS_NOT_CLASSES.md` for detailed rationale.
+**Note**: Vyn deliberately avoids classes and inheritance hierarchies. The aspect system
+provides all necessary polymorphism and code reuse without the complexity and pitfalls of
+OOP inheritance. See `doc/WHY_ASPECTS_NOT_CLASSES.md` for detailed rationale.
 
 See `doc/TRAIT_SYSTEM_DESIGN.md` for complete specification and design rationale.
 

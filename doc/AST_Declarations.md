@@ -267,19 +267,20 @@ The angle bracket syntax aligns with Vyn's type-first approach used in function 
 
 ## 8. Class Declaration (`vyn::ast::ClassDeclaration`)
 
-Represents the declaration of a class. *Note: The role of classes versus structs and traits/impls is under review. This node might be refined or superseded.*
+*Note: Vyn does not have a class system. The `ClassDeclaration` AST node exists as a
+parser artifact from early development and is **not** exposed in the language. Use structs
++ aspects instead. This node may be removed in a future cleanup.*
 
 ```cpp
-// Structure in include/vyn/parser/ast.hpp
+// Structure in include/vyn/parser/ast.hpp (legacy — not exposed to Vyn programs)
 namespace vyn::ast {
 
 class ClassDeclaration : public Declaration {
 public:
     IdentifierPtr name;
     std::vector<FieldDeclarationPtr> fields;
-    std::vector<FunctionDeclarationPtr> methods; // Methods are FunctionDeclarations
+    std::vector<FunctionDeclarationPtr> methods;
     std::vector<GenericParameterPtr> genericParameters;
-    // std::optional<TypeNodePtr> baseClass; // Potential future extension
 
     ClassDeclaration(SourceLocation loc, IdentifierPtr name,
                      std::vector<FieldDeclarationPtr> fields,
@@ -293,18 +294,18 @@ public:
 
 ## 9. Field Declaration (`vyn::ast::FieldDeclaration`)
 
-Represents a field within a struct or class. It's a declaration itself.
+Represents a field within a struct. It's a declaration itself.
 
 ```cpp
 // Structure in include/vyn/parser/ast.hpp
 namespace vyn::ast {
 
-class FieldDeclaration : public Declaration { // Field is a kind of Declaration
+class FieldDeclaration : public Declaration {
 public:
     IdentifierPtr name;
     TypeNodePtr type;
     std::optional<ExprPtr> defaultValue; // Optional default value for the field
-    bool isMutable; // If the field can be mutated after struct/class initialization
+    bool isMutable; // If the field can be mutated after struct initialization
 
     FieldDeclaration(SourceLocation loc, IdentifierPtr name, TypeNodePtr type,
                      std::optional<ExprPtr> defaultValue, bool isMutable);
@@ -336,9 +337,10 @@ struct Example {
 
 Both syntaxes produce identical AST structures and runtime behavior. The choice between them is primarily stylistic, though the angle bracket syntax provides consistency with function return types and variable declarations.
 
-## 10. Impl Declaration (`vyn::ast::ImplDeclaration`)
+## 10. Bind Declaration (`vyn::ast::ImplDeclaration`)
 
-Represents an implementation block, used for implementing methods for a struct/class or for implementing a trait for a struct/class.
+Represents a `bind` block — binding an aspect to a type. The underlying AST node is
+`ImplDeclaration` (legacy name); the Vyn keyword is `bind`. See `doc/TRAIT_SYSTEM_DESIGN.md`.
 
 ```cpp
 // Structure in include/vyn/parser/ast.hpp
@@ -346,10 +348,10 @@ namespace vyn::ast {
 
 class ImplDeclaration : public Declaration {
 public:
-    IdentifierPtr structName; // The struct/class being implemented for
-    std::optional<IdentifierPtr> traitName; // Optional: if implementing a trait
-    std::vector<FunctionDeclarationPtr> methods; // Methods are FunctionDeclarations
-    std::vector<GenericParameterPtr> genericParameters; // Generics for the impl block itself
+    IdentifierPtr structName;            // The type being bound to
+    std::optional<IdentifierPtr> traitName; // The aspect being bound (aspectName)
+    std::vector<FunctionDeclarationPtr> methods;
+    std::vector<GenericParameterPtr> genericParameters;
 
     ImplDeclaration(SourceLocation loc, IdentifierPtr structName,
                     std::optional<IdentifierPtr> traitName,
@@ -406,16 +408,18 @@ public:
 
 ## 13. Generic Parameter (`vyn::ast::GenericParameter`)
 
-Represents a generic parameter in a declaration (e.g., `T` in `fn foo<T>(p: T)` or `struct Bar<T: SomeTrait>`). This node was formerly named `GenericParamNode`. It inherits directly from `Node`.
+Represents a generic parameter in a declaration (e.g., `T` in `foo<T>(p<T>)` or
+`struct Bar<T<SomeAspect>>`). This node was formerly named `GenericParamNode`. It inherits
+directly from `Node`. Vyn uses `<T<Aspect>>` bound syntax — not `T: Aspect`.
 
 ```cpp
 // Structure in include/vyn/parser/ast.hpp
 namespace vyn::ast {
 
-class GenericParameter : public Node { // Inherits from Node
+class GenericParameter : public Node {
 public:
     IdentifierPtr name;
-    std::optional<TypeNodePtr> constraint; // Optional trait or type constraint
+    std::optional<TypeNodePtr> constraint; // Optional aspect constraint
 
     GenericParameter(SourceLocation loc, IdentifierPtr name, std::optional<TypeNodePtr> constraint);
     // ... accept, getType, toString methods ...

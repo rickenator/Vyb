@@ -1,20 +1,26 @@
-# Vyn Trait System Design
+# Vyn Aspect System Design
 
-**Version:** 0.4.2 (Planned)  
-**Status:** Design Phase  
+**Version:** 0.4.2+  
+**Status:** Partially Implemented  
 **Priority:** HIGH  
 
 ## Overview
 
-Vyn's trait system provides interface-based polymorphism without mandatory classes. Traits define shared behavior that types can implement, enabling generic programming with compile-time guarantees.
+Vyn's aspect system provides interface-based polymorphism without classes. Aspects define
+shared behavior that types can bind to, enabling generic programming with compile-time
+guarantees. This document uses Vyn-native vocabulary: `aspect` and `bind`.
+
+> **Terminology note:** Earlier drafts used `trait`/`impl` (Rust vocabulary). Vyn uses
+> `aspect`/`bind`. These are not the same language — the concepts are similar but the
+> keywords and philosophy differ. See `doc/WHY_ASPECTS_NOT_CLASSES.md`.
 
 ## Core Principles
 
-1. **Opt-in Polymorphism** - Traits are optional; simple structs work without them
-2. **No Mandatory Classes** - Structs can implement traits directly
+1. **Opt-in Polymorphism** - Aspects are optional; simple structs work without them
+2. **No Classes** - Structs bind aspects directly; there is no class keyword in Vyn
 3. **Compile-time Dispatch** - Static dispatch via monomorphization (no vtables by default)
-4. **Explicit Implementation** - Types explicitly `impl` traits, no duck typing
-5. **Trait Bounds** - Generic type parameters can require trait implementation
+4. **Explicit Binding** - Types explicitly `bind` aspects; no duck typing
+5. **Aspect Bounds** - Generic type parameters can require aspect binding
 
 ## Design Philosophy
 
@@ -37,30 +43,18 @@ distance(p1<Point>, p2<Point>)<Float> -> {
 // This is valid and preferred for simple data types
 ```
 
-**vs. mandatory classes:**
-```vyn
-// Unnecessary ceremony for simple data
-class Point {
-    x<Int>
-    y<Int>
-    
-    new(x<Int>, y<Int>)<Point> -> { ... }  // Boilerplate
-    distance(other<Point>)<Float> -> { ... } // Forces OOP mindset
-}
-```
-
 **Vyn's Approach:**
 - Use **structs** for data
 - Use **functions** for behavior
-- Use **traits** when you need polymorphism
-- Use **classes** when you want encapsulation and inheritance (future feature)
+- Use **aspects** when you need polymorphism
+- **No classes** — aspect composition is sufficient and more composable
 
-## Trait Declaration Syntax
+## Aspect Declaration Syntax
 
-### Basic Trait
+### Basic Aspect
 
 ```vyn
-trait Comparable {
+aspect Comparable {
     // Method signatures only - no implementations
     lt(self<their<Self>>, other<their<Self>>)<Bool> ->
     gt(self<their<Self>>, other<their<Self>>)<Bool> ->
@@ -69,46 +63,46 @@ trait Comparable {
 ```
 
 **Key Features:**
-- `Self` represents the implementing type
+- `Self` represents the binding type
 - Methods take `their<Self>` (borrowed self) by convention
-- No method bodies - pure interface
+- No method bodies — pure interface
 
-### Trait with Default Methods
+### Aspect with Default Methods
 
 ```vyn
-trait Comparable {
+aspect Comparable {
     // Required methods
     lt(self<their<Self>>, other<their<Self>>)<Bool> ->
     eq(self<their<Self>>, other<their<Self>>)<Bool> ->
-    
+
     // Default implementations (can be overridden)
     gt(self<their<Self>>, other<their<Self>>)<Bool> -> {
         return !self.lt(other) && !self.eq(other)
     }
-    
+
     lte(self<their<Self>>, other<their<Self>>)<Bool> -> {
         return self.lt(other) || self.eq(other)
     }
 }
 ```
 
-### Trait Inheritance
+### Aspect Composition (Aspect Inheritance)
 
 ```vyn
-trait Equatable {
+aspect Equatable {
     eq(self<their<Self>>, other<their<Self>>)<Bool> ->
 }
 
-trait Comparable : Equatable {
-    // Requires Equatable::eq to be implemented
+aspect Comparable {
+    // Requires Equatable::eq to be bound
     lt(self<their<Self>>, other<their<Self>>)<Bool> ->
     gt(self<their<Self>>, other<their<Self>>)<Bool> ->
 }
 ```
 
-## Trait Implementation Syntax
+## Binding Aspects to Types
 
-### Implementing for Structs
+### Binding to Structs
 
 ```vyn
 struct Point {
@@ -116,24 +110,24 @@ struct Point {
     y<Int>
 }
 
-impl Comparable for Point {
+bind Comparable -> Point {
     lt(self<their<Point>>, other<their<Point>>)<Bool> -> {
         return self.x < other.x || (self.x == other.x && self.y < other.y)
     }
-    
+
     eq(self<their<Point>>, other<their<Point>>)<Bool> -> {
         return self.x == other.x && self.y == other.y
     }
-    
-    // gt() uses default implementation from trait
+
+    // gt() uses default implementation from aspect
 }
 ```
 
-### Implementing for Primitive Types
+### Binding to Primitive Types
 
 ```vyn
-// Extend built-in types with new traits
-impl Numeric for Int {
+// Extend built-in types with new aspects
+bind Numeric -> Int {
     add(self<Int>, other<Int>)<Int> -> { return self + other }
     sub(self<Int>, other<Int>)<Int> -> { return self - other }
     mul(self<Int>, other<Int>)<Int> -> { return self * other }
@@ -141,11 +135,11 @@ impl Numeric for Int {
 }
 ```
 
-### Generic Implementations
+### Generic Bindings
 
 ```vyn
-// Implement trait for all types that meet constraints
-impl<T: Comparable> Equatable for Vec<T> {
+// Bind aspect for all types that meet constraints
+bind<T<Comparable>> Equatable -> Vec<T> {
     eq(self<their<Vec<T>>>, other<their<Vec<T>>>)<Bool> -> {
         if (self.len() != other.len()) {
             return false
@@ -162,56 +156,55 @@ impl<T: Comparable> Equatable for Vec<T> {
 }
 ```
 
-## Using Traits
+## Using Aspects
 
-### Trait Bounds on Templates
+### Aspect Bounds on Generic Functions
 
 ```vyn
-// Simple bound
-template Container<T: Comparable> {
-    struct Data {
-        value<T>
+// Single bound — Vyn syntax
+min<T<Comparable>>(a<T>, b<T>)<T> -> {
+    if (a.lt(b)) {
+        return a
+    } else {
+        return b
     }
 }
 
 // Multiple bounds
-template SortedList<T: Comparable + Equatable> {
-    items<Vec<T>>
-}
-
-// Multiple parameters with different bounds
-template HashMap<K: Hashable + Equatable, V> {
-    buckets<Vec<Pair<K, V>>>
+serialize<T<ToJson><Debug>>(obj<their<T>>)<String> -> {
+    json<String> = obj.to_json()
+    println("Serializing: " + obj.debug())
+    return json
 }
 ```
 
-### Trait Objects (Future - Dynamic Dispatch)
+### Dynamic Dispatch (Planned)
 
 ```vyn
-// Dynamic dispatch using trait objects (planned)
+// Dynamic dispatch using aspect objects (planned)
 draw_shape(shape<dyn Drawable>)<Void> -> {
     shape.draw()  // Runtime dispatch
 }
 
-// vs. static dispatch (current)
-draw_shape<T: Drawable>(shape<T>)<Void> -> {
-    shape.draw()  // Compile-time dispatch
+// vs. static dispatch (current — zero cost)
+draw_shape<T<Drawable>>(shape<T>)<Void> -> {
+    shape.draw()  // Compile-time dispatch via monomorphization
 }
 ```
 
-## Standard Library Traits
+## Standard Library Aspects
 
-### Core Traits (Priority)
+### Core Aspects
 
 ```vyn
-trait Equatable {
+aspect Equatable {
     eq(self<their<Self>>, other<their<Self>>)<Bool> ->
     ne(self<their<Self>>, other<their<Self>>)<Bool> -> {
         return !self.eq(other)  // Default
     }
 }
 
-trait Comparable : Equatable {
+aspect Comparable {
     lt(self<their<Self>>, other<their<Self>>)<Bool> ->
     lte(self<their<Self>>, other<their<Self>>)<Bool> -> {
         return self.lt(other) || self.eq(other)
@@ -224,7 +217,7 @@ trait Comparable : Equatable {
     }
 }
 
-trait Numeric {
+aspect Numeric {
     add(self<Self>, other<Self>)<Self> ->
     sub(self<Self>, other<Self>)<Self> ->
     mul(self<Self>, other<Self>)<Self> ->
@@ -232,64 +225,67 @@ trait Numeric {
     zero()<Self> ->  // Static method
 }
 
-trait Hashable : Equatable {
+aspect Hashable {
     hash(self<their<Self>>)<UInt64> ->
 }
 
-trait Cloneable {
+aspect Cloneable {
     clone(self<their<Self>>)<Self> ->
 }
 
-trait Display {
+aspect Display {
     to_string(self<their<Self>>)<String> ->
 }
 ```
 
-### Advanced Traits (Future)
+### Iterator Aspect (Standard Library — requires associated types)
 
 ```vyn
-trait Iterator<T> {
-    next(self<their<Self>>)<Option<T>> ->
-    has_next(self<their<Self>>)<Bool> ->
+aspect Iterator {
+    type Item                                    # associated type
+    next(self<their<Self>>)<Option<Self::Item>>  # returns next value or None
 }
 
-trait Serializable {
+// Types that bind Iterator are usable in for loops
+// for (item in col) desugars to repeated Iterator::next() calls
+```
+
+### Serialization Aspects (Future)
+
+```vyn
+aspect Serializable {
     serialize(self<their<Self>>)<Bytes> ->
-    deserialize(data<their<Bytes>>)<Result<Self, Error>> ->
+    deserialize(data<their<Bytes>>)<Option<Self>> ->
 }
 
-trait Async<T> {
-    await(self<Self>)<T> ->
+aspect Async<T> {
+    await_val(self<Self>)<T> ->
 }
 ```
 
-## Why Traits, Not Classes?
-
-Vyn uses **structs + traits** as the foundation for polymorphism and code reuse, deliberately avoiding classes and inheritance hierarchies. See [WHY_TRAITS_NOT_CLASSES.md](WHY_TRAITS_NOT_CLASSES.md) for a comprehensive explanation.
-
-### The Vyn Way
+## The Vyn Way
 
 **Data = Structs**
 ```vyn
 struct Point { x<Int>, y<Int> }
 ```
 
-**Behavior = Traits**
+**Behavior = Aspects**
 ```vyn
-trait Drawable {
+aspect Drawable {
     draw(self<their<Self>>)<Void> -> { }
 }
 
-impl Drawable for Point {
+bind Drawable -> Point {
     draw(self<their<Point>>)<Void> -> {
         println("Drawing point at (" + self.x.to_string() + ", " + self.y.to_string() + ")")
     }
 }
 ```
 
-**Polymorphism = Trait Bounds**
+**Polymorphism = Aspect Bounds**
 ```vyn
-render<T: Drawable>(shape<their<T>>)<Void> -> {
+render<T<Drawable>>(shape<their<T>>)<Void> -> {
     shape.draw()
 }
 ```
@@ -298,140 +294,106 @@ render<T: Drawable>(shape<their<T>>)<Void> -> {
 
 ### Advantages
 
-✅ **Multiple Trait Implementations** - Unlike single inheritance  
-✅ **No Fragile Base Class** - Changes don't break dependents  
-✅ **Better Composition** - Mix and match behaviors freely  
-✅ **Extension Without Modification** - Impl traits for any type  
-✅ **Static Dispatch** - Zero-cost abstractions  
-✅ **Simple Mental Model** - Structs are data, traits are contracts
+✅ **Multiple Aspect Bindings** — Unlike single inheritance  
+✅ **No Fragile Base** — Changes don't break dependents  
+✅ **Better Composition** — Mix and match behaviors freely  
+✅ **Extension Without Modification** — Bind aspects to any type  
+✅ **Static Dispatch** — Zero-cost abstractions  
+✅ **Simple Mental Model** — Structs are data, aspects are contracts
 
 ## Implementation Phases
 
-### Phase 1: Trait Declarations (v0.4.2) - HIGH PRIORITY
+### Phase 1: Aspect Declarations (v0.4.2) — COMPLETED
 
-**Goal:** Make trait definitions real and usable
-
-**Tasks:**
-1. ✅ Parse trait declarations (already working)
-2. ⬜ Store trait definitions in semantic analyzer
-3. ⬜ Validate trait method signatures
-4. ⬜ Register trait in type system
-5. ⬜ Check trait inheritance (trait A : B)
-
-**Test:**
-```vyn
-trait Comparable {
-    lt(self<their<Self>>, other<their<Self>>)<Bool> ->
-}
-
-// Should register and validate successfully
-```
-
-### Phase 2: Trait Implementation (v0.4.2) - HIGH PRIORITY
-
-**Goal:** Allow types to implement traits
+**Goal:** Make aspect definitions real and usable
 
 **Tasks:**
-1. ⬜ Parse impl blocks (already working)
-2. ⬜ Validate impl matches trait signature
+1. ✅ Parse aspect declarations
+2. ✅ Store aspect definitions in semantic analyzer
+3. ✅ Validate aspect method signatures
+4. ✅ Register aspect in type system
+5. ⬜ Check aspect composition (aspect A requires B)
+
+### Phase 2: Aspect Binding (v0.4.2) — IN PROGRESS
+
+**Goal:** Allow types to bind aspects
+
+**Tasks:**
+1. ✅ Parse bind blocks
+2. ⬜ Validate bind matches aspect signature
 3. ⬜ Check all required methods implemented
-4. ⬜ Register impl in type system
-5. ⬜ Enable trait method calls (value.method())
+4. ⬜ Register binding in type system
+5. ⬜ Enable aspect method calls (value.method())
 
 **Test:**
 ```vyn
 struct Point { x<Int>, y<Int> }
 
-impl Comparable for Point {
+bind Comparable -> Point {
     lt(self<their<Point>>, other<their<Point>>)<Bool> -> {
         return self.x < other.x
     }
 }
 
 main()<Int> -> {
-    p1<Point> = Point { x = 1, y = 2 }
-    p2<Point> = Point { x = 3, y = 4 }
+    p1<Point> = Point { x: 1, y: 2 }
+    p2<Point> = Point { x: 3, y: 4 }
     result<Bool> = p1.lt(p2)  // Should work
     return 0
 }
 ```
 
-### Phase 3: Template Instantiation (v0.4.3)
+### Phase 3: Generic Monomorphization (v0.4.3)
 
-**Goal:** Make templates actually usable
+**Goal:** Make generic functions with aspect bounds usable
 
 **Tasks:**
-1. ⬜ Implement monomorphization (template expansion)
-2. ⬜ Validate trait bounds during instantiation
+1. ⬜ Implement monomorphization (generic expansion)
+2. ⬜ Validate aspect bounds during instantiation
 3. ⬜ Generate specialized code for each concrete type
 4. ⬜ Cache instantiations to avoid duplication
-5. ⬜ Support template functions and structs
+5. ⬜ Support generic functions and structs
 
-**Test:**
-```vyn
-template Container<T: Comparable> {
-    struct Data { value<T> }
-}
+### Phase 4: Advanced Aspect Features (v0.5.0)
 
-main()<Int> -> {
-    int_data<Container<Int>::Data> = Container<Int>::Data { value = 42 }
-    return int_data.value
-}
-```
-
-### Phase 4: Advanced Trait Features (v0.5.0)
-
-**Goal:** Complete trait system
+**Goal:** Complete aspect system
 
 **Tasks:**
 1. ⬜ Default method implementations
-2. ⬜ Associated types
-3. ⬜ Trait objects (dynamic dispatch)
-4. ⬜ Generic impl blocks
-5. ⬜ Trait aliases
-
-### Phase 5: Class System (v0.6.0)
-
-**Goal:** Optional OOP features
-
-**Tasks:**
-1. ⬜ Class declarations with inheritance
-2. ⬜ Access modifiers (pub, protected, private)
-3. ⬜ Constructors and destructors
-4. ⬜ Method overriding
-5. ⬜ Abstract classes
+2. ⬜ Associated types (required for Iterator)
+3. ⬜ Aspect objects (dynamic dispatch)
+4. ⬜ Generic bind blocks
+5. ⬜ Aspect composition requirements
 
 ## Roadmap Priority
 
-### Immediate (v0.4.2)
-1. **Trait declarations** - Make traits real types
-2. **Trait implementations** - Connect types to traits
-3. **Trait method calls** - value.method() syntax
-4. **Trait bounds validation** - Check T: Comparable works
+### Immediate (v0.4.x)
+1. **Aspect binding validation** — Connect types to aspects
+2. **Aspect method calls** — value.method() syntax
+3. **Aspect bounds validation** — Check `<T<Comparable>>` works
 
-### Short-term (v0.4.3)
-1. **Template instantiation** - Monomorphization
-2. **Generic functions** - max<T: Comparable>(a, b)
-3. **Trait inheritance** - trait A : B
+### Short-term (v0.5.0)
+1. **Generic monomorphization** — `min<T<Comparable>>(a, b)`
+2. **Aspect composition** — `aspect A requires B`
 
-### Medium-term (v0.5.0)
-1. **Default methods** - Trait with implementations
-2. **Associated types** - type Item in Iterator
-3. **Generic impl** - impl<T> Trait for Vec<T>
+### Medium-term (v0.5.x)
+1. **Default methods** — Aspect with implementations
+2. **Associated types** — `type Item` in Iterator
+3. **Generic bind** — `bind<T> Aspect -> Vec<T>`
 
-### Long-term (v0.6.0)
-1. **Trait objects** - Dynamic dispatch (if needed for specific use cases)
-2. **Advanced generics** - Higher-kinded types
-3. **Associated types** - Type members in traits
+### Long-term (v0.6.0+)
+1. **Aspect objects** — Dynamic dispatch (if needed)
+2. **Higher-kinded types** — Advanced generics
+3. **Associated constants** — Compile-time values in aspects
 
 ## Design Questions
 
 ### Q: Why no classes?
 
-**A:** Traits provide everything classes do, without the complexity:
-- **Polymorphism** ✅ via trait bounds
-- **Code reuse** ✅ via default trait implementations
-- **Multiple "inheritance"** ✅ unlimited trait impls (no diamond problem)
+**A:** Aspects provide everything classes do, without the complexity:
+- **Polymorphism** ✅ via aspect bounds
+- **Code reuse** ✅ via default aspect method implementations
+- **Multiple "inheritance"** ✅ unlimited aspect bindings (no diamond problem)
 - **Encapsulation** ✅ via modules and visibility (planned)
 
 Classes add:
@@ -440,7 +402,7 @@ Classes add:
 - ❌ Forced inheritance hierarchies
 - ❌ Runtime overhead (vtables)
 
-See [WHY_TRAITS_NOT_CLASSES.md](WHY_TRAITS_NOT_CLASSES.md) for detailed rationale.
+See [WHY_ASPECTS_NOT_CLASSES.md](WHY_ASPECTS_NOT_CLASSES.md) for detailed rationale.
 
 ### Q: What about encapsulation?
 
@@ -459,28 +421,26 @@ pub get_balance(account<their<BankAccount>>)<Int> -> {
 // Outside module: cannot access balance directly
 ```
 
-### Q: How to avoid trait conflicts?
+### Q: How to handle aspect method name collisions?
 
 ```vyn
-trait A { fn method(self<their<Self>>)<Int> -> }
-trait B { fn method(self<their<Self>>)<String> -> }
+aspect A { method(self<their<Self>>)<Int> -> }
+aspect B { method(self<their<Self>>)<String> -> }
 
 struct MyType { }
-impl A for MyType { ... }
-impl B for MyType { ... }
+bind A -> MyType { ... }
+bind B -> MyType { ... }
 
 // Explicit disambiguation
 x<Int> = value.A::method()
 y<String> = value.B::method()
 ```
 
-## Examples
-
-### Full Working Example (Target v0.4.2)
+## Full Working Example
 
 ```vyn
-// Define trait
-trait Comparable {
+// Define aspect
+aspect Comparable {
     lt(self<their<Self>>, other<their<Self>>)<Bool> ->
     eq(self<their<Self>>, other<their<Self>>)<Bool> ->
 }
@@ -491,19 +451,19 @@ struct Point {
     y<Int>
 }
 
-// Implement trait for struct
-impl Comparable for Point {
+// Bind aspect to struct
+bind Comparable -> Point {
     lt(self<their<Point>>, other<their<Point>>)<Bool> -> {
         return self.x < other.x || (self.x == other.x && self.y < other.y)
     }
-    
+
     eq(self<their<Point>>, other<their<Point>>)<Bool> -> {
         return self.x == other.x && self.y == other.y
     }
 }
 
 // Use in generic function
-min<T: Comparable>(a<T>, b<T>)<T> -> {
+min<T<Comparable>>(a<T>, b<T>)<T> -> {
     if (a.lt(b)) {
         return a
     } else {
@@ -512,21 +472,22 @@ min<T: Comparable>(a<T>, b<T>)<T> -> {
 }
 
 main()<Int> -> {
-    p1<Point> = Point { x = 1, y = 2 }
-    p2<Point> = Point { x = 3, y = 4 }
-    
+    p1<Point> = Point { x: 1, y: 2 }
+    p2<Point> = Point { x: 3, y: 4 }
+
     smaller<Point> = min(p1, p2)  // Works! Monomorphized to min<Point>
-    
+
     return smaller.x
 }
 ```
 
 ## Conclusion
 
-Vyn's trait system balances:
-- **Simplicity** - Structs for data, traits for interfaces
-- **Power** - Generic programming with compile-time safety
-- **Flexibility** - Optional classes for OOP when needed
-- **Performance** - Zero-cost abstractions via monomorphization
+Vyn's aspect system balances:
+- **Simplicity** — Structs for data, aspects for interfaces
+- **Power** — Generic programming with compile-time safety
+- **Flexibility** — Compose behaviors without class hierarchies
+- **Performance** — Zero-cost abstractions via monomorphization
 
-This design avoids forcing users into OOP while still providing powerful abstraction mechanisms when needed.
+No classes. By design. Forever.
+

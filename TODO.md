@@ -371,85 +371,78 @@ multiple errors per file — a significant developer experience improvement.
 
 ---
 
-## Contradictions and Undecided Items
+## Resolved Design Decisions
 
-These items have conflicting designs or no clear decision. They MUST be resolved before 1.0.
+These items had conflicting designs and have been resolved. They are documented here for
+reference so that contributors do not re-open them.
 
-### [UNDECIDED] Class System vs. Struct + Aspect
+### [DECIDED] Class System vs. Struct + Aspect
 
-`doc/WHY_TRAITS_NOT_CLASSES.md` argues emphatically that Vyn should NOT have classes.
-`doc/TRAIT_SYSTEM_DESIGN.md` Phase 5 plans an optional class system. The README uses
-"aspects + structs instead of classes."
+**Decision:** Vyn has no class system. Struct + aspect composition is the only model.
 
-**Proposal (Vyn-native):** Keep the struct + aspect philosophy as the *primary* model.
-Classes are an anti-pattern in Vyn's design. If inheritance-like patterns are truly needed,
-they should be achieved via aspect composition + `bind`, not via a new `class` keyword.
-*Recommendation: Remove the class system from the roadmap. Aspects + structs are sufficient
-and more composable. Document this decision clearly so contributors do not re-propose it.*
+Classes are an anti-pattern in Vyn's design. Inheritance-like patterns are achieved via
+aspect composition + `bind`. The `class` keyword is not planned, not accepted as a
+proposal, and should not be re-proposed. `doc/TRAIT_SYSTEM_DESIGN.md` Phase 5 (class
+system) has been removed. All references to an optional class system have been excised
+from the roadmap.
 
-### [UNDECIDED] `trait`/`impl` vs. `aspect`/`bind` Terminology
+### [DECIDED] `trait`/`impl` vs. `aspect`/`bind` Terminology
 
-The codebase uses both: `doc/TRAIT_SYSTEM_DESIGN.md` uses `trait`/`impl`, while the
-current implementation uses `aspect`/`bind`. The README favors `aspect`/`bind`.
+**Decision:** Vyn uses `aspect`/`bind`. `trait`/`impl` is Rust vocabulary.
 
-**Proposal (Vyn-native):** Commit to `aspect`/`bind`. It is more expressive: an "aspect"
-captures that it adds a dimension of behavior, while "bind" clearly expresses that you are
-attaching that aspect to a type. `trait`/`impl` is Rust vocabulary. Vyn is not Rust.
-`impl` may remain for backwards compatibility, but `bind` is the idiomatic Vyn path.
-Remove `trait` keyword references from all docs that are not explicitly historical.
+`aspect` captures that it adds a dimension of behavior. `bind` clearly expresses that you
+are attaching that aspect to a type. All documentation uses `aspect`/`bind`. The `impl`
+keyword may be accepted as an alias for backward compatibility only; `bind` is the
+idiomatic Vyn path. All `trait`/`impl` examples in documentation have been updated to
+`aspect`/`bind`. `doc/TRAIT_SYSTEM_DESIGN.md` and `doc/WHY_TRAITS_NOT_CLASSES.md` have
+been updated accordingly.
 
-### [UNDECIDED] `fn` Keyword Backward Compatibility
+### [DECIDED] `fn` Keyword Backward Compatibility
 
-The language dropped `fn` in favor of name-first function syntax. The README says "legacy
-`fn<Type>` syntax remains supported." Keeping two syntaxes causes confusion.
+**Decision:** `fn` syntax is deprecated as of v0.5 and will be removed in v1.0.
 
-**Proposal:** Deprecate `fn` syntax in v0.5, remove in v1.0. The name-first syntax
-`name(params)<ReturnType> ->` is cleaner and uniquely Vyn. One syntax is better than two.
+The name-first syntax `name(params)<ReturnType> ->` is cleaner and uniquely Vyn. One
+syntax is better than two. The `fn` keyword is legacy. New code must use name-first
+syntax. The README note about `fn` support is historical; it will not persist to 1.0.
 
-### [UNDECIDED] `try`/`catch`/`finally` vs. `fail`/`trap`
+### [DECIDED] `try`/`catch`/`finally` vs. `fail`/`trap`
 
-`doc/AST_Roadmap.md` mentions `TryStatement` and `ThrowStatement` in the AST, which
-suggests C++/Java-style exception handling. But Vyn's system is `fail`/`trap`, which is
-different in philosophy: zero-cost success path, typed errors, explicit propagation.
+**Decision:** Vyn uses `fail`/`trap`. There is no `try`, `catch`, `finally`, or `throw`.
 
-**Proposal (Vyn-native):** Remove `try`/`catch`/`finally` AST nodes entirely. They are
-vestigial C++ vocabulary. `fail`/`trap` is Vyn's answer — more explicit, more controlled,
-and allows error propagation without hidden costs. There is no `throw` in Vyn.
+`TryStatement` and `ThrowStatement` have been removed from `doc/AST_Roadmap.md`. These
+are vestigial C++ vocabulary and have no place in Vyn. `fail`/`trap` provides zero-cost
+success path, typed errors, and explicit propagation — the Vyn way. `doc/AST_Roadmap.md`
+has been updated to reflect this.
 
-### [UNDECIDED] Generic Bound Syntax Inconsistency
+### [DECIDED] Generic Bound Syntax
 
-Two syntaxes appear across docs:
-- `<T: Aspect>` — Rust-style, used in some `doc/TRAIT_SYSTEM_DESIGN.md` examples
-- `<T<Aspect>>` — Vyn-style, used in `aspect`/`bind` docs and the implementation
+**Decision:** `<T<Aspect>>` only. `T: Aspect` is Rust syntax and is not Vyn.
 
-**Proposal:** Commit to `<T<Aspect>>` only. This is consistent with Vyn's unified
-`name<Type>` syntax. `T: Aspect` is Rust syntax. Vyn is not Rust. Remove all `<T: Trait>`
-examples from documentation.
+All documentation now uses `<T<Aspect>>` exclusively. This is consistent with Vyn's
+unified `name<Type>` syntax. All `<T: Trait>` examples have been removed from docs.
 
-### [UNDECIDED] Iterator Protocol: Aspect or Built-in?
+### [DECIDED] Iterator Protocol: Aspect-Based
 
-`for (item in collection)` works for `Vec<T>` but there is no `Iterator` aspect that
-user types can implement to make themselves iterable.
+**Decision:** `Iterator` is a standard library aspect. `for` loops desugar to aspect calls.
 
-**Proposal (Vyn-native):** Define an `Iterator` aspect in the standard library using an
-associated type `Item` (which itself requires associated types to be implemented first):
+The `Iterator` aspect is defined in the standard library:
 ```vyn
 aspect Iterator {
     type Item                                    # associated type — what the iterator yields
     next(self<their<Self>>)<Option<Self::Item>>  # returns next value or None
 }
 ```
-Types that bind `Iterator` become usable in `for` loops. The compiler desugars
-`for (item in col)` to repeated `Iterator::next()` calls. This is elegant and composable.
-Note: this depends on associated types being implemented in the aspect system first.
+Types that `bind Iterator` become usable in `for` loops. The compiler desugars
+`for (item in col)` to repeated `Iterator::next()` calls. Depends on associated types
+being implemented in the aspect system first (tracked separately).
 
-### [UNDECIDED] Channels / Actors — 1.0 or Later?
+### [DECIDED] Channels / Actors — Deferred to Post-1.0
 
-The README mentions actors and channels as planned. They have no design document.
+**Decision:** Channels and actors are not part of the 1.0 release.
 
-**Proposal:** Defer to post-1.0. A solid 1.0 with `async`/`await` + structured concurrency
-is more valuable than an under-designed actor model. Design channels and actors thoroughly
-(write a doc first!) before implementing them.
+A solid 1.0 with `async`/`await` + structured concurrency is more valuable than an
+under-designed actor model. Channels and actors require a full design document before
+implementation. The README has been updated to remove them from the v1.0 scope.
 
 ---
 

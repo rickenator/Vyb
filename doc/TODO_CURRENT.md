@@ -74,7 +74,7 @@
 **Status**: Parser fully supports templates, need runtime
 - [ ] **Generic Functions**: `fn<T> process(item: T) -> T`
 - [ ] **Generic Structs**: `struct Container<T> { value: T }`
-- [ ] **Type Constraints**: Where clauses and trait bounds
+- [ ] **Type Constraints**: Aspect bounds — `<T<Comparable>>` syntax
 - [ ] **Monomorphization**: Compile-time template expansion
 
 ## 🔮 FUTURE (Lower Priority)
@@ -82,9 +82,8 @@
 ### 7. Advanced Features
 - [ ] **Modules**: Import/export system with bundles
 - [ ] **Async/Await**: Coroutine support (parser ready)
-- [ ] **Classes**: OOP with inheritance (parser ready)  
 - [ ] **Pattern Matching**: Match expressions with destructuring
-- [ ] **Error Handling**: Try/catch exception system
+- [ ] **Error Handling**: `fail`/`trap` system — typed error propagation, zero-cost success path
 
 ### 8. Performance and Optimization
 - [ ] **Optimization Passes**: LLVM-based code optimization
