@@ -59,25 +59,26 @@ Vyn's static type system will be mapped to efficient runtime representations.
 *   **Arrays:** Fixed-size, contiguous memory.
 *   **Slices (`[T]`):** Represented as a "fat pointer" containing a pointer to the data and a length (e.g., `{ ptr: *T, len: usize }`).
 *   **Function Pointers:** Direct LLVM function pointers.
-*   **Traits (Interfaces):**
+*   **Aspects (Interfaces):**
     *   **Static Dispatch:** For monomorphized generics, no runtime overhead.
-    *   **Dynamic Dispatch (Trait Objects):** Represented as a fat pointer containing:
+    *   **Dynamic Dispatch (Aspect Objects):** Represented as a fat pointer containing:
         1.  A pointer to the actual object data.
-        2.  A pointer to a Virtual Table (vtable) containing function pointers for the trait methods.
+        2.  A pointer to a Virtual Table (vtable) containing function pointers for the aspect methods.
         ```
-        // Vyn: let x: dyn MyTrait = MyStruct {};
+        // Vyn: bind MyAspect -> MyStruct { ... }
+        // let x<dyn MyAspect> = MyStruct {}
         // Runtime (conceptual):
-        // struct TraitObject {
+        // struct AspectObject {
         //   data_ptr: *void,
-        //   vtable_ptr: *VTable_MyTrait
+        //   vtable_ptr: *VTable_MyAspect
         // }
-        // struct VTable_MyTrait {
+        // struct VTable_MyAspect {
         //   method1_ptr: fn(*void, ...),
         //   method2_ptr: fn(*void, ...),
         //   ...
         // }
         ```
-*   **`any` type:** (Future) Could be implemented similar to trait objects but with a more general type information system, potentially involving runtime type information (RTTI).
+*   **`any` type:** (Future) Could be implemented similar to aspect objects but with a more general type information system, potentially involving runtime type information (RTTI).
 
 ## 5. Execution Model
 

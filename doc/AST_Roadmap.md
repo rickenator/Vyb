@@ -43,16 +43,24 @@ This section consolidates nodes that were previously mentioned as "planned" or a
     *   Enhanced `ImportDeclaration`: Support for selective imports (`import my_module::{foo, bar};`), aliasing (`import my_module::foo as FooBar;`).
 *   **Action:** Refine module-related AST nodes and parsing logic.
 
-### 1.4. Error Handling Nodes (Beyond Basic `TryStatement`)
+### 1.4. Error Handling Nodes
 
-*   **Status:** `TryStatement` exists. `ErrorNode` discussed in `AST_Design_Considerations.md`.
-*   **Description:** More refined nodes for error handling and propagation.
+*   **Status:** `fail`/`trap` is the Vyn error system. `TryStatement` and `ThrowStatement`
+    are **not** part of Vyn — they are vestigial C++/Java vocabulary and have been removed
+    from this roadmap.
+*   **Description:** Vyn uses `fail`/`trap` for error propagation. These provide a
+    zero-cost success path with typed errors. There is no `throw`, no `try`, no `catch`,
+    and no `finally` in Vyn. AST nodes for Vyn error handling:
 *   **Key Nodes:**
-    *   `ErrorNode` (or `ErrorExpression`, `ErrorStatement`): To represent constructs that failed to parse correctly but where recovery was possible. This helps later stages understand that part of the tree is invalid.
-    *   `ThrowStatement`: Represents a `throw` statement for explicit error propagation.
-        *   `PExpression errorExpression`: The expression evaluating to the error object to be thrown.
-    *   Potentially a `ResultTypeNode` or similar if the language has explicit result types for error handling.
-*   **Action:** Implement `ErrorNode` as discussed. Define and implement `ThrowStatement`. Evaluate need for other error-specific AST nodes as language features solidify.
+    *   `FailExpression`: Represents a `fail<ErrorType>(value)` expression — typed error
+        propagation.
+    *   `TrapStatement`: Represents a `trap` handler — catches a `fail`-propagated error
+        from a called function with `?` or explicit trap syntax.
+    *   `ErrorNode` (or `ErrorExpression`, `ErrorStatement`): Represents constructs that
+        failed to parse correctly but where recovery was possible. Used by the parser to
+        record errors without aborting the whole parse.
+*   **Action:** Implement `FailExpression` and `TrapStatement` nodes. `ErrorNode` for
+    parser recovery. Do not add any try/catch/throw/finally nodes — they are not Vyn.
 
 ### 1.5. Metaprogramming / Macros
 
@@ -71,7 +79,7 @@ This section consolidates nodes that were previously mentioned as "planned" or a
 *   **Key Nodes (potential subclasses of `TypeNode` or distinct type nodes):**
     *   `SliceTypeNode`: Represents a slice type (e.g., `&[T]`), potentially distinct from `UnsizedArrayTypeNode` if semantics differ (e.g., fat pointer vs. simple pointer to unsized data).
         *   `TypeNodePtr elementType`
-    *   `SelfTypeNode`: Represents the `Self` keyword used as a type, typically within trait or impl blocks, referring to the implementing type.
+    *   `SelfTypeNode`: Represents the `Self` keyword used as a type, typically within aspect or bind blocks, referring to the binding type.
 *   **Action:** Refine `TypeNode` hierarchy as discussed in `AST_Types.md` and `AST_Design_Considerations.md`, and implement these additional specialized type nodes as language features require.
 
 ### 1.7. Conditional Expressions (Ternary Operations)
@@ -95,25 +103,31 @@ This section consolidates nodes that were previously mentioned as "planned" or a
         *   `PExpression value`: The expression whose value is being assigned and destructured.
 *   **Action:** Define the `PatternAssignmentStatement` node, integrate with the `Visitor`, and update the parser. This will likely leverage existing pattern AST nodes.
 
-### 1.9. Trait System Nodes
+### 1.9. Aspect System Nodes
 
-*   **Status:** Planned.
-*   **Description:** Nodes to support trait definitions, method signatures within traits, and trait bounds for generics. These are fundamental for Vyn's polymorphism and interface system. `ImplDeclaration` for implementing traits/interfaces on types is already part of the AST.
+*   **Status:** Partially implemented (`AspectDeclaration`, `BindDeclaration`).
+*   **Description:** Nodes to support aspect definitions, method signatures within aspects,
+    and aspect bounds for generics. These are fundamental for Vyn's polymorphism. Vyn uses
+    `aspect`/`bind` — not `trait`/`impl`. `BindDeclaration` for binding aspects to types
+    is already part of the AST.
 *   **Key Nodes:**
-    *   `TraitDeclaration`: Defines a new trait.
+    *   `AspectDeclaration`: Defines a new aspect.
         *   `IdentifierPtr name`
         *   `std::vector<GenericParameterPtr> genericParameters`
-        *   `std::vector<MethodSignaturePtr> methodSignatures` // Pointer to MethodSignature nodes
-    *   `MethodSignature`: Declares a method signature within a trait (or potentially an `impl` block if freestanding method signatures are allowed there).
+        *   `std::vector<MethodSignaturePtr> methodSignatures`
+    *   `MethodSignature`: Declares a method signature within an aspect.
         *   `IdentifierPtr name`
-        *   `std::vector<FunctionParameterPtr> parameters` // Reusing FunctionParameter from FunctionDeclaration
+        *   `std::vector<FunctionParameterPtr> parameters`
         *   `TypeNodePtr returnType`
-        *   `std::vector<GenericParameterPtr> genericParameters` // For generic methods
+        *   `std::vector<GenericParameterPtr> genericParameters`
         *   *(Consider flags: `isConst`, `isAsync`, `isStatic` etc.)*
-    *   `TraitBoundNode`: Specifies that a generic type parameter must implement one or more traits (used in generic parameter definitions or where clauses).
-        *   `TypeNodePtr constrainedType` // e.g., a `GenericTypeNode` representing 'T'
-        *   `std::vector<TypeNodePtr> bounds` // e.g., `GenericTypeNode`s representing trait names like 'Printable', 'Iterable'
-*   **Action:** Design and implement these nodes in `ast.hpp`/`ast.cpp`. Update `NodeType`, integrate with the `Visitor` pattern, and develop parsing rules for trait definitions and usage.
+    *   `AspectBoundNode`: Specifies that a generic type parameter must bind one or more
+        aspects (used in generic parameter definitions). Syntax: `<T<Comparable>>`.
+        *   `TypeNodePtr constrainedType` // e.g., a `GenericTypeNode` representing `T`
+        *   `std::vector<TypeNodePtr> bounds` // aspect names like `Comparable`, `Display`
+*   **Action:** Design and implement these nodes in `ast.hpp`/`ast.cpp`. Update `NodeType`,
+    integrate with the `Visitor` pattern, and develop parsing rules for aspect definitions
+    and bind blocks. Use `<T<Aspect>>` syntax only — not `<T: Aspect>`.
 
 ### 1.10. Low-Level Pointer Intrinsics and Operations
 

@@ -77,47 +77,46 @@ borrow(buffer).write(data);
 
 ```vyn
 // Connection pool with canonical syntax
-class ConnectionPool {
+struct ConnectionPool {
     connections<Vec<my<Connection>>>,
     shared_config<our<PoolConfig>>
 }
 
-impl ConnectionPool {
-    // Constructor uses canonical ownership creation
-    new(config<our<PoolConfig>>)<my<ConnectionPool>> -> {
-        return my(ConnectionPool {
-            connections: Vec.new(),
-            shared_config: config
-        });
+// Methods on structs are standalone functions in Vyn
+// Constructor
+ConnectionPool_new(config<our<PoolConfig>>)<my<ConnectionPool>> -> {
+    return my(ConnectionPool {
+        connections = Vec.new(),
+        shared_config = config
+    })
+}
+
+// Method uses canonical borrowing for parameters
+get_connection(self<their<ConnectionPool>>)<my<Connection>> -> {
+    if view(self.connections).is_empty() {
+        # Create new connection with immutable shared config view
+        new_conn<my<Connection>> = my(Connection::new(view(self.shared_config)))
+        return new_conn
+    } else {
+        # Reuse existing connection from pool
+        return borrow(self.connections).pop().unwrap()
     }
-    
-    // Method uses canonical borrowing for parameters
-    get_connection(self<their<ConnectionPool>>)<my<Connection>> -> {
-        if view(self.connections).is_empty() {
-            # Create new connection with immutable shared config view
-            new_conn<my<Connection>> = my(Connection::new(view(self.shared_config)));
-            return new_conn;
-        } else {
-            # Reuse existing connection from pool
-            return borrow(self.connections).pop().unwrap();
-        }
-    }
-    
-    // Async method with canonical Future types
-    async execute_query(self<their<ConnectionPool>>, query<String>)<Future<my<Result>>> -> {
-        conn<my<Connection>> = self.get_connection();
-        result<my<Result>> = await view(conn).execute(view(query));
-        return result;
-    }
+}
+
+// Async function with canonical Future types
+async execute_query(self<their<ConnectionPool>>, query<String>)<Future<my<Result>>> -> {
+    conn<my<Connection>> = get_connection(self)
+    result<my<Result>> = await view(conn).execute(view(query))
+    return result
 }
 
 // Usage with canonical syntax
 async main()<Void> -> {
     // Create shared configuration
-    config<our<PoolConfig>> = our(PoolConfig::default());
-    
+    config<our<PoolConfig>> = our(PoolConfig::default())
+
     // Create connection pool
-    pool<my<ConnectionPool>> = ConnectionPool::new(config);
+    pool<my<ConnectionPool>> = ConnectionPool_new(config)
     
     // Execute queries with borrowing
     result1<my<Result>> = await view(pool).execute_query("SELECT * FROM users");

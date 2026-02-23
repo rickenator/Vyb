@@ -37,8 +37,8 @@ This directory contains the authoritative documentation for the Vyn programming 
 | [`ROADMAP.md`](ROADMAP.md) | High-level language roadmap |
 | [`VRE.md`](VRE.md) | Vyn Runtime Environment internals |
 | [`RUNTIME.md`](RUNTIME.md) | Runtime design |
-| [`WHY_TRAITS_NOT_CLASSES.md`](WHY_TRAITS_NOT_CLASSES.md) | Rationale for aspect/bind over classes |
-| [`TRAIT_SYSTEM_DESIGN.md`](TRAIT_SYSTEM_DESIGN.md) | Aspect (trait) system design |
+| [`WHY_TRAITS_NOT_CLASSES.md`](WHY_TRAITS_NOT_CLASSES.md) | Rationale for aspect/bind over classes (uses `aspect`/`bind` terminology) |
+| [`TRAIT_SYSTEM_DESIGN.md`](TRAIT_SYSTEM_DESIGN.md) | Aspect system design (`aspect`/`bind`) |
 | [`ERROR_TRAP.md`](ERROR_TRAP.md) | `fail`/`trap` error propagation design |
 | [`FFI_DESIGN.md`](FFI_DESIGN.md) | Foreign Function Interface design |
 | [`MODULE_FFI_BINARY_ROADMAP.md`](MODULE_FFI_BINARY_ROADMAP.md) | Module system roadmap |
