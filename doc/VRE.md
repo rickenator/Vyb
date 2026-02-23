@@ -78,7 +78,7 @@ Vyn's static type system will be mapped to efficient runtime representations.
         //   ...
         // }
         ```
-*   **`any` type:** (Future) Could be implemented similar to trait objects but with a more general type information system, potentially involving runtime type information (RTTI).
+*   **`any` type:** (Future) Could be implemented similar to aspect objects but with a more general type information system, potentially involving runtime type information (RTTI).
 
 ## 5. Execution Model
 

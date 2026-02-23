@@ -336,8 +336,8 @@ bind Comparable -> Point {
 }
 
 main()<Int> -> {
-    p1<Point> = Point { x: 1, y: 2 }
-    p2<Point> = Point { x: 3, y: 4 }
+    p1<Point> = Point { x = 1, y = 2 }
+    p2<Point> = Point { x = 3, y = 4 }
     result<Bool> = p1.lt(p2)  // Should work
     return 0
 }
@@ -472,8 +472,8 @@ min<T<Comparable>>(a<T>, b<T>)<T> -> {
 }
 
 main()<Int> -> {
-    p1<Point> = Point { x: 1, y: 2 }
-    p2<Point> = Point { x: 3, y: 4 }
+    p1<Point> = Point { x = 1, y = 2 }
+    p2<Point> = Point { x = 3, y = 4 }
 
     smaller<Point> = min(p1, p2)  // Works! Monomorphized to min<Point>
 

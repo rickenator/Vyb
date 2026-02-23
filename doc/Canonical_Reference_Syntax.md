@@ -86,8 +86,8 @@ struct ConnectionPool {
 // Constructor
 ConnectionPool_new(config<our<PoolConfig>>)<my<ConnectionPool>> -> {
     return my(ConnectionPool {
-        connections: Vec.new(),
-        shared_config: config
+        connections = Vec.new(),
+        shared_config = config
     })
 }
 

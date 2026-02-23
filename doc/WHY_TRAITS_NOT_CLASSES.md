@@ -95,6 +95,7 @@ render<T<Drawable>>(shape<their<T>>)<Void> -> {
 ### ✅ Code Reuse via Default Implementations
 ```vyn
 aspect Iterator {
+    type Item                                    # associated type
     # Required
     next(self<their<Self>>)<Option<Self::Item>> -> { }
 

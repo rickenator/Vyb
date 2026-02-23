@@ -218,8 +218,8 @@ public:
     virtual void visit(ReturnStatement* node) = 0;
     virtual void visit(BreakStatement* node) = 0;
     virtual void visit(ContinueStatement* node) = 0;
-    virtual void visit(TryStatement* node) = 0;
-    virtual void visit(ThrowStatement* node) = 0;      // Added as per ast.hpp
+    virtual void visit(TryStatement* node) = 0;      // Legacy: maps to TrapStatement in future
+    virtual void visit(ThrowStatement* node) = 0;     // Legacy: maps to FailExpression in future
     virtual void visit(ScopedStatement* node) = 0;     // Added as per ast.hpp
     // virtual void visit(PatternAssignmentStatement* node) = 0; // Not in ast.hpp
 

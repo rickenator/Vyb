@@ -10,7 +10,7 @@ Throughout the AST definitions, the following smart pointer aliases are used for
 - `StmtPtr = std::unique_ptr<Statement>;`
 - `IdentifierPtr = std::unique_ptr<Identifier>;`
 - `BlockStatementPtr = std::unique_ptr<BlockStatement>;`
-- `TypeNodePtr = std::unique_ptr<TypeNode>;` // For TryStatement catch type
+- `TypeNodePtr = std::unique_ptr<TypeNode>;`
 
 ## 1. `BlockStatement`
 
@@ -259,27 +259,34 @@ The `MatchStatement` enables comprehensive pattern matching with:
 - **Fat arrow syntax**: `=>` separates patterns from results
 - **Exhaustive checking**: Compiler ensures all cases are covered
 
-## 10. `ThrowStatement`
+## 10. `FailExpression` / `TrapStatement`
 
-Represents a statement that throws an exception or error.
+Vyn does not have `throw`, `try`, `catch`, or `finally`. Error handling is done via
+`fail`/`trap`. The `ThrowStatement` and `TryStatement` AST nodes documented in older
+versions of this file are **removed from the language spec**.
 
--   **C++ Class**: `vyn::ast::ThrowStatement`
--   **`NodeType`**: `THROW_STATEMENT`
+### `FailExpression`
+
+Represents `fail<ErrorType>(value)` — typed error propagation.
+
+-   **C++ Class**: `vyn::ast::FailExpression`
+-   **`NodeType`**: `FAIL_EXPRESSION`
 -   **Fields**:
-    -   `expression` (`ExprPtr`): The expression evaluating to the error object or value to be thrown.
+    -   `errorType` (`TypeNodePtr`): The error type being propagated.
+    -   `value` (`ExprPtr`): The error value expression.
 
-```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
-class ThrowStatement : public Statement {
-public:
-    ExprPtr expression;
+### `TrapStatement`
 
-    ThrowStatement(SourceLocation loc, ExprPtr expression);
-    // ... accept, getType, toString methods ...
-};
-} // namespace vyn::ast
-```
+Represents a `trap` handler that intercepts a `fail`-propagated error.
+
+-   **C++ Class**: `vyn::ast::TrapStatement`
+-   **`NodeType`**: `TRAP_STATEMENT`
+-   **Fields**:
+    -   `body` (`BlockStatementPtr`): The block to execute, which may propagate a `fail`.
+    -   `handlers` (`std::vector<TrapHandlerPtr>`): Error type → handler block pairs.
+
+> See `doc/ERROR_TRAP.md` and `doc/ERROR_PROPAGATION_DESIGN.md` for the full `fail`/`trap`
+> design.
 
 ## 11. `ScopedStatement`
 
@@ -303,38 +310,19 @@ public:
 } // namespace vyn::ast
 ```
 
-## 12. `TryStatement`
+## 12. `EnsureStatement`
 
-Represents a try-catch(-finally) block for exception handling.
+Represents an `ensure` contract statement (planned).
 
--   **C++ Class**: `vyn::ast::TryStatement`
--   **`NodeType`**: `TRY_STATEMENT`
+-   **C++ Class**: `vyn::ast::EnsureStatement` (planned)
+-   **`NodeType`**: `ENSURE_STATEMENT`
 -   **Fields**:
-    -   `tryBlock` (`BlockStatementPtr`): The block of code to try.
-    -   `catchVariable` (`std::optional<IdentifierPtr>`): The variable to bind the caught exception to.
-    -   `catchType` (`std::optional<TypeNodePtr>`): The type of exception to catch.
-    -   `catchBlock` (`std::optional<BlockStatementPtr>`): The block of code to execute if an exception is caught.
-    -   `finallyBlock` (`std::optional<BlockStatementPtr>`): The block of code that is always executed.
+    -   `condition` (`ExprPtr`): The condition that must hold.
+    -   `failExpression` (`std::optional<ExprPtr>`): The `fail` expression if the condition is false.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
-class TryStatement : public Statement {
-public:
-    BlockStatementPtr tryBlock;
-    std::optional<IdentifierPtr> catchVariable;
-    std::optional<TypeNodePtr> catchType;
-    std::optional<BlockStatementPtr> catchBlock;
-    std::optional<BlockStatementPtr> finallyBlock;
-
-    TryStatement(SourceLocation loc, BlockStatementPtr tryBlock,
-                 std::optional<IdentifierPtr> catchVariable,
-                 std::optional<TypeNodePtr> catchType,
-                 std::optional<BlockStatementPtr> catchBlock,
-                 std::optional<BlockStatementPtr> finallyBlock);
-    // ... accept, getType, toString methods ...
-};
-} // namespace vyn::ast
+// Planned — not yet implemented
+// ensure b != 0 else fail<DivisionError>(DivisionError { dividend: a })
 ```
 
 ## 13. `UnsafeBlockStatement`
