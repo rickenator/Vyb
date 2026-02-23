@@ -11,6 +11,15 @@
 #include <functional> 
 
 namespace vyn {
+// Forward-declare g_debug_codegen so semantic.cpp can use VYN_CDBG without
+// depending on the LLVM codegen headers.
+extern bool g_debug_codegen;
+} // namespace vyn
+#ifndef VYN_CDBG
+#define VYN_CDBG if (vyn::g_debug_codegen) std::cerr
+#endif
+
+namespace vyn {
 
 // Scope class implementation
 Scope::Scope(Scope* parent_scope) : parent(parent_scope) {}
@@ -300,7 +309,7 @@ void SemanticAnalyzer::visit(ast::Identifier* node) {
         node->type = std::shared_ptr<ast::TypeNode>(symbol->type->clone());
 
     } else {
-        std::cout << "DEBUG: No type found for identifier '" << node->name << "'" << std::endl;
+        VYN_CDBG << "DEBUG: No type found for identifier '" << node->name << "'" << std::endl;
     }
 }
 
@@ -394,7 +403,7 @@ void SemanticAnalyzer::visit(ast::Module* node) {
                             funcDecl->errorTypes.push_back("Error");
                         }
                         changed = true;
-                        std::cout << "DEBUG: Marked function '" << funcDecl->id->name 
+                        VYN_CDBG << "DEBUG: Marked function '" << funcDecl->id->name 
                                   << "' as failable (calls failable function)" << std::endl;
                     }
                 }
@@ -509,7 +518,7 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
                         if (typeName->identifier && typeName->identifier->name == "Self") {
                             // Replace Self with the current impl type
                             resolvedType = currentImplType;
-                            std::cout << "DEBUG: Resolved parameter type Self to " << currentImplType->toString() << std::endl;
+                            VYN_CDBG << "DEBUG: Resolved parameter type Self to " << currentImplType->toString() << std::endl;
                         }
                     }
                 }
@@ -812,7 +821,7 @@ void SemanticAnalyzer::visit(ast::BinaryExpression* node) {
 
     if (!leftType || !rightType) {
         // Cannot determine type without both operands
-        std::cout << "DEBUG: Binary expression - could not determine operand types" << std::endl;
+        VYN_CDBG << "DEBUG: Binary expression - could not determine operand types" << std::endl;
         return;
     }
 
@@ -860,7 +869,7 @@ void SemanticAnalyzer::visit(ast::BinaryExpression* node) {
         expressionTypes[node] = resultType;
         node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
         
-        std::cout << "DEBUG: Binary expression result type: " << resultType->toString() << std::endl;
+        VYN_CDBG << "DEBUG: Binary expression result type: " << resultType->toString() << std::endl;
     }
 }
 void SemanticAnalyzer::visit(ast::CallExpression* node) {
@@ -1207,7 +1216,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     // Check if type was already set by VariableDeclaration (type propagation)
                     if (expressionTypes.count(node) && expressionTypes[node]) {
                         // Type already set - use it
-                        std::cout << "DEBUG: Vec::new() type already propagated: " << expressionTypes[node]->toString() << std::endl;
+                        VYN_CDBG << "DEBUG: Vec::new() type already propagated: " << expressionTypes[node]->toString() << std::endl;
                         return;
                     }
                     
@@ -1255,7 +1264,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                             std::make_unique<ast::Identifier>(node->loc, typeName));
                         expressionTypes[node] = resultType;
                         node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
-                        std::cout << "DEBUG: " << typeName << "::from_string() returns " << typeName << std::endl;
+                        VYN_CDBG << "DEBUG: " << typeName << "::from_string() returns " << typeName << std::endl;
                         return;
                     }
                     
@@ -1266,7 +1275,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                             std::make_unique<ast::Identifier>(node->loc, typeName));
                         expressionTypes[node] = resultType;
                         node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
-                        std::cout << "DEBUG: " << typeName << "::from_string() returns " << typeName << " (custom struct)" << std::endl;
+                        VYN_CDBG << "DEBUG: " << typeName << "::from_string() returns " << typeName << " (custom struct)" << std::endl;
                         return;
                     }
                     
@@ -1335,7 +1344,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                             if (typeNameStr.find("mild<") == 0) {
                                 if (methodName == "grab") {
                                     // mild<T>.grab() returns our<T>
-                                    std::cout << "DEBUG: Setting return type for mild<T>.grab()" << std::endl;
+                                    VYN_CDBG << "DEBUG: Setting return type for mild<T>.grab()" << std::endl;
                                     // Extract T from mild<T>
                                     if (!typeName->genericArgs.empty()) {
                                         auto innerType = typeName->genericArgs[0].get();
@@ -1346,12 +1355,12 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                         auto resultType = new ast::TypeName(node->loc, std::move(ourId), std::move(ourArgs));
                                         expressionTypes[node] = resultType;
                                         node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
-                                        std::cout << "DEBUG: mild<T>.grab() returns " << resultType->toString() << std::endl;
+                                        VYN_CDBG << "DEBUG: mild<T>.grab() returns " << resultType->toString() << std::endl;
                                         return;
                                     }
                                 } else if (methodName == "released") {
                                     // mild<T>.released() returns Bool
-                                    std::cout << "DEBUG: Setting return type for mild<T>.released() to Bool" << std::endl;
+                                    VYN_CDBG << "DEBUG: Setting return type for mild<T>.released() to Bool" << std::endl;
                                     auto boolType = new ast::TypeName(node->loc,
                                         std::make_unique<ast::Identifier>(node->loc, "Bool"));
                                     expressionTypes[node] = boolType;
@@ -1376,7 +1385,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                                 node->type = std::shared_ptr<ast::TypeNode>(actualReturnType->clone());
                                             }
                                             
-                                            std::cout << "DEBUG: Resolved trait method call: " << typeNameStr 
+                                            VYN_CDBG << "DEBUG: Resolved trait method call: " << typeNameStr 
                                                       << "." << methodName << " from trait " << traitName << std::endl;
                                             return;
                                         }
@@ -1515,7 +1524,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                     std::make_unique<ast::Identifier>(node->loc, "String"));
                                 expressionTypes[node] = stringType;
                                 node->type = std::shared_ptr<ast::TypeNode>(stringType->clone());
-                                std::cout << "DEBUG: Primitive method " << typeStr << ".to_string() returns String (early path)" << std::endl;
+                                VYN_CDBG << "DEBUG: Primitive method " << typeStr << ".to_string() returns String (early path)" << std::endl;
                                 return;
                             }
                             
@@ -1528,7 +1537,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                         std::make_unique<ast::Identifier>(node->loc, "String"));
                                     expressionTypes[node] = stringType;
                                     node->type = std::shared_ptr<ast::TypeNode>(stringType->clone());
-                                    std::cout << "DEBUG: Complex type " << typeStr << ".to_string() returns JSON String (early path)" << std::endl;
+                                    VYN_CDBG << "DEBUG: Complex type " << typeStr << ".to_string() returns JSON String (early path)" << std::endl;
                                     return;
                                 }
                             }
@@ -1600,7 +1609,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                         // mild<T>.grab() returns our<T>? (optional)
                         // For now, just return the inner type wrapped in our<> (will be nil)
                         // TODO: Implement proper optional/result type
-                        std::cout << "DEBUG: Setting return type for mild<T>.grab()" << std::endl;
+                        VYN_CDBG << "DEBUG: Setting return type for mild<T>.grab()" << std::endl;
                         // Extract T from mild<T>
                         if (auto typeName = dynamic_cast<ast::TypeName*>(objTypeIt->second)) {
                             if (!typeName->genericArgs.empty()) {
@@ -1612,13 +1621,13 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                 auto resultType = new ast::TypeName(node->loc, std::move(ourId), std::move(ourArgs));
                                 expressionTypes[node] = resultType;
                                 node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
-                                std::cout << "DEBUG: mild<T>.grab() returns " << resultType->toString() << std::endl;
+                                VYN_CDBG << "DEBUG: mild<T>.grab() returns " << resultType->toString() << std::endl;
                                 return;
                             }
                         }
                     } else if (methodName == "released") {
                         // mild<T>.released() returns Bool
-                        std::cout << "DEBUG: Setting return type for mild<T>.released() to Bool" << std::endl;
+                        VYN_CDBG << "DEBUG: Setting return type for mild<T>.released() to Bool" << std::endl;
                         auto boolType = new ast::TypeName(node->loc,
                             std::make_unique<ast::Identifier>(node->loc, "Bool"));
                         expressionTypes[node] = boolType;
@@ -1671,7 +1680,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                             node->type = std::shared_ptr<ast::TypeNode>(method->returnTypeNode->clone());
                                         }
                                         
-                                        std::cout << "DEBUG: Resolved trait method call: " << typeNameStr 
+                                        VYN_CDBG << "DEBUG: Resolved trait method call: " << typeNameStr 
                                                   << "." << methodName << " from trait " << traitName << std::endl;
                                         return;
                                     }
@@ -1693,10 +1702,10 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                             if (method && method->id && method->id->name == methodName) {
                                                 // Found the generic trait method! Substitute Self with concrete type
                                                 if (method->returnTypeNode) {
-                                                    std::cout << "DEBUG: Generic trait method " << methodName 
+                                                    VYN_CDBG << "DEBUG: Generic trait method " << methodName 
                                                               << " return type before substitution: " << method->returnTypeNode->toString() << std::endl;
                                                     ast::TypeNode* actualReturnType = substituteSelfType(method->returnTypeNode.get(), typeNameStr);
-                                                    std::cout << "DEBUG: After Self substitution: " << actualReturnType->toString() << std::endl;
+                                                    VYN_CDBG << "DEBUG: After Self substitution: " << actualReturnType->toString() << std::endl;
                                                     expressionTypes[node] = actualReturnType;
                                                     node->type = std::shared_ptr<ast::TypeNode>(actualReturnType->clone());
                                                 }
@@ -1767,7 +1776,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                 if (traitInfo) {
                                     for (const auto& method : traitInfo->methods) {
                                         if (method.name == methodName) {
-                                            std::cout << "DEBUG: CallExpression: Type parameter " << typeNameStr 
+                                            VYN_CDBG << "DEBUG: CallExpression: Type parameter " << typeNameStr 
                                                       << " with bound " << boundName 
                                                       << " allows method " << methodName << std::endl;
                                             // Found the method in bounds - substitute Self with type parameter
@@ -1778,7 +1787,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                                     if (returnTypeName->identifier && returnTypeName->identifier->name == "Self") {
                                                         // Return Self -> substitute with type parameter
                                                         actualReturnType = typeName; // The type parameter itself
-                                                        std::cout << "DEBUG: Substituting Self return type with type parameter " << typeNameStr << std::endl;
+                                                        VYN_CDBG << "DEBUG: Substituting Self return type with type parameter " << typeNameStr << std::endl;
                                                     }
                                                 }
                                                 expressionTypes[node] = actualReturnType;
@@ -1799,7 +1808,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                     std::make_unique<ast::Identifier>(node->loc, "String"));
                                 expressionTypes[node] = stringType;
                                 node->type = std::shared_ptr<ast::TypeNode>(stringType->clone());
-                                std::cout << "DEBUG: Primitive method " << typeNameStr << ".to_string() returns String" << std::endl;
+                                VYN_CDBG << "DEBUG: Primitive method " << typeNameStr << ".to_string() returns String" << std::endl;
                                 return;
                             }
                             
@@ -1811,7 +1820,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                     std::make_unique<ast::Identifier>(node->loc, "String"));
                                 expressionTypes[node] = stringType;
                                 node->type = std::shared_ptr<ast::TypeNode>(stringType->clone());
-                                std::cout << "DEBUG: Complex type " << typeNameStr << ".to_string() returns JSON String" << std::endl;
+                                VYN_CDBG << "DEBUG: Complex type " << typeNameStr << ".to_string() returns JSON String" << std::endl;
                                 return;
                             }
                         }
@@ -1932,14 +1941,14 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
     std::string structTypeName = it->second->toString();
     const std::string& fieldName = propertyId->name;
     
-    std::cout << "DEBUG: MemberExpression type check: structTypeName=" << structTypeName 
+    VYN_CDBG << "DEBUG: MemberExpression type check: structTypeName=" << structTypeName 
               << ", fieldName=" << fieldName 
               << ", typeNodeKind=" << typeid(*it->second).name() << std::endl;
     
     // Handle mild<T>.grab() and mild<T>.released() intrinsic methods
     if (structTypeName.find("mild<") == 0) {
         if (fieldName == "grab" || fieldName == "released") {
-            std::cout << "DEBUG: Recognized mild<T>." << fieldName << "() method" << std::endl;
+            VYN_CDBG << "DEBUG: Recognized mild<T>." << fieldName << "() method" << std::endl;
             // These are intrinsic methods on mild<T>, allow them
             // Type will be set in CallExpression visitor
             return;
@@ -1961,7 +1970,7 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
                         // Check if this aspect has the method
                         for (const auto& method : traitInfo->methods) {
                             if (method.name == fieldName) {
-                                std::cout << "DEBUG: Object of type parameter " << objTypeStr 
+                                VYN_CDBG << "DEBUG: Object of type parameter " << objTypeStr 
                                           << " with bound " << boundName 
                                           << " allows method " << fieldName << std::endl;
                                 // Found the method in one of the bounds - allow it
@@ -1994,7 +2003,7 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
                                 // Check if this aspect has the method
                                 for (const auto& method : traitInfo->methods) {
                                     if (method.name == fieldName) {
-                                        std::cout << "DEBUG: Variable " << objIdent->name 
+                                        VYN_CDBG << "DEBUG: Variable " << objIdent->name 
                                                   << " has type parameter " << varTypeStr 
                                                   << " with bound " << boundName 
                                                   << " allowing method " << fieldName << std::endl;
@@ -2023,7 +2032,7 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
                 // Check if this aspect has the method
                 for (const auto& method : traitInfo->methods) {
                     if (method.name == fieldName) {
-                        std::cout << "DEBUG: Type parameter " << structTypeName 
+                        VYN_CDBG << "DEBUG: Type parameter " << structTypeName 
                                   << " with bound " << boundName 
                                   << " allows method " << fieldName << std::endl;
                         // Found the method in one of the bounds - allow it
@@ -2049,7 +2058,7 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
                 if (method && method->id && method->id->name == fieldName) {
                     // This is a trait method, not a field
                     // Don't set type here - let CallExpression handle it
-                    std::cout << "DEBUG: MemberExpression identified trait method: " 
+                    VYN_CDBG << "DEBUG: MemberExpression identified trait method: " 
                               << structTypeName << "." << fieldName << std::endl;
                     return;
                 }
@@ -2208,7 +2217,7 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
     expressionTypes[node] = fieldType;
     node->type = std::shared_ptr<ast::TypeNode>(fieldType->clone());
     
-    std::cout << "DEBUG: Resolved member access " << structTypeName << "." << fieldName 
+    VYN_CDBG << "DEBUG: Resolved member access " << structTypeName << "." << fieldName 
               << " to type: " << fieldType->toString() << std::endl;
 }
 void SemanticAnalyzer::visit(ast::AssignmentExpression* node) {
@@ -2260,7 +2269,7 @@ void SemanticAnalyzer::visit(ast::AssignmentExpression* node) {
     ast::TypeNode* leftType = (leftTypeIt != expressionTypes.end()) ? leftTypeIt->second : nullptr;
     ast::TypeNode* rightType = (rightTypeIt != expressionTypes.end()) ? rightTypeIt->second : nullptr;
 
-    std::cout << "DEBUG: Assignment type check - LHS type: " 
+    VYN_CDBG << "DEBUG: Assignment type check - LHS type: " 
               << (leftType ? leftType->toString() : "null")
               << ", RHS type: " 
               << (rightType ? rightType->toString() : "null") << std::endl;
@@ -3395,7 +3404,7 @@ void SemanticAnalyzer::visit(ast::StructDeclaration* node) {
             // Store the field type for later member access resolution
             fieldTypes[field->name->name] = field->typeNode.get();
             
-            std::cout << "DEBUG: Registered struct field " << structName << "." << field->name->name 
+            VYN_CDBG << "DEBUG: Registered struct field " << structName << "." << field->name->name 
                       << " with type: " << field->typeNode->toString() << std::endl;
         }
     }
@@ -3493,7 +3502,7 @@ void SemanticAnalyzer::visit(ast::TemplateDeclaration* node) {
             
             currentScope->add(sym);
             
-            std::cout << "DEBUG: Registered template type parameter: " << paramName << std::endl;
+            VYN_CDBG << "DEBUG: Registered template type parameter: " << paramName << std::endl;
         }
     }
     
@@ -3502,14 +3511,14 @@ void SemanticAnalyzer::visit(ast::TemplateDeclaration* node) {
     
     // Visit the template body with type parameters in scope
     if (node->body) {
-        std::cout << "DEBUG: Visiting template body for: " << templateName << std::endl;
+        VYN_CDBG << "DEBUG: Visiting template body for: " << templateName << std::endl;
         node->body->accept(*this);
     }
     
     // Exit the template scope
     exitScope();
     
-    std::cout << "DEBUG: Template '" << templateName << "' registered successfully" << std::endl;
+    VYN_CDBG << "DEBUG: Template '" << templateName << "' registered successfully" << std::endl;
 }
 
 void SemanticAnalyzer::visit(ast::AspectDeclaration* node) {
@@ -3558,7 +3567,7 @@ void SemanticAnalyzer::visit(ast::AspectDeclaration* node) {
             addError("Aspect method '" + method->id->name + "' must declare a return type.", method.get());
         }
         
-        std::cout << "DEBUG:   Method: " << method->id->name 
+        VYN_CDBG << "DEBUG:   Method: " << method->id->name 
                   << " (default impl: " << (method->body ? "yes" : "no") << ")" << std::endl;
     }
     
@@ -3621,7 +3630,7 @@ void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
                 
                 currentScope->add(typeParamSymbol);
                 
-                std::cout << "DEBUG: Registered type parameter: " << paramName << std::endl;
+                VYN_CDBG << "DEBUG: Registered type parameter: " << paramName << std::endl;
             }
         }
     }
@@ -3632,13 +3641,13 @@ void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
     // Set current impl type for Self resolution (will be restored later)
     ast::TypeNode* previousImplType = currentImplType;
     currentImplType = node->selfType.get();
-    std::cout << "DEBUG: Set currentImplType to " << typeName << " for Self resolution" << std::endl;
+    VYN_CDBG << "DEBUG: Set currentImplType to " << typeName << " for Self resolution" << std::endl;
     
     if (node->traitType) {
         // This is an aspect implementation: bind Aspect -> Type
         traitName = node->traitType->toString();
         
-        std::cout << "DEBUG: Processing impl " << traitName << " for " << typeName << std::endl;
+        VYN_CDBG << "DEBUG: Processing impl " << traitName << " for " << typeName << std::endl;
         
         // Check if trait exists
         TraitInfo* traitInfo = findTrait(traitName);
@@ -3662,7 +3671,7 @@ void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
             for (const auto& paramName : typeParamNames) {
                 if (typeName.find(paramName) != std::string::npos) {
                     isGenericType = true;
-                    std::cout << "DEBUG: Type " << typeName << " uses type parameter " << paramName << std::endl;
+                    VYN_CDBG << "DEBUG: Type " << typeName << " uses type parameter " << paramName << std::endl;
                     break;
                 }
             }
@@ -3696,12 +3705,12 @@ void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
         }
         processingTraitOrBindMethod = false;
         
-        std::cout << "DEBUG: Successfully registered impl " << traitName << " for " << typeName 
+        VYN_CDBG << "DEBUG: Successfully registered impl " << traitName << " for " << typeName 
                   << " with " << node->methods.size() << " methods" << std::endl;
     } else {
         // This is an inherent bind: bind Type { ... }
         // Just adds methods directly to the type without an aspect
-        std::cout << "DEBUG: Processing inherent bind for " << typeName << std::endl;
+        VYN_CDBG << "DEBUG: Processing inherent bind for " << typeName << std::endl;
         
         // Visit all methods to validate them
         processingTraitOrBindMethod = true;  // Don't add inherent bind methods to global scope
@@ -3745,7 +3754,7 @@ void SemanticAnalyzer::visit(ast::FailStatement* node) {
         // TODO: Verify error type implements Errable aspect when aspect system is complete
         // For now, accept any struct/object type as potential error
         
-        std::cout << "DEBUG: fail statement with error type: " << errorType->toString() << std::endl;
+        VYN_CDBG << "DEBUG: fail statement with error type: " << errorType->toString() << std::endl;
     } else {
         addError("Could not determine type of error expression in fail statement", node->error.get());
     }
@@ -3827,16 +3836,16 @@ void SemanticAnalyzer::visit(ast::TrapClause* node) {
     currentScope->add(errorSymbol);
     
     if (node->isWildcard) {
-        std::cout << "DEBUG: trap clause for wildcard error type" << std::endl;
+        VYN_CDBG << "DEBUG: trap clause for wildcard error type" << std::endl;
     } else if (node->isMultiType) {
-        std::cout << "DEBUG: trap clause for multi-type union: ";
+        VYN_CDBG << "DEBUG: trap clause for multi-type union: ";
         for (size_t i = 0; i < node->errorTypes.size(); ++i) {
             if (i > 0) std::cout << " | ";
             std::cout << node->errorTypes[i]->toString();
         }
         std::cout << std::endl;
     } else if (node->errorType) {
-        std::cout << "DEBUG: trap clause for error type: " << node->errorType->toString() << std::endl;
+        VYN_CDBG << "DEBUG: trap clause for error type: " << node->errorType->toString() << std::endl;
     }
     
     // Type check handler block
@@ -3867,7 +3876,7 @@ void SemanticAnalyzer::visit(ast::EnsureClause* node) {
         return;
     }
     
-    std::cout << "DEBUG: processing ensure clause" << std::endl;
+    VYN_CDBG << "DEBUG: processing ensure clause" << std::endl;
     
     // Enter new scope for ensure block
     enterScope();
@@ -3889,7 +3898,7 @@ void SemanticAnalyzer::visit(ast::RethrowStatement* node) {
         return;
     }
     
-    std::cout << "DEBUG: rethrow statement at trap depth " << trapDepth << std::endl;
+    VYN_CDBG << "DEBUG: rethrow statement at trap depth " << trapDepth << std::endl;
     
     // If transforming the error, type check the new error expression
     if (node->transformedError) {
@@ -3899,7 +3908,7 @@ void SemanticAnalyzer::visit(ast::RethrowStatement* node) {
         auto it = expressionTypes.find(node->transformedError.get());
         if (it != expressionTypes.end() && it->second) {
             ast::TypeNode* newErrorType = it->second;
-            std::cout << "DEBUG: rethrow with transformed error type: " << newErrorType->toString() << std::endl;
+            VYN_CDBG << "DEBUG: rethrow with transformed error type: " << newErrorType->toString() << std::endl;
             
             // TODO: Verify new error type is compatible with outer trap handlers
         }
@@ -3907,7 +3916,7 @@ void SemanticAnalyzer::visit(ast::RethrowStatement* node) {
         // Simple rethrow - propagates current error
         if (!activeTrapTypes.empty()) {
             ast::TypeNode* currentErrorType = activeTrapTypes.back();
-            std::cout << "DEBUG: rethrow current error type: " << currentErrorType->toString() << std::endl;
+            VYN_CDBG << "DEBUG: rethrow current error type: " << currentErrorType->toString() << std::endl;
         }
     }
 }
@@ -3933,7 +3942,7 @@ void SemanticAnalyzer::visit(ast::PanicStatement* node) {
                 (typeName->identifier->name == "String" || 
                  typeName->identifier->name == "str" ||
                  typeName->identifier->name == "string")) {
-                std::cout << "DEBUG: panic statement with string message" << std::endl;
+                VYN_CDBG << "DEBUG: panic statement with string message" << std::endl;
             } else {
                 addError("panic message must be a String type, got: " + typeName->toString(), node->message.get());
             }
@@ -3976,12 +3985,12 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
     if (typeNameStr == "Self") {
         if (currentImplType) {
             // We're inside an impl block - resolve Self to the implementing type
-            std::cout << "DEBUG: Resolving Self to " << currentImplType->toString() << std::endl;
+            VYN_CDBG << "DEBUG: Resolving Self to " << currentImplType->toString() << std::endl;
             expressionTypes[node] = currentImplType;
             return;
         } else {
             // We're in an aspect declaration - treat Self as a valid placeholder type
-            std::cout << "DEBUG: Self used as placeholder in aspect declaration" << std::endl;
+            VYN_CDBG << "DEBUG: Self used as placeholder in aspect declaration" << std::endl;
             node->type = std::shared_ptr<ast::TypeNode>(node->clone());
             return;
         }
@@ -4079,7 +4088,7 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
         SymbolInfo* symbol = currentScope->lookup(typeNameStr);
         if (symbol && symbol->kind == SymbolInfo::Kind::TYPE_PARAMETER) {
             // This is a valid generic type parameter (like T, K, V)
-            std::cout << "DEBUG: Recognized generic type parameter: " << typeNameStr << std::endl;
+            VYN_CDBG << "DEBUG: Recognized generic type parameter: " << typeNameStr << std::endl;
             node->type = std::shared_ptr<ast::TypeNode>(node->clone());
             // Visit generic arguments if present (e.g., Vec<T>)
             for (auto& argTypeNode : node->genericArgs) {
@@ -5309,13 +5318,13 @@ void SemanticAnalyzer::registerTraitImpl(ast::BindDeclaration* implDecl) {
     
     if (isGeneric) {
         // Store generic implementation separately
-        std::cout << "DEBUG: Storing generic trait impl: " << traitName << " for " << typeName << std::endl;
+        VYN_CDBG << "DEBUG: Storing generic trait impl: " << traitName << " for " << typeName << std::endl;
         
         auto genericInfo = std::make_unique<GenericImplInfo>(implDecl);
         genericTraitImpls[typeName][traitName] = std::move(genericInfo);
     } else {
         // Store concrete implementation
-        std::cout << "DEBUG: Storing concrete trait impl: " << traitName << " for " << typeName << std::endl;
+        VYN_CDBG << "DEBUG: Storing concrete trait impl: " << traitName << " for " << typeName << std::endl;
         
         std::vector<ast::FunctionDeclaration*> implMethods;
         for (const auto& method : implDecl->methods) {
@@ -5350,7 +5359,7 @@ bool SemanticAnalyzer::validateTraitImpl(const std::string& typeName,
                 
                 // Validate signature matches
                 if (!traitMethodSignatureMatches(traitMethod, implMethod.get())) {
-                    std::cout << "DEBUG: Method signature mismatch for: " << traitMethod.name << std::endl;
+                    VYN_CDBG << "DEBUG: Method signature mismatch for: " << traitMethod.name << std::endl;
                     return false;
                 }
                 
@@ -5360,7 +5369,7 @@ bool SemanticAnalyzer::validateTraitImpl(const std::string& typeName,
         }
         
         if (!found) {
-            std::cout << "DEBUG: Missing required trait method: " << traitMethod.name << std::endl;
+            VYN_CDBG << "DEBUG: Missing required trait method: " << traitMethod.name << std::endl;
             return false;
         }
     }
@@ -5381,7 +5390,7 @@ bool SemanticAnalyzer::traitMethodSignatureMatches(const TraitMethod& traitMetho
     
     // Check parameter count (including self)
     if (implMethod->params.size() != traitMethod.parameterNames.size()) {
-        std::cout << "DEBUG: Parameter count mismatch: " 
+        VYN_CDBG << "DEBUG: Parameter count mismatch: " 
                   << implMethod->params.size() << " vs " 
                   << traitMethod.parameterNames.size() << std::endl;
         return false;
@@ -5393,7 +5402,7 @@ bool SemanticAnalyzer::traitMethodSignatureMatches(const TraitMethod& traitMetho
         std::string traitReturnType = traitMethod.returnType->toString();
         
         if (implReturnType != traitReturnType) {
-            std::cout << "DEBUG: Return type mismatch: " 
+            VYN_CDBG << "DEBUG: Return type mismatch: " 
                       << implReturnType << " vs " << traitReturnType << std::endl;
             return false;
         }

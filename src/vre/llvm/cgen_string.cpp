@@ -255,7 +255,7 @@ llvm::Value* LLVMCodegen::generateToStringCall(llvm::Value* value, llvm::Type* v
             auto structIt = monomorphizedStructs.find(typeName);
             if (structIt != monomorphizedStructs.end()) {
                 // This is a custom struct - serialize to JSON
-                std::cout << "DEBUG: Generating JSON serialization for struct type: " << typeName << std::endl;
+                VYN_CDBG << "DEBUG: Generating JSON serialization for struct type: " << typeName << std::endl;
                 
                 // Call __vyn_complex_to_json(void* instance, const char* type_name)
                 llvm::PointerType* int8PtrType = llvm::PointerType::get(llvm::Type::getInt8Ty(*context), 0);

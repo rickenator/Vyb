@@ -106,13 +106,13 @@ llvm::StructType* LLVMCodegen::monomorphizeStruct(const std::string& baseName,
     // Generate mangled name for this instantiation
     std::string mangledName = mangleGenericTypeName(baseName, typeArgs);
     
-    std::cout << "DEBUG: Monomorphizing " << baseName << " with " << typeArgs.size() 
+    VYN_CDBG << "DEBUG: Monomorphizing " << baseName << " with " << typeArgs.size() 
               << " type arguments -> " << mangledName << std::endl;
     
     // Check cache first
     auto cacheIt = monomorphizedStructs.find(mangledName);
     if (cacheIt != monomorphizedStructs.end()) {
-        std::cout << "DEBUG: Found cached monomorphized struct: " << mangledName << std::endl;
+        VYN_CDBG << "DEBUG: Found cached monomorphized struct: " << mangledName << std::endl;
         return cacheIt->second;
     }
     
@@ -140,7 +140,7 @@ llvm::StructType* LLVMCodegen::monomorphizeStruct(const std::string& baseName,
         if (param && param->name) {
             std::string paramName = param->name->name;
             typeParamMap[paramName] = typeArgs[i].get();
-            std::cout << "DEBUG: Type parameter mapping: " << paramName << " -> " 
+            VYN_CDBG << "DEBUG: Type parameter mapping: " << paramName << " -> " 
                       << typeArgs[i]->toString() << std::endl;
         }
     }
@@ -168,7 +168,7 @@ llvm::StructType* LLVMCodegen::monomorphizeStruct(const std::string& baseName,
         // Substitute type parameters in field type
         ast::TypeNodePtr substitutedType = substituteTypeParameter(fieldDecl->typeNode.get(), typeParamMap);
         
-        std::cout << "DEBUG: Field '" << fieldDecl->name->name << "' original type: " 
+        VYN_CDBG << "DEBUG: Field '" << fieldDecl->name->name << "' original type: " 
                   << fieldDecl->typeNode->toString() 
                   << " -> substituted: " << substitutedType->toString() << std::endl;
         
@@ -187,7 +187,7 @@ llvm::StructType* LLVMCodegen::monomorphizeStruct(const std::string& baseName,
     // Set the struct body
     specializedType->setBody(fieldTypes, /*isPacked=*/false);
     
-    std::cout << "DEBUG: Created specialized struct " << mangledName 
+    VYN_CDBG << "DEBUG: Created specialized struct " << mangledName 
               << " with " << fieldTypes.size() << " fields" << std::endl;
     
     // Update userTypeMap with complete field information

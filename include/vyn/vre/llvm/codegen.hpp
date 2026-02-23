@@ -34,6 +34,14 @@ namespace vyn {
 
 namespace vyn {
 
+// Global flag: when false (the default), all "DEBUG: ..." codegen prints are suppressed.
+// Enable with --debug-codegen CLI flag.
+extern bool g_debug_codegen;
+
+// Convenience macro: use VYN_CDBG in place of std::cerr for DEBUG-level codegen output.
+// The entire chained << expression is skipped when g_debug_codegen is false.
+#define VYN_CDBG if (vyn::g_debug_codegen) std::cerr
+
 // Helper struct for storing information about user-defined types
 struct UserTypeInfo {
     llvm::StructType* llvmType;
