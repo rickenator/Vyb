@@ -132,6 +132,10 @@ private:
     bool m_isLHSOfAssignment = false;
     bool verbose = false;  // Controls detailed warning output
     bool m_isMemberAccessBase = false; // Controls Identifier behavior for member access
+    // Auto-serialization: when main() has a non-Int, non-Void, non-String return type,
+    // its LLVM return type is changed to void and the value is serialized and printed.
+    // This member holds the original return type so cgen_stmt knows how to serialize.
+    llvm::Type* m_mainAutoSerializeOrigRetType = nullptr;
 
     // Ownership and scope tracking
     struct ScopeVariable {

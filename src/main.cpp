@@ -902,28 +902,30 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
                 }
                 return 0;
             }
-            // Other struct types: call as void function (output was handled via println)
-            // TODO: Implement proper multi-value tuple serialization
+            // Other struct types (non-String): codegen has changed return type to void
+            // and emits serialization code (JSON output) inside the function body.
+            // Bool, Float, and multi-value tuple returns all fall into this path.
             typedef void (*VoidMainFuncType)();
             VoidMainFuncType voidMainFunc = reinterpret_cast<VoidMainFuncType>(
                 static_cast<void*>(executorAddr.toPtr<void*>()));
             voidMainFunc();
             return 0;
         } else if (mainReturnsInt) {
-            // Integer return - standard main
+            // Integer return (i32/i64) — Vyn uses Unix exit-code convention:
+            // main()<Int> return value becomes the process exit code (0 = success).
             typedef int (*MainFuncType)();
             MainFuncType intMainFunc = reinterpret_cast<MainFuncType>(static_cast<void*>(executorAddr.toPtr<void*>()));
             int exitCode = intMainFunc();
             return exitCode;
         } else if (mainReturnsVoid) {
-            // Void return
+            // Void return — codegen emits serialization/print code inside the function
+            // for Bool, Float, and multi-value tuple returns (which are lowered to void).
             typedef void (*VoidMainFuncType)();
             VoidMainFuncType voidMainFunc = reinterpret_cast<VoidMainFuncType>(static_cast<void*>(executorAddr.toPtr<void*>()));
             voidMainFunc();
             return 0;
         } else {
-            // Other return type - call as void and return 0
-            std::cout << "Note: main returns non-standard type. Calling without return value handling." << std::endl;
+            // Other return type — call as void (forward-compat catch-all).
             typedef void (*VoidMainFuncType)();
             VoidMainFuncType voidMainFunc = reinterpret_cast<VoidMainFuncType>(static_cast<void*>(executorAddr.toPtr<void*>()));
             voidMainFunc();
