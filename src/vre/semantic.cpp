@@ -297,6 +297,11 @@ void SemanticAnalyzer::visit(ast::Identifier* node) {
         // They will be properly typed in the context where they're used (e.g., Int::from_string())
         return;
     }
+
+    // Enum type names used as namespaces (e.g., Direction in Direction::North)
+    if (enumTypeNames.count(node->name)) {
+        return;
+    }
     
     SymbolInfo* symbol = currentScope->lookup(node->name);
     if (!symbol) {
@@ -1900,6 +1905,14 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
     if (auto objectIdent = dynamic_cast<ast::Identifier*>(node->object.get())) {
         const std::string& typeName = objectIdent->name;
         const std::string& methodName = propertyId->name;
+
+        // Enum variant access: EnumName::VariantName → integer constant (Int)
+        if (enumTypeNames.count(typeName)) {
+            // Set the expression type to Int (enum variants are i64 constants)
+            expressionTypes[node] = new ast::TypeName(node->loc,
+                std::make_unique<ast::Identifier>(node->loc, "Int"));
+            return;
+        }
         
         // Vec::new() - create vector
         if (typeName == "Vec" && methodName == "new") {
@@ -3419,7 +3432,11 @@ void SemanticAnalyzer::visit(ast::StructDeclaration* node) {
     }
 }
 // void SemanticAnalyzer::visit(ast::ClassDeclaration* node) {} // Handled above
-void SemanticAnalyzer::visit(ast::EnumDeclaration* node) {}
+void SemanticAnalyzer::visit(ast::EnumDeclaration* node) {
+    if (!node || !node->name) return;
+    enumTypeNames.insert(node->name->name);
+    // Enum variants are integer constants — no further semantic work needed for C-like enums.
+}
 // void SemanticAnalyzer::visit(ast::TraitDeclaration* node) {} // Handled above (commented out)
 // void SemanticAnalyzer::visit(ast::ImplDeclaration* node) {} // Handled above
 // void SemanticAnalyzer::visit(ast::NamespaceDeclaration* node) {} // Handled above (commented out)

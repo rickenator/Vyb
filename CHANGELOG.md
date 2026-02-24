@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.0] - 2026-02-24 (freedom-1.0 series)
+
+### Added
+- **C-like Enum codegen**: Enum variants now compile to sequential `i64` integer constants.
+  - `enum Direction { North, South, East, West }` declares 4 constants (0, 1, 2, 3)
+  - Variant access via `Direction::North` syntax works in all expression contexts
+  - Enum variant values integrate seamlessly with `match` and comparison operators
+  - Semantic analysis recognizes enum type names; no false "undefined identifier" errors
+  - Future: tagged unions with associated data (`Circle(Float)`) planned for v0.6
+
+### Improved
+- **Silent compiler by default**: Optimization-pass progress messages (`"Applying IR optimization passes"`, `"Skipping IR optimization"`, etc.) are now gated behind `--debug-codegen`; the compiler is quiet during normal use
+- **CMakeLists.txt version**: Project version updated from `0.3.5` → `0.5.0` to match the language's actual state
+
+### Status
+Vyn v0.5.0 delivers a complete systems programming language with LLVM backend, native code generation, generics, aspect/bind polymorphism, pattern matching, defer, error propagation (fail/trap), async/await stubs, Vec<T>, String methods, and now C-like enums.
+
+---
+
 ## [0.4.2] - 2025-10-20 (freedom-1.0 series)
 
 ### Language Philosophy

@@ -3096,7 +3096,26 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
+    // Check for enum variant access: EnumName::VariantName
+    if (!node->computed && node->property) {
+        if (auto* objIdent = dynamic_cast<ast::Identifier*>(node->object.get())) {
+            if (enumTypeNames.count(objIdent->name)) {
+                if (auto* propIdent = dynamic_cast<ast::Identifier*>(node->property.get())) {
+                    const std::string qualName = objIdent->name + "::" + propIdent->name;
+                    auto enumIt = enumVariantValues.find(qualName);
+                    if (enumIt != enumVariantValues.end()) {
+                        m_currentLLVMValue = enumIt->second;
+                        return;
+                    }
+                    logError(node->loc, "Unknown enum variant: " + qualName);
+                    m_currentLLVMValue = nullptr;
+                    return;
+                }
+            }
+        }
+    }
+
     // Evaluate the object expression (should not be treated as LHS)
     bool wasLHS = m_isLHSOfAssignment;
     m_isLHSOfAssignment = false;  // Object evaluation should load the value normally
