@@ -93,7 +93,10 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                 };
                 // Helper: serialize one LLVM value to a JSON char* string
                 auto serializeOne = [&](llvm::Value* val, llvm::Type* t) -> llvm::Value* {
-                    if (!val || !t) return builder->CreateGlobalStringPtr("null");
+                    if (!val || !t) {
+                        VYN_CDBG << "DEBUG: serializeOne - null val or type, emitting JSON null" << std::endl;
+                        return builder->CreateGlobalStringPtr("null");
+                    }
                     if (t->isIntegerTy(1)) {
                         // Bool → "true" or "false"
                         llvm::FunctionType* ft = llvm::FunctionType::get(int8PtrType, {int1Type}, false);
@@ -123,6 +126,8 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                             return builder->CreateCall(concat, {tmp, closeQ}, "str.json");
                         }
                     }
+                    VYN_CDBG << "DEBUG: serializeOne - unsupported type: " << getTypeName(t)
+                              << ", emitting JSON null" << std::endl;
                     return builder->CreateGlobalStringPtr("null");
                 };
 
@@ -133,29 +138,23 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                     // Single primitive value (Bool or Float)
                     jsonStr = serializeOne(returnValue, origType);
                 } else {
+                    // Struct (single-element or multi-value tuple): always use JSON array
                     auto* st = llvm::cast<llvm::StructType>(origType);
                     unsigned numElems = st->getNumElements();
-                    if (numElems == 1) {
-                        // Single-element tuple: emit without array wrapper
-                        llvm::Value* elem = builder->CreateExtractValue(returnValue, {0u}, "elem0");
-                        jsonStr = serializeOne(elem, st->getElementType(0));
-                    } else {
-                        // Multi-value: build JSON array [e0, e1, ...]
-                        llvm::Function* concat = getConcatFn();
-                        jsonStr = builder->CreateGlobalStringPtr("[");
-                        for (unsigned i = 0; i < numElems; i++) {
-                            llvm::Value* elem = builder->CreateExtractValue(
-                                returnValue, {i}, "elem" + std::to_string(i));
-                            llvm::Value* elemJson = serializeOne(elem, st->getElementType(i));
-                            if (i > 0) {
-                                llvm::Value* sep = builder->CreateGlobalStringPtr(", ");
-                                jsonStr = builder->CreateCall(concat, {jsonStr, sep}, "arr.sep");
-                            }
-                            jsonStr = builder->CreateCall(concat, {jsonStr, elemJson}, "arr.elem");
+                    llvm::Function* concat = getConcatFn();
+                    jsonStr = builder->CreateGlobalStringPtr("[");
+                    for (unsigned i = 0; i < numElems; i++) {
+                        llvm::Value* elem = builder->CreateExtractValue(
+                            returnValue, {i}, "elem" + std::to_string(i));
+                        llvm::Value* elemJson = serializeOne(elem, st->getElementType(i));
+                        if (i > 0) {
+                            llvm::Value* sep = builder->CreateGlobalStringPtr(", ");
+                            jsonStr = builder->CreateCall(concat, {jsonStr, sep}, "arr.sep");
                         }
-                        llvm::Value* close = builder->CreateGlobalStringPtr("]");
-                        jsonStr = builder->CreateCall(concat, {jsonStr, close}, "arr.close");
+                        jsonStr = builder->CreateCall(concat, {jsonStr, elemJson}, "arr.elem");
                     }
+                    llvm::Value* close = builder->CreateGlobalStringPtr("]");
+                    jsonStr = builder->CreateCall(concat, {jsonStr, close}, "arr.close");
                 }
 
                 // Print the JSON output

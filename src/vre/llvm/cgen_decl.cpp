@@ -14,6 +14,16 @@
 #include <vector>
 #include <map>
 
+// File-local helper: detect the Vyn String struct representation { ptr, i64 }.
+// Used by both function declaration and forward-declaration code paths.
+static bool isVynStringStructType(llvm::Type* t) {
+    if (!t->isStructTy()) return false;
+    auto* st = llvm::cast<llvm::StructType>(t);
+    return st->getNumElements() == 2 &&
+           st->getElementType(0)->isPointerTy() &&
+           st->getElementType(1)->isIntegerTy(64);
+}
+
 using namespace vyn;
 // using namespace llvm; // Uncomment if desired for brevity
 
@@ -411,17 +421,9 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
         //   and emit serialization code in the return statement (cgen_stmt.cpp).
         //   m_mainAutoSerializeOrigRetType records the original type for cgen_stmt.
         if (node->id->name == "main" && !node->needsErrorReturn) {
-            // Detect Vyn String struct: { ptr, i64 }
-            auto isVynStringStruct = [](llvm::Type* t) -> bool {
-                if (!t->isStructTy()) return false;
-                auto* st = llvm::cast<llvm::StructType>(t);
-                return st->getNumElements() == 2 &&
-                       st->getElementType(0)->isPointerTy() &&
-                       st->getElementType(1)->isIntegerTy(64);
-            };
             bool isIntExitCode = returnType->isIntegerTy() && !returnType->isIntegerTy(1);
             bool isVoidReturn  = returnType->isVoidTy();
-            bool isStringRet   = isVynStringStruct(returnType);
+            bool isStringRet   = isVynStringStructType(returnType);
             if (!isIntExitCode && !isVoidReturn && !isStringRet) {
                 // Emit serialization inside main(); change LLVM return type to void.
                 m_mainAutoSerializeOrigRetType = returnType;
@@ -1077,16 +1079,9 @@ void LLVMCodegen::createFunctionForwardDeclaration(vyn::ast::FunctionDeclaration
     // Apply the same auto-serialization rule as in visit(FunctionDeclaration):
     // main() with Bool, Float, or non-String struct return → use void.
     if (node->id->name == "main" && !node->needsErrorReturn) {
-        auto isVynStringStruct = [](llvm::Type* t) -> bool {
-            if (!t->isStructTy()) return false;
-            auto* st = llvm::cast<llvm::StructType>(t);
-            return st->getNumElements() == 2 &&
-                   st->getElementType(0)->isPointerTy() &&
-                   st->getElementType(1)->isIntegerTy(64);
-        };
         bool isIntExitCode = returnType->isIntegerTy() && !returnType->isIntegerTy(1);
         bool isVoidReturn  = returnType->isVoidTy();
-        bool isStringRet   = isVynStringStruct(returnType);
+        bool isStringRet   = isVynStringStructType(returnType);
         if (!isIntExitCode && !isVoidReturn && !isStringRet) {
             returnType = voidType;
         }
