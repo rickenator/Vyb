@@ -137,11 +137,11 @@ namespace vyn {
 // Function to optimize LLVM IR module based on optimization level
 void optimize_module(llvm::Module* module, llvm::TargetMachine* targetMachine, int optLevel) {
     if (optLevel == 0) {
-        std::cout << "Skipping IR optimization (-O0)" << std::endl;
+        if (vyn::g_debug_codegen) std::cout << "Skipping IR optimization (-O0)" << std::endl;
         return;  // No optimization at -O0
     }
     
-    std::cout << "Applying IR optimization passes (-O" << optLevel << ")..." << std::endl;
+    if (vyn::g_debug_codegen) std::cout << "Applying IR optimization passes (-O" << optLevel << ")..." << std::endl;
     
     // Create analysis managers
     llvm::LoopAnalysisManager LAM;
@@ -164,26 +164,22 @@ void optimize_module(llvm::Module* module, llvm::TargetMachine* targetMachine, i
     
     switch (optLevel) {
         case 1: {
-            // -O1: Basic optimizations (minimal compile time impact)
-            std::cout << "  Using O1 optimization pipeline (basic)" << std::endl;
+            if (vyn::g_debug_codegen) std::cout << "  Using O1 optimization pipeline (basic)" << std::endl;
             MPM = PB.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O1);
             break;
         }
         case 2: {
-            // -O2: Moderate optimizations (default, good balance)
-            std::cout << "  Using O2 optimization pipeline (default)" << std::endl;
+            if (vyn::g_debug_codegen) std::cout << "  Using O2 optimization pipeline (default)" << std::endl;
             MPM = PB.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O2);
             break;
         }
         case 3: {
-            // -O3: Aggressive optimizations (may increase code size)
-            std::cout << "  Using O3 optimization pipeline (aggressive)" << std::endl;
+            if (vyn::g_debug_codegen) std::cout << "  Using O3 optimization pipeline (aggressive)" << std::endl;
             MPM = PB.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3);
             break;
         }
         default: {
-            // Default to O2
-            std::cout << "  Using O2 optimization pipeline (default)" << std::endl;
+            if (vyn::g_debug_codegen) std::cout << "  Using O2 optimization pipeline (default)" << std::endl;
             MPM = PB.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O2);
             break;
         }
@@ -191,7 +187,7 @@ void optimize_module(llvm::Module* module, llvm::TargetMachine* targetMachine, i
     
     // Run the optimization pipeline
     MPM.run(*module, MAM);
-    std::cout << "  IR optimization completed" << std::endl;
+    if (vyn::g_debug_codegen) std::cout << "  IR optimization completed" << std::endl;
 }
 
 

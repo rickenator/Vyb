@@ -9,6 +9,7 @@
 #include <llvm/Support/raw_ostream.h>
 #include <map>
 #include <memory>
+#include <set>
 #include <stack>
 #include <string>
 #include <vector>
@@ -179,6 +180,11 @@ private:
     // Generic function templates
     std::map<std::string, vyn::ast::FunctionDeclaration*> genericFunctionTemplates; // Store generic function AST nodes (e.g., printItem<T>)
     std::map<std::string, llvm::Function*> monomorphizedFunctions; // Cache instantiated functions (e.g., "printItem_Point" -> Function*)
+
+    // Enum variant integer constants: "EnumName::VariantName" -> constant i64
+    std::map<std::string, llvm::Constant*> enumVariantValues;
+    // Set of declared enum type names (for quick lookup)
+    std::set<std::string> enumTypeNames;
     
     // Helper methods
     llvm::Type* codegenType(vyn::ast::TypeNode* typeNode); // Converts vyn::TypeNode to llvm::Type

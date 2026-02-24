@@ -406,6 +406,9 @@ private:
     
     // Struct field type storage for member access resolution
     std::unordered_map<std::string, std::map<std::string, ast::TypeNode*>> structFieldTypes;
+
+    // Enum type names declared in this module (for identifier and member-expression resolution)
+    std::unordered_set<std::string> enumTypeNames;
     
     // Context for resolving 'Self' type in aspect implementations
     ast::TypeNode* currentImplType = nullptr;  // Set to Box<T> when processing bind Display -> Box<T>

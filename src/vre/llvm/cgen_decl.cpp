@@ -948,31 +948,27 @@ void LLVMCodegen::visit(vyn::ast::BindDeclaration* node) {
 }
 
 void LLVMCodegen::visit(vyn::ast::EnumDeclaration* node) {
-    // Enums in Vyn could be C-like (integer-based) or more complex (tagged unions like Rust/Swift).
-    // This implementation sketch assumes C-like enums for simplicity, mapping to integers.
-    // For tagged unions, each variant would be a struct, and the enum type itself a wrapper struct or i8* + tag.
-    logError(node->loc, "EnumDeclaration codegen is not fully implemented (assuming C-like integer enums for now).");
-    
-    // For C-like enums, we might just define constants for each variant.
-    // llvm::Type* enumBaseType = int32Type; // Or infer from values
-    // int64_t currentValue = 0;
-    // for (const auto& variantNode : node->variants) {
-    //     std::string variantName = node->name->name + "::" + variantNode->name->name; // Or however Vyn names enum variants
-    //     if (variantNode->value) { // If explicit value
-    //         variantNode->value->accept(*this);
-    //         if (auto* constInt = llvm::dyn_cast_or_null<llvm::ConstantInt>(m_currentLLVMValue)) {
-    //             currentValue = constInt->getSExtValue();
-    //         } else {
-    //             logError(variantNode->loc, "Enum variant value for '" + variantName + "' is not a constant integer.");
-    //         }
-    //     }
-    //     llvm::Constant* enumConst = llvm::ConstantInt::get(enumBaseType, currentValue);
-    //     // Store this constant somewhere accessible, e.g. in namedValues or a specific enum map.
-    //     // namedValues[variantName] = enumConst; 
-    //     // This makes `MyEnum::Variant` resolve to the integer constant.
-    //     currentValue++;
-    // }
-    m_currentLLVMValue = nullptr; // Enum declaration itself doesn't have a direct LLVM value in this model
+    // C-like integer enum: each variant maps to a sequential i64 constant.
+    // Variants with associated types are not supported yet (tagged union is a future feature).
+    if (!node->name) {
+        logError(node->loc, "EnumDeclaration missing name");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    const std::string& enumName = node->name->name;
+    enumTypeNames.insert(enumName);
+
+    int64_t currentValue = 0;
+    for (const auto& variantNode : node->variants) {
+        if (!variantNode || !variantNode->name) continue;
+        const std::string qualName = enumName + "::" + variantNode->name->name;
+        llvm::Constant* enumConst = llvm::ConstantInt::get(int64Type, currentValue, /*isSigned=*/true);
+        enumVariantValues[qualName] = enumConst;
+        currentValue++;
+    }
+
+    m_currentLLVMValue = nullptr;
 }
 
 void LLVMCodegen::visit(vyn::ast::EnumVariant* node) {

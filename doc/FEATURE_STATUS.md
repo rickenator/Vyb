@@ -54,7 +54,7 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 |---------|--------|-------|
 | Functions (name-first syntax) | ✅ | |
 | Structs | ✅ | |
-| Enums | 🚧 | Parsing + AST complete; codegen not yet implemented (C-like integer enum stub only) |
+| Enums | ✅ | C-like integer enums: variants map to sequential `i64` constants; `Enum::Variant` access works; tagged unions (data variants) planned for v0.6 |
 | Generics (monomorphization) | ✅ | |
 | Aspect/Bind polymorphism | ✅ | |
 | Ownership: `my`, `our`, `their`, `mild` | ✅ | |

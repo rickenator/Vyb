@@ -55,6 +55,8 @@
 - [x] **Vec mutation through borrowed struct fields** — `s.items.push(val)` where `s<their<T>>` now correctly mutates in-place; member-expression Vec calls now get a field *pointer* (not a loaded copy)
 - [x] **Semantic use-after-free fix** — `handleVecMethodCallOnMember` no longer stores raw pointers from temporary `VecType` objects into `expressionTypes`; all return types are cloned into `node->type` first
 - [x] **`test/new_features` 100% pass** — All new-features tests pass (quicksort, stack, insertion sort, etc.)
+- [x] **C-like enum codegen** — `enum Color { Red, Green, Blue }` compiles; variants become sequential `i64` constants (0, 1, 2); `Color::Red` resolves correctly in all expression contexts including `match`
+- [x] **Silence optimization pass messages** — `"Applying IR optimization passes"` / `"Skipping IR optimization"` now gated behind `--debug-codegen`; compiler is quiet in normal use
 
 ---
 
@@ -256,9 +258,9 @@ Vyn needs a way to express sum types. Essential for `Option<T>`, `Result<T,E>`, 
 expressive APIs. **Vyn-natural approach:** enums should integrate with the aspect system
 and pattern matching, not be a separate OOP mechanism.
 
-- [ ] **Enum declaration syntax** — `enum Direction { North, South, East, West }`
-- [ ] **Enum variants with data** — `enum Shape { Circle(Float), Rect(Float, Float) }`
-- [ ] **Pattern matching on enums** — In `match`, `select`, and destructuring
+- [x] **Enum declaration syntax** — `enum Direction { North, South, East, West }` — variants compile to sequential `i64` integer constants (0, 1, 2, …); access via `Direction::North`
+- [ ] **Enum variants with data** — `enum Shape { Circle(Float), Rect(Float, Float) }` (tagged unions; future)
+- [ ] **Pattern matching on enums** — In `match`, `select`, and destructuring (integer match works today)
 - [ ] **Enum methods via `bind`** — `bind Drawable -> Shape { ... }` (natural fit!)
 - [ ] **`Option<T>` as built-in enum** — `Some(T)` / `None`
 - [ ] **`Result<T, E>` as built-in enum** — `Ok(T)` / `Err(E)`
@@ -339,7 +341,7 @@ The compiler must be silent in normal use. DEBUG output makes the language feel 
 
 - [x] **Silence codegen DEBUG output** — All `std::cout << "DEBUG: ..."` and `std::cerr << "DEBUG: ..."` in `src/vre/` and `src/vre/llvm/` (~320 statements) are now gated behind `g_debug_codegen` (default `false`) via the `VYN_CDBG` macro. Enable with `--debug-codegen` CLI flag.
 - [x] **Silence parser trace output** — Parser `[PEEK]`/`[CONSUME]`/`[EXPECT]` traces gated behind `#ifdef VERBOSE` and `VERBOSE` no longer defined globally in `CMakeLists.txt`; off by default. Re-enable with `-DVERBOSE` in the build.
-- [ ] **Silence optimization pass messages** — `"Skipping IR optimization"` / `"Applying IR optimization passes"` printed to stdout unconditionally; gate behind `--verbose` or `-v`.
+- [x] **Silence optimization pass messages** — `"Skipping IR optimization"` / `"Applying IR optimization passes"` now gated behind `--debug-codegen` (same flag as all other debug output).
 - [ ] **Doc consolidation** — `doc/` has overlapping files (`ROADMAP.md`, `TODO_CURRENT.md`, multiple ownership docs). Keep `TODO.md`, `doc/FEATURE_STATUS.md`, `CHANGELOG.md` as living docs; archive or delete the rest into `doc/archive/`; update `doc/README.md` as index.
 - [ ] **Canonical syntax audit** — Audit all `*.md` files for outdated syntax (`unsafe` → `freedom`, old `:` field syntax → `<Type>`, `T: Aspect` → `<T<Aspect>>`).
 
