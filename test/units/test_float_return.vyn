@@ -1,0 +1,9 @@
+// @test: Float return from main is JSONified as output
+// @description: main()<Float> should print the float value and exit 0
+// @category: basic, return-coherence
+// @expect: pass
+// @expect-output: 3.14
+
+main()<Float> -> {
+    return 3.14
+}

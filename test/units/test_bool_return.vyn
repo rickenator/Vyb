@@ -1,0 +1,9 @@
+// @test: Bool return from main is JSONified as output
+// @description: main()<Bool> should print "true" or "false" and exit 0
+// @category: basic, return-coherence
+// @expect: pass
+// @expect-output: true
+
+main()<Bool> -> {
+    return true
+}

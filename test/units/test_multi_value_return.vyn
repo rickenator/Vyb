@@ -1,0 +1,9 @@
+// @test: Multi-value return from main produces JSON array
+// @description: main()<Int, String> should print [42, "hello"] and exit 0
+// @category: basic, return-coherence
+// @expect: pass
+// @expect-output: [42, "hello"]
+
+main()<Int, String> -> {
+    return 42, "hello"
+}

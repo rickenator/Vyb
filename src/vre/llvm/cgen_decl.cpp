@@ -14,6 +14,16 @@
 #include <vector>
 #include <map>
 
+// File-local helper: detect the Vyn String struct representation { ptr, i64 }.
+// Used by both function declaration and forward-declaration code paths.
+static bool isVynStringStructType(llvm::Type* t) {
+    if (!t->isStructTy()) return false;
+    auto* st = llvm::cast<llvm::StructType>(t);
+    return st->getNumElements() == 2 &&
+           st->getElementType(0)->isPointerTy() &&
+           st->getElementType(1)->isIntegerTy(64);
+}
+
 using namespace vyn;
 // using namespace llvm; // Uncomment if desired for brevity
 
@@ -403,15 +413,23 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
             }
         }
         
-        // TODO: Auto-serialization for main function is disabled for now to fix type verification
-        // When enabled, main functions with complex types will serialize to JSON and return i32
-        // if (node->id->name == "main" && 
-        //     !returnType->isIntegerTy() && 
-        //     !returnType->isVoidTy() && 
-        //     !(returnType->isPointerTy() && returnType == int8PtrType) &&
-        //     !functionBodyReturnsLitIntrinsic(node->body.get())) {
-        //     returnType = int32Type; // main returns exit code when auto-serializing
-        // }
+        // Auto-serialization for main():
+        // - main()<Int> (any integer except i1): used as Unix exit code — no change.
+        // - main()<Void>: nothing to serialize — no change.
+        // - main()<String>: handled specially in the JIT runner (main.cpp) — no change.
+        // - main()<Bool>, main()<Float>, main()<T1,T2,...>: change return type to void
+        //   and emit serialization code in the return statement (cgen_stmt.cpp).
+        //   m_mainAutoSerializeOrigRetType records the original type for cgen_stmt.
+        if (node->id->name == "main" && !node->needsErrorReturn) {
+            bool isIntExitCode = returnType->isIntegerTy() && !returnType->isIntegerTy(1);
+            bool isVoidReturn  = returnType->isVoidTy();
+            bool isStringRet   = isVynStringStructType(returnType);
+            if (!isIntExitCode && !isVoidReturn && !isStringRet) {
+                // Emit serialization inside main(); change LLVM return type to void.
+                m_mainAutoSerializeOrigRetType = returnType;
+                returnType = voidType;
+            }
+        }
     } else {
         if (currentAsyncState.isAsync) {
             // Async void function returns Future<void>
@@ -1058,6 +1076,16 @@ void LLVMCodegen::createFunctionForwardDeclaration(vyn::ast::FunctionDeclaration
     }
     
     // Create function type and forward declaration
+    // Apply the same auto-serialization rule as in visit(FunctionDeclaration):
+    // main() with Bool, Float, or non-String struct return → use void.
+    if (node->id->name == "main" && !node->needsErrorReturn) {
+        bool isIntExitCode = returnType->isIntegerTy() && !returnType->isIntegerTy(1);
+        bool isVoidReturn  = returnType->isVoidTy();
+        bool isStringRet   = isVynStringStructType(returnType);
+        if (!isIntExitCode && !isVoidReturn && !isStringRet) {
+            returnType = voidType;
+        }
+    }
     llvm::FunctionType* funcType = llvm::FunctionType::get(returnType, paramTypes, false /*isVarArg*/);
     llvm::Function* func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, node->id->name, module.get());
     

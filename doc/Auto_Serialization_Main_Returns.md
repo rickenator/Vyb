@@ -1,11 +1,34 @@
 **Multi-Value Returns with Typeful JSON Serialization**
 
-**Status:** ✅ Core functionality IMPLEMENTED in v0.3.7
-- Smart type detection working
-- Multi-value returns functional: `main()<Int,String> -> return 42, "hello"`
-- Auto-serialization prevents segfaults
-- Basic structured output implemented
-- Full JSON formatting and advanced features in progress
+**Status:** ✅ Core functionality IMPLEMENTED and COHERENT (v0.5.2)
+- Auto-serialization implemented for all non-exit-code main() return types
+- Coherent rules: Bool, Float, String, multi-value tuples all JSONify; Int is exit code
+- Multi-value returns produce JSON arrays: `[42, "hello"]`
+- Single Bool returns print `true` or `false`
+- Single Float returns print the numeric value
+- Single String returns print JSON-encoded string `"hello"`
+
+## Coherence Rules for main() Return Values
+
+The rules below define how `main()` return values are handled. The design prioritizes
+Unix convention (Int = exit code) while providing clear, predictable JSON output for
+all other types.
+
+| Return type     | Output                            | Exit code | Notes                        |
+| --------------- | --------------------------------- | --------- | ---------------------------- |
+| `main()<Void>`  | *(none)*                          | 0         | No output                    |
+| `main()<Int>`   | *(none)*                          | the value | Unix exit-code convention    |
+| `main()<Bool>`  | `true` or `false`                 | 0         | JSON boolean                 |
+| `main()<Float>` | number (e.g. `3.14`)              | 0         | JSON number                  |
+| `main()<String>`| `"hello world"` (quoted)          | 0         | JSON string                  |
+| `main()<T1,T2>` | `[val1, val2]` JSON array         | 0         | Multi-value tuple            |
+
+### Key rule
+
+- **`main()<Int>`** follows the Unix exit-code convention: the integer value becomes the
+  process exit code (0 = success). No JSON is printed.
+- **All other types** are auto-JSONified: the value is printed to stdout as JSON and the
+  process exits with code 0.
 
 ## Goal
 

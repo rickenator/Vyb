@@ -74,70 +74,99 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
             VYN_CDBG << "DEBUG: Return value LLVM type pointer: " << returnValue->getType() << std::endl;
             VYN_CDBG << "DEBUG: Function return LLVM type pointer: " << (currentFunction ? currentFunction->getReturnType() : nullptr) << std::endl;
             
-            // Check if we're in main function for auto-serialization
-            // BUT skip auto-serialization if this is a lit() intrinsic call
-            // TODO: Auto-serialization temporarily disabled to fix LLVM type verification
-            if (false && currentFunction && currentFunction->getName() == "main" && !isLitIntrinsicCall(node->argument.get())) {
-                // Main function with complex return type - auto-serialize
-                llvm::Function* serializeFunc = getSerializeToJsonFunction();
-                    
-                    // Cast the return value to void* for serialization
-                    llvm::Value* returnValueAsPtr = returnValue;
-                    if (!returnValue->getType()->isPointerTy()) {
-                        // If not a pointer already, create a temporary alloca 
-                        llvm::AllocaInst* tempAlloca = builder->CreateAlloca(returnValue->getType(), nullptr, "ret_temp");
-                        builder->CreateStore(returnValue, tempAlloca);
-                        returnValueAsPtr = tempAlloca;
+            // Auto-serialize main() return values when the return type was changed to void.
+            // m_mainAutoSerializeOrigRetType is set in cgen_decl.cpp for Bool, Float, and
+            // multi-value struct returns from main (Int and Void remain unchanged).
+            if (m_mainAutoSerializeOrigRetType && currentFunction &&
+                    currentFunction->getName() == "main" &&
+                    !isLitIntrinsicCall(node->argument.get())) {
+                // Helper: get or declare a simple function (char* → char* or T → char*)
+                auto getOrDeclFunc = [&](const std::string& name, llvm::FunctionType* ft) -> llvm::Function* {
+                    llvm::Function* f = module->getFunction(name);
+                    if (!f) f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, name, module.get());
+                    return f;
+                };
+                // Helper: get __vyn_string_concat(char*, char*) -> char*
+                auto getConcatFn = [&]() -> llvm::Function* {
+                    llvm::FunctionType* ft = llvm::FunctionType::get(int8PtrType, {int8PtrType, int8PtrType}, false);
+                    return getOrDeclFunc("__vyn_string_concat", ft);
+                };
+                // Helper: serialize one LLVM value to a JSON char* string
+                auto serializeOne = [&](llvm::Value* val, llvm::Type* t) -> llvm::Value* {
+                    if (!val || !t) {
+                        VYN_CDBG << "DEBUG: serializeOne - null val or type, emitting JSON null" << std::endl;
+                        return builder->CreateGlobalStringPtr("null");
                     }
-                    
-                    // Get type name as string (for serialization)
-                    std::string typeName = getTypeName(returnValue->getType());
-                    
-                    // For structs, extract the actual struct type name if possible
-                    if (returnValue->getType()->isPointerTy()) {
-                        // Try to get struct name from the object pointer directly
-                        std::string typeStr = getTypeName(returnValue->getType());
-                        if (typeStr.find("struct.") != std::string::npos) {
-                            // This is a struct pointer, extract the name
-                            size_t prefixPos = typeStr.find("struct.");
-                            size_t startPos = prefixPos + 7; // length of "struct."
-                            size_t endPos = typeStr.find('*', startPos);
-                            if (endPos != std::string::npos && endPos > startPos) {
-                                typeName = typeStr.substr(startPos, endPos - startPos - 1);
-                            }
-                        }
-                        
-                        // If we have a struct name in userTypeMap for this value, use it
-                        for (const auto& entry : userTypeMap) {
-                            if (entry.second.llvmType && returnValue->getType()->isPointerTy()) {
-                                // For opaque pointers in LLVM 15+, we can't easily get element type
-                                // Skip this check for now and rely on type name matching
-                                if (llvm::AllocaInst* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(returnValue)) {
-                                    llvm::Type* elementType = allocaInst->getAllocatedType();
-                                    if (entry.second.llvmType == elementType) {
-                                        typeName = entry.first;
-                                        break;
-                                    }
-                                }
-                            }
+                    if (t->isIntegerTy(1)) {
+                        // Bool → "true" or "false"
+                        llvm::FunctionType* ft = llvm::FunctionType::get(int8PtrType, {int1Type}, false);
+                        return builder->CreateCall(getOrDeclFunc("__vyn_bool_to_string", ft), {val}, "bool.json");
+                    } else if (t->isIntegerTy()) {
+                        // Int → number string
+                        llvm::Value* v64 = builder->CreateSExtOrTrunc(val, int64Type, "to.i64");
+                        llvm::FunctionType* ft = llvm::FunctionType::get(int8PtrType, {int64Type}, false);
+                        return builder->CreateCall(getOrDeclFunc("__vyn_int_to_string", ft), {v64}, "int.json");
+                    } else if (t->isFloatTy() || t->isDoubleTy()) {
+                        // Float → number string
+                        llvm::Value* vdbl = t->isFloatTy()
+                            ? builder->CreateFPExt(val, doubleType, "to.dbl") : val;
+                        llvm::FunctionType* ft = llvm::FunctionType::get(int8PtrType, {doubleType}, false);
+                        return builder->CreateCall(getOrDeclFunc("__vyn_float_to_string", ft), {vdbl}, "float.json");
+                    } else if (t->isStructTy()) {
+                        // Check for Vyn String struct { ptr, i64 } → JSON-quoted string
+                        auto* st = llvm::cast<llvm::StructType>(t);
+                        if (st->getNumElements() == 2 &&
+                                st->getElementType(0)->isPointerTy() &&
+                                st->getElementType(1)->isIntegerTy(64)) {
+                            llvm::Value* strPtr = builder->CreateExtractValue(val, 0, "str.ptr");
+                            llvm::Function* concat = getConcatFn();
+                            llvm::Value* openQ  = builder->CreateGlobalStringPtr("\"");
+                            llvm::Value* closeQ = builder->CreateGlobalStringPtr("\"");
+                            llvm::Value* tmp = builder->CreateCall(concat, {openQ, strPtr}, "str.open");
+                            return builder->CreateCall(concat, {tmp, closeQ}, "str.json");
                         }
                     }
-                    
-                    llvm::Value* typeNameValue = builder->CreateGlobalStringPtr(typeName, "typename");
-                    
-                    // Convert to void* (int8*)
-                    llvm::Value* voidPtr = builder->CreateBitCast(returnValueAsPtr, int8PtrType, "as_void_ptr");
-                    
-                    // Call serialize function
-                    llvm::Value* jsonString = builder->CreateCall(serializeFunc, {voidPtr, typeNameValue}, "json_result");
-                    
-                    // Print the JSON string
-                    llvm::Function* printlnFunc = getVynPrintlnFunction();
-                    builder->CreateCall(printlnFunc, {jsonString});
-                         // Return 0 as exit code after auto-serialization
-                builder->CreateRet(llvm::ConstantInt::get(int32Type, 0));
+                    VYN_CDBG << "DEBUG: serializeOne - unsupported type: " << getTypeName(t)
+                              << ", emitting JSON null" << std::endl;
+                    return builder->CreateGlobalStringPtr("null");
+                };
+
+                llvm::Type* origType = m_mainAutoSerializeOrigRetType;
+                llvm::Value* jsonStr = nullptr;
+
+                if (!origType->isStructTy()) {
+                    // Single primitive value (Bool or Float)
+                    jsonStr = serializeOne(returnValue, origType);
+                } else {
+                    // Struct (single-element or multi-value tuple): always use JSON array
+                    auto* st = llvm::cast<llvm::StructType>(origType);
+                    unsigned numElems = st->getNumElements();
+                    llvm::Function* concat = getConcatFn();
+                    jsonStr = builder->CreateGlobalStringPtr("[");
+                    for (unsigned i = 0; i < numElems; i++) {
+                        llvm::Value* elem = builder->CreateExtractValue(
+                            returnValue, {i}, "elem" + std::to_string(i));
+                        llvm::Value* elemJson = serializeOne(elem, st->getElementType(i));
+                        if (i > 0) {
+                            llvm::Value* sep = builder->CreateGlobalStringPtr(", ");
+                            jsonStr = builder->CreateCall(concat, {jsonStr, sep}, "arr.sep");
+                        }
+                        jsonStr = builder->CreateCall(concat, {jsonStr, elemJson}, "arr.elem");
+                    }
+                    llvm::Value* close = builder->CreateGlobalStringPtr("]");
+                    jsonStr = builder->CreateCall(concat, {jsonStr, close}, "arr.close");
+                }
+
+                // Print the JSON output
+                llvm::Function* printlnFunc = getVynPrintlnFunction();
+                if (jsonStr) builder->CreateCall(printlnFunc, {jsonStr});
+
+                // Clean up scope and pop call frame, then return void
+                if (!scopeStack.empty()) exitScope();
+                generatePopFrameCall();
+                builder->CreateRetVoid();
             } else {
-                // Not in main function - normal return
+                // Not in main function (or plain Int/Void main) - normal return
                 VYN_CDBG << "DEBUG: Return value type: " << getTypeName(returnValue->getType())
                           << ", Function return type: " << getTypeName(currentFunction->getReturnType()) << std::endl;
                 
