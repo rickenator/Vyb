@@ -497,6 +497,7 @@ public:
     void visit(vyn::ast::EnsureClause* node) override;
     void visit(vyn::ast::RethrowStatement* node) override;
     void visit(vyn::ast::PanicStatement* node) override;
+    void visit(vyn::ast::ExitStatement* node) override;
     void visit(vyn::ast::DeferStatement* node) override;
     
     void visit(vyn::ast::TypeNode* node) override;

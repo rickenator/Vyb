@@ -414,17 +414,15 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
         }
         
         // Auto-serialization for main():
-        // - main()<Int> (any integer except i1): used as Unix exit code — no change.
         // - main()<Void>: nothing to serialize — no change.
         // - main()<String>: handled specially in the JIT runner (main.cpp) — no change.
-        // - main()<Bool>, main()<Float>, main()<T1,T2,...>: change return type to void
-        //   and emit serialization code in the return statement (cgen_stmt.cpp).
+        // - All other types (Int, Bool, Float, multi-value tuples): change return type to void
+        //   and emit serialization (JSON) code in the return statement (cgen_stmt.cpp).
         //   m_mainAutoSerializeOrigRetType records the original type for cgen_stmt.
         if (node->id->name == "main" && !node->needsErrorReturn) {
-            bool isIntExitCode = returnType->isIntegerTy() && !returnType->isIntegerTy(1);
             bool isVoidReturn  = returnType->isVoidTy();
             bool isStringRet   = isVynStringStructType(returnType);
-            if (!isIntExitCode && !isVoidReturn && !isStringRet) {
+            if (!isVoidReturn && !isStringRet) {
                 // Emit serialization inside main(); change LLVM return type to void.
                 m_mainAutoSerializeOrigRetType = returnType;
                 returnType = voidType;
@@ -1077,12 +1075,11 @@ void LLVMCodegen::createFunctionForwardDeclaration(vyn::ast::FunctionDeclaration
     
     // Create function type and forward declaration
     // Apply the same auto-serialization rule as in visit(FunctionDeclaration):
-    // main() with Bool, Float, or non-String struct return → use void.
+    // main() with any non-Void, non-String return → use void (auto-serialization).
     if (node->id->name == "main" && !node->needsErrorReturn) {
-        bool isIntExitCode = returnType->isIntegerTy() && !returnType->isIntegerTy(1);
         bool isVoidReturn  = returnType->isVoidTy();
         bool isStringRet   = isVynStringStructType(returnType);
-        if (!isIntExitCode && !isVoidReturn && !isStringRet) {
+        if (!isVoidReturn && !isStringRet) {
             returnType = voidType;
         }
     }

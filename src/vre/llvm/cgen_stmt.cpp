@@ -1680,6 +1680,43 @@ void LLVMCodegen::visit(vyn::ast::PanicStatement* node) {
     m_currentLLVMValue = nullptr;
 }
 
+void LLVMCodegen::visit(vyn::ast::ExitStatement* node) {
+    // Generate: call void @exit(i32 code) then unreachable
+    if (!node->code) {
+        logError(node->loc, "exit statement missing exit code expression");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    // Evaluate the exit code expression
+    node->code->accept(*this);
+    llvm::Value* codeValue = m_currentLLVMValue;
+
+    if (!codeValue) {
+        logError(node->loc, "exit code expression evaluated to null");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    // Convert to i32 (standard exit code type)
+    llvm::Value* code32 = builder->CreateTruncOrBitCast(codeValue, llvm::Type::getInt32Ty(*context), "exit.code");
+
+    // Declare or get @exit(i32) -> void (noreturn C standard library function)
+    llvm::Function* exitFn = module->getFunction("exit");
+    if (!exitFn) {
+        llvm::FunctionType* exitFnType = llvm::FunctionType::get(
+            llvm::Type::getVoidTy(*context), {llvm::Type::getInt32Ty(*context)}, false);
+        exitFn = llvm::Function::Create(
+            exitFnType, llvm::Function::ExternalLinkage, "exit", module.get());
+        exitFn->addFnAttr(llvm::Attribute::NoReturn);
+    }
+
+    builder->CreateCall(exitFn, {code32});
+    builder->CreateUnreachable();
+
+    m_currentLLVMValue = nullptr;
+}
+
 void LLVMCodegen::visit(vyn::ast::DeferStatement* node) {
     // DeferStatement: register the statement to run at function exit
     if (m_deferStack.empty()) {

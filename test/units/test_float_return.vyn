@@ -2,6 +2,7 @@
 // @description: main()<Float> should print the float value and exit 0
 // @category: basic, return-coherence
 // @expect: pass
+// @execute-jit: true
 // @expect-output: 3.14
 
 main()<Float> -> {

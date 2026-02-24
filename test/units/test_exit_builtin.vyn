@@ -1,0 +1,11 @@
+// @test: exit(n) built-in terminates process with given exit code
+// @description: exit(n) is a built-in that calls the C exit() function with the given code;
+//               this test verifies that exit() syntax is recognized and compiles correctly.
+//               When executed, main() -> { exit(0) } exits with code 0 (success).
+// @category: basic, return-coherence
+// @expect: pass
+// @execute-jit: true
+
+main() -> {
+    exit(0)
+}

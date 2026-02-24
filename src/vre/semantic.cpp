@@ -3957,6 +3957,35 @@ void SemanticAnalyzer::visit(ast::PanicStatement* node) {
     // This will be tracked in control flow analysis
 }
 
+void SemanticAnalyzer::visit(ast::ExitStatement* node) {
+    // Verify exit code expression is present
+    if (!node->code) {
+        addError("exit statement requires an integer exit code expression", node);
+        return;
+    }
+    // Type check the exit code expression
+    node->code->accept(*this);
+
+    // Verify the exit code expression resolves to an integer type
+    auto it = expressionTypes.find(node->code.get());
+    if (it != expressionTypes.end() && it->second) {
+        ast::TypeNode* codeType = it->second;
+        if (auto typeName = dynamic_cast<ast::TypeName*>(codeType)) {
+            const std::string& name = typeName->identifier ? typeName->identifier->name : "";
+            // Accept Int and all sized integer types
+            bool isIntType = (name == "Int" || name == "Int8" || name == "Int16" ||
+                              name == "Int32" || name == "Int64" || name == "UInt" ||
+                              name == "UInt8" || name == "UInt16" || name == "UInt32" ||
+                              name == "UInt64");
+            if (!isIntType) {
+                addError("exit() requires an integer exit code, got: " + typeName->toString(), node->code.get());
+            }
+        }
+        // If we can't determine the type name (e.g. complex expression), allow it through
+    }
+    // Note: exit is a noreturn operation - control flow never continues after exit
+}
+
 void SemanticAnalyzer::visit(ast::DeferStatement* node) {
     if (!node->statement) {
         addError("defer statement requires a body", node);

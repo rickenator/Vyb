@@ -1018,11 +1018,27 @@ check_invariant(value<Int>)<Void> -> {
 ### Exit Codes
 
 ```
-0   - Success (normal exit)
-1   - Untrapped error (default)
+0   - Success (normal exit, or any main() return value that is JSONified)
+1   - Untrapped error (default; untrapped `fail` always exits with 1)
 2   - Panic
 101 - User-defined error (custom handler can set)
 ```
+
+To exit with a specific code, use the `exit(n)` built-in:
+
+```vyn
+main() -> {
+    // ... do work ...
+    exit(42)   // terminates process with exit code 42; no stdout output
+}
+```
+
+`exit(n)` is a noreturn built-in that works in any function context. It does NOT produce
+any stdout output — use `println` explicitly before calling `exit(n)` if you need output.
+
+> **Note:** `main()<Int>` no longer sets the exit code. As of v0.5.3, returning an `Int`
+> from `main()` JSONifies it to stdout (just like Bool, Float, and String) and exits with
+> code 0. Use `exit(n)` to set a custom exit code.
 
 ### Environment Variables
 

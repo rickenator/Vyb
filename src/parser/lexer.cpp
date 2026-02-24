@@ -498,6 +498,7 @@ vyn::TokenType Lexer::get_keyword_type(const std::string& word) {
         {"rethrow", vyn::TokenType::KEYWORD_RETHROW},
         {"ensure", vyn::TokenType::KEYWORD_ENSURE},
         {"panic", vyn::TokenType::KEYWORD_PANIC},
+        {"exit", vyn::TokenType::KEYWORD_EXIT},
         {"typeof", vyn::TokenType::KEYWORD_TYPEOF},
         {"typename", vyn::TokenType::KEYWORD_TYPENAME}
     };

@@ -1970,6 +1970,28 @@ void PanicStatement::accept(Visitor& visitor) {
     visitor.visit(this);
 }
 
+// ExitStatement implementation
+ExitStatement::ExitStatement(SourceLocation loc, ExprPtr code)
+    : Statement(loc), code(std::move(code)) {}
+
+NodeType ExitStatement::getType() const {
+    return NodeType::EXIT_STATEMENT;
+}
+
+std::string ExitStatement::toString() const {
+    std::stringstream ss;
+    ss << "exit(";
+    if (code) {
+        ss << code->toString();
+    }
+    ss << ")";
+    return ss.str();
+}
+
+void ExitStatement::accept(Visitor& visitor) {
+    visitor.visit(this);
+}
+
 // DeferStatement implementation
 DeferStatement::DeferStatement(SourceLocation loc, StmtPtr statement)
     : Statement(loc), statement(std::move(statement)) {}
