@@ -122,6 +122,8 @@ vyn::ast::StmtPtr StatementParser::parse() {
             return parse_fail();
         case vyn::TokenType::KEYWORD_PANIC:
             return parse_panic();
+        case vyn::TokenType::KEYWORD_EXIT:
+            return parse_exit();
         case vyn::TokenType::KEYWORD_RETHROW:
             return parse_rethrow();
         default:
@@ -966,6 +968,7 @@ bool StatementParser::is_statement_start(vyn::TokenType type) const {
         case vyn::TokenType::KEYWORD_FREEDOM:
         case vyn::TokenType::KEYWORD_FAIL:
         case vyn::TokenType::KEYWORD_PANIC:
+        case vyn::TokenType::KEYWORD_EXIT:
         case vyn::TokenType::KEYWORD_RETHROW:
         case vyn::TokenType::KEYWORD_DEFER:
         case vyn::TokenType::IDENTIFIER: // Added identifier for relaxed syntax
@@ -1305,6 +1308,29 @@ std::unique_ptr<vyn::ast::PanicStatement> StatementParser::parse_panic() {
     match(vyn::TokenType::SEMICOLON);
     
     return std::make_unique<vyn::ast::PanicStatement>(loc, std::move(messageExpr));
+}
+
+// Parses an exit statement: 'exit(n)' — terminates process with exit code n
+std::unique_ptr<vyn::ast::ExitStatement> StatementParser::parse_exit() {
+    SourceLocation loc = expect(vyn::TokenType::KEYWORD_EXIT, "Expected 'exit'").location;
+    
+    // Expect '('
+    expect(vyn::TokenType::LPAREN, "Expected '(' after 'exit'");
+    
+    // Parse the exit code expression (must evaluate to Int)
+    auto codeExpr = expr_parser_.parse_expression();
+    
+    if (!codeExpr) {
+        throw std::runtime_error("Expected exit code expression at " + location_to_string(loc));
+    }
+    
+    // Expect ')'
+    expect(vyn::TokenType::RPAREN, "Expected ')' after exit code");
+    
+    // Optional semicolon
+    match(vyn::TokenType::SEMICOLON);
+    
+    return std::make_unique<vyn::ast::ExitStatement>(loc, std::move(codeExpr));
 }
 
 // Parses a rethrow statement: 'rethrow' or 'fail NewError { cause = e }'

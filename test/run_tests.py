@@ -60,6 +60,7 @@ class TestCase:
     expect_return: Optional[str] = None
     parse_only: bool = False
     semantic_only: bool = False
+    execute_jit: bool = False  # When True, run with JIT execution regardless of global flag
     
     def __post_init__(self):
         if self.category is None:
@@ -110,6 +111,10 @@ def parse_directives(file_path):
         if semantic_match and semantic_match.group(1).strip().lower() in ('true', 'yes', '1'):
             test.semantic_only = True
         
+        jit_match = re.search(r'// @execute-jit:\s*(.*?)$', content, re.MULTILINE)
+        if jit_match and jit_match.group(1).strip().lower() in ('true', 'yes', '1'):
+            test.execute_jit = True
+        
     except Exception as e:
         print(f"Error parsing test directives in {file_path}: {str(e)}")
         
@@ -123,7 +128,7 @@ def run_test(test, vyn_executable, verbose=False, execute_jit=False):
         cmd.append("--parse-only")
     elif test.semantic_only:
         cmd.append("--semantic-only")
-    elif not execute_jit:
+    elif not execute_jit and not test.execute_jit:
         cmd.append("--no-execute")  # Don't execute if JIT execution is not requested
     
     if verbose:

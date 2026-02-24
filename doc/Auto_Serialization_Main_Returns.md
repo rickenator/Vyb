@@ -1,34 +1,53 @@
 **Multi-Value Returns with Typeful JSON Serialization**
 
-**Status:** ✅ Core functionality IMPLEMENTED and COHERENT (v0.5.2)
-- Auto-serialization implemented for all non-exit-code main() return types
-- Coherent rules: Bool, Float, String, multi-value tuples all JSONify; Int is exit code
+**Status:** ✅ Core functionality IMPLEMENTED and COHERENT (v0.5.3)
+- Auto-serialization implemented for ALL non-Void, non-String main() return types
+- Coherent rules: Int, Bool, Float, String, multi-value tuples all JSONify to stdout; exit code is always 0
+- `exit(n)` built-in available to set the process exit code explicitly
 - Multi-value returns produce JSON arrays: `[42, "hello"]`
+- Single Int returns print the numeric value (e.g. `42`)
 - Single Bool returns print `true` or `false`
 - Single Float returns print the numeric value
 - Single String returns print JSON-encoded string `"hello"`
 
 ## Coherence Rules for main() Return Values
 
-The rules below define how `main()` return values are handled. The design prioritizes
-Unix convention (Int = exit code) while providing clear, predictable JSON output for
-all other types.
+The rules below define how `main()` return values are handled. All non-Void return types
+produce JSON output to stdout and exit with code 0. Use `exit(n)` to set a custom exit code.
 
 | Return type     | Output                            | Exit code | Notes                        |
 | --------------- | --------------------------------- | --------- | ---------------------------- |
 | `main()<Void>`  | *(none)*                          | 0         | No output                    |
-| `main()<Int>`   | *(none)*                          | the value | Unix exit-code convention    |
+| `main()<Int>`   | number (e.g. `42`)               | 0         | JSON number                  |
 | `main()<Bool>`  | `true` or `false`                 | 0         | JSON boolean                 |
-| `main()<Float>` | number (e.g. `3.14`)              | 0         | JSON number                  |
+| `main()<Float>` | number (e.g. `3.14`)             | 0         | JSON number                  |
 | `main()<String>`| `"hello world"` (quoted)          | 0         | JSON string                  |
 | `main()<T1,T2>` | `[val1, val2]` JSON array         | 0         | Multi-value tuple            |
+| `exit(n)`       | *(none)*                          | n         | Built-in; works anywhere     |
 
 ### Key rule
 
-- **`main()<Int>`** follows the Unix exit-code convention: the integer value becomes the
-  process exit code (0 = success). No JSON is printed.
-- **All other types** are auto-JSONified: the value is printed to stdout as JSON and the
-  process exits with code 0.
+- **All non-Void return types** are auto-JSONified: the value is printed to stdout as JSON
+  and the process exits with code 0.
+- **`exit(n)`** terminates the process immediately with exit code `n`. No output is produced.
+  Use this to explicitly control the process exit code from any function.
+
+### Migration note
+
+Prior to v0.5.3, `main()<Int>` used the Unix exit-code convention (the integer return value
+became the process exit code). Programs that relied on that behavior should be updated to
+call `exit(n)` explicitly:
+
+```vyn
+// Old behavior (v0.5.2 and earlier):
+main()<Int> -> { return 42 }  // exit code 42, no stdout output
+
+// New behavior (v0.5.3+): returns 42 as JSON to stdout, exits 0
+main()<Int> -> { return 42 }  // stdout: 42, exit code: 0
+
+// To get the old behavior, use exit(n):
+main() -> { exit(42) }         // no stdout output, exit code: 42
+```
 
 ## Goal
 

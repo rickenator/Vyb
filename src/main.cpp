@@ -814,15 +814,11 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
         // Check main function's return type before moving module
         llvm::Function* mainFuncForTypeCheck = module->getFunction("main");
         bool mainReturnsStruct = false;
-        bool mainReturnsInt = false;
-        bool mainReturnsVoid = false;
         bool mainReturnsString = false;    // { ptr, i64 } Vyn string struct
         
         if (mainFuncForTypeCheck) {
             llvm::Type* returnType = mainFuncForTypeCheck->getReturnType();
             mainReturnsStruct = returnType->isStructTy();
-            mainReturnsInt = returnType->isIntegerTy();
-            mainReturnsVoid = returnType->isVoidTy();
             // Detect if this is a Vyn string struct: { ptr, i64 } with 2 elements
             if (mainReturnsStruct) {
                 llvm::StructType* st = llvm::cast<llvm::StructType>(returnType);
@@ -884,7 +880,7 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
         
         auto executorAddr = *symbolResult;
         
-        // Check if return type is a struct (tuple or single complex type)
+        // Check if return type is a struct (for String returns handled specially)
         if (mainReturnsStruct) {
             if (mainReturnsString) {
                 // Single String return: call as struct { char*, int64_t } returning function
@@ -902,32 +898,14 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
                 }
                 return 0;
             }
-            // Other struct types (non-String): codegen has changed return type to void
-            // and emits serialization code (JSON output) inside the function body.
-            // Bool, Float, and multi-value tuple returns all fall into this path.
+            // Non-String struct: fall through to void call (codegen changed return type to void)
+        }
+        // Void return (or any non-String type, which codegen has lowered to void with
+        // inline serialization): call as void and return 0.
+        {
             typedef void (*VoidMainFuncType)();
             VoidMainFuncType voidMainFunc = reinterpret_cast<VoidMainFuncType>(
                 static_cast<void*>(executorAddr.toPtr<void*>()));
-            voidMainFunc();
-            return 0;
-        } else if (mainReturnsInt) {
-            // Integer return (i32/i64) — Vyn uses Unix exit-code convention:
-            // main()<Int> return value becomes the process exit code (0 = success).
-            typedef int (*MainFuncType)();
-            MainFuncType intMainFunc = reinterpret_cast<MainFuncType>(static_cast<void*>(executorAddr.toPtr<void*>()));
-            int exitCode = intMainFunc();
-            return exitCode;
-        } else if (mainReturnsVoid) {
-            // Void return — codegen emits serialization/print code inside the function
-            // for Bool, Float, and multi-value tuple returns (which are lowered to void).
-            typedef void (*VoidMainFuncType)();
-            VoidMainFuncType voidMainFunc = reinterpret_cast<VoidMainFuncType>(static_cast<void*>(executorAddr.toPtr<void*>()));
-            voidMainFunc();
-            return 0;
-        } else {
-            // Other return type — call as void (forward-compat catch-all).
-            typedef void (*VoidMainFuncType)();
-            VoidMainFuncType voidMainFunc = reinterpret_cast<VoidMainFuncType>(static_cast<void*>(executorAddr.toPtr<void*>()));
             voidMainFunc();
             return 0;
         }

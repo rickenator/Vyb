@@ -86,6 +86,7 @@ class TrapClause; // Error handling: trap clause for handling failures
 class EnsureClause; // Error handling: ensure clause for cleanup
 class RethrowStatement; // Error handling: rethrow current error
 class PanicStatement; // Error handling: unrecoverable panic
+class ExitStatement;  // Process exit with code: exit(n)
 class DeferStatement; // Deferred execution at scope exit
 
 // Declarations
@@ -240,6 +241,7 @@ enum class NodeType {
     ENSURE_CLAUSE, // Error handling: ensure clause
     RETHROW_STATEMENT, // Error handling: rethrow
     PANIC_STATEMENT, // Error handling: panic
+    EXIT_STATEMENT,  // Process exit with code
     DEFER_STATEMENT, // Deferred execution at scope exit
 
     // Declarations
@@ -345,6 +347,7 @@ public:
     virtual void visit(EnsureClause* node) = 0;
     virtual void visit(RethrowStatement* node) = 0;
     virtual void visit(PanicStatement* node) = 0;
+    virtual void visit(ExitStatement* node) = 0;
     virtual void visit(DeferStatement* node) = 0;
 
     // Declarations
@@ -1596,6 +1599,18 @@ public:
 
     PanicStatement(SourceLocation loc, ExprPtr message);
     ~PanicStatement() override = default;
+    NodeType getType() const override;
+    std::string toString() const override;
+    void accept(Visitor& visitor) override;
+};
+
+// ExitStatement - Terminate process with exit code: exit(n)
+class ExitStatement : public Statement {
+public:
+    ExprPtr code; // Exit code expression (must be Int)
+
+    ExitStatement(SourceLocation loc, ExprPtr code);
+    ~ExitStatement() override = default;
     NodeType getType() const override;
     std::string toString() const override;
     void accept(Visitor& visitor) override;

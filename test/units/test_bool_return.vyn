@@ -2,6 +2,7 @@
 // @description: main()<Bool> should print "true" or "false" and exit 0
 // @category: basic, return-coherence
 // @expect: pass
+// @execute-jit: true
 // @expect-output: true
 
 main()<Bool> -> {
