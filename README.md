@@ -1,5 +1,7 @@
 <img src="vyn.png" alt="Vyn Image" width="300">
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/rickenator/Vyn)
+
 ## Vyn Programming Guide
 
 ---
