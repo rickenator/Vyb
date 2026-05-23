@@ -10,7 +10,9 @@ extern "C" {
 }
 
 main()<Int> -> {
-    p<loc<Void>> = malloc(8)
-    free(p)
+    freedom {
+        p<loc<Void>> = malloc(8)
+        free(p)
+    }
     return 0
 }

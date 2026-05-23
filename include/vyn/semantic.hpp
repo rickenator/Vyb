@@ -417,6 +417,7 @@ private:
     
     // Function registry for error propagation analysis
     std::unordered_map<std::string, ast::FunctionDeclaration*> functionRegistry;
+    std::unordered_set<std::string> externalFunctionNames;
     
     // Helper for transitive error propagation
     bool checkCallsFailableFunction(ast::Node* node);

@@ -9,6 +9,8 @@ extern "C" {
 }
 
 main()<Int> -> {
-    puts("Hello from Vyn FFI")
+    freedom {
+        puts("Hello from Vyn FFI")
+    }
     return 0
 }

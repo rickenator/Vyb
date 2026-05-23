@@ -1,0 +1,14 @@
+// @test: extern C calls require freedom
+// @description: Direct calls to extern C functions are rejected outside freedom blocks
+// @category: ffi, interop, freedom
+// @expect: fail
+// @tags: ffi, extern, freedom
+
+extern "C" {
+    puts(message<loc<Int8>>)<Int>
+}
+
+main()<Int> -> {
+    puts("outside freedom")
+    return 0
+}

@@ -1,0 +1,12 @@
+// FFI example: declare C functions at module scope, call them inside freedom.
+
+extern "C" {
+    puts(message<loc<Int8>>)<Int>
+}
+
+main()<Int> -> {
+    freedom {
+        puts("Hello from Vyn FFI")
+    }
+    return 0
+}

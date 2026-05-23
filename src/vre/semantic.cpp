@@ -352,10 +352,21 @@ void SemanticAnalyzer::visit(ast::Module* node) {
     
     // First pass: Build registry and visit all declarations
     functionRegistry.clear();
+    externalFunctionNames.clear();
     for (auto& item : node->body) {
         if (auto funcDecl = dynamic_cast<ast::FunctionDeclaration*>(item.get())) {
             if (funcDecl->id) {
                 functionRegistry[funcDecl->id->name] = funcDecl;
+            }
+        } else if (auto namespaceDecl = dynamic_cast<ast::NamespaceDeclaration*>(item.get())) {
+            if (namespaceDecl->name && namespaceDecl->name->name == "__extern_C") {
+                for (auto& member : namespaceDecl->members) {
+                    if (auto funcDecl = dynamic_cast<ast::FunctionDeclaration*>(member.get())) {
+                        if (funcDecl->id) {
+                            externalFunctionNames.insert(funcDecl->id->name);
+                        }
+                    }
+                }
             }
         }
     }
@@ -760,8 +771,16 @@ void SemanticAnalyzer::visit(ast::NamespaceDeclaration* node) {
         addError("Identifier \\\"" + node->name->name + "\\\" is a reserved word and cannot be used as a namespace name.", node->name.get());
     }
 
+    bool isExternCBlock = node->name && node->name->name == "__extern_C";
     for (auto& member : node->members) {
         if (member) {
+            if (isExternCBlock) {
+                if (auto* functionDecl = dynamic_cast<ast::FunctionDeclaration*>(member.get())) {
+                    if (functionDecl->id) {
+                        externalFunctionNames.insert(functionDecl->id->name);
+                    }
+                }
+            }
             member->accept(*this);
         }
     }
@@ -891,6 +910,10 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
     // Handle intrinsics
     if (auto ident = dynamic_cast<ast::Identifier*>(node->callee.get())) {
         const std::string& name = ident->name;
+
+        if (externalFunctionNames.count(name) && !isInUnsafeBlock()) {
+            addError("External function '" + name + "' can only be called inside a freedom block.", node);
+        }
         
         // Handle serialization intrinsics (lit, notype, bare, deserial)
         if (name == "lit" || name == "notype" || name == "bare" || name == "deserial") {
