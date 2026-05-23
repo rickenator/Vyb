@@ -60,6 +60,10 @@ is still in progress; see `doc/OWNERSHIP_MILD.md` for current status.
 Demonstrates `mild<T>` (soft/weak) reference syntax using `soft()`, `.released()`.
 Control block runtime enforcement is planned for v0.5.
 
+### `ffi_puts.vyn` — C FFI Through Freedom
+Declares libc `puts` in an `extern "C"` block and calls it inside `freedom { }`.
+This is the intended boundary for direct FFI calls.
+
 ---
 
 ## Coming Soon (require features in progress)
@@ -69,6 +73,6 @@ Control block runtime enforcement is planned for v0.5.
 | Generic sort `<T<Comparable>>` | Generic aspect bounds (v0.5) |
 | `HashMap` word count | `HashMap<K,V>` stdlib (v0.5) |
 | File I/O | `File::open/read/write` stdlib (v0.5) |
-| FFI — call `strlen` | `extern "C"` FFI (v0.5) |
+| FFI — variadic calls / `repr(C)` structs | Expanded FFI (v0.5) |
 | Multi-file project | Module system `import`/`smuggle` (v0.5) |
 | TCP server | Sockets via FFI (post-1.0) |
