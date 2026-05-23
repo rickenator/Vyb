@@ -6,8 +6,8 @@ These demos are intended to run with the current compiler and runtime:
 build/vyn demos/<file>.vyn
 ```
 
-The demos avoid by-value `Vec<T>` helper returns until Vec ownership move/clone
-semantics are completed.
+The demos are intentionally compact; richer runtime examples, including
+`Vec<T>` helper-return algorithms and local module imports, live in `examples/`.
 
 | Demo | Covers |
 |------|--------|

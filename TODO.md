@@ -34,7 +34,7 @@ is the working audit for what needs to be implemented next.
 | Async/await | ~80% | Real scheduler/executor |
 | Error propagation (`fail`/`trap`) | ~40% | Phases 2-5 |
 | Lambda/closure codegen | ~50% | Full closure struct, captured-var codegen |
-| Module system (`import`/`smuggle`/`bundle`) | ~20% | Import/smuggle parsing done; resolution, bundle, share pending |
+| Module system (`import`/`smuggle`/`bundle`) | ~35% | Local import resolution done; aliases, bundle, share, module paths pending |
 | FFI (`extern "C"`) | ~15% | extern modifier + ExternStatement codegen work; block syntax and C-type mapping pending |
 | Standard library | ~45% | Vec, String, I/O, Math done; HashMap, File I/O needed |
 | Introspection (`typeof`/`typename`) | ~75% | Downcasting, type assertions |
@@ -209,8 +209,8 @@ Vyn's `import`/`smuggle`/`bundle`/`share` system is a unique approach to module 
 See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
 
 - [x] **Phase 1.1 — Import Parsing** — `import <path>`, `import <path> as <alias>`, `import <path> from "<locator>"`, `smuggle <path> as <alias>`, `ImportKind` (TrustedImport / Smuggle) captured in AST
-- [ ] **Phase 1.1 — Module Registry** — `ModuleRegistry` class; `loadModule(path)`, `resolveImport()` (currently no-ops at codegen)
-  - Circular dependency detection
+- [x] **Phase 1.1 — Local Module Resolution** — local `import nested::module`, `import name from "./file.vyn"`, recursive loading, import deduping, and circular dependency detection before semantic analysis/codegen
+- [ ] **Phase 1.1b — Module Registry** — formal `ModuleRegistry` class, module cache API, alias/specifier support, and re-export semantics
 - [ ] **Phase 1.2 — `bundle(...)` Declaration Parsing**
   - `BundleDeclaration` AST node
   - `bundle(sort.Core, sort.Common)` at file top

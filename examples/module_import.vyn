@@ -1,0 +1,9 @@
+// Local module import example.
+
+import modules::math_tools
+
+main()<Int> -> {
+    value<Int> = double(9) + square(4)
+    println("module result = " + value.to_string())
+    return 0
+}

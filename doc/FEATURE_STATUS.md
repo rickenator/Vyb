@@ -10,17 +10,17 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| `import <path>` | ✅ | Parses module path (`::` or `.` separated) |
+| `import <path>` | ✅ | Parses module path and resolves local `.vyn` files (`::` or `.` separated) |
 | `import <path> as <alias>` | ✅ | Alias binding at parse level |
 | `import <path> from "<locator>"` | ✅ | Locator string parsed and stored in AST |
 | `smuggle <path> from "<locator>"` | ✅ | Locator string parsed and stored in AST |
 | `smuggle <path> as <alias>` | ✅ | Alias binding at parse level |
 | `ImportKind` (TrustedImport / Smuggle) | ✅ | Captured in AST `ImportDeclaration.kind` |
 | `from` keyword | ✅ | Lexed as `KEYWORD_FROM`; also valid in `from<T>(addr)` freedom-block expressions |
-| Module resolution (load files) | 🚧 | Pre-codegen resolution stub; imports are no-ops at codegen |
-| Local path loading (`from "./..."`) | 📋 | v0.5.x |
+| Module resolution (load files) | 🚧 | Local files are loaded and spliced before semantic analysis/codegen; aliases/specifiers remain unsupported |
+| Local path loading (`from "./..."`) | ✅ | Relative locators resolve from the importing file |
 | URL/Git fetching (`from "github.com/..."`) | 📋 | v0.6.x |
-| Module cycle detection | 📋 | v0.5.x |
+| Module cycle detection | ✅ | Circular local imports are rejected |
 | Symbol re-export | 📋 | v0.6.x |
 
 ## Println / Output

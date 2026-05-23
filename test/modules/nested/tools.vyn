@@ -1,0 +1,13 @@
+// @test: Nested module helper declarations
+// @description: Helper module parsed by nested module-path import tests
+// @category: modules
+// @expect: pass
+// @parse-only: true
+
+struct Multiplier {
+    factor<Int>
+}
+
+apply_multiplier(multiplier<Multiplier>, value<Int>)<Int> -> {
+    return multiplier.factor * value
+}

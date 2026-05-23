@@ -10,6 +10,8 @@
 #include <vector>
 #include <string>
 #include <set> // For test and parser verbosity specifiers
+#include <filesystem>
+#include <unordered_set>
 #include <algorithm> // For std::find
 #include <cstdio> // For printf and fflush
 #include <cstdlib> // For malloc/free
@@ -191,6 +193,148 @@ void optimize_module(llvm::Module* module, llvm::TargetMachine* targetMachine, i
     if (vyn::g_debug_codegen) std::cout << "  IR optimization completed" << std::endl;
 }
 
+namespace {
+namespace fs = std::filesystem;
+
+struct ModuleResolutionState {
+    std::unordered_set<std::string> loaded;
+    std::vector<std::string> active;
+};
+
+std::string read_source_file(const fs::path& path) {
+    std::ifstream file(path);
+    if (!file) {
+        throw std::runtime_error("Could not read imported module: " + path.string());
+    }
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    return buffer.str();
+}
+
+fs::path normalized_path(const fs::path& path) {
+    std::error_code ec;
+    fs::path absolute = fs::absolute(path, ec);
+    if (ec) {
+        absolute = path;
+    }
+    fs::path normalized = fs::weakly_canonical(absolute, ec);
+    if (ec) {
+        normalized = absolute.lexically_normal();
+    }
+    return normalized;
+}
+
+fs::path module_path_to_file(const std::string& modulePath, const fs::path& baseDir) {
+    fs::path relative;
+    size_t start = 0;
+    while (start <= modulePath.size()) {
+        size_t sep = modulePath.find("::", start);
+        std::string segment = modulePath.substr(start, sep == std::string::npos ? std::string::npos : sep - start);
+        if (!segment.empty()) {
+            relative /= segment;
+        }
+        if (sep == std::string::npos) {
+            break;
+        }
+        start = sep + 2;
+    }
+
+    if (!relative.has_extension()) {
+        relative += ".vyn";
+    }
+    return normalized_path(baseDir / relative);
+}
+
+fs::path resolve_import_path(const vyn::ast::ImportDeclaration* importDecl, const fs::path& importingFile) {
+    if (!importDecl || !importDecl->source) {
+        throw std::runtime_error("Malformed import declaration");
+    }
+
+    if (!importDecl->specifiers.empty() || importDecl->defaultImport || importDecl->namespaceImport) {
+        throw std::runtime_error("Import aliases/specifiers are parsed but not yet supported by module resolution: " +
+                                 importDecl->toString());
+    }
+
+    fs::path baseDir = importingFile.parent_path();
+    if (importDecl->locator) {
+        const std::string& locator = importDecl->locator->value;
+        if (locator.find("://") != std::string::npos) {
+            throw std::runtime_error("External import locators are not supported yet: " + locator);
+        }
+        fs::path located(locator);
+        return normalized_path(located.is_absolute() ? located : baseDir / located);
+    }
+
+    return module_path_to_file(importDecl->source->value, baseDir);
+}
+
+std::unique_ptr<vyn::ast::Module> parse_module_only(const std::string& source, const std::string& fileName) {
+    Lexer lexer(source, fileName);
+    std::vector<vyn::token::Token> tokens = lexer.tokenize();
+    vyn::Parser parser(tokens, fileName);
+    auto ast = parser.parse_module();
+    if (!ast) {
+        throw std::runtime_error("Failed to parse source code: " + fileName);
+    }
+    return ast;
+}
+
+bool is_main_function(const vyn::ast::StmtPtr& stmt) {
+    auto* fn = dynamic_cast<vyn::ast::FunctionDeclaration*>(stmt.get());
+    return fn && fn->id && fn->id->name == "main";
+}
+
+std::unique_ptr<vyn::ast::Module> parse_module_with_imports(const std::string& source,
+                                                            const std::string& fileName,
+                                                            ModuleResolutionState& state,
+                                                            bool isRoot) {
+    fs::path currentPath = normalized_path(fileName);
+    std::string currentKey = currentPath.string();
+
+    if (std::find(state.active.begin(), state.active.end(), currentKey) != state.active.end()) {
+        throw std::runtime_error("Circular import detected at " + currentKey);
+    }
+
+    if (!isRoot && state.loaded.find(currentKey) != state.loaded.end()) {
+        return std::make_unique<vyn::ast::Module>(vyn::SourceLocation(currentKey, 1, 1),
+                                                  std::vector<vyn::ast::StmtPtr>{});
+    }
+
+    state.loaded.insert(currentKey);
+    state.active.push_back(currentKey);
+
+    auto module = parse_module_only(source, currentKey);
+    std::vector<vyn::ast::StmtPtr> resolvedBody;
+
+    for (auto& stmt : module->body) {
+        if (auto* importDecl = dynamic_cast<vyn::ast::ImportDeclaration*>(stmt.get())) {
+            fs::path importedPath = resolve_import_path(importDecl, currentPath);
+            std::string importedSource = read_source_file(importedPath);
+            auto importedModule = parse_module_with_imports(importedSource, importedPath.string(), state, false);
+
+            for (auto& importedStmt : importedModule->body) {
+                if (is_main_function(importedStmt)) {
+                    throw std::runtime_error("Imported module must not define main(): " + importedPath.string());
+                }
+                resolvedBody.push_back(std::move(importedStmt));
+            }
+            continue;
+        }
+
+        resolvedBody.push_back(std::move(stmt));
+    }
+
+    module->body = std::move(resolvedBody);
+    state.active.pop_back();
+    return module;
+}
+
+std::unique_ptr<vyn::ast::Module> parse_vyn_module(const std::string& source, const std::string& fileName) {
+    ModuleResolutionState state;
+    return parse_module_with_imports(source, fileName, state, true);
+}
+} // namespace
+
 
 
 // Function to compile Vyn code to object file
@@ -209,17 +353,8 @@ int compile_vyn_to_object(const std::string& source, const std::string& fileName
         std::cout << "Creating driver instance..." << std::endl;
         vyn::Driver driver;
 
-        std::cout << "Tokenizing source code..." << std::endl;
-        Lexer lexer(source, fileName);
-        std::vector<vyn::token::Token> tokens = lexer.tokenize();
-        std::cout << "Tokens generated: " << tokens.size() << " tokens" << std::endl;
-
-        std::cout << "Parsing tokens into AST..." << std::endl;
-        vyn::Parser parser(tokens, fileName);
-        auto ast = parser.parse_module();
-        if (!ast) {
-            throw std::runtime_error("Failed to parse source code");
-        }
+        std::cout << "Parsing source and resolving imports..." << std::endl;
+        auto ast = parse_vyn_module(source, fileName);
         std::cout << "AST created successfully" << std::endl;
 
         std::cout << "Running semantic analysis..." << std::endl;
@@ -515,17 +650,8 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
         VYN_CDBG << "Creating driver instance..." << std::endl;
         vyn::Driver driver;
 
-        VYN_CDBG << "Tokenizing source code..." << std::endl;
-        Lexer lexer(source, fileName);
-        std::vector<vyn::token::Token> tokens = lexer.tokenize();
-        VYN_CDBG << "Tokens generated: " << tokens.size() << " tokens" << std::endl;
-
-        VYN_CDBG << "Parsing tokens into AST..." << std::endl;
-        vyn::Parser parser(tokens, fileName);
-        auto ast = parser.parse_module();
-        if (!ast) {
-            throw std::runtime_error("Failed to parse source code");
-        }
+        VYN_CDBG << "Parsing source and resolving imports..." << std::endl;
+        auto ast = parse_vyn_module(source, fileName);
         VYN_CDBG << "AST created successfully" << std::endl;
 
         VYN_CDBG << "Running semantic analysis..." << std::endl;
@@ -1076,20 +1202,7 @@ int main(int argc, char* argv[]) {
 
             // In parse-only mode, just tokenize and parse
             if (parse_only_mode) {
-                Lexer lexer(source, filename);
-                auto tokens = lexer.tokenize();
-                
-                // Optional: Print tokens if verbose mode is enabled
-                if (g_make_all_tests_verbose || !g_verbose_test_specifiers.empty()) {
-                    std::cout << "Tokenization results:" << std::endl;
-                    for (const auto& token : tokens) {
-                        std::cout << vyn::token_type_to_string(token.type) << " (" << token.lexeme << ") at " 
-                                << token.location.filePath << ":" << token.location.line << ":" << token.location.column << std::endl;
-                    }
-                }
-
-                vyn::Parser parser(tokens, filename);
-                std::unique_ptr<vyn::ast::Module> ast = parser.parse_module();
+                auto ast = parse_vyn_module(source, filename);
                 
                 std::cout << "Parse completed successfully" << std::endl;
                 return 0;
@@ -1097,10 +1210,7 @@ int main(int argc, char* argv[]) {
             
             // Generate LLVM IR to a file if requested
             if (emit_llvm_ir) {
-                Lexer lexer(source, filename);
-                auto tokens = lexer.tokenize();
-                vyn::Parser parser(tokens, filename);
-                auto ast = parser.parse_module();
+                auto ast = parse_vyn_module(source, filename);
                 
                 vyn::Driver driver;
                 
@@ -1136,10 +1246,7 @@ int main(int argc, char* argv[]) {
             
             // In semantic-only mode, run semantic analysis without execution
             if (semantic_only_mode) {
-                Lexer lexer(source, filename);
-                auto tokens = lexer.tokenize();
-                vyn::Parser parser(tokens, filename);
-                auto ast = parser.parse_module();
+                auto ast = parse_vyn_module(source, filename);
                 
                 vyn::Driver driver;
                 vyn::SemanticAnalyzer semanticAnalyzer(driver);
@@ -1214,10 +1321,7 @@ int main(int argc, char* argv[]) {
 
             // --no-execute: parse + semantic analysis to validate the file without running it
             {
-                Lexer lexer(source, filename);
-                auto tokens = lexer.tokenize();
-                vyn::Parser parser(tokens, filename);
-                auto ast = parser.parse_module();
+                auto ast = parse_vyn_module(source, filename);
 
                 vyn::Driver driver;
                 vyn::SemanticAnalyzer semanticAnalyzer(driver);

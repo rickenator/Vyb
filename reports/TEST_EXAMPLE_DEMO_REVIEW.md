@@ -6,8 +6,8 @@ Date: 2026-05-23
 
 | Area | Count | Status |
 |------|------:|--------|
-| Tests | 658 `.vyn` files | Organized by feature area; docs updated |
-| Examples | 11 `.vyn` files | All execute with `build/vyn examples/<file>.vyn` |
+| Tests | 671 `.vyn` files | Organized by feature area; docs updated |
+| Examples | 12 top-level `.vyn` programs | All execute with `build/vyn examples/<file>.vyn` |
 | Demos | 4 `.vyn` files | Added runnable demos under `demos/` |
 
 ## Fixes Applied
@@ -22,6 +22,8 @@ Date: 2026-05-23
   parameters and returns.
 - Expanded examples to cover recursive quicksort, insertion sort helper
   returns, and struct-backed stack helpers at runtime.
+- Added local module import coverage for same-directory, nested-path, and
+  `from "./file.vyn"` module resolution.
 - Added demos for control flow, collections, aspects, and FFI freedom blocks.
 
 ## Verification
@@ -30,6 +32,7 @@ Date: 2026-05-23
 cmake --build build -j2
 python3 test/run_tests.py --test-dir test/new_features --vyn build/vyn --execute-jit
 python3 test/run_tests.py --test-dir test/ffi --vyn build/vyn --execute-jit
+python3 test/run_tests.py --test-dir test/modules --vyn build/vyn --execute-jit
 for f in examples/*.vyn; do build/vyn "$f"; done
 for f in demos/*.vyn; do build/vyn "$f"; done
 ```
@@ -39,8 +42,9 @@ demos sequentially.
 
 ## Remaining Test Debt
 
-- Full-suite execution still needs triage by directory. `test/new_features` and
-  `test/ffi` are the current verified runtime suites from this pass.
+- Full-suite execution still needs triage by directory. `test/new_features`,
+  `test/ffi`, and `test/modules` are the current verified runtime suites from
+  this pass.
 - `test/debug/` contains scratch/regression files and should be split into
   runnable regression tests versus archived repros.
 - Generated artifacts and backup files under `test/` should be removed from

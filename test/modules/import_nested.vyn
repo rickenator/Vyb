@@ -1,0 +1,13 @@
+// @test: Nested module path import
+// @description: import nested::tools resolves to nested/tools.vyn
+// @category: modules
+// @expect: pass
+// @expect-output: 28
+
+import nested::tools
+
+main()<Int> -> {
+    multiplier<Multiplier> = Multiplier { factor = 7 }
+    println_int(apply_multiplier(multiplier, 4))
+    return 0
+}

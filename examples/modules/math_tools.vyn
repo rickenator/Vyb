@@ -1,0 +1,7 @@
+double(value<Int>)<Int> -> {
+    return value * 2
+}
+
+square(value<Int>)<Int> -> {
+    return value * value
+}

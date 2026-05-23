@@ -28,6 +28,12 @@ expect-fail tests are treated as stronger evidence than optimistic status text.
   organization docs, and documented remaining ownership/runtime gaps in
   `reports/TEST_EXAMPLE_DEMO_REVIEW.md` and
   `reports/LANGUAGE_COMPLETION_REVIEW.md`.
+- 2026-05-23: Began module finalization by resolving local `.vyn` imports in
+  the driver before semantic analysis and codegen. `import nested::module`
+  resolves to `nested/module.vyn`, `import name from "./file.vyn"` resolves
+  relative file locators, imported declarations are spliced before use, and
+  duplicate/circular imports are guarded. Added module runtime tests and a
+  runnable example.
 
 ## Audit Scope
 

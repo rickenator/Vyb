@@ -1,0 +1,13 @@
+// @test: Module helper declarations
+// @description: Helper module parsed by import tests
+// @category: modules
+// @expect: pass
+// @parse-only: true
+
+double(value<Int>)<Int> -> {
+    return value * 2
+}
+
+triple(value<Int>)<Int> -> {
+    return value * 3
+}

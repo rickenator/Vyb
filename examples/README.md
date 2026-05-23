@@ -6,8 +6,9 @@ Runnable Vyn programs demonstrating the current language surface.
 build/vyn examples/<file>.vyn
 ```
 
-All files in this directory are expected to execute successfully with the
-current compiler. Heavier feature walkthroughs live in `demos/`.
+All top-level `.vyn` files in this directory are expected to execute
+successfully with the current compiler. Support modules live under
+`examples/modules/`. Heavier feature walkthroughs live in `demos/`.
 
 ## Examples
 
@@ -24,6 +25,7 @@ current compiler. Heavier feature walkthroughs live in `demos/`.
 | `memory_semantics.vyn` | `freedom`, `loc<T>`, and `at(ptr)` |
 | `mild_references.vyn` | `our<T>` and `mild<T>` syntax |
 | `ffi_puts.vyn` | `extern "C"` plus `freedom`-gated calls |
+| `module_import.vyn` | local module import from `examples/modules/` |
 
 ## Known Boundaries
 
