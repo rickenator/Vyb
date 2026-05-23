@@ -33,7 +33,12 @@ vyn::ast::DeclPtr DeclarationParser::parse() {
     token::Token current_token = this->peek();
     token::Token next_token = this->peekNext();
 
-    if (current_token.type == vyn::TokenType::KEYWORD_FN ||
+    if (current_token.type == vyn::TokenType::KEYWORD_EXTERN) {
+        if (next_token.type == vyn::TokenType::STRING_LITERAL) {
+            return this->parse_extern_block();
+        }
+        return this->parse_function();
+    } else if (current_token.type == vyn::TokenType::KEYWORD_FN ||
         current_token.type == vyn::TokenType::KEYWORD_ASYNC || // Accept async fn (legacy) and async name(params) (new)
         (current_token.type == vyn::TokenType::IDENTIFIER && current_token.lexeme == "async" && next_token.type == vyn::TokenType::KEYWORD_FN) || // async fn (legacy)
         (current_token.type == vyn::TokenType::IDENTIFIER && next_token.type == vyn::TokenType::LPAREN && this->is_function_declaration_context())) { // NEW UNIFIED SYNTAX: name(params) in function declaration context
@@ -1143,6 +1148,53 @@ std::unique_ptr<vyn::ast::ImportDeclaration> DeclarationParser::parse_smuggle_de
         specifiers.emplace_back(nullptr, std::move(alias));
     }
     return std::make_unique<vyn::ast::ImportDeclaration>(loc, vyn::ast::ImportKind::Smuggle, std::move(source), std::move(locator), std::move(specifiers));
+}
+
+std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_extern_block() {
+    vyn::SourceLocation loc = this->current_location();
+    this->expect(vyn::TokenType::KEYWORD_EXTERN);
+
+    if (this->peek().type != vyn::TokenType::STRING_LITERAL) {
+        throw std::runtime_error("Expected ABI string after 'extern' at " +
+                                 location_to_string(this->current_location()));
+    }
+
+    std::string abi = this->consume().lexeme;
+    if (abi != "C") {
+        throw std::runtime_error("Unsupported extern ABI '" + abi + "' at " +
+                                 location_to_string(this->current_location()) +
+                                 ". Only extern \"C\" is currently supported.");
+    }
+
+    this->expect(vyn::TokenType::LBRACE);
+
+    std::vector<ast::DeclPtr> members;
+    while (!this->IsAtEnd() && this->peek().type != vyn::TokenType::RBRACE) {
+        this->skip_comments_and_newlines();
+        if (this->peek().type == vyn::TokenType::RBRACE) {
+            break;
+        }
+
+        auto function_decl = this->parse_function();
+        if (!function_decl) {
+            throw std::runtime_error("Expected function signature in extern \"C\" block at " +
+                                     location_to_string(this->current_location()));
+        }
+        if (function_decl->body) {
+            throw std::runtime_error("Extern \"C\" declarations cannot include function bodies at " +
+                                     location_to_string(function_decl->loc));
+        }
+
+        members.push_back(std::move(function_decl));
+        while (this->peek().type == vyn::TokenType::SEMICOLON) {
+            this->consume();
+        }
+    }
+
+    this->expect(vyn::TokenType::RBRACE);
+
+    auto name = std::make_unique<ast::Identifier>(loc, "__extern_C");
+    return std::make_unique<ast::NamespaceDeclaration>(loc, std::move(name), std::move(members));
 }
 
 std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_class_declaration() {

@@ -1,0 +1,16 @@
+// @test: extern C malloc/free smoke test
+// @description: Top-level extern "C" blocks declare C functions callable from Vyn
+// @category: ffi, interop
+// @expect: pass
+// @tags: ffi, extern
+
+extern "C" {
+    malloc(size<Int>)<loc<Void>>
+    free(memory<loc<Void>>)<Void>
+}
+
+main()<Int> -> {
+    p<loc<Void>> = malloc(8)
+    free(p)
+    return 0
+}

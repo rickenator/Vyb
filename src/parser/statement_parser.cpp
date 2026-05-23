@@ -51,6 +51,15 @@ vyn::ast::StmtPtr StatementParser::parse() {
             } else {
                 throw std::runtime_error("Async function parsing not available in this context at " + location_to_string(current_token.location));
             }
+        case vyn::TokenType::KEYWORD_EXTERN:
+            if (decl_parser_) {
+                if (this->peekNext().type == vyn::TokenType::STRING_LITERAL) {
+                    return decl_parser_->parse_extern_block();
+                }
+                return decl_parser_->parse_function();
+            } else {
+                throw std::runtime_error("Extern declaration parsing not available in this context at " + location_to_string(current_token.location));
+            }
         case vyn::TokenType::KEYWORD_CLASS:
             if (decl_parser_) {
                 return decl_parser_->parse_class_declaration();
@@ -954,6 +963,7 @@ bool StatementParser::is_statement_start(vyn::TokenType type) const {
         case vyn::TokenType::KEYWORD_VAR: // Added var
         case vyn::TokenType::KEYWORD_AUTO: // Added auto
         case vyn::TokenType::KEYWORD_ASYNC: // Accept async
+        case vyn::TokenType::KEYWORD_EXTERN:
         case vyn::TokenType::KEYWORD_CLASS: // Added class
         case vyn::TokenType::KEYWORD_TEMPLATE: // Added template
         case vyn::TokenType::KEYWORD_IF:
