@@ -1,32 +1,51 @@
-// Sort three values using compare-and-swap.
-// This stays runtime-safe while Vec move/clone semantics are completed.
+// Insertion sort over Vec<Int>.
+
+insert_sorted(sorted<Vec<Int>>, value<Int>)<Vec<Int>> -> {
+    result<Vec<Int>> = Vec::new()
+    inserted<Bool> = false
+    i<Int> = 0
+
+    while (i < sorted.len()) {
+        if (!inserted && value <= sorted.get(i)) {
+            result.push(value)
+            inserted = true
+        }
+        result.push(sorted.get(i))
+        i = i + 1
+    }
+
+    if (!inserted) {
+        result.push(value)
+    }
+
+    return result
+}
+
+sort_ints(nums<Vec<Int>>)<Vec<Int>> -> {
+    sorted<Vec<Int>> = Vec::new()
+    i<Int> = 0
+    while (i < nums.len()) {
+        sorted = insert_sorted(sorted, nums.get(i))
+        i = i + 1
+    }
+    return sorted
+}
 
 main()<Int> -> {
-    a<Int> = 64
-    b<Int> = 12
-    c<Int> = 34
+    nums<Vec<Int>> = Vec::new()
+    nums.push(64)
+    nums.push(12)
+    nums.push(34)
+    nums.push(5)
 
-    if (a > b) {
-        tmp<Int> = a
-        a = b
-        b = tmp
-    }
-
-    if (b > c) {
-        tmp<Int> = b
-        b = c
-        c = tmp
-    }
-
-    if (a > b) {
-        tmp<Int> = a
-        a = b
-        b = tmp
-    }
+    sorted<Vec<Int>> = sort_ints(nums)
 
     println("Sort example")
-    println_int(a)
-    println_int(b)
-    println_int(c)
+    i<Int> = 0
+    while (i < sorted.len()) {
+        println_int(sorted.get(i))
+        i = i + 1
+    }
+
     return 0
 }

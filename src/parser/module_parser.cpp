@@ -23,24 +23,30 @@ std::unique_ptr<vyn::ast::Module> ModuleParser::parse() {
         auto decl_node = this->declaration_parser_.parse();
         if (decl_node) {
             module_body.push_back(std::move(decl_node));
+            #ifdef VERBOSE
             std::cerr << "[ModuleParser] Before consuming semicolons, next token: "
                       << vyn::token_type_to_string(this->peek().type) << " (" << this->peek().lexeme << ")\\\\n";
+            #endif
             // Consume all consecutive semicolons after top-level declaration (e.g., class, struct, etc.)
             while (this->peek().type == vyn::TokenType::SEMICOLON) {
+                #ifdef VERBOSE
                 std::cerr << "[ModuleParser] Consuming semicolon at: " << this->peek().location.toString() << "\\\\n";
+                #endif
                 this->consume();
             }
+            #ifdef VERBOSE
             std::cerr << "[ModuleParser] After consuming semicolons, next token: "
                       << vyn::token_type_to_string(this->peek().type) << " (" << this->peek().lexeme << ")\\\\n";
+            #endif
         } else {
             // If parsing a declaration failed and no tokens were consumed,
             // it means we encountered something unexpected.
             // To prevent an infinite loop, consume the token and report an error, or break.
             if (this->pos_ == pos_before_parse && this->peek().type == current_token_before_parse.type && this->peek().lexeme == current_token_before_parse.lexeme) {
-                 std::cerr << "[ModuleParser] Error: No progress made. Unexpected token: "
-                           << vyn::token_type_to_string(this->peek().type)
-                           << " (\\\"" << this->peek().lexeme << "\\\") at "
-                           << this->peek().location.toString() << ". Stopping parse.\\\\n";
+                std::cerr << "[ModuleParser] Error: No progress made. Unexpected token: "
+                          << vyn::token_type_to_string(this->peek().type)
+                          << " (\\\"" << this->peek().lexeme << "\\\") at "
+                          << this->peek().location.toString() << ". Stopping parse.\\\\n";
                 // Optionally, throw an exception here or add to an error list
                 // For now, let's break to prevent infinite loop.
                 // You might want to consume the token: this->consume();

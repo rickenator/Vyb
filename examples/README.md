@@ -14,9 +14,9 @@ current compiler. Heavier feature walkthroughs live in `demos/`.
 | Example | Covers |
 |---------|--------|
 | `main.vyn` | arithmetic, structs, `Vec<T>`, `match`, strings, recursion, `defer` |
-| `sort.vyn` | compare-and-swap sorting without by-value Vec returns |
-| `quicksort.vyn` | quicksort partition logic over a local `Vec<Int>` |
-| `stack.vyn` | stack behavior using `Vec<Int>` directly |
+| `sort.vyn` | insertion sort with `Vec<Int>` helper functions |
+| `quicksort.vyn` | recursive quicksort returning `Vec<Int>` |
+| `stack.vyn` | stack helpers over a struct containing `Vec<Int>` |
 | `binary_tree_clean.vyn` | flat tree-node storage and lookup with `Vec<TreeNode>` |
 | `vec_filter.vyn` | filtering values into a second vector |
 | `vec_max.vyn` | scanning a vector for a maximum value |
@@ -27,7 +27,6 @@ current compiler. Heavier feature walkthroughs live in `demos/`.
 
 ## Known Boundaries
 
-The current examples avoid returning or passing `Vec<T>` by value in runtime
-algorithm helpers. Semantic tests cover those forms, but runtime execution still
-needs completed Vec move/clone ownership semantics to prevent shallow-copy
-double frees.
+The examples now include runtime `Vec<T>` helper returns for common algorithm
+paths. Remaining ownership work is broader: enforcing full move/drop rules for
+all owned aggregates and documenting the final borrow/mutation contract.

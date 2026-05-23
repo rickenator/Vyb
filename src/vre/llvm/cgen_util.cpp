@@ -211,11 +211,13 @@ llvm::Value* LLVMCodegen::createEntryBlockAlloca(llvm::Function* func, const std
         }
     }
     
-    VYN_CDBG << "DEBUG: createEntryBlockAlloca(3-param) - ";
-    if (insertPoint) {
-        std::cerr << "Found last alloca, inserting '" << varName << "' after it\n";
-    } else {
-        std::cerr << "No allocas found, inserting '" << varName << "' at beginning\n";
+    if (vyn::g_debug_codegen) {
+        std::cerr << "DEBUG: createEntryBlockAlloca(3-param) - ";
+        if (insertPoint) {
+            std::cerr << "Found last alloca, inserting '" << varName << "' after it\n";
+        } else {
+            std::cerr << "No allocas found, inserting '" << varName << "' at beginning\n";
+        }
     }
     
     llvm::IRBuilder<> tmpB(*context);
@@ -229,12 +231,14 @@ llvm::Value* LLVMCodegen::createEntryBlockAlloca(llvm::Function* func, const std
     
     auto* alloca = tmpB.CreateAlloca(type, nullptr, varName);
     
-    VYN_CDBG << "DEBUG: createEntryBlockAlloca(3-param) - Created alloca '" << varName << "', current order:\n";
-    for (auto& inst : func->getEntryBlock()) {
-        if (auto* ai = llvm::dyn_cast<llvm::AllocaInst>(&inst)) {
-            std::cerr << "  - " << ai->getName().str() << "\n";
-        } else {
-            break;
+    if (vyn::g_debug_codegen) {
+        std::cerr << "DEBUG: createEntryBlockAlloca(3-param) - Created alloca '" << varName << "', current order:\n";
+        for (auto& inst : func->getEntryBlock()) {
+            if (auto* ai = llvm::dyn_cast<llvm::AllocaInst>(&inst)) {
+                std::cerr << "  - " << ai->getName().str() << "\n";
+            } else {
+                break;
+            }
         }
     }
     
@@ -275,12 +279,14 @@ llvm::AllocaInst* LLVMCodegen::createEntryBlockAlloca(llvm::Type* type, const st
     
     auto* alloca = TmpB.CreateAlloca(type, nullptr, name);
     
-    VYN_CDBG << "DEBUG: createEntryBlockAlloca - Created alloca '" << name << "', current order:\n";
-    for (auto& inst : currentFunction->getEntryBlock()) {
-        if (auto* ai = llvm::dyn_cast<llvm::AllocaInst>(&inst)) {
-            std::cerr << "  - " << ai->getName().str() << "\n";
-        } else {
-            break;
+    if (vyn::g_debug_codegen) {
+        std::cerr << "DEBUG: createEntryBlockAlloca - Created alloca '" << name << "', current order:\n";
+        for (auto& inst : currentFunction->getEntryBlock()) {
+            if (auto* ai = llvm::dyn_cast<llvm::AllocaInst>(&inst)) {
+                std::cerr << "  - " << ai->getName().str() << "\n";
+            } else {
+                break;
+            }
         }
     }
     
@@ -376,4 +382,3 @@ int LLVMCodegen::getStructFieldIndex(llvm::StructType* structType, const std::st
     }
     return -1; // Field not found or struct type not recognized by our map
 }
-

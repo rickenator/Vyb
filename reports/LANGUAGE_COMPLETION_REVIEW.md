@@ -6,7 +6,7 @@ Vyn is usable, but not complete. The remaining completion work is now explicit:
 
 | Area | Missing Work |
 |------|--------------|
-| Ownership runtime | Correct move/clone/drop behavior for `Vec<T>` and structs containing owned data; eliminate shallow-copy double frees |
+| Ownership runtime | Finish full move/drop enforcement for owned aggregates; current `Vec<T>` function parameter/return cases have runtime coverage |
 | Borrowing | Complete `their<T>`/`borrow` semantics outside ad hoc cases, including mutable borrow validation |
 | FFI | Add `repr(C)` structs, ABI validation, varargs policy, header/library linking, and platform symbol tests |
 | Modules | Implement `import`/`smuggle`/package resolution beyond documented syntax |
@@ -20,12 +20,13 @@ Vyn is usable, but not complete. The remaining completion work is now explicit:
 
 Priority order:
 
-1. Ownership runtime for owned aggregates and `Vec<T>`.
+1. Ownership runtime for owned aggregates beyond the currently verified `Vec<T>` helper-return paths.
 2. Borrowing semantics for `their<T>` and mutation boundaries.
 3. Module/package implementation.
 4. FFI ABI completion.
 5. Sum types and typed error propagation.
 
-The immediate blocker for richer examples is `Vec<T>` ownership. Semantic
-coverage exists, but runtime examples avoid by-value `Vec<T>` helper returns
-until moves or deep clones are implemented.
+The previous immediate blocker, by-value `Vec<T>` helper returns, is now covered
+by runtime tests and examples. The remaining ownership work is the broader
+language contract: move/drop enforcement, aggregate ownership, and precise
+borrow mutation boundaries.

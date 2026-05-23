@@ -1,18 +1,50 @@
-// Stack behavior using Vec<Int> directly.
+// Stack behavior with a struct backed by Vec<Int>.
+
+struct Stack {
+    items<Vec<Int>>,
+    size<Int>
+}
+
+stack_new()<Stack> -> {
+    return Stack { items = Vec::new(), size = 0 }
+}
+
+stack_push(s<their<Stack>>, value<Int>)<Void> -> {
+    s.items.push(value)
+    s.size = s.size + 1
+}
+
+stack_pop(s<their<Stack>>)<Int> -> {
+    if (s.size == 0) {
+        return -1
+    }
+
+    top<Int> = s.items.get(s.size - 1)
+    s.items.pop()
+    s.size = s.size - 1
+    return top
+}
+
+stack_peek(s<Stack>)<Int> -> {
+    if (s.size == 0) {
+        return -1
+    }
+    return s.items.get(s.size - 1)
+}
 
 main()<Int> -> {
-    stack<Vec<Int>> = Vec::new()
-    stack.push(10)
-    stack.push(20)
-    stack.push(30)
+    stack<Stack> = stack_new()
+    stack_push(borrow stack, 10)
+    stack_push(borrow stack, 20)
+    stack_push(borrow stack, 30)
 
-    top<Int> = stack.get(stack.len() - 1)
+    top<Int> = stack_peek(stack)
     println("Stack example")
-    println("size = " + stack.len().to_string())
+    println("size = " + stack.size.to_string())
     println("top = " + top.to_string())
 
-    popped<Int> = stack.pop()
+    popped<Int> = stack_pop(borrow stack)
     println("popped = " + popped.to_string())
-    println("size = " + stack.len().to_string())
+    println("size = " + stack.size.to_string())
     return 0
 }

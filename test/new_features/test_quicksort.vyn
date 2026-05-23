@@ -1,9 +1,8 @@
 // @test: Quicksort
-// @description: Semantic coverage for recursive quicksort on Vec<Int>; runtime waits on Vec move/clone semantics
+// @description: Runtime coverage for recursive quicksort on Vec<Int>
 // @category: algorithms, vec
 // @expect: pass
-// @semantic-only: true
-// @expect-output: n/a
+// @expect-output: 1
 
 quicksort(nums<Vec<Int>>)<Vec<Int>> -> {
     if (nums.len() <= 1) {

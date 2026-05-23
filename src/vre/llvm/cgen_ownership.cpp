@@ -57,7 +57,7 @@ void LLVMCodegen::enterScope() {
 
 void LLVMCodegen::exitScope() {
     if (scopeStack.empty()) {
-        std::cout << "WARNING: Attempted to exit scope but no scopes active" << std::endl;
+        VYN_CDBG << "WARNING: Attempted to exit scope but no scopes active" << std::endl;
         return;
     }
     

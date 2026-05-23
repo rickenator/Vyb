@@ -499,36 +499,36 @@ int link_vyn_executable(const std::vector<std::string>& objectFiles,
 
 // Function to execute Vyn code using LLVM JIT
 int run_vyn_code(const std::string& source, const std::string& fileName, bool generateLLVMIR) {
-    std::cout << "Starting run_vyn_code for file: " << fileName << std::endl;
+    VYN_CDBG << "Starting run_vyn_code for file: " << fileName << std::endl;
     
     // Initialize LLVM targets for JIT
-    std::cout << "Initializing LLVM targets..." << std::endl;
+    VYN_CDBG << "Initializing LLVM targets..." << std::endl;
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
     llvm::InitializeNativeTargetAsmParser();
     
     // Setup for ORC JIT execution
-    std::cout << "Setting up ORC JIT options..." << std::endl;
-    std::cout << "LLVM components ready for ORC JIT." << std::endl;
+    VYN_CDBG << "Setting up ORC JIT options..." << std::endl;
+    VYN_CDBG << "LLVM components ready for ORC JIT." << std::endl;
 
     try {
-        std::cout << "Creating driver instance..." << std::endl;
+        VYN_CDBG << "Creating driver instance..." << std::endl;
         vyn::Driver driver;
 
-        std::cout << "Tokenizing source code..." << std::endl;
+        VYN_CDBG << "Tokenizing source code..." << std::endl;
         Lexer lexer(source, fileName);
         std::vector<vyn::token::Token> tokens = lexer.tokenize();
-        std::cout << "Tokens generated: " << tokens.size() << " tokens" << std::endl;
+        VYN_CDBG << "Tokens generated: " << tokens.size() << " tokens" << std::endl;
 
-        std::cout << "Parsing tokens into AST..." << std::endl;
+        VYN_CDBG << "Parsing tokens into AST..." << std::endl;
         vyn::Parser parser(tokens, fileName);
         auto ast = parser.parse_module();
         if (!ast) {
             throw std::runtime_error("Failed to parse source code");
         }
-        std::cout << "AST created successfully" << std::endl;
+        VYN_CDBG << "AST created successfully" << std::endl;
 
-        std::cout << "Running semantic analysis..." << std::endl;
+        VYN_CDBG << "Running semantic analysis..." << std::endl;
         vyn::SemanticAnalyzer semanticAnalyzer(driver);
         driver.setSemanticAnalyzer(&semanticAnalyzer);  // Make semantic data available to codegen
         semanticAnalyzer.analyze(ast.get());
@@ -543,12 +543,12 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             throw std::runtime_error("Semantic analysis failed with " + 
                 std::to_string(semanticErrors.size()) + " error(s)");
         }
-        std::cout << "Semantic analysis completed" << std::endl;
+        VYN_CDBG << "Semantic analysis completed" << std::endl;
 
-        std::cout << "Generating LLVM IR code..." << std::endl;
+        VYN_CDBG << "Generating LLVM IR code..." << std::endl;
         vyn::LLVMCodegen codegen(driver);
         codegen.generate(ast.get(), fileName + ".ll");
-        std::cout << "LLVM IR generation completed" << std::endl;
+        VYN_CDBG << "LLVM IR generation completed" << std::endl;
 
         if (generateLLVMIR) {
             // Generate LLVM IR to a file if requested
@@ -567,7 +567,7 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
         std::unique_ptr<llvm::Module> module = codegen.releaseModule();
         std::unique_ptr<llvm::LLVMContext> context = codegen.releaseContext();
 
-        std::cout << "Setting up execution engine..." << std::endl;
+        VYN_CDBG << "Setting up execution engine..." << std::endl;
 
         // Retrieve intrinsic functions before moving module into JIT
         llvm::Function* printlnFunc = module->getFunction("__vyn_println");
@@ -598,7 +598,7 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
         }
 
         // Verify the module before JIT compilation
-        std::cout << "Verifying module..." << std::endl;
+        VYN_CDBG << "Verifying module..." << std::endl;
         std::string verifyErrors;
         llvm::raw_string_ostream verifyStream(verifyErrors);
         if (llvm::verifyModule(*module, &verifyStream)) {
@@ -606,7 +606,7 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             std::cerr << "Module verification failed:\n" << verifyErrors << std::endl;
             throw std::runtime_error("Module verification failed: " + verifyErrors);
         }
-        std::cout << "Module verified successfully" << std::endl;
+        VYN_CDBG << "Module verified successfully" << std::endl;
 
         // Create the ORC JIT execution engine
         auto jitOrErr = llvm::orc::LLJITBuilder().create();
@@ -864,7 +864,7 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             stream << addErr;
             throw std::runtime_error("Failed to add module to JIT: " + errorMsg);
         }
-        std::cout << "ORC JIT execution engine created successfully" << std::endl;
+        VYN_CDBG << "ORC JIT execution engine created successfully" << std::endl;
         
         // Call type registration function before main (simulates global constructors)
         auto registerTypesResult = jit->lookup("__vyn_register_all_types");
@@ -873,9 +873,9 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             RegisterTypesFuncType registerFunc = reinterpret_cast<RegisterTypesFuncType>(
                 static_cast<void*>(registerTypesResult->toPtr<void*>()));
             registerFunc();
-            std::cout << "Type metadata registered successfully" << std::endl;
+            VYN_CDBG << "Type metadata registered successfully" << std::endl;
         } else {
-            std::cout << "No type registration function found (no custom types in program)" << std::endl;
+            VYN_CDBG << "No type registration function found (no custom types in program)" << std::endl;
         }
         
         // Look up the main function symbol
@@ -1063,7 +1063,7 @@ int main(int argc, char* argv[]) {
     if (!input_files.empty()) {
         // Use the first input file collected during argument parsing
         std::string filename = input_files[0];
-        std::cout << "Processing file: " << filename << std::endl;
+        VYN_CDBG << "Processing file: " << filename << std::endl;
         try {
             // Read the source file
             std::ifstream file(filename);
@@ -1203,7 +1203,7 @@ int main(int argc, char* argv[]) {
             // Default behavior: JIT compile and execute the code
             if (execute_jit) {
                 try {
-                    std::cout << "Starting JIT execution of " << filename << std::endl;
+                    VYN_CDBG << "Starting JIT execution of " << filename << std::endl;
                     int result = run_vyn_code(source, filename, emit_llvm_ir);
                     return result;
                 } catch (const std::exception& e) {
@@ -1266,5 +1266,5 @@ int main(int argc, char* argv[]) {
         std::cout << "  --no-parser-debug-output Suppress parser debug output" << std::endl;
     }
 
-    return result; // Or 0 if not running tests and successful
+    return 0; // Reached only when no input file given and not in test mode (usage printed above)
 }

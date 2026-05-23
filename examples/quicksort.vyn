@@ -1,32 +1,73 @@
-// Quicksort partition step demo.
-// Full Vec-returning quicksort is tracked as an ownership-runtime gap.
+// Recursive quicksort over Vec<Int>.
+
+quicksort(nums<Vec<Int>>)<Vec<Int>> -> {
+    if (nums.len() <= 1) {
+        return nums
+    }
+
+    pivot<Int> = nums.get(nums.len() / 2)
+    left<Vec<Int>> = Vec::new()
+    equal<Vec<Int>> = Vec::new()
+    right<Vec<Int>> = Vec::new()
+
+    i<Int> = 0
+    while (i < nums.len()) {
+        value<Int> = nums.get(i)
+        if (value < pivot) {
+            left.push(value)
+        } else if (value > pivot) {
+            right.push(value)
+        } else {
+            equal.push(value)
+        }
+        i = i + 1
+    }
+
+    left_sorted<Vec<Int>> = quicksort(left)
+    right_sorted<Vec<Int>> = quicksort(right)
+    result<Vec<Int>> = Vec::new()
+
+    i = 0
+    while (i < left_sorted.len()) {
+        result.push(left_sorted.get(i))
+        i = i + 1
+    }
+
+    i = 0
+    while (i < equal.len()) {
+        result.push(equal.get(i))
+        i = i + 1
+    }
+
+    i = 0
+    while (i < right_sorted.len()) {
+        result.push(right_sorted.get(i))
+        i = i + 1
+    }
+
+    return result
+}
 
 main()<Int> -> {
-    pivot<Int> = 5
     values<Vec<Int>> = Vec::new()
     values.push(9)
     values.push(3)
     values.push(7)
     values.push(1)
     values.push(5)
+    values.push(8)
+    values.push(2)
+    values.push(6)
+    values.push(4)
 
-    less<Int> = 0
-    equal<Int> = 0
-    greater<Int> = 0
+    sorted<Vec<Int>> = quicksort(values)
 
-    for (value in values) {
-        if (value < pivot) {
-            less = less + 1
-        } else if (value > pivot) {
-            greater = greater + 1
-        } else {
-            equal = equal + 1
-        }
+    println("Quicksort example")
+    i<Int> = 0
+    while (i < sorted.len()) {
+        println_int(sorted.get(i))
+        i = i + 1
     }
 
-    println("Quicksort partition example")
-    println("less = " + less.to_string())
-    println("equal = " + equal.to_string())
-    println("greater = " + greater.to_string())
     return 0
 }

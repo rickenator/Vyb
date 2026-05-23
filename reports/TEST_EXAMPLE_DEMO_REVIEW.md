@@ -17,10 +17,11 @@ Date: 2026-05-23
 - Added ordinary function-call return typing, including recursive calls, so
   expressions like `sorted = insert_sorted(...)` receive their declared return
   type.
-- Updated algorithm and stack tests that still hit runtime ownership gaps to
-  `@semantic-only` and `@expect-output: n/a`.
-- Rewrote examples to avoid shallow-copy `Vec<T>` runtime paths while preserving
-  the visible feature intent.
+- Restored algorithm and stack tests to runtime execution after rebasing onto
+  current `main`, which includes `Vec<T>` deep-copy handling for function
+  parameters and returns.
+- Expanded examples to cover recursive quicksort, insertion sort helper
+  returns, and struct-backed stack helpers at runtime.
 - Added demos for control flow, collections, aspects, and FFI freedom blocks.
 
 ## Verification
@@ -33,7 +34,8 @@ for f in examples/*.vyn; do build/vyn "$f"; done
 for f in demos/*.vyn; do build/vyn "$f"; done
 ```
 
-All commands above passed during this review.
+All commands above passed during this review after running the examples and
+demos sequentially.
 
 ## Remaining Test Debt
 

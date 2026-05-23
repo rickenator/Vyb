@@ -1,9 +1,8 @@
 // @test: Insertion Sort
-// @description: Semantic coverage for Vec<Int> insertion sort; runtime waits on Vec move/clone semantics
+// @description: Runtime coverage for Vec<Int> insertion sort
 // @category: algorithms, vec
 // @expect: pass
-// @semantic-only: true
-// @expect-output: n/a
+// @expect-output: 12
 
 // Insert val into already-sorted Vec, returning a new sorted Vec
 insert_sorted(sorted<Vec<Int>>, val<Int>)<Vec<Int>> -> {
