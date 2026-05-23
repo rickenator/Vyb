@@ -1,0 +1,22 @@
+// Demo: control flow, recursion, match, and defer.
+
+factorial(n<Int>)<Int> -> {
+    if (n <= 1) {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+
+main()<Int> -> {
+    value<Int> = factorial(5)
+    println("factorial")
+    println_int(value)
+
+    match (value) {
+        120 -> println("matched factorial result")
+        ? -> println("unexpected result")
+    }
+
+    defer println("leaving control flow demo")
+    return 0
+}

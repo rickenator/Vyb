@@ -1,17 +1,13 @@
-// Memory semantics example with unified syntax v0.4.0
-// Pointer and borrowing examples
+// Freedom block pointer example.
 
 main()<Int> -> {
-    x<Int> = 42;
-    
+    x<Int> = 42
+
     freedom {
-        p<loc<Int>> = loc(x);
-        at(p) = 42;
-        // Test the new view and borrow operators
-        b<their<Int>> = borrow x;       // Now implemented!
-        v<their<Int>> = view x;         // Now implemented!
-        length<Int> = (view x).len();   // This should work once String methods are added
+        p<loc<Int>> = loc(x)
+        at(p) = 64
     }
-    
-    return x;  // Returns 42
+
+    println("memory value = " + x.to_string())
+    return 0
 }

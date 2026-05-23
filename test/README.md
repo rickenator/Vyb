@@ -1,86 +1,53 @@
 # Vyn Test System
 
-This directory contains the Vyn language test suite and test harness system.
+This directory contains the Vyn language test suite and Python test harness.
+There are currently 658 `.vyn` tests.
 
-## Test Structure
+## Test Directives
 
-Tests in Vyn consist of `.vyn` files with special directives in comments at the top of the file.
-These directives tell the test harness how to run and validate each test.
-
-### Test Directives
-
-Test directives are specified as comments at the top of each test file:
+Tests use top-of-file comments to describe expected behavior:
 
 ```vyn
-// @test: Short Name of The Test
-// @description: Longer description of what the test is checking
-// @category: category1, category2
+// @test: Short name
+// @description: What this test validates
+// @category: parser, semantic, runtime
 // @expect: pass
 // @parse-only: true
-// @expect-output: Expected output text
-// @expect-error: Expected error message
-// @expect-return: Expected return value
+// @semantic-only: true
+// @expect-output: Expected stdout text
+// @expect-error: Expected error text
+// @expect-return: 0
 ```
 
-### Available Directives
+| Directive | Description |
+|-----------|-------------|
+| `@test` | Human-readable test name |
+| `@description` | Specific behavior under test |
+| `@category` | Comma-separated category tags |
+| `@expect` | `pass` or `fail` |
+| `@expect-error` | Error substring expected for failing tests |
+| `@expect-output` | Stdout substring expected for runtime tests |
+| `@expect-return` | Expected process return value when used by a runner that supports it |
+| `@parse-only` | Stop after parsing |
+| `@semantic-only` | Stop after parsing and semantic analysis |
 
-| Directive | Description | Example |
-|-----------|-------------|---------|
-| `@test` | Short test name | `@test: Array Indexing` |
-| `@description` | Detailed description | `@description: Tests array index bounds checking` |
-| `@category` | Test category | `@category: parser, semantic, runtime, feature-X` |
-| `@expect` | Expected result | `@expect: pass` or `@expect: fail` |
-| `@expect-error` | Expected error pattern | `@expect-error: Type mismatch` |
-| `@expect-output` | Expected stdout | `@expect-output: Hello, world!` |
-| `@expect-return` | Expected return value | `@expect-return: 42` |
-| `@parse-only` | Test parsing only | `@parse-only: true` |
-| `@semantic-only` | Test parsing & semantics | `@semantic-only: true` |
+Use `@expect-output: n/a` when a parse-only or semantic-only test should not
+assert runtime output.
 
 ## Running Tests
 
-### Using the Build Script
-
-The easiest way to run tests is with the build script:
-
 ```bash
-./build.sh --run-tests          # Run all tests
-./build.sh --run-tests --verbose  # Run all tests with verbose output
-./build.sh --run-tests --category parser  # Run only parser tests
-./build.sh --run-tests --test-pattern "test_*_syntax.vyn"  # Run specific tests
+python3 test/run_tests.py --vyn build/vyn --test-dir test/new_features --execute-jit
+python3 test/run_tests.py --vyn build/vyn --test-dir test/ffi --execute-jit
+python3 test/run_tests.py --vyn build/vyn --test-dir test/parser
 ```
 
-### Using CMake Directly
+The harness defaults to `test/units` and `--no-execute`. Pass `--execute-jit`
+for runtime/output tests.
 
-You can also use the CMake target directly:
+## Writing Tests
 
-```bash
-cd build
-make run-tests
-```
-
-### Using the Test Script Directly
-
-You can run the test script directly for more control:
-
-```bash
-cd test
-./run_tests.py --vyn ../build/vyn  # Point to your vyn executable
-./run_tests.py --vyn ../build/vyn --verbose  # More detailed output
-./run_tests.py --vyn ../build/vyn --category parser  # Filter by category
-./run_tests.py --vyn ../build/vyn --pattern "test_relaxed_*.vyn"  # Test pattern
-./run_tests.py --vyn ../build/vyn --json results.json  # Save results to JSON
-```
-
-## Writing New Tests
-
-To create a new test:
-
-1. Create a new `.vyn` file in the test directory
-2. Add test directives at the top of the file as comments
-3. Write your test code
-4. Add it to the appropriate test category
-
-### Example Test
+Use current name-first Vyn syntax:
 
 ```vyn
 // @test: Integer Addition
@@ -88,13 +55,15 @@ To create a new test:
 // @category: runtime, arithmetic
 // @expect: pass
 // @expect-output: Result: 15
-// @expect-return: 0
 
-fn<Int> main() -> {
-    var<Int> a = 5;
-    var<Int> b = 10;
-    var<Int> c = a + b;
-    println("Result: " + c);
-    return 0;
+main()<Int> -> {
+    a<Int> = 5
+    b<Int> = 10
+    c<Int> = a + b
+    println("Result: " + c.to_string())
+    return 0
 }
 ```
+
+Runtime tests should return `0` unless the return code is the behavior being
+tested.

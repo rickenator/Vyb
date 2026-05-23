@@ -1,18 +1,41 @@
-Test directory organization:
+# Test Directory Organization
 
-- test/async/          - Asynchronous programming tests
-- test/arrays/         - Array functionality tests  
-- test/basic/          - Basic language feature tests
-- test/borrowing/      - Ownership and borrowing tests
-- test/debug/          - Debug and diagnostic tests
-- test/future_features/ - Experimental feature tests
-- test/memory/         - Memory management tests
-- test/ownership/      - Ownership system tests
-- test/parser/         - Parser functionality tests
-- test/syntax/         - Syntax validation tests
-- test/template/       - Template system tests
-- test/tree_structures/ - Tree data structure tests
-- test/units/          - Unit test suites
-- test/vectors/        - Vector data structure tests
+Current `.vyn` test count: 658.
 
-Total test files organized: 404
+| Path | Count | Purpose |
+|------|------:|---------|
+| `test/units/` | 225 | Legacy and unit-level language checks |
+| `test/trap/` | 52 | `fail`/`trap`/`panic` behavior |
+| `test/debug/` | 48 | Debugging and regression scratch tests |
+| `test/parser/` | 43 | Parser syntax coverage |
+| `test/basic/` | 39 | Basic runtime and semantic behavior |
+| `test/new_features/` | 37 | Current integrated feature tests |
+| `test/aspect/` | 28 | Aspect/bind system coverage |
+| `test/vectors/` | 21 | Vec method and typing coverage |
+| `test/vec_for/` | 17 | Vec and range loop behavior |
+| `test/tuples/` | 14 | Tuple and multiple-return coverage |
+| `test/future_features/` | 14 | Syntax and designs not yet complete |
+| `test/string/` | 13 | String methods and literals |
+| `test/template/` | 11 | Template/generic behavior |
+| `test/select_match/` | 11 | `match` and `select` |
+| `test/ownership/` | 11 | Ownership syntax and lifecycle experiments |
+| `test/arrays/` | 7 | Fixed array behavior |
+| `test/range_for/` | 7 | Range loop variants |
+| `test/introspection/` | 6 | `typeof` and `typename` |
+| `test/math/` | 6 | Math intrinsics |
+| `test/stack_trace/` | 6 | Stack trace diagnostics |
+| `test/types/` | 6 | Primitive and sized types |
+| `test/memory/` | 5 | Ownership and memory examples |
+| `test/stdlib/` | 5 | Error and stdlib sketches |
+| `test/syntax/` | 4 | Canonical syntax checks |
+| `test/tree_structures/` | 4 | Tree structure examples |
+| `test/compilation/` | 3 | Compilation pipeline examples |
+| `test/ffi/` | 3 | `extern "C"` and `freedom` FFI checks |
+| `test/async/` | 2 | Async syntax/runtime experiments |
+| `test/json/` | 2 | JSON conversion checks |
+| top-level `.vyn` tests | 10 | Legacy focused smoke tests |
+
+`test/future_features/` is intentionally allowed to contain incomplete language
+designs. Tests outside that directory should either execute successfully or be
+marked `@parse-only` / `@semantic-only` when they cover a feature whose runtime
+is not complete yet.
