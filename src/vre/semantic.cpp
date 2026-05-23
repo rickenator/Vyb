@@ -753,18 +753,18 @@ void SemanticAnalyzer::visit(ast::ClassDeclaration* node) {
 
 
 void SemanticAnalyzer::visit(ast::NamespaceDeclaration* node) {
-    // Body commented out due to incomplete type errors from build log.
-    // Requires ast.hpp to have full definition of NamespaceDeclaration.
-    // if (node && node->name && isReservedWord(node->name->name)) { 
-    //     addError("Identifier \\\"" + node->name->name + "\\\" is a reserved word and cannot be used as a namespace name.", node->name.get());
-    // }
-    // enterScope(); 
-    // if (node) {
-    //    for (auto& item : node->body) { // Assuming 'body' based on ast::Module
-    //        if (item) item->accept(*this);
-    //    }
-    // }
-    // exitScope(); 
+    if (!node) {
+        return;
+    }
+    if (node->name && isReservedWord(node->name->name)) {
+        addError("Identifier \\\"" + node->name->name + "\\\" is a reserved word and cannot be used as a namespace name.", node->name.get());
+    }
+
+    for (auto& member : node->members) {
+        if (member) {
+            member->accept(*this);
+        }
+    }
 }
 
 void SemanticAnalyzer::visit(ast::TypeAliasDeclaration* node) {

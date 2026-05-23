@@ -232,6 +232,7 @@ namespace vyn { // Changed Vyn to vyn
         std::unique_ptr<vyn::ast::Declaration> parse_template_declaration();
         std::unique_ptr<vyn::ast::ImportDeclaration> parse_import_declaration();
         std::unique_ptr<vyn::ast::ImportDeclaration> parse_smuggle_declaration();
+        std::unique_ptr<vyn::ast::Declaration> parse_extern_block();
         
     private:
         bool IsOperator(const vyn::token::Token& token) const;
