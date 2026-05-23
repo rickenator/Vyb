@@ -2289,7 +2289,15 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         // Implicit cast if necessary (e.g. int to float, i64 to i32)
         llvm::Type* expectedArgType = calleeFunc->getFunctionType()->getParamType(i);
         if (argValue->getType() != expectedArgType) {
-            if (expectedArgType->isFloatingPointTy() && argValue->getType()->isIntegerTy()) {
+            if (expectedArgType->isPointerTy()) {
+                if (auto* stringStructType = llvm::dyn_cast<llvm::StructType>(argValue->getType())) {
+                    if (stringStructType->getNumElements() == 2 &&
+                        stringStructType->getElementType(0)->isPointerTy() &&
+                        stringStructType->getElementType(1)->isIntegerTy()) {
+                        argValue = builder->CreateExtractValue(argValue, {0}, "cstrarg");
+                    }
+                }
+            } else if (expectedArgType->isFloatingPointTy() && argValue->getType()->isIntegerTy()) {
                 argValue = builder->CreateSIToFP(argValue, expectedArgType, "callargcast");
             } else if (expectedArgType->isIntegerTy() && argValue->getType()->isFloatingPointTy()) {
                 argValue = builder->CreateFPToSI(argValue, expectedArgType, "callargcast");
