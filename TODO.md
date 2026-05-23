@@ -8,6 +8,15 @@
 
 ---
 
+## Implementation Audit Tag
+
+See `UPDATE_LOG.md` (`implementation-audit-2026-05-23`) for the current
+source-biased implementation backlog, source TODO hotspots, and documentation
+status conflicts. This roadmap remains the high-level 1.0 plan; the update log
+is the working audit for what needs to be implemented next.
+
+---
+
 ## Overall Completion Estimate
 
 | Domain | Done | Remaining |
@@ -627,6 +636,7 @@ Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `
 
 ### Action Items
 
+- Keep `UPDATE_LOG.md` current as the source-biased implementation audit.
 - Fix or move non-Vyn *.vyn fixtures (e.g. extracted tests containing C++ snippets).
 - Pick a single canonical test runner.
 

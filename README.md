@@ -2611,7 +2611,7 @@ Vyn v0.4.4 (freedom-1.0) delivers a **complete, production-ready systems program
 - **Language Server (LSP)**: Completion, go-to-definition, diagnostics in editors
 - **REPL**: `vyn repl` backed by ORC JIT
 
-**Current Status**: All core language features work end-to-end. See `TODO.md` for a comprehensive feature status table.
+**Current Status**: All core language features work end-to-end. See `TODO.md` for the high-level 1.0 plan and `UPDATE_LOG.md` for the current source-biased implementation audit.
 
 ## Testing & Development Tools
 
