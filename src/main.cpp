@@ -87,6 +87,7 @@ extern "C" {
 }
 
 // LLVM includes for ORC JIT compilation
+#include <llvm/ExecutionEngine/Orc/ExecutionUtils.h>
 #include <llvm/ExecutionEngine/Orc/LLJIT.h>
 #include <llvm/ExecutionEngine/Orc/ThreadSafeModule.h>
 #include <llvm/IR/Module.h>
@@ -620,6 +621,16 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
         // Register runtime functions with the JIT before adding module
         auto& mainDylib = jit->getMainJITDylib();
         llvm::orc::MangleAndInterner mangle(jit->getExecutionSession(), jit->getDataLayout());
+
+        auto processSymbols = llvm::orc::DynamicLibrarySearchGenerator::GetForCurrentProcess(
+            jit->getDataLayout().getGlobalPrefix());
+        if (!processSymbols) {
+            std::string errorMsg;
+            llvm::raw_string_ostream stream(errorMsg);
+            stream << processSymbols.takeError();
+            throw std::runtime_error("Failed to expose process symbols to JIT: " + errorMsg);
+        }
+        mainDylib.addGenerator(std::move(*processSymbols));
         
         // Define symbol mappings for our runtime functions
         llvm::orc::SymbolMap runtimeSymbols;
@@ -1255,5 +1266,5 @@ int main(int argc, char* argv[]) {
         std::cout << "  --no-parser-debug-output Suppress parser debug output" << std::endl;
     }
 
-    return 0; // Reached only when no input file given and not in test mode (usage printed above)
+    return result; // Or 0 if not running tests and successful
 }

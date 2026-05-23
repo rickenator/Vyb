@@ -15,6 +15,9 @@ expect-fail tests are treated as stronger evidence than optimistic status text.
   visits their members, and the LLVM path emits external function declarations.
   Added `test/ffi/extern_c_malloc_free.vyn` as a JIT smoke test for calling C
   `malloc` and `free`.
+- 2026-05-23: Extended the JIT FFI path to resolve host process symbols and
+  added a narrow `String`-to-C-string call conversion. Added
+  `test/ffi/extern_c_puts.vyn` to cover calling libc `puts`.
 
 ## Audit Scope
 
@@ -48,7 +51,7 @@ Source areas checked:
 | ID | Area | Priority | What needs to be implemented | Evidence |
 |----|------|----------|------------------------------|----------|
 | I-001 | Module system | P0 | Real module loading, caching, symbol tables, import resolution, circular dependency detection, `bundle(...)`, `share(...)`, visibility checks, module paths, and stdlib module auto-discovery. | `doc/MODULE_FFI_BINARY_ROADMAP.md`; `src/vre/semantic.cpp` has an empty `visit(ImportDeclaration*)`; `src/vre/llvm/cgen_decl.cpp` treats imports as no-ops. |
-| I-002 | FFI | P0 | Continue FFI after first-pass `extern "C"` block support: C type mapping, `repr(C)` structs, variadic calls, `--link` support, `String::as_c_str()`, dynamic symbol lookup beyond registered runtime symbols, and broader end-to-end FFI tests. | `doc/FFI_DESIGN.md` says planned; `test/future_features/test_ffi_extern_c.vyn` is `@expect: fail`; source now supports simple extern C function-signature blocks but still lacks variadic/repr(C)/linker flow. |
+| I-002 | FFI | P0 | Continue FFI after first-pass `extern "C"` block support: fuller C type mapping, `repr(C)` structs, variadic calls, `--link` support, explicit `String::as_c_str()`, and broader end-to-end FFI tests. | `doc/FFI_DESIGN.md` says planned; `test/future_features/test_ffi_extern_c.vyn` is `@expect: fail`; source now supports simple extern C function-signature blocks, host process symbol lookup, and a narrow String-to-C-string call path, but still lacks variadic/repr(C)/linker flow. |
 | I-003 | Ownership runtime | P0 | Enforce `my<T>` moves, `our<T>` strong ref counts, `their<T>` lifetime/aliasing rules, `view`/`borrow` semantics, and `soft()` conversion rules. | `TODO.md`; `doc/mem_RFC.md`; `src/vre/semantic.cpp` borrow visitor notes missing type/lifetime implementation. |
 | I-004 | `mild<T>` weak references | P0 | Implement real control blocks, `weak_count`, released state, valid `grab()` upgrade to `our<T>`, and cleanup when strong/weak counts reach zero. | `doc/OWNERSHIP_MILD.md`; `examples/README.md`; `test/ownership/mild_methods_test.vyn` and examples describe current stubs. |
 | I-005 | Error propagation/runtime errors | P0 | Finish cross-function error propagation, construct real `VynError` objects at `fail`, preserve type/data/source location, print detailed untrapped errors, and settle Result-vs-fail/trap design conflict. | `doc/ERROR_PROPAGATION_DESIGN.md`; `test/trap/TEST_RESULTS.md`; `src/runtime/error_handling.cpp` says error structure is not implemented. |
