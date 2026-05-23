@@ -1,126 +1,53 @@
-// Vyn Language — Showcase Example
-//
-// This file demonstrates the main idiomatic features of Vyn v0.4.x:
-//   - Name-first function syntax (no `fn` keyword)
-//   - Struct declarations with field<Type> syntax
-//   - Ownership keywords: my, our, their, mild
-//   - Error handling: fail / trap
-//   - defer for resource cleanup
-//   - async / await
-//   - Vec<T> and String operations
-//   - match / select expressions
-//
-// Module imports (import/smuggle/bundle) and FFI (extern "C") are
-// planned for v0.5.  See doc/MODULE_FFI_BINARY_ROADMAP.md.
-
-// --- Structs ---
+// Vyn language showcase using current runtime-safe patterns.
 
 struct Point {
-    x<Float>,
-    y<Float>
+    x<Int>,
+    y<Int>
 }
 
-struct Config {
-    host<String>,
-    port<Int>,
-    max_retries<Int>
-}
-
-// --- Helper functions ---
-
-// Compute squared distance from origin
-distance_sq(p<Point>)<Float> -> {
-    return p.x * p.x + p.y * p.y
-}
-
-// Format a Config as a display string
-config_to_string(cfg<Config>)<String> -> {
-    return cfg.host + ":" + cfg.port.to_string()
-}
-
-// Clamp an Int to [lo, hi]
-clamp(val<Int>, lo<Int>, hi<Int>)<Int> -> {
-    if (val < lo) {
-        return lo
-    } else if (val > hi) {
-        return hi
-    }
-    return val
-}
-
-// Compute n-th Fibonacci number (illustrates recursion)
-fib(n<Int>)<Int> -> {
+factorial(n<Int>)<Int> -> {
     if (n <= 1) {
-        return n
+        return 1
     }
-    return fib(n - 1) + fib(n - 2)
+    return n * factorial(n - 1)
 }
-
-// --- Main entry point ---
 
 main()<Int> -> {
     println("=== Vyn Showcase ===")
-    println("")
 
-    // --- Basic arithmetic and variables ---
     a<Int> = 10
     b<Int> = 3
     println("10 + 3 = " + (a + b).to_string())
-    println("10 / 3 = " + (a / b).to_string())
     println("10 % 3 = " + (a % b).to_string())
-    println("")
 
-    // --- Structs ---
-    p<Point> = Point { x = 3.0, y = 4.0 }
-    println("Point(" + p.x.to_string() + ", " + p.y.to_string() + ")")
-    println("Distance² from origin: " + distance_sq(p).to_string())
-    println("")
+    p<Point> = Point { x = 3, y = 4 }
+    distance_sq<Int> = p.x * p.x + p.y * p.y
+    println("point distance squared = " + distance_sq.to_string())
 
-    // --- Vec<T> ---
     scores<Vec<Int>> = Vec::new()
     scores.push(95)
     scores.push(82)
     scores.push(71)
-    scores.push(88)
-    println("Scores: " + scores.to_string())
-    println("Count: " + scores.len().to_string())
-    println("")
 
-    // --- match expression ---
-    grade<Int> = scores.get(0)
-    match (grade) {
-        >= 90 -> println("Grade A")
-        >= 80 -> println("Grade B")
-        >= 70 -> println("Grade C")
-        ?     -> println("Grade D or lower")
+    total<Int> = 0
+    for (score in scores) {
+        total = total + score
     }
-    println("")
+    println("score count = " + scores.len().to_string())
+    println("score total = " + total.to_string())
 
-    // --- String operations ---
+    grade<Int> = 1
+    match (grade) {
+        1 -> println("grade bucket: high")
+        2 -> println("grade bucket: mid")
+        ? -> println("grade bucket: low")
+    }
+
     msg<String> = "Hello, Vyn!"
-    println("Message: " + msg)
-    println("Length: " + msg.len().to_string())
-    println("Upper: " + msg.to_upper())
-    println("Contains 'Vyn': " + msg.contains("Vyn").to_string())
-    println("")
+    println("message length = " + msg.len().to_string())
+    println("factorial 5 = " + factorial(5).to_string())
 
-    // --- Recursion ---
-    println("Fibonacci(10) = " + fib(10).to_string())
-    println("")
-
-    // --- defer (LIFO cleanup) ---
-    println("defer demo:")
-    defer println("  [deferred 1] runs last")
-    defer println("  [deferred 2] runs first")
-    println("  (deferred calls execute in reverse order at scope exit)")
-    println("")
-
-    // --- Config struct ---
-    cfg<Config> = Config { host = "localhost", port = 8080, max_retries = 3 }
-    println("Config: " + config_to_string(cfg))
-    println("Port clamped [1024,65535]: " + clamp(cfg.port, 1024, 65535).to_string())
-    println("")
-
+    defer println("defer ran at scope exit")
     println("=== Done ===")
     return 0
 }

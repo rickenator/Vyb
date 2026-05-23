@@ -1,7 +1,4 @@
-// Vec<T> Iteration Example with struct Point
-// 
-// This example demonstrates Vec<T> iteration with struct types.
-// Shows how to iterate over a Vec<Point> and calculate distances.
+// Vec<T> iteration with struct Point.
 
 struct Point {
     x<Float>,
@@ -9,24 +6,20 @@ struct Point {
 }
 
 main()<Int> -> {
-    // Create a vector of Point structs
     points<Vec<Point>> = Vec::new()
-    
-    // Add test points with known distances
-    points.push(Point { x = 3.0, y = 4.0 })    // Distance²: 3²+4² = 25
-    points.push(Point { x = 1.0, y = 1.0 })    // Distance²: 1²+1² = 2
-    points.push(Point { x = 5.0, y = 12.0 })   // Distance²: 5²+12² = 169
-    points.push(Point { x = 2.0, y = 0.0 })    // Distance²: 2²+0² = 4
-    
-    println("Calculating distance squared from origin for each point:")
-    println("")
-    
-    // Iterate over the Vec<Point> and calculate distances
+
+    points.push(Point { x = 3.0, y = 4.0 })
+    points.push(Point { x = 1.0, y = 1.0 })
+    points.push(Point { x = 5.0, y = 12.0 })
+    points.push(Point { x = 2.0, y = 0.0 })
+
+    println("Distance squared values")
+
     for (p in points) {
         distance_sq<Float> = p.x * p.x + p.y * p.y
         println(distance_sq)
     }
-    
-    count<Int> = points.len()
-    return count
+
+    println("count = " + points.len().to_string())
+    return 0
 }

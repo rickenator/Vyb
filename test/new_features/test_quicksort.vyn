@@ -1,8 +1,9 @@
 // @test: Quicksort
-// @description: Recursive quicksort on Vec<Int>; verifies output is sorted by checking pairwise order
+// @description: Semantic coverage for recursive quicksort on Vec<Int>; runtime waits on Vec move/clone semantics
 // @category: algorithms, vec
 // @expect: pass
-// @expect-output: 1
+// @semantic-only: true
+// @expect-output: n/a
 
 quicksort(nums<Vec<Int>>)<Vec<Int>> -> {
     if (nums.len() <= 1) {

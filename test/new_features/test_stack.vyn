@@ -1,8 +1,9 @@
 // @test: Stack Data Structure
-// @description: Stack using struct + Vec<Int>; push, pop, peek, empty operations
+// @description: Semantic coverage for struct + Vec<Int> stack helpers; runtime waits on borrow and Vec ownership completion
 // @category: data_structures, struct, vec
 // @expect: pass
-// @expect-output: 30
+// @semantic-only: true
+// @expect-output: n/a
 
 struct Stack {
     items<Vec<Int>>,

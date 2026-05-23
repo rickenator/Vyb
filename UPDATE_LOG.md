@@ -20,6 +20,14 @@ expect-fail tests are treated as stronger evidence than optimistic status text.
   `test/ffi/extern_c_puts.vyn` to cover calling libc `puts`.
 - 2026-05-23: Restricted direct calls to `extern "C"` functions to
   `freedom { }` blocks and added a negative FFI test for calls outside freedom.
+- 2026-05-23: Completed a focused tests/examples/demos repair pass. Semantic
+  analysis now preserves resolved function parameter, return, and struct field
+  types, and ordinary function calls infer declared return types. Reworked the
+  example suite so every `examples/*.vyn` file is runnable with the current
+  compiler, added `demos/` for curated language demonstrations, refreshed test
+  organization docs, and documented remaining ownership/runtime gaps in
+  `reports/TEST_EXAMPLE_DEMO_REVIEW.md` and
+  `reports/LANGUAGE_COMPLETION_REVIEW.md`.
 
 ## Audit Scope
 
@@ -159,5 +167,11 @@ These should be fixed before using the docs as release guidance.
 
 ## Verification Notes
 
-No test suite was run for this audit. This file is a documentation/source audit,
-not a behavioral verification report.
+The original implementation audit was source/documentation-focused. The
+tests/examples/demos repair pass was behavior-checked with:
+
+- `cmake --build build -j2`
+- `python3 test/run_tests.py --test-dir test/new_features --vyn build/vyn --execute-jit`
+- `python3 test/run_tests.py --test-dir test/ffi --vyn build/vyn --execute-jit`
+- `build/vyn` over every `examples/*.vyn`
+- `build/vyn` over every `demos/*.vyn`

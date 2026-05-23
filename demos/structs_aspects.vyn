@@ -1,0 +1,22 @@
+// Demo: structs, aspects, bind, and method dispatch.
+
+aspect Greet {
+    greet(self<Self>)<Void>
+}
+
+struct Person {
+    name<String>
+}
+
+bind Greet -> Person {
+    greet(self<Self>)<Void> -> {
+        print("hello ")
+        println(self.name)
+    }
+}
+
+main()<Int> -> {
+    p<Person> = Person { name = "Vyn" }
+    p.greet()
+    return 0
+}

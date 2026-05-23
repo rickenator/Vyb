@@ -1,0 +1,12 @@
+// Demo: direct C FFI calls are restricted to freedom blocks.
+
+extern "C" {
+    puts(s<String>)<Int>
+}
+
+main()<Int> -> {
+    freedom {
+        puts("hello from C")
+    }
+    return 0
+}

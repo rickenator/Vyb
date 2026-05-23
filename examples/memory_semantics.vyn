@@ -1,17 +1,16 @@
-// Memory semantics example with unified syntax v0.4.0
-// Pointer and borrowing examples
+// Memory semantics example with freedom, loc/at, and borrow/view.
 
 main()<Int> -> {
-    x<Int> = 42;
+    x<Int> = 42
 
     freedom {
-        p<loc<Int>> = loc(x);
-        at(p) = 42;
+        p<loc<Int>> = loc(x)
+        at(p) = 64
     }
 
-    // Canonical borrow()/view() syntax for borrowed references
-    b<their<Int>> = borrow(x);   // mutable borrow
-    v<their<Int>> = view(x);     // immutable view
+    b<their<Int>> = borrow(x)
+    v<their<Int>> = view(x)
 
-    return x;  // Returns 42
+    println("memory value = " + x.to_string())
+    return 0
 }

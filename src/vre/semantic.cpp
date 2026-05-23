@@ -539,9 +539,10 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
                     }
                 }
                 
-                resolvedType->accept(*this); 
-                paramTypesVec.push_back(resolvedType->clone());
-                currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, param.name->name, false, ast::OwnershipKind::MY, resolvedType->clone().release()});
+                resolvedType->accept(*this);
+                ast::TypeNode* effectiveType = resolvedType->type ? resolvedType->type.get() : resolvedType;
+                paramTypesVec.push_back(effectiveType->clone());
+                currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, param.name->name, false, ast::OwnershipKind::MY, effectiveType->clone().release()});
             } else {
                 addError("Parameter \\\"" + param.name->name + "\\\" missing type.", param.name.get());
                 paramTypesVec.push_back(nullptr); 
@@ -552,8 +553,9 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
 
     ast::TypeNode* returnTypeAstNode = nullptr;
     if (node->returnTypeNode) {
-        node->returnTypeNode->accept(*this); 
-        returnTypeAstNode = node->returnTypeNode->clone().release();
+        node->returnTypeNode->accept(*this);
+        ast::TypeNode* effectiveReturnType = node->returnTypeNode->type ? node->returnTypeNode->type.get() : node->returnTypeNode.get();
+        returnTypeAstNode = effectiveReturnType->clone().release();
     } else {
         auto void_type_id = std::make_unique<ast::Identifier>(node->loc, "void");
         returnTypeAstNode = new ast::TypeName(node->loc, std::move(void_type_id));
@@ -1217,6 +1219,33 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 }
                 return;
             }
+        }
+
+        // Normal function calls return the function's declared return type.
+        SymbolInfo* functionSymbol = currentScope->lookup(name);
+        if (functionSymbol && functionSymbol->kind == SymbolInfo::Kind::Function && functionSymbol->type) {
+            if (auto functionType = dynamic_cast<ast::FunctionType*>(functionSymbol->type)) {
+                if (functionType->returnType) {
+                    ast::TypeNode* returnType = functionType->returnType->type
+                        ? functionType->returnType->type.get()
+                        : functionType->returnType.get();
+                    expressionTypes[node] = returnType;
+                    node->type = std::shared_ptr<ast::TypeNode>(returnType->clone());
+                }
+                return;
+            }
+        }
+
+        auto registryIt = functionRegistry.find(name);
+        if (registryIt != functionRegistry.end() && registryIt->second && registryIt->second->returnTypeNode) {
+            ast::TypeNode* declaredReturn = registryIt->second->returnTypeNode.get();
+            if (!declaredReturn->type) {
+                declaredReturn->accept(*this);
+            }
+            ast::TypeNode* returnType = declaredReturn->type ? declaredReturn->type.get() : declaredReturn;
+            expressionTypes[node] = returnType;
+            node->type = std::shared_ptr<ast::TypeNode>(returnType->clone());
+            return;
         }
     }
     
@@ -3437,11 +3466,12 @@ void SemanticAnalyzer::visit(ast::StructDeclaration* node) {
             // Visit the field type to ensure it's valid (type params are now in scope)
             field->typeNode->accept(*this);
             
-            // Store the field type for later member access resolution
-            fieldTypes[field->name->name] = field->typeNode.get();
+            // Store the resolved field type for later member access resolution.
+            ast::TypeNode* effectiveFieldType = field->typeNode->type ? field->typeNode->type.get() : field->typeNode.get();
+            fieldTypes[field->name->name] = effectiveFieldType;
             
             VYN_CDBG << "DEBUG: Registered struct field " << structName << "." << field->name->name 
-                      << " with type: " << field->typeNode->toString() << std::endl;
+                      << " with type: " << effectiveFieldType->toString() << std::endl;
         }
     }
     

@@ -1,0 +1,19 @@
+// Demo: Vec<Int> creation, push, iteration, and length.
+
+main()<Int> -> {
+    values<Vec<Int>> = Vec::new()
+    values.push(4)
+    values.push(8)
+    values.push(15)
+    values.push(16)
+
+    sum<Int> = 0
+    for (value in values) {
+        sum = sum + value
+    }
+
+    println("collections")
+    println("count = " + values.len().to_string())
+    println("sum = " + sum.to_string())
+    return 0
+}
