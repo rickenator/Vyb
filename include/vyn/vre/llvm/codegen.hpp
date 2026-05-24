@@ -287,6 +287,8 @@ private:
     void cleanupTrapContext();
     llvm::Value* createErrorValue(ast::Expression* errorExpr, ast::TypeNode* errorType);
     void preCreateTrapAllocas(ast::Statement* stmt, llvm::Function* func, llvm::Instruction** lastAllocaInsertPt = nullptr);
+    void emitDeferredStatementsForCurrentFunction();
+    void emitPropagatingErrorReturn(llvm::Value* errorPtr);
     
     // Stack trace helpers (Phase 6.4)
     void pushCallStackFrame(const std::string& functionName, const SourceLocation& loc, llvm::Function* llvmFunc);

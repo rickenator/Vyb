@@ -1299,6 +1299,21 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
         }
 
         // Normal function calls return the function's declared return type.
+        auto registryIt = functionRegistry.find(name);
+        bool calleeCanFail = (registryIt != functionRegistry.end() && registryIt->second && registryIt->second->canFail);
+        if (calleeCanFail &&
+            currentFunction &&
+            currentFunction->id &&
+            currentFunction->id->name == "main" &&
+            !currentFunction->needsErrorReturn &&
+            trapProtectedBlockDepth == 0) {
+            addError(
+                "Call to failable function '" + name + "' from non-failable function '" + currentFunction->id->name +
+                "' requires a trap block or marking the caller as failable.",
+                node
+            );
+        }
+
         SymbolInfo* functionSymbol = currentScope->lookup(name);
         if (functionSymbol && functionSymbol->kind == SymbolInfo::Kind::Function && functionSymbol->type) {
             if (auto functionType = dynamic_cast<ast::FunctionType*>(functionSymbol->type)) {
@@ -1313,7 +1328,6 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             }
         }
 
-        auto registryIt = functionRegistry.find(name);
         if (registryIt != functionRegistry.end() && registryIt->second && registryIt->second->returnTypeNode) {
             ast::TypeNode* declaredReturn = registryIt->second->returnTypeNode.get();
             if (!declaredReturn->type) {
@@ -2841,6 +2855,11 @@ void SemanticAnalyzer::visit(ast::RangeExpression* node) {
     }
 }
 void SemanticAnalyzer::visit(ast::BlockExpression* node) {
+    const bool protectsWithTrap = !node->trapClauses.empty();
+    if (protectsWithTrap) {
+        trapProtectedBlockDepth++;
+    }
+
     if (node->block) {
         node->block->accept(*this);
     }
@@ -2855,6 +2874,10 @@ void SemanticAnalyzer::visit(ast::BlockExpression* node) {
     // Process ensure clause if present
     if (node->ensureClause) {
         node->ensureClause->accept(*this);
+    }
+
+    if (protectsWithTrap) {
+        trapProtectedBlockDepth--;
     }
 }
 void SemanticAnalyzer::visit(ast::SelectExpression* node) {
@@ -3899,6 +3922,11 @@ void SemanticAnalyzer::visit(ast::ThrowStatement* node) {}
 // --- Error Handling Visitor Implementations ---
 
 void SemanticAnalyzer::visit(ast::FailStatement* node) {
+    if (currentFunction) {
+        currentFunction->canFail = true;
+        currentFunction->needsErrorReturn = true;
+    }
+
     // Verify error expression is present
     if (!node->error) {
         addError("fail statement requires an error expression", node);

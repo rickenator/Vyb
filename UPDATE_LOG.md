@@ -58,6 +58,20 @@ expect-fail tests are treated as stronger evidence than optimistic status text.
   parse failures inside imports, circular imports, and duplicate splice
   symbols. Added focused `test/modules` coverage and a runnable
   `--module-path` example.
+- 2026-05-24: Completed I-005 Error Propagation phases 3–5. `fail` now builds
+  runtime `VynError` payloads and propagates through failable returns when no
+  trap is active, call sites of semantically failable functions now auto-check
+  `{value, error}` and propagate errors using the same return helper, and
+  failable calls from non-failable functions without trap are now rejected by
+  semantic analysis with a targeted diagnostic. The runtime
+  `__vyn_runtime_untrapped_error` path now prints type, payload JSON, and fail
+  source location, supports `exitCode<Int>` payload override, and the JIT entry
+  path now dispatches propagated failable-`main` errors to that handler.
+  Added tests: `test/trap/propagation_no_trap.vyn`,
+  `test/trap/propagation_to_main.vyn`, `test/trap/defer_runs_on_fail.vyn`,
+  `test/trap/non_failable_caller_rejected.vyn`.
+  Follow-up: generalized JIT ABI handling for failable `main` payloads beyond
+  current `{Int, i8*}` / `{i1, i8*}` specializations.
 
 ## Audit Scope
 

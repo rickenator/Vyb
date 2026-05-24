@@ -7,6 +7,9 @@
 #include <thread>
 #include <mutex>
 #include <vector>
+#include <iomanip>
+#include <sstream>
+#include <string>
 
 // Platform-specific includes for stack trace
 #ifdef __linux__
@@ -22,6 +25,29 @@
 #endif
 
 extern "C" {
+
+// Keep metadata layout in sync with runtime/vyn_type_metadata.h.
+typedef struct VynFieldMetadata {
+    const char* name;
+    const char* type_name;
+    size_t offset;
+    size_t size;
+    bool is_primitive;
+    bool is_vec;
+    const char* vec_element_type;
+} VynFieldMetadata;
+
+typedef struct VynTypeMetadata {
+    const char* type_name;
+    size_t struct_size;
+    size_t num_fields;
+    VynFieldMetadata* fields;
+    size_t num_aspects;
+    void* aspects;
+} VynTypeMetadata;
+
+VynTypeMetadata* __vyn_lookup_type(const char* type_name);
+char* __vyn_complex_to_json_with_metadata(void* instance, VynTypeMetadata* metadata);
 
 // ===== Global State =====
 
@@ -186,20 +212,29 @@ VynStackTrace* __vyn_runtime_get_current_stack_trace() {
 
 // ===== Error Management =====
 
-VynError* __vyn_runtime_create_error(
+VynError* __vyn_runtime_create_error_ex(
     const char* type_name,
     void* type_id,
     void* data,
     size_t data_size,
     void (*destructor)(void*),
-    VynSourceLocation location
+    const char* file,
+    uint32_t line,
+    uint32_t column
 ) {
     VynError* error = new VynError;
+    error->type_hash = type_name ? std::hash<std::string>{}(std::string(type_name)) : 0ULL;
     error->type_name = type_name;
+    error->payload = nullptr;
+    error->file = file ? strdup(file) : nullptr;
+    error->line = line;
+    error->col = column;
     error->type_id = type_id;
     error->data_size = data_size;
     error->destructor = destructor;
-    error->location = location;
+    error->location.file_path = error->file;
+    error->location.line = line;
+    error->location.column = column;
     error->cause = nullptr;
     error->timestamp = get_timestamp_ns();
     error->thread_id = get_thread_id();
@@ -211,11 +246,32 @@ VynError* __vyn_runtime_create_error(
     } else {
         error->data = nullptr;
     }
+    error->payload = error->data;
     
     // Capture Vyn-level stack trace (Phase 6.4)
     error->stack_trace = __vyn_runtime_get_current_stack_trace();
     
     return error;
+}
+
+VynError* __vyn_runtime_create_error(
+    const char* type_name,
+    void* type_id,
+    void* data,
+    size_t data_size,
+    void (*destructor)(void*),
+    VynSourceLocation location
+) {
+    return __vyn_runtime_create_error_ex(
+        type_name,
+        type_id,
+        data,
+        data_size,
+        destructor,
+        location.file_path,
+        location.line,
+        location.column
+    );
 }
 
 void __vyn_runtime_free_error(VynError* error) {
@@ -233,6 +289,10 @@ void __vyn_runtime_free_error(VynError* error) {
     
     // Free stack trace
     __vyn_runtime_free_stack_trace(error->stack_trace);
+
+    if (error->file) {
+        free((void*)error->file);
+    }
     
     // Recursively free cause chain
     if (error->cause) {
@@ -252,6 +312,9 @@ VynError* __vyn_runtime_clone_error(VynError* error) {
         clone->data = malloc(error->data_size);
         memcpy(clone->data, error->data, error->data_size);
     }
+    clone->payload = clone->data;
+    clone->file = error->file ? strdup(error->file) : nullptr;
+    clone->location.file_path = clone->file;
     
     // Clone stack trace
     if (error->stack_trace) {
@@ -363,8 +426,26 @@ void __vyn_runtime_untrapped_error(VynError* error) {
     
     char line_buf[128];
     
-    // For now, just print generic error - proper VynError support needs more work
-    snprintf(line_buf, sizeof(line_buf), "Error: <runtime error>");
+    const char* typeName = nullptr;
+    VynTypeMetadata* metadata = nullptr;
+    if (error && error->type_name) {
+        metadata = __vyn_lookup_type(error->type_name);
+        if (metadata && metadata->type_name) {
+            typeName = metadata->type_name;
+        } else {
+            typeName = error->type_name;
+        }
+    }
+    std::string typeFallback;
+    if (!typeName) {
+        uint64_t hash = error ? error->type_hash : 0ULL;
+        std::ostringstream oss;
+        oss << "0x" << std::hex << std::setw(16) << std::setfill('0') << hash;
+        typeFallback = oss.str();
+        typeName = typeFallback.c_str();
+    }
+
+    snprintf(line_buf, sizeof(line_buf), "Type: %s", typeName);
     fprintf(stderr, "│ %-61s│\n", line_buf);
     
     snprintf(line_buf, sizeof(line_buf), "Thread: 0x%llx", (unsigned long long)get_thread_id());
@@ -374,6 +455,30 @@ void __vyn_runtime_untrapped_error(VynError* error) {
     fprintf(stderr, "│ %-61s│\n", line_buf);
     
     fprintf(stderr, "└──────────────────────────────────────────────────────────────┘\n");
+
+    if (error && error->payload) {
+        char* payloadJson = nullptr;
+        if (metadata) {
+            payloadJson = __vyn_complex_to_json_with_metadata(error->payload, metadata);
+        }
+        if (payloadJson) {
+            fprintf(stderr, "Payload: %s\n", payloadJson);
+            free(payloadJson);
+        } else {
+            fprintf(stderr, "Payload: <unavailable>\n");
+        }
+    } else {
+        fprintf(stderr, "Payload: null\n");
+    }
+
+    const char* file = error ? (error->file ? error->file : error->location.file_path) : nullptr;
+    uint32_t line = error ? (error->line ? error->line : error->location.line) : 0;
+    uint32_t col = error ? (error->col ? error->col : error->location.column) : 0;
+    if (file && *file) {
+        fprintf(stderr, "Fail site: %s:%u:%u\n", file, line, col);
+    } else {
+        fprintf(stderr, "Fail site: <unknown>\n");
+    }
     
     // Phase 6.4: Print Vyn-level call stack
     fprintf(stderr, "\nStack Trace:\n");
@@ -395,18 +500,26 @@ void __vyn_runtime_untrapped_error(VynError* error) {
     // Print stack trace if available
     // NOTE: Currently error is just a heap-allocated error struct (type_id + value)
     // not a full VynError* with stack trace. We'll improve this in Phase 6.3.
-    if (error) {
-        // For now, just free the heap-allocated error struct
-        // Don't try to access error->stack_trace or call cleanup - would segfault
-        free(error);
-    } else {
-        fprintf(stderr, "\nNote: Error details not available (error structure not yet implemented)\n");
+    int exitCode = 1;
+    if (error && metadata && error->payload) {
+        for (size_t i = 0; i < metadata->num_fields; ++i) {
+            const VynFieldMetadata& field = metadata->fields[i];
+            if (!field.name || !field.type_name) continue;
+            if (strcmp(field.name, "exitCode") == 0 && strcmp(field.type_name, "Int") == 0) {
+                int64_t payloadExitCode = *(int64_t*)((char*)error->payload + field.offset);
+                exitCode = static_cast<int>(payloadExitCode);
+                break;
+            }
+        }
     }
-    
-    fprintf(stderr, "\nExit Code: 1\n");
+    if (error) {
+        __vyn_runtime_free_error(error);
+    }
+
+    fprintf(stderr, "\nExit Code: %d\n", exitCode);
     fflush(stderr);
     
-    exit(1);
+    exit(exitCode);
 }
 
 // ===== Defer/Ensure Support (Stubs for now) =====

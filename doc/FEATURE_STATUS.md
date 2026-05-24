@@ -67,7 +67,7 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 | `freedom` blocks + `loc<T>` raw pointers | ✅ | |
 | `match` / `select` expressions | ✅ | |
 | `defer` | ✅ | |
-| `fail` / `trap` error system | ✅ | Includes typed `fail<T>(value)`, typed traps, wildcard/multi-type trap parsing, and Phase 2 dual-return codegen `{T, i8*}` / `{i1, i8*}` for failable functions |
+| `fail` / `trap` error system | ✅ | Includes typed `fail<T>(value)`, typed traps, wildcard/multi-type trap parsing, dual-return ABI `{T, i8*}` / `{i1, i8*}`, Phase 3 fail propagation returns, Phase 4 auto-propagating call-site checks, and Phase 5 untrapped runtime handler dispatch from failable `main` |
 | `async` / `await` | 🚧 | Runtime stub |
 | `Vec<T>` | ✅ | |
 | String methods | ✅ | |

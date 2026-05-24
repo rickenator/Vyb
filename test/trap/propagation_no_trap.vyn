@@ -1,0 +1,28 @@
+// @test: Error propagation without local trap recovers in outer trap
+// @description: A failing inner function propagates through a failable outer function and is recovered by an enclosing trap.
+// @category: trap,error
+// @expect: pass
+// @expect-return: 77
+
+struct InnerError {
+    code<Int>
+}
+
+inner()<Int> -> {
+    fail<InnerError>(InnerError { code = 77 })
+    return 0
+}
+
+outer()<Int> -> {
+    value<Int> = inner()
+    return value + 1
+}
+
+main()<Int> -> {
+    recovered<Int> = {
+        outer()
+    } trap (e<InnerError>) -> {
+        e.code
+    }
+    return recovered
+}

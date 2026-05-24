@@ -1,0 +1,16 @@
+// @test: Non-failable caller rejects untrapped failable call
+// @description: A non-failable function calling a failable function without trap should fail semantic analysis with clear guidance.
+// @category: trap,error
+// @expect: fail
+// @semantic-only: true
+// @expect-error: requires a trap block or marking the caller as failable
+
+inner()<Int> -> {
+    fail<Int>(5)
+    return 0
+}
+
+main()<Int> -> {
+    value<Int> = inner()
+    return value
+}

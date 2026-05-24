@@ -1,0 +1,30 @@
+// @test: Defer executes before propagated fail return
+// @description: Defers registered before a fail run in LIFO order before the failure is trapped by the caller.
+// @category: trap,error
+// @expect: pass
+// @expect-output: defer cleanup
+// @expect-return: 42
+
+struct DeferError {
+    code<Int>
+}
+
+inner()<Int> -> {
+    defer println("defer cleanup")
+    fail<DeferError>(DeferError { code = 42 })
+    return 0
+}
+
+outer()<Int> -> {
+    value<Int> = inner()
+    return value
+}
+
+main()<Int> -> {
+    recovered<Int> = {
+        outer()
+    } trap (e<DeferError>) -> {
+        e.code
+    }
+    return recovered
+}

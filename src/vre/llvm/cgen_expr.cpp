@@ -2498,8 +2498,22 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
     } else {
         llvm::Value* callResult = builder->CreateCall(calleeFunc, argValues, "calltmp");
         
-        // Phase 4: Check if this is a call to a failable function (returns {T, ptr})
-        if (llvm::StructType* structRetType = llvm::dyn_cast<llvm::StructType>(calleeFunc->getReturnType())) {
+        // Phase 4: Check if this is a call to a semantically failable function.
+        bool calleeNeedsErrorReturn = false;
+        if (auto* calleeIdent = dynamic_cast<ast::Identifier*>(node->callee.get())) {
+            if (m_currentVynModule) {
+                for (const auto& stmt : m_currentVynModule->body) {
+                    auto* decl = dynamic_cast<ast::FunctionDeclaration*>(stmt.get());
+                    if (decl && decl->id && decl->id->name == calleeIdent->name && decl->needsErrorReturn) {
+                        calleeNeedsErrorReturn = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (calleeNeedsErrorReturn) {
+            if (llvm::StructType* structRetType = llvm::dyn_cast<llvm::StructType>(calleeFunc->getReturnType())) {
             if (structRetType->getNumElements() == 2 && 
                 structRetType->getElementType(1)->isPointerTy()) {
                 // This looks like a {T, ptr} return from a failable function
@@ -2538,19 +2552,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                     builder->CreateBr(trap.landingPad);
                 } else if (currentFunctionAST && currentFunctionAST->needsErrorReturn) {
                     // No trap but we're in a failable function - propagate to our caller
-                    
-                    // Clean up scope
-                    if (!scopeStack.empty()) {
-                        exitScope();
-                    }
-                    
-                    // Create return struct with propagated error
-                    llvm::StructType* ourReturnType = llvm::cast<llvm::StructType>(currentFunc->getReturnType());
-                    llvm::Value* propagatedStruct = llvm::UndefValue::get(ourReturnType);
-                    llvm::Value* dummyValue = llvm::UndefValue::get(ourReturnType->getElementType(0));
-                    propagatedStruct = builder->CreateInsertValue(propagatedStruct, dummyValue, {0}, "prop.dummy");
-                    propagatedStruct = builder->CreateInsertValue(propagatedStruct, errorPtr, {1}, "prop.error");
-                    builder->CreateRet(propagatedStruct);
+                    emitPropagatingErrorReturn(errorPtr);
                 } else {
                     // No trap and not a failable function - call untrapped error handler
                     VYN_CDBG << "DEBUG: Error reaching untrapped handler" << std::endl;
@@ -2565,6 +2567,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 builder->SetInsertPoint(successBB);
                 m_currentLLVMValue = returnedValue;
                 return;
+            }
             }
         }
         
@@ -4219,6 +4222,23 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
             errorSlot,
             "error.ptr"
         );
+        llvm::StructType* vynErrorTy = llvm::StructType::get(
+            *context,
+            {
+                builder->getInt64Ty(),                  // type_hash
+                llvm::PointerType::get(*context, 0),    // type_name
+                llvm::PointerType::get(*context, 0),    // payload
+                llvm::PointerType::get(*context, 0),    // file
+                builder->getInt32Ty(),                  // line
+                builder->getInt32Ty()                   // col
+            },
+            false
+        );
+        llvm::Value* errorStructPtr = builder->CreateBitCast(
+            errorPtr,
+            llvm::PointerType::get(vynErrorTy, 0),
+            "error.struct.ptr"
+        );
         
         // Phase 6.2: Handle multiple trap clauses with type checking
         // For each trap clause, check if error type matches, then execute handler
@@ -4280,11 +4300,7 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
                         llvm::Value* expectedTypeId = llvm::ConstantInt::get(builder->getInt64Ty(), expectedTypeHash);
                         
                         // Load the actual error type ID from the error struct header
-                        llvm::Value* typeIdPtr = builder->CreateBitCast(
-                            errorPtr,
-                            llvm::PointerType::get(builder->getInt64Ty(), 0),
-                            "error.typeid.ptr"
-                        );
+                        llvm::Value* typeIdPtr = builder->CreateStructGEP(vynErrorTy, errorStructPtr, 0, "error.typeid.ptr");
                         llvm::Value* actualTypeId = builder->CreateLoad(
                             builder->getInt64Ty(),
                             typeIdPtr,
@@ -4319,11 +4335,7 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
                     
                     // Load the actual error type ID from the error struct header
                     // Error pointer points to memory with first 8 bytes being type ID
-                    llvm::Value* typeIdPtr = builder->CreateBitCast(
-                        errorPtr,
-                        llvm::PointerType::get(builder->getInt64Ty(), 0),
-                        "error.typeid.ptr"
-                    );
+                    llvm::Value* typeIdPtr = builder->CreateStructGEP(vynErrorTy, errorStructPtr, 0, "error.typeid.ptr");
                     llvm::Value* actualTypeId = builder->CreateLoad(
                         builder->getInt64Ty(),
                         typeIdPtr,
@@ -4368,22 +4380,14 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
             } else if (trapClause->errorType) {
                 llvm::Type* expectedType = codegenType(trapClause->errorType.get());
                 if (expectedType && !expectedType->isPointerTy()) {
-                    // Cast error pointer to i8* for byte offset calculation
-                    llvm::Value* errorI8Ptr = builder->CreateBitCast(
-                        errorPtr,
-                        llvm::PointerType::get(builder->getInt8Ty(), 0),
-                        "error.i8ptr"
+                    llvm::Value* payloadPtrSlot = builder->CreateStructGEP(vynErrorTy, errorStructPtr, 2, "error.payload.slot");
+                    llvm::Value* payloadI8Ptr = builder->CreateLoad(
+                        llvm::PointerType::get(*context, 0),
+                        payloadPtrSlot,
+                        "error.payload.i8ptr"
                     );
-                    // Skip the type ID header (8 bytes) to get to actual error data
-                    llvm::Value* dataI8Ptr = builder->CreateGEP(
-                        builder->getInt8Ty(),
-                        errorI8Ptr,
-                        llvm::ConstantInt::get(builder->getInt64Ty(), 8),
-                        "error.data.i8ptr"
-                    );
-                    // Cast back to expected struct pointer type and load
                     llvm::Value* dataPtr = builder->CreateBitCast(
-                        dataI8Ptr,
+                        payloadI8Ptr,
                         llvm::PointerType::get(expectedType, 0),
                         "error.data.ptr"
                     );
@@ -4443,10 +4447,22 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
                 // Free heap-allocated errors before branching
                 // Only free if error is a pointer (struct type with type ID header)
                 // Integer errors are passed by value and don't need cleanup
-                if (errorPtr->getType()->isPointerTy()) {
-                    llvm::Function* freeFunc = getOrCreateFreeFunction();
-                    builder->CreateCall(freeFunc, {errorPtr});
+                llvm::Function* freeErrFn = module->getFunction("__vyn_runtime_free_error");
+                if (!freeErrFn) {
+                    llvm::Type* i8PtrTy = llvm::PointerType::get(*context, 0);
+                    llvm::FunctionType* freeErrTy = llvm::FunctionType::get(
+                        llvm::Type::getVoidTy(*context),
+                        {i8PtrTy},
+                        false
+                    );
+                    freeErrFn = llvm::Function::Create(
+                        freeErrTy,
+                        llvm::Function::ExternalLinkage,
+                        "__vyn_runtime_free_error",
+                        module.get()
+                    );
                 }
+                builder->CreateCall(freeErrFn, {errorPtr});
                 
                 llvm::BasicBlock* handlerExitBB = builder->GetInsertBlock();
                 if (hasEnsure) {
@@ -4469,20 +4485,7 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
         
         // PHASE 6.3: Propagate unmatched error to caller if in failable function
         if (currentFunctionAST && currentFunctionAST->needsErrorReturn) {
-            // This function can propagate errors - return {T, errorPtr}
-            llvm::StructType* returnStructType = llvm::cast<llvm::StructType>(func->getReturnType());
-            llvm::Value* resultStruct = llvm::UndefValue::get(returnStructType);
-            
-            // Insert dummy value for position 0 (unused on error)
-            llvm::Type* valueType = returnStructType->getElementType(0);
-            llvm::Value* dummyValue = llvm::UndefValue::get(valueType);
-            resultStruct = builder->CreateInsertValue(resultStruct, dummyValue, {0}, "error.dummy");
-            
-            // Insert error pointer at position 1 (still has type ID header)
-            resultStruct = builder->CreateInsertValue(resultStruct, errorPtr, {1}, "error.ptr");
-            
-            // Return the error tuple
-            builder->CreateRet(resultStruct);
+            emitPropagatingErrorReturn(errorPtr);
         } else {
             // Not in failable function - call untrapped error handler
             llvm::Function* untrappedFn = getVynUntrappedErrorFunction();
