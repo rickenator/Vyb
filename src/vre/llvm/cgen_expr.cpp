@@ -1045,6 +1045,16 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                     std::string objectType;
                     if (objIdent->type) {
                         objectType = objIdent->type->toString();
+                    } else if (memberExpr->object->type) {
+                        objectType = memberExpr->object->type->toString();
+                    } else {
+                        auto namedIt = namedValues.find(objIdent->name);
+                        if (namedIt != namedValues.end()) {
+                            auto valueTypeIt = valueTypeMap.find(namedIt->second);
+                            if (valueTypeIt != valueTypeMap.end() && valueTypeIt->second) {
+                                objectType = valueTypeIt->second->toString();
+                            }
+                        }
                     }
                     
                     // Check if type starts with "mild<"

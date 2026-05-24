@@ -1,0 +1,19 @@
+// @expect-return: 0
+// Regression: mild<T>.released() must resolve in helper-function contexts.
+
+struct Node {
+    value<Int>
+}
+
+alive_from_helper(obj<our<Node>>)<Bool> -> {
+    weak<mild<Node>> = soft(obj)
+    return !weak.released()
+}
+
+main()<Int> -> {
+    shared<our<Node>> = our(Node { value: 7 })
+    if (alive_from_helper(shared)) {
+        return 0
+    }
+    return 1
+}
