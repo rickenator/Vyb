@@ -1,0 +1,14 @@
+// @test: Recursive struct through loc allowed
+// @description: Self references through loc<T> are indirection, not direct value recursion
+// @category: basic, semantic, struct
+// @expect: pass
+// @semantic-only: true
+
+struct Node {
+    value<Int>,
+    next<loc<Node>>
+}
+
+main()<Int> -> {
+    return 0
+}

@@ -123,6 +123,7 @@ def parse_directives(file_path):
 def run_test(test, vyn_executable, verbose=False, execute_jit=False):
     """Run the test and verify results against expectations."""
     cmd = [vyn_executable]
+    will_execute = False
     
     if test.parse_only:
         cmd.append("--parse-only")
@@ -130,6 +131,8 @@ def run_test(test, vyn_executable, verbose=False, execute_jit=False):
         cmd.append("--semantic-only")
     elif not execute_jit and not test.execute_jit:
         cmd.append("--no-execute")  # Don't execute if JIT execution is not requested
+    else:
+        will_execute = True
     
     if verbose:
         cmd.append("--emit-llvm")
@@ -144,23 +147,43 @@ def run_test(test, vyn_executable, verbose=False, execute_jit=False):
         # Check return code matches expectations
         expected_return_code = 0 if test.expect == "pass" else 1
         success = (result.returncode == expected_return_code)
+        failure_reasons = []
+        if not success:
+            failure_reasons.append(
+                f"expected compiler exit {expected_return_code}, got {result.returncode}"
+            )
         
         # Check output if specified
         if test.expect_output and test.expect_output != "n/a":
             if test.expect_output not in result.stdout:
                 success = False
+                failure_reasons.append(f"expected stdout to contain: {test.expect_output}")
+
+        # Check main return serialization when JIT execution is enabled.
+        # Vyn programs emit the main return value on stdout; the compiler process
+        # itself still exits with 0 for a successfully compiled/executed test.
+        if will_execute and test.expect == "pass" and test.expect_return and test.expect_return != "n/a":
+            stdout_lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+            actual_return = stdout_lines[-1] if stdout_lines else ""
+            if actual_return != test.expect_return:
+                success = False
+                failure_reasons.append(
+                    f"expected main return {test.expect_return}, got {actual_return or '<no stdout>'}"
+                )
                 
         # Check for expected error if failing test
         if test.expect == "fail" and test.expect_error and test.expect_error != "n/a":
             if test.expect_error not in result.stderr:
                 success = False
+                failure_reasons.append(f"expected stderr to contain: {test.expect_error}")
         
         return {
             "success": success,
             "stdout": result.stdout,
             "stderr": result.stderr,
             "return_code": result.returncode,
-            "execution_time": elapsed
+            "execution_time": elapsed,
+            "failure_reasons": failure_reasons
         }
             
     except Exception as e:
@@ -170,7 +193,8 @@ def run_test(test, vyn_executable, verbose=False, execute_jit=False):
             "stdout": "",
             "stderr": str(e),
             "return_code": -1,
-            "execution_time": elapsed
+            "execution_time": elapsed,
+            "failure_reasons": [str(e)]
         }
 
 def format_result(result, test, verbose=False):
@@ -184,6 +208,10 @@ def format_result(result, test, verbose=False):
         output += f"Execution time: {result['execution_time']:.4f}s\n"
         
         if not result["success"] or verbose > 1:
+            if result.get("failure_reasons"):
+                output += "Checks:\n"
+                for reason in result["failure_reasons"]:
+                    output += f"- {reason}\n"
             output += "Output:\n"
             if result["stdout"]:
                 output += result["stdout"] + "\n"

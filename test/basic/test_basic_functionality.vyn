@@ -1,0 +1,17 @@
+// @test: Basic Functionality Smoke Test
+// @description: Covers variables, arithmetic, if/else, and main return serialization
+// @category: basic, runtime
+// @expect: pass
+// @expect-return: 15
+
+add(a<Int>, b<Int>)<Int> -> {
+    return a + b
+}
+
+main()<Int> -> {
+    x<Int> = add(5, 10)
+    if (x == 15) {
+        return x
+    }
+    return 0
+}

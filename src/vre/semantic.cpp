@@ -385,23 +385,33 @@ void SemanticAnalyzer::visit(ast::Identifier* node) {
 }
 
 void SemanticAnalyzer::visit(ast::IntegerLiteral* node) {
-    expressionTypes[node] = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Int"));
+    auto* type = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Int"));
+    expressionTypes[node] = type;
+    node->type = std::shared_ptr<ast::TypeNode>(type->clone());
 }
 
 void SemanticAnalyzer::visit(ast::FloatLiteral* node) {
-    expressionTypes[node] = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Float"));
+    auto* type = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Float"));
+    expressionTypes[node] = type;
+    node->type = std::shared_ptr<ast::TypeNode>(type->clone());
 }
 
 void SemanticAnalyzer::visit(ast::StringLiteral* node) {
-    expressionTypes[node] = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "String"));
+    auto* type = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "String"));
+    expressionTypes[node] = type;
+    node->type = std::shared_ptr<ast::TypeNode>(type->clone());
 }
 
 void SemanticAnalyzer::visit(ast::BooleanLiteral* node) {
-    expressionTypes[node] = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Bool"));
+    auto* type = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Bool"));
+    expressionTypes[node] = type;
+    node->type = std::shared_ptr<ast::TypeNode>(type->clone());
 }
 
 void SemanticAnalyzer::visit(ast::NilLiteral* node) {
-    expressionTypes[node] = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "nil"));
+    auto* type = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "nil"));
+    expressionTypes[node] = type;
+    node->type = std::shared_ptr<ast::TypeNode>(type->clone());
 }
 
 // Basic visit methods for statements (Single definitions)
@@ -3543,6 +3553,14 @@ void SemanticAnalyzer::visit(ast::StructDeclaration* node) {
             // Store the resolved field type for later member access resolution.
             ast::TypeNode* effectiveFieldType = field->typeNode->type ? field->typeNode->type.get() : field->typeNode.get();
             fieldTypes[field->name->name] = effectiveFieldType;
+
+            if (auto* fieldTypeName = dynamic_cast<ast::TypeName*>(effectiveFieldType)) {
+                if (fieldTypeName->identifier && fieldTypeName->identifier->name == structName) {
+                    addError("Struct \"" + structName + "\" cannot contain direct value field \"" +
+                             field->name->name + "\" of its own type; use loc<" + structName +
+                             "> or another indirection type.", field.get());
+                }
+            }
             
             VYN_CDBG << "DEBUG: Registered struct field " << structName << "." << field->name->name 
                       << " with type: " << effectiveFieldType->toString() << std::endl;

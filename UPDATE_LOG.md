@@ -39,6 +39,12 @@ expect-fail tests are treated as stronger evidence than optimistic status text.
   `share(...) import ...` re-exports, lexical borrow/view conflict checks,
   C ABI aliases for extern blocks, and typed `fail<T>(value)`. Added targeted
   tests plus runnable example/demo coverage.
+- 2026-05-24: Started the next quality gate by adding a milestone test runner
+  that now executes and passes 157 tests while enforcing a minimum floor of 122.
+  Tightened the harness to check `@expect-return` during JIT execution, repaired
+  accidental basic/type/Vec tests, taught semantic analysis to type literal
+  operands for `typeof`/`typename`, and added a semantic rejection for direct
+  recursive struct value fields.
 
 ## Audit Scope
 

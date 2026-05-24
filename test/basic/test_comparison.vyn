@@ -1,4 +1,9 @@
-// @expect-return: 1
-main()<i32> -> {
-    return 5 < 10;
+// @test: Comparison true return
+// @description: Less-than comparison returns Bool true
+// @category: basic, comparison
+// @expect: pass
+// @expect-return: true
+
+main()<Bool> -> {
+    return 5 < 10
 }

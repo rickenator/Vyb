@@ -1,7 +1,7 @@
 # Vyn Test System
 
 This directory contains the Vyn language test suite and Python test harness.
-There are currently 658 `.vyn` tests.
+There are currently 687 `.vyn` tests.
 
 ## Test Directives
 
@@ -27,7 +27,7 @@ Tests use top-of-file comments to describe expected behavior:
 | `@expect` | `pass` or `fail` |
 | `@expect-error` | Error substring expected for failing tests |
 | `@expect-output` | Stdout substring expected for runtime tests |
-| `@expect-return` | Expected process return value when used by a runner that supports it |
+| `@expect-return` | Expected final stdout line from `main` return serialization when JIT execution is enabled |
 | `@parse-only` | Stop after parsing |
 | `@semantic-only` | Stop after parsing and semantic analysis |
 
@@ -40,10 +40,13 @@ assert runtime output.
 python3 test/run_tests.py --vyn build/vyn --test-dir test/new_features --execute-jit
 python3 test/run_tests.py --vyn build/vyn --test-dir test/ffi --execute-jit
 python3 test/run_tests.py --vyn build/vyn --test-dir test/parser
+python3 test/run_milestone_tests.py --vyn build/vyn
 ```
 
 The harness defaults to `test/units` and `--no-execute`. Pass `--execute-jit`
-for runtime/output tests.
+for runtime/output tests. The milestone runner aggregates the stable runtime,
+module, FFI, introspection, primitive type, range, Vec iteration, and stdlib
+suites and enforces at least 122 passing tests before the next milestone.
 
 ## Writing Tests
 

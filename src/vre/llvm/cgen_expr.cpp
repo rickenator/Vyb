@@ -1959,8 +1959,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         if (!arg->getType()->isIntegerTy(64)) {
             arg = builder->CreateIntCast(arg, llvm::Type::getInt64Ty(*context), true, "cast_i64");
         }
-        vyn::ast::TypeNode* argType = node->arguments[0]->type.get();
-        llvm::Value* strVal = generateToStringCall(arg, arg->getType(), argType, node->loc);
+        llvm::Value* strVal = generateToStringCall(arg, arg->getType(), nullptr, node->loc);
         if (identCallee->name == "println_int") {
             builder->CreateCall(getVynPrintlnFunction(), {strVal});
         } else {
@@ -1982,8 +1981,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         if (!arg->getType()->isIntegerTy(1)) {
             arg = builder->CreateICmpNE(arg, llvm::ConstantInt::get(arg->getType(), 0), "to_bool");
         }
-        vyn::ast::TypeNode* argType = node->arguments[0]->type.get();
-        llvm::Value* strVal = generateToStringCall(arg, arg->getType(), argType, node->loc);
+        llvm::Value* strVal = generateToStringCall(arg, arg->getType(), nullptr, node->loc);
         if (identCallee->name == "println_bool") {
             builder->CreateCall(getVynPrintlnFunction(), {strVal});
         } else {

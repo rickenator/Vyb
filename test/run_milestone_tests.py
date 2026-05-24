@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+"""
+Run the Vyn milestone gate.
+
+The gate intentionally aggregates multiple stable suites through run_tests.py
+and fails if the total number of passing tests drops below the milestone floor.
+"""
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import tempfile
+from dataclasses import dataclass
+from pathlib import Path
+
+
+MILESTONE_MINIMUM = 122
+
+
+@dataclass(frozen=True)
+class Suite:
+    name: str
+    path: str
+    execute_jit: bool = True
+
+
+MILESTONE_SUITES = [
+    Suite("new_features", "test/new_features"),
+    Suite("modules", "test/modules"),
+    Suite("ffi", "test/ffi"),
+    Suite("basic", "test/basic"),
+    Suite("string", "test/string"),
+    Suite("math", "test/math"),
+    Suite("introspection", "test/introspection"),
+    Suite("types", "test/types"),
+    Suite("range_for", "test/range_for"),
+    Suite("vec_for", "test/vec_for"),
+    Suite("stdlib", "test/stdlib"),
+]
+
+
+def repo_root() -> Path:
+    current = Path(__file__).resolve().parent
+    while current != current.parent:
+        if (current / "CMakeLists.txt").exists() and (current / "src" / "tests.cpp").exists():
+            return current
+        current = current.parent
+    raise RuntimeError("Could not find Vyn repository root")
+
+
+def run_suite(root: Path, suite: Suite, vyn: str, verbose: bool) -> tuple[int, int]:
+    with tempfile.TemporaryDirectory(prefix=f"vyn-{suite.name}-") as temp_dir:
+        json_path = Path(temp_dir) / "results.json"
+        cmd = [
+            sys.executable,
+            str(root / "test" / "run_tests.py"),
+            "--vyn",
+            vyn,
+            "--test-dir",
+            str(root / suite.path),
+            "--json",
+            str(json_path),
+        ]
+        if suite.execute_jit:
+            cmd.append("--execute-jit")
+
+        result = subprocess.run(cmd, cwd=root, capture_output=True, text=True)
+        if verbose or result.returncode != 0:
+            print(result.stdout, end="")
+            print(result.stderr, end="", file=sys.stderr)
+
+        results = []
+        if json_path.exists():
+            with json_path.open("r", encoding="utf-8") as handle:
+                results = json.load(handle)
+
+        ran = len(results)
+        passed = sum(1 for item in results if item.get("result", {}).get("success"))
+        failed = ran - passed
+        print(f"{suite.name}: {passed}/{ran} passed")
+
+        if result.returncode != 0 or failed:
+            raise RuntimeError(f"{suite.name} failed {failed} test(s)")
+
+        return ran, passed
+
+
+def main() -> int:
+    root = repo_root()
+    parser = argparse.ArgumentParser(description="Run the Vyn milestone test gate")
+    parser.add_argument("--vyn", default=str(root / "build" / "vyn"), help="Path to the Vyn executable")
+    parser.add_argument("--minimum", type=int, default=MILESTONE_MINIMUM, help="Minimum passing tests required")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Show full per-test output")
+    args = parser.parse_args()
+
+    if not os.path.isfile(args.vyn):
+        print(f"Error: Cannot find Vyn executable at {args.vyn}", file=sys.stderr)
+        return 1
+
+    total_ran = 0
+    total_passed = 0
+    try:
+        for suite in MILESTONE_SUITES:
+            ran, passed = run_suite(root, suite, args.vyn, args.verbose)
+            total_ran += ran
+            total_passed += passed
+    except RuntimeError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"\nMilestone total: {total_passed}/{total_ran} passed")
+    print(f"Milestone minimum: {args.minimum} passing tests")
+
+    if total_ran < args.minimum or total_passed < args.minimum:
+        print("Error: milestone test count is below the required minimum", file=sys.stderr)
+        return 1
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

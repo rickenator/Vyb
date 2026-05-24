@@ -1,11 +1,16 @@
-// Test struct with self-references but no ownership types
+// @test: Direct recursive struct rejected
+// @description: Struct value fields cannot directly contain the same struct type
+// @category: basic, semantic, struct
+// @expect: fail
+// @semantic-only: true
+// @expect-error: cannot contain direct value field
+
 struct Node {
     value<Int>,
-    left<Node>,  // Direct self-reference without ownership  
+    left<Node>,
     right<Node>
 }
 
 main() -> {
-    // Just create an empty struct
     return 0
 }
