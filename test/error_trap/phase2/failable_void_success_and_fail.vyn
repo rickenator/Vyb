@@ -4,8 +4,8 @@
 // @expect: pass
 // @expect-output: 35
 
-maybe_fail_void(shouldFail<Bool>)<Void> -> {
-    if (shouldFail) {
+maybe_fail_void(should_fail<Bool>)<Void> -> {
+    if (should_fail) {
         fail<Int>(5)
     }
     return
