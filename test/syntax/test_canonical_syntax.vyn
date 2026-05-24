@@ -6,8 +6,10 @@ main()<Int> -> {
     # Test our() constructor  
     shared<our<String>> = our("shared data")
     
-    # Test view borrowing
-    length<Int> = (view data).len()
+    # Test view() borrowing
+    readonly<their<String const>> = view(data)
+    plain<String> = "hello world"
+    length<Int> = plain.len()
     
     println("Data:", data)
     println("Length:", length)

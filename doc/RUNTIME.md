@@ -64,25 +64,25 @@ Vyn employs ownership types to manage memory and control data access:
 
 ## 4. Borrowing: Creating `their<T>` References
 
-Borrowed references (`their<T>`) are created using the `borrow` and `view` keywords, which act as prefix operators:
+Borrowed references (`their<T>`) are created using `borrow(expr)` and `view(expr)`:
 
-*   **`view <expr>`**: Creates an immutable borrow `their<T const>`. This provides a read-only view of the data.
+*   **`view(expr)`**: Creates an immutable borrow `their<T const>`. This provides a read-only view of the data.
     ```vyn
     owner<my<Foo>> = my(Foo{ value: 10 });
-    immutable_ref<their<Foo const>> = view owner;
+    immutable_ref<their<Foo const>> = view(owner);
     // immutable_ref.value = 20; // Error: cannot modify through their<T const>
     print(immutable_ref.value); // OK
     ```
 
-*   **`borrow <expr>`**: Creates a mutable borrow `their<T>`. This allows modification of the data, subject to borrowing rules (e.g., no other active borrows to the same data).
+*   **`borrow(expr)`**: Creates a mutable borrow `their<T>`. This allows modification of the data, subject to borrowing rules (e.g., no other active borrows to the same data).
     ```vyn
     owner<my<Foo>> = my(Foo{ value: 10 });
-    mutable_ref<their<Foo>> = borrow owner;
+    mutable_ref<their<Foo>> = borrow(owner);
     mutable_ref.value = 20; // OK, owner.value is now 20
     print(mutable_ref.value); // OK
     ```
 
-The compiler enforces borrow-checking rules to ensure memory safety (e.g., preventing simultaneous mutable and immutable borrows to the same data, or ensuring borrows do not outlive the owner).
+The compiler enforces borrow-checking rules to ensure memory safety (e.g., preventing simultaneous mutable and immutable borrows to the same data, or ensuring borrows do not outlive the owner). These safe checked borrows do not require `freedom`.
 
 ## 5. Function Parameters
 
@@ -140,7 +140,7 @@ p1<my<Point>> = my(Point { x: 10, y: 20, meta: my("info") });
 p1.x = 15; // Allowed, p1 is mutable and x is a value type field
 p1.meta = my("new_info"); // Allowed, p1 is mutable, old meta is dropped
 
-const<my<Point>> p2 = my(Point { x: 0, y: 0, meta: make_my("const_info") });
+const<my<Point>> p2 = my(Point { x: 0, y: 0, meta: my("const_info") });
 // p2.x = 5; // Error: if p2 is a const binding to my<Point>, direct field mutation
             // might be disallowed or depend on whether Point is a "const-friendly" type.
             // Typically, for `const p: my<T>`, `T` itself must be treated as `T const`.

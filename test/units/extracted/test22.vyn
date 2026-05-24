@@ -9,9 +9,9 @@
 
 async fetch_data(url: String)<String> -> {
     const<my<http::client::Connection>> conn = http::client::connect(url);
-    const<my<http::client::Response>> resp = await (view conn).get("/");
+    const<my<http::client::Response>> resp = await view(conn).get("/");
     if (resp.status != 200) {
         throw NetworkError("Failed to fetch: " + resp.status.to_string());
     }
-    return (view resp).text();
+    return view(resp).text();
 }

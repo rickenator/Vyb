@@ -692,7 +692,7 @@ borrow(data).clear()
 ```
 
 #### **Legacy Syntax Migration**
-All legacy `make_my()`, `make_our()` functions and `view()`, `borrow()` function calls have been automatically migrated to canonical syntax using the migration tool:
+All legacy `make_my()`, `make_our()`, and prefix `view expr` / `borrow expr` syntax can be migrated to canonical syntax using the migration tool:
 
 ```bash
 # Scan for legacy syntax

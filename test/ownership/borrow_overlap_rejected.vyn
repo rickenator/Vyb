@@ -6,7 +6,7 @@
 
 main()<Int> -> {
     value<Int> = 1
-    read_ref<their<Int>> = view value
-    write_ref<their<Int>> = borrow value
+    read_ref<their<Int>> = view(value)
+    write_ref<their<Int>> = borrow(value)
     return value
 }

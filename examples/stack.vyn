@@ -34,16 +34,16 @@ stack_peek(s<Stack>)<Int> -> {
 
 main()<Int> -> {
     stack<Stack> = stack_new()
-    stack_push(borrow stack, 10)
-    stack_push(borrow stack, 20)
-    stack_push(borrow stack, 30)
+    stack_push(borrow(stack), 10)
+    stack_push(borrow(stack), 20)
+    stack_push(borrow(stack), 30)
 
     top<Int> = stack_peek(stack)
     println("Stack example")
     println("size = " + stack.size.to_string())
     println("top = " + top.to_string())
 
-    popped<Int> = stack_pop(borrow stack)
+    popped<Int> = stack_pop(borrow(stack))
     println("popped = " + popped.to_string())
     println("size = " + stack.size.to_string())
     return 0

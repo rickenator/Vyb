@@ -67,11 +67,7 @@ result<String> = view(connection).send_request();
 borrow(buffer).write(data);
 ```
 
-> **Design Note**: Vyn supports two equivalent syntactic forms for borrowing:
-> - **Prefix form** (canonical in practice): `borrow expr`, `view expr` — used in most Vyn code and tests
-> - **Function-call form** (also supported): `borrow(expr)`, `view(expr)` — consistent with `my(expr)`, `our(expr)` ownership construction
->
-> Both forms parse to the same `BorrowExpression` AST node and generate identical code. The prefix form is typically preferred for brevity (e.g. `stack_push(borrow s, 10)`). The function-call form is useful when the expression is complex or parentheses aid readability.
+> **Design Note**: Canonical borrowing syntax is function-call style only: `borrow(expr)` and `view(expr)`. Prefix forms (`borrow expr`, `view expr`) are deprecated and rejected.
 
 ### **4. Complete Real-World Example**
 
@@ -134,15 +130,15 @@ async main()<Void> -> {
 ```vyn
 data<my<String>>    = my("owned");        // ✅ Ownership construction
 shared<our<Config>> = our(Config::new()); // ✅ Shared construction  
-view<their<String>> = view data;          // ✅ Immutable borrowing
-mutable<their<String>> = borrow data;     // ✅ Mutable borrowing
+view<their<String>> = view(data);          // ✅ Immutable borrowing
+mutable<their<String>> = borrow(data);     // ✅ Mutable borrowing
 ```
 
 ### **❌ Legacy (Don't Use)**
 ```vyn
-data<my<String>>    = my("owned");   // ❌ Deprecated function
-shared<our<Config>> = our(Config::new()); // ❌ Deprecated function
-view<their<String>> = view data;   // ❌ Never existed, wrong concept
+data<my<String>>    = make_my("owned");   // ❌ Deprecated function
+shared<our<Config>> = make_our(Config::new()); // ❌ Deprecated function
+view<their<String>> = view(data);   // ❌ Deprecated if written as `view data`
 ```
 
 ## 🔧 **Parser Integration**
@@ -159,7 +155,7 @@ The canonical syntax integrates with the parser as follows:
 
 ### **Precedence Rules**
 1. **Type parsing**: Ownership types have higher precedence than base types
-2. **Expression parsing**: Borrowing operators have prefix unary precedence
+2. **Expression parsing**: `view(expr)` and `borrow(expr)` parse to `BorrowExpression`
 3. **Method calls**: `view(obj).method()` → Borrowing binds before method call
 
 ## 🧪 **Testing Standards**

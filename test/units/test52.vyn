@@ -1,7 +1,8 @@
-//# EXPECTED ERROR: view() can only be used inside an freedom block
-
 main()<Int> -> {
-    x<my<Int>> = 10;
-    
-    // Create a view (immutable borrow)
-    v<their<Int const>> = view x;
+    x<my<Int>> = my(10);
+
+    // view() is a safe checked borrow and does not require freedom
+    v<their<Int const>> = view(x);
+
+    return x;
+}

@@ -23,7 +23,7 @@ main()<Int> -> {
     println("Size: " + my_tree.size.to_string())
     println("Has root: " + my_tree.has_root.to_string())
     
-    debug_modify(borrow my_tree)
+    debug_modify(borrow(my_tree))
     
     println("After modification:")
     println("Size: " + my_tree.size.to_string())

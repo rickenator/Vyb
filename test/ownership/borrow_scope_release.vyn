@@ -7,7 +7,7 @@
 main()<Int> -> {
     value<Int> = 1
     {
-        borrow_ref<their<Int>> = borrow value
+        borrow_ref<their<Int>> = borrow(value)
     }
     value = 2
     return value

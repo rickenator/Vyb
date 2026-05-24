@@ -24,7 +24,7 @@ main()<Int> -> {
     println("Before:")
     println("Has node: " + my_tree.has_node.to_string())
     
-    add_node(borrow my_tree, 42)
+    add_node(borrow(my_tree), 42)
     
     println("After:")
     println("Has node: " + my_tree.has_node.to_string())

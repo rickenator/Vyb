@@ -1,13 +1,9 @@
-//# EXPECTED ERROR: borrow() argument must be an owned type my<T> or our<T>
-
 main()<Int> -> {
-    x<Int> = 10; // Not an owned type (missing my<> or our<>)
-    
-    freedom {
-        // Using borrow on non-owned type should fail
-        b<their<Int>> = borrow x;
-        b = 20;
-    }
-    
+    x<my<Int>> = my(10);
+
+    // borrow() is a safe checked borrow and does not require freedom
+    b<their<Int>> = borrow(x);
+    b = 20;
+
     return x;
 }

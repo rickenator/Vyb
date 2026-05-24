@@ -110,14 +110,14 @@ build/vyn test/memory/simple_memory_test.vyn
 |-----------|--------|---------|-------------|
 | Unique constructor | `my(expr)` | `my<T>` | Creates unique ownership |
 | Shared constructor | `our(expr)` | `our<T>` | Creates shared ownership |
-| Mutable borrow | `borrow(expr)` | `their<T>` | Borrows mutably (freedom) |
-| Immutable borrow | `view(expr)` | `their<T const>` | Borrows immutably (freedom) |
+| Mutable borrow | `borrow(expr)` | `their<T>` | Borrows mutably (safe, checked) |
+| Immutable borrow | `view(expr)` | `their<T const>` | Borrows immutably (safe, checked) |
 | Pointer creation | `loc(expr)` | `loc<T>` | Gets memory location (freedom) |
 | Pointer dereference | `at(ptr)` | `T` | Accesses value at pointer (freedom) |
 
 ### Safety Rules
 
-1. **`borrow()` and `view()` require `freedom {}`** - These operations bypass ownership checks
+1. **`borrow()` and `view()` are safe checked borrows** - No `freedom {}` required
 2. **`loc()` and `at()` require `freedom {}`** - Direct memory access is inherently freedom
 3. **`my<T>` ownership is unique** - Only one owner at a time (moves invalidate original)
 4. **`our<T>` is reference counted** - Multiple owners share immutable data
@@ -147,21 +147,18 @@ All tests should:
 
 ## Common Issues
 
-### "borrow() can only be used inside an freedom block"
-**Solution**: Wrap `borrow()` and `view()` calls in `freedom {}` blocks:
+### "Prefix 'borrow expr' syntax is no longer supported"
+**Solution**: Use function-call syntax:
 ```vyn
-freedom {
-    borrowed<their<Int>> = borrow(data)
-}
+borrowed<their<Int>> = borrow(data)
+viewed<their<Int const>> = view(data)
 ```
 
 ### "borrow() argument must be an owned type my<T> or our<T>"
 **Solution**: Ensure you're borrowing from `my<T>` or `our<T>`, not plain `T`:
 ```vyn
 data<my<Int>> = my(42)  // Correct
-freedom {
-    borrowed<their<Int>> = borrow(data)  // Works
-}
+borrowed<their<Int>> = borrow(data)  // Works
 ```
 
 ### Pointer operations fail

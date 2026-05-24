@@ -30,8 +30,8 @@ main()<Int> -> {
     println("Has root: " + tree.has_root.to_string())
     println("Size: " + tree.size.to_string())
     
-    insert_value(borrow tree, 50, "fifty")
-    insert_value(borrow tree, 30, "thirty")
+    insert_value(borrow(tree), 50, "fifty")
+    insert_value(borrow(tree), 30, "thirty")
     
     println("After insertions:")
     println("Has root: " + tree.has_root.to_string())
