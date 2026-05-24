@@ -17,6 +17,9 @@ relay_success(x<Int>)<Int> -> {
 }
 
 main()<Int> -> {
+    if (false) {
+        fail<Int>(0)
+    }
     println_int(relay_success(41))
     return 0
 }

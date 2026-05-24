@@ -419,7 +419,6 @@ private:
     ast::FunctionDeclaration* currentFunction = nullptr;  // Track current function for error analysis
     int trapDepth = 0;  // Track nesting depth of trap clauses
     std::vector<ast::TypeNode*> activeTrapTypes;  // Stack of error types being trapped
-    int trapProtectedBlockDepth = 0;  // Track block expressions whose body is protected by trap clauses
     
     // Function registry for error propagation analysis
     std::unordered_map<std::string, ast::FunctionDeclaration*> functionRegistry;

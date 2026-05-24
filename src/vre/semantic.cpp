@@ -506,6 +506,94 @@ void SemanticAnalyzer::visit(ast::Module* node) {
     if (iterations >= MAX_ITERATIONS) {
         std::cerr << "Warning: Error propagation analysis hit maximum iterations" << std::endl;
     }
+
+    // Third pass: reject untrapped calls to failable functions from callers that
+    // are still non-failable after propagation analysis.
+    std::function<void(ast::Node*, bool, ast::FunctionDeclaration*)> validateCalls;
+    validateCalls = [&](ast::Node* n, bool trapProtected, ast::FunctionDeclaration* owner) {
+        if (!n) return;
+
+        if (auto* call = dynamic_cast<ast::CallExpression*>(n)) {
+            if (!trapProtected && owner && !owner->canFail) {
+                if (auto* calleeIdent = dynamic_cast<ast::Identifier*>(call->callee.get())) {
+                    auto it = functionRegistry.find(calleeIdent->name);
+                    if (it != functionRegistry.end() && it->second && it->second->canFail) {
+                        addError(
+                            "Call to failable function '" + calleeIdent->name + "' from non-failable function '" +
+                            owner->id->name + "' requires a trap block or marking the caller as failable.",
+                            call
+                        );
+                    }
+                }
+            }
+            for (auto& arg : call->arguments) {
+                validateCalls(arg.get(), trapProtected, owner);
+            }
+            validateCalls(call->callee.get(), trapProtected, owner);
+            return;
+        }
+
+        if (auto* block = dynamic_cast<ast::BlockStatement*>(n)) {
+            for (auto& stmt : block->body) validateCalls(stmt.get(), trapProtected, owner);
+            return;
+        }
+
+        if (auto* exprStmt = dynamic_cast<ast::ExpressionStatement*>(n)) {
+            validateCalls(exprStmt->expression.get(), trapProtected, owner);
+            return;
+        }
+
+        if (auto* varDecl = dynamic_cast<ast::VariableDeclaration*>(n)) {
+            validateCalls(varDecl->init.get(), trapProtected, owner);
+            return;
+        }
+
+        if (auto* retStmt = dynamic_cast<ast::ReturnStatement*>(n)) {
+            validateCalls(retStmt->argument.get(), trapProtected, owner);
+            return;
+        }
+
+        if (auto* ifStmt = dynamic_cast<ast::IfStatement*>(n)) {
+            validateCalls(ifStmt->test.get(), trapProtected, owner);
+            validateCalls(ifStmt->consequent.get(), trapProtected, owner);
+            validateCalls(ifStmt->alternate.get(), trapProtected, owner);
+            return;
+        }
+
+        if (auto* whileStmt = dynamic_cast<ast::WhileStatement*>(n)) {
+            validateCalls(whileStmt->test.get(), trapProtected, owner);
+            validateCalls(whileStmt->body.get(), trapProtected, owner);
+            return;
+        }
+
+        if (auto* forStmt = dynamic_cast<ast::ForStatement*>(n)) {
+            validateCalls(forStmt->init.get(), trapProtected, owner);
+            validateCalls(forStmt->test.get(), trapProtected, owner);
+            validateCalls(forStmt->update.get(), trapProtected, owner);
+            validateCalls(forStmt->body.get(), trapProtected, owner);
+            return;
+        }
+
+        if (auto* blockExpr = dynamic_cast<ast::BlockExpression*>(n)) {
+            bool protectedBody = trapProtected || !blockExpr->trapClauses.empty();
+            validateCalls(blockExpr->block.get(), protectedBody, owner);
+            for (auto& trapClause : blockExpr->trapClauses) {
+                if (trapClause && trapClause->handler) {
+                    validateCalls(trapClause->handler.get(), trapProtected, owner);
+                }
+            }
+            if (blockExpr->ensureClause && blockExpr->ensureClause->cleanupBlock) {
+                validateCalls(blockExpr->ensureClause->cleanupBlock.get(), trapProtected, owner);
+            }
+            return;
+        }
+    };
+
+    for (auto& item : node->body) {
+        if (auto* funcDecl = dynamic_cast<ast::FunctionDeclaration*>(item.get())) {
+            validateCalls(funcDecl->body.get(), false, funcDecl);
+        }
+    }
 }
 
 void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
@@ -1300,19 +1388,6 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
 
         // Normal function calls return the function's declared return type.
         auto registryIt = functionRegistry.find(name);
-        bool calleeCanFail = (registryIt != functionRegistry.end() && registryIt->second && registryIt->second->canFail);
-        if (calleeCanFail &&
-            currentFunction &&
-            currentFunction->id &&
-            currentFunction->id->name == "main" &&
-            !currentFunction->needsErrorReturn &&
-            trapProtectedBlockDepth == 0) {
-            addError(
-                "Call to failable function '" + name + "' from non-failable function '" + currentFunction->id->name +
-                "' requires a trap block or marking the caller as failable.",
-                node
-            );
-        }
 
         SymbolInfo* functionSymbol = currentScope->lookup(name);
         if (functionSymbol && functionSymbol->kind == SymbolInfo::Kind::Function && functionSymbol->type) {
@@ -2855,11 +2930,6 @@ void SemanticAnalyzer::visit(ast::RangeExpression* node) {
     }
 }
 void SemanticAnalyzer::visit(ast::BlockExpression* node) {
-    const bool protectsWithTrap = !node->trapClauses.empty();
-    if (protectsWithTrap) {
-        trapProtectedBlockDepth++;
-    }
-
     if (node->block) {
         node->block->accept(*this);
     }
@@ -2874,10 +2944,6 @@ void SemanticAnalyzer::visit(ast::BlockExpression* node) {
     // Process ensure clause if present
     if (node->ensureClause) {
         node->ensureClause->accept(*this);
-    }
-
-    if (protectsWithTrap) {
-        trapProtectedBlockDepth--;
     }
 }
 void SemanticAnalyzer::visit(ast::SelectExpression* node) {
