@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Optional, List
 import time
 import json
+import shlex
 
 
 def find_vyn_root():
@@ -61,10 +62,16 @@ class TestCase:
     parse_only: bool = False
     semantic_only: bool = False
     execute_jit: bool = False  # When True, run with JIT execution regardless of global flag
+    vyn_args: List[str] = None
+    env: dict = None
     
     def __post_init__(self):
         if self.category is None:
             self.category = ["uncategorized"]
+        if self.vyn_args is None:
+            self.vyn_args = []
+        if self.env is None:
+            self.env = {}
 
 def parse_directives(file_path):
     """Parse test directives from comments at the top of the file."""
@@ -114,6 +121,19 @@ def parse_directives(file_path):
         jit_match = re.search(r'// @execute-jit:\s*(.*?)$', content, re.MULTILINE)
         if jit_match and jit_match.group(1).strip().lower() in ('true', 'yes', '1'):
             test.execute_jit = True
+
+        vyn_args_match = re.search(r'// @vyn-args:\s*(.*?)$', content, re.MULTILINE)
+        if vyn_args_match:
+            test.vyn_args = shlex.split(vyn_args_match.group(1).strip())
+
+        env_match = re.search(r'// @env:\s*(.*?)$', content, re.MULTILINE)
+        if env_match:
+            assignments = [item.strip() for item in env_match.group(1).split(';') if item.strip()]
+            for assignment in assignments:
+                if '=' not in assignment:
+                    continue
+                key, value = assignment.split('=', 1)
+                test.env[key.strip()] = value.strip()
         
     except Exception as e:
         print(f"Error parsing test directives in {file_path}: {str(e)}")
@@ -123,6 +143,8 @@ def parse_directives(file_path):
 def run_test(test, vyn_executable, verbose=False, execute_jit=False):
     """Run the test and verify results against expectations."""
     cmd = [vyn_executable]
+    if test.vyn_args:
+        cmd.extend(test.vyn_args)
     will_execute = False
     
     if test.parse_only:
@@ -138,10 +160,12 @@ def run_test(test, vyn_executable, verbose=False, execute_jit=False):
         cmd.append("--emit-llvm")
     
     cmd.append(test.filename)
+    env = os.environ.copy()
+    env.update(test.env)
     
     start_time = time.time()
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, env=env)
         elapsed = time.time() - start_time
         
         # Check return code matches expectations

@@ -28,6 +28,14 @@ successfully with the current compiler. Support modules live under
 | `module_import.vyn` | local module import from `examples/modules/` |
 | `module_visibility.vyn` | `bundle(...)`, `share(...)`, and selective import aliases |
 
+### Module path demo
+
+This repository also includes a multi-file `--module-path` demo:
+
+```bash
+build/vyn examples/module_path_demo/main.vyn --module-path examples/module_path_demo/modules
+```
+
 ## Known Boundaries
 
 The examples now include runtime `Vec<T>` helper returns for common algorithm

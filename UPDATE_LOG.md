@@ -50,6 +50,14 @@ expect-fail tests are treated as stronger evidence than optimistic status text.
   `String` structs even in global scope, the weak-reference smoke test was
   simplified to supported syntax, and the canonical syntax fixture is treated
   as parse-only to keep it focused on syntax rather than LLVM lowering.
+- 2026-05-24: Continued I-001 by moving source-level import resolution into a
+  dedicated `ModuleRegistry` metadata model (module state, canonical keys,
+  dependency tracking, topo order), adding `--module-path` plus
+  `VYN_MODULE_PATH` and stdlib auto-discovery (`VYN_STDLIB` and
+  executable-relative probes), and upgrading diagnostics for missing modules,
+  parse failures inside imports, circular imports, and duplicate splice
+  symbols. Added focused `test/modules` coverage and a runnable
+  `--module-path` example.
 
 ## Audit Scope
 

@@ -1,0 +1,10 @@
+// @test: Environment module path helper
+// @description: Helper for VYN_MODULE_PATH import resolution
+// @category: modules
+// @expect: pass
+// @parse-only: true
+
+share(all)
+env_value()<Int> -> {
+    return 31
+}

@@ -2,6 +2,7 @@
 #include "vyn/parser/lexer.hpp"   // For Lexer
 #include "vyn/parser/parser.hpp"  // For vyn::Parser
 #include "vyn/semantic.hpp"       // For vyn::SemanticAnalyzer
+#include "vyn/module_registry.hpp"
 #include "vyn/vre/llvm/codegen.hpp" // For vyn::LLVMCodegen
 #include <catch2/catch_session.hpp>
 #include <fstream>
@@ -199,468 +200,19 @@ void optimize_module(llvm::Module* module, llvm::TargetMachine* targetMachine, i
 namespace {
 namespace fs = std::filesystem;
 
-struct ModuleResolutionState {
-    std::unordered_set<std::string> loaded;
-    std::vector<std::string> active;
+struct ModuleParseOptions {
+    std::vector<fs::path> cliModulePaths;
+    fs::path executablePath;
 };
 
-struct SourceMetadata {
-    std::string source;
-    std::vector<std::string> bundles;
-    std::unordered_map<std::string, std::vector<std::string>> sharesByName;
-    std::vector<std::vector<std::string>> importShares;
-};
-
-struct ResolvedModule {
-    std::unique_ptr<vyn::ast::Module> module;
-    std::vector<std::string> bundles;
-    std::unordered_map<std::string, std::vector<std::string>> sharesByName;
-};
-
-std::string read_source_file(const fs::path& path) {
-    std::ifstream file(path);
-    if (!file) {
-        throw std::runtime_error("Could not read imported module: " + path.string());
-    }
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    return buffer.str();
-}
-
-fs::path normalized_path(const fs::path& path) {
-    std::error_code ec;
-    fs::path absolute = fs::absolute(path, ec);
-    if (ec) {
-        absolute = path;
-    }
-    fs::path normalized = fs::weakly_canonical(absolute, ec);
-    if (ec) {
-        normalized = absolute.lexically_normal();
-    }
-    return normalized;
-}
-
-fs::path module_path_to_file(const std::string& modulePath, const fs::path& baseDir) {
-    fs::path relative;
-    size_t start = 0;
-    while (start <= modulePath.size()) {
-        size_t sep = modulePath.find("::", start);
-        std::string segment = modulePath.substr(start, sep == std::string::npos ? std::string::npos : sep - start);
-        if (!segment.empty()) {
-            relative /= segment;
-        }
-        if (sep == std::string::npos) {
-            break;
-        }
-        start = sep + 2;
-    }
-
-    if (!relative.has_extension()) {
-        relative += ".vyn";
-    }
-    return normalized_path(baseDir / relative);
-}
-
-fs::path resolve_import_path(const vyn::ast::ImportDeclaration* importDecl, const fs::path& importingFile) {
-    if (!importDecl || !importDecl->source) {
-        throw std::runtime_error("Malformed import declaration");
-    }
-
-    if (importDecl->defaultImport || importDecl->namespaceImport) {
-        throw std::runtime_error("Default and namespace imports are not supported by module resolution yet: " +
-                                 importDecl->toString());
-    }
-
-    fs::path baseDir = importingFile.parent_path();
-    if (importDecl->locator) {
-        const std::string& locator = importDecl->locator->value;
-        if (locator.find("://") != std::string::npos) {
-            throw std::runtime_error("External import locators are not supported yet: " + locator);
-        }
-        fs::path located(locator);
-        return normalized_path(located.is_absolute() ? located : baseDir / located);
-    }
-
-    return module_path_to_file(importDecl->source->value, baseDir);
-}
-
-std::string trim_copy(const std::string& text) {
-    size_t start = 0;
-    while (start < text.size() && std::isspace(static_cast<unsigned char>(text[start]))) {
-        ++start;
-    }
-    size_t end = text.size();
-    while (end > start && std::isspace(static_cast<unsigned char>(text[end - 1]))) {
-        --end;
-    }
-    return text.substr(start, end - start);
-}
-
-bool starts_with_word(const std::string& text, const std::string& word) {
-    if (text.rfind(word, 0) != 0) {
-        return false;
-    }
-    return text.size() == word.size() ||
-           (!std::isalnum(static_cast<unsigned char>(text[word.size()])) &&
-            text[word.size()] != '_');
-}
-
-std::vector<std::string> parse_directive_args(const std::string& inside) {
-    std::vector<std::string> args;
-    size_t start = 0;
-    while (start <= inside.size()) {
-        size_t comma = inside.find(',', start);
-        std::string arg = trim_copy(inside.substr(start, comma == std::string::npos ? std::string::npos : comma - start));
-        if (!arg.empty()) {
-            args.push_back(arg);
-        }
-        if (comma == std::string::npos) {
-            break;
-        }
-        start = comma + 1;
-    }
-    return args;
-}
-
-std::optional<std::vector<std::string>> consume_directive(std::string& line, const std::string& name) {
-    std::string trimmed = trim_copy(line);
-    std::string prefix = name + "(";
-    if (trimmed.rfind(prefix, 0) != 0) {
-        return std::nullopt;
-    }
-
-    size_t close = trimmed.find(')', prefix.size());
-    if (close == std::string::npos) {
-        throw std::runtime_error("Malformed " + name + "(...) directive");
-    }
-
-    auto args = parse_directive_args(trimmed.substr(prefix.size(), close - prefix.size()));
-    std::string rest = trim_copy(trimmed.substr(close + 1));
-    line = rest;
-    return args;
-}
-
-std::string take_identifier_after_keyword(const std::string& line, const std::string& keyword) {
-    if (!starts_with_word(line, keyword)) {
-        return "";
-    }
-    size_t pos = keyword.size();
-    while (pos < line.size() && std::isspace(static_cast<unsigned char>(line[pos]))) {
-        ++pos;
-    }
-    size_t start = pos;
-    while (pos < line.size() &&
-           (std::isalnum(static_cast<unsigned char>(line[pos])) || line[pos] == '_')) {
-        ++pos;
-    }
-    return pos > start ? line.substr(start, pos - start) : "";
-}
-
-std::string declaration_name_from_line(const std::string& line) {
-    std::string name = take_identifier_after_keyword(line, "struct");
-    if (!name.empty()) return name;
-    name = take_identifier_after_keyword(line, "enum");
-    if (!name.empty()) return name;
-    name = take_identifier_after_keyword(line, "aspect");
-    if (!name.empty()) return name;
-    name = take_identifier_after_keyword(line, "class");
-    if (!name.empty()) return name;
-    name = take_identifier_after_keyword(line, "type");
-    if (!name.empty()) return name;
-    name = take_identifier_after_keyword(line, "fn");
-    if (!name.empty()) return name;
-    name = take_identifier_after_keyword(line, "extern");
-    if (!name.empty() && line.find('"') == std::string::npos) return name;
-    name = take_identifier_after_keyword(line, "async");
-    if (!name.empty() && line.find('(') != std::string::npos) return name;
-
-    if (!line.empty() && (std::isalpha(static_cast<unsigned char>(line[0])) || line[0] == '_')) {
-        size_t pos = 1;
-        while (pos < line.size() &&
-               (std::isalnum(static_cast<unsigned char>(line[pos])) || line[pos] == '_')) {
-            ++pos;
-        }
-        std::string candidate = line.substr(0, pos);
-        if (pos < line.size() && (line[pos] == '(' || line[pos] == '<' || line[pos] == '=')) {
-            return candidate;
-        }
-    }
-
-    return "";
-}
-
-bool is_import_line(const std::string& line) {
-    return starts_with_word(line, "import") || starts_with_word(line, "smuggle");
-}
-
-SourceMetadata preprocess_module_source(const std::string& source) {
-    SourceMetadata metadata;
-    std::stringstream input(source);
-    std::stringstream cleaned;
-    std::string line;
-    std::optional<std::vector<std::string>> pendingShare;
-
-    while (std::getline(input, line)) {
-        std::string working = trim_copy(line);
-
-        if (auto bundleArgs = consume_directive(working, "bundle")) {
-            metadata.bundles.insert(metadata.bundles.end(), bundleArgs->begin(), bundleArgs->end());
-            if (working.empty()) {
-                cleaned << '\n';
-                continue;
-            }
-        }
-
-        if (auto shareArgs = consume_directive(working, "share")) {
-            pendingShare = *shareArgs;
-            if (working.empty()) {
-                cleaned << '\n';
-                continue;
-            }
-        }
-
-        if (working.empty()) {
-            cleaned << line << '\n';
-            continue;
-        }
-
-        if (is_import_line(working)) {
-            metadata.importShares.push_back(pendingShare.value_or(std::vector<std::string>{}));
-            pendingShare.reset();
-            cleaned << working << '\n';
-            continue;
-        }
-
-        if (pendingShare) {
-            std::string name = declaration_name_from_line(working);
-            if (!name.empty()) {
-                metadata.sharesByName[name] = *pendingShare;
-                pendingShare.reset();
-            }
-            cleaned << working << '\n';
-            continue;
-        }
-
-        cleaned << line << '\n';
-    }
-
-    metadata.source = cleaned.str();
-    return metadata;
-}
-
-std::unique_ptr<vyn::ast::Module> parse_module_only(const std::string& source, const std::string& fileName) {
-    Lexer lexer(source, fileName);
-    std::vector<vyn::token::Token> tokens = lexer.tokenize();
-    vyn::Parser parser(tokens, fileName);
-    auto ast = parser.parse_module();
-    if (!ast) {
-        throw std::runtime_error("Failed to parse source code: " + fileName);
-    }
-    return ast;
-}
-
-std::string declaration_name(const vyn::ast::StmtPtr& stmt) {
-    if (auto* fn = dynamic_cast<vyn::ast::FunctionDeclaration*>(stmt.get())) {
-        return fn->id ? fn->id->name : "";
-    }
-    if (auto* var = dynamic_cast<vyn::ast::VariableDeclaration*>(stmt.get())) {
-        return var->id ? var->id->name : "";
-    }
-    if (auto* typeAlias = dynamic_cast<vyn::ast::TypeAliasDeclaration*>(stmt.get())) {
-        return typeAlias->name ? typeAlias->name->name : "";
-    }
-    if (auto* st = dynamic_cast<vyn::ast::StructDeclaration*>(stmt.get())) {
-        return st->name ? st->name->name : "";
-    }
-    if (auto* en = dynamic_cast<vyn::ast::EnumDeclaration*>(stmt.get())) {
-        return en->name ? en->name->name : "";
-    }
-    if (auto* aspect = dynamic_cast<vyn::ast::AspectDeclaration*>(stmt.get())) {
-        return aspect->name ? aspect->name->name : "";
-    }
-    if (auto* cls = dynamic_cast<vyn::ast::ClassDeclaration*>(stmt.get())) {
-        return cls->name ? cls->name->name : "";
-    }
-    return "";
-}
-
-bool rename_declaration(vyn::ast::StmtPtr& stmt, const std::string& newName) {
-    if (auto* fn = dynamic_cast<vyn::ast::FunctionDeclaration*>(stmt.get())) {
-        if (!fn->id) return false;
-        fn->id->name = newName;
-        return true;
-    }
-    if (auto* var = dynamic_cast<vyn::ast::VariableDeclaration*>(stmt.get())) {
-        if (!var->id) return false;
-        var->id->name = newName;
-        return true;
-    }
-    if (auto* typeAlias = dynamic_cast<vyn::ast::TypeAliasDeclaration*>(stmt.get())) {
-        if (!typeAlias->name) return false;
-        typeAlias->name->name = newName;
-        return true;
-    }
-    if (auto* st = dynamic_cast<vyn::ast::StructDeclaration*>(stmt.get())) {
-        if (!st->name) return false;
-        st->name->name = newName;
-        return true;
-    }
-    if (auto* en = dynamic_cast<vyn::ast::EnumDeclaration*>(stmt.get())) {
-        if (!en->name) return false;
-        en->name->name = newName;
-        return true;
-    }
-    if (auto* aspect = dynamic_cast<vyn::ast::AspectDeclaration*>(stmt.get())) {
-        if (!aspect->name) return false;
-        aspect->name->name = newName;
-        return true;
-    }
-    if (auto* cls = dynamic_cast<vyn::ast::ClassDeclaration*>(stmt.get())) {
-        if (!cls->name) return false;
-        cls->name->name = newName;
-        return true;
-    }
-    return false;
-}
-
-bool is_main_function(const vyn::ast::StmtPtr& stmt) {
-    auto* fn = dynamic_cast<vyn::ast::FunctionDeclaration*>(stmt.get());
-    return fn && fn->id && fn->id->name == "main";
-}
-
-bool shares_allow(const std::vector<std::string>& shares, const std::vector<std::string>& importerBundles) {
-    for (const auto& share : shares) {
-        if (share == "all") {
-            return true;
-        }
-        if (std::find(importerBundles.begin(), importerBundles.end(), share) != importerBundles.end()) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool declaration_visible(const std::string& name,
-                         const ResolvedModule& importedModule,
-                         const std::vector<std::string>& importerBundles,
-                         const vyn::ast::ImportDeclaration* importDecl) {
-    if (importDecl && importDecl->kind == vyn::ast::ImportKind::Smuggle) {
-        return true;
-    }
-    auto shareIt = importedModule.sharesByName.find(name);
-    if (shareIt == importedModule.sharesByName.end()) {
-        return false;
-    }
-    return shares_allow(shareIt->second, importerBundles);
-}
-
-ResolvedModule parse_module_with_imports(const std::string& source,
-                                         const std::string& fileName,
-                                         ModuleResolutionState& state,
-                                         bool isRoot) {
-    fs::path currentPath = normalized_path(fileName);
-    std::string currentKey = currentPath.string();
-
-    if (std::find(state.active.begin(), state.active.end(), currentKey) != state.active.end()) {
-        throw std::runtime_error("Circular import detected at " + currentKey);
-    }
-
-    if (!isRoot && state.loaded.find(currentKey) != state.loaded.end()) {
-        return ResolvedModule{
-            std::make_unique<vyn::ast::Module>(vyn::SourceLocation(currentKey, 1, 1),
-                                               std::vector<vyn::ast::StmtPtr>{}),
-            {},
-            {}
-        };
-    }
-
-    state.loaded.insert(currentKey);
-    state.active.push_back(currentKey);
-
-    SourceMetadata metadata = preprocess_module_source(source);
-    auto module = parse_module_only(metadata.source, currentKey);
-    std::vector<vyn::ast::StmtPtr> resolvedBody;
-    std::unordered_map<std::string, std::vector<std::string>> resolvedShares = metadata.sharesByName;
-    size_t importIndex = 0;
-
-    for (auto& stmt : module->body) {
-        if (auto* importDecl = dynamic_cast<vyn::ast::ImportDeclaration*>(stmt.get())) {
-            std::vector<std::string> importShare;
-            if (importIndex < metadata.importShares.size()) {
-                importShare = metadata.importShares[importIndex];
-            }
-            ++importIndex;
-
-            for (const auto& specifier : importDecl->specifiers) {
-                if (!specifier.importedName) {
-                    throw std::runtime_error("Whole-module import aliases are not supported yet; use import module::{symbol as alias}");
-                }
-            }
-
-            fs::path importedPath = resolve_import_path(importDecl, currentPath);
-            std::string importedSource = read_source_file(importedPath);
-            auto importedModule = parse_module_with_imports(importedSource, importedPath.string(), state, false);
-
-            std::unordered_map<std::string, std::string> requestedRenames;
-            std::unordered_set<std::string> requestedNames;
-            for (const auto& specifier : importDecl->specifiers) {
-                const std::string importedName = specifier.importedName->name;
-                requestedNames.insert(importedName);
-                requestedRenames[importedName] = specifier.localName ? specifier.localName->name : importedName;
-            }
-
-            for (auto& importedStmt : importedModule.module->body) {
-                if (is_main_function(importedStmt)) {
-                    throw std::runtime_error("Imported module must not define main(): " + importedPath.string());
-                }
-                std::string name = declaration_name(importedStmt);
-                if (name.empty()) {
-                    continue;
-                }
-
-                if (!requestedNames.empty() && requestedNames.find(name) == requestedNames.end()) {
-                    continue;
-                }
-
-                if (!declaration_visible(name, importedModule, metadata.bundles, importDecl)) {
-                    continue;
-                }
-
-                if (!requestedNames.empty()) {
-                    requestedNames.erase(name);
-                    auto renameIt = requestedRenames.find(name);
-                    if (renameIt != requestedRenames.end() && renameIt->second != name) {
-                        if (!rename_declaration(importedStmt, renameIt->second)) {
-                            throw std::runtime_error("Cannot alias imported declaration '" + name + "' from " + importedPath.string());
-                        }
-                        name = renameIt->second;
-                    }
-                }
-
-                if (!importShare.empty()) {
-                    resolvedShares[name] = importShare;
-                }
-                resolvedBody.push_back(std::move(importedStmt));
-            }
-
-            if (!requestedNames.empty()) {
-                auto missing = *requestedNames.begin();
-                throw std::runtime_error("Imported symbol '" + missing + "' is not exported by " + importedPath.string());
-            }
-            continue;
-        }
-
-        resolvedBody.push_back(std::move(stmt));
-    }
-
-    module->body = std::move(resolvedBody);
-    state.active.pop_back();
-    return ResolvedModule{std::move(module), metadata.bundles, std::move(resolvedShares)};
-}
+ModuleParseOptions g_module_parse_options;
 
 std::unique_ptr<vyn::ast::Module> parse_vyn_module(const std::string& source, const std::string& fileName) {
-    ModuleResolutionState state;
-    return parse_module_with_imports(source, fileName, state, true).module;
+    vyn::ModuleRegistryOptions options;
+    options.cliModulePaths = g_module_parse_options.cliModulePaths;
+    options.executablePath = g_module_parse_options.executablePath;
+    vyn::ModuleRegistry registry(std::move(options));
+    return registry.resolveRoot(source, fileName);
 }
 } // namespace
 
@@ -1394,6 +946,7 @@ int main(int argc, char* argv[]) {
     std::string build_output;
     bool static_link = false;
     std::vector<std::string> input_files;
+    std::vector<fs::path> module_search_paths;
     int optimization_level = 2;  // Default -O2
     bool execute_jit = true;  // By default, execute the code with JIT
 
@@ -1433,6 +986,13 @@ int main(int argc, char* argv[]) {
             continue;
         } else if (arg == "--static") {
             static_link = true;
+            continue;
+        } else if (arg == "--module-path") {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: --module-path requires a directory path" << std::endl;
+                return 1;
+            }
+            module_search_paths.emplace_back(argv[++i]);
             continue;
         } else if (arg.substr(0, 2) == "-O") {
             // Parse optimization level: -O0, -O1, -O2, -O3
@@ -1500,6 +1060,13 @@ int main(int argc, char* argv[]) {
     if (!test_mode_active && (g_make_all_tests_verbose || !g_verbose_test_specifiers.empty() || g_suppress_all_debug_output ||
                               vyn::g_make_all_parser_verbose || !vyn::g_verbose_parser_test_specifiers.empty() || vyn::g_suppress_all_parser_debug_output)) {
          std::cerr << "Warning: Debug verbosity flags (--debug-verbose, --no-debug-output, --debug-parser-verbose, --no-parser-debug-output) are intended for use with --test mode." << std::endl;
+    }
+
+    g_module_parse_options.cliModulePaths = module_search_paths;
+    std::error_code exePathError;
+    g_module_parse_options.executablePath = fs::absolute(argv[0], exePathError);
+    if (exePathError) {
+        g_module_parse_options.executablePath = argv[0];
     }
     
     // Convert std::vector<std::string> to char* array for Catch2
@@ -1691,12 +1258,14 @@ int main(int argc, char* argv[]) {
         std::cout << "  --compile, -c [file]  Compile to object file (.o)" << std::endl;
         std::cout << "  --build, -b [file]    Compile and link to executable (NEW!)" << std::endl;
         std::cout << "  --static              Use static linking (with --build)" << std::endl;
+        std::cout << "  --module-path <dir>   Add a module search path (repeatable)" << std::endl;
         std::cout << "  -O0, -O1, -O2, -O3    Set optimization level (default: -O2)" << std::endl;
         std::cout << "  --no-execute          Do not execute the code (JIT is on by default)" << std::endl;
         std::cout << std::endl;
         std::cout << "Examples:" << std::endl;
         std::cout << "  " << argv[0] << " program.vyn                    # JIT compile and run" << std::endl;
         std::cout << "  " << argv[0] << " program.vyn --build myapp      # Build executable" << std::endl;
+        std::cout << "  " << argv[0] << " app.vyn --module-path modules   # Add module search path" << std::endl;
         std::cout << "  " << argv[0] << " program.vyn -b myapp -O3       # Build with max optimization" << std::endl;
         std::cout << "  " << argv[0] << " program.vyn --compile prog.o   # Compile to object file" << std::endl;
         std::cout << std::endl;

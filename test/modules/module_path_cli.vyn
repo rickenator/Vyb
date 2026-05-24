@@ -1,0 +1,13 @@
+// @test: Module path via CLI flag
+// @description: import a::b::c resolves using --module-path
+// @category: modules
+// @expect: pass
+// @expect-output: 77
+// @vyn-args: --module-path test/modules/pathlib
+
+import a::b::c
+
+main()<Int> -> {
+    println_int(cli_value())
+    return 0
+}

@@ -1,0 +1,6 @@
+import cycle_a from "./a.vyn"
+
+share(all)
+cycle_b_value()<Int> -> {
+    return 2
+}

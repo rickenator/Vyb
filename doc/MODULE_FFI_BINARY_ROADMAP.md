@@ -225,6 +225,25 @@ Enable multi-file Vyn programs with controlled visibility using the bundles & sh
 
 ---
 
+#### Implementation snapshot (2026-05-24)
+
+- Import loading is now managed by a source-level `ModuleRegistry` model keyed by
+  canonical absolute module path.
+- Registry records include source path, parsed AST root, imported module keys,
+  state (`Unresolved`/`Parsing`/`Resolved`/`Failed`), and original import
+  spelling for diagnostics.
+- Search precedence for `import a::b::c`:
+  1. Importing file directory
+  2. `--module-path <dir>` (repeatable, CLI order)
+  3. `VYN_MODULE_PATH` (colon-separated)
+  4. Auto-discovered stdlib root
+- Module path convention: try `<root>/a/b/c.vyn`, then `<root>/a/b/c/mod.vyn`.
+- Stdlib auto-discovery order:
+  1. `VYN_STDLIB` (if set)
+  2. Relative to compiler executable (`<exe_dir>/../stdlib`, then `<exe_dir>/stdlib`)
+
+---
+
 ### Phase 1.6: Standard Library Modules (v0.6.0)
 
 **Goal:** Organize standard library into importable modules.

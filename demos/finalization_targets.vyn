@@ -7,7 +7,7 @@ extern "C" {
 main()<Int> -> {
     value<Int> = 10
     {
-        read_ref<their<Int>> = view value
+        read_ref<their<Int>> = view(value)
     }
 
     {

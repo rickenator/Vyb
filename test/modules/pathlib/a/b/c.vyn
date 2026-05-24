@@ -1,0 +1,10 @@
+// @test: CLI module path helper
+// @description: Helper for --module-path import resolution
+// @category: modules
+// @expect: pass
+// @parse-only: true
+
+share(all)
+cli_value()<Int> -> {
+    return 77
+}

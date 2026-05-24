@@ -1,0 +1,12 @@
+// @test: Stdlib auto-discovery import
+// @description: import prelude resolves from discovered stdlib root
+// @category: modules
+// @expect: pass
+// @expect-output: 1
+
+import prelude
+
+main()<Int> -> {
+    println_int(prelude_ok())
+    return 0
+}

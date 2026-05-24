@@ -1,0 +1,4 @@
+share(all)
+prelude_ok()<Int> -> {
+    return 1
+}

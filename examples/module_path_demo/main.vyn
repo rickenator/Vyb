@@ -1,0 +1,6 @@
+import toolkit::ops
+
+main()<Int> -> {
+    println_int(times_two(12))
+    return 0
+}

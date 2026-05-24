@@ -1,0 +1,4 @@
+share(all)
+times_two(value<Int>)<Int> -> {
+    return value * 2
+}

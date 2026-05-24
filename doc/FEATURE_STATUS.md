@@ -18,13 +18,15 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 | `smuggle <path> as <alias>` | ✅ | Alias binding at parse level |
 | `ImportKind` (TrustedImport / Smuggle) | ✅ | Captured in AST `ImportDeclaration.kind` |
 | `from` keyword | ✅ | Lexed as `KEYWORD_FROM`; also valid in `from<T>(addr)` freedom-block expressions |
-| Module resolution (load files) | ✅ | Local files are loaded and spliced before semantic analysis/codegen |
+| Module resolution (load files) | ✅ | Resolved via `ModuleRegistry` metadata model (canonical keys + resolution states) |
 | Local path loading (`from "./..."`) | ✅ | Relative locators resolve from the importing file |
+| Module search paths | ✅ | Importer dir, `--module-path`, `VYN_MODULE_PATH`, then stdlib auto-discovery |
+| Stdlib auto-discovery | ✅ | `VYN_STDLIB`, then executable-relative probes (`../stdlib`, `./stdlib`) |
 | `bundle(...)` visibility | ✅ | Source-level directives are enforced by the local resolver |
 | `share(...)` exports | ✅ | `share(all)` and bundle-scoped shares export declarations/imports |
 | `smuggle` visibility bypass | ✅ | Smuggled imports bypass share/bundle checks |
 | URL/Git fetching (`from "github.com/..."`) | 📋 | v0.6.x |
-| Module cycle detection | ✅ | Circular local imports are rejected |
+| Module cycle detection | ✅ | Circular imports are rejected with dependency-chain diagnostics |
 | Symbol re-export | ✅ | `share(...)` before an import re-exports selected imported declarations |
 
 ## Println / Output

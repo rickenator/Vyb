@@ -111,6 +111,7 @@ set(VRE_SOURCES
 set(VRE_HEADERS
     include/vyn/vre/value.hpp
     include/vyn/semantic.hpp
+    include/vyn/module_registry.hpp
     include/vyn/vre/memory.hpp
     include/vyn/vre/runtime_types.hpp
     include/vyn/vre/llvm/codegen.hpp
@@ -131,7 +132,7 @@ set(RUNTIME_HEADERS
 )
 
 # Main and tests
-set(MAIN_SOURCES src/main.cpp src/tests.cpp)
+set(MAIN_SOURCES src/main.cpp src/module_registry.cpp src/tests.cpp)
 
 add_executable(vyn
     ${PARSER_SOURCES}

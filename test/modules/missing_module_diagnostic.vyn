@@ -1,0 +1,11 @@
+// @test: Missing module diagnostics include tried paths
+// @description: Missing imports report all candidate paths tried
+// @category: modules
+// @expect: fail
+// @expect-error: Tried paths:
+
+import ghost::missing
+
+main()<Int> -> {
+    return 0
+}

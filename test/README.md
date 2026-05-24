@@ -17,6 +17,8 @@ Tests use top-of-file comments to describe expected behavior:
 // @expect-output: Expected stdout text
 // @expect-error: Expected error text
 // @expect-return: 0
+// @vyn-args: --module-path test/modules/pathlib
+// @env: VYN_MODULE_PATH=test/modules/envlib
 ```
 
 | Directive | Description |
@@ -28,6 +30,8 @@ Tests use top-of-file comments to describe expected behavior:
 | `@expect-error` | Error substring expected for failing tests |
 | `@expect-output` | Stdout substring expected for runtime tests |
 | `@expect-return` | Expected final stdout line from `main` return serialization when JIT execution is enabled |
+| `@vyn-args` | Extra CLI arguments passed to `vyn` before the test filename |
+| `@env` | Semicolon-separated environment overrides (`KEY=value;KEY2=value2`) |
 | `@parse-only` | Stop after parsing |
 | `@semantic-only` | Stop after parsing and semantic analysis |
 
