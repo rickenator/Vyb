@@ -1,0 +1,21 @@
+// @test: Module visibility helper
+// @description: Helper module for bundle/share import tests
+// @category: modules
+// @expect: pass
+// @parse-only: true
+
+bundle(core)
+
+share(all)
+exported_value()<Int> -> {
+    return 21
+}
+
+share(app)
+bundle_value()<Int> -> {
+    return 9
+}
+
+hidden_value()<Int> -> {
+    return 99
+}

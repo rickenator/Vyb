@@ -1,0 +1,12 @@
+// @test: Assignment while borrowed rejected
+// @description: A binding cannot be assigned while a lexical borrow of it is active
+// @category: ownership, borrow
+// @expect: fail
+// @semantic-only: true
+
+main()<Int> -> {
+    value<Int> = 1
+    borrow_ref<their<Int>> = borrow value
+    value = 2
+    return value
+}

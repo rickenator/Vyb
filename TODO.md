@@ -210,17 +210,11 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
 
 - [x] **Phase 1.1 — Import Parsing** — `import <path>`, `import <path> as <alias>`, `import <path> from "<locator>"`, `smuggle <path> as <alias>`, `ImportKind` (TrustedImport / Smuggle) captured in AST
 - [x] **Phase 1.1 — Local Module Resolution** — local `import nested::module`, `import name from "./file.vyn"`, recursive loading, import deduping, and circular dependency detection before semantic analysis/codegen
-- [ ] **Phase 1.1b — Module Registry** — formal `ModuleRegistry` class, module cache API, alias/specifier support, and re-export semantics
-- [ ] **Phase 1.2 — `bundle(...)` Declaration Parsing**
-  - `BundleDeclaration` AST node
-  - `bundle(sort.Core, sort.Common)` at file top
-- [ ] **Phase 1.3 — `share(...)` Directive Parsing**
-  - `share(all)` and `share(bundle1, bundle2)` on declarations
-  - Visibility metadata stored in AST
-- [ ] **Phase 1.4 — Visibility Checking**
-  - Bundle overlap algorithm during import resolution
-  - `smuggle` keyword — bypasses all visibility checks
-  - Clear error messages: "Symbol 'foo' not visible from your bundle"
+- [x] **Phase 1.1b — Alias/specifier imports and re-export semantics** — `import module::{symbol as alias}`, explicit `share(...) import ...` re-exports
+- [x] **Phase 1.2 — `bundle(...)` Directives** — Source-level module bundle metadata accepted by local resolver
+- [x] **Phase 1.3 — `share(...)` Directives** — `share(all)` and `share(bundle1, bundle2)` accepted on declarations and imports
+- [x] **Phase 1.4 — Visibility Checking** — Bundle overlap enforced during import resolution; `smuggle` bypasses visibility
+- [ ] **Phase 1.4b — Formal ModuleRegistry AST model** — replace source-level directive metadata with AST nodes/cache API
 - [ ] **Phase 1.5 — Module Path Resolution**
   - `VYN_MODULE_PATH` environment variable
   - `--module-path` CLI flag
@@ -231,8 +225,8 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
 
 ### 2. FFI — C Interop (HIGH PRIORITY)
 - [x] **`extern` function modifier** — Individual extern function declarations compile to LLVM `ExternalLinkage` via `ExternStatement` codegen; syntax: `extern funcName(params)<ReturnType>`
-- [ ] **`extern "C" { }` block syntax** — Multi-declaration block (AST node exists; parser not yet wired)
-- [ ] **C type mapping** — `Int` to `int64_t`, `Int32` to `int32_t`, `*i8` to `char*`
+- [x] **`extern "C" { }` block syntax** — Multi-declaration blocks parse, register external functions, and codegen LLVM declarations
+- [x] **C type mapping** — Common C aliases (`CInt`, `CSize`, `CString`, `CPtr<T>`, `CVoid`, etc.) lower through semantic/codegen
 - [ ] **`#[repr(C)]` on structs** — Force C-compatible memory layout
 - [ ] **Variadic C functions** — `printf(format: *i8, ...) -> Int`
 - [ ] **`vyn bindgen`** — Tool to generate Vyn bindings from C headers (v0.6+)
@@ -240,10 +234,10 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
 ### 3. Ownership Types — Runtime Enforcement (HIGH PRIORITY)
 - [ ] **`my<T>` move semantics** — Enforce single-owner at compile time; error on copy
 - [ ] **`our<T>` reference counting** — Atomic strong_count; drop when 0
-- [ ] **`their<T>` borrow checker** — Validate lifetime of borrows; no dangling refs
+- [x] **`their<T>` borrow checker (lexical phase)** — borrow/view require lvalues, reject overlapping mutable/view borrows, reject assignment while borrowed
 - [ ] **`mild<T>` control block** — weak_count + "released" flag; `grab()` and `released()`
-- [ ] **`view(expr)` semantic** — Creates immutable `their<T const>`; enforced
-- [ ] **`borrow(expr)` semantic** — Creates mutable `their<T>`; enforced
+- [x] **`view(expr)` semantic (lexical phase)** — Creates `their<T>` view and participates in borrow conflict checks
+- [x] **`borrow(expr)` semantic (lexical phase)** — Creates mutable `their<T>` and participates in borrow conflict checks
 - [ ] **`soft(expr)` semantic** — Creates `mild<T>` from `our<T>`; enforced
 
 ### 4. Standard Library Expansion (HIGH PRIORITY)

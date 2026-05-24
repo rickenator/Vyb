@@ -8,8 +8,12 @@ main()<Int> -> {
         at(p) = 64
     }
 
-    b<their<Int>> = borrow(x)
-    v<their<Int>> = view(x)
+    {
+        b<their<Int>> = borrow(x)
+    }
+    {
+        v<their<Int>> = view(x)
+    }
 
     println("memory value = " + x.to_string())
     return 0

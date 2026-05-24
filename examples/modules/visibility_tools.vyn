@@ -1,0 +1,15 @@
+bundle(examples.Core)
+
+share(all)
+public_score()<Int> -> {
+    return 20
+}
+
+share(examples.App)
+bundle_score()<Int> -> {
+    return 22
+}
+
+private_score()<Int> -> {
+    return 99
+}

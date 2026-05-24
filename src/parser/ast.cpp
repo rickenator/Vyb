@@ -1851,8 +1851,8 @@ void YieldReturnStatement::accept(Visitor& visitor) {
 // --- Error Handling Statements ---
 
 // FailStatement implementation
-FailStatement::FailStatement(SourceLocation loc, ExprPtr error)
-    : Statement(loc), error(std::move(error)) {}
+FailStatement::FailStatement(SourceLocation loc, ExprPtr error, TypeNodePtr errorType)
+    : Statement(loc), error(std::move(error)), errorType(std::move(errorType)) {}
 
 NodeType FailStatement::getType() const {
     return NodeType::FAIL_STATEMENT;
@@ -1860,7 +1860,11 @@ NodeType FailStatement::getType() const {
 
 std::string FailStatement::toString() const {
     std::stringstream ss;
-    ss << "fail " << (error ? error->toString() : "");
+    ss << "fail";
+    if (errorType) {
+        ss << "<" << errorType->toString() << ">";
+    }
+    ss << " " << (error ? error->toString() : "");
     return ss.str();
 }
 

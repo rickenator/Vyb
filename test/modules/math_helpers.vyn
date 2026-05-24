@@ -4,10 +4,12 @@
 // @expect: pass
 // @parse-only: true
 
+share(all)
 double(value<Int>)<Int> -> {
     return value * 2
 }
 
+share(all)
 triple(value<Int>)<Int> -> {
     return value * 3
 }

@@ -1077,8 +1077,31 @@ std::unique_ptr<vyn::ast::ImportDeclaration> DeclarationParser::parse_import_dec
         throw std::runtime_error("Expected identifier after \'import\' at " + location_to_string(this->current_location()));
     }
     std::string path = this->consume().lexeme;
+    std::vector<ast::ImportSpecifier> specifiers;
     while (this->peek().type == vyn::TokenType::COLONCOLON || this->peek().type == vyn::TokenType::DOT) {
-        this->consume();
+        vyn::TokenType separator = this->consume().type;
+        if (separator == vyn::TokenType::COLONCOLON && this->peek().type == vyn::TokenType::LBRACE) {
+            this->consume();
+            while (!this->IsAtEnd() && this->peek().type != vyn::TokenType::RBRACE) {
+                if (this->peek().type != vyn::TokenType::IDENTIFIER) {
+                    throw std::runtime_error("Expected imported name in import specifier list at " + location_to_string(this->current_location()));
+                }
+                auto imported = std::make_unique<ast::Identifier>(this->current_location(), this->consume().lexeme);
+                std::unique_ptr<ast::Identifier> local = nullptr;
+                if (this->match(vyn::TokenType::KEYWORD_AS)) {
+                    if (this->peek().type != vyn::TokenType::IDENTIFIER) {
+                        throw std::runtime_error("Expected local name after \'as\' in import specifier at " + location_to_string(this->current_location()));
+                    }
+                    local = std::make_unique<ast::Identifier>(this->current_location(), this->consume().lexeme);
+                }
+                specifiers.emplace_back(std::move(imported), std::move(local));
+                if (!this->match(vyn::TokenType::COMMA)) {
+                    break;
+                }
+            }
+            this->expect(vyn::TokenType::RBRACE, "Expected '}' after import specifier list.");
+            break;
+        }
         if (this->peek().type != vyn::TokenType::IDENTIFIER) {
             throw std::runtime_error("Expected identifier in import path at " + location_to_string(this->current_location()));
         }
@@ -1102,7 +1125,6 @@ std::unique_ptr<vyn::ast::ImportDeclaration> DeclarationParser::parse_import_dec
     }
     this->match(vyn::TokenType::SEMICOLON);
     auto source = std::make_unique<ast::StringLiteral>(loc, path);
-    std::vector<ast::ImportSpecifier> specifiers;
     if (alias) {
         specifiers.emplace_back(nullptr, std::move(alias));
     }
@@ -1116,8 +1138,31 @@ std::unique_ptr<vyn::ast::ImportDeclaration> DeclarationParser::parse_smuggle_de
         throw std::runtime_error("Expected identifier after \'smuggle\' at " + location_to_string(this->current_location()));
     }
     std::string path = this->consume().lexeme;
+    std::vector<ast::ImportSpecifier> specifiers;
     while (this->peek().type == vyn::TokenType::COLONCOLON || this->peek().type == vyn::TokenType::DOT) {
-        this->consume();
+        vyn::TokenType separator = this->consume().type;
+        if (separator == vyn::TokenType::COLONCOLON && this->peek().type == vyn::TokenType::LBRACE) {
+            this->consume();
+            while (!this->IsAtEnd() && this->peek().type != vyn::TokenType::RBRACE) {
+                if (this->peek().type != vyn::TokenType::IDENTIFIER) {
+                    throw std::runtime_error("Expected imported name in smuggle specifier list at " + location_to_string(this->current_location()));
+                }
+                auto imported = std::make_unique<ast::Identifier>(this->current_location(), this->consume().lexeme);
+                std::unique_ptr<ast::Identifier> local = nullptr;
+                if (this->match(vyn::TokenType::KEYWORD_AS)) {
+                    if (this->peek().type != vyn::TokenType::IDENTIFIER) {
+                        throw std::runtime_error("Expected local name after \'as\' in smuggle specifier at " + location_to_string(this->current_location()));
+                    }
+                    local = std::make_unique<ast::Identifier>(this->current_location(), this->consume().lexeme);
+                }
+                specifiers.emplace_back(std::move(imported), std::move(local));
+                if (!this->match(vyn::TokenType::COMMA)) {
+                    break;
+                }
+            }
+            this->expect(vyn::TokenType::RBRACE, "Expected '}' after smuggle specifier list.");
+            break;
+        }
         if (this->peek().type != vyn::TokenType::IDENTIFIER) {
             throw std::runtime_error("Expected identifier in smuggle path at " + location_to_string(this->current_location()));
         }
@@ -1143,7 +1188,6 @@ std::unique_ptr<vyn::ast::ImportDeclaration> DeclarationParser::parse_smuggle_de
     }
     this->match(vyn::TokenType::SEMICOLON);
     auto source = std::make_unique<ast::StringLiteral>(loc, path);
-    std::vector<ast::ImportSpecifier> specifiers;
     if (alias) {
         specifiers.emplace_back(nullptr, std::move(alias));
     }

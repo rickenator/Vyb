@@ -1,0 +1,18 @@
+// @test: extern C ABI aliases
+// @description: C ABI scalar and pointer aliases lower to the expected LLVM ABI types
+// @category: ffi, interop
+// @expect: pass
+// @expect-output: 3
+// @tags: ffi, extern, abi
+
+extern "C" {
+    strlen(s<CString>)<CSize>
+}
+
+main()<Int> -> {
+    freedom {
+        length<CSize> = strlen("abc")
+        println_int(length)
+    }
+    return 0
+}

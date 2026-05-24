@@ -12,7 +12,10 @@
 #include <set> // For test and parser verbosity specifiers
 #include <filesystem>
 #include <unordered_set>
+#include <unordered_map>
 #include <algorithm> // For std::find
+#include <cctype>
+#include <optional>
 #include <cstdio> // For printf and fflush
 #include <cstdlib> // For malloc/free
 #include <cstring> // For memset
@@ -201,6 +204,19 @@ struct ModuleResolutionState {
     std::vector<std::string> active;
 };
 
+struct SourceMetadata {
+    std::string source;
+    std::vector<std::string> bundles;
+    std::unordered_map<std::string, std::vector<std::string>> sharesByName;
+    std::vector<std::vector<std::string>> importShares;
+};
+
+struct ResolvedModule {
+    std::unique_ptr<vyn::ast::Module> module;
+    std::vector<std::string> bundles;
+    std::unordered_map<std::string, std::vector<std::string>> sharesByName;
+};
+
 std::string read_source_file(const fs::path& path) {
     std::ifstream file(path);
     if (!file) {
@@ -250,8 +266,8 @@ fs::path resolve_import_path(const vyn::ast::ImportDeclaration* importDecl, cons
         throw std::runtime_error("Malformed import declaration");
     }
 
-    if (!importDecl->specifiers.empty() || importDecl->defaultImport || importDecl->namespaceImport) {
-        throw std::runtime_error("Import aliases/specifiers are parsed but not yet supported by module resolution: " +
+    if (importDecl->defaultImport || importDecl->namespaceImport) {
+        throw std::runtime_error("Default and namespace imports are not supported by module resolution yet: " +
                                  importDecl->toString());
     }
 
@@ -268,6 +284,170 @@ fs::path resolve_import_path(const vyn::ast::ImportDeclaration* importDecl, cons
     return module_path_to_file(importDecl->source->value, baseDir);
 }
 
+std::string trim_copy(const std::string& text) {
+    size_t start = 0;
+    while (start < text.size() && std::isspace(static_cast<unsigned char>(text[start]))) {
+        ++start;
+    }
+    size_t end = text.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(text[end - 1]))) {
+        --end;
+    }
+    return text.substr(start, end - start);
+}
+
+bool starts_with_word(const std::string& text, const std::string& word) {
+    if (text.rfind(word, 0) != 0) {
+        return false;
+    }
+    return text.size() == word.size() ||
+           (!std::isalnum(static_cast<unsigned char>(text[word.size()])) &&
+            text[word.size()] != '_');
+}
+
+std::vector<std::string> parse_directive_args(const std::string& inside) {
+    std::vector<std::string> args;
+    size_t start = 0;
+    while (start <= inside.size()) {
+        size_t comma = inside.find(',', start);
+        std::string arg = trim_copy(inside.substr(start, comma == std::string::npos ? std::string::npos : comma - start));
+        if (!arg.empty()) {
+            args.push_back(arg);
+        }
+        if (comma == std::string::npos) {
+            break;
+        }
+        start = comma + 1;
+    }
+    return args;
+}
+
+std::optional<std::vector<std::string>> consume_directive(std::string& line, const std::string& name) {
+    std::string trimmed = trim_copy(line);
+    std::string prefix = name + "(";
+    if (trimmed.rfind(prefix, 0) != 0) {
+        return std::nullopt;
+    }
+
+    size_t close = trimmed.find(')', prefix.size());
+    if (close == std::string::npos) {
+        throw std::runtime_error("Malformed " + name + "(...) directive");
+    }
+
+    auto args = parse_directive_args(trimmed.substr(prefix.size(), close - prefix.size()));
+    std::string rest = trim_copy(trimmed.substr(close + 1));
+    line = rest;
+    return args;
+}
+
+std::string take_identifier_after_keyword(const std::string& line, const std::string& keyword) {
+    if (!starts_with_word(line, keyword)) {
+        return "";
+    }
+    size_t pos = keyword.size();
+    while (pos < line.size() && std::isspace(static_cast<unsigned char>(line[pos]))) {
+        ++pos;
+    }
+    size_t start = pos;
+    while (pos < line.size() &&
+           (std::isalnum(static_cast<unsigned char>(line[pos])) || line[pos] == '_')) {
+        ++pos;
+    }
+    return pos > start ? line.substr(start, pos - start) : "";
+}
+
+std::string declaration_name_from_line(const std::string& line) {
+    std::string name = take_identifier_after_keyword(line, "struct");
+    if (!name.empty()) return name;
+    name = take_identifier_after_keyword(line, "enum");
+    if (!name.empty()) return name;
+    name = take_identifier_after_keyword(line, "aspect");
+    if (!name.empty()) return name;
+    name = take_identifier_after_keyword(line, "class");
+    if (!name.empty()) return name;
+    name = take_identifier_after_keyword(line, "type");
+    if (!name.empty()) return name;
+    name = take_identifier_after_keyword(line, "fn");
+    if (!name.empty()) return name;
+    name = take_identifier_after_keyword(line, "extern");
+    if (!name.empty() && line.find('"') == std::string::npos) return name;
+    name = take_identifier_after_keyword(line, "async");
+    if (!name.empty() && line.find('(') != std::string::npos) return name;
+
+    if (!line.empty() && (std::isalpha(static_cast<unsigned char>(line[0])) || line[0] == '_')) {
+        size_t pos = 1;
+        while (pos < line.size() &&
+               (std::isalnum(static_cast<unsigned char>(line[pos])) || line[pos] == '_')) {
+            ++pos;
+        }
+        std::string candidate = line.substr(0, pos);
+        if (pos < line.size() && (line[pos] == '(' || line[pos] == '<' || line[pos] == '=')) {
+            return candidate;
+        }
+    }
+
+    return "";
+}
+
+bool is_import_line(const std::string& line) {
+    return starts_with_word(line, "import") || starts_with_word(line, "smuggle");
+}
+
+SourceMetadata preprocess_module_source(const std::string& source) {
+    SourceMetadata metadata;
+    std::stringstream input(source);
+    std::stringstream cleaned;
+    std::string line;
+    std::optional<std::vector<std::string>> pendingShare;
+
+    while (std::getline(input, line)) {
+        std::string working = trim_copy(line);
+
+        if (auto bundleArgs = consume_directive(working, "bundle")) {
+            metadata.bundles.insert(metadata.bundles.end(), bundleArgs->begin(), bundleArgs->end());
+            if (working.empty()) {
+                cleaned << '\n';
+                continue;
+            }
+        }
+
+        if (auto shareArgs = consume_directive(working, "share")) {
+            pendingShare = *shareArgs;
+            if (working.empty()) {
+                cleaned << '\n';
+                continue;
+            }
+        }
+
+        if (working.empty()) {
+            cleaned << line << '\n';
+            continue;
+        }
+
+        if (is_import_line(working)) {
+            metadata.importShares.push_back(pendingShare.value_or(std::vector<std::string>{}));
+            pendingShare.reset();
+            cleaned << working << '\n';
+            continue;
+        }
+
+        if (pendingShare) {
+            std::string name = declaration_name_from_line(working);
+            if (!name.empty()) {
+                metadata.sharesByName[name] = *pendingShare;
+                pendingShare.reset();
+            }
+            cleaned << working << '\n';
+            continue;
+        }
+
+        cleaned << line << '\n';
+    }
+
+    metadata.source = cleaned.str();
+    return metadata;
+}
+
 std::unique_ptr<vyn::ast::Module> parse_module_only(const std::string& source, const std::string& fileName) {
     Lexer lexer(source, fileName);
     std::vector<vyn::token::Token> tokens = lexer.tokenize();
@@ -279,15 +459,105 @@ std::unique_ptr<vyn::ast::Module> parse_module_only(const std::string& source, c
     return ast;
 }
 
+std::string declaration_name(const vyn::ast::StmtPtr& stmt) {
+    if (auto* fn = dynamic_cast<vyn::ast::FunctionDeclaration*>(stmt.get())) {
+        return fn->id ? fn->id->name : "";
+    }
+    if (auto* var = dynamic_cast<vyn::ast::VariableDeclaration*>(stmt.get())) {
+        return var->id ? var->id->name : "";
+    }
+    if (auto* typeAlias = dynamic_cast<vyn::ast::TypeAliasDeclaration*>(stmt.get())) {
+        return typeAlias->name ? typeAlias->name->name : "";
+    }
+    if (auto* st = dynamic_cast<vyn::ast::StructDeclaration*>(stmt.get())) {
+        return st->name ? st->name->name : "";
+    }
+    if (auto* en = dynamic_cast<vyn::ast::EnumDeclaration*>(stmt.get())) {
+        return en->name ? en->name->name : "";
+    }
+    if (auto* aspect = dynamic_cast<vyn::ast::AspectDeclaration*>(stmt.get())) {
+        return aspect->name ? aspect->name->name : "";
+    }
+    if (auto* cls = dynamic_cast<vyn::ast::ClassDeclaration*>(stmt.get())) {
+        return cls->name ? cls->name->name : "";
+    }
+    return "";
+}
+
+bool rename_declaration(vyn::ast::StmtPtr& stmt, const std::string& newName) {
+    if (auto* fn = dynamic_cast<vyn::ast::FunctionDeclaration*>(stmt.get())) {
+        if (!fn->id) return false;
+        fn->id->name = newName;
+        return true;
+    }
+    if (auto* var = dynamic_cast<vyn::ast::VariableDeclaration*>(stmt.get())) {
+        if (!var->id) return false;
+        var->id->name = newName;
+        return true;
+    }
+    if (auto* typeAlias = dynamic_cast<vyn::ast::TypeAliasDeclaration*>(stmt.get())) {
+        if (!typeAlias->name) return false;
+        typeAlias->name->name = newName;
+        return true;
+    }
+    if (auto* st = dynamic_cast<vyn::ast::StructDeclaration*>(stmt.get())) {
+        if (!st->name) return false;
+        st->name->name = newName;
+        return true;
+    }
+    if (auto* en = dynamic_cast<vyn::ast::EnumDeclaration*>(stmt.get())) {
+        if (!en->name) return false;
+        en->name->name = newName;
+        return true;
+    }
+    if (auto* aspect = dynamic_cast<vyn::ast::AspectDeclaration*>(stmt.get())) {
+        if (!aspect->name) return false;
+        aspect->name->name = newName;
+        return true;
+    }
+    if (auto* cls = dynamic_cast<vyn::ast::ClassDeclaration*>(stmt.get())) {
+        if (!cls->name) return false;
+        cls->name->name = newName;
+        return true;
+    }
+    return false;
+}
+
 bool is_main_function(const vyn::ast::StmtPtr& stmt) {
     auto* fn = dynamic_cast<vyn::ast::FunctionDeclaration*>(stmt.get());
     return fn && fn->id && fn->id->name == "main";
 }
 
-std::unique_ptr<vyn::ast::Module> parse_module_with_imports(const std::string& source,
-                                                            const std::string& fileName,
-                                                            ModuleResolutionState& state,
-                                                            bool isRoot) {
+bool shares_allow(const std::vector<std::string>& shares, const std::vector<std::string>& importerBundles) {
+    for (const auto& share : shares) {
+        if (share == "all") {
+            return true;
+        }
+        if (std::find(importerBundles.begin(), importerBundles.end(), share) != importerBundles.end()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool declaration_visible(const std::string& name,
+                         const ResolvedModule& importedModule,
+                         const std::vector<std::string>& importerBundles,
+                         const vyn::ast::ImportDeclaration* importDecl) {
+    if (importDecl && importDecl->kind == vyn::ast::ImportKind::Smuggle) {
+        return true;
+    }
+    auto shareIt = importedModule.sharesByName.find(name);
+    if (shareIt == importedModule.sharesByName.end()) {
+        return false;
+    }
+    return shares_allow(shareIt->second, importerBundles);
+}
+
+ResolvedModule parse_module_with_imports(const std::string& source,
+                                         const std::string& fileName,
+                                         ModuleResolutionState& state,
+                                         bool isRoot) {
     fs::path currentPath = normalized_path(fileName);
     std::string currentKey = currentPath.string();
 
@@ -296,27 +566,86 @@ std::unique_ptr<vyn::ast::Module> parse_module_with_imports(const std::string& s
     }
 
     if (!isRoot && state.loaded.find(currentKey) != state.loaded.end()) {
-        return std::make_unique<vyn::ast::Module>(vyn::SourceLocation(currentKey, 1, 1),
-                                                  std::vector<vyn::ast::StmtPtr>{});
+        return ResolvedModule{
+            std::make_unique<vyn::ast::Module>(vyn::SourceLocation(currentKey, 1, 1),
+                                               std::vector<vyn::ast::StmtPtr>{}),
+            {},
+            {}
+        };
     }
 
     state.loaded.insert(currentKey);
     state.active.push_back(currentKey);
 
-    auto module = parse_module_only(source, currentKey);
+    SourceMetadata metadata = preprocess_module_source(source);
+    auto module = parse_module_only(metadata.source, currentKey);
     std::vector<vyn::ast::StmtPtr> resolvedBody;
+    std::unordered_map<std::string, std::vector<std::string>> resolvedShares = metadata.sharesByName;
+    size_t importIndex = 0;
 
     for (auto& stmt : module->body) {
         if (auto* importDecl = dynamic_cast<vyn::ast::ImportDeclaration*>(stmt.get())) {
+            std::vector<std::string> importShare;
+            if (importIndex < metadata.importShares.size()) {
+                importShare = metadata.importShares[importIndex];
+            }
+            ++importIndex;
+
+            for (const auto& specifier : importDecl->specifiers) {
+                if (!specifier.importedName) {
+                    throw std::runtime_error("Whole-module import aliases are not supported yet; use import module::{symbol as alias}");
+                }
+            }
+
             fs::path importedPath = resolve_import_path(importDecl, currentPath);
             std::string importedSource = read_source_file(importedPath);
             auto importedModule = parse_module_with_imports(importedSource, importedPath.string(), state, false);
 
-            for (auto& importedStmt : importedModule->body) {
+            std::unordered_map<std::string, std::string> requestedRenames;
+            std::unordered_set<std::string> requestedNames;
+            for (const auto& specifier : importDecl->specifiers) {
+                const std::string importedName = specifier.importedName->name;
+                requestedNames.insert(importedName);
+                requestedRenames[importedName] = specifier.localName ? specifier.localName->name : importedName;
+            }
+
+            for (auto& importedStmt : importedModule.module->body) {
                 if (is_main_function(importedStmt)) {
                     throw std::runtime_error("Imported module must not define main(): " + importedPath.string());
                 }
+                std::string name = declaration_name(importedStmt);
+                if (name.empty()) {
+                    continue;
+                }
+
+                if (!requestedNames.empty() && requestedNames.find(name) == requestedNames.end()) {
+                    continue;
+                }
+
+                if (!declaration_visible(name, importedModule, metadata.bundles, importDecl)) {
+                    continue;
+                }
+
+                if (!requestedNames.empty()) {
+                    requestedNames.erase(name);
+                    auto renameIt = requestedRenames.find(name);
+                    if (renameIt != requestedRenames.end() && renameIt->second != name) {
+                        if (!rename_declaration(importedStmt, renameIt->second)) {
+                            throw std::runtime_error("Cannot alias imported declaration '" + name + "' from " + importedPath.string());
+                        }
+                        name = renameIt->second;
+                    }
+                }
+
+                if (!importShare.empty()) {
+                    resolvedShares[name] = importShare;
+                }
                 resolvedBody.push_back(std::move(importedStmt));
+            }
+
+            if (!requestedNames.empty()) {
+                auto missing = *requestedNames.begin();
+                throw std::runtime_error("Imported symbol '" + missing + "' is not exported by " + importedPath.string());
             }
             continue;
         }
@@ -326,12 +655,12 @@ std::unique_ptr<vyn::ast::Module> parse_module_with_imports(const std::string& s
 
     module->body = std::move(resolvedBody);
     state.active.pop_back();
-    return module;
+    return ResolvedModule{std::move(module), metadata.bundles, std::move(resolvedShares)};
 }
 
 std::unique_ptr<vyn::ast::Module> parse_vyn_module(const std::string& source, const std::string& fileName) {
     ModuleResolutionState state;
-    return parse_module_with_imports(source, fileName, state, true);
+    return parse_module_with_imports(source, fileName, state, true).module;
 }
 } // namespace
 
@@ -1252,6 +1581,15 @@ int main(int argc, char* argv[]) {
                 vyn::SemanticAnalyzer semanticAnalyzer(driver);
                 driver.setSemanticAnalyzer(&semanticAnalyzer);  // Make semantic data available
                 semanticAnalyzer.analyze(ast.get());
+
+                const auto& semanticErrors = semanticAnalyzer.getErrors();
+                if (!semanticErrors.empty()) {
+                    std::cerr << "\nSemantic Errors:" << std::endl;
+                    for (const auto& error : semanticErrors) {
+                        std::cerr << "  " << error << std::endl;
+                    }
+                    return 1;
+                }
                 
                 std::cout << "Semantic analysis completed successfully" << std::endl;
                 return 0;

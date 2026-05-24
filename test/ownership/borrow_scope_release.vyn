@@ -1,0 +1,14 @@
+// @test: Borrow released at lexical scope end
+// @description: A borrow created in an inner block ends when that block exits
+// @category: ownership, borrow
+// @expect: pass
+// @semantic-only: true
+
+main()<Int> -> {
+    value<Int> = 1
+    {
+        borrow_ref<their<Int>> = borrow value
+    }
+    value = 2
+    return value
+}

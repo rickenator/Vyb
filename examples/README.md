@@ -26,6 +26,7 @@ successfully with the current compiler. Support modules live under
 | `mild_references.vyn` | `our<T>` and `mild<T>` syntax |
 | `ffi_puts.vyn` | `extern "C"` plus `freedom`-gated calls |
 | `module_import.vyn` | local module import from `examples/modules/` |
+| `module_visibility.vyn` | `bundle(...)`, `share(...)`, and selective import aliases |
 
 ## Known Boundaries
 

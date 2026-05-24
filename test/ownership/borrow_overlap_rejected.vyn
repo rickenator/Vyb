@@ -1,0 +1,12 @@
+// @test: Overlapping mutable borrow rejected
+// @description: A mutable borrow cannot coexist with an active immutable view
+// @category: ownership, borrow
+// @expect: fail
+// @semantic-only: true
+
+main()<Int> -> {
+    value<Int> = 1
+    read_ref<their<Int>> = view value
+    write_ref<their<Int>> = borrow value
+    return value
+}

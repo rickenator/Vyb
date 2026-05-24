@@ -11,17 +11,21 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 | Feature | Status | Notes |
 |---------|--------|-------|
 | `import <path>` | ✅ | Parses module path and resolves local `.vyn` files (`::` or `.` separated) |
-| `import <path> as <alias>` | ✅ | Alias binding at parse level |
+| `import <path> as <alias>` | 🚧 | Whole-module alias parses; namespace binding still planned |
+| `import <path>::{symbol as alias}` | ✅ | Selective import specifiers filter and rename imported declarations |
 | `import <path> from "<locator>"` | ✅ | Locator string parsed and stored in AST |
 | `smuggle <path> from "<locator>"` | ✅ | Locator string parsed and stored in AST |
 | `smuggle <path> as <alias>` | ✅ | Alias binding at parse level |
 | `ImportKind` (TrustedImport / Smuggle) | ✅ | Captured in AST `ImportDeclaration.kind` |
 | `from` keyword | ✅ | Lexed as `KEYWORD_FROM`; also valid in `from<T>(addr)` freedom-block expressions |
-| Module resolution (load files) | 🚧 | Local files are loaded and spliced before semantic analysis/codegen; aliases/specifiers remain unsupported |
+| Module resolution (load files) | ✅ | Local files are loaded and spliced before semantic analysis/codegen |
 | Local path loading (`from "./..."`) | ✅ | Relative locators resolve from the importing file |
+| `bundle(...)` visibility | ✅ | Source-level directives are enforced by the local resolver |
+| `share(...)` exports | ✅ | `share(all)` and bundle-scoped shares export declarations/imports |
+| `smuggle` visibility bypass | ✅ | Smuggled imports bypass share/bundle checks |
 | URL/Git fetching (`from "github.com/..."`) | 📋 | v0.6.x |
 | Module cycle detection | ✅ | Circular local imports are rejected |
-| Symbol re-export | 📋 | v0.6.x |
+| Symbol re-export | ✅ | `share(...)` before an import re-exports selected imported declarations |
 
 ## Println / Output
 
@@ -57,11 +61,11 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 | Enums | ✅ | C-like integer enums: variants map to sequential `i64` constants; `Enum::Variant` access works; tagged unions (data variants) planned for v0.6 |
 | Generics (monomorphization) | ✅ | |
 | Aspect/Bind polymorphism | ✅ | |
-| Ownership: `my`, `our`, `their`, `mild` | ✅ | |
+| Ownership: `my`, `our`, `their`, `mild` | 🚧 | Syntax/runtime pieces plus lexical borrow enforcement; full move/drop checker still planned |
 | `freedom` blocks + `loc<T>` raw pointers | ✅ | |
 | `match` / `select` expressions | ✅ | |
 | `defer` | ✅ | |
-| `fail` / `trap` error system | ✅ | |
+| `fail` / `trap` error system | ✅ | Includes typed `fail<T>(value)`, typed traps, wildcard/multi-type trap parsing |
 | `async` / `await` | 🚧 | Runtime stub |
 | `Vec<T>` | ✅ | |
 | String methods | ✅ | |
@@ -105,7 +109,7 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 | JIT execution | ✅ | |
 | AOT native executable | ✅ | `--build` flag |
 | Multi-file compilation | 📋 | v0.5.x (module resolution) |
-| `extern "C"` FFI | 🚧 | `extern` function modifier compiles to ExternalLinkage; `extern "C" { }` block parser not yet wired |
+| `extern "C"` FFI | ✅ | Extern blocks parse/codegen, freedom-gated calls, C ABI scalar/pointer aliases |
 
 ---
 

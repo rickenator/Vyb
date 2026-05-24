@@ -1,7 +1,9 @@
+share(all)
 double(value<Int>)<Int> -> {
     return value * 2
 }
 
+share(all)
 square(value<Int>)<Int> -> {
     return value * value
 }

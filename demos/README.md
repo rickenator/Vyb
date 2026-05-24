@@ -15,3 +15,4 @@ The demos are intentionally compact; richer runtime examples, including
 | `collections.vyn` | `Vec<Int>`, push, iteration, `len` |
 | `structs_aspects.vyn` | structs, aspects, `bind`, method dispatch |
 | `ffi_freedom.vyn` | `extern "C"` declarations called only inside `freedom` |
+| `finalization_targets.vyn` | borrow scope checks, typed `fail`/`trap`, and C ABI aliases |

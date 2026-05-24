@@ -34,6 +34,11 @@ expect-fail tests are treated as stronger evidence than optimistic status text.
   relative file locators, imported declarations are spliced before use, and
   duplicate/circular imports are guarded. Added module runtime tests and a
   runnable example.
+- 2026-05-23: Finalized the next language-contract slice: source-level
+  `bundle(...)`/`share(...)` visibility, selective import aliases,
+  `share(...) import ...` re-exports, lexical borrow/view conflict checks,
+  C ABI aliases for extern blocks, and typed `fail<T>(value)`. Added targeted
+  tests plus runnable example/demo coverage.
 
 ## Audit Scope
 
@@ -66,9 +71,9 @@ Source areas checked:
 
 | ID | Area | Priority | What needs to be implemented | Evidence |
 |----|------|----------|------------------------------|----------|
-| I-001 | Module system | P0 | Real module loading, caching, symbol tables, import resolution, circular dependency detection, `bundle(...)`, `share(...)`, visibility checks, module paths, and stdlib module auto-discovery. | `doc/MODULE_FFI_BINARY_ROADMAP.md`; `src/vre/semantic.cpp` has an empty `visit(ImportDeclaration*)`; `src/vre/llvm/cgen_decl.cpp` treats imports as no-ops. |
-| I-002 | FFI | P0 | Continue FFI after first-pass `extern "C"` block support: fuller C type mapping, `repr(C)` structs, variadic calls, `--link` support, explicit `String::as_c_str()`, and broader end-to-end FFI tests. | `doc/FFI_DESIGN.md` says planned; source now supports simple extern C function-signature blocks, host process symbol lookup, freedom-gated direct calls, and a narrow String-to-C-string call path, but still lacks variadic/repr(C)/linker flow. |
-| I-003 | Ownership runtime | P0 | Enforce `my<T>` moves, `our<T>` strong ref counts, `their<T>` lifetime/aliasing rules, `view`/`borrow` semantics, and `soft()` conversion rules. | `TODO.md`; `doc/mem_RFC.md`; `src/vre/semantic.cpp` borrow visitor notes missing type/lifetime implementation. |
+| I-001 | Module system | P0 | Formalize the source-level module resolver into a `ModuleRegistry`/AST metadata model, add module path search (`VYN_MODULE_PATH`, CLI), stdlib auto-discovery, and better duplicate-import caching. Local loading, cycle checks, `bundle(...)`, `share(...)`, selective aliases, and explicit re-exports now work. | `doc/MODULE_FFI_BINARY_ROADMAP.md`; source resolver lives in `src/main.cpp`; semantic/codegen import visitors remain no-ops after pre-resolution. |
+| I-002 | FFI | P0 | Continue FFI after extern block/ABI alias support: `repr(C)` structs, variadic calls, `--link` support, explicit `String::as_c_str()`, and broader end-to-end FFI tests. | Source now supports extern C blocks, host process symbol lookup, freedom-gated direct calls, C scalar/pointer aliases, and a narrow String-to-C-string call path, but still lacks variadic/repr(C)/linker flow. |
+| I-003 | Ownership runtime | P0 | Extend lexical borrow checks into full ownership: `my<T>` moves, `our<T>` strong ref counts, deeper `their<T>` lifetime analysis, `mild<T>` cleanup, and `soft()` conversion rules. | `TODO.md`; `doc/mem_RFC.md`; current semantic pass now checks lvalue borrows, overlapping mutable/view borrows, and assignment while borrowed. |
 | I-004 | `mild<T>` weak references | P0 | Implement real control blocks, `weak_count`, released state, valid `grab()` upgrade to `our<T>`, and cleanup when strong/weak counts reach zero. | `doc/OWNERSHIP_MILD.md`; `examples/README.md`; `test/ownership/mild_methods_test.vyn` and examples describe current stubs. |
 | I-005 | Error propagation/runtime errors | P0 | Finish cross-function error propagation, construct real `VynError` objects at `fail`, preserve type/data/source location, print detailed untrapped errors, and settle Result-vs-fail/trap design conflict. | `doc/ERROR_PROPAGATION_DESIGN.md`; `test/trap/TEST_RESULTS.md`; `src/runtime/error_handling.cpp` says error structure is not implemented. |
 | I-006 | Defer/runtime cleanup | P0 | Decide whether runtime defer/ensure stacks are needed; implement runtime defer stack if `defer` must survive fail/unwind paths. | `src/runtime/error_handling.cpp` has defer/ensure stubs; `src/vre/llvm/cgen_stmt.cpp` stores defers in a codegen stack. |

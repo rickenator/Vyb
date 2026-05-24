@@ -1542,8 +1542,9 @@ public:
 class FailStatement : public Statement {
 public:
     ExprPtr error; // The error value to fail with (must implement Errable aspect)
+    TypeNodePtr errorType; // Optional explicit fail<T>(value) type
 
-    FailStatement(SourceLocation loc, ExprPtr error);
+    FailStatement(SourceLocation loc, ExprPtr error, TypeNodePtr errorType = nullptr);
     ~FailStatement() override = default;
     NodeType getType() const override;
     std::string toString() const override;

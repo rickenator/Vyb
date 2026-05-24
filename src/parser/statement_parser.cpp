@@ -1282,10 +1282,25 @@ std::unique_ptr<vyn::ast::UnsafeStatement> StatementParser::parse_unsafe() {
 // Parses a fail statement: 'fail ErrorType { field = value }'
 std::unique_ptr<vyn::ast::FailStatement> StatementParser::parse_fail() {
     SourceLocation loc = expect(vyn::TokenType::KEYWORD_FAIL, "Expected 'fail'").location;
+
+    vyn::ast::TypeNodePtr explicitErrorType = nullptr;
+    bool hasExplicitType = false;
+    if (match(vyn::TokenType::LT)) {
+        explicitErrorType = type_parser_.parse();
+        expect(vyn::TokenType::GT, "Expected '>' after fail error type");
+        hasExplicitType = true;
+    }
     
-    // Parse the error expression (e.g., ErrorType { field = value })
-    // This is typically a construction expression or identifier
-    auto errorExpr = expr_parser_.parse_expression();
+    vyn::ast::ExprPtr errorExpr = nullptr;
+    if (hasExplicitType) {
+        expect(vyn::TokenType::LPAREN, "Expected '(' after typed fail");
+        errorExpr = expr_parser_.parse_expression();
+        expect(vyn::TokenType::RPAREN, "Expected ')' after typed fail expression");
+    } else {
+        // Parse the error expression (e.g., ErrorType { field = value })
+        // This is typically a construction expression or identifier
+        errorExpr = expr_parser_.parse_expression();
+    }
     
     if (!errorExpr) {
         throw std::runtime_error("Expected error expression after 'fail' at " + location_to_string(loc));
@@ -1294,7 +1309,7 @@ std::unique_ptr<vyn::ast::FailStatement> StatementParser::parse_fail() {
     // Optional semicolon
     match(vyn::TokenType::SEMICOLON);
     
-    return std::make_unique<vyn::ast::FailStatement>(loc, std::move(errorExpr));
+    return std::make_unique<vyn::ast::FailStatement>(loc, std::move(errorExpr), std::move(explicitErrorType));
 }
 
 // Parses a panic statement: 'panic("message")'

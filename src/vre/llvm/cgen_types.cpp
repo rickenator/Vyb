@@ -366,10 +366,10 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                 return nullptr;
             }
 
-            // Special handling for loc<T>
-            if (typeNameNode->identifier->name == "loc") {
+            // Special handling for pointer-like ABI types.
+            if (typeNameNode->identifier->name == "loc" || typeNameNode->identifier->name == "CPtr") {
                 if (typeNameNode->genericArgs.empty()) {
-                    logError(typeNode->loc, "loc type requires a type parameter");
+                    logError(typeNode->loc, typeNameNode->identifier->name + " type requires a type parameter");
                     return nullptr;
                 }
                 llvm::Type* pointeeType = codegenType(typeNameNode->genericArgs[0].get());
@@ -427,6 +427,11 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
             }
 
             // Handle Vec<T> types
+            if (typeNameStr == "CString") {
+                llvmType = llvm::PointerType::getUnqual(int8Type);
+                break;
+            }
+
             if (typeNameStr == "Vec") {
                 if (typeNameNode->genericArgs.empty() || !typeNameNode->genericArgs[0]) {
                     logError(typeNode->loc, "Vec type requires a type parameter (e.g., Vec<Int>)");
@@ -492,29 +497,31 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
             }
 
             // Signed integer types (64-bit default)
-            if (typeNameStr == "Int" || typeNameStr == "i64") {
+            if (typeNameStr == "Int" || typeNameStr == "i64" ||
+                typeNameStr == "CLong" || typeNameStr == "CSSize") {
                 llvmType = int64Type;
-            } else if (typeNameStr == "Int32" || typeNameStr == "i32") {
+            } else if (typeNameStr == "Int32" || typeNameStr == "i32" || typeNameStr == "CInt") {
                 llvmType = int32Type;
-            } else if (typeNameStr == "Int16" || typeNameStr == "i16") {
+            } else if (typeNameStr == "Int16" || typeNameStr == "i16" || typeNameStr == "CShort") {
                 llvmType = llvm::Type::getInt16Ty(*context);
-            } else if (typeNameStr == "Int8" || typeNameStr == "i8") {
+            } else if (typeNameStr == "Int8" || typeNameStr == "i8" || typeNameStr == "CChar") {
                 llvmType = int8Type;
             
             // Unsigned integer types
-            } else if (typeNameStr == "UInt64" || typeNameStr == "u64") {
+            } else if (typeNameStr == "UInt64" || typeNameStr == "u64" ||
+                       typeNameStr == "CULong" || typeNameStr == "CSize") {
                 llvmType = llvm::Type::getInt64Ty(*context);  // Same as i64 at LLVM level
-            } else if (typeNameStr == "UInt32" || typeNameStr == "u32") {
+            } else if (typeNameStr == "UInt32" || typeNameStr == "u32" || typeNameStr == "CUInt") {
                 llvmType = llvm::Type::getInt32Ty(*context);  // Same as i32 at LLVM level
-            } else if (typeNameStr == "UInt16" || typeNameStr == "u16") {
+            } else if (typeNameStr == "UInt16" || typeNameStr == "u16" || typeNameStr == "CUShort") {
                 llvmType = llvm::Type::getInt16Ty(*context);  // Same as i16 at LLVM level
-            } else if (typeNameStr == "UInt8" || typeNameStr == "u8") {
+            } else if (typeNameStr == "UInt8" || typeNameStr == "u8" || typeNameStr == "CUChar") {
                 llvmType = llvm::Type::getInt8Ty(*context);   // Same as i8 at LLVM level
             
             // Floating point types
-            } else if (typeNameStr == "Float" || typeNameStr == "f64") {
+            } else if (typeNameStr == "Float" || typeNameStr == "f64" || typeNameStr == "CDouble") {
                 llvmType = doubleType;
-            } else if (typeNameStr == "Float32" || typeNameStr == "f32") {
+            } else if (typeNameStr == "Float32" || typeNameStr == "f32" || typeNameStr == "CFloat") {
                 llvmType = floatType;
             
             // Boolean type
@@ -522,7 +529,7 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                 llvmType = int1Type;
             
             // Void type
-            } else if (typeNameStr == "Void") {
+            } else if (typeNameStr == "Void" || typeNameStr == "CVoid") {
                 llvmType = voidType;
             
             // String type (fat pointer: { ptr, len })
@@ -797,7 +804,6 @@ void LLVMCodegen::visit(ast::TypeName* node) {
     m_currentLLVMValue = llvm::ConstantPointerNull::get(
         llvm::PointerType::get(*context, 0));
 }
-
 
 
 

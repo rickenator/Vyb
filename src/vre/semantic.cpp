@@ -79,6 +79,7 @@ void SemanticAnalyzer::addError(const std::string& message, const ast::Node* nod
 
 void SemanticAnalyzer::enterScope() {
     currentScope = new SymbolTable(currentScope);
+    borrowScopes.emplace_back();
 }
 
 void SemanticAnalyzer::exitScope() {
@@ -86,6 +87,9 @@ void SemanticAnalyzer::exitScope() {
         SymbolTable* parent = currentScope->getParent();
         delete currentScope;
         currentScope = parent;
+    }
+    if (!borrowScopes.empty()) {
+        borrowScopes.pop_back();
     }
 }
 
@@ -182,7 +186,10 @@ bool SemanticAnalyzer::isIntegerType(ast::TypeNode* type) {
                name == "isize" || name == "usize" ||
                name == "Int8" || name == "Int16" || name == "Int32" || name == "Int64" ||
                name == "UInt8" || name == "UInt16" || name == "UInt32" || name == "UInt64" ||
-               name == "Byte" || name == "Char" || name == "Rune";
+               name == "Byte" || name == "Char" || name == "Rune" ||
+               name == "CChar" || name == "CUChar" || name == "CShort" || name == "CUShort" ||
+               name == "CInt" || name == "CUInt" || name == "CLong" || name == "CULong" ||
+               name == "CSize" || name == "CSSize";
     }
     
     // Handle array size expressions which might be integer literals
@@ -211,6 +218,65 @@ bool SemanticAnalyzer::isLValue(ast::Expression* expr) {
            dynamic_cast<ast::MemberExpression*>(expr) != nullptr ||
            dynamic_cast<ast::ArrayElementExpression*>(expr) != nullptr ||
            dynamic_cast<ast::PointerDerefExpression*>(expr) != nullptr; 
+}
+
+std::string SemanticAnalyzer::borrowedRootName(ast::Expression* expr) {
+    if (auto* ident = dynamic_cast<ast::Identifier*>(expr)) {
+        return ident->name;
+    }
+    if (auto* member = dynamic_cast<ast::MemberExpression*>(expr)) {
+        return borrowedRootName(member->object.get());
+    }
+    if (auto* element = dynamic_cast<ast::ArrayElementExpression*>(expr)) {
+        return borrowedRootName(element->array.get());
+    }
+    return "";
+}
+
+SemanticAnalyzer::BorrowState SemanticAnalyzer::aggregateBorrowState(const std::string& rootName) const {
+    BorrowState total;
+    for (const auto& scope : borrowScopes) {
+        auto it = scope.find(rootName);
+        if (it != scope.end()) {
+            total.mutableBorrows += it->second.mutableBorrows;
+            total.immutableBorrows += it->second.immutableBorrows;
+        }
+    }
+    return total;
+}
+
+bool SemanticAnalyzer::hasActiveBorrow(const std::string& rootName) const {
+    BorrowState state = aggregateBorrowState(rootName);
+    return state.mutableBorrows > 0 || state.immutableBorrows > 0;
+}
+
+void SemanticAnalyzer::recordBorrow(const std::string& rootName, ast::BorrowKind kind, const ast::Node* node) {
+    if (rootName.empty()) {
+        return;
+    }
+    if (borrowScopes.empty()) {
+        borrowScopes.emplace_back();
+    }
+
+    BorrowState active = aggregateBorrowState(rootName);
+    VYN_CDBG << "DEBUG: recordBorrow " << rootName
+             << " kind=" << (kind == ast::BorrowKind::MUTABLE_BORROW ? "borrow" : "view")
+             << " mutable=" << active.mutableBorrows
+             << " immutable=" << active.immutableBorrows << std::endl;
+    if (kind == ast::BorrowKind::MUTABLE_BORROW) {
+        if (active.mutableBorrows > 0 || active.immutableBorrows > 0) {
+            addError("Cannot take mutable borrow of '" + rootName + "' while it is already borrowed.", node);
+            return;
+        }
+        borrowScopes.back()[rootName].mutableBorrows++;
+        return;
+    }
+
+    if (active.mutableBorrows > 0) {
+        addError("Cannot take view of '" + rootName + "' while it has an active mutable borrow.", node);
+        return;
+    }
+    borrowScopes.back()[rootName].immutableBorrows++;
 }
 
 bool SemanticAnalyzer::isRawLocationType(ast::Expression* expr) {
@@ -725,6 +791,19 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
                 }
             }
         }
+
+        if (auto* borrowExpr = dynamic_cast<ast::BorrowExpression*>(node->init.get())) {
+            recordBorrow(borrowedRootName(borrowExpr->expression.get()), borrowExpr->kind, borrowExpr);
+        } else if (auto* callExpr = dynamic_cast<ast::CallExpression*>(node->init.get())) {
+            if (auto* callee = dynamic_cast<ast::Identifier*>(callExpr->callee.get())) {
+                if ((callee->name == "borrow" || callee->name == "view") && callExpr->arguments.size() == 1) {
+                    auto kind = callee->name == "borrow"
+                        ? ast::BorrowKind::MUTABLE_BORROW
+                        : ast::BorrowKind::IMMUTABLE_VIEW;
+                    recordBorrow(borrowedRootName(callExpr->arguments[0].get()), kind, callExpr);
+                }
+            }
+        }
     } else if (needsTypeCheck) {
         // No initializer and no type annotation
         if (node->isConst) {
@@ -993,46 +1072,34 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
         
         // Handle borrow()/view() intrinsics
         if (name == "borrow" || name == "view") {
-            // Must be used within freedom block
-            if (!isInUnsafeBlock()) {
-                addError(name + "() can only be used inside an freedom block", node);
-            }
             if (node->arguments.size() != 1) {
                 addError(name + "() expects exactly one argument", node);
                 return;
             }
             ast::Expression* argExpr = node->arguments[0].get();
-            ast::TypeNode* argType = expressionTypes[argExpr];
+            if (!isLValue(argExpr)) {
+                addError(name + "() requires an lvalue argument.", node);
+                return;
+            }
+            auto argTypeIt = expressionTypes.find(argExpr);
+            ast::TypeNode* argType = (argTypeIt != expressionTypes.end()) ? argTypeIt->second : nullptr;
             if (!argType) {
                 addError("Cannot determine type of argument to " + name + "()", node);
                 return;
             }
-            // Argument must be owned (my<T> or our<T>)
+
+            ast::TypeNodePtr innerType;
             auto baseTypeName = dynamic_cast<ast::TypeName*>(argType);
-            if (!baseTypeName || baseTypeName->genericArgs.size() != 1 || 
-                (baseTypeName->identifier->name != "my" && baseTypeName->identifier->name != "our")) {
-                addError(name + "() argument must be an owned type my<T> or our<T>", node);
+            if (baseTypeName && baseTypeName->identifier &&
+                (baseTypeName->identifier->name == "my" || baseTypeName->identifier->name == "our") &&
+                baseTypeName->genericArgs.size() == 1) {
+                innerType = baseTypeName->genericArgs[0]->clone();
+            } else {
+                innerType = argType->clone();
             }
-            // Compute result type: their<T> for borrow, their<T const> for view
+
             using ast::BorrowKind;
             BorrowKind kind = (name == "borrow" ? BorrowKind::MUTABLE_BORROW : BorrowKind::IMMUTABLE_VIEW);
-            
-            // Clone inner type T
-            ast::TypeNodePtr innerType = baseTypeName->genericArgs[0]->clone();
-            
-            // For view, wrap T in const if necessary (represented as TypeName with " const" appended)
-            if (name == "view") {
-                // Create a new TypeName with " const" appended to the inner type's name
-                auto innerTypeName = dynamic_cast<ast::TypeName*>(innerType.get());
-                if (innerTypeName && innerTypeName->identifier) {
-                    std::string constTypeName = innerTypeName->identifier->name + " const";
-                    auto constIdentifier = std::make_unique<ast::Identifier>(node->loc, constTypeName);
-                    innerType = std::make_unique<ast::TypeName>(node->loc, std::move(constIdentifier), 
-                                                               std::move(innerTypeName->genericArgs));
-                }
-                // If not a TypeName, we might need different handling
-            }
-            
             // Create their<T> TypeName
             auto theirId = std::make_unique<ast::Identifier>(node->loc, "their");
             std::vector<ast::TypeNodePtr> theirArgs;
@@ -2325,6 +2392,13 @@ void SemanticAnalyzer::visit(ast::AssignmentExpression* node) {
     if (!isLValue(node->left.get())) {
         addError("LHS of assignment is not a valid L-value.", node->left.get());
         expressionTypes[node] = nullptr; // Mark as error
+        return;
+    }
+
+    std::string assignedRoot = borrowedRootName(node->left.get());
+    if (!assignedRoot.empty() && hasActiveBorrow(assignedRoot)) {
+        addError("Cannot assign to '" + assignedRoot + "' while it has an active borrow.", node->left.get());
+        expressionTypes[node] = nullptr;
         return;
     }
 
@@ -3815,11 +3889,22 @@ void SemanticAnalyzer::visit(ast::FailStatement* node) {
     
     // Type check the error expression
     node->error->accept(*this);
+
+    ast::TypeNode* explicitErrorType = nullptr;
+    if (node->errorType) {
+        node->errorType->accept(*this);
+        explicitErrorType = node->errorType->type ? node->errorType->type.get() : node->errorType.get();
+    }
     
     // Get the type of the error expression
     auto it = expressionTypes.find(node->error.get());
     if (it != expressionTypes.end() && it->second) {
         ast::TypeNode* errorType = it->second;
+        if (explicitErrorType && !areTypesCompatible(explicitErrorType, errorType)) {
+            addError("Typed fail expects " + explicitErrorType->toString() +
+                     " but error expression has type " + errorType->toString(), node);
+            return;
+        }
         
         // TODO: Verify error type implements Errable aspect when aspect system is complete
         // For now, accept any struct/object type as potential error
@@ -4151,9 +4236,9 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
         // Create a FutureType instance
         auto futureType = std::make_unique<ast::FutureType>(node->loc, node->genericArgs[0]->clone());
         node->type = std::shared_ptr<ast::TypeNode>(futureType.release());
-    } else if (typeNameStr == "loc") {
+    } else if (typeNameStr == "loc" || typeNameStr == "CPtr") {
         if (node->genericArgs.empty() || !node->genericArgs[0]) {
-            addError("loc type constructor requires a type parameter (e.g., loc<T>).", node);
+            addError(typeNameStr + " type constructor requires a type parameter (e.g., " + typeNameStr + "<T>).", node);
             return; 
         }
         for ( auto& argTypeNode : node->genericArgs ) {
@@ -4175,6 +4260,11 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
                typeNameStr == "Float32" || typeNameStr == "Float64" ||
                typeNameStr == "Char" || typeNameStr == "Rune" ||
                typeNameStr == "String" || typeNameStr == "Future" || typeNameStr == "Void" ||
+               typeNameStr == "CChar" || typeNameStr == "CUChar" || typeNameStr == "CShort" ||
+               typeNameStr == "CUShort" || typeNameStr == "CInt" || typeNameStr == "CUInt" ||
+               typeNameStr == "CLong" || typeNameStr == "CULong" || typeNameStr == "CSize" ||
+               typeNameStr == "CSSize" || typeNameStr == "CFloat" || typeNameStr == "CDouble" ||
+               typeNameStr == "CVoid" || typeNameStr == "CString" ||
                typeNameStr == "my" || typeNameStr == "our" || typeNameStr == "their" || 
                typeNameStr == "mild" || typeNameStr == "view" || typeNameStr == "borrow") { 
         node->type = std::shared_ptr<ast::TypeNode>(node->clone());
@@ -4391,6 +4481,17 @@ static std::string normalizeTypeName(const std::string& name) {
     if (name == "i32" || name == "int32")                  return "Int32";
     if (name == "i16" || name == "int16" || name == "short") return "Int16";
     if (name == "i8"  || name == "int8"  || name == "char") return "Int8";
+    if (name == "CChar")                                   return "Int8";
+    if (name == "CUChar")                                  return "UInt8";
+    if (name == "CShort")                                  return "Int16";
+    if (name == "CUShort")                                 return "UInt16";
+    if (name == "CInt")                                    return "Int32";
+    if (name == "CUInt")                                   return "UInt32";
+    if (name == "CLong" || name == "CSSize")               return "Int";
+    if (name == "CULong" || name == "CSize")               return "UInt64";
+    if (name == "CFloat")                                  return "Float32";
+    if (name == "CDouble")                                 return "Float";
+    if (name == "CVoid")                                   return "Void";
     if (name == "u64" || name == "uint64")                 return "UInt64";
     if (name == "u32" || name == "uint32")                 return "UInt32";
     if (name == "u16" || name == "uint16")                 return "UInt16";
@@ -4735,22 +4836,38 @@ void SemanticAnalyzer::visit(ast::BorrowExpression* node) {
     }
     
     // Ensure that the borrowed expression is valid for borrowing
-    // (it should be an lvalue if it's a mutable borrow)
-    if (node->kind == ast::BorrowKind::MUTABLE_BORROW && !isLValue(node->expression.get())) {
-        addError("Cannot take mutable borrow of non-lvalue expression", node);
+    if (!isLValue(node->expression.get())) {
+        addError("Cannot borrow non-lvalue expression", node);
+        expressionTypes[node] = nullptr;
+        return;
     }
     
-    // Create a type node that represents the borrowed type
-    // This would normally set expressionTypes[node] to a pointer type
-    // of the underlying expression's type, but we'll just log for now
-    
-    // In a complete implementation, we would:
-    // 1. Get the type of the expression being borrowed
-    // 2. Create a borrowed type (ptr/ref) based on it
-    // 3. Associate that type with this expression
-    
-    // For now, we'll just track that this borrow occurred
-    // expressionTypes[node] = ...;
+    auto exprTypeIt = expressionTypes.find(node->expression.get());
+    ast::TypeNode* exprType = (exprTypeIt != expressionTypes.end()) ? exprTypeIt->second : nullptr;
+    if (!exprType) {
+        addError("Cannot determine type of borrowed expression", node);
+        expressionTypes[node] = nullptr;
+        return;
+    }
+
+    ast::TypeNodePtr innerType;
+    if (auto* typeName = dynamic_cast<ast::TypeName*>(exprType)) {
+        if (typeName->identifier &&
+            (typeName->identifier->name == "my" || typeName->identifier->name == "our") &&
+            typeName->genericArgs.size() == 1) {
+            innerType = typeName->genericArgs[0]->clone();
+        }
+    }
+    if (!innerType) {
+        innerType = exprType->clone();
+    }
+
+    auto theirId = std::make_unique<ast::Identifier>(node->loc, "their");
+    std::vector<ast::TypeNodePtr> args;
+    args.push_back(std::move(innerType));
+    ast::TypeNode* resultType = new ast::TypeName(node->loc, std::move(theirId), std::move(args));
+    expressionTypes[node] = resultType;
+    node->type = std::shared_ptr<ast::TypeNode>(resultType->clone().release());
 }
 
 // From semantic_array_init_expr.cpp

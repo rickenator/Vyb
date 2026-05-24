@@ -1,0 +1,10 @@
+// @test: Borrowing temporary rejected
+// @description: borrow/view require an lvalue, not a temporary expression
+// @category: ownership, borrow
+// @expect: fail
+// @semantic-only: true
+
+main()<Int> -> {
+    borrow_ref<their<Int>> = borrow (1 + 2)
+    return 0
+}

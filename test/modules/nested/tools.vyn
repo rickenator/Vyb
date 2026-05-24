@@ -4,10 +4,12 @@
 // @expect: pass
 // @parse-only: true
 
+share(all)
 struct Multiplier {
     factor<Int>
 }
 
+share(all)
 apply_multiplier(multiplier<Multiplier>, value<Int>)<Int> -> {
     return multiplier.factor * value
 }

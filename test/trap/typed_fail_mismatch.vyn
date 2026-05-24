@@ -1,0 +1,11 @@
+// @test: Typed fail mismatch rejected
+// @description: fail<T>(value) rejects values that do not match the declared fail type
+// @category: trap, errors
+// @expect: fail
+// @semantic-only: true
+// @tags: fail, trap, typed
+
+main()<Int> -> {
+    fail<String>(42)
+    return 0
+}

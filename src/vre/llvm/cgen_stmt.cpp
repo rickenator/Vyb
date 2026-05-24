@@ -1397,7 +1397,9 @@ void LLVMCodegen::visit(vyn::ast::FailStatement* node) {
     if (!errorValue->getType()->isPointerTy()) {
         // Get type name for hash
         std::string typeName;
-        if (auto* objLit = dynamic_cast<ast::ObjectLiteral*>(node->error.get())) {
+        if (node->errorType) {
+            typeName = node->errorType->toString();
+        } else if (auto* objLit = dynamic_cast<ast::ObjectLiteral*>(node->error.get())) {
             if (objLit->typePath) {
                 if (auto* typeName_node = dynamic_cast<ast::TypeName*>(objLit->typePath.get())) {
                     if (typeName_node->identifier) {

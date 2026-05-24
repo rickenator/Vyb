@@ -252,6 +252,7 @@ public:
     bool isRawLocationType(ast::TypeNode* type); // Added to support location type checking
     bool isReservedWord(const std::string& name);
     bool isLValue(ast::Expression* expr);
+    std::string borrowedRootName(ast::Expression* expr);
     bool areTypesCompatible(ast::TypeNode* typeA, ast::TypeNode* typeB); // Added
     std::shared_ptr<ast::TypeNode> cloneTypeNode(ast::TypeNode* type); // Helper to clone type nodes
     ast::TypeNode* substituteSelfType(ast::TypeNode* returnType, const std::string& concreteType); // Substitute Self with concrete type
@@ -422,6 +423,12 @@ private:
     // Function registry for error propagation analysis
     std::unordered_map<std::string, ast::FunctionDeclaration*> functionRegistry;
     std::unordered_set<std::string> externalFunctionNames;
+
+    struct BorrowState {
+        int mutableBorrows = 0;
+        int immutableBorrows = 0;
+    };
+    std::vector<std::unordered_map<std::string, BorrowState>> borrowScopes;
     
     // Helper for transitive error propagation
     bool checkCallsFailableFunction(ast::Node* node);
@@ -431,6 +438,9 @@ private:
     void addError(const std::string& message, const ast::Node* node);
     // bool isLValue(ast::Expression* expr); // Duplicate declaration removed
     bool isRawLocationType(ast::Expression* expr);
+    BorrowState aggregateBorrowState(const std::string& rootName) const;
+    void recordBorrow(const std::string& rootName, ast::BorrowKind kind, const ast::Node* node);
+    bool hasActiveBorrow(const std::string& rootName) const;
     
     // Template management methods
     void registerTemplate(std::unique_ptr<ast::TemplateDeclaration> templateDecl);

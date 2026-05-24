@@ -1,0 +1,10 @@
+// Demonstrates bundle/share visibility and selective import aliases.
+
+bundle(examples.App)
+import modules::visibility_tools::{public_score as open_score, bundle_score}
+
+main()<Int> -> {
+    score<Int> = open_score() + bundle_score()
+    println_int(score)
+    return 0
+}
