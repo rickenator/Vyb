@@ -38,7 +38,7 @@ bool startsWithWord(const std::string& text, const std::string& word) {
 std::vector<std::string> parseDirectiveArgs(const std::string& inside) {
     std::vector<std::string> args;
     size_t start = 0;
-    while (start <= inside.size()) {
+    while (start < inside.size()) {
         size_t comma = inside.find(',', start);
         std::string arg = trimCopy(inside.substr(start, comma == std::string::npos ? std::string::npos : comma - start));
         if (!arg.empty()) {
@@ -490,7 +490,7 @@ std::string ModuleRegistry::readSourceFile(const fs::path& path) {
 fs::path ModuleRegistry::modulePathRelativeFile(const std::string& modulePath) {
     fs::path relative;
     size_t start = 0;
-    while (start <= modulePath.size()) {
+    while (start < modulePath.size()) {
         size_t sep = modulePath.find("::", start);
         std::string segment = modulePath.substr(start, sep == std::string::npos ? std::string::npos : sep - start);
         if (!segment.empty()) {

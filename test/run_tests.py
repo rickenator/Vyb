@@ -12,7 +12,7 @@ import subprocess
 import sys
 import argparse
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, List
 import time
 import json
@@ -62,16 +62,12 @@ class TestCase:
     parse_only: bool = False
     semantic_only: bool = False
     execute_jit: bool = False  # When True, run with JIT execution regardless of global flag
-    vyn_args: List[str] = None
-    env: dict = None
+    vyn_args: List[str] = field(default_factory=list)
+    env: dict = field(default_factory=dict)
     
     def __post_init__(self):
         if self.category is None:
             self.category = ["uncategorized"]
-        if self.vyn_args is None:
-            self.vyn_args = []
-        if self.env is None:
-            self.env = {}
 
 def parse_directives(file_path):
     """Parse test directives from comments at the top of the file."""
