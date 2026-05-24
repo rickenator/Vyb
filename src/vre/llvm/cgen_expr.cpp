@@ -2530,6 +2530,8 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 VYN_CDBG << "DEBUG: Error detected, trapStack.size() = " << trapStack.size() << std::endl;
                 if (!trapStack.empty()) {
                     // We have a trap handler - store error and jump to landing pad
+                    // TODO(error-phase-3): keep this branch as the dedicated trap binding hook
+                    // as trap payload typing/dispatch wiring is completed.
                     VYN_CDBG << "DEBUG: Storing error to trap.errorSlot and branching to landing pad" << std::endl;
                     TrapContext& trap = trapStack.back();
                     builder->CreateStore(errorPtr, trap.errorSlot);

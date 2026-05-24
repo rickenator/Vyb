@@ -21,6 +21,45 @@ Vyn has a **production-ready error handling system** with:
 **What's Missing**: Standard library types (Error struct, Errable aspect) to expose
 the runtime system to Vyn code. See "Implementation Roadmap" section below.
 
+### Phase 2 — Implemented (Dual Return ABI)
+
+Codegen now lowers failable functions (`needsErrorReturn`) to a dual-return tuple:
+
+- non-`Void`: `{ T, i8* }`
+- `Void`: `{ i1, i8* }` (`i1` is a dummy payload so all failable paths share one 2-field ABI shape)
+
+Success path returns `{ value, null }`.  
+Failure path returns `{ undef_or_dummy, error_ptr }`, where `error_ptr` points to heap memory with:
+
+1. first 8 bytes = runtime type hash (`std::hash<TypeName>`, same convention used by `typeof(...)`)
+2. remaining bytes = failed value payload bytes
+
+Conceptual lowering example:
+
+```vyn
+divide(a<Int>, b<Int>)<Int> -> {
+    if (b == 0) { fail<Int>(0) }
+    return a / b
+}
+```
+
+```llvm
+define { i64, ptr } @divide(i64 %a, i64 %b) {
+entry:
+  ; success
+  %ok = insertvalue { i64, ptr } undef, i64 %quot, 0
+  %ok2 = insertvalue { i64, ptr } %ok, ptr null, 1
+  ret { i64, ptr } %ok2
+
+fail_path:
+  ; allocate + write [type_hash][payload]
+  ; return error tuple
+  %err = insertvalue { i64, ptr } undef, i64 undef, 0
+  %err2 = insertvalue { i64, ptr } %err, ptr %error_ptr, 1
+  ret { i64, ptr } %err2
+}
+```
+
 ---
 
 ## Core Philosophy

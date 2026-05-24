@@ -1,0 +1,29 @@
+// @test: Phase2 void failable success and fail paths
+// @description: Void failable function returns success tuple on plain return and propagates errors into trap blocks.
+// @category: trap,error
+// @expect: pass
+// @expect-output: 35
+
+maybe_fail_void(shouldFail<Bool>)<Void> -> {
+    if (shouldFail) {
+        fail<Int>(5)
+    }
+    return
+}
+
+main()<Int> -> {
+    marker<Int> = 0
+
+    maybe_fail_void(false)
+    marker = marker + 3
+
+    trapped<Int> = {
+        maybe_fail_void(true)
+        0
+    } trap (e<Int>) -> {
+        32
+    }
+
+    println_int(marker + trapped)
+    return 0
+}

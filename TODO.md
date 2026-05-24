@@ -169,7 +169,7 @@ is the working audit for what needs to be implemented next.
 
 ### Error Propagation — Phases 2-5 (HIGH PRIORITY)
 - [x] Phase 1: Semantic detection of failable functions (`canFail`)
-- [ ] Phase 2: Dual return value codegen `{ T, ptr }` for failable functions
+- [x] Phase 2: Dual return value codegen `{ T, ptr }` for failable functions
 - [ ] Phase 3: `fail` statement returns error to caller when no trap in scope
 - [ ] Phase 4: Call site instrumentation — auto-check `{ value, error }` tuple
 - [ ] Phase 5: Top-level untrapped error handler (`__vyn_runtime_untrapped_error`)
