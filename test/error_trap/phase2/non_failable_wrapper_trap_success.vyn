@@ -1,0 +1,26 @@
+// @test: Phase2 non-failable wrapper trap success path
+// @description: Non-failable wrapper with trap around a failable call executes success path end-to-end. Failure trap payload wiring is completed in later phases.
+// @category: trap,error
+// @expect: pass
+// @expect-output: 11
+
+maybe_fail(flag<Bool>)<Int> -> {
+    if (flag) {
+        fail<Int>(123)
+    }
+    return 10
+}
+
+wrapper(flag<Bool>)<Int> -> {
+    value<Int> = {
+        maybe_fail(flag)
+    } trap (e<Int>) -> {
+        return -1
+    }
+    return value + 1
+}
+
+main()<Int> -> {
+    println_int(wrapper(false))
+    return 0
+}

@@ -407,7 +407,12 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
                 VYN_CDBG << "DEBUG: Wrapping return type in {T, ptr} for failable function '" 
                           << node->id->name << "'" << std::endl;
                 llvm::Type* errorPtrType = llvm::PointerType::get(*context, 0);  // i8*
-                returnType = llvm::StructType::get(*context, {originalReturnType, errorPtrType});
+                if (originalReturnType->isVoidTy()) {
+                    // Explicit <Void> return type still uses the failable void ABI {i1, i8*}.
+                    returnType = llvm::StructType::get(*context, {llvm::Type::getInt1Ty(*context), errorPtrType});
+                } else {
+                    returnType = llvm::StructType::get(*context, {originalReturnType, errorPtrType});
+                }
             } else {
                 returnType = originalReturnType;
             }
@@ -436,7 +441,9 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
         } else {
             originalReturnType = llvm::Type::getVoidTy(*context);
             
-            // Phase 2: Wrap void return in {void, ptr} for failable functions
+            // Phase 2 ABI choice:
+            // Keep one uniform failable ABI shape for codegen paths: {payload, error_ptr}.
+            // For Void payloads we use i1 as a dummy field, giving {i1, i8*}.
             if (node->needsErrorReturn) {
                 VYN_CDBG << "DEBUG: Wrapping void return in {i1, ptr} for failable function '" 
                           << node->id->name << "' (using i1 as dummy)" << std::endl;
@@ -642,15 +649,29 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
         // Clean up function scope before return
         exitScope();
 
-        // Verify function return: ensure all paths return if non-void, or add implicit void return
+        // Verify function return: ensure all paths return if non-void, or add implicit return.
+        const bool isFailableVoidFunction =
+            node->needsErrorReturn && originalReturnType && originalReturnType->isVoidTy();
         if (returnType->isVoidTy()) {
-            // Check if the last block has a terminator. If not, add ret void.
+            // Non-failable void function: if the last block has no terminator, add `ret void`.
             if (!func->empty() && !func->back().getTerminator()) {
                 // Make sure we're inserting at the end of the last block
                 builder->SetInsertPoint(&func->back());
                 // Phase 6.4: Pop call frame before implicit return
                 generatePopFrameCall();
                 builder->CreateRetVoid();
+            }
+        } else if (isFailableVoidFunction) {
+            if (!func->empty() && !func->back().getTerminator()) {
+                builder->SetInsertPoint(&func->back());
+                generatePopFrameCall();
+
+                llvm::StructType* returnStructType = llvm::cast<llvm::StructType>(returnType);
+                llvm::Value* nullErrorPtr = llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0));
+                llvm::Value* successStruct = llvm::UndefValue::get(returnStructType);
+                successStruct = builder->CreateInsertValue(successStruct, llvm::ConstantInt::getFalse(*context), {0}, "implicit.void_dummy");
+                successStruct = builder->CreateInsertValue(successStruct, nullErrorPtr, {1}, "implicit.error");
+                builder->CreateRet(successStruct);
             }
         } else {
             // For non-void functions, ensure all paths return. LLVM's verifier will catch most issues.
@@ -1044,7 +1065,11 @@ void LLVMCodegen::createFunctionForwardDeclaration(vyn::ast::FunctionDeclaration
                 VYN_CDBG << "DEBUG: Forward decl - Wrapping return type in {T, ptr} for failable function '" 
                           << node->id->name << "'" << std::endl;
                 llvm::Type* errorPtrType = llvm::PointerType::get(*context, 0);
-                returnType = llvm::StructType::get(*context, {originalReturnType, errorPtrType});
+                if (originalReturnType->isVoidTy()) {
+                    returnType = llvm::StructType::get(*context, {llvm::Type::getInt1Ty(*context), errorPtrType});
+                } else {
+                    returnType = llvm::StructType::get(*context, {originalReturnType, errorPtrType});
+                }
             } else {
                 returnType = originalReturnType;
             }
@@ -1057,7 +1082,9 @@ void LLVMCodegen::createFunctionForwardDeclaration(vyn::ast::FunctionDeclaration
         } else {
             originalReturnType = llvm::Type::getVoidTy(*context);
             
-            // Phase 2: Wrap void return in {void, ptr} for failable functions
+            // Phase 2 ABI choice:
+            // Keep one uniform failable ABI shape for codegen paths: {payload, error_ptr}.
+            // For Void payloads we use i1 as a dummy field, giving {i1, i8*}.
             if (node->needsErrorReturn) {
                 VYN_CDBG << "DEBUG: Forward decl - Wrapping void return in {i1, ptr} for failable function '" 
                           << node->id->name << "'" << std::endl;
@@ -1084,5 +1111,3 @@ void LLVMCodegen::createFunctionForwardDeclaration(vyn::ast::FunctionDeclaration
     
     VYN_CDBG << "DEBUG: Successfully created forward declaration for function: " << node->id->name << std::endl;
 }
-
-

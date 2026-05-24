@@ -1,0 +1,22 @@
+// @test: Phase2 failable success payload
+// @description: A canFail callee returning successfully forwards only payload and keeps error pointer null.
+// @category: trap,error
+// @expect: pass
+// @expect-output: 42
+
+add_one_or_fail(x<Int>)<Int> -> {
+    if (x < 0) {
+        fail<Int>(x)
+    }
+    return x + 1
+}
+
+relay_success(x<Int>)<Int> -> {
+    value<Int> = add_one_or_fail(x)
+    return value
+}
+
+main()<Int> -> {
+    println_int(relay_success(41))
+    return 0
+}

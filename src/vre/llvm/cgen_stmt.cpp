@@ -329,7 +329,17 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
         }
         // Phase 6.4: Pop call frame before return
         generatePopFrameCall();
-        builder->CreateRetVoid();
+        if (currentFunctionAST && currentFunctionAST->needsErrorReturn) {
+            // Failable void functions use a uniform 2-field tuple ABI: {i1 dummy, i8* err}.
+            llvm::StructType* returnStructType = llvm::cast<llvm::StructType>(currentFunction->getReturnType());
+            llvm::Value* nullErrorPtr = llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0));
+            llvm::Value* successStruct = llvm::UndefValue::get(returnStructType);
+            successStruct = builder->CreateInsertValue(successStruct, llvm::ConstantInt::getFalse(*context), {0}, "result.void_dummy");
+            successStruct = builder->CreateInsertValue(successStruct, nullErrorPtr, {1}, "result.error");
+            builder->CreateRet(successStruct);
+        } else {
+            builder->CreateRetVoid();
+        }
     }
 }
 
@@ -1394,7 +1404,8 @@ void LLVMCodegen::visit(vyn::ast::FailStatement* node) {
     // Phase 6.2: Handle struct error types with type ID header
     // Allocate error struct with 8-byte type ID prefix
     llvm::Value* errorPtr = errorValue;
-    if (!errorValue->getType()->isPointerTy()) {
+    const bool forceHeapErrorObject = node->errorType != nullptr;
+    if (forceHeapErrorObject || !errorValue->getType()->isPointerTy()) {
         // Get type name for hash
         std::string typeName;
         if (node->errorType) {
@@ -1425,22 +1436,8 @@ void LLVMCodegen::visit(vyn::ast::FailStatement* node) {
         uint64_t errorDataSize = dataLayout.getTypeAllocSize(errorType);
         uint64_t totalSize = 8 + errorDataSize;  // 8 bytes for type ID + error data
         
-        // Call malloc to allocate heap memory
-        llvm::Function* mallocFn = module->getFunction("malloc");
-        if (!mallocFn) {
-            // Declare malloc if not already declared
-            llvm::FunctionType* mallocType = llvm::FunctionType::get(
-                llvm::PointerType::get(*context, 0),
-                {builder->getInt64Ty()},
-                false
-            );
-            mallocFn = llvm::Function::Create(
-                mallocType,
-                llvm::Function::ExternalLinkage,
-                "malloc",
-                module.get()
-            );
-        }
+        // Reuse the existing runtime allocation hook used throughout codegen.
+        llvm::Function* mallocFn = getOrCreateMallocFunction();
         
         llvm::Value* size = llvm::ConstantInt::get(builder->getInt64Ty(), totalSize);
         llvm::Value* rawPtr = builder->CreateCall(mallocFn, {size}, "error.heap");
