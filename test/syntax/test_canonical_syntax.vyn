@@ -1,3 +1,4 @@
+// @parse-only: true
 // Simple test of canonical syntax
 main()<Int> -> {
     # Test my() constructor

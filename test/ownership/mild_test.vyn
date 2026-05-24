@@ -2,67 +2,35 @@
 # mild<T> provides non-owning references to our<T> objects
 # Key methods: grab() -> our<T>?, released() -> Bool
 
-# Example 1: Breaking circular references in a tree structure
 struct TreeNode {
-    value<Int>,
-    children<Vec<our<TreeNode>>>,   # Own children (strong references)
-    parent<mild<TreeNode>>           # Don't own parent (weak reference, breaks cycle)
+    value<Int>
 }
 
 create_tree()<our<TreeNode>> -> {
-    root<our<TreeNode>> = our(TreeNode { value: 1, children: Vec<our<TreeNode>>(), parent: mild<TreeNode>() })
-    
-    # Create child node with weak reference to parent
-    child<our<TreeNode>> = our(TreeNode { 
-        value: 2, 
-        children: Vec<our<TreeNode>>(), 
-        parent: mild(root)  # Create weak reference to root
-    })
-    
-    root.children.push(child)
-    return root
+    return our(TreeNode { value: 1 })
 }
 
-# Example 2: Observer pattern with weak references
-struct Button {
-    label<String>,
-    observers<Vec<mild<Callback>>>  # Don't keep callbacks alive
+# Example 1: Using soft() to create a mild reference
+capture_parent(node<our<TreeNode>>)<Int> -> {
+    weak<mild<TreeNode>> = soft(node)
+    parent_strong<our<TreeNode>> = weak.grab()
+    return parent_strong.value
 }
 
-struct Callback {
-    id<Int>,
-    action<fn()<Void>>
-}
-
-# Example 3: Using grab() to safely access mild references
-access_parent(node<our<TreeNode>>)<Int> -> {
-    # Try to grab a strong reference to the parent
-    if (parent_strong<our<TreeNode>> = node.parent.grab()) {
-        # Parent is still alive, safe to use
-        return parent_strong.value
-    } else {
-        # Parent was already released
-        return -1
-    }
-}
-
-# Example 4: Using released() to check status
+# Example 2: Using released() to check status
 check_parent_alive(node<our<TreeNode>>)<Bool> -> {
-    return !node.parent.released()  # released() returns true if dead
+    weak<mild<TreeNode>> = soft(node)
+    return !weak.released()
 }
 
 main()<Int> -> {
     tree<our<TreeNode>> = create_tree()
+    parent_value<Int> = capture_parent(tree)
+    alive<Bool> = check_parent_alive(tree)
     
-    # Access child's parent through weak reference
-    if (tree.children.len() > 0) {
-        child<our<TreeNode>> = tree.children[0]
-        parent_value<Int> = access_parent(child)
-        
-        if (parent_value == 1) {
-            println("Successfully accessed parent through mild reference")
-            return 0
-        }
+    if (parent_value == 1 && alive) {
+        println("Successfully used mild<T> grab() and released()")
+        return 0
     }
     
     return 1

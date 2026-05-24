@@ -45,7 +45,7 @@ main()<Int> -> {
     
     // Check that subject is alive
     println("Checking observer1's subject status:")
-    if observer1.subject_ref.released() {
+    if (observer1.subject_ref.released()) {
         println("  Subject is FREED (unexpected!)")
     } else {
         println("  Subject is ALIVE (correct)")
@@ -64,7 +64,7 @@ main()<Int> -> {
         
         println("Created temporary subject and observer")
         println("Checking status while subject alive:")
-        if temp_observer.subject_ref.released() {
+        if (temp_observer.subject_ref.released()) {
             println("  Subject is FREED (wrong!)")
         } else {
             println("  Subject is ALIVE (correct)")

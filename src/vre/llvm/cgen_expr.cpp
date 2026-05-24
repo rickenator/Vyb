@@ -26,59 +26,44 @@ void LLVMCodegen::visit(vyn::ast::BooleanLiteral *node) {
 }
 
 void LLVMCodegen::visit(vyn::ast::StringLiteral *node) {
-    llvm::Value* strPtr = nullptr;
-    
+    llvm::Type* int8PtrType = llvm::PointerType::get(*context, 0);
+    llvm::Type* int64Type = llvm::Type::getInt64Ty(*context);
+    llvm::StructType* stringStructType = llvm::StructType::get(*context, {int8PtrType, int64Type});
+    llvm::Constant* lenValue = llvm::ConstantInt::get(int64Type, node->value.length());
+
     if (currentFunction) {
-        // Inside a function - use CreateGlobalStringPtr
-        strPtr = builder->CreateGlobalStringPtr(node->value);
-    } else {
-        // Global scope - create a global constant string
-        // Create a constant string
-        llvm::Constant* stringConstant = llvm::ConstantDataArray::getString(*context, node->value, true);
-        
-        // Create a global variable to hold the string
-        llvm::GlobalVariable* globalString = new llvm::GlobalVariable(
-            *module,
-            stringConstant->getType(),
-            true, // isConstant
-            llvm::GlobalValue::PrivateLinkage,
-            stringConstant,
-            ".str"
-        );
-        
-        // Get a pointer to the first element (i8*)
-        std::vector<llvm::Constant*> indices = {
-            llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0),
-            llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0)
-        };
-        
-        strPtr = llvm::ConstantExpr::getGetElementPtr(
-            stringConstant->getType(),
-            globalString,
-            indices
-        );
-    }
-    
-    // Convert to String struct {ptr, len}
-    if (currentFunction) {
-        // Create String struct type
-        llvm::Type* int8PtrType = llvm::PointerType::get(*context, 0);
-        llvm::Type* int64Type = llvm::Type::getInt64Ty(*context);
-        llvm::StructType* stringStructType = llvm::StructType::get(*context, {int8PtrType, int64Type});
-        
-        // Calculate length (exclude null terminator)
-        llvm::Value* lenValue = llvm::ConstantInt::get(int64Type, node->value.length());
-        
-        // Build the String struct
+        // Inside a function - use CreateGlobalStringPtr and build a runtime string struct.
+        llvm::Value* strPtr = builder->CreateGlobalStringPtr(node->value);
         llvm::Value* stringStruct = llvm::UndefValue::get(stringStructType);
         stringStruct = builder->CreateInsertValue(stringStruct, strPtr, 0, "str.ptr");
         stringStruct = builder->CreateInsertValue(stringStruct, lenValue, 1, "str.len");
-        
         m_currentLLVMValue = stringStruct;
-    } else {
-        // In global scope, just return the pointer for now (backward compatibility)
-        m_currentLLVMValue = strPtr;
+        return;
     }
+
+    // Global scope - emit a constant global string and return a constant String struct.
+    llvm::Constant* stringConstant = llvm::ConstantDataArray::getString(*context, node->value, true);
+    llvm::GlobalVariable* globalString = new llvm::GlobalVariable(
+        *module,
+        stringConstant->getType(),
+        true,
+        llvm::GlobalValue::PrivateLinkage,
+        stringConstant,
+        ".str"
+    );
+
+    std::vector<llvm::Constant*> indices = {
+        llvm::ConstantInt::get(int64Type, 0),
+        llvm::ConstantInt::get(int64Type, 0)
+    };
+
+    llvm::Constant* strPtr = llvm::ConstantExpr::getGetElementPtr(
+        stringConstant->getType(),
+        globalString,
+        indices
+    );
+
+    m_currentLLVMValue = llvm::ConstantStruct::get(stringStructType, {strPtr, lenValue});
 }
 
 void LLVMCodegen::visit(vyn::ast::NilLiteral* node) {

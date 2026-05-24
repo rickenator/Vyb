@@ -45,6 +45,11 @@ expect-fail tests are treated as stronger evidence than optimistic status text.
   accidental basic/type/Vec tests, taught semantic analysis to type literal
   operands for `typeof`/`typename`, and added a semantic rejection for direct
   recursive struct value fields.
+- 2026-05-24: Fast-forwarded to the latest GitHub ownership-syntax merge and
+  repaired the affected local fixtures. String literals now lower to constant
+  `String` structs even in global scope, the weak-reference smoke test was
+  simplified to supported syntax, and the canonical syntax fixture is treated
+  as parse-only to keep it focused on syntax rather than LLVM lowering.
 
 ## Audit Scope
 
