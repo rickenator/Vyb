@@ -1,0 +1,23 @@
+// @test: Untrapped error propagation to failable main
+// @description: Error propagates through failable main with no trap and is handled by the runtime untrapped-error handler.
+// @category: trap,error
+// @expect: fail
+// @expect-error: Type: MainError
+
+struct MainError {
+    message<String>,
+    exitCode<Int>
+}
+
+inner()<Int> -> {
+    fail<MainError>(MainError { message = "boom", exitCode = 1 })
+    return 0
+}
+
+main()<Int> -> {
+    if (false) {
+        fail<MainError>(MainError { message = "unused", exitCode = 1 })
+    }
+    value<Int> = inner()
+    return value
+}

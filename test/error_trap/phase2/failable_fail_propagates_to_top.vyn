@@ -15,6 +15,9 @@ middle_layer()<Int> -> {
 }
 
 main()<Int> -> {
+    if (false) {
+        fail<Int>(0)
+    }
     y<Int> = middle_layer()
     return y
 }

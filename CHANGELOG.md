@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+- Error propagation Phases 3–5 for `fail`/`trap`:
+  - `fail` without in-scope trap now returns the failable ABI tuple and propagates to caller.
+  - Call sites of failable functions now auto-check `{value,error}` and propagate on non-null error.
+  - New trap tests for propagation, defer-on-fail, untrapped main propagation, and non-failable caller rejection.
+
+### Changed
+- Runtime `__vyn_runtime_untrapped_error` now reports error type, JSON payload, fail source location, and honors `exitCode<Int>` payload fields.
+- JIT `main` dispatch now checks failable-main error tuple returns and routes non-null errors to the untrapped runtime handler.
+
 ## [0.5.0] - 2026-02-24 (freedom-1.0 series)
 
 ### Added

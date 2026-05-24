@@ -14,25 +14,27 @@ Errors propagate up until caught by a trap handler or reach the top of the stack
 - **Verified**: `divide()` with fail marked `canFail=1`, `main()` marked `canFail=0`
 - **Files**: ast.hpp, semantic.cpp, cgen_decl.cpp, test_canfail.vyn
 
-### Phase 2: Dual Return Values
+### Phase 2: Dual Return Values ✅ COMPLETE
 - Functions that can fail return `{ T, ptr }` instead of `T`
 - First element: actual return value (or dummy if error)
 - Second element: error pointer (NULL = success, non-NULL = error)
 - Transparent to Vyn source code
 
-### Phase 3: Fail Statement Codegen
+### Phase 3: Fail Statement Codegen ✅ COMPLETE
 - If trap handler in scope: store error, jump to landing pad (current behavior)
 - If no trap handler: pack error into return value, return to caller
-- Create error structure (for now, simple alloca)
+- Construct a runtime `VynError` payload via `__vyn_runtime_create_error`
+- Execute registered `defer` statements before emitting the propagating return
 
-### Phase 4: Call Site Instrumentation
+### Phase 4: Call Site Instrumentation ✅ COMPLETE
 - After calling failable function, extract { value, error } tuple
 - Check if error != NULL
 - If error and has trap: jump to trap.landing
 - If error and no trap: propagate (return error to our caller)
 - If no error: continue with value
+- Semantic validation rejects untrapped failable calls from non-failable callers
 
-### Phase 5: Top-Level Handling
+### Phase 5: Top-Level Handling ✅ COMPLETE
 - Functions at top of call stack (main, no caller)
 - If error propagates out: call __vyn_runtime_untrapped_error()
 - Clean termination with error display
@@ -55,6 +57,19 @@ define i64 @safe_func()
 
 ; Failable function (internal representation)
 define { i64, ptr } @failable_func()
+```
+
+### Runtime `VynError` Layout (codegen-emitted)
+```c
+struct VynError {
+    uint64_t type_hash;     // hash(typeof(error))
+    const char* type_name;  // concrete error type name
+    void* payload;          // copied bytes of failed value
+    const char* file;       // fail site file path
+    uint32_t line;          // fail site line
+    uint32_t col;           // fail site column
+    // legacy runtime fields retained for compatibility
+};
 ```
 
 ## Error Propagation Flow
@@ -93,7 +108,7 @@ main()
 ## Status Tracking
 
 - [x] Phase 1: Semantic analysis for failable functions ✅
-- [ ] Phase 2: Dual return value codegen ⏳
-- [ ] Phase 3: Fail statement returns error
-- [ ] Phase 4: Call site error checking
-- [ ] Phase 5: Top-level untrapped handling
+- [x] Phase 2: Dual return value codegen ✅
+- [x] Phase 3: Fail statement returns error ✅
+- [x] Phase 4: Call site error checking ✅
+- [x] Phase 5: Top-level untrapped handling ✅

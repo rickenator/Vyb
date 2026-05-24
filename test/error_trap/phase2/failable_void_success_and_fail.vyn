@@ -14,7 +14,11 @@ maybe_fail_void(should_fail<Bool>)<Void> -> {
 main()<Int> -> {
     marker<Int> = 0
 
-    maybe_fail_void(false)
+    {
+        maybe_fail_void(false)
+    } trap (e<Int>) -> {
+        false
+    }
     marker = marker + 3
 
     trapped<Int> = {

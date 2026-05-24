@@ -50,7 +50,7 @@ python3 test/run_milestone_tests.py --vyn build/vyn
 The harness defaults to `test/units` and `--no-execute`. Pass `--execute-jit`
 for runtime/output tests. The milestone runner aggregates the stable runtime,
 module, FFI, introspection, primitive type, range, Vec iteration, and stdlib
-suites and enforces at least 122 passing tests before the next milestone.
+suites and enforces at least 126 passing tests before the next milestone.
 
 ## Writing Tests
 

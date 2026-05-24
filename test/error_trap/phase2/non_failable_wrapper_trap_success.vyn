@@ -21,6 +21,9 @@ wrapper(flag<Bool>)<Int> -> {
 }
 
 main()<Int> -> {
+    if (false) {
+        fail<Int>(0)
+    }
     println_int(wrapper(false))
     return 0
 }

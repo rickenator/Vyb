@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-MILESTONE_MINIMUM = 122
+MILESTONE_MINIMUM = 126
 
 
 @dataclass(frozen=True)

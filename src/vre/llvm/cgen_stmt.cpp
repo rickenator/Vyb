@@ -54,14 +54,40 @@ void LLVMCodegen::visit(vyn::ast::BlockStatement* node) {
     namedValues = std::move(oldNamedValues);
 }
 
-void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
-    // Emit deferred statements (LIFO) before returning
+void LLVMCodegen::emitDeferredStatementsForCurrentFunction() {
     if (!m_deferStack.empty() && !m_deferStack.back().empty()) {
         auto& defers = m_deferStack.back();
         for (auto it = defers.rbegin(); it != defers.rend(); ++it) {
             if (*it) (*it)->accept(*this);
         }
     }
+}
+
+void LLVMCodegen::emitPropagatingErrorReturn(llvm::Value* errorPtr) {
+    if (!currentFunction || !currentFunctionAST || !currentFunctionAST->needsErrorReturn) {
+        return;
+    }
+
+    emitDeferredStatementsForCurrentFunction();
+
+    llvm::StructType* returnStructType = llvm::cast<llvm::StructType>(currentFunction->getReturnType());
+    llvm::Value* resultStruct = llvm::UndefValue::get(returnStructType);
+    llvm::Type* valueType = returnStructType->getElementType(0);
+    llvm::Value* dummyValue = llvm::UndefValue::get(valueType);
+    resultStruct = builder->CreateInsertValue(resultStruct, dummyValue, {0}, "error.dummy");
+
+    llvm::Type* errorFieldTy = returnStructType->getElementType(1);
+    llvm::Value* castError = errorPtr;
+    if (castError && castError->getType() != errorFieldTy) {
+        castError = builder->CreateBitCast(castError, errorFieldTy, "error.cast");
+    }
+    resultStruct = builder->CreateInsertValue(resultStruct, castError, {1}, "error.ptr");
+    builder->CreateRet(resultStruct);
+}
+
+void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
+    // Emit deferred statements (LIFO) before returning
+    emitDeferredStatementsForCurrentFunction();
     if (node->argument) {
         // Codegen the argument expression. The result will be in m_currentLLVMValue.
         node->argument->accept(*this); 
@@ -1401,71 +1427,71 @@ void LLVMCodegen::visit(vyn::ast::FailStatement* node) {
         return;
     }
     
-    // Phase 6.2: Handle struct error types with type ID header
-    // Allocate error struct with 8-byte type ID prefix
-    llvm::Value* errorPtr = errorValue;
-    const bool forceHeapErrorObject = node->errorType != nullptr;
-    if (forceHeapErrorObject || !errorValue->getType()->isPointerTy()) {
-        // Get type name for hash
-        std::string typeName;
-        if (node->errorType) {
-            typeName = node->errorType->toString();
-        } else if (auto* objLit = dynamic_cast<ast::ObjectLiteral*>(node->error.get())) {
-            if (objLit->typePath) {
-                if (auto* typeName_node = dynamic_cast<ast::TypeName*>(objLit->typePath.get())) {
-                    if (typeName_node->identifier) {
-                        typeName = typeName_node->identifier->name;
-                    }
-                }
-            }
-        } else {
-            // For non-struct errors (like integer literals), infer Vyn type name from LLVM type
-            llvm::Type* errorType = errorValue->getType();
-            if (errorType->isIntegerTy()) {
-                typeName = "Int";  // Integer literals in Vyn are type Int
-            } else if (errorType->isFloatingPointTy()) {
-                typeName = "Float";
-            } else if (errorType->isPointerTy()) {
-                typeName = "String";  // Assuming string pointers
-            }
-        }
-        
-        // Allocate space for type ID (8 bytes) + error struct on heap
-        llvm::Type* errorType = errorValue->getType();
-        llvm::DataLayout dataLayout(module.get());
-        uint64_t errorDataSize = dataLayout.getTypeAllocSize(errorType);
-        uint64_t totalSize = 8 + errorDataSize;  // 8 bytes for type ID + error data
-        
-        // Reuse the existing runtime allocation hook used throughout codegen.
-        llvm::Function* mallocFn = getOrCreateMallocFunction();
-        
-        llvm::Value* size = llvm::ConstantInt::get(builder->getInt64Ty(), totalSize);
-        llvm::Value* rawPtr = builder->CreateCall(mallocFn, {size}, "error.heap");
-        
-        // Store type ID in first 8 bytes
-        if (!typeName.empty()) {
-            uint64_t typeHash = std::hash<std::string>{}(typeName);
-            llvm::Value* typeId = llvm::ConstantInt::get(builder->getInt64Ty(), typeHash);
-            // Cast malloc result to i64* for proper type handling
-            llvm::Value* typeIdPtr = builder->CreateBitCast(
-                rawPtr,
-                llvm::PointerType::get(builder->getInt64Ty(), 0),
-                "error.typeid.ptr"
-            );
-            builder->CreateStore(typeId, typeIdPtr, false);  // Not volatile
-        }
-        
-        // Store error data after type ID (at offset 8)
-        llvm::Value* dataPtr = builder->CreateGEP(
-            builder->getInt8Ty(),
-            rawPtr,
-            llvm::ConstantInt::get(builder->getInt64Ty(), 8),
-            "error.data.ptr"
-        );
-        builder->CreateStore(errorValue, dataPtr);
-        
-        errorPtr = rawPtr;
+    // Construct a concrete runtime VynError object.
+    std::string typeName;
+    if (node->errorType) {
+        typeName = node->errorType->toString();
+    } else if (node->error && node->error->type) {
+        typeName = node->error->type->toString();
+    } else if (errorValue->getType()->isIntegerTy(1)) {
+        typeName = "Bool";
+    } else if (errorValue->getType()->isIntegerTy()) {
+        typeName = "Int";
+    } else if (errorValue->getType()->isFloatingPointTy()) {
+        typeName = "Float";
     }
+    if (typeName.empty()) {
+        typeName = "Error";
+    }
+
+    llvm::DataLayout dataLayout(module.get());
+    llvm::Type* payloadType = errorValue->getType();
+    uint64_t payloadSize = dataLayout.getTypeAllocSize(payloadType);
+
+    llvm::Value* payloadAlloca = builder->CreateAlloca(payloadType, nullptr, "fail.payload");
+    builder->CreateStore(errorValue, payloadAlloca);
+    llvm::Value* payloadPtr = builder->CreateBitCast(payloadAlloca, llvm::PointerType::get(*context, 0), "fail.payload.ptr");
+
+    llvm::Function* createErrFn = module->getFunction("__vyn_runtime_create_error_ex");
+    if (!createErrFn) {
+        llvm::Type* i8PtrTy = llvm::PointerType::get(*context, 0);
+        llvm::Type* i64Ty = builder->getInt64Ty();
+        llvm::Type* i32Ty = builder->getInt32Ty();
+        llvm::Type* destructorTy = llvm::PointerType::get(llvm::FunctionType::get(llvm::Type::getVoidTy(*context), {i8PtrTy}, false), 0);
+        llvm::FunctionType* createErrTy = llvm::FunctionType::get(
+            i8PtrTy,
+            {i8PtrTy, i8PtrTy, i8PtrTy, i64Ty, destructorTy, i8PtrTy, i32Ty, i32Ty},
+            false
+        );
+        createErrFn = llvm::Function::Create(
+            createErrTy,
+            llvm::Function::ExternalLinkage,
+            "__vyn_runtime_create_error_ex",
+            module.get()
+        );
+    }
+
+    llvm::Value* typeNameValue = builder->CreateGlobalStringPtr(typeName, "fail.type_name");
+    llvm::Value* nullTypeId = llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0));
+    llvm::Value* payloadSizeValue = llvm::ConstantInt::get(builder->getInt64Ty(), payloadSize);
+    llvm::Type* destructorTy = createErrFn->getFunctionType()->getParamType(4);
+    llvm::Value* nullDestructor = llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(destructorTy));
+    llvm::Value* fileValue = builder->CreateGlobalStringPtr(node->loc.filePath, "fail.file");
+
+    llvm::Value* errorPtr = builder->CreateCall(
+        createErrFn,
+        {
+            typeNameValue,
+            nullTypeId,
+            payloadPtr,
+            payloadSizeValue,
+            nullDestructor,
+            fileValue,
+            llvm::ConstantInt::get(builder->getInt32Ty(), node->loc.line),
+            llvm::ConstantInt::get(builder->getInt32Ty(), node->loc.column)
+        },
+        "fail.error"
+    );
     
     // Check if we're inside a trap context
     if (!trapStack.empty()) {
@@ -1484,48 +1510,13 @@ void LLVMCodegen::visit(vyn::ast::FailStatement* node) {
         
         // Phase 3: Check if we're in a failable function that can propagate errors
         if (currentFunctionAST && currentFunctionAST->needsErrorReturn) {
-            // This function returns {T, ptr} - propagate error to caller
             VYN_CDBG << "DEBUG: Fail statement propagating error to caller in failable function" << std::endl;
-            
-            // Clean up scope before returning
-            if (!scopeStack.empty()) {
-                VYN_CDBG << "DEBUG: Cleaning up scope before fail return" << std::endl;
-                exitScope();
-            }
-            
-            // Create the {T, ptr} return struct with error
-            llvm::StructType* returnStructType = llvm::cast<llvm::StructType>(function->getReturnType());
-            llvm::Value* resultStruct = llvm::UndefValue::get(returnStructType);
-            
-            // Insert dummy value for position 0 (the actual return value - unused on error)
-            llvm::Type* valueType = returnStructType->getElementType(0);
-            llvm::Value* dummyValue = llvm::UndefValue::get(valueType);
-            resultStruct = builder->CreateInsertValue(resultStruct, dummyValue, {0}, "error.dummy");
-            
-            // Insert error pointer at position 1
-            // errorPtr already contains the heap-allocated error with type ID header
-            resultStruct = builder->CreateInsertValue(resultStruct, errorPtr, {1}, "error.ptr");
-            
-            // Phase 6.4: DON'T pop call frame when failing!
-            // The frame should remain on the stack so it appears in the stack trace
-            // when the error is displayed. It will be cleaned up when the program exits.
-            // generatePopFrameCall();  // Removed - keep frame for stack trace
-            
-            // Return the error tuple
-            builder->CreateRet(resultStruct);
-            
+            emitPropagatingErrorReturn(errorPtr);
         } else {
             // No trap handler and not a failable function - this is an untrapped error
-            // TODO: Create proper VynError structure with __vyn_runtime_create_error
-            // For now, pass NULL to indicate we don't have proper error structure yet
-            
             llvm::Function* untrappedFn = getVynUntrappedErrorFunction();
-            
-            // Pass null pointer - runtime will handle gracefully
-            llvm::Value* nullPtr = llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0));
-            
             // Call untrapped error handler (noreturn)
-            builder->CreateCall(untrappedFn, {nullPtr});
+            builder->CreateCall(untrappedFn, {errorPtr});
             
             // Mark as unreachable
             builder->CreateUnreachable();

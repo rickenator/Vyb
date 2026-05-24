@@ -81,6 +81,8 @@ extern "C" {
     // Error handling runtime functions (from error_handling.cpp)
     void __vyn_runtime_panic(const char* message) __attribute__((noreturn));
     void __vyn_runtime_untrapped_error(void* error) __attribute__((noreturn));
+    void* __vyn_runtime_create_error_ex(const char* type_name, void* type_id, void* data, uint64_t data_size, void (*destructor)(void*), const char* file, uint32_t line, uint32_t column);
+    void __vyn_runtime_free_error(void* error);
     
     // Stack trace runtime functions (Phase 6.4 - from error_handling.cpp)
     void __vyn_runtime_push_call_frame(const char* function_name, const char* file_path, uint32_t line, uint32_t column);
@@ -661,6 +663,10 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             llvm::orc::ExecutorAddr::fromPtr((void*)&__vyn_runtime_panic), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyn_runtime_untrapped_error")] = llvm::orc::ExecutorSymbolDef(
             llvm::orc::ExecutorAddr::fromPtr((void*)&__vyn_runtime_untrapped_error), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_runtime_create_error_ex")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr((void*)&__vyn_runtime_create_error_ex), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyn_runtime_free_error")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr((void*)&__vyn_runtime_free_error), llvm::JITSymbolFlags::Exported);
         
         // Register stack trace runtime functions (Phase 6.4)
         runtimeSymbols[mangle("__vyn_runtime_push_call_frame")] = llvm::orc::ExecutorSymbolDef(
@@ -829,6 +835,9 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
         llvm::Function* mainFuncForTypeCheck = module->getFunction("main");
         bool mainReturnsStruct = false;
         bool mainReturnsString = false;    // { ptr, i64 } Vyn string struct
+        bool mainReturnsFailableStruct = false; // { T, i8* }
+        bool mainFailablePayloadIsInt = false;
+        bool mainFailablePayloadIsVoidDummy = false;
         
         if (mainFuncForTypeCheck) {
             llvm::Type* returnType = mainFuncForTypeCheck->getReturnType();
@@ -836,10 +845,16 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             // Detect if this is a Vyn string struct: { ptr, i64 } with 2 elements
             if (mainReturnsStruct) {
                 llvm::StructType* st = llvm::cast<llvm::StructType>(returnType);
-                if (st->getNumElements() == 2 &&
-                    st->getElementType(0)->isPointerTy() &&
-                    st->getElementType(1)->isIntegerTy(64)) {
-                    mainReturnsString = true;
+                if (st->getNumElements() == 2) {
+                    if (st->getElementType(1)->isPointerTy()) {
+                        // Failable return ABI { payload, error_ptr }.
+                        mainReturnsFailableStruct = true;
+                        mainFailablePayloadIsInt = st->getElementType(0)->isIntegerTy(64);
+                        mainFailablePayloadIsVoidDummy = st->getElementType(0)->isIntegerTy(1);
+                    } else if (st->getElementType(0)->isPointerTy() &&
+                               st->getElementType(1)->isIntegerTy(64)) {
+                        mainReturnsString = true;
+                    }
                 }
             }
         }
@@ -896,6 +911,30 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
         
         // Check if return type is a struct (for String returns handled specially)
         if (mainReturnsStruct) {
+            if (mainReturnsFailableStruct) {
+                if (mainFailablePayloadIsVoidDummy) {
+                    struct FailableVoidMainResult { bool ok_dummy; void* error; };
+                    typedef FailableVoidMainResult (*FailableVoidMainFuncType)();
+                    FailableVoidMainFuncType fMain = reinterpret_cast<FailableVoidMainFuncType>(
+                        static_cast<void*>(executorAddr.toPtr<void*>()));
+                    FailableVoidMainResult result = fMain();
+                    if (result.error != nullptr) {
+                        __vyn_runtime_untrapped_error(result.error);
+                    }
+                    return 0;
+                }
+                if (mainFailablePayloadIsInt) {
+                    struct FailableIntMainResult { int64_t value; void* error; };
+                    typedef FailableIntMainResult (*FailableIntMainFuncType)();
+                    FailableIntMainFuncType fMain = reinterpret_cast<FailableIntMainFuncType>(
+                        static_cast<void*>(executorAddr.toPtr<void*>()));
+                    FailableIntMainResult result = fMain();
+                    if (result.error != nullptr) {
+                        __vyn_runtime_untrapped_error(result.error);
+                    }
+                    return 0;
+                }
+            }
             if (mainReturnsString) {
                 // Single String return: call as struct { char*, int64_t } returning function
                 // On x86_64 SysV ABI, { ptr, i64 } is returned in registers (rax + rdx)

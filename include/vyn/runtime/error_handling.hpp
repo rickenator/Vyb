@@ -36,11 +36,17 @@ struct VynStackTrace {
 
 // Error value representation
 struct VynError {
+    uint64_t type_hash;          // Stable hash for runtime matching
     const char* type_name;       // e.g., "DivisionByZero"
-    void* type_id;               // Unique type identifier
-    void* data;                  // Error-specific data
-    size_t data_size;            // Size of data
-    VynSourceLocation location;  // Where fail occurred
+    void* payload;               // Error-specific payload bytes
+    const char* file;            // Source file of fail site
+    uint32_t line;               // Source line of fail site
+    uint32_t col;                // Source column of fail site
+    // Legacy aliases still used by runtime internals
+    void* type_id;               // Unique type identifier (legacy)
+    void* data;                  // Alias of payload
+    size_t data_size;            // Size of payload
+    VynSourceLocation location;  // Alias of file/line/col
     VynStackTrace* stack_trace;  // Captured stack
     VynError* cause;             // Causality chain
     uint64_t timestamp;          // When error occurred
@@ -67,6 +73,17 @@ VynError* __vyn_runtime_create_error(
     size_t data_size,
     void (*destructor)(void*),
     VynSourceLocation location
+);
+
+VynError* __vyn_runtime_create_error_ex(
+    const char* type_name,
+    void* type_id,
+    void* data,
+    size_t data_size,
+    void (*destructor)(void*),
+    const char* file,
+    uint32_t line,
+    uint32_t column
 );
 
 // Error cleanup
