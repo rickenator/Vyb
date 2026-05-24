@@ -403,7 +403,7 @@ fn mem_set(ptr: loc<UInt8>, value: UInt8, n: UInt) -> Void
 
 1. **Declarations**: choose explicit (`var<T>`) or inferred (`var auto`).  
 2. **Functions**: return in `<Type>`, arrow mandatory, braces optional for single expressions.  
-3. **Ownership**: use `my<T>`, `our<T>`, `their<T>`, with optional `borrow()`/`view()` shorthand.  
+3. **Ownership**: use `my<T>`, `our<T>`, `their<T>`, with canonical `borrow(expr)` / `view(expr)` borrowing.  
 4. **Intrinsics**: memory ops only in `freedom`, metadata always safe.  
 5. **Print**: use generic `println(value)` for any type; prefer `to_string()` for explicit conversion.
 6. **Serialization**: use auto-serialization for `main()` returns; mode intrinsics for customization.

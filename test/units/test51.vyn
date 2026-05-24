@@ -1,11 +1,14 @@
-//# EXPECTED ERROR: borrow() can only be used inside an freedom block
+// @test: Mutable borrow conflict rejected
+// @expect: fail
+// @expect-error: Cannot take mutable borrow of 'x' while it is already borrowed.
+//# EXPECTED ERROR: Cannot take mutable borrow of 'x' while it is already borrowed.
 
 main()<Int> -> {
-    x<my<Int>> = 10;
-    
-    // Using borrow outside freedom block should fail
-    b<their<Int>> = borrow x;
-    b = 20;
-    
+    x<my<Int>> = my(10);
+
+    // Conflicting borrows should fail even without freedom
+    v<their<Int const>> = view(x);
+    b<their<Int>> = borrow(x);
+
     return x;
 }

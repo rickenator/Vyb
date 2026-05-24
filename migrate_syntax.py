@@ -87,20 +87,20 @@ class SyntaxMigrator:
             
             # Legacy their creation patterns (if any exist)
             (r'\bmake_their\s*\(\s*([^)]+)\s*\)', 
-             r'view \1', 
+             r'view(\1)', 
              'make_their_to_view',
-             'Convert make_their() calls to view operators'),
+             'Convert make_their() calls to view() operations'),
             
-            # View expression patterns that might need fixing
-            (r'\bview\s*\(\s*([^)]+)\s*\)', 
-             r'view \1', 
-             'view_call_to_operator',
-             'Convert view() calls to view operators'),
+            # Prefix borrow/view syntax to function-call syntax
+            (r'\bview\s+([A-Za-z_][A-Za-z0-9_]*)\b(?=\s*[,.;)\]}]|$)', 
+             r'view(\1)', 
+             'view_prefix_to_call',
+             'Convert view expr to view(expr) syntax'),
             
-            (r'\bborrow\s*\(\s*([^)]+)\s*\)', 
-             r'borrow \1', 
-             'borrow_call_to_operator',
-             'Convert borrow() calls to borrow operators'),
+            (r'\bborrow\s+([A-Za-z_][A-Za-z0-9_]*)\b(?=\s*[,.;)\]}]|$)', 
+             r'borrow(\1)', 
+             'borrow_prefix_to_call',
+             'Convert borrow expr to borrow(expr) syntax'),
             
             # Documentation inconsistencies
             (r'\bmake_my\s+borrow\s+view', 

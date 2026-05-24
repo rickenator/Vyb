@@ -37,9 +37,9 @@ stack_peek(s<Stack>)<Int> -> {
 
 main()<Int> -> {
     s<Stack> = stack_new()
-    stack_push(borrow s, 10)
-    stack_push(borrow s, 20)
-    stack_push(borrow s, 30)
+    stack_push(borrow(s), 10)
+    stack_push(borrow(s), 20)
+    stack_push(borrow(s), 30)
 
     // Peek should return 30 without removing it
     top<Int> = stack_peek(s)

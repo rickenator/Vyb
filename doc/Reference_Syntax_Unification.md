@@ -20,10 +20,10 @@ Currently, Vyn has **three different syntaxes** for ownership and borrowing oper
    view "data"  
    ```
 
-3. **Keyword-style** (README.md examples):
+3. **Legacy prefix keyword-style** (deprecated; migrate to call syntax):
    ```vyn
-   view <expr>        // Creates their<T const>
-   borrow <expr>      // Creates their<T>
+   view(expr)         // Creates their<T const>
+   borrow(expr)       // Creates their<T>
    ```
 
 ## Unified Canonical Syntax
@@ -42,9 +42,9 @@ name<their<Type>>   = ...    // Borrowed reference type
 my(expression)              // Create unique ownership
 our(expression)             // Create shared ownership (reference counted)
 
-// BORROWING OPERATIONS - These are temporary reference operators
-borrow expression           // Create mutable borrow -> their<T>
-view expression             // Create immutable borrow -> their<T const>
+// BORROWING OPERATIONS - Canonical function-call syntax
+borrow(expression)          // Create mutable borrow -> their<T>
+view(expression)            // Create immutable borrow -> their<T const>
 ```
 
 > **Syntax Rationale**: The unified function-call syntax `my(expr)`, `our(expr)`, `view(expr)`, and `borrow(expr)` provides syntactic consistency across all ownership operations. This design makes the language more regular and predictable, simplifying both parser implementation and developer understanding. The function-call style clearly indicates these are fundamental language constructs while maintaining a clean, readable syntax.
@@ -76,7 +76,7 @@ main()<Void> -> {
 
 ### ✅ **Already Implemented:**
 - `my<T>`, `our<T>`, `their<T>` ownership types in type system
-- `borrow` and `view` keywords and expressions in parser
+- `borrow(expr)` and `view(expr)` borrow expressions in parser
 - `my()`, `our()` function-style constructors in examples
 
 ### ❌ **Legacy Syntax to Remove:**

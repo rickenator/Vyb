@@ -676,6 +676,21 @@ regular_array_literal:
                 return std::make_unique<ast::ObjectLiteral>(struct_loc, std::move(type_path_node), std::move(properties));
             } else {
                 // Plain Identifier (including ownership keywords treated as identifiers)
+                if ((current_id_token.type == TokenType::KEYWORD_VIEW || current_id_token.type == TokenType::KEYWORD_BORROW)) {
+                    size_t next_pos = pos_ + 1;
+                    while (next_pos < tokens_.size() &&
+                           (tokens_[next_pos].type == TokenType::COMMENT ||
+                            tokens_[next_pos].type == TokenType::NEWLINE ||
+                            tokens_[next_pos].type == TokenType::INDENT ||
+                            tokens_[next_pos].type == TokenType::DEDENT)) {
+                        next_pos++;
+                    }
+                    if (next_pos >= tokens_.size() || tokens_[next_pos].type != TokenType::LPAREN) {
+                        throw error(current_id_token,
+                            "Prefix '" + current_id_token.lexeme + " expr' syntax is no longer supported. Use '" +
+                            current_id_token.lexeme + "(expr)' instead.");
+                    }
+                }
                 token::Token id_token = consume(); // Consume IDENTIFIER or ownership keyword
                 return std::make_unique<ast::Identifier>(id_token.location, id_token.lexeme);
             }
@@ -1174,19 +1189,6 @@ regular_array_literal:
             return std::make_unique<ast::TypenameExpression>(typename_token.location, std::move(operand));
         }
         
-        // Handle view and borrow operators
-        if (match(TokenType::KEYWORD_VIEW)) {
-            token::Token view_token = previous_token();
-            vyn::ast::ExprPtr operand = parse_unary_expr();
-            return std::make_unique<ast::BorrowExpression>(view_token.location, std::move(operand), ast::BorrowKind::IMMUTABLE_VIEW);
-        }
-        
-        if (match(TokenType::KEYWORD_BORROW)) {
-            token::Token borrow_token = previous_token();
-            vyn::ast::ExprPtr operand = parse_unary_expr();
-            return std::make_unique<ast::BorrowExpression>(borrow_token.location, std::move(operand), ast::BorrowKind::MUTABLE_BORROW);
-        }
-        
         if (match(TokenType::BANG) || match(TokenType::MINUS) || match(TokenType::TILDE)) {
             token::Token op_token = previous_token();
             vyn::ast::ExprPtr operand = parse_unary_expr(); 
@@ -1230,6 +1232,29 @@ regular_array_literal:
                 if (expr->getType() == ast::NodeType::IDENTIFIER) {
                     auto id = static_cast<ast::Identifier*>(expr.get());
                     std::string name = id->name;
+
+                    // Handle safe borrow operations: view(expr), borrow(expr)
+                    if (name == "view" || name == "borrow") {
+                        std::vector<vyn::ast::ExprPtr> arguments;
+                        if (!check(TokenType::RPAREN)) {
+                            do {
+                                arguments.push_back(parse_expression());
+                            } while (match(TokenType::COMMA));
+                        }
+                        expect(TokenType::RPAREN);
+
+                        if (arguments.size() != 1) {
+                            vyn::token::Token intrinsic_token(vyn::TokenType::IDENTIFIER, name, id->loc);
+                            throw error(intrinsic_token,
+                                std::string("Intrinsic '") + name + "' expects 1 argument, got " + std::to_string(arguments.size()));
+                        }
+
+                        auto kind = (name == "borrow")
+                            ? ast::BorrowKind::MUTABLE_BORROW
+                            : ast::BorrowKind::IMMUTABLE_VIEW;
+                        expr = std::make_unique<ast::BorrowExpression>(op_loc, std::move(arguments[0]), kind);
+                        continue;
+                    }
 
                     // Handle intrinsic-like calls: loc(var), addr(loc_var), at(loc_var), lit(expr), notype(expr), bare(expr), deserial(expr)
                     if (name == "loc" || name == "addr" || name == "at" || name == "lit" || name == "notype" || name == "bare" || name == "deserial") {

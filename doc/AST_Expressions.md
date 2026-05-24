@@ -91,10 +91,9 @@ Intrinsics Parsed as CallExpression
 
 Several types of intrinsics are parsed as CallExpression nodes with specific `callee` identifiers:
 
-### Borrowing Intrinsics (shorthand)
+### Borrowing Intrinsics
 
-The `borrow owner` and `view owner` intrinsics are parsed as CallExpression nodes
-with `callee` matching the identifier `borrow` or `view` and a single argument.
+The canonical `borrow(expr)` and `view(expr)` forms are parsed as `BorrowExpression` nodes.
 They produce `their<T>` or `their<T const>` respectively.
 
 ### Serialization Mode Intrinsics
