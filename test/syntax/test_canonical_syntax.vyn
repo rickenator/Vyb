@@ -8,7 +8,8 @@ main()<Int> -> {
     
     # Test view() borrowing
     readonly<their<String const>> = view(data)
-    length<Int> = 11
+    plain<String> = "hello world"
+    length<Int> = plain.len()
     
     println("Data:", data)
     println("Length:", length)
