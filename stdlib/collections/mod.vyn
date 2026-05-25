@@ -1,0 +1,6 @@
+# collections placeholder until collection modules are split into dedicated files.
+
+share(all)
+collections_status_message()<String> -> {
+    return "collections module scaffolded"
+}

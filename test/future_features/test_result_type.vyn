@@ -4,6 +4,10 @@
 // @expect: fail
 // @tags: future, unimplemented
 
+// Transitional note:
+// `core::result` currently exists as a placeholder module only.
+// Canonical generic `Result<T,E>` remains intentionally unimplemented.
+//
 // When implemented, Result<T,E> will work like:
 //
 //   parse_int(s<String>)<Result<Int,String>> -> {
@@ -20,6 +24,8 @@
 //       }
 //       return 0
 //   }
+
+import core::result
 
 main()<Int> -> {
     r<Result<Int,String>> = Ok(42)

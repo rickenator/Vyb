@@ -1,0 +1,9 @@
+// @test: Stdlib prelude is not auto-imported
+// @description: using a prelude symbol without importing prelude fails in current explicit-only model
+// @category: modules
+// @expect: fail
+// @expect-error: Undefined identifier: prelude_ok
+
+main()<Int> -> {
+    return prelude_ok()
+}
