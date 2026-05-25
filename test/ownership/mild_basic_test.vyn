@@ -1,5 +1,5 @@
 # Test basic mild<T> functionality with soft()
-# This is a minimal test - full functionality (grab(), released()) to be implemented
+# soft() now creates a weak handle tied to the our<T> control block.
 
 struct Node {
     value<Int>

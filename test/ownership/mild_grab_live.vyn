@@ -1,0 +1,19 @@
+// @test: mild grab upgrades live owner
+// @description: mild<T>.grab() returns an our<T> control-block handle while the target is still live
+// @category: ownership, mild
+// @expect: pass
+// @expect-return: 0
+
+struct Node {
+    value<Int>
+}
+
+main()<Int> -> {
+    owner<our<Node>> = our(Node { value: 33 })
+    weak<mild<Node>> = soft(owner)
+    grabbed<our<Node>> = weak.grab()
+    if (grabbed.value == 33) {
+        return 0
+    }
+    return 1
+}

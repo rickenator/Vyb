@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-MILESTONE_MINIMUM = 136
+MILESTONE_MINIMUM = 156
 
 
 @dataclass(frozen=True)
@@ -31,6 +31,7 @@ MILESTONE_SUITES = [
     Suite("new_features", "test/new_features"),
     Suite("modules", "test/modules"),
     Suite("ffi", "test/ffi"),
+    Suite("ownership", "test/ownership"),
     Suite("error_trap_phase2", "test/error_trap/phase2"),
     Suite("trap_propagation", "test/trap", pattern="propagation_no_trap.vyn"),
     Suite("trap_untrapped_main", "test/trap", pattern="propagation_to_main.vyn"),

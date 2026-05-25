@@ -3182,6 +3182,7 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
         
         llvm::Value* structPtr = nullptr;
         llvm::Type* structType = nullptr;
+        bool objectIsOurControlBlock = false;
         
         // Check if the object is a pointer to a struct (alloca) or actual struct value
         if (objectValue->getType()->isPointerTy()) {
@@ -3211,6 +3212,7 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
                                      typeNameStr == "borrow" || typeNameStr == "view") && 
                                     !typeNameNode->genericArgs.empty() && typeNameNode->genericArgs[0]) {
                                     underlyingType = typeNameNode->genericArgs[0].get();
+                                    objectIsOurControlBlock = typeNameStr == "our";
                                     VYN_CDBG << "DEBUG: Extracted underlying type from ownership type: " << typeNameStr 
                                               << " -> " << underlyingType->toString() << std::endl;
                                 }
@@ -3264,6 +3266,19 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
         }
 
         llvm::StructType* llvmStructType = llvm::cast<llvm::StructType>(structType);
+        if (objectIsOurControlBlock) {
+            // our<T> is represented as a control-block pointer. Field access
+            // goes through the payload pointer stored in the block.
+            std::vector<llvm::Type*> cbFields = {
+                llvm::Type::getInt32Ty(*context),
+                llvm::Type::getInt32Ty(*context),
+                llvm::Type::getInt8Ty(*context),
+                llvm::PointerType::get(*context, 0)
+            };
+            llvm::StructType* controlBlockType = llvm::StructType::get(*context, cbFields, /*isPacked=*/false);
+            llvm::Value* objectPtrFieldPtr = builder->CreateStructGEP(controlBlockType, structPtr, 3, "our.object_ptr_field");
+            structPtr = builder->CreateLoad(llvm::PointerType::get(*context, 0), objectPtrFieldPtr, "our.object_ptr");
+        }
         std::string fieldName = propIdent->name;
         int fieldIndex = getStructFieldIndex(llvmStructType, fieldName);
 

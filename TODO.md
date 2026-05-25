@@ -27,8 +27,8 @@ is the working audit for what needs to be implemented next.
 | Type system (primitives + generics) | ~75% | Higher-kinded types |
 | Struct system | ~85% | repr(C) for FFI |
 | Ownership types (syntax + parsing) | ~80% | Semantic enforcement |
-| Ownership types (runtime enforcement) | ~30% | Full lifecycle checking |
-| `mild<T>` weak references | ~20% | Control block runtime |
+| Ownership types (runtime enforcement) | ~45% | Full move/copy/drop checking |
+| `mild<T>` weak references | ~60% | Minimal control blocks done; Option-like failed upgrade and full copy/drop semantics remain |
 | Aspect/bind system | ~65% | Associated types, dyn dispatch |
 | Generic monomorphization | ~70% | Bounds-checked instantiation |
 | Async/await | ~80% | Real scheduler/executor |
@@ -118,8 +118,8 @@ is the working audit for what needs to be implemented next.
 ### Memory & Ownership
 - [x] **`freedom` blocks** — `freedom { ... }` for programmer-controlled sections (not `unsafe`)
 - [x] **`loc<T>` raw pointers** — Scoped to `freedom` blocks only
-- [x] **`view(expr)`/`borrow(expr)`** — Parsed; semantic validation in progress
-- [x] **`soft(expr)`** — Creates `mild<T>` from `our<T>` (parsed)
+- [x] **`view(expr)`/`borrow(expr)`** — Canonical call syntax with lexical borrow validation
+- [x] **`soft(expr)`** — Creates `mild<T>` from `our<T>` and attaches to the shared control block
 
 ### Aspect/Bind System (Vyn's Polymorphism)
 - [x] **`aspect` declarations** — Method signatures, optional default implementations
@@ -233,12 +233,12 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
 
 ### 3. Ownership Types — Runtime Enforcement (HIGH PRIORITY)
 - [ ] **`my<T>` move semantics** — Enforce single-owner at compile time; error on copy
-- [ ] **`our<T>` reference counting** — Atomic strong_count; drop when 0
+- [ ] **`our<T>` reference counting** — Minimal control-block strong_count exists for `our()`/`grab()`/scope cleanup; full copy/assignment/parameter semantics remain
 - [x] **`their<T>` borrow checker (lexical phase)** — borrow/view require lvalues, reject overlapping mutable/view borrows, reject assignment while borrowed
-- [ ] **`mild<T>` control block** — weak_count + "released" flag; `grab()` and `released()`
+- [x] **`mild<T>` control block (minimal runtime)** — `soft()` increments weak_count, `released()` observes release after strong owner scope exit, and live `grab()` upgrades by incrementing strong_count
 - [x] **`view(expr)` semantic (lexical phase)** — Creates `their<T>` view and participates in borrow conflict checks
 - [x] **`borrow(expr)` semantic (lexical phase)** — Creates mutable `their<T>` and participates in borrow conflict checks
-- [ ] **`soft(expr)` semantic** — Creates `mild<T>` from `our<T>`; enforced
+- [x] **`soft(expr)` semantic** — Creates `mild<T>` from `our<T>`; enforced
 
 ### 4. Standard Library Expansion (HIGH PRIORITY)
 - [ ] **`Option<T>`** — `Some(value)` / `None` for nullable values
@@ -519,7 +519,7 @@ For Vyn to be considered production-ready at 1.0, **all of the following must be
 - [x] Module system core working (`import`, `smuggle`, `bundle`, `share`, module paths, stdlib discovery)
 - [ ] Lambda/closure codegen complete
 - [ ] Ownership types runtime-enforced (borrow checking, move semantics)
-- [ ] `mild<T>` control block implemented with `grab()` and `released()`
+- [x] Minimal `mild<T>` control block implemented with `soft()`, `grab()`, and `released()`
 - [x] Error propagation (Phases 2-5) complete
 - [ ] `Option<T>` and `Result<T, E>` in stdlib
 - [ ] Core aspects (`Display`, `Debug`, `Clone`, `Equatable`, `Comparable`, `Hashable`)

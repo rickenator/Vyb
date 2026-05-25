@@ -40,20 +40,28 @@ struct Node {
 
 ## Key Methods
 
-### `grab() -> our<T>?`
+### `grab() -> our<T>` (nullable placeholder until `Option<T>`)
 
-Attempts to upgrade the mild reference to a strong reference. Returns `our<T>` if the target is still alive, or `nil` if it has been released.
+Attempts to upgrade the mild reference to a strong reference. The intended 1.0
+contract is to return `our<T>` when the target is live and an Option-like empty
+value when it has been released.
+
+Current implementation note: Vyn does not yet have a first-class `Option<T>` or
+nullable binding syntax. Today `grab()` returns an `our<T>` control-block handle
+when the target is live and a null `our<T>` placeholder when it has been
+released. Code should check `released()` before dereferencing a grabbed value.
+The intended 1.0 shape remains an Option-like result once sum types are
+available.
 
 ```vyn
 node<our<Node>> = get_node()
 shadow<mild<Node>> = soft(node)
 
-# Try to access the object
-if (strong<our<Node>> = shadow.grab()) {
-    # Success! Object is still alive
+# Try to access the object using today's current-language convention
+if (!shadow.released()) {
+    strong<our<Node>> = shadow.grab()
     println(strong.value)
 } else {
-    # Object was destroyed
     println("Node no longer exists")
 }
 ```
@@ -153,6 +161,31 @@ fn insert_after(node: our<ListNode>, new_node: our<ListNode>) -> Void {
 ```
 
 ## Implementation Details
+
+### Current Implementation Status
+
+Vyn now has a minimal real runtime model for `our<T>` / `mild<T>`:
+
+- `our(expr)` allocates the payload and a control block.
+- `soft(ourValue)` increments `weak_count` and returns a `mild<T>` handle tied
+  to the same control block.
+- `mild<T>.released()` reads the control block release flag.
+- `mild<T>.grab()` increments `strong_count` and returns an `our<T>` handle when
+  the payload is live.
+- When the last local strong owner in a scope is cleaned up, the payload is
+  freed and the control block is marked released while weak handles remain.
+- Returning a local `our<T>` or `mild<T>` transfers that local handle to the
+  caller instead of cleaning it up before return.
+
+Remaining limitations:
+
+- Failed `grab()` uses a null `our<T>` placeholder because `Option<T>` is not
+  implemented yet.
+- Full `our<T>` copy/assignment/parameter reference-count semantics are still
+  incomplete.
+- Full `my<T>` move semantics and a complete ownership transfer checker remain
+  future work.
+- Control-block cleanup is minimal and focused on current scope/return paths.
 
 ### Control Block Structure
 

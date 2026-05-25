@@ -86,6 +86,18 @@ expect-fail tests are treated as stronger evidence than optimistic status text.
   empty `Vec<Int>`. Added `test/new_features/test_vec_pop_returns_value.vyn`
   and `test/new_features/test_vec_pop_empty.vyn`, then raised the milestone
   floor to 136.
+- 2026-05-24: Implemented the first real `our<T>` / `mild<T>` control-block
+  runtime slice. `our(expr)` now backs shared owners with a payload pointer and
+  strong/weak/released metadata, `soft(ourValue)` increments weak_count,
+  `mild<T>.released()` observes the released flag after the final local strong
+  owner leaves scope, and `mild<T>.grab()` upgrades live weak handles by
+  incrementing strong_count. Returning local `our<T>`/`mild<T>` now transfers
+  that handle instead of cleaning it up before return, and `our<T>` member
+  access unwraps through the control block payload pointer. Added focused
+  ownership regressions for live/released `released()` and `grab()` behavior,
+  promoted `test/ownership` into the milestone gate, and raised the milestone
+  floor to 156. Current limitation: failed `grab()` returns a null `our<T>`
+  placeholder until Vyn has first-class `Option<T>`/nullable result syntax.
 
 ## Audit Scope
 
@@ -120,8 +132,8 @@ Source areas checked:
 |----|------|----------|------------------------------|----------|
 | I-001 | Module system | P0 | Formalize the source-level module resolver into a `ModuleRegistry`/AST metadata model, add module path search (`VYN_MODULE_PATH`, CLI), stdlib auto-discovery, and better duplicate-import caching. Local loading, cycle checks, `bundle(...)`, `share(...)`, selective aliases, and explicit re-exports now work. | `doc/MODULE_FFI_BINARY_ROADMAP.md`; source resolver lives in `src/main.cpp`; semantic/codegen import visitors remain no-ops after pre-resolution. |
 | I-002 | FFI | P0 | Continue FFI after extern block/ABI alias support: `repr(C)` structs, variadic calls, `--link` support, explicit `String::as_c_str()`, and broader end-to-end FFI tests. | Source now supports extern C blocks, host process symbol lookup, freedom-gated direct calls, C scalar/pointer aliases, and a narrow String-to-C-string call path, but still lacks variadic/repr(C)/linker flow. |
-| I-003 | Ownership runtime | P0 | Extend lexical borrow checks into full ownership: `my<T>` moves, `our<T>` strong ref counts, deeper `their<T>` lifetime analysis, `mild<T>` cleanup, and `soft()` conversion rules. | `TODO.md`; `doc/mem_RFC.md`; current semantic pass now checks lvalue borrows, overlapping mutable/view borrows, and assignment while borrowed. |
-| I-004 | `mild<T>` weak references | P0 | Implement real control blocks, `weak_count`, released state, valid `grab()` upgrade to `our<T>`, and cleanup when strong/weak counts reach zero. | `doc/OWNERSHIP_MILD.md`; `examples/README.md`; `test/ownership/mild_methods_test.vyn` and examples describe current stubs. |
+| I-003 | Ownership runtime | P0 | Extend lexical borrow checks and the initial `our<T>`/`mild<T>` control-block runtime into full ownership: `my<T>` moves, complete `our<T>` copy/assignment/parameter strong-count semantics, deeper `their<T>` lifetime analysis, and comprehensive cleanup. | `TODO.md`; `doc/mem_RFC.md`; current semantic pass checks lvalue borrows, overlapping mutable/view borrows, and assignment while borrowed; current codegen supports minimal control blocks for `our()`, `soft()`, `released()`, and live `grab()`. |
+| I-004 | `mild<T>` weak references | P0 | Complete the remaining weak-reference contract: Option-like failed `grab()`, full weak handle copy/drop accounting across all assignment paths, and final control-block cleanup once strong/weak counts reach zero. | `doc/OWNERSHIP_MILD.md`; `test/ownership/mild_released_live.vyn`; `test/ownership/mild_released_after_drop_or_scope.vyn`; `test/ownership/mild_grab_live.vyn`; `test/ownership/mild_grab_released.vyn`. |
 | I-005 | Error propagation/runtime errors | P0 | Finish cross-function error propagation, construct real `VynError` objects at `fail`, preserve type/data/source location, print detailed untrapped errors, and settle Result-vs-fail/trap design conflict. | `doc/ERROR_PROPAGATION_DESIGN.md`; `test/trap/TEST_RESULTS.md`; `src/runtime/error_handling.cpp` says error structure is not implemented. |
 | I-006 | Defer/runtime cleanup | P0 | Decide whether runtime defer/ensure stacks are needed; implement runtime defer stack if `defer` must survive fail/unwind paths. | `src/runtime/error_handling.cpp` has defer/ensure stubs; `src/vre/llvm/cgen_stmt.cpp` stores defers in a codegen stack. |
 | I-007 | Aspect completion | P0 | Associated types, aspect objects/dynamic dispatch, aspect inheritance, bounded bind selection precedence, and method monomorphization for generic binds. | `TODO.md`; `doc/ASPECT_BOUNDS.md`; `test/aspect/PHASE_6_ROADMAP.md`; semantic monomorphization has TODO/stub paths. |

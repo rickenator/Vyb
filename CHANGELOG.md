@@ -18,11 +18,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `test/error_trap/phase2` is now part of the required gate.
   - Focused trap fixtures now cover propagated calls, failable `main`, defer cleanup on propagated fail, and non-failable caller rejection.
 - `Vec::pop()` now returns the removed primitive value instead of a placeholder and safely returns the default value for empty `Vec<Int>`.
+- Minimal `our<T>` / `mild<T>` control-block runtime:
+  - `our(expr)` allocates a payload plus strong/weak/released metadata.
+  - `soft(ourValue)` creates a `mild<T>` handle by incrementing weak_count.
+  - `mild<T>.released()` now observes release after the local strong owner is dropped.
+  - `mild<T>.grab()` upgrades live weak handles to `our<T>` and returns a null `our<T>` placeholder for released targets until `Option<T>` exists.
 
 ### Changed
 - Runtime `__vyn_runtime_untrapped_error` now reports error type, JSON payload, fail source location, and honors `exitCode<Int>` payload fields.
 - JIT `main` dispatch now checks failable-main error tuple returns and routes non-null errors to the untrapped runtime handler.
-- Milestone minimum raised from 126 to 136 passing tests.
+- Returning a local `our<T>` or `mild<T>` now transfers the handle to the caller instead of cleaning it up before return.
+- `our<T>` member access now unwraps through the control block payload pointer before loading fields.
+- Milestone minimum raised from 126 to 156 passing tests.
 
 ## [0.5.0] - 2026-02-24 (freedom-1.0 series)
 

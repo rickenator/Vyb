@@ -1,0 +1,23 @@
+// @test: mild released true after owner scope ends
+// @description: Returned mild<T> keeps the control block alive and observes release after the local our<T> is dropped
+// @category: ownership, mild
+// @expect: pass
+// @expect-return: 0
+
+struct Node {
+    value<Int>
+}
+
+make_weak()<mild<Node>> -> {
+    owner<our<Node>> = our(Node { value: 22 })
+    weak<mild<Node>> = soft(owner)
+    return weak
+}
+
+main()<Int> -> {
+    weak<mild<Node>> = make_weak()
+    if (weak.released()) {
+        return 0
+    }
+    return 1
+}

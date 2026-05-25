@@ -1,0 +1,24 @@
+// @test: mild grab released target is safe
+// @description: mild<T>.grab() on a released target returns the current null our<T> placeholder without extending lifetime
+// @category: ownership, mild
+// @expect: pass
+// @expect-return: 0
+
+struct Node {
+    value<Int>
+}
+
+make_weak()<mild<Node>> -> {
+    owner<our<Node>> = our(Node { value: 44 })
+    weak<mild<Node>> = soft(owner)
+    return weak
+}
+
+main()<Int> -> {
+    weak<mild<Node>> = make_weak()
+    grabbed<our<Node>> = weak.grab()
+    if (weak.released()) {
+        return 0
+    }
+    return 1
+}

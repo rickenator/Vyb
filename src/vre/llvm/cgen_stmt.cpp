@@ -290,14 +290,19 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                 // This prevents the block scope cleanup from happening after the terminator
                 if (!scopeStack.empty()) {
                     VYN_CDBG << "DEBUG: Cleaning up current scope before return" << std::endl;
-                    // If returning a Vec variable, skip its cleanup to avoid double-free
-                    // (ownership is transferred to the caller)
+                    // If returning an owning variable, skip its local cleanup because
+                    // ownership of that binding is transferred to the caller.
                     if (node->argument) {
                         if (auto* retIdent = dynamic_cast<ast::Identifier*>(node->argument.get())) {
                             const std::string& retVarName = retIdent->name;
                             for (auto& scopeVars : scopeStack) {
                                 for (auto& var : scopeVars) {
-                                    if (var.name == retVarName && var.isVecWithMallocData) {
+                                    bool transfersOwnership =
+                                        var.name == retVarName &&
+                                        (var.isVecWithMallocData ||
+                                         var.ownership == ast::OwnershipKind::OUR ||
+                                         var.ownership == ast::OwnershipKind::MILD);
+                                    if (transfersOwnership) {
                                         var.needsCleanup = false;
                                         var.isVecWithMallocData = false;
                                     }

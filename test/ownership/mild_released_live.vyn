@@ -1,0 +1,18 @@
+// @test: mild released false while owner is live
+// @description: soft(our<T>) creates a mild<T> tied to a live control block
+// @category: ownership, mild
+// @expect: pass
+// @expect-return: 0
+
+struct Node {
+    value<Int>
+}
+
+main()<Int> -> {
+    owner<our<Node>> = our(Node { value: 11 })
+    weak<mild<Node>> = soft(owner)
+    if (!weak.released()) {
+        return 0
+    }
+    return 1
+}

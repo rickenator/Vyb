@@ -63,7 +63,7 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 | Enums | ✅ | C-like integer enums: variants map to sequential `i64` constants; `Enum::Variant` access works; tagged unions (data variants) planned for v0.6 |
 | Generics (monomorphization) | ✅ | |
 | Aspect/Bind polymorphism | ✅ | |
-| Ownership: `my`, `our`, `their`, `mild` | 🚧 | Syntax/runtime pieces plus lexical borrow enforcement; full move/drop checker still planned |
+| Ownership: `my`, `our`, `their`, `mild` | 🚧 | Lexical borrow enforcement plus minimal `our<T>`/`mild<T>` control blocks; full move/copy/drop checker still planned |
 | `freedom` blocks + `loc<T>` raw pointers | ✅ | |
 | `match` / `select` expressions | ✅ | |
 | `defer` | ✅ | |
