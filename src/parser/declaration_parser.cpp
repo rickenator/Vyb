@@ -768,16 +768,28 @@ std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_trait_declaratio
     this->expect(vyn::TokenType::LBRACE);
     this->skip_comments_and_newlines();
     
-    // Parse trait methods
+    // Parse trait members
+    std::vector<std::unique_ptr<ast::Identifier>> associated_types;
     std::vector<std::unique_ptr<ast::FunctionDeclaration>> methods;
     
     while (this->peek().type != vyn::TokenType::RBRACE && this->peek().type != vyn::TokenType::END_OF_FILE) {
-        // Parse method declaration (may or may not have a body for default implementations)
-        auto method = this->parse_function();
-        if (!method) {
-            throw std::runtime_error("Failed to parse trait method in trait '" + name->name + "' at " + location_to_string(this->current_location()));
+        if (this->peek().type == vyn::TokenType::KEYWORD_TYPE) {
+            SourceLocation associated_type_loc = this->current_location();
+            this->consume(); // consume 'type'
+
+            if (this->peek().type != vyn::TokenType::IDENTIFIER) {
+                throw std::runtime_error("Expected associated type name in aspect '" + name->name + "' at " + location_to_string(this->current_location()));
+            }
+
+            associated_types.push_back(std::make_unique<ast::Identifier>(associated_type_loc, this->consume().lexeme));
+        } else {
+            // Parse method declaration (may or may not have a body for default implementations)
+            auto method = this->parse_function();
+            if (!method) {
+                throw std::runtime_error("Failed to parse trait method in trait '" + name->name + "' at " + location_to_string(this->current_location()));
+            }
+            methods.push_back(std::move(method));
         }
-        methods.push_back(std::move(method));
         
         // Optional comma or semicolon after method declaration - not required (consistent with struct fields)
         this->match(vyn::TokenType::COMMA);
@@ -788,7 +800,7 @@ std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_trait_declaratio
     
     this->expect(vyn::TokenType::RBRACE);
     
-    return std::make_unique<ast::AspectDeclaration>(loc, std::move(name), std::move(generic_params), std::move(methods));
+    return std::make_unique<ast::AspectDeclaration>(loc, std::move(name), std::move(generic_params), std::move(associated_types), std::move(methods));
 }
 
 // ImplDeclNode not in ast.hpp. Assuming a Declaration type for it.
@@ -815,9 +827,35 @@ std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_impl() {
     }
 
     this->expect(vyn::TokenType::LBRACE);
+    std::vector<ast::BindDeclaration::AssociatedTypeBinding> associated_type_bindings;
     std::vector<std::unique_ptr<ast::FunctionDeclaration>> methods;
     while (!this->check(vyn::TokenType::RBRACE) && !this->IsAtEnd()) {
-        methods.push_back(this->parse_function());
+        if (this->peek().type == vyn::TokenType::KEYWORD_TYPE) {
+            SourceLocation associated_type_loc = this->current_location();
+            this->consume(); // consume 'type'
+
+            if (this->peek().type != vyn::TokenType::IDENTIFIER) {
+                throw std::runtime_error("Expected associated type name in bind block at " + location_to_string(this->current_location()));
+            }
+            auto associated_type_name = std::make_unique<ast::Identifier>(this->current_location(), this->consume().lexeme);
+
+            if (!this->match(vyn::TokenType::EQ)) {
+                throw std::runtime_error("Expected '=' after associated type name in bind block at " + location_to_string(this->current_location()));
+            }
+
+            auto associated_type_value = this->type_parser_.parse();
+            if (!associated_type_value) {
+                throw std::runtime_error("Expected type after '=' in bind associated type assignment at " + location_to_string(this->current_location()));
+            }
+
+            ast::BindDeclaration::AssociatedTypeBinding binding;
+            binding.name = std::move(associated_type_name);
+            binding.valueType = std::move(associated_type_value);
+            associated_type_bindings.push_back(std::move(binding));
+        } else {
+            methods.push_back(this->parse_function());
+        }
+
         // Optional comma or semicolon after method declaration - not required
         this->match(vyn::TokenType::COMMA);
         this->match(vyn::TokenType::SEMICOLON);
@@ -825,7 +863,7 @@ std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_impl() {
     }
     this->expect(vyn::TokenType::RBRACE);
 
-    return std::make_unique<ast::BindDeclaration>(loc, std::move(self_type_node), std::move(methods), nullptr, std::move(generic_params), std::move(trait_type_node));
+    return std::make_unique<ast::BindDeclaration>(loc, std::move(self_type_node), std::move(methods), std::move(associated_type_bindings), nullptr, std::move(generic_params), std::move(trait_type_node));
 }
 
 

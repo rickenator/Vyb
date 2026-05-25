@@ -1209,13 +1209,19 @@ public:
 // BindDeclaration
 class BindDeclaration : public Declaration {
 public:
+    struct AssociatedTypeBinding {
+        std::unique_ptr<Identifier> name;
+        TypeNodePtr valueType;
+    };
+
     std::unique_ptr<Identifier> name; // Optional name for the bind block (less common)
     std::vector<std::unique_ptr<GenericParameter>> genericParams;
     TypeNodePtr traitType; // Optional: if implementing an aspect (e.g., bind MyAspect -> MyType)
     TypeNodePtr selfType;  // The type for which methods are being implemented (e.g., MyType)
+    std::vector<AssociatedTypeBinding> associatedTypeBindings;
     std::vector<std::unique_ptr<FunctionDeclaration>> methods;
 
-    BindDeclaration(SourceLocation loc, TypeNodePtr selfType, std::vector<std::unique_ptr<FunctionDeclaration>> methods, std::unique_ptr<Identifier> name = nullptr, std::vector<std::unique_ptr<GenericParameter>> genericParams = {}, TypeNodePtr traitType = nullptr);
+    BindDeclaration(SourceLocation loc, TypeNodePtr selfType, std::vector<std::unique_ptr<FunctionDeclaration>> methods, std::vector<AssociatedTypeBinding> associatedTypeBindings = {}, std::unique_ptr<Identifier> name = nullptr, std::vector<std::unique_ptr<GenericParameter>> genericParams = {}, TypeNodePtr traitType = nullptr);
     ~BindDeclaration() override = default;
     NodeType getType() const override;
     std::string toString() const override;
@@ -1458,9 +1464,10 @@ class AspectDeclaration : public Declaration {
 public:
     std::unique_ptr<Identifier> name;
     std::vector<std::unique_ptr<GenericParameter>> genericParams;
+    std::vector<std::unique_ptr<Identifier>> associatedTypes;
     std::vector<std::unique_ptr<FunctionDeclaration>> methods;
 
-    AspectDeclaration(SourceLocation loc, std::unique_ptr<Identifier> name, std::vector<std::unique_ptr<GenericParameter>> genericParams, std::vector<std::unique_ptr<FunctionDeclaration>> methods);
+    AspectDeclaration(SourceLocation loc, std::unique_ptr<Identifier> name, std::vector<std::unique_ptr<GenericParameter>> genericParams, std::vector<std::unique_ptr<Identifier>> associatedTypes, std::vector<std::unique_ptr<FunctionDeclaration>> methods);
     ~AspectDeclaration() override = default;
     NodeType getType() const override;
     std::string toString() const override;

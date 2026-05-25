@@ -152,6 +152,7 @@ struct GenericImplInfo {
     std::vector<std::string> typeParams; // e.g., ["T"]
     ast::BindDeclaration* declaration; // Original AST node
     std::map<std::string, ast::FunctionDeclaration*> methods; // method name -> AST
+    std::map<std::string, ast::TypeNode*> associatedTypeBindings; // associated type name -> assigned type AST
     
     GenericImplInfo(ast::BindDeclaration* decl) : declaration(decl) {
         if (decl->selfType) {
@@ -174,6 +175,12 @@ struct GenericImplInfo {
                 methods[method->id->name] = method.get();
             }
         }
+
+        for (const auto& assocBinding : decl->associatedTypeBindings) {
+            if (assocBinding.name && assocBinding.valueType) {
+                associatedTypeBindings[assocBinding.name->name] = assocBinding.valueType.get();
+            }
+        }
     }
 };
 
@@ -192,6 +199,7 @@ struct TraitInfo {
     std::string name;
     std::vector<std::string> genericParams;
     std::vector<std::string> superTraits; // Aspect inheritance
+    std::vector<std::string> associatedTypes;
     std::vector<TraitMethod> methods;
     ast::AspectDeclaration* declaration; // Original AST node
     
@@ -204,6 +212,12 @@ struct TraitInfo {
         for (const auto& param : decl->genericParams) {
             if (param && param->name) {
                 genericParams.push_back(param->name->name);
+            }
+        }
+
+        for (const auto& associatedType : decl->associatedTypes) {
+            if (associatedType) {
+                associatedTypes.push_back(associatedType->name);
             }
         }
         
@@ -404,6 +418,9 @@ private:
     // Generic trait implementation registry: stores templates like impl<T> Display for Box<T>
     // Maps "Box<T>" -> "Display" -> GenericImplInfo
     std::unordered_map<std::string, std::unordered_map<std::string, std::unique_ptr<GenericImplInfo>>> genericTraitImpls;
+
+    // Associated type assignments for concrete binds: type -> aspect -> associated type -> value type
+    std::unordered_map<std::string, std::unordered_map<std::string, std::unordered_map<std::string, ast::TypeNode*>>> traitAssociatedTypeImpls;
     
     // Struct field type storage for member access resolution
     std::unordered_map<std::string, std::map<std::string, ast::TypeNode*>> structFieldTypes;
@@ -413,6 +430,8 @@ private:
     
     // Context for resolving 'Self' type in aspect implementations
     ast::TypeNode* currentImplType = nullptr;  // Set to Box<T> when processing bind Display -> Box<T>
+    std::string currentImplTraitName;          // Set to Display when processing bind Display -> Type
+    std::unordered_map<std::string, ast::TypeNode*> currentImplAssociatedTypeBindings;
     bool processingTraitOrBindMethod = false;  // True when visiting methods inside aspect or bind
     
     // Error handling context
@@ -475,9 +494,16 @@ private:
     TraitInfo* findTrait(const std::string& traitName);
     void registerTraitImpl(ast::BindDeclaration* implDecl);
     bool validateTraitImpl(const std::string& typeName, const std::string& traitName,
-                          const std::vector<std::unique_ptr<ast::FunctionDeclaration>>& methods);
+                          const std::vector<std::unique_ptr<ast::FunctionDeclaration>>& methods,
+                          const std::vector<ast::BindDeclaration::AssociatedTypeBinding>& associatedTypeBindings,
+                          const ast::BindDeclaration* bindDecl);
     bool traitMethodSignatureMatches(const TraitMethod& traitMethod,
-                                    ast::FunctionDeclaration* implMethod);
+                                    ast::FunctionDeclaration* implMethod,
+                                    const std::unordered_map<std::string, std::string>& associatedTypeBindings);
+    std::string resolveAssociatedTypeReference(const std::string& typeName,
+                                              const std::string& traitName,
+                                              const std::string& typeReference,
+                                              const std::unordered_map<std::string, ast::TypeNode*>* inlineAssociatedTypeBindings = nullptr) const;
     
     // Pattern matching helper for generic type matching
     // Returns true if concrete type (e.g., "Box<Int>") matches pattern (e.g., "Box<T>")
