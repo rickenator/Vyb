@@ -12,7 +12,7 @@ main()<Int> -> {
         b<their<Int>> = borrow(x)
     }
     {
-        v<their<Int>> = view(x)
+        v<their<Int const>> = view(x)
     }
 
     println("memory value = " + x.to_string())
