@@ -192,6 +192,38 @@ bind<T<Aspect1, Aspect2>> Aspect -> Type<T> { ... }
 functionName<T<Aspect1, Aspect2>>(param<T>)<ReturnType> -> { ... }
 ```
 
+## Associated Types (First Practical Slice)
+
+Associated types can now be declared on aspects and assigned in binds.
+
+```vyn
+aspect Iterator {
+    type Item
+    next(self<Self>)<Self::Item>
+}
+
+bind Iterator -> CounterIter {
+    type Item = Int
+
+    next(self<CounterIter>)<Int> -> {
+        current<Iterator::Item> = self.value
+        return current
+    }
+}
+```
+
+### Current validation
+
+- Missing associated type assignment in a `bind` is a semantic error.
+- Unknown associated type assignment in a `bind` is a semantic error.
+- Duplicate associated type assignment in the same `bind` is a semantic error.
+
+### Current limitations (not in this slice)
+
+- No associated type defaults.
+- No where-clause-style associated type constraints.
+- No `dyn Aspect` associated type dispatch support.
+
 ## Implementation Status
 
 ### ✅ Completed (v0.4.1)
@@ -200,13 +232,14 @@ functionName<T<Aspect1, Aspect2>>(param<T>)<ReturnType> -> { ... }
 - Bounds stored in symbol table for type parameters
 - Error reporting for invalid bounds
 - Method calls on bounded type parameters allowed
+- First associated-type slice: declarations in `aspect`, assignments in `bind`, and semantic diagnostics for missing/unknown/duplicate assignments
 
 ### ⏳ In Progress
 - Monomorphization with bounds checking
 - Bind selection based on bounds satisfaction
 
 ### 📋 Planned
-- Associated types in bounds
+- Associated type defaults and richer associated-type bounds/constraints
 - Trait objects for dynamic dispatch
 - Higher-order bounds
 

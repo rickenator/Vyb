@@ -1285,8 +1285,8 @@ void ClassDeclaration::accept(Visitor& visitor) {
 
 // --- BindDeclaration ---
 // ... existing code ...
-BindDeclaration::BindDeclaration(SourceLocation loc, TypeNodePtr self_ty, std::vector<std::unique_ptr<FunctionDeclaration>> meths, std::unique_ptr<Identifier> n, std::vector<std::unique_ptr<GenericParameter>> gp, TypeNodePtr trait_ty)
-    : Declaration(loc), selfType(std::move(self_ty)), methods(std::move(meths)), name(std::move(n)), genericParams(std::move(gp)), traitType(std::move(trait_ty)) {}
+BindDeclaration::BindDeclaration(SourceLocation loc, TypeNodePtr self_ty, std::vector<AssociatedTypeBinding> assoc_type_bindings, std::vector<std::unique_ptr<FunctionDeclaration>> meths, std::unique_ptr<Identifier> n, std::vector<std::unique_ptr<GenericParameter>> gp, TypeNodePtr trait_ty)
+    : Declaration(loc), selfType(std::move(self_ty)), associatedTypeBindings(std::move(assoc_type_bindings)), methods(std::move(meths)), name(std::move(n)), genericParams(std::move(gp)), traitType(std::move(trait_ty)) {}
 
 NodeType BindDeclaration::getType() const {
     return NodeType::BIND_DECLARATION;
@@ -1311,6 +1311,11 @@ std::string BindDeclaration::toString() const {
         ss << " as " << name->toString();
     }
     ss << " {\n";
+    for (const auto& assocBinding : associatedTypeBindings) {
+        if (assocBinding.name && assocBinding.valueType) {
+            ss << "  type " << assocBinding.name->toString() << " = " << assocBinding.valueType->toString() << "\n";
+        }
+    }
     for (const auto& method : methods) {
         if (method) {
             // Basic indentation
@@ -1677,8 +1682,8 @@ void MatchStatement::accept(Visitor& visitor) {
 }
 
 // --- AspectDeclaration ---
-AspectDeclaration::AspectDeclaration(SourceLocation loc, std::unique_ptr<Identifier> n, std::vector<std::unique_ptr<GenericParameter>> gp, std::vector<std::unique_ptr<FunctionDeclaration>> meths)
-    : Declaration(loc), name(std::move(n)), genericParams(std::move(gp)), methods(std::move(meths)) {}
+AspectDeclaration::AspectDeclaration(SourceLocation loc, std::unique_ptr<Identifier> n, std::vector<std::unique_ptr<GenericParameter>> gp, std::vector<std::unique_ptr<Identifier>> assoc_types, std::vector<std::unique_ptr<FunctionDeclaration>> meths)
+    : Declaration(loc), name(std::move(n)), genericParams(std::move(gp)), associatedTypes(std::move(assoc_types)), methods(std::move(meths)) {}
 
 NodeType AspectDeclaration::getType() const {
     return NodeType::ASPECT_DECLARATION;
@@ -1687,6 +1692,11 @@ NodeType AspectDeclaration::getType() const {
 std::string AspectDeclaration::toString() const {
     std::stringstream ss;
     ss << "aspect " << (name ? name->toString() : "") << " {\n";
+    for (const auto& associatedType : associatedTypes) {
+        if (associatedType) {
+            ss << "  type " << associatedType->toString() << "\n";
+        }
+    }
     for (const auto& method : methods) {
         if (method) {
             std::string methodStr = method->toString();

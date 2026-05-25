@@ -1,0 +1,22 @@
+// @test: associated type missing assignment
+// @expect: fail
+// @expect-error: Missing associated type assignment 'Item' in bind 'Iterator -> CounterIter'
+
+aspect Iterator {
+    type Item
+    next(self<Self>)<Self::Item>
+}
+
+struct CounterIter {
+    value<Int>
+}
+
+bind Iterator -> CounterIter {
+    next(self<CounterIter>)<Int> -> {
+        return self.value
+    }
+}
+
+main()<Int> -> {
+    return 0
+}

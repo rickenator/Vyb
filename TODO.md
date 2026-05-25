@@ -176,7 +176,7 @@ is the working audit for what needs to be implemented next.
 
 ### Aspect System — Completion (HIGH PRIORITY)
 - [x] Phases 1-4: Declarations, method calls, generic impls, type param substitution
-- [ ] **Associated types** — `aspect Iterator { type Item }` (fundamental for stdlib)
+- [x] **Associated types (first practical slice)** — `aspect Iterator { type Item }` declarations, `bind` assignments (`type Item = Int`), and semantic validation for missing/unknown/duplicate assignments are implemented. Remaining work: defaults, where-style constraints, dyn-dispatch integration.
 - [ ] **Aspect objects / dynamic dispatch** — `dyn Aspect` for runtime polymorphism
 - [ ] **Aspect inheritance** — `aspect Comparable : Equatable`
 - [ ] **Monomorphization with bounds validation** — Reject instantiation where bounds fail
