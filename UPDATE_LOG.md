@@ -17,6 +17,15 @@ expect-fail tests are treated as stronger evidence than optimistic status text.
   diagnostics that name the aspect/type bind. Added positive/negative
   `test/aspect` coverage, including `Self::Item`/`Iterator::Item` resolution
   in bind method type contexts.
+- 2026-05-25: Advanced I-008 stdlib foundations by adding a canonical module
+  scaffold under `stdlib/core`, `stdlib/collections`, and `stdlib/io`, wiring
+  top-level `stdlib/prelude.vyn` to re-export `core::prelude`, and introducing
+  a documented transitional `core::option` bridge (`OptionInt`) while generic
+  `Option<T>`/`Result<T,E>` remain future work. Added stdlib module discovery
+  coverage for `VYN_STDLIB`, explicit prelude behavior tests (no auto-import),
+  and a runnable `examples/stdlib_demo` sample plus docs/status updates in
+  `doc/stdlib_layout.md`, `doc/module_visibility.md`, `doc/FEATURE_STATUS.md`,
+  and `TODO.md`.
 - 2026-05-23: Implemented first-pass `extern "C" { ... }` block support for
   function signatures. Blocks now parse as declaration groups, semantic analysis
   visits their members, and the LLVM path emits external function declarations.

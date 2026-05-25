@@ -47,6 +47,11 @@ Stdlib root is detected in this order:
 
 The discovered stdlib root is appended to module search paths automatically.
 
+## Stdlib prelude behavior
+
+Current behavior is explicit-only (no auto-import). See `doc/stdlib_layout.md`
+for the canonical stdlib layout and prelude module paths.
+
 ## Diagnostics
 
 Module-resolution failures now distinguish:

@@ -4,6 +4,10 @@
 // @expect: fail
 // @tags: future, unimplemented
 
+// Transitional note:
+// `core::option` currently provides only `OptionInt` helpers as a bridge.
+// Canonical generic `Option<T>` remains intentionally unimplemented.
+//
 // When implemented, Option<T> will work like:
 //
 //   find_first(v<Vec<Int>>, target<Int>)<Option<Int>> -> {
@@ -28,6 +32,8 @@
 //       }
 //       return 0
 //   }
+
+import core::option
 
 main()<Int> -> {
     result<Option<Int>> = None

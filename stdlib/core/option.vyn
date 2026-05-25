@@ -1,0 +1,34 @@
+# core::option
+#
+# Transitional stdlib bridge while tagged enum payload variants are still
+# unimplemented in Vyn. This file intentionally provides only `OptionInt`.
+# Canonical `Option<T>` / `Some(T)` / `None` remains a future feature.
+
+share(all)
+struct OptionInt {
+    is_some<Bool>,
+    value<Int>
+}
+
+share(all)
+option_int_none()<OptionInt> -> {
+    return OptionInt{ is_some = false, value = 0 }
+}
+
+share(all)
+option_int_some(value<Int>)<OptionInt> -> {
+    return OptionInt{ is_some = true, value = value }
+}
+
+share(all)
+option_int_is_some(option<OptionInt>)<Bool> -> {
+    return option.is_some
+}
+
+share(all)
+option_int_unwrap_or(option<OptionInt>, fallback<Int>)<Int> -> {
+    if (option.is_some) {
+        return option.value
+    }
+    return fallback
+}

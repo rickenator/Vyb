@@ -1,0 +1,6 @@
+# io placeholder until file/network APIs are implemented.
+
+share(all)
+io_status_message()<String> -> {
+    return "io module scaffolded"
+}

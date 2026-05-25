@@ -220,7 +220,8 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
   - `--module-path` CLI flag
   - Standard library auto-discovery
 - [ ] **Phase 1.6 — Standard Library as Modules**
-  - `stdlib/core/`, `stdlib/io/`, `stdlib/math/`, `stdlib/collections/`
+  - [x] Foundation scaffold landed: `stdlib/core/`, `stdlib/io/`, `stdlib/collections/`, top-level/core preludes, transitional `core::option` bridge, and placeholder `core::result`
+  - [ ] Expand with full module contents (`math`, collections, io, iterator/core aspects)
   - Auto-import of `core::*` (opt-out with directive)
 
 ### 2. FFI — C Interop (HIGH PRIORITY)
@@ -241,8 +242,8 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
 - [x] **`soft(expr)` semantic** — Creates `mild<T>` from `our<T>`; enforced
 
 ### 4. Standard Library Expansion (HIGH PRIORITY)
-- [ ] **`Option<T>`** — `Some(value)` / `None` for nullable values
-- [ ] **`Result<T, E>`** — `Ok(value)` / `Err(error)` for fallible operations
+- [ ] **`Option<T>`** — `Some(value)` / `None` for nullable values (transitional `core::option::OptionInt` bridge exists)
+- [ ] **`Result<T, E>`** — `Ok(value)` / `Err(error)` for fallible operations (`core::result` placeholder module exists)
 - [ ] **Core aspects** — `Display`, `Debug`, `Clone`, `Equatable`, `Comparable`, `Hashable`
 - [x] **String methods** — `.len()`, `.contains()`, `.starts_with()`, `.ends_with()`, `.to_upper()`, `.to_lower()`, `.substring()`, `.char_at()`, `.trim()`, `.replace()`, `String::from_bytes()`
 - [ ] **String methods (remaining)** — `.split()`, `.format()`

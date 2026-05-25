@@ -1,0 +1,9 @@
+# core::result
+#
+# Placeholder module. Canonical `Result<T,E>` with `Ok(value)` / `Err(error)`
+# depends on generic enum payload variants that are not implemented yet.
+
+share(all)
+result_status_message()<String> -> {
+    return "Result<T,E> is planned but not implemented yet"
+}

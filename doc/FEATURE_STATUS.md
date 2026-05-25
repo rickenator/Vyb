@@ -22,6 +22,8 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 | Local path loading (`from "./..."`) | ✅ | Relative locators resolve from the importing file |
 | Module search paths | ✅ | Importer dir, `--module-path`, `VYN_MODULE_PATH`, then stdlib auto-discovery |
 | Stdlib auto-discovery | ✅ | `VYN_STDLIB`, then executable-relative probes (`../stdlib`, `./stdlib`) |
+| Stdlib module foundation (`core`/`collections`/`io`) | 🚧 | Minimal scaffold shipped; `core::option` provides transitional `OptionInt`; `core::result` is placeholder |
+| Stdlib prelude auto-import | 📋 | Current behavior is explicit-only (`import prelude` or `import core::prelude`) |
 | `bundle(...)` visibility | ✅ | Source-level directives are enforced by the local resolver |
 | `share(...)` exports | ✅ | `share(all)` and bundle-scoped shares export declarations/imports |
 | `smuggle` visibility bypass | ✅ | Smuggled imports bypass share/bundle checks |
