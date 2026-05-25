@@ -32,10 +32,10 @@ is the working audit for what needs to be implemented next.
 | Aspect/bind system | ~65% | Associated types, dyn dispatch |
 | Generic monomorphization | ~70% | Bounds-checked instantiation |
 | Async/await | ~80% | Real scheduler/executor |
-| Error propagation (`fail`/`trap`) | ~40% | Phases 2-5 |
+| Error propagation (`fail`/`trap`) | ~80% | Standard error aspects, `rethrow`, ensure contracts |
 | Lambda/closure codegen | ~50% | Full closure struct, captured-var codegen |
-| Module system (`import`/`smuggle`/`bundle`) | ~35% | Local import resolution done; aliases, bundle, share, module paths pending |
-| FFI (`extern "C"`) | ~15% | extern modifier + ExternStatement codegen work; block syntax and C-type mapping pending |
+| Module system (`import`/`smuggle`/`bundle`) | ~70% | Local/module-path resolution, aliases, bundle/share visibility done; stdlib modules/package integration pending |
+| FFI (`extern "C"`) | ~35% | Extern blocks, C aliases, freedom-gated JIT calls done; repr(C), variadics, linker flow pending |
 | Standard library | ~45% | Vec, String, I/O, Math done; HashMap, File I/O needed |
 | Introspection (`typeof`/`typename`) | ~75% | Downcasting, type assertions |
 | Auto-serialization | ~80% | Edge cases remain |
@@ -214,8 +214,8 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
 - [x] **Phase 1.2 — `bundle(...)` Directives** — Source-level module bundle metadata accepted by local resolver
 - [x] **Phase 1.3 — `share(...)` Directives** — `share(all)` and `share(bundle1, bundle2)` accepted on declarations and imports
 - [x] **Phase 1.4 — Visibility Checking** — Bundle overlap enforced during import resolution; `smuggle` bypasses visibility
-- [ ] **Phase 1.4b — Formal ModuleRegistry AST model** — replace source-level directive metadata with AST nodes/cache API
-- [ ] **Phase 1.5 — Module Path Resolution**
+- [x] **Phase 1.4b — Formal ModuleRegistry model** — source-level resolver moved into `ModuleRegistry` metadata/cache API with canonical keys, resolution states, topo order, and dependency diagnostics
+- [x] **Phase 1.5 — Module Path Resolution**
   - `VYN_MODULE_PATH` environment variable
   - `--module-path` CLI flag
   - Standard library auto-discovery
@@ -244,8 +244,8 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
 - [ ] **`Option<T>`** — `Some(value)` / `None` for nullable values
 - [ ] **`Result<T, E>`** — `Ok(value)` / `Err(error)` for fallible operations
 - [ ] **Core aspects** — `Display`, `Debug`, `Clone`, `Equatable`, `Comparable`, `Hashable`
-- [x] **String methods** — `.len()`, `.contains()`, `.starts_with()`, `.ends_with()`, `.to_upper()`, `.to_lower()`, `.substring()`, `.char_at()`, `String::from_bytes()`
-- [ ] **String methods (remaining)** — `.trim()`, `.split()`, `.replace()`, `.format()`
+- [x] **String methods** — `.len()`, `.contains()`, `.starts_with()`, `.ends_with()`, `.to_upper()`, `.to_lower()`, `.substring()`, `.char_at()`, `.trim()`, `.replace()`, `String::from_bytes()`
+- [ ] **String methods (remaining)** — `.split()`, `.format()`
 - [ ] **String formatting** — Format strings or `fmt()` intrinsic
 - [ ] **`HashMap<K, V>`** — Hash map with `Hashable + Equatable` bounds
 - [ ] **`HashSet<T>`** — Hash set
@@ -516,16 +516,16 @@ Unifies error handling with pattern matching in a uniquely Vyn way. No try-catch
 For Vyn to be considered production-ready at 1.0, **all of the following must be true**:
 
 ### Must-Have for 1.0
-- [ ] Module system fully working (`import`, `smuggle`, `bundle`, `share`)
+- [x] Module system core working (`import`, `smuggle`, `bundle`, `share`, module paths, stdlib discovery)
 - [ ] Lambda/closure codegen complete
 - [ ] Ownership types runtime-enforced (borrow checking, move semantics)
 - [ ] `mild<T>` control block implemented with `grab()` and `released()`
-- [ ] Error propagation (Phases 2-5) complete
+- [x] Error propagation (Phases 2-5) complete
 - [ ] `Option<T>` and `Result<T, E>` in stdlib
 - [ ] Core aspects (`Display`, `Debug`, `Clone`, `Equatable`, `Comparable`, `Hashable`)
 - [ ] Iterator aspect with `for` loop desugaring
 - [ ] Enum/sum types with pattern matching
-- [ ] String methods complete
+- [ ] String methods complete (`split` and formatting remain)
 - [ ] `HashMap<K, V>` and basic collections
 - [ ] FFI (`extern "C"`) working
 - [ ] `vyn.toml` and `vyn build` project system

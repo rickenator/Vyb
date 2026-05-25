@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-MILESTONE_MINIMUM = 126
+MILESTONE_MINIMUM = 136
 
 
 @dataclass(frozen=True)
@@ -24,12 +24,18 @@ class Suite:
     name: str
     path: str
     execute_jit: bool = True
+    pattern: str = "*.vyn"
 
 
 MILESTONE_SUITES = [
     Suite("new_features", "test/new_features"),
     Suite("modules", "test/modules"),
     Suite("ffi", "test/ffi"),
+    Suite("error_trap_phase2", "test/error_trap/phase2"),
+    Suite("trap_propagation", "test/trap", pattern="propagation_no_trap.vyn"),
+    Suite("trap_untrapped_main", "test/trap", pattern="propagation_to_main.vyn"),
+    Suite("trap_defer_fail", "test/trap", pattern="defer_runs_on_fail.vyn"),
+    Suite("trap_non_failable_reject", "test/trap", pattern="non_failable_caller_rejected.vyn"),
     Suite("basic", "test/basic"),
     Suite("string", "test/string"),
     Suite("math", "test/math"),
@@ -62,6 +68,8 @@ def run_suite(root: Path, suite: Suite, vyn: str, verbose: bool) -> tuple[int, i
             str(root / suite.path),
             "--json",
             str(json_path),
+            "--pattern",
+            suite.pattern,
         ]
         if suite.execute_jit:
             cmd.append("--execute-jit")

@@ -1,0 +1,14 @@
+// @test: Vec pop returns removed value
+// @description: Vec.pop() returns the last element instead of a placeholder
+// @category: vec, data_structures
+// @expect: pass
+// @expect-output: 20
+
+main()<Int> -> {
+    v<Vec<Int>> = Vec::new()
+    v.push(10)
+    v.push(20)
+    removed<Int> = v.pop()
+    println_int(removed)
+    return 0
+}

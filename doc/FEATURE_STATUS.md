@@ -1,4 +1,4 @@
-# Vyn Feature Status (v0.5.0)
+# Vyn Feature Status (v0.5.1)
 
 This document tracks the implementation status of Vyn language features.
 
@@ -70,7 +70,7 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 | `fail` / `trap` error system | ✅ | Includes typed `fail<T>(value)`, typed traps, wildcard/multi-type trap parsing, dual-return ABI `{T, i8*}` / `{i1, i8*}`, Phase 3 fail propagation returns, Phase 4 auto-propagating call-site checks, and Phase 5 untrapped runtime handler dispatch from failable `main` |
 | `async` / `await` | 🚧 | Runtime stub |
 | `Vec<T>` | ✅ | |
-| String methods | ✅ | |
+| String methods | ✅ | `.len()`, `.contains()`, `.starts_with()`, `.ends_with()`, `.to_upper()`, `.to_lower()`, `.substring()`, `.char_at()`, `.trim()`, `.replace()` |
 | Math intrinsics | ✅ | |
 | `typeof` / `typename` | ✅ | |
 | Templates | ✅ | |
@@ -110,9 +110,9 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 | LLVM IR codegen | ✅ | |
 | JIT execution | ✅ | |
 | AOT native executable | ✅ | `--build` flag |
-| Multi-file compilation | 📋 | v0.5.x (module resolution) |
+| Multi-file compilation | ✅ | ModuleRegistry resolves local imports, module paths, stdlib discovery, and dependency order |
 | `extern "C"` FFI | ✅ | Extern blocks parse/codegen, freedom-gated calls, C ABI scalar/pointer aliases |
 
 ---
 
-*Last updated: v0.5.1 (2026-02-22)*
+*Last updated: v0.5.1 (2026-05-24)*

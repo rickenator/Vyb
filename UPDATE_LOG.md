@@ -72,6 +72,20 @@ expect-fail tests are treated as stronger evidence than optimistic status text.
   `test/trap/non_failable_caller_rejected.vyn`.
   Follow-up: generalized JIT ABI handling for failable `main` payloads beyond
   current `{Int, i8*}` / `{i1, i8*}` specializations.
+- 2026-05-24: Closed the error-propagation coverage gap by promoting the
+  current Phase 2 and Phase 3-5 trap propagation fixtures into the milestone
+  gate. The gate now covers propagated failable calls, failable `main`
+  untrapped dispatch, defer-on-fail cleanup, and non-failable caller rejection
+  in addition to the existing module/FFI/core suites. Raised the milestone
+  floor to 134 and reconciled stale roadmap/status entries for ModuleRegistry,
+  module path resolution, string method coverage, and completed error
+  propagation phases.
+- 2026-05-24: Closed a concrete Vec correctness gap: `Vec::pop()` now returns
+  the removed element for the supported primitive path instead of a hardcoded
+  placeholder value and no longer dereferences null storage when called on an
+  empty `Vec<Int>`. Added `test/new_features/test_vec_pop_returns_value.vyn`
+  and `test/new_features/test_vec_pop_empty.vyn`, then raised the milestone
+  floor to 136.
 
 ## Audit Scope
 
@@ -116,7 +130,7 @@ Source areas checked:
 | I-010 | Lambda/closures | P1 | Implement real lambda return type inference, non-void lambda returns, function value/call semantics, closure capture structs, capture extraction, move/mutable captures, generic and async lambdas. | `doc/LAMBDAS.md`; `test/future_features/test_lambda_codegen.vyn`; `src/vre/llvm/cgen_expr.cpp` defaults lambda return type to void and lacks capture handling. |
 | I-011 | Pattern matching/select polish | P1 | Struct/tuple destructuring, enum variant patterns, range patterns, guards, exhaustiveness, match-as-expression, and better select type inference. | `TODO.md`; `doc/AST_Roadmap.md`; source warns that complex patterns and select inference are incomplete. |
 | I-012 | Enums/sum types | P1 | Implement tagged enum variants with payloads, enum construction, enum methods via bind, pattern matching on variants, and stdlib `Option`/`Result` support. | `test/future_features/test_enum_basic.vyn`; `src/vre/llvm/cgen_decl.cpp` reports enum codegen is not fully implemented. |
-| I-013 | Vec correctness/polish | P1 | Add bounds checking to `get`, return the actual popped value from `pop`, implement real `contains`, `concat`, `push_array`, `to_array`, `get_array`, `get_vec`, and improve element type tracking for `Vec<Struct>`. | `src/vre/llvm/cgen_vec.cpp`; `doc/VEC_ITERATION.md` notes `Vec<Struct>`/complex-expression limitations. |
+| I-013 | Vec correctness/polish | P1 | Add bounds checking to `get`, implement `concat`, `push_array`, `to_array`, `get_array`, `get_vec`, and improve element type tracking for `Vec<Struct>`. `contains` and primitive `pop` return values are now covered. | `src/vre/llvm/cgen_vec.cpp`; `doc/VEC_ITERATION.md` notes `Vec<Struct>`/complex-expression limitations. |
 | I-014 | Tuple completion | P1 | Tuple serialization/output, tuple variables, `.0`/`.1` element access, destructuring assignment, and tuple pattern matching. | `test/tuples/README.md`; `TODO.md`. |
 | I-015 | Generic/template monomorphization | P1 | Finish template instantiation, AST clone/substitution, constructor inference, nested generics, member template instantiation, and bounds-checked instantiation. | `src/vre/semantic.cpp` has monomorphization stubs; `test/template/generics_examples.vyn`; `doc/SELF_RESOLUTION_COMPLETE.md` lists constructor/Vec issues. |
 | I-016 | Introspection completion | P1 | First-class `Type`, type registry initialization, type equality assertions, downcasting/as operator, and `typeof` in wildcard trap handlers. | `TODO.md`; `doc/INTROSPECTION_DESIGN.md`. |

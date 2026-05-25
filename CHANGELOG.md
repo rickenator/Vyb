@@ -14,10 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `fail` without in-scope trap now returns the failable ABI tuple and propagates to caller.
   - Call sites of failable functions now auto-check `{value,error}` and propagate on non-null error.
   - New trap tests for propagation, defer-on-fail, untrapped main propagation, and non-failable caller rejection.
+- Milestone gate coverage for current error propagation:
+  - `test/error_trap/phase2` is now part of the required gate.
+  - Focused trap fixtures now cover propagated calls, failable `main`, defer cleanup on propagated fail, and non-failable caller rejection.
+- `Vec::pop()` now returns the removed primitive value instead of a placeholder and safely returns the default value for empty `Vec<Int>`.
 
 ### Changed
 - Runtime `__vyn_runtime_untrapped_error` now reports error type, JSON payload, fail source location, and honors `exitCode<Int>` payload fields.
 - JIT `main` dispatch now checks failable-main error tuple returns and routes non-null errors to the untrapped runtime handler.
+- Milestone minimum raised from 126 to 136 passing tests.
 
 ## [0.5.0] - 2026-02-24 (freedom-1.0 series)
 

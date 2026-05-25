@@ -229,7 +229,8 @@ void LLVMCodegen::handleVecPop(vyn::ast::CallExpression* node, llvm::Value* vecP
         return;
     }
     
-    // Get pointer to size field
+    // Get pointers to struct fields
+    llvm::Value* dataFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 0, "vec.data_ptr");
     llvm::Value* sizeFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 1, "vec.size_ptr");
     
     // Load current size
@@ -251,13 +252,48 @@ void LLVMCodegen::handleVecPop(vyn::ast::CallExpression* node, llvm::Value* vecP
                                                     newSize,
                                                     "vec.safe_new_size");
     
-    // Store new size
+    // Store new size before returning the removed value.
     builder->CreateStore(safeNewSize, sizeFieldPtr);
+
+    llvm::Type* elementType = nullptr;
+    if (node->type) {
+        elementType = codegenType(node->type.get());
+    }
+    if (!elementType) {
+        elementType = llvm::Type::getInt64Ty(*context);
+    }
+
+    llvm::DataLayout dataLayout(module.get());
+    uint64_t elementSizeBytes = dataLayout.getTypeAllocSize(elementType);
+    llvm::Value* elementSize = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), elementSizeBytes);
+
+    llvm::Function* function = builder->GetInsertBlock()->getParent();
+    llvm::BasicBlock* valueBB = llvm::BasicBlock::Create(*context, "vec.pop_value", function);
+    llvm::BasicBlock* emptyBB = llvm::BasicBlock::Create(*context, "vec.pop_empty", function);
+    llvm::BasicBlock* mergeBB = llvm::BasicBlock::Create(*context, "vec.pop_merge", function);
+    builder->CreateCondBr(isEmpty, emptyBB, valueBB);
+
+    builder->SetInsertPoint(valueBB);
+    llvm::Value* dataPtr = builder->CreateLoad(llvm::PointerType::get(*context, 0), dataFieldPtr, "vec.data");
+    llvm::Value* offset = builder->CreateMul(safeNewSize, elementSize, "vec.pop_offset");
+    llvm::Value* elementPtr = builder->CreateGEP(llvm::Type::getInt8Ty(*context), dataPtr, offset, "vec.pop_ptr");
+    llvm::Value* poppedValue = builder->CreateLoad(elementType, elementPtr, "vec.popped_value");
+    builder->CreateBr(mergeBB);
+    valueBB = builder->GetInsertBlock();
+
+    builder->SetInsertPoint(emptyBB);
+    llvm::Value* emptyValue = llvm::Constant::getNullValue(elementType);
+    builder->CreateBr(mergeBB);
+    emptyBB = builder->GetInsertBlock();
+
+    builder->SetInsertPoint(mergeBB);
+    llvm::PHINode* result = builder->CreatePHI(elementType, 2, "vec.pop_result");
+    result->addIncoming(emptyValue, emptyBB);
+    result->addIncoming(poppedValue, valueBB);
     
     VYN_CDBG << "DEBUG: Vec::pop() called - size decremented" << std::endl;
     
-    // Return the popped value (for now, return 0 as placeholder)
-    m_currentLLVMValue = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0);
+    m_currentLLVMValue = result;
 }
 
 void LLVMCodegen::handleVecLen(vyn::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
