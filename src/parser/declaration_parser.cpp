@@ -863,7 +863,7 @@ std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_impl() {
     }
     this->expect(vyn::TokenType::RBRACE);
 
-    return std::make_unique<ast::BindDeclaration>(loc, std::move(self_type_node), std::move(methods), std::move(associated_type_bindings), nullptr, std::move(generic_params), std::move(trait_type_node));
+    return std::make_unique<ast::BindDeclaration>(loc, std::move(self_type_node), std::move(associated_type_bindings), std::move(methods), nullptr, std::move(generic_params), std::move(trait_type_node));
 }
 
 

@@ -504,6 +504,10 @@ private:
                                               const std::string& traitName,
                                               const std::string& typeReference,
                                               const std::unordered_map<std::string, ast::TypeNode*>* inlineAssociatedTypeBindings = nullptr) const;
+    bool setResolvedTraitReturnType(ast::CallExpression* callNode,
+                                    const std::string& concreteTypeName,
+                                    const std::string& traitName,
+                                    ast::TypeNode* traitReturnType);
     
     // Pattern matching helper for generic type matching
     // Returns true if concrete type (e.g., "Box<Int>") matches pattern (e.g., "Box<T>")

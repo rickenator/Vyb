@@ -1221,7 +1221,7 @@ public:
     std::vector<AssociatedTypeBinding> associatedTypeBindings;
     std::vector<std::unique_ptr<FunctionDeclaration>> methods;
 
-    BindDeclaration(SourceLocation loc, TypeNodePtr selfType, std::vector<std::unique_ptr<FunctionDeclaration>> methods, std::vector<AssociatedTypeBinding> associatedTypeBindings = {}, std::unique_ptr<Identifier> name = nullptr, std::vector<std::unique_ptr<GenericParameter>> genericParams = {}, TypeNodePtr traitType = nullptr);
+    BindDeclaration(SourceLocation loc, TypeNodePtr selfType, std::vector<AssociatedTypeBinding> associatedTypeBindings = {}, std::vector<std::unique_ptr<FunctionDeclaration>> methods = {}, std::unique_ptr<Identifier> name = nullptr, std::vector<std::unique_ptr<GenericParameter>> genericParams = {}, TypeNodePtr traitType = nullptr);
     ~BindDeclaration() override = default;
     NodeType getType() const override;
     std::string toString() const override;

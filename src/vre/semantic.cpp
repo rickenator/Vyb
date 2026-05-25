@@ -1644,15 +1644,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                                     if (traitMethod.name == methodName && traitMethod.hasDefaultImpl) {
                                                         // Found default implementation
                                                         if (traitMethod.returnType) {
-                                                            std::string resolvedAssocType = resolveAssociatedTypeReference(typeNameStr, traitName, traitMethod.returnType->toString());
-                                                            if (!resolvedAssocType.empty()) {
-                                                                auto resolvedType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, resolvedAssocType));
-                                                                expressionTypes[node] = resolvedType;
-                                                                node->type = std::shared_ptr<ast::TypeNode>(resolvedType->clone());
-                                                            } else {
-                                                                expressionTypes[node] = traitMethod.returnType;
-                                                                node->type = std::shared_ptr<ast::TypeNode>(traitMethod.returnType->clone());
-                                                            }
+                                                            setResolvedTraitReturnType(node, typeNameStr, traitName, traitMethod.returnType);
                                                         }
                                                         return;
                                                     }
@@ -1687,15 +1679,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                                 if (traitMethod.name == methodName && traitMethod.hasDefaultImpl) {
                                                     // Found default implementation
                                                     if (traitMethod.returnType) {
-                                                        std::string resolvedAssocType = resolveAssociatedTypeReference(typeNameStr, traitName, traitMethod.returnType->toString());
-                                                        if (!resolvedAssocType.empty()) {
-                                                            auto resolvedType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, resolvedAssocType));
-                                                            expressionTypes[node] = resolvedType;
-                                                            node->type = std::shared_ptr<ast::TypeNode>(resolvedType->clone());
-                                                        } else {
-                                                            expressionTypes[node] = traitMethod.returnType;
-                                                            node->type = std::shared_ptr<ast::TypeNode>(traitMethod.returnType->clone());
-                                                        }
+                                                        setResolvedTraitReturnType(node, typeNameStr, traitName, traitMethod.returnType);
                                                     }
                                                     return;
                                                 }
@@ -1957,15 +1941,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                                 if (traitMethod.name == methodName && traitMethod.hasDefaultImpl) {
                                                     // Found default implementation - set return type from aspect
                                                     if (traitMethod.returnType) {
-                                                        std::string resolvedAssocType = resolveAssociatedTypeReference(typeNameStr, traitName, traitMethod.returnType->toString());
-                                                        if (!resolvedAssocType.empty()) {
-                                                            auto resolvedType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, resolvedAssocType));
-                                                            expressionTypes[node] = resolvedType;
-                                                            node->type = std::shared_ptr<ast::TypeNode>(resolvedType->clone());
-                                                        } else {
-                                                            expressionTypes[node] = traitMethod.returnType;
-                                                            node->type = std::shared_ptr<ast::TypeNode>(traitMethod.returnType->clone());
-                                                        }
+                                                        setResolvedTraitReturnType(node, typeNameStr, traitName, traitMethod.returnType);
                                                     }
                                                     return;
                                                 }
@@ -2000,15 +1976,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                             if (traitMethod.name == methodName && traitMethod.hasDefaultImpl) {
                                                 // Found default implementation - set return type from aspect
                                                 if (traitMethod.returnType) {
-                                                    std::string resolvedAssocType = resolveAssociatedTypeReference(typeNameStr, traitName, traitMethod.returnType->toString());
-                                                    if (!resolvedAssocType.empty()) {
-                                                        auto resolvedType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, resolvedAssocType));
-                                                        expressionTypes[node] = resolvedType;
-                                                        node->type = std::shared_ptr<ast::TypeNode>(resolvedType->clone());
-                                                    } else {
-                                                        expressionTypes[node] = traitMethod.returnType;
-                                                        node->type = std::shared_ptr<ast::TypeNode>(traitMethod.returnType->clone());
-                                                    }
+                                                    setResolvedTraitReturnType(node, typeNameStr, traitName, traitMethod.returnType);
                                                 }
                                                 return;
                                             }
@@ -5874,9 +5842,10 @@ std::string SemanticAnalyzer::resolveAssociatedTypeReference(
     const std::string& traitName,
     const std::string& typeReference,
     const std::unordered_map<std::string, ast::TypeNode*>* inlineAssociatedTypeBindings) const {
+    static constexpr size_t kSelfPrefixLength = 6; // strlen("Self::")
     std::string assocName;
     if (typeReference.rfind("Self::", 0) == 0) {
-        assocName = typeReference.substr(6);
+        assocName = typeReference.substr(kSelfPrefixLength);
     } else if (typeReference.rfind(traitName + "::", 0) == 0) {
         assocName = typeReference.substr(traitName.length() + 2);
     } else {
@@ -5910,6 +5879,27 @@ std::string SemanticAnalyzer::resolveAssociatedTypeReference(
     }
 
     return assocIt->second->toString();
+}
+
+bool SemanticAnalyzer::setResolvedTraitReturnType(ast::CallExpression* callNode,
+                                                  const std::string& concreteTypeName,
+                                                  const std::string& traitName,
+                                                  ast::TypeNode* traitReturnType) {
+    if (!callNode || !traitReturnType) {
+        return false;
+    }
+
+    std::string resolvedAssocType = resolveAssociatedTypeReference(concreteTypeName, traitName, traitReturnType->toString());
+    if (!resolvedAssocType.empty()) {
+        auto resolvedType = new ast::TypeName(callNode->loc, std::make_unique<ast::Identifier>(callNode->loc, resolvedAssocType));
+        expressionTypes[callNode] = resolvedType;
+        callNode->type = std::shared_ptr<ast::TypeNode>(resolvedType->clone());
+        return true;
+    }
+
+    expressionTypes[callNode] = traitReturnType;
+    callNode->type = std::shared_ptr<ast::TypeNode>(traitReturnType->clone());
+    return true;
 }
 
 bool SemanticAnalyzer::matchesPattern(const std::string& concreteType, const std::string& pattern) {

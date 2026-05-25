@@ -1285,7 +1285,7 @@ void ClassDeclaration::accept(Visitor& visitor) {
 
 // --- BindDeclaration ---
 // ... existing code ...
-BindDeclaration::BindDeclaration(SourceLocation loc, TypeNodePtr self_ty, std::vector<std::unique_ptr<FunctionDeclaration>> meths, std::vector<AssociatedTypeBinding> assoc_type_bindings, std::unique_ptr<Identifier> n, std::vector<std::unique_ptr<GenericParameter>> gp, TypeNodePtr trait_ty)
+BindDeclaration::BindDeclaration(SourceLocation loc, TypeNodePtr self_ty, std::vector<AssociatedTypeBinding> assoc_type_bindings, std::vector<std::unique_ptr<FunctionDeclaration>> meths, std::unique_ptr<Identifier> n, std::vector<std::unique_ptr<GenericParameter>> gp, TypeNodePtr trait_ty)
     : Declaration(loc), selfType(std::move(self_ty)), associatedTypeBindings(std::move(assoc_type_bindings)), methods(std::move(meths)), name(std::move(n)), genericParams(std::move(gp)), traitType(std::move(trait_ty)) {}
 
 NodeType BindDeclaration::getType() const {
