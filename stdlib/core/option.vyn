@@ -12,12 +12,12 @@ struct OptionInt {
 
 share(all)
 option_int_none()<OptionInt> -> {
-    return OptionInt{ is_some: false, value: 0 }
+    return OptionInt{ is_some = false, value = 0 }
 }
 
 share(all)
 option_int_some(value<Int>)<OptionInt> -> {
-    return OptionInt{ is_some: true, value: value }
+    return OptionInt{ is_some = true, value = value }
 }
 
 share(all)
