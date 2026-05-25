@@ -1,0 +1,25 @@
+// @test: associated type duplicate assignment
+// @expect: fail
+// @expect-error: Duplicate associated type assignment 'Item' in bind 'Iterator -> CounterIter'
+
+aspect Iterator {
+    type Item
+    next(self<Self>)<Self::Item>
+}
+
+struct CounterIter {
+    value<Int>
+}
+
+bind Iterator -> CounterIter {
+    type Item = Int
+    type Item = Int
+
+    next(self<CounterIter>)<Int> -> {
+        return self.value
+    }
+}
+
+main()<Int> -> {
+    return 0
+}

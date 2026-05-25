@@ -10,6 +10,13 @@ expect-fail tests are treated as stronger evidence than optimistic status text.
 
 ## Implementation Progress
 
+- 2026-05-25: Implemented the first associated-types slice for aspects/binds
+  (I-007). Aspects now parse/store associated type declarations (`type Item`),
+  binds accept explicit assignments (`type Item = Int`), and semantic analysis
+  validates missing/unknown/duplicate associated type assignments with focused
+  diagnostics that name the aspect/type bind. Added positive/negative
+  `test/aspect` coverage, including `Self::Item`/`Iterator::Item` resolution
+  in bind method type contexts.
 - 2026-05-23: Implemented first-pass `extern "C" { ... }` block support for
   function signatures. Blocks now parse as declaration groups, semantic analysis
   visits their members, and the LLVM path emits external function declarations.

@@ -1,0 +1,26 @@
+// @test: associated type positive bind resolution
+// @expect: pass
+// @expect-return: 42
+
+aspect Iterator {
+    type Item
+    next(self<Self>)<Self::Item>
+}
+
+struct CounterIter {
+    value<Int>
+}
+
+bind Iterator -> CounterIter {
+    type Item = Int
+
+    next(self<CounterIter>)<Int> -> {
+        current<Iterator::Item> = self.value
+        return current
+    }
+}
+
+main()<Int> -> {
+    iter<CounterIter> = CounterIter { value = 42 }
+    return iter.next()
+}
