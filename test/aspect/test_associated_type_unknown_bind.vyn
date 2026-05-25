@@ -1,0 +1,24 @@
+// @test: associated type unknown assignment
+// @expect: fail
+// @expect-error: Unknown associated type 'Value' in bind 'Iterator -> CounterIter'
+
+aspect Iterator {
+    type Item
+    next(self<Self>)<Self::Item>
+}
+
+struct CounterIter {
+    value<Int>
+}
+
+bind Iterator -> CounterIter {
+    type Value = Int
+
+    next(self<CounterIter>)<Int> -> {
+        return self.value
+    }
+}
+
+main()<Int> -> {
+    return 0
+}

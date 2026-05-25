@@ -1644,8 +1644,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                                     if (traitMethod.name == methodName && traitMethod.hasDefaultImpl) {
                                                         // Found default implementation
                                                         if (traitMethod.returnType) {
-                                                            expressionTypes[node] = traitMethod.returnType;
-                                                            node->type = std::shared_ptr<ast::TypeNode>(traitMethod.returnType->clone());
+                                                            setResolvedTraitReturnType(node, typeNameStr, traitName, traitMethod.returnType);
                                                         }
                                                         return;
                                                     }
@@ -1680,8 +1679,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                                 if (traitMethod.name == methodName && traitMethod.hasDefaultImpl) {
                                                     // Found default implementation
                                                     if (traitMethod.returnType) {
-                                                        expressionTypes[node] = traitMethod.returnType;
-                                                        node->type = std::shared_ptr<ast::TypeNode>(traitMethod.returnType->clone());
+                                                        setResolvedTraitReturnType(node, typeNameStr, traitName, traitMethod.returnType);
                                                     }
                                                     return;
                                                 }
@@ -1943,8 +1941,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                                 if (traitMethod.name == methodName && traitMethod.hasDefaultImpl) {
                                                     // Found default implementation - set return type from aspect
                                                     if (traitMethod.returnType) {
-                                                        expressionTypes[node] = traitMethod.returnType;
-                                                        node->type = std::shared_ptr<ast::TypeNode>(traitMethod.returnType->clone());
+                                                        setResolvedTraitReturnType(node, typeNameStr, traitName, traitMethod.returnType);
                                                     }
                                                     return;
                                                 }
@@ -1979,8 +1976,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                             if (traitMethod.name == methodName && traitMethod.hasDefaultImpl) {
                                                 // Found default implementation - set return type from aspect
                                                 if (traitMethod.returnType) {
-                                                    expressionTypes[node] = traitMethod.returnType;
-                                                    node->type = std::shared_ptr<ast::TypeNode>(traitMethod.returnType->clone());
+                                                    setResolvedTraitReturnType(node, typeNameStr, traitName, traitMethod.returnType);
                                                 }
                                                 return;
                                             }
@@ -3793,6 +3789,20 @@ void SemanticAnalyzer::visit(ast::AspectDeclaration* node) {
             return;
         }
     }
+
+    std::unordered_set<std::string> associatedTypeNames;
+    for (const auto& associatedType : node->associatedTypes) {
+        if (!associatedType) {
+            addError("Invalid associated type in aspect '" + traitName + "'.", node);
+            return;
+        }
+
+        const std::string& associatedTypeName = associatedType->name;
+        if (!associatedTypeNames.insert(associatedTypeName).second) {
+            addError("Duplicate associated type '" + associatedTypeName + "' in aspect '" + traitName + "'.", associatedType.get());
+            return;
+        }
+    }
     
     // Validate aspect methods
     for (const auto& method : node->methods) {
@@ -3938,7 +3948,7 @@ void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
         }
         
         // Validate that all required trait methods are implemented
-        if (!validateTraitImpl(typeName, traitName, node->methods)) {
+        if (!validateTraitImpl(typeName, traitName, node->methods, node->associatedTypeBindings, node)) {
             addError("Incomplete implementation of trait '" + traitName + "' for type '" + typeName + "'.", node);
             if (hasGenericParams) exitScope();
             return;
@@ -3948,6 +3958,16 @@ void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
         registerTraitImpl(node);
         
         // Visit all methods to validate their bodies (while type params are still in scope)
+        std::string previousImplTraitName = currentImplTraitName;
+        auto previousAssociatedTypeBindings = currentImplAssociatedTypeBindings;
+        currentImplTraitName = traitName;
+        currentImplAssociatedTypeBindings.clear();
+        for (const auto& assocBinding : node->associatedTypeBindings) {
+            if (assocBinding.name && assocBinding.valueType) {
+                currentImplAssociatedTypeBindings[assocBinding.name->name] = assocBinding.valueType.get();
+            }
+        }
+
         processingTraitOrBindMethod = true;  // Don't add bind methods to global scope
         for (const auto& method : node->methods) {
             if (method) {
@@ -3955,6 +3975,8 @@ void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
             }
         }
         processingTraitOrBindMethod = false;
+        currentImplTraitName = previousImplTraitName;
+        currentImplAssociatedTypeBindings = previousAssociatedTypeBindings;
         
         VYN_CDBG << "DEBUG: Successfully registered impl " << traitName << " for " << typeName 
                   << " with " << node->methods.size() << " methods" << std::endl;
@@ -4288,6 +4310,21 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
             // We're in an aspect declaration - treat Self as a valid placeholder type
             VYN_CDBG << "DEBUG: Self used as placeholder in aspect declaration" << std::endl;
             node->type = std::shared_ptr<ast::TypeNode>(node->clone());
+            return;
+        }
+    }
+
+    if (currentImplType && !currentImplTraitName.empty()) {
+        std::string resolvedAssocType = resolveAssociatedTypeReference(
+            currentImplType->toString(),
+            currentImplTraitName,
+            typeNameStr,
+            &currentImplAssociatedTypeBindings
+        );
+        if (!resolvedAssocType.empty()) {
+            node->type = std::shared_ptr<ast::TypeNode>(
+                new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, resolvedAssocType))
+            );
             return;
         }
     }
@@ -5662,15 +5699,61 @@ void SemanticAnalyzer::registerTraitImpl(ast::BindDeclaration* implDecl) {
         }
         
         traitImpls[typeName][traitName] = implMethods;
+
+        auto& associatedMap = traitAssociatedTypeImpls[typeName][traitName];
+        associatedMap.clear();
+        for (const auto& assocBinding : implDecl->associatedTypeBindings) {
+            if (assocBinding.name && assocBinding.valueType) {
+                associatedMap[assocBinding.name->name] = assocBinding.valueType.get();
+            }
+        }
     }
 }
 
 bool SemanticAnalyzer::validateTraitImpl(const std::string& typeName, 
                                         const std::string& traitName,
-                                        const std::vector<std::unique_ptr<ast::FunctionDeclaration>>& methods) {
+                                        const std::vector<std::unique_ptr<ast::FunctionDeclaration>>& methods,
+                                        const std::vector<ast::BindDeclaration::AssociatedTypeBinding>& associatedTypeBindings,
+                                        const ast::BindDeclaration* bindDecl) {
     TraitInfo* traitInfo = findTrait(traitName);
     if (!traitInfo) {
         return false;
+    }
+
+    std::unordered_map<std::string, std::string> associatedTypeBindingNames;
+    std::unordered_set<std::string> seenAssociatedTypeNames;
+    for (const auto& assocBinding : associatedTypeBindings) {
+        if (!assocBinding.name || !assocBinding.valueType) {
+            continue;
+        }
+
+        const std::string& assocName = assocBinding.name->name;
+        if (!seenAssociatedTypeNames.insert(assocName).second) {
+            addError("Duplicate associated type assignment '" + assocName + "' in bind '" + traitName + " -> " + typeName + "'.", bindDecl);
+            return false;
+        }
+
+        bool isKnown = false;
+        for (const auto& declaredAssoc : traitInfo->associatedTypes) {
+            if (declaredAssoc == assocName) {
+                isKnown = true;
+                break;
+            }
+        }
+
+        if (!isKnown) {
+            addError("Unknown associated type '" + assocName + "' in bind '" + traitName + " -> " + typeName + "'. Aspect '" + traitName + "' does not declare it.", bindDecl);
+            return false;
+        }
+
+        associatedTypeBindingNames[assocName] = assocBinding.valueType->toString();
+    }
+
+    for (const auto& declaredAssoc : traitInfo->associatedTypes) {
+        if (associatedTypeBindingNames.find(declaredAssoc) == associatedTypeBindingNames.end()) {
+            addError("Missing associated type assignment '" + declaredAssoc + "' in bind '" + traitName + " -> " + typeName + "'.", bindDecl);
+            return false;
+        }
     }
     
     // Check that all required trait methods are implemented
@@ -5686,7 +5769,7 @@ bool SemanticAnalyzer::validateTraitImpl(const std::string& typeName,
                 implMethod->id->name == traitMethod.name) {
                 
                 // Validate signature matches
-                if (!traitMethodSignatureMatches(traitMethod, implMethod.get())) {
+                if (!traitMethodSignatureMatches(traitMethod, implMethod.get(), associatedTypeBindingNames)) {
                     VYN_CDBG << "DEBUG: Method signature mismatch for: " << traitMethod.name << std::endl;
                     return false;
                 }
@@ -5706,7 +5789,8 @@ bool SemanticAnalyzer::validateTraitImpl(const std::string& typeName,
 }
 
 bool SemanticAnalyzer::traitMethodSignatureMatches(const TraitMethod& traitMethod,
-                                                   ast::FunctionDeclaration* implMethod) {
+                                                   ast::FunctionDeclaration* implMethod,
+                                                   const std::unordered_map<std::string, std::string>& associatedTypeBindings) {
     if (!implMethod || !implMethod->id) {
         return false;
     }
@@ -5728,6 +5812,14 @@ bool SemanticAnalyzer::traitMethodSignatureMatches(const TraitMethod& traitMetho
     if (implMethod->returnTypeNode && traitMethod.returnType) {
         std::string implReturnType = implMethod->returnTypeNode->toString();
         std::string traitReturnType = traitMethod.returnType->toString();
+
+        if (traitReturnType.rfind("Self::", 0) == 0) {
+            std::string assocName = traitReturnType.substr(6);
+            auto assocIt = associatedTypeBindings.find(assocName);
+            if (assocIt != associatedTypeBindings.end()) {
+                traitReturnType = assocIt->second;
+            }
+        }
         
         if (implReturnType != traitReturnType) {
             VYN_CDBG << "DEBUG: Return type mismatch: " 
@@ -5742,6 +5834,71 @@ bool SemanticAnalyzer::traitMethodSignatureMatches(const TraitMethod& traitMetho
     // TODO: More rigorous type checking for parameters
     // For now, just basic validation
     
+    return true;
+}
+
+std::string SemanticAnalyzer::resolveAssociatedTypeReference(
+    const std::string& typeName,
+    const std::string& traitName,
+    const std::string& typeReference,
+    const std::unordered_map<std::string, ast::TypeNode*>* inlineAssociatedTypeBindings) const {
+    static constexpr size_t kSelfPrefixLength = 6; // strlen("Self::")
+    std::string assocName;
+    if (typeReference.rfind("Self::", 0) == 0) {
+        assocName = typeReference.substr(kSelfPrefixLength);
+    } else if (typeReference.rfind(traitName + "::", 0) == 0) {
+        assocName = typeReference.substr(traitName.length() + 2);
+    } else {
+        return "";
+    }
+
+    if (assocName.empty()) {
+        return "";
+    }
+
+    if (inlineAssociatedTypeBindings) {
+        auto inlineIt = inlineAssociatedTypeBindings->find(assocName);
+        if (inlineIt != inlineAssociatedTypeBindings->end() && inlineIt->second) {
+            return inlineIt->second->toString();
+        }
+    }
+
+    auto typeIt = traitAssociatedTypeImpls.find(typeName);
+    if (typeIt == traitAssociatedTypeImpls.end()) {
+        return "";
+    }
+
+    auto traitIt = typeIt->second.find(traitName);
+    if (traitIt == typeIt->second.end()) {
+        return "";
+    }
+
+    auto assocIt = traitIt->second.find(assocName);
+    if (assocIt == traitIt->second.end() || !assocIt->second) {
+        return "";
+    }
+
+    return assocIt->second->toString();
+}
+
+bool SemanticAnalyzer::setResolvedTraitReturnType(ast::CallExpression* callNode,
+                                                  const std::string& concreteTypeName,
+                                                  const std::string& traitName,
+                                                  ast::TypeNode* traitReturnType) {
+    if (!callNode || !traitReturnType) {
+        return false;
+    }
+
+    std::string resolvedAssocType = resolveAssociatedTypeReference(concreteTypeName, traitName, traitReturnType->toString());
+    if (!resolvedAssocType.empty()) {
+        auto resolvedType = new ast::TypeName(callNode->loc, std::make_unique<ast::Identifier>(callNode->loc, resolvedAssocType));
+        expressionTypes[callNode] = resolvedType;
+        callNode->type = std::shared_ptr<ast::TypeNode>(resolvedType->clone());
+        return true;
+    }
+
+    expressionTypes[callNode] = traitReturnType;
+    callNode->type = std::shared_ptr<ast::TypeNode>(traitReturnType->clone());
     return true;
 }
 
