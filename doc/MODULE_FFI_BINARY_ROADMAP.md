@@ -380,19 +380,19 @@ Enable Vyn to call C functions and use C libraries (libc, POSIX, external deps).
    - Compatible with C struct passing by pointer
 
 3. **Parser Extension**
-   - Recognize `#[repr(C)]` attribute before struct
-   - Store in `StructDeclaration::layout` field
-   - Validate: no generics, no Vyn-specific types in C structs
+   - ✅ Recognize `#[repr(C)]` attribute before struct
+   - ✅ Store in `StructDeclaration::reprC`
+   - ✅ Validate: no generics, no ownership-qualified fields, no Vyn runtime fields such as `String`
 
 4. **Codegen Extension**
-   - LLVM struct with C ABI layout
-   - Use `StructLayout::offsetOfElement()` for validation
-   - Pass by pointer to C functions
+   - ✅ LLVM struct with declaration-order unpacked target layout
+   - ⏳ Use `StructLayout::offsetOfElement()` for deeper ABI reporting
+   - ✅ Pass by pointer to C functions
 
 **Deliverables:**
-- C-compatible struct layout
-- Can pass structs to C functions
-- Test suite: `test/ffi/test_c_struct.vyn`
+- ✅ C-compatible struct layout for the supported subset
+- ✅ Can pass repr(C) structs to C functions by pointer
+- ✅ Test suite: `test/ffi/repr_c_struct_basic.vyn`, `test/ffi/repr_c_struct_rejects_vyn_string.vyn`, `test/ffi/repr_c_struct_rejects_generic.vyn`, `test/ffi/repr_c_struct_rejects_ownership.vyn`, `test/ffi/extern_c_struct_by_pointer.vyn`
 
 **Dependencies:** Phase 2.1 (extern "C")
 

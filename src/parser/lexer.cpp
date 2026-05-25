@@ -37,8 +37,8 @@ std::vector<vyn::token::Token> Lexer::tokenize() {
       continue; 
     }
 
-    // Skip single-line comments starting with #
-    if (c == '#') {
+    // Skip single-line comments starting with #. Attribute syntax starts with #[...].
+    if (c == '#' && !(pos_ + 1 < source_.size() && source_[pos_ + 1] == '[')) {
       consume_while([](char c_comment) { return c_comment != '\n'; });
       // No token emitted for # comments, column advances with pos_ in consume_while
       // The newline will be handled by the next loop iteration.
@@ -276,6 +276,7 @@ std::vector<vyn::token::Token> Lexer::tokenize() {
         break;
       case ';': emit_token(vyn::TokenType::SEMICOLON, ";"); break; 
       case '@': emit_token(vyn::TokenType::AT, "@"); break; 
+      case '#': emit_token(vyn::TokenType::HASH, "#"); break;
       case '_': emit_token(vyn::TokenType::UNDERSCORE, "_"); break; 
       case '?': emit_token(vyn::TokenType::QUESTION_MARK, "?"); break;
       default:
@@ -341,7 +342,8 @@ void Lexer::handle_newline(std::vector<vyn::token::Token>& tokens) {
     bool is_nested_blank_or_comment = true;
     if (temp_pos_for_check < source_.size()) { 
         char first_char_after_spaces = source_[temp_pos_for_check];
-        if (first_char_after_spaces == '#') { 
+        if (first_char_after_spaces == '#' &&
+            !(temp_pos_for_check + 1 < source_.size() && source_[temp_pos_for_check + 1] == '[')) {
             is_nested_blank_or_comment = true;
         } else if (first_char_after_spaces == '/' && temp_pos_for_check + 1 < source_.size() && source_[temp_pos_for_check + 1] == '/') { 
             is_nested_blank_or_comment = true;
@@ -386,7 +388,8 @@ void Lexer::handle_newline(std::vector<vyn::token::Token>& tokens) {
   if (temp_pos_for_indent_check == source_.size() || // EOF
       source_[temp_pos_for_indent_check] == '\n' || // Another newline (blank line)
       source_[temp_pos_for_indent_check] == '\r' || // Carriage return
-      source_[temp_pos_for_indent_check] == '#' || // Hash comment
+      (source_[temp_pos_for_indent_check] == '#' &&
+       !(temp_pos_for_indent_check + 1 < source_.size() && source_[temp_pos_for_indent_check + 1] == '[')) || // Hash comment
       (source_[temp_pos_for_indent_check] == '/' && temp_pos_for_indent_check + 1 < source_.size() && source_[temp_pos_for_indent_check+1] == '/') // Slash comment
      ) {
       line_is_blank_or_comment = true;

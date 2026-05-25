@@ -1,0 +1,16 @@
+// @test: repr(C) struct basic layout
+// @description: #[repr(C)] structs parse, type-check, and preserve declaration-order fields for codegen
+// @category: ffi, interop
+// @expect: pass
+// @tags: ffi, repr-c, structs
+
+#[repr(C)]
+struct CPoint {
+    x<CInt>,
+    y<CInt>
+}
+
+main()<Int> -> {
+    p<CPoint> = CPoint { x = 2, y = 3 }
+    return 0
+}

@@ -8,6 +8,50 @@
 #include <stdbool.h>
 #include <errno.h>
 
+#if defined(__GNUC__) || defined(__clang__)
+#define VYN_WEAK __attribute__((weak))
+#else
+#define VYN_WEAK
+#endif
+
+// ============================================================================
+// CORE RUNTIME SHIMS USED BY NATIVE BUILDS
+// ============================================================================
+
+VYN_WEAK void __vyn_println(const char* str) {
+    fputs(str ? str : "", stdout);
+    fputc('\n', stdout);
+}
+
+VYN_WEAK void __vyn_print(const char* str) {
+    fputs(str ? str : "", stdout);
+}
+
+VYN_WEAK void __vyn_println_int(int64_t value) {
+    printf("%lld\n", (long long)value);
+}
+
+VYN_WEAK void __vyn_print_int(int64_t value) {
+    printf("%lld", (long long)value);
+}
+
+VYN_WEAK void __vyn_println_bool(int64_t value) {
+    puts(value ? "true" : "false");
+}
+
+VYN_WEAK void __vyn_print_bool(int64_t value) {
+    fputs(value ? "true" : "false", stdout);
+}
+
+VYN_WEAK void __vyn_runtime_push_call_frame(const char* function_name, const char* file_path, uint32_t line, uint32_t column) {
+    (void)function_name;
+    (void)file_path;
+    (void)line;
+    (void)column;
+}
+
+VYN_WEAK void __vyn_runtime_pop_call_frame(void) {}
+
 // ============================================================================
 // PRIMITIVE TYPE CONVERSIONS: to_string()
 // ============================================================================
@@ -137,4 +181,3 @@ void* __vyn_complex_from_json(const char* json_str, const char* type_name) {
     }
     return __vyn_complex_from_json_with_metadata(json_str, metadata);
 }
-

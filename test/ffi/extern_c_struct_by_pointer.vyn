@@ -1,0 +1,23 @@
+// @test: extern C struct by pointer
+// @description: repr(C) struct pointers can be passed to extern C functions inside freedom blocks
+// @category: ffi, interop
+// @expect: pass
+// @tags: ffi, repr-c, extern, pointers
+
+#[repr(C)]
+struct CPoint {
+    x<CInt>,
+    y<CInt>
+}
+
+extern "C" {
+    memset(dst<loc<CPoint>>, value<CInt>, n<CSize>)<loc<CPoint>>
+}
+
+main()<Int> -> {
+    p<CPoint> = CPoint { x = 7, y = 9 }
+    freedom {
+        memset(loc(p), 0, 8)
+    }
+    return 0
+}

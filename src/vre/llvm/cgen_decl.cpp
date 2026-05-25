@@ -729,6 +729,7 @@ void LLVMCodegen::visit(vyn::ast::StructDeclaration* node) {
     UserTypeInfo typeInfo;
     typeInfo.llvmType = structType;
     typeInfo.isStruct = true;
+    typeInfo.isReprC = node->reprC;
     
     // Add opaque struct to map BEFORE processing field types (for circular references)
     userTypeMap[nameStr] = typeInfo;

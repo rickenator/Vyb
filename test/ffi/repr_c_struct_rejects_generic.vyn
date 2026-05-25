@@ -1,0 +1,16 @@
+// @test: repr(C) struct rejects generics
+// @description: C ABI structs must have a fully concrete layout
+// @category: ffi, interop
+// @expect: fail
+// @semantic-only: true
+// @expect-error: repr(C) struct "CBox" cannot be generic
+// @tags: ffi, repr-c, diagnostics
+
+#[repr(C)]
+struct CBox<T> {
+    value<T>
+}
+
+main()<Int> -> {
+    return 0
+}

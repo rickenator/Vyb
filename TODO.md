@@ -228,7 +228,8 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
 - [x] **`extern` function modifier** — Individual extern function declarations compile to LLVM `ExternalLinkage` via `ExternStatement` codegen; syntax: `extern funcName(params)<ReturnType>`
 - [x] **`extern "C" { }` block syntax** — Multi-declaration blocks parse, register external functions, and codegen LLVM declarations
 - [x] **C type mapping** — Common C aliases (`CInt`, `CSize`, `CString`, `CPtr<T>`, `CVoid`, etc.) lower through semantic/codegen
-- [ ] **`#[repr(C)]` on structs** — Force C-compatible memory layout
+- [x] **`#[repr(C)]` on structs** — Attribute parses on structs, preserves declaration-order unpacked LLVM layout, and rejects generic/Vyn-runtime fields that are not C ABI-stable
+- [x] **Native `--link <lib-or-path>` flow** — Repeatable build flag passes `-l<lib>` or explicit library/object paths to the native linker
 - [ ] **Variadic C functions** — `printf(format: *i8, ...) -> Int`
 - [ ] **`vyn bindgen`** — Tool to generate Vyn bindings from C headers (v0.6+)
 

@@ -48,6 +48,7 @@ struct UserTypeInfo {
     llvm::StructType* llvmType;
     std::map<std::string, unsigned> fieldIndices; // Map field name to index
     bool isStruct; // True if struct, false if class (or could be enum later)
+    bool isReprC = false;
     // Potentially: vtable, parent type info, etc.
 };
 

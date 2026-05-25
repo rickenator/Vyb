@@ -106,10 +106,15 @@ extern "C" {
 }
 ```
 
-`#[repr(C)]` forces C-compatible field alignment and ordering.  Without it, the Vyn
-compiler may reorder or pad fields differently from C.
+`#[repr(C)]` preserves declaration-order fields and emits the LLVM struct as an
+unpacked target-layout struct. Without it, the Vyn compiler reserves the right to
+change layout in future releases.
 
-**Implementation note:** `#[repr(C)]` is planned alongside the FFI implementation in v0.5.
+Current restrictions are intentionally conservative: `repr(C)` structs cannot be
+generic, cannot contain ownership-qualified fields (`my`, `our`, `their`, `mild`,
+`view`, `borrow`), and cannot contain Vyn runtime fields such as `String`, `Bytes`,
+`Vec`, `Future`, tuples, or optional values. Use `CString`, `CPtr<T>`, `loc<T>`,
+C scalar aliases, or another explicit C ABI representation instead.
 The attribute syntax uses `#[...]` (Rust-inspired for now; may change before 1.0).
 
 ---
@@ -163,12 +168,15 @@ read_first_line(path<String>)<String> -> {
 
 ## 5. Linking
 
-To link against a C library, use the `--link` flag (planned for v0.5):
+To link against a C library in native build mode, use the repeatable `--link` flag:
 
 ```bash
-vyn build --link c --link m myprogram.vyn   # link libc and libm
-vyn build --link ssl myprogram.vyn           # link OpenSSL
+vyn myprogram.vyn --build myprogram --link c --link m  # link libc and libm
+vyn myprogram.vyn --build myprogram --link ssl         # link OpenSSL
 ```
+
+Bare names are passed as `-l<name>`. Arguments that already start with `-`, contain
+a path separator, or name a `.a`, `.so`, `.dylib`, or `.o` file are passed through.
 
 Alternatively, `vyn.toml` (package manager) will support:
 
@@ -187,9 +195,9 @@ ssl = { link = "ssl" }
 | Parse `extern "C" { }` blocks | Add `ExternBlock` AST node |
 | Emit LLVM `declare` for extern functions | In `cgen_decl.cpp` |
 | Type mapping table | Vyn type → LLVM IR type for all C-interop types |
-| `#[repr(C)]` struct attribute | Force C ABI layout |
+| `#[repr(C)]` struct attribute | Implemented for non-generic C-stable fields |
 | `String::as_c_str()` stdlib method | Returns null-terminated `loc<Int8>` |
-| `--link` CLI flag | Pass `-l<lib>` to linker |
+| `--link` CLI flag | Implemented for native `--build` linker inputs |
 | Test: call `strlen`, `puts` | Validates end-to-end FFI |
 | Test: `#[repr(C)]` struct round-trip | Pass struct to C, read back |
 

@@ -1183,8 +1183,9 @@ public:
     std::unique_ptr<Identifier> name;
     std::vector<std::unique_ptr<GenericParameter>> genericParams;
     std::vector<std::unique_ptr<FieldDeclaration>> fields;
+    bool reprC = false;
 
-    StructDeclaration(SourceLocation loc, std::unique_ptr<Identifier> name, std::vector<std::unique_ptr<GenericParameter>> genericParams, std::vector<std::unique_ptr<FieldDeclaration>> fields);
+    StructDeclaration(SourceLocation loc, std::unique_ptr<Identifier> name, std::vector<std::unique_ptr<GenericParameter>> genericParams, std::vector<std::unique_ptr<FieldDeclaration>> fields, bool reprC = false);
     ~StructDeclaration() override = default;
     NodeType getType() const override;
     std::string toString() const override;

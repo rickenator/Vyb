@@ -42,7 +42,7 @@ enum class TokenType {
 
     // Punctuation
     LPAREN, RPAREN, LBRACE, RBRACE, LBRACKET, RBRACKET, COMMA, DOT, COLON,
-    SEMICOLON, ARROW, FAT_ARROW, COLONCOLON, AT, UNDERSCORE, QUESTION_MARK, // Added for optional type T?
+    SEMICOLON, ARROW, FAT_ARROW, COLONCOLON, AT, HASH, UNDERSCORE, QUESTION_MARK, // Added for optional type T?
 
     // Misc
     UNKNOWN,

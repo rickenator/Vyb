@@ -10,6 +10,14 @@ expect-fail tests are treated as stronger evidence than optimistic status text.
 
 ## Implementation Progress
 
+- 2026-05-25: Advanced I-002 FFI with the next ABI slice: `#[repr(C)]`
+  now parses on structs, is tracked in AST/codegen metadata, preserves
+  declaration-order unpacked LLVM struct layout, and rejects generic,
+  ownership-qualified, and Vyn-runtime fields that are not C ABI-stable.
+  Native `--build` now accepts repeatable `--link <lib-or-path>` arguments and
+  links the metadata runtime object needed by native builds. Added focused
+  `test/ffi` coverage for repr(C) layout, diagnostics, and by-pointer extern C
+  calls.
 - 2026-05-25: Implemented the first associated-types slice for aspects/binds
   (I-007). Aspects now parse/store associated type declarations (`type Item`),
   binds accept explicit assignments (`type Item = Int`), and semantic analysis
@@ -147,7 +155,7 @@ Source areas checked:
 | ID | Area | Priority | What needs to be implemented | Evidence |
 |----|------|----------|------------------------------|----------|
 | I-001 | Module system | P0 | Formalize the source-level module resolver into a `ModuleRegistry`/AST metadata model, add module path search (`VYN_MODULE_PATH`, CLI), stdlib auto-discovery, and better duplicate-import caching. Local loading, cycle checks, `bundle(...)`, `share(...)`, selective aliases, and explicit re-exports now work. | `doc/MODULE_FFI_BINARY_ROADMAP.md`; source resolver lives in `src/main.cpp`; semantic/codegen import visitors remain no-ops after pre-resolution. |
-| I-002 | FFI | P0 | Continue FFI after extern block/ABI alias support: `repr(C)` structs, variadic calls, `--link` support, explicit `String::as_c_str()`, and broader end-to-end FFI tests. | Source now supports extern C blocks, host process symbol lookup, freedom-gated direct calls, C scalar/pointer aliases, and a narrow String-to-C-string call path, but still lacks variadic/repr(C)/linker flow. |
+| I-002 | FFI | P0 | Continue FFI after extern block/ABI alias support: variadic calls, explicit `String::as_c_str()`, richer C ABI layout validation, and broader end-to-end native/JIT FFI tests. | Source now supports extern C blocks, host process symbol lookup, freedom-gated direct calls, C scalar/pointer aliases, `#[repr(C)]` structs with conservative ABI diagnostics, a minimal native `--link <lib-or-path>` flow, and a narrow String-to-C-string call path. |
 | I-003 | Ownership runtime | P0 | Extend lexical borrow checks and the initial `our<T>`/`mild<T>` control-block runtime into full ownership: `my<T>` moves, complete `our<T>` copy/assignment/parameter strong-count semantics, deeper `their<T>` lifetime analysis, and comprehensive cleanup. | `TODO.md`; `doc/mem_RFC.md`; current semantic pass checks lvalue borrows, overlapping mutable/view borrows, and assignment while borrowed; current codegen supports minimal control blocks for `our()`, `soft()`, `released()`, and live `grab()`. |
 | I-004 | `mild<T>` weak references | P0 | Complete the remaining weak-reference contract: Option-like failed `grab()`, full weak handle copy/drop accounting across all assignment paths, and final control-block cleanup once strong/weak counts reach zero. | `doc/OWNERSHIP_MILD.md`; `test/ownership/mild_released_live.vyn`; `test/ownership/mild_released_after_drop_or_scope.vyn`; `test/ownership/mild_grab_live.vyn`; `test/ownership/mild_grab_released.vyn`. |
 | I-005 | Error propagation/runtime errors | P0 | Finish cross-function error propagation, construct real `VynError` objects at `fail`, preserve type/data/source location, print detailed untrapped errors, and settle Result-vs-fail/trap design conflict. | `doc/ERROR_PROPAGATION_DESIGN.md`; `test/trap/TEST_RESULTS.md`; `src/runtime/error_handling.cpp` says error structure is not implemented. |

@@ -1,0 +1,17 @@
+// @test: repr(C) struct rejects Vyn String
+// @description: C ABI structs must use CString or an explicit C ABI representation, not Vyn String
+// @category: ffi, interop
+// @expect: fail
+// @semantic-only: true
+// @expect-error: repr(C) struct field "name" cannot use Vyn String; use CString
+// @tags: ffi, repr-c, diagnostics
+
+#[repr(C)]
+struct CUser {
+    id<CInt>,
+    name<String>
+}
+
+main()<Int> -> {
+    return 0
+}

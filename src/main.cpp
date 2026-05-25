@@ -17,6 +17,7 @@
 #include <algorithm> // For std::find
 #include <cctype>
 #include <optional>
+#include <utility>
 #include <cstdio> // For printf and fflush
 #include <cstdlib> // For malloc/free
 #include <cstring> // For memset
@@ -339,25 +340,31 @@ int compile_vyn_to_object(const std::string& source, const std::string& fileName
 // Function to link object files into executable
 int link_vyn_executable(const std::vector<std::string>& objectFiles,
                         const std::string& outputExecutable,
+                        const std::vector<std::string>& userLinkArgs = {},
                         bool staticLink = false) {
     std::cout << "Linking executable: " << outputExecutable << std::endl;
     
-    // First, compile the runtime library if needed
-    std::string runtimeSource = "runtime/vyn_runtime.c";
-    std::string runtimeObject = "runtime/vyn_runtime.o";
-    
-    // Check if runtime source exists and compile it
-    if (access(runtimeSource.c_str(), F_OK) == 0) {
-        std::cout << "Compiling Vyn runtime library..." << std::endl;
-        
-        // Compile runtime with gcc/clang
-        std::string compileCmd = "cc -c " + runtimeSource + " -o " + runtimeObject + " -O2";
-        int compileResult = system(compileCmd.c_str());
-        if (compileResult != 0) {
-            std::cerr << "Failed to compile runtime library" << std::endl;
-            return 1;
+    // First, compile the runtime support files if needed.
+    std::vector<std::pair<std::string, std::string>> runtimeUnits = {
+        {"runtime/vyn_runtime.c", "runtime/vyn_runtime.o"},
+        {"runtime/vyn_type_metadata.c", "runtime/vyn_type_metadata.o"}
+    };
+    std::vector<std::string> runtimeObjects;
+
+    for (const auto& unit : runtimeUnits) {
+        const std::string& runtimeSource = unit.first;
+        const std::string& runtimeObject = unit.second;
+        if (access(runtimeSource.c_str(), F_OK) == 0) {
+            std::cout << "Compiling Vyn runtime library..." << std::endl;
+
+            std::string compileCmd = "cc -c " + runtimeSource + " -o " + runtimeObject + " -O2";
+            int compileResult = system(compileCmd.c_str());
+            if (compileResult != 0) {
+                std::cerr << "Failed to compile runtime library" << std::endl;
+                return 1;
+            }
+            runtimeObjects.push_back(runtimeObject);
         }
-        std::cout << "Runtime library compiled successfully" << std::endl;
     }
     
     // Detect platform and choose linker
@@ -433,9 +440,11 @@ int link_vyn_executable(const std::vector<std::string>& objectFiles,
         linkerArgs.push_back(objFile);
     }
     
-    // Add runtime library if it was compiled
-    if (access(runtimeObject.c_str(), F_OK) == 0) {
-        linkerArgs.push_back(runtimeObject);
+    // Add runtime libraries if they were compiled
+    for (const auto& runtimeObject : runtimeObjects) {
+        if (access(runtimeObject.c_str(), F_OK) == 0) {
+            linkerArgs.push_back(runtimeObject);
+        }
     }
     
     // Add C runtime library paths
@@ -444,6 +453,24 @@ int link_vyn_executable(const std::vector<std::string>& objectFiles,
     linkerArgs.push_back("-L/usr/lib64");
     linkerArgs.push_back("-L/usr/lib");
 #endif
+
+    auto normalizeLinkArg = [](const std::string& linkArg) -> std::string {
+        auto endsWith = [](const std::string& value, const std::string& suffix) -> bool {
+            return value.size() >= suffix.size() &&
+                   value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
+        };
+
+        if (linkArg.empty() || linkArg[0] == '-' || linkArg.find('/') != std::string::npos ||
+            endsWith(linkArg, ".a") || endsWith(linkArg, ".so") ||
+            endsWith(linkArg, ".dylib") || endsWith(linkArg, ".o")) {
+            return linkArg;
+        }
+        return "-l" + linkArg;
+    };
+
+    for (const auto& linkArg : userLinkArgs) {
+        linkerArgs.push_back(normalizeLinkArg(linkArg));
+    }
     
     // Link against C standard library and math library
     if (staticLink) {
@@ -984,6 +1011,7 @@ int main(int argc, char* argv[]) {
     std::string compile_output;
     std::string build_output;
     bool static_link = false;
+    std::vector<std::string> link_libraries;
     std::vector<std::string> input_files;
     std::vector<fs::path> module_search_paths;
     int optimization_level = 2;  // Default -O2
@@ -1025,6 +1053,13 @@ int main(int argc, char* argv[]) {
             continue;
         } else if (arg == "--static") {
             static_link = true;
+            continue;
+        } else if (arg == "--link") {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: --link requires a library name or path" << std::endl;
+                return 1;
+            }
+            link_libraries.emplace_back(argv[++i]);
             continue;
         } else if (arg == "--module-path") {
             if (i + 1 >= argc) {
@@ -1240,7 +1275,7 @@ int main(int argc, char* argv[]) {
                 // Step 2: Link to executable
                 std::cout << "\nStep 2: Linking to executable..." << std::endl;
                 std::vector<std::string> objectFiles = { objFile };
-                int linkResult = link_vyn_executable(objectFiles, executableName, static_link);
+                int linkResult = link_vyn_executable(objectFiles, executableName, link_libraries, static_link);
                 
                 if (linkResult == 0) {
                     std::cout << "\n✅ Build successful!" << std::endl;
@@ -1296,6 +1331,7 @@ int main(int argc, char* argv[]) {
         std::cout << "  --emit-llvm           Generate LLVM IR to a .ll file" << std::endl;
         std::cout << "  --compile, -c [file]  Compile to object file (.o)" << std::endl;
         std::cout << "  --build, -b [file]    Compile and link to executable (NEW!)" << std::endl;
+        std::cout << "  --link <lib-or-path>  Link a native build with -l<lib> or an explicit library/object path (repeatable)" << std::endl;
         std::cout << "  --static              Use static linking (with --build)" << std::endl;
         std::cout << "  --module-path <dir>   Add a module search path (repeatable)" << std::endl;
         std::cout << "  -O0, -O1, -O2, -O3    Set optimization level (default: -O2)" << std::endl;
@@ -1304,6 +1340,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Examples:" << std::endl;
         std::cout << "  " << argv[0] << " program.vyn                    # JIT compile and run" << std::endl;
         std::cout << "  " << argv[0] << " program.vyn --build myapp      # Build executable" << std::endl;
+        std::cout << "  " << argv[0] << " program.vyn --build myapp --link m  # Build and link libm" << std::endl;
         std::cout << "  " << argv[0] << " app.vyn --module-path modules   # Add module search path" << std::endl;
         std::cout << "  " << argv[0] << " program.vyn -b myapp -O3       # Build with max optimization" << std::endl;
         std::cout << "  " << argv[0] << " program.vyn --compile prog.o   # Compile to object file" << std::endl;

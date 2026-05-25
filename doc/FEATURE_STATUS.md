@@ -111,10 +111,10 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 |---------|--------|-------|
 | LLVM IR codegen | ✅ | |
 | JIT execution | ✅ | |
-| AOT native executable | ✅ | `--build` flag |
+| AOT native executable | ✅ | `--build` flag with repeatable `--link <lib-or-path>` linker inputs |
 | Multi-file compilation | ✅ | ModuleRegistry resolves local imports, module paths, stdlib discovery, and dependency order |
-| `extern "C"` FFI | ✅ | Extern blocks parse/codegen, freedom-gated calls, C ABI scalar/pointer aliases |
+| `extern "C"` FFI | ✅ | Extern blocks parse/codegen, freedom-gated calls, C ABI scalar/pointer aliases, conservative `#[repr(C)]` structs |
 
 ---
 
-*Last updated: v0.5.1 (2026-05-24)*
+*Last updated: v0.5.1 (2026-05-25)*

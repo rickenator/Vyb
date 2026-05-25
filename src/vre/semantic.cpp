@@ -21,6 +21,59 @@ extern bool g_debug_codegen;
 
 namespace vyn {
 
+static std::string reprCUnsupportedReason(ast::TypeNode* typeNode) {
+    if (!typeNode) {
+        return "has no declared type";
+    }
+
+    if (auto* typeName = dynamic_cast<ast::TypeName*>(typeNode)) {
+        if (!typeName->identifier) {
+            return "has an unnamed type";
+        }
+
+        const std::string name = typeName->identifier->name;
+        if (name == "String" || name == "string" || name == "Bytes" || name == "bytes") {
+            return "cannot use Vyn " + name + "; use CString or an explicit C ABI representation";
+        }
+        if (name == "my" || name == "our" || name == "their" ||
+            name == "mild" || name == "view" || name == "borrow") {
+            return "cannot use ownership-qualified type " + typeNode->toString() + " in a C ABI layout";
+        }
+        if (name == "Vec" || name == "Future" || name == "Tuple") {
+            return "cannot use Vyn runtime type " + typeNode->toString() + " in a C ABI layout";
+        }
+
+        for (const auto& arg : typeName->genericArgs) {
+            std::string reason = reprCUnsupportedReason(arg.get());
+            if (!reason.empty()) {
+                return reason;
+            }
+        }
+        return "";
+    }
+
+    if (auto* pointerType = dynamic_cast<ast::PointerType*>(typeNode)) {
+        return reprCUnsupportedReason(pointerType->pointeeType.get());
+    }
+    if (auto* arrayType = dynamic_cast<ast::ArrayType*>(typeNode)) {
+        return reprCUnsupportedReason(arrayType->elementType.get());
+    }
+    if (auto* vecType = dynamic_cast<ast::VecType*>(typeNode)) {
+        return "cannot use Vyn runtime type " + typeNode->toString() + " in a C ABI layout";
+    }
+    if (auto* futureType = dynamic_cast<ast::FutureType*>(typeNode)) {
+        return "cannot use Vyn runtime type " + typeNode->toString() + " in a C ABI layout";
+    }
+    if (auto* optionalType = dynamic_cast<ast::OptionalType*>(typeNode)) {
+        return "cannot use optional type " + typeNode->toString() + " in a C ABI layout";
+    }
+    if (auto* tupleType = dynamic_cast<ast::TupleTypeNode*>(typeNode)) {
+        return "cannot use tuple type " + typeNode->toString() + " in a C ABI layout";
+    }
+
+    return "";
+}
+
 // Scope class implementation
 Scope::Scope(Scope* parent_scope) : parent(parent_scope) {}
 
@@ -2784,7 +2837,14 @@ void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
                 // Type parameters are NOT primitive types (Int, Float, String, Bool, etc.)
                 bool isPrimitive = (declaredTypeStr == "Int" || declaredTypeStr == "Float" || 
                                    declaredTypeStr == "String" || declaredTypeStr == "Bool" ||
-                                   declaredTypeStr == "Void");
+                                   declaredTypeStr == "Void" ||
+                                   declaredTypeStr == "CChar" || declaredTypeStr == "CUChar" ||
+                                   declaredTypeStr == "CShort" || declaredTypeStr == "CUShort" ||
+                                   declaredTypeStr == "CInt" || declaredTypeStr == "CUInt" ||
+                                   declaredTypeStr == "CLong" || declaredTypeStr == "CULong" ||
+                                   declaredTypeStr == "CSize" || declaredTypeStr == "CSSize" ||
+                                   declaredTypeStr == "CFloat" || declaredTypeStr == "CDouble" ||
+                                   declaredTypeStr == "CVoid" || declaredTypeStr == "CString");
                 
                 if (!isPrimitive) {
                     // Check if it's a known struct/type by looking it up
@@ -3578,6 +3638,10 @@ void SemanticAnalyzer::visit(ast::StructDeclaration* node) {
 
     // Handle generic parameters if present (e.g., struct Box<T>)
     bool hasGenericParams = !node->genericParams.empty();
+    if (node->reprC && hasGenericParams) {
+        addError("repr(C) struct \"" + structName + "\" cannot be generic; C ABI layout must be fully concrete.", node);
+    }
+
     if (hasGenericParams) {
         enterScope();  // Create scope for type parameters
         
@@ -3632,6 +3696,13 @@ void SemanticAnalyzer::visit(ast::StructDeclaration* node) {
     
     for (auto& field : node->fields) {
         if (field && field->name && field->typeNode) {
+            if (node->reprC) {
+                std::string reason = reprCUnsupportedReason(field->typeNode.get());
+                if (!reason.empty()) {
+                    addError("repr(C) struct field \"" + field->name->name + "\" " + reason + ".", field.get());
+                }
+            }
+
             // Visit the field type to ensure it's valid (type params are now in scope)
             field->typeNode->accept(*this);
             

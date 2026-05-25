@@ -137,6 +137,7 @@ std::string token_type_to_string(vyn::TokenType type) { // Corrected namespace f
         {vyn::TokenType::FAT_ARROW, "FAT_ARROW"},
         {vyn::TokenType::COLONCOLON, "COLONCOLON"},
         {vyn::TokenType::AT, "AT"},
+        {vyn::TokenType::HASH, "HASH"},
         {vyn::TokenType::UNDERSCORE, "UNDERSCORE"},
         {vyn::TokenType::QUESTION_MARK, "QUESTION_MARK"},
 

@@ -46,7 +46,8 @@ vyn::ast::DeclPtr DeclarationParser::parse() {
         std::cerr << "[DECL_PARSER] Parsing as function declaration" << std::endl;
         #endif
         return this->parse_function();
-    } else if (current_token.type == vyn::TokenType::KEYWORD_STRUCT) {
+    } else if (current_token.type == vyn::TokenType::KEYWORD_STRUCT ||
+               current_token.type == vyn::TokenType::HASH) {
         auto struct_decl = this->parse_struct();
         return struct_decl;
     } else if (current_token.type == vyn::TokenType::KEYWORD_ASPECT) {
@@ -673,6 +674,30 @@ std::unique_ptr<vyn::ast::FunctionDeclaration> DeclarationParser::parse_function
 // Similar to struct, this needs a vyn::StructDeclaration in ast.hpp.
 std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_struct() {
     SourceLocation loc = this->current_location();
+    bool reprC = false;
+
+    if (this->match(vyn::TokenType::HASH)) {
+        this->expect(vyn::TokenType::LBRACKET);
+        if (this->peek().type != vyn::TokenType::IDENTIFIER || this->peek().lexeme != "repr") {
+            throw std::runtime_error("Unsupported attribute before struct at " +
+                                     location_to_string(this->current_location()) +
+                                     ". Only #[repr(C)] is currently supported.");
+        }
+        this->consume();
+        this->expect(vyn::TokenType::LPAREN);
+        if (this->peek().type != vyn::TokenType::IDENTIFIER || this->peek().lexeme != "C") {
+            throw std::runtime_error("Unsupported repr attribute before struct at " +
+                                     location_to_string(this->current_location()) +
+                                     ". Only #[repr(C)] is currently supported.");
+        }
+        this->consume();
+        this->expect(vyn::TokenType::RPAREN);
+        this->expect(vyn::TokenType::RBRACKET);
+        reprC = true;
+        this->skip_comments_and_newlines();
+        loc = this->current_location();
+    }
+
     this->expect(vyn::TokenType::KEYWORD_STRUCT);
 
     if (this->peek().type != vyn::TokenType::IDENTIFIER) {
@@ -745,7 +770,7 @@ std::unique_ptr<vyn::ast::Declaration> DeclarationParser::parse_struct() {
     }
     this->expect(vyn::TokenType::RBRACE);
 
-    return std::make_unique<ast::StructDeclaration>(loc, std::move(name), std::move(generic_params), std::move(fields));
+    return std::make_unique<ast::StructDeclaration>(loc, std::move(name), std::move(generic_params), std::move(fields), reprC);
 }
 
 

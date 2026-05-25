@@ -1205,8 +1205,8 @@ void FieldDeclaration::accept(Visitor& visitor) {
 
 // --- StructDeclaration ---
 // ... existing code ...
-StructDeclaration::StructDeclaration(SourceLocation loc, std::unique_ptr<Identifier> n, std::vector<std::unique_ptr<GenericParameter>> gp, std::vector<std::unique_ptr<FieldDeclaration>> flds)
-    : Declaration(loc), name(std::move(n)), genericParams(std::move(gp)), fields(std::move(flds)) {}
+StructDeclaration::StructDeclaration(SourceLocation loc, std::unique_ptr<Identifier> n, std::vector<std::unique_ptr<GenericParameter>> gp, std::vector<std::unique_ptr<FieldDeclaration>> flds, bool rc)
+    : Declaration(loc), name(std::move(n)), genericParams(std::move(gp)), fields(std::move(flds)), reprC(rc) {}
 
 NodeType StructDeclaration::getType() const {
     return NodeType::STRUCT_DECLARATION;
@@ -1214,6 +1214,9 @@ NodeType StructDeclaration::getType() const {
 
 std::string StructDeclaration::toString() const {
     std::stringstream ss;
+    if (reprC) {
+        ss << "#[repr(C)]\n";
+    }
     ss << "struct " << (name ? name->toString() : "");
     if (!genericParams.empty()) {
         ss << "<";
