@@ -4,7 +4,7 @@
 
 aspect Iterator {
     type Item
-    next(self<Self>)<Self::Item>
+    next(self)<Self::Item>
 }
 
 struct CounterIter {
@@ -14,7 +14,7 @@ struct CounterIter {
 bind Iterator -> CounterIter {
     type Item = Int
 
-    next(self<CounterIter>)<Int> -> {
+    next(self)<Int> -> {
         current<Iterator::Item> = self.value
         return current
     }

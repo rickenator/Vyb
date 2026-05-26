@@ -130,6 +130,7 @@ private:
     std::map<llvm::Value*, std::shared_ptr<vyn::ast::TypeNode>> valueTypeMap; // Maps LLVM values to AST types
     std::map<std::string, llvm::FunctionType*> localLambdaTypes; // Maps lambda variable name to its function type
     vyn::ast::TypeNode* m_currentImplTypeNode = nullptr; // Initialize
+    std::string m_currentImplTraitName;
     vyn::ast::Module* m_currentVynModule = nullptr;
     bool m_isLHSOfAssignment = false;
     bool verbose = false;  // Controls detailed warning output
@@ -230,6 +231,8 @@ private:
                                            const std::string& methodName);
     std::string extractBasePattern(const std::string& concreteType);
     std::string getFullTypeName(vyn::ast::Expression* expr);
+    vyn::ast::TypeNodePtr typePatternToTypeNode(const TypePattern& pattern,
+                                                const vyn::SourceLocation& loc);
     
     // Generic function monomorphization
     llvm::Function* monomorphizeGenericFunction(const std::string& functionName,

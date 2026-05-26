@@ -16,7 +16,6 @@ void __vyn_register_type(VynTypeMetadata* metadata) {
         return;
     }
     g_type_registry[g_num_types++] = metadata;
-    printf("Registered type: %s with %zu fields\n", metadata->type_name, metadata->num_fields);
 }
 
 // Lookup type metadata by name

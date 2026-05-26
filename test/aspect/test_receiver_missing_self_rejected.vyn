@@ -1,0 +1,14 @@
+// @test: aspect receiver missing self rejected
+// @description: Instance aspect methods still require an explicit receiver slot
+// @category: aspect, receiver, diagnostics
+// @expect: fail
+// @expect-error: Aspect method 'greet' must have 'self' as first parameter.
+// @semantic-only: true
+
+aspect Greet {
+    greet()<Void>
+}
+
+main()<Int> -> {
+    return 0
+}

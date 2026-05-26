@@ -7,8 +7,8 @@ This directory contains test files for the Vyn aspect system implementation.
 ### ✅ Basic Aspect Declarations
 ```vyn
 aspect Printable {
-    print(self<Self>)<Void> -> { }
-    describe(self<Self>)<String> -> { }
+    print(self)<Void> -> { }
+    describe(self)<String> -> { }
 }
 ```
 
@@ -43,11 +43,11 @@ result<String> = p.describe()
 ```vyn
 // Phase 3 complete
 bind<T> Container -> Vec<T> {
-    size(self<Vec<T>>)<Int> -> {
+    size(self)<Int> -> {
         return self.len()
     }
     
-    is_empty(self<Vec<T>>)<Bool> -> {
+    is_empty(self)<Bool> -> {
         return self.len() == 0
     }
 }
@@ -72,7 +72,7 @@ struct Box<T> {
 }
 
 bind<T> Display -> Box<T> {
-    show(self<Box<T>>)<Void> -> {
+    show(self)<Void> -> {
         // T is recognized and available in method body
         temp<T> = self.value  // Can use T for local variables
         return
@@ -91,24 +91,15 @@ bind<T> Display -> Box<T> {
 **Test Files:**
 - `test_type_param_simple.vyn` - ✅ **PASSING** - Generic struct and aspect bind validate correctly
 
-## Planned Features (Phase 5+)
+## Remaining Advanced Features
 
-### 🚧 Monomorphization for Code Generation
-**Requires:**
-- Generate specialized code for concrete types
-- Create Vec<Int>, Vec<String> from Vec<T>
-- LLVM code generation for generic types
-- Type substitution during compilation
+The current suite covers concrete binds, generic binds, receiver shorthand, aspect bounds,
+and the first associated-type slice. Remaining advanced work is tracked in `TODO.md`:
 
-**Status**: Generic types pass semantic analysis but fail LLVM code generation (expected - needs monomorphization)
-
-### 🚧 Future Advanced Features
-- **Aspect Bounds**: `fn sort<T: Comparable>(items<Vec<T>>)`
-- **Associated Types**: `aspect Iterator { type Item; }`
-- **Multiple Binds**: Multiple aspects for same type
-- **Aspect Objects**: Dynamic dispatch with aspect references
-- **Associated Types**: Types associated with aspects
-- **Super-aspects**: Aspect inheritance
+- **Bind selection precedence**: choosing a bounded bind over an unbounded bind when both match
+- **Aspect objects**: dynamic dispatch with `dyn Aspect`
+- **Aspect inheritance**: super-aspect requirements
+- **Full associated-type integration**: defaults, constraints, and dynamic-dispatch interactions
 
 ## Test Results
 

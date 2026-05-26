@@ -1,37 +1,12 @@
-# Vec type definition -> testing
-# Simple non-generic version first to validate aspect impls work
+// @test: builtin Vec smoke fixture
+// @description: Current Vyn uses builtin Vec<T>; this replaces the obsolete hand-rolled non-generic Vec fixture
+// @category: vec, aspect-fixture
+// @expect: pass
+// @expect-return: 2
 
-struct Vec {
-    data<loc<Int>>,     # Pointer to data
-    length<Int>,         # Current number of elements
-    capacity<Int>        # Allocated capacity
-}
-
-# Constructor
-new_vec()<Vec> -> {
-    v<Vec> = Vec {
-        data = loc(0),
-        length = 0,
-        capacity = 0
-    }
-    return v
-}
-
-# Basic methods
-vec_len(v<Vec>)<Int> -> {
-    return v.length
-}
-
-vec_is_empty(v<Vec>)<Bool> -> {
-    return v.length == 0
-}
-
-# Test the Vec type
 main()<Int> -> {
-    v<Vec> = new_vec()
-    
-    len<Int> = vec_len(v)
-    empty<Bool> = vec_is_empty(v)
-    
-    return len
+    values<Vec<Int>> = Vec::new()
+    values.push(10)
+    values.push(20)
+    return values.len()
 }

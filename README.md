@@ -520,15 +520,17 @@ if (typeof(x) != typeof(y)) {
 
 ### ✅ **Aspect System (v0.4.2)**
 
-**Philosophy:** Vyn uses **aspects + structs** instead of classes and inheritance. This provides polymorphism, code reuse, and composition without the complexity and pitfalls of OOP class hierarchies. See `doc/ASPECT_SYSTEM_DESIGN.md` for detailed design and rationale.
+**Philosophy:** Vyn uses **aspects + structs** instead of classes and inheritance. This provides polymorphism, code reuse, and composition without the complexity and pitfalls of OOP class hierarchies. See `doc/TRAIT_SYSTEM_DESIGN.md` for detailed design and rationale.
+
+Simple aspect receivers use `self`; the compiler treats it as the bound `Self` type. Use explicit receiver types like `self<their<Self>>` only when ownership mode matters.
 
 #### **Complete Aspect Example**
 
 ```vyn
 # Define an aspect (interface) with method signatures
 aspect Display {
-    show(self<Self>)<String> -> { }
-    format(self<Self>, prefix<String>)<String> -> { }
+    show(self)<String> -> { }
+    format(self, prefix<String>)<String> -> { }
 }
 
 # Define a generic struct
@@ -538,11 +540,11 @@ struct Box<T> {
 
 # Bind the aspect to a concrete type
 bind Display -> Box<Int> {
-    show(self<Self>)<String> -> {
+    show(self)<String> -> {
         return "Box with integer"
     }
     
-    format(self<Self>, prefix<String>)<String> -> {
+    format(self, prefix<String>)<String> -> {
         return prefix + ": Box[Int]"
     }
 }
@@ -554,11 +556,11 @@ struct Point {
 }
 
 bind Display -> Point {
-    show(self<Self>)<String> -> {
+    show(self)<String> -> {
         return "Point"
     }
     
-    format(self<Self>, prefix<String>)<String> -> {
+    format(self, prefix<String>)<String> -> {
         return prefix + ": (x,y)"
     }
 }
@@ -812,13 +814,13 @@ struct Person {
 
 // Define aspect for gradeable entities
 aspect Gradeable {
-    letter_grade(self<Self>)<String> -> { }
-    is_passing(self<Self>)<Bool> -> { }
+    letter_grade(self)<String> -> { }
+    is_passing(self)<Bool> -> { }
 }
 
 // Bind aspect to Person using match in the implementation
 bind Gradeable -> Person {
-    letter_grade(self<Self>)<String> -> {
+    letter_grade(self)<String> -> {
         // Calculate average score
         total<Int> = 0
         i<Int> = 0
@@ -838,7 +840,7 @@ bind Gradeable -> Person {
         }
     }
 
-    is_passing(self<Self>)<Bool> -> {
+    is_passing(self)<Bool> -> {
         grade<String> = self.letter_grade()
         match (grade) {
             "F" -> return false,

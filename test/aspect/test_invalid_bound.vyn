@@ -1,7 +1,12 @@
-// Test that invalid bounds are properly rejected
+// @test: struct bound rejected
+// @description: Generic bounds must name aspects, not ordinary structs
+// @category: aspect, bounds, diagnostics
+// @expect: fail
+// @expect-error: Bound 'Point' on type parameter 'T' is not a defined aspect.
+// @semantic-only: true
 
 aspect Display {
-    show(self<Self>)<Void>
+    show(self)<Void>
 }
 
 struct Point {
@@ -9,11 +14,10 @@ struct Point {
     y<Int>
 }
 
-// This should FAIL - Point is not an aspect
 testFunc<T<Point>>(item<T>)<Void> -> {
-    // T bounded by Point (which is a struct, not an aspect)
+    return
 }
 
 main()<Int> -> {
-    return 0;
+    return 0
 }

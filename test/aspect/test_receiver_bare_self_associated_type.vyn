@@ -1,0 +1,26 @@
+// @test: bare self receiver with associated type
+// @description: Receiver shorthand works with Self:: associated type returns
+// @category: aspect, receiver, associated-types
+// @expect: pass
+// @semantic-only: true
+
+aspect Iterator {
+    type Item
+    next(self)<Self::Item>
+}
+
+struct CounterIter {
+    value<Int>
+}
+
+bind Iterator -> CounterIter {
+    type Item = Int
+
+    next(self)<Int> -> {
+        return self.value
+    }
+}
+
+main()<Int> -> {
+    return 0
+}

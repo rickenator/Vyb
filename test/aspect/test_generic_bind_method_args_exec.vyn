@@ -1,0 +1,21 @@
+// @test: executable generic bind method with explicit argument
+// @description: Generic bind monomorphization preserves receiver and non-receiver parameter indexing
+// @category: aspect, generics, monomorphization
+// @expect: pass
+// @expect-return: 5
+
+aspect SizedAdd {
+    add_size(self, amount<Int>)<Int>
+}
+
+bind<T> SizedAdd -> Vec<T> {
+    add_size(self, amount<Int>)<Int> -> {
+        return self.len() + amount
+    }
+}
+
+main()<Int> -> {
+    numbers<Vec<Int>> = Vec::new()
+    numbers.push(10)
+    return numbers.add_size(4)
+}

@@ -1,0 +1,19 @@
+// @test: nested generic object literal field validation
+// @description: Explicit generic object literals substitute nested generic field types before validation
+// @category: aspect, generics, object-literal
+// @expect: pass
+// @semantic-only: true
+
+struct Box<T> {
+    value<T>
+}
+
+struct Holder<T> {
+    box<Box<T>>
+}
+
+main()<Int> -> {
+    box<Box<Int>> = Box<Int> { value = 7 }
+    holder<Holder<Int>> = Holder<Int> { box = box }
+    return 0
+}

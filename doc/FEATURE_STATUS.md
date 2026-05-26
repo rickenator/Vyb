@@ -63,8 +63,8 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 | Functions (name-first syntax) | ✅ | |
 | Structs | ✅ | |
 | Enums | ✅ | C-like integer enums: variants map to sequential `i64` constants; `Enum::Variant` access works; tagged unions (data variants) planned for v0.6 |
-| Generics (monomorphization) | ✅ | |
-| Aspect/Bind polymorphism | ✅ | |
+| Generics (monomorphization) | ✅ | Includes generic functions and current generic bind method executable monomorphization; broader nested/member templates still need expansion |
+| Aspect/Bind polymorphism | ✅ | Includes canonical simple receiver shorthand `method(self)<T>`, legacy/explicit `self<Self>`, ownership-qualified receivers, associated types, executable generic bind methods for current supported shapes, and ambiguous dot-call diagnostics |
 | Ownership: `my`, `our`, `their`, `mild` | 🚧 | Lexical borrow enforcement plus minimal `our<T>`/`mild<T>` control blocks; full move/copy/drop checker still planned |
 | `freedom` blocks + `loc<T>` raw pointers | ✅ | |
 | `match` / `select` expressions | ✅ | |

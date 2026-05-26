@@ -1,0 +1,23 @@
+// @test: bare self receiver in generic bind
+// @description: Receiver shorthand is accepted in generic bind templates
+// @category: aspect, receiver, generics
+// @expect: pass
+// @semantic-only: true
+
+aspect Display {
+    show(self)<String>
+}
+
+struct Box<T> {
+    value<T>
+}
+
+bind<T> Display -> Box<T> {
+    show(self)<String> -> {
+        return "Box"
+    }
+}
+
+main()<Int> -> {
+    return 0
+}

@@ -2,17 +2,17 @@
 // Tests bind Trait -> Vec<Int> (concrete generic type)
 
 aspect Container {
-    size(self<Self>)<Int> -> { }
-    is_empty(self<Self>)<Bool> -> { }
+    size(self)<Int> -> { }
+    is_empty(self)<Bool> -> { }
 }
 
 // Concrete bind: Vec<Int> implements Container
 bind Container -> Vec<Int> {
-    size(self<Vec<Int>>)<Int> -> {
+    size(self)<Int> -> {
         return self.len()
     }
     
-    is_empty(self<Vec<Int>>)<Bool> -> {
+    is_empty(self)<Bool> -> {
         return self.len() == 0
     }
 }

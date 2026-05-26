@@ -1,0 +1,14 @@
+// @test: bare self receiver rejected in free function
+// @description: Receiver shorthand is scoped to aspect and bind methods
+// @category: aspect, receiver, diagnostics
+// @expect: fail
+// @expect-error: Receiver parameter "self" is only valid as the first parameter of an aspect or bind method.
+// @semantic-only: true
+
+helper(self)<Void> -> {
+    return
+}
+
+main()<Int> -> {
+    return 0
+}

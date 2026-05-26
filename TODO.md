@@ -29,8 +29,8 @@ is the working audit for what needs to be implemented next.
 | Ownership types (syntax + parsing) | ~80% | Semantic enforcement |
 | Ownership types (runtime enforcement) | ~45% | Full move/copy/drop checking |
 | `mild<T>` weak references | ~60% | Minimal control blocks done; Option-like failed upgrade and full copy/drop semantics remain |
-| Aspect/bind system | ~65% | Associated types, dyn dispatch |
-| Generic monomorphization | ~70% | Bounds-checked instantiation |
+| Aspect/bind system | ~72% | Aspect objects/dyn dispatch, inheritance, qualified disambiguation |
+| Generic monomorphization | ~72% | Bounds-checked instantiation, broader nested/member templates |
 | Async/await | ~80% | Real scheduler/executor |
 | Error propagation (`fail`/`trap`) | ~80% | Standard error aspects, `rethrow`, ensure contracts |
 | Lambda/closure codegen | ~50% | Full closure struct, captured-var codegen |
@@ -123,6 +123,7 @@ is the working audit for what needs to be implemented next.
 
 ### Aspect/Bind System (Vyn's Polymorphism)
 - [x] **`aspect` declarations** — Method signatures, optional default implementations
+- [x] **Receiver shorthand** — `method(self)<T>` is canonical sugar for simple `self<Self>` aspect/bind receivers
 - [x] **`bind Aspect -> Type { ... }`** — Unbounded bind for concrete types
 - [x] **`bind<T> Aspect -> Type<T> { ... }`** — Generic unbounded bind
 - [x] **`bind<T<Aspect1, Aspect2>> Aspect -> Type<T> { ... }`** — Bounded bind

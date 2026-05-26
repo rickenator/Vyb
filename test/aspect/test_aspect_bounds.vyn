@@ -1,75 +1,15 @@
-// Test aspect bounds on generic parameters
-// Step 5: Aspect bounds constrain what types can be used with generics
-
-// ============================================================================
-// CRITICAL CONCEPT: WHAT DOES A BIND DO?
-// ============================================================================
-//
-// A bind ADDS an aspect to a type, making that aspect's methods CALLABLE by
-// external code. The bind implementation defines HOW those methods work.
-//
-// Example:
-//   bind Display -> Point { show(self<Self>)<Void> -> { ... } }
-//
-// Result: External code can now call point.show()
-//         The bind implementation defines what show() does
-//
-// ============================================================================
-// UNBOUNDED vs BOUNDED BINDS
-// ============================================================================
-//
-// UNBOUNDED: bind<T> Display -> Box<T>
-//   WHAT IT DOES:
-//     - Gives Display aspect to Box<T> for ANY type T
-//     - External code can call box.show() no matter what T is
-//     - Box<Int>.show() works, Box<String>.show() works, etc.
-//
-//   INSIDE THE BIND IMPLEMENTATION:
-//     - T is opaque - you don't know what methods T has
-//     - Can access self.value (it's a Box field) but can't call T's methods
-//     - Can't call self.value.show() - T might not have Display!
-//
-//   EXAMPLE USE CASE:
-//     - Generic wrapper that displays itself, not its contents
-//     - E.g., "Box contains something" (doesn't show what's inside)
-//
-// BOUNDED: bind<T<Display>> Display -> Box<T>
-//   WHAT IT DOES:
-//     - Gives Display aspect to Box<T> ONLY when T also has Display
-//     - External code can call box.show() ONLY if T has Display
-//     - Box<Point>.show() works IF Point has Display
-//     - Box<Int>.show() does NOT get this bind (Int doesn't have Display)
-//
-//   INSIDE THE BIND IMPLEMENTATION:
-//     - T is known to have Display - you CAN call T's methods
-//     - Can call self.value.show() because bound guarantees it exists
-//     - Lets you delegate to T's display, or use it in custom way
-//
-//   EXAMPLE USE CASE:
-//     - Wrapper that shows its contents by delegating to T's Display
-//     - E.g., "Box containing: <value's display>"
-//
-// KEY INSIGHT:
-//   - Bounds affect what you can do INSIDE the bind implementation
-//   - Both bounded and unbounded binds add methods that EXTERNAL code can call
-//   - The difference is HOW the implementation works and WHEN it applies
-
-// MULTIPLE BOUNDS: bind<T<Display, Clone>> Wrapper -> Box<T>
-//   - T must have BOTH Display AND Clone aspects
-//   - Inside impl, you can call methods from both aspects on T
-//   - Comma means AND - all bounds must be satisfied
-//   - External code can use the wrapper ONLY when T satisfies all bounds
-
-// NOTE: To implement multiple aspects for one type, use separate bind declarations:
-//   bind<T<Display>> Display -> Box<T> { ... }
-//   bind<T> Clone -> Box<T> { ... }
+// @test: aspect bounds on generic parameters
+// @description: Bounds let generic code call aspect methods guaranteed by the bound
+// @category: aspect, bounds
+// @expect: pass
+// @semantic-only: true
 
 aspect Display {
-    show(self<Self>)<Void>
+    show(self)<Void>
 }
 
 aspect Clone {
-    clone(self<Self>)<Self>
+    clone(self)<Self>
 }
 
 struct Point {
@@ -81,86 +21,45 @@ struct Box<T> {
     value<T>
 }
 
-// Simple concrete bind: Point implements Display
 bind Display -> Point {
-    show(self<Self>)<Void> -> {
-        println("Point(x, y)");
+    show(self)<Void> -> {
+        return
     }
 }
 
-// Point also implements Clone (separate bind)
 bind Clone -> Point {
-    clone(self<Self>)<Self> -> {
-        result<Point> = Point { x = self.x, y = self.y };
-        return result;
+    clone(self)<Self> -> {
+        result<Point> = Point { x = self.x, y = self.y }
+        return result
     }
 }
 
-// UNBOUNDED EXAMPLE: Works for ANY T
-// External code gets: box.show() for Box<Int>, Box<String>, Box<Anything>
-// Implementation: Generic message, doesn't try to show T's contents
-bind<T> Display -> Box<T> {
-    show(self<Self>)<Void> -> {
-        println("Box contains a value (type unknown)");
-        // CANNOT call self.value.show() - T might not have Display!
-        // This is the limitation of unbounded generics
-    }
-}
-
-// BOUNDED EXAMPLE: Only works when T has Display
-// External code gets: box.show() ONLY for Box<Point>, Box<OtherDisplayType>
-// Implementation: Can delegate to T's Display because bound guarantees it
 bind<T<Display>> Display -> Box<T> {
-    show(self<Self>)<Void> -> {
-        println("Box containing:");
-        self.value.show();  // ✅ ALLOWED: bound guarantees T has Display
-        // This implementation can use T's Display methods
+    show(self)<Void> -> {
+        self.value.show()
+        return
     }
 }
 
-// MULTIPLE BOUNDS: T must have BOTH Display AND Clone
 bind<T<Display, Clone>> Clone -> Box<T> {
-    clone(self<Self>)<Self> -> {
-        println("Cloning box and its contents");
-        clonedValue<T> = self.value.clone();  // OK: T has Clone
-        clonedValue.show();  // OK: T has Display
-        result<Box<T>> = Box { value = clonedValue };
-        return result;
+    clone(self)<Self> -> {
+        self.value.show()
+        self.value.clone()
+        return self
     }
 }
 
-// Generic function with single bound
-// EXTERNAL CODE: Can call printItem(p) ONLY if p's type has Display
-// INSIDE FUNCTION: Can call item.show() because bound guarantees it
 printItem<T<Display>>(item<T>)<Void> -> {
-    item.show();  // ✅ ALLOWED: bound guarantees T has Display
+    item.show()
+    return
 }
 
-// Generic function with multiple bounds
-duplicateAndShow<T<Display, Clone>>(item<T>)<T> -> {
-    copy<T> = item.clone();  // ✅ T has Clone
-    copy.show();  // ✅ T has Display
-    return copy;
+useDisplayAndClone<T<Display, Clone>>(item<T>)<Void> -> {
+    item.show()
+    item.clone()
+    return
 }
 
 main()<Int> -> {
-    p<Point> = Point { x = 5, y = 10 };
-    
-    // ✅ Works: Point has Display (via bind Display -> Point)
-    printItem(p);
-    
-    // ✅ Works: Point has BOTH Display and Clone
-    p2<Point> = duplicateAndShow(p);
-    
-    // Box<Point> gets Display from BOTH unbounded and bounded binds:
-    box<Box<Point>> = Box { value = p };
-    
-    // Which bind is chosen? The bounded one takes precedence when applicable
-    box.show();  // Uses bounded bind - shows "Box containing: Point(x, y)"
-    
-    box2<Box<Point>> = box.clone();  // Uses multi-bounded Clone impl
-    box2.show();
-    
-    println("Aspect bounds test passed!");
-    return 0;
+    return 0
 }

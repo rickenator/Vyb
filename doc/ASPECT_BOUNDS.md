@@ -8,10 +8,12 @@
 
 A **bind** adds an aspect to a type, making that aspect's methods **callable by external code**. The bind implementation defines **how** those methods work.
 
+Simple receiver parameters are written as `self`. This is canonical sugar for `self<Self>` in aspect and bind methods. Keep explicit receiver types, such as `self<their<Self>>`, when ownership or borrowing mode is part of the contract.
+
 ### Example:
 ```vyn
 bind Display -> Point {
-    show(self<Self>)<Void> -> {
+    show(self)<Void> -> {
         println("Point(x, y)");
     }
 }
@@ -40,7 +42,7 @@ point.show();  // ✅ Works! Prints "Point(x, y)"
 **Example:**
 ```vyn
 bind<T> Display -> Box<T> {
-    show(self<Self>)<Void> -> {
+    show(self)<Void> -> {
         println("Box contains a value (type unknown)");
         // ❌ CANNOT: self.value.show()
         // T might not have Display!
@@ -73,7 +75,7 @@ box2.show();  // ✅ Works: "Box contains a value"
 **Example:**
 ```vyn
 bind<T<Display>> Display -> Box<T> {
-    show(self<Self>)<Void> -> {
+    show(self)<Void> -> {
         println("Box containing:");
         self.value.show();  // ✅ ALLOWED: bound guarantees T has Display
     }
@@ -98,7 +100,7 @@ Use commas to require multiple aspects:
 
 ```vyn
 bind<T<Display, Clone>> Clone -> Box<T> {
-    clone(self<Self>)<Self> -> {
+    clone(self)<Self> -> {
         println("Cloning box and its contents");
         clonedValue<T> = self.value.clone();  // ✅ T has Clone
         clonedValue.show();  // ✅ T has Display
@@ -175,8 +177,8 @@ bind<T<Display>> Display -> Box<T> { ... }  // Applies when T has Display
 ```vyn
 // Aspect definition
 aspect AspectName {
-    method(self<Self>)<ReturnType>  // Mandatory (no arrow)
-    method(self<Self>)<ReturnType> -> { ... }  // Optional with default
+    method(self)<ReturnType>  // Mandatory (no arrow)
+    method(self)<ReturnType> -> { ... }  // Optional with default
 }
 
 // Unbounded bind (T is opaque)
@@ -199,13 +201,13 @@ Associated types can now be declared on aspects and assigned in binds.
 ```vyn
 aspect Iterator {
     type Item
-    next(self<Self>)<Self::Item>
+    next(self)<Self::Item>
 }
 
 bind Iterator -> CounterIter {
     type Item = Int
 
-    next(self<CounterIter>)<Int> -> {
+    next(self)<Int> -> {
         current<Iterator::Item> = self.value
         return current
     }

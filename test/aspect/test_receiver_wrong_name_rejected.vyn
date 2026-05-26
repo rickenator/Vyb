@@ -1,0 +1,24 @@
+// @test: bind receiver wrong name rejected
+// @description: Bind methods must keep self as the first receiver parameter
+// @category: aspect, receiver, diagnostics
+// @expect: fail
+// @expect-error: Method 'greet' must use receiver parameter 'self' as its first parameter to implement aspect method 'greet'.
+// @semantic-only: true
+
+aspect Greet {
+    greet(self)<Void>
+}
+
+struct Person {
+    name<String>
+}
+
+bind Greet -> Person {
+    greet(other<Person>)<Void> -> {
+        return
+    }
+}
+
+main()<Int> -> {
+    return 0
+}

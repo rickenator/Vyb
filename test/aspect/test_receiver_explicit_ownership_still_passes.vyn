@@ -1,0 +1,23 @@
+// @test: explicit ownership receiver still passes
+// @description: Ownership-qualified receiver syntax remains available
+// @category: aspect, receiver, ownership
+// @expect: pass
+// @semantic-only: true
+
+aspect Display {
+    show(self<their<Self>>)<String>
+}
+
+struct Person {
+    name<String>
+}
+
+bind Display -> Person {
+    show(self<their<Person>>)<String> -> {
+        return self.name
+    }
+}
+
+main()<Int> -> {
+    return 0
+}
