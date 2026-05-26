@@ -311,6 +311,16 @@ vyn::ast::FunctionParameter DeclarationParser::parse_function_parameter_struct()
     // Check for unified syntax vs legacy relaxed syntax
     if (this->peek().type == vyn::TokenType::IDENTIFIER) {
         auto lookahead = this->peekNext();
+        if (this->peek().lexeme == "self" &&
+            (lookahead.type == vyn::TokenType::COMMA || lookahead.type == vyn::TokenType::RPAREN)) {
+            auto name_ident = std::make_unique<ast::Identifier>(this->current_location(), this->consume().lexeme);
+            auto self_type = std::make_unique<ast::TypeName>(
+                loc,
+                std::make_unique<ast::Identifier>(loc, "Self")
+            );
+            return vyn::ast::FunctionParameter(std::move(name_ident), std::move(self_type), is_mutable);
+        }
+
         if (lookahead.type == vyn::TokenType::LT) {
             // NEW UNIFIED SYNTAX: name<Type>
             auto name_ident = std::make_unique<ast::Identifier>(this->current_location(), this->consume().lexeme);

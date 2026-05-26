@@ -130,6 +130,7 @@ private:
     std::map<llvm::Value*, std::shared_ptr<vyn::ast::TypeNode>> valueTypeMap; // Maps LLVM values to AST types
     std::map<std::string, llvm::FunctionType*> localLambdaTypes; // Maps lambda variable name to its function type
     vyn::ast::TypeNode* m_currentImplTypeNode = nullptr; // Initialize
+    std::string m_currentImplTraitName;
     vyn::ast::Module* m_currentVynModule = nullptr;
     bool m_isLHSOfAssignment = false;
     bool verbose = false;  // Controls detailed warning output

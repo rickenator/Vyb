@@ -51,6 +51,8 @@ distance(p1<Point>, p2<Point>)<Float> -> {
 
 ## Aspect Declaration Syntax
 
+For a simple instance receiver, write `self`. The compiler canonicalizes it to the bound `Self` type. Use explicit receiver types like `self<their<Self>>` when ownership mode is meaningful.
+
 ### Basic Aspect
 
 ```vyn

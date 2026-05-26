@@ -1,13 +1,19 @@
-# Test type parameter recognition in generic bind methods
+// @test: type parameter recognition in generic bind methods
+// @description: Generic bind method bodies may declare locals using the bind type parameter
+// @category: aspect, generics
+// @expect: pass
+// @semantic-only: true
 
 aspect Container {
-    size(self<Self>)<Int> -> { }
+    size(self)<Int>
 }
 
-# Generic bind with type parameter T
+struct Wrapper<T> {
+    data<T>
+}
+
 bind<T> Container -> Wrapper<T> {
-    size(self<Wrapper<T>>)<Int> -> {
-        # Use T in a local variable declaration
+    size(self)<Int> -> {
         value<T> = self.data
         return 1
     }

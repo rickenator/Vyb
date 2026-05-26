@@ -259,6 +259,12 @@ public:
     const std::unordered_map<std::string, std::unique_ptr<TraitInfo>>& 
     getTraitRegistry() const { return traitRegistry; }
 
+    std::string resolveAssociatedTypeForType(const std::string& typeName,
+                                             const std::string& traitName,
+                                             const std::string& typeReference) const {
+        return resolveAssociatedTypeReference(typeName, traitName, typeReference);
+    }
+
     // Helper methods
     bool isInLoop();
     bool isInUnsafeBlock();
@@ -424,6 +430,7 @@ private:
     
     // Struct field type storage for member access resolution
     std::unordered_map<std::string, std::map<std::string, ast::TypeNode*>> structFieldTypes;
+    std::unordered_map<std::string, std::vector<std::string>> structGenericParamOrder;
 
     // Enum type names declared in this module (for identifier and member-expression resolution)
     std::unordered_set<std::string> enumTypeNames;

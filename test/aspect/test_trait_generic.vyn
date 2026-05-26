@@ -1,18 +1,24 @@
+// @test: generic aspect bind to Vec semantic validation
+// @description: Generic aspect binds for Vec<T> validate semantically; executable generic-bind method monomorphization remains tracked separately
+// @category: aspect, generics, vec
+// @expect: pass
+// @semantic-only: true
+
 // Phase 3: Generic aspect implementations
 // Tests bind<T> Trait -> GenericType<T>
 
 aspect Container {
-    size(self<Self>)<Int> -> { }
-    is_empty(self<Self>)<Bool> -> { }
+    size(self)<Int> -> { }
+    is_empty(self)<Bool> -> { }
 }
 
 // Generic bind: any Vec<T> implements Container
 bind<T> Container -> Vec<T> {
-    size(self<Vec<T>>)<Int> -> {
+    size(self)<Int> -> {
         return self.len()
     }
     
-    is_empty(self<Vec<T>>)<Bool> -> {
+    is_empty(self)<Bool> -> {
         return self.len() == 0
     }
 }

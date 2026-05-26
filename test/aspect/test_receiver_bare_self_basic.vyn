@@ -1,4 +1,7 @@
-// Demo: structs, aspects, bind, and method dispatch.
+// @test: aspect receiver bare self basic
+// @description: Simple aspect receivers may use canonical bare self syntax
+// @category: aspect, receiver
+// @expect: pass
 
 aspect Greet {
     greet(self)<Void>
@@ -10,8 +13,7 @@ struct Person {
 
 bind Greet -> Person {
     greet(self)<Void> -> {
-        print("hello ")
-        println(self.name)
+        return
     }
 }
 

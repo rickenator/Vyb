@@ -21,6 +21,26 @@ extern bool g_debug_codegen;
 
 namespace vyn {
 
+static bool isBuiltinVecMethodName(const std::string& methodName) {
+    return methodName == "push" || methodName == "pop" || methodName == "len" ||
+           methodName == "get" || methodName == "push_array" ||
+           methodName == "to_array" || methodName == "get_array" ||
+           methodName == "clear" || methodName == "is_empty" ||
+           methodName == "capacity" || methodName == "concat" ||
+           methodName == "contains" || methodName == "remove_at" ||
+           methodName == "get_vec";
+}
+
+static bool isBuiltinVecType(ast::TypeNode* typeNode) {
+    if (dynamic_cast<ast::VecType*>(typeNode)) {
+        return true;
+    }
+    auto* typeName = dynamic_cast<ast::TypeName*>(typeNode);
+    return typeName && typeName->identifier &&
+           typeName->identifier->name == "Vec" &&
+           !typeName->genericArgs.empty();
+}
+
 static std::string reprCUnsupportedReason(ast::TypeNode* typeNode) {
     if (!typeNode) {
         return "has no declared type";
@@ -735,8 +755,25 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
         }
     }
 
-    std::vector<std::unique_ptr<ast::TypeNode>> paramTypesVec;    for (auto& param : node->params) { 
+    auto isSelfReceiverType = [](const ast::TypeNode* typeNode) {
+        auto typeName = dynamic_cast<const ast::TypeName*>(typeNode);
+        return typeName && typeName->identifier &&
+               typeName->identifier->name == "Self" &&
+               typeName->genericArgs.empty();
+    };
+
+    std::vector<std::unique_ptr<ast::TypeNode>> paramTypesVec;
+    for (auto& param : node->params) { 
         if (param.name) {
+            if (!processingTraitOrBindMethod &&
+                param.name->name == "self" &&
+                isSelfReceiverType(param.typeNode.get())) {
+                addError("Receiver parameter \"self\" is only valid as the first parameter of an aspect or bind method.", param.name.get());
+                paramTypesVec.push_back(nullptr);
+                currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, param.name->name, false, ast::OwnershipKind::MY, nullptr});
+                continue;
+            }
+
              if (isReservedWord(param.name->name)) {
                 addError("Identifier \\\"" + param.name->name + "\\\" is a reserved word and cannot be used as a parameter name.", param.name.get());
             }
@@ -1584,12 +1621,12 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 SymbolInfo* objSymbol = currentScope->lookup(objIdent->name);
                 if (objSymbol && objSymbol->type) {
                     // Check if it's a Vec type (directly or as TypeName "Vec<T>" from function params)
-                    if (dynamic_cast<ast::VecType*>(objSymbol->type)) {
+                    if (dynamic_cast<ast::VecType*>(objSymbol->type) && isBuiltinVecMethodName(methodName)) {
                         handleVecMethodCall(node, objIdent->name, methodName);
                         return;
                     }
                     if (auto tn = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
-                        if (tn->identifier && tn->identifier->name == "Vec") {
+                        if (tn->identifier && tn->identifier->name == "Vec" && isBuiltinVecMethodName(methodName)) {
                             handleVecMethodCall(node, objIdent->name, methodName);
                             return;
                         }
@@ -1611,6 +1648,69 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                         }
                     }
                     
+                    auto resolveAspectMethodForTypeString = [&](const std::string& typeNameStr) -> bool {
+                        auto typeImplsIt = traitImpls.find(typeNameStr);
+                        if (typeImplsIt != traitImpls.end()) {
+                            for (const auto& traitEntry : typeImplsIt->second) {
+                                const std::string& traitName = traitEntry.first;
+                                const std::vector<ast::FunctionDeclaration*>& methods = traitEntry.second;
+
+                                for (ast::FunctionDeclaration* method : methods) {
+                                    if (method && method->id && method->id->name == methodName) {
+                                        if (method->returnTypeNode) {
+                                            ast::TypeNode* actualReturnType = substituteSelfType(method->returnTypeNode.get(), typeNameStr);
+                                            expressionTypes[node] = actualReturnType;
+                                            node->type = std::shared_ptr<ast::TypeNode>(actualReturnType->clone());
+                                        }
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+
+                        for (const auto& typeEntry : genericTraitImpls) {
+                            const std::string& pattern = typeEntry.first;
+                            if (matchesPattern(typeNameStr, pattern)) {
+                                for (const auto& traitEntry : typeEntry.second) {
+                                    const std::string& traitName = traitEntry.first;
+                                    const GenericImplInfo* implInfo = traitEntry.second.get();
+                                    if (implInfo && implInfo->declaration) {
+                                        for (const auto& method : implInfo->declaration->methods) {
+                                            if (method && method->id && method->id->name == methodName) {
+                                                if (method->returnTypeNode) {
+                                                    ast::TypeNode* actualReturnType = substituteSelfType(method->returnTypeNode.get(), typeNameStr);
+                                                    expressionTypes[node] = actualReturnType;
+                                                    node->type = std::shared_ptr<ast::TypeNode>(actualReturnType->clone());
+                                                }
+                                                return true;
+                                            }
+                                        }
+
+                                        auto traitIt = traitRegistry.find(traitName);
+                                        if (traitIt != traitRegistry.end()) {
+                                            for (const auto& traitMethod : traitIt->second->methods) {
+                                                if (traitMethod.name == methodName && traitMethod.hasDefaultImpl) {
+                                                    if (traitMethod.returnType) {
+                                                        setResolvedTraitReturnType(node, typeNameStr, traitName, traitMethod.returnType);
+                                                    }
+                                                    return true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        return false;
+                    };
+
+                    if (auto vecType = dynamic_cast<ast::VecType*>(objSymbol->type)) {
+                        if (resolveAspectMethodForTypeString(vecType->toString())) {
+                            return;
+                        }
+                    }
+
                     // Otherwise check for trait methods
                     if (auto typeName = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
                         if (typeName->identifier) {
@@ -1778,14 +1878,14 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 // If we reach here and it's a Vec type, try Vec-specific methods
                 // Otherwise, it's an unknown method error
                 if (objSymbol && objSymbol->type) {
-                    if (dynamic_cast<ast::VecType*>(objSymbol->type)) {
+                    if (dynamic_cast<ast::VecType*>(objSymbol->type) && isBuiltinVecMethodName(methodName)) {
                         handleVecMethodCall(node, objIdent->name, methodName);
                         return;
                     }
                     
                     // Check for primitive type methods (Int.to_string(), etc.)
                     if (auto objTypeName = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
-                        if (objTypeName->identifier && objTypeName->identifier->name == "Vec") {
+                        if (objTypeName->identifier && objTypeName->identifier->name == "Vec" && isBuiltinVecMethodName(methodName)) {
                             handleVecMethodCall(node, objIdent->name, methodName);
                             return;
                         }
@@ -2801,6 +2901,43 @@ void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
     }
     
     const auto& fieldTypes = structFieldsIt->second;
+
+    auto genericOrderIt = structGenericParamOrder.find(structName);
+    const std::vector<std::string>* genericParamOrder =
+        genericOrderIt == structGenericParamOrder.end() ? nullptr : &genericOrderIt->second;
+
+    if (!typeName->genericArgs.empty() && genericParamOrder &&
+        typeName->genericArgs.size() == genericParamOrder->size()) {
+        std::map<std::string, ast::TypeNode*> explicitTypeArgs;
+        for (size_t i = 0; i < genericParamOrder->size(); ++i) {
+            explicitTypeArgs[(*genericParamOrder)[i]] = typeName->genericArgs[i].get();
+        }
+
+        for (const auto& prop : node->properties) {
+            if (!prop.key || !prop.value) continue;
+            auto fieldTypeIt = fieldTypes.find(prop.key->name);
+            if (fieldTypeIt == fieldTypes.end()) {
+                addError("Field '" + prop.key->name + "' does not exist in struct '" + structName + "'", node);
+                continue;
+            }
+            auto valueTypeIt = expressionTypes.find(prop.value.get());
+            if (valueTypeIt == expressionTypes.end() || !valueTypeIt->second) continue;
+            if (auto declaredTypeName = dynamic_cast<ast::TypeName*>(fieldTypeIt->second)) {
+                if (declaredTypeName->identifier && declaredTypeName->genericArgs.empty()) {
+                    auto argIt = explicitTypeArgs.find(declaredTypeName->identifier->name);
+                    if (argIt != explicitTypeArgs.end() &&
+                        !areTypesCompatible(argIt->second, valueTypeIt->second)) {
+                        addError("Field '" + prop.key->name + "' initializer type does not match explicit generic argument. Expected " +
+                                 argIt->second->toString() + " but got " + valueTypeIt->second->toString(), node);
+                    }
+                }
+            }
+        }
+
+        expressionTypes[node] = node->typePath->clone().release();
+        node->type = std::shared_ptr<ast::TypeNode>(node->typePath->clone());
+        return;
+    }
     
     // Map type parameters to their inferred types
     // E.g., for Box<T> with field "value: T", if value=Point, then T → Point
@@ -2865,10 +3002,17 @@ void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
         // Create TypeName with generic arguments
         std::vector<ast::TypeNodePtr> genericArgs;
         
-        // For now, assume single type parameter (works for Box<T>)
-        // In a full implementation, would need to track parameter order
-        for (const auto& entry : typeParamMap) {
-            genericArgs.push_back(std::unique_ptr<ast::TypeNode>(entry.second->clone()));
+        if (genericParamOrder && !genericParamOrder->empty()) {
+            for (const auto& paramName : *genericParamOrder) {
+                auto inferredIt = typeParamMap.find(paramName);
+                if (inferredIt != typeParamMap.end() && inferredIt->second) {
+                    genericArgs.push_back(std::unique_ptr<ast::TypeNode>(inferredIt->second->clone()));
+                }
+            }
+        } else {
+            for (const auto& entry : typeParamMap) {
+                genericArgs.push_back(std::unique_ptr<ast::TypeNode>(entry.second->clone()));
+            }
         }
         
         auto resultType = new ast::TypeName(
@@ -3636,6 +3780,14 @@ void SemanticAnalyzer::visit(ast::StructDeclaration* node) {
         return;
     }
 
+    std::vector<std::string> genericParamNames;
+    for (const auto& param : node->genericParams) {
+        if (param && param->name) {
+            genericParamNames.push_back(param->name->name);
+        }
+    }
+    structGenericParamOrder[structName] = genericParamNames;
+
     // Handle generic parameters if present (e.g., struct Box<T>)
     bool hasGenericParams = !node->genericParams.empty();
     if (node->reprC && hasGenericParams) {
@@ -4009,7 +4161,9 @@ void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
             }
         }
         
-        if (!isBuiltinType && !isGenericType) {
+        bool isBuiltinGenericType = isBuiltinVecType(node->selfType.get());
+
+        if (!isBuiltinType && !isBuiltinGenericType && !isGenericType) {
             SymbolInfo* typeSym = currentScope->lookup(typeName);
             if (!typeSym || typeSym->kind != SymbolInfo::Kind::Type) {
                 addError("Type '" + typeName + "' is not defined.", node);
@@ -5877,6 +6031,14 @@ bool SemanticAnalyzer::traitMethodSignatureMatches(const TraitMethod& traitMetho
                   << implMethod->params.size() << " vs " 
                   << traitMethod.parameterNames.size() << std::endl;
         return false;
+    }
+
+    if (!traitMethod.parameterNames.empty() && traitMethod.parameterNames[0] == "self") {
+        if (implMethod->params.empty() || !implMethod->params[0].name ||
+            implMethod->params[0].name->name != "self") {
+            addError("Method '" + implMethod->id->name + "' must use receiver parameter 'self' as its first parameter to implement aspect method '" + traitMethod.name + "'.", implMethod);
+            return false;
+        }
     }
     
     // Check return type matches

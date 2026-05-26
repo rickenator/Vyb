@@ -914,8 +914,11 @@ void LLVMCodegen::visit(vyn::ast::BindDeclaration* node) {
         m_currentLLVMValue = nullptr; return;
     }
     llvm::StructType* oldCurrentClassType = currentClassType;
+    ast::TypeNode* oldCurrentImplTypeNode = m_currentImplTypeNode;
+    std::string oldCurrentImplTraitName = m_currentImplTraitName;
     currentClassType = llvm::dyn_cast<llvm::StructType>(targetType);
     m_currentImplTypeNode = node->selfType.get();
+    m_currentImplTraitName = node->traitType ? node->traitType->toString() : std::string();
 
     // Generate explicitly defined methods in the bind
     for (const auto& member : node->methods) {
@@ -965,7 +968,8 @@ void LLVMCodegen::visit(vyn::ast::BindDeclaration* node) {
     }
 
     currentClassType = oldCurrentClassType;
-    m_currentImplTypeNode = nullptr;
+    m_currentImplTypeNode = oldCurrentImplTypeNode;
+    m_currentImplTraitName = oldCurrentImplTraitName;
     m_currentLLVMValue = nullptr; // Impl block itself doesn't produce a value
 }
 

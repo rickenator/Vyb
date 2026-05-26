@@ -387,6 +387,28 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
             }
             std::string typeNameStr = typeNameNode->identifier->name; // Access name via identifier
 
+            size_t assocSep = typeNameStr.find("::");
+            if (assocSep != std::string::npos && m_currentImplTypeNode && driver_.hasSemanticAnalyzer()) {
+                std::string traitName = typeNameStr.substr(0, assocSep);
+                if (traitName == "Self") {
+                    traitName = m_currentImplTraitName;
+                }
+
+                if (!traitName.empty()) {
+                    SemanticAnalyzer* semantic = driver_.getSemanticAnalyzer();
+                    std::string resolvedType = semantic->resolveAssociatedTypeForType(
+                        m_currentImplTypeNode->toString(), traitName, typeNameStr);
+                    if (!resolvedType.empty()) {
+                        auto resolvedNode = std::make_unique<ast::TypeName>(
+                            typeNode->loc,
+                            std::make_unique<ast::Identifier>(typeNode->loc, resolvedType)
+                        );
+                        llvmType = codegenType(resolvedNode.get());
+                        break;
+                    }
+                }
+            }
+
             // Handle Self type in bind/impl methods
             if (typeNameStr == "Self") {
                 if (m_currentImplTypeNode) {

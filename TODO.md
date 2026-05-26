@@ -123,6 +123,7 @@ is the working audit for what needs to be implemented next.
 
 ### Aspect/Bind System (Vyn's Polymorphism)
 - [x] **`aspect` declarations** — Method signatures, optional default implementations
+- [x] **Receiver shorthand** — `method(self)<T>` is canonical sugar for simple `self<Self>` aspect/bind receivers
 - [x] **`bind Aspect -> Type { ... }`** — Unbounded bind for concrete types
 - [x] **`bind<T> Aspect -> Type<T> { ... }`** — Generic unbounded bind
 - [x] **`bind<T<Aspect1, Aspect2>> Aspect -> Type<T> { ... }`** — Bounded bind

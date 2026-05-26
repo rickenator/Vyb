@@ -1,0 +1,24 @@
+// @test: bare self receiver with arguments
+// @description: Receiver shorthand composes with ordinary typed parameters
+// @category: aspect, receiver
+// @expect: pass
+
+aspect PrefixName {
+    format(self, prefix<String>)<String>
+}
+
+struct Person {
+    name<String>
+}
+
+bind PrefixName -> Person {
+    format(self, prefix<String>)<String> -> {
+        return prefix + self.name
+    }
+}
+
+main()<Int> -> {
+    p<Person> = Person { name = "Vyn" }
+    label<String> = p.format("hello ")
+    return 0
+}

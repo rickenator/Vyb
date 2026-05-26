@@ -1,12 +1,18 @@
-// Test that non-existent bounds are rejected
+// @test: nonexistent bound rejected
+// @description: Generic bounds must refer to declared aspects
+// @category: aspect, bounds, diagnostics
+// @expect: fail
+// @expect-error: Bound 'Printable' on type parameter 'T' is not a defined aspect.
+// @semantic-only: true
 
 aspect Display {
-    show(self<Self>)<Void>
+    show(self)<Void>
 }
 
-// This should FAIL - Printable doesn't exist
-testFunc<T<Printable>>(item<T>)<Void> -> {}
+testFunc<T<Printable>>(item<T>)<Void> -> {
+    return
+}
 
 main()<Int> -> {
-    return 0;
+    return 0
 }

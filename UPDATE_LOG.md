@@ -10,6 +10,7 @@ expect-fail tests are treated as stronger evidence than optimistic status text.
 
 ## Implementation Progress
 
+- 2026-05-25: Added canonical aspect/bind receiver shorthand. Simple receiver signatures may now use `method(self)<T>`, which the parser canonicalizes to the bound `Self` receiver internally, while existing `self<Self>` and ownership-qualified receiver forms remain valid. Updated the structs/aspects demo, docs, and focused aspect regression tests.
 - 2026-05-25: Advanced I-002 FFI with the next ABI slice: `#[repr(C)]`
   now parses on structs, is tracked in AST/codegen metadata, preserves
   declaration-order unpacked LLVM struct layout, and rejects generic,
