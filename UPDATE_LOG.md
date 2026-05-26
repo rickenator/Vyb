@@ -10,6 +10,13 @@ expect-fail tests are treated as stronger evidence than optimistic status text.
 
 ## Implementation Progress
 
+- 2026-05-25: Closed the aspect-suite residual risk follow-up. Generic bind
+  methods now monomorphize into executable LLVM functions with the correct
+  active function/impl context, built-in `Vec<T>` receiver layout, receiver
+  plus non-receiver parameter indexing, and balanced call-frame handling.
+  Dot-call aspect dispatch now rejects ambiguous method names with a
+  deterministic diagnostic, and explicit generic object literals validate
+  nested substituted field types. Added focused `test/aspect` regressions.
 - 2026-05-25: Added canonical aspect/bind receiver shorthand. Simple receiver signatures may now use `method(self)<T>`, which the parser canonicalizes to the bound `Self` receiver internally, while existing `self<Self>` and ownership-qualified receiver forms remain valid. Updated the structs/aspects demo, docs, and focused aspect regression tests.
 - 2026-05-25: Advanced I-002 FFI with the next ABI slice: `#[repr(C)]`
   now parses on structs, is tracked in AST/codegen metadata, preserves
@@ -161,7 +168,7 @@ Source areas checked:
 | I-004 | `mild<T>` weak references | P0 | Complete the remaining weak-reference contract: Option-like failed `grab()`, full weak handle copy/drop accounting across all assignment paths, and final control-block cleanup once strong/weak counts reach zero. | `doc/OWNERSHIP_MILD.md`; `test/ownership/mild_released_live.vyn`; `test/ownership/mild_released_after_drop_or_scope.vyn`; `test/ownership/mild_grab_live.vyn`; `test/ownership/mild_grab_released.vyn`. |
 | I-005 | Error propagation/runtime errors | P0 | Finish cross-function error propagation, construct real `VynError` objects at `fail`, preserve type/data/source location, print detailed untrapped errors, and settle Result-vs-fail/trap design conflict. | `doc/ERROR_PROPAGATION_DESIGN.md`; `test/trap/TEST_RESULTS.md`; `src/runtime/error_handling.cpp` says error structure is not implemented. |
 | I-006 | Defer/runtime cleanup | P0 | Decide whether runtime defer/ensure stacks are needed; implement runtime defer stack if `defer` must survive fail/unwind paths. | `src/runtime/error_handling.cpp` has defer/ensure stubs; `src/vre/llvm/cgen_stmt.cpp` stores defers in a codegen stack. |
-| I-007 | Aspect completion | P0 | Associated types, aspect objects/dynamic dispatch, aspect inheritance, bounded bind selection precedence, and method monomorphization for generic binds. | `TODO.md`; `doc/ASPECT_BOUNDS.md`; `test/aspect/PHASE_6_ROADMAP.md`; semantic monomorphization has TODO/stub paths. |
+| I-007 | Aspect completion | P0 | Remaining work after associated types, receiver shorthand, ambiguity diagnostics, and executable generic bind method monomorphization: aspect objects/dynamic dispatch, aspect inheritance, bounded bind selection precedence, and qualified disambiguation syntax for same-name aspect methods. | `TODO.md`; `doc/ASPECT_BOUNDS.md`; `doc/TRAIT_SYSTEM_DESIGN.md`; `test/aspect/PHASE_6_ROADMAP.md`. |
 | I-008 | Stdlib foundation | P0 | Implement `Option<T>`, decide and implement/document `Result<T,E>`, core aspects (`Display`, `Debug`, `Clone`, `Equatable`, `Comparable`, `Hashable`), `Iterator`, File I/O, maps/sets, and remaining String/Vec helpers. | `TODO.md`; `doc/STRING_IMPLEMENTATION.md`; `test/future_features/test_option_type.vyn`, `test_result_type.vyn`; FFI is a blocker for File I/O. |
 | I-009 | Async runtime semantics | P1 | Replace placeholder await behavior with real scheduling, future value storage, suspension/resumption, task spawning, and eventually async I/O integration. | `TODO.md`; `src/vre/llvm/cgen_expr.cpp` awaits with dummy task id and returns the input future; `src/runtime/async_runtime.cpp` stores value support as future work. |
 | I-010 | Lambda/closures | P1 | Implement real lambda return type inference, non-void lambda returns, function value/call semantics, closure capture structs, capture extraction, move/mutable captures, generic and async lambdas. | `doc/LAMBDAS.md`; `test/future_features/test_lambda_codegen.vyn`; `src/vre/llvm/cgen_expr.cpp` defaults lambda return type to void and lacks capture handling. |

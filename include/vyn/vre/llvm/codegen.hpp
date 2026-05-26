@@ -231,6 +231,8 @@ private:
                                            const std::string& methodName);
     std::string extractBasePattern(const std::string& concreteType);
     std::string getFullTypeName(vyn::ast::Expression* expr);
+    vyn::ast::TypeNodePtr typePatternToTypeNode(const TypePattern& pattern,
+                                                const vyn::SourceLocation& loc);
     
     // Generic function monomorphization
     llvm::Function* monomorphizeGenericFunction(const std::string& functionName,

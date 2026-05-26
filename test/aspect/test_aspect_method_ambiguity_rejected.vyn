@@ -1,0 +1,35 @@
+// @test: ambiguous aspect method names are rejected
+// @description: Dot-call dispatch rejects multiple aspect candidates for the same receiver and method name
+// @category: aspect, dispatch, diagnostics
+// @expect: fail
+// @expect-error: Ambiguous aspect method 'show' for type 'Thing'.
+
+aspect DisplayA {
+    show(self)<String>
+}
+
+aspect DisplayB {
+    show(self)<String>
+}
+
+struct Thing {
+    value<Int>
+}
+
+bind DisplayA -> Thing {
+    show(self)<String> -> {
+        return "A"
+    }
+}
+
+bind DisplayB -> Thing {
+    show(self)<String> -> {
+        return "B"
+    }
+}
+
+main()<Int> -> {
+    thing<Thing> = Thing { value = 1 }
+    label<String> = thing.show()
+    return 0
+}

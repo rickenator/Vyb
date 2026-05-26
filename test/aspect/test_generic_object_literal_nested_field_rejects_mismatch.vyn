@@ -1,0 +1,20 @@
+// @test: nested generic object literal field mismatch is rejected
+// @description: Explicit generic object literals reject nested field initializers that contradict their type arguments
+// @category: aspect, generics, object-literal
+// @expect: fail
+// @expect-error: Field 'box' initializer type does not match explicit generic argument. Expected Box<Int> but got Box<String>
+// @semantic-only: true
+
+struct Box<T> {
+    value<T>
+}
+
+struct Holder<T> {
+    box<Box<T>>
+}
+
+main()<Int> -> {
+    box<Box<String>> = Box<String> { value = "wrong" }
+    holder<Holder<Int>> = Holder<Int> { box = box }
+    return 0
+}

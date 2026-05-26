@@ -94,6 +94,82 @@ static std::string reprCUnsupportedReason(ast::TypeNode* typeNode) {
     return "";
 }
 
+static ast::TypeNodePtr substituteGenericArgsForValidation(
+    ast::TypeNode* typeNode,
+    const std::map<std::string, ast::TypeNode*>& substitutions) {
+    if (!typeNode) {
+        return nullptr;
+    }
+
+    if (auto* typeName = dynamic_cast<ast::TypeName*>(typeNode)) {
+        if (!typeName->identifier) {
+            return typeNode->clone();
+        }
+
+        const std::string name = typeName->identifier->name;
+        if (typeName->genericArgs.empty()) {
+            auto substIt = substitutions.find(name);
+            if (substIt != substitutions.end() && substIt->second) {
+                return substIt->second->clone();
+            }
+        }
+
+        std::vector<ast::TypeNodePtr> substitutedArgs;
+        substitutedArgs.reserve(typeName->genericArgs.size());
+        for (const auto& arg : typeName->genericArgs) {
+            if (auto substituted = substituteGenericArgsForValidation(arg.get(), substitutions)) {
+                substitutedArgs.push_back(std::move(substituted));
+            }
+        }
+
+        return std::make_unique<ast::TypeName>(
+            typeName->loc,
+            std::make_unique<ast::Identifier>(typeName->loc, name),
+            std::move(substitutedArgs));
+    }
+
+    if (auto* vecType = dynamic_cast<ast::VecType*>(typeNode)) {
+        auto substitutedElement = substituteGenericArgsForValidation(vecType->elementType.get(), substitutions);
+        return std::make_unique<ast::VecType>(
+            vecType->loc,
+            substitutedElement ? std::move(substitutedElement) : vecType->elementType->clone());
+    }
+
+    if (auto* futureType = dynamic_cast<ast::FutureType*>(typeNode)) {
+        auto substitutedResult = substituteGenericArgsForValidation(futureType->resultType.get(), substitutions);
+        return std::make_unique<ast::FutureType>(
+            futureType->loc,
+            substitutedResult ? std::move(substitutedResult) : futureType->resultType->clone());
+    }
+
+    if (auto* optionalType = dynamic_cast<ast::OptionalType*>(typeNode)) {
+        auto substitutedContained = substituteGenericArgsForValidation(optionalType->containedType.get(), substitutions);
+        return std::make_unique<ast::OptionalType>(
+            optionalType->loc,
+            substitutedContained ? std::move(substitutedContained) : optionalType->containedType->clone());
+    }
+
+    if (auto* pointerType = dynamic_cast<ast::PointerType*>(typeNode)) {
+        auto substitutedPointee = substituteGenericArgsForValidation(pointerType->pointeeType.get(), substitutions);
+        return std::make_unique<ast::PointerType>(
+            pointerType->loc,
+            substitutedPointee ? std::move(substitutedPointee) : pointerType->pointeeType->clone());
+    }
+
+    if (auto* tupleType = dynamic_cast<ast::TupleTypeNode*>(typeNode)) {
+        std::vector<ast::TypeNodePtr> substitutedMembers;
+        substitutedMembers.reserve(tupleType->memberTypes.size());
+        for (const auto& member : tupleType->memberTypes) {
+            if (auto substituted = substituteGenericArgsForValidation(member.get(), substitutions)) {
+                substitutedMembers.push_back(std::move(substituted));
+            }
+        }
+        return std::make_unique<ast::TupleTypeNode>(tupleType->loc, std::move(substitutedMembers));
+    }
+
+    return typeNode->clone();
+}
+
 // Scope class implementation
 Scope::Scope(Scope* parent_scope) : parent(parent_scope) {}
 
@@ -1648,21 +1724,43 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                         }
                     }
                     
+                    struct AspectMethodCandidate {
+                        std::string traitName;
+                        ast::TypeNode* returnType;
+                    };
+
                     auto resolveAspectMethodForTypeString = [&](const std::string& typeNameStr) -> bool {
+                        std::vector<AspectMethodCandidate> candidates;
+                        std::set<std::string> seenCandidates;
+                        auto addCandidate = [&](const std::string& traitName, ast::TypeNode* returnType) {
+                            std::string key = traitName + "::" + methodName;
+                            if (seenCandidates.insert(key).second) {
+                                candidates.push_back({traitName, returnType});
+                            }
+                        };
+
                         auto typeImplsIt = traitImpls.find(typeNameStr);
                         if (typeImplsIt != traitImpls.end()) {
                             for (const auto& traitEntry : typeImplsIt->second) {
                                 const std::string& traitName = traitEntry.first;
                                 const std::vector<ast::FunctionDeclaration*>& methods = traitEntry.second;
+                                bool foundInImpl = false;
 
                                 for (ast::FunctionDeclaration* method : methods) {
                                     if (method && method->id && method->id->name == methodName) {
-                                        if (method->returnTypeNode) {
-                                            ast::TypeNode* actualReturnType = substituteSelfType(method->returnTypeNode.get(), typeNameStr);
-                                            expressionTypes[node] = actualReturnType;
-                                            node->type = std::shared_ptr<ast::TypeNode>(actualReturnType->clone());
+                                        addCandidate(traitName, method->returnTypeNode.get());
+                                        foundInImpl = true;
+                                    }
+                                }
+
+                                if (!foundInImpl) {
+                                    auto traitIt = traitRegistry.find(traitName);
+                                    if (traitIt != traitRegistry.end()) {
+                                        for (const auto& traitMethod : traitIt->second->methods) {
+                                            if (traitMethod.name == methodName && traitMethod.hasDefaultImpl) {
+                                                addCandidate(traitName, traitMethod.returnType);
+                                            }
                                         }
-                                        return true;
                                     }
                                 }
                             }
@@ -1675,25 +1773,21 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                     const std::string& traitName = traitEntry.first;
                                     const GenericImplInfo* implInfo = traitEntry.second.get();
                                     if (implInfo && implInfo->declaration) {
+                                        bool foundInImpl = false;
                                         for (const auto& method : implInfo->declaration->methods) {
                                             if (method && method->id && method->id->name == methodName) {
-                                                if (method->returnTypeNode) {
-                                                    ast::TypeNode* actualReturnType = substituteSelfType(method->returnTypeNode.get(), typeNameStr);
-                                                    expressionTypes[node] = actualReturnType;
-                                                    node->type = std::shared_ptr<ast::TypeNode>(actualReturnType->clone());
-                                                }
-                                                return true;
+                                                addCandidate(traitName, method->returnTypeNode.get());
+                                                foundInImpl = true;
                                             }
                                         }
 
-                                        auto traitIt = traitRegistry.find(traitName);
-                                        if (traitIt != traitRegistry.end()) {
-                                            for (const auto& traitMethod : traitIt->second->methods) {
-                                                if (traitMethod.name == methodName && traitMethod.hasDefaultImpl) {
-                                                    if (traitMethod.returnType) {
-                                                        setResolvedTraitReturnType(node, typeNameStr, traitName, traitMethod.returnType);
+                                        if (!foundInImpl) {
+                                            auto traitIt = traitRegistry.find(traitName);
+                                            if (traitIt != traitRegistry.end()) {
+                                                for (const auto& traitMethod : traitIt->second->methods) {
+                                                    if (traitMethod.name == methodName && traitMethod.hasDefaultImpl) {
+                                                        addCandidate(traitName, traitMethod.returnType);
                                                     }
-                                                    return true;
                                                 }
                                             }
                                         }
@@ -1702,7 +1796,27 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                             }
                         }
 
-                        return false;
+                        if (candidates.empty()) {
+                            return false;
+                        }
+
+                        if (candidates.size() > 1) {
+                            std::string candidateList;
+                            for (size_t i = 0; i < candidates.size(); ++i) {
+                                if (i > 0) candidateList += ", ";
+                                candidateList += candidates[i].traitName + "::" + methodName;
+                            }
+                            addError("Ambiguous aspect method '" + methodName + "' for type '" +
+                                     typeNameStr + "'. Candidates: " + candidateList, node);
+                            return true;
+                        }
+
+                        if (candidates[0].returnType) {
+                            ast::TypeNode* actualReturnType = substituteSelfType(candidates[0].returnType, typeNameStr);
+                            expressionTypes[node] = actualReturnType;
+                            node->type = std::shared_ptr<ast::TypeNode>(actualReturnType->clone());
+                        }
+                        return true;
                     };
 
                     if (auto vecType = dynamic_cast<ast::VecType*>(objSymbol->type)) {
@@ -1745,6 +1859,10 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                 }
                             }
                             
+                            if (resolveAspectMethodForTypeString(typeNameStr)) {
+                                return;
+                            }
+
                             // Look for concrete trait implementations
                             auto typeImplsIt = traitImpls.find(typeNameStr);
                             if (typeImplsIt != traitImpls.end()) {
@@ -2922,15 +3040,11 @@ void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
             }
             auto valueTypeIt = expressionTypes.find(prop.value.get());
             if (valueTypeIt == expressionTypes.end() || !valueTypeIt->second) continue;
-            if (auto declaredTypeName = dynamic_cast<ast::TypeName*>(fieldTypeIt->second)) {
-                if (declaredTypeName->identifier && declaredTypeName->genericArgs.empty()) {
-                    auto argIt = explicitTypeArgs.find(declaredTypeName->identifier->name);
-                    if (argIt != explicitTypeArgs.end() &&
-                        !areTypesCompatible(argIt->second, valueTypeIt->second)) {
-                        addError("Field '" + prop.key->name + "' initializer type does not match explicit generic argument. Expected " +
-                                 argIt->second->toString() + " but got " + valueTypeIt->second->toString(), node);
-                    }
-                }
+
+            auto expectedFieldType = substituteGenericArgsForValidation(fieldTypeIt->second, explicitTypeArgs);
+            if (expectedFieldType && !areTypesCompatible(expectedFieldType.get(), valueTypeIt->second)) {
+                addError("Field '" + prop.key->name + "' initializer type does not match explicit generic argument. Expected " +
+                         expectedFieldType->toString() + " but got " + valueTypeIt->second->toString(), node);
             }
         }
 

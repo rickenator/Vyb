@@ -103,6 +103,21 @@ std::string LLVMCodegen::TypePattern::toMangled() const {
     return result;
 }
 
+vyn::ast::TypeNodePtr LLVMCodegen::typePatternToTypeNode(const TypePattern& pattern,
+                                                   const SourceLocation& loc) {
+    std::vector<vyn::ast::TypeNodePtr> args;
+    for (const auto& arg : pattern.args) {
+        TypePattern argPattern = TypePattern::parse(arg);
+        args.push_back(typePatternToTypeNode(argPattern, loc));
+    }
+
+    return std::make_unique<vyn::ast::TypeName>(
+        loc,
+        std::make_unique<vyn::ast::Identifier>(loc, pattern.base),
+        std::move(args)
+    );
+}
+
 // Extract base pattern from concrete type: "Box<Int>" -> "Box"
 std::string LLVMCodegen::extractBasePattern(const std::string& concreteType) {
     TypePattern parsed = TypePattern::parse(concreteType);
@@ -197,18 +212,12 @@ llvm::Function* LLVMCodegen::monomorphizeTraitMethod(const std::string& concrete
                     }
                     paramTypes.push_back(selfType);
                     
-                    // Add remaining parameters
-                    for (size_t i = 0; i < methodAST->params.size(); ++i) {
+                    // Add remaining parameters. The receiver is always the first
+                    // source-level parameter for aspect/bind methods and is already
+                    // represented by the concrete Self argument above.
+                    std::vector<size_t> nonReceiverParamIndices;
+                    for (size_t i = 1; i < methodAST->params.size(); ++i) {
                         const auto& param = methodAST->params[i];
-                        
-                        // Skip first parameter if it's Self (already handled)
-                        if (i == 0 && param.typeNode) {
-                            if (auto typeName = dynamic_cast<ast::TypeName*>(param.typeNode.get())) {
-                                if (typeName->identifier && typeName->identifier->name == "Self") {
-                                    continue;  // Already added
-                                }
-                            }
-                        }
                         
                         // Substitute type parameters in this parameter's type
                         llvm::Type* paramType = resolveParameterTypeWithSubstitution(
@@ -218,6 +227,7 @@ llvm::Function* LLVMCodegen::monomorphizeTraitMethod(const std::string& concrete
                             return nullptr;
                         }
                         paramTypes.push_back(paramType);
+                        nonReceiverParamIndices.push_back(i);
                     }
                     
                     // Determine return type with substitution
@@ -243,65 +253,110 @@ llvm::Function* LLVMCodegen::monomorphizeTraitMethod(const std::string& concrete
                                         // Cache it before generating body
                     monomorphizedMethods[cacheKey] = specializedFunc;
                     
-                    // Generate the function body with type substitution active
+                    // Generate the function body with type substitution active.
+                    // Monomorphized bind methods need the same active function and
+                    // impl context as normal bind methods so return statements, Self,
+                    // and associated type references resolve against the specialized
+                    // function instead of the caller currently being generated.
+                    auto currentImplConcreteTypeNode = typePatternToTypeNode(concretePattern, methodAST->loc);
 
-                    
-                    // Save current state - INCLUDING builder insert point!
                     auto savedTypeSubstitutions = currentTypeSubstitutions;
                     auto savedNamedValues = namedValues;
+                    llvm::Function* savedFunction = currentFunction;
+                    ast::FunctionDeclaration* savedFunctionAST = currentFunctionAST;
+                    ast::TypeNode* savedImplTypeNode = m_currentImplTypeNode;
+                    std::string savedImplTraitName = m_currentImplTraitName;
                     llvm::BasicBlock* savedInsertBlock = builder->GetInsertBlock();
                     llvm::BasicBlock::iterator savedInsertPoint = builder->GetInsertPoint();
                     
                     currentTypeSubstitutions = typeSubstitutions;
+                    currentFunction = specializedFunc;
+                    currentFunctionAST = methodAST;
+                    m_currentImplTypeNode = currentImplConcreteTypeNode.get();
+                    m_currentImplTraitName = traitName;
                     
-                    // Generate function body by visiting the method AST
-                    // The visitor will use currentTypeSubstitutions for type resolution
                     llvm::BasicBlock* entry = llvm::BasicBlock::Create(*context, "entry", specializedFunc);
                     builder->SetInsertPoint(entry);
+                    size_t savedScopeDepth = scopeStack.size();
+                    enterScope();
+                    generatePushFrameCall(specializedName, methodAST->loc);
                     
-                    // Set up named values for parameters
                     namedValues.clear();
                     
                     size_t argIdx = 0;
                     for (auto& arg : specializedFunc->args()) {
                         if (argIdx == 0) {
-                            // First argument is Self
                             arg.setName("self");
-                            llvm::AllocaInst* alloca = builder->CreateAlloca(arg.getType(), nullptr, "self.addr");
+                            llvm::AllocaInst* alloca = llvm::dyn_cast_or_null<llvm::AllocaInst>(
+                                createEntryBlockAlloca(specializedFunc, "self", arg.getType()));
+                            if (!alloca) {
+                                logError(methodAST->loc, "Failed to create receiver alloca for monomorphized bind method");
+                                if (scopeStack.size() > savedScopeDepth) exitScope();
+                                namedValues = savedNamedValues;
+                                currentTypeSubstitutions = savedTypeSubstitutions;
+                                currentFunction = savedFunction;
+                                currentFunctionAST = savedFunctionAST;
+                                m_currentImplTypeNode = savedImplTypeNode;
+                                m_currentImplTraitName = savedImplTraitName;
+                                return nullptr;
+                            }
                             builder->CreateStore(&arg, alloca);
                             namedValues["self"] = alloca;
+                            valueTypeMap[alloca] = std::shared_ptr<ast::TypeNode>(currentImplConcreteTypeNode->clone());
                         } else {
-                            // Regular parameters
-                            size_t paramIdx = argIdx - 1;
-                            if (paramIdx < methodAST->params.size()) {
-                                const auto& param = methodAST->params[paramIdx];
+                            size_t paramListIdx = argIdx - 1;
+                            if (paramListIdx < nonReceiverParamIndices.size()) {
+                                const auto& param = methodAST->params[nonReceiverParamIndices[paramListIdx]];
                                 arg.setName(param.name->name);
-                                llvm::AllocaInst* alloca = builder->CreateAlloca(arg.getType(), nullptr, param.name->name + ".addr");
+                                llvm::AllocaInst* alloca = llvm::dyn_cast_or_null<llvm::AllocaInst>(
+                                    createEntryBlockAlloca(specializedFunc, param.name->name, arg.getType()));
+                                if (!alloca) {
+                                    logError(param.name->loc, "Failed to create parameter alloca for " + param.name->name);
+                                    if (scopeStack.size() > savedScopeDepth) exitScope();
+                                    namedValues = savedNamedValues;
+                                    currentTypeSubstitutions = savedTypeSubstitutions;
+                                    currentFunction = savedFunction;
+                                    currentFunctionAST = savedFunctionAST;
+                                    m_currentImplTypeNode = savedImplTypeNode;
+                                    m_currentImplTraitName = savedImplTraitName;
+                                    return nullptr;
+                                }
                                 builder->CreateStore(&arg, alloca);
                                 namedValues[param.name->name] = alloca;
+                                if (param.typeNode) {
+                                    valueTypeMap[alloca] = std::shared_ptr<ast::TypeNode>(param.typeNode->clone());
+                                }
                             }
                         }
                         argIdx++;
                     }
                     
-                    // Visit the function body
                     if (methodAST->body) {
                         methodAST->body->accept(*this);
                     }
                     
-                    // Ensure function has a return
                     if (!builder->GetInsertBlock()->getTerminator()) {
+                        if (scopeStack.size() > savedScopeDepth) {
+                            exitScope();
+                        }
                         if (returnType->isVoidTy()) {
                             builder->CreateRetVoid();
                         } else {
-                            // Return default value
                             builder->CreateRet(llvm::Constant::getNullValue(returnType));
                         }
+                    } else if (scopeStack.size() > savedScopeDepth) {
+                        // Explicit returns clean up the active function scope. If a
+                        // no-return body path left it active, restore only the scope
+                        // introduced for this monomorphized method, not the caller's.
+                        exitScope();
                     }
                     
-                    // Restore state - INCLUDING builder insert point!
                     namedValues = savedNamedValues;
                     currentTypeSubstitutions = savedTypeSubstitutions;
+                    currentFunction = savedFunction;
+                    currentFunctionAST = savedFunctionAST;
+                    m_currentImplTypeNode = savedImplTypeNode;
+                    m_currentImplTraitName = savedImplTraitName;
                     if (savedInsertBlock) {
                         if (savedInsertPoint != savedInsertBlock->end()) {
                             builder->SetInsertPoint(savedInsertBlock, savedInsertPoint);
@@ -309,7 +364,6 @@ llvm::Function* LLVMCodegen::monomorphizeTraitMethod(const std::string& concrete
                             builder->SetInsertPoint(savedInsertBlock);
                         }
                     }
-                    
 
                     return specializedFunc;
                 }
@@ -337,8 +391,16 @@ llvm::Type* LLVMCodegen::resolveTypeForMonomorphization(const TypePattern& patte
         return structType;
     }
     
-    // For now, return generic pointer if we can't find the struct
-    // In production, this should trigger struct monomorphization
+    // Built-in generic runtime types such as Vec<T> do not have named
+    // StructType instances. Reconstruct an AST type and let the normal type
+    // codegen path produce the canonical LLVM representation.
+    auto concreteTypeNode = typePatternToTypeNode(pattern, SourceLocation());
+    if (llvm::Type* resolvedType = codegenType(concreteTypeNode.get())) {
+        return resolvedType;
+    }
+
+    // For now, return generic pointer if we can't find the struct.
+    // In production, this should trigger struct monomorphization.
     return llvm::PointerType::get(llvm::Type::getInt8Ty(*context), 0);
 }
 

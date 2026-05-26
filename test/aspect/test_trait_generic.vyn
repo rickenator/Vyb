@@ -1,8 +1,8 @@
-// @test: generic aspect bind to Vec semantic validation
-// @description: Generic aspect binds for Vec<T> validate semantically; executable generic-bind method monomorphization remains tracked separately
+// @test: generic aspect bind to Vec execution
+// @description: Generic aspect binds for Vec<T> monomorphize and execute through dot-call dispatch
 // @category: aspect, generics, vec
 // @expect: pass
-// @semantic-only: true
+// @expect-return: 3
 
 // Phase 3: Generic aspect implementations
 // Tests bind<T> Trait -> GenericType<T>
