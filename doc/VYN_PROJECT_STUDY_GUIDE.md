@@ -1,7 +1,7 @@
 # Vyn Project Study Guide
 
 Status: living document
-Audience: graduate students, language implementers, and practicing systems programmers
+Audience: practitioners, language implementers, and systems programmers
 Last reviewed: 2026-05-27
 Repository reviewed: `~/Projects/Vyn`
 
@@ -954,7 +954,7 @@ Reports from 2026-05-23 say `test/new_features`, `test/ffi`, and
 `test/modules` were verified runtime suites during that pass, with full-suite
 triage still an ongoing debt.
 
-## 8. Study Path For Graduate Students
+## 8. Practitioner Study Path
 
 ### Phase 1: Language Orientation
 
