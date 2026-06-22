@@ -2389,8 +2389,12 @@ cmake .. && make clean && make -j
 # Quick rebuild (from project root)
 make -C build -j
 
-# Run tests
+# Run a single file
 build/vyb test/string/string_test.vyb
+
+# Run demos and examples
+python3 test/run_examples.py --vyb build/vyb
+cmake --build build --target run-examples
 ```
 
 ## Test Harness

@@ -184,3 +184,10 @@ add_custom_target(run-tests
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     COMMENT "Running Vyb test suite"
 )
+
+add_custom_target(run-examples
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/test/run_examples.py --vyb $<TARGET_FILE:vyb>
+    DEPENDS vyb
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Running Vyb demos and examples"
+)
