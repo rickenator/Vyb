@@ -1175,7 +1175,7 @@ The project has optimistic docs and source-biased audits. Keep broad
 Primary:
 
 - `doc/FEATURE_STATUS.md`
-- this file: `doc/VYB_PROJECT_STUDY_GUIDE.md`
+- this file: `doc/Vyb_Project_Study_Guide.md`
 - `README.md`
 - `TODO.md`
 - `CHANGELOG.md`

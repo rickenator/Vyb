@@ -292,9 +292,9 @@ These features were completed in the current release cycle and are fully tested:
 - **String methods** — `.len()`, `.contains()`, `.starts_with()`, `.ends_with()`, `.to_upper()`, `.to_lower()`, `.substring()`, `.char_at()`, `String::from_bytes()`
   ```vyb
   main()<Int> -> {
-      s<String> = "Hello, Vyb!"
-      if (s.contains("Vyb")) {
-          println(s.to_upper())   // HELLO, VYB!
+      s<String> = "Hello, world!"
+      if (s.contains("world")) {
+          println(s.to_upper())   // HELLO, WORLD!
       }
       return 0
   }
@@ -1564,8 +1564,8 @@ println(mixed)  # Still "Hello World"
 full<String> = "Hello" + " " + "World"
 
 # Chaining operations
-result<String> = "Vyb".to_upper() + " " + "Language".to_lower()
-# Result: "VYB language"
+result<String> = "Code".to_upper() + " " + "Language".to_lower()
+# Result: "CODE language"
 
 # Mixed types (planned with toString())
 # message<String> = "Count: " + 42.to_string()

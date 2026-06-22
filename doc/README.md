@@ -10,7 +10,7 @@ This directory contains the authoritative documentation for the Vyb programming 
 |----------|---------|
 | [`../README.md`](../README.md) | Project overview, quick start, examples |
 | [`FEATURE_STATUS.md`](FEATURE_STATUS.md) | Current implementation status per feature |
-| [`VYB_PROJECT_STUDY_GUIDE.md`](VYB_PROJECT_STUDY_GUIDE.md) | Living project study guide for practitioners |
+| [`Vyb_Project_Study_Guide.md`](Vyb_Project_Study_Guide.md) | Living project study guide for practitioners |
 | [`../TODO.md`](../TODO.md) | Living road-to-1.0 checklist |
 | [`../SUGGESTIONS.md`](../SUGGESTIONS.md) | Sprint-organized improvement suggestions |
 
