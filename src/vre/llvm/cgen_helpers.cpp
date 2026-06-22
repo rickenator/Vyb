@@ -99,7 +99,7 @@ bool LLVMCodegen::functionBodyReturnsLitIntrinsic(vyb::ast::BlockStatement* body
 // This prevents JIT runtime errors when functions are not found
 void LLVMCodegen::ensureCoreIntrinsicFunctions() {
     // Declare all core intrinsic functions that the JIT runtime expects
-    getVyBPrintlnFunction();      // __vyb_println
+    getVybPrintlnFunction();      // __vyb_println
     getSerializeToJsonFunction(); // __vyb_serialize_to_json
     getLitConversionFunction();   // __vyb_convert_lit_string
 }

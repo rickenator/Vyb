@@ -1,4 +1,4 @@
-# VyB Implementation Update Log
+# Vyb Implementation Update Log
 
 Tag: `implementation-audit-2026-05-23`
 Audit date: 2026-05-23
@@ -21,7 +21,7 @@ expect-fail tests are treated as stronger evidence than optimistic status text.
 - 2026-05-25: Advanced I-002 FFI with the next ABI slice: `#[repr(C)]`
   now parses on structs, is tracked in AST/codegen metadata, preserves
   declaration-order unpacked LLVM struct layout, and rejects generic,
-  ownership-qualified, and VyB-runtime fields that are not C ABI-stable.
+  ownership-qualified, and Vyb-runtime fields that are not C ABI-stable.
   Native `--build` now accepts repeatable `--link <lib-or-path>` arguments and
   links the metadata runtime object needed by native builds. Added focused
   `test/ffi` coverage for repr(C) layout, diagnostics, and by-pointer extern C
@@ -91,7 +91,7 @@ expect-fail tests are treated as stronger evidence than optimistic status text.
   symbols. Added focused `test/modules` coverage and a runnable
   `--module-path` example.
 - 2026-05-24: Completed I-005 Error Propagation phases 3–5. `fail` now builds
-  runtime `VyBError` payloads and propagates through failable returns when no
+  runtime `VybError` payloads and propagates through failable returns when no
   trap is active, call sites of semantically failable functions now auto-check
   `{value, error}` and propagate errors using the same return helper, and
   failable calls from non-failable functions without trap are now rejected by
@@ -129,7 +129,7 @@ expect-fail tests are treated as stronger evidence than optimistic status text.
   ownership regressions for live/released `released()` and `grab()` behavior,
   promoted `test/ownership` into the milestone gate, and raised the milestone
   floor to 156. Current limitation: failed `grab()` returns a null `our<T>`
-  placeholder until VyB has first-class `Option<T>`/nullable result syntax.
+  placeholder until Vyb has first-class `Option<T>`/nullable result syntax.
 
 ## Audit Scope
 
@@ -166,7 +166,7 @@ Source areas checked:
 | I-002 | FFI | P0 | Continue FFI after extern block/ABI alias support: variadic calls, explicit `String::as_c_str()`, richer C ABI layout validation, and broader end-to-end native/JIT FFI tests. | Source now supports extern C blocks, host process symbol lookup, freedom-gated direct calls, C scalar/pointer aliases, `#[repr(C)]` structs with conservative ABI diagnostics, a minimal native `--link <lib-or-path>` flow, and a narrow String-to-C-string call path. |
 | I-003 | Ownership runtime | P0 | Extend lexical borrow checks and the initial `our<T>`/`mild<T>` control-block runtime into full ownership: `my<T>` moves, complete `our<T>` copy/assignment/parameter strong-count semantics, deeper `their<T>` lifetime analysis, and comprehensive cleanup. | `TODO.md`; `doc/mem_RFC.md`; current semantic pass checks lvalue borrows, overlapping mutable/view borrows, and assignment while borrowed; current codegen supports minimal control blocks for `our()`, `soft()`, `released()`, and live `grab()`. |
 | I-004 | `mild<T>` weak references | P0 | Complete the remaining weak-reference contract: Option-like failed `grab()`, full weak handle copy/drop accounting across all assignment paths, and final control-block cleanup once strong/weak counts reach zero. | `doc/OWNERSHIP_MILD.md`; `test/ownership/mild_released_live.vyb`; `test/ownership/mild_released_after_drop_or_scope.vyb`; `test/ownership/mild_grab_live.vyb`; `test/ownership/mild_grab_released.vyb`. |
-| I-005 | Error propagation/runtime errors | P0 | Finish cross-function error propagation, construct real `VyBError` objects at `fail`, preserve type/data/source location, print detailed untrapped errors, and settle Result-vs-fail/trap design conflict. | `doc/ERROR_PROPAGATION_DESIGN.md`; `test/trap/TEST_RESULTS.md`; `src/runtime/error_handling.cpp` says error structure is not implemented. |
+| I-005 | Error propagation/runtime errors | P0 | Finish cross-function error propagation, construct real `VybError` objects at `fail`, preserve type/data/source location, print detailed untrapped errors, and settle Result-vs-fail/trap design conflict. | `doc/ERROR_PROPAGATION_DESIGN.md`; `test/trap/TEST_RESULTS.md`; `src/runtime/error_handling.cpp` says error structure is not implemented. |
 | I-006 | Defer/runtime cleanup | P0 | Decide whether runtime defer/ensure stacks are needed; implement runtime defer stack if `defer` must survive fail/unwind paths. | `src/runtime/error_handling.cpp` has defer/ensure stubs; `src/vre/llvm/cgen_stmt.cpp` stores defers in a codegen stack. |
 | I-007 | Aspect completion | P0 | Remaining work after associated types, receiver shorthand, ambiguity diagnostics, and executable generic bind method monomorphization: aspect objects/dynamic dispatch, aspect inheritance, bounded bind selection precedence, and qualified disambiguation syntax for same-name aspect methods. | `TODO.md`; `doc/ASPECT_BOUNDS.md`; `doc/TRAIT_SYSTEM_DESIGN.md`; `test/aspect/PHASE_6_ROADMAP.md`. |
 | I-008 | Stdlib foundation | P0 | Implement `Option<T>`, decide and implement/document `Result<T,E>`, core aspects (`Display`, `Debug`, `Clone`, `Equatable`, `Comparable`, `Hashable`), `Iterator`, File I/O, maps/sets, and remaining String/Vec helpers. | `TODO.md`; `doc/STRING_IMPLEMENTATION.md`; `test/future_features/test_option_type.vyb`, `test_result_type.vyb`; FFI is a blocker for File I/O. |
@@ -194,7 +194,7 @@ Source areas checked:
   closure semantics.
 - `src/vre/llvm/cgen_stmt.cpp`: legacy try/catch/throw codegen is stubbed or
   obsolete relative to `fail`/`trap`; untrapped `fail` does not build a full
-  `VyBError`.
+  `VybError`.
 - `src/vre/llvm/cgen_vec.cpp`: several Vec methods return placeholders or only
   simulate copies.
 - `src/runtime/error_handling.cpp`: untrapped error details, defer stack, and
@@ -215,7 +215,7 @@ These should be fixed before using the docs as release guidance.
 2. Error handling status conflict:
    `doc/ERROR_TRAP.md` says core error handling phases are complete, while
    `doc/ERROR_PROPAGATION_DESIGN.md`, `test/trap/TEST_RESULTS.md`, and runtime
-   source still show cross-function propagation and full `VyBError` construction
+   source still show cross-function propagation and full `VybError` construction
    as incomplete.
 
 3. `ensure` meaning conflict:
@@ -246,7 +246,7 @@ These should be fixed before using the docs as release guidance.
    Update examples or mark legacy syntax as deprecated.
 
 8. Production-ready language claims:
-   Several docs call VyB production-ready, but the source audit shows major 1.0
+   Several docs call Vyb production-ready, but the source audit shows major 1.0
    blockers remain. Release/status docs should use a more precise feature
    matrix and avoid broad production-ready claims until P0 items are complete.
 
@@ -258,7 +258,7 @@ These should be fixed before using the docs as release guidance.
    stdlib modules, networking, and multi-file programs.
 3. Complete ownership runtime enforcement, especially `mild<T>`, before expanding
    container/resource APIs that depend on lifecycle correctness.
-4. Finish error propagation and real `VyBError` construction so `fail`/`trap`
+4. Finish error propagation and real `VybError` construction so `fail`/`trap`
    works across function boundaries and produces useful runtime diagnostics.
 5. Complete aspect associated types and iterator design, then implement
    `Iterator`, `Option`, core aspects, and stdlib collections.

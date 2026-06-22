@@ -13,16 +13,16 @@ struct VreValue;
 void* allocate_raw(size_t size);
 void deallocate_raw(void* ptr);
 
-// VyB's my<T> for unique ownership of heap-allocated values.
+// Vyb's my<T> for unique ownership of heap-allocated values.
 // T would typically be a VreValue or a specific runtime type like VreObject.
 template<typename T>
 using my = std::unique_ptr<T>; // Using std::unique_ptr as a starting point
 
-// VyB's our<T> for shared ownership of heap-allocated values (e.g., via ARC).
+// Vyb's our<T> for shared ownership of heap-allocated values (e.g., via ARC).
 template<typename T>
 using our = std::shared_ptr<T>; // Using std::shared_ptr as a starting point for shared ownership
 
-// VyB's their<T> for non-owning, borrowed references to values.
+// Vyb's their<T> for non-owning, borrowed references to values.
 // This represents a raw pointer, indicating a borrow that does not affect lifetime.
 // It can be null and can be reassigned. For non-nullable borrows, C++ references (T&) are typically used directly.
 template<typename T>

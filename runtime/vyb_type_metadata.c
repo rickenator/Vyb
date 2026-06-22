@@ -1,4 +1,4 @@
-// VyB Type Metadata Runtime Implementation
+// Vyb Type Metadata Runtime Implementation
 #include "vyb_type_metadata.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,11 +6,11 @@
 
 // Global type registry (simple linear search for now)
 #define MAX_TYPES 256
-static VyBTypeMetadata* g_type_registry[MAX_TYPES];
+static VybTypeMetadata* g_type_registry[MAX_TYPES];
 static size_t g_num_types = 0;
 
 // Register a type in the global registry
-void __vyb_register_type(VyBTypeMetadata* metadata) {
+void __vyb_register_type(VybTypeMetadata* metadata) {
     if (g_num_types >= MAX_TYPES) {
         fprintf(stderr, "Error: Type registry full\n");
         return;
@@ -19,7 +19,7 @@ void __vyb_register_type(VyBTypeMetadata* metadata) {
 }
 
 // Lookup type metadata by name
-VyBTypeMetadata* __vyb_lookup_type(const char* type_name) {
+VybTypeMetadata* __vyb_lookup_type(const char* type_name) {
     for (size_t i = 0; i < g_num_types; i++) {
         if (strcmp(g_type_registry[i]->type_name, type_name) == 0) {
             return g_type_registry[i];
@@ -42,8 +42,8 @@ static void serialize_primitive_field(char* buffer, size_t* pos, void* field_ptr
         *pos += sprintf(buffer + *pos, "%s", val ? "true" : "false");
     } else if (strcmp(type_name, "String") == 0) {
         // String is stored as {char* data, int64_t length} struct
-        typedef struct { char* data; int64_t length; } VyBString;
-        VyBString* str = (VyBString*)field_ptr;
+        typedef struct { char* data; int64_t length; } VybString;
+        VybString* str = (VybString*)field_ptr;
         *pos += sprintf(buffer + *pos, "\"");
         if (str->data && str->length > 0) {
             // Use length for safety
@@ -72,7 +72,7 @@ static void serialize_primitive_field(char* buffer, size_t* pos, void* field_ptr
 }
 
 // Serialize a complex type to JSON using its metadata
-char* __vyb_complex_to_json_with_metadata(void* instance, VyBTypeMetadata* metadata) {
+char* __vyb_complex_to_json_with_metadata(void* instance, VybTypeMetadata* metadata) {
     if (!instance || !metadata) {
         return strdup("null");
     }
@@ -86,7 +86,7 @@ char* __vyb_complex_to_json_with_metadata(void* instance, VyBTypeMetadata* metad
 
     // Serialize each field
     for (size_t i = 0; i < metadata->num_fields; i++) {
-        VyBFieldMetadata* field = &metadata->fields[i];
+        VybFieldMetadata* field = &metadata->fields[i];
         void* field_ptr = (char*)instance + field->offset;
 
         fprintf(stderr, "DEBUG JSON: Field '%s' at offset %zu, type '%s', is_primitive=%d\n",
@@ -104,7 +104,7 @@ char* __vyb_complex_to_json_with_metadata(void* instance, VyBTypeMetadata* metad
             pos += sprintf(buffer + pos, "[]%s", i == metadata->num_fields - 1 ? "" : ", ");
         } else {
             // Nested complex type (recursive)
-            VyBTypeMetadata* nested_meta = __vyb_lookup_type(field->type_name);
+            VybTypeMetadata* nested_meta = __vyb_lookup_type(field->type_name);
             if (nested_meta) {
                 char* nested_json = __vyb_complex_to_json_with_metadata(field_ptr, nested_meta);
                 pos += sprintf(buffer + pos, "%s%s", nested_json,
@@ -171,7 +171,7 @@ static const char* parse_bool_value(const char* json, bool* out) {
 }
 
 // Deserialize JSON to a complex type using metadata
-void* __vyb_complex_from_json_with_metadata(const char* json_str, VyBTypeMetadata* metadata) {
+void* __vyb_complex_from_json_with_metadata(const char* json_str, VybTypeMetadata* metadata) {
     if (!json_str || !metadata) {
         return NULL;
     }
@@ -210,7 +210,7 @@ void* __vyb_complex_from_json_with_metadata(const char* json_str, VyBTypeMetadat
         p++; // Skip ':'
 
         // Find field in metadata
-        VyBFieldMetadata* field = NULL;
+        VybFieldMetadata* field = NULL;
         for (size_t j = 0; j < metadata->num_fields; j++) {
             if (strcmp(metadata->fields[j].name, field_name) == 0) {
                 field = &metadata->fields[j];
@@ -238,8 +238,8 @@ void* __vyb_complex_from_json_with_metadata(const char* json_str, VyBTypeMetadat
                     char str_val[1024];
                     p = parse_string_value(p, str_val, sizeof(str_val));
                     // String is {char* data, int64_t length} struct
-                    typedef struct { char* data; int64_t length; } VyBString;
-                    VyBString* vyb_str = (VyBString*)field_ptr;
+                    typedef struct { char* data; int64_t length; } VybString;
+                    VybString* vyb_str = (VybString*)field_ptr;
                     vyb_str->data = strdup(str_val);
                     vyb_str->length = strlen(str_val);
                 }

@@ -2,7 +2,7 @@
 """
 Extract test cases from tests.cpp and convert them to individual .vyb test files.
 
-This script parses the VyB compiler's tests.cpp file and extracts the test cases
+This script parses the Vyb compiler's tests.cpp file and extracts the test cases
 into separate .vyb files with appropriate metadata headers. It handles both raw string
 literals and regular string literals.
 """
@@ -79,7 +79,7 @@ def extract_test_case(test_case_text):
         # Use the original filename from the comment if present
         filename = original_filename
 
-    # Extract the VyB code from the source string
+    # Extract the Vyb code from the source string
     vyb_code = extract_string_literal(source_text)
     if vyb_code is None:
         return None

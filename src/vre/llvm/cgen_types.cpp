@@ -657,11 +657,11 @@ llvm::Type* LLVMCodegen::codegenType(vyb::ast::TypeNode* typeNode) {
                     llvmType = llvm::ArrayType::get(elemTy, arraySize);
                 } else {
                     logError(typeNode->loc, "Array size is not a constant integer literal. Dynamic/complex-sized arrays need specific handling (e.g., as slices/structs or require constant folding). Treating as pointer for now.");
-                    llvmType = llvm::PointerType::getUnqual(elemTy); // Fallback, might not be correct for all VyB semantics
+                    llvmType = llvm::PointerType::getUnqual(elemTy); // Fallback, might not be correct for all Vyb semantics
                 }
             } else {
                 // Unsized array (e.g., `arr: []Int`) - typically a pointer or a slice struct.
-                llvmType = llvm::PointerType::getUnqual(elemTy); // Fallback, might not be correct for all VyB semantics
+                llvmType = llvm::PointerType::getUnqual(elemTy); // Fallback, might not be correct for all Vyb semantics
             }
             break;
         }
@@ -778,7 +778,7 @@ llvm::Type* LLVMCodegen::codegenType(vyb::ast::TypeNode* typeNode) {
             // Represent optional<T> as a struct { T value; bool has_value; }
             // Or, if T is a pointer, optional<T*> can be T* (where nullptr means no value).
             // For simplicity here, let's assume T is not a pointer and use a struct.
-            // A more complex handling might be needed based on VyB's specific semantics for optionals.
+            // A more complex handling might be needed based on Vyb's specific semantics for optionals.
             if (containedLlvmType->isPointerTy()) {
                  // If T is already a pointer, optional<T*> can be represented by T* (nullptr for none)
                 llvmType = containedLlvmType;

@@ -1,4 +1,4 @@
-// Test file to verify new angle bracket syntax for VyB consistency
+// Test file to verify new angle bracket syntax for Vyb consistency
 struct Point {
     x<Int>,
     y<Int>

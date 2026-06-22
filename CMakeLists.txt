@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(VyBParser VERSION 0.5.0)
+project(VybParser VERSION 0.5.0)
 
 set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_CXX_STANDARD 17)
@@ -182,5 +182,5 @@ add_custom_target(run-tests
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/test/run_tests.py --vyb $<TARGET_FILE:vyb> --test-dir ${CMAKE_SOURCE_DIR}/test
     DEPENDS vyb
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    COMMENT "Running VyB test suite"
+    COMMENT "Running Vyb test suite"
 )

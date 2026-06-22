@@ -1,6 +1,6 @@
 # Primitive Type Tests
 
-This directory contains comprehensive tests for all VyB primitive types.
+This directory contains comprehensive tests for all Vyb primitive types.
 
 ## Test Files
 
@@ -84,7 +84,7 @@ build/vyb test/types/char_types_test.vyb      # Should exit with code 313
 
 ### Type Aliases
 All types support multiple naming conventions:
-- VyB style: `Int32`, `Float64`, `UInt8`
+- Vyb style: `Int32`, `Float64`, `UInt8`
 - C style: `int32`, `float64`, `uint8`
 - LLVM style: `i32`, `f64`, `u8`
 

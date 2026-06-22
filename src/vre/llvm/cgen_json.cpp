@@ -7,7 +7,7 @@
 
 namespace vyb {
 
-// Implementation for print function (without newline) in the VyB language
+// Implementation for print function (without newline) in the Vyb language
 llvm::Function* LLVMCodegen::getPrintFunction() {
     // Check if the print function has already been declared in the module
     llvm::Function* printFunc = module->getFunction("print");

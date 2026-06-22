@@ -1,11 +1,11 @@
 	.text
-	.file	"VyBModule"
+	.file	"VybModule"
 	.globl	divide                          # -- Begin function divide
 	.p2align	4, 0x90
 	.type	divide,@function
 divide:                                 # @divide
 .Lfunc_begin0:
-	.file	1 "/home/rick/Projects/VyB/test/trap" "test_minimal_repro.vyb.ll"
+	.file	1 "/home/rick/Projects/Vyb/test/trap" "test_minimal_repro.vyb.ll"
 	.loc	1 2 0                           # test_minimal_repro.vyb.ll:2:0
 	.cfi_startproc
 # %bb.0:                                # %entry
@@ -332,11 +332,11 @@ main:                                   # @main
 .Ldebug_info_end0:
 	.section	.debug_str,"MS",@progbits,1
 .Linfo_string0:
-	.asciz	"VyB Compiler"                  # string offset=0
+	.asciz	"Vyb Compiler"                  # string offset=0
 .Linfo_string1:
 	.asciz	"test_minimal_repro.vyb.ll"     # string offset=13
 .Linfo_string2:
-	.asciz	"/home/rick/Projects/VyB/test/trap" # string offset=39
+	.asciz	"/home/rick/Projects/Vyb/test/trap" # string offset=39
 .Linfo_string3:
 	.asciz	"divide"                        # string offset=73
 .Linfo_string4:

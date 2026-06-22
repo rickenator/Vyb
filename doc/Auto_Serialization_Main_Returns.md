@@ -51,11 +51,11 @@ main() -> { exit(42) }         // no stdout output, exit code: 42
 
 ## Goal
 
-Enable any function in VyB to return one or more values of arbitrary types, with the VyB runtime auto‑serializing the result into a concise, type‑annotated JSON representation and allowing a matching auto‑deserializer to produce faithful VyB structs.
+Enable any function in Vyb to return one or more values of arbitrary types, with the Vyb runtime auto‑serializing the result into a concise, type‑annotated JSON representation and allowing a matching auto‑deserializer to produce faithful Vyb structs.
 
 ## Why
 
-* **Zero boilerplate** for round‑trip between VyBR and storage or IPC.
+* **Zero boilerplate** for round‑trip between VybR and storage or IPC.
 * **Type fidelity**: preserve declared types (e.g. `Int8`, `Int32`) without implicit demotion.
 * **Interoperability**: leverage JSON as lingua franca for external tools and runtimes.
 
@@ -83,11 +83,11 @@ compute()<String> ->
 ```
 
 * **`main()<T1,T2,…>`**: generic return‑type list for `main`.
-* **`return`** in `main` triggers auto‑JSONification; elsewhere it returns native VyB values or JSON if using `toJSON()`.
+* **`return`** in `main` triggers auto‑JSONification; elsewhere it returns native Vyb values or JSON if using `toJSON()`.
 
 ## Auto-Deserialization
 
-VyBR provides a built‑in intrinsic:
+VybR provides a built‑in intrinsic:
 
 ```vyb
 // this section needs more thinking.
@@ -291,10 +291,10 @@ This preserves symmetry with `main()` return rules and guarantees a 1:1 mapping 
 
 1. Define reflection metadata format in vyb.
 2. Implement JSON emitter after AST lowering.
-3. Extend VyBR with `deserial`, `fromJson`, and error-reporting.
+3. Extend VybR with `deserial`, `fromJson`, and error-reporting.
 4. Test nested structs, literal returns, array-of-primitives, versioning, and error cases.
 
 ---
 
 *Concise returns, faithful types, zero ceremony.*
-*references to VyBL and VyBR are VyB Language and VyB Runtime respectively*
+*references to VybL and VybR are Vyb Language and Vyb Runtime respectively*

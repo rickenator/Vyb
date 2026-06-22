@@ -1,10 +1,10 @@
 # Tuple Type Tests
 
-This directory contains tests for VyB's tuple type system with full variadic support.
+This directory contains tests for Vyb's tuple type system with full variadic support.
 
 ## Tuple Syntax
 
-VyB supports two equivalent syntaxes for tuple types:
+Vyb supports two equivalent syntaxes for tuple types:
 
 1. **Inline syntax**: `main()<Int, String, Bool>`
 2. **Generic syntax**: `main()<Tuple<Int, String, Bool>>`

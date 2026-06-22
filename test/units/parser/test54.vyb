@@ -1,4 +1,4 @@
-// filepath: /home/rick/Projects/VyB/test/units/extracted/test54.vyb
+// filepath: /home/rick/Projects/Vyb/test/units/extracted/test54.vyb
 // @test: Codegen: All pointer intrinsics used together in freedom block
 // @description: Extracted from tests.cpp - Codegen: All pointer intrinsics used together in freedom block
 // @category: parser

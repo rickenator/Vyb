@@ -1,4 +1,4 @@
-// filepath: /home/rick/Projects/VyB/test/units/extracted/test55.vyb
+// filepath: /home/rick/Projects/Vyb/test/units/extracted/test55.vyb
 // @test: Semantic: Pointer operations require freedom block - positive case
 // @description: Extracted from tests.cpp - Semantic: Pointer operations require freedom block - positive case
 // @category: parser

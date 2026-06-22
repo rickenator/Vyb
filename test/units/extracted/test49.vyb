@@ -1,4 +1,4 @@
-// filepath: /home/rick/Projects/VyB/test/units/extracted/test49.vyb
+// filepath: /home/rick/Projects/Vyb/test/units/extracted/test49.vyb
 // @test: Semantic: 'addr()' operand must be a location type
 // @description: Extracted from tests.cpp - Semantic: 'addr()' operand must be a location type
 // @category: parser

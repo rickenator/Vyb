@@ -1,8 +1,8 @@
-# VyB Runtime: Mutability, Ownership, and References
+# Vyb Runtime: Mutability, Ownership, and References
 
 ## 1. Overview
 
-VyB's memory model is designed for safety and explicitness, drawing inspiration from modern systems languages. It distinguishes between:
+Vyb's memory model is designed for safety and explicitness, drawing inspiration from modern systems languages. It distinguishes between:
 1.  **Binding Mutability**: Whether a variable can be reassigned (default mutable vs `const`).
 2.  **Ownership**: Who is responsible for managing the memory of data (`my<T>`, `our<T>`, `their<T>`).
 3.  **Data Mutability**: Whether the data itself can be changed, often indicated by `const` on the type (e.g., `my<T const>`).
@@ -10,11 +10,11 @@ VyB's memory model is designed for safety and explicitness, drawing inspiration 
 
 This document details these aspects, aligning with the `mem_RFC.md` proposal.
 
-**Runtime Note**: As of v0.4.0, VyB uses LLVM's modern ORC JIT infrastructure, providing robust memory management and excellent compatibility with the ownership and borrowing system described here.
+**Runtime Note**: As of v0.4.0, Vyb uses LLVM's modern ORC JIT infrastructure, providing robust memory management and excellent compatibility with the ownership and borrowing system described here.
 
 ## 2. Variable Declarations and Binding Mutability
 
-VyB uses two keywords for variable bindings:
+Vyb uses two keywords for variable bindings:
 
 *   **`var`**: Declares a mutable binding. The variable can be reassigned to a new value or a different instance of its type.
     ```vyb
@@ -47,7 +47,7 @@ VyB uses two keywords for variable bindings:
 
 ## 3. Ownership Qualifiers and Data Mutability
 
-VyB employs ownership types to manage memory and control data access:
+Vyb employs ownership types to manage memory and control data access:
 
 *   **`my<T>`**: Unique-owning pointer (similar to Rust's `Box<T>`). Only one `my<T>` can own the data. When a `my<T>` goes out of scope, the data is deallocated.
 *   **`our<T>`**: Shared-owning pointer (reference-counted, like `Rc<T>`/`Arc<T>`). Multiple `our<T>` pointers can co-own the data. The data is deallocated when the last `our<T>` is dropped.
@@ -169,4 +169,4 @@ This memory model, centered around `var`/`const` bindings, `my`/`our`/`their` ow
 -   **Offer Control**: Developers have fine-grained control over mutability at both the binding and type levels.
 -   **Enable Concurrency**: `our<T const>` is inherently safe for concurrent reads, and `our<Mutex<T>>` (or similar) can be used for shared mutable state.
 
-This model aligns VyB with modern practices for safe and efficient systems programming.
+This model aligns Vyb with modern practices for safe and efficient systems programming.

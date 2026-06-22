@@ -10,7 +10,7 @@ extern "C" {
 
 main()<Int> -> {
     freedom {
-        puts("Hello from VyB FFI")
+        puts("Hello from Vyb FFI")
     }
     return 0
 }

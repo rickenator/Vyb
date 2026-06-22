@@ -1,9 +1,9 @@
 #!/bin/bash
-# Test compilation of VyB examples
+# Test compilation of Vyb examples
 # Tests both JIT execution and AOT compilation with build
 
 echo "=========================================="
-echo "VyB Compilation Test Suite v0.4.4"
+echo "Vyb Compilation Test Suite v0.4.4"
 echo "=========================================="
 echo
 

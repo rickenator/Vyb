@@ -49,7 +49,7 @@
 - [x] Phase 4d: Graceful NULL error handling (no segfaults)
 - [x] Phase 4e: Beautiful error boxes (perfect 64-char alignment)
 - [ ] Phase 5: Result<T, E> return types for failable functions
-- [ ] Phase 6: VyBError structure creation for fail statements
+- [ ] Phase 6: VybError structure creation for fail statements
 - [ ] Phase 7: Cross-function error propagation via Result types
 - [ ] Phase 8: Ensure clause execution
 - [ ] Phase 9: Rethrow statement support
@@ -61,10 +61,10 @@
    - Caller checks result and either unwraps or propagates error
    - Enables proper cross-function error handling
 
-2. **VyBError Creation**: Implement `__vyb_runtime_create_error()` calls
+2. **VybError Creation**: Implement `__vyb_runtime_create_error()` calls
    - Store error type, data, source location
    - Capture stack trace at fail point
-   - Pass proper VyBError* to handlers
+   - Pass proper VybError* to handlers
 
 3. **JIT Runtime Functions**: Register I/O functions with JIT
    - __vyb_println for debug output

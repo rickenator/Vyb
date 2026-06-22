@@ -1,7 +1,7 @@
 // Simple test for println function
 main()<Int> -> {
     // Simple string println
-    println("Hello, VyB World!");
+    println("Hello, Vyb World!");
 
     // Printing an expression
     println(1 + 2);

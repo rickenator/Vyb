@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-VyB Test Harness
+Vyb Test Harness
 
-This script discovers and runs test files in the VyB language,
+This script discovers and runs test files in the Vyb language,
 using special directives in test file comments to determine how to run each test.
 """
 
@@ -20,22 +20,22 @@ import shlex
 
 
 def find_vyb_root():
-    """Find the VyB repository root directory.
+    """Find the Vyb repository root directory.
 
     This function looks for the repository root by starting from this script's directory
     and walking up until it finds a directory with CMakeLists.txt and src/tests.cpp
-    (which are clear indicators of the VyB repository root).
+    (which are clear indicators of the Vyb repository root).
 
     Returns:
-        Path: The absolute path to the VyB repository root
+        Path: The absolute path to the Vyb repository root
     """
     # Start from the directory where this script is located
     script_dir = Path(os.path.dirname(os.path.abspath(__file__)))
     current_dir = script_dir
 
-    # Walk up directories until we find the VyB repo root
+    # Walk up directories until we find the Vyb repo root
     while True:
-        # Check if this looks like the VyB repo root
+        # Check if this looks like the Vyb repo root
         if (current_dir / "CMakeLists.txt").exists() and (current_dir / "src" / "tests.cpp").exists():
             return current_dir
 
@@ -44,13 +44,13 @@ def find_vyb_root():
 
         # If we've reached the filesystem root without finding it
         if parent_dir == current_dir:
-            raise RuntimeError("Could not find VyB repository root directory")
+            raise RuntimeError("Could not find Vyb repository root directory")
 
         current_dir = parent_dir
 
 @dataclass
 class TestCase:
-    """Represents a single VyB test case with its directives."""
+    """Represents a single Vyb test case with its directives."""
     filename: str
     name: str = "Unnamed test"
     description: str = ""
@@ -180,7 +180,7 @@ def run_test(test, vyb_executable, verbose=False, execute_jit=False):
                 failure_reasons.append(f"expected stdout to contain: {test.expect_output}")
 
         # Check main return serialization when JIT execution is enabled.
-        # VyB programs emit the main return value on stdout; the compiler process
+        # Vyb programs emit the main return value on stdout; the compiler process
         # itself still exits with 0 for a successfully compiled/executed test.
         if will_execute and test.expect == "pass" and test.expect_return and test.expect_return != "n/a":
             stdout_lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
@@ -244,7 +244,7 @@ def format_result(result, test, verbose=False):
     return output
 
 def main():
-    # Find the VyB repository root
+    # Find the Vyb repository root
     try:
         vyb_root = find_vyb_root()
     except RuntimeError as e:
@@ -252,7 +252,7 @@ def main():
         sys.exit(1)
 
     parser = argparse.ArgumentParser(
-        description='VyB test harness',
+        description='Vyb test harness',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -291,8 +291,8 @@ Examples:
 
     # Verify executable exists
     if not os.path.isfile(vyb_executable):
-        print(f"Error: Cannot find VyB executable at {vyb_executable}")
-        print(f"Build VyB or specify executable with --vyb option")
+        print(f"Error: Cannot find Vyb executable at {vyb_executable}")
+        print(f"Build Vyb or specify executable with --vyb option")
         sys.exit(1)
 
     # Verify test directory exists
@@ -301,8 +301,8 @@ Examples:
         sys.exit(1)
 
     if args.verbose:
-        print(f"VyB repository root: {vyb_root}")
-        print(f"Using VyB executable: {vyb_executable}")
+        print(f"Vyb repository root: {vyb_root}")
+        print(f"Using Vyb executable: {vyb_executable}")
         print(f"Using test directory: {test_dir}")
         if args.execute_jit:
             print("JIT execution enabled: Code will be executed, not just parsed")

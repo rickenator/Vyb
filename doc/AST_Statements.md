@@ -1,6 +1,6 @@
 # AST Nodes: Statements
 
-This document describes the Abstract Syntax Tree (AST) nodes for various statements in the VyB programming language, as defined in `include/vyb/parser/ast.hpp`. Statements are units of execution. All statement nodes inherit from `vyb::ast::Statement`.
+This document describes the Abstract Syntax Tree (AST) nodes for various statements in the Vyb programming language, as defined in `include/vyb/parser/ast.hpp`. Statements are units of execution. All statement nodes inherit from `vyb::ast::Statement`.
 
 ## Common Pointer Aliases
 
@@ -176,7 +176,7 @@ public:
 
 ### Auto-Serialization Behavior
 
-When a `ReturnStatement` appears in a `main()` function, the VyB runtime automatically serializes the returned value(s) to JSON format:
+When a `ReturnStatement` appears in a `main()` function, the Vyb runtime automatically serializes the returned value(s) to JSON format:
 
 - **Single values**: Serialized directly (e.g., `return 42` → `42`)
 - **Multiple values**: Comma-separated expressions are serialized as a JSON object with type annotations (e.g., `return 42, "hello"` → `{"Int":42,"String":"hello"}`)
@@ -261,7 +261,7 @@ The `MatchStatement` enables comprehensive pattern matching with:
 
 ## 10. `FailExpression` / `TrapStatement`
 
-VyB does not have `throw`, `try`, `catch`, or `finally`. Error handling is done via
+Vyb does not have `throw`, `try`, `catch`, or `finally`. Error handling is done via
 `fail`/`trap`. The `ThrowStatement` and `TryStatement` AST nodes documented in older
 versions of this file are **removed from the language spec**.
 
@@ -362,6 +362,6 @@ freedom {
 }
 ```
 
-These operations are freedom because they bypass VyB's memory safety guarantees, allowing for potential errors like null pointer dereferences, dangling pointers, and memory corruption.
+These operations are freedom because they bypass Vyb's memory safety guarantees, allowing for potential errors like null pointer dereferences, dangling pointers, and memory corruption.
 
 *Note: `PatternAssignmentStatement` is mentioned in `AST_Roadmap.md` but not currently present in `vyb/parser/ast.hpp`'s statement definitions. It will be added here once implemented.*

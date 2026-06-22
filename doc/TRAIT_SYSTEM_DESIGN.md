@@ -1,4 +1,4 @@
-# VyB Aspect System Design
+# Vyb Aspect System Design
 
 **Version:** 0.4.2+
 **Status:** Partially Implemented
@@ -6,18 +6,18 @@
 
 ## Overview
 
-VyB's aspect system provides interface-based polymorphism without classes. Aspects define
+Vyb's aspect system provides interface-based polymorphism without classes. Aspects define
 shared behavior that types can bind to, enabling generic programming with compile-time
-guarantees. This document uses VyB-native vocabulary: `aspect` and `bind`.
+guarantees. This document uses Vyb-native vocabulary: `aspect` and `bind`.
 
-> **Terminology note:** Earlier drafts used `trait`/`impl` (Rust vocabulary). VyB uses
+> **Terminology note:** Earlier drafts used `trait`/`impl` (Rust vocabulary). Vyb uses
 > `aspect`/`bind`. These are not the same language — the concepts are similar but the
 > keywords and philosophy differ. See `doc/WHY_ASPECTS_NOT_CLASSES.md`.
 
 ## Core Principles
 
 1. **Opt-in Polymorphism** - Aspects are optional; simple structs work without them
-2. **No Classes** - Structs bind aspects directly; there is no class keyword in VyB
+2. **No Classes** - Structs bind aspects directly; there is no class keyword in Vyb
 3. **Compile-time Dispatch** - Static dispatch via monomorphization (no vtables by default)
 4. **Explicit Binding** - Types explicitly `bind` aspects; no duck typing
 5. **Aspect Bounds** - Generic type parameters can require aspect binding
@@ -43,7 +43,7 @@ distance(p1<Point>, p2<Point>)<Float> -> {
 // This is valid and preferred for simple data types
 ```
 
-**VyB's Approach:**
+**Vyb's Approach:**
 - Use **structs** for data
 - Use **functions** for behavior
 - Use **aspects** when you need polymorphism
@@ -163,7 +163,7 @@ bind<T<Comparable>> Equatable -> Vec<T> {
 ### Aspect Bounds on Generic Functions
 
 ```vyb
-// Single bound — VyB syntax
+// Single bound — Vyb syntax
 min<T<Comparable>>(a<T>, b<T>)<T> -> {
     if (a.lt(b)) {
         return a
@@ -265,7 +265,7 @@ aspect Async<T> {
 }
 ```
 
-## The VyB Way
+## The Vyb Way
 
 **Data = Structs**
 ```vyb
@@ -408,7 +408,7 @@ See [WHY_ASPECTS_NOT_CLASSES.md](WHY_ASPECTS_NOT_CLASSES.md) for detailed ration
 
 ### Q: What about encapsulation?
 
-**A:** VyB will have module-level visibility:
+**A:** Vyb will have module-level visibility:
 
 ```vyb
 // Private by default in modules
@@ -485,7 +485,7 @@ main()<Int> -> {
 
 ## Conclusion
 
-VyB's aspect system balances:
+Vyb's aspect system balances:
 - **Simplicity** — Structs for data, aspects for interfaces
 - **Power** — Generic programming with compile-time safety
 - **Flexibility** — Compose behaviors without class hierarchies

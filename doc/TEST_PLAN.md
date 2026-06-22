@@ -1,4 +1,4 @@
-# VyB Test Plan & Quality Assurance
+# Vyb Test Plan & Quality Assurance
 
 **Last Updated:** October 20, 2025
 **Version:** 0.4.2 (freedom-1.0)
@@ -8,7 +8,7 @@
 
 ## Philosophy
 
-VyB is one of the most beautiful things we've worked on. Now we strive for **quality of implementation** - every feature must be rock solid, every edge case handled, every error message clear.
+Vyb is one of the most beautiful things we've worked on. Now we strive for **quality of implementation** - every feature must be rock solid, every edge case handled, every error message clear.
 
 ---
 
@@ -321,7 +321,7 @@ Before tagging a release:
 
 ## Notes
 
-This is a living document. Update it after every major test run, after fixing failures, and when identifying new test gaps. The goal is **production quality** - VyB should be rock solid, reliable, and beautiful in implementation as it is in design.
+This is a living document. Update it after every major test run, after fixing failures, and when identifying new test gaps. The goal is **production quality** - Vyb should be rock solid, reliable, and beautiful in implementation as it is in design.
 
 **Quality is not an accident - it's a commitment.**
 

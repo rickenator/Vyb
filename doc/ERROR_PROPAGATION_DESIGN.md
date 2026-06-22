@@ -18,12 +18,12 @@ Errors propagate up until caught by a trap handler or reach the top of the stack
 - Functions that can fail return `{ T, ptr }` instead of `T`
 - First element: actual return value (or dummy if error)
 - Second element: error pointer (NULL = success, non-NULL = error)
-- Transparent to VyB source code
+- Transparent to Vyb source code
 
 ### Phase 3: Fail Statement Codegen ✅ COMPLETE
 - If trap handler in scope: store error, jump to landing pad (current behavior)
 - If no trap handler: pack error into return value, return to caller
-- Construct a runtime `VyBError` payload via `__vyb_runtime_create_error`
+- Construct a runtime `VybError` payload via `__vyb_runtime_create_error`
 - Execute registered `defer` statements before emitting the propagating return
 
 ### Phase 4: Call Site Instrumentation ✅ COMPLETE
@@ -59,9 +59,9 @@ define i64 @safe_func()
 define { i64, ptr } @failable_func()
 ```
 
-### Runtime `VyBError` Layout (codegen-emitted)
+### Runtime `VybError` Layout (codegen-emitted)
 ```c
-struct VyBError {
+struct VybError {
     uint64_t type_hash;     // hash(typeof(error))
     const char* type_name;  // concrete error type name
     void* payload;          // copied bytes of failed value

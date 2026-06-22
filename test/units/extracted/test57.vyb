@@ -1,4 +1,4 @@
-// filepath: /home/rick/Projects/VyB/test/units/extracted/test57.vyb
+// filepath: /home/rick/Projects/Vyb/test/units/extracted/test57.vyb
 // @test: Codegen: from<Type>(expr) with specific type
 // @description: Extracted from tests.cpp - Codegen: from<Type>(expr) with specific type
 // @category: parser

@@ -1,6 +1,6 @@
-# Canonical Reference Syntax for VyB v0.4.0
+# Canonical Reference Syntax for Vyb v0.4.0
 
-This document defines the **authoritative syntax** for all ownership and reference operations in VyB. This syntax is **mandatory** for all code, documentation, and examples.
+This document defines the **authoritative syntax** for all ownership and reference operations in Vyb. This syntax is **mandatory** for all code, documentation, and examples.
 
 ## 🎯 **Design Principles**
 
@@ -78,7 +78,7 @@ struct ConnectionPool {
     shared_config<our<PoolConfig>>
 }
 
-// Methods on structs are standalone functions in VyB
+// Methods on structs are standalone functions in Vyb
 // Constructor
 ConnectionPool_new(config<our<PoolConfig>>)<my<ConnectionPool>> -> {
     return my(ConnectionPool {
@@ -189,11 +189,11 @@ All documentation must use canonical syntax:
 ## 🎯 **Benefits Summary**
 
 1. **Cognitive Load**: Single syntax to learn and remember
-2. **Code Consistency**: All VyB code looks the same across projects
+2. **Code Consistency**: All Vyb code looks the same across projects
 3. **Tool Support**: Simplified parsing and IDE integration
 4. **Learning Curve**: Clear, unambiguous syntax for newcomers
 5. **Maintenance**: No legacy syntax variants to support
 
 ---
 
-**This document is the authoritative reference for VyB ownership and borrowing syntax. All code, documentation, and examples must follow these conventions.**
+**This document is the authoritative reference for Vyb ownership and borrowing syntax. All code, documentation, and examples must follow these conventions.**

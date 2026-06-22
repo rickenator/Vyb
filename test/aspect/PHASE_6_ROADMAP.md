@@ -1,7 +1,7 @@
 # Phase 6: Generic Aspects - Roadmap
 
 ## Overview
-Phase 6 extends the aspect system (VyB's trait/interface system) to support:
+Phase 6 extends the aspect system (Vyb's trait/interface system) to support:
 1. Generic aspects with type parameters
 2. Bounds on generic type parameters
 3. Generic implementations with Self type resolution
@@ -41,14 +41,14 @@ Phase 6 extends the aspect system (VyB's trait/interface system) to support:
 
 ### Current Aspect System Features
 
-**Aspects** (VyB's name for traits/interfaces):
+**Aspects** (Vyb's name for traits/interfaces):
 ```vyb
 aspect Display {
     show(self<Self>)<String> -> { }
 }
 ```
 
-**Binds** (VyB's name for trait implementations):
+**Binds** (Vyb's name for trait implementations):
 ```vyb
 bind Display -> Point {
     show(self<Self>)<String> -> { return "Point" }

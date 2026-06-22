@@ -1,7 +1,7 @@
 #pragma once
 /**
  * @file semantic.hpp
- * @brief This is the primary semantic analysis header for the VyB compiler.
+ * @brief This is the primary semantic analysis header for the Vyb compiler.
  *
  * IMPORTANT: This file was previously duplicated as include/vyb/vre/semantic.hpp
  * which was removed during cleanup. Do not create duplicate headers!

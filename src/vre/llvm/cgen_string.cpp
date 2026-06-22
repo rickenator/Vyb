@@ -292,7 +292,7 @@ llvm::Value* LLVMCodegen::generateToStringCall(llvm::Value* value, llvm::Type* v
                 // Call JSON serialization with instance and type name
                 llvm::Value* jsonCStr = builder->CreateCall(jsonFunc, {voidPtr, typeNamePtr}, "json.cstr");
 
-                // Convert char* to VyB String struct {char* data, int64_t length}
+                // Convert char* to Vyb String struct {char* data, int64_t length}
                 llvm::StructType* stringStructType = llvm::StructType::get(*context, {
                     int8PtrType,  // data
                     llvm::Type::getInt64Ty(*context)  // length

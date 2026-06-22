@@ -1,4 +1,4 @@
-// filepath: /home/rick/Projects/VyB/test/units/extracted/test41.vyb
+// filepath: /home/rick/Projects/Vyb/test/units/extracted/test41.vyb
 // @test: Semantic: 'loc(var)' requires freedom block
 // @description: Extracted from tests.cpp - Semantic: 'loc(var)' requires freedom block
 // @category: parser

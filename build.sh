@@ -1,6 +1,6 @@
 # filepath: build.sh
 #!/bin/bash
-# Build and run VyB compiler with optional test support
+# Build and run Vyb compiler with optional test support
 
 # Define project root (use the directory containing this script)
 VYB_ROOT=$(dirname "$(readlink -f "$0")")

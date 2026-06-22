@@ -1140,7 +1140,7 @@ std::string FunctionDeclaration::toString() const {
     if (isAsync) ss << "async ";
     ss << "fn";
 
-    // Add return type in angle brackets (correct VyB syntax)
+    // Add return type in angle brackets (correct Vyb syntax)
     if (returnTypeNode) {
         ss << "<" << returnTypeNode->toString() << ">";
     }

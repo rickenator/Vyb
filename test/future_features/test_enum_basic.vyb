@@ -4,7 +4,7 @@
 // @expect: fail
 // @tags: future, unimplemented
 
-// When implemented, VyB enums will look like:
+// When implemented, Vyb enums will look like:
 //
 //   enum Direction { North, South, East, West }
 //

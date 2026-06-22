@@ -1,8 +1,8 @@
-# VyB Ownership Types: `mild<T>`
+# Vyb Ownership Types: `mild<T>`
 
 ## Overview
 
-`mild<T>` is VyB's fourth ownership type, providing **mild references** to `our<T>` (shared ownership) objects. It solves the circular reference problem and enables patterns like observers, caches, and back-pointers in tree structures.
+`mild<T>` is Vyb's fourth ownership type, providing **mild references** to `our<T>` (shared ownership) objects. It solves the circular reference problem and enables patterns like observers, caches, and back-pointers in tree structures.
 
 ## The Four Ownership Types
 
@@ -46,7 +46,7 @@ Attempts to upgrade the mild reference to a strong reference. The intended 1.0
 contract is to return `our<T>` when the target is live and an Option-like empty
 value when it has been released.
 
-Current implementation note: VyB does not yet have a first-class `Option<T>` or
+Current implementation note: Vyb does not yet have a first-class `Option<T>` or
 nullable binding syntax. Today `grab()` returns an `our<T>` control-block handle
 when the target is live and a null `our<T>` placeholder when it has been
 released. Code should check `released()` before dereferencing a grabbed value.
@@ -164,7 +164,7 @@ fn insert_after(node: our<ListNode>, new_node: our<ListNode>) -> Void {
 
 ### Current Implementation Status
 
-VyB now has a minimal real runtime model for `our<T>` / `mild<T>`:
+Vyb now has a minimal real runtime model for `our<T>` / `mild<T>`:
 
 - `our(expr)` allocates the payload and a control block.
 - `soft(ourValue)` increments `weak_count` and returns a `mild<T>` handle tied
@@ -218,7 +218,7 @@ Remaining limitations:
 
 | Language | Mild/Weak Reference Type | Upgrade Method | Check Method |
 |----------|---------------------|----------------|--------------|
-| **VyB** | `mild<T>` | `grab() -> our<T>?` | `released() -> Bool` |
+| **Vyb** | `mild<T>` | `grab() -> our<T>?` | `released() -> Bool` |
 | C++ | `std::weak_ptr<T>` | `lock() -> shared_ptr<T>` | `expired() -> bool` |
 | Rust | `Weak<T>` | `upgrade() -> Option<Rc<T>>` | `strong_count() == 0` |
 | Swift | `weak var` | Automatic upgrade | Check `!= nil` |
@@ -296,7 +296,7 @@ fn main() -> Int {
 
 ## Summary
 
-`mild<T>` is VyB's solution to circular references and the observer pattern. It provides:
+`mild<T>` is Vyb's solution to circular references and the observer pattern. It provides:
 - **Mild (non-owning) references** to `our<T>` objects
 - **Safe access** via `grab()` that returns `our<T>?`
 - **Lifecycle detection** via `released()`

@@ -1,4 +1,4 @@
-# VyB FFI Design — Calling C Libraries
+# Vyb FFI Design — Calling C Libraries
 
 **Status:** Planned for v0.5 — specification complete, implementation not yet started
 **Priority:** HIGH (required for stdlib File I/O, networking, and platform integration)
@@ -7,17 +7,17 @@
 
 ## Overview
 
-VyB's FFI (Foreign Function Interface) allows calling C functions from VyB code using
+Vyb's FFI (Foreign Function Interface) allows calling C functions from Vyb code using
 `extern "C"` declaration blocks.  This document specifies the design.
 
-VyB targets LLVM, which already understands C calling conventions, so FFI is primarily a
+Vyb targets LLVM, which already understands C calling conventions, so FFI is primarily a
 *declaration + type mapping* problem rather than a code generation problem.
 
 ---
 
 ## 1. `extern "C"` Declaration Blocks
 
-Declare C functions with their VyB-equivalent signatures inside an `extern "C"` block:
+Declare C functions with their Vyb-equivalent signatures inside an `extern "C"` block:
 
 ```vyb
 extern "C" {
@@ -48,15 +48,15 @@ extern "C" {
 
 - All `extern "C"` declarations are **implicitly in a `freedom` context** at the call site —
   callers must be inside a `freedom { }` block to call them directly.
-- Higher-level VyB wrappers may hide this requirement from end users.
+- Higher-level Vyb wrappers may hide this requirement from end users.
 - Variadic functions (`...`) are supported only via `printf`-style calling convention;
-  VyB-side variadic arguments must be passed as LLVM varargs.
+  Vyb-side variadic arguments must be passed as LLVM varargs.
 
 ---
 
 ## 2. C Type Mapping
 
-| VyB type          | C equivalent      | Notes                                 |
+| Vyb type          | C equivalent      | Notes                                 |
 |-------------------|-------------------|---------------------------------------|
 | `Int`             | `int64_t`         | 64-bit signed integer                 |
 | `Int32`           | `int32_t`         | 32-bit signed integer                 |
@@ -73,13 +73,13 @@ extern "C" {
 
 ### C String Interop
 
-C strings (`char*`) map to `loc<Int8>` in VyB.  Converting a VyB `String` to a C string
+C strings (`char*`) map to `loc<Int8>` in Vyb.  Converting a Vyb `String` to a C string
 requires a `freedom` block:
 
 ```vyb
 call_puts(msg<String>)<Void> -> {
     freedom {
-        // Get null-terminated byte pointer from VyB String
+        // Get null-terminated byte pointer from Vyb String
         cstr<loc<Int8>> = msg.as_c_str()   // stdlib helper (v0.5)
         puts(cstr)
     }
@@ -107,12 +107,12 @@ extern "C" {
 ```
 
 `#[repr(C)]` preserves declaration-order fields and emits the LLVM struct as an
-unpacked target-layout struct. Without it, the VyB compiler reserves the right to
+unpacked target-layout struct. Without it, the Vyb compiler reserves the right to
 change layout in future releases.
 
 Current restrictions are intentionally conservative: `repr(C)` structs cannot be
 generic, cannot contain ownership-qualified fields (`my`, `our`, `their`, `mild`,
-`view`, `borrow`), and cannot contain VyB runtime fields such as `String`, `Bytes`,
+`view`, `borrow`), and cannot contain Vyb runtime fields such as `String`, `Bytes`,
 `Vec`, `Future`, tuples, or optional values. Use `CString`, `CPtr<T>`, `loc<T>`,
 C scalar aliases, or another explicit C ABI representation instead.
 The attribute syntax uses `#[...]` (Rust-inspired for now; may change before 1.0).
@@ -194,7 +194,7 @@ ssl = { link = "ssl" }
 |------|-------|
 | Parse `extern "C" { }` blocks | Add `ExternBlock` AST node |
 | Emit LLVM `declare` for extern functions | In `cgen_decl.cpp` |
-| Type mapping table | VyB type → LLVM IR type for all C-interop types |
+| Type mapping table | Vyb type → LLVM IR type for all C-interop types |
 | `#[repr(C)]` struct attribute | Implemented for non-generic C-stable fields |
 | `String::as_c_str()` stdlib method | Returns null-terminated `loc<Int8>` |
 | `--link` CLI flag | Implemented for native `--build` linker inputs |
@@ -210,14 +210,14 @@ language problems:
 
 - **File I/O** — wrap `fopen`/`fclose`/`fread`/`fwrite`
 - **Networking** — wrap POSIX socket API (see `doc/ROADMAP.md` networking section)
-- **Math** — expose `libm` functions beyond what's in VyB intrinsics
+- **Math** — expose `libm` functions beyond what's in Vyb intrinsics
 - **OS signals** — `signal()`, `sigaction()`
 - **Terminal** — `tcgetattr()`/`tcsetattr()`, readline
 - **TLS** — OpenSSL / mbedTLS bindings
-- **Graphics** — SDL2, OpenGL via thin VyB wrappers
+- **Graphics** — SDL2, OpenGL via thin Vyb wrappers
 - **Database** — SQLite C API
 
-FFI is the foundation that unlocks the systems programming story for VyB.
+FFI is the foundation that unlocks the systems programming story for Vyb.
 
 ---
 

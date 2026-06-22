@@ -1,4 +1,4 @@
-# VyB Demos
+# Vyb Demos
 
 These demos are intended to run with the current compiler and runtime:
 

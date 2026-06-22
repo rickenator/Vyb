@@ -4,14 +4,14 @@
 #include <string> // Added for std::string
 #include <sstream> // For Token::toString
 
-// The function is defined within the VyB namespace if the header declares it so.
-// If token.hpp declares `namespace VyB { std::string token_type_to_string(TokenType type); }`
+// The function is defined within the Vyb namespace if the header declares it so.
+// If token.hpp declares `namespace Vyb { std::string token_type_to_string(TokenType type); }`
 // then this definition is correct.
-// If token.hpp declares `std::string token_type_to_string(VyB::TokenType type);` at global scope,
+// If token.hpp declares `std::string token_type_to_string(Vyb::TokenType type);` at global scope,
 // then this definition is also correct.
-// Assuming it's part of the VyB namespace as per previous discussions.
+// Assuming it's part of the Vyb namespace as per previous discussions.
 
-namespace vyb { // Changed from VyB to vyb to match token.hpp
+namespace vyb { // Changed from Vyb to vyb to match token.hpp
 
 std::string token_type_to_string(vyb::TokenType type) { // Corrected namespace for TokenType
     static const std::unordered_map<vyb::TokenType, std::string> token_map = { // Corrected namespace for TokenType

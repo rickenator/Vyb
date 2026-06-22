@@ -1,10 +1,10 @@
-# VyB Language Roadmap
+# Vyb Language Roadmap
 
 **Last Updated:** February 2026 (v0.5.1)
 
 > For actionable sprint-organized suggestions, see [`../SUGGESTIONS.md`](../SUGGESTIONS.md).
 
-This document outlines the completed features, ongoing development, and future considerations for the VyB programming language.
+This document outlines the completed features, ongoing development, and future considerations for the Vyb programming language.
 
 ## Current Status (v0.5.1)
 
@@ -29,7 +29,7 @@ This document outlines the completed features, ongoing development, and future c
 
 ### Variadic Tuple System (v0.4.0)
 
-VyB now supports **fully variadic tuple types** with comprehensive 1-to-N type parameter support:
+Vyb now supports **fully variadic tuple types** with comprehensive 1-to-N type parameter support:
 
 **Features Implemented:**
 - ✅ **Dual Syntax Support:**
@@ -130,7 +130,7 @@ The immediate focus for the next release:
    - ✅ `T::from_string(json)` creates instances from JSON strings
    - ✅ Support for Int, Float, Bool, String primitive types
    - ✅ Full round-trip conversion: struct → JSON → struct → field access
-   - ✅ String conversion: char* to VyBString{data, length} struct
+   - ✅ String conversion: char* to VybString{data, length} struct
    - ✅ Member access fix: always load field values (critical bug resolved)
    - ✅ Comprehensive test suite in `test/json/`
    - ✅ Production-ready with clean codebase (debug output removed)
@@ -161,7 +161,7 @@ The immediate focus for the next release:
 ## Project Structure and Organization
 
 ### Proposed Refactoring (Future Task)
-As the VyB project grows, a more structured directory layout will be beneficial for maintainability, readability, and scalability.
+As the Vyb project grows, a more structured directory layout will be beneficial for maintainability, readability, and scalability.
 
 -   **Goal:** Improve overall project organization and clearly separate components.
 -   **Proposed Source Structure (`src/`):**
@@ -169,7 +169,7 @@ As the VyB project grows, a more structured directory layout will be beneficial 
     -   `parser/`: Lexer, parser logic, and related utilities.
     -   `sema/` or `analyzer/`: Semantic analysis, type checking.
     -   `codegen/` or `llvm_backend/`: LLVM IR generation and compilation logic.
-    -   `vre/`: VyB Runtime Environment components (core runtime, standard library C++ implementations).
+    -   `vre/`: Vyb Runtime Environment components (core runtime, standard library C++ implementations).
     -   `core/` or `common/`: Common utilities, data structures, error reporting used across the compiler.
     -   `main/`: Main executable entry point, REPL implementation.
 -   **Proposed Include Structure (`include/vyb/`):**
@@ -193,8 +193,8 @@ As the VyB project grows, a more structured directory layout will be beneficial 
 ### Build System and Includes
 
 -   **`vyb.hpp` as a Central Include:**
-    -   The file `include/vyb/vyb.hpp` was initially conceived not just to house the EBNF grammar but to serve as a primary, top-level include file for essential VyB definitions, core types, and widely used utilities.
-    -   Utilities such as `source_location.hpp` and potentially `token.hpp` should ideally be directly included by `vyb.hpp` or be part of a core module that `vyb.hpp` exposes. This approach simplifies include management for different parts of the VyB compiler and for any external tools that might interact with VyB's core components.
+    -   The file `include/vyb/vyb.hpp` was initially conceived not just to house the EBNF grammar but to serve as a primary, top-level include file for essential Vyb definitions, core types, and widely used utilities.
+    -   Utilities such as `source_location.hpp` and potentially `token.hpp` should ideally be directly included by `vyb.hpp` or be part of a core module that `vyb.hpp` exposes. This approach simplifies include management for different parts of the Vyb compiler and for any external tools that might interact with Vyb's core components.
     -   The EBNF grammar, if kept in `vyb.hpp`, should be clearly demarcated (e.g., within a large comment block) if the file also serves as an active header for code. Alternatively, the EBNF could reside purely in a design document like `AST.md`.
 
 ## Future Language & System Considerations
@@ -604,18 +604,18 @@ aspect Errable {
 
 **Phase 6.7 - Standard Library Error Types (v0.6.1+):**
 
-Note: Runtime error infrastructure (VyBError struct, heap allocation, type IDs) already exists.
-This phase is about exposing it to VyB code through standard library types:
+Note: Runtime error infrastructure (VybError struct, heap allocation, type IDs) already exists.
+This phase is about exposing it to Vyb code through standard library types:
 
 - **Errable aspect**: Define aspect for types that can be used as errors
-- **Error base type**: Standard VyB struct wrapping runtime VyBError
+- **Error base type**: Standard Vyb struct wrapping runtime VybError
 - **Display aspect**: General formatting aspect for all types
 - **bind implementations**: Implement Errable and Display for common error types
 - **Error context chaining**: Wrap errors with additional context (needs aspect system)
 - **Custom error formatting**: User-defined error display (needs Display aspect)
 - **Error metrics hooks**: Optional telemetry integration
 
-**NOT NEEDED**: Result<T,E> - VyB's trap/fail system is superior for systems programming
+**NOT NEEDED**: Result<T,E> - Vyb's trap/fail system is superior for systems programming
 
 #### **Performance Characteristics**
 
@@ -634,7 +634,7 @@ This phase is about exposing it to VyB code through standard library types:
 **Comparison Table:**
 | Approach | Success Overhead | Error Overhead | Hidden Control Flow | Compile-time Safety |
 |----------|-----------------|----------------|---------------------|---------------------|
-| **VyB trap/fail** | ~1 comparison | 1 malloc + type match | No | Yes |
+| **Vyb trap/fail** | ~1 comparison | 1 malloc + type match | No | Yes |
 | C++ exceptions | Exception tables | Stack unwinding + alloc | Yes | Partial |
 | Rust Result<T,E> | Match overhead | Enum size increase | No | Yes |
 | Go error returns | Comparison + check | Allocation | No | Weak |
@@ -757,7 +757,7 @@ serialize<T>(value<T>)<String> -> {
 - ✅ Hash-based type ID system using std::hash<std::string>
 - ✅ LLVM codegen with string struct creation for typename
 - ✅ Comprehensive test suite in test/introspection/
-- ✅ println() fixed to properly output VyB string types
+- ✅ println() fixed to properly output Vyb string types
 
 **Phase 2: Safe Downcasting (v0.5.0)**
 - `as` operator for safe type narrowing
@@ -851,7 +851,7 @@ See `doc/bundles_and_sharing.md` for detailed documentation.
 
 ✅ **IMPLEMENTED in v0.3.7** - Zero-boilerplate JSON serialization for data structures returned from `main()`:
 
-- **Core Functionality**: The VyB compiler/runtime automatically:
+- **Core Functionality**: The Vyb compiler/runtime automatically:
   - Calls `main()` and inspects the return type `T`
   - If `T` is a simple integer, uses it as the process exit code
   - If `T` is complex (tuples, structs), outputs structured JSON-like data
@@ -877,7 +877,7 @@ See `doc/bundles_and_sharing.md` for detailed documentation.
   - Explicit JSON mode: `vyb run --json program.vyb` (future feature)
   - Proper error handling for exceptions and serialization failures
 
-This feature will enable scripts and API-style binaries to return structured data without manual printing logic, enhancing VyB's utility for data processing and service development.
+This feature will enable scripts and API-style binaries to return structured data without manual printing logic, enhancing Vyb's utility for data processing and service development.
 
 ### Function Syntax Investigation
 
@@ -901,7 +901,7 @@ This feature will enable scripts and API-style binaries to return structured dat
 ### Aspect System Implementation (v0.4.2+)
 
 **HIGH PRIORITY** - Comprehensive aspect system for user-extensible polymorphism.
-VyB uses `aspect`/`bind` — not `trait`/`impl` (Rust vocabulary).
+Vyb uses `aspect`/`bind` — not `trait`/`impl` (Rust vocabulary).
 
 #### Phase 1: Aspect Declarations (v0.4.2) — COMPLETED
 - **Aspect Definition Syntax**: `aspect Comparable { lt(self<their<Self>>, other<their<Self>>)<Bool> -> }`
@@ -933,7 +933,7 @@ VyB uses `aspect`/`bind` — not `trait`/`impl` (Rust vocabulary).
 - **Visibility System**: Module-level privacy for encapsulation
 - **Default Type Parameters**: `struct Vec<T, Alloc = DefaultAllocator>`
 
-**Note**: VyB deliberately avoids classes and inheritance hierarchies. The aspect system
+**Note**: Vyb deliberately avoids classes and inheritance hierarchies. The aspect system
 provides all necessary polymorphism and code reuse without the complexity and pitfalls of
 OOP inheritance. See `doc/WHY_ASPECTS_NOT_CLASSES.md` for detailed rationale.
 
@@ -943,8 +943,8 @@ See `doc/TRAIT_SYSTEM_DESIGN.md` for complete specification and design rationale
 
 The following features are planned for future releases (no particular priority order):
 
-1. **Self-Hosted Standard Library**: Bootstrap a pure VyB stdlib implementation
-   - Core data structures (Vec, Map, Set) in native VyB
+1. **Self-Hosted Standard Library**: Bootstrap a pure Vyb stdlib implementation
+   - Core data structures (Vec, Map, Set) in native Vyb
    - I/O primitives and file handling
    - String manipulation utilities
    - Math and numeric operations
@@ -994,13 +994,13 @@ The following features are planned for future releases (no particular priority o
 The following points were previously noted in `ROADMAP.txt` and are retained here for future planning:
 
 -   **Template Placement**: Explore allowing template/generic declarations in more contexts beyond just module-level (e.g., within functions, nested scopes) if deemed beneficial for advanced metaprogramming scenarios. Currently, templates are primarily module-level items.
--   **Dedicated Header Files (`.vyh` or similar)**: Investigate the potential need for dedicated header files (e.g., `.vyh`) for separating public interfaces, public template/generic definitions, and type declarations from implementation files (`.vyb`). This could improve organization, reduce compilation dependencies, and potentially speed up compile times for larger VyB projects by allowing for more explicit module boundaries.
+-   **Dedicated Header Files (`.vyh` or similar)**: Investigate the potential need for dedicated header files (e.g., `.vyh`) for separating public interfaces, public template/generic definitions, and type declarations from implementation files (`.vyb`). This could improve organization, reduce compilation dependencies, and potentially speed up compile times for larger Vyb projects by allowing for more explicit module boundaries.
 
 ## Documentation
-Key design and planning documents for VyB:
+Key design and planning documents for Vyb:
 
--   `doc/AST.md`: Detailed description of the VyB Abstract Syntax Tree nodes and structure.
--   `doc/VRE.md`: Preliminary design for the VyB Runtime Environment.
+-   `doc/AST.md`: Detailed description of the Vyb Abstract Syntax Tree nodes and structure.
+-   `doc/VRE.md`: Preliminary design for the Vyb Runtime Environment.
 -   `doc/ROADMAP.md`: This document, outlining project direction and future plans.
 
 ---

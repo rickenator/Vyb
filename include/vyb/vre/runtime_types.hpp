@@ -19,7 +19,7 @@ struct VreSlice;
 struct VreTraitObject;
 struct VreFunction; // Or VreClosure
 
-// Represents a VyB struct/class instance at runtime
+// Represents a Vyb struct/class instance at runtime
 struct VreObject {
     // Option 1: Fields identified by name (more dynamic, REPL-friendly)
     // std::unordered_map<std::string, VreValue> fields;
@@ -33,19 +33,19 @@ struct VreObject {
     // VreObject(TypeId id, size_t field_count) : type_id(id), fields_by_index(field_count) {}
 };
 
-// Represents a VyB dynamic array at runtime
+// Represents a Vyb dynamic array at runtime
 struct VreArray {
     std::vector<VreValue> elements;
     // Capacity, length are handled by std::vector
 };
 
-// Represents a VyB string at runtime (if std::string in VreValue is not sufficient)
+// Represents a Vyb string at runtime (if std::string in VreValue is not sufficient)
 // struct VreString {
 //     // Could wrap std::string or be custom for specific encoding/small-string-optimization etc.
 //     std::string data;
 // };
 
-// Represents a VyB slice (a view into an array or other contiguous memory)
+// Represents a Vyb slice (a view into an array or other contiguous memory)
 struct VreSlice {
     VreValue* data_ptr; // Pointer to the first element
     size_t length;
@@ -54,7 +54,7 @@ struct VreSlice {
     VreSlice(VreValue* ptr = nullptr, size_t len = 0) : data_ptr(ptr), length(len) {}
 };
 
-// Represents a VyB trait object for dynamic dispatch
+// Represents a Vyb trait object for dynamic dispatch
 struct VreTraitObject {
     my<void> instance_data; // Pointer to the actual object data (type-erased)
     void* vtable_ptr;        // Pointer to the virtual table for this trait implementation
@@ -67,7 +67,7 @@ struct VreTraitObject {
     // };
 };
 
-// Represents a VyB function or closure at runtime
+// Represents a Vyb function or closure at runtime
 struct VreFunction {
     // Could be a native function pointer, or a structure for closures
     // For closures, it would need to store:

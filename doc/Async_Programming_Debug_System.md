@@ -1,10 +1,10 @@
-# VyB Async Programming and Debug System
+# Vyb Async Programming and Debug System
 
-VyB v0.4.0 introduces comprehensive async programming support with advanced debugging capabilities, making it one of the most debuggable async systems in modern programming languages.
+Vyb v0.4.0 introduces comprehensive async programming support with advanced debugging capabilities, making it one of the most debuggable async systems in modern programming languages.
 
 ## Overview
 
-The VyB async system provides:
+The Vyb async system provides:
 - **Native async/await syntax** with proper parsing and semantic analysis
 - **Future<T> type system** for asynchronous operations
 - **LLVM debug integration** with comprehensive metadata generation
@@ -51,7 +51,7 @@ main()<Int> -> {
 
 ### LLVM Debug Integration
 
-VyB's async debugging system integrates deeply with LLVM's debug infrastructure:
+Vyb's async debugging system integrates deeply with LLVM's debug infrastructure:
 
 - **DIBuilder Integration**: Uses LLVM's DIBuilder for metadata generation
 - **DICompileUnit**: Creates compile unit information for debug files
@@ -127,7 +127,7 @@ DEBUG: Resuming from suspension point at line 12 column 18
 
 ### Parser Integration
 
-The async system integrates with VyB's parser:
+The async system integrates with Vyb's parser:
 
 - **Async keyword recognition**: `async` functions are properly parsed
 - **Await expression parsing**: `await` expressions create proper AST nodes
@@ -249,7 +249,7 @@ Async performance analysis capabilities:
 
 ### Integration with Test Harness
 
-The async debugging system integrates with VyB's test harness:
+The async debugging system integrates with Vyb's test harness:
 
 ```bash
 # Run async tests with debugging
@@ -296,6 +296,6 @@ Planned improvements to the async debugging system:
 
 ## Conclusion
 
-VyB's async debugging system represents a significant advancement in async programming language tooling. With comprehensive LLVM debug integration, state machine introspection, and modern test harness support, VyB provides developers with unprecedented visibility into async program execution.
+Vyb's async debugging system represents a significant advancement in async programming language tooling. With comprehensive LLVM debug integration, state machine introspection, and modern test harness support, Vyb provides developers with unprecedented visibility into async program execution.
 
-The combination of clean async/await syntax, robust Future<T> types, and comprehensive debugging makes VyB an excellent choice for async systems programming where debugging and maintainability are critical.
+The combination of clean async/await syntax, robust Future<T> types, and comprehensive debugging makes Vyb an excellent choice for async systems programming where debugging and maintainability are critical.

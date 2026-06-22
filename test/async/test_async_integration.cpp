@@ -1,4 +1,4 @@
-// Example of how async/await will integrate with the VyB language
+// Example of how async/await will integrate with the Vyb language
 // This shows the conceptual integration, not working code yet
 
 #include "vyb/runtime/async_runtime.hpp"
@@ -56,12 +56,12 @@ std::shared_ptr<Future> process_data_async() {
 }
 
 int main() {
-    std::cout << "=== VyB Async/Await Integration Demo ===" << std::endl;
+    std::cout << "=== Vyb Async/Await Integration Demo ===" << std::endl;
 
     // Initialize runtime
     initializeAsyncRuntime();
 
-    // Simulate what this VyB code would generate:
+    // Simulate what this Vyb code would generate:
     // ```
     // async fetch_data(url<String>)<String> -> {
     //     // async work here
@@ -103,7 +103,7 @@ int main() {
     shutdownAsyncRuntime();
 
     std::cout << "\n✓ Async/await integration demo completed successfully!" << std::endl;
-    std::cout << "\nThis demonstrates how VyB's async/await will work:" << std::endl;
+    std::cout << "\nThis demonstrates how Vyb's async/await will work:" << std::endl;
     std::cout << "- async functions return Future<T>" << std::endl;
     std::cout << "- await suspends until Future is ready" << std::endl;
     std::cout << "- Multiple async operations can run concurrently" << std::endl;

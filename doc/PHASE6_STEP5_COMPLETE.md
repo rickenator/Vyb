@@ -7,7 +7,7 @@
 
 After analyzing the codebase and test file, I realized that:
 
-1. **No explicit type instantiation syntax exists yet** in VyB
+1. **No explicit type instantiation syntax exists yet** in Vyb
    - The test uses `printItem(p)` not `printItem<Point>(p)`
    - Type inference for generic functions isn't implemented
 

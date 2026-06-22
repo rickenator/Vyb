@@ -1,6 +1,6 @@
 # AST Nodes: Literals
 
-This document details the Abstract Syntax Tree (AST) nodes representing various literal values in the VyB programming language. These nodes are fundamental for representing constant data within the source code.
+This document details the Abstract Syntax Tree (AST) nodes representing various literal values in the Vyb programming language. These nodes are fundamental for representing constant data within the source code.
 
 All literal nodes inherit from `vyb::ast::Expression`.
 
@@ -196,7 +196,7 @@ public:
 
 ## 8. `ObjectLiteral`
 
-Represents an object or struct literal (e.g., `{ name: "VyB", version: 0.1 }` or `MyStruct { field: value }`).
+Represents an object or struct literal (e.g., `{ name: "Vyb", version: 0.1 }` or `MyStruct { field: value }`).
 
 -   **C++ Class**: `vyb::ast::ObjectLiteral`
 -   **`NodeType`**: `OBJECT_LITERAL`

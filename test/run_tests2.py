@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-VyB Test Harness with Logging
+Vyb Test Harness with Logging
 """
 
 import os
@@ -32,7 +32,7 @@ def find_vyb_root():
             return current_dir
         parent_dir = current_dir.parent
         if parent_dir == current_dir:
-            raise RuntimeError("Could not find VyB repository root directory")
+            raise RuntimeError("Could not find Vyb repository root directory")
         current_dir = parent_dir
 
 @dataclass
@@ -137,7 +137,7 @@ def main():
         log_print(f"Error: {e}")
         sys.exit(1)
 
-    parser = argparse.ArgumentParser(description='VyB test harness')
+    parser = argparse.ArgumentParser(description='Vyb test harness')
     parser.add_argument('--vyb', default=None)
     parser.add_argument('--test-dir', default=None)
     parser.add_argument('--pattern', default='*.vyb')
@@ -151,14 +151,14 @@ def main():
     test_dir = vyb_root / "test" / "units" if args.test_dir is None else Path(args.test_dir)
 
     if not os.path.isfile(vyb_executable):
-        log_print(f"Error: Cannot find VyB executable at {vyb_executable}")
+        log_print(f"Error: Cannot find Vyb executable at {vyb_executable}")
         sys.exit(1)
     if not test_dir.exists():
         log_print(f"Error: Test directory {test_dir} doesn't exist")
         sys.exit(1)
 
     if args.verbose:
-        log_print(f"VyB repo: {vyb_root}")
+        log_print(f"Vyb repo: {vyb_root}")
         log_print(f"Executable: {vyb_executable}")
         log_print(f"Tests in: {test_dir}")
         if args.execute_jit:

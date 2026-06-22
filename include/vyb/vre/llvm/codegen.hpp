@@ -100,7 +100,7 @@ private:
     llvm::Type* doubleType;
     llvm::Type* int8PtrType; // Generic pointer type (char*)
     llvm::StructType* rttiStructType; // For RTTI objects
-    llvm::Type* stringType; // Placeholder for VyB's string type representation
+    llvm::Type* stringType; // Placeholder for Vyb's string type representation
 
     // Current state
     llvm::Type* m_currentLLVMType = nullptr; // Initialize
@@ -131,7 +131,7 @@ private:
     std::map<std::string, llvm::FunctionType*> localLambdaTypes; // Maps lambda variable name to its function type
     vyb::ast::TypeNode* m_currentImplTypeNode = nullptr; // Initialize
     std::string m_currentImplTraitName;
-    vyb::ast::Module* m_currentVyBModule = nullptr;
+    vyb::ast::Module* m_currentVybModule = nullptr;
     bool m_isLHSOfAssignment = false;
     bool verbose = false;  // Controls detailed warning output
     bool m_isMemberAccessBase = false; // Controls Identifier behavior for member access
@@ -168,7 +168,7 @@ private:
 
     // Stack trace capture for error handling (Phase 6.4)
     struct CallStackFrame {
-        std::string functionName;       // VyB function name
+        std::string functionName;       // Vyb function name
         SourceLocation location;        // Source location of function definition
         llvm::Function* llvmFunction;   // LLVM function pointer
     };
@@ -274,17 +274,17 @@ private:
 
     // IO operations
     llvm::Function* getPrintlnFunction();
-    llvm::Function* getVyBPrintlnFunction();
-    llvm::Function* getVyBPrintFunction();   // print() - no newline
-    llvm::Function* getVyBPrintlnIntFunction();  // println_int()
-    llvm::Function* getVyBPrintIntFunction();    // print_int()
-    llvm::Function* getVyBPrintlnBoolFunction(); // println_bool()
-    llvm::Function* getVyBPrintBoolFunction();   // print_bool()
+    llvm::Function* getVybPrintlnFunction();
+    llvm::Function* getVybPrintFunction();   // print() - no newline
+    llvm::Function* getVybPrintlnIntFunction();  // println_int()
+    llvm::Function* getVybPrintIntFunction();    // print_int()
+    llvm::Function* getVybPrintlnBoolFunction(); // println_bool()
+    llvm::Function* getVybPrintBoolFunction();   // print_bool()
     llvm::Function* getSerializeToJsonFunction();
 
     // Error handling runtime functions
-    llvm::Function* getVyBPanicFunction();
-    llvm::Function* getVyBUntrappedErrorFunction();
+    llvm::Function* getVybPanicFunction();
+    llvm::Function* getVybUntrappedErrorFunction();
 
     // Error handling helpers
     void setupTrapContext(ast::BlockExpression* blockExpr, llvm::BasicBlock* continueBB);

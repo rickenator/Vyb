@@ -1,7 +1,7 @@
-# Error - Base error type for VyB standard library
+# Error - Base error type for Vyb standard library
 #
-# This struct wraps the runtime VyBError infrastructure and provides
-# a VyB-level interface to error handling. All stdlib errors should
+# This struct wraps the runtime VybError infrastructure and provides
+# a Vyb-level interface to error handling. All stdlib errors should
 # either use this directly or compose with it.
 
 struct Error {

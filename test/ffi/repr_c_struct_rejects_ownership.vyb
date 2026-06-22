@@ -1,5 +1,5 @@
 // @test: repr(C) struct rejects ownership fields
-// @description: C ABI structs cannot contain VyB ownership-qualified fields
+// @description: C ABI structs cannot contain Vyb ownership-qualified fields
 // @category: ffi, interop
 // @expect: fail
 // @semantic-only: true

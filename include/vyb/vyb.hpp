@@ -2,7 +2,7 @@
 #define VYB_HPP
 
 /*
- * VyB Programming Language v0.4.1
+ * Vyb Programming Language v0.4.1
  *
  * CURRENT IMPLEMENTATION STATUS:
  * ✅ Complete LLVM backend with JIT execution
@@ -20,7 +20,7 @@
  * ✅ Comprehensive parser supporting templates, async, classes
  * 📋 Standard library modules (planned)
  *
- * This header provides the main interface for VyB compilation and execution.
+ * This header provides the main interface for Vyb compilation and execution.
  */
 
 #include "vyb/parser/lexer.hpp"
@@ -31,11 +31,11 @@
 #include "vyb/vre/llvm/codegen.hpp" // Added for LLVMCodegen
 #include "vyb/driver.hpp" // Added for vyb::Driver
 
-// Declare function for JIT compilation and execution of VyB code
+// Declare function for JIT compilation and execution of Vyb code
 // This is implemented in main.cpp with auto-serialization support
 int run_vyb_code(const std::string& source, const std::string& fileName, bool generateLLVMIR = false);
 
-/* // EBNF Grammar of the VyB Language  // Uncommented
+/* // EBNF Grammar of the Vyb Language  // Uncommented
 //
 // Conventions:
 //   IDENTIFIER:        Represents a valid identifier token.

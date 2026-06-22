@@ -1,4 +1,4 @@
-// filepath: /home/rick/Projects/VyB/test/units/lexer/test5.vyb
+// filepath: /home/rick/Projects/Vyb/test/units/lexer/test5.vyb
 // @test: Lexer rejects tabs
 // @description: Extracted from tests.cpp - Lexer rejects tabs
 // @category: lexer

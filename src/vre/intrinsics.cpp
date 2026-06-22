@@ -11,7 +11,7 @@ namespace intrinsics {
 /**
  * RUNTIME INTRINSICS
  *
- * This file contains implementations of runtime intrinsics for the VyB language.
+ * This file contains implementations of runtime intrinsics for the Vyb language.
  * These intrinsics are functions that are directly recognized and called by the runtime.
  *
  * NOTE: Memory operations such as loc(), at(), addr(), and from<loc<T>>() are NOT
@@ -124,7 +124,7 @@ extern "C" char* __vyb_convert_lit_string(const char* str) {
     return result;
 }
 
-// Println intrinsic for VyB - handles string output and auto-serialization
+// Println intrinsic for Vyb - handles string output and auto-serialization
 extern "C" void __vyb_println(const char* str) {
     if (!str) {
         std::cout << "null" << std::endl;

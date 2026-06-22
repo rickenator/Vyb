@@ -1,8 +1,8 @@
 #!/bin/bash
-# Demonstrate VyB call stack traces
+# Demonstrate Vyb call stack traces
 
 echo "╔════════════════════════════════════════════════════════════════════════════╗"
-echo "║              VyB Call Stack Traces - Live Demonstration                    ║"
+echo "║              Vyb Call Stack Traces - Live Demonstration                    ║"
 echo "╚════════════════════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -25,7 +25,7 @@ echo ""
 echo "╔════════════════════════════════════════════════════════════════════════════╗"
 echo "║                              KEY FEATURES                                  ║"
 echo "╠════════════════════════════════════════════════════════════════════════════╣"
-echo "║ ✓ Shows VyB function names (not native/mangled C++ names)                  ║"
+echo "║ ✓ Shows Vyb function names (not native/mangled C++ names)                  ║"
 echo "║ ✓ Displays source file, line, and column for each frame                    ║"
 echo "║ ✓ Ordered from innermost (where error occurred) to outermost (main)        ║"
 echo "║ ✓ Automatically captured on every error                                    ║"

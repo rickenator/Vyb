@@ -18,7 +18,7 @@
 //       return 0
 //   }
 //
-// The FFI design maps VyB types to C types:
+// The FFI design maps Vyb types to C types:
 //   Int      -> int64_t
 //   Int32    -> int32_t
 //   Float    -> double

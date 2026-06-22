@@ -1,10 +1,10 @@
-# VyB Test Harness and Analysis System
+# Vyb Test Harness and Analysis System
 
-VyB v0.4.0 includes a comprehensive, modern test harness designed to manage hundreds of test files with advanced parallel execution, rich reporting, and intelligent failure analysis.
+Vyb v0.4.0 includes a comprehensive, modern test harness designed to manage hundreds of test files with advanced parallel execution, rich reporting, and intelligent failure analysis.
 
 ## Overview
 
-The VyB test system consists of:
+The Vyb test system consists of:
 - **391+ Test Files**: Comprehensive coverage across all language features
 - **Modern Test Harness**: Parallel execution with intelligent categorization
 - **Rich Reporting**: HTML, JSON, and console output formats
@@ -43,7 +43,7 @@ The VyB test system consists of:
 
 ### Test Directives
 
-VyB tests use comment-based directives for comprehensive metadata:
+Vyb tests use comment-based directives for comprehensive metadata:
 
 ```vyb
 // @test: Short descriptive name
@@ -419,6 +419,6 @@ The reporting system supports:
 
 ## Conclusion
 
-VyB's test harness represents a modern approach to language testing, combining comprehensive coverage with intelligent analysis. The system's 391+ tests provide excellent coverage of language features, while the advanced reporting and triage capabilities enable efficient development and maintenance workflows.
+Vyb's test harness represents a modern approach to language testing, combining comprehensive coverage with intelligent analysis. The system's 391+ tests provide excellent coverage of language features, while the advanced reporting and triage capabilities enable efficient development and maintenance workflows.
 
-The combination of parallel execution, rich reporting, and automated failure analysis makes the VyB test harness a powerful tool for ensuring language quality and developer productivity.
+The combination of parallel execution, rich reporting, and automated failure analysis makes the Vyb test harness a powerful tool for ensuring language quality and developer productivity.

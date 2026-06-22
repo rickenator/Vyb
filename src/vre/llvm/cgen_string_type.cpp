@@ -9,7 +9,7 @@
 namespace vyb {
 
 // String struct: { ptr: *i8, len: i64 }
-// This represents a VyB String type as a fat pointer with length
+// This represents a Vyb String type as a fat pointer with length
 
 void LLVMCodegen::handleStringMethod(vyb::ast::CallExpression* node, const std::string& objectName, const std::string& methodName) {
     // Look up the String object in namedValues

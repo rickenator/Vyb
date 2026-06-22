@@ -1,8 +1,8 @@
-# Reference Syntax Unification for VyB v0.4.0
+# Reference Syntax Unification for Vyb v0.4.0
 
 ## Problem Statement
 
-Currently, VyB has **three different syntaxes** for ownership and borrowing operations, causing confusion and inconsistency:
+Currently, Vyb has **three different syntaxes** for ownership and borrowing operations, causing confusion and inconsistency:
 
 ### Current Inconsistent Syntaxes:
 
@@ -28,7 +28,7 @@ Currently, VyB has **three different syntaxes** for ownership and borrowing oper
 
 ## Unified Canonical Syntax
 
-This document establishes the **single, canonical syntax** for all ownership and borrowing operations in VyB v0.4.0:
+This document establishes the **single, canonical syntax** for all ownership and borrowing operations in Vyb v0.4.0:
 
 ### ✅ **Canonical Ownership Creation Syntax**
 
@@ -128,4 +128,4 @@ The parser recognizes these constructs with the following precedence:
 
 ---
 
-**This document serves as the authoritative reference for all ownership and borrowing syntax in VyB v0.4.0.**
+**This document serves as the authoritative reference for all ownership and borrowing syntax in Vyb v0.4.0.**

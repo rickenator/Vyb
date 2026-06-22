@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-VyB Modern Test Harness v2.0
+Vyb Modern Test Harness v2.0
 
 A comprehensive test runner with advanced reporting, parallel execution,
-and intelligent test discovery for the VyB programming language.
+and intelligent test discovery for the Vyb programming language.
 
 Features:
 - Parallel test execution
@@ -48,7 +48,7 @@ class Colors:
 
 @dataclass
 class TestCase:
-    """Represents a single VyB test case with comprehensive metadata."""
+    """Represents a single Vyb test case with comprehensive metadata."""
     filename: str
     name: str = "Unnamed test"
     description: str = ""
@@ -103,7 +103,7 @@ class TestDiscovery:
         self.vyb_root = self._find_vyb_root()
 
     def _find_vyb_root(self) -> Path:
-        """Find the VyB repository root directory."""
+        """Find the Vyb repository root directory."""
         script_dir = Path(os.path.dirname(os.path.abspath(__file__)))
         current_dir = script_dir
 
@@ -113,7 +113,7 @@ class TestDiscovery:
 
             parent_dir = current_dir.parent
             if parent_dir == current_dir:
-                raise RuntimeError("Could not find VyB repository root directory")
+                raise RuntimeError("Could not find Vyb repository root directory")
             current_dir = parent_dir
 
     def discover_tests(self, test_dirs: List[str] = None, patterns: List[str] = None) -> List[TestCase]:
@@ -485,7 +485,7 @@ class TestReporter:
 <!DOCTYPE html>
 <html>
 <head>
-    <title>VyB Test Report</title>
+    <title>Vyb Test Report</title>
     <style>
         body {{ font-family: Arial, sans-serif; margin: 20px; }}
         .header {{ background: #f0f0f0; padding: 20px; border-radius: 5px; }}
@@ -508,7 +508,7 @@ class TestReporter:
 </head>
 <body>
     <div class="header">
-        <h1>VyB Test Report</h1>
+        <h1>Vyb Test Report</h1>
         <p>Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
     </div>
 
@@ -568,7 +568,7 @@ class TestReporter:
 def main():
     """Main entry point for the test harness."""
     parser = argparse.ArgumentParser(
-        description='VyB Modern Test Harness v2.0',
+        description='Vyb Modern Test Harness v2.0',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -619,11 +619,11 @@ Examples:
 
     # Verify executable exists
     if not os.path.isfile(vyb_executable):
-        print(f"{Colors.RED}Error: Cannot find VyB executable at {vyb_executable}{Colors.RESET}")
-        print(f"Build VyB or specify executable with --vyb option")
+        print(f"{Colors.RED}Error: Cannot find Vyb executable at {vyb_executable}{Colors.RESET}")
+        print(f"Build Vyb or specify executable with --vyb option")
         sys.exit(1)
 
-    print(f"{Colors.BLUE}VyB Test Harness v2.0{Colors.RESET}")
+    print(f"{Colors.BLUE}Vyb Test Harness v2.0{Colors.RESET}")
     print(f"Using executable: {vyb_executable}")
     print(f"Test directories: {', '.join(args.test_dirs)}")
 

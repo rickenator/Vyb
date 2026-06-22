@@ -1,12 +1,12 @@
-# VyB Memory Operations
+# Vyb Memory Operations
 
-This document describes VyB's memory model and the operations available for low-level memory manipulation. VyB follows a hybrid approach to memory management, with safe memory operations by default and explicit freedom operations when needed.
+This document describes Vyb's memory model and the operations available for low-level memory manipulation. Vyb follows a hybrid approach to memory management, with safe memory operations by default and explicit freedom operations when needed.
 
 ## 1. Memory Safety Philosophy
 
-VyB's memory model is designed with these principles:
+Vyb's memory model is designed with these principles:
 
-- **Safe by Default**: Normal VyB code operates with memory safety guarantees
+- **Safe by Default**: Normal Vyb code operates with memory safety guarantees
 - **Explicit Unsafety**: Freedom operations must be contained within `freedom` blocks
 - **Minimal Freedom Surface**: The language minimizes the number of freedom operations needed
 - **Clear Intent**: Memory operations use clear syntax that indicates their purpose
@@ -127,7 +127,7 @@ freedom {
 
 ## 5. Error Cases and Safety Checks
 
-The VyB compiler and runtime perform various safety checks:
+The Vyb compiler and runtime perform various safety checks:
 
 1. **Compile-time checks**:
    - Memory operations outside freedom blocks are rejected

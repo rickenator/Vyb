@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-VyB Syntax Migration Tool v1.0
+Vyb Syntax Migration Tool v1.0
 Automatically converts legacy ownership syntax to canonical syntax.
 
 Usage:
@@ -65,7 +65,7 @@ class MigrationReport:
             self.errors = []
 
 class SyntaxMigrator:
-    """Handles migration from legacy to canonical VyB syntax."""
+    """Handles migration from legacy to canonical Vyb syntax."""
 
     def __init__(self):
         self.migration_rules = self._build_migration_rules()
@@ -230,7 +230,7 @@ class SyntaxMigrator:
         total_migrations = sum(len(migrations) for migrations in all_migrations.values())
 
         report_lines = [
-            f"# VyB Syntax Migration Report",
+            f"# Vyb Syntax Migration Report",
             f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
             f"",
             f"## Summary",
@@ -327,7 +327,7 @@ class SyntaxMigrator:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Migrate legacy VyB syntax to canonical syntax",
+        description="Migrate legacy Vyb syntax to canonical syntax",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__
     )

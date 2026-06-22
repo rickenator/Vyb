@@ -165,8 +165,8 @@ test_ownership_chain()<Int> -> {
 test_string_ownership()<Int> -> {
     println("\n=== Test 9: String ownership ===")
 
-    text<my<String>> = my("Hello, VyB!")
-    println("Created my<String>: Hello, VyB!")
+    text<my<String>> = my("Hello, Vyb!")
+    println("Created my<String>: Hello, Vyb!")
 
     freedom {
         viewed<their<String const>> = view(text)

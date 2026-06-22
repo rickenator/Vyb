@@ -1,11 +1,11 @@
-# VyB Project Study Guide
+# Vyb Project Study Guide
 
 Status: living document
 Audience: practitioners, language implementers, and systems programmers
 Last reviewed: 2026-05-27
-Repository reviewed: `~/Projects/VyB`
+Repository reviewed: `~/Projects/Vyb`
 
-This document is the durable orientation guide for the VyB project. It is meant
+This document is the durable orientation guide for the Vyb project. It is meant
 to be updated as the implementation moves, and to give serious readers a single
 place to understand the language, compiler, runtime, test corpus, and current
 engineering risks.
@@ -22,10 +22,10 @@ When documents disagree, prefer this evidence order:
 
 Current local checkout:
 
-- Path: `~/Projects/VyB`
+- Path: `~/Projects/Vyb`
 - Git branch: `main`
 - Tracking branch: `origin/main`
-- Remote: `git@github.com:rickenator/VyB.git`
+- Remote: `git@github.com:rickenator/Vyb.git`
 - Recent head at review time: `894d189 Merge pull request #107 from rickenator/codex/aspect-receiver-suite-cleanup`
 
 Recent work visible in git and update logs includes:
@@ -49,7 +49,7 @@ Primary status files:
 
 ## 2. Executive Summary
 
-VyB is a statically typed systems programming language implemented in C++17 on
+Vyb is a statically typed systems programming language implemented in C++17 on
 top of LLVM 18. It aims to combine native-code performance with a compact,
 name-first syntax and explicit ownership vocabulary.
 
@@ -68,7 +68,7 @@ The language's main identity markers are:
 - JIT execution, AOT object emission, and native executable generation
 - Local module imports, visibility directives, stdlib discovery, and FFI
 
-In compiler terms, VyB is already a substantial language implementation: it has
+In compiler terms, Vyb is already a substantial language implementation: it has
 a frontend, semantic analysis, LLVM backend, runtime support, standard-library
 scaffold, examples, demos, and hundreds of tests. In release terms, it should be
 studied as an active language prototype moving toward a 1.0 contract, not as a
@@ -132,7 +132,7 @@ Top-level files and directories:
 - `src/vre/`: semantic analysis, value model, intrinsics, LLVM backend
 - `src/runtime/`: async and error runtime support
 - `runtime/`: C runtime and type metadata implementation
-- `stdlib/`: early VyB standard library modules
+- `stdlib/`: early Vyb standard library modules
 - `examples/`: runnable examples
 - `demos/`: curated demonstrations
 - `test/`: feature-oriented test corpus
@@ -150,7 +150,7 @@ Inventory at review time:
 
 ### 5.1 Name-First Syntax
 
-VyB functions put the function name first, then parameters, then return type:
+Vyb functions put the function name first, then parameters, then return type:
 
 ```vyb
 add(a<Int>, b<Int>)<Int> -> {
@@ -183,7 +183,7 @@ const limit<Int> = 10
 Study:
 
 - `doc/Declaration_Syntax.md`
-- `doc/VyB_Function_Declaration_Syntax.md`
+- `doc/Vyb_Function_Declaration_Syntax.md`
 - `doc/Canonical_Reference_Syntax.md`
 - `test/parser/`
 - `test/new_features/`
@@ -216,7 +216,7 @@ Study:
 
 ### 5.3 Ownership Vocabulary
 
-VyB's ownership model is a core language differentiator:
+Vyb's ownership model is a core language differentiator:
 
 - `my<T>`: unique ownership
 - `our<T>`: shared ownership
@@ -307,7 +307,7 @@ Study:
 
 ### 5.6 Aspects And Binds
 
-VyB's trait-like system uses `aspect` and `bind`.
+Vyb's trait-like system uses `aspect` and `bind`.
 
 An aspect declares behavior:
 
@@ -363,7 +363,7 @@ Study:
 
 ### 5.7 Generics And Monomorphization
 
-VyB's generics are intended to be zero-cost through compile-time
+Vyb's generics are intended to be zero-cost through compile-time
 monomorphization. Current support includes generic functions and supported
 generic aspect/bind method shapes.
 
@@ -529,7 +529,7 @@ Study:
 
 ### 5.12 Tuples And Multi-Value Returns
 
-VyB supports tuple types and multi-value returns:
+Vyb supports tuple types and multi-value returns:
 
 ```vyb
 main()<Int, String> -> {
@@ -574,7 +574,7 @@ Study:
 
 ### 5.14 Error Handling
 
-VyB's error model uses failures and traps instead of ordinary exceptions.
+Vyb's error model uses failures and traps instead of ordinary exceptions.
 
 Failure:
 
@@ -965,11 +965,11 @@ Read:
 - `doc/README.md`
 - `doc/Declaration_Syntax.md`
 - `doc/Canonical_Reference_Syntax.md`
-- `doc/VyB_Function_Declaration_Syntax.md`
+- `doc/Vyb_Function_Declaration_Syntax.md`
 
 Exercises:
 
-- Write five simple VyB programs.
+- Write five simple Vyb programs.
 - Convert examples from older `fn` or colon syntax to name-first syntax.
 - Identify three docs whose examples are current and three whose examples look historical.
 
@@ -1126,7 +1126,7 @@ Likely failure layers:
 
 ### 10.1 Ownership Contract
 
-VyB's ownership vocabulary is rich, but the full contract is not finished. The
+Vyb's ownership vocabulary is rich, but the full contract is not finished. The
 big question is how to make `my`, `our`, `their`, and `mild` enforceable across
 assignments, function calls, returns, aggregate fields, and module boundaries.
 
@@ -1175,7 +1175,7 @@ The project has optimistic docs and source-biased audits. Keep broad
 Primary:
 
 - `doc/FEATURE_STATUS.md`
-- this file: `doc/VYB_PROJECT_STUDY_GUIDE.md`
+- this file: `doc/Vyb_Project_Study_Guide.md`
 - `README.md`
 - `TODO.md`
 - `CHANGELOG.md`
@@ -1193,7 +1193,7 @@ Architecture:
 Language:
 
 - `doc/Declaration_Syntax.md`
-- `doc/VyB_Function_Declaration_Syntax.md`
+- `doc/Vyb_Function_Declaration_Syntax.md`
 - `doc/Canonical_Reference_Syntax.md`
 - `doc/Reference_Syntax_Unification.md`
 - `doc/OWNERSHIP_MILD.md`
@@ -1274,7 +1274,7 @@ Monomorphization:
 Compile-time specialization of generic code for concrete type arguments.
 
 Mild reference:
-VyB's weak-reference ownership form.
+Vyb's weak-reference ownership form.
 
 Trap:
 A handler for a failing block.
@@ -1289,4 +1289,4 @@ ModuleRegistry:
 Compiler subsystem that resolves and orders imported `.vyb` modules.
 
 VRE:
-VyB Runtime Environment, used in docs for runtime and execution design.
+Vyb Runtime Environment, used in docs for runtime and execution design.

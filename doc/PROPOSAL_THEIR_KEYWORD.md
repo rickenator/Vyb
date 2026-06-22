@@ -5,20 +5,20 @@
 
 ## 1. Abstract
 
-This proposal suggests replacing the current `&` sigil used for creating and typing non-owning references (borrows) in VyB with the keyword `their`. The `const` keyword would continue to be used in conjunction with `their` to denote immutable borrows. This change aims to enhance syntactic clarity, reduce potential confusion with C-style address operators, and align the language more directly with the VyB Runtime Environment (VRE) conceptual type `their<T>` for non-owning pointers.
+This proposal suggests replacing the current `&` sigil used for creating and typing non-owning references (borrows) in Vyb with the keyword `their`. The `const` keyword would continue to be used in conjunction with `their` to denote immutable borrows. This change aims to enhance syntactic clarity, reduce potential confusion with C-style address operators, and align the language more directly with the Vyb Runtime Environment (VRE) conceptual type `their<T>` for non-owning pointers.
 
 ## 2. Motivation
 
 The primary motivations for this change are:
 
-*   **Enhanced Clarity and Explicitness**: Using a keyword like `their` makes the act of borrowing more explicit in the syntax (e.g., `their x` instead of `&x`). This can improve code readability, especially for developers new to VyB or those less familiar with sigil-based borrow systems.
-*   **Differentiation from C-style Pointers**: The `&` symbol is strongly associated with taking an address in C and C++. While VyB's references serve a similar purpose, they come with different semantics (e.g., safety guarantees, no pointer arithmetic). Using a distinct keyword helps to mentally separate VyB's references from raw pointers.
-*   **Alignment with VRE Terminology**: The VyB Runtime Environment (VRE) uses the conceptual type `their<T>` (a non-owning raw pointer `T*` in its C++ implementation) for non-owning borrows. Adopting `their` in the VyB language syntax creates a more direct and intuitive mapping between the language and its underlying runtime concepts.
+*   **Enhanced Clarity and Explicitness**: Using a keyword like `their` makes the act of borrowing more explicit in the syntax (e.g., `their x` instead of `&x`). This can improve code readability, especially for developers new to Vyb or those less familiar with sigil-based borrow systems.
+*   **Differentiation from C-style Pointers**: The `&` symbol is strongly associated with taking an address in C and C++. While Vyb's references serve a similar purpose, they come with different semantics (e.g., safety guarantees, no pointer arithmetic). Using a distinct keyword helps to mentally separate Vyb's references from raw pointers.
+*   **Alignment with VRE Terminology**: The Vyb Runtime Environment (VRE) uses the conceptual type `their<T>` (a non-owning raw pointer `T*` in its C++ implementation) for non-owning borrows. Adopting `their` in the Vyb language syntax creates a more direct and intuitive mapping between the language and its underlying runtime concepts.
 *   **User Preference**: Feedback suggests a preference for a more descriptive keyword over a sigil for this core concept.
 
 ## 3. Proposed Change
 
-We propose the following modifications to the VyB language syntax and EBNF:
+We propose the following modifications to the Vyb language syntax and EBNF:
 
 ### 3.1. EBNF Modifications
 
@@ -106,7 +106,7 @@ process_data_const(ref_c_const);
 *   **Language Semantics**: The underlying semantics of borrowing (rules around lifetimes, aliasing, mutability) remain unchanged. This is purely a syntactic alteration.
 *   **Parser**: The parser will need to be updated to recognize `their` as a keyword and handle it in type definitions, expressions, and patterns.
 *   **Documentation**: All language documentation, tutorials, and examples (including `RUNTIME.md` and `memory_semantics.vyb`) will need to be updated.
-*   **Existing Code**: This is a breaking change. Any existing VyB code would need to be updated to the new syntax. Tooling (e.g., a `vyb fmt` subcommand or a dedicated migration script) could assist with this.
+*   **Existing Code**: This is a breaking change. Any existing Vyb code would need to be updated to the new syntax. Tooling (e.g., a `vyb fmt` subcommand or a dedicated migration script) could assist with this.
 *   **Keyword Reservation**: `their` would become a reserved keyword.
 
 ## 6. Benefits
@@ -120,7 +120,7 @@ process_data_const(ref_c_const);
 
 *   **Verbosity**: Keywords are inherently more verbose than sigils. However, for a core concept like borrowing, the explicitness might be a worthwhile trade-off.
 *   **Keyword Collision**: `their` is a common English word; ensuring it doesn't feel awkward or lead to parsing ambiguities in other contexts (though unlikely in its proposed usage) is important.
-*   **Deviation from "Common Practice"**: Many modern languages with borrow systems (e.g., Rust, Swift with `&`) use sigils. Adopting a keyword deviates from this trend, which might be a minor learning curve adjustment for developers coming from those languages. However, VyB is not bound to follow these conventions if a keyword offers better clarity for its specific goals.
+*   **Deviation from "Common Practice"**: Many modern languages with borrow systems (e.g., Rust, Swift with `&`) use sigils. Adopting a keyword deviates from this trend, which might be a minor learning curve adjustment for developers coming from those languages. However, Vyb is not bound to follow these conventions if a keyword offers better clarity for its specific goals.
 *   **Tooling Effort**: Updating the parser, documentation, and potentially creating migration tools requires effort.
 
 ## 8. Alternatives Considered
@@ -135,4 +135,4 @@ process_data_const(ref_c_const);
 
 ## 10. Conclusion
 
-The proposal to replace `&` with `their` for borrow syntax offers a path to a more explicit, potentially clearer, and VRE-aligned VyB language. While it introduces a breaking change and adds a new keyword, the benefits in terms of readability and conceptual mapping are believed to be significant. Feedback on this proposal is encouraged to determine the best path forward.
+The proposal to replace `&` with `their` for borrow syntax offers a path to a more explicit, potentially clearer, and VRE-aligned Vyb language. While it introduces a breaking change and adds a new keyword, the benefits in terms of readability and conceptual mapping are believed to be significant. Feedback on this proposal is encouraged to determine the best path forward.

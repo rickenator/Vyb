@@ -34,7 +34,7 @@ def extract_test_case(test_case_text):
     filename = re.sub(r'[^a-zA-Z0-9_]', '_', test_name.lower())
     filename = f"test_{filename}.vyb"
 
-    # Extract the VyB code from the test
+    # Extract the Vyb code from the test
     code_match = re.search(r'R"vyb\((.*?)\)vyb"', test_case_text, re.DOTALL)
     if not code_match:
         return None

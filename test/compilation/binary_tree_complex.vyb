@@ -1,4 +1,4 @@
-// Complex Binary Search Tree - VyB v0.4.4
+// Complex Binary Search Tree - Vyb v0.4.4
 // Demonstrates multiple functions, structs, and complex control flow
 // Using 7-node BST with manual verification
 
@@ -50,7 +50,7 @@ sum_three(a<Int>, b<Int>, c<Int>)<Int> -> {
 
 // Main function demonstrating complex BST operations
 main()<Int> -> {
-    println("Complex Binary Search Tree - VyB v0.4.4")
+    println("Complex Binary Search Tree - Vyb v0.4.4")
     println("==========================================")
     println("Tree Structure:")
     println("       50")

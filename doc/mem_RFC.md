@@ -1,12 +1,12 @@
-# VyB Memory Model Proposal
+# Vyb Memory Model Proposal
 
-This document unifies design decisions and incorporates team feedback on VyB's memory model, ownership, mutability, and safety mechanisms.
+This document unifies design decisions and incorporates team feedback on Vyb's memory model, ownership, mutability, and safety mechanisms.
 
 ---
 
 ## 1. Overview
 
-VyB’s memory model combines two primary axes for safe bindings plus a third for raw locations:
+Vyb’s memory model combines two primary axes for safe bindings plus a third for raw locations:
 
 1. **Binding Mutability** (`var` vs `const`)
 2. **Ownership & Data Mutability** (`my<T>` / `our<T>` / `their<T>` with optional `T const`)
@@ -18,7 +18,7 @@ Safe code uses only `my`/`our`/`their`; raw locations (`loc<T>`) live behind exp
 
 ## 2. Binding Mutability
 
-VyB uses a simple two-keyword model for variable bindings:
+Vyb uses a simple two-keyword model for variable bindings:
 
 * **`var`**: mutable binding (can be reassigned)
 * **`const`**: immutable binding (rebinding prohibited)
@@ -127,7 +127,7 @@ If a thread panics (or throws an unrecoverable error) while holding the `LockGua
 
 ### 7.4 Deadlock Avoidance
 
-VyB’s `Mutex<T>` does not automatically detect deadlocks (e.g., lock cycles). To prevent deadlocks:
+Vyb’s `Mutex<T>` does not automatically detect deadlocks (e.g., lock cycles). To prevent deadlocks:
 
 *   **Lock ordering**: Establish and adhere to a global order in which multiple mutexes are acquired.
 *   **Use timeouts**: Prefer `lock_timeout(...)` over `lock()` when deadlock is a possibility, allowing the program to react to a timeout instead of hanging indefinitely.

@@ -1,7 +1,7 @@
 
-# VyB Unified Function Declaration Syntax
+# Vyb Unified Function Declaration Syntax
 
-This document defines the unified function declaration syntax in VyB using the `name<Type>` pattern. This eliminates the `fn` keyword in favor of a clean, execution-order syntax.
+This document defines the unified function declaration syntax in Vyb using the `name<Type>` pattern. This eliminates the `fn` keyword in favor of a clean, execution-order syntax.
 
 ---
 
@@ -18,7 +18,7 @@ Body         ::= Block
                | Expression
 
 Block        ::= "{" Statement* [ Expression ] "}"
-Expression   ::= <any single VyB expression>  // no braces required
+Expression   ::= <any single Vyb expression>  // no braces required
 ```
 
 - **Function name** comes first, following natural execution order
@@ -117,5 +117,5 @@ parse_input(input<String>)<Int, String> -> {
 
 - Multi-line or statement-rich bodies should always use braces for clarity
 - Single-expression functions can omit braces for conciseness
-- The unified syntax represents the evolution toward maximum consistency in VyB
+- The unified syntax represents the evolution toward maximum consistency in Vyb
 - Legacy `fn<Type>` syntax remains supported for backward compatibility

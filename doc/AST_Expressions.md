@@ -1,6 +1,6 @@
 # AST Nodes: Expressions
 
-This document describes the Abstract Syntax Tree (AST) nodes for various expressions in the VyB programming language, as defined in `include/vyb/parser/ast.hpp`. Expressions are constructs that evaluate to a value.
+This document describes the Abstract Syntax Tree (AST) nodes for various expressions in the Vyb programming language, as defined in `include/vyb/parser/ast.hpp`. Expressions are constructs that evaluate to a value.
 
 All expression nodes inherit from `vyb::ast::Expression`.
 
@@ -103,7 +103,7 @@ The following serialization intrinsics are parsed as CallExpression nodes:
 - **`lit(value)`**: Emits raw JSON literals without type wrapping. Restricted to primitive values (Int, Float, String, Bool).
 - **`notype(value)`**: Removes `<Type>` suffixes from field names in struct serialization. Only valid for structs.
 - **`bare(value)`**: Emits only raw field values as JSON array, removing all type and field metadata. Only valid for structs.
-- **`deserial(json_string)`**: Deserializes JSON string back to typed VyB values.
+- **`deserial(json_string)`**: Deserializes JSON string back to typed Vyb values.
 
 These intrinsics are primarily used for customizing JSON serialization behavior of `main()` function returns.
 See `doc/Auto_Serialization_Main_Returns.md` for comprehensive documentation.
@@ -331,7 +331,7 @@ public:
 
 ## 13. `FromIntToLocExpression`
 
-Represents a VyB-specific expression for converting integers to a source location. Likely for internal or metaprogramming use.
+Represents a Vyb-specific expression for converting integers to a source location. Likely for internal or metaprogramming use.
 
 -   **C++ Class**: `vyb::ast::FromIntToLocExpression`
 -   **`NodeType`**: `FROM_INT_TO_LOC_EXPRESSION`
@@ -449,7 +449,7 @@ public:
 
 ### Memory Operation Expressions
 
-Several memory operations in VyB are represented using `ConstructionExpression` or `CallExpression` nodes:
+Several memory operations in Vyb are represented using `ConstructionExpression` or `CallExpression` nodes:
 
 #### 1. Creating pointers with `loc<T>(expr)`
 

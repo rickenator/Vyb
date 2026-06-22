@@ -1,4 +1,4 @@
-# VyB Error Handling: Failure & Trap System
+# Vyb Error Handling: Failure & Trap System
 
 **Status:** Design Specification (v0.4.2)
 **Last Updated:** October 20, 2025
@@ -10,8 +10,8 @@
 
 **✅ CORE ERROR HANDLING COMPLETE**
 
-VyB has a **production-ready error handling system** with:
-- Runtime infrastructure: VyBError struct, heap allocation, type IDs (C++ level)
+Vyb has a **production-ready error handling system** with:
+- Runtime infrastructure: VybError struct, heap allocation, type IDs (C++ level)
 - Language features: fail/trap/rethrow/ensure/panic keywords
 - Advanced patterns: wildcard `trap (e<?>) ->`, multi-type `trap (e<A|B>) ->`
 - Stack traces with source locations
@@ -19,7 +19,7 @@ VyB has a **production-ready error handling system** with:
 - Comprehensive test coverage
 
 **What's Missing**: Standard library types (Error struct, Errable aspect) to expose
-the runtime system to VyB code. See "Implementation Roadmap" section below.
+the runtime system to Vyb code. See "Implementation Roadmap" section below.
 
 ### Phase 2 — Implemented (Dual Return ABI)
 
@@ -68,7 +68,7 @@ Error handling should be:
 - **Explicit but not verbose:** Errors visible at call sites without boilerplate
 - **Type-safe:** Compile-time checking of error types and compatibility
 - **Composable:** Easy to build error hierarchies and handlers
-- **Unique to VyB:** Fresh approach that fits VyB's design philosophy
+- **Unique to Vyb:** Fresh approach that fits Vyb's design philosophy
 
 **Key Insight:** Blocks can fail, and failures can be trapped. No exceptions, no try/catch - just **failure** and **trap**.
 
@@ -519,7 +519,7 @@ async fetch_data(url<String>)<Future<String>> -> {
 
 ```cpp
 // LLVM IR representation
-struct VyBError {
+struct VybError {
     void* vtable;        // Type information for dispatch
     void* data;          // Error-specific data
     SourceLocation loc;  // Where error occurred
@@ -642,7 +642,7 @@ parse_expression(tokens<Vec<Token>>)<Expr> -> {
 - **Explicit:** Trap clauses attached to blocks make error handling visible
 - **Type-safe:** Compile-time checking of error types
 - **Composable:** Easy to chain and nest
-- **Fresh:** Unique to VyB, not borrowed from other languages
+- **Fresh:** Unique to Vyb, not borrowed from other languages
 
 ### Why Ensure Instead of Finally?
 - Shorter, clearer keyword
@@ -660,9 +660,9 @@ parse_expression(tokens<Vec<Token>>)<Expr> -> {
 
 ### Overview
 
-When a `fail` occurs, VyB captures a **source-level stack trace** showing the chain of VyB function calls leading to the failure. This trace is stored with the error value and can be accessed during trap handling.
+When a `fail` occurs, Vyb captures a **source-level stack trace** showing the chain of Vyb function calls leading to the failure. This trace is stored with the error value and can be accessed during trap handling.
 
-### VyB Source Stack Trace
+### Vyb Source Stack Trace
 
 **Format:**
 ```
@@ -705,7 +705,7 @@ process()<Void> -> {
 
 ### Native Stack Trace (Advanced)
 
-For debugging **C FFI boundaries** or **compiler issues**, VyB provides access to the native system stack:
+For debugging **C FFI boundaries** or **compiler issues**, Vyb provides access to the native system stack:
 
 **Access:**
 ```vyb
@@ -850,18 +850,18 @@ struct NativeFrame {
 
 ### Philosophy
 
-**Untrapped errors should not silently crash** - they should be caught by the VyB runtime and reported with full diagnostic information. This provides:
+**Untrapped errors should not silently crash** - they should be caught by the Vyb runtime and reported with full diagnostic information. This provides:
 1. **Better debugging** - See exactly what failed and where
 2. **Meaningful test results** - Tests can report specific failures
 3. **Production reliability** - Graceful degradation instead of segfaults
 
 ### Runtime Handler Behavior
 
-When a `fail` occurs **without a matching trap**, the VyB runtime automatically:
+When a `fail` occurs **without a matching trap**, the Vyb runtime automatically:
 
 1. **Captures the complete error context:**
    - Error type and values
-   - Full VyB source stack trace
+   - Full Vyb source stack trace
    - Ownership cleanup chain
    - Timestamp and thread info
 
@@ -1101,7 +1101,7 @@ VYB_ERROR_NO_COLOR=1 ./program
 ## Open Questions
 
 1. **Error Type Hierarchy:** Composition vs inheritance vs aspects?
-   - **Current preference:** Aspects (most flexible, fits VyB philosophy)
+   - **Current preference:** Aspects (most flexible, fits Vyb philosophy)
 
 2. **Automatic Error Propagation:** Should `?` operator auto-propagate?
    ```vyb
@@ -1132,7 +1132,7 @@ VYB_ERROR_NO_COLOR=1 ./program
 - ✅ `rethrow` statement for error propagation
 - ✅ `ensure` clause for cleanup
 - ✅ `panic` for unrecoverable errors
-- ✅ Runtime VyBError infrastructure (C++ level)
+- ✅ Runtime VybError infrastructure (C++ level)
 - ✅ Heap allocation with type ID + value storage
 - ✅ Stack trace capture with source locations
 - ✅ Wildcard patterns `trap (e<?>) -> { }`
@@ -1142,7 +1142,7 @@ VYB_ERROR_NO_COLOR=1 ./program
 
 ### Phase 7: Standard Library Error Types (v0.6.1+ - PLANNED)
 
-Expose runtime error system to VyB code through stdlib:
+Expose runtime error system to Vyb code through stdlib:
 
 - [ ] **Errable aspect**: Define aspect for error types
   ```vyb
@@ -1152,7 +1152,7 @@ Expose runtime error system to VyB code through stdlib:
   }
   ```
 
-- [ ] **Error base struct**: Standard VyB error type
+- [ ] **Error base struct**: Standard Vyb error type
   ```vyb
   struct Error {
       message<String>,

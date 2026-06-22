@@ -1,6 +1,6 @@
 # String Type Tests
 
-This directory contains comprehensive tests for VyB's String type implementation.
+This directory contains comprehensive tests for Vyb's String type implementation.
 
 ## Test Files
 

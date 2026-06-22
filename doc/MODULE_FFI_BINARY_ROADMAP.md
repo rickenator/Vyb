@@ -2,11 +2,11 @@
 
 **Status:** Planning Document - Strategic Breakdown
 **Created:** October 22, 2025
-**Priority:** HIGH - Foundation for production-ready VyB
+**Priority:** HIGH - Foundation for production-ready Vyb
 
 ## Executive Summary
 
-This document breaks down three interconnected systems critical for VyB's evolution from a JIT-only language to a full systems programming language:
+This document breaks down three interconnected systems critical for Vyb's evolution from a JIT-only language to a full systems programming language:
 
 1. **Module System** (import/smuggle/bundles) - Code organization and visibility
 2. **FFI System** (C bindings) - Integration with existing ecosystems
@@ -20,7 +20,7 @@ Each system is broken into **phases** with **concrete implementation tasks** and
 
 ### Overview
 
-Enable multi-file VyB programs with controlled visibility using the bundles & sharing system (see `bundles_and_sharing.md`).
+Enable multi-file Vyb programs with controlled visibility using the bundles & sharing system (see `bundles_and_sharing.md`).
 
 ### Current State
 
@@ -34,7 +34,7 @@ Enable multi-file VyB programs with controlled visibility using the bundles & sh
 
 ### Phase 1.1: Basic Import Infrastructure (v0.5.0)
 
-**Goal:** Load and compile other VyB files without visibility checks.
+**Goal:** Load and compile other Vyb files without visibility checks.
 
 **Tasks:**
 1. **Module Registry**
@@ -291,7 +291,7 @@ Enable multi-file VyB programs with controlled visibility using the bundles & sh
 
 ### Overview
 
-Enable VyB to call C functions and use C libraries (libc, POSIX, external deps).
+Enable Vyb to call C functions and use C libraries (libc, POSIX, external deps).
 
 ### Current State
 
@@ -304,7 +304,7 @@ Enable VyB to call C functions and use C libraries (libc, POSIX, external deps).
 
 ### Phase 2.1: extern "C" Declarations (v0.5.0)
 
-**Goal:** Manually declare C functions callable from VyB.
+**Goal:** Manually declare C functions callable from Vyb.
 
 **Tasks:**
 1. **FFI Declaration Syntax**
@@ -329,7 +329,7 @@ Enable VyB to call C functions and use C libraries (libc, POSIX, external deps).
 
 4. **Type Mapping**
    ```
-   VyB Type       C Type
+   Vyb Type       C Type
    --------       ------
    Int            int64_t / long long
    Int32          int32_t / int
@@ -357,7 +357,7 @@ Enable VyB to call C functions and use C libraries (libc, POSIX, external deps).
 
 ### Phase 2.2: C Struct Interop (v0.5.1)
 
-**Goal:** Define VyB structs with C-compatible memory layout.
+**Goal:** Define Vyb structs with C-compatible memory layout.
 
 **Tasks:**
 1. **C Layout Attribute**
@@ -382,7 +382,7 @@ Enable VyB to call C functions and use C libraries (libc, POSIX, external deps).
 3. **Parser Extension**
    - ✅ Recognize `#[repr(C)]` attribute before struct
    - ✅ Store in `StructDeclaration::reprC`
-   - ✅ Validate: no generics, no ownership-qualified fields, no VyB runtime fields such as `String`
+   - ✅ Validate: no generics, no ownership-qualified fields, no Vyb runtime fields such as `String`
 
 4. **Codegen Extension**
    - ✅ LLVM struct with declaration-order unpacked target layout
@@ -441,7 +441,7 @@ Enable VyB to call C functions and use C libraries (libc, POSIX, external deps).
 
 ### Phase 2.4: C Header Binding Generator (v0.6.0)
 
-**Goal:** Automated tool to generate VyB bindings from C headers.
+**Goal:** Automated tool to generate Vyb bindings from C headers.
 
 **Tasks:**
 1. **Tool: `vyb bindgen`**
@@ -452,10 +452,10 @@ Enable VyB to call C functions and use C libraries (libc, POSIX, external deps).
 2. **libclang Integration**
    - Use libclang to parse C headers
    - Extract function declarations, structs, enums
-   - Generate VyB `extern "C" { }` blocks
+   - Generate Vyb `extern "C" { }` blocks
 
 3. **Type Translation**
-   - Automatic C → VyB type mapping
+   - Automatic C → Vyb type mapping
    - Handle typedefs, function pointers
    - Generate `#[repr(C)]` structs
 
@@ -476,7 +476,7 @@ Enable VyB to call C functions and use C libraries (libc, POSIX, external deps).
 
 ### Phase 2.5: Standard C Library Wrappers (v0.6.1)
 
-**Goal:** Safe VyB wrappers around common C functions.
+**Goal:** Safe Vyb wrappers around common C functions.
 
 **Tasks:**
 1. **Core Wrappers**
@@ -513,9 +513,9 @@ Enable VyB to call C functions and use C libraries (libc, POSIX, external deps).
    - Exit codes: exit, atexit
 
 **Deliverables:**
-- Safe VyB stdlib wrapping C
+- Safe Vyb stdlib wrapping C
 - No need for users to write `extern "C"`
-- Test suite: Use C wrappers in VyB programs
+- Test suite: Use C wrappers in Vyb programs
 
 **Dependencies:** Phase 2.4 (bindgen tool)
 
@@ -525,7 +525,7 @@ Enable VyB to call C functions and use C libraries (libc, POSIX, external deps).
 
 ### Overview
 
-Compile VyB programs to native executables instead of JIT-only.
+Compile Vyb programs to native executables instead of JIT-only.
 
 ### Current State
 
@@ -537,7 +537,7 @@ Compile VyB programs to native executables instead of JIT-only.
 
 ### Phase 3.1: Object File Emission (v0.5.0)
 
-**Goal:** Compile VyB to `.o` object files.
+**Goal:** Compile Vyb to `.o` object files.
 
 **Tasks:**
 1. **LLVM Object File Writer**
@@ -563,7 +563,7 @@ Compile VyB programs to native executables instead of JIT-only.
    - `-O3`: Aggressive optimization
 
 **Deliverables:**
-- Can compile VyB to `.o` files
+- Can compile Vyb to `.o` files
 - Multiple optimization levels
 - Test: Compile and inspect with `objdump`
 
@@ -683,7 +683,7 @@ Compile VyB programs to native executables instead of JIT-only.
    - `-g3`: Full info (includes macros, etc.)
 
 **Deliverables:**
-- Can debug VyB programs with gdb/lldb
+- Can debug Vyb programs with gdb/lldb
 - Source-level debugging (step, breakpoint, inspect)
 - Test: Debug session in gdb
 
@@ -725,7 +725,7 @@ Compile VyB programs to native executables instead of JIT-only.
 4. **Library Types**
    - Static library: `.a` (archive)
    - Dynamic library: `.so` / `.dylib` / `.dll`
-   - VyB library: `.vyblib` (pre-compiled module)
+   - Vyb library: `.vyblib` (pre-compiled module)
 
 **Deliverables:**
 - `vyb build` handles complex projects
@@ -811,7 +811,7 @@ test/
 
 ### FFI System
 4. **C++ Interop**: Should we support `extern "C++"` for C++ libraries?
-5. **Callbacks**: How to pass VyB closures to C functions expecting function pointers?
+5. **Callbacks**: How to pass Vyb closures to C functions expecting function pointers?
 6. **Thread Safety**: How to handle C libraries that aren't thread-safe?
 
 ### Binary Generation
@@ -841,8 +841,8 @@ For each phase, track:
 
 - `doc/bundles_and_sharing.md` - Detailed bundle/sharing design
 - `doc/AST_Declarations.md` - Import AST node specifications
-- `doc/ROADMAP.md` - Overall VyB roadmap
-- `doc/VRE.md` - VyB Runtime Environment design
+- `doc/ROADMAP.md` - Overall Vyb roadmap
+- `doc/VRE.md` - Vyb Runtime Environment design
 
 ---
 

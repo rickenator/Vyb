@@ -88,7 +88,7 @@ extern "C" {
     // Stack trace runtime functions (Phase 6.4 - from error_handling.cpp)
     void __vyb_runtime_push_call_frame(const char* function_name, const char* file_path, uint32_t line, uint32_t column);
     void __vyb_runtime_pop_call_frame();
-    void* __vyb_runtime_get_current_stack_trace();  // Returns VyBStackTrace*
+    void* __vyb_runtime_get_current_stack_trace();  // Returns VybStackTrace*
 
     // TODO: Future toString functions for compound types:
     // char* __vyb_toString_vec(void* vec_ptr, const char* element_type);
@@ -221,7 +221,7 @@ std::unique_ptr<vyb::ast::Module> parse_vyb_module(const std::string& source, co
 
 
 
-// Function to compile VyB code to object file
+// Function to compile Vyb code to object file
 int compile_vyb_to_object(const std::string& source, const std::string& fileName,
                           const std::string& outputFile, int optLevel = 2) {
     std::cout << "Compiling " << fileName << " to object file..." << std::endl;
@@ -355,7 +355,7 @@ int link_vyb_executable(const std::vector<std::string>& objectFiles,
         const std::string& runtimeSource = unit.first;
         const std::string& runtimeObject = unit.second;
         if (access(runtimeSource.c_str(), F_OK) == 0) {
-            std::cout << "Compiling VyB runtime library..." << std::endl;
+            std::cout << "Compiling Vyb runtime library..." << std::endl;
 
             std::string compileCmd = "cc -c " + runtimeSource + " -o " + runtimeObject + " -O2";
             int compileResult = system(compileCmd.c_str());
@@ -542,7 +542,7 @@ int link_vyb_executable(const std::vector<std::string>& objectFiles,
     }
 }
 
-// Function to execute VyB code using LLVM JIT
+// Function to execute Vyb code using LLVM JIT
 int run_vyb_code(const std::string& source, const std::string& fileName, bool generateLLVMIR) {
     VYB_CDBG << "Starting run_vyb_code for file: " << fileName << std::endl;
 
@@ -861,7 +861,7 @@ int run_vyb_code(const std::string& source, const std::string& fileName, bool ge
         // Check main function's return type before moving module
         llvm::Function* mainFuncForTypeCheck = module->getFunction("main");
         bool mainReturnsStruct = false;
-        bool mainReturnsString = false;    // { ptr, i64 } VyB string struct
+        bool mainReturnsString = false;    // { ptr, i64 } Vyb string struct
         bool mainReturnsFailableStruct = false; // { T, i8* }
         bool mainFailablePayloadIsInt = false;
         bool mainFailablePayloadIsVoidDummy = false;
@@ -869,7 +869,7 @@ int run_vyb_code(const std::string& source, const std::string& fileName, bool ge
         if (mainFuncForTypeCheck) {
             llvm::Type* returnType = mainFuncForTypeCheck->getReturnType();
             mainReturnsStruct = returnType->isStructTy();
-            // Detect if this is a VyB string struct: { ptr, i64 } with 2 elements
+            // Detect if this is a Vyb string struct: { ptr, i64 } with 2 elements
             if (mainReturnsStruct) {
                 llvm::StructType* st = llvm::cast<llvm::StructType>(returnType);
                 if (st->getNumElements() == 2) {
@@ -965,11 +965,11 @@ int run_vyb_code(const std::string& source, const std::string& fileName, bool ge
             if (mainReturnsString) {
                 // Single String return: call as struct { char*, int64_t } returning function
                 // On x86_64 SysV ABI, { ptr, i64 } is returned in registers (rax + rdx)
-                struct VyBStringResult { const char* ptr; int64_t len; };
-                typedef VyBStringResult (*StringMainFuncType)();
+                struct VybStringResult { const char* ptr; int64_t len; };
+                typedef VybStringResult (*StringMainFuncType)();
                 StringMainFuncType strMainFunc = reinterpret_cast<StringMainFuncType>(
                     static_cast<void*>(executorAddr.toPtr<void*>()));
-                VyBStringResult result = strMainFunc();
+                VybStringResult result = strMainFunc();
                 if (result.ptr) {
                     // Output as JSON-encoded string with quotes
                     std::cout << "\"" << result.ptr << "\"" << std::endl;
@@ -990,7 +990,7 @@ int run_vyb_code(const std::string& source, const std::string& fileName, bool ge
             return 0;
         }
     } catch (const std::exception& e) {
-        std::cerr << "Error running VyB code: " << e.what() << std::endl;
+        std::cerr << "Error running Vyb code: " << e.what() << std::endl;
         throw; // Re-throw the exception to allow calling code to handle errors
     }
 }
@@ -1313,7 +1313,7 @@ int main(int argc, char* argv[]) {
                     for (const auto& err : semanticErrors) {
                         std::cerr << "  " << err << std::endl;
                     }
-                    std::cerr << "Error running VyB code: Semantic analysis failed with "
+                    std::cerr << "Error running Vyb code: Semantic analysis failed with "
                               << semanticErrors.size() << " error(s)" << std::endl;
                     return 1;
                 }
@@ -1324,7 +1324,7 @@ int main(int argc, char* argv[]) {
             return 1;
         }
     } else {
-        std::cout << "VyB Compiler - Usage: " << argv[0] << " <filename> [options] | --test [catch2_options]" << std::endl;
+        std::cout << "Vyb Compiler - Usage: " << argv[0] << " <filename> [options] | --test [catch2_options]" << std::endl;
         std::cout << "Options:" << std::endl;
         std::cout << "  --parse-only          Stop after parsing (validates syntax only)" << std::endl;
         std::cout << "  --semantic-only       Stop after semantic analysis" << std::endl;

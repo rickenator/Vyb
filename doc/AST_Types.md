@@ -1,6 +1,6 @@
-# VyB AST: Type System Nodes
+# Vyb AST: Type System Nodes
 
-This document describes AST nodes related to VyB's type system, as defined in `include/vyb/parser/ast.hpp`. These nodes are used to represent type information in variable declarations, function parameters, return types, and type-related expressions.
+This document describes AST nodes related to Vyb's type system, as defined in `include/vyb/parser/ast.hpp`. These nodes are used to represent type information in variable declarations, function parameters, return types, and type-related expressions.
 
 All specific type nodes inherit from the base `vyb::ast::TypeNode` class, which itself inherits from `vyb::ast::Node`.
 
@@ -178,7 +178,7 @@ For details on multi-value function syntax and auto-serialization, see [`Auto_Se
 
 Represents a tuple type with **full variadic support** (e.g., `(i32, string, bool)` or `Tuple<Int, String, Bool>`).
 
-VyB tuples support **1 to N type parameters** and can be expressed in two equivalent syntaxes:
+Vyb tuples support **1 to N type parameters** and can be expressed in two equivalent syntaxes:
 - **Inline syntax**: `main()<Int, String, Bool>` (comma-separated types)
 - **Generic syntax**: `main()<Tuple<Int, String, Bool>>` (explicit Tuple generic)
 
@@ -277,7 +277,7 @@ public:
 
 #### Memory System Types
 
-VyB includes specialized types for low-level memory operations, which are typically represented using GenericInstanceTypeNode:
+Vyb includes specialized types for low-level memory operations, which are typically represented using GenericInstanceTypeNode:
 
 ##### `loc<T>` Type
 
@@ -295,4 +295,4 @@ This type is used in freedom code blocks to work with raw memory. Operations on 
 
 These operations are typically represented using `ConstructionExpression` or `CallExpression` in the AST.
 
-This structure allows VyB's AST to accurately represent a wide variety of type constructs found in modern programming languages. The parser (`TypeParser`) is responsible for translating type syntax from the source code into these `TypeNode` structures.
+This structure allows Vyb's AST to accurately represent a wide variety of type constructs found in modern programming languages. The parser (`TypeParser`) is responsible for translating type syntax from the source code into these `TypeNode` structures.

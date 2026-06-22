@@ -1,6 +1,6 @@
 # Error Handling Test Suite (fail/trap)
 
-This directory contains comprehensive tests for VyB's error handling system using the `fail/trap/rethrow/ensure/panic` keywords.
+This directory contains comprehensive tests for Vyb's error handling system using the `fail/trap/rethrow/ensure/panic` keywords.
 
 ## Test Organization
 

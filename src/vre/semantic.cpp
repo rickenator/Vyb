@@ -53,14 +53,14 @@ static std::string reprCUnsupportedReason(ast::TypeNode* typeNode) {
 
         const std::string name = typeName->identifier->name;
         if (name == "String" || name == "string" || name == "Bytes" || name == "bytes") {
-            return "cannot use VyB " + name + "; use CString or an explicit C ABI representation";
+            return "cannot use Vyb " + name + "; use CString or an explicit C ABI representation";
         }
         if (name == "my" || name == "our" || name == "their" ||
             name == "mild" || name == "view" || name == "borrow") {
             return "cannot use ownership-qualified type " + typeNode->toString() + " in a C ABI layout";
         }
         if (name == "Vec" || name == "Future" || name == "Tuple") {
-            return "cannot use VyB runtime type " + typeNode->toString() + " in a C ABI layout";
+            return "cannot use Vyb runtime type " + typeNode->toString() + " in a C ABI layout";
         }
 
         for (const auto& arg : typeName->genericArgs) {
@@ -79,10 +79,10 @@ static std::string reprCUnsupportedReason(ast::TypeNode* typeNode) {
         return reprCUnsupportedReason(arrayType->elementType.get());
     }
     if (auto* vecType = dynamic_cast<ast::VecType*>(typeNode)) {
-        return "cannot use VyB runtime type " + typeNode->toString() + " in a C ABI layout";
+        return "cannot use Vyb runtime type " + typeNode->toString() + " in a C ABI layout";
     }
     if (auto* futureType = dynamic_cast<ast::FutureType*>(typeNode)) {
-        return "cannot use VyB runtime type " + typeNode->toString() + " in a C ABI layout";
+        return "cannot use Vyb runtime type " + typeNode->toString() + " in a C ABI layout";
     }
     if (auto* optionalType = dynamic_cast<ast::OptionalType*>(typeNode)) {
         return "cannot use optional type " + typeNode->toString() + " in a C ABI layout";
@@ -989,7 +989,7 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
         addError("Redefinition of variable \"" + node->id->name + "\" in the same scope.", node->id.get());
     }
 
-    // Enforce mandatory type annotation for VyB variables (name<Type> = value syntax)
+    // Enforce mandatory type annotation for Vyb variables (name<Type> = value syntax)
     // Allow compiler-generated internal variables (starting with __) to skip this check
     // Allow variables with initializers to use type inference (error if type can't be inferred)
     const std::string& varName = node->id ? node->id->name : "";
@@ -1035,7 +1035,7 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
                 needsTypeCheck = false; // resolved via inference
             }
         }
-        // If still no type, report error with correct VyB syntax
+        // If still no type, report error with correct Vyb syntax
         if (needsTypeCheck) {
             if (node->isConst) {
                 addError("Missing type annotation on constant '" + node->id->name + "'; use const<Type> name = value syntax.", node);
@@ -3510,7 +3510,7 @@ void SemanticAnalyzer::visit(ast::AddrOfExpression* node) {
 
     // The type of addr(operand) is an integer type representing an address.
     // Using "i64" as a placeholder for the address type.
-    // VyB should have a dedicated address type (e.g., uintptr).
+    // Vyb should have a dedicated address type (e.g., uintptr).
     auto addr_type_ident = std::make_unique<ast::Identifier>(node->loc, "i64");
     ast::TypeNode* addrAstType = new ast::TypeName(node->loc, std::move(addr_type_ident));
     expressionTypes[node] = addrAstType;
@@ -4961,7 +4961,7 @@ void SemanticAnalyzer::visit(ast::GenericParameter* node) {
     // if (!symbol) { addError("Generic parameter " + node->name->name + " not found.", node); }
 }
 
-// Normalize LLVM-internal type names to their canonical VyB surface-type names.
+// Normalize LLVM-internal type names to their canonical Vyb surface-type names.
 // The LLVM backend accepts e.g. "i32" as an alias for "Int32"; the semantic
 // analyzer must honour the same aliases so validation is consistent with codegen.
 static std::string normalizeTypeName(const std::string& name) {
@@ -5035,7 +5035,7 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
                 if (categoryTarget == ast::TypeNode::Category::OPTIONAL) {
                     return true;
                 }
-                // VyB might also allow assigning 'nil' to raw pointer types.
+                // Vyb might also allow assigning 'nil' to raw pointer types.
                 // if (categoryTarget == ast::TypeNode::Category::POINTER) return true;
             }
         }
@@ -5136,7 +5136,7 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
             if (!tnTarget->identifier || !tnValue->identifier) return false;
 
             // Normalize type names: treat LLVM aliases (i32, i64, …) as their
-            // canonical VyB equivalents (Int32, Int, …) for compatibility checks.
+            // canonical Vyb equivalents (Int32, Int, …) for compatibility checks.
             std::string nameTarget = normalizeTypeName(tnTarget->identifier->name);
             std::string nameValue  = normalizeTypeName(tnValue->identifier->name);
 
@@ -5157,7 +5157,7 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
             auto* ptTarget = static_cast<ast::PointerType*>(targetType);
             auto* ptValue = static_cast<ast::PointerType*>(valueType);
             // T* is compatible with U* if T is compatible with U (invariant for now).
-            // VyB might have rules for void* or covariance/contravariance.
+            // Vyb might have rules for void* or covariance/contravariance.
             return areTypesCompatible(ptTarget->pointeeType.get(), ptValue->pointeeType.get());
         }
         case ast::TypeNode::Category::ARRAY: {
@@ -6308,7 +6308,7 @@ void SemanticAnalyzer::visit(ast::TypenameExpression* node) {
     // Analyze operand to determine its type
     node->operand->accept(*this);
 
-    // Result type is always "String" — VyB's string type uses PascalCase
+    // Result type is always "String" — Vyb's string type uses PascalCase
     auto stringIdent = std::make_unique<ast::Identifier>(node->loc, "String");
     ast::TypeNode* resultType = new ast::TypeName(node->loc, std::move(stringIdent));
     expressionTypes[node] = resultType;

@@ -1347,7 +1347,7 @@ DEBUG: Primitive method Float.to_string() returns String
 DEBUG: Binary expression result type: String
 Semantic analysis completed
 Generating LLVM IR code...
-DEBUG: Initialized debug info for file: json_conversion_test.vyb.ll in directory: /home/rick/Projects/VyB/test
+DEBUG: Initialized debug info for file: json_conversion_test.vyb.ll in directory: /home/rick/Projects/Vyb/test
 DEBUG: Module visitor called with 3 statements
 DEBUG: First pass - processing struct declarations
 DEBUG: Processing struct declaration statement 0

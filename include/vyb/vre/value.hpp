@@ -137,9 +137,9 @@ struct VreValue {
     }
 };
 
-// --- VyB Runtime Memory Management Model ---
+// --- Vyb Runtime Memory Management Model ---
 //
-// VreValue is the universal runtime value type for VyB. It supports primitive types (bool, int64_t, double),
+// VreValue is the universal runtime value type for Vyb. It supports primitive types (bool, int64_t, double),
 // heap-allocated types (std::string, VreObject, VreArray), and type info for dynamic dispatch.
 //
 // Memory Management:
@@ -158,7 +158,7 @@ struct VreValue {
 //
 // This model is robust for both interpreter and LLVM codegen, and can be extended for GC or custom allocators in the future.
 
-// --- Debugging hooks for VyB runtime memory management ---
+// --- Debugging hooks for Vyb runtime memory management ---
 //
 // These hooks allow you to track allocations, reference count changes, and deallocations of VreObject and VreArray.
 // They are useful for debugging memory leaks, double-frees, and lifetime issues in both interpreter and codegen backends.

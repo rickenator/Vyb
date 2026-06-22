@@ -1,7 +1,7 @@
 # String Type Implementation - Complete
 
 ## Overview
-The VyB String type is now fully implemented as a fat pointer struct with comprehensive method support.
+The Vyb String type is now fully implemented as a fat pointer struct with comprehensive method support.
 
 ## Type Structure
 ```cpp
@@ -13,7 +13,7 @@ struct String {
 
 ## String Literals
 
-VyB supports **natural string literal syntax** where quoted text is automatically treated as a String type:
+Vyb supports **natural string literal syntax** where quoted text is automatically treated as a String type:
 
 ```vyb
 # Direct literal assignment (no constructor needed!)
@@ -23,7 +23,7 @@ data<String> = "Hello"
 combined<String> = "this" + "that"
 
 # Method calls on literals
-length<Int> = "VyB".len()
+length<Int> = "Vyb".len()
 first<Int> = "Hello".char_at(0)
 check<Bool> = "Test".starts_with("Te")
 ```
@@ -129,7 +129,7 @@ data<String> = "Hello"
 - **Transform methods** (substring, to_upper, to_lower, +): malloc new buffers
   - Always allocates length + 1 bytes for null terminator
   - Caller owns returned String values
-  - VyB's ownership system handles cleanup
+  - Vyb's ownership system handles cleanup
 
 ### Bounds Checking
 All index-based operations use LLVM BasicBlocks and PHI nodes:
@@ -293,7 +293,7 @@ This approach:
 - **Direct memory access**: GEP instructions for indexed access
 
 ### Trade-offs
-- **Immutability**: All transform operations create new strings (follows VyB ownership model)
+- **Immutability**: All transform operations create new strings (follows Vyb ownership model)
 - **Null termination overhead**: +1 byte per allocation for C compatibility
 - **ASCII-only case conversion**: to_upper/to_lower don't handle Unicode
 
@@ -313,7 +313,7 @@ This approach:
 - **UTF-8 support**: Unicode-aware operations
 
 ### Memory Safety
-- **Automatic cleanup**: Integrate with VyB's ownership system for automatic free()
+- **Automatic cleanup**: Integrate with Vyb's ownership system for automatic free()
 - **Move semantics**: Transfer ownership without copying
 - **Borrow checker**: Prevent use-after-free and double-free
 
@@ -351,4 +351,4 @@ The String type implementation is **complete and production-ready**:
 - **C compatible**: Null-terminated for printf, strstr, etc.
 - **Method chaining**: `text.to_lower().substring(0, 5)`
 
-This provides VyB with a **robust and practical String type** that emphasizes **memory safety**, **natural syntax**, and **ownership awareness**, as requested.
+This provides Vyb with a **robust and practical String type** that emphasizes **memory safety**, **natural syntax**, and **ownership awareness**, as requested.

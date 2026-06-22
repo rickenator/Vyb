@@ -1,4 +1,4 @@
-// filepath: /home/rick/Projects/VyB/test/units/extracted/test35.vyb
+// filepath: /home/rick/Projects/Vyb/test/units/extracted/test35.vyb
 // @test: Codegen: Member access assignment
 // @description: Extracted from tests.cpp - Codegen: Member access assignment
 // @category: parser

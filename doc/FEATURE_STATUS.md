@@ -1,6 +1,6 @@
-# VyB Feature Status (v0.5.1)
+# Vyb Feature Status (v0.5.1)
 
-This document tracks the implementation status of VyB language features.
+This document tracks the implementation status of Vyb language features.
 
 Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 

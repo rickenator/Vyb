@@ -1,4 +1,4 @@
-// VyB Type Metadata Generation
+// Vyb Type Metadata Generation
 // Generates runtime type metadata for JSON serialization and reflection
 
 #include "vyb/vre/llvm/codegen.hpp"
@@ -39,7 +39,7 @@ void LLVMCodegen::generateTypeMetadata(const std::string& typeName, ast::StructD
         bool isVec = false;
 
         // Create field metadata struct
-        // typedef struct VyBFieldMetadata {
+        // typedef struct VybFieldMetadata {
         //     const char* name;
         //     const char* type_name;
         //     size_t offset;
@@ -47,7 +47,7 @@ void LLVMCodegen::generateTypeMetadata(const std::string& typeName, ast::StructD
         //     bool is_primitive;
         //     bool is_vec;
         //     const char* vec_element_type;
-        // } VyBFieldMetadata;
+        // } VybFieldMetadata;
 
         // Create global string constants manually (not using builder, which requires function context)
         llvm::Constant* fieldNameStrConst = llvm::ConstantDataArray::getString(*context, fieldName, /*AddNull=*/true);
@@ -127,15 +127,15 @@ void LLVMCodegen::generateTypeMetadata(const std::string& typeName, ast::StructD
         "__vyb_fields_" + typeName
     );
 
-    // Create VyBTypeMetadata struct
-    // typedef struct VyBTypeMetadata {
+    // Create VybTypeMetadata struct
+    // typedef struct VybTypeMetadata {
     //     const char* type_name;
     //     size_t struct_size;
     //     size_t num_fields;
-    //     VyBFieldMetadata* fields;
+    //     VybFieldMetadata* fields;
     //     size_t num_aspects;
-    //     VyBAspectBinding* aspects;
-    // } VyBTypeMetadata;
+    //     VybAspectBinding* aspects;
+    // } VybTypeMetadata;
 
     llvm::PointerType* int8PtrType = llvm::PointerType::get(llvm::Type::getInt8Ty(*context), 0);
     llvm::Type* int64Type = llvm::Type::getInt64Ty(*context);
@@ -203,7 +203,7 @@ void LLVMCodegen::registerTypeMetadata() {
     llvm::PointerType* int8PtrType = llvm::PointerType::get(llvm::Type::getInt8Ty(*context), 0);
     llvm::FunctionType* registerFuncType = llvm::FunctionType::get(
         llvm::Type::getVoidTy(*context),
-        {int8PtrType}, // Takes VyBTypeMetadata* (as i8*)
+        {int8PtrType}, // Takes VybTypeMetadata* (as i8*)
         false
     );
 
