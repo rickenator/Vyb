@@ -1,0 +1,23 @@
+// Demo: call an external URL through C FFI.
+//
+// This intentionally keeps the Vyb side simple while the lower-level socket
+// wrapper work matures: Vyb calls libc `system()`, and curl performs the HTTP
+// request to google.com.
+
+extern "C" {
+    puts(s<loc<Int8>>)<CInt>
+    system(command<loc<Int8>>)<CInt>
+}
+
+main()<Int> -> {
+    freedom {
+        puts("calling http://google.com through C FFI")
+        status<CInt> = system("curl -sSI http://google.com")
+        if (status == 0) {
+            puts("request completed")
+        } else {
+            puts("request failed")
+        }
+    }
+    return 0
+}
