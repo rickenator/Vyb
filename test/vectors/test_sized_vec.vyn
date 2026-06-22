@@ -1,9 +1,0 @@
-// Test Vec::new(size) to isolate memory allocation issues
-
-main()<Int> -> {
-    // Test just the sized constructor
-    sized_vec<Vec<Int>> = Vec::new(3);
-    println("Sized Vec created successfully");
-    
-    return 0;
-}

@@ -1,0 +1,56 @@
+// Comprehensive Vec<T> iteration tests
+
+main()<Int> -> {
+    // Test 1: Basic iteration with chained push
+    v1<Vec<Int>> = Vec::new();
+    v1.push(1).push(2).push(3);
+    var<Int> sum1 = 0;
+    for (x in v1) {
+        sum1 = sum1 + x;
+    }
+    if (sum1 != 6) {
+        return 1;  // Test 1 failed
+    }
+
+    // Test 2: Empty Vec
+    v2<Vec<Int>> = Vec::new();
+    var<Int> sum2 = 0;
+    for (x in v2) {
+        sum2 = sum2 + x;
+    }
+    if (sum2 != 0) {
+        return 2;  // Test 2 failed
+    }
+
+    // Test 3: Break in Vec iteration with chained push
+    v3<Vec<Int>> = Vec::new();
+    v3.push(1).push(2).push(3).push(4);
+    var<Int> sum3 = 0;
+    for (x in v3) {
+        if (sum3 >= 3) {
+            break;
+        }
+        sum3 = sum3 + x;
+    }
+    if (sum3 != 3) {
+        return 3;  // Test 3 failed
+    }
+
+    // Test 4: Continue in Vec iteration with chained push
+    v4<Vec<Int>> = Vec::new();
+    v4.push(1).push(2).push(3).push(4);
+    var<Int> sum4 = 0;
+    var<Int> skip_pos = 0;
+    for (x in v4) {
+        skip_pos = skip_pos + 1;
+        if (skip_pos == 2) {
+            continue;
+        }
+        sum4 = sum4 + x;
+    }
+    if (sum4 != 8) {  // 1+3+4 = 8 (skipping position 2)
+        return 4;  // Test 4 failed
+    }
+
+    return 0;  // All tests passed!
+}

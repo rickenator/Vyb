@@ -1,0 +1,14 @@
+// filepath: /home/rick/Projects/VyB/test/units/extracted/test34.vyb
+// @test: Codegen: Pointer dereference assignment
+// @description: Extracted from tests.cpp - Codegen: Pointer dereference assignment
+// @category: parser
+// @expect: pass
+// @parse-only: true
+// @expect-output: n/a
+// @expect-error: n/a
+// @expect-return: n/a
+
+main()<Int> -> {
+    x<Int> = 42;
+    return 0
+}

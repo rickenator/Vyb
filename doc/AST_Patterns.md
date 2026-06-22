@@ -1,9 +1,9 @@
-<!-- filepath: /home/rick/Projects/Vyn/doc/AST_Patterns.md -->
-# Vyn AST: Pattern Nodes
+<!-- filepath: /home/rick/Projects/VyB/doc/AST_Patterns.md -->
+# VyB AST: Pattern Nodes
 
-This document details AST nodes used for pattern matching in Vyn, as defined in `include/vyn/parser/ast.hpp`. Pattern matching allows for destructuring and control flow based on the shape of data.
+This document details AST nodes used for pattern matching in VyB, as defined in `include/vyb/parser/ast.hpp`. Pattern matching allows for destructuring and control flow based on the shape of data.
 
-All specific pattern nodes inherit from a common base class, `PatternNode`, which itself inherits from `vyn::ast::Node`.
+All specific pattern nodes inherit from a common base class, `PatternNode`, which itself inherits from `vyb::ast::Node`.
 
 ## Common Pointer Aliases
 
@@ -12,16 +12,16 @@ All specific pattern nodes inherit from a common base class, `PatternNode`, whic
 - `ExprPtr = std::unique_ptr<Expression>;` // For LiteralPattern, RangePattern, etc.
 - `TypeNodePtr = std::unique_ptr<TypeNode>;` // For StructPattern, EnumVariantPattern type paths
 
-## 1. Base `PatternNode` (`vyn::ast::PatternNode`)
+## 1. Base `PatternNode` (`vyb::ast::PatternNode`)
 
 This is the abstract base class for all pattern nodes.
 
--   **C++ Class**: `vyn::ast::PatternNode`
--   **Inheritance**: `vyn::ast::Node` -> `vyn::ast::PatternNode`
+-   **C++ Class**: `vyb::ast::PatternNode`
+-   **Inheritance**: `vyb::ast::Node` -> `vyb::ast::PatternNode`
 
 ```cpp
-// Base class from include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// Base class from include/vyb/parser/ast.hpp
+namespace vyb::ast {
 
 class PatternNode : public Node {
 public:
@@ -30,7 +30,7 @@ public:
     // virtual bool isIrrefutable() const = 0; // Example of a common method
 };
 
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ## 2. Concrete Pattern Node Types
@@ -41,7 +41,7 @@ These classes inherit from `PatternNode` and represent concrete patterns.
 
 Matches a value and binds it to an identifier. Can also be used for struct field shorthand `Struct { field }` which binds `field`.
 
--   **C++ Class**: `vyn::ast::IdentifierPattern`
+-   **C++ Class**: `vyb::ast::IdentifierPattern`
 -   **`NodeType`**: `IDENTIFIER_PATTERN`
 -   **Fields**:
     -   `name` (`IdentifierPtr`): The identifier to bind to.
@@ -49,8 +49,8 @@ Matches a value and binds it to an identifier. Can also be used for struct field
     -   `subPattern` (`std::optional<PatternPtr>`): Optional sub-pattern for destructuring (e.g., `identifier @ sub_pattern` or for enum variants like `Some(x)` where `x` is the identifier pattern).
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 
 class IdentifierPattern : public PatternNode {
 public:
@@ -62,21 +62,21 @@ public:
     // ... accept, getType, toString methods ...
 };
 
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ### 2.2. `LiteralPattern`
 
 Matches a specific literal value.
 
--   **C++ Class**: `vyn::ast::LiteralPattern`
+-   **C++ Class**: `vyb::ast::LiteralPattern`
 -   **`NodeType`**: `LITERAL_PATTERN`
 -   **Fields**:
     -   `literal` (`ExprPtr`): The literal expression (e.g., `IntegerLiteral`, `StringLiteral`) to match against.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 
 class LiteralPattern : public PatternNode {
 public:
@@ -86,21 +86,21 @@ public:
     // ... accept, getType, toString methods ...
 };
 
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ### 2.3. `TuplePattern`
 
 Destructures a tuple into its constituent parts.
 
--   **C++ Class**: `vyn::ast::TuplePattern`
+-   **C++ Class**: `vyb::ast::TuplePattern`
 -   **`NodeType`**: `TUPLE_PATTERN`
 -   **Fields**:
     -   `elements` (`std::vector<PatternPtr>`): A vector of pattern nodes, one for each element of the tuple.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 
 class TuplePattern : public PatternNode {
 public:
@@ -110,14 +110,14 @@ public:
     // ... accept, getType, toString methods ...
 };
 
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ### 2.4. `StructPattern`
 
 Destructures a struct by its field names.
 
--   **C++ Class**: `vyn::ast::StructPattern`
+-   **C++ Class**: `vyb::ast::StructPattern`
 -   **`NodeType`**: `STRUCT_PATTERN`
 -   **Fields**:
     -   `structType` (`TypeNodePtr`): The type of the struct being matched (e.g., `BasicTypeNode` for `MyStruct`).
@@ -125,8 +125,8 @@ Destructures a struct by its field names.
     -   `hasRest` (`bool`): Indicates if `..` is present, meaning not all fields need to be specified.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 
 class StructPattern : public PatternNode {
 public:
@@ -139,14 +139,14 @@ public:
     // ... accept, getType, toString methods ...
 };
 
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ### 2.5. `EnumVariantPattern`
 
 Matches and destructures a specific enum variant.
 
--   **C++ Class**: `vyn::ast::EnumVariantPattern`
+-   **C++ Class**: `vyb::ast::EnumVariantPattern`
 -   **`NodeType`**: `ENUM_VARIANT_PATTERN`
 -   **Fields**:
     -   `enumType` (`TypeNodePtr`): The type of the enum (e.g., `BasicTypeNode` for `Option`).
@@ -154,8 +154,8 @@ Matches and destructures a specific enum variant.
     -   `arguments` (`std::vector<PatternPtr>`): Patterns for the arguments of the variant, if any.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 
 class EnumVariantPattern : public PatternNode {
 public:
@@ -167,19 +167,19 @@ public:
     // ... accept, getType, toString methods ...
 };
 
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ### 2.6. `WildcardPattern`
 
 Matches any value without binding it to a name (`_`).
 
--   **C++ Class**: `vyn::ast::WildcardPattern`
+-   **C++ Class**: `vyb::ast::WildcardPattern`
 -   **`NodeType`**: `WILDCARD_PATTERN`
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 
 class WildcardPattern : public PatternNode {
 public:
@@ -187,14 +187,14 @@ public:
     // ... accept, getType, toString methods ...
 };
 
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ### 2.7. `RangePattern`
 
 Matches a value if it falls within a specified range (e.g., `1..=5`, `'a'..'z'`).
 
--   **C++ Class**: `vyn::ast::RangePattern`
+-   **C++ Class**: `vyb::ast::RangePattern`
 -   **`NodeType`**: `RANGE_PATTERN`
 -   **Fields**:
     -   `start` (`ExprPtr`): The start of the range (must be a literal or const expression).
@@ -202,8 +202,8 @@ Matches a value if it falls within a specified range (e.g., `1..=5`, `'a'..'z'`)
     -   `isInclusive` (`bool`): True if the range end is inclusive (`..=`), false if exclusive (`..`).
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 
 class RangePattern : public PatternNode {
 public:
@@ -215,21 +215,21 @@ public:
     // ... accept, getType, toString methods ...
 };
 
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ### 2.8. `OrPattern`
 
 Allows matching against multiple alternative patterns (e.g., `Some(0) | None` or `1 | 2 | 3`).
 
--   **C++ Class**: `vyn::ast::OrPattern`
+-   **C++ Class**: `vyb::ast::OrPattern`
 -   **`NodeType`**: `OR_PATTERN`
 -   **Fields**:
     -   `alternatives` (`std::vector<PatternPtr>`): A list of patterns, any of which can match.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 
 class OrPattern : public PatternNode {
 public:
@@ -239,7 +239,7 @@ public:
     // ... accept, getType, toString methods ...
 };
 
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ## Visitor Integration
@@ -247,7 +247,7 @@ public:
 Each concrete pattern node implements `accept(Visitor& visitor)` which calls the corresponding `visit` method on the visitor.
 
 ```cpp
-// In Visitor interface (include/vyn/parser/ast.hpp)
+// In Visitor interface (include/vyb/parser/ast.hpp)
 class Visitor {
 public:
     // ... other visit methods ...
@@ -263,4 +263,4 @@ public:
 };
 ```
 
-This structure, as defined in `include/vyn/parser/ast.hpp`, provides a comprehensive way to represent patterns in the AST and integrate them with the existing Visitor design pattern.
+This structure, as defined in `include/vyb/parser/ast.hpp`, provides a comprehensive way to represent patterns in the AST and integrate them with the existing Visitor design pattern.

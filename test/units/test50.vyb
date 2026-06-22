@@ -1,0 +1,18 @@
+// test50.vyb - Tests borrow(expr) and view(expr) syntax
+main()<Int> -> {
+    x<my<Int>> = my(10);
+
+    {
+        // Test borrow() for mutable borrow
+        b<their<Int>> = borrow(x);
+        b = 20; // Modify through the borrow
+    }
+
+    {
+        // Test view() for immutable borrow
+        v<their<Int const>> = view(x);
+    }
+
+    // Verify that x was modified through b
+    return x; // Should return 20
+}

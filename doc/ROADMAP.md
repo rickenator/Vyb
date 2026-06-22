@@ -1,10 +1,10 @@
-# Vyn Language Roadmap
+# VyB Language Roadmap
 
 **Last Updated:** February 2026 (v0.5.1)
 
 > For actionable sprint-organized suggestions, see [`../SUGGESTIONS.md`](../SUGGESTIONS.md).
 
-This document outlines the completed features, ongoing development, and future considerations for the Vyn programming language.
+This document outlines the completed features, ongoing development, and future considerations for the VyB programming language.
 
 ## Current Status (v0.5.1)
 
@@ -29,31 +29,31 @@ This document outlines the completed features, ongoing development, and future c
 
 ### Variadic Tuple System (v0.4.0)
 
-Vyn now supports **fully variadic tuple types** with comprehensive 1-to-N type parameter support:
+VyB now supports **fully variadic tuple types** with comprehensive 1-to-N type parameter support:
 
 **Features Implemented:**
 - ✅ **Dual Syntax Support:**
-  - Inline syntax: `main()<Int, String, Bool>` 
+  - Inline syntax: `main()<Int, String, Bool>`
   - Generic syntax: `main()<Tuple<Int, String, Bool>>`
   - Both produce identical LLVM anonymous struct types
-  
+
 - ✅ **Complete Variadic Range:**
   - Single-element tuples: `Tuple<Int>` with auto-wrapping
   - Multi-element tuples: 2-7+ elements tested and verified
   - No theoretical upper limit on element count
-  
+
 - ✅ **Type System Integration:**
   - Generic type parameter processing in `cgen_types.cpp`
   - Sequence expression handling in `cgen_expr.cpp`
   - Return statement auto-wrapping in `cgen_stmt.cpp`
   - Full type safety and compile-time checking
-  
+
 - ✅ **Complex Type Support:**
   - Primitive types: Int, Float, Bool
   - String types with proper memory management
   - Collection types: Vec<T> in tuples
   - Custom struct types (planned)
-  
+
 - ✅ **Comprehensive Testing:**
   - 9 test files covering edge cases
   - Single-element tuple edge case verified
@@ -118,8 +118,8 @@ The immediate focus for the next release:
 1. **✅ Static Linking (COMPLETED v0.4.4):** Link .o files into standalone executables
    - ✅ Invoke system linker (ld, lld) with platform detection
    - ✅ Link against libc and runtime libraries
-   - ✅ Runtime library implementation (vyn_runtime.c)
-   - ✅ Command: `vyn program.vyn --build myapp`
+   - ✅ Runtime library implementation (vyb_runtime.c)
+   - ✅ Command: `vyb program.vyb --build myapp`
    - ✅ Full compilation pipeline: source → object → executable
    - See `doc/MODULE_FFI_BINARY_ROADMAP.md` Phase 3.2 ✅ COMPLETED
 
@@ -130,11 +130,11 @@ The immediate focus for the next release:
    - ✅ `T::from_string(json)` creates instances from JSON strings
    - ✅ Support for Int, Float, Bool, String primitive types
    - ✅ Full round-trip conversion: struct → JSON → struct → field access
-   - ✅ String conversion: char* to VynString{data, length} struct
+   - ✅ String conversion: char* to VyBString{data, length} struct
    - ✅ Member access fix: always load field values (critical bug resolved)
    - ✅ Comprehensive test suite in `test/json/`
    - ✅ Production-ready with clean codebase (debug output removed)
-   - See `runtime/vyn_type_metadata.c` for implementation
+   - See `runtime/vyb_type_metadata.c` for implementation
    - Future: Nested structs, Vec<T> serialization, aspect metadata
 
 ### 📋 CURRENT FOCUS (v0.5.0+)
@@ -161,7 +161,7 @@ The immediate focus for the next release:
 ## Project Structure and Organization
 
 ### Proposed Refactoring (Future Task)
-As the Vyn project grows, a more structured directory layout will be beneficial for maintainability, readability, and scalability.
+As the VyB project grows, a more structured directory layout will be beneficial for maintainability, readability, and scalability.
 
 -   **Goal:** Improve overall project organization and clearly separate components.
 -   **Proposed Source Structure (`src/`):**
@@ -169,10 +169,10 @@ As the Vyn project grows, a more structured directory layout will be beneficial 
     -   `parser/`: Lexer, parser logic, and related utilities.
     -   `sema/` or `analyzer/`: Semantic analysis, type checking.
     -   `codegen/` or `llvm_backend/`: LLVM IR generation and compilation logic.
-    -   `vre/`: Vyn Runtime Environment components (core runtime, standard library C++ implementations).
+    -   `vre/`: VyB Runtime Environment components (core runtime, standard library C++ implementations).
     -   `core/` or `common/`: Common utilities, data structures, error reporting used across the compiler.
     -   `main/`: Main executable entry point, REPL implementation.
--   **Proposed Include Structure (`include/vyn/`):**
+-   **Proposed Include Structure (`include/vyb/`):**
     -   `ast/`: Header files for AST node definitions.
     -   `parser/`: Header files for parser interfaces, token definitions.
     -   `sema/` or `analyzer/`: Header files for semantic analysis components.
@@ -186,16 +186,16 @@ As the Vyn project grows, a more structured directory layout will be beneficial 
 
 #### Codebase Cleanup and Organization
 
--   **Address Duplicate Files**: Resolve the duplication of header and source files identified in `/include/vyn/` and `/src/` directories by consolidating them into the `/parser/` subdirectories as planned.
--   **Implement Proposed Directory Structure**: Refactor the codebase to follow the proposed `src/` and `include/vyn/` directory layouts (`ast/`, `parser/`, `sema/`, `codegen/`, `vre/`, `core/`).
+-   **Address Duplicate Files**: Resolve the duplication of header and source files identified in `/include/vyb/` and `/src/` directories by consolidating them into the `/parser/` subdirectories as planned.
+-   **Implement Proposed Directory Structure**: Refactor the codebase to follow the proposed `src/` and `include/vyb/` directory layouts (`ast/`, `parser/`, `sema/`, `codegen/`, `vre/`, `core/`).
 -   **Review for Stale/Unused Code**: Conduct a thorough review of the codebase to identify and remove any other stale or unused files and code segments.
 
 ### Build System and Includes
 
--   **`vyn.hpp` as a Central Include:**
-    -   The file `include/vyn/vyn.hpp` was initially conceived not just to house the EBNF grammar but to serve as a primary, top-level include file for essential Vyn definitions, core types, and widely used utilities.
-    -   Utilities such as `source_location.hpp` and potentially `token.hpp` should ideally be directly included by `vyn.hpp` or be part of a core module that `vyn.hpp` exposes. This approach simplifies include management for different parts of the Vyn compiler and for any external tools that might interact with Vyn's core components.
-    -   The EBNF grammar, if kept in `vyn.hpp`, should be clearly demarcated (e.g., within a large comment block) if the file also serves as an active header for code. Alternatively, the EBNF could reside purely in a design document like `AST.md`.
+-   **`vyb.hpp` as a Central Include:**
+    -   The file `include/vyb/vyb.hpp` was initially conceived not just to house the EBNF grammar but to serve as a primary, top-level include file for essential VyB definitions, core types, and widely used utilities.
+    -   Utilities such as `source_location.hpp` and potentially `token.hpp` should ideally be directly included by `vyb.hpp` or be part of a core module that `vyb.hpp` exposes. This approach simplifies include management for different parts of the VyB compiler and for any external tools that might interact with VyB's core components.
+    -   The EBNF grammar, if kept in `vyb.hpp`, should be clearly demarcated (e.g., within a large comment block) if the file also serves as an active header for code. Alternatively, the EBNF could reside purely in a design document like `AST.md`.
 
 ## Future Language & System Considerations
 
@@ -252,7 +252,7 @@ As the Vyn project grows, a more structured directory layout will be beneficial 
   - Requires semicolon terminator after closing brace
 
 - **Syntax**:
-  ```vyn
+  ```vyb
   result<Int> = select(value) -> {
       1 -> 10,              // Naked expression (auto-returns)
       2 -> 20,
@@ -295,7 +295,7 @@ As the Vyn project grows, a more structured directory layout will be beneficial 
   - Natural fit for functional-style programming
   - Supports complex logic in blocks while maintaining expression semantics
 
-**Status**: ✅ Fully implemented and tested with test_select_simple.vyn and test_select_pass.vyn.
+**Status**: ✅ Fully implemented and tested with test_select_simple.vyb and test_select_pass.vyb.
 
 #### Range/Comparison Patterns ✅
 
@@ -309,7 +309,7 @@ An enhancement to both `match` and `select` to support comparison-based patterns
   - Complements exact-match patterns with relational operators
 
 - **Syntax Examples**:
-  ```vyn
+  ```vyb
   // Select expression with comparison patterns
   grade<String> = select(score) -> {
       >= 90 -> { pass "A" },
@@ -318,7 +318,7 @@ An enhancement to both `match` and `select` to support comparison-based patterns
       >= 60 -> { pass "D" },
       ?     -> { pass "F" }
   }
-  
+
   // Match statement with comparison patterns
   match (temperature) {
       < 0   -> println("Freezing"),
@@ -326,7 +326,7 @@ An enhancement to both `match` and `select` to support comparison-based patterns
       < 30  -> println("Comfortable"),
       >= 30 -> println("Hot")
   }
-  
+
   // Mixed comparison operators
   result<Int> = select(value) -> {
       == 0  -> 1,        // Exact equality
@@ -355,49 +355,49 @@ An enhancement to both `match` and `select` to support comparison-based patterns
   - Example: Pattern `>= 18` means "is matched_value >= 18?"
 
 - **Unreachable Pattern Detection** ⚠️:
-  
+
   The semantic analyzer enforces pattern reachability as **compile-time errors**:
-  
+
   1. **Wildcard in Middle**: `?` followed by any pattern
-     ```vyn
+     ```vyb
      match (x) {
          >= 90 -> "A",
          ? -> "other",      // Catches everything
          >= 80 -> "B"       // ERROR: Unreachable (already caught by ?)
      }
      ```
-  
+
   2. **Subsumed Comparisons**: Broader pattern before narrower
-     ```vyn
+     ```vyb
      select(score) -> {
          >= 80 -> 1,        // Catches 80+
          >= 90 -> 2         // ERROR: 90+ already caught by >= 80
      }
      ```
-  
+
   3. **Duplicate Patterns**: Same pattern appearing twice
-     ```vyn
+     ```vyb
      match (x) {
          == 75 -> "first",
          == 75 -> "second"  // ERROR: Duplicate pattern
      }
      ```
-  
+
   4. **Range Subsumption**: Exact match covered by range
-     ```vyn
+     ```vyb
      select(n) -> {
          >= 70 -> 1,        // Catches 70+
          == 75 -> 2         // ERROR: 75 already caught by >= 70
      }
      ```
-  
+
   **Error Messages**:
   - `"Pattern after wildcard in case N is unreachable"`
   - `"Pattern '>= 90' in case N is subsumed by earlier '>= 80' (case M)"`
   - `"Pattern '== 75' in case N is duplicate pattern (case M)"`
   - `"Pattern '== 75' in case N is covered by earlier '>= 70' (case M)"`
-  
-  **Design Philosophy**: 
+
+  **Design Philosophy**:
   - Flexible pattern ordering (no forced monotonic constraints)
   - But **no tolerance for sloppy code** that can never execute
   - Catches common logic errors at compile time
@@ -425,9 +425,9 @@ An enhancement to both `match` and `select` to support comparison-based patterns
   6. ⏳ Full type checking for comparison compatibility
 
 - **Test Coverage**:
-  - `test/select_match/test_comparison_simple.vyn` - Basic comparison patterns
-  - `test/select_match/test_comparison_patterns.vyn` - All six operators
-  - `test/select_match/test_unreachable_patterns.vyn` - Error detection
+  - `test/select_match/test_comparison_simple.vyb` - Basic comparison patterns
+  - `test/select_match/test_comparison_patterns.vyb` - All six operators
+  - `test/select_match/test_unreachable_patterns.vyb` - Error detection
 
 **Status**: ✅ Fully implemented for Int/Float types with unreachable pattern detection. String comparison operators remain as future enhancement.
 
@@ -447,7 +447,7 @@ A production-ready error handling system combining explicit propagation with zer
 #### **Implemented Features** ✅
 
 **fail Statement:**
-```vyn
+```vyb
 # Primitive errors
 fail 42                    # Integer error code
 fail "not found"           # String error message
@@ -463,7 +463,7 @@ fail DivisionError { code = 42, dividend = 10, divisor = 0 }
 ```
 
 **trap Handlers:**
-```vyn
+```vyb
 # Postfix syntax with pattern matching
 result<Int> = {
     risky_operation()
@@ -508,11 +508,11 @@ Heap-allocated struct (16 bytes):
 #### **Planned Enhancements** 🔜
 
 **Phase 6.3 - ensure Keyword: ✅ COMPLETED v0.4.2**
-```vyn
+```vyb
 # Cleanup/finally blocks that always execute
 process_with_cleanup(path<String>)<String> -> {
     file<File> = open_file(path)
-    
+
     result<String> = {
         file.read()
     } trap (e<IOError>) -> {
@@ -520,7 +520,7 @@ process_with_cleanup(path<String>)<String> -> {
     } ensure -> {
         file.close()  # Always runs, success or failure
     }
-    
+
     return result
 }
 
@@ -535,11 +535,11 @@ process_with_cleanup(path<String>)<String> -> {
 # - AST: EnsureClause with cleanupBlock
 # - Semantic: Validates ensure placement
 # - Codegen: Inlined control flow (block.normal → block.ensure → block.continue)
-# - Test: test/trap/test_ensure_simple.vyn demonstrates working implementation
+# - Test: test/trap/test_ensure_simple.vyb demonstrates working implementation
 ```
 
 **Phase 6.4 - Stack Trace Capture (Planned for v0.4.4):** 📍 HIGH PRIORITY
-```vyn
+```vyb
 # Capture source-level stack traces on fail
 divide(a<Int>, b<Int>)<Int> -> {
     if (b == 0) {
@@ -554,13 +554,13 @@ divide(a<Int>, b<Int>)<Int> -> {
 } trap (e<DivisionError>) -> {
     println("Error occurred:")
     println(e.stack_trace())  # Shows full call chain
-    
+
     # Output:
     # Error: DivisionError { dividend = 10, divisor = 0 }
-    #   at divide (math.vyn:45:9)
-    #   at compute (calc.vyn:23:15)
-    #   at main (main.vyn:12:5)
-    
+    #   at divide (math.vyb:45:9)
+    #   at compute (calc.vyb:23:15)
+    #   at main (main.vyb:12:5)
+
     -1
 }
 
@@ -572,7 +572,7 @@ aspect Errable {
 ```
 
 **Phase 6.5 - Wildcard Pattern (Planned for v0.4.5):**
-```vyn
+```vyb
 # Catch-all handler for any error type
 {
     operation()
@@ -587,7 +587,7 @@ aspect Errable {
 **Note**: ✅ Phase 1 introspection (typeof/typename) completed in v0.4.2, enabling wildcard trap implementation. Wildcard patterns now ready for implementation.
 
 **Phase 6.6 - Multi-Type Trap Block (v0.6.0):**
-```vyn
+```vyb
 # Single trap handler for multiple error types
 {
     operation()
@@ -604,18 +604,18 @@ aspect Errable {
 
 **Phase 6.7 - Standard Library Error Types (v0.6.1+):**
 
-Note: Runtime error infrastructure (VynError struct, heap allocation, type IDs) already exists.
-This phase is about exposing it to Vyn code through standard library types:
+Note: Runtime error infrastructure (VyBError struct, heap allocation, type IDs) already exists.
+This phase is about exposing it to VyB code through standard library types:
 
 - **Errable aspect**: Define aspect for types that can be used as errors
-- **Error base type**: Standard Vyn struct wrapping runtime VynError
+- **Error base type**: Standard VyB struct wrapping runtime VyBError
 - **Display aspect**: General formatting aspect for all types
 - **bind implementations**: Implement Errable and Display for common error types
 - **Error context chaining**: Wrap errors with additional context (needs aspect system)
 - **Custom error formatting**: User-defined error display (needs Display aspect)
 - **Error metrics hooks**: Optional telemetry integration
 
-**NOT NEEDED**: Result<T,E> - Vyn's trap/fail system is superior for systems programming
+**NOT NEEDED**: Result<T,E> - VyB's trap/fail system is superior for systems programming
 
 #### **Performance Characteristics**
 
@@ -634,7 +634,7 @@ This phase is about exposing it to Vyn code through standard library types:
 **Comparison Table:**
 | Approach | Success Overhead | Error Overhead | Hidden Control Flow | Compile-time Safety |
 |----------|-----------------|----------------|---------------------|---------------------|
-| **Vyn trap/fail** | ~1 comparison | 1 malloc + type match | No | Yes |
+| **VyB trap/fail** | ~1 comparison | 1 malloc + type match | No | Yes |
 | C++ exceptions | Exception tables | Stack unwinding + alloc | Yes | Partial |
 | Rust Result<T,E> | Match overhead | Enum size increase | No | Yes |
 | Go error returns | Comparison + check | Allocation | No | Weak |
@@ -642,10 +642,10 @@ This phase is about exposing it to Vyn code through standard library types:
 #### **Test Coverage**
 
 Complete test suite in `test/trap/`:
-- `test_multilevel_propagation.vyn` - Error propagation through 3 levels
-- `test_custom_error.vyn` - Struct errors with field access
-- `test_multiple_error_types.vyn` - Multiple trap handlers
-- `test_untrapped.vyn` - Runtime error termination
+- `test_multilevel_propagation.vyb` - Error propagation through 3 levels
+- `test_custom_error.vyb` - Struct errors with field access
+- `test_multiple_error_types.vyb` - Multiple trap handlers
+- `test_untrapped.vyb` - Runtime error termination
 - Plus 11 additional comprehensive tests
 
 **All 15 tests passing** ✅
@@ -665,7 +665,7 @@ A runtime type introspection system providing typeof and typename operators for 
 - Enable safe downcasting and type narrowing
 
 **Fundamental Operations:**
-```vyn
+```vyb
 # Get runtime type information
 type_info<Type> = typeof(value)
 
@@ -687,7 +687,7 @@ name<String> = typename(value)  # "Int", "String", "CustomError"
 #### **Integration Points**
 
 **1. Wildcard Pattern Support:**
-```vyn
+```vyb
 # In match/select
 result<String> = select(value) -> {
     1 -> "one",
@@ -710,14 +710,14 @@ result<String> = select(value) -> {
 ```
 
 **2. Multi-Type Trap Blocks:**
-```vyn
+```vyb
 # Single handler for multiple types
 {
     operation()
 } trap (e<ParseError | ValidationError | DatabaseError>) -> {
     # Introspection determines actual type
     name<String> = typename(e)
-    
+
     if (typeof(e) == typeof<ParseError>()) {
         parse_err<ParseError> = e as ParseError
         println("Parse error at position: " + String::from_int(parse_err.position))
@@ -732,7 +732,7 @@ result<String> = select(value) -> {
 ```
 
 **3. Generic Serialization:**
-```vyn
+```vyb
 # Auto-derive serialization using introspection
 serialize<T>(value<T>)<String> -> {
     match (typeof(value)) {
@@ -757,7 +757,7 @@ serialize<T>(value<T>)<String> -> {
 - ✅ Hash-based type ID system using std::hash<std::string>
 - ✅ LLVM codegen with string struct creation for typename
 - ✅ Comprehensive test suite in test/introspection/
-- ✅ println() fixed to properly output Vyn string types
+- ✅ println() fixed to properly output VyB string types
 
 **Phase 2: Safe Downcasting (v0.5.0)**
 - `as` operator for safe type narrowing
@@ -828,7 +828,7 @@ A planned feature to introduce fine-grained control over module visibility using
   - **`bundle(...)`**: Declares which bundles (packages/subsystems) a module belongs to
   - **`share(...)`**: Controls which bundles can see each declaration
   - **Import validation**: Ensures modules import only symbols shared with their bundles
-  
+
 - **Visibility Control**:
   - `bundle(sort, sort.Core)` at file level declares package membership
   - `share(all)` exports a symbol to all modules
@@ -851,7 +851,7 @@ See `doc/bundles_and_sharing.md` for detailed documentation.
 
 ✅ **IMPLEMENTED in v0.3.7** - Zero-boilerplate JSON serialization for data structures returned from `main()`:
 
-- **Core Functionality**: The Vyn compiler/runtime automatically:
+- **Core Functionality**: The VyB compiler/runtime automatically:
   - Calls `main()` and inspects the return type `T`
   - If `T` is a simple integer, uses it as the process exit code
   - If `T` is complex (tuples, structs), outputs structured JSON-like data
@@ -873,16 +873,16 @@ See `doc/bundles_and_sharing.md` for detailed documentation.
   - Clear error messages guiding developers to convert or extract serializable data
 
 - **Runner Behavior**:
-  - Standard mode: `vyn run program.vyn` will auto-print JSON or exit code
-  - Explicit JSON mode: `vyn run --json program.vyn` (future feature)
+  - Standard mode: `vyb run program.vyb` will auto-print JSON or exit code
+  - Explicit JSON mode: `vyb run --json program.vyb` (future feature)
   - Proper error handling for exceptions and serialization failures
 
-This feature will enable scripts and API-style binaries to return structured data without manual printing logic, enhancing Vyn's utility for data processing and service development.
+This feature will enable scripts and API-style binaries to return structured data without manual printing logic, enhancing VyB's utility for data processing and service development.
 
 ### Function Syntax Investigation
 
 ✅ **IMPLEMENTED in v0.4.0** - **Unified Syntax Revolution**: Successfully replaced keyword-heavy syntax with clean `name<Type>` patterns:
-    ```vyn
+    ```vyb
     example()<Int> -> { ... }  // Modern unified syntax (v0.4.0+)
     fn<Int> example() -> { ... }  // Legacy syntax (still supported)
     ```
@@ -901,7 +901,7 @@ This feature will enable scripts and API-style binaries to return structured dat
 ### Aspect System Implementation (v0.4.2+)
 
 **HIGH PRIORITY** - Comprehensive aspect system for user-extensible polymorphism.
-Vyn uses `aspect`/`bind` — not `trait`/`impl` (Rust vocabulary).
+VyB uses `aspect`/`bind` — not `trait`/`impl` (Rust vocabulary).
 
 #### Phase 1: Aspect Declarations (v0.4.2) — COMPLETED
 - **Aspect Definition Syntax**: `aspect Comparable { lt(self<their<Self>>, other<their<Self>>)<Bool> -> }`
@@ -933,7 +933,7 @@ Vyn uses `aspect`/`bind` — not `trait`/`impl` (Rust vocabulary).
 - **Visibility System**: Module-level privacy for encapsulation
 - **Default Type Parameters**: `struct Vec<T, Alloc = DefaultAllocator>`
 
-**Note**: Vyn deliberately avoids classes and inheritance hierarchies. The aspect system
+**Note**: VyB deliberately avoids classes and inheritance hierarchies. The aspect system
 provides all necessary polymorphism and code reuse without the complexity and pitfalls of
 OOP inheritance. See `doc/WHY_ASPECTS_NOT_CLASSES.md` for detailed rationale.
 
@@ -943,8 +943,8 @@ See `doc/TRAIT_SYSTEM_DESIGN.md` for complete specification and design rationale
 
 The following features are planned for future releases (no particular priority order):
 
-1. **Self-Hosted Standard Library**: Bootstrap a pure Vyn stdlib implementation
-   - Core data structures (Vec, Map, Set) in native Vyn
+1. **Self-Hosted Standard Library**: Bootstrap a pure VyB stdlib implementation
+   - Core data structures (Vec, Map, Set) in native VyB
    - I/O primitives and file handling
    - String manipulation utilities
    - Math and numeric operations
@@ -994,13 +994,13 @@ The following features are planned for future releases (no particular priority o
 The following points were previously noted in `ROADMAP.txt` and are retained here for future planning:
 
 -   **Template Placement**: Explore allowing template/generic declarations in more contexts beyond just module-level (e.g., within functions, nested scopes) if deemed beneficial for advanced metaprogramming scenarios. Currently, templates are primarily module-level items.
--   **Dedicated Header Files (`.vyh` or similar)**: Investigate the potential need for dedicated header files (e.g., `.vyh`) for separating public interfaces, public template/generic definitions, and type declarations from implementation files (`.vyn`). This could improve organization, reduce compilation dependencies, and potentially speed up compile times for larger Vyn projects by allowing for more explicit module boundaries.
+-   **Dedicated Header Files (`.vyh` or similar)**: Investigate the potential need for dedicated header files (e.g., `.vyh`) for separating public interfaces, public template/generic definitions, and type declarations from implementation files (`.vyb`). This could improve organization, reduce compilation dependencies, and potentially speed up compile times for larger VyB projects by allowing for more explicit module boundaries.
 
 ## Documentation
-Key design and planning documents for Vyn:
+Key design and planning documents for VyB:
 
--   `doc/AST.md`: Detailed description of the Vyn Abstract Syntax Tree nodes and structure.
--   `doc/VRE.md`: Preliminary design for the Vyn Runtime Environment.
+-   `doc/AST.md`: Detailed description of the VyB Abstract Syntax Tree nodes and structure.
+-   `doc/VRE.md`: Preliminary design for the VyB Runtime Environment.
 -   `doc/ROADMAP.md`: This document, outlining project direction and future plans.
 
 ---

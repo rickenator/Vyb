@@ -8,10 +8,10 @@ From the repository root:
 
 ```bash
 # Option 1: explicit stdlib root
-VYN_STDLIB=stdlib ./build/vyn examples/stdlib_demo/main.vyn
+VYB_STDLIB=stdlib ./build/vyb examples/stdlib_demo/main.vyb
 
 # Option 2: executable-relative discovery (works from this repo layout)
-./build/vyn examples/stdlib_demo/main.vyn
+./build/vyb examples/stdlib_demo/main.vyb
 ```
 
 Expected output: `42`

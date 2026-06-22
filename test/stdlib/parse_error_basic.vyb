@@ -1,0 +1,54 @@
+// @expect-return: 3
+# Test ParseError with line/column info
+
+aspect Errable {
+    message(self<Self>)<String> -> { }
+    code(self<Self>)<Int> -> { }
+}
+
+aspect Display {
+    display(self<Self>)<String> -> { }
+}
+
+struct ParseError {
+    message<String>,
+    code<Int>,
+    line<Int>,
+    column<Int>
+}
+
+bind Errable -> ParseError {
+    message(self<Self>)<String> -> {
+        return self.message;
+    }
+
+    code(self<Self>)<Int> -> {
+        return self.code;
+    }
+}
+
+bind Display -> ParseError {
+    display(self<Self>)<String> -> {
+        return self.message;
+    }
+}
+
+parseJson(input<String>)<Int> -> {
+    fail ParseError {
+        message = "Unexpected token",
+        code = 1,
+        line = 10,
+        column = 5
+    };
+}
+
+main()<Int> -> {
+    result<Int> = {
+        parseJson("{ invalid json }")
+    } trap (e<ParseError>) -> {
+        # Successfully caught ParseError
+        return 3;
+    }
+
+    return result;
+}

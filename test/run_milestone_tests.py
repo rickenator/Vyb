@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Run the Vyn milestone gate.
+Run the VyB milestone gate.
 
 The gate intentionally aggregates multiple stable suites through run_tests.py
 and fails if the total number of passing tests drops below the milestone floor.
@@ -24,7 +24,7 @@ class Suite:
     name: str
     path: str
     execute_jit: bool = True
-    pattern: str = "*.vyn"
+    pattern: str = "*.vyb"
 
 
 MILESTONE_SUITES = [
@@ -33,10 +33,10 @@ MILESTONE_SUITES = [
     Suite("ffi", "test/ffi"),
     Suite("ownership", "test/ownership"),
     Suite("error_trap_phase2", "test/error_trap/phase2"),
-    Suite("trap_propagation", "test/trap", pattern="propagation_no_trap.vyn"),
-    Suite("trap_untrapped_main", "test/trap", pattern="propagation_to_main.vyn"),
-    Suite("trap_defer_fail", "test/trap", pattern="defer_runs_on_fail.vyn"),
-    Suite("trap_non_failable_reject", "test/trap", pattern="non_failable_caller_rejected.vyn"),
+    Suite("trap_propagation", "test/trap", pattern="propagation_no_trap.vyb"),
+    Suite("trap_untrapped_main", "test/trap", pattern="propagation_to_main.vyb"),
+    Suite("trap_defer_fail", "test/trap", pattern="defer_runs_on_fail.vyb"),
+    Suite("trap_non_failable_reject", "test/trap", pattern="non_failable_caller_rejected.vyb"),
     Suite("basic", "test/basic"),
     Suite("string", "test/string"),
     Suite("math", "test/math"),
@@ -54,17 +54,17 @@ def repo_root() -> Path:
         if (current / "CMakeLists.txt").exists() and (current / "src" / "tests.cpp").exists():
             return current
         current = current.parent
-    raise RuntimeError("Could not find Vyn repository root")
+    raise RuntimeError("Could not find VyB repository root")
 
 
-def run_suite(root: Path, suite: Suite, vyn: str, verbose: bool) -> tuple[int, int]:
-    with tempfile.TemporaryDirectory(prefix=f"vyn-{suite.name}-") as temp_dir:
+def run_suite(root: Path, suite: Suite, vyb: str, verbose: bool) -> tuple[int, int]:
+    with tempfile.TemporaryDirectory(prefix=f"vyb-{suite.name}-") as temp_dir:
         json_path = Path(temp_dir) / "results.json"
         cmd = [
             sys.executable,
             str(root / "test" / "run_tests.py"),
-            "--vyn",
-            vyn,
+            "--vyb",
+            vyb,
             "--test-dir",
             str(root / suite.path),
             "--json",
@@ -98,21 +98,21 @@ def run_suite(root: Path, suite: Suite, vyn: str, verbose: bool) -> tuple[int, i
 
 def main() -> int:
     root = repo_root()
-    parser = argparse.ArgumentParser(description="Run the Vyn milestone test gate")
-    parser.add_argument("--vyn", default=str(root / "build" / "vyn"), help="Path to the Vyn executable")
+    parser = argparse.ArgumentParser(description="Run the VyB milestone test gate")
+    parser.add_argument("--vyb", default=str(root / "build" / "vyb"), help="Path to the VyB executable")
     parser.add_argument("--minimum", type=int, default=MILESTONE_MINIMUM, help="Minimum passing tests required")
     parser.add_argument("--verbose", "-v", action="store_true", help="Show full per-test output")
     args = parser.parse_args()
 
-    if not os.path.isfile(args.vyn):
-        print(f"Error: Cannot find Vyn executable at {args.vyn}", file=sys.stderr)
+    if not os.path.isfile(args.vyb):
+        print(f"Error: Cannot find VyB executable at {args.vyb}", file=sys.stderr)
         return 1
 
     total_ran = 0
     total_passed = 0
     try:
         for suite in MILESTONE_SUITES:
-            ran, passed = run_suite(root, suite, args.vyn, args.verbose)
+            ran, passed = run_suite(root, suite, args.vyb, args.verbose)
             total_ran += ran
             total_passed += passed
     except RuntimeError as exc:

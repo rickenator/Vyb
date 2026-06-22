@@ -1,8 +1,8 @@
-# Vyn Runtime: Mutability, Ownership, and References
+# VyB Runtime: Mutability, Ownership, and References
 
 ## 1. Overview
 
-Vyn's memory model is designed for safety and explicitness, drawing inspiration from modern systems languages. It distinguishes between:
+VyB's memory model is designed for safety and explicitness, drawing inspiration from modern systems languages. It distinguishes between:
 1.  **Binding Mutability**: Whether a variable can be reassigned (default mutable vs `const`).
 2.  **Ownership**: Who is responsible for managing the memory of data (`my<T>`, `our<T>`, `their<T>`).
 3.  **Data Mutability**: Whether the data itself can be changed, often indicated by `const` on the type (e.g., `my<T const>`).
@@ -10,14 +10,14 @@ Vyn's memory model is designed for safety and explicitness, drawing inspiration 
 
 This document details these aspects, aligning with the `mem_RFC.md` proposal.
 
-**Runtime Note**: As of v0.4.0, Vyn uses LLVM's modern ORC JIT infrastructure, providing robust memory management and excellent compatibility with the ownership and borrowing system described here.
+**Runtime Note**: As of v0.4.0, VyB uses LLVM's modern ORC JIT infrastructure, providing robust memory management and excellent compatibility with the ownership and borrowing system described here.
 
 ## 2. Variable Declarations and Binding Mutability
 
-Vyn uses two keywords for variable bindings:
+VyB uses two keywords for variable bindings:
 
 *   **`var`**: Declares a mutable binding. The variable can be reassigned to a new value or a different instance of its type.
-    ```vyn
+    ```vyb
     var x: Int = 10;
     x = 20; // Allowed
 
@@ -26,7 +26,7 @@ Vyn uses two keywords for variable bindings:
     ```
 
 *   **`const`**: Declares an immutable binding. The variable cannot be reassigned after initialization.
-    ```vyn
+    ```vyb
     const<Float> PI = 3.14159;
     // PI = 3.0; // Error: cannot reassign a const binding
 
@@ -35,7 +35,7 @@ Vyn uses two keywords for variable bindings:
     ```
     Note: `const` on a binding only prevents reassignment. If the bound value holds a mutable type (e.g., `my<Data>`), the data *within* that value might still be modifiable through methods on `Data`, unless the type itself is immutable (e.g., `my<Data const>`).
 
-    ```vyn
+    ```vyb
     class Counter { value<Int> = 0; fn increment(&mut self) { self.value = self.value + 1; } }
     const<my<Counter>> c = my(Counter{});
     // c = my(Counter{}); // Error: c is a const binding
@@ -47,7 +47,7 @@ Vyn uses two keywords for variable bindings:
 
 ## 3. Ownership Qualifiers and Data Mutability
 
-Vyn employs ownership types to manage memory and control data access:
+VyB employs ownership types to manage memory and control data access:
 
 *   **`my<T>`**: Unique-owning pointer (similar to Rust's `Box<T>`). Only one `my<T>` can own the data. When a `my<T>` goes out of scope, the data is deallocated.
 *   **`our<T>`**: Shared-owning pointer (reference-counted, like `Rc<T>`/`Arc<T>`). Multiple `our<T>` pointers can co-own the data. The data is deallocated when the last `our<T>` is dropped.
@@ -67,7 +67,7 @@ Vyn employs ownership types to manage memory and control data access:
 Borrowed references (`their<T>`) are created using `borrow(expr)` and `view(expr)`:
 
 *   **`view(expr)`**: Creates an immutable borrow `their<T const>`. This provides a read-only view of the data.
-    ```vyn
+    ```vyb
     owner<my<Foo>> = my(Foo{ value: 10 });
     immutable_ref<their<Foo const>> = view(owner);
     // immutable_ref.value = 20; // Error: cannot modify through their<T const>
@@ -75,7 +75,7 @@ Borrowed references (`their<T>`) are created using `borrow(expr)` and `view(expr
     ```
 
 *   **`borrow(expr)`**: Creates a mutable borrow `their<T>`. This allows modification of the data, subject to borrowing rules (e.g., no other active borrows to the same data).
-    ```vyn
+    ```vyb
     owner<my<Foo>> = my(Foo{ value: 10 });
     mutable_ref<their<Foo>> = borrow(owner);
     mutable_ref.value = 20; // OK, owner.value is now 20
@@ -89,13 +89,13 @@ The compiler enforces borrow-checking rules to ensure memory safety (e.g., preve
 Function parameters use ownership types to define how arguments are passed:
 
 *   **`param: T`** (where `T` is a value type like `Int`, `Bool`, or a struct passed by value): The argument is passed by value (copied).
-    ```vyn
+    ```vyb
     fn process_value(data: Int) { /* ... */ }
     process_value(10);
     ```
 
 *   **`param: my<T>`** (or `our<T>`): The argument is moved into the function. The caller loses ownership.
-    ```vyn
+    ```vyb
     fn consume_data(data: my<Foo>) { /* data is now owned by this function */ }
     my_foo<my<Foo>> = my(Foo{});
     consume_data(my_foo);
@@ -103,7 +103,7 @@ Function parameters use ownership types to define how arguments are passed:
     ```
 
 *   **`param: their<T>`**: The function receives a mutable borrow. The original data must be accessible via a mutable path.
-    ```vyn
+    ```vyb
     fn modify_data(data: their<Foo>) {
         data.value = data.value + 1;
     }
@@ -112,7 +112,7 @@ Function parameters use ownership types to define how arguments are passed:
     ```
 
 *   **`param: their<T const>`**: The function receives an immutable borrow. The original data can be mutable or immutable.
-    ```vyn
+    ```vyb
     fn read_data(data: their<Foo const>) {
         print(data.value);
         // data.value = 10; // Error
@@ -128,7 +128,7 @@ Function parameters use ownership types to define how arguments are passed:
 
 Fields within structs and classes are declared with a name and a type. Their mutability characteristics are primarily determined by the type system and the mutability of the struct/class instance.
 
-```vyn
+```vyb
 struct Point {
     x<Int>; // A field of value type
     y: Int;
@@ -169,4 +169,4 @@ This memory model, centered around `var`/`const` bindings, `my`/`our`/`their` ow
 -   **Offer Control**: Developers have fine-grained control over mutability at both the binding and type levels.
 -   **Enable Concurrency**: `our<T const>` is inherently safe for concurrent reads, and `our<Mutex<T>>` (or similar) can be used for shared mutable state.
 
-This model aligns Vyn with modern practices for safe and efficient systems programming.
+This model aligns VyB with modern practices for safe and efficient systems programming.

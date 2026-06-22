@@ -1,10 +1,10 @@
-# Vyn Language — Road to 1.0
+# VyB Language — Road to 1.0
 
-> **What is Vyn?** A statically typed, systems programming language with an LLVM backend,
+> **What is VyB?** A statically typed, systems programming language with an LLVM backend,
 > ownership semantics expressed as readable keywords (`my`, `our`, `their`, `mild`),
 > programmer-first memory control via `freedom` blocks, a struct + aspect model for
 > polymorphism, and a uniquely clean name-first function syntax—no `fn` keyword noise.
-> Vyn is not Rust. It is not C++. It is its own thing.
+> VyB is not Rust. It is not C++. It is its own thing.
 
 ---
 
@@ -40,7 +40,7 @@ is the working audit for what needs to be implemented next.
 | Introspection (`typeof`/`typename`) | ~75% | Downcasting, type assertions |
 | Auto-serialization | ~80% | Edge cases remain |
 | Pattern matching | ~60% | Destructuring, guards, enum variants |
-| Package manager / `vyn.toml` | ~0% | Not started |
+| Package manager / `vyb.toml` | ~0% | Not started |
 | Language server (LSP) | ~0% | Not started |
 | REPL | ~0% | Not started |
 | Self-hosting compiler | ~0% | Long-term goal |
@@ -95,7 +95,7 @@ is the working audit for what needs to be implemented next.
   - Comparison patterns (`>= 90`, `< 0`, etc.)
   - Literal patterns (int, float, string)
 - [x] **`select` expressions** — Pattern matching that yields a value, with `pass` for
-  explicit multi-statement returns (Vyn-original concept, no equivalent in other languages)
+  explicit multi-statement returns (VyB-original concept, no equivalent in other languages)
 
 ### Type System
 - [x] **Generic types** — `<T>`, `<K, V>` with proper scoping and substitution
@@ -112,7 +112,7 @@ is the working audit for what needs to be implemented next.
 - [x] **Member access** — `obj.field`, `arr[index]`
 - [x] **String concatenation** — `str1 + str2` with mixed-type auto-`toString`
 - [x] **`toString` intrinsics** — All primitive types
-- [x] **`typeof(expr)`** — Runtime type hash (8-byte i64) — uniquely Vyn introspection
+- [x] **`typeof(expr)`** — Runtime type hash (8-byte i64) — uniquely VyB introspection
 - [x] **`typename(expr)`** — Type name as `String`
 
 ### Memory & Ownership
@@ -121,7 +121,7 @@ is the working audit for what needs to be implemented next.
 - [x] **`view(expr)`/`borrow(expr)`** — Canonical call syntax with lexical borrow validation
 - [x] **`soft(expr)`** — Creates `mild<T>` from `our<T>` and attaches to the shared control block
 
-### Aspect/Bind System (Vyn's Polymorphism)
+### Aspect/Bind System (VyB's Polymorphism)
 - [x] **`aspect` declarations** — Method signatures, optional default implementations
 - [x] **Receiver shorthand** — `method(self)<T>` is canonical sugar for simple `self<Self>` aspect/bind receivers
 - [x] **`bind Aspect -> Type { ... }`** — Unbounded bind for concrete types
@@ -156,7 +156,7 @@ is the working audit for what needs to be implemented next.
 ### Auto-Serialization
 - [x] **`main()` return serialization** — Complex types auto-output as JSON
 - [x] **`lit()`, `notype()`, `bare()`, `deserial()` intrinsics** — Serialization control
-- [x] **JSON construction intrinsics** — `__vyn_serialize_to_json()`, struct metadata
+- [x] **JSON construction intrinsics** — `__vyb_serialize_to_json()`, struct metadata
 - [x] **JSON deserialization** — `T::from_string(json)` round-trip (v0.4.4)
 
 ### Infrastructure
@@ -171,9 +171,9 @@ is the working audit for what needs to be implemented next.
 ### Error Propagation — Phases 2-5 (HIGH PRIORITY)
 - [x] Phase 1: Semantic detection of failable functions (`canFail`)
 - [x] Phase 2: Dual return value codegen `{ T, ptr }` for failable functions
-- [x] Phase 3: `fail` statement returns error to caller when no trap in scope (`test/trap/propagation_no_trap.vyn`, `test/trap/defer_runs_on_fail.vyn`)
-- [x] Phase 4: Call site instrumentation — auto-check `{ value, error }` tuple (`test/trap/propagation_no_trap.vyn`, `test/trap/non_failable_caller_rejected.vyn`)
-- [x] Phase 5: Top-level untrapped error handler (`__vyn_runtime_untrapped_error`) (`test/trap/propagation_to_main.vyn`)
+- [x] Phase 3: `fail` statement returns error to caller when no trap in scope (`test/trap/propagation_no_trap.vyb`, `test/trap/defer_runs_on_fail.vyb`)
+- [x] Phase 4: Call site instrumentation — auto-check `{ value, error }` tuple (`test/trap/propagation_no_trap.vyb`, `test/trap/non_failable_caller_rejected.vyb`)
+- [x] Phase 5: Top-level untrapped error handler (`__vyb_runtime_untrapped_error`) (`test/trap/propagation_to_main.vyb`)
 
 ### Aspect System — Completion (HIGH PRIORITY)
 - [x] Phases 1-4: Declarations, method calls, generic impls, type param substitution
@@ -206,18 +206,18 @@ is the working audit for what needs to be implemented next.
 ## Planned — Needed for 1.0
 
 ### 1. Module System (HIGH PRIORITY)
-Vyn's `import`/`smuggle`/`bundle`/`share` system is a unique approach to module visibility.
+VyB's `import`/`smuggle`/`bundle`/`share` system is a unique approach to module visibility.
 See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
 
 - [x] **Phase 1.1 — Import Parsing** — `import <path>`, `import <path> as <alias>`, `import <path> from "<locator>"`, `smuggle <path> as <alias>`, `ImportKind` (TrustedImport / Smuggle) captured in AST
-- [x] **Phase 1.1 — Local Module Resolution** — local `import nested::module`, `import name from "./file.vyn"`, recursive loading, import deduping, and circular dependency detection before semantic analysis/codegen
+- [x] **Phase 1.1 — Local Module Resolution** — local `import nested::module`, `import name from "./file.vyb"`, recursive loading, import deduping, and circular dependency detection before semantic analysis/codegen
 - [x] **Phase 1.1b — Alias/specifier imports and re-export semantics** — `import module::{symbol as alias}`, explicit `share(...) import ...` re-exports
 - [x] **Phase 1.2 — `bundle(...)` Directives** — Source-level module bundle metadata accepted by local resolver
 - [x] **Phase 1.3 — `share(...)` Directives** — `share(all)` and `share(bundle1, bundle2)` accepted on declarations and imports
 - [x] **Phase 1.4 — Visibility Checking** — Bundle overlap enforced during import resolution; `smuggle` bypasses visibility
 - [x] **Phase 1.4b — Formal ModuleRegistry model** — source-level resolver moved into `ModuleRegistry` metadata/cache API with canonical keys, resolution states, topo order, and dependency diagnostics
 - [x] **Phase 1.5 — Module Path Resolution**
-  - `VYN_MODULE_PATH` environment variable
+  - `VYB_MODULE_PATH` environment variable
   - `--module-path` CLI flag
   - Standard library auto-discovery
 - [ ] **Phase 1.6 — Standard Library as Modules**
@@ -229,10 +229,10 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
 - [x] **`extern` function modifier** — Individual extern function declarations compile to LLVM `ExternalLinkage` via `ExternStatement` codegen; syntax: `extern funcName(params)<ReturnType>`
 - [x] **`extern "C" { }` block syntax** — Multi-declaration blocks parse, register external functions, and codegen LLVM declarations
 - [x] **C type mapping** — Common C aliases (`CInt`, `CSize`, `CString`, `CPtr<T>`, `CVoid`, etc.) lower through semantic/codegen
-- [x] **`#[repr(C)]` on structs** — Attribute parses on structs, preserves declaration-order unpacked LLVM layout, and rejects generic/Vyn-runtime fields that are not C ABI-stable
+- [x] **`#[repr(C)]` on structs** — Attribute parses on structs, preserves declaration-order unpacked LLVM layout, and rejects generic/VyB-runtime fields that are not C ABI-stable
 - [x] **Native `--link <lib-or-path>` flow** — Repeatable build flag passes `-l<lib>` or explicit library/object paths to the native linker
 - [ ] **Variadic C functions** — `printf(format: *i8, ...) -> Int`
-- [ ] **`vyn bindgen`** — Tool to generate Vyn bindings from C headers (v0.6+)
+- [ ] **`vyb bindgen`** — Tool to generate VyB bindings from C headers (v0.6+)
 
 ### 3. Ownership Types — Runtime Enforcement (HIGH PRIORITY)
 - [ ] **`my<T>` move semantics** — Enforce single-owner at compile time; error on copy
@@ -260,8 +260,8 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
 - [ ] **`Vec<T>` expansion** — `.map()`, `.filter()`, `.reduce()`, `.find()`, `.sort()`; `.contains()` is now correctly implemented
 
 ### 5. Sum Types / Enums (MEDIUM PRIORITY)
-Vyn needs a way to express sum types. Essential for `Option<T>`, `Result<T,E>`, and
-expressive APIs. **Vyn-natural approach:** enums should integrate with the aspect system
+VyB needs a way to express sum types. Essential for `Option<T>`, `Result<T,E>`, and
+expressive APIs. **VyB-natural approach:** enums should integrate with the aspect system
 and pattern matching, not be a separate OOP mechanism.
 
 - [x] **Enum declaration syntax** — `enum Direction { North, South, East, West }` — variants compile to sequential `i64` integer constants (0, 1, 2, …); access via `Direction::North`
@@ -276,11 +276,11 @@ and pattern matching, not be a separate OOP mechanism.
 - [x] `typename(expr)` — Returns type name as String
 - [ ] **`as` downcasting operator** — `value as TargetType` (Phase 2)
 - [ ] **`typeof` in wildcard trap** — `trap (e<?>) -> { if typeof(e) == typeof<ParseError>() }`
-- [ ] **Type registry at startup** — `__vyn_module_init()` registers all types
+- [ ] **Type registry at startup** — `__vyb_module_init()` registers all types
 - [ ] **`Type` as first-class type** — `t<Type> = typeof(42)`, equality comparison
 
 ### 7. Select Expressions — Polish (MEDIUM PRIORITY)
-The `select` expression is a uniquely Vyn concept: pattern matching that produces a value,
+The `select` expression is a uniquely VyB concept: pattern matching that produces a value,
 with `pass` for multi-statement case bodies. Needs polishing:
 
 - [ ] **`select` exhaustiveness** — Warn when no `?` wildcard and possible no-match
@@ -291,7 +291,7 @@ with `pass` for multi-statement case bodies. Needs polishing:
 ### 8. Wildcard Trap Handler (MEDIUM PRIORITY)
 - [ ] **`trap (e<?>)` syntax** — Catch any error type
 - [ ] **`typeof(e)` in wildcard handler** — Runtime type discrimination
-- [ ] **Multi-type trap** — `trap (e<ParseError | IOError>) -> { ... }` (Vyn-native syntax)
+- [ ] **Multi-type trap** — `trap (e<ParseError | IOError>) -> { ... }` (VyB-native syntax)
 
 ### 9. Advanced Control Flow (LOWER PRIORITY)
 - [x] **`defer` statement** — `defer cleanup()` runs on scope exit (LIFO order, function-level)
@@ -303,7 +303,7 @@ with `pass` for multi-statement case bodies. Needs polishing:
 - [ ] **`spawn` for concurrent tasks** — `task<Future<T>> = spawn compute()`
 - [ ] **Typed channels** — `chan<T>` for message passing between tasks (planned)
 - [ ] **Actors** — Lightweight isolated concurrency units (planned)
-- [ ] **`select` over channels** — Wait on multiple channels (Vyn-natural extension)
+- [ ] **`select` over channels** — Wait on multiple channels (VyB-natural extension)
 - [ ] **Async lambdas** — `async |x| -> await process(x)`
 - [ ] **`async for`** — Iterate over async streams
 
@@ -312,40 +312,40 @@ with `pass` for multi-statement case bodies. Needs polishing:
 ## Developer Experience — Needed for 1.0
 
 ### Package Manager
-- [ ] **`vyn.toml`** — Project manifest with `[package]`, `[dependencies]`, `[[bin]]`
-- [ ] **`vyn build`** — Build multi-file projects from manifest
-- [ ] **Dependency resolution** — Version constraints and lock file (`vyn.lock`)
+- [ ] **`vyb.toml`** — Project manifest with `[package]`, `[dependencies]`, `[[bin]]`
+- [ ] **`vyb build`** — Build multi-file projects from manifest
+- [ ] **Dependency resolution** — Version constraints and lock file (`vyb.lock`)
 - [ ] **Package registry** — Central registry for published packages
-- [ ] **`vyn new`** — Scaffold a new Vyn project
+- [ ] **`vyb new`** — Scaffold a new VyB project
 
 ### Language Server Protocol (LSP)
 - [ ] **Go-to-definition** — Jump to symbol definitions across files
 - [ ] **Hover documentation** — Show type signatures and doc comments
 - [ ] **Completion** — Aspect method names, struct fields, imports
 - [ ] **Diagnostics** — Real-time error reporting in editors
-- [ ] **`vyn lsp`** — Launch LSP server mode
+- [ ] **`vyb lsp`** — Launch LSP server mode
 
 ### REPL
-- [ ] **Interactive mode** — `vyn repl` launches a read-eval-print loop
+- [ ] **Interactive mode** — `vyb repl` launches a read-eval-print loop
 - [ ] **JIT-backed** — Reuse existing ORC JIT infrastructure
 - [ ] **History + multiline** — Standard readline-style editing
 - [ ] **`:type` command** — Print the type of an expression
 
 ### Documentation Tools
 - [ ] **Doc comments** — `/// comment` on declarations
-- [ ] **`vyn doc`** — Generate HTML documentation from source
+- [ ] **`vyb doc`** — Generate HTML documentation from source
 - [ ] **Online reference** — Language reference manual (derived from existing docs)
 
 ### Testing & Tooling
-- [ ] **`vyn test`** — Run test files alongside source (`*.test.vyn`)
-- [ ] **Code formatter** — `vyn fmt` for canonical formatting
-- [ ] **Linter** — `vyn check` for warnings beyond errors
-- [ ] **Debugger integration** — `gdb`/`lldb` with Vyn source stepping (DWARF done, validate end-to-end)
+- [ ] **`vyb test`** — Run test files alongside source (`*.test.vyb`)
+- [ ] **Code formatter** — `vyb fmt` for canonical formatting
+- [ ] **Linter** — `vyb check` for warnings beyond errors
+- [ ] **Debugger integration** — `gdb`/`lldb` with VyB source stepping (DWARF done, validate end-to-end)
 
 ### Polish — Silent by Default (HIGH PRIORITY)
 The compiler must be silent in normal use. DEBUG output makes the language feel unfinished.
 
-- [x] **Silence codegen DEBUG output** — All `std::cout << "DEBUG: ..."` and `std::cerr << "DEBUG: ..."` in `src/vre/` and `src/vre/llvm/` (~320 statements) are now gated behind `g_debug_codegen` (default `false`) via the `VYN_CDBG` macro. Enable with `--debug-codegen` CLI flag.
+- [x] **Silence codegen DEBUG output** — All `std::cout << "DEBUG: ..."` and `std::cerr << "DEBUG: ..."` in `src/vre/` and `src/vre/llvm/` (~320 statements) are now gated behind `g_debug_codegen` (default `false`) via the `VYB_CDBG` macro. Enable with `--debug-codegen` CLI flag.
 - [x] **Silence parser trace output** — Parser `[PEEK]`/`[CONSUME]`/`[EXPECT]` traces gated behind `#ifdef VERBOSE` and `VERBOSE` no longer defined globally in `CMakeLists.txt`; off by default. Re-enable with `-DVERBOSE` in the build.
 - [x] **Silence optimization pass messages** — `"Skipping IR optimization"` / `"Applying IR optimization passes"` now gated behind `--debug-codegen` (same flag as all other debug output).
 - [ ] **Doc consolidation** — `doc/` has overlapping files (`ROADMAP.md`, `TODO_CURRENT.md`, multiple ownership docs). Keep `TODO.md`, `doc/FEATURE_STATUS.md`, `CHANGELOG.md` as living docs; archive or delete the rest into `doc/archive/`; update `doc/README.md` as index.
@@ -386,9 +386,9 @@ reference so that contributors do not re-open them.
 
 ### [DECIDED] Class System vs. Struct + Aspect
 
-**Decision:** Vyn has no class system. Struct + aspect composition is the only model.
+**Decision:** VyB has no class system. Struct + aspect composition is the only model.
 
-Classes are an anti-pattern in Vyn's design. Inheritance-like patterns are achieved via
+Classes are an anti-pattern in VyB's design. Inheritance-like patterns are achieved via
 aspect composition + `bind`. The `class` keyword is not planned, not accepted as a
 proposal, and should not be re-proposed. `doc/TRAIT_SYSTEM_DESIGN.md` Phase 5 (class
 system) has been removed. All references to an optional class system have been excised
@@ -396,12 +396,12 @@ from the roadmap.
 
 ### [DECIDED] `trait`/`impl` vs. `aspect`/`bind` Terminology
 
-**Decision:** Vyn uses `aspect`/`bind`. `trait`/`impl` is Rust vocabulary.
+**Decision:** VyB uses `aspect`/`bind`. `trait`/`impl` is Rust vocabulary.
 
 `aspect` captures that it adds a dimension of behavior. `bind` clearly expresses that you
 are attaching that aspect to a type. All documentation uses `aspect`/`bind`. The `impl`
 keyword may be accepted as an alias for backward compatibility only; `bind` is the
-idiomatic Vyn path. All `trait`/`impl` examples in documentation have been updated to
+idiomatic VyB path. All `trait`/`impl` examples in documentation have been updated to
 `aspect`/`bind`. `doc/TRAIT_SYSTEM_DESIGN.md` and `doc/WHY_TRAITS_NOT_CLASSES.md` have
 been updated accordingly.
 
@@ -409,24 +409,24 @@ been updated accordingly.
 
 **Decision:** `fn` syntax is deprecated as of v0.5 and will be removed in v1.0.
 
-The name-first syntax `name(params)<ReturnType> ->` is cleaner and uniquely Vyn. One
+The name-first syntax `name(params)<ReturnType> ->` is cleaner and uniquely VyB. One
 syntax is better than two. The `fn` keyword is legacy. New code must use name-first
 syntax. The README note about `fn` support is historical; it will not persist to 1.0.
 
 ### [DECIDED] `try`/`catch`/`finally` vs. `fail`/`trap`
 
-**Decision:** Vyn uses `fail`/`trap`. There is no `try`, `catch`, `finally`, or `throw`.
+**Decision:** VyB uses `fail`/`trap`. There is no `try`, `catch`, `finally`, or `throw`.
 
 `TryStatement` and `ThrowStatement` have been removed from `doc/AST_Roadmap.md`. These
-are vestigial C++ vocabulary and have no place in Vyn. `fail`/`trap` provides zero-cost
-success path, typed errors, and explicit propagation — the Vyn way. `doc/AST_Roadmap.md`
+are vestigial C++ vocabulary and have no place in VyB. `fail`/`trap` provides zero-cost
+success path, typed errors, and explicit propagation — the VyB way. `doc/AST_Roadmap.md`
 has been updated to reflect this.
 
 ### [DECIDED] Generic Bound Syntax
 
-**Decision:** `<T<Aspect>>` only. `T: Aspect` is Rust syntax and is not Vyn.
+**Decision:** `<T<Aspect>>` only. `T: Aspect` is Rust syntax and is not VyB.
 
-All documentation now uses `<T<Aspect>>` exclusively. This is consistent with Vyn's
+All documentation now uses `<T<Aspect>>` exclusively. This is consistent with VyB's
 unified `name<Type>` syntax. All `<T: Trait>` examples have been removed from docs.
 
 ### [DECIDED] Iterator Protocol: Aspect-Based
@@ -434,7 +434,7 @@ unified `name<Type>` syntax. All `<T: Trait>` examples have been removed from do
 **Decision:** `Iterator` is a standard library aspect. `for` loops desugar to aspect calls.
 
 The `Iterator` aspect is defined in the standard library:
-```vyn
+```vyb
 aspect Iterator {
     type Item                                    # associated type — what the iterator yields
     next(self<their<Self>>)<Option<Self::Item>>  # returns next value or None
@@ -454,26 +454,26 @@ implementation. The README has been updated to remove them from the v1.0 scope.
 
 ---
 
-## Vyn-Native Ideas Worth Exploring
+## VyB-Native Ideas Worth Exploring
 
-These are not in any current design document but feel natural given Vyn's identity and
+These are not in any current design document but feel natural given VyB's identity and
 should be prototyped or at least documented before 1.0:
 
 ### `pipe` Operator (`|>`)
 Functional pipelines without deep nesting:
-```vyn
+```vyb
 result<String> = data
     |> filter(|x| -> x > 0)
     |> map(|x| -> x * 2)
     |> to_string()
 ```
 The `|>` pipe operator threads the left-hand value as the first argument to the right-hand
-function. Fits Vyn's clean aesthetic; makes functional chains readable without a method
+function. Fits VyB's clean aesthetic; makes functional chains readable without a method
 chain API requirement.
 
 ### `ensure` Contracts
 Unlike bare `assert` (C-style), `ensure` integrates with the `fail`/`trap` system:
-```vyn
+```vyb
 divide(a<Int>, b<Int>)<Int> -> {
     ensure b != 0 else fail<DivisionError>(DivisionError { dividend: a })
     return a / b
@@ -484,7 +484,7 @@ clash with the error handling design — it IS the error handling design.
 
 ### `with` Scope Blocks (Resource Management)
 A managed scope that calls cleanup when exiting — better than bare `defer` for resources:
-```vyn
+```vyb
 with file<File> = File::open("data.txt") {
     content<String> = file.read_all()
     println(content)
@@ -494,15 +494,15 @@ Implemented by the compiler calling a `Drop` aspect method on scope exit. Does n
 Aligns with `mild<T>` and `our<T>` lifecycle semantics.
 
 ### Named Arguments at Call Sites
-Vyn's `name<Type>` syntax already names parameters. Callers should be allowed to use names:
-```vyn
+VyB's `name<Type>` syntax already names parameters. Callers should be allowed to use names:
+```vyb
 result<Int> = add(x: 10, y: 20)   # Named args, order-independent
 ```
 Improves readability for functions with many parameters without requiring overloaded forms.
 
 ### `select` Over Error Results
 Extend `select` to dispatch on `Result<T, E>`:
-```vyn
+```vyb
 result<Int> = select(risky_operation()) -> {
     ok(value)        -> value * 2,
     err(e<ParseError>) -> -1,
@@ -510,13 +510,13 @@ result<Int> = select(risky_operation()) -> {
     ?                  -> 0
 };
 ```
-Unifies error handling with pattern matching in a uniquely Vyn way. No try-catch pyramid.
+Unifies error handling with pattern matching in a uniquely VyB way. No try-catch pyramid.
 
 ---
 
 ## 1.0 Release Criteria
 
-For Vyn to be considered production-ready at 1.0, **all of the following must be true**:
+For VyB to be considered production-ready at 1.0, **all of the following must be true**:
 
 ### Must-Have for 1.0
 - [x] Module system core working (`import`, `smuggle`, `bundle`, `share`, module paths, stdlib discovery)
@@ -531,27 +531,27 @@ For Vyn to be considered production-ready at 1.0, **all of the following must be
 - [ ] String methods complete (`split` and formatting remain)
 - [ ] `HashMap<K, V>` and basic collections
 - [ ] FFI (`extern "C"`) working
-- [ ] `vyn.toml` and `vyn build` project system
+- [ ] `vyb.toml` and `vyb build` project system
 - [ ] Wildcard trap handler (`trap (e<?>)`) with `typeof` discrimination
 - [ ] All open contradictions resolved (see section above)
 
 ### Should-Have for 1.0
-- [ ] REPL (`vyn repl`)
+- [ ] REPL (`vyb repl`)
 - [ ] Language server (LSP) — at least basic completion and diagnostics
-- [ ] `vyn fmt` code formatter
-- [ ] `vyn doc` documentation generator
+- [ ] `vyb fmt` code formatter
+- [ ] `vyb doc` documentation generator
 - [ ] Comprehensive language reference manual
 - [ ] Test suite covering all 1.0 features
-- [ ] `vyn test` integrated test runner
+- [ ] `vyb test` integrated test runner
 - [ ] Debugger integration validated end-to-end with `gdb`/`lldb`
 
 ### Post-1.0 Roadmap
 - [ ] Channels + actors (design doc first!)
 - [ ] Networking + Sockets (see section below)
-- [ ] Self-hosting compiler (Vyn written in Vyn)
+- [ ] Self-hosting compiler (VyB written in VyB)
 - [ ] Macros / metaprogramming
 - [ ] Package registry
-- [ ] `vyn bindgen` for C header automation
+- [ ] `vyb bindgen` for C header automation
 - [ ] Higher-kinded types
 - [ ] Compile-time function evaluation (CTFE)
 - [ ] `pipe` operator (`|>`)
@@ -562,15 +562,15 @@ For Vyn to be considered production-ready at 1.0, **all of the following must be
 ## Networking and Sockets
 
 Networking is a post-1.0 feature that **depends entirely on FFI being complete first**.
-Raw sockets are POSIX system calls (`socket`, `connect`, `bind`, `recv`, `send`), so Vyn
+Raw sockets are POSIX system calls (`socket`, `connect`, `bind`, `recv`, `send`), so VyB
 networking is FFI + a thin standard-library wrapper — not a language feature per se.
 
-### Design Approach (Vyn-native)
+### Design Approach (VyB-native)
 
 Once `extern "C"` FFI lands (v0.5), networking follows naturally:
 
-```vyn
-// stdlib/net/tcp.vyn — thin wrapper over POSIX sockets
+```vyb
+// stdlib/net/tcp.vyb — thin wrapper over POSIX sockets
 extern "C" {
     socket(domain<Int>, type<Int>, protocol<Int>)<Int>
     connect(sockfd<Int>, addr<loc<SockAddr>>, addrlen<Int>)<Int>
@@ -592,11 +592,11 @@ async tcp_connect(host<String>, port<Int>)<TcpStream> -> {
 ### Networking Roadmap
 
 - [ ] **v0.5 — FFI foundation** (`extern "C"` blocks, C type mapping)
-- [ ] **v0.5 — Raw socket FFI bindings** — `stdlib/net/raw.vyn` wrapping POSIX socket API
-- [ ] **v0.6 — `TcpStream` / `UdpSocket`** — Safe Vyn wrappers with `fail`/`trap` error handling
+- [ ] **v0.5 — Raw socket FFI bindings** — `stdlib/net/raw.vyb` wrapping POSIX socket API
+- [ ] **v0.6 — `TcpStream` / `UdpSocket`** — Safe VyB wrappers with `fail`/`trap` error handling
 - [ ] **v0.6 — `TcpListener`** — Server-side accept loop integrated with async runtime
 - [ ] **v0.6 — Async I/O** — Non-blocking socket I/O using the async executor (requires real event loop)
-- [ ] **v0.7 — HTTP/1.1 client** — Built on `TcpStream`, pure Vyn implementation
+- [ ] **v0.7 — HTTP/1.1 client** — Built on `TcpStream`, pure VyB implementation
 - [ ] **Post-1.0 — TLS** — Via `extern "C"` bindings to OpenSSL or mbedTLS
 - [ ] **Post-1.0 — UDP multicast, raw packets** — Advanced socket options
 
@@ -604,14 +604,14 @@ async tcp_connect(host<String>, port<Int>)<TcpStream> -> {
 
 **Q: Is networking a language feature or a library?**
 Networking is *stdlib*, not a language feature. The only language feature required is
-`extern "C"` FFI, which is planned for v0.5. Everything else is library code written in Vyn.
+`extern "C"` FFI, which is planned for v0.5. Everything else is library code written in VyB.
 
 **Q: How do errors surface?**
-Socket errors surface as Vyn `fail`/`trap`: failable functions return `{value, error}` pairs.
+Socket errors surface as VyB `fail`/`trap`: failable functions return `{value, error}` pairs.
 There is no exception for network I/O — the `fail`/`trap` system handles it uniformly.
 
 **Q: What about async I/O?**
-Async socket I/O requires a real event loop in the Vyn async runtime (currently a stub).
+Async socket I/O requires a real event loop in the VyB async runtime (currently a stub).
 Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `TcpStream`.
 
 ## Consistency Work
@@ -634,12 +634,12 @@ Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `
 ### Action Items
 
 - Keep `UPDATE_LOG.md` current as the source-biased implementation audit.
-- Fix or move non-Vyn *.vyn fixtures (e.g. extracted tests containing C++ snippets).
+- Fix or move non-VyB *.vyb fixtures (e.g. extracted tests containing C++ snippets).
 - Pick a single canonical test runner.
 
 ---
 
 *Last Updated: February 2026*
-*Current Version: Vyn v0.5.0 (freedom-1.0 series)*
+*Current Version: VyB v0.5.0 (freedom-1.0 series)*
 *Overall Status: ~60-65% complete toward 1.0 — 657 tests, 315 passing (47.9%)*
 *SUGGESTIONS.md merged into this document.*

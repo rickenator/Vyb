@@ -1,18 +1,18 @@
 # Introspection System Design - Phase 1: Basic Type Information
 
-**Version**: 0.5.0  
-**Status**: 🏗️ In Progress  
+**Version**: 0.5.0
+**Status**: 🏗️ In Progress
 **Date**: October 2025
 
 ## Philosophy: "Know Thyself" - The Zen of Type Awareness
 
 > *"Before code can reason about the world, it must first reason about itself."*
 
-Introspection in Vyn is not merely a feature—it's a fundamental capability that allows code to understand its own nature. Like a zen monk examining their own consciousness, Vyn programs can examine their own type structure.
+Introspection in VyB is not merely a feature—it's a fundamental capability that allows code to understand its own nature. Like a zen monk examining their own consciousness, VyB programs can examine their own type structure.
 
 ## The Nature of Types
 
-In Vyn, every value has a **type identity**—an immutable essence that defines what it *is*. This identity exists at both compile-time and runtime:
+In VyB, every value has a **type identity**—an immutable essence that defines what it *is*. This identity exists at both compile-time and runtime:
 
 - **Compile-time**: The parser and semantic analyzer know types
 - **Runtime**: Values carry their type identity as a hash (8 bytes)
@@ -45,25 +45,25 @@ Introspection reveals what *is*, not what might be:
 ### 4. **Integration with Existing Systems**
 The error handling system (Phase 6) already uses type IDs:
 ```cpp
-struct VynError {
+struct VyBError {
     const char* type_name;  // "ParseError"
     void* type_id;          // Hash as void*
     // ...
 };
 ```
 
-We extend this pattern to **all Vyn values**.
+We extend this pattern to **all VyB values**.
 
 ## Phase 1: The Three Operators
 
 ### Operator 1: `typeof(expr)` - The Question "What Is?"
 
-**Syntax**: `typeof(expression)`  
-**Returns**: `Type` object (opaque 8-byte type ID)  
+**Syntax**: `typeof(expression)`
+**Returns**: `Type` object (opaque 8-byte type ID)
 **Purpose**: Get runtime type identity
 
 **Examples**:
-```vyn
+```vyb
 x<Int> = 42
 t<Type> = typeof(x)  # Type representing Int
 
@@ -102,12 +102,12 @@ class TypeofExpression : public Expression {
 
 ### Operator 2: `typename(expr)` - The Name of Being
 
-**Syntax**: `typename(expression)`  
-**Returns**: `String` with type name  
+**Syntax**: `typename(expression)`
+**Returns**: `String` with type name
 **Purpose**: Get human-readable type name
 
 **Examples**:
-```vyn
+```vyb
 x<Int> = 42
 name<String> = typename(x)  # "Int"
 
@@ -121,7 +121,7 @@ println("Value is of type: " + typename(value))
 **Implementation**:
 - At compile-time, resolve expression type name
 - At codegen, generate pointer to string literal containing type name
-- Wrap in Vyn String struct: `VynString { data: "Int", length: 3 }`
+- Wrap in VyB String struct: `VyBString { data: "Int", length: 3 }`
 - Return as String value
 
 **AST Node**:
@@ -136,12 +136,12 @@ class TypenameExpression : public Expression {
 
 ### Operator 3: Type Equality - The Test of Sameness
 
-**Syntax**: `typeof(a) == typeof(b)` or `typeof(a) == typeof<T>()`  
-**Returns**: `Bool`  
+**Syntax**: `typeof(a) == typeof(b)` or `typeof(a) == typeof<T>()`
+**Returns**: `Bool`
 **Purpose**: Compare type identities
 
 **Examples**:
-```vyn
+```vyb
 x<Int> = 42
 y<String> = "hello"
 
@@ -184,11 +184,11 @@ To support `typename()`, we need a runtime mapping from type ID → type name.
 // In runtime or codegen
 std::unordered_map<uint64_t, const char*> g_type_registry;
 
-void __vyn_register_type(uint64_t type_id, const char* type_name) {
+void __vyb_register_type(uint64_t type_id, const char* type_name) {
     g_type_registry[type_id] = type_name;
 }
 
-const char* __vyn_get_typename(uint64_t type_id) {
+const char* __vyb_get_typename(uint64_t type_id) {
     auto it = g_type_registry.find(type_id);
     return it != g_type_registry.end() ? it->second : "Unknown";
 }
@@ -197,11 +197,11 @@ const char* __vyn_get_typename(uint64_t type_id) {
 **Initialization**:
 At module initialization, register all types:
 ```cpp
-void __vyn_module_init() {
-    __vyn_register_type(std::hash<std::string>{}("Int"), "Int");
-    __vyn_register_type(std::hash<std::string>{}("String"), "String");
-    __vyn_register_type(std::hash<std::string>{}("Bool"), "Bool");
-    __vyn_register_type(std::hash<std::string>{}("ParseError"), "ParseError");
+void __vyb_module_init() {
+    __vyb_register_type(std::hash<std::string>{}("Int"), "Int");
+    __vyb_register_type(std::hash<std::string>{}("String"), "String");
+    __vyb_register_type(std::hash<std::string>{}("Bool"), "Bool");
+    __vyb_register_type(std::hash<std::string>{}("ParseError"), "ParseError");
     // ... all user-defined types
 }
 ```
@@ -212,12 +212,12 @@ This is called once at program startup, before `main()`.
 
 ## The `Type` Type
 
-**Nature**: Opaque primitive type representing a type identity  
-**Size**: 8 bytes (uint64_t)  
+**Nature**: Opaque primitive type representing a type identity
+**Size**: 8 bytes (uint64_t)
 **Operations**: Equality comparison (`==`, `!=`)
 
 **Usage**:
-```vyn
+```vyb
 # Declare variable of type Type
 t<Type> = typeof(42)
 
@@ -254,10 +254,10 @@ Create new expression types:
 class TypeofExpression : public Expression {
 public:
     ExprPtr operand;
-    
+
     TypeofExpression(SourceLocation loc, ExprPtr operand)
         : Expression(loc), operand(std::move(operand)) {}
-    
+
     NodeType getType() const override { return NodeType::TYPEOF_EXPRESSION; }
     void accept(Visitor* visitor) const override;
     std::string toString() const override;
@@ -266,10 +266,10 @@ public:
 class TypenameExpression : public Expression {
 public:
     ExprPtr operand;
-    
+
     TypenameExpression(SourceLocation loc, ExprPtr operand)
         : Expression(loc), operand(std::move(operand)) {}
-    
+
     NodeType getType() const override { return NodeType::TYPENAME_EXPRESSION; }
     void accept(Visitor* visitor) const override;
     std::string toString() const override;
@@ -287,7 +287,7 @@ Parse `typeof(expr)` and `typename(expr)`:
 ```cpp
 ExprPtr Parser::parsePrimaryExpression() {
     // ... existing code ...
-    
+
     if (match(TokenType::KEYWORD_TYPEOF)) {
         SourceLocation loc = previous().location;
         consume(TokenType::LPAREN, "Expected '(' after 'typeof'");
@@ -295,7 +295,7 @@ ExprPtr Parser::parsePrimaryExpression() {
         consume(TokenType::RPAREN, "Expected ')' after typeof operand");
         return std::make_unique<TypeofExpression>(loc, std::move(operand));
     }
-    
+
     if (match(TokenType::KEYWORD_TYPENAME)) {
         SourceLocation loc = previous().location;
         consume(TokenType::LPAREN, "Expected '(' after 'typename'");
@@ -303,7 +303,7 @@ ExprPtr Parser::parsePrimaryExpression() {
         consume(TokenType::RPAREN, "Expected ')' after typename operand");
         return std::make_unique<TypenameExpression>(loc, std::move(operand));
     }
-    
+
     // ... existing code ...
 }
 ```
@@ -330,11 +330,11 @@ For `TypenameExpression`:
 void LLVMCodegen::visit(const TypeofExpression* node) {
     // Get the type name of the operand
     std::string typeName = getExpressionTypeName(node->operand.get());
-    
+
     // Generate type hash as compile-time constant
     uint64_t typeHash = std::hash<std::string>{}(typeName);
     llvm::Value* typeId = llvm::ConstantInt::get(builder->getInt64Ty(), typeHash);
-    
+
     m_currentLLVMValue = typeId;
 }
 ```
@@ -344,13 +344,13 @@ void LLVMCodegen::visit(const TypeofExpression* node) {
 void LLVMCodegen::visit(const TypenameExpression* node) {
     // Get the type name of the operand
     std::string typeName = getExpressionTypeName(node->operand.get());
-    
+
     // Create global string constant
     llvm::Constant* typeNameStr = builder->CreateGlobalStringPtr(typeName);
-    
-    // Create VynString struct
-    llvm::Value* stringStruct = createVynString(typeName);
-    
+
+    // Create VyBString struct
+    llvm::Value* stringStruct = createVyBString(typeName);
+
     m_currentLLVMValue = stringStruct;
 }
 ```
@@ -358,39 +358,39 @@ void LLVMCodegen::visit(const TypenameExpression* node) {
 **Type Registry Initialization**:
 ```cpp
 void LLVMCodegen::generateModuleInit() {
-    // Create __vyn_module_init function
+    // Create __vyb_module_init function
     llvm::FunctionType* initType = llvm::FunctionType::get(voidType, {}, false);
     llvm::Function* initFunc = llvm::Function::Create(
         initType,
         llvm::Function::ExternalLinkage,
-        "__vyn_module_init",
+        "__vyb_module_init",
         module.get()
     );
-    
+
     llvm::BasicBlock* entry = llvm::BasicBlock::Create(*context, "entry", initFunc);
     builder->SetInsertPoint(entry);
-    
+
     // Register all types
     for (const auto& [typeName, typeInfo] : typeRegistry) {
         uint64_t typeHash = std::hash<std::string>{}(typeName);
         llvm::Value* typeId = llvm::ConstantInt::get(builder->getInt64Ty(), typeHash);
         llvm::Value* nameStr = builder->CreateGlobalStringPtr(typeName);
-        
-        // Call __vyn_register_type(type_id, type_name)
-        llvm::Function* registerFn = getOrDeclareFunction("__vyn_register_type", 
+
+        // Call __vyb_register_type(type_id, type_name)
+        llvm::Function* registerFn = getOrDeclareFunction("__vyb_register_type",
             llvm::FunctionType::get(voidType, {builder->getInt64Ty(), int8PtrType}, false));
         builder->CreateCall(registerFn, {typeId, nameStr});
     }
-    
+
     builder->CreateRetVoid();
 }
 ```
 
-Call `__vyn_module_init()` from main or module constructor.
+Call `__vyb_module_init()` from main or module constructor.
 
 ### Step 6: Runtime Support
 
-Add to `include/vyn/runtime/type_info.hpp`:
+Add to `include/vyb/runtime/type_info.hpp`:
 ```cpp
 #pragma once
 
@@ -399,13 +399,13 @@ Add to `include/vyn/runtime/type_info.hpp`:
 extern "C" {
 
 // Type registration
-void __vyn_register_type(uint64_t type_id, const char* type_name);
+void __vyb_register_type(uint64_t type_id, const char* type_name);
 
 // Type name lookup
-const char* __vyn_get_typename(uint64_t type_id);
+const char* __vyb_get_typename(uint64_t type_id);
 
 // Type comparison (inline, just integer equality)
-inline bool __vyn_type_equals(uint64_t type_a, uint64_t type_b) {
+inline bool __vyb_type_equals(uint64_t type_a, uint64_t type_b) {
     return type_a == type_b;
 }
 
@@ -414,7 +414,7 @@ inline bool __vyn_type_equals(uint64_t type_a, uint64_t type_b) {
 
 Implement in `src/runtime/type_info.cpp`:
 ```cpp
-#include "vyn/runtime/type_info.hpp"
+#include "vyb/runtime/type_info.hpp"
 #include <unordered_map>
 #include <cstring>
 
@@ -422,11 +422,11 @@ static std::unordered_map<uint64_t, const char*> g_type_registry;
 
 extern "C" {
 
-void __vyn_register_type(uint64_t type_id, const char* type_name) {
+void __vyb_register_type(uint64_t type_id, const char* type_name) {
     g_type_registry[type_id] = type_name;
 }
 
-const char* __vyn_get_typename(uint64_t type_id) {
+const char* __vyb_get_typename(uint64_t type_id) {
     auto it = g_type_registry.find(type_id);
     if (it != g_type_registry.end()) {
         return it->second;
@@ -443,20 +443,20 @@ const char* __vyn_get_typename(uint64_t type_id) {
 
 The error handling system **already** stores type IDs:
 ```cpp
-struct VynError {
+struct VyBError {
     void* type_id;  // Stored as void* (8 bytes)
     // ...
 };
 ```
 
 In wildcard trap handlers, we can now use introspection:
-```vyn
+```vyb
 {
     risky_operation()
 } trap (e<?>) -> {
     # e is opaque pointer—we need to extract type
-    error_type<Type> = __vyn_error_typeof(e)  # Built-in function
-    
+    error_type<Type> = __vyb_error_typeof(e)  # Built-in function
+
     if (error_type == typeof<ParseError>()) {
         println("It's a parse error")
     } else if (error_type == typeof<IOError>()) {
@@ -468,13 +468,13 @@ In wildcard trap handlers, we can now use introspection:
 **Built-in Function**:
 ```cpp
 // Extract type from error pointer
-uint64_t __vyn_error_typeof(VynError* error) {
+uint64_t __vyb_error_typeof(VyBError* error) {
     return (uint64_t)error->type_id;
 }
 ```
 
 Or, we extend `typeof()` to work directly on wildcard error values:
-```vyn
+```vyb
 {
     operation()
 } trap (e<?>) -> {
@@ -487,7 +487,7 @@ Or, we extend `typeof()` to work directly on wildcard error values:
 
 The codegen for `typeof(e)` when `e` is a wildcard error:
 ```cpp
-// e is VynError* pointer
+// e is VyBError* pointer
 // Load type_id field (offset 8 bytes after type_name pointer)
 llvm::Value* typeIdPtr = builder->CreateStructGEP(errorType, errorPtr, 1);
 llvm::Value* typeId = builder->CreateLoad(builder->getInt64Ty(), typeIdPtr);
@@ -499,12 +499,12 @@ return typeId;
 ## Testing Strategy
 
 ### Test 1: Basic typeof
-```vyn
-# test/introspection/typeof_basic.vyn
+```vyb
+# test/introspection/typeof_basic.vyb
 fn main()<Int> -> {
     x<Int> = 42
     t<Type> = typeof(x)
-    
+
     if (t == typeof<Int>()) {
         return 0  # Success
     }
@@ -513,12 +513,12 @@ fn main()<Int> -> {
 ```
 
 ### Test 2: Basic typename
-```vyn
-# test/introspection/typename_basic.vyn
+```vyb
+# test/introspection/typename_basic.vyb
 fn main()<Int> -> {
     x<Int> = 42
     name<String> = typename(x)
-    
+
     # Compare string (need string equality)
     if (name.length == 3) {
         return 0  # Success (typename is "Int")
@@ -528,27 +528,27 @@ fn main()<Int> -> {
 ```
 
 ### Test 3: Type comparison
-```vyn
-# test/introspection/type_comparison.vyn
+```vyb
+# test/introspection/type_comparison.vyb
 fn main()<Int> -> {
     x<Int> = 42
     y<String> = "hello"
-    
+
     if (typeof(x) == typeof(y)) {
         return 1  # Should not happen
     }
-    
+
     if (typeof(x) == typeof<Int>()) {
         return 0  # Success
     }
-    
+
     return 2
 }
 ```
 
 ### Test 4: Wildcard trap with typeof
-```vyn
-# test/introspection/wildcard_typeof.vyn
+```vyb
+# test/introspection/wildcard_typeof.vyb
 fn risky()<Int> -> {
     fail<ParseError>(ParseError { line: 10, column: 5 })
 }
@@ -567,8 +567,8 @@ fn main()<Int> -> {
 ```
 
 ### Test 5: Custom struct types
-```vyn
-# test/introspection/struct_typeof.vyn
+```vyb
+# test/introspection/struct_typeof.vyb
 struct Point {
     x<Int>,
     y<Int>
@@ -576,7 +576,7 @@ struct Point {
 
 fn main()<Int> -> {
     p<Point> = Point { x: 10, y: 20 }
-    
+
     if (typename(p) == "Point") {  # String comparison
         return 0
     }
@@ -593,27 +593,27 @@ Add section on introspection:
 ```markdown
 ### Introspection
 
-Vyn provides runtime type information through three operators:
+VyB provides runtime type information through three operators:
 
 **typeof(expr)** - Get runtime type identity:
-```vyn
+```vyb
 t<Type> = typeof(42)  # Type representing Int
 ```
 
 **typename(expr)** - Get type name as string:
-```vyn
+```vyb
 name<String> = typename(42)  # "Int"
 ```
 
 **Type comparison**:
-```vyn
+```vyb
 if (typeof(x) == typeof<Int>()) {
     println("It's an integer!")
 }
 ```
 
 These operators enable powerful patterns like wildcard error handling:
-```vyn
+```vyb
 {
     operation()
 } trap (e<?>) -> {
@@ -632,7 +632,7 @@ Mark Phase 1 as complete, update status.
 ## Open Questions & Future Work
 
 ### Q1: Generics with typeof?
-```vyn
+```vyb
 fn identity<T>(value<T>)<T> -> {
     println(typename(value))  # What gets printed?
     return value
@@ -644,7 +644,7 @@ x<Int> = identity<Int>(42)  # Prints "Int"
 **Answer**: Yes, `typename()` returns the **concrete type** after monomorphization.
 
 ### Q2: typeof on functions?
-```vyn
+```vyb
 fn add(a<Int>, b<Int>)<Int> -> { return a + b }
 
 t<Type> = typeof(add)  # Type representing "fn(Int, Int) -> Int"
@@ -658,7 +658,7 @@ t<Type> = typeof(add)  # Type representing "fn(Int, Int) -> Int"
 **Answer**: In practice, extremely rare for reasonable type names. If needed, Phase 3 can switch to perfect hashing or type ID generation at compile-time.
 
 ### Q4: Performance impact?
-Each `typeof()` call generates a compile-time constant—zero runtime cost.  
+Each `typeof()` call generates a compile-time constant—zero runtime cost.
 Each `typename()` call loads a string pointer—minimal cost (one load + string wrap).
 
 **Answer**: Performance impact is negligible.
@@ -673,7 +673,7 @@ Each `typename()` call loads a string pointer—minimal cost (one load + string 
 
 Together, these form the foundation of self-aware code—code that can examine its own nature and make decisions accordingly.
 
-**Phase 1 Complete**: Basic type information ✅  
+**Phase 1 Complete**: Basic type information ✅
 **Next**: Phase 2 - Safe Downcasting with `as` operator 🔮
 
 ---

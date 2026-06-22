@@ -1,11 +1,11 @@
-# Vyn Aspect System Tests
+# VyB Aspect System Tests
 
-This directory contains test files for the Vyn aspect system implementation.
+This directory contains test files for the VyB aspect system implementation.
 
 ## Working Features (Phase 1 & 2)
 
 ### ✅ Basic Aspect Declarations
-```vyn
+```vyb
 aspect Printable {
     print(self)<Void> -> { }
     describe(self)<String> -> { }
@@ -13,7 +13,7 @@ aspect Printable {
 ```
 
 ### ✅ Aspect Implementations for Structs
-```vyn
+```vyb
 struct Point {
     x<Int>
     y<Int>
@@ -27,26 +27,26 @@ bind Printable -> Point {
 ```
 
 ### ✅ Calling Aspect Methods
-```vyn
+```vyb
 p<Point> = Point { x = 10, y = 20 }
 p.print()           // Calls aspect method
 result<String> = p.describe()
 ```
 
 **Test Files:**
-- `test_aspect_basic.vyn` - Basic aspect declaration and validation
-- `test_aspect_simple.vyn` - ✅ **PASSING** - Aspect method calls with return values
+- `test_aspect_basic.vyb` - Basic aspect declaration and validation
+- `test_aspect_simple.vyb` - ✅ **PASSING** - Aspect method calls with return values
 
 ## Working Features (Phase 3)
 
 ### ✅ Generic Aspect Implementations
-```vyn
+```vyb
 // Phase 3 complete
 bind<T> Container -> Vec<T> {
     size(self)<Int> -> {
         return self.len()
     }
-    
+
     is_empty(self)<Bool> -> {
         return self.len() == 0
     }
@@ -60,12 +60,12 @@ bind<T> Container -> Vec<T> {
 - Foundation for monomorphization
 
 **Test Files:**
-- `test_aspect_generic.vyn` - ✅ **WORKING** - Generic bind with type parameters
+- `test_aspect_generic.vyb` - ✅ **WORKING** - Generic bind with type parameters
 
 ## Working Features (Phase 4)
 
 ### ✅ Type Parameter Substitution in Method Bodies
-```vyn
+```vyb
 // Phase 4 complete - Type parameters work everywhere!
 struct Box<T> {
     value<T>  // Type parameter in struct field
@@ -89,7 +89,7 @@ bind<T> Display -> Box<T> {
 - ✅ Complete semantic analysis support
 
 **Test Files:**
-- `test_type_param_simple.vyn` - ✅ **PASSING** - Generic struct and aspect bind validate correctly
+- `test_type_param_simple.vyb` - ✅ **PASSING** - Generic struct and aspect bind validate correctly
 
 ## Remaining Advanced Features
 
@@ -105,10 +105,10 @@ and the first associated-type slice. Remaining advanced work is tracked in `TODO
 
 | Test File | Status | Returns | Notes |
 |-----------|--------|---------|-------|
-| test_aspect_basic.vyn | ✅ Parses | N/A | Declaration validation |
-| test_aspect_simple.vyn | ✅ **PASSES** | 25 | Method calls work! |
-| test_aspect_generic.vyn | ❌ Fails | - | Needs Phase 3 |
-| test_aspect_vec.vyn | ❌ Fails | - | Needs Phase 3 |
+| test_aspect_basic.vyb | ✅ Parses | N/A | Declaration validation |
+| test_aspect_simple.vyb | ✅ **PASSES** | 25 | Method calls work! |
+| test_aspect_generic.vyb | ❌ Fails | - | Needs Phase 3 |
+| test_aspect_vec.vyb | ❌ Fails | - | Needs Phase 3 |
 
 ## Implementation Notes
 
@@ -123,7 +123,7 @@ and the first associated-type slice. Remaining advanced work is tracked in `TODO
   - Checks if `obj.method()` is an aspect method
   - Looks up implementation in `aspectImpls` registry
   - Sets return type from aspect method signature
-  
+
 - **Code Generation**: LLVM codegen for aspect method calls
   - Detects MemberExpression in CallExpression
   - Extracts object type and method name
@@ -144,11 +144,11 @@ This is a major undertaking similar to Rust's trait monomorphization.
 
 ```bash
 # Working test (should return 25)
-build/vyn test/aspect/test_aspect_simple.vyn
+build/vyb test/aspect/test_aspect_simple.vyb
 
 # Future tests (will fail with semantic errors)
-build/vyn test/aspect/test_aspect_generic.vyn
-build/vyn test/aspect/test_aspect_vec.vyn
+build/vyb test/aspect/test_aspect_generic.vyb
+build/vyb test/aspect/test_aspect_vec.vyb
 ```
 
 ## Architecture

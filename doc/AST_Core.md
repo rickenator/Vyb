@@ -1,14 +1,14 @@
 # Core AST Design
 
-This document describes the fundamental building blocks of the Vyn Abstract Syntax Tree (AST), including the base `Node` class, its primary derivatives (`Expression`, `Statement`, `Declaration`), the `NodeType` enumeration, and the Visitor pattern implementation. All definitions are sourced from `include/vyn/parser/ast.hpp`.
+This document describes the fundamental building blocks of the VyB Abstract Syntax Tree (AST), including the base `Node` class, its primary derivatives (`Expression`, `Statement`, `Declaration`), the `NodeType` enumeration, and the Visitor pattern implementation. All definitions are sourced from `include/vyb/parser/ast.hpp`.
 
-## 1. Base AST Node (`vyn::ast::Node`) and Derivatives
+## 1. Base AST Node (`vyb::ast::Node`) and Derivatives
 
-All AST nodes in Vyn inherit from a base `Node` class. `Expression`, `Statement`, and `Declaration` are key abstract base classes derived from `Node`.
+All AST nodes in VyB inherit from a base `Node` class. `Expression`, `Statement`, and `Declaration` are key abstract base classes derived from `Node`.
 
 ```cpp
-// Structure in include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// Structure in include/vyb/parser/ast.hpp
+namespace vyb::ast {
 
 // Forward declarations for Visitor pattern and base types
 class Node;
@@ -18,7 +18,7 @@ class Declaration;
 class Visitor;
 // ... (other forward declarations for all concrete node types are implicitly needed by Visitor)
 
-// SourceLocation is defined in \"vyn/source_location.hpp\"
+// SourceLocation is defined in \"vyb/source_location.hpp\"
 
 // Base AST Node
 class Node {
@@ -54,27 +54,27 @@ public:
     // Note: Specific declaration types derive from this.
 };
 
-// vyn::ast::TypeNode is the concrete class for type representations.
+// vyb::ast::TypeNode is the concrete class for type representations.
 // PatternNode is a conceptual base for future pattern matching AST nodes.
 
 } // namespace ast
-// Note: The outer 'vyn' namespace is omitted here for brevity, assuming 'using namespace vyn;'
-// or fully qualifying, e.g., vyn::ast::Node. The header uses 'namespace vyn { namespace ast { ... } }'.
+// Note: The outer 'vyb' namespace is omitted here for brevity, assuming 'using namespace vyb;'
+// or fully qualifying, e.g., vyb::ast::Node. The header uses 'namespace vyb { namespace ast { ... } }'.
 ```
 
 Key members and features:
 
--   **`vyn::SourceLocation`**: Defined in `vyn/source_location.hpp`. Stores filename, line, and column.
--   **`vyn::ast::Node::loc`**: An instance of `SourceLocation`.
--   **`vyn::ast::Node::inferredTypeName`**: A string to store type information inferred during semantic analysis.
--   **`vyn::ast::Node::getType() const`**: Pure virtual, returns specific `NodeType`.
--   **`vyn::ast::Node::toString() const`**: Pure virtual, for string representation (debugging).
--   **`vyn::ast::Node::accept(Visitor& visitor)`**: Pure virtual, for the Visitor pattern.
+-   **`vyb::SourceLocation`**: Defined in `vyb/source_location.hpp`. Stores filename, line, and column.
+-   **`vyb::ast::Node::loc`**: An instance of `SourceLocation`.
+-   **`vyb::ast::Node::inferredTypeName`**: A string to store type information inferred during semantic analysis.
+-   **`vyb::ast::Node::getType() const`**: Pure virtual, returns specific `NodeType`.
+-   **`vyb::ast::Node::toString() const`**: Pure virtual, for string representation (debugging).
+-   **`vyb::ast::Node::accept(Visitor& visitor)`**: Pure virtual, for the Visitor pattern.
 -   **Base Derivatives**:
-    -   `vyn::ast::Expression`: Base for expression nodes.
-    -   `vyn::ast::Statement`: Base for statement nodes.
-    -   `vyn::ast::Declaration`: Base for declaration nodes, inherits from `Statement`.
--   **`vyn::ast::TypeNode`**: The concrete class for type representations (see `AST_Types.md`).
+    -   `vyb::ast::Expression`: Base for expression nodes.
+    -   `vyb::ast::Statement`: Base for statement nodes.
+    -   `vyb::ast::Declaration`: Base for declaration nodes, inherits from `Statement`.
+-   **`vyb::ast::TypeNode`**: The concrete class for type representations (see `AST_Types.md`).
 -   **Pattern Nodes**: Planned for pattern matching (see `AST_Patterns.md` and `AST_Roadmap.md`).
 
 ## 2. `NodeType` Enumeration
@@ -82,8 +82,8 @@ Key members and features:
 This enumeration is used to identify the concrete type of an AST node. It is used in implementations of `getType()` in concrete node classes and is useful for pattern-matching-style operations in AST processing.
 
 ```cpp
-// Enum in include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// Enum in include/vyb/parser/ast.hpp
+namespace vyb::ast {
 enum class NodeType {
     // Literals
     IDENTIFIER,
@@ -94,7 +94,7 @@ enum class NodeType {
     ARRAY_LITERAL,
     OBJECT_LITERAL,
     NIL_LITERAL,
-    
+
     // Expressions
     UNARY_EXPRESSION,
     BINARY_EXPRESSION,
@@ -141,7 +141,7 @@ enum class NodeType {
 
     // Memory system types (represented using existing nodes)
     // LOC_TYPE - Represented using GENERIC_INSTANCE_TYPE_NODE with name "loc"
-    // AT_INTRINSIC - Represented using CALL_EXPRESSION or CONSTRUCTION_EXPRESSION  
+    // AT_INTRINSIC - Represented using CALL_EXPRESSION or CONSTRUCTION_EXPRESSION
     // FROM_INTRINSIC - Represented using CONSTRUCTION_EXPRESSION with generic target type
 
     // Other
@@ -149,18 +149,18 @@ enum class NodeType {
     FUNCTION_PARAMETER,     // Helper struct, also a node type
     IMPORT_SPECIFIER        // Helper struct, also a node type
 };
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
-This enum is kept up-to-date with all implemented AST node classes in `include/vyn/parser/ast.hpp`.
+This enum is kept up-to-date with all implemented AST node classes in `include/vyb/parser/ast.hpp`.
 
 ## 3. Visitor Pattern
 
 The AST employs the Visitor design pattern.
 
 ```cpp
-// Visitor interface in include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// Visitor interface in include/vyb/parser/ast.hpp
+namespace vyb::ast {
 
 // Forward declarations of all concrete AST node types are needed here.
 // For brevity, only a few are listed as examples. The actual header lists all.
@@ -260,14 +260,14 @@ public:
 };
 
 } // namespace ast
-} // namespace vyn
+} // namespace vyb
 ```
 
 Each concrete AST node class implements the `accept` method:
 
 ```cpp
 // Example for Identifier (in its implementation file or ast.cpp)
-// Assuming using namespace vyn::ast;
+// Assuming using namespace vyb::ast;
 void Identifier::accept(Visitor& visitor) {
     visitor.visit(this);
 }

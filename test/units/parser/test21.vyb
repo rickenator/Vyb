@@ -1,0 +1,16 @@
+// @test: Parser handles main.vyb class and operator
+// @description: Extracted from tests.cpp - Parser handles main.vyb class and operator
+// @category: parser
+// @expect: fail
+// @parse-only: true
+// @expect-output: n/a
+// @expect-error: n/a
+// @expect-return: n/a
+
+class Vector {
+    x<Float>;
+    y<Float>;
+    fn operator+(other: Vector) -> Vector {
+        return Vector { x: self.x + other.x, y: self.y + other.y }
+    }
+}

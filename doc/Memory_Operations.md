@@ -1,12 +1,12 @@
-# Vyn Memory Operations
+# VyB Memory Operations
 
-This document describes Vyn's memory model and the operations available for low-level memory manipulation. Vyn follows a hybrid approach to memory management, with safe memory operations by default and explicit freedom operations when needed.
+This document describes VyB's memory model and the operations available for low-level memory manipulation. VyB follows a hybrid approach to memory management, with safe memory operations by default and explicit freedom operations when needed.
 
 ## 1. Memory Safety Philosophy
 
-Vyn's memory model is designed with these principles:
+VyB's memory model is designed with these principles:
 
-- **Safe by Default**: Normal Vyn code operates with memory safety guarantees
+- **Safe by Default**: Normal VyB code operates with memory safety guarantees
 - **Explicit Unsafety**: Freedom operations must be contained within `freedom` blocks
 - **Minimal Freedom Surface**: The language minimizes the number of freedom operations needed
 - **Clear Intent**: Memory operations use clear syntax that indicates their purpose
@@ -22,7 +22,7 @@ The `loc<T>` type represents a raw pointer to memory containing a value of type 
 - **Safety**: Always considered freedom to dereference or modify
 
 Example:
-```vyn
+```vyb
 var<Int> x = 42;
 var<loc<Int>> p; // Declares a pointer to Int
 
@@ -52,7 +52,7 @@ The `loc()` operation creates a pointer to a variable.
 - **Safety**: Must be used within an `freedom` block
 
 Example:
-```vyn
+```vyb
 var<Int> x = 42;
 freedom {
     var<loc<Int>> p = loc(x);
@@ -73,7 +73,7 @@ The `at()` operation accesses the value at a pointer's location.
 - **Safety**: Must be used within an `freedom` block
 
 Examples:
-```vyn
+```vyb
 freedom {
     var<Int> y = at(p);  // Reading from a pointer (load)
     at(p) = 99;          // Writing to a pointer (store)
@@ -90,12 +90,12 @@ The `from<loc<T>>()` operation converts between different pointer types or from 
 - **Safety**: Must be used within an `freedom` block
 
 Examples:
-```vyn
+```vyb
 freedom {
      // Convert an integer to a pointer
     var<Int> addr = 0x12345678;
     var<loc<Int>> p = from<loc<Int>>(addr);
-     
+
      // Convert between pointer types
     var<loc<Void>> p_void = loc(x);
     var<loc<Int>> p_int = from<loc<Int>>(p_void);
@@ -111,7 +111,7 @@ All memory operations must be contained within `freedom` blocks, which are repre
 - **Purpose**: Explicitly marks code that may violate memory safety
 
 Example:
-```vyn
+```vyb
 var<Int> x = 42;
 var<loc<Int>> p;
 
@@ -127,7 +127,7 @@ freedom {
 
 ## 5. Error Cases and Safety Checks
 
-The Vyn compiler and runtime perform various safety checks:
+The VyB compiler and runtime perform various safety checks:
 
 1. **Compile-time checks**:
    - Memory operations outside freedom blocks are rejected

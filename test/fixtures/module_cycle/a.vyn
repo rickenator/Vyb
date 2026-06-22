@@ -1,6 +1,0 @@
-import cycle_b from "./b.vyn"
-
-share(all)
-cycle_a_value()<Int> -> {
-    return 1
-}

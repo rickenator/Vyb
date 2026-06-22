@@ -1,6 +1,6 @@
 # Test Directory Organization
 
-Current `.vyn` test count: 671.
+Current `.vyb` test count: 671.
 
 | Path | Count | Purpose |
 |------|------:|---------|
@@ -34,7 +34,7 @@ Current `.vyn` test count: 671.
 | `test/ffi/` | 3 | `extern "C"` and `freedom` FFI checks |
 | `test/async/` | 2 | Async syntax/runtime experiments |
 | `test/json/` | 2 | JSON conversion checks |
-| top-level `.vyn` tests | 6 | Legacy focused smoke tests |
+| top-level `.vyb` tests | 6 | Legacy focused smoke tests |
 
 `test/future_features/` is intentionally allowed to contain incomplete language
 designs. Tests outside that directory should either execute successfully or be

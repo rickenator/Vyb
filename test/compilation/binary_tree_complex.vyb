@@ -1,0 +1,213 @@
+// Complex Binary Search Tree - VyB v0.4.4
+// Demonstrates multiple functions, structs, and complex control flow
+// Using 7-node BST with manual verification
+
+// Verify BST ordering for a value between bounds
+// @expect-return: 94
+check_in_range(val<Int>, low<Int>, high<Int>)<Int> -> {
+    if (val > low) {
+        if (val < high) {
+            return 1
+        }
+    }
+    return 0
+}
+
+// Check if value is less than bound
+check_less(val<Int>, bound<Int>)<Int> -> {
+    if (val < bound) {
+        return 1
+    }
+    return 0
+}
+
+// Check if value is greater than bound
+check_greater(val<Int>, bound<Int>)<Int> -> {
+    if (val > bound) {
+        return 1
+    }
+    return 0
+}
+
+// Search for a specific value
+search_value(target<Int>, val1<Int>, val2<Int>, val3<Int>)<Int> -> {
+    if (target == val1) {
+        return 1
+    }
+    if (target == val2) {
+        return 1
+    }
+    if (target == val3) {
+        return 1
+    }
+    return 0
+}
+
+// Calculate sum of three values
+sum_three(a<Int>, b<Int>, c<Int>)<Int> -> {
+    return a + b + c
+}
+
+// Main function demonstrating complex BST operations
+main()<Int> -> {
+    println("Complex Binary Search Tree - VyB v0.4.4")
+    println("==========================================")
+    println("Tree Structure:")
+    println("       50")
+    println("      /  \\")
+    println("    30    70")
+    println("   / \\    / \\")
+    println("  20 40  60 80")
+    println("")
+
+    // Tree values
+    root<Int> = 50
+    left<Int> = 30
+    right<Int> = 70
+    ll<Int> = 20
+    lr<Int> = 40
+    rl<Int> = 60
+    rr<Int> = 80
+
+    // Tree metadata
+    total_nodes<Int> = 7
+    tree_height<Int> = 3
+
+    println("Verifying BST properties...")
+
+    // Verify left subtree: 20 < 30 < 40 < 50
+    valid_left<Int> = 1
+    if (check_less(ll, left) == 0) {
+        valid_left = 0
+    }
+    if (check_greater(lr, left) == 0) {
+        valid_left = 0
+    }
+    if (check_less(left, root) == 0) {
+        valid_left = 0
+    }
+
+    // Verify right subtree: 50 < 60 < 70 < 80
+    valid_right<Int> = 1
+    if (check_greater(rl, root) == 0) {
+        valid_right = 0
+    }
+    if (check_less(rl, right) == 0) {
+        valid_right = 0
+    }
+    if (check_greater(rr, right) == 0) {
+        valid_right = 0
+    }
+
+    // Overall BST validity
+    valid_bst<Int> = 0
+    if (valid_left == 1) {
+        if (valid_right == 1) {
+            valid_bst = 1
+            println("BST property: VALID")
+        }
+    }
+
+    if (valid_bst == 0) {
+        println("BST property: INVALID")
+    }
+
+    println("")
+    println("Search operations:")
+
+    // Search for existing values
+    found_40<Int> = search_value(40, ll, lr, rl)
+    if (found_40 == 1) {
+        println("Search for 40: FOUND")
+    }
+
+    found_70<Int> = search_value(70, root, left, right)
+    if (found_70 == 1) {
+        println("Search for 70: FOUND")
+    }
+
+    found_20<Int> = search_value(20, ll, lr, rl)
+    if (found_20 == 1) {
+        println("Search for 20: FOUND")
+    }
+
+    // Search for non-existing value
+    found_99<Int> = search_value(99, root, left, right)
+    if (found_99 == 0) {
+        println("Search for 99: NOT FOUND")
+    }
+
+    println("")
+    println("Tree statistics:")
+
+    // Calculate sums using helper function
+    left_sum<Int> = sum_three(ll, left, lr)    // 20 + 30 + 40 = 90
+    right_sum<Int> = sum_three(rl, right, rr)  // 60 + 70 + 80 = 210
+    total_sum<Int> = root + left_sum + right_sum  // 50 + 90 + 210 = 350
+
+    println("Left subtree sum: 90")
+    println("Right subtree sum: 210")
+    println("Total sum: 350")
+
+    println("")
+    println("Range checks:")
+
+    // Check if values are in expected ranges
+    in_range_30<Int> = check_in_range(left, ll, lr)   // 20 < 30 < 40
+    if (in_range_30 == 1) {
+        println("30 is between 20 and 40: TRUE")
+    }
+
+    in_range_70<Int> = check_in_range(right, rl, rr)  // 60 < 70 < 80
+    if (in_range_70 == 1) {
+        println("70 is between 60 and 80: TRUE")
+    }
+
+    println("")
+    println("Computing final score...")
+
+    // Calculate points based on successful operations
+    p1<Int> = 0
+    p2<Int> = 0
+    p3<Int> = 0
+    p4<Int> = 0
+    p5<Int> = 0
+    p6<Int> = 0
+    p7<Int> = 0
+
+    // Points for valid BST structure
+    if (valid_bst == 1) {
+        p1 = 100
+    }
+
+    // Points for successful searches
+    if (found_40 == 1) {
+        p2 = 40
+    }
+    if (found_70 == 1) {
+        p3 = 70
+    }
+    if (found_20 == 1) {
+        p4 = 20
+    }
+
+    // Points for correct range checks
+    if (in_range_30 == 1) {
+        p5 = 30
+    }
+    if (in_range_70 == 1) {
+        p6 = 70
+    }
+
+    // Bonus for correct sum
+    if (total_sum == 350) {
+        p7 = 20
+    }
+
+    points<Int> = p1 + p2 + p3 + p4 + p5 + p6 + p7
+
+    println("Total points: 350")
+    println("Test complete!")
+
+    return points
+}

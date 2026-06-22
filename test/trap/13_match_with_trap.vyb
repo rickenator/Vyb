@@ -1,0 +1,28 @@
+# Test 13: Match expression with trap - error handling in pattern matching
+# Tests that errors in match arms can be trapped
+
+parse_value(s<String>)<Int> -> {
+    match (s) {
+        "zero" -> return 0,
+        "one" -> return 1,
+        "fail" -> fail ParseError { input = s },
+        ? -> fail ParseError { input = "unknown: " + s }
+    }
+}
+
+main()<Int> -> {
+    inputs<Vec<String>> = vec!["zero", "one", "fail", "other"]
+
+    for (input in inputs) {
+        result<Int> = {
+            parse_value(input)
+        } trap (e<ParseError>) -> {
+            println("Parse error for input: " + e.input)
+            return -1
+        }
+
+        println("Parsed '" + input + "' = " + result.to_string())
+    }
+
+    return 0
+}

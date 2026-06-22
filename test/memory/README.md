@@ -1,10 +1,10 @@
 # Memory & Ownership Tests
 
-This directory contains comprehensive tests for Vyn's ownership and memory management system, including the unique ownership types (`my<T>`, `our<T>`, `their<T>`), borrowing operations (`borrow()`, `view()`), and low-level memory operations (`loc()`, `at()`).
+This directory contains comprehensive tests for VyB's ownership and memory management system, including the unique ownership types (`my<T>`, `our<T>`, `their<T>`), borrowing operations (`borrow()`, `view()`), and low-level memory operations (`loc()`, `at()`).
 
 ## Test Files
 
-### ownership_test.vyn
+### ownership_test.vyb
 **Purpose**: Comprehensive test suite covering all ownership and borrowing semantics
 
 **What it tests**:
@@ -46,12 +46,12 @@ Created multiple references to shared data
 
 **Run with**:
 ```bash
-build/vyn test/memory/ownership_test.vyn
+build/vyb test/memory/ownership_test.vyb
 ```
 
 ---
 
-### borrow_test.vyn
+### borrow_test.vyb
 **Purpose**: Tests basic borrow functionality with structs
 
 **What it tests**:
@@ -67,12 +67,12 @@ After: 42
 
 **Run with**:
 ```bash
-build/vyn test/memory/borrow_test.vyn
+build/vyb test/memory/borrow_test.vyb
 ```
 
 ---
 
-### simple_memory_test.vyn
+### simple_memory_test.vyb
 **Purpose**: Basic memory operations test
 
 **What it tests**:
@@ -88,7 +88,7 @@ build/vyn test/memory/borrow_test.vyn
 
 **Run with**:
 ```bash
-build/vyn test/memory/simple_memory_test.vyn
+build/vyb test/memory/simple_memory_test.vyb
 ```
 
 ---
@@ -128,13 +128,13 @@ build/vyn test/memory/simple_memory_test.vyn
 Run all memory tests:
 ```bash
 # Comprehensive ownership test
-build/vyn test/memory/ownership_test.vyn
+build/vyb test/memory/ownership_test.vyb
 
 # Basic borrow test
-build/vyn test/memory/borrow_test.vyn
+build/vyb test/memory/borrow_test.vyb
 
 # Simple memory operations
-build/vyn test/memory/simple_memory_test.vyn
+build/vyb test/memory/simple_memory_test.vyb
 ```
 
 ## Expected Results
@@ -149,21 +149,21 @@ All tests should:
 
 ### "Prefix 'borrow expr' syntax is no longer supported"
 **Solution**: Use function-call syntax:
-```vyn
+```vyb
 borrowed<their<Int>> = borrow(data)
 viewed<their<Int const>> = view(data)
 ```
 
 ### "borrow() argument must be an owned type my<T> or our<T>"
 **Solution**: Ensure you're borrowing from `my<T>` or `our<T>`, not plain `T`:
-```vyn
+```vyb
 data<my<Int>> = my(42)  // Correct
 borrowed<their<Int>> = borrow(data)  // Works
 ```
 
 ### Pointer operations fail
 **Solution**: All pointer operations require `freedom {}`:
-```vyn
+```vyb
 freedom {
     ptr<loc<Int>> = loc(x)
     value<Int> = at(ptr)

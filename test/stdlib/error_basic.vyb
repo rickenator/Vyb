@@ -1,0 +1,53 @@
+# Test stdlib Error types with Errable aspect
+#
+# This test verifies:
+# 1. Errable aspect definition
+# 2. Error struct with bind implementations
+# 3. Failing with Error type
+# 4. Trapping Error type
+
+aspect Errable {
+    message(self<Self>)<String> -> { }
+    code(self<Self>)<Int> -> { }
+}
+
+aspect Display {
+    display(self<Self>)<String> -> { }
+}
+
+struct Error {
+    message<String>,
+    code<Int>
+}
+
+bind Errable -> Error {
+    message(self<Self>)<String> -> {
+        return self.message;
+    }
+
+    code(self<Self>)<Int> -> {
+        return self.code;
+    }
+}
+
+bind Display -> Error {
+    display(self<Self>)<String> -> {
+        return self.message;
+    }
+}
+
+# Function that fails with Error
+risky()<Int> -> {
+    fail Error { message = "Something went wrong", code = 42 };
+}
+
+main()<Int> -> {
+    result<Int> = {
+        risky()
+    } trap (e<Error>) -> {
+        # Successfully caught the error
+        return 1;
+    }
+
+    return result;
+}

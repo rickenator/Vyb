@@ -5,13 +5,13 @@
 #include <cstdlib> // For malloc
 #include <cstdint> // For uint8_t, uint16_t, uint32_t, uint64_t
 
-namespace vyn {
+namespace vyb {
 namespace intrinsics {
 
 /**
  * RUNTIME INTRINSICS
- * 
- * This file contains implementations of runtime intrinsics for the Vyn language.
+ *
+ * This file contains implementations of runtime intrinsics for the VyB language.
  * These intrinsics are functions that are directly recognized and called by the runtime.
  *
  * NOTE: Memory operations such as loc(), at(), addr(), and from<loc<T>>() are NOT
@@ -20,7 +20,7 @@ namespace intrinsics {
  * have runtime function implementations.
  *
  * MEMORY OPERATION IMPLEMENTATION LOCATIONS:
- * - AST Nodes: include/vyn/parser/ast.hpp (LocationExpression, PointerDerefExpression, etc.)
+ * - AST Nodes: include/vyb/parser/ast.hpp (LocationExpression, PointerDerefExpression, etc.)
  * - Semantic Analysis: src/vre/semantic.cpp (type checking & freedom block verification)
  * - Code Generation: src/vre/llvm/cgen_expr.cpp (LLVM IR generation)
  */
@@ -32,24 +32,24 @@ void println(const std::string& output) {
 
 // Function to convert a string literal to its raw JSON value
 // This supports the lit() serialization intrinsic
-extern "C" char* __vyn_convert_lit_string(const char* str) {
+extern "C" char* __vyb_convert_lit_string(const char* str) {
     if (!str) {
         const char* nullJson = "null";
         char* result = (char*)malloc(strlen(nullJson) + 1);
         if (result) strcpy(result, nullJson);
         return result;
     }
-    
+
     // Parse the string value to determine what raw JSON value to return
     std::string input(str);
     std::string output;
-    
+
     // Try to parse as number (integer or float)
     bool isNumeric = true;
     bool isFloat = false;
     bool isBoolean = false;
     bool isNull = false;
-    
+
     // Check for special literal values
     if (input == "true" || input == "false") {
         isBoolean = true;
@@ -60,53 +60,53 @@ extern "C" char* __vyn_convert_lit_string(const char* str) {
     } else {
         // Check if it's a numeric value
         size_t pos = 0;
-        
+
         // Skip leading whitespace
         while (pos < input.length() && isspace(input[pos])) pos++;
-        
+
         // Check for sign
         if (pos < input.length() && (input[pos] == '-' || input[pos] == '+')) pos++;
-        
+
         // Scan digits
         bool hasDigits = false;
         while (pos < input.length() && isdigit(input[pos])) {
             hasDigits = true;
             pos++;
         }
-        
+
         // Check for decimal point
         if (pos < input.length() && input[pos] == '.') {
             isFloat = true;
             pos++;
-            
+
             // Scan fractional digits
             while (pos < input.length() && isdigit(input[pos])) pos++;
         }
-        
+
         // Check for exponent
         if (pos < input.length() && (input[pos] == 'e' || input[pos] == 'E')) {
             isFloat = true;
             pos++;
-            
+
             // Check for sign in exponent
             if (pos < input.length() && (input[pos] == '-' || input[pos] == '+')) pos++;
-            
+
             // Scan exponent digits
             bool hasExpDigits = false;
             while (pos < input.length() && isdigit(input[pos])) {
                 hasExpDigits = true;
                 pos++;
             }
-            
+
             if (!hasExpDigits) isNumeric = false; // Invalid exponent
         }
-        
+
         // Skip trailing whitespace
         while (pos < input.length() && isspace(input[pos])) pos++;
-        
+
         // Check if we consumed the entire string and found at least one digit
         isNumeric = isNumeric && (pos == input.length()) && hasDigits;
-        
+
         if (isNumeric) {
             // It's a valid number, pass it through as-is
             output = input;
@@ -117,15 +117,15 @@ extern "C" char* __vyn_convert_lit_string(const char* str) {
             output += "\"";
         }
     }
-    
+
     // Return a heap-allocated copy of the result
     char* result = (char*)malloc(output.length() + 1);
     if (result) strcpy(result, output.c_str());
     return result;
 }
 
-// Println intrinsic for Vyn - handles string output and auto-serialization
-extern "C" void __vyn_println(const char* str) {
+// Println intrinsic for VyB - handles string output and auto-serialization
+extern "C" void __vyb_println(const char* str) {
     if (!str) {
         std::cout << "null" << std::endl;
     } else {
@@ -134,7 +134,7 @@ extern "C" void __vyn_println(const char* str) {
 }
 
 // print intrinsic - no newline
-extern "C" void __vyn_print(const char* str) {
+extern "C" void __vyb_print(const char* str) {
     if (!str) {
         std::cout << "null";
     } else {
@@ -143,43 +143,43 @@ extern "C" void __vyn_print(const char* str) {
 }
 
 // println_int / print_int intrinsics for integer output
-extern "C" void __vyn_println_int(int64_t val) {
+extern "C" void __vyb_println_int(int64_t val) {
     std::cout << val << std::endl;
 }
 
-extern "C" void __vyn_print_int(int64_t val) {
+extern "C" void __vyb_print_int(int64_t val) {
     std::cout << val;
 }
 
 // println_bool / print_bool intrinsics for boolean output
-extern "C" void __vyn_println_bool(int64_t val) {
+extern "C" void __vyb_println_bool(int64_t val) {
     std::cout << (val ? "true" : "false") << std::endl;
 }
 
-extern "C" void __vyn_print_bool(int64_t val) {
+extern "C" void __vyb_print_bool(int64_t val) {
     std::cout << (val ? "true" : "false");
 }
 
 // Serialization helper for auto-serializing complex types to JSON
-extern "C" char* __vyn_serialize_to_json(void* obj, const char* type_name) {
+extern "C" char* __vyb_serialize_to_json(void* obj, const char* type_name) {
     // This function handles the serialization of objects to JSON
     // It uses the type_name parameter to determine how to serialize the object
-    
+
     if (!obj) {
         const char* nullJson = "null";
         char* result = (char*)malloc(strlen(nullJson) + 1);
         if (result) strcpy(result, nullJson);
         return result;
     }
-    
+
     std::string jsonStr;
-    
+
     // Special case: if type_name is nullptr, this is a lit() intrinsic call
     // We should try to infer the type from the memory content and output raw literal
     if (!type_name) {
         // For lit() intrinsic: try to determine the type from the data
         // This is a heuristic approach since we don't have type information
-        
+
         // First, check if it's a string (null-terminated C string)
         const char* strValue = reinterpret_cast<const char*>(obj);
         if (strValue) {
@@ -187,7 +187,7 @@ extern "C" char* __vyn_serialize_to_json(void* obj, const char* type_name) {
             bool isString = true;
             size_t len = 0;
             const size_t maxStringLen = 1024; // Safety limit
-            
+
             for (size_t i = 0; i < maxStringLen; i++) {
                 if (strValue[i] == '\0') {
                     len = i;
@@ -198,31 +198,31 @@ extern "C" char* __vyn_serialize_to_json(void* obj, const char* type_name) {
                     break;
                 }
             }
-            
+
             if (isString && len > 0 && len < maxStringLen) {
                 // It's a string literal, output as JSON string
                 jsonStr = "\"";
                 jsonStr += strValue;
                 jsonStr += "\"";
-                
+
                 char* result = (char*)malloc(jsonStr.length() + 1);
                 if (result) strcpy(result, jsonStr.c_str());
                 return result;
             }
         }
-        
+
         // If not a string, fall back to treating as unknown type
         type_name = "unknown";
     }
-    
+
     std::string typeStr(type_name);
-    
+
     // Handle literal types for lit() intrinsic - output raw JSON values
     if (typeStr == "string_literal") {
         // String literal - output the string content as raw JSON string
         const char* strValue = reinterpret_cast<const char*>(obj);
         if (strValue) {
-            jsonStr = strValue; // Output raw content without quotes for lit() 
+            jsonStr = strValue; // Output raw content without quotes for lit()
         } else {
             jsonStr = "null";
         }
@@ -272,7 +272,7 @@ extern "C" char* __vyn_serialize_to_json(void* obj, const char* type_name) {
     else if (strstr(type_name, "struct") != nullptr || (typeStr.find("{") != std::string::npos && typeStr.find("}") != std::string::npos)) {
         // This is a struct type, likely from a multi-value return
         // Handle LLVM struct type names like "{ i64, ptr }" or traditional struct names
-        
+
         // Handle our test case for multi-value returns with specific type patterns
         if (typeStr == "{ ptr, i64, i1 }" || typeStr == "{ i64, ptr }" || typeStr == "{ i64, ptr, i8 }" || strstr(type_name, "struct.anon") != nullptr) {
             // Handle the actual struct layout: { ptr, i64, i1 } (String, Int, Bool)
@@ -282,12 +282,12 @@ extern "C" char* __vyn_serialize_to_json(void* obj, const char* type_name) {
                     int64_t intValue;   // i64 (second field)
                     bool boolValue;     // i1 (third field)
                 };
-                
+
                 MultiValueReturn* mvr = static_cast<MultiValueReturn*>(obj);
-                
+
                 // Create a JSON object with the proper field names in expected order
                 jsonStr = "{";
-                
+
                 // Add the String field first
                 jsonStr += "\"String\":";
                 if (mvr->stringValue) {
@@ -297,15 +297,15 @@ extern "C" char* __vyn_serialize_to_json(void* obj, const char* type_name) {
                 } else {
                     jsonStr += "null";
                 }
-                
+
                 // Add the Int field
                 jsonStr += ",\"Int\":";
                 jsonStr += std::to_string(mvr->intValue);
-                
+
                 // Add the Bool field
                 jsonStr += ",\"Bool\":";
                 jsonStr += (mvr->boolValue ? "true" : "false");
-                
+
                 jsonStr += "}";
             } else if (typeStr == "{ i64, ptr, i8 }") {
                 // Handle { i64, ptr, i8 } pattern (UserId, UserName, Score)
@@ -314,16 +314,16 @@ extern "C" char* __vyn_serialize_to_json(void* obj, const char* type_name) {
                     char* userName;     // ptr (second field - UserName)
                     int8_t score;       // i8 (third field - Score)
                 };
-                
+
                 TypeAliasMultiValueReturn* mvr = static_cast<TypeAliasMultiValueReturn*>(obj);
-                
+
                 // Create a JSON object with the proper field names
                 jsonStr = "{";
-                
+
                 // Add the UserId field
                 jsonStr += "\"UserId\":";
                 jsonStr += std::to_string(mvr->userId);
-                
+
                 // Add the UserName field
                 jsonStr += ",\"UserName\":";
                 if (mvr->userName) {
@@ -333,11 +333,11 @@ extern "C" char* __vyn_serialize_to_json(void* obj, const char* type_name) {
                 } else {
                     jsonStr += "null";
                 }
-                
+
                 // Add the Score field
                 jsonStr += ",\"Score\":";
                 jsonStr += std::to_string(static_cast<int>(mvr->score));
-                
+
                 jsonStr += "}";
             } else {
                 // Handle legacy { i64, ptr } pattern for backward compatibility
@@ -345,16 +345,16 @@ extern "C" char* __vyn_serialize_to_json(void* obj, const char* type_name) {
                     int64_t intValue;
                     char* stringValue;
                 };
-                
+
                 LegacyMultiValueReturn* mvr = static_cast<LegacyMultiValueReturn*>(obj);
-                
+
                 // Create a JSON object with the proper field names
                 jsonStr = "{";
-                
+
                 // Add the Int field
                 jsonStr += "\"Int\":";
                 jsonStr += std::to_string(mvr->intValue);
-                
+
                 // Add the String field if it exists
                 if (mvr->stringValue) {
                     jsonStr += ",\"String\":\"";
@@ -363,7 +363,7 @@ extern "C" char* __vyn_serialize_to_json(void* obj, const char* type_name) {
                 } else {
                     jsonStr += ",\"String\":null";
                 }
-                
+
                 jsonStr += "}";
             }
         } else {
@@ -379,14 +379,14 @@ extern "C" char* __vyn_serialize_to_json(void* obj, const char* type_name) {
         jsonStr = "{ \"type\": \"";
         jsonStr += type_name;
         jsonStr += "\", \"address\": \"";
-        
+
         // Convert address to hex string
         char addrBuf[32];
         snprintf(addrBuf, sizeof(addrBuf), "%p", obj);
         jsonStr += addrBuf;
         jsonStr += "\" }";
     }
-    
+
     // Return a heap-allocated copy of the string
     char* result = (char*)malloc(jsonStr.length() + 1);
     if (result) strcpy(result, jsonStr.c_str());
@@ -394,30 +394,30 @@ extern "C" char* __vyn_serialize_to_json(void* obj, const char* type_name) {
 }
 
 // Serialization helper for multi-value returns with custom field names
-extern "C" char* __vyn_serialize_struct_with_names(void* obj, const char* type_name, const char** field_names, int field_count) {
+extern "C" char* __vyb_serialize_struct_with_names(void* obj, const char* type_name, const char** field_names, int field_count) {
     // This function handles the serialization of structs to JSON with custom field names
     // It uses the field_names array to provide proper field names in the JSON output
-    
+
     if (!obj) {
         const char* nullJson = "null";
         char* result = (char*)malloc(strlen(nullJson) + 1);
         if (result) strcpy(result, nullJson);
         return result;
     }
-    
+
     std::string jsonStr;
-    
+
     // Check the type name to determine how to serialize the object
     if (!type_name) {
         type_name = "unknown";
     }
-    
+
     std::string typeStr(type_name);
-    
+
     // Handle struct types with custom field names
     if (strstr(type_name, "struct") != nullptr || (typeStr.find("{") != std::string::npos && typeStr.find("}") != std::string::npos)) {
         // This is a struct type, likely from a multi-value return
-         
+
          // Handle our test case for multi-value returns with specific type patterns
          if (typeStr == "{ ptr, i64, i1 }" || typeStr == "{ i64, ptr }" || strstr(type_name, "struct.anon") != nullptr) {
              // Handle the actual struct layout: { ptr, i64, i1 } (String, Int, Bool)
@@ -427,12 +427,12 @@ extern "C" char* __vyn_serialize_struct_with_names(void* obj, const char* type_n
                      int64_t intValue;   // i64 (second field)
                      bool boolValue;     // i1 (third field)
                  };
-                 
+
                  MultiValueReturn* mvr = static_cast<MultiValueReturn*>(obj);
-                 
+
                  // Create a JSON object with the custom field names
                  jsonStr = "{";
-                 
+
                  // Add the first field (String/custom name)
                  jsonStr += "\"";
                  if (field_count > 0 && field_names && field_names[0]) {
@@ -448,7 +448,7 @@ extern "C" char* __vyn_serialize_struct_with_names(void* obj, const char* type_n
                  } else {
                      jsonStr += "null";
                  }
-                 
+
                  // Add the second field (Int/custom name)
                  jsonStr += ",\"";
                  if (field_count > 1 && field_names && field_names[1]) {
@@ -458,7 +458,7 @@ extern "C" char* __vyn_serialize_struct_with_names(void* obj, const char* type_n
                  }
                  jsonStr += "\":";
                  jsonStr += std::to_string(mvr->intValue);
-                 
+
                  // Add the third field (Bool/custom name)
                  jsonStr += ",\"";
                  if (field_count > 2 && field_names && field_names[2]) {
@@ -468,7 +468,7 @@ extern "C" char* __vyn_serialize_struct_with_names(void* obj, const char* type_n
                  }
                  jsonStr += "\":";
                  jsonStr += (mvr->boolValue ? "true" : "false");
-                 
+
                  jsonStr += "}";
              } else {
                  // Handle legacy { i64, ptr } pattern for backward compatibility
@@ -476,12 +476,12 @@ extern "C" char* __vyn_serialize_struct_with_names(void* obj, const char* type_n
                      int64_t intValue;
                      char* stringValue;
                  };
-                 
+
                  LegacyMultiValueReturn* mvr = static_cast<LegacyMultiValueReturn*>(obj);
-                 
+
                  // Create a JSON object with the custom field names
                  jsonStr = "{";
-                 
+
                  // Add the first field (Int/MyInt)
                  if (field_count > 0 && field_names && field_names[0]) {
                     jsonStr += "\"";
@@ -492,7 +492,7 @@ extern "C" char* __vyn_serialize_struct_with_names(void* obj, const char* type_n
                     jsonStr += "\"Int\":";
                     jsonStr += std::to_string(mvr->intValue);
                  }
-                 
+
                  // Add the second field (String/MyString) if it exists
                  if (mvr->stringValue) {
                      jsonStr += ",\"";
@@ -513,7 +513,7 @@ extern "C" char* __vyn_serialize_struct_with_names(void* obj, const char* type_n
                      }
                      jsonStr += "\":null";
                  }
-                 
+
                  jsonStr += "}";
              }
          } else {
@@ -525,9 +525,9 @@ extern "C" char* __vyn_serialize_struct_with_names(void* obj, const char* type_n
          }
     } else {
         // For other types, fall back to the regular serialization
-        return __vyn_serialize_to_json(obj, type_name);
+        return __vyb_serialize_to_json(obj, type_name);
     }
-    
+
     // Return a heap-allocated copy of the string
     char* result = (char*)malloc(jsonStr.length() + 1);
     if (result) strcpy(result, jsonStr.c_str());
@@ -535,15 +535,15 @@ extern "C" char* __vyn_serialize_struct_with_names(void* obj, const char* type_n
 }
 
 // String concatenation intrinsic
-extern "C" char* __vyn_string_concat(const char* left, const char* right) {
+extern "C" char* __vyb_string_concat(const char* left, const char* right) {
     if (!left) left = "";
     if (!right) right = "";
-    
+
     // Calculate the combined length
     size_t leftLen = strlen(left);
     size_t rightLen = strlen(right);
     size_t totalLen = leftLen + rightLen + 1;  // +1 for null terminator
-    
+
     // Allocate memory for the new string
     char* result = (char*)malloc(totalLen);
     if (!result) {
@@ -551,11 +551,11 @@ extern "C" char* __vyn_string_concat(const char* left, const char* right) {
         std::cerr << "Memory allocation failed for string concatenation" << std::endl;
         return nullptr;
     }
-    
+
     // Copy the strings and add null terminator
     strcpy(result, left);
     strcat(result, right);
-    
+
     return result;
 }
 
@@ -565,14 +565,14 @@ struct JSONArrayContext {
     bool first;
 };
 
-extern "C" void* __vyn_begin_json_array() {
+extern "C" void* __vyb_begin_json_array() {
     JSONArrayContext* ctx = new JSONArrayContext();
     ctx->json = "[";
     ctx->first = true;
     return ctx;
 }
 
-extern "C" void __vyn_add_json_array_element(void* ctxPtr, const char* elemJson) {
+extern "C" void __vyb_add_json_array_element(void* ctxPtr, const char* elemJson) {
     JSONArrayContext* ctx = static_cast<JSONArrayContext*>(ctxPtr);
     if (!ctx->first) {
         ctx->json += ",";
@@ -581,7 +581,7 @@ extern "C" void __vyn_add_json_array_element(void* ctxPtr, const char* elemJson)
     ctx->first = false;
 }
 
-extern "C" char* __vyn_end_json_array(void* ctxPtr) {
+extern "C" char* __vyb_end_json_array(void* ctxPtr) {
     JSONArrayContext* ctx = static_cast<JSONArrayContext*>(ctxPtr);
     ctx->json += "]";
     char* result = (char*)malloc(ctx->json.size() + 1);
@@ -596,14 +596,14 @@ struct JSONObjectContext {
     bool first;
 };
 
-extern "C" void* __vyn_begin_json_object() {
+extern "C" void* __vyb_begin_json_object() {
     JSONObjectContext* ctx = new JSONObjectContext();
     ctx->json = "{";
     ctx->first = true;
     return ctx;
 }
 
-extern "C" void __vyn_add_json_field(void* ctxPtr, const char* fieldName, void* fieldValue, const char* typeName) {
+extern "C" void __vyb_add_json_field(void* ctxPtr, const char* fieldName, void* fieldValue, const char* typeName) {
     JSONObjectContext* ctx = static_cast<JSONObjectContext*>(ctxPtr);
     if (!ctx->first) {
         ctx->json += ",";
@@ -615,14 +615,14 @@ extern "C" void __vyn_add_json_field(void* ctxPtr, const char* fieldName, void* 
     ctx->json += typeName;
     ctx->json += ">\":";
     // Serialize field value using generic to_json
-    char* valJson = __vyn_serialize_to_json(fieldValue, typeName);
+    char* valJson = __vyb_serialize_to_json(fieldValue, typeName);
     ctx->json += valJson;
     free(valJson);
     ctx->first = false;
 }
 
 // New no-type version: add JSON field without type metadata
-extern "C" void __vyn_add_json_field_notype(void* ctxPtr, const char* fieldName, void* fieldValue) {
+extern "C" void __vyb_add_json_field_notype(void* ctxPtr, const char* fieldName, void* fieldValue) {
     JSONObjectContext* ctx = static_cast<JSONObjectContext*>(ctxPtr);
     if (!ctx->first) {
         ctx->json += ",";
@@ -632,13 +632,13 @@ extern "C" void __vyn_add_json_field_notype(void* ctxPtr, const char* fieldName,
     ctx->json += fieldName;
     ctx->json += "\":";
     // Serialize field value using generic to_json, using fieldName as type name
-    char* valJson = __vyn_serialize_to_json(fieldValue, fieldName);
+    char* valJson = __vyb_serialize_to_json(fieldValue, fieldName);
     ctx->json += valJson;
     free(valJson);
     ctx->first = false;
 }
 
-extern "C" char* __vyn_end_json_object(void* ctxPtr) {
+extern "C" char* __vyb_end_json_object(void* ctxPtr) {
     JSONObjectContext* ctx = static_cast<JSONObjectContext*>(ctxPtr);
     ctx->json += "}";
     char* result = (char*)malloc(ctx->json.size() + 1);
@@ -650,42 +650,42 @@ extern "C" char* __vyn_end_json_object(void* ctxPtr) {
 // Future runtime intrinsics may be added here
 
 // ToString intrinsic functions for automatic string conversion
-extern "C" char* __vyn_toString_int(int64_t value) {
+extern "C" char* __vyb_toString_int(int64_t value) {
     std::string str = std::to_string(value);
     char* result = (char*)malloc(str.length() + 1);
     if (result) strcpy(result, str.c_str());
     return result;
 }
 
-extern "C" char* __vyn_toString_int8(int8_t value) {
+extern "C" char* __vyb_toString_int8(int8_t value) {
     std::string str = std::to_string(static_cast<int>(value));
     char* result = (char*)malloc(str.length() + 1);
     if (result) strcpy(result, str.c_str());
     return result;
 }
 
-extern "C" char* __vyn_toString_int32(int32_t value) {
+extern "C" char* __vyb_toString_int32(int32_t value) {
     std::string str = std::to_string(value);
     char* result = (char*)malloc(str.length() + 1);
     if (result) strcpy(result, str.c_str());
     return result;
 }
 
-extern "C" char* __vyn_toString_float(double value) {
+extern "C" char* __vyb_toString_float(double value) {
     std::string str = std::to_string(value);
     char* result = (char*)malloc(str.length() + 1);
     if (result) strcpy(result, str.c_str());
     return result;
 }
 
-extern "C" char* __vyn_toString_bool(bool value) {
+extern "C" char* __vyb_toString_bool(bool value) {
     const char* str = value ? "true" : "false";
     char* result = (char*)malloc(strlen(str) + 1);
     if (result) strcpy(result, str);
     return result;
 }
 
-extern "C" char* __vyn_toString_string(const char* value) {
+extern "C" char* __vyb_toString_string(const char* value) {
     // For strings, just return a copy
     if (!value) {
         const char* nullStr = "null";
@@ -693,7 +693,7 @@ extern "C" char* __vyn_toString_string(const char* value) {
         if (result) strcpy(result, nullStr);
         return result;
     }
-    
+
     size_t len = strlen(value);
     char* result = (char*)malloc(len + 1);
     if (result) strcpy(result, value);
@@ -701,56 +701,56 @@ extern "C" char* __vyn_toString_string(const char* value) {
 }
 
 // Additional toString functions for other basic types
-extern "C" char* __vyn_toString_int16(int16_t value) {
+extern "C" char* __vyb_toString_int16(int16_t value) {
     std::string str = std::to_string(value);
     char* result = (char*)malloc(str.length() + 1);
     if (result) strcpy(result, str.c_str());
     return result;
 }
 
-extern "C" char* __vyn_toString_int64(int64_t value) {
+extern "C" char* __vyb_toString_int64(int64_t value) {
     std::string str = std::to_string(value);
     char* result = (char*)malloc(str.length() + 1);
     if (result) strcpy(result, str.c_str());
     return result;
 }
 
-extern "C" char* __vyn_toString_uint8(uint8_t value) {
+extern "C" char* __vyb_toString_uint8(uint8_t value) {
     std::string str = std::to_string(value);
     char* result = (char*)malloc(str.length() + 1);
     if (result) strcpy(result, str.c_str());
     return result;
 }
 
-extern "C" char* __vyn_toString_uint16(uint16_t value) {
+extern "C" char* __vyb_toString_uint16(uint16_t value) {
     std::string str = std::to_string(value);
     char* result = (char*)malloc(str.length() + 1);
     if (result) strcpy(result, str.c_str());
     return result;
 }
 
-extern "C" char* __vyn_toString_uint32(uint32_t value) {
+extern "C" char* __vyb_toString_uint32(uint32_t value) {
     std::string str = std::to_string(value);
     char* result = (char*)malloc(str.length() + 1);
     if (result) strcpy(result, str.c_str());
     return result;
 }
 
-extern "C" char* __vyn_toString_uint64(uint64_t value) {
+extern "C" char* __vyb_toString_uint64(uint64_t value) {
     std::string str = std::to_string(value);
     char* result = (char*)malloc(str.length() + 1);
     if (result) strcpy(result, str.c_str());
     return result;
 }
 
-extern "C" char* __vyn_toString_float32(float value) {
+extern "C" char* __vyb_toString_float32(float value) {
     std::string str = std::to_string(value);
     char* result = (char*)malloc(str.length() + 1);
     if (result) strcpy(result, str.c_str());
     return result;
 }
 
-extern "C" char* __vyn_toString_char(uint8_t value) {
+extern "C" char* __vyb_toString_char(uint8_t value) {
     // For char, we want to show it as a single character in quotes if printable
     // or as a numeric value if not printable
     char buffer[8]; // Enough for "'c'" or "255"
@@ -759,13 +759,13 @@ extern "C" char* __vyn_toString_char(uint8_t value) {
     } else {
         sprintf(buffer, "%u", value);
     }
-    
+
     char* result = (char*)malloc(strlen(buffer) + 1);
     if (result) strcpy(result, buffer);
     return result;
 }
 
-extern "C" char* __vyn_toString_rune(uint32_t value) {
+extern "C" char* __vyb_toString_rune(uint32_t value) {
     // For rune (Unicode code point), show as numeric value
     // In a full implementation, we might convert to UTF-8 string
     std::string str = std::to_string(value);
@@ -774,20 +774,20 @@ extern "C" char* __vyn_toString_rune(uint32_t value) {
     return result;
 }
 
-extern "C" char* __vyn_toString_byte(uint8_t value) {
+extern "C" char* __vyb_toString_byte(uint8_t value) {
     // Byte is an alias for UInt8
-    return __vyn_toString_uint8(value);
+    return __vyb_toString_uint8(value);
 }
 
 // TODO: Add toString functions for compound types when implemented:
-// char* __vyn_toString_vec(void* vec_ptr, const char* element_type);
-// char* __vyn_toString_tuple(void* tuple_ptr, const char* type_spec);
-// char* __vyn_toString_array(void* array_ptr, const char* element_type, size_t length);
-// char* __vyn_toString_struct(void* struct_ptr, const char* struct_type);
+// char* __vyb_toString_vec(void* vec_ptr, const char* element_type);
+// char* __vyb_toString_tuple(void* tuple_ptr, const char* type_spec);
+// char* __vyb_toString_array(void* array_ptr, const char* element_type, size_t length);
+// char* __vyb_toString_struct(void* struct_ptr, const char* struct_type);
 
 // String::replace runtime helper — replaces all non-overlapping occurrences of old_s with new_s.
 // Returns malloc'd result (caller must free). Sets *out_len to the byte length (excluding NUL).
-extern "C" char* __vyn_string_replace(const char* src, int64_t src_len,
+extern "C" char* __vyb_string_replace(const char* src, int64_t src_len,
                                        const char* old_s, const char* new_s,
                                        int64_t* out_len) {
     if (!src || !old_s || !new_s) {
@@ -838,4 +838,4 @@ extern "C" char* __vyn_string_replace(const char* src, int64_t src_len,
 }
 
 } // namespace intrinsics
-} // namespace vyn
+} // namespace vyb

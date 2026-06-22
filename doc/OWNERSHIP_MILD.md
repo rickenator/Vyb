@@ -1,8 +1,8 @@
-# Vyn Ownership Types: `mild<T>`
+# VyB Ownership Types: `mild<T>`
 
 ## Overview
 
-`mild<T>` is Vyn's fourth ownership type, providing **mild references** to `our<T>` (shared ownership) objects. It solves the circular reference problem and enables patterns like observers, caches, and back-pointers in tree structures.
+`mild<T>` is VyB's fourth ownership type, providing **mild references** to `our<T>` (shared ownership) objects. It solves the circular reference problem and enables patterns like observers, caches, and back-pointers in tree structures.
 
 ## The Four Ownership Types
 
@@ -17,7 +17,7 @@
 
 ### Problem: Circular References
 
-```vyn
+```vyb
 # Without mild: Memory leak!
 struct Node {
     next: our<Node>,  # Strong reference
@@ -29,7 +29,7 @@ struct Node {
 
 ### Solution: Mild References
 
-```vyn
+```vyb
 # With mild: No leak!
 struct Node {
     next: our<Node>,   # Strong reference (owns)
@@ -46,14 +46,14 @@ Attempts to upgrade the mild reference to a strong reference. The intended 1.0
 contract is to return `our<T>` when the target is live and an Option-like empty
 value when it has been released.
 
-Current implementation note: Vyn does not yet have a first-class `Option<T>` or
+Current implementation note: VyB does not yet have a first-class `Option<T>` or
 nullable binding syntax. Today `grab()` returns an `our<T>` control-block handle
 when the target is live and a null `our<T>` placeholder when it has been
 released. Code should check `released()` before dereferencing a grabbed value.
 The intended 1.0 shape remains an Option-like result once sum types are
 available.
 
-```vyn
+```vyb
 node<our<Node>> = get_node()
 shadow<mild<Node>> = soft(node)
 
@@ -70,7 +70,7 @@ if (!shadow.released()) {
 
 Checks if the referenced object has been destroyed. Returns `true` if the object is dead, `false` if still alive.
 
-```vyn
+```vyb
 if (shadow.released()) {
     println("Object was released")
 } else {
@@ -87,7 +87,7 @@ if (!shadow.released()) {
 
 ### 1. Tree with Parent Pointers
 
-```vyn
+```vyb
 struct TreeNode {
     value: Int,
     children: Vec<our<TreeNode>>,  # Own children
@@ -104,7 +104,7 @@ fn get_parent_value(node: our<TreeNode>) -> Int {
 
 ### 2. Observer Pattern
 
-```vyn
+```vyb
 struct Subject {
     observers: Vec<mild<Observer>>
 }
@@ -116,7 +116,7 @@ fn notify(subject: our<Subject>) -> Void {
         }
         # Otherwise skip - observer was destroyed
     }
-    
+
     # Optional: Clean up released observers
     subject.observers = subject.observers.filter(|o| !o.released())
 }
@@ -124,7 +124,7 @@ fn notify(subject: our<Subject>) -> Void {
 
 ### 3. Cache with Expiring Entries
 
-```vyn
+```vyb
 struct Cache {
     entries: Vec<mild<Entry>>
 }
@@ -146,7 +146,7 @@ fn get_valid_entries(cache: our<Cache>) -> Vec<our<Entry>> {
 
 ### 4. Back-References in Doubly-Linked List
 
-```vyn
+```vyb
 struct ListNode {
     value: Int,
     next: our<ListNode>?,    # Strong reference (owns next)
@@ -164,7 +164,7 @@ fn insert_after(node: our<ListNode>, new_node: our<ListNode>) -> Void {
 
 ### Current Implementation Status
 
-Vyn now has a minimal real runtime model for `our<T>` / `mild<T>`:
+VyB now has a minimal real runtime model for `our<T>` / `mild<T>`:
 
 - `our(expr)` allocates the payload and a control block.
 - `soft(ourValue)` increments `weak_count` and returns a `mild<T>` handle tied
@@ -218,7 +218,7 @@ Remaining limitations:
 
 | Language | Mild/Weak Reference Type | Upgrade Method | Check Method |
 |----------|---------------------|----------------|--------------|
-| **Vyn** | `mild<T>` | `grab() -> our<T>?` | `released() -> Bool` |
+| **VyB** | `mild<T>` | `grab() -> our<T>?` | `released() -> Bool` |
 | C++ | `std::weak_ptr<T>` | `lock() -> shared_ptr<T>` | `expired() -> bool` |
 | Rust | `Weak<T>` | `upgrade() -> Option<Rc<T>>` | `strong_count() == 0` |
 | Swift | `weak var` | Automatic upgrade | Check `!= nil` |
@@ -245,7 +245,7 @@ Remaining limitations:
 
 ## Example: Complete Tree Implementation
 
-```vyn
+```vyb
 struct TreeNode {
     value: Int,
     children: Vec<our<TreeNode>>,
@@ -269,7 +269,7 @@ fn add_child(parent: our<TreeNode>, value: Int) -> our<TreeNode> {
 fn get_ancestors(node: our<TreeNode>) -> Vec<Int> {
     ancestors: Vec<Int> = Vec()
     current: mild<TreeNode> = node.parent
-    
+
     while (!current.released()) {
         if let parent = current.grab() {
             ancestors.push(parent.value)
@@ -278,7 +278,7 @@ fn get_ancestors(node: our<TreeNode>) -> Vec<Int> {
             break
         }
     }
-    
+
     return ancestors
 }
 
@@ -286,17 +286,17 @@ fn main() -> Int {
     root: our<TreeNode> = create_node(1, mild<TreeNode>())  # Root has no parent
     child1: our<TreeNode> = add_child(root, 2)
     child2: our<TreeNode> = add_child(child1, 3)
-    
+
     ancestors: Vec<Int> = get_ancestors(child2)
     # Should return [2, 1]
-    
+
     return 0
 }
 ```
 
 ## Summary
 
-`mild<T>` is Vyn's solution to circular references and the observer pattern. It provides:
+`mild<T>` is VyB's solution to circular references and the observer pattern. It provides:
 - **Mild (non-owning) references** to `our<T>` objects
 - **Safe access** via `grab()` that returns `our<T>?`
 - **Lifecycle detection** via `released()`

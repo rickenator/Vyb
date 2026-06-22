@@ -1,0 +1,16 @@
+// filepath: /home/rick/Projects/VyB/test/units/extracted/test57.vyb
+// @test: Codegen: from<Type>(expr) with specific type
+// @description: Extracted from tests.cpp - Codegen: from<Type>(expr) with specific type
+// @category: parser
+// @expect: fail
+// @parse-only: true
+// @expect-output: n/a
+// @expect-error: n/a
+// @expect-return: n/a
+
+    std::string source = R"(
+struct MyData {
+    val: Int
+}
+fn main() -> Int {
+    d<MyData> = MyData{val: 777};

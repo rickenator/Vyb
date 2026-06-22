@@ -1,15 +1,15 @@
-#include "vyn/parser/parser.hpp" // Should provide full defs for StatementParser and DeclarationParser
-#include "vyn/parser/ast.hpp"
+#include "vyb/parser/parser.hpp" // Should provide full defs for StatementParser and DeclarationParser
+#include "vyb/parser/ast.hpp"
 #include <stdexcept>
-#include "vyn/parser/token.hpp" // Required for vyn::token::Token
+#include "vyb/parser/token.hpp" // Required for vyb::token::Token
 
-namespace vyn {
+namespace vyb {
 
 StatementParser::StatementParser(const std::vector<token::Token>& tokens, size_t& pos, int indent_level, const std::string& file_path, TypeParser& type_parser, ExpressionParser& expr_parser, DeclarationParser* decl_parser)
     : BaseParser(tokens, pos, file_path), type_parser_(type_parser), expr_parser_(expr_parser), decl_parser_(decl_parser) {
     // indent_level is part of BaseParser or handled there if needed.
     // If BaseParser doesn't take indent_level, and it's needed here, add a member: this->indent_level_ = indent_level;
-    
+
     // Let expression parser access statement parser for block parsing
     expr_parser_.set_statement_parser(this);
 }
@@ -18,10 +18,10 @@ void StatementParser::set_declaration_parser(DeclarationParser* dp) {
     this->decl_parser_ = dp;
 }
 
-vyn::ast::StmtPtr StatementParser::parse() {
+vyb::ast::StmtPtr StatementParser::parse() {
     // Skip any INDENT/DEDENT tokens before parsing a statement
     this->skip_indents_dedents();
-    while (!this->IsAtEnd() && this->peek().type == vyn::TokenType::NEWLINE) {
+    while (!this->IsAtEnd() && this->peek().type == vyb::TokenType::NEWLINE) {
         this->consume(); // Skip empty lines
     }
 
@@ -30,137 +30,137 @@ vyn::ast::StmtPtr StatementParser::parse() {
     }
 
     // Handle 'throw' statements as expression statements: parse throw expression and ignore its result
-    if (this->peek().type == vyn::TokenType::IDENTIFIER && this->peek().lexeme == "throw") {
+    if (this->peek().type == vyb::TokenType::IDENTIFIER && this->peek().lexeme == "throw") {
         this->consume(); // consume 'throw'
         // Parse the thrown expression (e.g., NetworkError(...))
         auto thrownExpr = this->expr_parser_.parse_expression();
         // Consume optional semicolon
-        this->match(vyn::TokenType::SEMICOLON);
+        this->match(vyb::TokenType::SEMICOLON);
         return nullptr; // ignore throw statement in AST
     }
-    vyn::token::Token current_token = this->peek();
+    vyb::token::Token current_token = this->peek();
     switch (current_token.type) {
-        case vyn::TokenType::KEYWORD_MUT:
-        case vyn::TokenType::KEYWORD_CONST:
-        case vyn::TokenType::KEYWORD_VAR:
-        case vyn::TokenType::KEYWORD_AUTO:
+        case vyb::TokenType::KEYWORD_MUT:
+        case vyb::TokenType::KEYWORD_CONST:
+        case vyb::TokenType::KEYWORD_VAR:
+        case vyb::TokenType::KEYWORD_AUTO:
             return parse_var_decl();
-        case vyn::TokenType::KEYWORD_ASYNC:
+        case vyb::TokenType::KEYWORD_ASYNC:
             if (decl_parser_) {
                 return decl_parser_->parse_function();
             } else {
                 throw std::runtime_error("Async function parsing not available in this context at " + location_to_string(current_token.location));
             }
-        case vyn::TokenType::KEYWORD_EXTERN:
+        case vyb::TokenType::KEYWORD_EXTERN:
             if (decl_parser_) {
-                if (this->peekNext().type == vyn::TokenType::STRING_LITERAL) {
+                if (this->peekNext().type == vyb::TokenType::STRING_LITERAL) {
                     return decl_parser_->parse_extern_block();
                 }
                 return decl_parser_->parse_function();
             } else {
                 throw std::runtime_error("Extern declaration parsing not available in this context at " + location_to_string(current_token.location));
             }
-        case vyn::TokenType::KEYWORD_CLASS:
+        case vyb::TokenType::KEYWORD_CLASS:
             if (decl_parser_) {
                 return decl_parser_->parse_class_declaration();
             } else {
                 throw std::runtime_error("Class declaration parsing not available in this context at " + location_to_string(current_token.location));
             }
-        case vyn::TokenType::KEYWORD_TEMPLATE:
+        case vyb::TokenType::KEYWORD_TEMPLATE:
             if (decl_parser_) {
                 return decl_parser_->parse_template_declaration();
             } else {
                 throw std::runtime_error("Template declaration parsing not available in this context at " + location_to_string(current_token.location));
             }
-        case vyn::TokenType::KEYWORD_IF:
+        case vyb::TokenType::KEYWORD_IF:
             return parse_if();
-        case vyn::TokenType::KEYWORD_WHILE:
+        case vyb::TokenType::KEYWORD_WHILE:
             return parse_while();
-        case vyn::TokenType::KEYWORD_FOR:
+        case vyb::TokenType::KEYWORD_FOR:
             return parse_for();
-        case vyn::TokenType::KEYWORD_MATCH:
+        case vyb::TokenType::KEYWORD_MATCH:
             return parse_match();
-        case vyn::TokenType::KEYWORD_RETURN:
+        case vyb::TokenType::KEYWORD_RETURN:
             return parse_return();
-        case vyn::TokenType::KEYWORD_PASS:
+        case vyb::TokenType::KEYWORD_PASS:
             return parse_pass();
-        case vyn::TokenType::LBRACE: {
+        case vyb::TokenType::LBRACE: {
             // Parse block, but check if it's followed by trap/ensure
             auto block_stmt = parse_block();
-            
+
             // Check if followed by trap or ensure - if so, it's a block expression
-            if (check(vyn::TokenType::KEYWORD_TRAP) || check(vyn::TokenType::KEYWORD_ENSURE)) {
+            if (check(vyb::TokenType::KEYWORD_TRAP) || check(vyb::TokenType::KEYWORD_ENSURE)) {
                 // Wrap in BlockExpression and parse trap/ensure clauses
-                std::vector<std::unique_ptr<vyn::ast::TrapClause>> trapClauses;
-                while (match(vyn::TokenType::KEYWORD_TRAP)) {
+                std::vector<std::unique_ptr<vyb::ast::TrapClause>> trapClauses;
+                while (match(vyb::TokenType::KEYWORD_TRAP)) {
                     trapClauses.push_back(expr_parser_.parse_trap_clause());
                 }
-                
-                std::unique_ptr<vyn::ast::EnsureClause> ensureClause;
-                if (match(vyn::TokenType::KEYWORD_ENSURE)) {
+
+                std::unique_ptr<vyb::ast::EnsureClause> ensureClause;
+                if (match(vyb::TokenType::KEYWORD_ENSURE)) {
                     ensureClause = expr_parser_.parse_ensure_clause();
                 }
-                
-                auto block_expr = std::make_unique<vyn::ast::BlockExpression>(
+
+                auto block_expr = std::make_unique<vyb::ast::BlockExpression>(
                     block_stmt->loc, std::move(block_stmt),
                     std::move(trapClauses), std::move(ensureClause)
                 );
-                
+
                 // Return as expression statement
-                return std::make_unique<vyn::ast::ExpressionStatement>(
+                return std::make_unique<vyb::ast::ExpressionStatement>(
                     block_expr->loc, std::move(block_expr)
                 );
             }
-            
+
             // Otherwise return as plain block statement
             return block_stmt;
         }
-        case vyn::TokenType::KEYWORD_TRY:
+        case vyb::TokenType::KEYWORD_TRY:
             return parse_try();
-        case vyn::TokenType::KEYWORD_FREEDOM:
+        case vyb::TokenType::KEYWORD_FREEDOM:
             return parse_unsafe();
-        case vyn::TokenType::KEYWORD_DEFER:
+        case vyb::TokenType::KEYWORD_DEFER:
             return parse_defer();
-        case vyn::TokenType::KEYWORD_AWAIT:
+        case vyb::TokenType::KEYWORD_AWAIT:
             return parse_await();
-        case vyn::TokenType::KEYWORD_BREAK:
+        case vyb::TokenType::KEYWORD_BREAK:
             return parse_break();
-        case vyn::TokenType::KEYWORD_CONTINUE:
+        case vyb::TokenType::KEYWORD_CONTINUE:
             return parse_continue();
-        case vyn::TokenType::KEYWORD_FAIL:
+        case vyb::TokenType::KEYWORD_FAIL:
             return parse_fail();
-        case vyn::TokenType::KEYWORD_PANIC:
+        case vyb::TokenType::KEYWORD_PANIC:
             return parse_panic();
-        case vyn::TokenType::KEYWORD_EXIT:
+        case vyb::TokenType::KEYWORD_EXIT:
             return parse_exit();
-        case vyn::TokenType::KEYWORD_RETHROW:
+        case vyb::TokenType::KEYWORD_RETHROW:
             return parse_rethrow();
         default:
             // Check if this could be a variable declaration with unified syntax (name<Type>)
-            if (current_token.type == vyn::TokenType::IDENTIFIER) {
+            if (current_token.type == vyb::TokenType::IDENTIFIER) {
                 token::Token next_token = this->peekNext();
-                
+
                 // Check for new unified syntax pattern: name<Type>
-                if (next_token.type == vyn::TokenType::LT) {
+                if (next_token.type == vyb::TokenType::LT) {
                     return parse_var_decl();
                 }
 
                 // Check for type-inferred lambda declaration: name = |params| -> body
-                // Per LAMBDAS.md, `add = |x, y| -> x + y` is valid Vyn syntax (type inferred from RHS).
-                if (next_token.type == vyn::TokenType::EQ) {
+                // Per LAMBDAS.md, `add = |x, y| -> x + y` is valid VyB syntax (type inferred from RHS).
+                if (next_token.type == vyb::TokenType::EQ) {
                     size_t saved_pos = this->pos_;
                     this->consume(); // consume identifier
                     this->consume(); // consume '='
-                    if (this->peek().type == vyn::TokenType::PIPE) {
+                    if (this->peek().type == vyb::TokenType::PIPE) {
                         // It IS: name = |params| -> body — parse as VariableDeclaration with inferred type
                         SourceLocation decl_loc = current_token.location;
-                        auto identifier_node = std::make_unique<vyn::ast::Identifier>(
+                        auto identifier_node = std::make_unique<vyb::ast::Identifier>(
                             current_token.location, current_token.lexeme);
                         auto init = this->expr_parser_.parse_expression();
-                        if (this->peek().type == vyn::TokenType::SEMICOLON) {
+                        if (this->peek().type == vyb::TokenType::SEMICOLON) {
                             this->consume();
                         }
-                        return std::make_unique<vyn::ast::VariableDeclaration>(
+                        return std::make_unique<vyb::ast::VariableDeclaration>(
                             decl_loc,
                             std::move(identifier_node),
                             /*isConst=*/false,
@@ -170,21 +170,21 @@ vyn::ast::StmtPtr StatementParser::parse() {
                     // Not a lambda — restore and fall through to expression statement parsing
                     this->pos_ = saved_pos;
                 }
-                
+
                 // Check if this could be a legacy relaxed syntax variable declaration (Type name)
                 size_t saved_pos = this->pos_;
-                
+
                 try {
                     // Try to parse as a type
                     auto type_node = this->type_parser_.parse();
-                    
-                    if (type_node && !this->IsAtEnd() && this->peek().type == vyn::TokenType::IDENTIFIER) {
+
+                    if (type_node && !this->IsAtEnd() && this->peek().type == vyb::TokenType::IDENTIFIER) {
                         // This looks like a relaxed syntax declaration: Type name
                         // Rewind position and parse as variable declaration
                         this->pos_ = saved_pos;
                         return parse_var_decl();
                     }
-                    
+
                     // Not a type or not followed by an identifier, so restore position
                     this->pos_ = saved_pos;
                 } catch (...) {
@@ -192,7 +192,7 @@ vyn::ast::StmtPtr StatementParser::parse() {
                     this->pos_ = saved_pos;
                 }
             }
-            
+
             // Not a declaration, try parsing as an expression statement
             if (this->expr_parser_.is_expression_start(current_token.type)) {
                 return parse_expression_statement();
@@ -202,18 +202,18 @@ vyn::ast::StmtPtr StatementParser::parse() {
     }
 }
 
-std::unique_ptr<vyn::ast::ExpressionStatement> StatementParser::parse_expression_statement() {
+std::unique_ptr<vyb::ast::ExpressionStatement> StatementParser::parse_expression_statement() {
     auto expr = this->expr_parser_.parse_expression();
     // Assuming expr_parser_.parse_expression() throws or returns a valid expression,
     // and does not return nullptr on failing to parse an expression that should be there.
     SourceLocation expr_loc = expr->loc; // Location of the statement is the location of the expression.
 
     // Check for optional semicolon or other valid terminators
-    if (this->match(vyn::TokenType::SEMICOLON)) {
+    if (this->match(vyb::TokenType::SEMICOLON)) {
         // Semicolon consumed, all good.
     } else if (this->IsAtEnd() ||
-               this->peek().type == vyn::TokenType::RBRACE ||
-               this->peek().type == vyn::TokenType::DEDENT ||
+               this->peek().type == vyb::TokenType::RBRACE ||
+               this->peek().type == vyb::TokenType::DEDENT ||
                // Check if next token starts a new statement
                this->is_statement_start(this->peek().type)) {
         // Optional semicolon: acceptable statement terminators
@@ -223,40 +223,40 @@ std::unique_ptr<vyn::ast::ExpressionStatement> StatementParser::parse_expression
                                  location_to_string(this->peek().location) + ", got " +
                                  token_type_to_string(this->peek().type));
     }
-    return std::make_unique<vyn::ast::ExpressionStatement>(expr_loc, std::move(expr));
+    return std::make_unique<vyb::ast::ExpressionStatement>(expr_loc, std::move(expr));
 }
 
 
-std::unique_ptr<vyn::ast::BlockStatement> StatementParser::parse_block() {
-    SourceLocation start_loc = this->expect(vyn::TokenType::LBRACE, "Expected '{' to start a block.").location;
-    std::vector<vyn::ast::StmtPtr> statements;
+std::unique_ptr<vyb::ast::BlockStatement> StatementParser::parse_block() {
+    SourceLocation start_loc = this->expect(vyb::TokenType::LBRACE, "Expected '{' to start a block.").location;
+    std::vector<vyb::ast::StmtPtr> statements;
     SourceLocation end_loc = start_loc;
 
-    while (!this->IsAtEnd() && this->peek().type != vyn::TokenType::RBRACE) {
+    while (!this->IsAtEnd() && this->peek().type != vyb::TokenType::RBRACE) {
         // Skip newlines within the block if they are not separating statements meaningfully
-        while (!this->IsAtEnd() && this->peek().type == vyn::TokenType::NEWLINE) {
+        while (!this->IsAtEnd() && this->peek().type == vyb::TokenType::NEWLINE) {
             this->consume();
         }
-        if (this->IsAtEnd() || this->peek().type == vyn::TokenType::RBRACE) {
+        if (this->IsAtEnd() || this->peek().type == vyb::TokenType::RBRACE) {
             break; // End of block or file
         }
         statements.push_back(parse()); // Parse the statement within the block
         // Ensure that after a statement, we either have another statement, a newline, or the end of the block
-        if (!this->IsAtEnd() && this->peek().type != vyn::TokenType::RBRACE) {
-            if (this->peek().type == vyn::TokenType::SEMICOLON) {
+        if (!this->IsAtEnd() && this->peek().type != vyb::TokenType::RBRACE) {
+            if (this->peek().type == vyb::TokenType::SEMICOLON) {
                 this->consume(); // Consume optional semicolon
-            } else if (this->peek().type == vyn::TokenType::NEWLINE) {
+            } else if (this->peek().type == vyb::TokenType::NEWLINE) {
                 // Fine, next statement or end of block might be on new line
             } else if (this->expr_parser_.is_expression_start(this->peek().type) || this->is_statement_start(this->peek().type)) { // Changed here
                 // Next statement starts immediately, this is fine.
             }
-             else if (this->peek().type != vyn::TokenType::RBRACE && !this->is_statement_start(this->peek().type) && !this->expr_parser_.is_expression_start(this->peek().type)) { // Changed here
+             else if (this->peek().type != vyb::TokenType::RBRACE && !this->is_statement_start(this->peek().type) && !this->expr_parser_.is_expression_start(this->peek().type)) { // Changed here
                  throw std::runtime_error("Expected newline, semicolon, or end of block after statement at " + location_to_string(this->peek().location) + ", got " + token_type_to_string(this->peek().type));
              }
         }
     }
 
-    if (this->IsAtEnd() && this->peek().type != vyn::TokenType::RBRACE) { // Check before expect
+    if (this->IsAtEnd() && this->peek().type != vyb::TokenType::RBRACE) { // Check before expect
         // If we are at the end of the file and haven't found an RBRACE,
         // it means the block was not properly closed.
         // The error message from expect() might be generic, so let's throw a specific one.
@@ -265,22 +265,22 @@ std::unique_ptr<vyn::ast::BlockStatement> StatementParser::parse_block() {
         // For now, let expect produce its standard error.
         // If a more specific error is desired for EOF, it can be added here.
     }
-    end_loc = this->expect(vyn::TokenType::RBRACE, "Expected \'}\' to end a block.").location;
-    return std::make_unique<vyn::ast::BlockStatement>(start_loc, std::move(statements));
+    end_loc = this->expect(vyb::TokenType::RBRACE, "Expected \'}\' to end a block.").location;
+    return std::make_unique<vyb::ast::BlockStatement>(start_loc, std::move(statements));
 }
 
 
-std::unique_ptr<vyn::ast::IfStatement> StatementParser::parse_if() {
-    SourceLocation if_loc = this->expect(vyn::TokenType::KEYWORD_IF, "Expected 'if'.").location;
-    this->expect(vyn::TokenType::LPAREN, "Expected '(' after 'if'.");
+std::unique_ptr<vyb::ast::IfStatement> StatementParser::parse_if() {
+    SourceLocation if_loc = this->expect(vyb::TokenType::KEYWORD_IF, "Expected 'if'.").location;
+    this->expect(vyb::TokenType::LPAREN, "Expected '(' after 'if'.");
     auto condition = this->expr_parser_.parse_expression();
-    this->expect(vyn::TokenType::RPAREN, "Expected ')' after if condition.");
+    this->expect(vyb::TokenType::RPAREN, "Expected ')' after if condition.");
     auto then_branch = parse_block(); // 'if' body must be a block
-    vyn::ast::StmtPtr else_branch = nullptr;
+    vyb::ast::StmtPtr else_branch = nullptr;
     SourceLocation end_loc = then_branch->loc; // Use loc member
 
-    if (this->match(vyn::TokenType::KEYWORD_ELSE)) {
-        if (this->peek().type == vyn::TokenType::KEYWORD_IF) { // 'else if'
+    if (this->match(vyb::TokenType::KEYWORD_ELSE)) {
+        if (this->peek().type == vyb::TokenType::KEYWORD_IF) { // 'else if'
             else_branch = parse_if(); // Recursively parse the 'else if'
         } else { // 'else'
             else_branch = parse_block(); // 'else' body must be a block
@@ -290,114 +290,114 @@ std::unique_ptr<vyn::ast::IfStatement> StatementParser::parse_if() {
         }
     }
 
-    return std::make_unique<vyn::ast::IfStatement>(if_loc, std::move(condition), std::move(then_branch), std::move(else_branch));
+    return std::make_unique<vyb::ast::IfStatement>(if_loc, std::move(condition), std::move(then_branch), std::move(else_branch));
 }
 
-std::unique_ptr<vyn::ast::WhileStatement> StatementParser::parse_while() {
-    SourceLocation while_loc = this->expect(vyn::TokenType::KEYWORD_WHILE, "Expected 'while'.").location;
-    this->expect(vyn::TokenType::LPAREN, "Expected '(' after 'while'.");
+std::unique_ptr<vyb::ast::WhileStatement> StatementParser::parse_while() {
+    SourceLocation while_loc = this->expect(vyb::TokenType::KEYWORD_WHILE, "Expected 'while'.").location;
+    this->expect(vyb::TokenType::LPAREN, "Expected '(' after 'while'.");
     auto condition = this->expr_parser_.parse_expression();
-    this->expect(vyn::TokenType::RPAREN, "Expected ')' after while condition.");
+    this->expect(vyb::TokenType::RPAREN, "Expected ')' after while condition.");
     auto body = parse_block(); // 'while' body must be a block
     SourceLocation end_loc = body->loc; // Use loc member
-    return std::make_unique<vyn::ast::WhileStatement>(while_loc, std::move(condition), std::move(body));
+    return std::make_unique<vyb::ast::WhileStatement>(while_loc, std::move(condition), std::move(body));
 }
 
-std::unique_ptr<vyn::ast::ForStatement> StatementParser::parse_for() {
-    SourceLocation for_loc = this->expect(vyn::TokenType::KEYWORD_FOR, "Expected 'for'.").location;
-    
+std::unique_ptr<vyb::ast::ForStatement> StatementParser::parse_for() {
+    SourceLocation for_loc = this->expect(vyb::TokenType::KEYWORD_FOR, "Expected 'for'.").location;
+
     // Expect opening parenthesis
-    this->expect(vyn::TokenType::LPAREN, "Expected '(' after 'for'");
-    
+    this->expect(vyb::TokenType::LPAREN, "Expected '(' after 'for'");
+
     // Check for range-based for loop: `for (identifier in expression) { body }`
-    if (this->peek().type == vyn::TokenType::IDENTIFIER) {
+    if (this->peek().type == vyb::TokenType::IDENTIFIER) {
         size_t saved_pos = this->pos_;
         token::Token ident_token = this->consume();
-        
-        if (this->peek().type == vyn::TokenType::KEYWORD_IN) {
+
+        if (this->peek().type == vyb::TokenType::KEYWORD_IN) {
             // This is a range-based for loop
             this->consume(); // Consume 'in'
-            
+
             // Parse the range expression
-            vyn::ast::ExprPtr range_expr = this->expr_parser_.parse_expression();
-            
+            vyb::ast::ExprPtr range_expr = this->expr_parser_.parse_expression();
+
             // Check for optional step/skip parameter: for i in 0..10, 2 or for x in vec, 2
-            vyn::ast::ExprPtr skip_expr = nullptr;
-            if (this->peek().type == vyn::TokenType::COMMA) {
+            vyb::ast::ExprPtr skip_expr = nullptr;
+            if (this->peek().type == vyb::TokenType::COMMA) {
                 this->consume(); // Consume comma
                 skip_expr = this->expr_parser_.parse_expression();
             }
-            
+
             // Expect closing parenthesis
-            this->expect(vyn::TokenType::RPAREN, "Expected ')' after for loop header");
-            
+            this->expect(vyb::TokenType::RPAREN, "Expected ')' after for loop header");
+
             // Expect the body block
             auto body = parse_block();
-            
+
             // Check what kind of expression we're iterating over
-            if (range_expr->getType() == vyn::ast::NodeType::RANGE_EXPRESSION) {
+            if (range_expr->getType() == vyb::ast::NodeType::RANGE_EXPRESSION) {
                 // Desugar range-based for loop to C-style for loop
                 // for i in start..end { body }
                 // becomes:
                 // { var i = start; while i <= end { body; i = i + step; } }
                 // Note: Ranges are now INCLUSIVE
-                auto* range = static_cast<vyn::ast::RangeExpression*>(range_expr.get());
-                
+                auto* range = static_cast<vyb::ast::RangeExpression*>(range_expr.get());
+
                 // For range expressions, add the step to the range if provided
                 if (skip_expr) {
                     range->step = std::move(skip_expr);
                 }
                 // Create the loop variable declaration: var i = start;
-                auto loop_var_name = std::make_unique<vyn::ast::Identifier>(ident_token.location, ident_token.lexeme);
-                auto type_name_id = std::make_unique<vyn::ast::Identifier>(ident_token.location, "Int");
-                auto loop_var_type = std::make_unique<vyn::ast::TypeName>(ident_token.location, std::move(type_name_id));
+                auto loop_var_name = std::make_unique<vyb::ast::Identifier>(ident_token.location, ident_token.lexeme);
+                auto type_name_id = std::make_unique<vyb::ast::Identifier>(ident_token.location, "Int");
+                auto loop_var_type = std::make_unique<vyb::ast::TypeName>(ident_token.location, std::move(type_name_id));
                 auto init_value = std::move(range->start);
-                auto loop_var_decl = std::make_unique<vyn::ast::VariableDeclaration>(
+                auto loop_var_decl = std::make_unique<vyb::ast::VariableDeclaration>(
                     ident_token.location,
                     std::move(loop_var_name),
                     false,  // isConst (false for var)
                     std::move(loop_var_type),
                     std::move(init_value)
                 );
-                
+
                 // Create the condition: i <= end (INCLUSIVE)
-                auto cond_left = std::make_unique<vyn::ast::Identifier>(ident_token.location, ident_token.lexeme);
-                token::Token cond_op_token(vyn::TokenType::LTEQ, "<=", ident_token.location);
-                auto condition = std::make_unique<vyn::ast::BinaryExpression>(
+                auto cond_left = std::make_unique<vyb::ast::Identifier>(ident_token.location, ident_token.lexeme);
+                token::Token cond_op_token(vyb::TokenType::LTEQ, "<=", ident_token.location);
+                auto condition = std::make_unique<vyb::ast::BinaryExpression>(
                     ident_token.location,
                     std::move(cond_left),
                     cond_op_token,
                     std::move(range->end)
                 );
-                
+
                 // Create the increment: i = i + step (default step is 1)
-                auto incr_left = std::make_unique<vyn::ast::Identifier>(ident_token.location, ident_token.lexeme);
-                auto incr_right_left = std::make_unique<vyn::ast::Identifier>(ident_token.location, ident_token.lexeme);
-                
+                auto incr_left = std::make_unique<vyb::ast::Identifier>(ident_token.location, ident_token.lexeme);
+                auto incr_right_left = std::make_unique<vyb::ast::Identifier>(ident_token.location, ident_token.lexeme);
+
                 // Use provided step or default to 1
-                vyn::ast::ExprPtr step_value;
+                vyb::ast::ExprPtr step_value;
                 if (range->step) {
                     step_value = std::move(range->step);
                 } else {
-                    step_value = std::make_unique<vyn::ast::IntegerLiteral>(ident_token.location, 1);
+                    step_value = std::make_unique<vyb::ast::IntegerLiteral>(ident_token.location, 1);
                 }
-                
-                token::Token plus_token(vyn::TokenType::PLUS, "+", ident_token.location);
-                auto incr_right = std::make_unique<vyn::ast::BinaryExpression>(
+
+                token::Token plus_token(vyb::TokenType::PLUS, "+", ident_token.location);
+                auto incr_right = std::make_unique<vyb::ast::BinaryExpression>(
                     ident_token.location,
                     std::move(incr_right_left),
                     plus_token,
                     std::move(step_value)
                 );
-                token::Token assign_token(vyn::TokenType::EQ, "=", ident_token.location);
-                auto increment = std::make_unique<vyn::ast::AssignmentExpression>(
+                token::Token assign_token(vyb::TokenType::EQ, "=", ident_token.location);
+                auto increment = std::make_unique<vyb::ast::AssignmentExpression>(
                     ident_token.location,
                     std::move(incr_left),
                     assign_token,
                     std::move(incr_right)
                 );
-                
-                return std::make_unique<vyn::ast::ForStatement>(
+
+                return std::make_unique<vyb::ast::ForStatement>(
                     for_loc,
                     std::move(loop_var_decl),
                     std::move(condition),
@@ -408,137 +408,137 @@ std::unique_ptr<vyn::ast::ForStatement> StatementParser::parse_for() {
                 // Not a RangeExpression - assume it's a Vec<T> or other iterable
                 // Desugar: for (item in vec) { body }
                 // Optional skip parameter already parsed above: skip_expr
-                
+
                 std::string idx_name = "__idx_" + ident_token.lexeme;
                 std::string len_name = "__len_" + ident_token.lexeme;
                 std::string step_name = "__step_" + ident_token.lexeme;
-                
+
                 // Check if range_expr is a simple identifier - if so, use it directly
                 // Otherwise we'd need to store in temp (not implemented yet for complex expressions)
-                auto* vec_ident = dynamic_cast<vyn::ast::Identifier*>(range_expr.get());
+                auto* vec_ident = dynamic_cast<vyb::ast::Identifier*>(range_expr.get());
                 if (!vec_ident) {
-                    throw std::runtime_error("Vec iteration currently only supports identifier expressions at " + 
+                    throw std::runtime_error("Vec iteration currently only supports identifier expressions at " +
                                            location_to_string(ident_token.location));
                 }
                 std::string vec_name = vec_ident->name;
-                
+
                 // 0. If skip parameter provided, create: var __step = skip_expr;
-                std::unique_ptr<vyn::ast::VariableDeclaration> step_decl = nullptr;
+                std::unique_ptr<vyb::ast::VariableDeclaration> step_decl = nullptr;
                 if (skip_expr) {
-                    auto step_var = std::make_unique<vyn::ast::Identifier>(ident_token.location, step_name);
-                    auto step_type_id = std::make_unique<vyn::ast::Identifier>(ident_token.location, "Int");
-                    auto step_type = std::make_unique<vyn::ast::TypeName>(ident_token.location, std::move(step_type_id));
-                    step_decl = std::make_unique<vyn::ast::VariableDeclaration>(
+                    auto step_var = std::make_unique<vyb::ast::Identifier>(ident_token.location, step_name);
+                    auto step_type_id = std::make_unique<vyb::ast::Identifier>(ident_token.location, "Int");
+                    auto step_type = std::make_unique<vyb::ast::TypeName>(ident_token.location, std::move(step_type_id));
+                    step_decl = std::make_unique<vyb::ast::VariableDeclaration>(
                         ident_token.location, std::move(step_var), false, std::move(step_type), std::move(skip_expr)
                     );
                 }
-                
+
                 // 1. var __idx = 0;
-                auto idx_var = std::make_unique<vyn::ast::Identifier>(ident_token.location, idx_name);
-                auto idx_type_id = std::make_unique<vyn::ast::Identifier>(ident_token.location, "Int");
-                auto idx_type = std::make_unique<vyn::ast::TypeName>(ident_token.location, std::move(idx_type_id));
-                auto idx_init = std::make_unique<vyn::ast::IntegerLiteral>(ident_token.location, 0);
-                auto idx_decl = std::make_unique<vyn::ast::VariableDeclaration>(
+                auto idx_var = std::make_unique<vyb::ast::Identifier>(ident_token.location, idx_name);
+                auto idx_type_id = std::make_unique<vyb::ast::Identifier>(ident_token.location, "Int");
+                auto idx_type = std::make_unique<vyb::ast::TypeName>(ident_token.location, std::move(idx_type_id));
+                auto idx_init = std::make_unique<vyb::ast::IntegerLiteral>(ident_token.location, 0);
+                auto idx_decl = std::make_unique<vyb::ast::VariableDeclaration>(
                     ident_token.location, std::move(idx_var), false, std::move(idx_type), std::move(idx_init)
                 );
-                
+
                 // 2. var __len = vec.len();
-                auto len_var = std::make_unique<vyn::ast::Identifier>(ident_token.location, len_name);
-                auto vec_for_len = std::make_unique<vyn::ast::Identifier>(ident_token.location, vec_name);
-                auto len_method = std::make_unique<vyn::ast::Identifier>(ident_token.location, "len");
-                auto len_member = std::make_unique<vyn::ast::MemberExpression>(
+                auto len_var = std::make_unique<vyb::ast::Identifier>(ident_token.location, len_name);
+                auto vec_for_len = std::make_unique<vyb::ast::Identifier>(ident_token.location, vec_name);
+                auto len_method = std::make_unique<vyb::ast::Identifier>(ident_token.location, "len");
+                auto len_member = std::make_unique<vyb::ast::MemberExpression>(
                     ident_token.location, std::move(vec_for_len), std::move(len_method), false
                 );
-                auto len_call = std::make_unique<vyn::ast::CallExpression>(
-                    ident_token.location, std::move(len_member), std::vector<vyn::ast::ExprPtr>()
+                auto len_call = std::make_unique<vyb::ast::CallExpression>(
+                    ident_token.location, std::move(len_member), std::vector<vyb::ast::ExprPtr>()
                 );
-                auto len_decl = std::make_unique<vyn::ast::VariableDeclaration>(
+                auto len_decl = std::make_unique<vyb::ast::VariableDeclaration>(
                     ident_token.location, std::move(len_var), false, nullptr, std::move(len_call)
                 );
-                
+
                 // 3. Condition: __idx < __len
-                auto cond_idx = std::make_unique<vyn::ast::Identifier>(ident_token.location, idx_name);
-                auto cond_len = std::make_unique<vyn::ast::Identifier>(ident_token.location, len_name);
-                token::Token lt_token(vyn::TokenType::LT, "<", ident_token.location);
-                auto condition = std::make_unique<vyn::ast::BinaryExpression>(
+                auto cond_idx = std::make_unique<vyb::ast::Identifier>(ident_token.location, idx_name);
+                auto cond_len = std::make_unique<vyb::ast::Identifier>(ident_token.location, len_name);
+                token::Token lt_token(vyb::TokenType::LT, "<", ident_token.location);
+                auto condition = std::make_unique<vyb::ast::BinaryExpression>(
                     ident_token.location, std::move(cond_idx), lt_token, std::move(cond_len)
                 );
-                
+
                 // 4. Increment: __idx = __idx + (skip_expr ? __step : 1)
-                auto incr_idx_left = std::make_unique<vyn::ast::Identifier>(ident_token.location, idx_name);
-                auto incr_idx_right_left = std::make_unique<vyn::ast::Identifier>(ident_token.location, idx_name);
-                
+                auto incr_idx_left = std::make_unique<vyb::ast::Identifier>(ident_token.location, idx_name);
+                auto incr_idx_right_left = std::make_unique<vyb::ast::Identifier>(ident_token.location, idx_name);
+
                 // Use step variable if provided, otherwise default to 1
-                vyn::ast::ExprPtr step_value;
+                vyb::ast::ExprPtr step_value;
                 if (step_decl) {
-                    step_value = std::make_unique<vyn::ast::Identifier>(ident_token.location, step_name);
+                    step_value = std::make_unique<vyb::ast::Identifier>(ident_token.location, step_name);
                 } else {
-                    step_value = std::make_unique<vyn::ast::IntegerLiteral>(ident_token.location, 1);
+                    step_value = std::make_unique<vyb::ast::IntegerLiteral>(ident_token.location, 1);
                 }
-                
-                token::Token plus_token(vyn::TokenType::PLUS, "+", ident_token.location);
-                auto incr_right = std::make_unique<vyn::ast::BinaryExpression>(
+
+                token::Token plus_token(vyb::TokenType::PLUS, "+", ident_token.location);
+                auto incr_right = std::make_unique<vyb::ast::BinaryExpression>(
                     ident_token.location, std::move(incr_idx_right_left), plus_token, std::move(step_value)
                 );
-                token::Token assign_token(vyn::TokenType::EQ, "=", ident_token.location);
-                auto increment = std::make_unique<vyn::ast::AssignmentExpression>(
+                token::Token assign_token(vyb::TokenType::EQ, "=", ident_token.location);
+                auto increment = std::make_unique<vyb::ast::AssignmentExpression>(
                     ident_token.location, std::move(incr_idx_left), assign_token, std::move(incr_right)
                 );
-                
+
                 // 5. Prepend to body: var item = vec.get(__idx);
-                auto item_var = std::make_unique<vyn::ast::Identifier>(ident_token.location, ident_token.lexeme);
-                auto vec_for_get = std::make_unique<vyn::ast::Identifier>(ident_token.location, vec_name);
-                auto get_method = std::make_unique<vyn::ast::Identifier>(ident_token.location, "get");
-                auto get_member = std::make_unique<vyn::ast::MemberExpression>(
+                auto item_var = std::make_unique<vyb::ast::Identifier>(ident_token.location, ident_token.lexeme);
+                auto vec_for_get = std::make_unique<vyb::ast::Identifier>(ident_token.location, vec_name);
+                auto get_method = std::make_unique<vyb::ast::Identifier>(ident_token.location, "get");
+                auto get_member = std::make_unique<vyb::ast::MemberExpression>(
                     ident_token.location, std::move(vec_for_get), std::move(get_method), false
                 );
-                auto idx_arg = std::make_unique<vyn::ast::Identifier>(ident_token.location, idx_name);
-                std::vector<vyn::ast::ExprPtr> get_args;
+                auto idx_arg = std::make_unique<vyb::ast::Identifier>(ident_token.location, idx_name);
+                std::vector<vyb::ast::ExprPtr> get_args;
                 get_args.push_back(std::move(idx_arg));
-                auto get_call = std::make_unique<vyn::ast::CallExpression>(
+                auto get_call = std::make_unique<vyb::ast::CallExpression>(
                     ident_token.location, std::move(get_member), std::move(get_args)
                 );
-                auto item_decl = std::make_unique<vyn::ast::VariableDeclaration>(
+                auto item_decl = std::make_unique<vyb::ast::VariableDeclaration>(
                     ident_token.location, std::move(item_var), false, nullptr, std::move(get_call)
                 );
-                
-                auto block_body = dynamic_cast<vyn::ast::BlockStatement*>(body.get());
+
+                auto block_body = dynamic_cast<vyb::ast::BlockStatement*>(body.get());
                 if (block_body) {
                     block_body->body.insert(block_body->body.begin(), std::move(item_decl));
                 }
-                
+
                 // 6. Create inner for loop: for (__idx init; condition; increment) { body with item }
                 // Using for loop ensures increment happens even with continue
-                auto inner_for = std::make_unique<vyn::ast::ForStatement>(
+                auto inner_for = std::make_unique<vyb::ast::ForStatement>(
                     for_loc, std::move(idx_decl), std::move(condition), std::move(increment), std::move(body)
                 );
-                
+
                 // 7. Build block: { (step_decl?); len_decl; inner_for; }
-                std::vector<vyn::ast::StmtPtr> block_stmts;
+                std::vector<vyb::ast::StmtPtr> block_stmts;
                 if (step_decl) {
                     block_stmts.push_back(std::move(step_decl));
                 }
                 block_stmts.push_back(std::move(len_decl));
                 block_stmts.push_back(std::move(inner_for));
-                auto final_block = std::make_unique<vyn::ast::BlockStatement>(ident_token.location, std::move(block_stmts));
-                
+                auto final_block = std::make_unique<vyb::ast::BlockStatement>(ident_token.location, std::move(block_stmts));
+
                 // 8. Wrap in a for loop that runs once: for (var __run = true; __run; __run = false) { block }
                 // This is a hack to match the ForStatement return type
                 std::string run_var_name = "__run_once_" + ident_token.lexeme;
-                auto run_var = std::make_unique<vyn::ast::Identifier>(ident_token.location, run_var_name);
-                auto run_init = std::make_unique<vyn::ast::BooleanLiteral>(ident_token.location, true);
-                auto run_decl = std::make_unique<vyn::ast::VariableDeclaration>(
+                auto run_var = std::make_unique<vyb::ast::Identifier>(ident_token.location, run_var_name);
+                auto run_init = std::make_unique<vyb::ast::BooleanLiteral>(ident_token.location, true);
+                auto run_decl = std::make_unique<vyb::ast::VariableDeclaration>(
                     ident_token.location, std::move(run_var), false, nullptr, std::move(run_init)
                 );
-                auto run_cond = std::make_unique<vyn::ast::Identifier>(ident_token.location, run_var_name);
-                auto run_update_left = std::make_unique<vyn::ast::Identifier>(ident_token.location, run_var_name);
-                auto run_update_right = std::make_unique<vyn::ast::BooleanLiteral>(ident_token.location, false);
-                token::Token eq_token(vyn::TokenType::EQ, "=", ident_token.location);
-                auto run_update = std::make_unique<vyn::ast::AssignmentExpression>(
+                auto run_cond = std::make_unique<vyb::ast::Identifier>(ident_token.location, run_var_name);
+                auto run_update_left = std::make_unique<vyb::ast::Identifier>(ident_token.location, run_var_name);
+                auto run_update_right = std::make_unique<vyb::ast::BooleanLiteral>(ident_token.location, false);
+                token::Token eq_token(vyb::TokenType::EQ, "=", ident_token.location);
+                auto run_update = std::make_unique<vyb::ast::AssignmentExpression>(
                     ident_token.location, std::move(run_update_left), eq_token, std::move(run_update_right)
                 );
-                
-                return std::make_unique<vyn::ast::ForStatement>(
+
+                return std::make_unique<vyb::ast::ForStatement>(
                     for_loc, std::move(run_decl), std::move(run_cond), std::move(run_update), std::move(final_block)
                 );
             }
@@ -547,31 +547,31 @@ std::unique_ptr<vyn::ast::ForStatement> StatementParser::parse_for() {
             this->pos_ = saved_pos;
         }
     }
-    
+
     // C-style for loop: for (init; cond; update) { body }
     // Note: LPAREN was already consumed above
 
-    vyn::ast::StmtPtr initializer = nullptr;
-    
+    vyb::ast::StmtPtr initializer = nullptr;
+
     // Check for variable declarations with all possible starting tokens
-    if (this->peek().type == vyn::TokenType::KEYWORD_LET || 
-        this->peek().type == vyn::TokenType::KEYWORD_MUT ||
-        this->peek().type == vyn::TokenType::KEYWORD_CONST || 
-        this->peek().type == vyn::TokenType::KEYWORD_VAR ||
-        this->peek().type == vyn::TokenType::KEYWORD_AUTO) {
+    if (this->peek().type == vyb::TokenType::KEYWORD_LET ||
+        this->peek().type == vyb::TokenType::KEYWORD_MUT ||
+        this->peek().type == vyb::TokenType::KEYWORD_CONST ||
+        this->peek().type == vyb::TokenType::KEYWORD_VAR ||
+        this->peek().type == vyb::TokenType::KEYWORD_AUTO) {
         // Standard syntax variable declaration
         initializer = parse_var_decl(); // Parses the full variable declaration including semicolon
-    } else if (this->peek().type != vyn::TokenType::SEMICOLON) {
+    } else if (this->peek().type != vyb::TokenType::SEMICOLON) {
         // Check for relaxed syntax (Type name) variable declarations
-        if (this->peek().type == vyn::TokenType::IDENTIFIER) {
+        if (this->peek().type == vyb::TokenType::IDENTIFIER) {
             // Save position in case we need to backtrack
             size_t saved_pos = this->pos_;
-            
+
             try {
                 // Try to parse as a type
                 auto type_node = this->type_parser_.parse();
-                
-                if (type_node && !this->IsAtEnd() && this->peek().type == vyn::TokenType::IDENTIFIER) {
+
+                if (type_node && !this->IsAtEnd() && this->peek().type == vyb::TokenType::IDENTIFIER) {
                     // This looks like a relaxed syntax declaration: Type name
                     // Rewind position and parse as variable declaration
                     this->pos_ = saved_pos;
@@ -591,74 +591,74 @@ std::unique_ptr<vyn::ast::ForStatement> StatementParser::parse_for() {
             initializer = parse_expression_statement(); // Parses expression then expects semicolon
         }
     } else {
-        this->expect(vyn::TokenType::SEMICOLON, "Expected semicolon after empty for-loop initializer."); // Consume semicolon for empty initializer
+        this->expect(vyb::TokenType::SEMICOLON, "Expected semicolon after empty for-loop initializer."); // Consume semicolon for empty initializer
     }
 
-    vyn::ast::ExprPtr condition = nullptr;
-    if (this->peek().type != vyn::TokenType::SEMICOLON) {
+    vyb::ast::ExprPtr condition = nullptr;
+    if (this->peek().type != vyb::TokenType::SEMICOLON) {
         condition = this->expr_parser_.parse_expression();
     }
-    this->expect(vyn::TokenType::SEMICOLON, "Expected semicolon after for-loop condition.");
+    this->expect(vyb::TokenType::SEMICOLON, "Expected semicolon after for-loop condition.");
 
-    vyn::ast::ExprPtr increment = nullptr;
-    if (this->peek().type != vyn::TokenType::RPAREN) {
+    vyb::ast::ExprPtr increment = nullptr;
+    if (this->peek().type != vyb::TokenType::RPAREN) {
         increment = this->expr_parser_.parse_expression();
     }
-    this->expect(vyn::TokenType::RPAREN, "Expected ')' after for-loop clauses.");
+    this->expect(vyb::TokenType::RPAREN, "Expected ')' after for-loop clauses.");
 
     auto body = parse_block(); // 'for' body must be a block
     SourceLocation end_loc = body->loc; // Use loc member
 
-    return std::make_unique<vyn::ast::ForStatement>(for_loc, std::move(initializer), std::move(condition), std::move(increment), std::move(body));
+    return std::make_unique<vyb::ast::ForStatement>(for_loc, std::move(initializer), std::move(condition), std::move(increment), std::move(body));
 }
 
-std::unique_ptr<vyn::ast::ReturnStatement> StatementParser::parse_return() {
-    SourceLocation return_loc = this->expect(vyn::TokenType::KEYWORD_RETURN, "Expected 'return'.").location;
-    vyn::ast::ExprPtr value = nullptr;
+std::unique_ptr<vyb::ast::ReturnStatement> StatementParser::parse_return() {
+    SourceLocation return_loc = this->expect(vyb::TokenType::KEYWORD_RETURN, "Expected 'return'.").location;
+    vyb::ast::ExprPtr value = nullptr;
     SourceLocation end_loc = return_loc;
 
-    if (this->peek().type != vyn::TokenType::SEMICOLON && this->peek().type != vyn::TokenType::NEWLINE && this->peek().type != vyn::TokenType::RBRACE && this->peek().type != vyn::TokenType::DEDENT) {
+    if (this->peek().type != vyb::TokenType::SEMICOLON && this->peek().type != vyb::TokenType::NEWLINE && this->peek().type != vyb::TokenType::RBRACE && this->peek().type != vyb::TokenType::DEDENT) {
         // Parse the first expression
         value = this->expr_parser_.parse_expression();
         end_loc = value->loc; // Use loc member
-        
+
         // Check if there are multiple comma-separated expressions
-        if (this->peek().type == vyn::TokenType::COMMA) {
-            std::vector<vyn::ast::ExprPtr> expressions;
+        if (this->peek().type == vyb::TokenType::COMMA) {
+            std::vector<vyb::ast::ExprPtr> expressions;
             expressions.push_back(std::move(value)); // Add the first expression
-            
+
             // Parse remaining expressions
-            while (this->peek().type == vyn::TokenType::COMMA) {
+            while (this->peek().type == vyb::TokenType::COMMA) {
                 this->consume(); // Consume comma
                 expressions.push_back(this->expr_parser_.parse_expression());
                 end_loc = expressions.back()->loc;
             }
-            
+
             // Create a SequenceExpression to hold all the expressions
-            value = std::make_unique<vyn::ast::SequenceExpression>(return_loc, std::move(expressions));
+            value = std::make_unique<vyb::ast::SequenceExpression>(return_loc, std::move(expressions));
         }
     }
 
-    if (this->peek().type == vyn::TokenType::SEMICOLON) {
+    if (this->peek().type == vyb::TokenType::SEMICOLON) {
         end_loc = this->peek().location;
         this->consume(); // Consume semicolon
-    } else if (this->peek().type == vyn::TokenType::NEWLINE || this->IsAtEnd() || this->peek().type == vyn::TokenType::RBRACE || this->peek().type == vyn::TokenType::DEDENT) {
+    } else if (this->peek().type == vyb::TokenType::NEWLINE || this->IsAtEnd() || this->peek().type == vyb::TokenType::RBRACE || this->peek().type == vyb::TokenType::DEDENT) {
         // Optional semicolon at the end of a line or before closing brace
     } else {
         throw std::runtime_error("Expected semicolon or newline after return statement at " + location_to_string(this->peek().location));
     }
 
-    return std::make_unique<vyn::ast::ReturnStatement>(return_loc, std::move(value));
+    return std::make_unique<vyb::ast::ReturnStatement>(return_loc, std::move(value));
 }
 
-std::unique_ptr<vyn::ast::PassStatement> StatementParser::parse_pass() {
-    SourceLocation pass_loc = this->expect(vyn::TokenType::KEYWORD_PASS, "Expected 'pass'.").location;
-    vyn::ast::ExprPtr value = nullptr;
+std::unique_ptr<vyb::ast::PassStatement> StatementParser::parse_pass() {
+    SourceLocation pass_loc = this->expect(vyb::TokenType::KEYWORD_PASS, "Expected 'pass'.").location;
+    vyb::ast::ExprPtr value = nullptr;
     SourceLocation end_loc = pass_loc;
 
     // Pass requires an argument - it must pass a value
-    if (this->peek().type == vyn::TokenType::SEMICOLON || this->peek().type == vyn::TokenType::NEWLINE || 
-        this->peek().type == vyn::TokenType::RBRACE || this->peek().type == vyn::TokenType::DEDENT) {
+    if (this->peek().type == vyb::TokenType::SEMICOLON || this->peek().type == vyb::TokenType::NEWLINE ||
+        this->peek().type == vyb::TokenType::RBRACE || this->peek().type == vyb::TokenType::DEDENT) {
         throw std::runtime_error("Expected expression after 'pass' keyword at " + location_to_string(pass_loc));
     }
 
@@ -669,60 +669,60 @@ std::unique_ptr<vyn::ast::PassStatement> StatementParser::parse_pass() {
     }
     end_loc = value->loc;
 
-    if (this->peek().type == vyn::TokenType::SEMICOLON) {
+    if (this->peek().type == vyb::TokenType::SEMICOLON) {
         end_loc = this->peek().location;
         this->consume(); // Consume semicolon
-    } else if (this->peek().type == vyn::TokenType::NEWLINE || this->IsAtEnd() || 
-               this->peek().type == vyn::TokenType::RBRACE || this->peek().type == vyn::TokenType::DEDENT) {
+    } else if (this->peek().type == vyb::TokenType::NEWLINE || this->IsAtEnd() ||
+               this->peek().type == vyb::TokenType::RBRACE || this->peek().type == vyb::TokenType::DEDENT) {
         // Optional semicolon at the end of a line or before closing brace
     } else {
         throw std::runtime_error("Expected semicolon or newline after pass statement at " + location_to_string(this->peek().location));
     }
 
-    return std::make_unique<vyn::ast::PassStatement>(pass_loc, std::move(value));
+    return std::make_unique<vyb::ast::PassStatement>(pass_loc, std::move(value));
 }
 
-std::unique_ptr<vyn::ast::VariableDeclaration> StatementParser::parse_var_decl() {
+std::unique_ptr<vyb::ast::VariableDeclaration> StatementParser::parse_var_decl() {
     // Declaration start location
     SourceLocation decl_loc = this->current_location();
-    
+
     // Check what kind of declaration this is
     bool is_const_decl = false;
     bool auto_type_inference = false;
-    
+
     // Check for 'auto' keyword first (type inference)
-    if (this->match(vyn::TokenType::KEYWORD_AUTO)) {
+    if (this->match(vyb::TokenType::KEYWORD_AUTO)) {
         auto_type_inference = true;
         is_const_decl = false;
-        
+
         // Parse variable name for auto
-        vyn::token::Token name_token = this->expect(vyn::TokenType::IDENTIFIER, "Expected variable name after 'auto'.");
-        auto identifier_node = std::make_unique<vyn::ast::Identifier>(name_token.location, name_token.lexeme);
-        
+        vyb::token::Token name_token = this->expect(vyb::TokenType::IDENTIFIER, "Expected variable name after 'auto'.");
+        auto identifier_node = std::make_unique<vyb::ast::Identifier>(name_token.location, name_token.lexeme);
+
         // Auto requires initializer
-        this->expect(vyn::TokenType::EQ, "Auto variables require an initializer.");
-        vyn::ast::ExprPtr initializer = this->expr_parser_.parse_expression();
+        this->expect(vyb::TokenType::EQ, "Auto variables require an initializer.");
+        vyb::ast::ExprPtr initializer = this->expr_parser_.parse_expression();
         if (!initializer) {
-            throw std::runtime_error("Expected initializer expression after '=' for auto variable at " + 
+            throw std::runtime_error("Expected initializer expression after '=' for auto variable at " +
                                    location_to_string(this->current_location()));
         }
-        
+
         SourceLocation end_loc = initializer->loc;
-        
-        if (this->peek().type == vyn::TokenType::SEMICOLON) {
+
+        if (this->peek().type == vyb::TokenType::SEMICOLON) {
             end_loc = this->peek().location;
             this->consume();
-        } else if (this->peek().type == vyn::TokenType::NEWLINE || this->IsAtEnd() || 
-                   this->peek().type == vyn::TokenType::RBRACE || this->peek().type == vyn::TokenType::DEDENT ||
-                   this->peek().type == vyn::TokenType::END_OF_FILE ||
+        } else if (this->peek().type == vyb::TokenType::NEWLINE || this->IsAtEnd() ||
+                   this->peek().type == vyb::TokenType::RBRACE || this->peek().type == vyb::TokenType::DEDENT ||
+                   this->peek().type == vyb::TokenType::END_OF_FILE ||
                    is_statement_start(this->peek().type)) {
             // Optional semicolon
         } else {
-            throw std::runtime_error("Expected statement separator after variable declaration at " + 
+            throw std::runtime_error("Expected statement separator after variable declaration at " +
                                    location_to_string(this->peek().location));
         }
-        
-        return std::make_unique<vyn::ast::VariableDeclaration>(
+
+        return std::make_unique<vyb::ast::VariableDeclaration>(
             decl_loc,
             std::move(identifier_node),
             is_const_decl,
@@ -731,24 +731,24 @@ std::unique_ptr<vyn::ast::VariableDeclaration> StatementParser::parse_var_decl()
         );
     }
     // Legacy support: Check for var/const keywords
-    else if (this->match(vyn::TokenType::KEYWORD_VAR)) {
+    else if (this->match(vyb::TokenType::KEYWORD_VAR)) {
         is_const_decl = false;
         // Legacy var<Type> syntax - parse type in angle brackets
-        this->expect(vyn::TokenType::LT, "Expected '<' after 'var'.");
-        
+        this->expect(vyb::TokenType::LT, "Expected '<' after 'var'.");
+
         // Parse comma-separated types for inline tuple syntax
         std::vector<ast::TypeNodePtr> types;
         do {
             ast::TypeNodePtr type_expr = this->type_parser_.parse();
             if (!type_expr) {
-                throw std::runtime_error("Expected type inside '<>' in variable declaration at " + 
+                throw std::runtime_error("Expected type inside '<>' in variable declaration at " +
                                        location_to_string(this->peek().location));
             }
             types.push_back(std::move(type_expr));
-        } while (this->match(vyn::TokenType::COMMA));
-        
-        this->expect(vyn::TokenType::GT, "Expected '>' after type in variable declaration.");
-        
+        } while (this->match(vyb::TokenType::COMMA));
+
+        this->expect(vyb::TokenType::GT, "Expected '>' after type in variable declaration.");
+
         // If multiple types, create TupleTypeNode; otherwise use single type
         ast::TypeNodePtr type_expr;
         if (types.size() == 1) {
@@ -756,62 +756,62 @@ std::unique_ptr<vyn::ast::VariableDeclaration> StatementParser::parse_var_decl()
         } else {
             type_expr = std::make_unique<ast::TupleTypeNode>(decl_loc, std::move(types));
         }
-        
+
         // Parse variable name
-        vyn::token::Token name_token = this->expect(vyn::TokenType::IDENTIFIER, "Expected variable name.");
-        auto identifier_node = std::make_unique<vyn::ast::Identifier>(name_token.location, name_token.lexeme);
-        
-        vyn::ast::ExprPtr initializer = nullptr;
+        vyb::token::Token name_token = this->expect(vyb::TokenType::IDENTIFIER, "Expected variable name.");
+        auto identifier_node = std::make_unique<vyb::ast::Identifier>(name_token.location, name_token.lexeme);
+
+        vyb::ast::ExprPtr initializer = nullptr;
         SourceLocation end_loc = name_token.location;
-        
-        if (this->match(vyn::TokenType::EQ)) {
+
+        if (this->match(vyb::TokenType::EQ)) {
             initializer = this->expr_parser_.parse_expression();
             if (initializer) {
                 end_loc = initializer->loc;
             }
         }
-        
-        if (this->peek().type == vyn::TokenType::SEMICOLON) {
+
+        if (this->peek().type == vyb::TokenType::SEMICOLON) {
             end_loc = this->peek().location;
             this->consume();
-        } else if (this->peek().type == vyn::TokenType::NEWLINE || this->IsAtEnd() || 
-                   this->peek().type == vyn::TokenType::RBRACE || this->peek().type == vyn::TokenType::DEDENT ||
-                   this->peek().type == vyn::TokenType::END_OF_FILE ||
+        } else if (this->peek().type == vyb::TokenType::NEWLINE || this->IsAtEnd() ||
+                   this->peek().type == vyb::TokenType::RBRACE || this->peek().type == vyb::TokenType::DEDENT ||
+                   this->peek().type == vyb::TokenType::END_OF_FILE ||
                    is_statement_start(this->peek().type)) {
             // Optional semicolon
         } else {
-            throw std::runtime_error("Expected statement separator after variable declaration at " + 
+            throw std::runtime_error("Expected statement separator after variable declaration at " +
                                    location_to_string(this->peek().location));
         }
-        
-        return std::make_unique<vyn::ast::VariableDeclaration>(
+
+        return std::make_unique<vyb::ast::VariableDeclaration>(
             decl_loc,
             std::move(identifier_node),
             is_const_decl,
             std::move(type_expr),
             std::move(initializer)
         );
-    } else if (this->match(vyn::TokenType::KEYWORD_CONST)) {
+    } else if (this->match(vyb::TokenType::KEYWORD_CONST)) {
         is_const_decl = true;
-        
+
         // Support both const<Type> syntax and relaxed "const Type name" syntax
-        if (this->peek().type == vyn::TokenType::LT) {
-            // Vyn const<Type> syntax - parse type in angle brackets
+        if (this->peek().type == vyb::TokenType::LT) {
+            // VyB const<Type> syntax - parse type in angle brackets
             this->consume(); // consume '<'
-        
+
         // Parse comma-separated types for inline tuple syntax
         std::vector<ast::TypeNodePtr> types;
         do {
             ast::TypeNodePtr type_expr = this->type_parser_.parse();
             if (!type_expr) {
-                throw std::runtime_error("Expected type inside '<>' in variable declaration at " + 
+                throw std::runtime_error("Expected type inside '<>' in variable declaration at " +
                                        location_to_string(this->peek().location));
             }
             types.push_back(std::move(type_expr));
-        } while (this->match(vyn::TokenType::COMMA));
-        
-        this->expect(vyn::TokenType::GT, "Expected '>' after type in variable declaration.");
-        
+        } while (this->match(vyb::TokenType::COMMA));
+
+        this->expect(vyb::TokenType::GT, "Expected '>' after type in variable declaration.");
+
         // If multiple types, create TupleTypeNode; otherwise use single type
         ast::TypeNodePtr type_expr;
         if (types.size() == 1) {
@@ -819,88 +819,88 @@ std::unique_ptr<vyn::ast::VariableDeclaration> StatementParser::parse_var_decl()
         } else {
             type_expr = std::make_unique<ast::TupleTypeNode>(decl_loc, std::move(types));
         }
-        
+
         // Parse variable name
-        vyn::token::Token name_token = this->expect(vyn::TokenType::IDENTIFIER, "Expected variable name.");
-        auto identifier_node = std::make_unique<vyn::ast::Identifier>(name_token.location, name_token.lexeme);
-        
-        vyn::ast::ExprPtr initializer = nullptr;
+        vyb::token::Token name_token = this->expect(vyb::TokenType::IDENTIFIER, "Expected variable name.");
+        auto identifier_node = std::make_unique<vyb::ast::Identifier>(name_token.location, name_token.lexeme);
+
+        vyb::ast::ExprPtr initializer = nullptr;
         SourceLocation end_loc = name_token.location;
-        
-        if (this->match(vyn::TokenType::EQ)) {
+
+        if (this->match(vyb::TokenType::EQ)) {
             initializer = this->expr_parser_.parse_expression();
             if (initializer) {
                 end_loc = initializer->loc;
             }
         }
-        
-        if (this->peek().type == vyn::TokenType::SEMICOLON) {
+
+        if (this->peek().type == vyb::TokenType::SEMICOLON) {
             end_loc = this->peek().location;
             this->consume();
-        } else if (this->peek().type == vyn::TokenType::NEWLINE || this->IsAtEnd() || 
-                   this->peek().type == vyn::TokenType::RBRACE || this->peek().type == vyn::TokenType::DEDENT ||
-                   this->peek().type == vyn::TokenType::END_OF_FILE ||
+        } else if (this->peek().type == vyb::TokenType::NEWLINE || this->IsAtEnd() ||
+                   this->peek().type == vyb::TokenType::RBRACE || this->peek().type == vyb::TokenType::DEDENT ||
+                   this->peek().type == vyb::TokenType::END_OF_FILE ||
                    is_statement_start(this->peek().type)) {
             // Optional semicolon
         } else {
-            throw std::runtime_error("Expected statement separator after variable declaration at " + 
+            throw std::runtime_error("Expected statement separator after variable declaration at " +
                                    location_to_string(this->peek().location));
         }
-        
-        return std::make_unique<vyn::ast::VariableDeclaration>(
+
+        return std::make_unique<vyb::ast::VariableDeclaration>(
             decl_loc,
             std::move(identifier_node),
             is_const_decl,
             std::move(type_expr),
             std::move(initializer)
         );
-        } else if (this->peek().type == vyn::TokenType::IDENTIFIER) {
+        } else if (this->peek().type == vyb::TokenType::IDENTIFIER) {
             // Relaxed syntax: const TypeName varName = value
             ast::TypeNodePtr type_expr = this->type_parser_.parse();
-            vyn::token::Token name_token = this->expect(vyn::TokenType::IDENTIFIER, "Expected variable name.");
-            auto identifier_node = std::make_unique<vyn::ast::Identifier>(name_token.location, name_token.lexeme);
-            vyn::ast::ExprPtr initializer = nullptr;
-            if (this->match(vyn::TokenType::EQ)) {
+            vyb::token::Token name_token = this->expect(vyb::TokenType::IDENTIFIER, "Expected variable name.");
+            auto identifier_node = std::make_unique<vyb::ast::Identifier>(name_token.location, name_token.lexeme);
+            vyb::ast::ExprPtr initializer = nullptr;
+            if (this->match(vyb::TokenType::EQ)) {
                 initializer = this->expr_parser_.parse_expression();
             }
-            if (this->peek().type == vyn::TokenType::SEMICOLON) this->consume();
-            return std::make_unique<vyn::ast::VariableDeclaration>(
+            if (this->peek().type == vyb::TokenType::SEMICOLON) this->consume();
+            return std::make_unique<vyb::ast::VariableDeclaration>(
                 decl_loc, std::move(identifier_node), is_const_decl,
                 std::move(type_expr), std::move(initializer));
         } else {
-            throw std::runtime_error("Expected '<' or type name after 'const', but found '" + 
+            throw std::runtime_error("Expected '<' or type name after 'const', but found '" +
                 token_type_to_string(this->peek().type) + "' at " + location_to_string(this->peek().location));
         }
     }
-    
+
     // NEW UNIFIED SYNTAX: name<Type> pattern
     // Parse the variable name first
-    vyn::token::Token name_token = this->expect(vyn::TokenType::IDENTIFIER, "Expected variable name.");
-    auto identifier_node = std::make_unique<vyn::ast::Identifier>(name_token.location, name_token.lexeme);
-    
+    vyb::token::Token name_token = this->expect(vyb::TokenType::IDENTIFIER, "Expected variable name.");
+    auto identifier_node = std::make_unique<vyb::ast::Identifier>(name_token.location, name_token.lexeme);
+
     // Parse the type in angle brackets: name<Type>
-    this->expect(vyn::TokenType::LT, "Expected '<' after variable name in unified syntax.");
-    
+    this->expect(vyb::TokenType::LT, "Expected '<' after variable name in unified syntax.");
+
     // Parse comma-separated types for inline tuple syntax
     std::vector<ast::TypeNodePtr> types;
     do {
         ast::TypeNodePtr type = this->type_parser_.parse();
         if (!type) {
-            throw std::runtime_error("Expected type inside '<>' in variable declaration at " + 
+            throw std::runtime_error("Expected type inside '<>' in variable declaration at " +
                                    location_to_string(this->peek().location));
         }
         types.push_back(std::move(type));
-    } while (this->match(vyn::TokenType::COMMA));
-    
+    } while (this->match(vyb::TokenType::COMMA));
+
     // Check for const modifier: name<Type const>
-    if ((this->peek().type == vyn::TokenType::IDENTIFIER && this->peek().lexeme == "const") ||
-        this->peek().type == vyn::TokenType::KEYWORD_CONST) {
+    if ((this->peek().type == vyb::TokenType::IDENTIFIER && this->peek().lexeme == "const") ||
+        this->peek().type == vyb::TokenType::KEYWORD_CONST) {
         this->consume(); // consume "const"
         is_const_decl = true;
     }
-    
-    this->expect(vyn::TokenType::GT, "Expected '>' after type in variable declaration.");
-    
+
+    this->expect(vyb::TokenType::GT, "Expected '>' after type in variable declaration.");
+
     // If multiple types, create TupleTypeNode; otherwise use single type
     ast::TypeNodePtr type_expr;
     if (types.size() == 1) {
@@ -909,12 +909,12 @@ std::unique_ptr<vyn::ast::VariableDeclaration> StatementParser::parse_var_decl()
         type_expr = std::make_unique<ast::TupleTypeNode>(decl_loc, std::move(types));
     }
 
-    
+
     // Handle initializer
-    vyn::ast::ExprPtr initializer = nullptr;
+    vyb::ast::ExprPtr initializer = nullptr;
     SourceLocation end_loc = name_token.location; // Default end_loc if no initializer
 
-    if (this->match(vyn::TokenType::EQ)) {
+    if (this->match(vyb::TokenType::EQ)) {
         initializer = this->expr_parser_.parse_expression();
         if (initializer) {
             end_loc = initializer->loc;
@@ -923,22 +923,22 @@ std::unique_ptr<vyn::ast::VariableDeclaration> StatementParser::parse_var_decl()
         // Constants usually require an initializer (could enforce later)
     }
 
-    if (this->peek().type == vyn::TokenType::SEMICOLON) {
+    if (this->peek().type == vyb::TokenType::SEMICOLON) {
         end_loc = this->peek().location;
         this->consume();
-    } else if (this->peek().type == vyn::TokenType::NEWLINE || this->IsAtEnd() || 
-               this->peek().type == vyn::TokenType::RBRACE || this->peek().type == vyn::TokenType::DEDENT ||
-               this->peek().type == vyn::TokenType::END_OF_FILE ||
+    } else if (this->peek().type == vyb::TokenType::NEWLINE || this->IsAtEnd() ||
+               this->peek().type == vyb::TokenType::RBRACE || this->peek().type == vyb::TokenType::DEDENT ||
+               this->peek().type == vyb::TokenType::END_OF_FILE ||
                is_statement_start(this->peek().type)) {
         // Optional semicolon - also accept statement starts and end of file
         // since semicolons are optional and the declaration might be the last thing in the file
     } else {
-        throw std::runtime_error("Expected statement separator after variable declaration at " + 
+        throw std::runtime_error("Expected statement separator after variable declaration at " +
                                location_to_string(this->peek().location));
     }
 
     // Create the VariableDeclaration AST node
-    return std::make_unique<vyn::ast::VariableDeclaration>(
+    return std::make_unique<vyb::ast::VariableDeclaration>(
         decl_loc,
         std::move(identifier_node),
         is_const_decl,
@@ -947,68 +947,68 @@ std::unique_ptr<vyn::ast::VariableDeclaration> StatementParser::parse_var_decl()
     );
 }
 
-vyn::ast::ExprPtr StatementParser::parse_pattern() {
+vyb::ast::ExprPtr StatementParser::parse_pattern() {
     // For now, a simple pattern is just an identifier.
     // This will be expanded for destructuring, etc.
-    vyn::token::Token id_token = this->expect(vyn::TokenType::IDENTIFIER, "Expected identifier in pattern.");
-    return std::make_unique<vyn::ast::Identifier>(id_token.location, id_token.lexeme); // Use lexeme
+    vyb::token::Token id_token = this->expect(vyb::TokenType::IDENTIFIER, "Expected identifier in pattern.");
+    return std::make_unique<vyb::ast::Identifier>(id_token.location, id_token.lexeme); // Use lexeme
 }
 
 
-bool StatementParser::is_statement_start(vyn::TokenType type) const {
+bool StatementParser::is_statement_start(vyb::TokenType type) const {
     switch (type) {
-        case vyn::TokenType::KEYWORD_LET:
-        case vyn::TokenType::KEYWORD_MUT:
-        case vyn::TokenType::KEYWORD_CONST:
-        case vyn::TokenType::KEYWORD_VAR: // Added var
-        case vyn::TokenType::KEYWORD_AUTO: // Added auto
-        case vyn::TokenType::KEYWORD_ASYNC: // Accept async
-        case vyn::TokenType::KEYWORD_EXTERN:
-        case vyn::TokenType::KEYWORD_CLASS: // Added class
-        case vyn::TokenType::KEYWORD_TEMPLATE: // Added template
-        case vyn::TokenType::KEYWORD_IF:
-        case vyn::TokenType::KEYWORD_WHILE:
-        case vyn::TokenType::KEYWORD_FOR:
-        case vyn::TokenType::KEYWORD_MATCH:
-        case vyn::TokenType::KEYWORD_RETURN:
-        case vyn::TokenType::KEYWORD_PASS:
-        case vyn::TokenType::LBRACE:
-        case vyn::TokenType::KEYWORD_BREAK:
-        case vyn::TokenType::KEYWORD_CONTINUE:
-        case vyn::TokenType::KEYWORD_FREEDOM:
-        case vyn::TokenType::KEYWORD_FAIL:
-        case vyn::TokenType::KEYWORD_PANIC:
-        case vyn::TokenType::KEYWORD_EXIT:
-        case vyn::TokenType::KEYWORD_RETHROW:
-        case vyn::TokenType::KEYWORD_DEFER:
-        case vyn::TokenType::IDENTIFIER: // Added identifier for relaxed syntax
+        case vyb::TokenType::KEYWORD_LET:
+        case vyb::TokenType::KEYWORD_MUT:
+        case vyb::TokenType::KEYWORD_CONST:
+        case vyb::TokenType::KEYWORD_VAR: // Added var
+        case vyb::TokenType::KEYWORD_AUTO: // Added auto
+        case vyb::TokenType::KEYWORD_ASYNC: // Accept async
+        case vyb::TokenType::KEYWORD_EXTERN:
+        case vyb::TokenType::KEYWORD_CLASS: // Added class
+        case vyb::TokenType::KEYWORD_TEMPLATE: // Added template
+        case vyb::TokenType::KEYWORD_IF:
+        case vyb::TokenType::KEYWORD_WHILE:
+        case vyb::TokenType::KEYWORD_FOR:
+        case vyb::TokenType::KEYWORD_MATCH:
+        case vyb::TokenType::KEYWORD_RETURN:
+        case vyb::TokenType::KEYWORD_PASS:
+        case vyb::TokenType::LBRACE:
+        case vyb::TokenType::KEYWORD_BREAK:
+        case vyb::TokenType::KEYWORD_CONTINUE:
+        case vyb::TokenType::KEYWORD_FREEDOM:
+        case vyb::TokenType::KEYWORD_FAIL:
+        case vyb::TokenType::KEYWORD_PANIC:
+        case vyb::TokenType::KEYWORD_EXIT:
+        case vyb::TokenType::KEYWORD_RETHROW:
+        case vyb::TokenType::KEYWORD_DEFER:
+        case vyb::TokenType::IDENTIFIER: // Added identifier for relaxed syntax
             return true;
         default:
             return this->expr_parser_.is_expression_start(type); // Changed: An expression can also be a statement
     }
 }
 
-vyn::ast::StmtPtr StatementParser::parse_try() {
+vyb::ast::StmtPtr StatementParser::parse_try() {
     SourceLocation try_loc = this->current_location();
-    this->expect(vyn::TokenType::KEYWORD_TRY);
+    this->expect(vyb::TokenType::KEYWORD_TRY);
 
     // Parse the try block
     std::unique_ptr<ast::BlockStatement> try_block = nullptr;
     SourceLocation try_block_start_loc = peek().location;
-    if (this->peek().type == vyn::TokenType::LBRACE) {
+    if (this->peek().type == vyb::TokenType::LBRACE) {
         try_block = this->parse_block();
-    } else if (this->peek().type == vyn::TokenType::INDENT) {
+    } else if (this->peek().type == vyb::TokenType::INDENT) {
         try_block_start_loc = consume().location; // Consume INDENT, capture its location
         std::vector<ast::StmtPtr> stmts;
-        while (!this->IsAtEnd() && this->peek().type != vyn::TokenType::DEDENT && this->peek().type != vyn::TokenType::END_OF_FILE) {
-            while (!this->IsAtEnd() && this->peek().type == vyn::TokenType::NEWLINE) this->consume();
-            if (this->IsAtEnd() || this->peek().type == vyn::TokenType::DEDENT) break;
+        while (!this->IsAtEnd() && this->peek().type != vyb::TokenType::DEDENT && this->peek().type != vyb::TokenType::END_OF_FILE) {
+            while (!this->IsAtEnd() && this->peek().type == vyb::TokenType::NEWLINE) this->consume();
+            if (this->IsAtEnd() || this->peek().type == vyb::TokenType::DEDENT) break;
             // Using a sub-parser as per existing pattern in the file for indented blocks
             StatementParser stmt_parser(this->tokens_, this->pos_, 0 /*TODO: review indent_level for sub-parsers*/, this->current_file_path_, this->type_parser_, this->expr_parser_, this->decl_parser_);
             stmts.push_back(stmt_parser.parse());
             this->pos_ = stmt_parser.get_current_pos();
         }
-        this->expect(vyn::TokenType::DEDENT);
+        this->expect(vyb::TokenType::DEDENT);
         try_block = std::make_unique<ast::BlockStatement>(try_block_start_loc, std::move(stmts));
     } else {
         throw error(peek(), "Expected block (starting with '{' or indent) after 'try'.");
@@ -1020,14 +1020,14 @@ vyn::ast::StmtPtr StatementParser::parse_try() {
     // std::unique_ptr<ast::TypeNode> catch_type_node;         // Future: for richer AST
     std::unique_ptr<ast::BlockStatement> catch_block = nullptr;
 
-    if (match(vyn::TokenType::KEYWORD_CATCH)) { // Consumes 'catch'
-        if (match(vyn::TokenType::LPAREN)) { // Parses 'catch (e: Type)' or 'catch (e)'
-            if (peek().type == vyn::TokenType::IDENTIFIER) {
+    if (match(vyb::TokenType::KEYWORD_CATCH)) { // Consumes 'catch'
+        if (match(vyb::TokenType::LPAREN)) { // Parses 'catch (e: Type)' or 'catch (e)'
+            if (peek().type == vyb::TokenType::IDENTIFIER) {
                 token::Token ident_token = consume();
                 catch_variable_name = ident_token.lexeme;
                 // catch_identifier_node = std::make_unique<ast::Identifier>(ident_token.location, ident_token.lexeme);
 
-                if (match(vyn::TokenType::COLON)) {
+                if (match(vyb::TokenType::COLON)) {
                     auto parsed_type = type_parser_.parse(); // Parse the type
                     if (!parsed_type) {
                         throw error(peek(), "Expected type annotation after ':' in catch clause.");
@@ -1039,8 +1039,8 @@ vyn::ast::StmtPtr StatementParser::parse_try() {
                 // For now, assume identifier is required if parentheses are present.
                 throw error(peek(), "Expected identifier within parentheses in catch clause.");
             }
-            expect(vyn::TokenType::RPAREN);
-        } else if (peek().type == vyn::TokenType::IDENTIFIER) { // Parses 'catch e'
+            expect(vyb::TokenType::RPAREN);
+        } else if (peek().type == vyb::TokenType::IDENTIFIER) { // Parses 'catch e'
             token::Token ident_token = consume();
             catch_variable_name = ident_token.lexeme;
             // catch_identifier_node = std::make_unique<ast::Identifier>(ident_token.location, ident_token.lexeme);
@@ -1050,19 +1050,19 @@ vyn::ast::StmtPtr StatementParser::parse_try() {
 
         // Parse the catch block
         SourceLocation catch_block_start_loc = peek().location;
-        if (this->peek().type == vyn::TokenType::LBRACE) {
+        if (this->peek().type == vyb::TokenType::LBRACE) {
             catch_block = this->parse_block();
-        } else if (this->peek().type == vyn::TokenType::INDENT) {
+        } else if (this->peek().type == vyb::TokenType::INDENT) {
             catch_block_start_loc = consume().location; // Consume INDENT, capture its location
             std::vector<ast::StmtPtr> stmts;
-            while (!this->IsAtEnd() && this->peek().type != vyn::TokenType::DEDENT && this->peek().type != vyn::TokenType::END_OF_FILE) {
-                while (!this->IsAtEnd() && this->peek().type == vyn::TokenType::NEWLINE) this->consume();
-                if (this->IsAtEnd() || this->peek().type == vyn::TokenType::DEDENT) break;
+            while (!this->IsAtEnd() && this->peek().type != vyb::TokenType::DEDENT && this->peek().type != vyb::TokenType::END_OF_FILE) {
+                while (!this->IsAtEnd() && this->peek().type == vyb::TokenType::NEWLINE) this->consume();
+                if (this->IsAtEnd() || this->peek().type == vyb::TokenType::DEDENT) break;
                 StatementParser stmt_parser(this->tokens_, this->pos_, 0 /*TODO: review indent_level*/, this->current_file_path_, this->type_parser_, this->expr_parser_, this->decl_parser_);
                 stmts.push_back(stmt_parser.parse());
                 this->pos_ = stmt_parser.get_current_pos();
             }
-            this->expect(vyn::TokenType::DEDENT);
+            this->expect(vyb::TokenType::DEDENT);
             catch_block = std::make_unique<ast::BlockStatement>(catch_block_start_loc, std::move(stmts));
         } else {
             throw error(peek(), "Expected block (starting with '{' or indent) after 'catch' clause.");
@@ -1070,27 +1070,27 @@ vyn::ast::StmtPtr StatementParser::parse_try() {
     }
 
     // Skip any additional catch clauses
-    while (match(vyn::TokenType::KEYWORD_CATCH)) {
+    while (match(vyb::TokenType::KEYWORD_CATCH)) {
         // Skip catch parameters or variable name
-        if (match(vyn::TokenType::LPAREN)) {
+        if (match(vyb::TokenType::LPAREN)) {
             int depth = 1;
             while (depth > 0 && !this->IsAtEnd()) {
-                if (match(vyn::TokenType::LPAREN)) depth++;
-                else if (match(vyn::TokenType::RPAREN)) depth--;
+                if (match(vyb::TokenType::LPAREN)) depth++;
+                else if (match(vyb::TokenType::RPAREN)) depth--;
                 else this->consume();
             }
-        } else if (peek().type == vyn::TokenType::IDENTIFIER) {
+        } else if (peek().type == vyb::TokenType::IDENTIFIER) {
             this->consume();
         }
         // Skip catch block
-        if (peek().type == vyn::TokenType::LBRACE) {
+        if (peek().type == vyb::TokenType::LBRACE) {
             this->parse_block();
-        } else if (peek().type == vyn::TokenType::INDENT) {
+        } else if (peek().type == vyb::TokenType::INDENT) {
             this->consume(); // consume INDENT
-            while (!this->IsAtEnd() && peek().type != vyn::TokenType::DEDENT && peek().type != vyn::TokenType::END_OF_FILE) {
+            while (!this->IsAtEnd() && peek().type != vyb::TokenType::DEDENT && peek().type != vyb::TokenType::END_OF_FILE) {
                 this->consume();
             }
-            this->expect(vyn::TokenType::DEDENT);
+            this->expect(vyb::TokenType::DEDENT);
         } else {
             throw error(peek(), "Expected block after 'catch' in try statement.");
         }
@@ -1098,21 +1098,21 @@ vyn::ast::StmtPtr StatementParser::parse_try() {
 
     // Optionally parse a finally block
     std::unique_ptr<ast::BlockStatement> finally_block = nullptr;
-    if (match(vyn::TokenType::KEYWORD_FINALLY)) { // Consumes 'finally'
+    if (match(vyb::TokenType::KEYWORD_FINALLY)) { // Consumes 'finally'
         SourceLocation finally_block_start_loc = peek().location;
-        if (this->peek().type == vyn::TokenType::LBRACE) {
+        if (this->peek().type == vyb::TokenType::LBRACE) {
             finally_block = this->parse_block();
-        } else if (this->peek().type == vyn::TokenType::INDENT) {
+        } else if (this->peek().type == vyb::TokenType::INDENT) {
             finally_block_start_loc = consume().location; // Consume INDENT, capture its location
             std::vector<ast::StmtPtr> stmts;
-            while (!this->IsAtEnd() && this->peek().type != vyn::TokenType::DEDENT && this->peek().type != vyn::TokenType::END_OF_FILE) {
-                while (!this->IsAtEnd() && this->peek().type == vyn::TokenType::NEWLINE) this->consume();
-                if (this->IsAtEnd() || this->peek().type == vyn::TokenType::DEDENT) break;
+            while (!this->IsAtEnd() && this->peek().type != vyb::TokenType::DEDENT && this->peek().type != vyb::TokenType::END_OF_FILE) {
+                while (!this->IsAtEnd() && this->peek().type == vyb::TokenType::NEWLINE) this->consume();
+                if (this->IsAtEnd() || this->peek().type == vyb::TokenType::DEDENT) break;
                 StatementParser stmt_parser(this->tokens_, this->pos_, 0/*TODO: review indent_level*/, this->current_file_path_, this->type_parser_, this->expr_parser_, this->decl_parser_);
                 stmts.push_back(stmt_parser.parse());
                 this->pos_ = stmt_parser.get_current_pos();
             }
-            this->expect(vyn::TokenType::DEDENT);
+            this->expect(vyb::TokenType::DEDENT);
             finally_block = std::make_unique<ast::BlockStatement>(finally_block_start_loc, std::move(stmts));
         } else {
             throw error(peek(), "Expected block (starting with '{' or indent) after 'finally'.");
@@ -1124,34 +1124,34 @@ vyn::ast::StmtPtr StatementParser::parse_try() {
 }
 
 // Minimal stub implementations for defer and await
-vyn::ast::StmtPtr StatementParser::parse_defer() {
+vyb::ast::StmtPtr StatementParser::parse_defer() {
     SourceLocation defer_loc = consume().location; // Consume 'defer'
     // Parse the deferred expression statement
-    vyn::ast::ExprPtr expr = expr_parser_.parse_expression();
+    vyb::ast::ExprPtr expr = expr_parser_.parse_expression();
     if (!expr) {
         throw error(peek(), "Expected expression after 'defer'.");
     }
     // Consume optional semicolon
-    if (peek().type == vyn::TokenType::SEMICOLON) consume();
+    if (peek().type == vyb::TokenType::SEMICOLON) consume();
     // Wrap the expression in an ExpressionStatement
-    auto innerStmt = std::make_unique<vyn::ast::ExpressionStatement>(defer_loc, std::move(expr));
-    return std::make_unique<vyn::ast::DeferStatement>(defer_loc, std::move(innerStmt));
+    auto innerStmt = std::make_unique<vyb::ast::ExpressionStatement>(defer_loc, std::move(expr));
+    return std::make_unique<vyb::ast::DeferStatement>(defer_loc, std::move(innerStmt));
 }
-vyn::ast::StmtPtr StatementParser::parse_await() {
+vyb::ast::StmtPtr StatementParser::parse_await() {
     SourceLocation await_loc = consume().location; // Consume 'await' and get its location
-    vyn::ast::ExprPtr expression = expr_parser_.parse_expression(); // Parse the expression being awaited
+    vyb::ast::ExprPtr expression = expr_parser_.parse_expression(); // Parse the expression being awaited
 
     if (!expression) {
         throw error(peek(), "Expected expression after 'await'.");
     }
 
     // Optional semicolon or newline handling (similar to ExpressionStatement)
-    if (match(vyn::TokenType::SEMICOLON)) {
+    if (match(vyb::TokenType::SEMICOLON)) {
         // Semicolon consumed.
-    } else if (peek().type == vyn::TokenType::NEWLINE ||
+    } else if (peek().type == vyb::TokenType::NEWLINE ||
                IsAtEnd() ||
-               peek().type == vyn::TokenType::RBRACE ||
-               peek().type == vyn::TokenType::DEDENT) {
+               peek().type == vyb::TokenType::RBRACE ||
+               peek().type == vyb::TokenType::DEDENT) {
         // Optional semicolon: fine.
     } else {
         throw error(peek(), "Expected semicolon or newline after await statement.");
@@ -1166,49 +1166,49 @@ vyn::ast::StmtPtr StatementParser::parse_await() {
     return std::make_unique<ast::ExpressionStatement>(await_loc, std::move(await_unary_expr));
 }
 
-vyn::ast::StmtPtr StatementParser::parse_match() {
-    SourceLocation match_loc = expect(vyn::TokenType::KEYWORD_MATCH, "Expected 'match'").location;
-    
+vyb::ast::StmtPtr StatementParser::parse_match() {
+    SourceLocation match_loc = expect(vyb::TokenType::KEYWORD_MATCH, "Expected 'match'").location;
+
     // Expect opening parenthesis for the match expression
-    expect(vyn::TokenType::LPAREN, "Expected '(' after 'match'.");
-    
+    expect(vyb::TokenType::LPAREN, "Expected '(' after 'match'.");
+
     // Parse the expression to match against (can be any expression)
-    vyn::ast::ExprPtr match_expr = expr_parser_.parse_expression();
+    vyb::ast::ExprPtr match_expr = expr_parser_.parse_expression();
     if (!match_expr) {
         throw error(peek(), "Expected expression in match statement.");
     }
-    
+
     // Expect closing parenthesis
-    expect(vyn::TokenType::RPAREN, "Expected ')' after match expression.");
-    
+    expect(vyb::TokenType::RPAREN, "Expected ')' after match expression.");
+
     // Expect opening brace
-    expect(vyn::TokenType::LBRACE, "Expected '{' after match expression.");
-    
+    expect(vyb::TokenType::LBRACE, "Expected '{' after match expression.");
+
     // Parse match arms: pattern => expression
-    std::vector<std::pair<vyn::ast::ExprPtr, vyn::ast::ExprPtr>> cases;
-    
-    while (!check(vyn::TokenType::RBRACE) && !IsAtEnd()) {
+    std::vector<std::pair<vyb::ast::ExprPtr, vyb::ast::ExprPtr>> cases;
+
+    while (!check(vyb::TokenType::RBRACE) && !IsAtEnd()) {
         // Skip newlines between cases
-        while (match(vyn::TokenType::NEWLINE)) {}
-        
-        if (check(vyn::TokenType::RBRACE)) break;
-        
+        while (match(vyb::TokenType::NEWLINE)) {}
+
+        if (check(vyb::TokenType::RBRACE)) break;
+
         // Parse pattern: '?', comparison pattern (e.g., >= 18), or literal
-        vyn::ast::ExprPtr pattern;
-        if (peek().type == vyn::TokenType::QUESTION_MARK) {
+        vyb::ast::ExprPtr pattern;
+        if (peek().type == vyb::TokenType::QUESTION_MARK) {
             // Wildcard pattern - represented as nullptr
             consume(); // consume '?'
             pattern = nullptr;
-        } else if (peek().type == vyn::TokenType::LT || peek().type == vyn::TokenType::LTEQ ||
-                   peek().type == vyn::TokenType::GT || peek().type == vyn::TokenType::GTEQ ||
-                   peek().type == vyn::TokenType::EQEQ || peek().type == vyn::TokenType::NOTEQ) {
+        } else if (peek().type == vyb::TokenType::LT || peek().type == vyb::TokenType::LTEQ ||
+                   peek().type == vyb::TokenType::GT || peek().type == vyb::TokenType::GTEQ ||
+                   peek().type == vyb::TokenType::EQEQ || peek().type == vyb::TokenType::NOTEQ) {
             // Comparison pattern (e.g., >= 18, < 0, == 5)
             auto op_token = consume(); // consume comparison operator
             auto value = expr_parser_.parse_primary();
             if (!value) {
                 throw error(peek(), "Expected value after comparison operator in pattern.");
             }
-            pattern = std::make_unique<vyn::ast::ComparisonPattern>(
+            pattern = std::make_unique<vyb::ast::ComparisonPattern>(
                 op_token.location, op_token, std::move(value)
             );
         } else {
@@ -1218,16 +1218,16 @@ vyn::ast::StmtPtr StatementParser::parse_match() {
                 throw error(peek(), "Expected pattern in match arm.");
             }
         }
-        
+
         // Expect '->' (arrow)
-        expect(vyn::TokenType::ARROW, "Expected '->' after match pattern.");
-        
+        expect(vyb::TokenType::ARROW, "Expected '->' after match pattern.");
+
         // Parse result: either a block statement or an expression
-        vyn::ast::ExprPtr result;
-        if (check(vyn::TokenType::LBRACE)) {
+        vyb::ast::ExprPtr result;
+        if (check(vyb::TokenType::LBRACE)) {
             // Parse block statement and wrap it in a BlockExpression
             auto block_stmt = parse_block();
-            result = std::make_unique<vyn::ast::BlockExpression>(
+            result = std::make_unique<vyb::ast::BlockExpression>(
                 block_stmt->loc, std::move(block_stmt)
             );
         } else {
@@ -1237,139 +1237,139 @@ vyn::ast::StmtPtr StatementParser::parse_match() {
                 throw error(peek(), "Expected expression or block after '->' in match arm.");
             }
         }
-        
+
         cases.emplace_back(std::move(pattern), std::move(result));
-        
+
         // Optional comma
-        match(vyn::TokenType::COMMA);
-        
+        match(vyb::TokenType::COMMA);
+
         // Skip trailing newlines
-        while (match(vyn::TokenType::NEWLINE)) {}
+        while (match(vyb::TokenType::NEWLINE)) {}
     }
-    
-    expect(vyn::TokenType::RBRACE, "Expected '}' after match cases.");
-    
-    return std::make_unique<vyn::ast::MatchStatement>(match_loc, std::move(match_expr), std::move(cases));
+
+    expect(vyb::TokenType::RBRACE, "Expected '}' after match cases.");
+
+    return std::make_unique<vyb::ast::MatchStatement>(match_loc, std::move(match_expr), std::move(cases));
 }
 
-std::unique_ptr<vyn::ast::BreakStatement> StatementParser::parse_break() {
-    SourceLocation break_loc = expect(vyn::TokenType::KEYWORD_BREAK, "Expected 'break'").location;
-    
+std::unique_ptr<vyb::ast::BreakStatement> StatementParser::parse_break() {
+    SourceLocation break_loc = expect(vyb::TokenType::KEYWORD_BREAK, "Expected 'break'").location;
+
     // Optional semicolon
-    match(vyn::TokenType::SEMICOLON);
-    
-    return std::make_unique<vyn::ast::BreakStatement>(break_loc);
+    match(vyb::TokenType::SEMICOLON);
+
+    return std::make_unique<vyb::ast::BreakStatement>(break_loc);
 }
 
-std::unique_ptr<vyn::ast::ContinueStatement> StatementParser::parse_continue() {
-    SourceLocation continue_loc = expect(vyn::TokenType::KEYWORD_CONTINUE, "Expected 'continue'").location;
-    
+std::unique_ptr<vyb::ast::ContinueStatement> StatementParser::parse_continue() {
+    SourceLocation continue_loc = expect(vyb::TokenType::KEYWORD_CONTINUE, "Expected 'continue'").location;
+
     // Optional semicolon
-    match(vyn::TokenType::SEMICOLON);
-    
-    return std::make_unique<vyn::ast::ContinueStatement>(continue_loc);
+    match(vyb::TokenType::SEMICOLON);
+
+    return std::make_unique<vyb::ast::ContinueStatement>(continue_loc);
 }
 
 // Parses an freedom block: 'freedom { ... }'
-std::unique_ptr<vyn::ast::UnsafeStatement> StatementParser::parse_unsafe() {
-    SourceLocation loc = expect(vyn::TokenType::KEYWORD_FREEDOM, "Expected 'freedom'").location;
+std::unique_ptr<vyb::ast::UnsafeStatement> StatementParser::parse_unsafe() {
+    SourceLocation loc = expect(vyb::TokenType::KEYWORD_FREEDOM, "Expected 'freedom'").location;
     auto blockStmt = parse_block(); // parse_block consumes '{' and '}'
-    return std::make_unique<vyn::ast::UnsafeStatement>(loc, std::move(blockStmt));
+    return std::make_unique<vyb::ast::UnsafeStatement>(loc, std::move(blockStmt));
 }
 
 // --- Error Handling Statement Parsers ---
 
 // Parses a fail statement: 'fail ErrorType { field = value }'
-std::unique_ptr<vyn::ast::FailStatement> StatementParser::parse_fail() {
-    SourceLocation loc = expect(vyn::TokenType::KEYWORD_FAIL, "Expected 'fail'").location;
+std::unique_ptr<vyb::ast::FailStatement> StatementParser::parse_fail() {
+    SourceLocation loc = expect(vyb::TokenType::KEYWORD_FAIL, "Expected 'fail'").location;
 
-    vyn::ast::TypeNodePtr explicitErrorType = nullptr;
+    vyb::ast::TypeNodePtr explicitErrorType = nullptr;
     bool hasExplicitType = false;
-    if (match(vyn::TokenType::LT)) {
+    if (match(vyb::TokenType::LT)) {
         explicitErrorType = type_parser_.parse();
-        expect(vyn::TokenType::GT, "Expected '>' after fail error type");
+        expect(vyb::TokenType::GT, "Expected '>' after fail error type");
         hasExplicitType = true;
     }
-    
-    vyn::ast::ExprPtr errorExpr = nullptr;
+
+    vyb::ast::ExprPtr errorExpr = nullptr;
     if (hasExplicitType) {
-        expect(vyn::TokenType::LPAREN, "Expected '(' after typed fail");
+        expect(vyb::TokenType::LPAREN, "Expected '(' after typed fail");
         errorExpr = expr_parser_.parse_expression();
-        expect(vyn::TokenType::RPAREN, "Expected ')' after typed fail expression");
+        expect(vyb::TokenType::RPAREN, "Expected ')' after typed fail expression");
     } else {
         // Parse the error expression (e.g., ErrorType { field = value })
         // This is typically a construction expression or identifier
         errorExpr = expr_parser_.parse_expression();
     }
-    
+
     if (!errorExpr) {
         throw std::runtime_error("Expected error expression after 'fail' at " + location_to_string(loc));
     }
-    
+
     // Optional semicolon
-    match(vyn::TokenType::SEMICOLON);
-    
-    return std::make_unique<vyn::ast::FailStatement>(loc, std::move(errorExpr), std::move(explicitErrorType));
+    match(vyb::TokenType::SEMICOLON);
+
+    return std::make_unique<vyb::ast::FailStatement>(loc, std::move(errorExpr), std::move(explicitErrorType));
 }
 
 // Parses a panic statement: 'panic("message")'
-std::unique_ptr<vyn::ast::PanicStatement> StatementParser::parse_panic() {
-    SourceLocation loc = expect(vyn::TokenType::KEYWORD_PANIC, "Expected 'panic'").location;
-    
+std::unique_ptr<vyb::ast::PanicStatement> StatementParser::parse_panic() {
+    SourceLocation loc = expect(vyb::TokenType::KEYWORD_PANIC, "Expected 'panic'").location;
+
     // Expect '('
-    expect(vyn::TokenType::LPAREN, "Expected '(' after 'panic'");
-    
+    expect(vyb::TokenType::LPAREN, "Expected '(' after 'panic'");
+
     // Parse the panic message (typically a string literal)
     auto messageExpr = expr_parser_.parse_expression();
-    
+
     if (!messageExpr) {
         throw std::runtime_error("Expected panic message expression at " + location_to_string(loc));
     }
-    
+
     // Expect ')'
-    expect(vyn::TokenType::RPAREN, "Expected ')' after panic message");
-    
+    expect(vyb::TokenType::RPAREN, "Expected ')' after panic message");
+
     // Optional semicolon
-    match(vyn::TokenType::SEMICOLON);
-    
-    return std::make_unique<vyn::ast::PanicStatement>(loc, std::move(messageExpr));
+    match(vyb::TokenType::SEMICOLON);
+
+    return std::make_unique<vyb::ast::PanicStatement>(loc, std::move(messageExpr));
 }
 
 // Parses an exit statement: 'exit(n)' — terminates process with exit code n
-std::unique_ptr<vyn::ast::ExitStatement> StatementParser::parse_exit() {
-    SourceLocation loc = expect(vyn::TokenType::KEYWORD_EXIT, "Expected 'exit'").location;
-    
+std::unique_ptr<vyb::ast::ExitStatement> StatementParser::parse_exit() {
+    SourceLocation loc = expect(vyb::TokenType::KEYWORD_EXIT, "Expected 'exit'").location;
+
     // Expect '('
-    expect(vyn::TokenType::LPAREN, "Expected '(' after 'exit'");
-    
+    expect(vyb::TokenType::LPAREN, "Expected '(' after 'exit'");
+
     // Parse the exit code expression (must evaluate to Int)
     auto codeExpr = expr_parser_.parse_expression();
-    
+
     if (!codeExpr) {
         throw std::runtime_error("Expected exit code expression at " + location_to_string(loc));
     }
-    
+
     // Expect ')'
-    expect(vyn::TokenType::RPAREN, "Expected ')' after exit code");
-    
+    expect(vyb::TokenType::RPAREN, "Expected ')' after exit code");
+
     // Optional semicolon
-    match(vyn::TokenType::SEMICOLON);
-    
-    return std::make_unique<vyn::ast::ExitStatement>(loc, std::move(codeExpr));
+    match(vyb::TokenType::SEMICOLON);
+
+    return std::make_unique<vyb::ast::ExitStatement>(loc, std::move(codeExpr));
 }
 
 // Parses a rethrow statement: 'rethrow' or 'fail NewError { cause = e }'
-std::unique_ptr<vyn::ast::RethrowStatement> StatementParser::parse_rethrow() {
-    SourceLocation loc = expect(vyn::TokenType::KEYWORD_RETHROW, "Expected 'rethrow'").location;
-    
+std::unique_ptr<vyb::ast::RethrowStatement> StatementParser::parse_rethrow() {
+    SourceLocation loc = expect(vyb::TokenType::KEYWORD_RETHROW, "Expected 'rethrow'").location;
+
     // Check if there's an error transformation (currently we just support simple rethrow)
     // In the future, we might support: rethrow NewError { cause = e }
     // For now, just simple rethrow
-    
+
     // Optional semicolon
-    match(vyn::TokenType::SEMICOLON);
-    
-    return std::make_unique<vyn::ast::RethrowStatement>(loc, nullptr);
+    match(vyb::TokenType::SEMICOLON);
+
+    return std::make_unique<vyb::ast::RethrowStatement>(loc, nullptr);
 }
 
-} // namespace vyn
+} // namespace vyb

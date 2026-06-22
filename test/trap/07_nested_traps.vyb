@@ -1,0 +1,24 @@
+# Test 07: Nested trap clauses
+# Tests nested error handling with inner and outer traps
+
+main()<Int> -> {
+    result<Int> = {
+        inner<Int> = {
+            fail InnerError { level = 1 }
+            return 10
+        } trap (e<InnerError>) -> {
+            println("Caught inner error at level " + e.level.to_string())
+            # Now fail with a different error
+            fail OuterError { level = 2 }
+            return 20
+        }
+
+        return inner
+    } trap (e<OuterError>) -> {
+        println("Caught outer error at level " + e.level.to_string())
+        return 30
+    }
+
+    println("Final result: " + result.to_string())
+    return 0
+}

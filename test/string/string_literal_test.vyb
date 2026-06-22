@@ -1,0 +1,22 @@
+// Test string literals as String type
+
+main() <Int> -> {
+    // Test simple string literal assignment
+    data<String> = "Hello"
+    println("String literal assigned: " + data.len().to_string())
+
+    // Test string concatenation with literals
+    combined<String> = "Hello" + " " + "World"
+    println("Concatenated length: " + combined.len().to_string())
+
+    // Test string literal with method calls
+    greeting<String> = "Hello World"
+    println("First char: " + greeting.char_at(0).to_string())
+
+    // Test comparison methods
+    test<String> = "Hello World"
+    prefix<String> = "Hello"
+    println("Starts with Hello: " + test.starts_with(prefix).to_string())
+
+    return 0
+}

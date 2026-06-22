@@ -1,0 +1,36 @@
+// Test all working features with correct v0.4.0 syntax
+
+// Global variable for testing
+// @expect-return: 42
+global_x<Int> = 100;
+
+test_vec_operations()<Int> -> {
+    // Test Vec.new(size) with different types (note: Vec.new not Vec::new)
+    v1<Vec<Int32>> = Vec.new(5);
+    v2<Vec<Float32>> = Vec.new(3);
+
+    println("Created Vec<Int32> and Vec<Float32>");
+    return 42;
+}
+
+test_basic_types()<Void> -> {
+    // Test Int32 types (skip Float32 for now due to casting issues)
+    i32<Int32> = 42;
+
+    println("Basic types working");
+}
+
+main()<Int> -> {
+    println("Testing all working features:");
+
+    // Test Vec operations
+    vec_result<Int> = test_vec_operations();
+    println("Vec operations test completed");
+
+    // Test basic types
+    test_basic_types();
+    println("Basic types test completed");
+
+    println("All tests completed successfully");
+    return vec_result;
+}

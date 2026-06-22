@@ -1,10 +1,10 @@
-# Vyn Async Programming and Debug System
+# VyB Async Programming and Debug System
 
-Vyn v0.4.0 introduces comprehensive async programming support with advanced debugging capabilities, making it one of the most debuggable async systems in modern programming languages.
+VyB v0.4.0 introduces comprehensive async programming support with advanced debugging capabilities, making it one of the most debuggable async systems in modern programming languages.
 
 ## Overview
 
-The Vyn async system provides:
+The VyB async system provides:
 - **Native async/await syntax** with proper parsing and semantic analysis
 - **Future<T> type system** for asynchronous operations
 - **LLVM debug integration** with comprehensive metadata generation
@@ -15,7 +15,7 @@ The Vyn async system provides:
 
 ### Basic Async Functions
 
-```vyn
+```vyb
 // Simple async function returning a Future<Int>
 async fetch_data()<Future<Int>> -> {
     result<Int> = 10
@@ -26,12 +26,12 @@ async fetch_data()<Future<Int>> -> {
 
 ### Async Functions with Await
 
-```vyn
+```vyb
 // Async function that awaits other async operations
 async process_data()<Future<Int>> -> {
     data1<Int> = await fetch_data()    // Suspension point 1
     data2<Int> = await fetch_data()    // Suspension point 2
-    
+
     combined<Int> = data1 + data2
     return combined
 }
@@ -39,7 +39,7 @@ async process_data()<Future<Int>> -> {
 
 ### Main Function Integration
 
-```vyn
+```vyb
 main()<Int> -> {
     println("=== Debug Async Test ===")
     result<Future<Int>> = process_data()
@@ -51,7 +51,7 @@ main()<Int> -> {
 
 ### LLVM Debug Integration
 
-Vyn's async debugging system integrates deeply with LLVM's debug infrastructure:
+VyB's async debugging system integrates deeply with LLVM's debug infrastructure:
 
 - **DIBuilder Integration**: Uses LLVM's DIBuilder for metadata generation
 - **DICompileUnit**: Creates compile unit information for debug files
@@ -127,7 +127,7 @@ DEBUG: Resuming from suspension point at line 12 column 18
 
 ### Parser Integration
 
-The async system integrates with Vyn's parser:
+The async system integrates with VyB's parser:
 
 - **Async keyword recognition**: `async` functions are properly parsed
 - **Await expression parsing**: `await` expressions create proper AST nodes
@@ -153,7 +153,7 @@ LLVM codegen with debug integration:
 
 ### Simple Async Operation
 
-```vyn
+```vyb
 // @test: Simple Async Function
 // @description: Tests basic async function execution with debugging
 // @category: async, debug
@@ -172,7 +172,7 @@ main()<Int> -> {
 
 ### Complex Async with Multiple Awaits
 
-```vyn
+```vyb
 // @test: Complex Async Debugging
 // @description: Tests async state machine debugging with multiple suspension points
 // @category: async, debug
@@ -181,10 +181,10 @@ main()<Int> -> {
 async fetch_user_data(userId<Int>)<Future<String>> -> {
     // Suspension point 1: Fetch user info
     userInfo<String> = await fetch_user_info(userId)
-    
-    // Suspension point 2: Fetch user preferences  
+
+    // Suspension point 2: Fetch user preferences
     preferences<String> = await fetch_user_preferences(userId)
-    
+
     // Combine results
     combined<String> = userInfo + ":" + preferences
     return combined
@@ -210,7 +210,7 @@ main()<Int> -> {
 
 Compile with debug information enabled:
 ```bash
-build/vyn --emit-llvm --debug-info test/async_test.vyn
+build/vyb --emit-llvm --debug-info test/async_test.vyb
 ```
 
 ### 2. Analyze Debug Output
@@ -249,7 +249,7 @@ Async performance analysis capabilities:
 
 ### Integration with Test Harness
 
-The async debugging system integrates with Vyn's test harness:
+The async debugging system integrates with VyB's test harness:
 
 ```bash
 # Run async tests with debugging
@@ -296,6 +296,6 @@ Planned improvements to the async debugging system:
 
 ## Conclusion
 
-Vyn's async debugging system represents a significant advancement in async programming language tooling. With comprehensive LLVM debug integration, state machine introspection, and modern test harness support, Vyn provides developers with unprecedented visibility into async program execution.
+VyB's async debugging system represents a significant advancement in async programming language tooling. With comprehensive LLVM debug integration, state machine introspection, and modern test harness support, VyB provides developers with unprecedented visibility into async program execution.
 
-The combination of clean async/await syntax, robust Future<T> types, and comprehensive debugging makes Vyn an excellent choice for async systems programming where debugging and maintainability are critical.
+The combination of clean async/await syntax, robust Future<T> types, and comprehensive debugging makes VyB an excellent choice for async systems programming where debugging and maintainability are critical.

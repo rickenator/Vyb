@@ -1,6 +1,6 @@
-# Vyn Feature Status (v0.5.1)
+# VyB Feature Status (v0.5.1)
 
-This document tracks the implementation status of Vyn language features.
+This document tracks the implementation status of VyB language features.
 
 Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 
@@ -10,7 +10,7 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| `import <path>` | ✅ | Parses module path and resolves local `.vyn` files (`::` or `.` separated) |
+| `import <path>` | ✅ | Parses module path and resolves local `.vyb` files (`::` or `.` separated) |
 | `import <path> as <alias>` | 🚧 | Whole-module alias parses; namespace binding still planned |
 | `import <path>::{symbol as alias}` | ✅ | Selective import specifiers filter and rename imported declarations |
 | `import <path> from "<locator>"` | ✅ | Locator string parsed and stored in AST |
@@ -20,8 +20,8 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 | `from` keyword | ✅ | Lexed as `KEYWORD_FROM`; also valid in `from<T>(addr)` freedom-block expressions |
 | Module resolution (load files) | ✅ | Resolved via `ModuleRegistry` metadata model (canonical keys + resolution states) |
 | Local path loading (`from "./..."`) | ✅ | Relative locators resolve from the importing file |
-| Module search paths | ✅ | Importer dir, `--module-path`, `VYN_MODULE_PATH`, then stdlib auto-discovery |
-| Stdlib auto-discovery | ✅ | `VYN_STDLIB`, then executable-relative probes (`../stdlib`, `./stdlib`) |
+| Module search paths | ✅ | Importer dir, `--module-path`, `VYB_MODULE_PATH`, then stdlib auto-discovery |
+| Stdlib auto-discovery | ✅ | `VYB_STDLIB`, then executable-relative probes (`../stdlib`, `./stdlib`) |
 | Stdlib module foundation (`core`/`collections`/`io`) | 🚧 | Minimal scaffold shipped; `core::option` provides transitional `OptionInt`; `core::result` is placeholder |
 | Stdlib prelude auto-import | 📋 | Current behavior is explicit-only (`import prelude` or `import core::prelude`) |
 | `bundle(...)` visibility | ✅ | Source-level directives are enforced by the local resolver |
@@ -36,9 +36,9 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 | Feature | Status | Notes |
 |---------|--------|-------|
 | `println(x)` for string types | ✅ | Extracts `char*` from String struct |
-| `println(x)` for Int | ✅ | Auto-converts via `__vyn_int_to_string` |
-| `println(x)` for Float | ✅ | Auto-converts via `__vyn_float_to_string` |
-| `println(x)` for Bool | ✅ | Auto-converts via `__vyn_bool_to_string` |
+| `println(x)` for Int | ✅ | Auto-converts via `__vyb_int_to_string` |
+| `println(x)` for Float | ✅ | Auto-converts via `__vyb_float_to_string` |
+| `println(x)` for Bool | ✅ | Auto-converts via `__vyb_bool_to_string` |
 | `println(x)` for Vec/arrays | ✅ | Array serialization |
 | `println(x)` for structs | ✅ | JSON/generic serialization |
 | `print(x)` (no newline) | ✅ | Same auto-stringify as println |

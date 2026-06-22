@@ -1,13 +1,13 @@
 
-# Object Construction & Allocation in Vyn
+# Object Construction & Allocation in VyB
 
-Vyn provides two primary ways to create instances of user-defined types, each with different semantics and use-cases:
+VyB provides two primary ways to create instances of user-defined types, each with different semantics and use-cases:
 
 ---
 
 ## 1. Struct Literals (Value Creation)
 
-```vyn
+```vyb
 var<Vector> v1 = Vector { x: 1.0, y: 2.0 }
 ```
 
@@ -20,7 +20,7 @@ var<Vector> v1 = Vector { x: 1.0, y: 2.0 }
 
 ## 2. Constructor Functions (`new`)
 
-```vyn
+```vyb
 fn<Vector> Vector::new(var<Float> x, var<Float> y) -> Vector {
     Vector { x, y }
 }
@@ -32,7 +32,7 @@ var<Vector> v2 = Vector::new(1.0, 2.0)
 - **Future-proofing:** callers use the same API even if implementation changes (e.g., adding pooling, logging, or different storage).
 - **Optional heap allocation:** constructors can switch to return `my<T>` for heap-allocated ownership:
 
-  ```vyn
+  ```vyb
   fn<my<Vector>> Vector::new(var<Float> x, var<Float> y) -> my<Vector> {
       my<Vector>(Vector { x, y })
   }
@@ -44,13 +44,13 @@ var<Vector> v2 = Vector::new(1.0, 2.0)
 ## 3. Pass-by-Value vs. Pointer Ownership
 
 - **Default parameter passing** is by-value:
-  ```vyn
+  ```vyb
   fn<Double> sum(var<Vector> a, var<Vector> b) -> Double { … }
   ```
   `a` and `b` are moved/copied into `sum`.
 
 - **Heap-allocated ownership** can be achieved by returning or passing `my<T>` or `our<T>`:
-  ```vyn
+  ```vyb
   fn<Void> process(var<my<Task>> task) -> Void { … }
   ```
   Ensures exclusive ownership and controlled resource lifetime.
@@ -76,4 +76,4 @@ var<Vector> v2 = Vector::new(1.0, 2.0)
 
 ---
 
-By explicitly documenting these distinctions—struct literals, constructors, pass-by-value, and optional heap allocation—Vyn’s programming guide will help users choose the right creation pattern for their needs.
+By explicitly documenting these distinctions—struct literals, constructors, pass-by-value, and optional heap allocation—VyB’s programming guide will help users choose the right creation pattern for their needs.

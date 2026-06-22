@@ -1,0 +1,15 @@
+// Test comprehensive struct operations
+// @expect-return: 50
+
+struct Point {
+    x<Int>,
+    y<Int>
+}
+
+main()<Int> -> {
+    p1<Point> = Point { x = 10, y = 20 };
+    p2<Point> = Point { x = 5, y = 15 };
+
+    sum<Int> = p1.x + p1.y + p2.x + p2.y;
+    return sum;
+}

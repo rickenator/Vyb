@@ -1,9 +1,9 @@
 #!/bin/bash
-# Test compilation of Vyn examples
+# Test compilation of VyB examples
 # Tests both JIT execution and AOT compilation with build
 
 echo "=========================================="
-echo "Vyn Compilation Test Suite v0.4.4"
+echo "VyB Compilation Test Suite v0.4.4"
 echo "=========================================="
 echo
 
@@ -14,21 +14,21 @@ TESTS_FAILED=0
 test_compile() {
     local test_file=$1
     local expected_exit=$2
-    local test_name=$(basename "$test_file" .vyn)
-    
+    local test_name=$(basename "$test_file" .vyb)
+
     echo "Testing: $test_name"
-    
+
     # Build the executable
-    if ! build/vyn "$test_file" --build "test_output_$test_name" -O2 > /dev/null 2>&1; then
+    if ! build/vyb "$test_file" --build "test_output_$test_name" -O2 > /dev/null 2>&1; then
         echo "✗ Build failed: $test_name"
         TESTS_FAILED=$((TESTS_FAILED + 1))
         return 1
     fi
-    
+
     # Run and check exit code
     ./test_output_$test_name > /dev/null 2>&1
     local actual_exit=$?
-    
+
     if [ "$actual_exit" -eq "$expected_exit" ]; then
         echo "✓ Pass: $test_name (exit code: $actual_exit)"
         TESTS_PASSED=$((TESTS_PASSED + 1))
@@ -45,9 +45,9 @@ test_compile() {
 echo "Running compilation tests..."
 echo
 
-test_compile "test/compilation/test_compile.vyn" 49
-test_compile "test/compilation/binary_tree.vyn" 60
-test_compile "test/compilation/binary_tree_complex.vyn" 94
+test_compile "test/compilation/test_compile.vyb" 49
+test_compile "test/compilation/binary_tree.vyb" 60
+test_compile "test/compilation/binary_tree_complex.vyb" 94
 
 echo
 echo "=========================================="

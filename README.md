@@ -1,14 +1,14 @@
-<img src="vyn.png" alt="Vyn Image" width="300">
+<img src="vyb.png" alt="VyB Image" width="300">
 
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/rickenator/Vyn)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/rickenator/VyB)
 
-## Vyn Programming Guide
+## VyB Programming Guide
 
 ---
 
 ## 1. Introduction
 
-Welcome to the Vyn Programming Guide. This guide walks you through writing, building, and extending Vyn programs, from your first "Hello, Vyn!" to deep dives into the Vyn language internals and runtime. **Version 0.4.4** (freedom-1.0 series) delivers a robust systems programming language with an LLVM backend, native code compilation to standalone executables, a complete sized type system, pattern matching with `match` and `select` expressions, comprehensive control flow including `defer`, `break`/`continue`, resizable `Vec<T>` collections, complete string methods, a full math library, runtime type introspection (`typeof`/`typename`), unified name-first function syntax, generic function monomorphization, aspect/bind polymorphism, and comprehensive auto-serialization capabilities.
+Welcome to the VyB Programming Guide. This guide walks you through writing, building, and extending VyB programs, from your first "Hello, VyB!" to deep dives into the VyB language internals and runtime. **Version 0.4.4** (freedom-1.0 series) delivers a robust systems programming language with an LLVM backend, native code compilation to standalone executables, a complete sized type system, pattern matching with `match` and `select` expressions, comprehensive control flow including `defer`, `break`/`continue`, resizable `Vec<T>` collections, complete string methods, a full math library, runtime type introspection (`typeof`/`typename`), unified name-first function syntax, generic function monomorphization, aspect/bind polymorphism, and comprehensive auto-serialization capabilities.
 
 ### 1.1 Purpose & Audience
 
@@ -19,30 +19,30 @@ This guide is intended for systems programmers, language designers, and develope
 * Built-in concurrency primitives and customizable threading templates.
 * A foundation for a self-hosted compiler and hybrid VM/JIT architecture for rapid iteration and performance tuning.
 
-Whether you're coming from C/C++, Rust, D, or other modern systems languages, you'll find Vyn's template-driven approach familiar yet uniquely powerful.
+Whether you're coming from C/C++, Rust, D, or other modern systems languages, you'll find VyB's template-driven approach familiar yet uniquely powerful.
 
-Here's a comparison of Vyn against several modern systems languages, showing key similarities and differences:
+Here's a comparison of VyB against several modern systems languages, showing key similarities and differences:
 
 | Language | Templates / Generics               | Memory Model                                                       | Concurrency                            | Syntax Style                      | Unique Feature                                     | Comment                                                      |
 | -------- | ---------------------------------- | ------------------------------------------------------------------ | -------------------------------------- | --------------------------------- | -------------------------------------------------- | ------------------------------------------------------------ |
-| **Vyn**  | Monomorphized generics everywhere | Ownership types (`my`/`our`/`mild`/`their`), reference counting | Async/await, planned actors, threads, channels | Name-first syntax `name(params)<Type> ->`, aspect/bind polymorphism | `select` expressions, `defer`, `freedom` blocks, `fail`/`trap` error system | Combines zero-cost generics with readable ownership semantics |
+| **VyB**  | Monomorphized generics everywhere | Ownership types (`my`/`our`/`mild`/`their`), reference counting | Async/await, planned actors, threads, channels | Name-first syntax `name(params)<Type> ->`, aspect/bind polymorphism | `select` expressions, `defer`, `freedom` blocks, `fail`/`trap` error system | Combines zero-cost generics with readable ownership semantics |
 | **Rust** | Monomorphized generics             | Ownership/borrow checker; optional `Arc`/`Rc`                      | `async`/`await`, threads, channels     | C-style braces, macros            | Zero-cost abstractions; strong compile-time safety | No global GC; all memory safety enforced at compile time     |
 | **D**    | Runtime & compile-time templates   | GC by default; `@nogc` for manual alloc/free                       | `std.concurrency` fibers, threads      | C-style; mixins                   | Compile-time function execution (CTFE)             | Blend of high-level features with systems control            |
 | **C++**  | Templates & concepts (20+)         | Manual `new`/`delete`; smart pointers (`unique_ptr`, `shared_ptr`) | Threads, coroutines (`co_await`)       | C-style braces                    | Metaprogramming via templates & concepts           | Extensive ecosystem; highest portability                     |
 | **Nim**  | Generics + macros                  | GC by default; optional manual `alloc`                             | Async (`async`/`await`), threads       | Python-like indentation           | Hygienic macros; optional GC or ARC                | Very concise syntax; strong metaprogramming support          |
 | **Go**   | Generics (1.18+)                   | GC only                                                            | Goroutines, channels                   | C-style, minimal                  | CSP-style concurrency                              | Simple, fast compile; built-in tooling                       |
 
-*Note:* Each language offers a different balance of safety, performance, and ergonomics. Vyn's strength lies in unifying template metaprogramming, planned flexible memory management, and a future hybrid VM/JIT in a terse, self-hosted package.
+*Note:* Each language offers a different balance of safety, performance, and ergonomics. VyB's strength lies in unifying template metaprogramming, planned flexible memory management, and a future hybrid VM/JIT in a terse, self-hosted package.
 
-### 1.2 What is Vyn?
+### 1.2 What is VyB?
 
-Vyn is a statically typed, compiled systems language targeting native code via LLVM. Its key differentiators:
+VyB is a statically typed, compiled systems language targeting native code via LLVM. Its key differentiators:
 
 * **Name-First Syntax**: `name(params)<ReturnType> ->` — no `fn` keyword noise; function names come first.
 * **Aspect/Bind Polymorphism**: Aspects (`aspect`) + struct binding (`bind Aspect -> Type`) instead of classes — more composable, no inheritance pitfalls.
 * **Readable Ownership**: `my<T>` (unique), `our<T>` (shared), `their<T>` (borrowed), `mild<T>` (weak) — ownership intent is explicit without cryptic lifetime annotations.
 * **Programmer FREEDOM**: `freedom { ... }` blocks for low-level control; `loc<T>` raw pointers within them — no hidden tax on safe code.
-* **`select` Expressions**: Pattern matching that yields a value with a `pass` keyword for multi-statement arms — uniquely Vyn, not found in other languages.
+* **`select` Expressions**: Pattern matching that yields a value with a `pass` keyword for multi-statement arms — uniquely VyB, not found in other languages.
 * **`fail`/`trap` Error System**: Typed error propagation with zero-cost success path; no try/catch/finally.
 * **`defer` Statement**: LIFO scope-exit cleanup without RAII ceremony.
 * **Monomorphized Generics**: Zero-cost generics with aspect bounds (`<T<Display>>`).
@@ -55,19 +55,19 @@ Vyn is a statically typed, compiled systems language targeting native code via L
 
 ```bash
 # Clone and build
-git clone https://github.com/rickenator/Vyn.git
-cd Vyn
+git clone https://github.com/rickenator/VyB.git
+cd VyB
 mkdir -p build && cd build && LLVM_DIR=/usr/lib/llvm-18/cmake cmake .. && make -j$(nproc) && cd ..
 
 # Run with modern test harness (400+ tests)
-python3 test_harness.py --vyn ./build/vyn --test-dirs test/new_features --workers 4
+python3 test_harness.py --vyb ./build/vyb --test-dirs test/new_features --workers 4
 
-# Run your first Vyn program
-echo 'main()<Int> -> { return 42 }' > hello.vyn
-build/vyn hello.vyn  # Returns exit code 42
+# Run your first VyB program
+echo 'main()<Int> -> { return 42 }' > hello.vyb
+build/vyb hello.vyb  # Returns exit code 42
 
 # Try select expressions with pattern matching
-cat > example.vyn << 'EOF'
+cat > example.vyb << 'EOF'
 main()<Int> -> {
     numbers<Vec<Int>> = Vec::new()
     numbers.push(10)
@@ -84,37 +84,37 @@ main()<Int> -> {
     return result
 }
 EOF
-build/vyn example.vyn  # Returns 30
+build/vyb example.vyb  # Returns 30
 
 # Complex return types with auto-serialization
-echo 'main()<Int,String> -> { return 42, "Hello!" }' > tuple.vyn
-build/vyn tuple.vyn  # Outputs: [42, "Hello!"]
+echo 'main()<Int,String> -> { return 42, "Hello!" }' > tuple.vyb
+build/vyb tuple.vyb  # Outputs: [42, "Hello!"]
 ```
 
 ### Compilation to Native Code (v0.4.3+)
 
-Vyn provides a complete compilation pipeline from source to standalone executables:
+VyB provides a complete compilation pipeline from source to standalone executables:
 
 #### Building Standalone Executables (NEW in v0.4.4!)
 
 ```bash
 # Build executable (simplest form)
-build/vyn hello.vyn --build hello
+build/vyb hello.vyb --build hello
 ./hello  # Run directly!
 
 # Build with custom name
-build/vyn program.vyn --build myapp
+build/vyb program.vyb --build myapp
 ./myapp
 
 # Build with optimization
-build/vyn program.vyn -b myapp -O3  # Maximum optimization
+build/vyb program.vyb -b myapp -O3  # Maximum optimization
 
 # Static linking (fully standalone, no runtime dependencies)
-build/vyn program.vyn -b myapp --static
+build/vyb program.vyb -b myapp --static
 
 # What happens:
-# 1. Compiles hello.vyn → hello.o (LLVM object file)
-# 2. Compiles runtime/vyn_runtime.c → vyn_runtime.o (C runtime)
+# 1. Compiles hello.vyb → hello.o (LLVM object file)
+# 2. Compiles runtime/vyb_runtime.c → vyb_runtime.o (C runtime)
 # 3. Links with system linker (lld/ld) + CRT files + libc/libm
 # 4. Creates executable: hello
 
@@ -123,7 +123,7 @@ file myapp
 # Output: myapp: ELF 64-bit LSB executable, x86-64, dynamically linked, with debug_info
 
 ldd myapp
-# Output: 
+# Output:
 #   linux-vdso.so.1 (0x00007fff...)
 #   libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f...)
 #   libm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007f...)
@@ -133,13 +133,13 @@ ldd myapp
 
 ```bash
 # Compile to object file (default -O2 optimization)
-build/vyn hello.vyn --compile hello.o
+build/vyb hello.vyb --compile hello.o
 
 # Specify optimization level
-build/vyn program.vyn -c program.o -O0  # No optimization (fast compile)
-build/vyn program.vyn -c program.o -O1  # Basic optimization
-build/vyn program.vyn -c program.o -O2  # Moderate optimization (default)
-build/vyn program.vyn -c program.o -O3  # Aggressive optimization
+build/vyb program.vyb -c program.o -O0  # No optimization (fast compile)
+build/vyb program.vyb -c program.o -O1  # Basic optimization
+build/vyb program.vyb -c program.o -O2  # Moderate optimization (default)
+build/vyb program.vyb -c program.o -O3  # Aggressive optimization
 
 # Verify object file was created
 file hello.o
@@ -176,7 +176,7 @@ Supports 20+ architectures out of the box:
 
 **Complete Compilation Features:**
 - ✅ **Executable Generation** (v0.4.4): Full build pipeline with `--build` flag
-- ✅ **Runtime Library** (v0.4.4): Automatic compilation and linking of Vyn runtime
+- ✅ **Runtime Library** (v0.4.4): Automatic compilation and linking of VyB runtime
 - ✅ **System Linker Integration** (v0.4.4): Platform-aware linker selection (lld, ld, ld64)
 - ✅ **Dynamic Linking** (v0.4.4): Links against system libc and libm
 - ✅ **Static Linking** (v0.4.4): Optional `--static` flag for standalone binaries
@@ -185,7 +185,7 @@ Supports 20+ architectures out of the box:
 - ✅ **Cross-Compilation** (v0.4.3): 20+ target architectures
 - ✅ **Debug Information** (v0.4.3): Full DWARF debug metadata
 - 🔜 **Optimization Pipeline** (v0.5.2): Advanced LLVM passes, LTO
-- 🔜 **Multi-File Compilation**: Link multiple .vyn files together
+- 🔜 **Multi-File Compilation**: Link multiple .vyb files together
 - 🔜 **Dynamic Libraries**: Shared object (.so/.dylib) generation
 - 🔜 **Package Building**: Full project management with dependency resolution
 
@@ -207,12 +207,12 @@ Supports 20+ architectures out of the box:
     *   `soft(expr)`: Creates a mild reference `mild<T>` from `our<T>`.
 *   **`freedom` Blocks**: Sections of code marked `freedom { ... }` where raw pointers (`loc<T>`) can be used and some compiler guarantees are relaxed. Within these blocks, operations like `at(ptr)` for dereferencing and `from<loc<T>>()` for pointer conversion are available.
 
-### 1.4 Import vs Smuggle - Vyn's Unique Module System (v0.5.0)
+### 1.4 Import vs Smuggle - VyB's Unique Module System (v0.5.0)
 
-Vyn introduces a distinctive approach to module imports with two keywords that serve different security and trust models:
+VyB introduces a distinctive approach to module imports with two keywords that serve different security and trust models:
 
 **`import`** - Trusted, Verified Modules:
-- Used for modules from signed repositories or project-local sources verified in `vyn.toml`
+- Used for modules from signed repositories or project-local sources verified in `vyb.toml`
 - Enforces security checks and version verification
 - Ideal for production dependencies and standard library modules
 - Optional `from "<locator>"` specifies the source URL or local path
@@ -239,7 +239,7 @@ smuggle <module::path> [from "<locator>"] [as <alias>] [;]
 
 This dual system provides both safety for production code and flexibility for development:
 
-```vyn
+```vyb
 # Production imports - verified and trusted
 import std::io::println
 import utils::math::calculate from "./utils"
@@ -255,24 +255,24 @@ main()<Int> -> {
 }
 ```
 
-Declare dependencies in `vyn.toml`:
+Declare dependencies in `vyb.toml`:
 ```toml
 [dependencies]
-std = "^1.0.0"  # Signed, from Vyn registry
+std = "^1.0.0"  # Signed, from VyB registry
 utils = { git = "https://github.com/user/utils" }  # External, smuggled
 ```
 
-This unique `import`/`smuggle` distinction makes Vyn's module system both secure and flexible, clearly marking the trust level of your dependencies. See [doc/FEATURE_STATUS.md](doc/FEATURE_STATUS.md) for implementation status.
+This unique `import`/`smuggle` distinction makes VyB's module system both secure and flexible, clearly marking the trust level of your dependencies. See [doc/FEATURE_STATUS.md](doc/FEATURE_STATUS.md) for implementation status.
 
 ## In This Release
 
-Vyn **v0.4.4** (freedom-1.0 series) is a **complete systems programming language** with **full native executable generation** ready for production use:
+VyB **v0.4.4** (freedom-1.0 series) is a **complete systems programming language** with **full native executable generation** ready for production use:
 
 ### ✅ **Recently Completed in v0.4.4**
 These features were completed in the current release cycle and are fully tested:
 
 - **`defer` statement** — `defer cleanup()` executes at scope exit in LIFO order; ideal for resource cleanup
-  ```vyn
+  ```vyb
   main()<Int> -> {
       defer println("cleanup done")
       println("before return")
@@ -281,7 +281,7 @@ These features were completed in the current release cycle and are fully tested:
   // Output: before return \n cleanup done
   ```
 - **Math library** — `abs`, `min`, `max`, `sqrt`, `sin`, `cos`, `tan`, `exp`, `log`, `log2`, `log10`, `pow`, `floor`, `ceil`, `round`
-  ```vyn
+  ```vyb
   main()<Int> -> {
       x<Float> = sqrt(2.0)
       y<Int> = abs(-5)
@@ -290,31 +290,31 @@ These features were completed in the current release cycle and are fully tested:
   }
   ```
 - **String methods** — `.len()`, `.contains()`, `.starts_with()`, `.ends_with()`, `.to_upper()`, `.to_lower()`, `.substring()`, `.char_at()`, `String::from_bytes()`
-  ```vyn
+  ```vyb
   main()<Int> -> {
-      s<String> = "Hello, Vyn!"
-      if (s.contains("Vyn")) {
-          println(s.to_upper())   // HELLO, VYN!
+      s<String> = "Hello, VyB!"
+      if (s.contains("VyB")) {
+          println(s.to_upper())   // HELLO, VYB!
       }
       return 0
   }
   ```
 - **Type inference from initializer** — Variables without annotation infer type from RHS
-  ```vyn
+  ```vyb
   x = 42          // inferred as Int
   msg = "hello"   // inferred as String
   ok = true       // inferred as Bool
   ```
 - **Vec `for` loop type inference** — Compiler-generated loop variables require no explicit types
-  ```vyn
+  ```vyb
   nums<Vec<Int>> = Vec::new()
   nums.push(10)
   for (n in nums) {
       println(n)   // n is automatically Int
   }
   ```
-- **`select` expressions** — Pattern matching that yields a value; Vyn-original concept
-  ```vyn
+- **`select` expressions** — Pattern matching that yields a value; VyB-original concept
+  ```vyb
   grade<String> = select(score) -> {
       >= 90 -> "A",
       >= 80 -> "B",
@@ -323,20 +323,20 @@ These features were completed in the current release cycle and are fully tested:
   }
   ```
 - **`typeof` / `typename` intrinsics** — Runtime type introspection
-  ```vyn
+  ```vyb
   x<Int> = 42
   same<Bool> = (typeof(x) == typeof(100))    // true
   name<String> = typename(x)                  // "Int"
   ```
 - **Immutable bindings (`const`)** — `name<Type const>` declares an immutable variable
-  ```vyn
+  ```vyb
   pi<Float const> = 3.14159
   ```
 
 ### ✅ **Binary Executable Generation (NEW in v0.4.4!)**
 - **Full Compilation Pipeline**: Complete source → object → executable workflow
-- **Build Command**: `vyn program.vyn --build myapp` creates standalone executables
-- **Runtime Library**: Automatic compilation and linking of Vyn runtime (vyn_runtime.c)
+- **Build Command**: `vyb program.vyb --build myapp` creates standalone executables
+- **Runtime Library**: Automatic compilation and linking of VyB runtime (vyb_runtime.c)
 - **System Linker Integration**: Platform-aware linker selection (lld, ld for Linux; ld64 for macOS)
 - **C Runtime Initialization**: Automatic discovery and linking of CRT files (crt1.o, crti.o, crtn.o)
 - **Dynamic Linking**: Links against system libc and libm by default
@@ -397,7 +397,7 @@ Comprehensive string manipulation built into the `String` type:
 | Method | Description | Example |
 |--------|-------------|---------|
 | `.len()` | Length in bytes | `s.len()` → `Int` |
-| `.contains(sub)` | Substring test | `s.contains("Vyn")` → `Bool` |
+| `.contains(sub)` | Substring test | `s.contains("VyB")` → `Bool` |
 | `.starts_with(pre)` | Prefix test | `s.starts_with("He")` → `Bool` |
 | `.ends_with(suf)` | Suffix test | `s.ends_with("!")` → `Bool` |
 | `.to_upper()` | Uppercase copy | `s.to_upper()` → `String` |
@@ -407,17 +407,17 @@ Comprehensive string manipulation built into the `String` type:
 | `String::from_bytes(ptr, len)` | Construct from bytes | `String::from_bytes(p, n)` |
 
 **String concatenation** with `+` auto-converts non-String operands:
-```vyn
+```vyb
 id<Int> = 42
 msg<String> = "User ID: " + id    // "User ID: 42"
 ```
 
 ### ✅ **Async Programming & Debugging**
 
-Vyn v0.4.1 features **complete async/await support** for writing concurrent programs:
+VyB v0.4.1 features **complete async/await support** for writing concurrent programs:
 
 #### Async Function Syntax
-```vyn
+```vyb
 // Async function returning Future<Int>
 async compute_value()<Future<Int>> -> {
     println("Computing...")
@@ -447,19 +447,19 @@ async background_task()<Future<Void>> -> {
 - **Suspension tracking**: Debug info for continuation points and state transitions
 
 #### Usage Example
-```vyn
+```vyb
 main()<Void> -> {
     // Create async tasks
     future1<Future<Int>> = compute_value()
     future2<Future<String>> = process_data()
-    
+
     // Futures execute concurrently
     println("Tasks initiated")
     return
 }
 ```
 
-**See:** `test/async/async_simple.vyn` and `test/async/async_comprehensive.vyn` for working examples
+**See:** `test/async/async_simple.vyb` and `test/async/async_comprehensive.vyb` for working examples
 
 **Implementation Status:**
 - ✅ Async function parsing and validation
@@ -471,10 +471,10 @@ main()<Void> -> {
 
 ### ✅ **Introspection System (v0.4.2)**
 
-Vyn features **runtime type introspection** for self-aware programs:
+VyB features **runtime type introspection** for self-aware programs:
 
 #### Type Reflection Operators
-```vyn
+```vyb
 // Get runtime type hash — use for equality comparison
 x<Int> = 42
 same<Bool> = (typeof(x) == typeof(100))   // true — both Int
@@ -494,7 +494,7 @@ same_expr<Bool> = (typeof(x + 5) == typeof(x * 2))   // true
 - **Note**: `typeof` result is an opaque `Type` value; use only for `==`/`!=` comparisons
 
 #### Usage Examples
-```vyn
+```vyb
 // Type comparison
 x<Int> = 42
 y<Float> = 3.14
@@ -520,13 +520,13 @@ if (typeof(x) != typeof(y)) {
 
 ### ✅ **Aspect System (v0.4.2)**
 
-**Philosophy:** Vyn uses **aspects + structs** instead of classes and inheritance. This provides polymorphism, code reuse, and composition without the complexity and pitfalls of OOP class hierarchies. See `doc/TRAIT_SYSTEM_DESIGN.md` for detailed design and rationale.
+**Philosophy:** VyB uses **aspects + structs** instead of classes and inheritance. This provides polymorphism, code reuse, and composition without the complexity and pitfalls of OOP class hierarchies. See `doc/TRAIT_SYSTEM_DESIGN.md` for detailed design and rationale.
 
 Simple aspect receivers use `self`; the compiler treats it as the bound `Self` type. Use explicit receiver types like `self<their<Self>>` only when ownership mode matters.
 
 #### **Complete Aspect Example**
 
-```vyn
+```vyb
 # Define an aspect (interface) with method signatures
 aspect Display {
     show(self)<String> -> { }
@@ -543,7 +543,7 @@ bind Display -> Box<Int> {
     show(self)<String> -> {
         return "Box with integer"
     }
-    
+
     format(self, prefix<String>)<String> -> {
         return prefix + ": Box[Int]"
     }
@@ -559,7 +559,7 @@ bind Display -> Point {
     show(self)<String> -> {
         return "Point"
     }
-    
+
     format(self, prefix<String>)<String> -> {
         return prefix + ": (x,y)"
     }
@@ -576,11 +576,11 @@ printItem<T<Display>>(item<T>)<Void> -> {
 main()<Int> -> {
     box<Box<Int>> = Box<Int> { value = 42 }
     point<Point> = Point { x = 10, y = 20 }
-    
+
     # Aspect methods work through generic functions
     printItem(box)    # Prints: "Box with integer" and "Item: Box[Int]"
     printItem(point)  # Prints: "Point" and "Item: (x,y)"
-    
+
     return 0
 }
 ```
@@ -628,7 +628,7 @@ main()<Int> -> {
 
 **Floating Point:**
 | Type | Description | Size | Precision | Example |
-|------|-------------|------|-----------|---------|  
+|------|-------------|------|-----------|---------|
 | `Float` / `Float64` | Double precision (default) | 64-bit | IEEE 754 double (~15-17 digits) | `pi<Float> = 3.14159` |
 | `Float32` | Single precision | 32-bit | IEEE 754 single (~6-9 digits) | `ratio<Float32> = 1.5` |
 
@@ -663,20 +663,20 @@ main()<Int> -> {
 | `their<T>` | Borrowed reference | Non-owning access | `ref<their<Data>> = view(owner)` |
 | `loc<T>` | Raw pointer | Freedom operations only | `ptr<loc<Int>> = loc(variable)` |
 
-### ✅ **Canonical Ownership Syntax** 
+### ✅ **Canonical Ownership Syntax**
 
-Vyn v0.4.2 features **unified canonical syntax** for ownership and borrowing operations:
+VyB v0.4.2 features **unified canonical syntax** for ownership and borrowing operations:
 
 #### **Type Annotations**
-```vyn
+```vyb
 # In variable declarations and function signatures
 data<my<String>>     # Unique ownership type
-shared<our<Config>>  # Shared ownership type  
+shared<our<Config>>  # Shared ownership type
 view<their<Data>>    # Borrowed reference type
 ```
 
 #### **Value Construction**
-```vyn
+```vyb
 # Create owned values with my() and our() constructors
 unique<my<String>>   = my("owned string")
 shared<our<Config>>  = our(Config::new())
@@ -684,7 +684,7 @@ result<my<Data>>     = my(compute_data())
 ```
 
 #### **Borrowing Operations**
-```vyn
+```vyb
 # Create temporary references with view/borrow/soft functions
 readonly<their<String const>> = view(data)     # Immutable borrow
 writable<their<String>>       = borrow(data)   # Mutable borrow
@@ -709,14 +709,14 @@ python3 migrate_syntax.py --migrate --directory . --backup --report
 ### ✅ **Memory Management**
 - **Ownership types**: `my<T>`, `our<T>`, `their<T>`, `mild<T>` for safe memory handling
 - **Mild references**: `mild<T>` created with `soft()` for breaking circular references with `grab()` and `released()` methods
-- **Borrowing**: `view(expr)` and `borrow(expr)` for references  
+- **Borrowing**: `view(expr)` and `borrow(expr)` for references
 - **Freedom operations**: `loc<T>` pointers in `freedom {}` blocks
 - **Raw Memory Operations**: Complete `freedom` block system with `loc<T>` pointers
 - **Memory Safety**: Borrow checking and lifetime analysis prevent dangling pointers
 
 #### Weak References with mild<T>
 
-Vyn v0.4.4 introduces **`mild<T>`** - weak references that solve circular reference problems without preventing cleanup:
+VyB v0.4.4 introduces **`mild<T>`** - weak references that solve circular reference problems without preventing cleanup:
 
 **Why mild<T>?**
 - **Break Cycles**: Tree nodes with parent pointers, doubly-linked lists
@@ -725,7 +725,7 @@ Vyn v0.4.4 introduces **`mild<T>`** - weak references that solve circular refere
 - **Safe Access**: Can detect when target object has been destroyed
 
 **Key Methods:**
-```vyn
+```vyb
 # grab() -> our<T>?
 # Attempts to upgrade mild reference to strong reference
 # Returns nil if target has been destroyed
@@ -738,14 +738,14 @@ is_alive<Bool> = !node.parent.released()
 ```
 
 **Creating Mild References:**
-```vyn
+```vyb
 # Use soft() to create mild<T> from our<T>
 shared_data<our<Config>> = our(Config::new())
 shadow<mild<Config>> = soft(shared_data)  # Create mild reference
 ```
 
 **Example: Tree with Parent Pointers**
-```vyn
+```vyb
 struct TreeNode {
     value<Int>,
     children<Vec<our<TreeNode>>>,  # Strong refs to children
@@ -770,7 +770,7 @@ access_parent(node<our<TreeNode>>)<Int> -> {
 }
 ```
 
-**See:** `doc/OWNERSHIP_MILD.md` for complete documentation and `test/ownership/mild_test.vyn` for examples
+**See:** `doc/OWNERSHIP_MILD.md` for complete documentation and `test/ownership/mild_test.vyb` for examples
 
 ### ✅ **Developer Experience**
 - **LLVM backend**: JIT execution, AOT object files, and standalone executable generation
@@ -782,27 +782,27 @@ access_parent(node<our<TreeNode>>)<Int> -> {
 - **Migration Tool**: `python3 migrate_syntax.py` for automated syntax upgrades
 
 ### 🔜 **Native Bridge / FFI Status**
-Vyn's native bridge to C libraries is the highest-priority upcoming feature:
+VyB's native bridge to C libraries is the highest-priority upcoming feature:
 
 | Layer | Status | Description |
 |-------|--------|-------------|
-| **Vyn Runtime** | ✅ Complete | `runtime/vyn_runtime.c` — GC, Vec, String, Math, I/O all linked automatically |
+| **VyB Runtime** | ✅ Complete | `runtime/vyb_runtime.c` — GC, Vec, String, Math, I/O all linked automatically |
 | **LLVM intrinsics** | ✅ Complete | `malloc`, `free`, `memset`, `printf`-style print all registered in JIT |
 | **C stdlib (math)** | ✅ Complete | `libm` linked; `sqrt`, `sin`, `cos`, `pow`, etc. all working |
 | **C stdlib (I/O)** | ✅ Complete | `libc` linked; I/O built on top of C runtime |
-| **`extern "C"` blocks** | 🔜 Planned | Declare C functions callable from Vyn; maps types: `Int`→`int64_t`, `loc<T>`→`T*` |
+| **`extern "C"` blocks** | 🔜 Planned | Declare C functions callable from VyB; maps types: `Int`→`int64_t`, `loc<T>`→`T*` |
 | **`#[repr(C)]` structs** | 🔜 Planned | Force C-compatible struct layout for FFI |
-| **`vyn bindgen`** | 🔜 Future | Auto-generate Vyn bindings from C headers |
+| **`vyb bindgen`** | 🔜 Future | Auto-generate VyB bindings from C headers |
 
-**Design goal**: Once `extern "C"` lands, the entire POSIX API becomes available with a thin Vyn wrapper, enabling networking, file I/O, threading, and more without any language-level changes. See `doc/FFI_DESIGN.md` for the complete design.
+**Design goal**: Once `extern "C"` lands, the entire POSIX API becomes available with a thin VyB wrapper, enabling networking, file I/O, threading, and more without any language-level changes. See `doc/FFI_DESIGN.md` for the complete design.
 
 ## Language Overview
 
-Vyn v0.4.2 (freedom-1.0 series) is a **complete, production-ready systems programming language** with modern syntax, complete sized type system, powerful pattern matching, generic functions, and comprehensive collection support.
+VyB v0.4.2 (freedom-1.0 series) is a **complete, production-ready systems programming language** with modern syntax, complete sized type system, powerful pattern matching, generic functions, and comprehensive collection support.
 
 ### Language Features Showcase
 
-```vyn
+```vyb
 // Complete language demonstration showing all major features
 
 // Modern struct syntax with typed fields
@@ -849,7 +849,7 @@ bind Gradeable -> Person {
     }
 }
 
-// select expression — Vyn-original: pattern matching that returns a value
+// select expression — VyB-original: pattern matching that returns a value
 get_grade_description(score<Int>)<String> -> {
     grade<String> = select(score) -> {
         >= 90 -> "Excellent",
@@ -908,9 +908,9 @@ main()<Int> -> {
 
 ### Memory Safety & Freedom Operations
 
-Vyn's design philosophy: **FREEDOM over restrictions**. The language provides compiler-managed ownership by default, but empowers programmers with low-level control when needed:
+VyB's design philosophy: **FREEDOM over restrictions**. The language provides compiler-managed ownership by default, but empowers programmers with low-level control when needed:
 
-```vyn
+```vyb
 // Ownership type syntax (runtime enforcement planned for v0.5)
 restricted_memory_example()<Int> -> {
     owned<my<String>> = my("unique data")         // Unique ownership
@@ -940,11 +940,11 @@ freedom_memory_example()<Int> -> {
 
 ### Syntax and Literals
 
-Vyn uses indentation-sensitive syntax with optional braces and semicolons. Whitespace defines blocks, so consistent indentation is key. The unified `name<Type>` syntax provides consistency across all language constructs.
+VyB uses indentation-sensitive syntax with optional braces and semicolons. Whitespace defines blocks, so consistent indentation is key. The unified `name<Type>` syntax provides consistency across all language constructs.
 
 #### Literal Forms
 
-```vyn
+```vyb
 // Integer literals
 x<Int> = 42                       // 64-bit signed integer (default)
 large<Int> = -9223372036854775808  // Full 64-bit range
@@ -959,7 +959,7 @@ active<Bool> = false
 
 // String literals
 name<String> = "Alice"            // UTF-8 string
-greeting<String> = "Hello\nVyn"  // Escape sequences supported
+greeting<String> = "Hello\nVyB"  // Escape sequences supported
 empty<String> = ""
 
 // Array literals (fixed-size)
@@ -975,7 +975,7 @@ PI<Float const> = 3.14159
 
 #### Syntax Examples
 
-```vyn
+```vyb
 // Variable declarations with unified syntax
 x<Int> = 42                  // Mutable variable
 PI<Float const> = 3.14159    // Immutable constant (name<Type const>)
@@ -998,7 +998,7 @@ process_value(val<Int>)<String> -> {
     }
 }
 
-// select — pattern matching that returns a value (Vyn-original)
+// select — pattern matching that returns a value (VyB-original)
 classify(score<Int>)<String> -> {
     return select(score) -> {
         >= 90 -> "A",
@@ -1019,7 +1019,7 @@ open_and_process()<Int> -> {
 
 **Current Primitive Types**:
 - **Signed integers**: `Int`/`Int64` (default), `Int32`, `Int16`, `Int8`
-- **Unsigned integers**: `UInt64`, `UInt32`, `UInt16`, `UInt8`  
+- **Unsigned integers**: `UInt64`, `UInt32`, `UInt16`, `UInt8`
 - **Floating point**: `Float`/`Float64` (default), `Float32`
 - **Characters**: `Char` (UTF-8 code unit), `Rune` (Unicode code point)
 - **Binary data**: `Bytes` (fat pointer for raw bytes)
@@ -1033,15 +1033,15 @@ open_and_process()<Int> -> {
 **Ownership Types**: `my<T>` (unique), `our<T>` (shared), `their<T>` (borrowed), `mild<T>` (mild reference), `loc<T>` (freedom raw pointer)
 
 **Type Aliasing**: All numeric types support multiple naming conventions:
-- Vyn style: `Int32`, `Float64`, `UInt8`
-- C style: `int32`, `float64`, `uint8`  
+- VyB style: `Int32`, `Float64`, `UInt8`
+- C style: `int32`, `float64`, `uint8`
 - LLVM style: `i32`, `f64`, `u8`
 
 ### Basic Syntax
 
-Vyn uses clean, expressive syntax with flexible parameter syntax:
+VyB uses clean, expressive syntax with flexible parameter syntax:
 
-```vyn
+```vyb
 # Functions support both standard and shorthand parameter syntax
 
 # Standard syntax: explicit parameter<Type> or parameter<Type const>
@@ -1068,15 +1068,15 @@ get_data()<Int, String, Bool> -> {
 
 ### Function Parameters
 
-Vyn supports two parameter syntax styles for maximum flexibility:
+VyB supports two parameter syntax styles for maximum flexibility:
 
-```vyn
+```vyb
 # Standard syntax: explicit mutability
 format_standard(prefix<String>, value<Int const>)<String> -> {
     return prefix + String::from_int(value)
 }
 
-# Shorthand syntax: type-first (more concise)  
+# Shorthand syntax: type-first (more concise)
 format_shorthand(String prefix, const Int value)<String> -> {
     return prefix + String::from_int(value)
 }
@@ -1086,7 +1086,7 @@ format_shorthand(String prefix, const Int value)<String> -> {
 
 ### Variables and Types
 
-```vyn
+```vyb
 # Variables with type inference
 x = 42          # Int
 name = "Alice"  # String
@@ -1103,7 +1103,7 @@ MAX_SIZE<Int const> = 1000
 
 ### Structs and Data
 
-```vyn
+```vyb
 # Define a struct with modern syntax
 struct Point {
     x<Int>,
@@ -1119,15 +1119,15 @@ main()<Int> -> {
 
 ### Modules & Import System
 
-Vyn's unique dual import system provides both security and flexibility:
+VyB's unique dual import system provides both security and flexibility:
 
-```vyn
+```vyb
 # Trusted imports from verified sources
 import std::collections::Vec
 import utils::math::calculate
 import std::io::println
 
-# Flexible imports for development and experimentation  
+# Flexible imports for development and experimentation
 smuggle debug::trace from "github.com/dev/tools"
 smuggle experimental::parser from "./local/experiments"
 
@@ -1135,10 +1135,10 @@ smuggle experimental::parser from "./local/experiments"
 main()<Int> -> {
     numbers<Vec<Int>> = Vec::new()
     numbers.push(calculate(10))
-    
+
     println(numbers)  # From trusted std::io
     trace("Debug info")  # From smuggled debug module
-    
+
     return numbers.get(0)
 }
 ```
@@ -1147,7 +1147,7 @@ main()<Int> -> {
 - **`import`**: For signed, verified modules from registries or project dependencies
 - **`smuggle`**: For external, experimental, or development-only modules
 
-Declare dependencies in `vyn.toml`:
+Declare dependencies in `vyb.toml`:
 ```toml
 [dependencies]
 std = "^1.0.0"                    # Verified registry package
@@ -1158,7 +1158,7 @@ local_tools = { path = "../tools" } # Local development dependency
 **Planned Bundle & Sharing System:**
 Fine-grained visibility control with bundles:
 
-```vyn
+```vyb
 # Declare module bundles
 bundle(math, math.Core)
 
@@ -1170,20 +1170,20 @@ fn internal_helper() { ... }                      # Private to this file
 
 ### Arrays and Collections
 
-```vyn
+```vyb
 # Resizable vectors with full method support
 main()<Int> -> {
     numbers<Vec<Int>> = Vec::new()
     numbers.push(10)
     numbers.push(20)
     numbers.push(30)
-    
+
     println(numbers)  # Outputs: { "type": "Vec<Int>", "address": "0x..." }
-    
+
     length<Int> = numbers.len()    # Gets 3
     first<Int> = numbers.get(0)    # Gets 10
     last<Int> = numbers.pop()      # Gets and removes 30
-    
+
     return first + last  # Returns 40
 }
 
@@ -1193,12 +1193,12 @@ iterate_example()<Int> -> {
     items.push(1)
     items.push(2)
     items.push(3)
-    
+
     sum<Int> = 0
     for (item in items) {
         sum = sum + item
     }
-    
+
     return sum  # Returns 6
 }
 
@@ -1211,7 +1211,7 @@ array_example()<Int> -> {
 
 ### Control Flow
 
-```vyn
+```vyb
 # Conditional expressions with modern syntax
 check_sign(x<Int>)<String> -> {
     if (x > 0) {
@@ -1268,7 +1268,7 @@ count_to_ten()<Int> -> {
 describe_number(x<Int>)<String> -> {
     match (x) {
         0 -> return "zero",
-        1 -> return "one", 
+        1 -> return "one",
         42 -> return "the answer",
         ? -> return "some number"
     }
@@ -1323,9 +1323,9 @@ process_request(code<Int>)<Int> -> {
 
 ### Comparison Patterns (Range Matching)
 
-Vyn's pattern matching supports **comparison patterns** for elegant range-based matching with compile-time safety:
+VyB's pattern matching supports **comparison patterns** for elegant range-based matching with compile-time safety:
 
-```vyn
+```vyb
 # Comparison operators in patterns: >, <, >=, <=, ==, !=
 
 # Select expression - returns a value directly
@@ -1382,7 +1382,7 @@ invalid_patterns(x<Int>)<String> -> {
 
 # Other unreachable pattern errors:
 # - Wildcard before end: match (x) { ? -> "any", 5 -> "five" }  # ERROR
-# - Duplicate patterns: match (x) { > 10 -> "a", > 10 -> "b" }  # ERROR  
+# - Duplicate patterns: match (x) { > 10 -> "a", > 10 -> "b" }  # ERROR
 # - Overlapping ranges: match (x) { > 5 -> "a", >= 3 -> "b" }  # ERROR
 ```
 
@@ -1401,9 +1401,9 @@ invalid_patterns(x<Int>)<String> -> {
 
 ### Variadic Tuples
 
-Vyn supports **fully variadic tuple types** that can hold any number of heterogeneous elements (1 to N):
+VyB supports **fully variadic tuple types** that can hold any number of heterogeneous elements (1 to N):
 
-```vyn
+```vyb
 # Single-element tuples
 get_single()<Tuple<Int>> -> {
     return 42  # Automatically wrapped in tuple struct
@@ -1441,7 +1441,7 @@ main()<Int> -> {
     single<Tuple<Int>> = get_single()
     pair<Tuple<Int,String>> = get_pair_inline()
     data<Tuple<String,Int,Bool,Float>> = get_data()
-    
+
     return 0
 }
 ```
@@ -1462,11 +1462,11 @@ main()<Int> -> {
 
 ## String Theory
 
-Vyn's String type is a production-ready fat pointer implementation with comprehensive method support and natural literal syntax. Unlike C's null-terminated strings or C++'s heavyweight `std::string`, Vyn Strings combine the best of both worlds: efficient representation with modern conveniences.
+VyB's String type is a production-ready fat pointer implementation with comprehensive method support and natural literal syntax. Unlike C's null-terminated strings or C++'s heavyweight `std::string`, VyB Strings combine the best of both worlds: efficient representation with modern conveniences.
 
 ### String Structure
 
-```vyn
+```vyb
 # Internally, String is a fat pointer struct:
 struct String {
     ptr: *i8,    # Pointer to null-terminated byte data
@@ -1482,17 +1482,17 @@ This design provides:
 
 ### Natural String Syntax
 
-String literals in Vyn are first-class citizens:
+String literals in VyB are first-class citizens:
 
-```vyn
+```vyb
 # Direct literal assignment
-greeting<String> = "Hello, Vyn!"
+greeting<String> = "Hello, VyB!"
 
 # Literal concatenation (just works™)
 message<String> = "Hello" + " " + "World"
 
 # Method calls on literals
-length<Int> = "Vyn".len()                    # Returns 3
+length<Int> = "VyB".len()                    # Returns 3
 first<Int> = "Quantum".char_at(0)            # Returns 'Q' (81)
 check<Bool> = "Einstein".starts_with("Ein")  # Returns true
 
@@ -1502,20 +1502,20 @@ check<Bool> = "Einstein".starts_with("Ein")  # Returns true
 ### Complete Method Reference
 
 **Constructor**
-```vyn
+```vyb
 # Create from raw bytes (C interop)
 name<String> = String::from_bytes("Alice", 5)
 raw<String> = String::from_bytes(c_ptr, c_len)
 ```
 
 **Property Access**
-```vyn
+```vyb
 msg<String> = "Hello"
 length<Int> = msg.len()  # Returns 5, O(1) operation
 ```
 
 **Substring Operations**
-```vyn
+```vyb
 text<String> = "Hello World"
 
 # Extract substring (end optional)
@@ -1530,7 +1530,7 @@ invalid<Int> = text.char_at(99)   # 0 (null char for out of bounds)
 ```
 
 **Search and Comparison**
-```vyn
+```vyb
 sentence<String> = "The quick brown fox"
 
 # Prefix/suffix checking
@@ -1547,7 +1547,7 @@ always<Bool> = sentence.starts_with("")          # true
 ```
 
 **Case Conversion**
-```vyn
+```vyb
 mixed<String> = "Hello World"
 
 # ASCII case conversion (allocates new string)
@@ -1559,13 +1559,13 @@ println(mixed)  # Still "Hello World"
 ```
 
 **String Concatenation**
-```vyn
+```vyb
 # Using + operator (most natural)
 full<String> = "Hello" + " " + "World"
 
 # Chaining operations
-result<String> = "Vyn".to_upper() + " " + "Language".to_lower()
-# Result: "VYN language"
+result<String> = "VyB".to_upper() + " " + "Language".to_lower()
+# Result: "VYB language"
 
 # Mixed types (planned with toString())
 # message<String> = "Count: " + 42.to_string()
@@ -1574,40 +1574,40 @@ result<String> = "Vyn".to_upper() + " " + "Language".to_lower()
 ### Practical Examples
 
 **Text Processing**
-```vyn
+```vyb
 process_input(text<String>)<Bool> -> {
     # Validate input
     if (text.len() == 0) {
         return false
     }
-    
+
     # Check for command prefix
     if (text.starts_with("/")) {
         command<String> = text.substring(1)
         println("Command: " + command)
         return true
     }
-    
+
     # Search for keywords
     if (text.contains("help")) {
         println("Help requested")
         return true
     }
-    
+
     return false
 }
 ```
 
 **String Manipulation**
-```vyn
+```vyb
 format_name(first<String>, last<String>)<String> -> {
     # Capitalize first letter of each name
-    first_upper<String> = first.char_at(0).to_string().to_upper() + 
+    first_upper<String> = first.char_at(0).to_string().to_upper() +
                           first.substring(1).to_lower()
-    
-    last_upper<String> = last.char_at(0).to_string().to_upper() + 
+
+    last_upper<String> = last.char_at(0).to_string().to_upper() +
                          last.substring(1).to_lower()
-    
+
     # Combine with space
     return first_upper + " " + last_upper
 }
@@ -1620,23 +1620,23 @@ main()<Int> -> {
 ```
 
 **Data Validation**
-```vyn
+```vyb
 validate_email(email<String>)<Bool> -> {
     # Simple email validation
     if (email.len() < 3) {
         return false  # Too short
     }
-    
+
     if (!email.contains("@")) {
         return false  # No @ symbol
     }
-    
+
     # Check @ is not first or last
     at_pos<Int> = email.find("@")  # (planned method)
     if (at_pos == 0 || at_pos == email.len() - 1) {
         return false
     }
-    
+
     return true
 }
 ```
@@ -1644,7 +1644,7 @@ validate_email(email<String>)<Bool> -> {
 ### Memory Management
 
 **Allocation Strategy**
-```vyn
+```vyb
 # Read-only operations: ZERO allocations
 len<Int> = "Hello".len()                    # No malloc
 ch<Int> = "World".char_at(0)                # No malloc
@@ -1660,9 +1660,9 @@ concat<String> = "A" + "B"                  # malloc(3) for "AB\0"
 ```
 
 **Bounds Safety**
-```vyn
+```vyb
 # All index operations are bounds-checked at runtime
-text<String> = "Vyn"
+text<String> = "VyB"
 
 safe<Int> = text.char_at(2)      # OK: returns 'n' (110)
 safe2<Int> = text.char_at(0)     # OK: returns 'V' (86)
@@ -1693,7 +1693,7 @@ empty<String> = text.substring(10, 20)  # Returns {null, 0}
 
 All String methods produce null-terminated strings for C compatibility:
 
-```vyn
+```vyb
 # Use with C functions (planned FFI)
 name<String> = "Alice"
 c_str<*i8> = name.to_bytes()  # Get raw pointer
@@ -1723,7 +1723,7 @@ c_str<*i8> = name.to_bytes()  # Get raw pointer
 - **Copy-on-write**: Share data until modification
 
 
-```vyn
+```vyb
 # Simple things are simple
 msg<String> = "Hello" + " " + "World"
 
@@ -1735,11 +1735,11 @@ advanced<String> = data
     .trim()                 # (planned)
 ```
 
-**String Theory Achievement Unlocked:** You now understand Vyn Strings better than most physicists understand actual string theory! 🎻✨
+**String Theory Achievement Unlocked:** You now understand VyB Strings better than most physicists understand actual string theory! 🎻✨
 
 ## Error Handling with trap/fail/ensure
 
-Vyn v0.4.2 features an **explicit error handling system** that combines the clarity of exceptions with the safety of Result types. The `trap`/`fail`/`ensure` trio provides compile-time error tracking with zero runtime overhead for the happy path.
+VyB v0.4.2 features an **explicit error handling system** that combines the clarity of exceptions with the safety of Result types. The `trap`/`fail`/`ensure` trio provides compile-time error tracking with zero runtime overhead for the happy path.
 
 ### The Philosophy
 
@@ -1747,9 +1747,9 @@ Traditional error handling offers two flawed extremes:
 - **Exceptions**: Hidden control flow, unclear what can fail, runtime overhead
 - **Result Types**: Verbose unwrapping, easy to ignore errors, cluttered code
 
-Vyn's approach:
+VyB's approach:
 - **Explicit propagation**: Errors visible in type signatures
-- **Zero-cost success**: No overhead when operations succeed  
+- **Zero-cost success**: No overhead when operations succeed
 - **Pattern matching**: Handle errors elegantly with full type safety
 - **Heap allocation**: Errors carry rich context through pointer passing
 
@@ -1757,7 +1757,7 @@ Vyn's approach:
 
 Functions declare error returns in their signatures using **failable types**:
 
-```vyn
+```vyb
 # Functions that can fail return (T, error_ptr) tuples
 divide(a<Int>, b<Int>)<Int> -> {
     if (b == 0) {
@@ -1771,7 +1771,7 @@ divide(a<Int>, b<Int>)<Int> -> {
 
 **Type System Integration:**
 - Success path: Returns `(value, null_ptr)` tuple
-- Error path: Returns `(undefined, error_ptr)` tuple  
+- Error path: Returns `(undefined, error_ptr)` tuple
 - Error pointers carry heap-allocated error structs
 - Type IDs enable pattern matching on error types
 
@@ -1779,10 +1779,10 @@ divide(a<Int>, b<Int>)<Int> -> {
 
 Create and propagate errors with `fail`:
 
-```vyn
+```vyb
 # Simple error codes (primitive types)
 fail 404                    # Integer error
-fail "not found"            # String error  
+fail "not found"            # String error
 fail 3.14                   # Float error
 
 # Structured errors (custom types)
@@ -1821,7 +1821,7 @@ Heap-allocated error struct (16 bytes):
 
 Handle errors with pattern matching:
 
-```vyn
+```vyb
 # Basic trap with single error type
 compute_safely(x<Int>, y<Int>)<Int> -> {
     result<Int> = {
@@ -1883,14 +1883,14 @@ process_data(input<String>)<Int> -> {
 - Type-safe: Only valid error types accepted
 - Exhaustive: Compiler ensures all error types handled
 - Field access: Access struct fields in trap handlers (`e.code`, `e.dividend`)
-- Wildcard: Use `} trap (e<?>) -> { }` to catch any error type 
-- Multi-type: Use `} trap (e<Type1 | Type2>) -> { }` to catch union of types 
+- Wildcard: Use `} trap (e<?>) -> { }` to catch any error type
+- Multi-type: Use `} trap (e<Type1 | Type2>) -> { }` to catch union of types
 
 ### Error Propagation
 
 Errors automatically propagate through call stacks:
 
-```vyn
+```vyb
 # Three-level error propagation
 divide(a<Int>, b<Int>)<Int> -> {
     if (b == 0) {
@@ -1906,14 +1906,14 @@ compute(x<Int>, y<Int>)<Int> -> {
 
 main()<Int> -> {
     val1<Int> = compute(10, 2)   # OK: 10/2 + 10 = 15
-    
+
     val2<Int> = {
         compute(10, 0)  # Fails: division by zero
     } trap (e<Int>) -> {
         println("Caught error: " + String::from_int(e))
         -1  # Return fallback
     }
-    
+
     return val1 + val2  # Returns 15 + (-1) = 14
 }
 ```
@@ -1928,7 +1928,7 @@ main()<Int> -> {
 
 Errors that escape without trap handlers trigger runtime termination:
 
-```vyn
+```vyb
 divide(a<Int>, b<Int>)<Int> -> {
     if (b == 0) {
         fail 42
@@ -1963,7 +1963,7 @@ Exit Code: 1
 
 Rich error types carry debugging context:
 
-```vyn
+```vyb
 struct ValidationError {
     field_name<String>,
     expected<String>,
@@ -2011,11 +2011,11 @@ Validation failed:
 
 The `ensure` keyword provides cleanup/finally semantics, guaranteeing code runs whether the block succeeds or fails:
 
-```vyn
+```vyb
 # Implemented in v0.4.2
 process_file(path<String>)<String> -> {
     file<File> = open_file(path)
-    
+
     result<String> = {
         file.read()
     } trap (e<IOError>) -> {
@@ -2023,7 +2023,7 @@ process_file(path<String>)<String> -> {
     } ensure -> {
         file.close()  # Always runs, success or failure
     }
-    
+
     return result
 }
 
@@ -2036,7 +2036,7 @@ process_file(path<String>)<String> -> {
 # - Parser fully supports } ensure -> { } syntax
 # - Codegen inlines ensure blocks into control flow
 # - Works with both success and failure paths
-# - See: test/trap/test_ensure_simple.vyn
+# - See: test/trap/test_ensure_simple.vyb
 ```
 
 ### LLVM Code Generation
@@ -2053,15 +2053,15 @@ entry:
 error_path:
   ; Allocate error struct: 8 bytes type_id + 8 bytes value
   %error_mem = call ptr @malloc(i64 16)
-  
+
   ; Store type ID at offset 0
   %type_id = i64 -3994496327427856726  ; hash("Int")
   store i64 %type_id, ptr %error_mem
-  
-  ; Store error value at offset 8  
+
+  ; Store error value at offset 8
   %value_ptr = getelementptr i8, ptr %error_mem, i64 8
   store i64 42, ptr %value_ptr
-  
+
   ; Return (undef, error_ptr) tuple
   %result = insertvalue { i64, ptr } undef, ptr %error_mem, 1
   ret { i64, ptr } %result
@@ -2080,7 +2080,7 @@ entry:
   %call = call { i64, ptr } @divide(i64 %x, i64 %y)
   %value = extractvalue { i64, ptr } %call, 0
   %error = extractvalue { i64, ptr } %call, 1
-  
+
   ; Check if error occurred
   %has_error = icmp ne ptr %error, null
   br i1 %has_error, label %error_propagate, label %success
@@ -2121,16 +2121,16 @@ catch_handler:
   ; Extract error value from offset 8
   %value_ptr = getelementptr i8, ptr %error, i64 8
   %error_value = load i64, ptr %value_ptr
-  
+
   ; Free error memory
   call void @free(ptr %error)
-  
+
   ; Handle error (return -1)
   br label %after_trap
 
 unmatched:
   ; No matching handler - call runtime
-  call void @__vyn_runtime_untrapped_error(ptr %error)
+  call void @__vyb_runtime_untrapped_error(ptr %error)
   unreachable
 
 try_success:
@@ -2160,7 +2160,7 @@ after_trap:
 
 | Approach | Success Overhead | Error Overhead | Hidden Control Flow | Compile-time Safety |
 |----------|-----------------|----------------|---------------------|---------------------|
-| **Vyn trap/fail** | ~1 comparison | 1 malloc + type match | No | Yes |
+| **VyB trap/fail** | ~1 comparison | 1 malloc + type match | No | Yes |
 | C++ exceptions | Exception tables | Stack unwinding + allocation | Yes | Partial |
 | Rust Result<T,E> | Match overhead | Enum size increase | No | Yes |
 | Go error returns | Comparison + check | Allocation | No | Weak (can ignore) |
@@ -2169,7 +2169,7 @@ after_trap:
 ### Error Handling Best Practices
 
 **1. Use Specific Error Types**
-```vyn
+```vyb
 # Good: Rich context
 struct FileError {
     path<String>,
@@ -2182,7 +2182,7 @@ fail 404
 ```
 
 **2. Handle Errors Close to Source**
-```vyn
+```vyb
 # Good: Handle immediately if recovery is possible
 result<String> = {
     read_file(path)
@@ -2196,9 +2196,9 @@ data<String> = read_file(path)  # Propagates error to caller
 ```
 
 **3. Document Error Conditions**
-```vyn
+```vyb
 # Read configuration from file
-# 
+#
 # Errors:
 #   FileError { operation = "open", ... } - File doesn't exist
 #   FileError { operation = "read", ... } - Permission denied
@@ -2209,7 +2209,7 @@ read_config(path<String>)<Config> -> {
 ```
 
 **4. Prefer Structured Errors Over Codes**
-```vyn
+```vyb
 # Good: Self-documenting
 struct NetworkError {
     url<String>,
@@ -2234,9 +2234,9 @@ fail 503  # What does this mean?
 - Automatic memory management (malloc/free)
 - Untrapped error runtime handler with formatted output
 - Complete LLVM codegen for all error operations
-- `ensure` keyword for cleanup/finally blocks 
+- `ensure` keyword for cleanup/finally blocks
 - Stack trace capture in error structs (v0.5.1)
-- Wildcard trap handlers `} trap (e<?>) -> { ... }` 
+- Wildcard trap handlers `} trap (e<?>) -> { ... }`
 - Type introspection (`typeof`, `as`) for discriminating multi-type traps
 
 **🔜 Planned Enhancements:**
@@ -2250,7 +2250,7 @@ fail 503  # What does this mean?
 
 A comprehensive example showing all error handling features:
 
-```vyn
+```vyb
 # Define domain-specific error types
 struct ParseError {
     input<String>,
@@ -2301,7 +2301,7 @@ validate_age(age<Int>)<Bool> -> {
 # Store user in database (can fail)
 store_user(name<String>, age<Int>)<Int> -> {
     valid<Bool> = validate_age(age)  # Propagates ValidationError
-    
+
     # Simulate database operation
     if (age == 42) {
         fail DatabaseError {
@@ -2309,7 +2309,7 @@ store_user(name<String>, age<Int>)<Int> -> {
             code = 1062  # Duplicate entry
         }
     }
-    
+
     return 1  # User ID
 }
 
@@ -2319,31 +2319,31 @@ register_user(name<String>, age_str<String>)<String> -> {
     result<String> = {
         # Parse age (may fail with ParseError)
         age<Int> = parse_int(age_str)
-        
+
         # Store user (may fail with ValidationError or DatabaseError)
         user_id<Int> = store_user(name, age)
-        
+
         "User registered with ID: " + String::from_int(user_id)
-        
+
     } trap (e<ParseError>) -> {
-        msg<String> = "Parse failed: " + e.expected + 
+        msg<String> = "Parse failed: " + e.expected +
                      " at position " + String::from_int(e.position)
         println(msg)
         "PARSE_ERROR"
-        
+
     } trap (e<ValidationError>) -> {
-        msg<String> = "Validation failed for " + e.field + 
+        msg<String> = "Validation failed for " + e.field +
                      ": " + e.constraint
         println(msg)
         "VALIDATION_ERROR"
-        
+
     } trap (e<DatabaseError>) -> {
-        msg<String> = "Database error " + String::from_int(e.code) + 
+        msg<String> = "Database error " + String::from_int(e.code) +
                      " in query: " + e.query
         println(msg)
         "DATABASE_ERROR"
     }
-    
+
     return result
 }
 
@@ -2351,19 +2351,19 @@ main()<Int> -> {
     # Test success path
     result1<String> = register_user("Alice", "25")
     println(result1)  # "User registered with ID: 1"
-    
+
     # Test ParseError
     result2<String> = register_user("Bob", "")
     println(result2)  # "PARSE_ERROR"
-    
-    # Test ValidationError  
+
+    # Test ValidationError
     result3<String> = register_user("Charlie", "-5")
     println(result3)  # "VALIDATION_ERROR"
-    
+
     # Test DatabaseError
     result4<String> = register_user("Dave", "42")
     println(result4)  # "DATABASE_ERROR"
-    
+
     return 0
 }
 ```
@@ -2375,11 +2375,11 @@ main()<Int> -> {
 - **Performance**: Only allocates memory when errors actually occur
 - **Ergonomics**: Pattern matching makes error handling elegant
 
-The Vyn error handling system achieves the rare combination of **safety, performance, and ergonomics** that makes robust error handling a joy rather than a chore.
+The VyB error handling system achieves the rare combination of **safety, performance, and ergonomics** that makes robust error handling a joy rather than a chore.
 
 ## Build System
 
-Vyn uses CMake for building:
+VyB uses CMake for building:
 
 ```bash
 # Clean build
@@ -2390,12 +2390,12 @@ cmake .. && make clean && make -j
 make -C build -j
 
 # Run tests
-build/vyn test/string/string_test.vyn
+build/vyb test/string/string_test.vyb
 ```
 
 ## Test Harness
 
-Vyn includes a modern, comprehensive test harness for managing 391+ test files:
+VyB includes a modern, comprehensive test harness for managing 391+ test files:
 
 ### Quick Testing
 ```bash
@@ -2435,14 +2435,14 @@ Vyn includes a modern, comprehensive test harness for managing 391+ test files:
 ## Project Structure
 
 ```
-Vyn/
+VyB/
 ├── src/              # C++ source code
 │   ├── main.cpp      # Entry point with LLVM JIT
 │   ├── lexer.cpp     # Tokenization
 │   ├── parser.cpp    # Syntax analysis
 │   └── ast.cpp       # Abstract syntax tree
-├── include/vyn/      # Header files
-├── test/             # Vyn test programs
+├── include/vyb/      # Header files
+├── test/             # VyB test programs
 ├── examples/         # Example programs
 ├── doc/              # Documentation
 └── build/            # Build output
@@ -2453,14 +2453,14 @@ Vyn/
 ### Simple Programs
 
 **Hello World:**
-```vyn
+```vyb
 main()<Void> -> {
-    println("Hello, Vyn!")
+    println("Hello, VyB!")
 }
 ```
 
 **Mathematical Computation:**
-```vyn
+```vyb
 fibonacci(n<Int>)<Int> -> {
     if (n <= 1) {
         return n
@@ -2475,7 +2475,7 @@ main()<Int> -> {
 ```
 
 **Data Processing with Auto-Serialization:**
-```vyn
+```vyb
 struct Result {
     success<Bool>,
     value<Int>,
@@ -2506,11 +2506,11 @@ main()<Result> -> {
 
 ## JSON Serialization & Deserialization
 
-Vyn v0.4.4 includes a **complete JSON serialization system** with bidirectional conversion between structs and JSON:
+VyB v0.4.4 includes a **complete JSON serialization system** with bidirectional conversion between structs and JSON:
 
 ### Automatic Serialization
 
-```vyn
+```vyb
 struct Person {
     name<String>,
     age<Int>,
@@ -2519,18 +2519,18 @@ struct Person {
 
 main()<Int> -> {
     person<Person> = Person { name: "Alice", age: 30, active: true }
-    
+
     # Serialize to JSON string
     json<String> = person.to_string()
     println(json)  # Output: {"name": "Alice", "age": 30, "active": true}
-    
+
     return 0
 }
 ```
 
 ### JSON Deserialization
 
-```vyn
+```vyb
 # Deserialize JSON back to struct
 person2<Person> = Person::from_string(json)
 
@@ -2548,7 +2548,7 @@ println(person2.age.to_string())  # Output: 30
 
 ### Auto-Serialization for main() Returns
 
-One of Vyn's standout features is automatic serialization of complex return types from `main()`:
+One of VyB's standout features is automatic serialization of complex return types from `main()`:
 
 - **Simple integers**: Return as exit codes (`main()<Int> -> { return 42 }`)
 - **Complex types**: Automatically serialize to JSON-like format
@@ -2559,19 +2559,19 @@ One of Vyn's standout features is automatic serialization of complex return type
 
 The JSON system is built on:
 - **Runtime Type Metadata**: Global type registry with field information
-- **C Runtime Functions**: `__vyn_complex_to_json()` and `__vyn_complex_from_json()`
+- **C Runtime Functions**: `__vyb_complex_to_json()` and `__vyb_complex_from_json()`
 - **Type Registration**: Automatic registration via global constructors
-- **String Conversion**: Seamless char* to VynString{data, length} struct conversion
+- **String Conversion**: Seamless char* to VyBString{data, length} struct conversion
 
-See `test/json/` for comprehensive examples and `runtime/vyn_type_metadata.c` for implementation.
+See `test/json/` for comprehensive examples and `runtime/vyb_type_metadata.c` for implementation.
 
-This makes Vyn excellent for data processing scripts, API services, and configuration management.
+This makes VyB excellent for data processing scripts, API services, and configuration management.
 
 ## Memory Safety
 
-Vyn provides multiple memory management strategies:
+VyB provides multiple memory management strategies:
 
-```vyn
+```vyb
 # Unique ownership (like Rust's Box)
 owned<my<String>> = my("unique data")
 
@@ -2593,10 +2593,10 @@ freedom {
 
 ## Future Roadmap
 
-Vyn v0.4.4 (freedom-1.0) delivers a **complete, production-ready systems programming language** with full native code generation. Future enhancements:
+VyB v0.4.4 (freedom-1.0) delivers a **complete, production-ready systems programming language** with full native code generation. Future enhancements:
 
 ### 🔜 **Near-Term Priorities (v0.5)**
-1. **FFI / `extern "C"`**: Foreign function interface for calling C libraries directly from Vyn — the key enabler for networking, file I/O, and ecosystem integration. See `doc/FFI_DESIGN.md`.
+1. **FFI / `extern "C"`**: Foreign function interface for calling C libraries directly from VyB — the key enabler for networking, file I/O, and ecosystem integration. See `doc/FFI_DESIGN.md`.
 2. **Module System**: `import`/`smuggle`/`bundle`/`share` for multi-file programs. See `doc/bundles_and_sharing.md`.
 3. **Lambda/Closure Codegen**: LLVM codegen for `|x<Int>| -> x * 2` closures (parsing is complete).
 4. **Error Propagation Phases 2-5**: `fail` propagation through call stacks; wildcard `trap (e<?>)`.
@@ -2608,16 +2608,16 @@ Vyn v0.4.4 (freedom-1.0) delivers a **complete, production-ready systems program
 - **Iterator Aspect**: `aspect Iterator { type Item; next(self)<Option<Item>> }` for `for` loop generalization
 - **Associated Types**: `aspect Iterator { type Item }` (requires aspect system extension)
 - **Enhanced Async/Await**: Real event loop, `spawn`, typed channels, async lambdas
-- **Self-Hosting**: Vyn compiler written in Vyn
-- **Package Manager**: `vyn.toml`, `vyn build`, dependency resolution
+- **Self-Hosting**: VyB compiler written in VyB
+- **Package Manager**: `vyb.toml`, `vyb build`, dependency resolution
 - **Language Server (LSP)**: Completion, go-to-definition, diagnostics in editors
-- **REPL**: `vyn repl` backed by ORC JIT
+- **REPL**: `vyb repl` backed by ORC JIT
 
 **Current Status**: All core language features work end-to-end. See `TODO.md` for the high-level 1.0 plan and `UPDATE_LOG.md` for the current source-biased implementation audit.
 
 ## Testing & Development Tools
 
-Vyn v0.4.2 includes a **modern, comprehensive testing infrastructure** designed for efficient development and quality assurance:
+VyB v0.4.2 includes a **modern, comprehensive testing infrastructure** designed for efficient development and quality assurance:
 
 ### 🧪 **Modern Test Harness**
 
@@ -2698,7 +2698,7 @@ The integrated toolchain supports efficient development:
 
 ## Architecture
 
-Vyn is built on solid foundations:
+VyB is built on solid foundations:
 
 - **Frontend**: Hand-written recursive descent parser
 - **AST**: Rich abstract syntax tree with source location tracking
@@ -2709,7 +2709,7 @@ Vyn is built on solid foundations:
 
 ## Contributing
 
-Vyn is actively developed with regular commits tracking progress:
+VyB is actively developed with regular commits tracking progress:
 
 1. **Language Features**: Add new syntax, types, or operations
 2. **Standard Library**: Implement core modules and utilities
@@ -2747,7 +2747,7 @@ See `doc/` directory for detailed design documents and RFCs.
 - ✅ **Async/Await**: Complete asynchronous programming support with Future<T> types
 - ✅ **Debug Infrastructure**: Full LLVM debug metadata with async state machine debugging
 
-**Language Status**: Vyn v0.4.2 (freedom-1.0 series) is a **complete, production-ready systems programming language** with unified canonical syntax, comprehensive sized type system (Int8-Int64, UInt8-UInt64, Float32/64, Char, Rune, Bytes), generic function monomorphization, comprehensive test infrastructure, and advanced debugging capabilities, suitable for real-world programming tasks with all core language constructs implemented, tested, and fully consistent.
+**Language Status**: VyB v0.4.2 (freedom-1.0 series) is a **complete, production-ready systems programming language** with unified canonical syntax, comprehensive sized type system (Int8-Int64, UInt8-UInt64, Float32/64, Char, Rune, Bytes), generic function monomorphization, comprehensive test infrastructure, and advanced debugging capabilities, suitable for real-world programming tasks with all core language constructs implemented, tested, and fully consistent.
 
 ## Getting Help
 
@@ -2762,7 +2762,7 @@ See `doc/` directory for detailed design documents and RFCs.
 
 ### A. EBNF Grammar
 
-Vyn's syntax is defined by a comprehensive EBNF grammar reflecting v0.4.2 capabilities:
+VyB's syntax is defined by a comprehensive EBNF grammar reflecting v0.4.2 capabilities:
 
 ```ebnf
 // Conventions:
@@ -2797,38 +2797,38 @@ smuggle_statement      ::= 'smuggle' path [ 'as' IDENTIFIER ] [';']
 path                   ::= IDENTIFIER { ('::' | '.') IDENTIFIER }
 
 // Type Declarations
-struct_declaration     ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ] 
+struct_declaration     ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ]
                            'struct' IDENTIFIER '{' { struct_field_declaration } '}'
 struct_field_declaration ::= [ 'pub' ] IDENTIFIER '<' type '>' [ '=' expression ] [';']
 
 
 field_declaration      ::= [ 'pub' ] IDENTIFIER '<' type '>' [ '=' expression ] [';']
 
-enum_declaration       ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ] 
+enum_declaration       ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ]
                            'enum' IDENTIFIER '{' { enum_variant } '}'
 enum_variant           ::= IDENTIFIER [ '(' type_list ')' ] [ '=' expression ] ','?
 
-bind_declaration       ::= [ 'template' '<' type_parameter_list '>' ] 
+bind_declaration       ::= [ 'template' '<' type_parameter_list '>' ]
                            'bind' type [ '->' type ] '{' { method_declaration } '}'
 
-aspect_declaration     ::= [ 'pub' ] 'aspect' IDENTIFIER [ template_parameters ] 
+aspect_declaration     ::= [ 'pub' ] 'aspect' IDENTIFIER [ template_parameters ]
                            '{' { method_signature } '}'
 
 // Function Declarations
-function_declaration   ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ] [ 'async' ] 
-                           IDENTIFIER '(' [ parameter_list ] ')' '<' type_list '>' '->' 
-                           ( block_statement | expression [';'] | statement ) 
+function_declaration   ::= [ 'pub' ] [ 'template' '<' type_parameter_list '>' ] [ 'async' ]
+                           IDENTIFIER '(' [ parameter_list ] ')' '<' type_list '>' '->'
+                           ( block_statement | expression [';'] | statement )
                            [ 'throws' type_list ]
 
 method_declaration     ::= [ 'pub' ] [ 'static' ] [ 'template' '<' type_parameter_list '>' ] [ 'async' ]
-                           IDENTIFIER '(' [ parameter_list ] ')' '<' type '>' '->' 
+                           IDENTIFIER '(' [ parameter_list ] ')' '<' type '>' '->'
                            ( block_statement | expression [';'] ) [ 'throws' type_list ]
 
-method_signature       ::= [ 'async' ] IDENTIFIER '(' [ parameter_list ] ')' 
+method_signature       ::= [ 'async' ] IDENTIFIER '(' [ parameter_list ] ')'
                            '<' type_list '>' '->' ';' [ 'throws' type_list ]
 
-constructor_declaration::= [ 'pub' ] 'new' [ template_parameters ] 
-                           '(' [ parameter_list ] ')' [ 'throws' type_list ] 
+constructor_declaration::= [ 'pub' ] 'new' [ template_parameters ]
+                           '(' [ parameter_list ] ')' [ 'throws' type_list ]
                            ( block_statement | '=>' expression [';'] )
 
 // Variable Declarations
@@ -2870,8 +2870,8 @@ statement              ::= expression_statement
 expression_statement   ::= expression [';']
 block_statement        ::= '{' { statement } '}'
 
-if_statement           ::= 'if' expression ( block_statement | statement_without_block ) 
-                           { 'else' 'if' expression ( block_statement | statement_without_block ) } 
+if_statement           ::= 'if' expression ( block_statement | statement_without_block )
+                           { 'else' 'if' expression ( block_statement | statement_without_block ) }
                            [ 'else' ( block_statement | statement_without_block ) ]
 
 for_statement          ::= 'for' pattern 'in' expression block_statement
@@ -2896,7 +2896,7 @@ try_statement          ::= 'try' block_statement { trap_clause } [ 'finally' blo
 trap_clause            ::= 'trap' '(' IDENTIFIER '<' type '>' ')' '->' block_statement
 
 pattern_assignment_statement ::= pattern '=' expression [';']
-statement_without_block ::= expression_statement | return_statement | break_statement 
+statement_without_block ::= expression_statement | return_statement | break_statement
                           | continue_statement | throw_statement
 
 // Patterns
@@ -2974,7 +2974,7 @@ tuple_literal          ::= '(' [ expression { ',' expression } [ ',' ] ] ')'
 struct_literal         ::= [ path_expression ] '{' [ struct_literal_field { ',' struct_literal_field } [ ',' ] ] '}'
 struct_literal_field   ::= IDENTIFIER (':' | '=') expression | IDENTIFIER
 
-lambda_expression      ::= [ 'async' ] ( '|' [ parameter_list ] '|' | IDENTIFIER ) '<' type '>' 
+lambda_expression      ::= [ 'async' ] ( '|' [ parameter_list ] '|' | IDENTIFIER ) '<' type '>'
                            ( '=>' expression | block_statement )
 
 // Type System
@@ -2990,7 +2990,7 @@ OwnershipWrapper       ::= 'my' | 'our' | 'their' | 'ptr' | 'loc'
 
 ArrayType              ::= '[' Type [ ';' Expression ] ']'
 TupleType              ::= '(' [ Type { ',' Type } [ ',' ] ] ')'
-FunctionType           ::= [ 'async' ] '(' [ Type { ',' Type } ] ')' '<' Type '>' '->' 
+FunctionType           ::= [ 'async' ] '(' [ Type { ',' Type } ] ')' '<' Type '>' '->'
                            [ 'throws' TypeList ]
 
 type_arguments         ::= '<' type_argument_list '>'
@@ -3032,7 +3032,7 @@ BorrowExpr             ::= 'borrow' '(' Expression ')'
 
 ### C. Auto-Serialization Reference
 
-Vyn automatically serializes complex return types from `main()`:
+VyB automatically serializes complex return types from `main()`:
 
 **Simple Returns:**
 - `main()<Int> -> { return 42 }` → Exit code 42
@@ -3057,14 +3057,14 @@ Compile-time analysis ensuring references don't outlive the data they point to.
 **Bundle**
 Planned namespace grouping for fine-grained module visibility control.
 
-**Import** 
+**Import**
 Secure module inclusion from verified, signed sources.
 
 **JIT** (Just-In-Time)
 Runtime compilation of code to native machine instructions for performance.
 
 **LLVM**
-Low Level Virtual Machine - compiler infrastructure used by Vyn's backend.
+Low Level Virtual Machine - compiler infrastructure used by VyB's backend.
 
 **Monomorphization**
 Compile-time process of creating specialized versions of generic functions/types.
@@ -3092,4 +3092,4 @@ Apache License - see LICENSE file for details.
 
 ---
 
-*Vyn v0.4.2 (freedom-1.0 series): A complete systems programming language with comprehensive sized type system, unified syntax, pattern matching, generic functions, resizable collections, and unique import/smuggle module system - ready for real-world development.*
+*VyB v0.4.2 (freedom-1.0 series): A complete systems programming language with comprehensive sized type system, unified syntax, pattern matching, generic functions, resizable collections, and unique import/smuggle module system - ready for real-world development.*

@@ -1,23 +1,23 @@
-# Vyn Aspect System Design
+# VyB Aspect System Design
 
-**Version:** 0.4.2+  
-**Status:** Partially Implemented  
-**Priority:** HIGH  
+**Version:** 0.4.2+
+**Status:** Partially Implemented
+**Priority:** HIGH
 
 ## Overview
 
-Vyn's aspect system provides interface-based polymorphism without classes. Aspects define
+VyB's aspect system provides interface-based polymorphism without classes. Aspects define
 shared behavior that types can bind to, enabling generic programming with compile-time
-guarantees. This document uses Vyn-native vocabulary: `aspect` and `bind`.
+guarantees. This document uses VyB-native vocabulary: `aspect` and `bind`.
 
-> **Terminology note:** Earlier drafts used `trait`/`impl` (Rust vocabulary). Vyn uses
+> **Terminology note:** Earlier drafts used `trait`/`impl` (Rust vocabulary). VyB uses
 > `aspect`/`bind`. These are not the same language — the concepts are similar but the
 > keywords and philosophy differ. See `doc/WHY_ASPECTS_NOT_CLASSES.md`.
 
 ## Core Principles
 
 1. **Opt-in Polymorphism** - Aspects are optional; simple structs work without them
-2. **No Classes** - Structs bind aspects directly; there is no class keyword in Vyn
+2. **No Classes** - Structs bind aspects directly; there is no class keyword in VyB
 3. **Compile-time Dispatch** - Static dispatch via monomorphization (no vtables by default)
 4. **Explicit Binding** - Types explicitly `bind` aspects; no duck typing
 5. **Aspect Bounds** - Generic type parameters can require aspect binding
@@ -26,7 +26,7 @@ guarantees. This document uses Vyn-native vocabulary: `aspect` and `bind`.
 
 ### Why Not Mandatory Classes?
 
-```vyn
+```vyb
 // Simple data without behavior - no class needed
 struct Point {
     x<Int>,
@@ -43,7 +43,7 @@ distance(p1<Point>, p2<Point>)<Float> -> {
 // This is valid and preferred for simple data types
 ```
 
-**Vyn's Approach:**
+**VyB's Approach:**
 - Use **structs** for data
 - Use **functions** for behavior
 - Use **aspects** when you need polymorphism
@@ -55,7 +55,7 @@ For a simple instance receiver, write `self`. The compiler canonicalizes it to t
 
 ### Basic Aspect
 
-```vyn
+```vyb
 aspect Comparable {
     // Method signatures only - no implementations
     lt(self<their<Self>>, other<their<Self>>)<Bool> ->
@@ -71,7 +71,7 @@ aspect Comparable {
 
 ### Aspect with Default Methods
 
-```vyn
+```vyb
 aspect Comparable {
     // Required methods
     lt(self<their<Self>>, other<their<Self>>)<Bool> ->
@@ -90,7 +90,7 @@ aspect Comparable {
 
 ### Aspect Composition (Aspect Inheritance)
 
-```vyn
+```vyb
 aspect Equatable {
     eq(self<their<Self>>, other<their<Self>>)<Bool> ->
 }
@@ -106,7 +106,7 @@ aspect Comparable {
 
 ### Binding to Structs
 
-```vyn
+```vyb
 struct Point {
     x<Int>,
     y<Int>
@@ -127,7 +127,7 @@ bind Comparable -> Point {
 
 ### Binding to Primitive Types
 
-```vyn
+```vyb
 // Extend built-in types with new aspects
 bind Numeric -> Int {
     add(self<Int>, other<Int>)<Int> -> { return self + other }
@@ -139,7 +139,7 @@ bind Numeric -> Int {
 
 ### Generic Bindings
 
-```vyn
+```vyb
 // Bind aspect for all types that meet constraints
 bind<T<Comparable>> Equatable -> Vec<T> {
     eq(self<their<Vec<T>>>, other<their<Vec<T>>>)<Bool> -> {
@@ -162,8 +162,8 @@ bind<T<Comparable>> Equatable -> Vec<T> {
 
 ### Aspect Bounds on Generic Functions
 
-```vyn
-// Single bound — Vyn syntax
+```vyb
+// Single bound — VyB syntax
 min<T<Comparable>>(a<T>, b<T>)<T> -> {
     if (a.lt(b)) {
         return a
@@ -182,7 +182,7 @@ serialize<T<ToJson><Debug>>(obj<their<T>>)<String> -> {
 
 ### Dynamic Dispatch (Planned)
 
-```vyn
+```vyb
 // Dynamic dispatch using aspect objects (planned)
 draw_shape(shape<dyn Drawable>)<Void> -> {
     shape.draw()  // Runtime dispatch
@@ -198,7 +198,7 @@ draw_shape<T<Drawable>>(shape<T>)<Void> -> {
 
 ### Core Aspects
 
-```vyn
+```vyb
 aspect Equatable {
     eq(self<their<Self>>, other<their<Self>>)<Bool> ->
     ne(self<their<Self>>, other<their<Self>>)<Bool> -> {
@@ -242,7 +242,7 @@ aspect Display {
 
 ### Iterator Aspect (Standard Library — requires associated types)
 
-```vyn
+```vyb
 aspect Iterator {
     type Item                                    # associated type
     next(self<their<Self>>)<Option<Self::Item>>  # returns next value or None
@@ -254,7 +254,7 @@ aspect Iterator {
 
 ### Serialization Aspects (Future)
 
-```vyn
+```vyb
 aspect Serializable {
     serialize(self<their<Self>>)<Bytes> ->
     deserialize(data<their<Bytes>>)<Option<Self>> ->
@@ -265,15 +265,15 @@ aspect Async<T> {
 }
 ```
 
-## The Vyn Way
+## The VyB Way
 
 **Data = Structs**
-```vyn
+```vyb
 struct Point { x<Int>, y<Int> }
 ```
 
 **Behavior = Aspects**
-```vyn
+```vyb
 aspect Drawable {
     draw(self<their<Self>>)<Void> -> { }
 }
@@ -286,7 +286,7 @@ bind Drawable -> Point {
 ```
 
 **Polymorphism = Aspect Bounds**
-```vyn
+```vyb
 render<T<Drawable>>(shape<their<T>>)<Void> -> {
     shape.draw()
 }
@@ -296,11 +296,11 @@ render<T<Drawable>>(shape<their<T>>)<Void> -> {
 
 ### Advantages
 
-✅ **Multiple Aspect Bindings** — Unlike single inheritance  
-✅ **No Fragile Base** — Changes don't break dependents  
-✅ **Better Composition** — Mix and match behaviors freely  
-✅ **Extension Without Modification** — Bind aspects to any type  
-✅ **Static Dispatch** — Zero-cost abstractions  
+✅ **Multiple Aspect Bindings** — Unlike single inheritance
+✅ **No Fragile Base** — Changes don't break dependents
+✅ **Better Composition** — Mix and match behaviors freely
+✅ **Extension Without Modification** — Bind aspects to any type
+✅ **Static Dispatch** — Zero-cost abstractions
 ✅ **Simple Mental Model** — Structs are data, aspects are contracts
 
 ## Implementation Phases
@@ -328,7 +328,7 @@ render<T<Drawable>>(shape<their<T>>)<Void> -> {
 5. ⬜ Enable aspect method calls (value.method())
 
 **Test:**
-```vyn
+```vyb
 struct Point { x<Int>, y<Int> }
 
 bind Comparable -> Point {
@@ -408,9 +408,9 @@ See [WHY_ASPECTS_NOT_CLASSES.md](WHY_ASPECTS_NOT_CLASSES.md) for detailed ration
 
 ### Q: What about encapsulation?
 
-**A:** Vyn will have module-level visibility:
+**A:** VyB will have module-level visibility:
 
-```vyn
+```vyb
 // Private by default in modules
 struct BankAccount {
     balance<Int>  // Private field
@@ -425,7 +425,7 @@ pub get_balance(account<their<BankAccount>>)<Int> -> {
 
 ### Q: How to handle aspect method name collisions?
 
-```vyn
+```vyb
 aspect A { method(self<their<Self>>)<Int> -> }
 aspect B { method(self<their<Self>>)<String> -> }
 
@@ -440,7 +440,7 @@ y<String> = value.B::method()
 
 ## Full Working Example
 
-```vyn
+```vyb
 // Define aspect
 aspect Comparable {
     lt(self<their<Self>>, other<their<Self>>)<Bool> ->
@@ -485,7 +485,7 @@ main()<Int> -> {
 
 ## Conclusion
 
-Vyn's aspect system balances:
+VyB's aspect system balances:
 - **Simplicity** — Structs for data, aspects for interfaces
 - **Power** — Generic programming with compile-time safety
 - **Flexibility** — Compose behaviors without class hierarchies

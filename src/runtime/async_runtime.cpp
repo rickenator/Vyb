@@ -1,14 +1,14 @@
-#include "vyn/runtime/async_runtime.hpp"
+#include "vyb/runtime/async_runtime.hpp"
 #include <iostream>
 #include <chrono>
 #include <algorithm>
 
-namespace vyn {
+namespace vyb {
 namespace runtime {
 
 // Task Implementation
 Task::Task(TaskId id, TaskFunction func, CompletionCallback callback)
-    : id_(id), state_(TaskState::PENDING), function_(std::move(func)), 
+    : id_(id), state_(TaskState::PENDING), function_(std::move(func)),
       completion_callback_(std::move(callback)) {
 }
 
@@ -17,9 +17,9 @@ void Task::execute() {
     if (state_ != TaskState::PENDING && state_ != TaskState::SUSPENDED) {
         return; // Task not in executable state
     }
-    
+
     state_ = TaskState::RUNNING;
-    
+
     try {
         function_();
         complete(true);
@@ -48,7 +48,7 @@ void Task::resume() {
 
 void Task::complete(bool success) {
     state_ = success ? TaskState::COMPLETED : TaskState::FAILED;
-    
+
     if (completion_callback_) {
         completion_callback_(id_, success);
     }
@@ -99,7 +99,7 @@ AsyncRuntime& AsyncRuntime::getInstance() {
 
 TaskId AsyncRuntime::createTask(TaskFunction func, CompletionCallback callback) {
     TaskId id = next_task_id_.fetch_add(1);
-    
+
     // Create completion callback that updates our future
     auto enhanced_callback = [this, callback](TaskId task_id, bool success) {
         completeFuture(task_id, success);
@@ -107,20 +107,20 @@ TaskId AsyncRuntime::createTask(TaskFunction func, CompletionCallback callback) 
             callback(task_id, success);
         }
     };
-    
+
     auto task = std::make_unique<Task>(id, std::move(func), std::move(enhanced_callback));
-    
+
     {
         std::lock_guard<std::mutex> lock(queue_mutex_);
         tasks_[id] = std::move(task);
     }
-    
+
     return id;
 }
 
 void AsyncRuntime::scheduleTask(TaskId task_id) {
     std::lock_guard<std::mutex> lock(queue_mutex_);
-    
+
     auto it = tasks_.find(task_id);
     if (it != tasks_.end() && it->second->getState() == TaskState::PENDING) {
         ready_queue_.push(task_id);
@@ -130,7 +130,7 @@ void AsyncRuntime::scheduleTask(TaskId task_id) {
 
 void AsyncRuntime::suspendTask(TaskId task_id) {
     std::lock_guard<std::mutex> lock(queue_mutex_);
-    
+
     auto it = tasks_.find(task_id);
     if (it != tasks_.end()) {
         it->second->suspend();
@@ -140,7 +140,7 @@ void AsyncRuntime::suspendTask(TaskId task_id) {
 
 void AsyncRuntime::resumeTask(TaskId task_id) {
     std::lock_guard<std::mutex> lock(queue_mutex_);
-    
+
     auto it = tasks_.find(task_id);
     if (it != tasks_.end() && it->second->getState() == TaskState::SUSPENDED) {
         it->second->resume();
@@ -151,18 +151,18 @@ void AsyncRuntime::resumeTask(TaskId task_id) {
 
 std::shared_ptr<Future> AsyncRuntime::createFuture(TaskId task_id) {
     auto future = std::make_shared<Future>(task_id);
-    
+
     {
         std::lock_guard<std::mutex> lock(queue_mutex_);
         futures_[task_id] = future;
     }
-    
+
     return future;
 }
 
 void AsyncRuntime::completeFuture(TaskId task_id, bool success) {
     std::lock_guard<std::mutex> lock(queue_mutex_);
-    
+
     auto it = futures_.find(task_id);
     if (it != futures_.end()) {
         // Notify the future that the task completed
@@ -179,18 +179,18 @@ void AsyncRuntime::start() {
     if (running_.load()) {
         return; // Already running
     }
-    
+
     running_.store(true);
     shutdown_requested_.store(false);
-    
+
     // Start worker threads (using hardware concurrency as default)
     size_t num_threads = std::max(1u, std::thread::hardware_concurrency());
     worker_threads_.reserve(num_threads);
-    
+
     for (size_t i = 0; i < num_threads; ++i) {
         worker_threads_.emplace_back(&AsyncRuntime::workerLoop, this);
     }
-    
+
     std::cout << "AsyncRuntime started with " << num_threads << " worker threads" << std::endl;
 }
 
@@ -198,20 +198,20 @@ void AsyncRuntime::stop() {
     if (!running_.load()) {
         return; // Not running
     }
-    
+
     shutdown_requested_.store(true);
     running_.store(false);
-    
+
     // Wake up all worker threads
     task_available_.notify_all();
-    
+
     // Wait for all worker threads to finish
     for (auto& thread : worker_threads_) {
         if (thread.joinable()) {
             thread.join();
         }
     }
-    
+
     worker_threads_.clear();
     std::cout << "AsyncRuntime stopped" << std::endl;
 }
@@ -222,11 +222,11 @@ void AsyncRuntime::runUntilComplete() {
     if (initial_pending == 0) {
         return; // No tasks to wait for
     }
-    
+
     while (getPendingTaskCount() > 0 && !shutdown_requested_.load()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    
+
     // Give a little extra time for the last tasks to complete
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 }
@@ -243,7 +243,7 @@ size_t AsyncRuntime::getCompletedTaskCount() const {
 void AsyncRuntime::workerLoop() {
     while (running_.load()) {
         Task* task = getNextTask();
-        
+
         if (task) {
             executeTask(task);
         } else {
@@ -258,19 +258,19 @@ void AsyncRuntime::workerLoop() {
 
 Task* AsyncRuntime::getNextTask() {
     std::lock_guard<std::mutex> lock(queue_mutex_);
-    
+
     if (ready_queue_.empty()) {
         return nullptr;
     }
-    
+
     TaskId task_id = ready_queue_.front();
     ready_queue_.pop();
-    
+
     auto it = tasks_.find(task_id);
     if (it != tasks_.end()) {
         return it->second.get();
     }
-    
+
     return nullptr;
 }
 
@@ -293,7 +293,7 @@ AsyncRuntime& getAsyncRuntime() {
     return AsyncRuntime::getInstance();
 }
 
-// Utility functions for integration with Vyn language
+// Utility functions for integration with VyB language
 TaskId scheduleAsyncFunction(TaskFunction func) {
     auto& runtime = AsyncRuntime::getInstance();
     TaskId id = runtime.createTask(std::move(func));
@@ -307,4 +307,4 @@ std::shared_ptr<Future> awaitTask(TaskId task_id) {
 }
 
 } // namespace runtime
-} // namespace vyn
+} // namespace vyb

@@ -1,0 +1,13 @@
+// filepath: /home/rick/Projects/VyB/test/units/extracted/test56.vyb
+// @test: Semantic: Pointer operations require freedom block - negative case
+// @description: Extracted from tests.cpp - Semantic: Pointer operations require freedom block - negative case
+// @category: parser
+// @expect: fail
+// @parse-only: true
+// @expect-output: n/a
+// @expect-error: n/a
+// @expect-return: n/a
+
+    std::string source = R"(
+fn main() -> Int{
+    x<Int> = 42;

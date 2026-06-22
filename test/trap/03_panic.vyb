@@ -1,0 +1,13 @@
+# Test 03: Panic statement
+# Tests unrecoverable panic that crashes immediately
+
+main()<Int> -> {
+    println("Before panic")
+
+    # This should crash the program immediately
+    panic("Something terrible happened!")
+
+    # Should never reach here
+    println("After panic")
+    return 0
+}

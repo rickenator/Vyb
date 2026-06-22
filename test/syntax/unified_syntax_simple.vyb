@@ -1,0 +1,21 @@
+# Test file for new unified syntax: name<Type> pattern (without const)
+
+# Variable declarations using new unified syntax
+x<Int> = 42;
+y<String> = "hello";
+
+# Function declarations using new unified syntax
+add(a<Int>, b<Int>)<Int> -> {
+    return a + b;
+}
+
+greet(name<String>)<String> -> {
+    return "Hello, " + name;
+}
+
+# Test main function
+main()<Void> -> {
+    result<Int> = add(x, 10);
+    message<String> = greet("World");
+    return;
+}

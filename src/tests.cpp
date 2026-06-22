@@ -1,5 +1,5 @@
 #define CATCH_CONFIG_MAIN
-#include "vyn/vyn.hpp"
+#include "vyb/vyb.hpp"
 #include <catch2/catch_all.hpp>
 #include <iostream>
 #include <string>
@@ -14,10 +14,10 @@
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/raw_ostream.h>
 
-#include "vyn/driver.hpp"
+#include "vyb/driver.hpp"
 #include <fstream>
 
-// Use the run_vyn_code function from main.cpp (declared in vyn.hpp)
+// Use the run_vyb_code function from main.cpp (declared in vyb.hpp)
 // No need to redefine it here
 
 // Globals for verbose test control (defined in main.cpp)
@@ -40,13 +40,13 @@ bool should_current_test_be_verbose() {
     // Get current test name using IResultCapture
     // Requires <catch2/catch_interfaces_capture.hpp>
     std::string current_test_name = Catch::getResultCapture().getCurrentTestName();
-    
+
     if (!current_test_name.empty()) {
         // Check for direct name match
         if (g_verbose_test_specifiers.count(current_test_name)) {
             return true;
         }
-        // Check if any of the specifiers (which might be tags like "[my_tag]") 
+        // Check if any of the specifiers (which might be tags like "[my_tag]")
         // are present as substrings in the current test name.
         // This is a simpler way to allow tag-like specifiers to work if they are part of the name.
         for (const auto& specifier : g_verbose_test_specifiers) {
@@ -68,93 +68,93 @@ bool should_current_test_be_verbose() {
 // This is a temporary workaround to allow tests to compile.
 // Ideally, SemanticAnalyzer and LLVMCodegen should implement all visit methods.
 
-class DummySemanticAnalyzer : public vyn::SemanticAnalyzer {
+class DummySemanticAnalyzer : public vyb::SemanticAnalyzer {
 public:
-    DummySemanticAnalyzer(vyn::Driver& driver) : vyn::SemanticAnalyzer(driver) {}
+    DummySemanticAnalyzer(vyb::Driver& driver) : vyb::SemanticAnalyzer(driver) {}
 
     // Provide empty implementations for pure virtual methods not covered by SemanticAnalyzer
-    void visit(vyn::ast::BorrowExpression* node) override {};
-    void visit(vyn::ast::IfExpression* node) override {};
-    void visit(vyn::ast::ConstructionExpression* node) override {};
-    void visit(vyn::ast::ArrayInitializationExpression* node) override {};
-    void visit(vyn::ast::ExternStatement* node) override {};
-    void visit(vyn::ast::ThrowStatement* node) override {};
-    void visit(vyn::ast::FieldDeclaration* node) override {};
-    void visit(vyn::ast::EnumVariant* node) override {};
-    void visit(vyn::ast::TemplateDeclaration* node) override {};
-    void visit(vyn::ast::TypeNode* node) override {};
-    void visit(vyn::ast::Module* node) override {
+    void visit(vyb::ast::BorrowExpression* node) override {};
+    void visit(vyb::ast::IfExpression* node) override {};
+    void visit(vyb::ast::ConstructionExpression* node) override {};
+    void visit(vyb::ast::ArrayInitializationExpression* node) override {};
+    void visit(vyb::ast::ExternStatement* node) override {};
+    void visit(vyb::ast::ThrowStatement* node) override {};
+    void visit(vyb::ast::FieldDeclaration* node) override {};
+    void visit(vyb::ast::EnumVariant* node) override {};
+    void visit(vyb::ast::TemplateDeclaration* node) override {};
+    void visit(vyb::ast::TypeNode* node) override {};
+    void visit(vyb::ast::Module* node) override {
         // Call base class implementation to perform semantic analysis
-        vyn::SemanticAnalyzer::visit(node);
+        vyb::SemanticAnalyzer::visit(node);
     };
-    void visit(vyn::ast::TupleTypeNode* node) override {};
+    void visit(vyb::ast::TupleTypeNode* node) override {};
     // Add any other missing pure virtuals from ast::Visitor that SemanticAnalyzer doesn't cover
-    void visit(vyn::ast::LogicalExpression* node) override {};
-    void visit(vyn::ast::ConditionalExpression* node) override {};
-    void visit(vyn::ast::SequenceExpression* node) override {};
-    void visit(vyn::ast::FunctionExpression* node) override {};
-    void visit(vyn::ast::ThisExpression* node) override {};
-    void visit(vyn::ast::SuperExpression* node) override {};
-    void visit(vyn::ast::AwaitExpression* node) override {};
-    void visit(vyn::ast::MatchStatement* node) override {};
-    void visit(vyn::ast::YieldStatement* node) override {};
-    void visit(vyn::ast::YieldReturnStatement* node) override {};
-    void visit(vyn::ast::AspectDeclaration* node) override {};
-    void visit(vyn::ast::NamespaceDeclaration* node) override {};
-    void visit(vyn::ast::TypeName* node) override {};
-    void visit(vyn::ast::PointerType* node) override {};
-    void visit(vyn::ast::ArrayType* node) override {};
-    void visit(vyn::ast::FunctionType* node) override {};
-    void visit(vyn::ast::OptionalType* node) override {};
-    void visit(vyn::ast::AssertStatement* node) override {};
-    void visit(vyn::ast::DeferStatement* node) override {};
+    void visit(vyb::ast::LogicalExpression* node) override {};
+    void visit(vyb::ast::ConditionalExpression* node) override {};
+    void visit(vyb::ast::SequenceExpression* node) override {};
+    void visit(vyb::ast::FunctionExpression* node) override {};
+    void visit(vyb::ast::ThisExpression* node) override {};
+    void visit(vyb::ast::SuperExpression* node) override {};
+    void visit(vyb::ast::AwaitExpression* node) override {};
+    void visit(vyb::ast::MatchStatement* node) override {};
+    void visit(vyb::ast::YieldStatement* node) override {};
+    void visit(vyb::ast::YieldReturnStatement* node) override {};
+    void visit(vyb::ast::AspectDeclaration* node) override {};
+    void visit(vyb::ast::NamespaceDeclaration* node) override {};
+    void visit(vyb::ast::TypeName* node) override {};
+    void visit(vyb::ast::PointerType* node) override {};
+    void visit(vyb::ast::ArrayType* node) override {};
+    void visit(vyb::ast::FunctionType* node) override {};
+    void visit(vyb::ast::OptionalType* node) override {};
+    void visit(vyb::ast::AssertStatement* node) override {};
+    void visit(vyb::ast::DeferStatement* node) override {};
 };
 
-class DummyLLVMCodegen : public vyn::LLVMCodegen {
+class DummyLLVMCodegen : public vyb::LLVMCodegen {
 public:
-    DummyLLVMCodegen(vyn::Driver& driver) : vyn::LLVMCodegen(driver) {}
+    DummyLLVMCodegen(vyb::Driver& driver) : vyb::LLVMCodegen(driver) {}
 
     // Provide empty implementations for pure virtual methods not covered by LLVMCodegen
     // From build log:
-    void visit(vyn::ast::LogicalExpression* node) override {};
-    void visit(vyn::ast::ConditionalExpression* node) override {};
-    void visit(vyn::ast::SequenceExpression* node) override {};
-    void visit(vyn::ast::FunctionExpression* node) override {};
-    void visit(vyn::ast::ThisExpression* node) override {};
-    void visit(vyn::ast::SuperExpression* node) override {};
-    void visit(vyn::ast::AwaitExpression* node) override {};
-    void visit(vyn::ast::EmptyStatement* node) override {};
-    void visit(vyn::ast::ExternStatement* node) override {};
-    void visit(vyn::ast::ThrowStatement* node) override {};
-    void visit(vyn::ast::MatchStatement* node) override {};
-    void visit(vyn::ast::YieldStatement* node) override {};
-    void visit(vyn::ast::YieldReturnStatement* node) override {};
-    void visit(vyn::ast::AssertStatement* node) override {};
-    void visit(vyn::ast::DeferStatement* node) override {};
-    void visit(vyn::ast::AspectDeclaration* node) override {};
-    void visit(vyn::ast::NamespaceDeclaration* node) override {};
-    void visit(vyn::ast::TypeName* node) override {};
-    void visit(vyn::ast::PointerType* node) override {};
-    void visit(vyn::ast::ArrayType* node) override {};
-    void visit(vyn::ast::FunctionType* node) override {};
-    void visit(vyn::ast::OptionalType* node) override {};
-    void visit(vyn::ast::TupleTypeNode* node) override {};
+    void visit(vyb::ast::LogicalExpression* node) override {};
+    void visit(vyb::ast::ConditionalExpression* node) override {};
+    void visit(vyb::ast::SequenceExpression* node) override {};
+    void visit(vyb::ast::FunctionExpression* node) override {};
+    void visit(vyb::ast::ThisExpression* node) override {};
+    void visit(vyb::ast::SuperExpression* node) override {};
+    void visit(vyb::ast::AwaitExpression* node) override {};
+    void visit(vyb::ast::EmptyStatement* node) override {};
+    void visit(vyb::ast::ExternStatement* node) override {};
+    void visit(vyb::ast::ThrowStatement* node) override {};
+    void visit(vyb::ast::MatchStatement* node) override {};
+    void visit(vyb::ast::YieldStatement* node) override {};
+    void visit(vyb::ast::YieldReturnStatement* node) override {};
+    void visit(vyb::ast::AssertStatement* node) override {};
+    void visit(vyb::ast::DeferStatement* node) override {};
+    void visit(vyb::ast::AspectDeclaration* node) override {};
+    void visit(vyb::ast::NamespaceDeclaration* node) override {};
+    void visit(vyb::ast::TypeName* node) override {};
+    void visit(vyb::ast::PointerType* node) override {};
+    void visit(vyb::ast::ArrayType* node) override {};
+    void visit(vyb::ast::FunctionType* node) override {};
+    void visit(vyb::ast::OptionalType* node) override {};
+    void visit(vyb::ast::TupleTypeNode* node) override {};
     // Add any other missing pure virtuals from ast::Visitor that LLVMCodegen doesn't cover
     // (cross-reference with SemanticAnalyzer's list and ast.hpp)
-    void visit(vyn::ast::BorrowExpression* node) override {};
-    void visit(vyn::ast::IfExpression* node) override {};
-    void visit(vyn::ast::FieldDeclaration* node) override {};
-    void visit(vyn::ast::EnumVariant* node) override {};
-    void visit(vyn::ast::TemplateDeclaration* node) override {};
-    void visit(vyn::ast::TypeNode* node) override {};
-    void visit(vyn::ast::ListComprehension* node) override {};
+    void visit(vyb::ast::BorrowExpression* node) override {};
+    void visit(vyb::ast::IfExpression* node) override {};
+    void visit(vyb::ast::FieldDeclaration* node) override {};
+    void visit(vyb::ast::EnumVariant* node) override {};
+    void visit(vyb::ast::TemplateDeclaration* node) override {};
+    void visit(vyb::ast::TypeNode* node) override {};
+    void visit(vyb::ast::ListComprehension* node) override {};
     // Module visit is usually significant, ensure it's handled or explicitly dummied
-    void visit(vyn::ast::Module* node) override {
+    void visit(vyb::ast::Module* node) override {
         // Call base class implementation to generate LLVM IR
-        vyn::LLVMCodegen::visit(node);
+        vyb::LLVMCodegen::visit(node);
     };
-    // void visit(vyn::ast::ArrayElementExpression* node) override {}; // Already in LLVMCodegen
-    // void visit(vyn::ast::LocationExpression* node) override {}; // Already in LLVMCodegen
+    // void visit(vyb::ast::ArrayElementExpression* node) override {}; // Already in LLVMCodegen
+    // void visit(vyb::ast::LocationExpression* node) override {}; // Already in LLVMCodegen
 
     // Add stubs for methods causing linker errors if not genuinely implemented in LLVMCodegen
     // These might be needed if LLVMCodegen is instantiated directly elsewhere, not just via DummyLLVMCodegen
@@ -163,9 +163,9 @@ public:
     // For now, ensure DummyLLVMCodegen covers everything LLVMCodegen might be missing an impl for.
 
     // From linker errors, these are needed if LLVMCodegen doesn't provide them:
-    // void visit(vyn::ast::CallExpression* node) override {}; // Already in LLVMCodegen decl, ensure Dummy has it if LLVMCodegen doesn't implement
-    // void visit(vyn::ast::MemberExpression* node) override {}; // Already in LLVMCodegen decl, ensure Dummy has it if LLVMCodegen doesn't implement
-    // void visit(vyn::ast::AssignmentExpression* node) override {}; // Implemented in LLVMCodegen, Dummy should inherit
+    // void visit(vyb::ast::CallExpression* node) override {}; // Already in LLVMCodegen decl, ensure Dummy has it if LLVMCodegen doesn't implement
+    // void visit(vyb::ast::MemberExpression* node) override {}; // Already in LLVMCodegen decl, ensure Dummy has it if LLVMCodegen doesn't implement
+    // void visit(vyb::ast::AssignmentExpression* node) override {}; // Implemented in LLVMCodegen, Dummy should inherit
 
     // Ensure all virtuals from ast::Visitor are covered if LLVMCodegen doesn't cover them.
     // This list should be cross-referenced with ast.hpp and LLVMCodegen's declarations.
@@ -190,7 +190,7 @@ main()<Int> -> {
     return 0;
 }
 )";
-    REQUIRE_NOTHROW(run_vyn_code(source_ok, "test_source_ok.vyn", false));
+    REQUIRE_NOTHROW(run_vyb_code(source_ok, "test_source_ok.vyb", false));
 
     std::string source_err = R"(
 main()<Int> -> {
@@ -199,6 +199,6 @@ main()<Int> -> {
     return 0;
 }
 )";
-    REQUIRE_THROWS(run_vyn_code(source_err, "test_source_err.vyn", false));
+    REQUIRE_THROWS(run_vyb_code(source_err, "test_source_err.vyb", false));
 }
 

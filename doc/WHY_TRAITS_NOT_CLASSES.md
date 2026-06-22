@@ -1,13 +1,13 @@
-# Aspects vs Classes: Why Vyn Chose Aspects
+# Aspects vs Classes: Why VyB Chose Aspects
 
 ## Philosophy: Composition Over Inheritance
 
-Vyn's aspect system provides all the benefits of object-oriented programming without the
+VyB's aspect system provides all the benefits of object-oriented programming without the
 complexity and pitfalls of class hierarchies. This document explains why **structs +
 aspects** are sufficient for modern software development.
 
-> **Terminology:** Vyn uses `aspect`/`bind`. Earlier drafts used `trait`/`impl` (Rust
-> vocabulary). This document uses Vyn-native terms throughout.
+> **Terminology:** VyB uses `aspect`/`bind`. Earlier drafts used `trait`/`impl` (Rust
+> vocabulary). This document uses VyB-native terms throughout.
 
 ## The Problem with Classes
 
@@ -21,7 +21,7 @@ class Bat extends Mammal, Bird { // Which eat()? }
 ```
 
 **Aspect Solution:**
-```vyn
+```vyb
 aspect Eats { eat(self<their<Self>>)<Void> -> { } }
 aspect Flies { fly(self<their<Self>>)<Void> -> { } }
 
@@ -63,7 +63,7 @@ class AmphibiousCar : Car { ... }  // Can't also extend Boat!
 ```
 
 **Aspect Solution:**
-```vyn
+```vyb
 aspect Drivable { ... }
 aspect Floatable { ... }
 aspect Flyable { ... }
@@ -77,7 +77,7 @@ bind Floatable -> AmphibiousCar { ... }
 ## What Aspects Give You (Without Classes)
 
 ### ✅ Polymorphism
-```vyn
+```vyb
 aspect Drawable {
     draw(self<their<Self>>)<Void> -> { }
 }
@@ -93,7 +93,7 @@ render<T<Drawable>>(shape<their<T>>)<Void> -> {
 ```
 
 ### ✅ Code Reuse via Default Implementations
-```vyn
+```vyb
 aspect Iterator {
     type Item                                    # associated type
     # Required
@@ -118,7 +118,7 @@ aspect Iterator {
 ```
 
 ### ✅ Multiple "Inheritance" (Aspect Bounds)
-```vyn
+```vyb
 # Combine multiple aspect requirements
 serialize<T<ToJson><Debug>>(obj<their<T>>)<String> -> {
     json<String> = obj.to_json()
@@ -134,7 +134,7 @@ bind Debug -> User { ... }
 ```
 
 ### ✅ Extension Without Modification
-```vyn
+```vyb
 # Extend types you don't own
 bind ToString -> Int {
     to_string(self<Int>)<String> -> {
@@ -148,7 +148,7 @@ s<String> = x.to_string()  # "42"
 ```
 
 ### ✅ Interface Segregation
-```vyn
+```vyb
 # Small, focused aspects
 aspect Read {
     read(self<their<Self>>, buf<their<Vec<Byte>>>)<Int> -> { }
@@ -183,7 +183,7 @@ bind Read -> ReadOnlyArchive { ... }
 ## Real-World Examples
 
 ### Example 1: HTTP Client
-```vyn
+```vyb
 # Without classes - compose behaviors
 struct HttpClient {
     timeout<Int>,
@@ -213,7 +213,7 @@ bind Closeable -> HttpClient {
 ```
 
 ### Example 2: Game Entities
-```vyn
+```vyb
 # Bad class design:
 # class Entity > Renderable > Movable > Collidable > Enemy
 # What if we need a static collidable object?
@@ -244,7 +244,7 @@ bind Movable -> Decoration { ... }
 ```
 
 ### Example 3: Serialization
-```vyn
+```vyb
 aspect ToJson {
     to_json(self<their<Self>>)<String> -> { }
 }
@@ -276,9 +276,9 @@ bind ToJson -> User {
 # Everything composes naturally!
 ```
 
-## Classes Are Not Planned for Vyn
+## Classes Are Not Planned for VyB
 
-**Classes are NOT part of Vyn's design — now or in the future.**
+**Classes are NOT part of VyB's design — now or in the future.**
 
 Why?
 1. **Aspects are strictly more powerful** — Everything classes do, aspects do better
@@ -291,9 +291,9 @@ If you come from an OOP background and feel the urge to propose a class system, 
 document again. Then read `doc/TRAIT_SYSTEM_DESIGN.md`. Aspects + structs cover every
 use case that classes address, without the drawbacks.
 
-## The Vyn Way
+## The VyB Way
 
-```vyn
+```vyb
 # Data = Structs
 struct User {
     name<String>,

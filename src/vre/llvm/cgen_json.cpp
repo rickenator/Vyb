@@ -1,17 +1,17 @@
-#include "vyn/vre/llvm/codegen.hpp"
-#include "vyn/parser/ast.hpp"
+#include "vyb/vre/llvm/codegen.hpp"
+#include "vyb/parser/ast.hpp"
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/DerivedTypes.h>
 
-namespace vyn {
+namespace vyb {
 
-// Implementation for print function (without newline) in the Vyn language
+// Implementation for print function (without newline) in the VyB language
 llvm::Function* LLVMCodegen::getPrintFunction() {
     // Check if the print function has already been declared in the module
     llvm::Function* printFunc = module->getFunction("print");
-    
+
     if (!printFunc) {
         // Create function signature for print
         std::vector<llvm::Type*> paramTypes = {int8PtrType};
@@ -20,7 +20,7 @@ llvm::Function* LLVMCodegen::getPrintFunction() {
             paramTypes,                       // Parameters: (char*)
             false                             // Not vararg
         );
-        
+
         // Declare the function in the module
         printFunc = llvm::Function::Create(
             printType,
@@ -28,12 +28,12 @@ llvm::Function* LLVMCodegen::getPrintFunction() {
             "print",
             module.get()
         );
-        
+
         // Set parameter names for readability
         auto args = printFunc->arg_begin();
         args->setName("str");
     }
-    
+
     return printFunc;
 }
 
@@ -41,7 +41,7 @@ llvm::Function* LLVMCodegen::getPrintFunction() {
 llvm::Function* LLVMCodegen::getPrintIntFunction() {
     // Check if the print_int function has already been declared in the module
     llvm::Function* printIntFunc = module->getFunction("print_int");
-    
+
     if (!printIntFunc) {
         // Create function signature for print_int
         std::vector<llvm::Type*> paramTypes = {int64Type}; // Assuming 64-bit integers
@@ -50,7 +50,7 @@ llvm::Function* LLVMCodegen::getPrintIntFunction() {
             paramTypes,                       // Parameters: (int64)
             false                             // Not vararg
         );
-        
+
         // Declare the function in the module
         printIntFunc = llvm::Function::Create(
             printIntType,
@@ -58,20 +58,20 @@ llvm::Function* LLVMCodegen::getPrintIntFunction() {
             "print_int",
             module.get()
         );
-        
+
         // Set parameter names for readability
         auto args = printIntFunc->arg_begin();
         args->setName("value");
     }
-    
+
     return printIntFunc;
 }
 
 // Implementation for beginning a JSON object
 llvm::Function* LLVMCodegen::getBeginJsonObjectFunction() {
     // Check if the function has already been declared in the module
-    llvm::Function* beginJsonFunc = module->getFunction("__vyn_begin_json_object");
-    
+    llvm::Function* beginJsonFunc = module->getFunction("__vyb_begin_json_object");
+
     if (!beginJsonFunc) {
         // Create function signature
         llvm::FunctionType* funcType = llvm::FunctionType::get(
@@ -79,24 +79,24 @@ llvm::Function* LLVMCodegen::getBeginJsonObjectFunction() {
             {},                                     // No parameters
             false                                   // Not vararg
         );
-        
+
         // Declare the function in the module
         beginJsonFunc = llvm::Function::Create(
             funcType,
             llvm::Function::ExternalLinkage,
-            "__vyn_begin_json_object",
+            "__vyb_begin_json_object",
             module.get()
         );
     }
-    
+
     return beginJsonFunc;
 }
 
 // Implementation for adding a field to a JSON object
 llvm::Function* LLVMCodegen::getAddJsonFieldFunction() {
     // Check if the function has already been declared in the module
-    llvm::Function* addFieldFunc = module->getFunction("__vyn_add_json_field");
-    
+    llvm::Function* addFieldFunc = module->getFunction("__vyb_add_json_field");
+
     if (!addFieldFunc) {
         // Create function signature
         std::vector<llvm::Type*> paramTypes = {
@@ -105,21 +105,21 @@ llvm::Function* LLVMCodegen::getAddJsonFieldFunction() {
             llvm::PointerType::getUnqual(int8Type), // void* value
             int8PtrType                             // const char* type_name
         };
-        
+
         llvm::FunctionType* funcType = llvm::FunctionType::get(
             llvm::Type::getVoidTy(*context),        // Return type: void
             paramTypes,                             // Parameters
             false                                   // Not vararg
         );
-        
+
         // Declare the function in the module
         addFieldFunc = llvm::Function::Create(
             funcType,
             llvm::Function::ExternalLinkage,
-            "__vyn_add_json_field",
+            "__vyb_add_json_field",
             module.get()
         );
-        
+
         // Set parameter names for readability
         auto args = addFieldFunc->arg_begin();
         args->setName("json_obj");
@@ -127,41 +127,41 @@ llvm::Function* LLVMCodegen::getAddJsonFieldFunction() {
         (++args)->setName("value");
         (++args)->setName("type_name");
     }
-    
+
     return addFieldFunc;
 }
 
 // Implementation for finalizing a JSON object
 llvm::Function* LLVMCodegen::getEndJsonObjectFunction() {
     // Check if the function has already been declared in the module
-    llvm::Function* endJsonFunc = module->getFunction("__vyn_end_json_object");
-    
+    llvm::Function* endJsonFunc = module->getFunction("__vyb_end_json_object");
+
     if (!endJsonFunc) {
         // Create function signature
         std::vector<llvm::Type*> paramTypes = {
             int8PtrType                            // void* json_obj
         };
-        
+
         llvm::FunctionType* funcType = llvm::FunctionType::get(
             llvm::Type::getVoidTy(*context),       // Return type: void
             paramTypes,                            // Parameters
             false                                  // Not vararg
         );
-        
+
         // Declare the function in the module
         endJsonFunc = llvm::Function::Create(
             funcType,
             llvm::Function::ExternalLinkage,
-            "__vyn_end_json_object",
+            "__vyb_end_json_object",
             module.get()
         );
-        
+
         // Set parameter names for readability
         auto args = endJsonFunc->arg_begin();
         args->setName("json_obj");
     }
-    
+
     return endJsonFunc;
 }
 
-} // namespace vyn
+} // namespace vyb

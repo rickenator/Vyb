@@ -1,25 +1,25 @@
-# Vyn Unified Declaration Syntax
+# VyB Unified Declaration Syntax
 
-Vyn uses a unified **`name<Type>`** syntax pattern across all language constructs for consistency and clarity. This replaces the old keyword-heavy approach with a clean, uniform pattern.
+VyB uses a unified **`name<Type>`** syntax pattern across all language constructs for consistency and clarity. This replaces the old keyword-heavy approach with a clean, uniform pattern.
 
 ## Core Syntax Principles
 
 The unified syntax follows these patterns:
 - **Variables**: `name<Type> = value`
-- **Constants**: `const name<Type> = value`  
+- **Constants**: `const name<Type> = value`
 - **Functions**: `name(params)<ReturnType> -> { ... }`
 - **Struct Fields**: `field<Type> = default`
 - **Parameters**: `param<Type> = default`
 
 ## Variable Declarations
 
-```vyn
+```vyb
 // Mutable variables
 x<Int> = 42
 name<String> = "Alice"
 items<[String; 5]> = ["a", "b", "c", "d", "e"]
 
-// Immutable constants  
+// Immutable constants
 const PI<Float> = 3.14159
 const MAX_SIZE<Int> = 1000
 
@@ -31,7 +31,7 @@ borrowed<their<Foo>> = borrow(owner)
 
 ## Function Declarations
 
-```vyn
+```vyb
 // Basic function
 add(x<Int>, y<Int>)<Int> -> {
     return x + y
@@ -56,7 +56,7 @@ max<T>(a<T>, b<T>)<T> -> {
 
 ## Struct Definitions
 
-```vyn
+```vyb
 struct Person {
     id<Int> = 0,
     name<String>,
@@ -72,7 +72,7 @@ struct Point<T> {
 
 ## Function Parameters
 
-```vyn
+```vyb
 // Basic parameters
 process(data<String>, count<Int>)<Void> -> { ... }
 
@@ -97,14 +97,14 @@ hash_data(const data<String>)<Int> -> { ... }
 
 Old syntax is still supported for backward compatibility but new code should use unified patterns:
 
-```vyn
+```vyb
 // Legacy (deprecated)
 var x: Int = 42
 fn add(x: Int, y: Int) -> Int { return x + y }
 
-// Modern unified syntax  
+// Modern unified syntax
 x<Int> = 42
 add(x<Int>, y<Int>)<Int> -> { return x + y }
 ```
 
-The unified syntax represents Vyn's evolution toward maximum clarity and consistency across all language constructs.
+The unified syntax represents VyB's evolution toward maximum clarity and consistency across all language constructs.

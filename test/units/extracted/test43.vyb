@@ -1,0 +1,13 @@
+// filepath: /home/rick/Projects/VyB/test/units/extracted/test43.vyb
+// @test: Semantic: 'at(loc_var) = val' (write) requires freedom block
+// @description: Extracted from tests.cpp - Semantic: 'at(loc_var) = val' (write) requires freedom block
+// @category: parser
+// @expect: fail
+// @parse-only: true
+// @expect-output: n/a
+// @expect-error: n/a
+// @expect-return: n/a
+
+    std::string source = R"(
+fn main() -> Int {
+    x<Int> = 0;

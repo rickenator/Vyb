@@ -1,0 +1,19 @@
+// filepath: /home/rick/Projects/VyB/test/units/extracted/test35.vyb
+// @test: Codegen: Member access assignment
+// @description: Extracted from tests.cpp - Codegen: Member access assignment
+// @category: parser
+// @expect: pass
+// @parse-only: true
+// @expect-output: n/a
+// @expect-error: n/a
+// @expect-return: n/a
+
+struct Point {
+    x: Int,
+    y: Int
+}
+main()<Int> -> {
+    p<Point> = Point { x = 10, y = 20 }
+    p.x = 42
+    return 0
+}

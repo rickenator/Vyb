@@ -1,0 +1,47 @@
+// Test JSON serialization/deserialization for complex types
+
+struct Person {
+    name<String>,
+    age<Int>,
+    active<Bool>
+}
+
+struct Point {
+    x<Float>,
+    y<Float>
+}
+
+main()<Int> -> {
+    println("=== Testing Complex Type JSON Conversion ===")
+
+    // Create a Person instance
+    person<Person> = Person {
+        name: "Alice",
+        age: 30,
+        active: true
+    }
+
+    // Serialize to JSON
+    json_str<String> = person.to_string()
+    println("Person to JSON:")
+    println(json_str)
+
+    // Deserialize from JSON
+    person2<Person> = Person::from_string(json_str)
+    println("Deserialized Person:")
+    println(person2.name)
+    println(person2.age.to_string())
+
+    // Test Point
+    pt<Point> = Point { x: 3.14, y: 2.71 }
+    pt_json<String> = pt.to_string()
+    println("")
+    println("Point to JSON:")
+    println(pt_json)
+
+    pt2<Point> = Point::from_string(pt_json)
+    println("Point x: " + pt2.x.to_string())
+    println("Point y: " + pt2.y.to_string())
+
+    return 0
+}

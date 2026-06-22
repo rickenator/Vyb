@@ -1,0 +1,60 @@
+// Test String comparison operators
+// Tests ==, !=, <, <=, >, >= for lexical ordering
+
+main()<Int> -> {
+    // Test equality
+    a<String> = "hello"
+    b<String> = "hello"
+    c<String> = "world"
+
+    if (a != b) { return 1 }  // Should be equal
+    if (a == c) { return 2 }  // Should not be equal
+    if (b == c) { return 3 }  // Should not be equal
+
+    // Test inequality
+    d<String> = "test"
+    e<String> = "test"
+    if (d == c) { return 4 }  // Different strings
+    if (d == e) {} else { return 5 }  // Should be equal
+    if (d != c) {} else { return 6 }  // Should be not equal
+
+    // Test less than
+    if (c < a) { return 7 }  // "world" > "hello"
+    if (a >= c) { return 8 }  // "hello" < "world"
+    if (a < c) {} else { return 9 }  // "hello" < "world"
+
+    // Test less than or equal
+    x<String> = "apple"
+    y<String> = "apple"
+    z<String> = "banana"
+
+    if (x <= y) {} else { return 10 }  // Equal, so <=
+    if (x <= z) {} else { return 11 }  // "apple" < "banana"
+    if (z <= x) { return 12 }  // "banana" > "apple"
+
+    // Test greater than
+    if (x > z) { return 13 }  // "apple" < "banana"
+    if (z > x) {} else { return 14 }  // "banana" > "apple"
+    if (x > x) { return 15 }  // Equal, not greater
+
+    // Test greater than or equal
+    if (x >= y) {} else { return 16 }  // Equal
+    if (z >= x) {} else { return 17 }  // "banana" > "apple"
+    if (x >= z) { return 18 }  // "apple" < "banana"
+
+    // Test with different length strings
+    short<String> = "hi"
+    long<String> = "hello"
+
+    if (short > long) {} else { return 19 }  // "hi" > "hello" (lexical)
+    if (short >= long) {} else { return 20 }  // "hi" >= "hello"
+
+    // Test prefix matching
+    prefix<String> = "hel"
+    full<String> = "hello"
+
+    if (prefix >= full) { return 21 }  // "hel" < "hello"
+    if (prefix < full) {} else { return 22 }  // "hel" < "hello"
+
+    return 0  // All tests passed
+}

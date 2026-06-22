@@ -1,13 +1,13 @@
-# Vyn AST: Design Considerations
+# VyB AST: Design Considerations
 
-This document discusses various design choices, alternatives considered, and rationale behind the Vyn AST structure. It also covers topics like memory management, error handling, and potential future enhancements based on review feedback and language goals.
+This document discusses various design choices, alternatives considered, and rationale behind the VyB AST structure. It also covers topics like memory management, error handling, and potential future enhancements based on review feedback and language goals.
 
 ## 1. Memory Management
 
 *(Original AST.md did not explicitly detail this, but it's a crucial consideration. This section is based on common C++ AST practices and review suggestion 7.)*
 
 **Current Approach (Assumed):**
-Typically, AST nodes in C++ are dynamically allocated on the heap. Smart pointers, particularly `std::unique_ptr`, are often used to manage the lifecycle of these nodes. For Vyn, `PNode`, `PExpression`, `PStatement`, etc., are typedefs for `std::shared_ptr<Node>`, `std::shared_ptr<Expression>`, etc., as seen in `ast.hpp`.
+Typically, AST nodes in C++ are dynamically allocated on the heap. Smart pointers, particularly `std::unique_ptr`, are often used to manage the lifecycle of these nodes. For VyB, `PNode`, `PExpression`, `PStatement`, etc., are typedefs for `std::shared_ptr<Node>`, `std::shared_ptr<Expression>`, etc., as seen in `ast.hpp`.
 
 **Considerations for `std::shared_ptr`:**
 -   **Pros:**
@@ -28,7 +28,7 @@ Typically, AST nodes in C++ are dynamically allocated on the heap. Smart pointer
 > "The document should explicitly state the memory ownership model for AST nodes. Are they owned by `std::unique_ptr` within their parent nodes? Or is there a central arena allocator? Who is responsible for deleting them? Given the use of `std::shared_ptr` (e.g. `PExpression`), this implies shared ownership, which is unusual for a primary tree structure and can have performance implications. Is this intentional, and why?"
 
 **Clarification:**
-The Vyn AST currently uses `std::shared_ptr` for its node pointers (`PNode`, `PExpression`, etc.). This choice was likely made to simplify early development and potentially to accommodate complex tree transformations or analyses where subtrees might be temporarily referenced from multiple places. However, the performance implications and the risk of cycles (especially if parent pointers were introduced) are valid concerns.
+The VyB AST currently uses `std::shared_ptr` for its node pointers (`PNode`, `PExpression`, etc.). This choice was likely made to simplify early development and potentially to accommodate complex tree transformations or analyses where subtrees might be temporarily referenced from multiple places. However, the performance implications and the risk of cycles (especially if parent pointers were introduced) are valid concerns.
 
 **Future Direction:**
 -   Re-evaluate the use of `std::shared_ptr`. For a strict tree structure, `std::unique_ptr` is generally preferred for ownership, with raw pointers or references for non-owning access.
@@ -42,7 +42,7 @@ The Vyn AST currently uses `std::shared_ptr` for its node pointers (`PNode`, `PE
 > "The `Node` base class doesn't include a `parent` pointer. While this simplifies construction and memory management (no cycles with `unique_ptr`), it makes navigating upwards in the tree or finding enclosing scopes/nodes more complex. Has this been considered? What are the strategies for contextual analysis (e.g., resolving identifiers, type checking) without direct parent links? Perhaps a separate symbol table or scope stack is used?"
 
 **Current Status:**
-The `vyn::ast::Node` class in `ast.hpp` does not currently include a `parent` pointer.
+The `vyb::ast::Node` class in `ast.hpp` does not currently include a `parent` pointer.
 
 **Discussion:**
 -   **Pros of No Parent Pointers:**
@@ -72,7 +72,7 @@ While the current approach relies on visitors passing context, the utility of pa
 The AST definition in `ast.hpp` does not explicitly include an `ErrorNode` or a similar mechanism for representing parsing errors directly within the tree structure that allow for partial recovery.
 
 **Discussion:**
--   **Parser Error Recovery:** The Vyn parser (`Parser` class and its components) attempts to recover from errors to provide multiple diagnostics. However, how these recovered-but-still-erroneous constructs are represented in the AST is key.
+-   **Parser Error Recovery:** The VyB parser (`Parser` class and its components) attempts to recover from errors to provide multiple diagnostics. However, how these recovered-but-still-erroneous constructs are represented in the AST is key.
 -   **Benefits of an `ErrorNode`:**
     -   Allows the parser to insert a placeholder in the AST when it encounters a construct it can't fully parse but can recover from.
     -   Enables later compilation phases (e.g., semantic analysis) to be aware of these errors. They can choose to skip over `ErrorNode`s or report that they cannot proceed due to earlier parsing failures.
@@ -173,7 +173,7 @@ The parser was updated to use `TypeParser::parse_path()` which returns a `PExpre
 > "The `TypeNode` in AST.md has `name` and `parameters` (for generics). The EBNF grammar likely supports more complex types (pointers `*T`, arrays `[T; N]`, tuples `(A, B)`, function types `fn(A)->B`). How are these mapped to `TypeNode`? Are there subclasses of `TypeNode` (e.g., `PointerTypeNode`, `ArrayTypeNode`) or are these distinctions encoded within `TypeNode` (e.g., flags, conventional names like `name="*int"`)?"
 
 **Current `TypeNode` Structure:**
-`vyn::ast::TypeNode` has `std::string name` and `std::vector<PTypeNode> parameters`.
+`vyb::ast::TypeNode` has `std::string name` and `std::vector<PTypeNode> parameters`.
 
 **Discussion:**
 This was partially addressed in `AST_Types.md`. The core issue is how the single `TypeNode` class represents the diversity of type constructs found in the language grammar:
@@ -192,7 +192,7 @@ This was partially addressed in `AST_Types.md`. The core issue is how the single
 **Future Direction/Clarification:**
 -   The `AST_Types.md` document should be the primary source for how `TypeNode` represents these. If the C++ `TypeNode` is simple, it should be stated that the `name` field often carries structured information that semantic analysis will decode.
 -   Introducing specialized `TypeNode` subclasses (e.g., `PointerType`, `ArrayType`, `TupleType`, `FunctionType`) inheriting from a base `TypeNode` would create a more explicit and structured AST for types. This would make semantic analysis more straightforward as it could dispatch on the specific type node kind.
--   The choice depends on the trade-off between AST simplicity and explicitness for later phases. Given Vyn's feature set, a more structured type representation in the AST (subclasses) is likely beneficial in the long run.
+-   The choice depends on the trade-off between AST simplicity and explicitness for later phases. Given VyB's feature set, a more structured type representation in the AST (subclasses) is likely beneficial in the long run.
 
 ## 7. Pattern Matching Nodes and `accept()`
 
@@ -217,7 +217,7 @@ Pattern nodes are planned but not yet implemented as concrete AST nodes with vis
 -   `RangePattern`: Matches a value within a range (e.g., `1..=5`).
 
 **Visitor Integration:**
-Each concrete pattern node would inherit from a base `PatternNode` (which inherits from `vyn::ast::Node`).
+Each concrete pattern node would inherit from a base `PatternNode` (which inherits from `vyb::ast::Node`).
 ```cpp
 // Conceptual base
 class PatternNode : public Node { /* ... */ };
@@ -249,4 +249,4 @@ public:
 **Future Direction:**
 When pattern matching is implemented, these nodes and their visitor methods will need to be added to `ast.hpp`, `ast.cpp`, `NodeType`, and all visitor implementations. `AST_Patterns.md` will need to be fully populated.
 
-This covers the main design considerations based on the review and general AST practices. These points should guide the ongoing development and refinement of the Vyn AST.
+This covers the main design considerations based on the review and general AST practices. These points should guide the ongoing development and refinement of the VyB AST.

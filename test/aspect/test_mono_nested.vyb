@@ -1,0 +1,21 @@
+# Test nested generic types
+# NOTE: Full nested generics (Container<Box<Int>>) require parser enhancement
+# This test validates that the foundation works with simple nesting
+
+struct Box<T> {
+    value<T>
+}
+
+struct Wrapper<T> {
+    data<T>
+}
+
+main()<Int> -> {
+    # Test that we can use generic types as field types
+    b<Box<Int>> = Box<Int> { value = 42 }
+
+    # TODO: Nested generics like Wrapper<Box<Int>> need parser support
+    # w<Wrapper<Box<Int>>> = Wrapper<Box<Int>> { data = b }
+
+    return 0
+}

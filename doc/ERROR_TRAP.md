@@ -1,7 +1,7 @@
-# Vyn Error Handling: Failure & Trap System
+# VyB Error Handling: Failure & Trap System
 
-**Status:** Design Specification (v0.4.2)  
-**Last Updated:** October 20, 2025  
+**Status:** Design Specification (v0.4.2)
+**Last Updated:** October 20, 2025
 **Philosophy:** Fresh thinking on error handling - no tired try/catch patterns
 
 ---
@@ -10,8 +10,8 @@
 
 **✅ CORE ERROR HANDLING COMPLETE**
 
-Vyn has a **production-ready error handling system** with:
-- Runtime infrastructure: VynError struct, heap allocation, type IDs (C++ level)
+VyB has a **production-ready error handling system** with:
+- Runtime infrastructure: VyBError struct, heap allocation, type IDs (C++ level)
 - Language features: fail/trap/rethrow/ensure/panic keywords
 - Advanced patterns: wildcard `trap (e<?>) ->`, multi-type `trap (e<A|B>) ->`
 - Stack traces with source locations
@@ -19,7 +19,7 @@ Vyn has a **production-ready error handling system** with:
 - Comprehensive test coverage
 
 **What's Missing**: Standard library types (Error struct, Errable aspect) to expose
-the runtime system to Vyn code. See "Implementation Roadmap" section below.
+the runtime system to VyB code. See "Implementation Roadmap" section below.
 
 ### Phase 2 — Implemented (Dual Return ABI)
 
@@ -28,7 +28,7 @@ Codegen now lowers failable functions (`needsErrorReturn`) to a dual-return tupl
 - non-`Void`: `{ T, i8* }`
 - `Void`: `{ i1, i8* }` (`i1` is a dummy payload so all failable paths share one 2-field ABI shape)
 
-Success path returns `{ value, null }`.  
+Success path returns `{ value, null }`.
 Failure path returns `{ undef_or_dummy, error_ptr }`, where `error_ptr` points to heap memory with:
 
 1. first 8 bytes = runtime type hash (`std::hash<TypeName>`, same convention used by `typeof(...)`)
@@ -36,7 +36,7 @@ Failure path returns `{ undef_or_dummy, error_ptr }`, where `error_ptr` points t
 
 Conceptual lowering example:
 
-```vyn
+```vyb
 divide(a<Int>, b<Int>)<Int> -> {
     if (b == 0) { fail<Int>(0) }
     return a / b
@@ -68,7 +68,7 @@ Error handling should be:
 - **Explicit but not verbose:** Errors visible at call sites without boilerplate
 - **Type-safe:** Compile-time checking of error types and compatibility
 - **Composable:** Easy to build error hierarchies and handlers
-- **Unique to Vyn:** Fresh approach that fits Vyn's design philosophy
+- **Unique to VyB:** Fresh approach that fits VyB's design philosophy
 
 **Key Insight:** Blocks can fail, and failures can be trapped. No exceptions, no try/catch - just **failure** and **trap**.
 
@@ -78,7 +78,7 @@ Error handling should be:
 
 ### Simple Failure
 
-```vyn
+```vyb
 divide(a<Int>, b<Int>)<Int> -> {
     if (b == 0) {
         fail DivisionByZero { dividend = a }
@@ -89,7 +89,7 @@ divide(a<Int>, b<Int>)<Int> -> {
 
 ### Trapping Failures
 
-```vyn
+```vyb
 safe_divide(a<Int>, b<Int>)<Int> -> {
     result<Int> = {
         divide(a, b)
@@ -103,7 +103,7 @@ safe_divide(a<Int>, b<Int>)<Int> -> {
 
 ### Multiple Traps (Type-Based Dispatch)
 
-```vyn
+```vyb
 process_file(path<String>)<String> -> {
     content<String> = {
         file<File> = open_file(path)
@@ -116,7 +116,7 @@ process_file(path<String>)<String> -> {
     } trap (e<IOError>) -> {
         return "IO error: " + e.message
     }
-    
+
     return content
 }
 ```
@@ -128,7 +128,7 @@ process_file(path<String>)<String> -> {
 ### Rule 1: Type Compatibility
 When a block's value is consumed, all trap clauses must evaluate to the same type.
 
-```vyn
+```vyb
 # ✅ VALID - All traps return Int
 compute()<Int> -> {
     value<Int> = {
@@ -155,7 +155,7 @@ bad_compute()<Int> -> {
 ### Rule 2: First Type-Compatible Trap Wins
 Traps are checked in order. First matching type handles the failure.
 
-```vyn
+```vyb
 {
     operation()
 } trap (e<SpecificError>) -> {
@@ -170,7 +170,7 @@ Traps are checked in order. First matching type handles the failure.
 ### Rule 3: Untrapped Failures Crash After Cleanup
 If no trap matches, the failure crashes the current task after scope cleanup.
 
-```vyn
+```vyb
 dangerous_operation()<Int> -> {
     resource<Resource> = acquire_resource()
     # If this fails and no trap, resource is cleaned up before crash
@@ -185,7 +185,7 @@ dangerous_operation()<Int> -> {
 
 The `rethrow` keyword propagates the error upward without handling it.
 
-```vyn
+```vyb
 wrapper_function()<Int> -> {
     {
         might_fail()
@@ -201,12 +201,12 @@ wrapper_function()<Int> -> {
 
 ### Rethrow with Transformation
 
-```vyn
+```vyb
 {
     low_level_operation()
 } trap (e<LowLevelError>) -> {
     # Transform error and propagate
-    fail HighLevelError { 
+    fail HighLevelError {
         message = "Operation failed: " + e.details,
         cause = e
     }
@@ -219,10 +219,10 @@ wrapper_function()<Int> -> {
 
 The `ensure` clause runs after either success or failure, similar to `finally` but cleaner.
 
-```vyn
+```vyb
 process_with_cleanup(path<String>)<String> -> {
     file<File> = open_file(path)
-    
+
     result<String> = {
         file.read()
     } trap (e<IOError>) -> {
@@ -230,14 +230,14 @@ process_with_cleanup(path<String>)<String> -> {
     } ensure -> {
         file.close()  # Always runs, success or failure
     }
-    
+
     return result
 }
 ```
 
 ### Ensure Execution Order
 
-```vyn
+```vyb
 {
     resource<Resource> = acquire()
     {
@@ -263,7 +263,7 @@ process_with_cleanup(path<String>)<String> -> {
 
 ### Base Error Type
 
-```vyn
+```vyb
 # Built-in base error type
 struct Error {
     message<String>,
@@ -280,7 +280,7 @@ bind Errable -> Error {
     message(self<Self>)<String> -> {
         return self.message
     }
-    
+
     details(self<Self>)<String> -> {
         return self.message + " at " + self.location.to_string()
     }
@@ -291,7 +291,7 @@ bind Errable -> Error {
 
 #### Option 1: Struct Extension (Composition)
 
-```vyn
+```vyb
 struct DivisionByZero {
     base<Error>,
     dividend<Int>
@@ -301,7 +301,7 @@ bind Errable -> DivisionByZero {
     message(self<Self>)<String> -> {
         return "Division by zero: dividend=" + self.dividend.to_string()
     }
-    
+
     details(self<Self>)<String> -> {
         return self.base.details() + " [dividend=" + self.dividend.to_string() + "]"
     }
@@ -310,7 +310,7 @@ bind Errable -> DivisionByZero {
 # Usage
 if (divisor == 0) {
     fail DivisionByZero {
-        base = Error { 
+        base = Error {
             message = "Cannot divide by zero",
             location = here(),
             timestamp = now()
@@ -322,7 +322,7 @@ if (divisor == 0) {
 
 #### Option 2: Aspect-Based (Duck Typing)
 
-```vyn
+```vyb
 struct MyError {
     msg<String>,
     code<Int>
@@ -332,7 +332,7 @@ bind Errable -> MyError {
     message(self<Self>)<String> -> {
         return "[" + self.code.to_string() + "] " + self.msg
     }
-    
+
     details(self<Self>)<String> -> {
         return self.message() + " (custom error)"
     }
@@ -344,7 +344,7 @@ fail MyError { msg = "Something broke", code = 42 }
 
 #### Option 3: Error Macro (Syntactic Sugar)
 
-```vyn
+```vyb
 # Macro-generated error type
 error FileError : Error {
     path<String>
@@ -368,7 +368,7 @@ fail FileError {
 
 ### Inheritance-Style (Via Composition)
 
-```vyn
+```vyb
 struct Error {
     message<String>,
     location<SourceLocation>
@@ -398,7 +398,7 @@ struct FileNotFound {
 
 ### Enum-Style Error Variants
 
-```vyn
+```vyb
 enum ParseError {
     UnexpectedToken { expected<String>, got<String> },
     UnexpectedEOF { position<Int> },
@@ -425,7 +425,7 @@ fail ParseError::UnexpectedToken { expected = "identifier", got = "number" }
 
 ### Panic vs Fail
 
-```vyn
+```vyb
 # fail - trappable, can be handled
 fail UserError { message = "Invalid input" }
 
@@ -435,7 +435,7 @@ panic("Invariant violated: this should never happen!")
 
 ### Result<T, E> Pattern (Optional)
 
-```vyn
+```vyb
 enum Result<T, E> {
     Ok { value<T> },
     Err { error<E> }
@@ -460,7 +460,7 @@ match (result) {
 
 ### Freedom Blocks and Errors
 
-```vyn
+```vyb
 # Freedom blocks can fail too
 process_pointer(ptr<loc<Int>>)<Int> -> {
     value<Int> = {
@@ -480,7 +480,7 @@ process_pointer(ptr<loc<Int>>)<Int> -> {
 
 ### Async Errors
 
-```vyn
+```vyb
 async fetch_data(url<String>)<Future<String>> -> {
     response<String> = {
         await http_get(url)
@@ -490,7 +490,7 @@ async fetch_data(url<String>)<Future<String>> -> {
     } trap (e<Timeout>) -> {
         return "Request timed out"
     }
-    
+
     return response
 }
 ```
@@ -519,7 +519,7 @@ async fetch_data(url<String>)<Future<String>> -> {
 
 ```cpp
 // LLVM IR representation
-struct VynError {
+struct VyBError {
     void* vtable;        // Type information for dispatch
     void* data;          // Error-specific data
     SourceLocation loc;  // Where error occurred
@@ -560,7 +560,7 @@ panic_statement ::= 'panic' '(' STRING_LITERAL ')' [';']
 
 ### Example 1: File Processing
 
-```vyn
+```vyb
 read_config(path<String>)<Config> -> {
     content<String> = {
         file<File> = open_file(path)
@@ -573,12 +573,12 @@ read_config(path<String>)<Config> -> {
         println("Config not found, using defaults")
         return default_config_string()
     } trap (e<PermissionDenied>) -> {
-        fail ConfigError { 
+        fail ConfigError {
             message = "Cannot read config: permission denied",
             path = path
         }
     }
-    
+
     config<Config> = parse_config(content)
     return config
 }
@@ -586,7 +586,7 @@ read_config(path<String>)<Config> -> {
 
 ### Example 2: Transaction Processing
 
-```vyn
+```vyb
 process_transaction(txn<Transaction>)<Result> -> {
     {
         validate_transaction(txn)
@@ -605,14 +605,14 @@ process_transaction(txn<Transaction>)<Result> -> {
     } ensure -> {
         log_transaction_attempt(txn)
     }
-    
+
     return Result { success = true, reason = "" }
 }
 ```
 
 ### Example 3: Parser with Error Recovery
 
-```vyn
+```vyb
 parse_expression(tokens<Vec<Token>>)<Expr> -> {
     expr<Expr> = {
         parse_term(tokens)
@@ -623,7 +623,7 @@ parse_expression(tokens<Vec<Token>>)<Expr> -> {
     } trap (e<UnexpectedEOF>) -> {
         fail ParseError { message = "Unexpected end of input" }
     }
-    
+
     return expr
 }
 ```
@@ -642,7 +642,7 @@ parse_expression(tokens<Vec<Token>>)<Expr> -> {
 - **Explicit:** Trap clauses attached to blocks make error handling visible
 - **Type-safe:** Compile-time checking of error types
 - **Composable:** Easy to chain and nest
-- **Fresh:** Unique to Vyn, not borrowed from other languages
+- **Fresh:** Unique to VyB, not borrowed from other languages
 
 ### Why Ensure Instead of Finally?
 - Shorter, clearer keyword
@@ -660,17 +660,17 @@ parse_expression(tokens<Vec<Token>>)<Expr> -> {
 
 ### Overview
 
-When a `fail` occurs, Vyn captures a **source-level stack trace** showing the chain of Vyn function calls leading to the failure. This trace is stored with the error value and can be accessed during trap handling.
+When a `fail` occurs, VyB captures a **source-level stack trace** showing the chain of VyB function calls leading to the failure. This trace is stored with the error value and can be accessed during trap handling.
 
-### Vyn Source Stack Trace
+### VyB Source Stack Trace
 
 **Format:**
 ```
 Error: DivisionByZero { dividend = 10 }
-  at divide (math.vyn:45:9)
-  at calculate_average (stats.vyn:23:15)
-  at process_data (main.vyn:67:5)
-  at main (main.vyn:12:5)
+  at divide (math.vyb:45:9)
+  at calculate_average (stats.vyb:23:15)
+  at process_data (main.vyb:67:5)
+  at main (main.vyb:12:5)
 ```
 
 **Captured Information:**
@@ -685,7 +685,7 @@ Error: DivisionByZero { dividend = 10 }
 - Stack is **preserved** through `rethrow` with additional frames appended
 
 **Example with Stack Access:**
-```vyn
+```vyb
 process()<Void> -> {
     {
         risky_operation()
@@ -693,9 +693,9 @@ process()<Void> -> {
         # Access the stack trace
         println("Error occurred:")
         println(e.stack_trace())
-        
+
         # Optionally rethrow with additional context
-        rethrow NetworkError { 
+        rethrow NetworkError {
             message = "Failed in process()",
             cause = e  # Preserves original trace
         }
@@ -705,14 +705,14 @@ process()<Void> -> {
 
 ### Native Stack Trace (Advanced)
 
-For debugging **C FFI boundaries** or **compiler issues**, Vyn provides access to the native system stack:
+For debugging **C FFI boundaries** or **compiler issues**, VyB provides access to the native system stack:
 
 **Access:**
-```vyn
+```vyb
 freedom {
     # Access native stack (DWARF-based)
     native_trace<Vec<StackFrame>> = error.native_stack()
-    
+
     for (frame in native_trace) {
         println(frame.function_name + " at " + frame.address.to_string())
     }
@@ -734,20 +734,20 @@ freedom {
 The stack trace **includes cleanup handlers** to show the full unwinding path:
 
 **Example:**
-```vyn
+```vyb
 process_file(path<String>)<String> -> {
     {
         file<File> = File.open(path)
         defer file.close()  # Cleanup handler registered
-        
+
         content<String> = file.read_all()  # May fail
         return content
     } trap (e<IOError>) -> {
         # Stack trace shows:
-        # at File.read_all (file.vyn:102:9)
-        # at process_file (main.vyn:45:30)
-        # cleanup: file.close() at main.vyn:44:15  ← Shows defer
-        
+        # at File.read_all (file.vyb:102:9)
+        # at process_file (main.vyb:45:30)
+        # cleanup: file.close() at main.vyb:44:15  ← Shows defer
+
         println("Stack during error:")
         println(e.stack_trace())
         fail FileProcessingError { cause = e }
@@ -772,7 +772,7 @@ process_file(path<String>)<String> -> {
 When rethrowing, the **original stack is preserved** and new frames are appended:
 
 **Example:**
-```vyn
+```vyb
 level1()<Void> -> {
     {
         level2()
@@ -791,24 +791,24 @@ level2()<Void> -> {
 
 # Resulting stack trace:
 # Error: ApplicationError { message = "Failed in level1", cause = ... }
-#   at level1 (main.vyn:15:9)  ← Rethrow frame
+#   at level1 (main.vyb:15:9)  ← Rethrow frame
 # Caused by: DataError { field = "invalid" }
-#   at level2 (main.vyn:23:5)  ← Original fail
-#   at level1 (main.vyn:12:9)
+#   at level2 (main.vyb:23:5)  ← Original fail
+#   at level1 (main.vyb:12:9)
 ```
 
 ### Stack Trace API
 
 Every error value provides:
 
-```vyn
+```vyb
 aspect Errable {
     # Get human-readable stack trace
     stack_trace(self<their<Self>>)<String> -> { }
-    
+
     # Get structured stack frames
     stack_frames(self<their<Self>>)<Vec<StackFrame>> -> { }
-    
+
     # Get native stack (freedom only)
     native_stack(self<their<Self>>)<Vec<NativeFrame>> -> { }
 }
@@ -850,18 +850,18 @@ struct NativeFrame {
 
 ### Philosophy
 
-**Untrapped errors should not silently crash** - they should be caught by the Vyn runtime and reported with full diagnostic information. This provides:
+**Untrapped errors should not silently crash** - they should be caught by the VyB runtime and reported with full diagnostic information. This provides:
 1. **Better debugging** - See exactly what failed and where
 2. **Meaningful test results** - Tests can report specific failures
 3. **Production reliability** - Graceful degradation instead of segfaults
 
 ### Runtime Handler Behavior
 
-When a `fail` occurs **without a matching trap**, the Vyn runtime automatically:
+When a `fail` occurs **without a matching trap**, the VyB runtime automatically:
 
 1. **Captures the complete error context:**
    - Error type and values
-   - Full Vyn source stack trace
+   - Full VyB source stack trace
    - Ownership cleanup chain
    - Timestamp and thread info
 
@@ -891,14 +891,14 @@ When a `fail` occurs **without a matching trap**, the Vyn runtime automatically:
 └───────────────────────────────────────────────────────────────┘
 
 Stack Trace:
-  at divide (math.vyn:45:9)
-  at calculate_average (stats.vyn:23:15)
-  at process_data (main.vyn:67:5)
-  at main (main.vyn:12:3)
+  at divide (math.vyb:45:9)
+  at calculate_average (stats.vyb:23:15)
+  at process_data (main.vyb:67:5)
+  at main (main.vyb:12:3)
 
 Cleanup Executed:
-  defer file.close() at main.vyn:65
-  drop temp_buffer at main.vyn:64
+  defer file.close() at main.vyb:65
+  drop temp_buffer at main.vyb:64
 
 Exit Code: 1
 ```
@@ -907,14 +907,14 @@ Exit Code: 1
 
 Users can install custom handlers for untrapped errors:
 
-```vyn
+```vyb
 # Set custom handler at program start
 main()<Int> -> {
     Runtime.set_untrapped_handler(my_error_handler)
-    
+
     # Rest of program...
     run_application()
-    
+
     return 0
 }
 
@@ -925,10 +925,10 @@ my_error_handler(error<Error>, trace<StackTrace>)<Void> -> {
     log_file.write("UNTRAPPED: " + error.message() + "\n")
     log_file.write(trace.to_string() + "\n")
     log_file.close()
-    
+
     # Send to monitoring service
     send_to_monitoring(error, trace)
-    
+
     # Note: Handler cannot prevent termination
     # Program will still exit after this runs
 }
@@ -938,13 +938,13 @@ my_error_handler(error<Error>, trace<StackTrace>)<Void> -> {
 
 For testing, the runtime can capture untrapped errors instead of exiting:
 
-```vyn
+```vyb
 # In test harness
 test_division_by_zero()<TestResult> -> {
     result<TestResult> = Runtime.capture_untrapped({
         divide(10, 0)  # This will fail
     })
-    
+
     match (result) {
         Trapped { error = e } -> {
             # Test can verify the error
@@ -960,14 +960,14 @@ test_division_by_zero()<TestResult> -> {
 
 ### Runtime API
 
-```vyn
+```vyb
 aspect Runtime {
     # Set custom handler (called before program exits)
     set_untrapped_handler(handler<fn(Error, StackTrace) -> Void>)<Void>
-    
+
     # Clear custom handler (back to default)
     clear_untrapped_handler()<Void>
-    
+
     # For testing: capture untrapped errors instead of exiting
     capture_untrapped<T>(block<fn() -> T>)<CaptureResult<T>>
 }
@@ -982,7 +982,7 @@ enum CaptureResult<T> {
 
 **C++ Runtime Support:**
 ```cpp
-namespace vyn::runtime {
+namespace vyb::runtime {
     // Global untrapped error handler
     struct UntrappedErrorHandler {
         // Error context
@@ -993,20 +993,20 @@ namespace vyn::runtime {
             uint64_t thread_id;
             uint64_t timestamp;
         };
-        
+
         // Handler function pointer
         using HandlerFn = void(*)(const ErrorContext&);
-        
+
         // Set custom handler
         static void set_handler(HandlerFn handler);
-        
+
         // Called when untrapped error occurs
         static void handle_untrapped_error(
             void* error_object,
             const char* error_type,
             const std::vector<StackFrame>& stack_trace
         );
-        
+
         // Default handler: print to stderr and exit(1)
         static void default_handler(const ErrorContext& ctx);
     };
@@ -1017,7 +1017,7 @@ namespace vyn::runtime {
 When a `fail` statement is generated without a trap, emit:
 ```llvm
 ; Call runtime error handler
-call void @__vyn_runtime_untrapped_error(
+call void @__vyb_runtime_untrapped_error(
     ptr %error_object,
     ptr @error_type_name,
     ptr %stack_trace_data
@@ -1031,7 +1031,7 @@ unreachable
 
 **Important Distinction:**
 
-```vyn
+```vyb
 # UNTRAPPED FAIL - Goes through runtime handler
 divide(a<Int>, b<Int>)<Int> -> {
     if (b == 0) {
@@ -1065,7 +1065,7 @@ check_invariant(value<Int>)<Void> -> {
 
 To exit with a specific code, use the `exit(n)` built-in:
 
-```vyn
+```vyb
 main() -> {
     // ... do work ...
     exit(42)   // terminates process with exit code 42; no stdout output
@@ -1084,16 +1084,16 @@ any stdout output — use `println` explicitly before calling `exit(n)` if you n
 Control runtime behavior:
 ```bash
 # Verbose error reporting
-VYN_ERROR_VERBOSE=1 ./program
+VYB_ERROR_VERBOSE=1 ./program
 
 # Stack trace depth limit
-VYN_STACK_TRACE_DEPTH=50 ./program
+VYB_STACK_TRACE_DEPTH=50 ./program
 
 # Save errors to file
-VYN_ERROR_LOG=/var/log/app.errors ./program
+VYB_ERROR_LOG=/var/log/app.errors ./program
 
 # Disable colors in error output
-VYN_ERROR_NO_COLOR=1 ./program
+VYB_ERROR_NO_COLOR=1 ./program
 ```
 
 ---
@@ -1101,22 +1101,22 @@ VYN_ERROR_NO_COLOR=1 ./program
 ## Open Questions
 
 1. **Error Type Hierarchy:** Composition vs inheritance vs aspects?
-   - **Current preference:** Aspects (most flexible, fits Vyn philosophy)
+   - **Current preference:** Aspects (most flexible, fits VyB philosophy)
 
 2. **Automatic Error Propagation:** Should `?` operator auto-propagate?
-   ```vyn
+   ```vyb
    value<Int> = risky_operation()?  # Auto-propagates failure
    ```
    - **Decision needed:** Explicit vs implicit propagation
 
 3. **Multiple Error Types:** Can a block fail with multiple unrelated types?
-   ```vyn
+   ```vyb
    fail NetworkError | FileError  # Union type?
    ```
    - **Decision needed:** Union types or require common base
 
 4. **Error Annotations:** Should functions declare what they can fail with?
-   ```vyn
+   ```vyb
    risky_function()<Int> fails<NetworkError, TimeoutError> -> { ... }
    ```
    - **Decision needed:** Checked vs unchecked failures
@@ -1132,7 +1132,7 @@ VYN_ERROR_NO_COLOR=1 ./program
 - ✅ `rethrow` statement for error propagation
 - ✅ `ensure` clause for cleanup
 - ✅ `panic` for unrecoverable errors
-- ✅ Runtime VynError infrastructure (C++ level)
+- ✅ Runtime VyBError infrastructure (C++ level)
 - ✅ Heap allocation with type ID + value storage
 - ✅ Stack trace capture with source locations
 - ✅ Wildcard patterns `trap (e<?>) -> { }`
@@ -1142,18 +1142,18 @@ VYN_ERROR_NO_COLOR=1 ./program
 
 ### Phase 7: Standard Library Error Types (v0.6.1+ - PLANNED)
 
-Expose runtime error system to Vyn code through stdlib:
+Expose runtime error system to VyB code through stdlib:
 
 - [ ] **Errable aspect**: Define aspect for error types
-  ```vyn
+  ```vyb
   aspect Errable {
       message()<String> -> {}
       code()<Int> -> {}
   }
   ```
 
-- [ ] **Error base struct**: Standard Vyn error type
-  ```vyn
+- [ ] **Error base struct**: Standard VyB error type
+  ```vyb
   struct Error {
       message<String>,
       code<Int>,
@@ -1162,14 +1162,14 @@ Expose runtime error system to Vyn code through stdlib:
   ```
 
 - [ ] **Display aspect**: General formatting (not error-specific)
-  ```vyn
+  ```vyb
   aspect Display {
       display()<String> -> {}
   }
   ```
 
 - [ ] **bind implementations**: Implement aspects for Error and common types
-  ```vyn
+  ```vyb
   bind Errable -> Error { ... }
   bind Display -> Error { ... }
   bind Display -> Int { ... }
@@ -1179,7 +1179,7 @@ Expose runtime error system to Vyn code through stdlib:
 - [ ] **Error context chaining**: Wrap errors with additional context
 - [ ] **Custom user error types**: User-defined structs implementing Errable
 
-**NOT PLANNED**: 
+**NOT PLANNED**:
 - ❌ Result<T,E> type (trap/fail is superior)
 - ❌ `?` operator (errors propagate automatically)
 - ❌ Error annotations (type system handles this)

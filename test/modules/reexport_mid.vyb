@@ -1,0 +1,8 @@
+// @test: Module re-export helper
+// @description: Helper module that re-exports an imported declaration
+// @category: modules
+// @expect: pass
+// @parse-only: true
+
+share(all)
+import visibility_export::{exported_value} from "./visibility_export.vyb"

@@ -1,18 +1,18 @@
-#include "vyn/vre/llvm/codegen.hpp"
-#include "vyn/parser/ast.hpp"
+#include "vyb/vre/llvm/codegen.hpp"
+#include "vyb/parser/ast.hpp"
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/DerivedTypes.h>
 
-namespace vyn {
+namespace vyb {
 
-// Implementation for println function in the Vyn language
+// Implementation for println function in the VyB language
 // For use in the CallExpression visitor
 llvm::Function* LLVMCodegen::getPrintlnFunction() {
     // Check if the println function has already been declared in the module
     llvm::Function* printlnFunc = module->getFunction("println");
-    
+
     if (!printlnFunc) {
         // Create function signature for println
         std::vector<llvm::Type*> paramTypes = {int8PtrType};
@@ -21,7 +21,7 @@ llvm::Function* LLVMCodegen::getPrintlnFunction() {
             paramTypes,                       // Parameters: (char*)
             false                             // Not vararg
         );
-        
+
         // Declare the function in the module
         printlnFunc = llvm::Function::Create(
             printlnType,
@@ -29,130 +29,130 @@ llvm::Function* LLVMCodegen::getPrintlnFunction() {
             "println",
             module.get()
         );
-        
+
         // Set parameter names for readability
         auto args = printlnFunc->arg_begin();
         args->setName("str");
     }
-    
+
     return printlnFunc;
 }
 
 // Implementation for auto-serialization to convert objects to JSON strings
 llvm::Function* LLVMCodegen::getSerializeToJsonFunction() {
     // Check if the serialization function has already been declared in the module
-    llvm::Function* serializeFunc = module->getFunction("__vyn_serialize_to_json");
-    
+    llvm::Function* serializeFunc = module->getFunction("__vyb_serialize_to_json");
+
     if (!serializeFunc) {
         // Create function signature for serialization
         std::vector<llvm::Type*> paramTypes = {
             llvm::PointerType::getUnqual(int8Type),  // void* obj
             int8PtrType                               // const char* type_name
         };
-        
+
         llvm::FunctionType* serializeType = llvm::FunctionType::get(
             int8PtrType,                            // Return type: char*
             paramTypes,                             // Parameters: (void*, const char*)
             false                                   // Not vararg
         );
-        
+
         // Declare the function in the module
         serializeFunc = llvm::Function::Create(
             serializeType,
             llvm::Function::ExternalLinkage,
-            "__vyn_serialize_to_json",
+            "__vyb_serialize_to_json",
             module.get()
         );
-        
+
         // Set parameter names for readability
         auto args = serializeFunc->arg_begin();
         args->setName("obj");
         (++args)->setName("type_name");
     }
-    
+
     return serializeFunc;
 }
 
 // Get the function for actual println implementation
-llvm::Function* LLVMCodegen::getVynPrintlnFunction() {
-    // Check if the __vyn_println function has already been declared in the module
-    llvm::Function* vynPrintlnFunc = module->getFunction("__vyn_println");
-    
-    if (!vynPrintlnFunc) {
-        // Create function signature for __vyn_println
+llvm::Function* LLVMCodegen::getVyBPrintlnFunction() {
+    // Check if the __vyb_println function has already been declared in the module
+    llvm::Function* vybPrintlnFunc = module->getFunction("__vyb_println");
+
+    if (!vybPrintlnFunc) {
+        // Create function signature for __vyb_println
         std::vector<llvm::Type*> paramTypes = {int8PtrType};
-        llvm::FunctionType* vynPrintlnType = llvm::FunctionType::get(
+        llvm::FunctionType* vybPrintlnType = llvm::FunctionType::get(
             llvm::Type::getVoidTy(*context),  // Return type: void
             paramTypes,                       // Parameters: (const char*)
             false                             // Not vararg
         );
-        
+
         // Declare the function in the module
-        vynPrintlnFunc = llvm::Function::Create(
-            vynPrintlnType,
+        vybPrintlnFunc = llvm::Function::Create(
+            vybPrintlnType,
             llvm::Function::ExternalLinkage,
-            "__vyn_println",
+            "__vyb_println",
             module.get()
         );
-        
+
         // Set parameter names for readability
-        auto args = vynPrintlnFunc->arg_begin();
+        auto args = vybPrintlnFunc->arg_begin();
         args->setName("str");
     }
-    
-    return vynPrintlnFunc;
+
+    return vybPrintlnFunc;
 }
 
-llvm::Function* LLVMCodegen::getVynPrintFunction() {
-    llvm::Function* f = module->getFunction("__vyn_print");
+llvm::Function* LLVMCodegen::getVyBPrintFunction() {
+    llvm::Function* f = module->getFunction("__vyb_print");
     if (!f) {
         std::vector<llvm::Type*> paramTypes = {int8PtrType};
         llvm::FunctionType* ft = llvm::FunctionType::get(llvm::Type::getVoidTy(*context), paramTypes, false);
-        f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "__vyn_print", module.get());
+        f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "__vyb_print", module.get());
         f->arg_begin()->setName("str");
     }
     return f;
 }
 
-llvm::Function* LLVMCodegen::getVynPrintlnIntFunction() {
-    llvm::Function* f = module->getFunction("__vyn_println_int");
+llvm::Function* LLVMCodegen::getVyBPrintlnIntFunction() {
+    llvm::Function* f = module->getFunction("__vyb_println_int");
     if (!f) {
         std::vector<llvm::Type*> paramTypes = {llvm::Type::getInt64Ty(*context)};
         llvm::FunctionType* ft = llvm::FunctionType::get(llvm::Type::getVoidTy(*context), paramTypes, false);
-        f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "__vyn_println_int", module.get());
+        f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "__vyb_println_int", module.get());
         f->arg_begin()->setName("val");
     }
     return f;
 }
 
-llvm::Function* LLVMCodegen::getVynPrintIntFunction() {
-    llvm::Function* f = module->getFunction("__vyn_print_int");
+llvm::Function* LLVMCodegen::getVyBPrintIntFunction() {
+    llvm::Function* f = module->getFunction("__vyb_print_int");
     if (!f) {
         std::vector<llvm::Type*> paramTypes = {llvm::Type::getInt64Ty(*context)};
         llvm::FunctionType* ft = llvm::FunctionType::get(llvm::Type::getVoidTy(*context), paramTypes, false);
-        f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "__vyn_print_int", module.get());
+        f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "__vyb_print_int", module.get());
         f->arg_begin()->setName("val");
     }
     return f;
 }
 
-llvm::Function* LLVMCodegen::getVynPrintlnBoolFunction() {
-    llvm::Function* f = module->getFunction("__vyn_println_bool");
+llvm::Function* LLVMCodegen::getVyBPrintlnBoolFunction() {
+    llvm::Function* f = module->getFunction("__vyb_println_bool");
     if (!f) {
         std::vector<llvm::Type*> paramTypes = {llvm::Type::getInt64Ty(*context)};
         llvm::FunctionType* ft = llvm::FunctionType::get(llvm::Type::getVoidTy(*context), paramTypes, false);
-        f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "__vyn_println_bool", module.get());
+        f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "__vyb_println_bool", module.get());
         f->arg_begin()->setName("val");
     }
     return f;
 }
 
-llvm::Function* LLVMCodegen::getVynPrintBoolFunction() {
-    llvm::Function* f = module->getFunction("__vyn_print_bool");
+llvm::Function* LLVMCodegen::getVyBPrintBoolFunction() {
+    llvm::Function* f = module->getFunction("__vyb_print_bool");
     if (!f) {
         std::vector<llvm::Type*> paramTypes = {llvm::Type::getInt64Ty(*context)};
         llvm::FunctionType* ft = llvm::FunctionType::get(llvm::Type::getVoidTy(*context), paramTypes, false);
-        f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "__vyn_print_bool", module.get());
+        f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "__vyb_print_bool", module.get());
         f->arg_begin()->setName("val");
     }
     return f;
@@ -164,19 +164,19 @@ llvm::Function* LLVMCodegen::getSprintfFunction() {
     if (sprintfFunc) {
         return sprintfFunc;
     }
-    
+
     // Create sprintf function type: int sprintf(char*, const char*, ...)
     std::vector<llvm::Type*> sprintfParamTypes = {
         int8PtrType,  // char* buffer
         int8PtrType   // const char* format
     };
-    
+
     llvm::FunctionType* sprintfType = llvm::FunctionType::get(
         int32Type,               // return type: int
         sprintfParamTypes,       // parameter types
         true                     // is variadic
     );
-    
+
     // Create the sprintf function declaration
     sprintfFunc = llvm::Function::Create(
         sprintfType,
@@ -184,74 +184,74 @@ llvm::Function* LLVMCodegen::getSprintfFunction() {
         "sprintf",
         module.get()
     );
-    
+
     return sprintfFunc;
 }
 
 // Runtime function for panic - terminates program with message
-llvm::Function* LLVMCodegen::getVynPanicFunction() {
+llvm::Function* LLVMCodegen::getVyBPanicFunction() {
     // Check if the panic function has already been declared
-    llvm::Function* panicFunc = module->getFunction("__vyn_runtime_panic");
-    
+    llvm::Function* panicFunc = module->getFunction("__vyb_runtime_panic");
+
     if (!panicFunc) {
-        // Create function signature for panic: void __vyn_runtime_panic(const char* message)
+        // Create function signature for panic: void __vyb_runtime_panic(const char* message)
         std::vector<llvm::Type*> paramTypes = {int8PtrType};
         llvm::FunctionType* panicType = llvm::FunctionType::get(
             llvm::Type::getVoidTy(*context),  // Return type: void (noreturn)
             paramTypes,                       // Parameters: (const char*)
             false                             // Not vararg
         );
-        
+
         // Declare the function in the module
         panicFunc = llvm::Function::Create(
             panicType,
             llvm::Function::ExternalLinkage,
-            "__vyn_runtime_panic",
+            "__vyb_runtime_panic",
             module.get()
         );
-        
+
         // Mark as noreturn
         panicFunc->setDoesNotReturn();
-        
+
         // Set parameter name
         auto args = panicFunc->arg_begin();
         args->setName("message");
     }
-    
+
     return panicFunc;
 }
 
 // Runtime function for untrapped errors - terminates program with error info
-llvm::Function* LLVMCodegen::getVynUntrappedErrorFunction() {
+llvm::Function* LLVMCodegen::getVyBUntrappedErrorFunction() {
     // Check if the untrapped error function has already been declared
-    llvm::Function* untrappedFunc = module->getFunction("__vyn_runtime_untrapped_error");
-    
+    llvm::Function* untrappedFunc = module->getFunction("__vyb_runtime_untrapped_error");
+
     if (!untrappedFunc) {
-        // Create function signature: void __vyn_runtime_untrapped_error(void* error)
+        // Create function signature: void __vyb_runtime_untrapped_error(void* error)
         std::vector<llvm::Type*> paramTypes = {int8PtrType};
         llvm::FunctionType* untrappedType = llvm::FunctionType::get(
             llvm::Type::getVoidTy(*context),  // Return type: void (noreturn)
             paramTypes,                       // Parameters: (void*)
             false                             // Not vararg
         );
-        
+
         // Declare the function in the module
         untrappedFunc = llvm::Function::Create(
             untrappedType,
             llvm::Function::ExternalLinkage,
-            "__vyn_runtime_untrapped_error",
+            "__vyb_runtime_untrapped_error",
             module.get()
         );
-        
+
         // Mark as noreturn
         untrappedFunc->setDoesNotReturn();
-        
+
         // Set parameter name
         auto args = untrappedFunc->arg_begin();
         args->setName("error");
     }
-    
+
     return untrappedFunc;
 }
 
-} // namespace vyn
+} // namespace vyb

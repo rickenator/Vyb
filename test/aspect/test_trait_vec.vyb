@@ -1,0 +1,32 @@
+// Phase 3 (simplified): Trait implementation -> concrete Vec type
+// Tests bind Trait -> Vec<Int> (concrete generic type)
+
+aspect Container {
+    size(self)<Int> -> { }
+    is_empty(self)<Bool> -> { }
+}
+
+// Concrete bind: Vec<Int> implements Container
+bind Container -> Vec<Int> {
+    size(self)<Int> -> {
+        return self.len()
+    }
+
+    is_empty(self)<Bool> -> {
+        return self.len() == 0
+    }
+}
+
+main()<Int> -> {
+    // Create a Vec<Int>
+    numbers<Vec<Int>> = Vec::new()
+    numbers.push(1)
+    numbers.push(2)
+    numbers.push(3)
+
+    // Call aspect methods on Vec<Int>
+    size<Int> = numbers.size()
+
+    // Should return 3
+    return size
+}

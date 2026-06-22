@@ -1,6 +1,6 @@
-# Vyn v0.3.7 - Current TODO List
+# VyB v0.3.7 - Current TODO List
 
-**Last Updated:** October 16, 2025  
+**Last Updated:** October 16, 2025
 **Current Status:** Major breakthrough - auto-serialization implemented, core language working
 
 ## ✅ MAJOR ACHIEVEMENTS COMPLETED
@@ -40,7 +40,7 @@
 - [x] **Vector Methods**: new(), push(), pop(), len(), get() ✅ COMPLETED!
 - [x] **Memory Management**: Proper allocation/deallocation for collections ✅ COMPLETED!
 
-### Control Flow Completion  
+### Control Flow Completion
 **Status**: ✅ **COMPLETED** - All for loop variations implemented
 - ✅ **C-style For Loops**: `for (init; condition; increment)` fully working
 - ✅ **All scenarios tested**: counting, step increments, countdown, nested loops
@@ -52,7 +52,7 @@
 ### 3. String Operations
 **Status**: Basic strings work, need expanded operations
 - [ ] **String Concatenation**: `str1 + str2` operator
-- [ ] **String Comparison**: `==`, `!=`, `<`, `>` operators  
+- [ ] **String Comparison**: `==`, `!=`, `<`, `>` operators
 - [ ] **String Methods**: `.length()`, `.substring()`, `.contains()`
 - [ ] **String Formatting**: Template strings or format functions
 
@@ -102,7 +102,7 @@
 ### Priority 1: Dynamic Vectors and Enhanced Collections
 
 ✅ **COMPLETED: Fixed-size Arrays [T; N]**
-- Array types, literals [1,2,3], variables, indexing arr[0] 
+- Array types, literals [1,2,3], variables, indexing arr[0]
 - Function parameters/returns, perfect println() serialization
 - All tests passing: [10, 20, 30] displays correctly!
 
@@ -121,7 +121,7 @@
 
 ### Priority 1: Tuple Element Access
 **Goal**: Complete existing tuple feature with element access
-```vyn
+```vyb
 main()<Int> -> {
     data<Tuple<Int, String, Bool>> = get_data()
     x<Int> = data.0      // Access first element
@@ -132,7 +132,7 @@ main()<Int> -> {
 
 ### Priority 3: String Operations
 **Goal**: Practical string manipulation
-```vyn
+```vyb
 main()<String> -> {
     name<String> = "Rick"
     greeting<String> = "Hello, " + name + "!"
@@ -144,7 +144,7 @@ main()<String> -> {
 
 For each new feature:
 1. **Parse Tests**: Verify syntax parsing works
-2. **Semantic Tests**: Check type checking and analysis  
+2. **Semantic Tests**: Check type checking and analysis
 3. **Codegen Tests**: Ensure LLVM IR generation
 4. **Runtime Tests**: Validate JIT execution
 5. **Integration Tests**: Test with other features
@@ -168,6 +168,6 @@ For each new feature:
 
 ---
 
-**Overall Assessment**: Vyn v0.4.1 represents a complete language breakthrough. The core language is fully functional with match statements, break/continue loop control, Vec<T> collections with full iteration support, range-based for loops with mandatory parentheses, comprehensive binary operations, member access, impressive auto-serialization, LLVM backend, and memory safety. Vyn is now a production-ready systems programming language suitable for real-world development. Next phase focuses on completing tuple element access, standard library expansion, and advanced features to enhance developer productivity.
+**Overall Assessment**: VyB v0.4.1 represents a complete language breakthrough. The core language is fully functional with match statements, break/continue loop control, Vec<T> collections with full iteration support, range-based for loops with mandatory parentheses, comprehensive binary operations, member access, impressive auto-serialization, LLVM backend, and memory safety. VyB is now a production-ready systems programming language suitable for real-world development. Next phase focuses on completing tuple element access, standard library expansion, and advanced features to enhance developer productivity.
 
 **Confidence Level**: HIGH - Foundation is solid, next features are incremental improvements rather than architectural changes.

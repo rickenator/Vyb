@@ -1,0 +1,25 @@
+// Simplified ownership test to check basic functionality
+main()<Int> -> {
+    println("=== Basic Ownership Test ===")
+
+    // Test 1: Basic my<T> with borrow
+    x<my<Int>> = my(42)
+    println("Test 1: Created my<Int> = 42")
+
+    freedom {
+        b<their<Int>> = borrow(x)
+        b = 99
+        println("Test 2: Borrowed and modified to 99")
+    }
+
+    println("Value after borrow: " + x.to_string())
+
+    // Test 3: view (read-only)
+    freedom {
+        v<their<Int const>> = view(x)
+        println("Test 3: Viewed value through view")
+    }
+
+    println("Final value: " + x.to_string())
+    return x
+}

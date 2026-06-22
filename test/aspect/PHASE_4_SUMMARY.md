@@ -48,7 +48,7 @@ if (hasGenericParams) {
 bool hasGenericParams = !node->genericParams.empty();
 if (hasGenericParams) {
     enterScope();  // Create scope for type parameters
-    
+
     for (const auto& param : node->genericParams) {
         SymbolInfo typeParamSymbol;
         typeParamSymbol.name = paramName;
@@ -76,9 +76,9 @@ if (hasGenericParams) {
 
 ## Test Results
 
-### test_type_param_simple.vyn ✅ PASSES
+### test_type_param_simple.vyb ✅ PASSES
 
-```vyn
+```vyb
 struct Box<T> {
     value<T>  // T recognized in struct field!
 }
@@ -96,7 +96,7 @@ impl<T> Display for Box<T> {
 DEBUG: Registered struct type parameter: T
 DEBUG: Recognized generic type parameter: T
 DEBUG: Registered struct field Box.value with type: T
-DEBUG: Registered type parameter: T  
+DEBUG: Registered type parameter: T
 DEBUG: Recognized generic type parameter: T
 DEBUG: Successfully registered impl Display for Box<T> with 1 methods
 ```
@@ -112,7 +112,7 @@ DEBUG: Successfully registered impl Display for Box<T> with 1 methods
 - [x] Methods can use type parameters in signatures
 - [x] Type parameter recognition in TypeName visitor works
 - [x] Scope cleanup happens at correct time
-- [x] No semantic errors in test_type_param_simple.vyn
+- [x] No semantic errors in test_type_param_simple.vyb
 - [x] Git commit created and ready to push
 
 ## Known Limitation
@@ -135,8 +135,8 @@ Global Scope
       └── Type Parameter Scope
            ├── T (TYPE_PARAMETER)
            └── Field value<T>
-           
-Global Scope  
+
+Global Scope
  └── Impl Scope (impl<T> Display for Box<T>)
       └── Type Parameter Scope
            ├── T (TYPE_PARAMETER)
@@ -167,7 +167,7 @@ Global Scope
 
 Phase 4 **completes the semantic analysis** portion of the generic trait system. All type checking, validation, and scope management now works correctly for:
 - Generic structs
-- Generic trait implementations  
+- Generic trait implementations
 - Type parameters in all contexts
 - Proper scope isolation
 

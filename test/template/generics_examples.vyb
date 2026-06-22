@@ -1,0 +1,48 @@
+// Test: Generics examples
+// Demonstrates generic structs with single and multiple type parameters
+
+// Generic struct: Pair holds two values of the same type
+template Pair<T> {
+    struct Pair {
+        first<T>,
+        second<T>
+    }
+}
+
+// Generic struct: Box wrapper around a single value
+template Box<T> {
+    struct Box {
+        value<T>
+    }
+}
+
+// Generic struct: Container with metadata
+template Container<T> {
+    struct Container {
+        count<Int>,
+        capacity<Int>
+    }
+}
+
+// Generic struct: Result type with multiple type parameters
+template Result<T, E> {
+    struct Result {
+        value<T>,
+        is_ok<Bool>
+    }
+}
+
+main()<Int> -> {
+    println("Generic struct syntax test")
+    println("Note: Struct monomorphization not yet implemented")
+    println("Templates parse and register correctly")
+    println("Awaiting semantic.cpp::performMonomorphization() implementation")
+
+    // TODO: Once struct monomorphization is implemented, uncomment:
+    // int_pair<Pair<Int>> = Pair { first: 10, second: 20 }
+    // int_box<Box<Int>> = Box { value: 42 }
+    // str_container<Container<String>> = Container { count: 0, capacity: 100 }
+    // result<Result<Int, String>> = Result { value: 123, is_ok: true }
+
+    return 0
+}

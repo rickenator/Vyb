@@ -1,6 +1,6 @@
 \
-#include "vyn/vre/llvm/codegen.hpp"
-#include "vyn/parser/ast.hpp"
+#include "vyb/vre/llvm/codegen.hpp"
+#include "vyb/parser/ast.hpp"
 
 #include <set>
 #include <llvm/IR/Function.h>
@@ -14,9 +14,9 @@
 #include <vector>
 #include <map>
 
-// File-local helper: detect the Vyn String struct representation { ptr, i64 }.
+// File-local helper: detect the VyB String struct representation { ptr, i64 }.
 // Used by both function declaration and forward-declaration code paths.
-static bool isVynStringStructType(llvm::Type* t) {
+static bool isVyBStringStructType(llvm::Type* t) {
     if (!t->isStructTy()) return false;
     auto* st = llvm::cast<llvm::StructType>(t);
     return st->getNumElements() == 2 &&
@@ -24,7 +24,7 @@ static bool isVynStringStructType(llvm::Type* t) {
            st->getElementType(1)->isIntegerTy(64);
 }
 
-using namespace vyn;
+using namespace vyb;
 // using namespace llvm; // Uncomment if desired for brevity
 
 // --- Declarations ---
@@ -32,21 +32,21 @@ using namespace vyn;
 void LLVMCodegen::visit(ast::AspectDeclaration* node) {
     // Traits are interfaces/type constraints that don't generate runtime code by themselves
     // They're primarily used for compile-time type checking and polymorphism
-    
+
     // Verify trait name
     if (!node->name) {
         logError(node->loc, "Trait declaration missing name");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     std::string traitName = node->name->name;
     if (traitName.empty()) {
         logError(node->loc, "Trait declaration has empty name");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Process generic parameters if any
     std::vector<std::string> genericParamNames;
     for (const auto& param : node->genericParams) {
@@ -54,52 +54,52 @@ void LLVMCodegen::visit(ast::AspectDeclaration* node) {
             genericParamNames.push_back(param->name->name);
         }
     }
-    
+
     // Generate code for aspect methods that have default implementations
     // Methods without bodies are just signatures (no codegen needed)
     // Methods with bodies need LLVM functions so they can be called when bind doesn't override
-    
+
     for (const auto& method : node->methods) {
         if (method && method->body) {
-            VYN_CDBG << "DEBUG: Generating default implementation for aspect method: " 
+            VYB_CDBG << "DEBUG: Generating default implementation for aspect method: "
                       << traitName << "::" << method->id->name << std::endl;
-            
+
             // Generate the method - but we can't use Self type directly
             // We'll generate a generic version that will be instantiated per type
             // For now, skip codegen for aspect default methods - they'll be generated
             // on-demand when a concrete type needs them
             // TODO: Implement on-demand generation or pre-generate for all implementing types
-            VYN_CDBG << "DEBUG: Skipping codegen for aspect default method (needs per-type instantiation)" << std::endl;
+            VYB_CDBG << "DEBUG: Skipping codegen for aspect default method (needs per-type instantiation)" << std::endl;
         }
     }
-    
-    VYN_CDBG << "DEBUG: Trait '" << traitName << "' declaration processed in codegen" << std::endl;
-    
+
+    VYB_CDBG << "DEBUG: Trait '" << traitName << "' declaration processed in codegen" << std::endl;
+
     // Traits don't produce runtime values
     m_currentLLVMValue = nullptr;
 }
 
 void LLVMCodegen::visit(ast::NamespaceDeclaration* node) {
     // Namespaces provide scoping for declarations but don't generate runtime code themselves
-    
+
     // Check if namespace name is valid
     if (!node->name) {
         logError(node->loc, "Namespace declaration missing name");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     std::string namespaceName = node->name->name;
     if (namespaceName.empty()) {
         logError(node->loc, "Namespace declaration has empty name");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Store the current namespace context to restore it later
     std::string currentNamespacePrefix = ""; // In a full implementation, we would track the current namespace
     std::string newNamespacePrefix = namespaceName + "::";
-    
+
     // Process all declarations in the namespace
     // For each declaration, we'll mangle its name to include the namespace prefix
     for (const auto& member : node->members) {
@@ -108,10 +108,10 @@ void LLVMCodegen::visit(ast::NamespaceDeclaration* node) {
             member->accept(*this);
         }
     }
-    
+
     // Restore the previous namespace context
     // (In a full implementation)
-    
+
     // Namespaces don't produce runtime values
     m_currentLLVMValue = nullptr;
 }
@@ -124,7 +124,7 @@ std::unique_ptr<llvm::LLVMContext> LLVMCodegen::releaseContext() {
     return std::move(context);
 }
 
-void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
+void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
     llvm::Value* initialVal = nullptr;
     llvm::Type* varType = nullptr;
 
@@ -143,7 +143,7 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
         if (node->typeNode && !node->init->type) {
             node->init->type = node->typeNode->clone();
         }
-        
+
         node->init->accept(*this);
         initialVal = m_currentLLVMValue;
         if (!initialVal) {
@@ -151,22 +151,22 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
             m_currentLLVMValue = nullptr;
             return;
         }
-        
+
         // Track lambda function types for later indirect calling
-        if (dynamic_cast<vyn::ast::FunctionExpression*>(node->init.get())) {
+        if (dynamic_cast<vyb::ast::FunctionExpression*>(node->init.get())) {
             if (auto* lambdaFunc = llvm::dyn_cast<llvm::Function>(initialVal)) {
                 localLambdaTypes[node->id->name] = lambdaFunc->getFunctionType();
             }
         }
-        
+
         // If the initializer was an ObjectLiteral, ensure we properly set up type information
-        if (auto* objLiteral = dynamic_cast<vyn::ast::ObjectLiteral*>(node->init.get())) {
+        if (auto* objLiteral = dynamic_cast<vyb::ast::ObjectLiteral*>(node->init.get())) {
             if (objLiteral->typePath && !node->typeNode) {
                 // Create a TypeNode for the variable based on the ObjectLiteral's type
                 node->typeNode = objLiteral->typePath->clone();
             }
         }
-        
+
         if (!varType) {
             varType = initialVal->getType();
         } else {
@@ -176,8 +176,8 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
                 if (castedVal) {
                     initialVal = castedVal;
                 } else {
-                    logError(node->init->loc, "Type mismatch for variable '" + node->id->name + 
-                                             "'. Initializer type " + getTypeName(initialVal->getType()) + 
+                    logError(node->init->loc, "Type mismatch for variable '" + node->id->name +
+                                             "'. Initializer type " + getTypeName(initialVal->getType()) +
                                              " is not assignable to declared type " + getTypeName(varType));
                     m_currentLLVMValue = nullptr;
                     return;
@@ -203,7 +203,7 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
     if (!currentFunction) { // Global variable
         // Global variables must have constant initializers.
         if (!llvm::isa<llvm::Constant>(initialVal)) {
-            logError(node->init ? node->init->loc : node->loc, 
+            logError(node->init ? node->init->loc : node->loc,
                      "Global variable '" + node->id->name + "' initializer must be a constant.");
             m_currentLLVMValue = nullptr;
             return;
@@ -220,7 +220,7 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
         m_currentLLVMValue = globalVar;
         // Propagate type info for struct/class variables
         if (node->typeNode) {
-            valueTypeMap[globalVar] = std::shared_ptr<vyn::ast::TypeNode>(node->typeNode->clone());
+            valueTypeMap[globalVar] = std::shared_ptr<vyb::ast::TypeNode>(node->typeNode->clone());
         }
     } else { // Local variable
         llvm::AllocaInst* alloca = llvm::dyn_cast_or_null<llvm::AllocaInst>(
@@ -250,7 +250,7 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
                                 std::vector<ast::TypeNodePtr>()
                             );
                             valueTypeMap[alloca] = std::shared_ptr<ast::TypeNode>(std::move(substitutedType));
-                            VYN_CDBG << "DEBUG: Variable '" << node->id->name << "' type substituted in valueTypeMap: " 
+                            VYB_CDBG << "DEBUG: Variable '" << node->id->name << "' type substituted in valueTypeMap: "
                                       << typeStr << " -> " << substIt->second << std::endl;
                         } else {
                             valueTypeMap[alloca] = node->id->type;
@@ -265,64 +265,64 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
                 valueTypeMap[alloca] = node->id->type;
             }
         }
-        
+
         // Determine ownership kind from variable's type annotation
         ast::OwnershipKind ownership = ast::OwnershipKind::MY; // Default to MY ownership
         bool needsCleanup = false;
-        
+
         // Extract ownership from type annotation
         if (node->typeNode) {
             std::string typeString = node->typeNode->toString();
-            VYN_CDBG << "DEBUG: Variable '" << node->id->name << "' has AST type: '" << typeString << "'" << std::endl;
-            
+            VYB_CDBG << "DEBUG: Variable '" << node->id->name << "' has AST type: '" << typeString << "'" << std::endl;
+
             // Check for ownership type wrappers
             if (auto* typeName = dynamic_cast<ast::TypeName*>(node->typeNode.get())) {
                 if (typeName->identifier) {
                     std::string typeNameStr = typeName->identifier->name;
-                    
+
                     // Detect ownership types
                     if (typeNameStr == "my") {
                         ownership = ast::OwnershipKind::MY;
                         needsCleanup = true;
-                        VYN_CDBG << "DEBUG: Variable '" << node->id->name << "' has MY ownership - needs cleanup" << std::endl;
+                        VYB_CDBG << "DEBUG: Variable '" << node->id->name << "' has MY ownership - needs cleanup" << std::endl;
                     } else if (typeNameStr == "our") {
                         ownership = ast::OwnershipKind::OUR;
                         needsCleanup = true;
-                        VYN_CDBG << "DEBUG: Variable '" << node->id->name << "' has OUR ownership - needs cleanup" << std::endl;
+                        VYB_CDBG << "DEBUG: Variable '" << node->id->name << "' has OUR ownership - needs cleanup" << std::endl;
                     } else if (typeNameStr == "their") {
                         ownership = ast::OwnershipKind::THEIR;
                         needsCleanup = false;
-                        VYN_CDBG << "DEBUG: Variable '" << node->id->name << "' has THEIR ownership - no cleanup" << std::endl;
+                        VYB_CDBG << "DEBUG: Variable '" << node->id->name << "' has THEIR ownership - no cleanup" << std::endl;
                     } else if (typeNameStr == "mild") {
                         ownership = ast::OwnershipKind::MILD;
                         needsCleanup = true;
-                        VYN_CDBG << "DEBUG: Variable '" << node->id->name << "' has MILD ownership - needs cleanup" << std::endl;
+                        VYB_CDBG << "DEBUG: Variable '" << node->id->name << "' has MILD ownership - needs cleanup" << std::endl;
                     }
                 }
             }
-            
+
             // Also check for Vec types that need cleanup
             if (typeString.find("Vec") != std::string::npos) {
                 needsCleanup = true;
-                VYN_CDBG << "DEBUG: Variable '" << node->id->name << "' is a Vec type requiring cleanup" << std::endl;
+                VYB_CDBG << "DEBUG: Variable '" << node->id->name << "' is a Vec type requiring cleanup" << std::endl;
             }
         }
-        
+
         // Fall back to LLVM struct type name check for Vec
         if (!needsCleanup) {
             if (auto structType = llvm::dyn_cast<llvm::StructType>(varType)) {
                 std::string typeName = structType->getName().str();
-                VYN_CDBG << "DEBUG: Variable '" << node->id->name << "' has struct type: '" << typeName << "'" << std::endl;
+                VYB_CDBG << "DEBUG: Variable '" << node->id->name << "' has struct type: '" << typeName << "'" << std::endl;
                 if (typeName.find("Vec") != std::string::npos) {
                     needsCleanup = true;
-                    VYN_CDBG << "DEBUG: Variable '" << node->id->name << "' is a Vec type (from LLVM) requiring cleanup" << std::endl;
+                    VYB_CDBG << "DEBUG: Variable '" << node->id->name << "' is a Vec type (from LLVM) requiring cleanup" << std::endl;
                 }
             }
         }
-        
+
         // Register variable for scope-based cleanup
         registerVariable(node->id->name, alloca, initialVal, ownership, varType, needsCleanup);
-        
+
         // Create debug information for the variable
         if (debugBuilder && !debugScopeStack.empty()) {
             std::string typeName = getTypeName(varType);
@@ -335,36 +335,36 @@ void LLVMCodegen::visit(vyn::ast::VariableDeclaration* node) {
                 }
             }
         }
-        
+
         m_currentLLVMValue = alloca;
         // Propagate type info for struct/class variables
         if (node->typeNode) {
             // Use resolved type if available (e.g., TypeName->type contains resolved TupleTypeNode or VecType)
-            vyn::ast::TypeNode* typeToStore = node->typeNode->type ? node->typeNode->type.get() : node->typeNode.get();
-            valueTypeMap[alloca] = std::shared_ptr<vyn::ast::TypeNode>(typeToStore->clone());
+            vyb::ast::TypeNode* typeToStore = node->typeNode->type ? node->typeNode->type.get() : node->typeNode.get();
+            valueTypeMap[alloca] = std::shared_ptr<vyb::ast::TypeNode>(typeToStore->clone());
         }
     }
 }
 
-void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
+void LLVMCodegen::visit(vyb::ast::FunctionDeclaration* node) {
     // DEBUG: Show error propagation metadata
-    VYN_CDBG << "DEBUG: Function '" << node->id->name << "' - canFail=" << node->canFail 
-              << ", needsErrorReturn=" << node->needsErrorReturn 
+    VYB_CDBG << "DEBUG: Function '" << node->id->name << "' - canFail=" << node->canFail
+              << ", needsErrorReturn=" << node->needsErrorReturn
               << ", errorTypes.size=" << node->errorTypes.size() << std::endl;
-    
+
     // Check if this is a generic function (has type parameters)
     if (!node->genericParams.empty()) {
-        VYN_CDBG << "DEBUG: Storing generic function template: " << node->id->name 
+        VYB_CDBG << "DEBUG: Storing generic function template: " << node->id->name
                   << " with " << node->genericParams.size() << " type parameters" << std::endl;
-        
+
         // Store the generic function template for later monomorphization
         genericFunctionTemplates[node->id->name] = node;
-        
+
         // Don't codegen generic functions directly - they'll be monomorphized on call
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     std::vector<llvm::Type*> paramTypes;
     std::vector<std::string> paramNames;
     for (const auto& paramNode : node->params) {
@@ -383,7 +383,7 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
 
     llvm::Type* returnType = nullptr;
     llvm::Type* originalReturnType = nullptr;  // Store original type before wrapping
-    
+
     if (node->returnTypeNode) {
         if (currentAsyncState.isAsync) {
             // For async functions, the actual return type is wrapped in Future<T>
@@ -395,16 +395,16 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
             returnType = createFutureStructType(originalReturnType);
         } else {
             originalReturnType = codegenType(node->returnTypeNode.get());
-            VYN_CDBG << "DEBUG: Function " << node->id->name << " return type resolved to: " 
+            VYB_CDBG << "DEBUG: Function " << node->id->name << " return type resolved to: "
                       << getTypeName(originalReturnType) << " with pointer: " << originalReturnType << std::endl;
             if (!originalReturnType) {
                 logError(node->loc, "Could not determine LLVM return type for function '" + node->id->name + "'.");
                 m_currentLLVMValue = nullptr; return;
             }
-            
+
             // Phase 2: Wrap return type in {T, ptr} for failable functions
             if (node->needsErrorReturn) {
-                VYN_CDBG << "DEBUG: Wrapping return type in {T, ptr} for failable function '" 
+                VYB_CDBG << "DEBUG: Wrapping return type in {T, ptr} for failable function '"
                           << node->id->name << "'" << std::endl;
                 llvm::Type* errorPtrType = llvm::PointerType::get(*context, 0);  // i8*
                 if (originalReturnType->isVoidTy()) {
@@ -417,7 +417,7 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
                 returnType = originalReturnType;
             }
         }
-        
+
         // Auto-serialization for main():
         // - main()<Void>: nothing to serialize — no change.
         // - main()<String>: handled specially in the JIT runner (main.cpp) — no change.
@@ -426,7 +426,7 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
         //   m_mainAutoSerializeOrigRetType records the original type for cgen_stmt.
         if (node->id->name == "main" && !node->needsErrorReturn) {
             bool isVoidReturn  = returnType->isVoidTy();
-            bool isStringRet   = isVynStringStructType(returnType);
+            bool isStringRet   = isVyBStringStructType(returnType);
             if (!isVoidReturn && !isStringRet) {
                 // Emit serialization inside main(); change LLVM return type to void.
                 m_mainAutoSerializeOrigRetType = returnType;
@@ -440,12 +440,12 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
             returnType = createFutureStructType(originalReturnType);
         } else {
             originalReturnType = llvm::Type::getVoidTy(*context);
-            
+
             // Phase 2 ABI choice:
             // Keep one uniform failable ABI shape for codegen paths: {payload, error_ptr}.
             // For Void payloads we use i1 as a dummy field, giving {i1, i8*}.
             if (node->needsErrorReturn) {
-                VYN_CDBG << "DEBUG: Wrapping void return in {i1, ptr} for failable function '" 
+                VYB_CDBG << "DEBUG: Wrapping void return in {i1, ptr} for failable function '"
                           << node->id->name << "' (using i1 as dummy)" << std::endl;
                 llvm::Type* errorPtrType = llvm::PointerType::get(*context, 0);
                 // Use i1 (bool) as dummy value for void functions
@@ -455,24 +455,24 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
             }
         }
     }
-    
+
     llvm::FunctionType* funcType = llvm::FunctionType::get(returnType, paramTypes, false /*isVarArg*/);
-    
+
     // DEBUG: Print the function type we're creating
     std::string funcTypeStr;
     llvm::raw_string_ostream typeStream(funcTypeStr);
     funcType->print(typeStream);
-    VYN_CDBG << "DEBUG: Creating function '" << node->id->name << "' with type: " << typeStream.str() << std::endl;
-    
+    VYB_CDBG << "DEBUG: Creating function '" << node->id->name << "' with type: " << typeStream.str() << std::endl;
+
     // Mangle function name if inside a bind/impl block
     std::string functionName = node->id->name;
     if (m_currentImplTypeNode) {
         // Create mangled name: TypeName_methodName (e.g., Person_goodbye, Robot_hello)
         functionName = m_currentImplTypeNode->toString() + "_" + node->id->name;
-        VYN_CDBG << "DEBUG: Mangling bind method name: " << node->id->name 
+        VYB_CDBG << "DEBUG: Mangling bind method name: " << node->id->name
                   << " -> " << functionName << std::endl;
     }
-    
+
     // Check for existing function (could be forward declaration or redefinition)
     llvm::Function* func = module->getFunction(functionName);
     if (func) {
@@ -488,20 +488,20 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
     } else {
         func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, functionName, module.get());
     }
-    
+
     // Phase 6.4: Prevent inlining to preserve stack traces
     // Add noinline attribute so functions appear in call stack
     func->addFnAttr(llvm::Attribute::NoInline);
-    
+
     // DEBUG: Print the ACTUAL function type after creation/retrieval
     std::string actualFuncTypeStr;
     llvm::raw_string_ostream actualTypeStream(actualFuncTypeStr);
     func->getFunctionType()->print(actualTypeStream);
-    VYN_CDBG << "DEBUG: ACTUAL function '" << functionName << "' has type: " << actualTypeStream.str() << std::endl;
+    VYB_CDBG << "DEBUG: ACTUAL function '" << functionName << "' has type: " << actualTypeStream.str() << std::endl;
 
     // Set current function for subsequent codegen (body, variable declarations)
     llvm::Function* oldFunction = currentFunction;
-    vyn::ast::FunctionDeclaration* oldFunctionAST = currentFunctionAST;
+    vyb::ast::FunctionDeclaration* oldFunctionAST = currentFunctionAST;
     currentFunction = func;
     currentFunctionAST = node;  // Track AST node for error propagation
 
@@ -517,10 +517,10 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
         currentAsyncState.isAsync = true;
         currentAsyncState.asyncFunction = func;
         currentAsyncState.stateCounter = 0;
-        
+
         // Initialize debug information for async state machine
         initializeAsyncStateDebugInfo(functionName, node->loc);
-        
+
         // For async functions, modify return type to Future<T> if not already
         if (node->returnTypeNode) {
             // Check if return type is already Future<T>
@@ -540,9 +540,9 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
 
     // Store old namedValues and create a new scope for the function arguments and locals
     std::map<std::string, llvm::Value*> oldNamedValues;
-    oldNamedValues.swap(namedValues); 
+    oldNamedValues.swap(namedValues);
 
-    if (node->body) { 
+    if (node->body) {
         llvm::BasicBlock* entryBB = llvm::BasicBlock::Create(*context, "entry", func);
         builder->SetInsertPoint(entryBB);
 
@@ -573,11 +573,11 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
             }
             builder->CreateStore(argVal, alloca);
             namedValues[paramNames[i]] = alloca;
-            
+
             // Store type information for function parameters
             if (node->params[i].typeNode) {
-                valueTypeMap[alloca] = std::shared_ptr<vyn::ast::TypeNode>(node->params[i].typeNode->clone());
-                VYN_CDBG << "DEBUG: Stored type mapping for parameter '" << paramNames[i] << "'" << std::endl;
+                valueTypeMap[alloca] = std::shared_ptr<vyb::ast::TypeNode>(node->params[i].typeNode->clone());
+                VYB_CDBG << "DEBUG: Stored type mapping for parameter '" << paramNames[i] << "'" << std::endl;
             }
 
             // Deep-copy Vec parameters so that the callee owns independent data.
@@ -603,7 +603,7 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
                         llvm::Value* deepVec = generateVecDeepCopy(shallowVec, elemLLVMType, paramTypes[i]);
                         if (deepVec) {
                             builder->CreateStore(deepVec, alloca);
-                            VYN_CDBG << "DEBUG: Deep-copied Vec parameter '" << paramNames[i] << "'" << std::endl;
+                            VYB_CDBG << "DEBUG: Deep-copied Vec parameter '" << paramNames[i] << "'" << std::endl;
                             vecParam = true;
                         }
                     }
@@ -614,7 +614,7 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
             // Vec parameters now own their data (deep-copied above) so they need cleanup.
             // Non-Vec parameters do not own heap data and are cleaned up by the caller.
             registerVariable(paramNames[i], alloca, argVal, ast::OwnershipKind::MY, paramTypes[i], vecParam);
-            
+
             // Create debug information for the parameter
             if (debugBuilder && !debugScopeStack.empty()) {
                 std::string typeName = getTypeName(paramTypes[i]);
@@ -628,8 +628,8 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
                 }
             }
         }
-        
-        VYN_CDBG << "DEBUG: FunctionDeclaration - about to process function body" << std::endl;
+
+        VYB_CDBG << "DEBUG: FunctionDeclaration - about to process function body" << std::endl;
         // Push a new defer scope for this function
         m_deferStack.push_back({});
         node->body->accept(*this); // Generate code for the function body
@@ -644,7 +644,7 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
             }
             m_deferStack.pop_back();
         }
-        VYN_CDBG << "DEBUG: FunctionDeclaration - finished processing function body" << std::endl;
+        VYB_CDBG << "DEBUG: FunctionDeclaration - finished processing function body" << std::endl;
 
         // Clean up function scope before return
         exitScope();
@@ -681,7 +681,7 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
                 // Optionally, builder->CreateUnreachable(); if this state should be impossible.
             }
         }
-        
+
         // Verify the generated function
         if (llvm::verifyFunction(*func, &llvm::errs())) {
             logError(node->loc, "LLVM function verification failed for '" + node->id->name + "'. Errors printed to stderr.");
@@ -689,9 +689,9 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
             // Consider erasing the function: func->eraseFromParent();
             // For now, let it be, so errors are visible.
         }
-        
+
         // Phase 6.4: DEBUG - Check if function still exists after verification
-        VYN_CDBG << "DEBUG: Function '" << functionName << "' completed codegen, has " 
+        VYB_CDBG << "DEBUG: Function '" << functionName << "' completed codegen, has "
                   << func->size() << " basic blocks" << std::endl;
 
         // Pop debug scope for function
@@ -705,24 +705,24 @@ void LLVMCodegen::visit(vyn::ast::FunctionDeclaration* node) {
     currentFunction = oldFunction;
     currentFunctionAST = oldFunctionAST;  // Restore AST node
     currentAsyncState = oldAsyncState;
-    namedValues.swap(oldNamedValues); 
+    namedValues.swap(oldNamedValues);
 
     m_currentLLVMValue = func; // The "value" of a function declaration is the function itself
 }
 
-void LLVMCodegen::visit(vyn::ast::StructDeclaration* node) {
+void LLVMCodegen::visit(vyb::ast::StructDeclaration* node) {
     std::string nameStr = node->name->name;
-    
+
     // Check if this is a generic struct (has type parameters like Box<T>)
     if (!node->genericParams.empty()) {
-        VYN_CDBG << "DEBUG: Storing generic struct template: " << nameStr << " with " 
+        VYB_CDBG << "DEBUG: Storing generic struct template: " << nameStr << " with "
                   << node->genericParams.size() << " type parameters" << std::endl;
         // Store the AST node for later monomorphization when instantiated (e.g., Box<Int>)
         genericStructTemplates[nameStr] = node;
         m_currentLLVMValue = nullptr;
         return; // Don't generate LLVM type yet
     }
-    
+
     // Non-generic struct: generate LLVM type immediately
     llvm::StructType* structType = llvm::StructType::create(*context, nameStr);
 
@@ -730,10 +730,10 @@ void LLVMCodegen::visit(vyn::ast::StructDeclaration* node) {
     typeInfo.llvmType = structType;
     typeInfo.isStruct = true;
     typeInfo.isReprC = node->reprC;
-    
+
     // Add opaque struct to map BEFORE processing field types (for circular references)
     userTypeMap[nameStr] = typeInfo;
-    VYN_CDBG << "DEBUG: Stored " << nameStr << " in userTypeMap with LLVM type pointer: " << structType << std::endl;
+    VYB_CDBG << "DEBUG: Stored " << nameStr << " in userTypeMap with LLVM type pointer: " << structType << std::endl;
 
     std::vector<llvm::Type*> fieldTypes;
     for (size_t i = 0; i < node->fields.size(); ++i) {
@@ -742,33 +742,33 @@ void LLVMCodegen::visit(vyn::ast::StructDeclaration* node) {
             logError(fieldDecl->name->loc, "Field \'" + fieldDecl->name->name + "\' in struct \'" + nameStr + "\' is missing a type.");
             m_currentLLVMValue = nullptr; return;
         }
-        VYN_CDBG << "DEBUG: Processing field '" << fieldDecl->name->name << "' with type: " << fieldDecl->typeNode->toString() << std::endl;
+        VYB_CDBG << "DEBUG: Processing field '" << fieldDecl->name->name << "' with type: " << fieldDecl->typeNode->toString() << std::endl;
         llvm::Type* fieldType = codegenType(fieldDecl->typeNode.get()); // Changed .type to ->typeNode
         if (!fieldType) {
             logError(fieldDecl->name->loc, "Could not determine LLVM type for field \'" + fieldDecl->name->name + "\' in struct \'" + nameStr + "\'.");
             m_currentLLVMValue = nullptr; return;
         }
-        VYN_CDBG << "DEBUG: Successfully generated LLVM type for field '" << fieldDecl->name->name << "'" << std::endl;
+        VYB_CDBG << "DEBUG: Successfully generated LLVM type for field '" << fieldDecl->name->name << "'" << std::endl;
         fieldTypes.push_back(fieldType);
         typeInfo.fieldIndices[fieldDecl->name->name] = i; // Changed .name to ->name
     }
 
     structType->setBody(fieldTypes, /*isPacked=*/false);
-    VYN_CDBG << "DEBUG: Set struct body for " << nameStr << " with " << fieldTypes.size() << " fields, struct is opaque: " << structType->isOpaque() << std::endl;
-    
+    VYB_CDBG << "DEBUG: Set struct body for " << nameStr << " with " << fieldTypes.size() << " fields, struct is opaque: " << structType->isOpaque() << std::endl;
+
     // Update the map entry with complete field information
     userTypeMap[nameStr] = typeInfo;
-    
+
     // Add struct to monomorphizedStructs for metadata generation
     monomorphizedStructs[nameStr] = structType;
-    
+
     // Generate type metadata for JSON serialization
     generateTypeMetadata(nameStr, node);
-    
+
     m_currentLLVMValue = nullptr; // structType is an llvm::Type*, not llvm::Value*
 }
 
-void LLVMCodegen::visit(vyn::ast::ClassDeclaration* node) {
+void LLVMCodegen::visit(vyb::ast::ClassDeclaration* node) {
     // Similar to StructDeclaration, but might involve vtables, inheritance, etc. in the future.
     // For now, treat classes like structs.
     std::string nameStr = node->name->name;
@@ -780,7 +780,7 @@ void LLVMCodegen::visit(vyn::ast::ClassDeclaration* node) {
     typeInfo.isStruct = false; // It's a class
 
     std::vector<llvm::Type*> fieldTypes;
-    // TODO: Add vtable pointer as the first field if Vyn classes have virtual methods.
+    // TODO: Add vtable pointer as the first field if VyB classes have virtual methods.
     // llvm::Type* vtablePtrType = llvm::PointerType::getUnqual(llvm::FunctionType::get(voidType, true)->getPointerTo());
     // fieldTypes.push_back(vtablePtrType);
     // typeInfo.fieldIndices["_vptr"] = 0; // Example vptr
@@ -840,23 +840,23 @@ void LLVMCodegen::visit(vyn::ast::ClassDeclaration* node) {
     currentClassType = nullptr; // Reset after processing class
 }
 
-void LLVMCodegen::visit(vyn::ast::TypeAliasDeclaration* node) {
+void LLVMCodegen::visit(vyb::ast::TypeAliasDeclaration* node) {
     // type<UnderlyingType> AliasName;
     // This registers the type alias so that when codegenType encounters the alias name,
     // it can resolve to the underlying LLVM type.
-    
+
     if (!node->name || node->name->name.empty()) {
         logError(node->loc, "Type alias declaration missing or has empty name");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     if (!node->typeNode) {
         logError(node->loc, "Type alias declaration missing underlying type");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Resolve the underlying type to LLVM type
     llvm::Type* underlyingLlvmType = codegenType(node->typeNode.get());
     if (!underlyingLlvmType) {
@@ -864,11 +864,11 @@ void LLVMCodegen::visit(vyn::ast::TypeAliasDeclaration* node) {
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Register the type alias mapping
     std::string aliasName = node->name->name;
     typeAliasMap[aliasName] = underlyingLlvmType;
-    
+
     // Debug output to verify registration
     if (verbose) {
         logWarning(node->loc, "Registered type alias '" + aliasName + "' -> underlying LLVM type");
@@ -876,14 +876,14 @@ void LLVMCodegen::visit(vyn::ast::TypeAliasDeclaration* node) {
     m_currentLLVMValue = nullptr; // No direct LLVM value for an alias declaration itself.
 }
 
-void LLVMCodegen::visit(vyn::ast::ImportDeclaration* node) {
+void LLVMCodegen::visit(vyb::ast::ImportDeclaration* node) {
     // Import declarations are resolved in a pre-codegen module-resolution pass.
     // During codegen, treat them as no-ops.
     (void)node;
     m_currentLLVMValue = nullptr;
 }
 
-void LLVMCodegen::visit(vyn::ast::FieldDeclaration* node) {
+void LLVMCodegen::visit(vyb::ast::FieldDeclaration* node) {
     // FieldDeclarations are part of StructDeclaration or ClassDeclaration.
     // They are processed within those visitors, not typically visited standalone by the main codegen loop.
     // If visited standalone, it implies context is missing (e.g. which struct/class it belongs to).
@@ -891,19 +891,19 @@ void LLVMCodegen::visit(vyn::ast::FieldDeclaration* node) {
     m_currentLLVMValue = nullptr;
 }
 
-void LLVMCodegen::visit(vyn::ast::BindDeclaration* node) {
+void LLVMCodegen::visit(vyb::ast::BindDeclaration* node) {
     // impl blocks associate methods with types.
     // Generic impl blocks (e.g., impl<T> Display for Box<T>) are templates that don't
     // generate code until instantiated with concrete types.
-    
+
     // Check if this is a generic impl block
     if (!node->genericParams.empty()) {
-        VYN_CDBG << "DEBUG: Skipping generic impl block for " << node->selfType->toString() 
+        VYB_CDBG << "DEBUG: Skipping generic impl block for " << node->selfType->toString()
                   << " - codegen happens on instantiation" << std::endl;
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // For non-generic impl blocks, generate the methods for the concrete type
     // ast.hpp: TypeNodePtr selfType; // The type being implemented
     // ast.hpp: std::vector<std::unique_ptr<FunctionDeclaration>> methods;
@@ -930,17 +930,17 @@ void LLVMCodegen::visit(vyn::ast::BindDeclaration* node) {
     if (node->traitType && driver_.hasSemanticAnalyzer()) {
         std::string aspectName = node->traitType->toString();
         std::string typeName = node->selfType->toString();
-        
-        VYN_CDBG << "DEBUG: Checking for default methods to generate for " 
+
+        VYB_CDBG << "DEBUG: Checking for default methods to generate for "
                   << typeName << " implementing " << aspectName << std::endl;
-        
+
         SemanticAnalyzer* semantic = driver_.getSemanticAnalyzer();
         const auto& aspects = semantic->getTraitRegistry();
-        
+
         auto aspectIt = aspects.find(aspectName);
         if (aspectIt != aspects.end() && aspectIt->second) {
             const TraitInfo* aspectInfo = aspectIt->second.get();
-            
+
             // Get the list of methods explicitly defined in this bind
             std::set<std::string> implementedMethods;
             for (const auto& method : node->methods) {
@@ -948,15 +948,15 @@ void LLVMCodegen::visit(vyn::ast::BindDeclaration* node) {
                     implementedMethods.insert(method->id->name);
                 }
             }
-            
+
             // Check each aspect method for default implementations
             for (const auto& traitMethod : aspectInfo->methods) {
-                if (traitMethod.hasDefaultImpl && 
+                if (traitMethod.hasDefaultImpl &&
                     implementedMethods.find(traitMethod.name) == implementedMethods.end()) {
-                    
-                    VYN_CDBG << "DEBUG: Generating default implementation for " 
+
+                    VYB_CDBG << "DEBUG: Generating default implementation for "
                               << typeName << "::" << traitMethod.name << std::endl;
-                    
+
                     // Generate the default method by visiting the aspect's method declaration
                     // with the current impl type set (so Self resolves to the concrete type)
                     if (traitMethod.declaration) {
@@ -973,7 +973,7 @@ void LLVMCodegen::visit(vyn::ast::BindDeclaration* node) {
     m_currentLLVMValue = nullptr; // Impl block itself doesn't produce a value
 }
 
-void LLVMCodegen::visit(vyn::ast::EnumDeclaration* node) {
+void LLVMCodegen::visit(vyb::ast::EnumDeclaration* node) {
     // C-like integer enum: each variant maps to a sequential i64 constant.
     // Variants with associated types are not supported yet (tagged union is a future feature).
     if (!node->name) {
@@ -997,39 +997,39 @@ void LLVMCodegen::visit(vyn::ast::EnumDeclaration* node) {
     m_currentLLVMValue = nullptr;
 }
 
-void LLVMCodegen::visit(vyn::ast::EnumVariant* node) {
+void LLVMCodegen::visit(vyb::ast::EnumVariant* node) {
     // Visited as part of EnumDeclaration. Not typically standalone.
     logError(node->loc, "EnumVariant visited standalone.");
     m_currentLLVMValue = nullptr;
 }
 
-void LLVMCodegen::visit(vyn::ast::GenericParameter* node) {
+void LLVMCodegen::visit(vyb::ast::GenericParameter* node) {
     // Generic parameters are resolved during template instantiation (monomorphization).
     // Standalone codegen for a GenericParameter is not typical.
     logError(node->loc, "GenericParameter visited standalone. Should be resolved during template instantiation.");
     m_currentLLVMValue = nullptr;
 }
 
-void LLVMCodegen::visit(vyn::ast::TemplateDeclaration* node) {
+void LLVMCodegen::visit(vyb::ast::TemplateDeclaration* node) {
     // Template declarations are blueprints. Code is generated when they are instantiated.
     // No LLVM IR is generated for template declarations themselves - only for instantiations.
     // Silently skip template declarations during codegen.
-    VYN_CDBG << "DEBUG: Skipping TemplateDeclaration '" 
-              << (node && node->name ? node->name->name : "<unnamed>") 
+    VYB_CDBG << "DEBUG: Skipping TemplateDeclaration '"
+              << (node && node->name ? node->name->name : "<unnamed>")
               << "' - codegen happens on instantiation" << std::endl;
     m_currentLLVMValue = nullptr;
 }
 
-void LLVMCodegen::createFunctionForwardDeclaration(vyn::ast::FunctionDeclaration* node) {
-    VYN_CDBG << "DEBUG: Creating forward declaration for function: " << node->id->name << std::endl;
-    
+void LLVMCodegen::createFunctionForwardDeclaration(vyb::ast::FunctionDeclaration* node) {
+    VYB_CDBG << "DEBUG: Creating forward declaration for function: " << node->id->name << std::endl;
+
     // Check if function already exists
     llvm::Function* existingFunc = module->getFunction(node->id->name);
     if (existingFunc) {
-        VYN_CDBG << "DEBUG: Function " << node->id->name << " already exists, skipping forward declaration" << std::endl;
+        VYB_CDBG << "DEBUG: Function " << node->id->name << " already exists, skipping forward declaration" << std::endl;
         return;
     }
-    
+
     // Extract parameter types
     std::vector<llvm::Type*> paramTypes;
     for (const auto& paramNode : node->params) {
@@ -1048,7 +1048,7 @@ void LLVMCodegen::createFunctionForwardDeclaration(vyn::ast::FunctionDeclaration
     // Extract return type
     llvm::Type* returnType = nullptr;
     llvm::Type* originalReturnType = nullptr;
-    
+
     if (node->returnTypeNode) {
         if (currentAsyncState.isAsync) {
             // For async functions, the actual return type is wrapped in Future<T>
@@ -1064,10 +1064,10 @@ void LLVMCodegen::createFunctionForwardDeclaration(vyn::ast::FunctionDeclaration
                 logError(node->loc, "Could not determine LLVM return type for function '" + node->id->name + "'.");
                 return;
             }
-            
+
             // Phase 2: Wrap return type in {T, ptr} for failable functions
             if (node->needsErrorReturn) {
-                VYN_CDBG << "DEBUG: Forward decl - Wrapping return type in {T, ptr} for failable function '" 
+                VYB_CDBG << "DEBUG: Forward decl - Wrapping return type in {T, ptr} for failable function '"
                           << node->id->name << "'" << std::endl;
                 llvm::Type* errorPtrType = llvm::PointerType::get(*context, 0);
                 if (originalReturnType->isVoidTy()) {
@@ -1086,12 +1086,12 @@ void LLVMCodegen::createFunctionForwardDeclaration(vyn::ast::FunctionDeclaration
             returnType = createFutureStructType(originalReturnType);
         } else {
             originalReturnType = llvm::Type::getVoidTy(*context);
-            
+
             // Phase 2 ABI choice:
             // Keep one uniform failable ABI shape for codegen paths: {payload, error_ptr}.
             // For Void payloads we use i1 as a dummy field, giving {i1, i8*}.
             if (node->needsErrorReturn) {
-                VYN_CDBG << "DEBUG: Forward decl - Wrapping void return in {i1, ptr} for failable function '" 
+                VYB_CDBG << "DEBUG: Forward decl - Wrapping void return in {i1, ptr} for failable function '"
                           << node->id->name << "'" << std::endl;
                 llvm::Type* errorPtrType = llvm::PointerType::get(*context, 0);
                 returnType = llvm::StructType::get(*context, {llvm::Type::getInt1Ty(*context), errorPtrType});
@@ -1100,19 +1100,19 @@ void LLVMCodegen::createFunctionForwardDeclaration(vyn::ast::FunctionDeclaration
             }
         }
     }
-    
+
     // Create function type and forward declaration
     // Apply the same auto-serialization rule as in visit(FunctionDeclaration):
     // main() with any non-Void, non-String return → use void (auto-serialization).
     if (node->id->name == "main" && !node->needsErrorReturn) {
         bool isVoidReturn  = returnType->isVoidTy();
-        bool isStringRet   = isVynStringStructType(returnType);
+        bool isStringRet   = isVyBStringStructType(returnType);
         if (!isVoidReturn && !isStringRet) {
             returnType = voidType;
         }
     }
     llvm::FunctionType* funcType = llvm::FunctionType::get(returnType, paramTypes, false /*isVarArg*/);
     llvm::Function* func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, node->id->name, module.get());
-    
-    VYN_CDBG << "DEBUG: Successfully created forward declaration for function: " << node->id->name << std::endl;
+
+    VYB_CDBG << "DEBUG: Successfully created forward declaration for function: " << node->id->name << std::endl;
 }

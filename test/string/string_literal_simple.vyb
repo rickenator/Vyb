@@ -1,0 +1,13 @@
+// Test simple string literal concatenation
+
+main() <Int> -> {
+    // Direct string literal concatenation
+    data<String> = "this" + "that"
+    println("Concatenated: " + data.len().to_string())
+
+    // Multiple concatenations
+    msg<String> = "Hello" + " " + "World"
+    println("Message length: " + msg.len().to_string())
+
+    return 0
+}

@@ -1,0 +1,33 @@
+// Debug the tree initialization step by step
+struct DebugTree {
+    size<Int>,
+    has_root<Bool>
+}
+
+debug_init()<DebugTree> -> {
+    return DebugTree {
+        size = 0,
+        has_root = false
+    }
+}
+
+debug_modify(tree<their<DebugTree>>)<Void> -> {
+    tree.size = 7
+    tree.has_root = true
+}
+
+main()<Int> -> {
+    my_tree<DebugTree> = debug_init()
+
+    println("Initial state:")
+    println("Size: " + my_tree.size.to_string())
+    println("Has root: " + my_tree.has_root.to_string())
+
+    debug_modify(borrow(my_tree))
+
+    println("After modification:")
+    println("Size: " + my_tree.size.to_string())
+    println("Has root: " + my_tree.has_root.to_string())
+
+    return 0
+}

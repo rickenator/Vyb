@@ -1,0 +1,21 @@
+// Simple test for comparison patterns
+// @expect-return: 6
+
+main()<Int> -> {
+    score<Int const> = 85
+
+    println("Testing comparison patterns with score:")
+    println(score)
+
+    result<Int const> = select(score) -> {
+        >= 90 -> 1,
+        >= 80 -> 6,
+        < 60 -> 10,
+        ? -> 99
+    }
+
+    println("Result:")
+    println(result)
+
+    return result
+}

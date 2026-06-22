@@ -1,0 +1,11 @@
+// @test: Bundle-scoped share rejects outsiders
+// @description: share(bundle) declarations are hidden when the importer is not in that bundle
+// @category: modules
+// @expect: fail
+// @tags: modules, bundle, visibility
+
+import visibility_export::{bundle_value} from "./visibility_export.vyb"
+
+main()<Int> -> {
+    return bundle_value()
+}

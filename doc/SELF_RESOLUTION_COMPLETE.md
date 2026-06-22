@@ -36,7 +36,7 @@ Implementation:
 if (method->returnTypeNode) {
     // Added: Substitute Self with concrete type
     ast::TypeNode* actualReturnType = substituteSelfType(
-        method->returnTypeNode.get(), 
+        method->returnTypeNode.get(),
         typeNameStr  // e.g., "Box<Point>"
     );
     expressionTypes[node] = actualReturnType;
@@ -49,7 +49,7 @@ if (method->returnTypeNode) {
 - **After**: 6 semantic errors, Self resolution error FIXED ✅
 
 Test case:
-```vyn
+```vyb
 box<Box<Point>> = Box { value = p };
 box2<Box<Point>> = box.clone();  // Now correctly returns Box<Point>
 ```

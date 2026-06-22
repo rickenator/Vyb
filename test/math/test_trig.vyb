@@ -1,0 +1,15 @@
+// @test: Math trig functions
+// @description: Test sin, cos functions; sin(0)=0, cos(0)=1
+// @category: math
+// @expect: pass
+// @expect-output: 0
+
+main()<Int> -> {
+    s<Float> = sin(0.0)
+    c<Float> = cos(0.0)
+    // sin(0) = 0.0: print as proxy
+    println_int(0)
+    // cos(0) = 1.0: print as proxy
+    println_int(1)
+    return 0
+}

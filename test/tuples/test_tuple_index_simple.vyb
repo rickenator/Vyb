@@ -1,0 +1,22 @@
+// Simple tuple indexing test
+
+get_pair()<Tuple<Int, Int>> -> {
+    return 10, 20
+}
+
+main()<Int> -> {
+    data<Tuple<Int, Int>> = get_pair()
+
+    # Test indexing
+    x<Int> = data[0]
+    y<Int> = data[1]
+
+    # Test len()
+    size<Int> = data.len()
+
+    # Verify results
+    sum<Int> = x + y + size
+
+    # Should be: 10 + 20 + 2 = 32
+    return sum
+}

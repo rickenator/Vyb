@@ -1,0 +1,33 @@
+// Test: Multiple error paths with different failure points
+// Shows stack traces from different locations in the call tree
+
+willFail(shouldFail<Int>)<Int> -> {
+    if shouldFail == 1 {
+        println("Failing in willFail")
+        fail "Error from willFail function"
+    }
+    return 42
+}
+
+pathA()<Int> -> {
+    println("Taking path A")
+    return willFail(1)
+}
+
+pathB()<Int> -> {
+    println("Taking path B")
+    var<Int> result = willFail(0)
+    fail "Error from pathB after successful call"
+    return result
+}
+
+main()<Int> -> {
+    println("=== Stack Trace Test: Multiple Paths ===")
+    println("Testing path A (fail in nested call):")
+    var<Int> a = pathA()
+
+    println("Testing path B (fail in caller):")
+    var<Int> b = pathB()
+
+    return 0
+}

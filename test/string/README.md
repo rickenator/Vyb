@@ -1,24 +1,24 @@
 # String Type Tests
 
-This directory contains comprehensive tests for Vyn's String type implementation.
+This directory contains comprehensive tests for VyB's String type implementation.
 
 ## Test Files
 
 ### Basic Tests
-- **`string_test.vyn`** - Basic String functionality
+- **`string_test.vyb`** - Basic String functionality
   - `from_bytes()` constructor
   - `len()` method
   - `+` operator concatenation
   - String creation and manipulation
 
 ### Simple Method Tests
-- **`string_simple_test.vyn`** - Core method validation
+- **`string_simple_test.vyb`** - Core method validation
   - All 11 String methods in a single test
   - Basic functionality verification
   - Quick sanity check for String operations
 
 ### Comprehensive Method Tests
-- **`string_methods_test.vyn`** - Detailed method testing
+- **`string_methods_test.vyb`** - Detailed method testing
   - Individual test functions for each method
   - Edge cases and bounds checking
   - Expected output validation
@@ -32,13 +32,13 @@ This directory contains comprehensive tests for Vyn's String type implementation
     - `to_lower()`
 
 ### String Literal Tests
-- **`string_literal_test.vyn`** - String literal syntax
+- **`string_literal_test.vyb`** - String literal syntax
   - Direct literal assignment: `data<String> = "Hello"`
   - Literal concatenation: `"this" + "that"`
   - Method calls on literals: `"Hello".len()`
   - Natural string syntax validation
 
-- **`string_literal_simple.vyn`** - Simple literal tests
+- **`string_literal_simple.vyb`** - Simple literal tests
   - Basic literal concatenation
   - Length verification
 
@@ -47,16 +47,16 @@ This directory contains comprehensive tests for Vyn's String type implementation
 ### Run Individual Tests
 ```bash
 # Basic functionality
-build/vyn test/string/string_test.vyn
+build/vyb test/string/string_test.vyb
 
 # Quick method check
-build/vyn test/string/string_simple_test.vyn
+build/vyb test/string/string_simple_test.vyb
 
 # Comprehensive method tests
-build/vyn test/string/string_methods_test.vyn
+build/vyb test/string/string_methods_test.vyb
 
 # String literals
-build/vyn test/string/string_literal_test.vyn
+build/vyb test/string/string_literal_test.vyb
 ```
 
 ### Run All String Tests
@@ -65,15 +65,15 @@ build/vyn test/string/string_literal_test.vyn
 python3 test_harness.py --directory test/string
 
 # Manual loop
-for f in test/string/string_*.vyn; do
+for f in test/string/string_*.vyb; do
     echo "Testing $f..."
-    build/vyn "$f"
+    build/vyb "$f"
 done
 ```
 
 ## Expected Output
 
-### string_test.vyn
+### string_test.vyb
 ```
 Starting String tests...
 Created string from bytes
@@ -82,7 +82,7 @@ Combined string length: 11
 String tests completed
 ```
 
-### string_simple_test.vyn
+### string_simple_test.vyb
 ```
 Testing String methods...
 substring length: 5
@@ -95,7 +95,7 @@ to_lower first char: 104
 All tests completed!
 ```
 
-### string_methods_test.vyn
+### string_methods_test.vyb
 ```
 === String::substring() ===
 substring(0, 5) length: 5
@@ -108,7 +108,7 @@ char_at(10) out of bounds = 0
 [... more output ...]
 ```
 
-### string_literal_test.vyn
+### string_literal_test.vyb
 ```
 String literal assigned: 5
 Concatenated length: 11

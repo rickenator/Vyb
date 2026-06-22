@@ -1,0 +1,26 @@
+// Demo: borrow scopes, typed fail/trap, and C ABI aliases.
+
+extern "C" {
+    strlen(s<CString>)<CSize>
+}
+
+main()<Int> -> {
+    value<Int> = 10
+    {
+        read_ref<their<Int>> = view(value)
+    }
+
+    {
+        fail<Int>(7)
+    } trap (e<Int>) -> {
+        println_int(3)
+    }
+
+    freedom {
+        length<CSize> = strlen("VyB")
+        println_int(length)
+    }
+
+    println_int(value)
+    return 0
+}

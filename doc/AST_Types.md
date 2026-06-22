@@ -1,8 +1,8 @@
-# Vyn AST: Type System Nodes
+# VyB AST: Type System Nodes
 
-This document describes AST nodes related to Vyn's type system, as defined in `include/vyn/parser/ast.hpp`. These nodes are used to represent type information in variable declarations, function parameters, return types, and type-related expressions.
+This document describes AST nodes related to VyB's type system, as defined in `include/vyb/parser/ast.hpp`. These nodes are used to represent type information in variable declarations, function parameters, return types, and type-related expressions.
 
-All specific type nodes inherit from the base `vyn::ast::TypeNode` class, which itself inherits from `vyn::ast::Node`.
+All specific type nodes inherit from the base `vyb::ast::TypeNode` class, which itself inherits from `vyb::ast::Node`.
 
 ## Common Pointer Aliases
 
@@ -10,17 +10,17 @@ All specific type nodes inherit from the base `vyn::ast::TypeNode` class, which 
 - `ExprPtr = std::unique_ptr<Expression>;`
 - `IdentifierPtr = std::unique_ptr<Identifier>;`
 
-## 1. Base `TypeNode` (`vyn::ast::TypeNode`)
+## 1. Base `TypeNode` (`vyb::ast::TypeNode`)
 
 This is the abstract base class for all type nodes. It provides common functionality and a way to handle types polymorphically.
 
--   **C++ Class**: `vyn::ast::TypeNode`
+-   **C++ Class**: `vyb::ast::TypeNode`
 -   **`NodeType`**: `TYPE_NODE` (This is a general category; specific type nodes will have their own `NodeType` values like `BASIC_TYPE_NODE`, `POINTER_TYPE_NODE`, etc.)
--   **Inheritance**: `vyn::ast::Node` -> `vyn::ast::TypeNode`
+-   **Inheritance**: `vyb::ast::Node` -> `vyb::ast::TypeNode`
 
 ```cpp
-// Base class from include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// Base class from include/vyb/parser/ast.hpp
+namespace vyb::ast {
 
 class TypeNode : public Node {
 public:
@@ -32,7 +32,7 @@ public:
     // ... accept, getType, toString methods ...
 };
 
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ## 2. Specific Type Nodes
@@ -43,14 +43,14 @@ These classes inherit from `TypeNode` and represent concrete types in the langua
 
 Represents a basic, named type (e.g., `i32`, `string`, `MyStruct`).
 
--   **C++ Class**: `vyn::ast::BasicTypeNode`
+-   **C++ Class**: `vyb::ast::BasicTypeNode`
 -   **`NodeType`**: `BASIC_TYPE_NODE`
 -   **Fields**:
     -   `name` (`IdentifierPtr`): The identifier representing the type name.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 
 class BasicTypeNode : public TypeNode {
 public:
@@ -60,22 +60,22 @@ public:
     // ... accept, getType, toString, ToSignature methods ...
 };
 
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ### 2.2. `PointerTypeNode`
 
 Represents a pointer type (e.g., `*i32`, `*mut string`).
 
--   **C++ Class**: `vyn::ast::PointerTypeNode`
+-   **C++ Class**: `vyb::ast::PointerTypeNode`
 -   **`NodeType`**: `POINTER_TYPE_NODE`
 -   **Fields**:
     -   `pointeeType` (`TypeNodePtr`): The type of the data pointed to.
     -   `isMutable` (`bool`): True if the pointer allows mutation of the pointed-to data (e.g., `*mut`).
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 
 class PointerTypeNode : public TypeNode {
 public:
@@ -86,22 +86,22 @@ public:
     // ... accept, getType, toString, ToSignature methods ...
 };
 
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ### 2.3. `ReferenceTypeNode`
 
 Represents a reference type (e.g., `&i32`, `&mut string`).
 
--   **C++ Class**: `vyn::ast::ReferenceTypeNode`
+-   **C++ Class**: `vyb::ast::ReferenceTypeNode`
 -   **`NodeType`**: `REFERENCE_TYPE_NODE`
 -   **Fields**:
     -   `referencedType` (`TypeNodePtr`): The type of the data being referenced.
     -   `kind` (`BorrowKind`): The kind of borrow e.g., `SHARED`, `MUTABLE`, `UNIQUE_MUTABLE`.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 // enum class BorrowKind { SHARED, MUTABLE, UNIQUE_MUTABLE }; // Defined in ast.hpp
 
 class ReferenceTypeNode : public TypeNode {
@@ -113,22 +113,22 @@ public:
     // ... accept, getType, toString, ToSignature methods ...
 };
 
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ### 2.4. `ArrayTypeNode`
 
 Represents an array type (e.g., `[i32; 5]`, `[string]`).
 
--   **C++ Class**: `vyn::ast::ArrayTypeNode`
+-   **C++ Class**: `vyb::ast::ArrayTypeNode`
 -   **`NodeType`**: `ARRAY_TYPE_NODE`
 -   **Fields**:
     -   `elementType` (`TypeNodePtr`): The type of the elements in the array.
     -   `size` (`std::optional<ExprPtr>`): An optional expression for the size of the array. If `std::nullopt`, it represents a slice.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 
 class ArrayTypeNode : public TypeNode {
 public:
@@ -139,22 +139,22 @@ public:
     // ... accept, getType, toString, ToSignature methods ...
 };
 
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ### 2.5. `FunctionType`
 
 Represents a function type (e.g., `fn<String>(Int, Bool) ->`).
 
--   **C++ Class**: `vyn::ast::FunctionType`
+-   **C++ Class**: `vyb::ast::FunctionType`
 -   **`NodeType`**: `FUNCTION_TYPE_NODE`
 -   **Fields**:
     -   `parameterTypes` (`std::vector<TypeNodePtr>`): A vector of types for the function parameters.
     -   `returnType` (`TypeNodePtr`): The return type of the function.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 
 class FunctionType : public TypeNode {
 public:
@@ -165,7 +165,7 @@ public:
     // ... accept, getType, toString methods ...
 };
 
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ### Multi-Value Return Support
@@ -178,19 +178,19 @@ For details on multi-value function syntax and auto-serialization, see [`Auto_Se
 
 Represents a tuple type with **full variadic support** (e.g., `(i32, string, bool)` or `Tuple<Int, String, Bool>`).
 
-Vyn tuples support **1 to N type parameters** and can be expressed in two equivalent syntaxes:
+VyB tuples support **1 to N type parameters** and can be expressed in two equivalent syntaxes:
 - **Inline syntax**: `main()<Int, String, Bool>` (comma-separated types)
 - **Generic syntax**: `main()<Tuple<Int, String, Bool>>` (explicit Tuple generic)
 
 Both syntaxes produce identical LLVM anonymous struct types and are fully interchangeable.
 
--   **C++ Class**: `vyn::ast::TupleTypeNode`
+-   **C++ Class**: `vyb::ast::TupleTypeNode`
 -   **`NodeType`**: `TUPLE_TYPE_NODE`
 -   **Fields**:
     -   `elementTypes` (`std::vector<TypeNodePtr>`): A vector of types for the elements in the tuple (variadic, supports any length).
 
 **Examples:**
-```vyn
+```vyb
 # Single-element tuple
 main()<Tuple<Int>> -> return 42
 
@@ -199,7 +199,7 @@ main()<Int, String> -> return 10, "hello"
 main()<Tuple<Int, String, Bool, Float>> -> return 1, "test", true, 3.14
 
 # Seven-element tuple
-main()<Tuple<Int, Int, Bool, String, Int, Bool, Int>> -> 
+main()<Tuple<Int, Int, Bool, String, Int, Bool, Int>> ->
     return 1, 2, true, "data", 3, false, 4
 ```
 
@@ -211,8 +211,8 @@ main()<Tuple<Int, Int, Bool, String, Int, Bool, Int>> ->
 - Return wrapping in `cgen_stmt.cpp` handles single-element edge case
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 
 class TupleTypeNode : public TypeNode {
 public:
@@ -222,21 +222,21 @@ public:
     // ... accept, getType, toString, ToSignature methods ...
 };
 
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ### 2.7. `OptionalTypeNode`
 
 Represents an optional type (e.g., `?i32`).
 
--   **C++ Class**: `vyn::ast::OptionalTypeNode`
+-   **C++ Class**: `vyb::ast::OptionalTypeNode`
 -   **`NodeType`**: `OPTIONAL_TYPE_NODE`
 -   **Fields**:
     -   `valueType` (`TypeNodePtr`): The underlying type that is optional.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 
 class OptionalTypeNode : public TypeNode {
 public:
@@ -246,22 +246,22 @@ public:
     // ... accept, getType, toString, ToSignature methods ...
 };
 
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ### 2.8. `GenericInstanceTypeNode`
 
 Represents an instantiation of a generic type (e.g., `Vec<i32>`, `Map<string, User>`, `loc<Int>`).
 
--   **C++ Class**: `vyn::ast::GenericInstanceTypeNode`
+-   **C++ Class**: `vyb::ast::GenericInstanceTypeNode`
 -   **`NodeType`**: `GENERIC_INSTANCE_TYPE_NODE`
 -   **Fields**:
     -   `genericType` (`TypeNodePtr`): The base generic type (often a `BasicTypeNode` like `Vec` or `loc`).
     -   `typeArguments` (`std::vector<TypeNodePtr>`): The type arguments provided for the generic parameters.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 
 class GenericInstanceTypeNode : public TypeNode {
 public:
@@ -272,12 +272,12 @@ public:
     // ... accept, getType, toString, ToSignature methods ...
 };
 
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 #### Memory System Types
 
-Vyn includes specialized types for low-level memory operations, which are typically represented using GenericInstanceTypeNode:
+VyB includes specialized types for low-level memory operations, which are typically represented using GenericInstanceTypeNode:
 
 ##### `loc<T>` Type
 
@@ -295,4 +295,4 @@ This type is used in freedom code blocks to work with raw memory. Operations on 
 
 These operations are typically represented using `ConstructionExpression` or `CallExpression` in the AST.
 
-This structure allows Vyn's AST to accurately represent a wide variety of type constructs found in modern programming languages. The parser (`TypeParser`) is responsible for translating type syntax from the source code into these `TypeNode` structures.
+This structure allows VyB's AST to accurately represent a wide variety of type constructs found in modern programming languages. The parser (`TypeParser`) is responsible for translating type syntax from the source code into these `TypeNode` structures.

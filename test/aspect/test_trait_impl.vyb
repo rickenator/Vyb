@@ -1,0 +1,33 @@
+// Phase 2: Trait implementation test
+// Tests bind Trait -> Type with actual method implementations
+
+aspect Printable {
+    print(self<Self>)<Void> -> { }
+    describe(self<Self>)<String> -> { }
+}
+
+struct Point {
+    x<Int>,
+    y<Int>
+}
+
+bind Printable -> Point {
+    print(self<Point>)<Void> -> {
+        println("Point(" + self.x.to_string() + ", " + self.y.to_string() + ")")
+    }
+
+    describe(self<Point>)<String> -> {
+        return "Point at (" + self.x.to_string() + ", " + self.y.to_string() + ")"
+    }
+}
+
+main()<Int> -> {
+    p<Point> = Point { x = 10, y = 20 }
+
+    // Call aspect methods on Point
+    p.print()
+    desc<String> = p.describe()
+    println(desc)
+
+    return 0
+}

@@ -1,0 +1,59 @@
+// @expect-return: 5
+# Test multi-type trap with stdlib errors
+
+aspect Errable {
+    message(self<Self>)<String> -> { }
+    code(self<Self>)<Int> -> { }
+}
+
+struct IOError {
+    message<String>,
+    code<Int>,
+    path<String>
+}
+
+struct ParseError {
+    message<String>,
+    code<Int>,
+    line<Int>,
+    column<Int>
+}
+
+bind Errable -> IOError {
+    message(self<Self>)<String> -> {
+        return self.message;
+    }
+
+    code(self<Self>)<Int> -> {
+        return self.code;
+    }
+}
+
+bind Errable -> ParseError {
+    message(self<Self>)<String> -> {
+        return self.message;
+    }
+
+    code(self<Self>)<Int> -> {
+        return self.code;
+    }
+}
+
+processFile(mode<Int>)<Int> -> {
+    if (mode == 1) {
+        fail IOError { message = "IO failed", code = 1, path = "/tmp/test" };
+    }
+    fail ParseError { message = "Parse failed", code = 2, line = 1, column = 1 };
+}
+
+main()<Int> -> {
+    # Multi-type trap: catch either IOError or ParseError
+    result<Int> = {
+        processFile(2)
+    } trap (e<IOError | ParseError>) -> {
+        # Both error types handled here
+        return 5;
+    }
+
+    return result;
+}

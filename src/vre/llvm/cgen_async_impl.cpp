@@ -1,5 +1,5 @@
-#include "vyn/vre/llvm/codegen.hpp"
-#include "vyn/runtime/async_runtime.hpp"
+#include "vyb/vre/llvm/codegen.hpp"
+#include "vyb/runtime/async_runtime.hpp"
 
 // LLVM Headers
 #include "llvm/IR/BasicBlock.h"
@@ -9,70 +9,70 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Type.h"
 
-namespace vyn {
+namespace vyb {
 
 // Implementation of async runtime integration functions for LLVMCodegen
 
 llvm::Function* LLVMCodegen::getOrCreateScheduleTaskFunction() {
-    const std::string funcName = "vyn_schedule_async_task";
-    
+    const std::string funcName = "vyb_schedule_async_task";
+
     if (auto existingFunc = module->getFunction(funcName)) {
         return existingFunc;
     }
-    
-    // Function signature: i64 vyn_schedule_async_task(i8* function_ptr, i8* state_ptr)
+
+    // Function signature: i64 vyb_schedule_async_task(i8* function_ptr, i8* state_ptr)
     std::vector<llvm::Type*> paramTypes = { int8PtrType, int8PtrType };
     llvm::FunctionType* funcType = llvm::FunctionType::get(int64Type, paramTypes, false);
-    
+
     llvm::Function* scheduleFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, funcName, module.get());
-    
+
     // Add a basic implementation (returns dummy task ID for now)
     llvm::BasicBlock* entry = llvm::BasicBlock::Create(*context, "entry", scheduleFunc);
     llvm::IRBuilder<> funcBuilder(entry);
     funcBuilder.CreateRet(llvm::ConstantInt::get(int64Type, 1));
-    
+
     return scheduleFunc;
 }
 
 llvm::Function* LLVMCodegen::getOrCreateAwaitTaskFunction() {
-    const std::string funcName = "vyn_await_task";
-    
+    const std::string funcName = "vyb_await_task";
+
     if (auto existingFunc = module->getFunction(funcName)) {
         return existingFunc;
     }
-    
-    // Function signature: void vyn_await_task(i64 task_id)
+
+    // Function signature: void vyb_await_task(i64 task_id)
     std::vector<llvm::Type*> paramTypes = { int64Type };
     llvm::FunctionType* funcType = llvm::FunctionType::get(voidType, paramTypes, false);
-    
+
     llvm::Function* awaitFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, funcName, module.get());
-    
+
     // Add a basic implementation (no-op for now)
     llvm::BasicBlock* entry = llvm::BasicBlock::Create(*context, "entry", awaitFunc);
     llvm::IRBuilder<> funcBuilder(entry);
     funcBuilder.CreateRetVoid();
-    
+
     return awaitFunc;
 }
 
 llvm::Function* LLVMCodegen::getOrCreateCreateFutureFunction() {
-    const std::string funcName = "vyn_create_future";
-    
+    const std::string funcName = "vyb_create_future";
+
     if (auto existingFunc = module->getFunction(funcName)) {
         return existingFunc;
     }
-    
-    // Function signature: i8* vyn_create_future(i64 task_id)
+
+    // Function signature: i8* vyb_create_future(i64 task_id)
     std::vector<llvm::Type*> paramTypes = { int64Type };
     llvm::FunctionType* funcType = llvm::FunctionType::get(int8PtrType, paramTypes, false);
-    
+
     llvm::Function* createFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, funcName, module.get());
-    
+
     // Add a basic implementation (returns null for now)
     llvm::BasicBlock* entry = llvm::BasicBlock::Create(*context, "entry", createFunc);
     llvm::IRBuilder<> funcBuilder(entry);
     funcBuilder.CreateRet(llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(int8PtrType)));
-    
+
     return createFunc;
 }
 
@@ -84,8 +84,8 @@ llvm::StructType* LLVMCodegen::createFutureStructType(llvm::Type* resultType) {
         int64Type,                                       // i64 task_id
         int8PtrType                                      // i8* runtime_data
     };
-    
+
     return llvm::StructType::create(*context, futureFields, "Future");
 }
 
-} // namespace vyn
+} // namespace vyb

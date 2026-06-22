@@ -1,7 +1,7 @@
-# Aspect Bounds in Vyn
+# Aspect Bounds in VyB
 
-**Version:** 0.4.1  
-**Status:** Implementation in Progress (Phase 6 Step 5)  
+**Version:** 0.4.1
+**Status:** Implementation in Progress (Phase 6 Step 5)
 **Last Updated:** 2025-10-19
 
 ## Critical Concept: What Does a Bind Do?
@@ -11,7 +11,7 @@ A **bind** adds an aspect to a type, making that aspect's methods **callable by 
 Simple receiver parameters are written as `self`. This is canonical sugar for `self<Self>` in aspect and bind methods. Keep explicit receiver types, such as `self<their<Self>>`, when ownership or borrowing mode is part of the contract.
 
 ### Example:
-```vyn
+```vyb
 bind Display -> Point {
     show(self)<Void> -> {
         println("Point(x, y)");
@@ -40,7 +40,7 @@ point.show();  // ✅ Works! Prints "Point(x, y)"
 - Cannot assume T has any aspects
 
 **Example:**
-```vyn
+```vyb
 bind<T> Display -> Box<T> {
     show(self)<Void> -> {
         println("Box contains a value (type unknown)");
@@ -73,7 +73,7 @@ box2.show();  // ✅ Works: "Box contains a value"
 - Lets you delegate to T's implementations or use them in custom ways
 
 **Example:**
-```vyn
+```vyb
 bind<T<Display>> Display -> Box<T> {
     show(self)<Void> -> {
         println("Box containing:");
@@ -98,7 +98,7 @@ box2.show();  // ❌ ERROR: Box<Int> doesn't have this Display bind
 
 Use commas to require multiple aspects:
 
-```vyn
+```vyb
 bind<T<Display, Clone>> Clone -> Box<T> {
     clone(self)<Self> -> {
         println("Cloning box and its contents");
@@ -116,7 +116,7 @@ Comma means **AND** - T must have ALL specified aspects.
 
 Bounds work the same way for generic functions:
 
-```vyn
+```vyb
 // Function only works when T has Display
 printItem<T<Display>>(item<T>)<Void> -> {
     item.show();  // ✅ ALLOWED: bound guarantees T has Display
@@ -129,7 +129,7 @@ printItem(42);     // ❌ ERROR: Int doesn't have Display
 
 ### Multiple Bounds in Functions
 
-```vyn
+```vyb
 duplicateAndShow<T<Display, Clone>>(item<T>)<T> -> {
     copy<T> = item.clone();  // ✅ T has Clone
     copy.show();  // ✅ T has Display
@@ -164,7 +164,7 @@ When you write `<T<Display>>`:
 
 ### 4. Multiple Binds Can Coexist
 
-```vyn
+```vyb
 // Both can exist:
 bind<T> Display -> Box<T> { ... }           // Applies to all Box<T>
 bind<T<Display>> Display -> Box<T> { ... }  // Applies when T has Display
@@ -174,7 +174,7 @@ bind<T<Display>> Display -> Box<T> { ... }  // Applies when T has Display
 
 ## Syntax Summary
 
-```vyn
+```vyb
 // Aspect definition
 aspect AspectName {
     method(self)<ReturnType>  // Mandatory (no arrow)
@@ -198,7 +198,7 @@ functionName<T<Aspect1, Aspect2>>(param<T>)<ReturnType> -> { ... }
 
 Associated types can now be declared on aspects and assigned in binds.
 
-```vyn
+```vyb
 aspect Iterator {
     type Item
     next(self)<Self::Item>
@@ -247,7 +247,7 @@ bind Iterator -> CounterIter {
 
 ## Examples
 
-See [`test/aspect/test_aspect_bounds.vyn`](../test/aspect/test_aspect_bounds.vyn) for comprehensive examples.
+See [`test/aspect/test_aspect_bounds.vyb`](../test/aspect/test_aspect_bounds.vyb) for comprehensive examples.
 
 ## Related Documentation
 

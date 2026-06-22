@@ -2,22 +2,22 @@
 
 ## Status: ✅ COMPLETE
 
-Vec<T> iteration is fully implemented and working in Vyn v0.4.1.
+Vec<T> iteration is fully implemented and working in VyB v0.4.1.
 
 ## Syntax
 
-```vyn
+```vyb
 for (item in vector_expr) {
     // body
 }
 ```
 
-**Note**: Parentheses are MANDATORY for all for loops in Vyn.
+**Note**: Parentheses are MANDATORY for all for loops in VyB.
 
 ## Features
 
 ### ✅ Basic Iteration
-```vyn
+```vyb
 v<Vec<Int>> = Vec::new();
 v.push(1);
 v.push(2);
@@ -29,7 +29,7 @@ for (x in v) {
 ```
 
 ### ✅ Empty Vec Handling
-```vyn
+```vyb
 v<Vec<Int>> = Vec::new();
 for (x in v) {
     // This block is never executed
@@ -37,7 +37,7 @@ for (x in v) {
 ```
 
 ### ✅ Break Statement
-```vyn
+```vyb
 for (x in v) {
     if (x > 5) {
         break;  // Exits the loop
@@ -46,7 +46,7 @@ for (x in v) {
 ```
 
 ### ✅ Continue Statement
-```vyn
+```vyb
 for (x in v) {
     if (x == 3) {
         continue;  // Skips to next iteration
@@ -59,13 +59,13 @@ for (x in v) {
 
 Vec iteration desugars to an index-based for loop:
 
-```vyn
+```vyb
 for (item in vec) { body }
 ```
 
 Becomes:
 
-```vyn
+```vyb
 for (__run_once = true; __run_once; __run_once = false) {
     var __len = vec.len();
     for (__idx = 0; __idx < __len; __idx = __idx + 1) {
@@ -95,15 +95,15 @@ for (__run_once = true; __run_once; __run_once = false) {
 ## Tests
 
 All tests passing:
-- `comprehensive_test.vyn`: All Vec iteration features
-- `comprehensive_range_test.vyn`: All range-based for loops
+- `comprehensive_test.vyb`: All Vec iteration features
+- `comprehensive_range_test.vyb`: All range-based for loops
 - Individual feature tests in `test/vec_for/`
 
 ## Range-Based For Loops
 
 Also fully implemented with same syntax:
 
-```vyn
+```vyb
 for (i in 0..10) { }        // Inclusive: 0 to 10
 for (i in 0..10, 2) { }     // With step: 0, 2, 4, 6, 8, 10
 for (i in -5..5) { }        // Negative ranges work

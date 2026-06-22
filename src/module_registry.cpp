@@ -1,6 +1,6 @@
-#include "vyn/module_registry.hpp"
-#include "vyn/parser/lexer.hpp"
-#include "vyn/parser/parser.hpp"
+#include "vyb/module_registry.hpp"
+#include "vyb/parser/lexer.hpp"
+#include "vyb/parser/parser.hpp"
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
@@ -9,7 +9,7 @@
 #include <stdexcept>
 #include <unordered_set>
 
-namespace vyn {
+namespace vyb {
 namespace fs = std::filesystem;
 
 namespace {
@@ -368,7 +368,7 @@ ModuleRegistry::ResolvedImportPath ModuleRegistry::resolveImportPath(const ast::
         }
 
         fs::path dirCandidate = normalizePath(root / relativeModule.parent_path() /
-                                              relativeModule.stem() / "mod.vyn");
+                                              relativeModule.stem() / "mod.vyb");
         result.triedPaths.push_back(dirCandidate);
         if (fs::exists(dirCandidate) && fs::is_regular_file(dirCandidate)) {
             result.resolvedPath = dirCandidate;
@@ -420,7 +420,7 @@ std::vector<fs::path> ModuleRegistry::buildConfiguredSearchPaths() const {
         addPath(path);
     }
 
-    if (const char* envPaths = std::getenv("VYN_MODULE_PATH")) {
+    if (const char* envPaths = std::getenv("VYB_MODULE_PATH")) {
         std::stringstream stream(envPaths);
         std::string segment;
         while (std::getline(stream, segment, ':')) {
@@ -453,7 +453,7 @@ fs::path ModuleRegistry::normalizePath(const fs::path& path) const {
 }
 
 std::optional<fs::path> ModuleRegistry::discoverStdlibRoot() const {
-    if (const char* stdlibEnv = std::getenv("VYN_STDLIB")) {
+    if (const char* stdlibEnv = std::getenv("VYB_STDLIB")) {
         std::string value = trimCopy(stdlibEnv);
         if (!value.empty()) {
             return normalizePath(value);
@@ -502,7 +502,7 @@ fs::path ModuleRegistry::modulePathRelativeFile(const std::string& modulePath) {
         start = sep + 2;
     }
     if (!relative.has_extension()) {
-        relative += ".vyn";
+        relative += ".vyb";
     }
     return relative;
 }
@@ -564,8 +564,8 @@ ModuleRegistry::SourceMetadata ModuleRegistry::preprocessModuleSource(const std:
 
 std::unique_ptr<ast::Module> ModuleRegistry::parseModuleOnly(const std::string& source, const std::string& fileName) {
     Lexer lexer(source, fileName);
-    std::vector<vyn::token::Token> tokens = lexer.tokenize();
-    vyn::Parser parser(tokens, fileName);
+    std::vector<vyb::token::Token> tokens = lexer.tokenize();
+    vyb::Parser parser(tokens, fileName);
     auto ast = parser.parse_module();
     if (!ast) {
         throw std::runtime_error("Failed to parse source code: " + fileName);
@@ -668,4 +668,4 @@ bool ModuleRegistry::declarationVisible(const std::string& name,
     return sharesAllow(shareIt->second, importerBundles);
 }
 
-} // namespace vyn
+} // namespace vyb

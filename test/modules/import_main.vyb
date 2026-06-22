@@ -1,0 +1,13 @@
+// @test: Local module import
+// @description: import loads declarations from a local .vyb module before semantic analysis and JIT execution
+// @category: modules
+// @expect: pass
+// @expect-output: 42
+
+import math_helpers from "./math_helpers.vyb"
+
+main()<Int> -> {
+    result<Int> = double(15) + triple(4)
+    println_int(result)
+    return 0
+}

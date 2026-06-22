@@ -1,11 +1,11 @@
 # Stack Trace Tests - Examples and Analysis
 
 ## Overview
-These tests demonstrate Phase 6.4 (v0.5.1) stack trace capture implementation in Vyn.
+These tests demonstrate Phase 6.4 (v0.5.1) stack trace capture implementation in VyB.
 
 ## Test Files
 
-### 1. `test/stack_trace_nested.vyn` - Basic 3-Level Call Stack
+### 1. `test/stack_trace_nested.vyb` - Basic 3-Level Call Stack
 **Purpose**: Demonstrates simple nested function calls with error at deepest level.
 
 **Call chain**: `main() → level1() → level2() → level3() [fails here]`
@@ -15,7 +15,7 @@ These tests demonstrate Phase 6.4 (v0.5.1) stack trace capture implementation in
 - Error occurs in deepest function (level3)
 - Stack trace would show: main, level1, level2, level3
 
-### 2. `test/stack_trace_deep.vyn` - Deep 5-Level Call Stack
+### 2. `test/stack_trace_deep.vyb` - Deep 5-Level Call Stack
 **Purpose**: Tests deeper call stacks to ensure proper frame management.
 
 **Call chain**: `main() → level1() → level2() → level3() → level4() → level5() [fails here]`
@@ -25,7 +25,7 @@ These tests demonstrate Phase 6.4 (v0.5.1) stack trace capture implementation in
 - Demonstrates thread-safe stack management
 - Each level properly instruments push/pop calls
 
-### 3. `test/stack_trace_multiple_paths.vyn` - Different Error Locations
+### 3. `test/stack_trace_multiple_paths.vyb` - Different Error Locations
 **Purpose**: Shows errors can occur at different points in the call tree.
 
 **Two paths**:
@@ -36,7 +36,7 @@ These tests demonstrate Phase 6.4 (v0.5.1) stack trace capture implementation in
 - Conditional failure based on parameter
 - Shows stack traces differ based on where error occurs
 
-### 4. `test/stack_trace_with_data.vyn` - Contextual Information
+### 4. `test/stack_trace_with_data.vyb` - Contextual Information
 **Purpose**: Demonstrates stack traces with meaningful function names that provide context.
 
 **Call chain**: `main() → handleRequest() → validateAndProcess() → processValue() [may fail]`
@@ -54,13 +54,13 @@ Each function has this pattern:
 define { i64, ptr } @functionName() !dbg !N {
 entry:
   ; 1. PUSH call frame with function name and source location
-  call void @__vyn_runtime_push_call_frame(ptr @funcname.str, ptr @filepath.str, i32 LINE, i32 COL)
-  
+  call void @__vyb_runtime_push_call_frame(ptr @funcname.str, ptr @filepath.str, i32 LINE, i32 COL)
+
   ; 2. Function body executes here
   ; ...
-  
+
   ; 3. POP call frame before any return (success or error)
-  call void @__vyn_runtime_pop_call_frame()
+  call void @__vyb_runtime_pop_call_frame()
   ret { i64, ptr } %result
 }
 ```
@@ -69,7 +69,7 @@ entry:
 
 **Push frame** (on function entry):
 ```c
-void __vyn_runtime_push_call_frame(
+void __vyb_runtime_push_call_frame(
     const char* function_name,
     const char* file_path,
     uint32_t line,
@@ -79,18 +79,18 @@ void __vyn_runtime_push_call_frame(
 
 **Pop frame** (on function exit):
 ```c
-void __vyn_runtime_pop_call_frame();
+void __vyb_runtime_pop_call_frame();
 ```
 
 **Get stack trace** (when error created):
 ```c
-VynStackTrace* __vyn_runtime_get_current_stack_trace();
+VyBStackTrace* __vyb_runtime_get_current_stack_trace();
 ```
 
 ## Stack Trace Information Captured
 
 Each frame in the stack trace contains:
-- **Function name**: Vyn-level name (not mangled C++ name)
+- **Function name**: VyB-level name (not mangled C++ name)
 - **File path**: Source file where function is defined
 - **Line number**: Line where function declaration starts
 - **Column number**: Column where function declaration starts
@@ -101,10 +101,10 @@ When an error occurs in `level3()` called from `level2()` called from `level1()`
 
 ```
 Stack trace (from innermost to outermost):
-  at level3 (test/stack_trace_nested.vyn:4:1)
-  at level2 (test/stack_trace_nested.vyn:10:1)
-  at level1 (test/stack_trace_nested.vyn:15:1)
-  at main (test/stack_trace_nested.vyn:20:1)
+  at level3 (test/stack_trace_nested.vyb:4:1)
+  at level2 (test/stack_trace_nested.vyb:10:1)
+  at level1 (test/stack_trace_nested.vyb:15:1)
+  at main (test/stack_trace_nested.vyb:20:1)
 ```
 
 ## Verification
@@ -124,11 +124,11 @@ Run the demonstration scripts:
 
 ## Benefits
 
-✅ **Accurate debugging**: Shows Vyn function names, not native addresses  
-✅ **Source locations**: Exact file/line/column information  
-✅ **Multi-level**: Captures entire call chain  
-✅ **Thread-safe**: Mutex-protected global stack  
-✅ **Automatic**: No manual instrumentation required  
+✅ **Accurate debugging**: Shows VyB function names, not native addresses
+✅ **Source locations**: Exact file/line/column information
+✅ **Multi-level**: Captures entire call chain
+✅ **Thread-safe**: Mutex-protected global stack
+✅ **Automatic**: No manual instrumentation required
 
 ## Status
 

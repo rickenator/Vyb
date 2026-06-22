@@ -7,7 +7,7 @@ This document is the canonical stdlib module layout for the current milestone.
 Stdlib import resolution uses the normal module resolver search order documented
 in `doc/module_visibility.md`, including:
 
-1. `VYN_STDLIB` (if set)
+1. `VYB_STDLIB` (if set)
 2. Executable-relative probes (`<exe_dir>/../stdlib`, then `<exe_dir>/stdlib`)
 
 No `--module-path` flag is required when one of those stdlib roots is available.
@@ -16,15 +16,15 @@ No `--module-path` flag is required when one of those stdlib roots is available.
 
 ```text
 stdlib/
-  prelude.vyn            # top-level prelude re-export module
+  prelude.vyb            # top-level prelude re-export module
   core/
-    prelude.vyn          # canonical prelude contents
-    option.vyn           # transitional OptionInt bridge + Option<T> notes
-    result.vyn           # placeholder for future Result<T,E>
+    prelude.vyb          # canonical prelude contents
+    option.vyb           # transitional OptionInt bridge + Option<T> notes
+    result.vyb           # placeholder for future Result<T,E>
   collections/
-    mod.vyn              # placeholder scaffold
+    mod.vyb              # placeholder scaffold
   io/
-    mod.vyn              # placeholder scaffold
+    mod.vyb              # placeholder scaffold
 ```
 
 ## Prelude behavior (current decision)

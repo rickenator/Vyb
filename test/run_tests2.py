@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Vyn Test Harness with Logging
+VyB Test Harness with Logging
 """
 
 import os
@@ -24,7 +24,7 @@ def log_print(msg):
     print(msg)
     log_file.write(msg + "\n")
 
-def find_vyn_root():
+def find_vyb_root():
     script_dir = Path(os.path.dirname(os.path.abspath(__file__)))
     current_dir = script_dir
     while True:
@@ -32,7 +32,7 @@ def find_vyn_root():
             return current_dir
         parent_dir = current_dir.parent
         if parent_dir == current_dir:
-            raise RuntimeError("Could not find Vyn repository root directory")
+            raise RuntimeError("Could not find VyB repository root directory")
         current_dir = parent_dir
 
 @dataclass
@@ -73,8 +73,8 @@ def parse_directives(file_path):
         log_print(f"Error parsing directives in {file_path}: {str(e)}")
     return test
 
-def run_test(test, vyn_executable, verbose=False, execute_jit=False):
-    cmd = [vyn_executable]
+def run_test(test, vyb_executable, verbose=False, execute_jit=False):
+    cmd = [vyb_executable]
     if test.parse_only:
         cmd.append("--parse-only")
     elif test.semantic_only:
@@ -132,34 +132,34 @@ def format_result(result, test, verbose=False):
 
 def main():
     try:
-        vyn_root = find_vyn_root()
+        vyb_root = find_vyb_root()
     except RuntimeError as e:
         log_print(f"Error: {e}")
         sys.exit(1)
 
-    parser = argparse.ArgumentParser(description='Vyn test harness')
-    parser.add_argument('--vyn', default=None)
+    parser = argparse.ArgumentParser(description='VyB test harness')
+    parser.add_argument('--vyb', default=None)
     parser.add_argument('--test-dir', default=None)
-    parser.add_argument('--pattern', default='*.vyn')
+    parser.add_argument('--pattern', default='*.vyb')
     parser.add_argument('--verbose', '-v', action='count', default=0)
     parser.add_argument('--category')
     parser.add_argument('--json')
     parser.add_argument('--execute-jit', action='store_true')
     args = parser.parse_args()
 
-    vyn_executable = str(vyn_root / "build" / "vyn") if args.vyn is None else args.vyn
-    test_dir = vyn_root / "test" / "units" if args.test_dir is None else Path(args.test_dir)
+    vyb_executable = str(vyb_root / "build" / "vyb") if args.vyb is None else args.vyb
+    test_dir = vyb_root / "test" / "units" if args.test_dir is None else Path(args.test_dir)
 
-    if not os.path.isfile(vyn_executable):
-        log_print(f"Error: Cannot find Vyn executable at {vyn_executable}")
+    if not os.path.isfile(vyb_executable):
+        log_print(f"Error: Cannot find VyB executable at {vyb_executable}")
         sys.exit(1)
     if not test_dir.exists():
         log_print(f"Error: Test directory {test_dir} doesn't exist")
         sys.exit(1)
 
     if args.verbose:
-        log_print(f"Vyn repo: {vyn_root}")
-        log_print(f"Executable: {vyn_executable}")
+        log_print(f"VyB repo: {vyb_root}")
+        log_print(f"Executable: {vyb_executable}")
         log_print(f"Tests in: {test_dir}")
         if args.execute_jit:
             log_print("JIT: Enabled")
@@ -174,7 +174,7 @@ def main():
         test = parse_directives(file)
         if args.category and args.category not in test.category:
             continue
-        test_result = run_test(test, vyn_executable, args.verbose > 1, args.execute_jit)
+        test_result = run_test(test, vyb_executable, args.verbose > 1, args.execute_jit)
         log_print(format_result(test_result, test, args.verbose))
         if test_result["stdout"]:
             log_file.write(f"\n--- stdout from {test.name} ---\n")

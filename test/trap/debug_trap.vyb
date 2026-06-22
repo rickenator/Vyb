@@ -1,0 +1,15 @@
+# Debug trap test - minimal
+
+main()<Int> -> {
+    println("Starting main")
+    result<Int> = {
+        println("In block")
+        fail 42
+    } trap (e<Int>) -> {
+        println("In trap handler")
+        return -1
+    }
+
+    println("After block")
+    return result
+}

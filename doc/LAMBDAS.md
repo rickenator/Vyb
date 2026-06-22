@@ -1,14 +1,14 @@
-# Lambda Expressions and Closures in Vyn
+# Lambda Expressions and Closures in VyB
 
 ## Overview
 
-Vyn supports **lambda expressions** (anonymous functions) with **closure capture**, enabling functional programming patterns like map/filter/reduce, callbacks, and higher-order functions.
+VyB supports **lambda expressions** (anonymous functions) with **closure capture**, enabling functional programming patterns like map/filter/reduce, callbacks, and higher-order functions.
 
 ## Syntax
 
 ### Basic Lambda
 
-```vyn
+```vyb
 // Syntax: |param1, param2| -> expression
 add = |x, y| -> x + y
 
@@ -19,7 +19,7 @@ result<Int> = add(5, 3)  // result = 8
 
 Parameter types can be explicitly specified:
 
-```vyn
+```vyb
 // Optional type annotations for clarity
 multiply = |x<Int>, y<Int>| -> x * y
 ```
@@ -28,7 +28,7 @@ multiply = |x<Int>, y<Int>| -> x * y
 
 For multi-line lambdas, use a block with explicit `return`:
 
-```vyn
+```vyb
 compute = |n| -> {
     result<Int> = n * 2
     result = result + 1
@@ -38,7 +38,7 @@ compute = |n| -> {
 
 ### Empty Parameter List
 
-```vyn
+```vyb
 // No parameters: || -> expression
 getRandom = || -> 42
 ```
@@ -47,7 +47,7 @@ getRandom = || -> 42
 
 Lambdas can **capture** variables from their enclosing scope, creating **closures**:
 
-```vyn
+```vyb
 makeAdder(base<Int>) -> {
     // Lambda captures 'base' from outer scope
     return |x| -> x + base
@@ -65,7 +65,7 @@ result<Int> = addTen(5)  // result = 15
 
 **Example with ownership:**
 
-```vyn
+```vyb
 makeObserver(data<our<Data>>) -> {
     // 'data' is captured - increments strong reference count
     return || -> {
@@ -80,7 +80,7 @@ Functions that accept or return lambdas:
 
 ### Map
 
-```vyn
+```vyb
 map(arr<[Int]>, transform) -> {
     result<[Int]> = []
     for item in arr {
@@ -95,7 +95,7 @@ doubled<[Int]> = map(numbers, |x| -> x * 2)  // [2, 4, 6, 8]
 
 ### Filter
 
-```vyn
+```vyb
 filter(arr<[Int]>, predicate) -> {
     result<[Int]> = []
     for item in arr {
@@ -112,7 +112,7 @@ evens<[Int]> = filter(numbers, |x| -> x % 2 == 0)  // [2, 4, 6]
 
 ### Reduce
 
-```vyn
+```vyb
 reduce(arr<[Int]>, initial<Int>, accumulator) -> {
     result<Int> = initial
     for item in arr {
@@ -129,7 +129,7 @@ sum<Int> = reduce(numbers, 0, |acc, x| -> acc + x)  // 10
 
 Lambdas can be asynchronous when combined with `async`/`await`:
 
-```vyn
+```vyb
 // TODO: Async lambda syntax (future feature)
 // asyncOp<async fn(String) -> String> = async |name| -> {
 //     result<String> = await fetchData(name)
@@ -180,7 +180,7 @@ entry:
   %closure = bitcast i8* %closure_ptr to %closure_t*
   %base_ptr = getelementptr %closure_t, %closure_t* %closure, i32 0, i32 0
   %base = load i32, i32* %base_ptr
-  
+
   ; Compute: x + base
   %result = add i32 %x, %base
   ret i32 %result
@@ -191,7 +191,7 @@ entry:
 
 ### Event Handlers
 
-```vyn
+```vyb
 struct Button {
     onClick
 }
@@ -207,7 +207,7 @@ button<Button> = Button {
 
 ### Custom Iterators
 
-```vyn
+```vyb
 forEach(arr<[Int]>, action) -> {
     for item in arr {
         action(item)
@@ -220,7 +220,7 @@ forEach(numbers, |n| -> println(n))
 
 ### Function Composition
 
-```vyn
+```vyb
 compose(f, g) -> {
     return |x| -> f(g(x))
 }
@@ -234,10 +234,10 @@ result<Int> = combined(5)  // (5 * 3) + 2 = 17
 
 ### Observer Pattern with Closures
 
-```vyn
+```vyb
 struct Subject {
     observers
-    
+
     notify(self, message<String>) -> {
         for observer in self.observers {
             observer(message)
@@ -296,10 +296,10 @@ add = lambda x, y: x + y
 adder = lambda x: lambda y: x + y  # Closure
 ```
 
-### Vyn
+### VyB
 
-```vyn
-// Vyn
+```vyb
+// VyB
 add = |x, y| -> x + y
 adder = |x| -> |y| -> x + y  // Closure
 ```

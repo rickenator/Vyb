@@ -1,0 +1,11 @@
+# Test untrapped error - should call __vyb_runtime_untrapped_error
+
+divide(a<Int>, b<Int>)<Int> -> {
+    if (b == 0) { fail 42 }
+    return a / b
+}
+
+main()<Int> -> {
+    result<Int> = divide(10, 0)  # No trap handler - error should be untrapped
+    return result
+}

@@ -1,0 +1,61 @@
+// @expect-return: 10
+# Test multiple stdlib error types in one program
+
+aspect Errable {
+    message(self<Self>)<String> -> { }
+    code(self<Self>)<Int> -> { }
+}
+
+struct IOError {
+    message<String>,
+    code<Int>,
+    path<String>
+}
+
+struct ParseError {
+    message<String>,
+    code<Int>,
+    line<Int>,
+    column<Int>
+}
+
+bind Errable -> IOError {
+    message(self<Self>)<String> -> {
+        return self.message;
+    }
+
+    code(self<Self>)<Int> -> {
+        return self.code;
+    }
+}
+
+bind Errable -> ParseError {
+    message(self<Self>)<String> -> {
+        return self.message;
+    }
+
+    code(self<Self>)<Int> -> {
+        return self.code;
+    }
+}
+
+readAndParse(mode<Int>)<Int> -> {
+    # Could fail with either IOError or ParseError
+    if (mode == 1) {
+        fail IOError { message = "Not found", code = 2, path = "/missing" };
+    }
+
+    fail ParseError { message = "Bad syntax", code = 1, line = 1, column = 1 };
+}
+
+main()<Int> -> {
+    result<Int> = {
+        readAndParse(1)
+    } trap (e<IOError>) -> {
+        return 10;
+    } trap (e<ParseError>) -> {
+        return 20;
+    }
+
+    return result;
+}
