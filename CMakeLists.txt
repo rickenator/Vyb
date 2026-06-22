@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(VynParser VERSION 0.5.0)
+project(VyBParser VERSION 0.5.0)
 
 set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_CXX_STANDARD 17)
@@ -72,11 +72,11 @@ set(PARSER_SOURCES
 
 # Parser headers
 set(PARSER_HEADERS
-    include/vyn/parser/ast.hpp
-    include/vyn/parser/lexer.hpp
-    include/vyn/parser/parser.hpp
-    include/vyn/parser/source_location.hpp
-    include/vyn/parser/token.hpp
+    include/vyb/parser/ast.hpp
+    include/vyb/parser/lexer.hpp
+    include/vyb/parser/parser.hpp
+    include/vyb/parser/source_location.hpp
+    include/vyb/parser/token.hpp
 )
 
 # VRE sources
@@ -109,32 +109,32 @@ set(VRE_SOURCES
 
 # VRE headers
 set(VRE_HEADERS
-    include/vyn/vre/value.hpp
-    include/vyn/semantic.hpp
-    include/vyn/module_registry.hpp
-    include/vyn/vre/memory.hpp
-    include/vyn/vre/runtime_types.hpp
-    include/vyn/vre/llvm/codegen.hpp
+    include/vyb/vre/value.hpp
+    include/vyb/semantic.hpp
+    include/vyb/module_registry.hpp
+    include/vyb/vre/memory.hpp
+    include/vyb/vre/runtime_types.hpp
+    include/vyb/vre/llvm/codegen.hpp
 )
 
 # Runtime sources
 set(RUNTIME_SOURCES
     src/runtime/async_runtime.cpp
     src/runtime/error_handling.cpp
-    runtime/vyn_runtime.c
-    runtime/vyn_type_metadata.c
+    runtime/vyb_runtime.c
+    runtime/vyb_type_metadata.c
 )
 
 # Runtime headers
 set(RUNTIME_HEADERS
-    include/vyn/runtime/async_runtime.hpp
-    include/vyn/runtime/error_handling.hpp
+    include/vyb/runtime/async_runtime.hpp
+    include/vyb/runtime/error_handling.hpp
 )
 
 # Main and tests
 set(MAIN_SOURCES src/main.cpp src/module_registry.cpp src/tests.cpp)
 
-add_executable(vyn
+add_executable(vyb
     ${PARSER_SOURCES}
     ${PARSER_HEADERS}
     ${VRE_SOURCES}
@@ -144,16 +144,16 @@ add_executable(vyn
     ${MAIN_SOURCES}
 )
 
-target_include_directories(vyn PRIVATE
+target_include_directories(vyb PRIVATE
     include # Project's own include directory
     SYSTEM ${LLVM_INCLUDE_DIRS} # Treat LLVM includes as system headers
 )
 
 # Add LLVM definitions
-target_compile_definitions(vyn PRIVATE ${LLVM_DEFINITIONS})
+target_compile_definitions(vyb PRIVATE ${LLVM_DEFINITIONS})
 
 # Link libraries
-target_link_libraries(vyn PRIVATE
+target_link_libraries(vyb PRIVATE
     Catch2::Catch2WithMain
     ${LLVM_LIBS} # Link against the mapped LLVM libraries
 )
@@ -161,13 +161,13 @@ target_link_libraries(vyn PRIVATE
 # Platform-specific libraries for error handling runtime
 if(UNIX AND NOT APPLE)
     # Linux: backtrace() requires -ldl, pthread for thread safety
-    target_link_libraries(vyn PRIVATE dl pthread)
+    target_link_libraries(vyb PRIVATE dl pthread)
 elseif(APPLE)
     # macOS: backtrace() is in system libraries, only need pthread
-    target_link_libraries(vyn PRIVATE pthread)
+    target_link_libraries(vyb PRIVATE pthread)
 elseif(WIN32)
     # Windows: CaptureStackBackTrace requires dbghelp.lib
-    target_link_libraries(vyn PRIVATE dbghelp)
+    target_link_libraries(vyb PRIVATE dbghelp)
 endif()
 
 # Add debug flags for tests.cpp
@@ -179,8 +179,8 @@ set_source_files_properties(src/tests.cpp PROPERTIES COMPILE_FLAGS "-DDEBUG_TEST
 # Add a custom target for running tests
 find_package(Python3 REQUIRED)
 add_custom_target(run-tests
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/test/run_tests.py --vyn $<TARGET_FILE:vyn> --test-dir ${CMAKE_SOURCE_DIR}/test
-    DEPENDS vyn
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/test/run_tests.py --vyb $<TARGET_FILE:vyb> --test-dir ${CMAKE_SOURCE_DIR}/test
+    DEPENDS vyb
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    COMMENT "Running Vyn test suite"
+    COMMENT "Running VyB test suite"
 )

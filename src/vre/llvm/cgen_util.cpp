@@ -1,6 +1,6 @@
 \
-#include "vyn/vre/llvm/codegen.hpp"
-#include "vyn/parser/ast.hpp" // For SourceLocation
+#include "vyb/vre/llvm/codegen.hpp"
+#include "vyb/parser/ast.hpp" // For SourceLocation
 
 #include <llvm/IR/Function.h>
 #include <llvm/IR/BasicBlock.h>
@@ -13,10 +13,10 @@
 #include <cctype>
 
 #include <string>
-#include <vector> 
-#include <map>    
+#include <vector>
+#include <map>
 
-using namespace vyn;
+using namespace vyb;
 // using namespace llvm; // Uncomment if desired for brevity
 
 // --- Helper Method Implementations ---
@@ -24,7 +24,7 @@ using namespace vyn;
 // New helper to get type name as string
 std::string LLVMCodegen::getTypeName(llvm::Type* type) {
     if (!type) return "nullptr";
-    
+
     // For struct types, try to get a cleaner name
     if (llvm::StructType* structTy = llvm::dyn_cast<llvm::StructType>(type)) {
         std::string structName = structTy->getName().str();
@@ -37,14 +37,14 @@ std::string LLVMCodegen::getTypeName(llvm::Type* type) {
             return structName;
         }
     }
-    
+
     // For pointer to struct types, try to extract the struct name from the type string
     if (type->isPointerTy()) {
         std::string typeStr;
         llvm::raw_string_ostream rso(typeStr);
         type->print(rso);
         std::string typeName = rso.str();
-        
+
         // Look for struct name pattern in the type string
         if (typeName.find("struct.") != std::string::npos) {
             size_t prefixPos = typeName.find("struct.");
@@ -53,17 +53,17 @@ std::string LLVMCodegen::getTypeName(llvm::Type* type) {
             if (endPos != std::string::npos && endPos > startPos) {
                 // Extract just the struct name
                 std::string structName = typeName.substr(startPos, endPos - startPos - 1);
-                
+
                 // Remove any trailing whitespace
                 structName.erase(structName.find_last_not_of(" \n\r\t") + 1);
-                
+
                 return structName;
             }
         }
-        
+
         return typeName;
     }
-    
+
     // For other types, use the default LLVM representation
     std::string typeStr;
     llvm::raw_string_ostream rso(typeStr);
@@ -71,7 +71,7 @@ std::string LLVMCodegen::getTypeName(llvm::Type* type) {
     return rso.str();
 }
 
-llvm::Value* LLVMCodegen::tryCast(llvm::Value* value, llvm::Type* targetType, const vyn::SourceLocation& loc) {
+llvm::Value* LLVMCodegen::tryCast(llvm::Value* value, llvm::Type* targetType, const vyb::SourceLocation& loc) {
     // Basic type casting logic (placeholder, needs to be more robust)
     // This should handle numeric casts, pointer casts, etc.
     if (!value || !targetType) return nullptr;
@@ -93,28 +93,28 @@ llvm::Value* LLVMCodegen::tryCast(llvm::Value* value, llvm::Type* targetType, co
                 // Try to determine pointee types without using version-specific methods
                 llvm::Type* targetPointeeType = nullptr;
                 llvm::Type* valuePointeeType = nullptr;
-                
+
                 // Get type names and parse if necessary
                 std::string targetTypeName = getTypeName(targetType);
                 std::string valueTypeName = getTypeName(value->getType());
-                
+
                 // If both are pointers to the same struct type, we can cast
                 if (targetTypeName.find("struct.") != std::string::npos && valueTypeName.find("struct.") != std::string::npos) {
                     // Extract struct names from type names
                     size_t targetPrefixPos = targetTypeName.find("struct.");
                     size_t valuePrefixPos = valueTypeName.find("struct.");
-                    
+
                     if (targetPrefixPos != std::string::npos && valuePrefixPos != std::string::npos) {
                         size_t targetStartPos = targetPrefixPos + 7; // length of "struct."
                         size_t valueStartPos = valuePrefixPos + 7;
-                        
+
                         size_t targetEndPos = targetTypeName.find('*', targetStartPos);
                         size_t valueEndPos = valueTypeName.find('*', valueStartPos);
-                        
+
                         if (targetEndPos != std::string::npos && valueEndPos != std::string::npos) {
                             std::string targetStructName = targetTypeName.substr(targetStartPos, targetEndPos - targetStartPos - 1);
                             std::string valueStructName = valueTypeName.substr(valueStartPos, valueEndPos - valueStartPos - 1);
-                            
+
                             if (targetStructName == valueStructName) {
                                 return builder->CreateBitCast(value, targetType, "struct_ptr_cast");
                             }
@@ -125,14 +125,14 @@ llvm::Value* LLVMCodegen::tryCast(llvm::Value* value, llvm::Type* targetType, co
         }
         return builder->CreateBitCast(value, targetType, "ptr_bitcast");
     }
-    // Pointer to Vyn String struct { ptr, i64 }: wrap char* in a string struct
+    // Pointer to VyB String struct { ptr, i64 }: wrap char* in a string struct
     if (targetType->isStructTy() && value->getType()->isPointerTy()) {
         llvm::StructType* st = llvm::dyn_cast<llvm::StructType>(targetType);
         if (st && st->getNumElements() == 2 &&
             st->getElementType(0)->isPointerTy() &&
             st->getElementType(1)->isIntegerTy(64)) {
             // Create { ptr, i64 } struct with the pointer and a length of -1 (unknown)
-            // Use strlen to compute actual length via __vyn_strlen if needed
+            // Use strlen to compute actual length via __vyb_strlen if needed
             llvm::Value* strStruct = llvm::UndefValue::get(targetType);
             strStruct = builder->CreateInsertValue(strStruct, value, 0, "strwrap.ptr");
             // Compute strlen for the length field
@@ -187,7 +187,7 @@ llvm::Value* LLVMCodegen::tryCast(llvm::Value* value, llvm::Type* targetType, co
     }
 
     logError(loc, "Unsupported or invalid cast from type " + getTypeName(value->getType()) + " to " + getTypeName(targetType));
-    return nullptr; 
+    return nullptr;
 }
 
 llvm::Value* LLVMCodegen::createEntryBlockAlloca(llvm::Function* func, const std::string& varName, llvm::Type* type) {
@@ -199,7 +199,7 @@ llvm::Value* LLVMCodegen::createEntryBlockAlloca(llvm::Function* func, const std
         // logError (some location, "Cannot create alloca: type is null for variable " + varName);
         return nullptr;
     }
-    
+
     // Find the last alloca in the entry block to maintain proper ordering
     llvm::Instruction* insertPoint = nullptr;
     for (auto& inst : func->getEntryBlock()) {
@@ -210,8 +210,8 @@ llvm::Value* LLVMCodegen::createEntryBlockAlloca(llvm::Function* func, const std
             break;
         }
     }
-    
-    if (vyn::g_debug_codegen) {
+
+    if (vyb::g_debug_codegen) {
         std::cerr << "DEBUG: createEntryBlockAlloca(3-param) - ";
         if (insertPoint) {
             std::cerr << "Found last alloca, inserting '" << varName << "' after it\n";
@@ -219,7 +219,7 @@ llvm::Value* LLVMCodegen::createEntryBlockAlloca(llvm::Function* func, const std
             std::cerr << "No allocas found, inserting '" << varName << "' at beginning\n";
         }
     }
-    
+
     llvm::IRBuilder<> tmpB(*context);
     if (insertPoint) {
         // Insert after the last alloca
@@ -228,10 +228,10 @@ llvm::Value* LLVMCodegen::createEntryBlockAlloca(llvm::Function* func, const std
         // No allocas yet, insert at beginning
         tmpB.SetInsertPoint(&func->getEntryBlock(), func->getEntryBlock().begin());
     }
-    
+
     auto* alloca = tmpB.CreateAlloca(type, nullptr, varName);
-    
-    if (vyn::g_debug_codegen) {
+
+    if (vyb::g_debug_codegen) {
         std::cerr << "DEBUG: createEntryBlockAlloca(3-param) - Created alloca '" << varName << "', current order:\n";
         for (auto& inst : func->getEntryBlock()) {
             if (auto* ai = llvm::dyn_cast<llvm::AllocaInst>(&inst)) {
@@ -241,7 +241,7 @@ llvm::Value* LLVMCodegen::createEntryBlockAlloca(llvm::Function* func, const std
             }
         }
     }
-    
+
     return alloca;
 }
 
@@ -250,7 +250,7 @@ llvm::AllocaInst* LLVMCodegen::createEntryBlockAlloca(llvm::Type* type, const st
         // No error reporting mechanism available here, just return nullptr
         return nullptr;
     }
-    
+
     // Find the last alloca in the entry block to maintain proper ordering
     llvm::Instruction* insertPoint = nullptr;
     for (auto& inst : currentFunction->getEntryBlock()) {
@@ -261,13 +261,13 @@ llvm::AllocaInst* LLVMCodegen::createEntryBlockAlloca(llvm::Type* type, const st
             break;
         }
     }
-    
+
     if (insertPoint) {
-        VYN_CDBG << "DEBUG: createEntryBlockAlloca - Found last alloca, inserting '" << name << "' after it\n";
+        VYB_CDBG << "DEBUG: createEntryBlockAlloca - Found last alloca, inserting '" << name << "' after it\n";
     } else {
-        VYN_CDBG << "DEBUG: createEntryBlockAlloca - No allocas found, inserting '" << name << "' at beginning\n";
+        VYB_CDBG << "DEBUG: createEntryBlockAlloca - No allocas found, inserting '" << name << "' at beginning\n";
     }
-    
+
     llvm::IRBuilder<> TmpB(*context);
     if (insertPoint) {
         // Insert after the last alloca
@@ -276,10 +276,10 @@ llvm::AllocaInst* LLVMCodegen::createEntryBlockAlloca(llvm::Type* type, const st
         // No allocas yet, insert at beginning
         TmpB.SetInsertPoint(&currentFunction->getEntryBlock(), currentFunction->getEntryBlock().begin());
     }
-    
+
     auto* alloca = TmpB.CreateAlloca(type, nullptr, name);
-    
-    if (vyn::g_debug_codegen) {
+
+    if (vyb::g_debug_codegen) {
         std::cerr << "DEBUG: createEntryBlockAlloca - Created alloca '" << name << "', current order:\n";
         for (auto& inst : currentFunction->getEntryBlock()) {
             if (auto* ai = llvm::dyn_cast<llvm::AllocaInst>(&inst)) {
@@ -289,7 +289,7 @@ llvm::AllocaInst* LLVMCodegen::createEntryBlockAlloca(llvm::Type* type, const st
             }
         }
     }
-    
+
     return alloca;
 }
 
@@ -305,25 +305,25 @@ void LLVMCodegen::popLoop() {
 
 // Helper function to get field index
 int LLVMCodegen::getStructFieldIndex(llvm::StructType* structType, const std::string& fieldName) {
-   
-    VYN_CDBG << "DEBUG: getStructFieldIndex - Looking for field '" << fieldName << "'" << std::endl;
-    
+
+    VYB_CDBG << "DEBUG: getStructFieldIndex - Looking for field '" << fieldName << "'" << std::endl;
+
     if (!structType) {
-        VYN_CDBG << "DEBUG: structType is null" << std::endl;
+        VYB_CDBG << "DEBUG: structType is null" << std::endl;
         return -1;
     }
-    
-    VYN_CDBG << "DEBUG: structType has " << structType->getNumElements() << " elements" << std::endl;
-    
+
+    VYB_CDBG << "DEBUG: structType has " << structType->getNumElements() << " elements" << std::endl;
+
     if (structType->getName().empty()) {
-        VYN_CDBG << "DEBUG: structType is anonymous" << std::endl;
+        VYB_CDBG << "DEBUG: structType is anonymous" << std::endl;
         // This can happen for anonymous structs (like tuples) or if structType is null.
         // For anonymous structs, field access is by index, not name.
-        return -1; 
+        return -1;
     }
     std::string structName = structType->getName().str();
-    VYN_CDBG << "DEBUG: structName = '" << structName << "'" << std::endl;
-    
+    VYB_CDBG << "DEBUG: structName = '" << structName << "'" << std::endl;
+
     // Strip numeric suffix from LLVM struct names (e.g., "TreeNode.0" -> "TreeNode")
     std::string baseStructName = structName;
     size_t dotPos = structName.find_last_of('.');
@@ -333,36 +333,36 @@ int LLVMCodegen::getStructFieldIndex(llvm::StructType* structType, const std::st
         bool isNumeric = !suffix.empty() && std::all_of(suffix.begin(), suffix.end(), ::isdigit);
         if (isNumeric) {
             baseStructName = structName.substr(0, dotPos);
-            VYN_CDBG << "DEBUG: Stripped numeric suffix, baseStructName = '" << baseStructName << "'" << std::endl;
+            VYB_CDBG << "DEBUG: Stripped numeric suffix, baseStructName = '" << baseStructName << "'" << std::endl;
         }
     }
-    
+
     // Simple hardcoded mapping for TestPoint struct fields
     if (structName.find("TestPoint") != std::string::npos) {
-        VYN_CDBG << "DEBUG: Found TestPoint struct" << std::endl;
+        VYB_CDBG << "DEBUG: Found TestPoint struct" << std::endl;
         if (fieldName == "x") return 0;
         if (fieldName == "y") return 1;
     }
-    
+
     auto it = userTypeMap.find(baseStructName);
     if (it != userTypeMap.end()) {
         const auto& typeInfo = it->second;
         auto fieldIt = typeInfo.fieldIndices.find(fieldName);
         if (fieldIt != typeInfo.fieldIndices.end()) {
-            VYN_CDBG << "DEBUG: Found field in userTypeMap at index " << fieldIt->second << std::endl;
+            VYB_CDBG << "DEBUG: Found field in userTypeMap at index " << fieldIt->second << std::endl;
             return fieldIt->second;
         } else {
-            VYN_CDBG << "DEBUG: Field not found in userTypeMap" << std::endl;
+            VYB_CDBG << "DEBUG: Field not found in userTypeMap" << std::endl;
         }
     } else {
-        VYN_CDBG << "DEBUG: Struct not found in userTypeMap" << std::endl;
+        VYB_CDBG << "DEBUG: Struct not found in userTypeMap" << std::endl;
         // This case means the struct type (though named in LLVM) is not in our userTypeMap.
         // Let's try to dynamically register it if it's a well-known struct
         if (!structType->isOpaque() && structType->getNumElements() > 0) {
             UserTypeInfo typeInfo;
             typeInfo.llvmType = structType;
             typeInfo.isStruct = true;
-            
+
             // Try to map common field names by position
             // For common structs like Point, try to guess field indices
             if (fieldName == "x" && structType->getNumElements() > 0) {
@@ -375,7 +375,7 @@ int LLVMCodegen::getStructFieldIndex(llvm::StructType* structType, const std::st
                 return 1;
             }
             // Add more common field names if needed
-            
+
             // Store the type info for future lookups
             userTypeMap[structName] = typeInfo;
         }

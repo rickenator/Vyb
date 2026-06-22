@@ -1,0 +1,10 @@
+// Simple Vec test to isolate runtime issues
+
+main()<Int> -> {
+    // Test basic Vec creation and operation
+    simple_vec<Vec<Int>> = Vec::new();
+    simple_vec.push(42);
+    println("Simple test passed");
+
+    return 0;
+}

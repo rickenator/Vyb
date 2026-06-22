@@ -1,0 +1,13 @@
+// @test: Module path via VYB_MODULE_PATH
+// @description: import envpkg::calc resolves using VYB_MODULE_PATH
+// @category: modules
+// @expect: pass
+// @expect-output: 31
+// @env: VYB_MODULE_PATH=test/modules/envlib
+
+import envpkg::calc
+
+main()<Int> -> {
+    println_int(env_value())
+    return 0
+}

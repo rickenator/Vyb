@@ -1,0 +1,18 @@
+# Test generic aspect implementation with monomorphization
+# NOTE: Phase 5 validates parsing and struct monomorphization
+# Phase 6 will add Self resolution and method monomorphization
+
+struct Box<T> {
+    value<T>
+}
+
+main()<Int> -> {
+    # Create Box<Int> - validates monomorphization works
+    b<Box<Int>> = Box<Int> { value = 42 }
+
+    # TODO Phase 6: Generic aspect implementations with method bodies
+    # aspect Display { show(self<Self>)<String> }
+    # bind<T> Display -> Box<T> { ... }
+
+    return 0
+}

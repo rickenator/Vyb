@@ -1,0 +1,8 @@
+main()<String> -> {
+    println("Testing lit() intrinsic");
+    println("Calling lit()...");
+    result<String> = lit("42");
+    println("lit() result: ");
+    println(result);
+    return result;
+}

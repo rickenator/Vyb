@@ -1,18 +1,18 @@
 	.text
-	.file	"VynModule"
+	.file	"VyBModule"
 	.globl	divide                          # -- Begin function divide
 	.p2align	4, 0x90
 	.type	divide,@function
 divide:                                 # @divide
 .Lfunc_begin0:
-	.file	1 "/home/rick/Projects/Vyn/test/trap" "test_minimal_repro.vyn.ll"
-	.loc	1 2 0                           # test_minimal_repro.vyn.ll:2:0
+	.file	1 "/home/rick/Projects/VyB/test/trap" "test_minimal_repro.vyb.ll"
+	.loc	1 2 0                           # test_minimal_repro.vyb.ll:2:0
 	.cfi_startproc
 # %bb.0:                                # %entry
 	subq	$24, %rsp
 	.cfi_def_cfa_offset 32
 .Ltmp0:
-	.loc	1 2 1 prologue_end              # test_minimal_repro.vyn.ll:2:1
+	.loc	1 2 1 prologue_end              # test_minimal_repro.vyb.ll:2:1
 	movq	%rdi, 8(%rsp)
 	movq	%rsi, 16(%rsp)
 	testq	%rsi, %rsi
@@ -22,7 +22,7 @@ divide:                                 # @divide
 	cqto
 	idivq	16(%rsp)
 	xorl	%edx, %edx
-	.loc	1 2 1 epilogue_begin is_stmt 0  # test_minimal_repro.vyn.ll:2:1
+	.loc	1 2 1 epilogue_begin is_stmt 0  # test_minimal_repro.vyb.ll:2:1
 	addq	$24, %rsp
 	.cfi_def_cfa_offset 8
 	retq
@@ -32,7 +32,7 @@ divide:                                 # @divide
 	callq	malloc@PLT
 	movq	$42, 8(%rax)
 	movq	%rax, %rdx
-	.loc	1 2 1 epilogue_begin            # test_minimal_repro.vyn.ll:2:1
+	.loc	1 2 1 epilogue_begin            # test_minimal_repro.vyb.ll:2:1
 	addq	$24, %rsp
 	.cfi_def_cfa_offset 8
 	retq
@@ -46,20 +46,20 @@ divide:                                 # @divide
 	.type	compute,@function
 compute:                                # @compute
 .Lfunc_begin1:
-	.loc	1 7 0 is_stmt 1                 # test_minimal_repro.vyn.ll:7:0
+	.loc	1 7 0 is_stmt 1                 # test_minimal_repro.vyb.ll:7:0
 	.cfi_startproc
 # %bb.0:                                # %entry
 	subq	$24, %rsp
 	.cfi_def_cfa_offset 32
 .Ltmp2:
-	.loc	1 7 1 prologue_end              # test_minimal_repro.vyn.ll:7:1
+	.loc	1 7 1 prologue_end              # test_minimal_repro.vyb.ll:7:1
 	movq	%rdi, (%rsp)
 	movq	%rsi, 8(%rsp)
 	callq	divide@PLT
 	testq	%rdx, %rdx
 	je	.LBB1_2
 # %bb.1:                                # %call.error5
-	.loc	1 7 1 epilogue_begin is_stmt 0  # test_minimal_repro.vyn.ll:7:1
+	.loc	1 7 1 epilogue_begin is_stmt 0  # test_minimal_repro.vyb.ll:7:1
 	addq	$24, %rsp
 	.cfi_def_cfa_offset 8
 	retq
@@ -68,7 +68,7 @@ compute:                                # @compute
 	movq	%rax, 16(%rsp)
 	addq	$10, %rax
 	xorl	%edx, %edx
-	.loc	1 7 1 epilogue_begin            # test_minimal_repro.vyn.ll:7:1
+	.loc	1 7 1 epilogue_begin            # test_minimal_repro.vyb.ll:7:1
 	addq	$24, %rsp
 	.cfi_def_cfa_offset 8
 	retq
@@ -82,13 +82,13 @@ compute:                                # @compute
 	.type	main,@function
 main:                                   # @main
 .Lfunc_begin2:
-	.loc	1 12 0 is_stmt 1                # test_minimal_repro.vyn.ll:12:0
+	.loc	1 12 0 is_stmt 1                # test_minimal_repro.vyb.ll:12:0
 	.cfi_startproc
 # %bb.0:                                # %entry
 	subq	$24, %rsp
 	.cfi_def_cfa_offset 32
 .Ltmp4:
-	.loc	1 12 1 prologue_end             # test_minimal_repro.vyn.ll:12:1
+	.loc	1 12 1 prologue_end             # test_minimal_repro.vyb.ll:12:1
 	movl	$10, %edi
 	movl	$2, %esi
 	callq	compute@PLT
@@ -113,17 +113,17 @@ main:                                   # @main
 .LBB2_4:                                # %block.continue
 	movq	%rax, 16(%rsp)
 	addq	(%rsp), %rax
-	.loc	1 12 1 epilogue_begin is_stmt 0 # test_minimal_repro.vyn.ll:12:1
+	.loc	1 12 1 epilogue_begin is_stmt 0 # test_minimal_repro.vyb.ll:12:1
 	addq	$24, %rsp
 	.cfi_def_cfa_offset 8
 	retq
 .LBB2_6:                                # %call.error1
 	.cfi_def_cfa_offset 32
 	xorl	%edi, %edi
-	callq	__vyn_runtime_untrapped_error@PLT
+	callq	__vyb_runtime_untrapped_error@PLT
 .LBB2_5:                                # %trap.unmatched
 	movq	%rdx, %rdi
-	callq	__vyn_runtime_untrapped_error@PLT
+	callq	__vyb_runtime_untrapped_error@PLT
 .Ltmp5:
 .Lfunc_end2:
 	.size	main, .Lfunc_end2-main
@@ -332,11 +332,11 @@ main:                                   # @main
 .Ldebug_info_end0:
 	.section	.debug_str,"MS",@progbits,1
 .Linfo_string0:
-	.asciz	"Vyn Compiler"                  # string offset=0
+	.asciz	"VyB Compiler"                  # string offset=0
 .Linfo_string1:
-	.asciz	"test_minimal_repro.vyn.ll"     # string offset=13
+	.asciz	"test_minimal_repro.vyb.ll"     # string offset=13
 .Linfo_string2:
-	.asciz	"/home/rick/Projects/Vyn/test/trap" # string offset=39
+	.asciz	"/home/rick/Projects/VyB/test/trap" # string offset=39
 .Linfo_string3:
 	.asciz	"divide"                        # string offset=73
 .Linfo_string4:

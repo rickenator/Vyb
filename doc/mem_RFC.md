@@ -1,12 +1,12 @@
-# Vyn Memory Model Proposal
+# VyB Memory Model Proposal
 
-This document unifies design decisions and incorporates team feedback on Vyn's memory model, ownership, mutability, and safety mechanisms.
+This document unifies design decisions and incorporates team feedback on VyB's memory model, ownership, mutability, and safety mechanisms.
 
 ---
 
 ## 1. Overview
 
-Vyn’s memory model combines two primary axes for safe bindings plus a third for raw locations:
+VyB’s memory model combines two primary axes for safe bindings plus a third for raw locations:
 
 1. **Binding Mutability** (`var` vs `const`)
 2. **Ownership & Data Mutability** (`my<T>` / `our<T>` / `their<T>` with optional `T const`)
@@ -18,7 +18,7 @@ Safe code uses only `my`/`our`/`their`; raw locations (`loc<T>`) live behind exp
 
 ## 2. Binding Mutability
 
-Vyn uses a simple two-keyword model for variable bindings:
+VyB uses a simple two-keyword model for variable bindings:
 
 * **`var`**: mutable binding (can be reassigned)
 * **`const`**: immutable binding (rebinding prohibited)
@@ -27,7 +27,7 @@ The `const` keyword on the type itself is reserved for data immutability (`T con
 
 **Example**:
 
-```vyn
+```vyb
 var<Int> counter = 0    // mutable variable
 const<Int> limit = 100  // immutable binding
 ```
@@ -49,7 +49,7 @@ Data mutability is controlled by `const` on the pointee: e.g., `my<Foo const>` m
 
 Borrow creation uses canonical function-call operators:
 
-```vyn
+```vyb
 // Immutable borrow read-only view
 var v: their<Foo const> = view(owner_expr)
 // Mutable borrow
@@ -67,7 +67,7 @@ Compile-time checks enforce lifetimes and aliasing rules (e.g., one mutable borr
 
 Direct mutation behind `our<T>` is allowed in single-threaded code. For thread-safe mutable sharing, wrap in sync primitives:
 
-```vyn
+```vyb
 var shared: our<Mutex<Bar>> = our(Mutex(Bar{v:1}))
 ```
 
@@ -91,7 +91,7 @@ A `Mutex<T>` provides mutual-exclusion access to `T` in multi-threaded contexts.
 
 ### 7.1 Core APIs
 
-```vyn
+```vyb
 // Create a shared, thread-safe Foo
 var shared_foo: our<Mutex<Foo>> = our(Mutex{ value: Foo{/*...*/} })
 
@@ -127,12 +127,12 @@ If a thread panics (or throws an unrecoverable error) while holding the `LockGua
 
 ### 7.4 Deadlock Avoidance
 
-Vyn’s `Mutex<T>` does not automatically detect deadlocks (e.g., lock cycles). To prevent deadlocks:
+VyB’s `Mutex<T>` does not automatically detect deadlocks (e.g., lock cycles). To prevent deadlocks:
 
 *   **Lock ordering**: Establish and adhere to a global order in which multiple mutexes are acquired.
 *   **Use timeouts**: Prefer `lock_timeout(...)` over `lock()` when deadlock is a possibility, allowing the program to react to a timeout instead of hanging indefinitely.
 *   **Try-lock loops**: Implement more complex acquisition patterns, such as trying to acquire locks and releasing them if not all can be obtained.
-    ```vyn
+    ```vyb
     loop {
       if let Some(g1) = m1.try_lock() {
         if let Some(g2) = m2.try_lock() {
@@ -155,7 +155,7 @@ The `LockGuard<T>` scope defines the "baton" of lock ownership. Timeouts via `lo
 
 ## 8. Freedom-Scoped Blocks
 
-```vyn
+```vyb
 fn use_raw()
   freedom {
     var l: loc<Foo> = alloc(sizeof(Foo))
@@ -196,7 +196,7 @@ fn use_raw()
 
 ### 10.1 Unique Ownership (`my<T>`)
 
-```vyn
+```vyb
 var a: my<Foo> = Foo{x:0}
 a.x = 5            // OK
 
@@ -206,14 +206,14 @@ const<my<Foo const>> b = Foo{x:10}
 
 ### 10.2 Shared Ownership (`our<T>`)
 
-```vyn
+```vyb
 var<our<Bar>> s = our(Bar{v:1})
 var<our<Mutex<Bar>>> ts = our(Mutex(Bar{v:2}))
 ```
 
 ### 10.3 Borrowed References (`their<T>`)
 
-```vyn
+```vyb
 var owner: my<Baz> = Baz{v:99}
 var v1: their<Baz const> = view(owner)    // read-only view immutable borrow
 var b1: their<Baz> = borrow(owner)      // mutable borrow
@@ -229,7 +229,7 @@ var v3: their<Baz const> = view(v1)     // creating an immutable view from an im
 
 ### 10.4 Raw Locations (`loc<T>`)
 
-```vyn
+```vyb
 fn alloc_foo() -> loc<Foo>
   freedom {
     return alloc(sizeof(Foo))

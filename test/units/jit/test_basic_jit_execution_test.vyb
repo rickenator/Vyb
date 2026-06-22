@@ -1,0 +1,13 @@
+// filepath: /home/rick/Projects/VyB/test/units/jit/test_basic_jit_execution_test.vyb
+// @test: Basic JIT execution test
+// @description: Extracted from tests.cpp - Basic JIT execution test
+// @category: jit
+// @expect: pass
+// @expect-output: n/a
+// @expect-error: n/a
+// @expect-return: 42
+
+main()<Int> -> {
+    x<Int> = 42;
+    return x;
+}

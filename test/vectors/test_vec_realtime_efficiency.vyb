@@ -1,0 +1,88 @@
+// Test Vec get_array for performance-critical scenarios
+main()<Int> -> {
+    // Simulate real-time data processing scenario
+    println("=== Real-time Data Processing Simulation ===");
+
+    // Pre-allocate working buffers (no allocation during processing!)
+    sensor_data<Vec<Int>> = Vec::new();
+    processing_buffer<[Int; 100]> = [0; 100];  // Fixed-size processing buffer
+    output_buffer<[Int; 50]> = [0; 50];        // Output buffer
+
+    // Simulate data collection phase
+    println("Collecting sensor data...");
+    i<Int> = 0;
+    while (i < 25) {
+        sensor_value<Int> = (i * 7 + 13) % 100;  // Simulate sensor readings
+        sensor_data.push(sensor_value);
+        i = i + 1;
+    }
+
+    println("Collected", sensor_data.len(), "sensor readings");
+
+    // Process data without any memory allocation
+    println("Processing data with zero allocations...");
+
+    // Copy to processing buffer
+    elements_copied<Int> = sensor_data.get_array(processing_buffer);
+    println("Copied", elements_copied, "elements to processing buffer");
+
+    // Simulate processing (filter values > 50)
+    processed_vec<Vec<Int>> = Vec::new();
+    j<Int> = 0;
+    while (j < elements_copied) {
+        if (processing_buffer[j] > 50) {
+            processed_vec.push(processing_buffer[j]);
+        }
+        j = j + 1;
+    }
+
+    // Copy results to output buffer (still no allocation!)
+    output_count<Int> = processed_vec.get_array(output_buffer);
+    println("Processed results:", output_count, "values > 50");
+
+    // Demonstrate buffer reuse for continuous processing
+    println("=== Continuous Processing Loop ===");
+
+    iteration<Int> = 0;
+    while (iteration < 3) {
+        println("Processing iteration:", iteration);
+
+        // Add more data
+        sensor_data.push(75 + iteration).push(25 + iteration);
+
+        // Reuse same buffers (critical for real-time systems)
+        copied<Int> = sensor_data.get_array(processing_buffer);
+
+        // Count values in different ranges using pre-allocated buffer
+        low_count<Int> = 0;
+        high_count<Int> = 0;
+        k<Int> = 0;
+        while (k < copied) {
+            if (processing_buffer[k] < 30) {
+                low_count = low_count + 1;
+            } else if (processing_buffer[k] > 70) {
+                high_count = high_count + 1;
+            }
+            k = k + 1;
+        }
+
+        println("  Low values (<30):", low_count);
+        println("  High values (>70):", high_count);
+        println("  Total processed:", copied);
+
+        iteration = iteration + 1;
+    }
+
+    // Demonstrate type safety and bounds checking
+    println("=== Safety Demonstration ===");
+
+    small_vec<Vec<Int>> = Vec::new();
+    small_vec.push(1).push(2);
+
+    tiny_buffer<[Int; 1]> = [0];
+    copied_to_tiny<Int> = small_vec.get_array(tiny_buffer);
+    println("Copied", copied_to_tiny, "elements to tiny buffer (size 1)");
+    println("Tiny buffer safely contains:", tiny_buffer);
+
+    return 0;
+}

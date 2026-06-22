@@ -1,0 +1,13 @@
+// @test: Stdlib prelude explicit import via VYB_STDLIB
+// @description: prelude is explicit-only and resolves through VYB_STDLIB when imported
+// @category: modules
+// @expect: pass
+// @expect-output: 9
+// @env: VYB_STDLIB=stdlib
+
+import prelude::{OptionInt, option_int_none, option_int_unwrap_or}
+
+main()<Int> -> {
+    println_int(option_int_unwrap_or(option_int_none(), 9))
+    return 0
+}

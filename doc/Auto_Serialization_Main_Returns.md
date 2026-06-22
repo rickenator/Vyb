@@ -38,7 +38,7 @@ Prior to v0.5.3, `main()<Int>` used the Unix exit-code convention (the integer r
 became the process exit code). Programs that relied on that behavior should be updated to
 call `exit(n)` explicitly:
 
-```vyn
+```vyb
 // Old behavior (v0.5.2 and earlier):
 main()<Int> -> { return 42 }  // exit code 42, no stdout output
 
@@ -51,11 +51,11 @@ main() -> { exit(42) }         // no stdout output, exit code: 42
 
 ## Goal
 
-Enable any function in Vyn to return one or more values of arbitrary types, with the Vyn runtime auto‑serializing the result into a concise, type‑annotated JSON representation and allowing a matching auto‑deserializer to produce faithful Vyn structs.
+Enable any function in VyB to return one or more values of arbitrary types, with the VyB runtime auto‑serializing the result into a concise, type‑annotated JSON representation and allowing a matching auto‑deserializer to produce faithful VyB structs.
 
 ## Why
 
-* **Zero boilerplate** for round‑trip between VynR and storage or IPC.
+* **Zero boilerplate** for round‑trip between VyBR and storage or IPC.
 * **Type fidelity**: preserve declared types (e.g. `Int8`, `Int32`) without implicit demotion.
 * **Interoperability**: leverage JSON as lingua franca for external tools and runtimes.
 
@@ -65,7 +65,7 @@ Auto‑JSONification applies only to `main()` returns. Other functions can use a
 
 Declare `main`'s return types as generics on the function, then `return` comma‑separated values:
 
-```vyn
+```vyb
 main()<Point,Rectangle> ->
   p<Point>, r<Rectangle> = createShapes()
   // modify
@@ -76,21 +76,21 @@ main()<Point,Rectangle> ->
 
 For non‑`main` functions, call each struct’s built‑in `toJSON()` helper explicitly:
 
-```vyn
+```vyb
 compute()<String> ->
   p<Point> = makePoint()
   return p.toJSON()  // returns JSON string
 ```
 
 * **`main()<T1,T2,…>`**: generic return‑type list for `main`.
-* **`return`** in `main` triggers auto‑JSONification; elsewhere it returns native Vyn values or JSON if using `toJSON()`.
+* **`return`** in `main` triggers auto‑JSONification; elsewhere it returns native VyB values or JSON if using `toJSON()`.
 
 ## Auto-Deserialization
 
-VynR provides a built‑in intrinsic:
+VyBR provides a built‑in intrinsic:
 
-```vyn
-// this section needs more thinking. 
+```vyb
+// this section needs more thinking.
 // I don't have a clearly defined Tuple for multi-type members, or even like-types
 
 auto tuple = deserial(jsonString)
@@ -110,7 +110,7 @@ Returns of multiple structs serialize to a JSON array of objects keyed by type n
 ```json
 [
   { "Person": { "id<Int32>": 123, "name<String>": "Alice", "salary<Float>": 88000.0 } },
-  { "Company": { "name<String>": "Acme", "employeeCount<Int8>": 150 } } 
+  { "Company": { "name<String>": "Acme", "employeeCount<Int8>": 150 } }
 ]
 ```
 
@@ -126,7 +126,7 @@ A lone struct return emits a single object (no array):
 
 Wrap literals in the intrinsic `lit()` to emit raw JSON primitives without wrapping:
 
-```vyn
+```vyb
 main()<Int,Float,String> ->
   return lit(42, 3.14, "hello")    // emits [42, 3.14, "hello"]
 
@@ -140,7 +140,7 @@ main()<Int> ->
 * Cannot be applied to values that are already named or typed structs.
 * Using `lit()` with a struct should emit a compile-time error:
 
-```vyn
+```vyb
 return lit(Person(name="Alice", id=1))  // ❌
 ```
 
@@ -167,7 +167,7 @@ The `notype()` intrinsic removes `<Type>` suffixes from field names in struct re
 
 If `notype()` is used with raw primitives (e.g., `notype(42)`), the compiler should emit a diagnostic error:
 
-```vyn
+```vyb
 // Invalid usage: notype() requires struct input
 main()<String, Int, String> -> {
     return "hello", notype(42), "world";
@@ -183,7 +183,7 @@ Expected behavior:
 
 For correct usage, wrap one or more structs:
 
-```vyn
+```vyb
 fn<Person, Company> main():
   var<Person> u, var<Company> c = createEntities()
   // emit JSON without <Type> suffix on fields
@@ -205,7 +205,7 @@ Use `lit()` for emitting raw primitives or anonymous tuples.
 
 By default, returned JSON field names include `<Type>` suffixes. To emit clean JSON without embedded type metadata, wrap return values in the `notype()` intrinsic within `main`:
 
-```vyn
+```vyb
 fn<Person, Company> main():
   var<Person> u, var<Company> c = createEntities()
   // emit JSON without <Type> suffix on fields
@@ -227,7 +227,7 @@ Emits:
 
 Use `bare()` to emit *only the raw field values* of a struct as a JSON array — removing all type and field metadata. Useful for returning unnamed tuples.
 
-```vyn
+```vyb
 p<Person> = Person(id=123, name="Rick", salary=88000.0)
 return bare(p)
 ```
@@ -246,7 +246,7 @@ Emits:
 
 Invalid usage:
 
-```vyn
+```vyb
 return bare(42)  // ❌
 ```
 
@@ -279,7 +279,7 @@ Expected diagnostic:
 
 This preserves symmetry with `main()` return rules and guarantees a 1:1 mapping for reconstitution.
 
-* **`vyn::fromJson<T>(json, index?)`**: extract element(s) by declared type from array or object. This is not really well defined yet as we don't have a standard vyn:: defined yet, nor ? syntax for maybe type (yet?).
+* **`vyb::fromJson<T>(json, index?)`**: extract element(s) by declared type from array or object. This is not really well defined yet as we don't have a standard vyb:: defined yet, nor ? syntax for maybe type (yet?).
 
 ## Runtime Behavior
 
@@ -289,12 +289,12 @@ This preserves symmetry with `main()` return rules and guarantees a 1:1 mapping 
 
 ## Next Steps
 
-1. Define reflection metadata format in vyn.
+1. Define reflection metadata format in vyb.
 2. Implement JSON emitter after AST lowering.
-3. Extend VynR with `deserial`, `fromJson`, and error-reporting.
+3. Extend VyBR with `deserial`, `fromJson`, and error-reporting.
 4. Test nested structs, literal returns, array-of-primitives, versioning, and error cases.
 
 ---
 
 *Concise returns, faithful types, zero ceremony.*
-*references to VynL and VynR are Vyn Language and Vyn Runtime respectively*
+*references to VyBL and VyBR are VyB Language and VyB Runtime respectively*

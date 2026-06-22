@@ -1,5 +1,5 @@
-#include "vyn/vre/llvm/codegen.hpp"
-#include "vyn/parser/ast.hpp"
+#include "vyb/vre/llvm/codegen.hpp"
+#include "vyb/parser/ast.hpp"
 
 #include <llvm/IR/Type.h>
 #include <llvm/IR/DerivedTypes.h>
@@ -10,22 +10,22 @@
 #include <vector>
 #include <map>
 
-using namespace vyn;
+using namespace vyb;
 // Using namespace llvm; // Uncomment if desired for brevity
 
 void LLVMCodegen::visit(ast::PointerType* node) {
     // PointerType represents a pointer to another type
     // It generates an LLVM pointer type
-    
+
     if (!node->pointeeType) {
         logError(node->loc, "Pointer type has no pointee type");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Process the pointee type
     node->pointeeType->accept(*this);
-    
+
     // If the pointee type processing gave us a type directly in m_currentLLVMType,
     // use that, otherwise try to use the type of m_currentLLVMValue
     llvm::Type* pointeeType = nullptr;
@@ -34,17 +34,17 @@ void LLVMCodegen::visit(ast::PointerType* node) {
     } else if (m_currentLLVMValue && m_currentLLVMValue->getType()) {
         pointeeType = m_currentLLVMValue->getType();
     }
-    
+
     if (!pointeeType) {
         logError(node->loc, "Failed to resolve pointee type");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Create a pointer type to the pointee type
     unsigned addressSpace = 0; // Use default address space
     llvm::Type* pointerType = llvm::PointerType::get(pointeeType, addressSpace);
-    
+
     // Store the result type
     m_currentLLVMType = pointerType;
     m_currentLLVMValue = nullptr; // No value produced
@@ -53,16 +53,16 @@ void LLVMCodegen::visit(ast::PointerType* node) {
 void LLVMCodegen::visit(ast::ArrayType* node) {
     // ArrayType represents a fixed-size array of elements
     // It generates an LLVM array type
-    
+
     if (!node->elementType) {
         logError(node->loc, "Array type has no element type");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Process the element type
     node->elementType->accept(*this);
-    
+
     // If the element type processing gave us a type directly in m_currentLLVMType,
     // use that, otherwise try to use the type of m_currentLLVMValue
     llvm::Type* elementType = nullptr;
@@ -71,28 +71,28 @@ void LLVMCodegen::visit(ast::ArrayType* node) {
     } else if (m_currentLLVMValue && m_currentLLVMValue->getType()) {
         elementType = m_currentLLVMValue->getType();
     }
-    
+
     if (!elementType) {
         logError(node->loc, "Failed to resolve array element type");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Handle the array size expression if provided
     llvm::Value* sizeValue = nullptr;
     uint64_t arraySize = 0;
-    
+
     if (node->sizeExpression) {
         // Evaluate the size expression
         node->sizeExpression->accept(*this);
         sizeValue = m_currentLLVMValue;
-        
+
         if (!sizeValue) {
             logError(node->sizeExpression->loc, "Failed to evaluate array size expression");
             m_currentLLVMValue = nullptr;
             return;
         }
-        
+
         // Try to get a constant size
         if (llvm::ConstantInt* constSize = llvm::dyn_cast<llvm::ConstantInt>(sizeValue)) {
             arraySize = constSize->getZExtValue();
@@ -112,10 +112,10 @@ void LLVMCodegen::visit(ast::ArrayType* node) {
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Create an array type with the determined size
     llvm::Type* arrayType = llvm::ArrayType::get(elementType, arraySize);
-    
+
     // Store the result type
     m_currentLLVMType = arrayType;
     m_currentLLVMValue = nullptr; // No value produced
@@ -124,13 +124,13 @@ void LLVMCodegen::visit(ast::ArrayType* node) {
 void LLVMCodegen::visit(ast::VecType* node) {
     // VecType represents a dynamic vector Vec<T>
     // It generates an LLVM struct type with { ptr, size, capacity }
-    
+
     if (!node->elementType) {
         logError(node->loc, "Vec type has no element type");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Get the LLVM type for the element type
     llvm::Type* elementLLVMType = codegenType(node->elementType.get());
     if (!elementLLVMType) {
@@ -138,14 +138,14 @@ void LLVMCodegen::visit(ast::VecType* node) {
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Create Vec struct: { ptr T*, size i64, capacity i64 }
     std::vector<llvm::Type*> vecFields = {
         llvm::PointerType::get(*context, 0), // ptr to elements (opaque pointer)
         llvm::Type::getInt64Ty(*context),    // size
         llvm::Type::getInt64Ty(*context)     // capacity
     };
-    
+
     llvm::StructType* vecLLVMType = llvm::StructType::get(*context, vecFields, false);
     m_currentLLVMType = vecLLVMType;
     m_currentLLVMValue = nullptr;
@@ -154,13 +154,13 @@ void LLVMCodegen::visit(ast::VecType* node) {
 void LLVMCodegen::visit(ast::FutureType* node) {
     // FutureType represents an async Future<T>
     // Generate LLVM struct type: { T* result, i32 state, i8* runtime_data }
-    
+
     if (!node->resultType) {
         logError(node->loc, "Future type has no result type");
         m_currentLLVMType = nullptr;
         return;
     }
-    
+
     // Get the LLVM type for the result type
     llvm::Type* resultLLVMType = codegenType(node->resultType.get());
     if (!resultLLVMType) {
@@ -168,14 +168,14 @@ void LLVMCodegen::visit(ast::FutureType* node) {
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Create Future struct: { result_ptr T*, state i32, completion_ptr void* }
     std::vector<llvm::Type*> futureFields = {
         llvm::PointerType::get(*context, 0), // ptr to result (opaque pointer)
         llvm::Type::getInt32Ty(*context),    // state (pending=0, completed=1, failed=2)
         llvm::PointerType::get(*context, 0)  // completion callback ptr (opaque pointer)
     };
-    
+
     llvm::StructType* futureLLVMType = llvm::StructType::get(*context, futureFields, false);
     m_currentLLVMType = futureLLVMType;
     m_currentLLVMValue = nullptr;
@@ -184,12 +184,12 @@ void LLVMCodegen::visit(ast::FutureType* node) {
 void LLVMCodegen::visit(ast::FunctionType* node) {
     // FunctionType represents a function pointer type with parameter and return types
     // It generates an LLVM function type
-    
+
     // Process return type
     llvm::Type* returnType = nullptr;
     if (node->returnType) {
         node->returnType->accept(*this);
-        
+
         if (m_currentLLVMType) {
             returnType = m_currentLLVMType;
         } else if (m_currentLLVMValue && m_currentLLVMValue->getType()) {
@@ -203,20 +203,20 @@ void LLVMCodegen::visit(ast::FunctionType* node) {
         // Default to void return type if not specified
         returnType = llvm::Type::getVoidTy(*context);
     }
-    
+
     // Process parameter types
     std::vector<llvm::Type*> paramTypes;
     for (const auto& paramType : node->parameterTypes) {
         if (paramType) {
             paramType->accept(*this);
-            
+
             llvm::Type* type = nullptr;
             if (m_currentLLVMType) {
                 type = m_currentLLVMType;
             } else if (m_currentLLVMValue && m_currentLLVMValue->getType()) {
                 type = m_currentLLVMValue->getType();
             }
-            
+
             if (type) {
                 paramTypes.push_back(type);
             } else {
@@ -226,17 +226,17 @@ void LLVMCodegen::visit(ast::FunctionType* node) {
             }
         }
     }
-    
+
     // Create the function type
     llvm::FunctionType* funcType = llvm::FunctionType::get(
         returnType,
         paramTypes,
         false // VarArg support - using false as there's no isVarArg in the actual class
     );
-    
+
     // Function types are represented as pointers to the function type
     llvm::Type* funcPtrType = llvm::PointerType::get(funcType, 0);
-    
+
     // Store the result type
     m_currentLLVMType = funcPtrType;
     m_currentLLVMValue = nullptr; // No value produced
@@ -247,16 +247,16 @@ void LLVMCodegen::visit(ast::OptionalType* node) {
     // In LLVM IR, we represent this as a structure containing:
     // 1. A boolean flag indicating if the value is present
     // 2. The value itself (if the flag is true)
-    
+
     if (!node->containedType) {
         logError(node->loc, "Optional type has no contained type");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Process the value type
     node->containedType->accept(*this);
-    
+
     // If the value type processing gave us a type directly in m_currentLLVMType,
     // use that, otherwise try to use the type of m_currentLLVMValue
     llvm::Type* valueType = nullptr;
@@ -265,27 +265,27 @@ void LLVMCodegen::visit(ast::OptionalType* node) {
     } else if (m_currentLLVMValue && m_currentLLVMValue->getType()) {
         valueType = m_currentLLVMValue->getType();
     }
-    
+
     if (!valueType) {
         logError(node->loc, "Failed to resolve optional value type");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Create a structure type for the optional
     // [hasValue: bool, value: ValueType]
     std::vector<llvm::Type*> members = {
         llvm::Type::getInt1Ty(*context), // hasValue flag
         valueType                        // The actual value
     };
-    
+
     // Generate a name for the optional type
     std::string optionalTypeName = "optional." + getTypeName(valueType);
-    
-    // Create the optional type structure 
+
+    // Create the optional type structure
     // (note: getTypeByName is not available in LLVM 18.1, using create directly)
     llvm::StructType* optionalType = llvm::StructType::create(*context, members, optionalTypeName);
-    
+
     // Store the result type
     m_currentLLVMType = optionalType;
     m_currentLLVMValue = nullptr; // No value produced
@@ -294,20 +294,20 @@ void LLVMCodegen::visit(ast::OptionalType* node) {
 void LLVMCodegen::visit(ast::TupleTypeNode* node) {
     // TupleTypeNode represents a tuple of multiple types
     // In LLVM IR, we represent this as an anonymous structure
-    
+
     // Process each member type
     std::vector<llvm::Type*> memberTypes;
     for (const auto& memberType : node->memberTypes) {
         if (memberType) {
             memberType->accept(*this);
-            
+
             llvm::Type* type = nullptr;
             if (m_currentLLVMType) {
                 type = m_currentLLVMType;
             } else if (m_currentLLVMValue && m_currentLLVMValue->getType()) {
                 type = m_currentLLVMValue->getType();
             }
-            
+
             if (type) {
                 memberTypes.push_back(type);
             } else {
@@ -321,30 +321,30 @@ void LLVMCodegen::visit(ast::TupleTypeNode* node) {
             return;
         }
     }
-    
+
     if (memberTypes.empty()) {
         logError(node->loc, "Empty tuple type not supported");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Create a name for the tuple type based on its members
     std::string tupleTypeName = "tuple";
     for (const auto& type : memberTypes) {
         tupleTypeName += "." + getTypeName(type);
     }
-    
+
     // Create the tuple type structure
     // (note: getTypeByName is not available in LLVM 18.1, using create directly)
     llvm::StructType* tupleType = llvm::StructType::create(*context, memberTypes, tupleTypeName);
-    
+
     // Store the result type
     m_currentLLVMType = tupleType;
     m_currentLLVMValue = nullptr; // No value produced
 }
 
 // --- Type Mapping Helper ---
-llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
+llvm::Type* LLVMCodegen::codegenType(vyb::ast::TypeNode* typeNode) {
     if (!typeNode) {
         logError(SourceLocation(), "Null type node in codegenType");
         return nullptr;
@@ -359,8 +359,8 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
     llvm::Type* llvmType = nullptr;
 
     switch (typeNode->getCategory()) {
-        case vyn::ast::TypeNode::Category::IDENTIFIER: {
-            auto* typeNameNode = dynamic_cast<vyn::ast::TypeName*>(typeNode);
+        case vyb::ast::TypeNode::Category::IDENTIFIER: {
+            auto* typeNameNode = dynamic_cast<vyb::ast::TypeName*>(typeNode);
             if (!typeNameNode) {
                 logError(typeNode->loc, "Type node is not a TypeName");
                 return nullptr;
@@ -412,7 +412,7 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
             // Handle Self type in bind/impl methods
             if (typeNameStr == "Self") {
                 if (m_currentImplTypeNode) {
-                    VYN_CDBG << "DEBUG: Resolving Self to " << m_currentImplTypeNode->toString() << " in bind method" << std::endl;
+                    VYB_CDBG << "DEBUG: Resolving Self to " << m_currentImplTypeNode->toString() << " in bind method" << std::endl;
                     llvmType = codegenType(m_currentImplTypeNode);
                     break;
                 } else {
@@ -427,7 +427,7 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                     logError(typeNode->loc, "Tuple type requires type parameters (e.g., Tuple<Int, String>)");
                     return nullptr;
                 }
-                
+
                 // Process each tuple element type
                 std::vector<llvm::Type*> tupleFields;
                 for (const auto& elemTypeNode : typeNameNode->genericArgs) {
@@ -442,7 +442,7 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                     }
                     tupleFields.push_back(elemTy);
                 }
-                
+
                 // Create anonymous struct for the tuple
                 llvmType = llvm::StructType::get(*context, tupleFields, false);
                 break;
@@ -471,19 +471,19 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                     llvm::Type::getInt64Ty(*context),    // size
                     llvm::Type::getInt64Ty(*context)     // capacity
                 };
-                
+
                 llvmType = llvm::StructType::get(*context, vecFields, false);
                 break;
             }
 
             // Handle ownership types: my<T>, our<T>, their<T>, mild<T>, view<T>, borrow<T>
-            if (typeNameStr == "my" || typeNameStr == "our" || typeNameStr == "their" || 
+            if (typeNameStr == "my" || typeNameStr == "our" || typeNameStr == "their" ||
                 typeNameStr == "mild" || typeNameStr == "view" || typeNameStr == "borrow") {
                 if (typeNameNode->genericArgs.empty() || !typeNameNode->genericArgs[0]) {
                     logError(typeNode->loc, typeNameStr + " type requires a type parameter (e.g., " + typeNameStr + "<TreeNode>)");
                     return nullptr;
                 }
-                VYN_CDBG << "DEBUG: Processing ownership type " << typeNameStr << " with underlying type: " 
+                VYB_CDBG << "DEBUG: Processing ownership type " << typeNameStr << " with underlying type: "
                           << typeNameNode->genericArgs[0]->toString() << std::endl;
                 // For LLVM code generation, ownership types become pointers to the underlying type
                 // This solves circular reference issues and matches the runtime semantics
@@ -494,7 +494,7 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                 }
                 // Create pointer to the underlying type
                 llvmType = llvm::PointerType::getUnqual(underlyingType);
-                VYN_CDBG << "DEBUG: Successfully resolved ownership type " << typeNameStr << " to pointer type" << std::endl;
+                VYB_CDBG << "DEBUG: Successfully resolved ownership type " << typeNameStr << " to pointer type" << std::endl;
                 break;
             }
 
@@ -503,16 +503,16 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
             if (!typeNameNode->genericArgs.empty()) {
                 auto templateIt = genericStructTemplates.find(typeNameStr);
                 if (templateIt != genericStructTemplates.end()) {
-                    VYN_CDBG << "DEBUG: Detected generic struct instantiation: " << typeNameStr 
+                    VYB_CDBG << "DEBUG: Detected generic struct instantiation: " << typeNameStr
                               << " with " << typeNameNode->genericArgs.size() << " type arguments" << std::endl;
-                    
+
                     // Trigger monomorphization
                     llvm::StructType* specializedType = monomorphizeStruct(typeNameStr, typeNameNode->genericArgs);
                     if (!specializedType) {
                         logError(typeNode->loc, "Failed to monomorphize " + typeNameStr);
                         return nullptr;
                     }
-                    
+
                     llvmType = specializedType;
                     break;
                 }
@@ -528,7 +528,7 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                 llvmType = llvm::Type::getInt16Ty(*context);
             } else if (typeNameStr == "Int8" || typeNameStr == "i8" || typeNameStr == "CChar") {
                 llvmType = int8Type;
-            
+
             // Unsigned integer types
             } else if (typeNameStr == "UInt64" || typeNameStr == "u64" ||
                        typeNameStr == "CULong" || typeNameStr == "CSize") {
@@ -539,21 +539,21 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                 llvmType = llvm::Type::getInt16Ty(*context);  // Same as i16 at LLVM level
             } else if (typeNameStr == "UInt8" || typeNameStr == "u8" || typeNameStr == "CUChar") {
                 llvmType = llvm::Type::getInt8Ty(*context);   // Same as i8 at LLVM level
-            
+
             // Floating point types
             } else if (typeNameStr == "Float" || typeNameStr == "f64" || typeNameStr == "CDouble") {
                 llvmType = doubleType;
             } else if (typeNameStr == "Float32" || typeNameStr == "f32" || typeNameStr == "CFloat") {
                 llvmType = floatType;
-            
+
             // Boolean type
             } else if (typeNameStr == "Bool") {
                 llvmType = int1Type;
-            
+
             // Void type
             } else if (typeNameStr == "Void" || typeNameStr == "CVoid") {
                 llvmType = voidType;
-            
+
             // String type (fat pointer: { ptr, len })
             } else if (typeNameStr == "String") {
                 // String is a struct: { ptr: *i8, len: i64 }
@@ -562,7 +562,7 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                     llvm::Type::getInt64Ty(*context)     // length
                 };
                 llvmType = llvm::StructType::get(*context, strFields, false);
-            
+
             // Character types
             } else if (typeNameStr == "Char") {
                 // Char represents a single UTF-8 code unit (1 byte)
@@ -570,7 +570,7 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
             } else if (typeNameStr == "Rune") {
                 // Rune represents a full Unicode code point (up to 32 bits)
                 llvmType = int32Type;
-            
+
             // Byte sequence type
             } else if (typeNameStr == "Bytes" || typeNameStr == "bytes") {
                 // Bytes is similar to String but for raw binary data: { ptr: *u8, len: i64 }
@@ -579,7 +579,7 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                     llvm::Type::getInt64Ty(*context)     // length
                 };
                 llvmType = llvm::StructType::get(*context, bytesFields, false);
-            
+
             // Future type (async)
             } else if (typeNameStr == "Future") {
                 // For now, treat generic Future type as opaque pointer
@@ -589,15 +589,15 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                 // Check type alias map first
                 auto typeAliasIt = typeAliasMap.find(typeNameStr);
                 if (typeAliasIt != typeAliasMap.end()) {
-                    VYN_CDBG << "DEBUG: Found type alias for " << typeNameStr << std::endl;
+                    VYB_CDBG << "DEBUG: Found type alias for " << typeNameStr << std::endl;
                     llvmType = typeAliasIt->second;
                 } else {
                     // Check if this is a type parameter being substituted during monomorphization
                     auto substitutionIt = currentTypeSubstitutions.find(typeNameStr);
                     if (substitutionIt != currentTypeSubstitutions.end()) {
-                        VYN_CDBG << "DEBUG: Substituting type parameter " << typeNameStr 
+                        VYB_CDBG << "DEBUG: Substituting type parameter " << typeNameStr
                                   << " -> " << substitutionIt->second << " during monomorphization" << std::endl;
-                        
+
                         // Recursively resolve the substituted type
                         // Create a TypeName node for the concrete type
                         auto concreteTypeName = std::make_unique<ast::TypeName>(
@@ -609,14 +609,14 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                     } else {
                         auto userTypeIt = userTypeMap.find(typeNameStr);
                         if (userTypeIt != userTypeMap.end()) {
-                            VYN_CDBG << "DEBUG: Found user type " << typeNameStr << " in userTypeMap, isOpaque: " 
+                            VYB_CDBG << "DEBUG: Found user type " << typeNameStr << " in userTypeMap, isOpaque: "
                                       << userTypeIt->second.llvmType->isOpaque() << std::endl;
                             llvmType = userTypeIt->second.llvmType;
                         } else {
-                            VYN_CDBG << "DEBUG: User type " << typeNameStr << " not found in userTypeMap, checking LLVM context" << std::endl;
+                            VYB_CDBG << "DEBUG: User type " << typeNameStr << " not found in userTypeMap, checking LLVM context" << std::endl;
                             llvm::StructType* existingType = llvm::StructType::getTypeByName(*context, typeNameStr);
                             if (existingType) {
-                                VYN_CDBG << "DEBUG: Found existing type " << typeNameStr << " in LLVM context, isOpaque: " 
+                                VYB_CDBG << "DEBUG: Found existing type " << typeNameStr << " in LLVM context, isOpaque: "
                                           << existingType->isOpaque() << std::endl;
                                 llvmType = existingType;
                             } else {
@@ -633,8 +633,8 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
             }
             break;
         }
-        case vyn::ast::TypeNode::Category::ARRAY: {
-            auto* arrayTypeNode = dynamic_cast<vyn::ast::ArrayType*>(typeNode);
+        case vyb::ast::TypeNode::Category::ARRAY: {
+            auto* arrayTypeNode = dynamic_cast<vyb::ast::ArrayType*>(typeNode);
             if (!arrayTypeNode || !arrayTypeNode->elementType) { // Check arrayTypeNode and its elementType
                 logError(typeNode->loc, "Array type node has no element type or is not an ArrayType.");
                 return nullptr;
@@ -648,25 +648,25 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
             if (arrayTypeNode->sizeExpression) { // Access sizeExpression
                 // For fixed-size arrays. This requires constant evaluation.
                 // Simplified: assumes IntegerLiteral for size.
-                if (auto* intLit = dynamic_cast<vyn::ast::IntegerLiteral*>(arrayTypeNode->sizeExpression.get())) { // Access sizeExpression
+                if (auto* intLit = dynamic_cast<vyb::ast::IntegerLiteral*>(arrayTypeNode->sizeExpression.get())) { // Access sizeExpression
                     uint64_t arraySize = intLit->value;
-                    if (arraySize == 0) { 
+                    if (arraySize == 0) {
                         logError(typeNode->loc, "Array size cannot be zero.");
                         return nullptr;
                     }
                     llvmType = llvm::ArrayType::get(elemTy, arraySize);
                 } else {
                     logError(typeNode->loc, "Array size is not a constant integer literal. Dynamic/complex-sized arrays need specific handling (e.g., as slices/structs or require constant folding). Treating as pointer for now.");
-                    llvmType = llvm::PointerType::getUnqual(elemTy); // Fallback, might not be correct for all Vyn semantics
+                    llvmType = llvm::PointerType::getUnqual(elemTy); // Fallback, might not be correct for all VyB semantics
                 }
             } else {
                 // Unsized array (e.g., `arr: []Int`) - typically a pointer or a slice struct.
-                llvmType = llvm::PointerType::getUnqual(elemTy); // Fallback, might not be correct for all Vyn semantics
+                llvmType = llvm::PointerType::getUnqual(elemTy); // Fallback, might not be correct for all VyB semantics
             }
             break;
         }
-        case vyn::ast::TypeNode::Category::TUPLE: {
-            auto* tupleTypeNode = dynamic_cast<vyn::ast::TupleTypeNode*>(typeNode);
+        case vyb::ast::TypeNode::Category::TUPLE: {
+            auto* tupleTypeNode = dynamic_cast<vyb::ast::TupleTypeNode*>(typeNode);
             if (!tupleTypeNode) {
                 logError(typeNode->loc, "Type node is not a TupleTypeNode.");
                 return nullptr;
@@ -683,8 +683,8 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
             llvmType = llvm::StructType::get(*context, memberLlvmTypes);
             break;
         }
-        case vyn::ast::TypeNode::Category::VEC: {
-            auto* vecTypeNode = dynamic_cast<vyn::ast::VecType*>(typeNode);
+        case vyb::ast::TypeNode::Category::VEC: {
+            auto* vecTypeNode = dynamic_cast<vyb::ast::VecType*>(typeNode);
             if (!vecTypeNode || !vecTypeNode->elementType) {
                 logError(typeNode->loc, "Vec type node has no element type or is not a VecType.");
                 return nullptr;
@@ -701,12 +701,12 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                 llvm::Type::getInt64Ty(*context),    // size
                 llvm::Type::getInt64Ty(*context)     // capacity
             };
-            
+
             llvmType = llvm::StructType::get(*context, vecFields, false);
             break;
         }
-        case vyn::ast::TypeNode::Category::FUTURE: {
-            auto* futureTypeNode = dynamic_cast<vyn::ast::FutureType*>(typeNode);
+        case vyb::ast::TypeNode::Category::FUTURE: {
+            auto* futureTypeNode = dynamic_cast<vyb::ast::FutureType*>(typeNode);
             if (!futureTypeNode || !futureTypeNode->resultType) {
                 logError(typeNode->loc, "Future type node has no result type or is not a FutureType.");
                 return nullptr;
@@ -723,12 +723,12 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
                 llvm::Type::getInt32Ty(*context),    // state (pending=0, completed=1, failed=2)
                 llvm::PointerType::get(*context, 0)  // completion callback ptr (opaque pointer)
             };
-            
+
             llvmType = llvm::StructType::get(*context, futureFields, false);
             break;
         }
-        case vyn::ast::TypeNode::Category::FUNCTION: { // Changed from FUNCTION_SIGNATURE
-            auto* funcTypeNode = dynamic_cast<vyn::ast::FunctionType*>(typeNode);
+        case vyb::ast::TypeNode::Category::FUNCTION: { // Changed from FUNCTION_SIGNATURE
+            auto* funcTypeNode = dynamic_cast<vyb::ast::FunctionType*>(typeNode);
             if (!funcTypeNode) {
                 logError(typeNode->loc, "Type node is not a FunctionType.");
                 return nullptr;
@@ -750,8 +750,8 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
             llvmType = llvm::FunctionType::get(returnLlvmType, paramLlvmTypes, false)->getPointerTo();
             break;
         }
-        case vyn::ast::TypeNode::Category::POINTER: {
-            auto* pointerTypeNode = dynamic_cast<vyn::ast::PointerType*>(typeNode);
+        case vyb::ast::TypeNode::Category::POINTER: {
+            auto* pointerTypeNode = dynamic_cast<vyb::ast::PointerType*>(typeNode);
             if (!pointerTypeNode || !pointerTypeNode->pointeeType) {
                 logError(typeNode->loc, "Pointer type has no pointee type or is not a PointerType.");
                 return nullptr;
@@ -764,8 +764,8 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
             llvmType = llvm::PointerType::getUnqual(pointeeLlvmType);
             break;
         }
-        case vyn::ast::TypeNode::Category::OPTIONAL: {
-            auto* optionalTypeNode = dynamic_cast<vyn::ast::OptionalType*>(typeNode);
+        case vyb::ast::TypeNode::Category::OPTIONAL: {
+            auto* optionalTypeNode = dynamic_cast<vyb::ast::OptionalType*>(typeNode);
             if (!optionalTypeNode || !optionalTypeNode->containedType) {
                 logError(typeNode->loc, "Optional type has no contained type or is not an OptionalType.");
                 return nullptr;
@@ -778,7 +778,7 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
             // Represent optional<T> as a struct { T value; bool has_value; }
             // Or, if T is a pointer, optional<T*> can be T* (where nullptr means no value).
             // For simplicity here, let's assume T is not a pointer and use a struct.
-            // A more complex handling might be needed based on Vyn's specific semantics for optionals.
+            // A more complex handling might be needed based on VyB's specific semantics for optionals.
             if (containedLlvmType->isPointerTy()) {
                  // If T is already a pointer, optional<T*> can be represented by T* (nullptr for none)
                 llvmType = containedLlvmType;
@@ -792,8 +792,8 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
             }
             break;
         }
-        // case vyn::ast::TypeNode::Category::REFERENCE: // TODO: Add handling for REFERENCE if distinct from POINTER
-        // case vyn::ast::TypeNode::Category::SLICE: // TODO: Add handling for SLICE
+        // case vyb::ast::TypeNode::Category::REFERENCE: // TODO: Add handling for REFERENCE if distinct from POINTER
+        // case vyb::ast::TypeNode::Category::SLICE: // TODO: Add handling for SLICE
         default:
             logError(typeNode->loc, "Unknown or unsupported TypeNode category: " + typeNode->toString());
             return nullptr;
@@ -805,7 +805,7 @@ llvm::Type* LLVMCodegen::codegenType(vyn::ast::TypeNode* typeNode) {
     return llvmType;
 }
 
-void LLVMCodegen::visit(vyn::ast::TypeNode* node) {
+void LLVMCodegen::visit(vyb::ast::TypeNode* node) {
     if (node) {
         m_currentLLVMType = codegenType(node);
     } else {
@@ -819,9 +819,9 @@ void LLVMCodegen::visit(vyn::ast::TypeNode* node) {
 void LLVMCodegen::visit(ast::TypeName* node) {
     // This visitor is used when a type name appears as an expression (e.g., in a type check)
     // In most cases, we don't generate any runtime code for type names
-    
+
     logWarning(node->loc, "TypeName used as an expression; this might not behave as expected");
-    
+
     // For now, we'll just return a null value
     m_currentLLVMValue = llvm::ConstantPointerNull::get(
         llvm::PointerType::get(*context, 0));

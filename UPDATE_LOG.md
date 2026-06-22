@@ -1,4 +1,4 @@
-# Vyn Implementation Update Log
+# VyB Implementation Update Log
 
 Tag: `implementation-audit-2026-05-23`
 Audit date: 2026-05-23
@@ -21,7 +21,7 @@ expect-fail tests are treated as stronger evidence than optimistic status text.
 - 2026-05-25: Advanced I-002 FFI with the next ABI slice: `#[repr(C)]`
   now parses on structs, is tracked in AST/codegen metadata, preserves
   declaration-order unpacked LLVM struct layout, and rejects generic,
-  ownership-qualified, and Vyn-runtime fields that are not C ABI-stable.
+  ownership-qualified, and VyB-runtime fields that are not C ABI-stable.
   Native `--build` now accepts repeatable `--link <lib-or-path>` arguments and
   links the metadata runtime object needed by native builds. Added focused
   `test/ffi` coverage for repr(C) layout, diagnostics, and by-pointer extern C
@@ -35,34 +35,34 @@ expect-fail tests are treated as stronger evidence than optimistic status text.
   in bind method type contexts.
 - 2026-05-25: Advanced I-008 stdlib foundations by adding a canonical module
   scaffold under `stdlib/core`, `stdlib/collections`, and `stdlib/io`, wiring
-  top-level `stdlib/prelude.vyn` to re-export `core::prelude`, and introducing
+  top-level `stdlib/prelude.vyb` to re-export `core::prelude`, and introducing
   a documented transitional `core::option` bridge (`OptionInt`) while generic
   `Option<T>`/`Result<T,E>` remain future work. Added stdlib module discovery
-  coverage for `VYN_STDLIB`, explicit prelude behavior tests (no auto-import),
+  coverage for `VYB_STDLIB`, explicit prelude behavior tests (no auto-import),
   and a runnable `examples/stdlib_demo` sample plus docs/status updates in
   `doc/stdlib_layout.md`, `doc/module_visibility.md`, `doc/FEATURE_STATUS.md`,
   and `TODO.md`.
 - 2026-05-23: Implemented first-pass `extern "C" { ... }` block support for
   function signatures. Blocks now parse as declaration groups, semantic analysis
   visits their members, and the LLVM path emits external function declarations.
-  Added `test/ffi/extern_c_malloc_free.vyn` as a JIT smoke test for calling C
+  Added `test/ffi/extern_c_malloc_free.vyb` as a JIT smoke test for calling C
   `malloc` and `free`.
 - 2026-05-23: Extended the JIT FFI path to resolve host process symbols and
   added a narrow `String`-to-C-string call conversion. Added
-  `test/ffi/extern_c_puts.vyn` to cover calling libc `puts`.
+  `test/ffi/extern_c_puts.vyb` to cover calling libc `puts`.
 - 2026-05-23: Restricted direct calls to `extern "C"` functions to
   `freedom { }` blocks and added a negative FFI test for calls outside freedom.
 - 2026-05-23: Completed a focused tests/examples/demos repair pass. Semantic
   analysis now preserves resolved function parameter, return, and struct field
   types, and ordinary function calls infer declared return types. Reworked the
-  example suite so every `examples/*.vyn` file is runnable with the current
+  example suite so every `examples/*.vyb` file is runnable with the current
   compiler, added `demos/` for curated language demonstrations, refreshed test
   organization docs, and documented remaining ownership/runtime gaps in
   `reports/TEST_EXAMPLE_DEMO_REVIEW.md` and
   `reports/LANGUAGE_COMPLETION_REVIEW.md`.
-- 2026-05-23: Began module finalization by resolving local `.vyn` imports in
+- 2026-05-23: Began module finalization by resolving local `.vyb` imports in
   the driver before semantic analysis and codegen. `import nested::module`
-  resolves to `nested/module.vyn`, `import name from "./file.vyn"` resolves
+  resolves to `nested/module.vyb`, `import name from "./file.vyb"` resolves
   relative file locators, imported declarations are spliced before use, and
   duplicate/circular imports are guarded. Added module runtime tests and a
   runnable example.
@@ -85,23 +85,23 @@ expect-fail tests are treated as stronger evidence than optimistic status text.
 - 2026-05-24: Continued I-001 by moving source-level import resolution into a
   dedicated `ModuleRegistry` metadata model (module state, canonical keys,
   dependency tracking, topo order), adding `--module-path` plus
-  `VYN_MODULE_PATH` and stdlib auto-discovery (`VYN_STDLIB` and
+  `VYB_MODULE_PATH` and stdlib auto-discovery (`VYB_STDLIB` and
   executable-relative probes), and upgrading diagnostics for missing modules,
   parse failures inside imports, circular imports, and duplicate splice
   symbols. Added focused `test/modules` coverage and a runnable
   `--module-path` example.
 - 2026-05-24: Completed I-005 Error Propagation phases 3–5. `fail` now builds
-  runtime `VynError` payloads and propagates through failable returns when no
+  runtime `VyBError` payloads and propagates through failable returns when no
   trap is active, call sites of semantically failable functions now auto-check
   `{value, error}` and propagate errors using the same return helper, and
   failable calls from non-failable functions without trap are now rejected by
   semantic analysis with a targeted diagnostic. The runtime
-  `__vyn_runtime_untrapped_error` path now prints type, payload JSON, and fail
+  `__vyb_runtime_untrapped_error` path now prints type, payload JSON, and fail
   source location, supports `exitCode<Int>` payload override, and the JIT entry
   path now dispatches propagated failable-`main` errors to that handler.
-  Added tests: `test/trap/propagation_no_trap.vyn`,
-  `test/trap/propagation_to_main.vyn`, `test/trap/defer_runs_on_fail.vyn`,
-  `test/trap/non_failable_caller_rejected.vyn`.
+  Added tests: `test/trap/propagation_no_trap.vyb`,
+  `test/trap/propagation_to_main.vyb`, `test/trap/defer_runs_on_fail.vyb`,
+  `test/trap/non_failable_caller_rejected.vyb`.
   Follow-up: generalized JIT ABI handling for failable `main` payloads beyond
   current `{Int, i8*}` / `{i1, i8*}` specializations.
 - 2026-05-24: Closed the error-propagation coverage gap by promoting the
@@ -115,8 +115,8 @@ expect-fail tests are treated as stronger evidence than optimistic status text.
 - 2026-05-24: Closed a concrete Vec correctness gap: `Vec::pop()` now returns
   the removed element for the supported primitive path instead of a hardcoded
   placeholder value and no longer dereferences null storage when called on an
-  empty `Vec<Int>`. Added `test/new_features/test_vec_pop_returns_value.vyn`
-  and `test/new_features/test_vec_pop_empty.vyn`, then raised the milestone
+  empty `Vec<Int>`. Added `test/new_features/test_vec_pop_returns_value.vyb`
+  and `test/new_features/test_vec_pop_empty.vyb`, then raised the milestone
   floor to 136.
 - 2026-05-24: Implemented the first real `our<T>` / `mild<T>` control-block
   runtime slice. `our(expr)` now backs shared owners with a payload pointer and
@@ -129,7 +129,7 @@ expect-fail tests are treated as stronger evidence than optimistic status text.
   ownership regressions for live/released `released()` and `grab()` behavior,
   promoted `test/ownership` into the milestone gate, and raised the milestone
   floor to 156. Current limitation: failed `grab()` returns a null `our<T>`
-  placeholder until Vyn has first-class `Option<T>`/nullable result syntax.
+  placeholder until VyB has first-class `Option<T>`/nullable result syntax.
 
 ## Audit Scope
 
@@ -152,35 +152,35 @@ Docs/status sources reviewed:
 
 Source areas checked:
 
-- Parser: `src/parser/*`, `include/vyn/parser/*`
-- Semantic analysis: `src/vre/semantic.cpp`, `include/vyn/semantic.hpp`
-- LLVM codegen: `src/vre/llvm/*`, `include/vyn/vre/llvm/codegen.hpp`
-- Runtime: `src/runtime/*`, `include/vyn/runtime/*`, `runtime/*`
-- Future tests: `test/future_features/*.vyn`
+- Parser: `src/parser/*`, `include/vyb/parser/*`
+- Semantic analysis: `src/vre/semantic.cpp`, `include/vyb/semantic.hpp`
+- LLVM codegen: `src/vre/llvm/*`, `include/vyb/vre/llvm/codegen.hpp`
+- Runtime: `src/runtime/*`, `include/vyb/runtime/*`, `runtime/*`
+- Future tests: `test/future_features/*.vyb`
 
 ## Highest Priority Implementation Backlog
 
 | ID | Area | Priority | What needs to be implemented | Evidence |
 |----|------|----------|------------------------------|----------|
-| I-001 | Module system | P0 | Formalize the source-level module resolver into a `ModuleRegistry`/AST metadata model, add module path search (`VYN_MODULE_PATH`, CLI), stdlib auto-discovery, and better duplicate-import caching. Local loading, cycle checks, `bundle(...)`, `share(...)`, selective aliases, and explicit re-exports now work. | `doc/MODULE_FFI_BINARY_ROADMAP.md`; source resolver lives in `src/main.cpp`; semantic/codegen import visitors remain no-ops after pre-resolution. |
+| I-001 | Module system | P0 | Formalize the source-level module resolver into a `ModuleRegistry`/AST metadata model, add module path search (`VYB_MODULE_PATH`, CLI), stdlib auto-discovery, and better duplicate-import caching. Local loading, cycle checks, `bundle(...)`, `share(...)`, selective aliases, and explicit re-exports now work. | `doc/MODULE_FFI_BINARY_ROADMAP.md`; source resolver lives in `src/main.cpp`; semantic/codegen import visitors remain no-ops after pre-resolution. |
 | I-002 | FFI | P0 | Continue FFI after extern block/ABI alias support: variadic calls, explicit `String::as_c_str()`, richer C ABI layout validation, and broader end-to-end native/JIT FFI tests. | Source now supports extern C blocks, host process symbol lookup, freedom-gated direct calls, C scalar/pointer aliases, `#[repr(C)]` structs with conservative ABI diagnostics, a minimal native `--link <lib-or-path>` flow, and a narrow String-to-C-string call path. |
 | I-003 | Ownership runtime | P0 | Extend lexical borrow checks and the initial `our<T>`/`mild<T>` control-block runtime into full ownership: `my<T>` moves, complete `our<T>` copy/assignment/parameter strong-count semantics, deeper `their<T>` lifetime analysis, and comprehensive cleanup. | `TODO.md`; `doc/mem_RFC.md`; current semantic pass checks lvalue borrows, overlapping mutable/view borrows, and assignment while borrowed; current codegen supports minimal control blocks for `our()`, `soft()`, `released()`, and live `grab()`. |
-| I-004 | `mild<T>` weak references | P0 | Complete the remaining weak-reference contract: Option-like failed `grab()`, full weak handle copy/drop accounting across all assignment paths, and final control-block cleanup once strong/weak counts reach zero. | `doc/OWNERSHIP_MILD.md`; `test/ownership/mild_released_live.vyn`; `test/ownership/mild_released_after_drop_or_scope.vyn`; `test/ownership/mild_grab_live.vyn`; `test/ownership/mild_grab_released.vyn`. |
-| I-005 | Error propagation/runtime errors | P0 | Finish cross-function error propagation, construct real `VynError` objects at `fail`, preserve type/data/source location, print detailed untrapped errors, and settle Result-vs-fail/trap design conflict. | `doc/ERROR_PROPAGATION_DESIGN.md`; `test/trap/TEST_RESULTS.md`; `src/runtime/error_handling.cpp` says error structure is not implemented. |
+| I-004 | `mild<T>` weak references | P0 | Complete the remaining weak-reference contract: Option-like failed `grab()`, full weak handle copy/drop accounting across all assignment paths, and final control-block cleanup once strong/weak counts reach zero. | `doc/OWNERSHIP_MILD.md`; `test/ownership/mild_released_live.vyb`; `test/ownership/mild_released_after_drop_or_scope.vyb`; `test/ownership/mild_grab_live.vyb`; `test/ownership/mild_grab_released.vyb`. |
+| I-005 | Error propagation/runtime errors | P0 | Finish cross-function error propagation, construct real `VyBError` objects at `fail`, preserve type/data/source location, print detailed untrapped errors, and settle Result-vs-fail/trap design conflict. | `doc/ERROR_PROPAGATION_DESIGN.md`; `test/trap/TEST_RESULTS.md`; `src/runtime/error_handling.cpp` says error structure is not implemented. |
 | I-006 | Defer/runtime cleanup | P0 | Decide whether runtime defer/ensure stacks are needed; implement runtime defer stack if `defer` must survive fail/unwind paths. | `src/runtime/error_handling.cpp` has defer/ensure stubs; `src/vre/llvm/cgen_stmt.cpp` stores defers in a codegen stack. |
 | I-007 | Aspect completion | P0 | Remaining work after associated types, receiver shorthand, ambiguity diagnostics, and executable generic bind method monomorphization: aspect objects/dynamic dispatch, aspect inheritance, bounded bind selection precedence, and qualified disambiguation syntax for same-name aspect methods. | `TODO.md`; `doc/ASPECT_BOUNDS.md`; `doc/TRAIT_SYSTEM_DESIGN.md`; `test/aspect/PHASE_6_ROADMAP.md`. |
-| I-008 | Stdlib foundation | P0 | Implement `Option<T>`, decide and implement/document `Result<T,E>`, core aspects (`Display`, `Debug`, `Clone`, `Equatable`, `Comparable`, `Hashable`), `Iterator`, File I/O, maps/sets, and remaining String/Vec helpers. | `TODO.md`; `doc/STRING_IMPLEMENTATION.md`; `test/future_features/test_option_type.vyn`, `test_result_type.vyn`; FFI is a blocker for File I/O. |
+| I-008 | Stdlib foundation | P0 | Implement `Option<T>`, decide and implement/document `Result<T,E>`, core aspects (`Display`, `Debug`, `Clone`, `Equatable`, `Comparable`, `Hashable`), `Iterator`, File I/O, maps/sets, and remaining String/Vec helpers. | `TODO.md`; `doc/STRING_IMPLEMENTATION.md`; `test/future_features/test_option_type.vyb`, `test_result_type.vyb`; FFI is a blocker for File I/O. |
 | I-009 | Async runtime semantics | P1 | Replace placeholder await behavior with real scheduling, future value storage, suspension/resumption, task spawning, and eventually async I/O integration. | `TODO.md`; `src/vre/llvm/cgen_expr.cpp` awaits with dummy task id and returns the input future; `src/runtime/async_runtime.cpp` stores value support as future work. |
-| I-010 | Lambda/closures | P1 | Implement real lambda return type inference, non-void lambda returns, function value/call semantics, closure capture structs, capture extraction, move/mutable captures, generic and async lambdas. | `doc/LAMBDAS.md`; `test/future_features/test_lambda_codegen.vyn`; `src/vre/llvm/cgen_expr.cpp` defaults lambda return type to void and lacks capture handling. |
+| I-010 | Lambda/closures | P1 | Implement real lambda return type inference, non-void lambda returns, function value/call semantics, closure capture structs, capture extraction, move/mutable captures, generic and async lambdas. | `doc/LAMBDAS.md`; `test/future_features/test_lambda_codegen.vyb`; `src/vre/llvm/cgen_expr.cpp` defaults lambda return type to void and lacks capture handling. |
 | I-011 | Pattern matching/select polish | P1 | Struct/tuple destructuring, enum variant patterns, range patterns, guards, exhaustiveness, match-as-expression, and better select type inference. | `TODO.md`; `doc/AST_Roadmap.md`; source warns that complex patterns and select inference are incomplete. |
-| I-012 | Enums/sum types | P1 | Implement tagged enum variants with payloads, enum construction, enum methods via bind, pattern matching on variants, and stdlib `Option`/`Result` support. | `test/future_features/test_enum_basic.vyn`; `src/vre/llvm/cgen_decl.cpp` reports enum codegen is not fully implemented. |
+| I-012 | Enums/sum types | P1 | Implement tagged enum variants with payloads, enum construction, enum methods via bind, pattern matching on variants, and stdlib `Option`/`Result` support. | `test/future_features/test_enum_basic.vyb`; `src/vre/llvm/cgen_decl.cpp` reports enum codegen is not fully implemented. |
 | I-013 | Vec correctness/polish | P1 | Add bounds checking to `get`, implement `concat`, `push_array`, `to_array`, `get_array`, `get_vec`, and improve element type tracking for `Vec<Struct>`. `contains` and primitive `pop` return values are now covered. | `src/vre/llvm/cgen_vec.cpp`; `doc/VEC_ITERATION.md` notes `Vec<Struct>`/complex-expression limitations. |
 | I-014 | Tuple completion | P1 | Tuple serialization/output, tuple variables, `.0`/`.1` element access, destructuring assignment, and tuple pattern matching. | `test/tuples/README.md`; `TODO.md`. |
-| I-015 | Generic/template monomorphization | P1 | Finish template instantiation, AST clone/substitution, constructor inference, nested generics, member template instantiation, and bounds-checked instantiation. | `src/vre/semantic.cpp` has monomorphization stubs; `test/template/generics_examples.vyn`; `doc/SELF_RESOLUTION_COMPLETE.md` lists constructor/Vec issues. |
+| I-015 | Generic/template monomorphization | P1 | Finish template instantiation, AST clone/substitution, constructor inference, nested generics, member template instantiation, and bounds-checked instantiation. | `src/vre/semantic.cpp` has monomorphization stubs; `test/template/generics_examples.vyb`; `doc/SELF_RESOLUTION_COMPLETE.md` lists constructor/Vec issues. |
 | I-016 | Introspection completion | P1 | First-class `Type`, type registry initialization, type equality assertions, downcasting/as operator, and `typeof` in wildcard trap handlers. | `TODO.md`; `doc/INTROSPECTION_DESIGN.md`. |
-| I-017 | Auto-serialization/metadata edges | P1 | Re-enable/fix main auto-serialization where disabled, handle nested structs and Vec in metadata serialization/deserialization, and dynamic buffer sizing. | `src/main.cpp`; `src/vre/llvm/cgen_decl.cpp`; `runtime/vyn_type_metadata.c`. |
+| I-017 | Auto-serialization/metadata edges | P1 | Re-enable/fix main auto-serialization where disabled, handle nested structs and Vec in metadata serialization/deserialization, and dynamic buffer sizing. | `src/main.cpp`; `src/vre/llvm/cgen_decl.cpp`; `runtime/vyb_type_metadata.c`. |
 | I-018 | Build optimization pipeline | P2 | Complete LLVM pass pipeline for all optimization levels, add LTO/ThinLTO, bitcode flows, benchmarks, and linker/library flag handling. | `TODO.md`; `doc/MODULE_FFI_BINARY_ROADMAP.md`. |
-| I-019 | Developer tooling | P2 | `vyn.toml`, `vyn build` project mode, `vyn test`, package resolution/lockfile, formatter, linter, LSP, REPL, and `vyn doc`. | `TODO.md`; `doc/Development_Guide.md`. |
+| I-019 | Developer tooling | P2 | `vyb.toml`, `vyb build` project mode, `vyb test`, package resolution/lockfile, formatter, linter, LSP, REPL, and `vyb doc`. | `TODO.md`; `doc/Development_Guide.md`. |
 | I-020 | Networking | P2 | Implement raw socket FFI bindings, `TcpStream`, `UdpSocket`, listener APIs, async socket I/O, and HTTP client after FFI and async runtime are real. | `TODO.md` networking section; depends on I-002 and I-009. |
 
 ## Source-Level TODO Hotspots
@@ -194,12 +194,12 @@ Source areas checked:
   closure semantics.
 - `src/vre/llvm/cgen_stmt.cpp`: legacy try/catch/throw codegen is stubbed or
   obsolete relative to `fail`/`trap`; untrapped `fail` does not build a full
-  `VynError`.
+  `VyBError`.
 - `src/vre/llvm/cgen_vec.cpp`: several Vec methods return placeholders or only
   simulate copies.
 - `src/runtime/error_handling.cpp`: untrapped error details, defer stack, and
   ensure stack are stubs.
-- `runtime/vyn_type_metadata.c`: dynamic sizing, Vec metadata, and nested struct
+- `runtime/vyb_type_metadata.c`: dynamic sizing, Vec metadata, and nested struct
   handling are TODOs.
 
 ## Documentation Conflicts To Resolve
@@ -209,18 +209,18 @@ These should be fixed before using the docs as release guidance.
 1. FFI status conflict:
    `doc/FEATURE_STATUS.md` marks `extern "C"` as implemented, while
    `doc/FFI_DESIGN.md`, `doc/MODULE_FFI_BINARY_ROADMAP.md`, and
-   `test/future_features/test_ffi_extern_c.vyn` show it as planned/expect-fail.
+   `test/future_features/test_ffi_extern_c.vyb` show it as planned/expect-fail.
    Source appears partial, not complete.
 
 2. Error handling status conflict:
    `doc/ERROR_TRAP.md` says core error handling phases are complete, while
    `doc/ERROR_PROPAGATION_DESIGN.md`, `test/trap/TEST_RESULTS.md`, and runtime
-   source still show cross-function propagation and full `VynError` construction
+   source still show cross-function propagation and full `VyBError` construction
    as incomplete.
 
 3. `ensure` meaning conflict:
    `doc/ENSURE_IMPLEMENTATION_STATUS.md` documents block cleanup
-   `} ensure -> { ... }` as complete. `test/future_features/test_ensure_statement.vyn`
+   `} ensure -> { ... }` as complete. `test/future_features/test_ensure_statement.vyb`
    and `TODO.md` describe contract-style `ensure condition else fail(...)` as
    unimplemented. These are two different features and need separate names/status.
 
@@ -246,7 +246,7 @@ These should be fixed before using the docs as release guidance.
    Update examples or mark legacy syntax as deprecated.
 
 8. Production-ready language claims:
-   Several docs call Vyn production-ready, but the source audit shows major 1.0
+   Several docs call VyB production-ready, but the source audit shows major 1.0
    blockers remain. Release/status docs should use a more precise feature
    matrix and avoid broad production-ready claims until P0 items are complete.
 
@@ -258,13 +258,13 @@ These should be fixed before using the docs as release guidance.
    stdlib modules, networking, and multi-file programs.
 3. Complete ownership runtime enforcement, especially `mild<T>`, before expanding
    container/resource APIs that depend on lifecycle correctness.
-4. Finish error propagation and real `VynError` construction so `fail`/`trap`
+4. Finish error propagation and real `VyBError` construction so `fail`/`trap`
    works across function boundaries and produces useful runtime diagnostics.
 5. Complete aspect associated types and iterator design, then implement
    `Iterator`, `Option`, core aspects, and stdlib collections.
 6. Complete lambdas, enum/sum types, and pattern matching together because they
    share closure/function-value, variant, and destructuring semantics.
-7. Round out developer tooling (`vyn.toml`, `vyn build`, `vyn test`, formatter,
+7. Round out developer tooling (`vyb.toml`, `vyb build`, `vyb test`, formatter,
    LSP, REPL) after core language semantics settle.
 
 ## Verification Notes
@@ -273,7 +273,7 @@ The original implementation audit was source/documentation-focused. The
 tests/examples/demos repair pass was behavior-checked with:
 
 - `cmake --build build -j2`
-- `python3 test/run_tests.py --test-dir test/new_features --vyn build/vyn --execute-jit`
-- `python3 test/run_tests.py --test-dir test/ffi --vyn build/vyn --execute-jit`
-- `build/vyn` over every `examples/*.vyn`
-- `build/vyn` over every `demos/*.vyn`
+- `python3 test/run_tests.py --test-dir test/new_features --vyb build/vyb --execute-jit`
+- `python3 test/run_tests.py --test-dir test/ffi --vyb build/vyb --execute-jit`
+- `build/vyb` over every `examples/*.vyb`
+- `build/vyb` over every `demos/*.vyb`

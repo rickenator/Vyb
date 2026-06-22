@@ -1,0 +1,32 @@
+// @test: Float types test
+// @description: Float types test
+// @category: types
+// @expect: fail
+# Test floating point types: Float32, Float64 (Float)
+
+test_float32()<Int> -> {
+    small<Float32> = 3.14159
+    large<Float32> = 1234.5678
+    negative<Float32> = -99.99
+    zero<Float32> = 0.0
+    return 32
+}
+
+test_float64()<Int> -> {
+    precise<Float> = 3.141592653589793
+    large<Float> = 1234567.890123456
+    negative<Float> = -999.999999
+    zero<Float> = 0.0
+    scientific<Float> = 1.23e-4
+    return 64
+}
+
+main()<Int> -> {
+    result<Int> = 0
+
+    result = result + test_float32()
+    result = result + test_float64()
+
+    # Should return 32 + 64 = 96
+    return result
+}

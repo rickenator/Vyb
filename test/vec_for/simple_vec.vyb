@@ -1,0 +1,14 @@
+// @expect-return: 60
+main()<Int> -> {
+    numbers<Vec<Int>> = Vec::new();
+    numbers.push(10);
+    numbers.push(20);
+    numbers.push(30);
+
+    var<Int> sum = 0;
+    for (num in numbers) {
+        sum = sum + num;
+    }
+
+    return sum;  // Should return 60
+}

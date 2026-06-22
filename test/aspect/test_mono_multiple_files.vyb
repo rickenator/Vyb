@@ -1,0 +1,27 @@
+# Test multiple different instantiations in one file
+# Validates name mangling and cache behavior
+
+struct Box<T> {
+    value<T>
+}
+
+struct Result<T, E> {
+    ok<T>,
+    err<E>
+}
+
+main()<Int> -> {
+    # Multiple single-param instantiations
+    b1<Box<Int>> = Box<Int> { value = 1 }
+    b2<Box<Bool>> = Box<Bool> { value = true }
+    b3<Box<String>> = Box<String> { value = "test" }
+
+    # Multiple two-param instantiations
+    r1<Result<Int, String>> = Result<Int, String> { ok = 42, err = "none" }
+    r2<Result<Bool, Int>> = Result<Bool, Int> { ok = true, err = 0 }
+
+    # Duplicate - should use cache
+    b4<Box<Int>> = Box<Int> { value = 2 }
+
+    return 0
+}

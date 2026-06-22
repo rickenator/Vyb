@@ -1,0 +1,12 @@
+// Minimal working test that should execute successfully
+// @expect-return: 42
+main()<Int> -> {
+    // Test basic Int32 variable declaration
+    i32<Int32> = 42;
+
+    // Test Vec.new(size) with Int32
+    v1<Vec<Int32>> = Vec.new(3);
+
+    println("Minimal test completed successfully");
+    return 42;
+}

@@ -1,12 +1,12 @@
 # Module System, FFI, and Binary Generation Roadmap
 
-**Status:** Planning Document - Strategic Breakdown  
-**Created:** October 22, 2025  
-**Priority:** HIGH - Foundation for production-ready Vyn
+**Status:** Planning Document - Strategic Breakdown
+**Created:** October 22, 2025
+**Priority:** HIGH - Foundation for production-ready VyB
 
 ## Executive Summary
 
-This document breaks down three interconnected systems critical for Vyn's evolution from a JIT-only language to a full systems programming language:
+This document breaks down three interconnected systems critical for VyB's evolution from a JIT-only language to a full systems programming language:
 
 1. **Module System** (import/smuggle/bundles) - Code organization and visibility
 2. **FFI System** (C bindings) - Integration with existing ecosystems
@@ -20,7 +20,7 @@ Each system is broken into **phases** with **concrete implementation tasks** and
 
 ### Overview
 
-Enable multi-file Vyn programs with controlled visibility using the bundles & sharing system (see `bundles_and_sharing.md`).
+Enable multi-file VyB programs with controlled visibility using the bundles & sharing system (see `bundles_and_sharing.md`).
 
 ### Current State
 
@@ -34,14 +34,14 @@ Enable multi-file Vyn programs with controlled visibility using the bundles & sh
 
 ### Phase 1.1: Basic Import Infrastructure (v0.5.0)
 
-**Goal:** Load and compile other Vyn files without visibility checks.
+**Goal:** Load and compile other VyB files without visibility checks.
 
 **Tasks:**
 1. **Module Registry**
    - Create `ModuleRegistry` class in semantic analyzer
    - Store: `map<string, Module>` (path → compiled module)
    - Track: module dependencies, circular import detection
-   - Location: `include/vyn/semantic.hpp`, `src/vre/semantic.cpp`
+   - Location: `include/vyb/semantic.hpp`, `src/vre/semantic.cpp`
 
 2. **Module Loading**
    - Implement `loadModule(path: string) -> Module*`
@@ -52,7 +52,7 @@ Enable multi-file Vyn programs with controlled visibility using the bundles & sh
 
 3. **Symbol Resolution**
    - Implement `resolveImport(importPath: vector<string>) -> Module*`
-   - Support: `import foo::bar::baz` → find `foo/bar/baz.vyn`
+   - Support: `import foo::bar::baz` → find `foo/bar/baz.vyb`
    - Build symbol table: function names, struct names, global vars
    - Export symbol table from each module
 
@@ -66,7 +66,7 @@ Enable multi-file Vyn programs with controlled visibility using the bundles & sh
 - Multi-file compilation works
 - Basic import syntax functional
 - Circular dependency detection
-- Test suite: `test/modules/test_basic_import.vyn`
+- Test suite: `test/modules/test_basic_import.vyb`
 
 **Dependencies:** None (can start immediately)
 
@@ -80,7 +80,7 @@ Enable multi-file Vyn programs with controlled visibility using the bundles & sh
 1. **Bundle AST Node**
    - Create `BundleDeclaration` AST node
    - Fields: `vector<vector<string>> bundlePaths` (e.g., `sort.Core` → ["sort", "Core"])
-   - Location: `include/vyn/ast.hpp`, `src/ast.cpp`
+   - Location: `include/vyb/ast.hpp`, `src/ast.cpp`
 
 2. **Parser Extension**
    - Extend `parseTopLevelDeclaration()` to recognize `bundle(...)`
@@ -101,7 +101,7 @@ Enable multi-file Vyn programs with controlled visibility using the bundles & sh
 **Deliverables:**
 - Parser recognizes `bundle(...)` syntax
 - Module stores bundle membership
-- Test suite: `test/modules/test_bundle_parsing.vyn`
+- Test suite: `test/modules/test_bundle_parsing.vyb`
 
 **Dependencies:** Phase 1.1 (Module Registry)
 
@@ -132,7 +132,7 @@ Enable multi-file Vyn programs with controlled visibility using the bundles & sh
 **Deliverables:**
 - Parser recognizes `share(...)` syntax
 - Declarations store visibility metadata
-- Test suite: `test/modules/test_share_parsing.vyn`
+- Test suite: `test/modules/test_share_parsing.vyb`
 
 **Dependencies:** Phase 1.2 (Bundle parsing)
 
@@ -148,17 +148,17 @@ Enable multi-file Vyn programs with controlled visibility using the bundles & sh
    bool canImport(Module* importer, Declaration* target) {
        // No share directive → private
        if (target->shareWith.empty()) return false;
-       
+
        // share(all) → always visible
        if (contains(target->shareWith, "all")) return true;
-       
+
        // Check bundle overlap
        for (string& importerBundle : importer->bundles) {
            if (contains(target->shareWith, importerBundle)) {
                return true;
            }
        }
-       
+
        return false;
    }
    ```
@@ -183,7 +183,7 @@ Enable multi-file Vyn programs with controlled visibility using the bundles & sh
 - Full bundle/sharing visibility enforcement
 - `smuggle` keyword functional
 - Comprehensive error messages
-- Test suite: `test/modules/test_visibility.vyn`
+- Test suite: `test/modules/test_visibility.vyb`
 
 **Dependencies:** Phase 1.3 (Share directives)
 
@@ -196,9 +196,9 @@ Enable multi-file Vyn programs with controlled visibility using the bundles & sh
 **Tasks:**
 1. **Search Path Configuration**
    - Command-line flag: `--module-path /path/to/modules`
-   - Environment variable: `VYN_MODULE_PATH`
-   - Default paths: `./`, `../`, `/usr/lib/vyn/modules/`
-   - Standard library path: `${VYN_INSTALL}/stdlib/`
+   - Environment variable: `VYB_MODULE_PATH`
+   - Default paths: `./`, `../`, `/usr/lib/vyb/modules/`
+   - Standard library path: `${VYB_INSTALL}/stdlib/`
 
 2. **Path Resolution Algorithm**
    - Try: relative to current file
@@ -219,7 +219,7 @@ Enable multi-file Vyn programs with controlled visibility using the bundles & sh
 **Deliverables:**
 - Robust module loading with search paths
 - Circular dependency protection
-- Test suite: `test/modules/test_module_paths.vyn`
+- Test suite: `test/modules/test_module_paths.vyb`
 
 **Dependencies:** Phase 1.4 (Visibility checking)
 
@@ -235,11 +235,11 @@ Enable multi-file Vyn programs with controlled visibility using the bundles & sh
 - Search precedence for `import a::b::c`:
   1. Importing file directory
   2. `--module-path <dir>` (repeatable, CLI order)
-  3. `VYN_MODULE_PATH` (colon-separated)
+  3. `VYB_MODULE_PATH` (colon-separated)
   4. Auto-discovered stdlib root
-- Module path convention: try `<root>/a/b/c.vyn`, then `<root>/a/b/c/mod.vyn`.
+- Module path convention: try `<root>/a/b/c.vyb`, then `<root>/a/b/c/mod.vyb`.
 - Stdlib auto-discovery order:
-  1. `VYN_STDLIB` (if set)
+  1. `VYB_STDLIB` (if set)
   2. Relative to compiler executable (`<exe_dir>/../stdlib`, then `<exe_dir>/stdlib`)
 
 ---
@@ -253,18 +253,18 @@ Enable multi-file Vyn programs with controlled visibility using the bundles & sh
    ```
    stdlib/
      core/
-       String.vyn     - String utilities
-       Vec.vyn        - Vector operations
-       Int.vyn        - Integer utilities
+       String.vyb     - String utilities
+       Vec.vyb        - Vector operations
+       Int.vyb        - Integer utilities
      io/
-       File.vyn       - File operations
-       Console.vyn    - stdin/stdout
+       File.vyb       - File operations
+       Console.vyb    - stdin/stdout
      math/
-       Arithmetic.vyn - Basic math
-       Trig.vyn       - Trigonometry
+       Arithmetic.vyb - Basic math
+       Trig.vyb       - Trigonometry
      collections/
-       HashMap.vyn
-       BTree.vyn
+       HashMap.vyb
+       BTree.vyb
    ```
 
 2. **Auto-Import Core**
@@ -275,7 +275,7 @@ Enable multi-file Vyn programs with controlled visibility using the bundles & sh
 3. **Module Documentation**
    - Add doc comments to all stdlib functions
    - Generate HTML documentation from comments
-   - Tool: `vyn doc` to build documentation
+   - Tool: `vyb doc` to build documentation
 
 **Deliverables:**
 - Organized standard library
@@ -291,7 +291,7 @@ Enable multi-file Vyn programs with controlled visibility using the bundles & sh
 
 ### Overview
 
-Enable Vyn to call C functions and use C libraries (libc, POSIX, external deps).
+Enable VyB to call C functions and use C libraries (libc, POSIX, external deps).
 
 ### Current State
 
@@ -304,11 +304,11 @@ Enable Vyn to call C functions and use C libraries (libc, POSIX, external deps).
 
 ### Phase 2.1: extern "C" Declarations (v0.5.0)
 
-**Goal:** Manually declare C functions callable from Vyn.
+**Goal:** Manually declare C functions callable from VyB.
 
 **Tasks:**
 1. **FFI Declaration Syntax**
-   ```vyn
+   ```vyb
    extern "C" {
        fn printf(format: *i8, ...) -> Int
        fn malloc(size: i64) -> *i8
@@ -329,7 +329,7 @@ Enable Vyn to call C functions and use C libraries (libc, POSIX, external deps).
 
 4. **Type Mapping**
    ```
-   Vyn Type       C Type
+   VyB Type       C Type
    --------       ------
    Int            int64_t / long long
    Int32          int32_t / int
@@ -349,7 +349,7 @@ Enable Vyn to call C functions and use C libraries (libc, POSIX, external deps).
 **Deliverables:**
 - `extern "C"` syntax functional
 - Can call libc functions (printf, malloc, free)
-- Test suite: `test/ffi/test_extern_c.vyn`
+- Test suite: `test/ffi/test_extern_c.vyb`
 
 **Dependencies:** None (can start immediately)
 
@@ -357,17 +357,17 @@ Enable Vyn to call C functions and use C libraries (libc, POSIX, external deps).
 
 ### Phase 2.2: C Struct Interop (v0.5.1)
 
-**Goal:** Define Vyn structs with C-compatible memory layout.
+**Goal:** Define VyB structs with C-compatible memory layout.
 
 **Tasks:**
 1. **C Layout Attribute**
-   ```vyn
+   ```vyb
    #[repr(C)]
    struct Point {
        x: Float32,
        y: Float32
    }
-   
+
    extern "C" {
        fn draw_point(p: *Point) -> Void
    }
@@ -382,7 +382,7 @@ Enable Vyn to call C functions and use C libraries (libc, POSIX, external deps).
 3. **Parser Extension**
    - ✅ Recognize `#[repr(C)]` attribute before struct
    - ✅ Store in `StructDeclaration::reprC`
-   - ✅ Validate: no generics, no ownership-qualified fields, no Vyn runtime fields such as `String`
+   - ✅ Validate: no generics, no ownership-qualified fields, no VyB runtime fields such as `String`
 
 4. **Codegen Extension**
    - ✅ LLVM struct with declaration-order unpacked target layout
@@ -392,7 +392,7 @@ Enable Vyn to call C functions and use C libraries (libc, POSIX, external deps).
 **Deliverables:**
 - ✅ C-compatible struct layout for the supported subset
 - ✅ Can pass repr(C) structs to C functions by pointer
-- ✅ Test suite: `test/ffi/repr_c_struct_basic.vyn`, `test/ffi/repr_c_struct_rejects_vyn_string.vyn`, `test/ffi/repr_c_struct_rejects_generic.vyn`, `test/ffi/repr_c_struct_rejects_ownership.vyn`, `test/ffi/extern_c_struct_by_pointer.vyn`
+- ✅ Test suite: `test/ffi/repr_c_struct_basic.vyb`, `test/ffi/repr_c_struct_rejects_vyb_string.vyb`, `test/ffi/repr_c_struct_rejects_generic.vyb`, `test/ffi/repr_c_struct_rejects_ownership.vyb`, `test/ffi/extern_c_struct_by_pointer.vyb`
 
 **Dependencies:** Phase 2.1 (extern "C")
 
@@ -404,11 +404,11 @@ Enable Vyn to call C functions and use C libraries (libc, POSIX, external deps).
 
 **Tasks:**
 1. **Variadic Syntax**
-   ```vyn
+   ```vyb
    extern "C" {
        fn printf(format: *i8, ...) -> Int
    }
-   
+
    fn main() -> Int {
        printf("Hello %s, number %d\n", "world", 42)
        return 0
@@ -433,7 +433,7 @@ Enable Vyn to call C functions and use C libraries (libc, POSIX, external deps).
 **Deliverables:**
 - Variadic C functions callable
 - Can use printf, scanf, etc.
-- Test suite: `test/ffi/test_variadic.vyn`
+- Test suite: `test/ffi/test_variadic.vyb`
 
 **Dependencies:** Phase 2.1 (extern "C")
 
@@ -441,21 +441,21 @@ Enable Vyn to call C functions and use C libraries (libc, POSIX, external deps).
 
 ### Phase 2.4: C Header Binding Generator (v0.6.0)
 
-**Goal:** Automated tool to generate Vyn bindings from C headers.
+**Goal:** Automated tool to generate VyB bindings from C headers.
 
 **Tasks:**
-1. **Tool: `vyn bindgen`**
+1. **Tool: `vyb bindgen`**
    ```bash
-   vyn bindgen /usr/include/stdio.h > stdio.vyn
+   vyb bindgen /usr/include/stdio.h > stdio.vyb
    ```
 
 2. **libclang Integration**
    - Use libclang to parse C headers
    - Extract function declarations, structs, enums
-   - Generate Vyn `extern "C" { }` blocks
+   - Generate VyB `extern "C" { }` blocks
 
 3. **Type Translation**
-   - Automatic C → Vyn type mapping
+   - Automatic C → VyB type mapping
    - Handle typedefs, function pointers
    - Generate `#[repr(C)]` structs
 
@@ -465,7 +465,7 @@ Enable Vyn to call C functions and use C libraries (libc, POSIX, external deps).
    - Rename conflicting names
 
 **Deliverables:**
-- `vyn bindgen` tool functional
+- `vyb bindgen` tool functional
 - Can generate bindings for any C library
 - Pre-generated bindings for libc, POSIX
 - Documentation: How to use bindgen
@@ -476,20 +476,20 @@ Enable Vyn to call C functions and use C libraries (libc, POSIX, external deps).
 
 ### Phase 2.5: Standard C Library Wrappers (v0.6.1)
 
-**Goal:** Safe Vyn wrappers around common C functions.
+**Goal:** Safe VyB wrappers around common C functions.
 
 **Tasks:**
 1. **Core Wrappers**
-   ```vyn
-   // stdlib/sys/Libc.vyn
+   ```vyb
+   // stdlib/sys/Libc.vyb
    share(all)
    module sys::Libc
-   
+
    fn malloc(size: i64) -> *i8 {
        extern "C" fn c_malloc(size: i64) -> *i8
        return c_malloc(size)
    }
-   
+
    fn free(ptr: *i8) {
        extern "C" fn c_free(ptr: *i8) -> Void
        c_free(ptr)
@@ -513,9 +513,9 @@ Enable Vyn to call C functions and use C libraries (libc, POSIX, external deps).
    - Exit codes: exit, atexit
 
 **Deliverables:**
-- Safe Vyn stdlib wrapping C
+- Safe VyB stdlib wrapping C
 - No need for users to write `extern "C"`
-- Test suite: Use C wrappers in Vyn programs
+- Test suite: Use C wrappers in VyB programs
 
 **Dependencies:** Phase 2.4 (bindgen tool)
 
@@ -525,7 +525,7 @@ Enable Vyn to call C functions and use C libraries (libc, POSIX, external deps).
 
 ### Overview
 
-Compile Vyn programs to native executables instead of JIT-only.
+Compile VyB programs to native executables instead of JIT-only.
 
 ### Current State
 
@@ -537,7 +537,7 @@ Compile Vyn programs to native executables instead of JIT-only.
 
 ### Phase 3.1: Object File Emission (v0.5.0)
 
-**Goal:** Compile Vyn to `.o` object files.
+**Goal:** Compile VyB to `.o` object files.
 
 **Tasks:**
 1. **LLVM Object File Writer**
@@ -547,8 +547,8 @@ Compile Vyn programs to native executables instead of JIT-only.
 
 2. **Command-Line Interface**
    ```bash
-   vyn compile main.vyn -o main.o
-   vyn compile module.vyn -o module.o
+   vyb compile main.vyb -o main.o
+   vyb compile module.vyb -o module.o
    ```
 
 3. **Target Triple**
@@ -563,7 +563,7 @@ Compile Vyn programs to native executables instead of JIT-only.
    - `-O3`: Aggressive optimization
 
 **Deliverables:**
-- Can compile Vyn to `.o` files
+- Can compile VyB to `.o` files
 - Multiple optimization levels
 - Test: Compile and inspect with `objdump`
 
@@ -578,9 +578,9 @@ Compile Vyn programs to native executables instead of JIT-only.
 **Tasks:**
 1. **Linker Invocation**
    ```bash
-   vyn build main.vyn -o main
+   vyb build main.vyb -o main
    # Internally:
-   # 1. Compile main.vyn -> main.o
+   # 1. Compile main.vyb -> main.o
    # 2. Link: ld main.o -lc -o main
    ```
 
@@ -597,15 +597,15 @@ Compile Vyn programs to native executables instead of JIT-only.
 
 4. **Multi-File Compilation**
    ```bash
-   vyn build main.vyn module.vyn util.vyn -o myapp
+   vyb build main.vyb module.vyb util.vyb -o myapp
    ```
    - Compile each file to `.o`
    - Link all `.o` files together
    - Resolve imports during linking
 
 **Deliverables:**
-- `vyn build` produces executables
-- Can run without `vyn` runtime (standalone)
+- `vyb build` produces executables
+- Can run without `vyb` runtime (standalone)
 - Test: Run compiled binary on different machines
 
 **Dependencies:** Phase 3.1 (Object file emission)
@@ -669,7 +669,7 @@ Compile Vyn programs to native executables instead of JIT-only.
 
 3. **Debugger Integration**
    ```bash
-   vyn build --debug main.vyn -o main
+   vyb build --debug main.vyb -o main
    gdb ./main
    (gdb) break main
    (gdb) run
@@ -683,7 +683,7 @@ Compile Vyn programs to native executables instead of JIT-only.
    - `-g3`: Full info (includes macros, etc.)
 
 **Deliverables:**
-- Can debug Vyn programs with gdb/lldb
+- Can debug VyB programs with gdb/lldb
 - Source-level debugging (step, breakpoint, inspect)
 - Test: Debug session in gdb
 
@@ -696,23 +696,23 @@ Compile Vyn programs to native executables instead of JIT-only.
 **Goal:** Build multi-module projects with dependencies.
 
 **Tasks:**
-1. **Project Manifest: `vyn.toml`**
+1. **Project Manifest: `vyb.toml`**
    ```toml
    [package]
    name = "myapp"
    version = "0.1.0"
-   
+
    [dependencies]
    http = "1.0"
    json = "2.3"
-   
+
    [[bin]]
    name = "myapp"
-   path = "src/main.vyn"
+   path = "src/main.vyb"
    ```
 
-2. **Build Tool: `vyn build`**
-   - Read `vyn.toml`
+2. **Build Tool: `vyb build`**
+   - Read `vyb.toml`
    - Compile all source files
    - Download dependencies
    - Link into executable or library
@@ -720,15 +720,15 @@ Compile Vyn programs to native executables instead of JIT-only.
 3. **Dependency Resolution**
    - Central registry (like crates.io)
    - Version constraints: `"^1.0"`, `">=2.0"`
-   - Lock file: `vyn.lock` (reproducible builds)
+   - Lock file: `vyb.lock` (reproducible builds)
 
 4. **Library Types**
    - Static library: `.a` (archive)
    - Dynamic library: `.so` / `.dylib` / `.dll`
-   - Vyn library: `.vynlib` (pre-compiled module)
+   - VyB library: `.vyblib` (pre-compiled module)
 
 **Deliverables:**
-- `vyn build` handles complex projects
+- `vyb build` handles complex projects
 - Dependency management system
 - Can publish/download packages
 - Test: Build multi-module app with deps
@@ -786,14 +786,14 @@ Example test layout:
 ```
 test/
   modules/
-    test_basic_import.vyn
-    test_bundle_parsing.vyn
-    test_visibility.vyn
-    test_circular_deps.vyn
+    test_basic_import.vyb
+    test_bundle_parsing.vyb
+    test_visibility.vyb
+    test_circular_deps.vyb
   ffi/
-    test_extern_c.vyn
-    test_c_struct.vyn
-    test_variadic.vyn
+    test_extern_c.vyb
+    test_c_struct.vyb
+    test_variadic.vyb
   binary/
     test_object_file.sh
     test_linking.sh
@@ -805,13 +805,13 @@ test/
 ## Open Questions
 
 ### Module System
-1. **Precompiled Modules**: Should we cache compiled modules as `.vync` files?
+1. **Precompiled Modules**: Should we cache compiled modules as `.vybc` files?
 2. **Incremental Compilation**: How to detect which modules need recompilation?
 3. **Namespacing**: How to handle symbols with same name from different modules?
 
 ### FFI System
 4. **C++ Interop**: Should we support `extern "C++"` for C++ libraries?
-5. **Callbacks**: How to pass Vyn closures to C functions expecting function pointers?
+5. **Callbacks**: How to pass VyB closures to C functions expecting function pointers?
 6. **Thread Safety**: How to handle C libraries that aren't thread-safe?
 
 ### Binary Generation
@@ -841,8 +841,8 @@ For each phase, track:
 
 - `doc/bundles_and_sharing.md` - Detailed bundle/sharing design
 - `doc/AST_Declarations.md` - Import AST node specifications
-- `doc/ROADMAP.md` - Overall Vyn roadmap
-- `doc/VRE.md` - Vyn Runtime Environment design
+- `doc/ROADMAP.md` - Overall VyB roadmap
+- `doc/VRE.md` - VyB Runtime Environment design
 
 ---
 

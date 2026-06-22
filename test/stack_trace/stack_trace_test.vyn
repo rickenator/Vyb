@@ -1,9 +1,0 @@
-// Test stack trace capture with fail statement
-// This test demonstrates that error stack traces now capture
-// Vyn-level function names and source locations
-
-main()<Int> -> {
-    println("Starting stack trace test")
-    fail "Error in main function"
-    return 0
-}

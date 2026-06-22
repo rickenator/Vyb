@@ -1,0 +1,19 @@
+// Phase 6.5: Simple wildcard trap test - catch any error type
+// @expect-return: 42
+
+risky_operation()<Int> -> {
+    fail "Something went wrong"
+}
+
+main()<Int> -> {
+    result<Int> = {
+        risky_operation()
+    } trap (e<?>) -> {
+        println("Caught unknown error")
+        return 42
+    }
+
+    println("Result:")
+    println(result)
+    return 0
+}

@@ -1,0 +1,16 @@
+// @test: extern C puts smoke test
+// @description: extern "C" can call a libc function resolved from the host process
+// @category: ffi, interop
+// @expect: pass
+// @tags: ffi, extern, libc
+
+extern "C" {
+    puts(message<loc<Int8>>)<Int>
+}
+
+main()<Int> -> {
+    freedom {
+        puts("Hello from VyB FFI")
+    }
+    return 0
+}

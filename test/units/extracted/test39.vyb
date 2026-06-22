@@ -1,0 +1,13 @@
+// filepath: /home/rick/Projects/VyB/test/units/extracted/test39.vyb
+// @test: Codegen: addr(loc) and from(addr) round-trip in freedom
+// @description: Extracted from tests.cpp - Codegen: addr(loc) and from(addr) round-trip in freedom
+// @category: parser
+// @expect: fail
+// @parse-only: true
+// @expect-output: n/a
+// @expect-error: n/a
+// @expect-return: n/a
+
+    std::string source = R"(
+fn main() -> Int {
+    x<Int> = 55;

@@ -1,5 +1,5 @@
-#include <vyn/parser/ast.hpp>
-#include "vyn/vre/llvm/codegen.hpp"
+#include <vyb/parser/ast.hpp>
+#include "vyb/vre/llvm/codegen.hpp"
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Function.h>
@@ -8,18 +8,18 @@
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Verifier.h> // For llvm::verifyFunction
 
-namespace vyn {
+namespace vyb {
 
 // --- Statements ---
 
-void LLVMCodegen::visit(vyn::ast::BlockStatement* node) {
+void LLVMCodegen::visit(vyb::ast::BlockStatement* node) {
     // Save the current namedValues for block scoping
     auto oldNamedValues = namedValues;
-    
+
     // Enter new scope for ownership tracking
     enterScope();
-    
-    VYN_CDBG << "DEBUG: BlockStatement visitor called with " << node->body.size() << " statements" << std::endl;
+
+    VYB_CDBG << "DEBUG: BlockStatement visitor called with " << node->body.size() << " statements" << std::endl;
     for (size_t i = 0; i < node->body.size(); ++i) {
         const auto& stmt = node->body[i];
         if (stmt) {
@@ -32,16 +32,16 @@ void LLVMCodegen::visit(vyn::ast::BlockStatement* node) {
             // However, subsequent statements might be part of a different path if there was a branch.
             // For a simple sequential block, this is fine.
             // More robust handling might involve checking if the current insert point is reachable.
-            break; 
+            break;
         }
     }
-    
+
     // Always exit scope and cleanup variables, but check if block is terminated
     // If block is terminated (e.g., by return), cleanup must happen before termination
     if (builder->GetInsertBlock() && builder->GetInsertBlock()->getTerminator()) {
         // Block is terminated - can't insert cleanup code here
         // This case should be handled by inserting cleanup before return statements
-        VYN_CDBG << "DEBUG: Block terminated, skipping cleanup insertion (cleanup should have happened before terminator)" << std::endl;
+        VYB_CDBG << "DEBUG: Block terminated, skipping cleanup insertion (cleanup should have happened before terminator)" << std::endl;
         if (!scopeStack.empty()) {
             scopeStack.pop_back();
         }
@@ -49,7 +49,7 @@ void LLVMCodegen::visit(vyn::ast::BlockStatement* node) {
         // Block not terminated - safe to insert cleanup code
         exitScope();
     }
-    
+
     // Restore namedValues to outer scope
     namedValues = std::move(oldNamedValues);
 }
@@ -85,21 +85,21 @@ void LLVMCodegen::emitPropagatingErrorReturn(llvm::Value* errorPtr) {
     builder->CreateRet(resultStruct);
 }
 
-void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
+void LLVMCodegen::visit(vyb::ast::ReturnStatement *node) {
     // Emit deferred statements (LIFO) before returning
     emitDeferredStatementsForCurrentFunction();
     if (node->argument) {
         // Codegen the argument expression. The result will be in m_currentLLVMValue.
-        node->argument->accept(*this); 
+        node->argument->accept(*this);
         llvm::Value *returnValue = m_currentLLVMValue;
 
         if (returnValue) {
             // Debug output to see what we're returning
-            VYN_CDBG << "DEBUG: ReturnStatement - Type: " << getTypeName(returnValue->getType()) 
+            VYB_CDBG << "DEBUG: ReturnStatement - Type: " << getTypeName(returnValue->getType())
                 << ", Function Return Type: " << (currentFunction ? getTypeName(currentFunction->getReturnType()) : "null") << std::endl;
-            VYN_CDBG << "DEBUG: Return value LLVM type pointer: " << returnValue->getType() << std::endl;
-            VYN_CDBG << "DEBUG: Function return LLVM type pointer: " << (currentFunction ? currentFunction->getReturnType() : nullptr) << std::endl;
-            
+            VYB_CDBG << "DEBUG: Return value LLVM type pointer: " << returnValue->getType() << std::endl;
+            VYB_CDBG << "DEBUG: Function return LLVM type pointer: " << (currentFunction ? currentFunction->getReturnType() : nullptr) << std::endl;
+
             // Auto-serialize main() return values when the return type was changed to void.
             // m_mainAutoSerializeOrigRetType is set in cgen_decl.cpp for Bool, Float, and
             // multi-value struct returns from main (Int and Void remain unchanged).
@@ -112,34 +112,34 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                     if (!f) f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, name, module.get());
                     return f;
                 };
-                // Helper: get __vyn_string_concat(char*, char*) -> char*
+                // Helper: get __vyb_string_concat(char*, char*) -> char*
                 auto getConcatFn = [&]() -> llvm::Function* {
                     llvm::FunctionType* ft = llvm::FunctionType::get(int8PtrType, {int8PtrType, int8PtrType}, false);
-                    return getOrDeclFunc("__vyn_string_concat", ft);
+                    return getOrDeclFunc("__vyb_string_concat", ft);
                 };
                 // Helper: serialize one LLVM value to a JSON char* string
                 auto serializeOne = [&](llvm::Value* val, llvm::Type* t) -> llvm::Value* {
                     if (!val || !t) {
-                        VYN_CDBG << "DEBUG: serializeOne - null val or type, emitting JSON null" << std::endl;
+                        VYB_CDBG << "DEBUG: serializeOne - null val or type, emitting JSON null" << std::endl;
                         return builder->CreateGlobalStringPtr("null");
                     }
                     if (t->isIntegerTy(1)) {
                         // Bool → "true" or "false"
                         llvm::FunctionType* ft = llvm::FunctionType::get(int8PtrType, {int1Type}, false);
-                        return builder->CreateCall(getOrDeclFunc("__vyn_bool_to_string", ft), {val}, "bool.json");
+                        return builder->CreateCall(getOrDeclFunc("__vyb_bool_to_string", ft), {val}, "bool.json");
                     } else if (t->isIntegerTy()) {
                         // Int → number string
                         llvm::Value* v64 = builder->CreateSExtOrTrunc(val, int64Type, "to.i64");
                         llvm::FunctionType* ft = llvm::FunctionType::get(int8PtrType, {int64Type}, false);
-                        return builder->CreateCall(getOrDeclFunc("__vyn_int_to_string", ft), {v64}, "int.json");
+                        return builder->CreateCall(getOrDeclFunc("__vyb_int_to_string", ft), {v64}, "int.json");
                     } else if (t->isFloatTy() || t->isDoubleTy()) {
                         // Float → number string
                         llvm::Value* vdbl = t->isFloatTy()
                             ? builder->CreateFPExt(val, doubleType, "to.dbl") : val;
                         llvm::FunctionType* ft = llvm::FunctionType::get(int8PtrType, {doubleType}, false);
-                        return builder->CreateCall(getOrDeclFunc("__vyn_float_to_string", ft), {vdbl}, "float.json");
+                        return builder->CreateCall(getOrDeclFunc("__vyb_float_to_string", ft), {vdbl}, "float.json");
                     } else if (t->isStructTy()) {
-                        // Check for Vyn String struct { ptr, i64 } → JSON-quoted string
+                        // Check for VyB String struct { ptr, i64 } → JSON-quoted string
                         auto* st = llvm::cast<llvm::StructType>(t);
                         if (st->getNumElements() == 2 &&
                                 st->getElementType(0)->isPointerTy() &&
@@ -152,7 +152,7 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                             return builder->CreateCall(concat, {tmp, closeQ}, "str.json");
                         }
                     }
-                    VYN_CDBG << "DEBUG: serializeOne - unsupported type: " << getTypeName(t)
+                    VYB_CDBG << "DEBUG: serializeOne - unsupported type: " << getTypeName(t)
                               << ", emitting JSON null" << std::endl;
                     return builder->CreateGlobalStringPtr("null");
                 };
@@ -184,7 +184,7 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                 }
 
                 // Print the JSON output
-                llvm::Function* printlnFunc = getVynPrintlnFunction();
+                llvm::Function* printlnFunc = getVyBPrintlnFunction();
                 if (jsonStr) builder->CreateCall(printlnFunc, {jsonStr});
 
                 // Clean up scope and pop call frame, then return void
@@ -193,57 +193,57 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                 builder->CreateRetVoid();
             } else {
                 // Not in main function (or plain Int/Void main) - normal return
-                VYN_CDBG << "DEBUG: Return value type: " << getTypeName(returnValue->getType())
+                VYB_CDBG << "DEBUG: Return value type: " << getTypeName(returnValue->getType())
                           << ", Function return type: " << getTypeName(currentFunction->getReturnType()) << std::endl;
-                
+
                 // CRITICAL: Phase 2 wrapping must happen BEFORE type checking
                 // If this is a failable function, we need to wrap the return value
                 // in {T, ptr} BEFORE checking type compatibility
                 if (currentFunctionAST && currentFunctionAST->needsErrorReturn) {
-                    VYN_CDBG << "DEBUG: Wrapping return value in {T, nullptr} tuple for failable function" << std::endl;
-                    
+                    VYB_CDBG << "DEBUG: Wrapping return value in {T, nullptr} tuple for failable function" << std::endl;
+
                     // Create null pointer for error (success case)
                     llvm::Value* nullErrorPtr = llvm::ConstantPointerNull::get(
                         llvm::PointerType::get(*context, 0));
-                    
+
                     // Create the {value, error} struct
                     llvm::StructType* returnStructType = llvm::cast<llvm::StructType>(
                         currentFunction->getReturnType());
                     llvm::Value* resultStruct = llvm::UndefValue::get(returnStructType);
                     resultStruct = builder->CreateInsertValue(resultStruct, returnValue, {0}, "result.value");
                     resultStruct = builder->CreateInsertValue(resultStruct, nullErrorPtr, {1}, "result.error");
-                    
+
                     returnValue = resultStruct;
-                    VYN_CDBG << "DEBUG: Wrapped return value type: " << getTypeName(returnValue->getType()) << std::endl;
+                    VYB_CDBG << "DEBUG: Wrapped return value type: " << getTypeName(returnValue->getType()) << std::endl;
                 }
-                
+
                 // Now check type compatibility (after wrapping if needed)
                 if (returnValue->getType() != currentFunction->getReturnType()) {
                     // Special case: returning a single element tuple (Tuple<T>)
                     // If function returns a struct and we have a scalar, wrap it in a struct
                     if (llvm::StructType* structRetType = llvm::dyn_cast<llvm::StructType>(currentFunction->getReturnType())) {
-                        if (structRetType->getNumElements() == 1 && 
+                        if (structRetType->getNumElements() == 1 &&
                             !returnValue->getType()->isStructTy() &&
                             structRetType->getElementType(0) == returnValue->getType()) {
-                            VYN_CDBG << "DEBUG: Wrapping scalar value in single-element tuple struct" << std::endl;
-                            
+                            VYB_CDBG << "DEBUG: Wrapping scalar value in single-element tuple struct" << std::endl;
+
                             // Create a single-element struct
                             llvm::Value* tupleStruct = llvm::UndefValue::get(structRetType);
                             returnValue = builder->CreateInsertValue(tupleStruct, returnValue, {0}, "tuple_wrap");
-                            
-                            VYN_CDBG << "DEBUG: Wrapped value type: " << getTypeName(returnValue->getType()) << std::endl;
+
+                            VYB_CDBG << "DEBUG: Wrapped value type: " << getTypeName(returnValue->getType()) << std::endl;
                         } else {
                             // Try normal cast
                             llvm::Value* castedValue = tryCast(returnValue, currentFunction->getReturnType(), node->loc);
                             if (castedValue) {
-                                VYN_CDBG << "DEBUG: Successfully cast return value to " << getTypeName(castedValue->getType()) << std::endl;
+                                VYB_CDBG << "DEBUG: Successfully cast return value to " << getTypeName(castedValue->getType()) << std::endl;
                                 returnValue = castedValue;
                             } else {
                                 // For member expressions (e.g., p.x) load the value if needed
-                                if (returnValue->getType()->isPointerTy() && 
+                                if (returnValue->getType()->isPointerTy() &&
                                     !currentFunction->getReturnType()->isPointerTy()) {
-                                    VYN_CDBG << "DEBUG: Loading pointer value for return" << std::endl;
-                                    
+                                    VYB_CDBG << "DEBUG: Loading pointer value for return" << std::endl;
+
                                     // For loading, we need to know the element type
                                     llvm::Type* elementType = nullptr;
                                     if (llvm::AllocaInst* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(returnValue)) {
@@ -252,9 +252,9 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                                         // Can't determine element type safely, use function return type
                                         elementType = currentFunction->getReturnType();
                                     }
-                                    
+
                                     returnValue = builder->CreateLoad(elementType, returnValue, "member_load");
-                                    VYN_CDBG << "DEBUG: After loading, return value type: " << getTypeName(returnValue->getType()) << std::endl;
+                                    VYB_CDBG << "DEBUG: After loading, return value type: " << getTypeName(returnValue->getType()) << std::endl;
                                 }
                             }
                         }
@@ -262,14 +262,14 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                         // Not a struct return type, try normal cast
                         llvm::Value* castedValue = tryCast(returnValue, currentFunction->getReturnType(), node->loc);
                         if (castedValue) {
-                            VYN_CDBG << "DEBUG: Successfully cast return value to " << getTypeName(castedValue->getType()) << std::endl;
+                            VYB_CDBG << "DEBUG: Successfully cast return value to " << getTypeName(castedValue->getType()) << std::endl;
                             returnValue = castedValue;
                         } else {
                             // For member expressions (e.g., p.x) load the value if needed
-                            if (returnValue->getType()->isPointerTy() && 
+                            if (returnValue->getType()->isPointerTy() &&
                                 !currentFunction->getReturnType()->isPointerTy()) {
-                                VYN_CDBG << "DEBUG: Loading pointer value for return" << std::endl;
-                                
+                                VYB_CDBG << "DEBUG: Loading pointer value for return" << std::endl;
+
                                 // For loading, we need to know the element type
                                 llvm::Type* elementType = nullptr;
                                 if (llvm::AllocaInst* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(returnValue)) {
@@ -278,18 +278,18 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                                     // Can't determine element type safely, use function return type
                                     elementType = currentFunction->getReturnType();
                                 }
-                                
+
                                 returnValue = builder->CreateLoad(elementType, returnValue, "member_load");
-                                VYN_CDBG << "DEBUG: After loading, return value type: " << getTypeName(returnValue->getType()) << std::endl;
+                                VYB_CDBG << "DEBUG: After loading, return value type: " << getTypeName(returnValue->getType()) << std::endl;
                             }
                         }
                     }
                 }
-                
+
                 // IMPORTANT: Clean up current block scope before returning
                 // This prevents the block scope cleanup from happening after the terminator
                 if (!scopeStack.empty()) {
-                    VYN_CDBG << "DEBUG: Cleaning up current scope before return" << std::endl;
+                    VYB_CDBG << "DEBUG: Cleaning up current scope before return" << std::endl;
                     // If returning an owning variable, skip its local cleanup because
                     // ownership of that binding is transferred to the caller.
                     if (node->argument) {
@@ -312,13 +312,13 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                     }
                     exitScope();
                 }
-                
+
                 // Phase 6.4: Pop call frame before return
                 generatePopFrameCall();
-                
+
                 // Return the value (already wrapped if needed)
-                VYN_CDBG << "DEBUG: FINAL return value type before CreateRet: " << getTypeName(returnValue->getType()) << std::endl;
-                VYN_CDBG << "DEBUG: Function return type: " << getTypeName(currentFunction->getReturnType()) << std::endl;
+                VYB_CDBG << "DEBUG: FINAL return value type before CreateRet: " << getTypeName(returnValue->getType()) << std::endl;
+                VYB_CDBG << "DEBUG: Function return type: " << getTypeName(currentFunction->getReturnType()) << std::endl;
                 // If the function is declared void, discard the return value and emit ret void
                 if (currentFunction->getReturnType()->isVoidTy()) {
                     builder->CreateRetVoid();
@@ -332,7 +332,7 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
             if (currentFunction && currentFunction->getReturnType()->isVoidTy()) {
                 // IMPORTANT: Clean up current block scope before returning
                 if (!scopeStack.empty()) {
-                    VYN_CDBG << "DEBUG: Cleaning up current scope before void return" << std::endl;
+                    VYB_CDBG << "DEBUG: Cleaning up current scope before void return" << std::endl;
                     exitScope();
                 }
                 // Phase 6.4: Pop call frame before return
@@ -342,7 +342,7 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
                 // Return undef if function expects a non-void type and codegen failed
                 // IMPORTANT: Clean up current block scope before returning
                 if (!scopeStack.empty()) {
-                    VYN_CDBG << "DEBUG: Cleaning up current scope before undef return" << std::endl;
+                    VYB_CDBG << "DEBUG: Cleaning up current scope before undef return" << std::endl;
                     exitScope();
                 }
                 // Phase 6.4: Pop call frame before return
@@ -355,7 +355,7 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
         // No argument, so it's a void return
         // IMPORTANT: Clean up current block scope before returning
         if (!scopeStack.empty()) {
-            VYN_CDBG << "DEBUG: Cleaning up current scope before void return (no arg)" << std::endl;
+            VYB_CDBG << "DEBUG: Cleaning up current scope before void return (no arg)" << std::endl;
             exitScope();
         }
         // Phase 6.4: Pop call frame before return
@@ -374,7 +374,7 @@ void LLVMCodegen::visit(vyn::ast::ReturnStatement *node) {
     }
 }
 
-void LLVMCodegen::visit(vyn::ast::ExpressionStatement* node) {
+void LLVMCodegen::visit(vyb::ast::ExpressionStatement* node) {
 
     if (node->expression) {
         node->expression->accept(*this);
@@ -383,7 +383,7 @@ void LLVMCodegen::visit(vyn::ast::ExpressionStatement* node) {
     m_currentLLVMValue = nullptr; // Expression statement doesn't produce a value for further expressions
 }
 
-void LLVMCodegen::visit(vyn::ast::IfStatement* node) {
+void LLVMCodegen::visit(vyb::ast::IfStatement* node) {
     node->test->accept(*this);
     llvm::Value* conditionValue = m_currentLLVMValue;
     if (!conditionValue) {
@@ -398,8 +398,8 @@ void LLVMCodegen::visit(vyn::ast::IfStatement* node) {
     } else if (conditionValue->getType()->isIntegerTy() && conditionValue->getType() != int1Type) {
         // Treat non-zero integer as true, zero as false
         conditionValue = builder->CreateICmpNE(
-            conditionValue, 
-            llvm::ConstantInt::get(conditionValue->getType(), 0), 
+            conditionValue,
+            llvm::ConstantInt::get(conditionValue->getType(), 0),
             "intcond_tobool"
         );
     } else if (conditionValue->getType() != int1Type) {
@@ -444,7 +444,7 @@ void LLVMCodegen::visit(vyn::ast::IfStatement* node) {
         }
         // elseBB = builder->GetInsertBlock(); // Update elseBB
     }
-    
+
     // If mergeBB is not used by any predecessors (e.g. both then and else return), it can be removed.
     // However, LLVM's dead code elimination should handle this.
     // We must add mergeBB to the function if it has predecessors.
@@ -464,13 +464,13 @@ void LLVMCodegen::visit(vyn::ast::IfStatement* node) {
             // since it was never added to the function
         }
     }
-    
+
     // If IfStatement were an expression, a PHI node would be needed here.
     // For now, IfStatement does not produce a value.
     m_currentLLVMValue = nullptr;
 }
 
-void LLVMCodegen::visit(vyn::ast::WhileStatement* node) {
+void LLVMCodegen::visit(vyb::ast::WhileStatement* node) {
     llvm::Function* parentFunc = builder->GetInsertBlock()->getParent();
     if (!parentFunc) {
         logError(node->loc, "Cannot create while loop: not in a function.");
@@ -507,12 +507,12 @@ void LLVMCodegen::visit(vyn::ast::WhileStatement* node) {
         }
         builder->CreateCondBr(condVal, loopBodyBB, loopExitBB);
     }
-    
+
     // Populate body
     builder->SetInsertPoint(loopBodyBB);
     // The LoopContext struct in codegen.hpp is {llvm::BasicBlock *loopHeader, *loopBody, *loopUpdate, *loopExit;}
     // For a 'while' loop, the 'update' block is effectively the header where the condition is re-evaluated.
-    pushLoop(loopHeaderBB, loopBodyBB, loopHeaderBB /*update is header for while*/, loopExitBB); 
+    pushLoop(loopHeaderBB, loopBodyBB, loopHeaderBB /*update is header for while*/, loopExitBB);
     node->body->accept(*this); // Generate loop body
     popLoop(); // Pop loop context
 
@@ -525,31 +525,31 @@ void LLVMCodegen::visit(vyn::ast::WhileStatement* node) {
     m_currentLLVMValue = nullptr; // While statement itself doesn't produce a value
 }
 
-void LLVMCodegen::visit(vyn::ast::PassStatement* node) {
+void LLVMCodegen::visit(vyb::ast::PassStatement* node) {
     // Pass statement is used inside select expression blocks to return a value
     if (selectStack.empty()) {
         logError(node->loc, "Pass statement can only be used inside select expression blocks.");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     SelectContext& currentSelect = selectStack.back();
-    
+
     // Codegen the pass value
     if (node->argument) {
         node->argument->accept(*this);
         llvm::Value* passValue = m_currentLLVMValue;
-        
+
         // During type inference, just keep the value and return
         if (infer_types_only) {
             m_currentLLVMValue = passValue;
             return;
         }
-        
+
         if (passValue && currentSelect.resultAlloca) {
             // Store the value in the result alloca
             builder->CreateStore(passValue, currentSelect.resultAlloca);
-            
+
             // Branch to the end block
             builder->CreateBr(currentSelect.endBlock);
         } else {
@@ -558,11 +558,11 @@ void LLVMCodegen::visit(vyn::ast::PassStatement* node) {
     } else {
         logError(node->loc, "Pass statement requires an expression.");
     }
-    
+
     m_currentLLVMValue = nullptr;
 }
 
-void LLVMCodegen::visit(vyn::ast::BreakStatement* node) {
+void LLVMCodegen::visit(vyb::ast::BreakStatement* node) {
     if (loopStack.empty()) {
         logError(node->loc, "Break statement outside of a loop.");
         m_currentLLVMValue = nullptr;
@@ -570,20 +570,20 @@ void LLVMCodegen::visit(vyn::ast::BreakStatement* node) {
     }
     LoopContext& currentLoop = loopStack.back();
     // Member name is loopExit based on struct LoopContext definition in codegen.hpp
-    if (!currentLoop.loopExit) { 
+    if (!currentLoop.loopExit) {
          logError(node->loc, "Invalid loop context: exit block is null for break.");
          m_currentLLVMValue = nullptr;
          return;
     }
-    builder->CreateBr(currentLoop.loopExit); 
-    m_currentLLVMValue = nullptr; 
-    // Note: After a break, the current block is terminated. 
+    builder->CreateBr(currentLoop.loopExit);
+    m_currentLLVMValue = nullptr;
+    // Note: After a break, the current block is terminated.
     // We might need to create a new block if code generation is supposed to continue after the break
     // in the same scope, but typically break is the last thing in its path.
     // For simplicity, we assume subsequent code is unreachable or handled by block structure.
 }
 
-void LLVMCodegen::visit(vyn::ast::ContinueStatement* node) {
+void LLVMCodegen::visit(vyb::ast::ContinueStatement* node) {
     if (loopStack.empty()) {
         logError(node->loc, "Continue statement outside of a loop.");
         m_currentLLVMValue = nullptr;
@@ -591,17 +591,17 @@ void LLVMCodegen::visit(vyn::ast::ContinueStatement* node) {
     }
     LoopContext& currentLoop = loopStack.back();
     // Member name is loopUpdate based on struct LoopContext definition in codegen.hpp
-     if (!currentLoop.loopUpdate) { 
+     if (!currentLoop.loopUpdate) {
          logError(node->loc, "Invalid loop context: update/header block is null for continue.");
          m_currentLLVMValue = nullptr;
          return;
     }
-    builder->CreateBr(currentLoop.loopUpdate); 
+    builder->CreateBr(currentLoop.loopUpdate);
     m_currentLLVMValue = nullptr;
     // Similar to break, continue terminates the current path in the block.
 }
 
-void LLVMCodegen::visit(vyn::ast::ForStatement* node) {
+void LLVMCodegen::visit(vyb::ast::ForStatement* node) {
     llvm::Function* parentFunc = builder->GetInsertBlock()->getParent();
     if (!parentFunc) {
         logError(node->loc, "Cannot create for loop: not in a function.");
@@ -670,7 +670,7 @@ void LLVMCodegen::visit(vyn::ast::ForStatement* node) {
     m_currentLLVMValue = nullptr; // For statement itself doesn't produce a value
 }
 
-void LLVMCodegen::visit(vyn::ast::TryStatement* node) {
+void LLVMCodegen::visit(vyb::ast::TryStatement* node) {
     // NOTE: This is a simplified implementation without actual exception handling (e.g., landing pads).
     // It will execute the try block, and if a finally block exists, it will execute it.
     // Catch block is ignored for now as proper C++ style exception handling is complex in LLVM IR
@@ -721,14 +721,14 @@ void LLVMCodegen::visit(vyn::ast::TryStatement* node) {
             builder->CreateBr(contBB);
         }
     }
-    
+
     builder->SetInsertPoint(contBB);
     m_currentLLVMValue = nullptr; // Try statement itself doesn't produce a value
 }
 
-void LLVMCodegen::visit(vyn::ast::UnsafeStatement* node) {
+void LLVMCodegen::visit(vyb::ast::UnsafeStatement* node) {
     // For LLVM codegen, an freedom block doesn't typically translate to specific LLVM instructions.
-    // Its purpose is to bypass semantic checks in the Vyn language itself.
+    // Its purpose is to bypass semantic checks in the VyB language itself.
     // So, we just visit the inner block.
     if (node->block) {
         node->block->accept(*this);
@@ -737,13 +737,13 @@ void LLVMCodegen::visit(vyn::ast::UnsafeStatement* node) {
     m_currentLLVMValue = nullptr;
 }
 
-void LLVMCodegen::visit(vyn::ast::EmptyStatement* node) {
+void LLVMCodegen::visit(vyb::ast::EmptyStatement* node) {
     // EmptyStatement doesn't produce any code or value
     // It's essentially a no-op in the LLVM IR
     m_currentLLVMValue = nullptr;
 }
 
-void LLVMCodegen::visit(vyn::ast::ThrowStatement* node) {
+void LLVMCodegen::visit(vyb::ast::ThrowStatement* node) {
     // TODO: Old throw statement - consider deprecating in favor of fail
     // Get the current function
     llvm::Function* function = getCurrentFunction();
@@ -770,29 +770,29 @@ void LLVMCodegen::visit(vyn::ast::ThrowStatement* node) {
 
     // Get exception object type info if available
     // For now, we'll assume all exceptions are compatible with a common exception interface
-    
+
     // For basic implementation, we'll call a runtime function to handle the exception
     std::vector<llvm::Type*> throwFuncParamTypes = {
         llvm::PointerType::get(*context, 0) // Generic pointer to exception object
     };
-    
+
     llvm::FunctionType* throwFuncType = llvm::FunctionType::get(
         llvm::Type::getVoidTy(*context),
         throwFuncParamTypes,
         false
     );
-    
+
     // Get or create the throw function
-    llvm::Function* throwFunc = module->getFunction("__vyn_throw_exception");
+    llvm::Function* throwFunc = module->getFunction("__vyb_throw_exception");
     if (!throwFunc) {
         throwFunc = llvm::Function::Create(
             throwFuncType,
             llvm::Function::ExternalLinkage,
-            "__vyn_throw_exception",
+            "__vyb_throw_exception",
             module.get()
         );
     }
-    
+
     // Cast exception value to void* if necessary
     llvm::Value* exceptionPtr = exceptionValue;
     if (!exceptionPtr->getType()->isPointerTy()) {
@@ -805,31 +805,31 @@ void LLVMCodegen::visit(vyn::ast::ThrowStatement* node) {
         builder->CreateStore(exceptionValue, temp);
         exceptionPtr = temp;
     }
-    
+
     // Cast to i8* (void*)
     exceptionPtr = builder->CreateBitCast(
         exceptionPtr,
         llvm::PointerType::get(*context, 0),
         "exception.i8ptr"
     );
-    
+
     // Call the throw function
     builder->CreateCall(throwFunc, { exceptionPtr });
-    
+
     // After throwing, execution doesn't continue
     builder->CreateUnreachable();
-    
+
     // Create a new block for any following code (though it will be unreachable)
     llvm::BasicBlock* unreachableBB = llvm::BasicBlock::Create(*context, "after.throw", function);
     builder->SetInsertPoint(unreachableBB);
-    
+
     // Throw doesn't produce a value
     m_currentLLVMValue = nullptr;
-    
+
     logWarning(node->loc, "ThrowStatement implemented with basic functionality. Full exception handling support requires additional runtime support.");
 }
 
-void LLVMCodegen::visit(vyn::ast::MatchStatement* node) {
+void LLVMCodegen::visit(vyb::ast::MatchStatement* node) {
     // Get the current function
     llvm::Function* function = getCurrentFunction();
     if (!function) {
@@ -856,7 +856,7 @@ void LLVMCodegen::visit(vyn::ast::MatchStatement* node) {
     // Store match value in a temporary variable if not already a simple value
     // This prevents re-evaluation if the expression has side effects
     llvm::AllocaInst* matchTemp = nullptr;
-    if (!matchValue->getType()->isIntegerTy() && 
+    if (!matchValue->getType()->isIntegerTy() &&
         !matchValue->getType()->isFloatingPointTy() &&
         !matchValue->getType()->isPointerTy()) {
         matchTemp = builder->CreateAlloca(
@@ -871,10 +871,10 @@ void LLVMCodegen::visit(vyn::ast::MatchStatement* node) {
     // Create basic blocks for each case and the end of match
     llvm::BasicBlock* defaultBB = nullptr;
     llvm::BasicBlock* endMatchBB = llvm::BasicBlock::Create(*context, "match.end"); // Don't add to function yet
-    
+
     std::vector<llvm::BasicBlock*> caseBBs;
     std::vector<llvm::BasicBlock*> caseBodyBBs;
-    
+
     // Create basic blocks for all cases
     for (size_t i = 0; i < node->cases.size(); i++) {
         llvm::BasicBlock* caseBB = llvm::BasicBlock::Create(
@@ -883,7 +883,7 @@ void LLVMCodegen::visit(vyn::ast::MatchStatement* node) {
             function
         );
         caseBBs.push_back(caseBB);
-        
+
         llvm::BasicBlock* caseBodyBB = llvm::BasicBlock::Create(
             *context,
             "match.case.body." + std::to_string(i),
@@ -891,14 +891,14 @@ void LLVMCodegen::visit(vyn::ast::MatchStatement* node) {
         );
         caseBodyBBs.push_back(caseBodyBB);
     }
-    
+
     // Create default case if needed
     defaultBB = llvm::BasicBlock::Create(*context, "match.default", function);
-    
+
     // Build the initial branches for pattern matching
     llvm::BasicBlock* nextCaseBB = caseBBs[0];
     builder->CreateBr(nextCaseBB);
-    
+
     // Check if there's a wildcard pattern (nullptr) in the cases
     bool hasWildcard = false;
     for (const auto& caseItem : node->cases) {
@@ -907,29 +907,29 @@ void LLVMCodegen::visit(vyn::ast::MatchStatement* node) {
             break;
         }
     }
-    
+
     // Generate code for each case
     for (size_t i = 0; i < node->cases.size(); i++) {
         // Set insertion point to this case's pattern matching block
         builder->SetInsertPoint(caseBBs[i]);
-        
+
         // Get the case pattern and body
         auto& casePattern = node->cases[i].first;
         auto& caseBody = node->cases[i].second;
-        
+
         // Default pattern (underscore/wildcard) just branches to the body
         if (!casePattern) {
             builder->CreateBr(caseBodyBBs[i]);
         } else {
             // Check if this is a comparison pattern (e.g., >= 18, < 0)
-            bool isComparisonPattern = (casePattern->getType() == vyn::ast::NodeType::COMPARISON_PATTERN);
-            
+            bool isComparisonPattern = (casePattern->getType() == vyb::ast::NodeType::COMPARISON_PATTERN);
+
             llvm::Value* isMatch = nullptr;
-            
+
             if (isComparisonPattern) {
                 // Handle comparison pattern
-                auto* compPattern = static_cast<vyn::ast::ComparisonPattern*>(casePattern.get());
-                
+                auto* compPattern = static_cast<vyb::ast::ComparisonPattern*>(casePattern.get());
+
                 // Evaluate the comparison value
                 compPattern->value->accept(*this);
                 llvm::Value* patternValue = m_currentLLVMValue;
@@ -938,27 +938,27 @@ void LLVMCodegen::visit(vyn::ast::MatchStatement* node) {
                     m_currentLLVMValue = nullptr;
                     return;
                 }
-                
+
                 // Perform the comparison based on the operator
                 if (matchValue->getType()->isIntegerTy() && patternValue->getType()->isIntegerTy()) {
                     // Integer comparison
                     switch (compPattern->op.type) {
-                        case vyn::TokenType::LT:
+                        case vyb::TokenType::LT:
                             isMatch = builder->CreateICmpSLT(matchValue, patternValue, "match.cmp.lt");
                             break;
-                        case vyn::TokenType::LTEQ:
+                        case vyb::TokenType::LTEQ:
                             isMatch = builder->CreateICmpSLE(matchValue, patternValue, "match.cmp.le");
                             break;
-                        case vyn::TokenType::GT:
+                        case vyb::TokenType::GT:
                             isMatch = builder->CreateICmpSGT(matchValue, patternValue, "match.cmp.gt");
                             break;
-                        case vyn::TokenType::GTEQ:
+                        case vyb::TokenType::GTEQ:
                             isMatch = builder->CreateICmpSGE(matchValue, patternValue, "match.cmp.ge");
                             break;
-                        case vyn::TokenType::EQEQ:
+                        case vyb::TokenType::EQEQ:
                             isMatch = builder->CreateICmpEQ(matchValue, patternValue, "match.cmp.eq");
                             break;
-                        case vyn::TokenType::NOTEQ:
+                        case vyb::TokenType::NOTEQ:
                             isMatch = builder->CreateICmpNE(matchValue, patternValue, "match.cmp.ne");
                             break;
                         default:
@@ -969,22 +969,22 @@ void LLVMCodegen::visit(vyn::ast::MatchStatement* node) {
                 } else if (matchValue->getType()->isFloatingPointTy() && patternValue->getType()->isFloatingPointTy()) {
                     // Float comparison
                     switch (compPattern->op.type) {
-                        case vyn::TokenType::LT:
+                        case vyb::TokenType::LT:
                             isMatch = builder->CreateFCmpOLT(matchValue, patternValue, "match.cmp.flt");
                             break;
-                        case vyn::TokenType::LTEQ:
+                        case vyb::TokenType::LTEQ:
                             isMatch = builder->CreateFCmpOLE(matchValue, patternValue, "match.cmp.fle");
                             break;
-                        case vyn::TokenType::GT:
+                        case vyb::TokenType::GT:
                             isMatch = builder->CreateFCmpOGT(matchValue, patternValue, "match.cmp.fgt");
                             break;
-                        case vyn::TokenType::GTEQ:
+                        case vyb::TokenType::GTEQ:
                             isMatch = builder->CreateFCmpOGE(matchValue, patternValue, "match.cmp.fge");
                             break;
-                        case vyn::TokenType::EQEQ:
+                        case vyb::TokenType::EQEQ:
                             isMatch = builder->CreateFCmpOEQ(matchValue, patternValue, "match.cmp.feq");
                             break;
-                        case vyn::TokenType::NOTEQ:
+                        case vyb::TokenType::NOTEQ:
                             isMatch = builder->CreateFCmpONE(matchValue, patternValue, "match.cmp.fne");
                             break;
                         default:
@@ -1006,9 +1006,9 @@ void LLVMCodegen::visit(vyn::ast::MatchStatement* node) {
                     m_currentLLVMValue = nullptr;
                     return;
                 }
-                
+
                 // Compare the pattern with the match value
-                
+
                 // Handle different pattern types
                 if (patternValue->getType()->isIntegerTy() && matchValue->getType()->isIntegerTy()) {
                     // Integer comparison
@@ -1032,25 +1032,25 @@ void LLVMCodegen::visit(vyn::ast::MatchStatement* node) {
                     }
                 }
             }
-            
+
             // Branch based on match result
             llvm::BasicBlock* nextBlock = (i < node->cases.size() - 1) ? caseBBs[i+1] : defaultBB;
             builder->CreateCondBr(isMatch, caseBodyBBs[i], nextBlock);
         }
-        
+
         // Generate code for the case body
         builder->SetInsertPoint(caseBodyBBs[i]);
         if (caseBody) {
             caseBody->accept(*this);
             // Value from the body becomes the match result
         }
-        
+
         // Branch to end of match only if the case body doesn't already have a terminator
         if (!builder->GetInsertBlock()->getTerminator()) {
             builder->CreateBr(endMatchBB);
         }
     }
-    
+
     // Generate code for default case (no match)
     // If there's no wildcard pattern and no match occurs, execution continues (NOP)
     builder->SetInsertPoint(defaultBB);
@@ -1062,7 +1062,7 @@ void LLVMCodegen::visit(vyn::ast::MatchStatement* node) {
         // If there's a wildcard, this block is unreachable, but LLVM still needs a terminator
         builder->CreateUnreachable();
     }
-    
+
     // Set insertion point to end of match
     // Only add endMatchBB to the function if it has predecessors (i.e., if it's actually used)
     if (!endMatchBB->use_empty()) {
@@ -1080,13 +1080,13 @@ void LLVMCodegen::visit(vyn::ast::MatchStatement* node) {
         // Leave the builder at the last block that was generated
         // Don't change the insertion point since all paths terminated
     }
-    
+
     // The match result is determined by the Phi node that combines all case results
     // But for now, we'll just set the result to null to indicate no value
     m_currentLLVMValue = nullptr;
 }
 
-void LLVMCodegen::visit(vyn::ast::AssertStatement* node) {
+void LLVMCodegen::visit(vyb::ast::AssertStatement* node) {
     // Get the current function
     llvm::Function* function = getCurrentFunction();
     if (!function) {
@@ -1117,7 +1117,7 @@ void LLVMCodegen::visit(vyn::ast::AssertStatement* node) {
     // Convert condition to boolean if needed
     if (condValue->getType() != llvm::Type::getInt1Ty(*context)) {
         condValue = builder->CreateICmpNE(
-            condValue, 
+            condValue,
             llvm::ConstantInt::get(condValue->getType(), 0),
             "assert.cond"
         );
@@ -1128,13 +1128,13 @@ void LLVMCodegen::visit(vyn::ast::AssertStatement* node) {
 
     // Generate assert failure handling
     builder->SetInsertPoint(assertFailBB);
-    
+
     // Get the message if provided, or create a default one
     llvm::Value* messageValue;
     if (node->message) {
         node->message->accept(*this);
         messageValue = m_currentLLVMValue;
-        
+
         // If the message isn't a string, convert it to a string
         if (!messageValue || !messageValue->getType()->isPointerTy()) {
             // Create a default message
@@ -1155,34 +1155,34 @@ void LLVMCodegen::visit(vyn::ast::AssertStatement* node) {
     std::vector<llvm::Type*> handlerParamTypes = {
         llvm::PointerType::get(*context, 0) // Message as char*
     };
-    
+
     llvm::FunctionType* handlerFuncType = llvm::FunctionType::get(
         llvm::Type::getVoidTy(*context),
         handlerParamTypes,
         false
     );
-    
+
     // Get or create the assert handler function
-    llvm::Function* assertHandlerFunc = module->getFunction("__vyn_assert_fail");
+    llvm::Function* assertHandlerFunc = module->getFunction("__vyb_assert_fail");
     if (!assertHandlerFunc) {
         assertHandlerFunc = llvm::Function::Create(
             handlerFuncType,
             llvm::Function::ExternalLinkage,
-            "__vyn_assert_fail",
+            "__vyb_assert_fail",
             module.get()
         );
     }
-    
+
     // Call the handler with the message
     std::vector<llvm::Value*> args = { messageValue };
     builder->CreateCall(assertHandlerFunc, args);
-    
+
     // Terminate execution after assertion failure (this will be unreachable in practice)
     builder->CreateUnreachable();
-    
+
     // Continue normal execution if assertion passes
     builder->SetInsertPoint(assertPassBB);
-    
+
     // Assert statements don't produce a value
     m_currentLLVMValue = nullptr;
 }
@@ -1190,24 +1190,24 @@ void LLVMCodegen::visit(vyn::ast::AssertStatement* node) {
 void LLVMCodegen::visit(ast::YieldStatement* node) {
     // Implementation for YieldStatement
     // Yield temporarily produces a value and suspends execution until the generator is resumed
-    
+
     if (!getCurrentFunction()) {
         logError(node->loc, "Yield statement outside of function context.");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // For a basic implementation, we need to:
     // 1. Evaluate the expression to yield (if any)
     // 2. Save the current state of execution
     // 3. Create a suspension point
-    
+
     llvm::Value* yieldValue = nullptr;
     if (node->expression) {
         // Visit the expression to get its value
         node->expression->accept(*this);
         yieldValue = m_currentLLVMValue;
-        
+
         if (!yieldValue) {
             logError(node->expression->loc, "Failed to evaluate yield expression.");
             m_currentLLVMValue = nullptr;
@@ -1217,60 +1217,60 @@ void LLVMCodegen::visit(ast::YieldStatement* node) {
         // If no expression provided, yield 'undefined' or a default value
         yieldValue = llvm::UndefValue::get(llvm::Type::getInt32Ty(*context));
     }
-    
+
     // For now, we'll create a placeholder implementation that logs the yield
     // In a full implementation, this would involve coroutine transformation
     std::vector<llvm::Type*> paramTypes = { yieldValue->getType() };
     llvm::FunctionType* logYieldType = llvm::FunctionType::get(
-        llvm::Type::getVoidTy(*context), 
-        paramTypes, 
+        llvm::Type::getVoidTy(*context),
+        paramTypes,
         false
     );
-    
+
     // Create or get the debug function for logging yields
-    llvm::Function* logYieldFunc = module->getFunction("__vyn_debug_log_yield");
+    llvm::Function* logYieldFunc = module->getFunction("__vyb_debug_log_yield");
     if (!logYieldFunc) {
         logYieldFunc = llvm::Function::Create(
             logYieldType,
             llvm::Function::ExternalLinkage,
-            "__vyn_debug_log_yield",
+            "__vyb_debug_log_yield",
             module.get()
         );
     }
-    
+
     // Call the debug function with our yield value
     std::vector<llvm::Value*> args = { yieldValue };
     builder->CreateCall(logYieldFunc, args);
-    
+
     logWarning(node->loc, "YieldStatement partially implemented. Full generator functionality requires coroutine support.");
-    
+
     m_currentLLVMValue = yieldValue;
 }
 
 void LLVMCodegen::visit(ast::YieldReturnStatement* node) {
     // Implementation for YieldReturnStatement
     // This represents the final return from a generator function
-    
+
     if (!getCurrentFunction()) {
         logError(node->loc, "Yield return statement outside of function context.");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     llvm::Value* returnValue = nullptr;
     llvm::Type* returnType = currentFunction->getReturnType();
-    
+
     if (node->expression) {
         // Visit the expression to get its value
         node->expression->accept(*this);
         returnValue = m_currentLLVMValue;
-        
+
         if (!returnValue) {
             logError(node->expression->loc, "Failed to evaluate yield return expression.");
             m_currentLLVMValue = nullptr;
             return;
         }
-        
+
         // Check if the types match
         if (returnValue->getType() != returnType && !returnType->isVoidTy()) {
             // Try to cast the value to the return type
@@ -1287,52 +1287,52 @@ void LLVMCodegen::visit(ast::YieldReturnStatement* node) {
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Create a function for signaling generator completion
     std::vector<llvm::Type*> paramTypes;
     if (returnValue) {
         paramTypes.push_back(returnValue->getType());
     }
-    
+
     llvm::FunctionType* completeGenType = llvm::FunctionType::get(
-        llvm::Type::getVoidTy(*context), 
-        paramTypes, 
+        llvm::Type::getVoidTy(*context),
+        paramTypes,
         false
     );
-    
+
     // Create or get the debug function for generator completion
-    llvm::Function* completeGenFunc = module->getFunction("__vyn_debug_complete_generator");
+    llvm::Function* completeGenFunc = module->getFunction("__vyb_debug_complete_generator");
     if (!completeGenFunc) {
         completeGenFunc = llvm::Function::Create(
             completeGenType,
             llvm::Function::ExternalLinkage,
-            "__vyn_debug_complete_generator",
+            "__vyb_debug_complete_generator",
             module.get()
         );
     }
-    
+
     // Call the debug function
     std::vector<llvm::Value*> args;
     if (returnValue) {
         args.push_back(returnValue);
     }
     builder->CreateCall(completeGenFunc, args);
-    
+
     // Add a normal return statement after the yield return
     if (returnType->isVoidTy()) {
         builder->CreateRetVoid();
     } else if (returnValue) {
         builder->CreateRet(returnValue);
     }
-    
+
     logWarning(node->loc, "YieldReturnStatement partially implemented. Full generator functionality requires coroutine support.");
-    
+
     m_currentLLVMValue = returnValue;
 }
 
 void LLVMCodegen::visit(ast::ExternStatement* node) {
     // Implementation for ExternStatement to generate LLVM IR for external function declarations
-    
+
     if (!node->name) {
         logError(node->loc, "External declaration missing name.");
         m_currentLLVMValue = nullptr;
@@ -1342,17 +1342,17 @@ void LLVMCodegen::visit(ast::ExternStatement* node) {
     std::vector<llvm::Type*> paramTypes;
     for (const auto& paramNode : node->parameters) {
         if (!paramNode.typeNode) {
-            logError(paramNode.name->loc, "Parameter '" + paramNode.name->name + 
+            logError(paramNode.name->loc, "Parameter '" + paramNode.name->name +
                      "' in external declaration '" + node->name->name + "' is missing a type annotation.");
-            m_currentLLVMValue = nullptr; 
+            m_currentLLVMValue = nullptr;
             return;
         }
-        
+
         llvm::Type* llvmType = codegenType(paramNode.typeNode.get());
         if (!llvmType) {
-            logError(paramNode.name->loc, "Could not determine LLVM type for parameter '" + 
+            logError(paramNode.name->loc, "Could not determine LLVM type for parameter '" +
                      paramNode.name->name + "' in external declaration '" + node->name->name + "'.");
-            m_currentLLVMValue = nullptr; 
+            m_currentLLVMValue = nullptr;
             return;
         }
         paramTypes.push_back(llvmType);
@@ -1362,31 +1362,31 @@ void LLVMCodegen::visit(ast::ExternStatement* node) {
     if (node->returnType) {
         returnType = codegenType(node->returnType.get());
         if (!returnType) {
-            logError(node->loc, "Could not determine LLVM return type for external declaration '" + 
+            logError(node->loc, "Could not determine LLVM return type for external declaration '" +
                      node->name->name + "'.");
-            m_currentLLVMValue = nullptr; 
+            m_currentLLVMValue = nullptr;
             return;
         }
     } else {
         returnType = llvm::Type::getVoidTy(*context);
     }
-    
+
     llvm::FunctionType* funcType = llvm::FunctionType::get(returnType, paramTypes, false /*isVarArg*/);
-    
+
     // Check for existing function
     llvm::Function* func = module->getFunction(node->name->name);
     if (func) {
         if (func->getFunctionType() != funcType) {
-            logError(node->loc, "Redeclaration of external function '" + node->name->name + 
+            logError(node->loc, "Redeclaration of external function '" + node->name->name +
                      "' with different signature.");
-            m_currentLLVMValue = nullptr; 
+            m_currentLLVMValue = nullptr;
             return;
         }
         // Function already declared with matching signature, nothing more to do
     } else {
         // Create the external function declaration
         func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, node->name->name, module.get());
-        
+
         // Set parameter names for better IR readability
         unsigned idx = 0;
         for (auto &arg : func->args()) {
@@ -1396,19 +1396,19 @@ void LLVMCodegen::visit(ast::ExternStatement* node) {
             idx++;
         }
     }
-    
+
     m_currentLLVMValue = func;
 }
 
 // --- Error Handling Codegen Implementations ---
 
-void LLVMCodegen::visit(vyn::ast::FailStatement* node) {
+void LLVMCodegen::visit(vyb::ast::FailStatement* node) {
     // Generate:
     // 1. Evaluate error expression
     // 2. Check if there's a trap handler in scope
-    // 3. If no trap: call __vyn_runtime_untrapped_error() and unreachable
+    // 3. If no trap: call __vyb_runtime_untrapped_error() and unreachable
     // 4. If trap: store error and jump to trap landing pad
-    
+
     llvm::Function* function = getCurrentFunction();
     if (!function) {
         logError(node->loc, "Fail statement outside function context");
@@ -1425,14 +1425,14 @@ void LLVMCodegen::visit(vyn::ast::FailStatement* node) {
     // Evaluate the error expression
     node->error->accept(*this);
     llvm::Value* errorValue = m_currentLLVMValue;
-    
+
     if (!errorValue) {
         logError(node->loc, "Error expression evaluated to null");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
-    // Construct a concrete runtime VynError object.
+
+    // Construct a concrete runtime VyBError object.
     std::string typeName;
     if (node->errorType) {
         typeName = node->errorType->toString();
@@ -1457,7 +1457,7 @@ void LLVMCodegen::visit(vyn::ast::FailStatement* node) {
     builder->CreateStore(errorValue, payloadAlloca);
     llvm::Value* payloadPtr = builder->CreateBitCast(payloadAlloca, llvm::PointerType::get(*context, 0), "fail.payload.ptr");
 
-    llvm::Function* createErrFn = module->getFunction("__vyn_runtime_create_error_ex");
+    llvm::Function* createErrFn = module->getFunction("__vyb_runtime_create_error_ex");
     if (!createErrFn) {
         llvm::Type* i8PtrTy = llvm::PointerType::get(*context, 0);
         llvm::Type* i64Ty = builder->getInt64Ty();
@@ -1471,7 +1471,7 @@ void LLVMCodegen::visit(vyn::ast::FailStatement* node) {
         createErrFn = llvm::Function::Create(
             createErrTy,
             llvm::Function::ExternalLinkage,
-            "__vyn_runtime_create_error_ex",
+            "__vyb_runtime_create_error_ex",
             module.get()
         );
     }
@@ -1497,70 +1497,70 @@ void LLVMCodegen::visit(vyn::ast::FailStatement* node) {
         },
         "fail.error"
     );
-    
+
     // Check if we're inside a trap context
     if (!trapStack.empty()) {
         // We have an active trap handler - store error and jump to landing pad
         TrapContext& trap = trapStack.back();
-        
+
         // Store the error pointer in the error slot
         // Error pointer now contains type ID header, so no separate type storage needed
         builder->CreateStore(errorPtr, trap.errorSlot);
-        
+
         // Jump to the landing pad for error handling
         builder->CreateBr(trap.landingPad);
-        
+
     } else {
         // No trap handler in current scope
-        
+
         // Phase 3: Check if we're in a failable function that can propagate errors
         if (currentFunctionAST && currentFunctionAST->needsErrorReturn) {
-            VYN_CDBG << "DEBUG: Fail statement propagating error to caller in failable function" << std::endl;
+            VYB_CDBG << "DEBUG: Fail statement propagating error to caller in failable function" << std::endl;
             emitPropagatingErrorReturn(errorPtr);
         } else {
             // No trap handler and not a failable function - this is an untrapped error
-            llvm::Function* untrappedFn = getVynUntrappedErrorFunction();
+            llvm::Function* untrappedFn = getVyBUntrappedErrorFunction();
             // Call untrapped error handler (noreturn)
             builder->CreateCall(untrappedFn, {errorPtr});
-            
+
             // Mark as unreachable
             builder->CreateUnreachable();
         }
     }
-    
+
     m_currentLLVMValue = nullptr;
 }
 
-void LLVMCodegen::visit(vyn::ast::TrapClause* node) {
+void LLVMCodegen::visit(vyb::ast::TrapClause* node) {
     // TODO: Phase 1 implementation
     // TrapClause is not directly visited - it's processed as part of block expression
     // with trap clauses. The block codegen will:
     // 1. Set up landing pads for exception handling
     // 2. Generate type checks for each trap clause
     // 3. Jump to appropriate handler or continue unwinding
-    
+
     logError(node->loc, "TrapClause should not be visited directly");
     m_currentLLVMValue = nullptr;
 }
 
-void LLVMCodegen::visit(vyn::ast::EnsureClause* node) {
+void LLVMCodegen::visit(vyb::ast::EnsureClause* node) {
     // TODO: Phase 1 implementation
     // EnsureClause is not directly visited - it's processed as part of block expression
     // The block codegen will:
     // 1. Register cleanup handlers in scope
     // 2. Generate cleanup code in landing pads
     // 3. Ensure cleanup runs on both success and failure paths
-    
+
     logError(node->loc, "EnsureClause should not be visited directly");
     m_currentLLVMValue = nullptr;
 }
 
-void LLVMCodegen::visit(vyn::ast::RethrowStatement* node) {
+void LLVMCodegen::visit(vyb::ast::RethrowStatement* node) {
     // Generate:
     // 1. If transformedError: evaluate new error expression
     // 2. Pop current trap context and rethrow to outer handler
     // 3. Mark as unreachable (no return)
-    
+
     llvm::Function* function = getCurrentFunction();
     if (!function) {
         logError(node->loc, "Rethrow statement outside function context");
@@ -1574,9 +1574,9 @@ void LLVMCodegen::visit(vyn::ast::RethrowStatement* node) {
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     llvm::Value* errorToRethrow = nullptr;
-    
+
     if (node->transformedError) {
         // Evaluate the transformed error expression
         node->transformedError->accept(*this);
@@ -1588,13 +1588,13 @@ void LLVMCodegen::visit(vyn::ast::RethrowStatement* node) {
         llvm::Type* errorType = llvm::PointerType::get(*context, 0);
         errorToRethrow = builder->CreateLoad(errorType, currentTrap.errorSlot, "rethrow_error");
     }
-    
+
     if (!errorToRethrow) {
         logError(node->loc, "Rethrow error value is null");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Check if there's an outer trap handler
     if (trapStack.size() > 1) {
         // Store error in outer trap's error slot and jump to its landing pad
@@ -1603,8 +1603,8 @@ void LLVMCodegen::visit(vyn::ast::RethrowStatement* node) {
         builder->CreateBr(outerTrap.landingPad);
     } else {
         // No outer trap - call untrapped error handler
-        llvm::Function* untrappedFn = getVynUntrappedErrorFunction();
-        
+        llvm::Function* untrappedFn = getVyBUntrappedErrorFunction();
+
         llvm::Value* errorPtr = errorToRethrow;
         if (!errorToRethrow->getType()->isPointerTy()) {
             llvm::AllocaInst* tempAlloca = builder->CreateAlloca(errorToRethrow->getType(), nullptr, "rethrow_temp");
@@ -1613,20 +1613,20 @@ void LLVMCodegen::visit(vyn::ast::RethrowStatement* node) {
         } else {
             errorPtr = builder->CreateBitCast(errorToRethrow, int8PtrType, "rethrow_as_ptr");
         }
-        
+
         builder->CreateCall(untrappedFn, {errorPtr});
         builder->CreateUnreachable();
     }
-    
+
     m_currentLLVMValue = nullptr;
 }
 
-void LLVMCodegen::visit(vyn::ast::PanicStatement* node) {
+void LLVMCodegen::visit(vyb::ast::PanicStatement* node) {
     // Generate:
     // 1. Evaluate panic message
-    // 2. Call __vyn_runtime_panic(message)
+    // 2. Call __vyb_runtime_panic(message)
     // 3. Mark as noreturn with unreachable
-    
+
     llvm::Function* function = getCurrentFunction();
     if (!function) {
         logError(node->loc, "Panic statement outside function context");
@@ -1643,20 +1643,20 @@ void LLVMCodegen::visit(vyn::ast::PanicStatement* node) {
     // Evaluate panic message (should be a String)
     node->message->accept(*this);
     llvm::Value* messageValue = m_currentLLVMValue;
-    
+
     if (!messageValue) {
         logError(node->loc, "Panic message evaluated to null");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Get or create the panic runtime function
-    llvm::Function* panicFn = getVynPanicFunction();
-    
+    llvm::Function* panicFn = getVyBPanicFunction();
+
     // Extract the char* pointer from the String struct
-    // String literals in Vyn are { ptr, i64 } structs
+    // String literals in VyB are { ptr, i64 } structs
     llvm::Value* messageStr = messageValue;
-    
+
     if (messageValue->getType()->isStructTy()) {
         // Extract field 0 (the char* pointer) from the String struct
         messageStr = builder->CreateExtractValue(messageValue, 0, "panic_str_ptr");
@@ -1665,17 +1665,17 @@ void LLVMCodegen::visit(vyn::ast::PanicStatement* node) {
         llvm::Value* loadedValue = builder->CreateLoad(stringType, messageValue, "panic_str_load");
         messageStr = builder->CreateExtractValue(loadedValue, 0, "panic_str_ptr");
     }
-    
+
     // Call panic function (noreturn)
     builder->CreateCall(panicFn, {messageStr});
-    
+
     // Mark as unreachable - execution never continues after panic
     builder->CreateUnreachable();
-    
+
     m_currentLLVMValue = nullptr;
 }
 
-void LLVMCodegen::visit(vyn::ast::ExitStatement* node) {
+void LLVMCodegen::visit(vyb::ast::ExitStatement* node) {
     // Generate: call void @exit(i32 code) then unreachable
     if (!node->code) {
         logError(node->loc, "exit statement missing exit code expression");
@@ -1712,7 +1712,7 @@ void LLVMCodegen::visit(vyn::ast::ExitStatement* node) {
     m_currentLLVMValue = nullptr;
 }
 
-void LLVMCodegen::visit(vyn::ast::DeferStatement* node) {
+void LLVMCodegen::visit(vyb::ast::DeferStatement* node) {
     // DeferStatement: register the statement to run at function exit
     if (m_deferStack.empty()) {
         // No active defer scope - shouldn't happen inside a function body
@@ -1724,4 +1724,4 @@ void LLVMCodegen::visit(vyn::ast::DeferStatement* node) {
     }
 }
 
-}  // namespace vyn
+}  // namespace vyb

@@ -1,0 +1,26 @@
+# Semantic Test: Complete error handling with struct definition
+
+struct MyError {
+    code<Int>,
+    message<String>
+}
+
+divide(a<Int>, b<Int>)<Int> -> {
+    if (b == 0) {
+        fail MyError { code = 1, message = "Division by zero" }
+    }
+    return a / b
+}
+
+main()<Int> -> {
+    result<Int> = {
+        divide(10, 0)
+    } trap (e<MyError>) -> {
+        println("Caught error: " + e.message)
+        return -1
+    } ensure -> {
+        println("Cleanup executed")
+    }
+
+    return result
+}

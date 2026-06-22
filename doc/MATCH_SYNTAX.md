@@ -2,11 +2,11 @@
 
 ## Overview
 
-The `match` statement provides pattern matching in Vyn with clean, intuitive syntax designed for clarity and consistency.
+The `match` statement provides pattern matching in VyB with clean, intuitive syntax designed for clarity and consistency.
 
 ## Syntax
 
-```vyn
+```vyb
 match (expression) {
     pattern -> result_expression,
     pattern -> result_expression,
@@ -19,7 +19,7 @@ match (expression) {
 ### Parenthesized Expression
 The expression to match is enclosed in parentheses for visual clarity and to avoid ambiguity:
 
-```vyn
+```vyb
 match (x + y) {
     0 -> println("zero"),
     1 -> println("one")
@@ -29,7 +29,7 @@ match (x + y) {
 ### Arrow Operator (`->`)
 Pattern matching uses the `->` arrow, consistent with function syntax:
 
-```vyn
+```vyb
 match (value) {
     42 -> "the answer",
     0  -> "zero"
@@ -39,7 +39,7 @@ match (value) {
 ### Wildcard Pattern (`?`)
 The wildcard pattern `?` matches anything:
 
-```vyn
+```vyb
 match (status) {
     0 -> "init",
     1 -> "running",
@@ -50,7 +50,7 @@ match (status) {
 ### No-Match Behavior
 If no pattern matches and there's no wildcard, execution continues as a NOP:
 
-```vyn
+```vyb
 match (x) {
     1 -> println("one"),
     2 -> println("two")
@@ -63,7 +63,7 @@ match (x) {
 ### Literal Patterns
 Match specific literal values:
 
-```vyn
+```vyb
 match (x) {
     0    -> "zero",
     42   -> "forty-two",
@@ -71,10 +71,10 @@ match (x) {
 }
 ```
 
-### Identifier Patterns  
+### Identifier Patterns
 Currently match identifiers as values (future: destructuring):
 
-```vyn
+```vyb
 match (result) {
     success -> handle_success(),
     error   -> handle_error()
@@ -85,7 +85,7 @@ match (result) {
 
 Match against numeric ranges using comparison operators:
 
-```vyn
+```vyb
 match (score) {
     >= 90 -> println("A"),
     >= 80 -> println("B"),
@@ -98,7 +98,7 @@ match (score) {
 **Supported Operators**: `==`, `!=`, `<`, `<=`, `>`, `>=`
 
 **Important**: Patterns are evaluated **top-to-bottom**, first match wins:
-```vyn
+```vyb
 match (age) {
     >= 18 -> println("Adult"),     // Catches 18+
     >= 21 -> println("Can drink")  // ERROR: Unreachable! (21+ already caught)
@@ -124,7 +124,7 @@ Planned support for:
 ## Examples
 
 ### Simple Integer Matching
-```vyn
+```vyb
 describe_number(x<Int>)<String> -> {
     match (x) {
         0  -> "zero",
@@ -136,7 +136,7 @@ describe_number(x<Int>)<String> -> {
 ```
 
 ### Status Code Handling
-```vyn
+```vyb
 process_status(code<Int>)<Void> -> {
     match (code) {
         200 -> println("OK"),
@@ -148,7 +148,7 @@ process_status(code<Int>)<Void> -> {
 ```
 
 ### Without Wildcard
-```vyn
+```vyb
 check_specific(n<Int>)<Void> -> {
     match (n) {
         1 -> println("one"),
@@ -188,7 +188,7 @@ check_specific(n<Int>)<Void> -> {
 match_statement ::= 'match' '(' expression ')' '{' match_arm* '}'
 match_arm       ::= pattern '->' expression ','?
 pattern         ::= literal
-                  | identifier  
+                  | identifier
                   | '?'                    // wildcard
                   | path '{' field_pattern* '}' // future: struct
                   | path '(' pattern* ')'       // future: enum
@@ -204,7 +204,7 @@ pattern         ::= literal
 
 ### Why `->` Instead of `=>`?
 - **Consistency**: Matches function declaration syntax `foo() -> { ... }`
-- **Familiarity**: Standard arrow operator used throughout Vyn
+- **Familiarity**: Standard arrow operator used throughout VyB
 - **Clarity**: Clearly shows flow from pattern to result
 - **Uniformity**: Same arrow for all "points to" semantics
 
@@ -236,8 +236,8 @@ default: return "other"
 }
 ```
 
-### Vyn
-```vyn
+### VyB
+```vyb
 match (x) {
     0 -> "zero",
     ? -> "other"

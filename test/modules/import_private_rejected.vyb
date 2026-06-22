@@ -1,0 +1,11 @@
+// @test: Private imports rejected
+// @description: Declarations without share(...) stay private to their source file
+// @category: modules
+// @expect: fail
+// @tags: modules, visibility
+
+import visibility_export from "./visibility_export.vyb"
+
+main()<Int> -> {
+    return hidden_value()
+}

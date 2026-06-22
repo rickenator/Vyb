@@ -1,111 +1,111 @@
-#include "vyn/parser/parser.hpp"
-#include "vyn/parser/token.hpp"
-#include "vyn/parser/ast.hpp"   
+#include "vyb/parser/parser.hpp"
+#include "vyb/parser/token.hpp"
+#include "vyb/parser/ast.hpp"
 #include <stdexcept>
-#include <iostream> 
+#include <iostream>
 #include <sstream>
 
-namespace vyn {
+namespace vyb {
 
-    vyn::SourceLocation BaseParser::current_location() const {
+    vyb::SourceLocation BaseParser::current_location() const {
         if (pos_ < tokens_.size()) {
             const auto& token = tokens_[pos_];
-            return vyn::SourceLocation(current_file_path_, token.location.line, token.location.column);
+            return vyb::SourceLocation(current_file_path_, token.location.line, token.location.column);
         } else if (!tokens_.empty()) {
-            const auto& token = tokens_.back(); 
-            return vyn::SourceLocation(current_file_path_, token.location.line, token.location.column);
+            const auto& token = tokens_.back();
+            return vyb::SourceLocation(current_file_path_, token.location.line, token.location.column);
         }
-        return vyn::SourceLocation(current_file_path_, 0, 0); 
+        return vyb::SourceLocation(current_file_path_, 0, 0);
     }
 
     void BaseParser::skip_comments_and_newlines() {
         // Only skip COMMENT and NEWLINE, but do NOT skip INDENT or DEDENT
         while (pos_ < tokens_.size() &&
-               (tokens_[pos_].type == vyn::TokenType::COMMENT ||
-                tokens_[pos_].type == vyn::TokenType::NEWLINE)) {
+               (tokens_[pos_].type == vyb::TokenType::COMMENT ||
+                tokens_[pos_].type == vyb::TokenType::NEWLINE)) {
             pos_++;
         }
     }
 
-    const vyn::token::Token& BaseParser::peek() const {
+    const vyb::token::Token& BaseParser::peek() const {
         size_t temp_pos = pos_;
         while (temp_pos < tokens_.size() &&
-               (tokens_[temp_pos].type == vyn::TokenType::COMMENT ||
-                tokens_[temp_pos].type == vyn::TokenType::NEWLINE)) {
+               (tokens_[temp_pos].type == vyb::TokenType::COMMENT ||
+                tokens_[temp_pos].type == vyb::TokenType::NEWLINE)) {
             temp_pos++;
         }
         if (temp_pos >= tokens_.size()) {
-            if (tokens_.empty()) { 
+            if (tokens_.empty()) {
                 throw std::runtime_error("Peek called on empty token stream from file: " + current_file_path_);
             }
-            return tokens_.back(); 
+            return tokens_.back();
         }
         #ifdef VERBOSE
-        std::cerr << "[PEEK] " << vyn::token_type_to_string(tokens_[temp_pos].type)
-                  << " (" << tokens_[temp_pos].lexeme << ") at " 
-                  << tokens_[temp_pos].location.filePath << ":" 
-                  << tokens_[temp_pos].location.line << ":" 
+        std::cerr << "[PEEK] " << vyb::token_type_to_string(tokens_[temp_pos].type)
+                  << " (" << tokens_[temp_pos].lexeme << ") at "
+                  << tokens_[temp_pos].location.filePath << ":"
+                  << tokens_[temp_pos].location.line << ":"
                   << tokens_[temp_pos].location.column << std::endl;
         #endif
         return tokens_[temp_pos];
     }
 
-    const vyn::token::Token& BaseParser::peekNext() const {
+    const vyb::token::Token& BaseParser::peekNext() const {
         size_t temp_pos = pos_;
         // Skip first non-comment, non-newline token
         while (temp_pos < tokens_.size() &&
-               (tokens_[temp_pos].type == vyn::TokenType::COMMENT ||
-                tokens_[temp_pos].type == vyn::TokenType::NEWLINE)) {
+               (tokens_[temp_pos].type == vyb::TokenType::COMMENT ||
+                tokens_[temp_pos].type == vyb::TokenType::NEWLINE)) {
             temp_pos++;
         }
         temp_pos++; // Skip the first token
-        
+
         // Skip any comments or newlines after the first token
         while (temp_pos < tokens_.size() &&
-               (tokens_[temp_pos].type == vyn::TokenType::COMMENT ||
-                tokens_[temp_pos].type == vyn::TokenType::NEWLINE)) {
+               (tokens_[temp_pos].type == vyb::TokenType::COMMENT ||
+                tokens_[temp_pos].type == vyb::TokenType::NEWLINE)) {
             temp_pos++;
         }
-        
+
         if (temp_pos >= tokens_.size()) {
-            if (tokens_.empty()) { 
+            if (tokens_.empty()) {
                 throw std::runtime_error("PeekNext called on empty token stream from file: " + current_file_path_);
             }
-            return tokens_.back(); 
+            return tokens_.back();
         }
         return tokens_[temp_pos];
     }
 
-    vyn::token::Token BaseParser::consume() {
-        skip_comments_and_newlines(); 
+    vyb::token::Token BaseParser::consume() {
+        skip_comments_and_newlines();
         if (pos_ >= tokens_.size()) {
-            if (tokens_.empty()) { 
+            if (tokens_.empty()) {
                 throw std::runtime_error("Consume called on empty token stream from file: " + current_file_path_);
             }
-            return tokens_.back(); 
+            return tokens_.back();
         }
-        const vyn::token::Token& current_token = tokens_[pos_]; 
+        const vyb::token::Token& current_token = tokens_[pos_];
         #ifdef VERBOSE
-        std::cerr << "[CONSUME] " << vyn::token_type_to_string(current_token.type)
-                  << " (" << current_token.lexeme << ") at " 
-                  << current_token.location.filePath << ":" 
-                  << current_token.location.line << ":" 
+        std::cerr << "[CONSUME] " << vyb::token_type_to_string(current_token.type)
+                  << " (" << current_token.lexeme << ") at "
+                  << current_token.location.filePath << ":"
+                  << current_token.location.line << ":"
                   << current_token.location.column << std::endl;
         #endif
-        pos_++; 
-        return current_token; 
+        pos_++;
+        return current_token;
     }
 
-    vyn::token::Token BaseParser::expect(vyn::TokenType type) {
-        const vyn::token::Token& next_token = peek(); 
+    vyb::token::Token BaseParser::expect(vyb::TokenType type) {
+        const vyb::token::Token& next_token = peek();
         #ifdef VERBOSE
-        std::cerr << "[EXPECT] " << vyn::token_type_to_string(type)
-                  << " checking against " << vyn::token_type_to_string(next_token.type)
+        std::cerr << "[EXPECT] " << vyb::token_type_to_string(type)
+                  << " checking against " << vyb::token_type_to_string(next_token.type)
                   << " (" << next_token.lexeme << ")" << std::endl;
         #endif
         if (next_token.type != type) {
-            std::string error_msg = "Expected " + vyn::token_type_to_string(type) +
-                                   " but found " + vyn::token_type_to_string(next_token.type) +
+            std::string error_msg = "Expected " + vyb::token_type_to_string(type) +
+                                   " but found " + vyb::token_type_to_string(next_token.type) +
                                    " at file " + current_file_path_ +
                                    ", line " + std::to_string(next_token.location.line) +
                                    ", column " + std::to_string(next_token.location.column);
@@ -114,19 +114,19 @@ namespace vyn {
             #endif
             throw std::runtime_error(error_msg);
         }
-        return consume(); 
+        return consume();
     }
 
-    vyn::token::Token BaseParser::expect(vyn::TokenType type, const std::string& lexeme) {
-        const vyn::token::Token& next_token = peek();
+    vyb::token::Token BaseParser::expect(vyb::TokenType type, const std::string& lexeme) {
+        const vyb::token::Token& next_token = peek();
         #ifdef VERBOSE
-        std::cerr << "[EXPECT] " << vyn::token_type_to_string(type)
-                  << " (\"" << lexeme << "\") checking against " << vyn::token_type_to_string(next_token.type)
+        std::cerr << "[EXPECT] " << vyb::token_type_to_string(type)
+                  << " (\"" << lexeme << "\") checking against " << vyb::token_type_to_string(next_token.type)
                   << " (\"" << next_token.lexeme << "\")" << std::endl;
         #endif
         if (next_token.type != type || next_token.lexeme != lexeme) {
-            std::string error_msg = "Expected " + vyn::token_type_to_string(type) +
-                                   " (\"" + lexeme + "\") but found " + vyn::token_type_to_string(next_token.type) +
+            std::string error_msg = "Expected " + vyb::token_type_to_string(type) +
+                                   " (\"" + lexeme + "\") but found " + vyb::token_type_to_string(next_token.type) +
                                    " (\"" + next_token.lexeme + "\") at file " + current_file_path_ +
                                    ", line " + std::to_string(next_token.location.line) +
                                    ", column " + std::to_string(next_token.location.column);
@@ -139,16 +139,16 @@ namespace vyn {
     }
 
     // New overload for expecting a token type with a custom error message
-    vyn::token::Token BaseParser::expect(vyn::TokenType type, const char* customErrorMessage) {
-        const vyn::token::Token& next_token = peek();
+    vyb::token::Token BaseParser::expect(vyb::TokenType type, const char* customErrorMessage) {
+        const vyb::token::Token& next_token = peek();
         #ifdef VERBOSE
-        std::cerr << "[EXPECT] " << vyn::token_type_to_string(type)
-                  << " (custom msg: \"" << customErrorMessage << "\") checking against " << vyn::token_type_to_string(next_token.type)
+        std::cerr << "[EXPECT] " << vyb::token_type_to_string(type)
+                  << " (custom msg: \"" << customErrorMessage << "\") checking against " << vyb::token_type_to_string(next_token.type)
                   << " (" << next_token.lexeme << ")" << std::endl;
         #endif
         if (next_token.type != type) {
             std::string error_msg = std::string(customErrorMessage) +
-                                   " but found " + vyn::token_type_to_string(next_token.type) +
+                                   " but found " + vyb::token_type_to_string(next_token.type) +
                                    " (\"" + next_token.lexeme + "\") at file " + current_file_path_ +
                                    ", line " + std::to_string(next_token.location.line) +
                                    ", column " + std::to_string(next_token.location.column);
@@ -160,22 +160,22 @@ namespace vyn {
         return consume();
     }
 
-    std::optional<vyn::token::Token> BaseParser::match(vyn::TokenType type) {
+    std::optional<vyb::token::Token> BaseParser::match(vyb::TokenType type) {
         if (check(type)) {
             return consume();
         }
         return std::nullopt;
     }
 
-    std::optional<vyn::token::Token> BaseParser::match(vyn::TokenType type, const std::string& lexeme) {
+    std::optional<vyb::token::Token> BaseParser::match(vyb::TokenType type, const std::string& lexeme) {
         if (check(type) && peek().lexeme == lexeme) {
             return consume();
         }
         return std::nullopt;
     }
 
-    std::optional<vyn::token::Token> BaseParser::match(const std::vector<vyn::TokenType>& types) {
-        for (vyn::TokenType type : types) {
+    std::optional<vyb::token::Token> BaseParser::match(const std::vector<vyb::TokenType>& types) {
+        for (vyb::TokenType type : types) {
             if (check(type)) {
                 return consume();
             }
@@ -183,21 +183,21 @@ namespace vyn {
         return std::nullopt;
     }
 
-    bool BaseParser::check(vyn::TokenType type) const {
+    bool BaseParser::check(vyb::TokenType type) const {
         size_t temp_pos = pos_;
         while (temp_pos < tokens_.size() &&
-               (tokens_[temp_pos].type == vyn::TokenType::COMMENT ||
-                tokens_[temp_pos].type == vyn::TokenType::NEWLINE)) {
+               (tokens_[temp_pos].type == vyb::TokenType::COMMENT ||
+                tokens_[temp_pos].type == vyb::TokenType::NEWLINE)) {
             temp_pos++;
         }
         if (temp_pos >= tokens_.size()) {
-            return false; 
+            return false;
         }
         return tokens_[temp_pos].type == type;
     }
 
-    bool BaseParser::check(const std::vector<vyn::TokenType>& types) const {
-        for (vyn::TokenType type : types) {
+    bool BaseParser::check(const std::vector<vyb::TokenType>& types) const {
+        for (vyb::TokenType type : types) {
             if (check(type)) {
                 return true;
             }
@@ -207,14 +207,14 @@ namespace vyn {
 
     void BaseParser::skip_indents_dedents() {
         while (pos_ < tokens_.size()) {
-            if (tokens_[pos_].type == vyn::TokenType::INDENT) {
+            if (tokens_[pos_].type == vyb::TokenType::INDENT) {
                 pos_++;
-                skip_comments_and_newlines(); 
-            } else if (tokens_[pos_].type == vyn::TokenType::DEDENT) {
+                skip_comments_and_newlines();
+            } else if (tokens_[pos_].type == vyb::TokenType::DEDENT) {
                 pos_++;
-                skip_comments_and_newlines(); 
+                skip_comments_and_newlines();
             } else {
-                break; 
+                break;
             }
         }
     }
@@ -227,35 +227,35 @@ namespace vyn {
         if (pos_ >= tokens_.size()) {
             return true;
         }
-        return tokens_[pos_].type == vyn::TokenType::END_OF_FILE;
+        return tokens_[pos_].type == vyb::TokenType::END_OF_FILE;
     }
 
-    bool BaseParser::IsDataType(const vyn::token::Token &token) const {
-        return token.type == vyn::TokenType::IDENTIFIER;
+    bool BaseParser::IsDataType(const vyb::token::Token &token) const {
+        return token.type == vyb::TokenType::IDENTIFIER;
     }
 
-    bool BaseParser::IsLiteral(const vyn::token::Token &token) const {
-        return token.type == vyn::TokenType::INT_LITERAL ||
-               token.type == vyn::TokenType::FLOAT_LITERAL ||
-               token.type == vyn::TokenType::STRING_LITERAL;
+    bool BaseParser::IsLiteral(const vyb::token::Token &token) const {
+        return token.type == vyb::TokenType::INT_LITERAL ||
+               token.type == vyb::TokenType::FLOAT_LITERAL ||
+               token.type == vyb::TokenType::STRING_LITERAL;
     }
 
-    bool BaseParser::IsOperator(const vyn::token::Token &token) const {
-        return token.type == vyn::TokenType::PLUS ||
-               token.type == vyn::TokenType::MINUS ||
-               token.type == vyn::TokenType::MULTIPLY ||
-               token.type == vyn::TokenType::DIVIDE ||
-               token.type == vyn::TokenType::EQEQ ||
-               token.type == vyn::TokenType::NOTEQ ||
-               token.type == vyn::TokenType::LT ||
-               token.type == vyn::TokenType::LTEQ ||
-               token.type == vyn::TokenType::GT ||
-               token.type == vyn::TokenType::GTEQ;
+    bool BaseParser::IsOperator(const vyb::token::Token &token) const {
+        return token.type == vyb::TokenType::PLUS ||
+               token.type == vyb::TokenType::MINUS ||
+               token.type == vyb::TokenType::MULTIPLY ||
+               token.type == vyb::TokenType::DIVIDE ||
+               token.type == vyb::TokenType::EQEQ ||
+               token.type == vyb::TokenType::NOTEQ ||
+               token.type == vyb::TokenType::LT ||
+               token.type == vyb::TokenType::LTEQ ||
+               token.type == vyb::TokenType::GT ||
+               token.type == vyb::TokenType::GTEQ;
     }
 
-    bool BaseParser::IsUnaryOperator(const vyn::token::Token &token) const {
-        return token.type == vyn::TokenType::MINUS ||
-               token.type == vyn::TokenType::BANG;
+    bool BaseParser::IsUnaryOperator(const vyb::token::Token &token) const {
+        return token.type == vyb::TokenType::MINUS ||
+               token.type == vyb::TokenType::BANG;
     }
 
     [[noreturn]] std::runtime_error BaseParser::error(const token::Token& token, const std::string& message) const {
@@ -266,12 +266,12 @@ namespace vyn {
         // Assuming SourceLocation has line and column members.
         // Adjust if your SourceLocation struct has different members or a different string conversion method.
         // location_str = "line " + std::to_string(token.location.line) + ", column " + std::to_string(token.location.column);
-        
+
         std::string error_message = "Error at " + token.location.toString() + ": " + message + " (found '" + token.lexeme + "')";
         throw std::runtime_error(error_message);
     }
 
-    const vyn::token::Token& BaseParser::previous_token() const {
+    const vyb::token::Token& BaseParser::previous_token() const {
         if (pos_ == 0) {
             throw std::runtime_error("previous_token() called at the beginning of the token stream.");
         }
@@ -280,7 +280,7 @@ namespace vyn {
         // A better approach might be to store the actual last consumed non-comment/newline token.
         // However, current usage in TypeParser implies previous_token() is called right after a match() or consume() that returned a significant token.
         size_t prev_pos = pos_ -1;
-        while(prev_pos > 0 && (tokens_[prev_pos].type == vyn::TokenType::COMMENT || tokens_[prev_pos].type == vyn::TokenType::NEWLINE)) {
+        while(prev_pos > 0 && (tokens_[prev_pos].type == vyb::TokenType::COMMENT || tokens_[prev_pos].type == vyb::TokenType::NEWLINE)) {
             prev_pos--;
         }
         return tokens_[prev_pos];
@@ -302,10 +302,10 @@ namespace vyn {
         // However, if there were skipped comments/newlines, this is not robust.
         // A better `put_back_token` would require knowing how many tokens were consumed by the operation we are undoing.
         // For now, let's try a simple decrement, but this is a known weak point.
-        
+
         // Find the last non-comment/newline token before current pos_
         size_t target_pos = pos_ -1;
-        while(target_pos > 0 && (tokens_[target_pos].type == vyn::TokenType::COMMENT || tokens_[target_pos].type == vyn::TokenType::NEWLINE)) {
+        while(target_pos > 0 && (tokens_[target_pos].type == vyb::TokenType::COMMENT || tokens_[target_pos].type == vyb::TokenType::NEWLINE)) {
             target_pos--;
         }
         // Now, we need to ensure that pos_ is set such that the *next* call to peek() or consume() will see tokens_[target_pos].
@@ -313,4 +313,4 @@ namespace vyn {
         pos_ = target_pos;
     }
 
-} // namespace vyn
+} // namespace vyb

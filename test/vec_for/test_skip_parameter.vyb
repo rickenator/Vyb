@@ -1,0 +1,42 @@
+// Test Vec iteration with skip parameter
+
+main()<Int> -> {
+    // Create a vector with 10 elements
+    numbers<Vec<Int>> = Vec::new();
+    numbers.push(1).push(2).push(3).push(4).push(5)
+           .push(6).push(7).push(8).push(9).push(10);
+
+    // Test 1: Skip by 2 (default is 1)
+    sum1<Int> = 0;
+    for (num in numbers, 2) {
+        sum1 = sum1 + num;
+    }
+    // Should iterate: 1, 3, 5, 7, 9 = 25
+
+    // Test 2: Skip by 3
+    sum2<Int> = 0;
+    for (num in numbers, 3) {
+        sum2 = sum2 + num;
+    }
+    // Should iterate: 1, 4, 7, 10 = 22
+
+    // Test 3: Skip by 1 (explicit, same as default)
+    sum3<Int> = 0;
+    for (num in numbers, 1) {
+        sum3 = sum3 + num;
+    }
+    // Should iterate: all elements = 55
+
+    // Verify results
+    if (sum1 != 25) {
+        return 1;  // Test 1 failed
+    }
+    if (sum2 != 22) {
+        return 2;  // Test 2 failed
+    }
+    if (sum3 != 55) {
+        return 3;  // Test 3 failed
+    }
+
+    return 0;  // All tests passed!
+}

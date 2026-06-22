@@ -1,6 +1,6 @@
-# Vyn Programming Language - Changelog
+# VyB Programming Language - Changelog
 
-All notable changes to the Vyn programming language will be documented in this file.
+All notable changes to the VyB programming language will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `mild<T>.grab()` upgrades live weak handles to `our<T>` and returns a null `our<T>` placeholder for released targets until `Option<T>` exists.
 
 ### Changed
-- Runtime `__vyn_runtime_untrapped_error` now reports error type, JSON payload, fail source location, and honors `exitCode<Int>` payload fields.
+- Runtime `__vyb_runtime_untrapped_error` now reports error type, JSON payload, fail source location, and honors `exitCode<Int>` payload fields.
 - JIT `main` dispatch now checks failable-main error tuple returns and routes non-null errors to the untrapped runtime handler.
 - Returning a local `our<T>` or `mild<T>` now transfers the handle to the caller instead of cleaning it up before return.
 - `our<T>` member access now unwraps through the control block payload pointer before loading fields.
@@ -46,7 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CMakeLists.txt version**: Project version updated from `0.3.5` → `0.5.0` to match the language's actual state
 
 ### Status
-Vyn v0.5.0 delivers a complete systems programming language with LLVM backend, native code generation, generics, aspect/bind polymorphism, pattern matching, defer, error propagation (fail/trap), async/await stubs, Vec<T>, String methods, and now C-like enums.
+VyB v0.5.0 delivers a complete systems programming language with LLVM backend, native code generation, generics, aspect/bind polymorphism, pattern matching, defer, error propagation (fail/trap), async/await stubs, Vec<T>, String methods, and now C-like enums.
 
 ---
 
@@ -66,7 +66,7 @@ Vyn v0.5.0 delivers a complete systems programming language with LLVM backend, n
   - Method resolution on generic parameters
   - Function specialization with caching
   - Works seamlessly with aspect bounds: `func<T<Display>>(item: T)`
-  
+
 - **Aspect System Foundation**: User-extensible aspects with bind blocks
   - Define aspects with method signatures
   - Implement aspects for types using `bind Aspect -> Type` syntax
@@ -79,14 +79,14 @@ Vyn v0.5.0 delivers a complete systems programming language with LLVM backend, n
   - Added working aspect method call examples
   - Simplified roadmap emphasizing production-ready status
   - Fixed broken documentation links
-  
+
 - **Code Quality**: Cleaned up temporary and test output files
   - Removed generated LLVM IR files (*.ll)
   - Removed old test results and reports
   - Removed obsolete test scripts
 
 ### Status
-Vyn v0.4.2 is a **fully functional, production-ready systems programming language** with complete core features, generic functions, and aspect system foundation.
+VyB v0.4.2 is a **fully functional, production-ready systems programming language** with complete core features, generic functions, and aspect system foundation.
 
 ### Tagged Release
 **freedom-1.0**: First release emphasizing programmer FREEDOM with generic functions and aspect system
@@ -118,7 +118,7 @@ Vyn v0.4.2 is a **fully functional, production-ready systems programming languag
 - **Symbol Resolution**: Better handling of runtime symbol lookup and registration
 
 ### Technical Details
-- **New LLVM Headers**: 
+- **New LLVM Headers**:
   - `llvm/ExecutionEngine/Orc/LLJIT.h`
   - `llvm/ExecutionEngine/Orc/ThreadSafeModule.h`
   - `llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h`
@@ -127,7 +127,7 @@ Vyn v0.4.2 is a **fully functional, production-ready systems programming languag
 - **Memory Function Support**: Full registration of malloc/free/memset with proper mangling
 
 ### Migration Impact
-- **Developer Experience**: No changes to Vyn language syntax or semantics
+- **Developer Experience**: No changes to VyB language syntax or semantics
 - **Runtime Stability**: Dramatically improved stability for memory-intensive operations
 - **Vec System**: Full functionality restored with automatic cleanup working perfectly
 - **Performance**: Better JIT compilation performance with modern LLVM infrastructure
@@ -140,7 +140,7 @@ Vyn v0.4.2 is a **fully functional, production-ready systems programming languag
 
 ### Files Modified
 - `src/main.cpp` - Complete MCJIT to ORC JIT conversion with symbol registration
-- `include/vyn/vre/llvm/codegen.hpp` - Added ThreadSafeModule support methods
+- `include/vyb/vre/llvm/codegen.hpp` - Added ThreadSafeModule support methods
 - Standard library integration remains unchanged, maintaining API compatibility
 
 ---
@@ -168,12 +168,12 @@ Vyn v0.4.2 is a **fully functional, production-ready systems programming languag
 - **Type-aware Code Generation**: Improved LLVM IR generation for mixed-type operations
 
 ### Technical Details
-- **New Intrinsic Functions**: 
-  - `__vyn_toString_int()`, `__vyn_toString_int8()`, `__vyn_toString_int32()`, `__vyn_toString_float()`, `__vyn_toString_bool()`, `__vyn_toString_string()`
-  - Extended support: `__vyn_toString_int16()`, `__vyn_toString_int64()`, `__vyn_toString_uint8-64()`, `__vyn_toString_float32()`, `__vyn_toString_char()`, `__vyn_toString_rune()`, `__vyn_toString_byte()`
+- **New Intrinsic Functions**:
+  - `__vyb_toString_int()`, `__vyb_toString_int8()`, `__vyb_toString_int32()`, `__vyb_toString_float()`, `__vyb_toString_bool()`, `__vyb_toString_string()`
+  - Extended support: `__vyb_toString_int16()`, `__vyb_toString_int64()`, `__vyb_toString_uint8-64()`, `__vyb_toString_float32()`, `__vyb_toString_char()`, `__vyb_toString_rune()`, `__vyb_toString_byte()`
 - **New Helper Methods**:
   - `generateToStringCall()` - converts values to strings based on type
-  - `generateMixedStringConcatenation()` - handles mixed-type concatenation  
+  - `generateMixedStringConcatenation()` - handles mixed-type concatenation
   - `resolveTypeAliasToBaseName()` - resolves type aliases to base type names
 - **Enhanced Code Generation**: Modified binary expression handler in `cgen_expr.cpp` to detect string operations and trigger automatic conversion
 
@@ -184,7 +184,7 @@ Vyn v0.4.2 is a **fully functional, production-ready systems programming languag
 
 ### Files Modified
 - `src/vre/intrinsics.cpp` - Added 16 toString functions and enhanced serialization
-- `include/vyn/vre/llvm/codegen.hpp` - Added method declarations for string conversion helpers
+- `include/vyb/vre/llvm/codegen.hpp` - Added method declarations for string conversion helpers
 - `src/vre/llvm/cgen_string.cpp` - Implemented helper methods for type resolution and mixed concatenation
 - `src/vre/llvm/cgen_expr.cpp` - Modified PLUS case in binary expression handler
 - `src/main.cpp` - Added comprehensive toString function declarations and JIT registration
@@ -196,14 +196,14 @@ Vyn v0.4.2 is a **fully functional, production-ready systems programming languag
 ### Added
 - **Comprehensive Auto-Serialization Capabilities**: Added full support for automatic serialization of structured data types when returned from `main()` functions
   - New serialization mode intrinsics: `lit()`, `notype()`, `bare()`, `deserial()`
-  - JSON construction intrinsics: `__vyn_serialize_to_json()`, `__vyn_serialize_struct_with_names()`
+  - JSON construction intrinsics: `__vyb_serialize_to_json()`, `__vyb_serialize_struct_with_names()`
   - Array and object construction functions for manual JSON building
   - Automatic activation for structured return values from `main()`
   - Comprehensive documentation in `doc/Intrinsics.md` Section 7
 
 ### Improved
 - **Enhanced Parser Error Handling**: Improved error messages and handling for common syntax mistakes
-- **Documentation Updates**: 
+- **Documentation Updates**:
   - Updated all version references from 0.3.4 to 0.3.5
   - Enhanced feature descriptions in README.md
   - Comprehensive auto-serialization documentation added to intrinsics guide
@@ -223,38 +223,38 @@ Vyn v0.4.2 is a **fully functional, production-ready systems programming languag
 The following test files validate the v0.3.5 functionality:
 
 #### Auto-Serialization Tests
-- **`test/test_auto_serialize_basic.vyn`**: Basic auto-serialization without intrinsics (multi-value return)
-- **`test/test_lit_intrinsic_simple.vyn`**: Simple `lit()` intrinsic for raw JSON literal output
-- **`test/test_lit_intrinsic_multiple.vyn`**: Multiple `lit()` intrinsics generating JSON array output
-- **`test/test_notype_intrinsic.vyn`**: Error handling test for `notype()` with primitives (should fail)
-- **`test/test_notype_struct.vyn`**: Proper `notype()` usage with structs for metadata suppression
-- **`test/test_lit_primitives.vyn`**: Additional primitive type serialization tests
+- **`test/test_auto_serialize_basic.vyb`**: Basic auto-serialization without intrinsics (multi-value return)
+- **`test/test_lit_intrinsic_simple.vyb`**: Simple `lit()` intrinsic for raw JSON literal output
+- **`test/test_lit_intrinsic_multiple.vyb`**: Multiple `lit()` intrinsics generating JSON array output
+- **`test/test_notype_intrinsic.vyb`**: Error handling test for `notype()` with primitives (should fail)
+- **`test/test_notype_struct.vyb`**: Proper `notype()` usage with structs for metadata suppression
+- **`test/test_lit_primitives.vyb`**: Additional primitive type serialization tests
 
 #### Multi-Value Return & Function Tests
-- **`test/test_multi_value_return.vyn`**: Multi-value function returns with auto-serialization
-- **`test/test_multi_value_parser.vyn`**: Parser validation for multi-value syntax
-- **`test/simple_fn_test.vyn`**: Simple function declaration and execution
-- **`test/direct_return.vyn`**: Direct return value handling
+- **`test/test_multi_value_return.vyb`**: Multi-value function returns with auto-serialization
+- **`test/test_multi_value_parser.vyb`**: Parser validation for multi-value syntax
+- **`test/simple_fn_test.vyb`**: Simple function declaration and execution
+- **`test/direct_return.vyb`**: Direct return value handling
 
 #### Parser Error Handling Tests
-- **`test/test_function_syntax_error_handling.vyn`**: Enhanced error messages for common function syntax mistakes
-- **`test/units/parser/test*.vyn`**: Comprehensive parser validation suite (58 test files)
-- **`test/units/extracted/test*.vyn`**: Extracted test cases for edge cases (100+ test files)
+- **`test/test_function_syntax_error_handling.vyb`**: Enhanced error messages for common function syntax mistakes
+- **`test/units/parser/test*.vyb`**: Comprehensive parser validation suite (58 test files)
+- **`test/units/extracted/test*.vyb`**: Extracted test cases for edge cases (100+ test files)
 
 #### Struct & Type System Tests
-- **`test/test_struct_syntax.vyn`**: Advanced struct declarations with auto-serialization
-- **`test/test_struct_syntax_simplified.vyn`**: Simplified struct syntax validation
-- **`test/test_type_alias.vyn`**: Type alias functionality
-- **`test/test_type_alias_simple.vyn`**: Simple type alias cases
+- **`test/test_struct_syntax.vyb`**: Advanced struct declarations with auto-serialization
+- **`test/test_struct_syntax_simplified.vyb`**: Simplified struct syntax validation
+- **`test/test_type_alias.vyb`**: Type alias functionality
+- **`test/test_type_alias_simple.vyb`**: Simple type alias cases
 
 #### Integration & Semantic Tests
-- **`test/test_semantic_integration.vyn`**: Full semantic analysis integration
-- **`test/debug_test.vyn`**: Debug output and analysis validation
-- **`test/println_test.vyn`**: Basic output functionality
+- **`test/test_semantic_integration.vyb`**: Full semantic analysis integration
+- **`test/debug_test.vyb`**: Debug output and analysis validation
+- **`test/println_test.vyb`**: Basic output functionality
 
 #### Relaxed Syntax Tests
-- **`test/test_relaxed*.vyn`**: Relaxed syntax parsing for improved developer experience
-- **`test/units/test_relaxed*.vyn`**: Additional relaxed syntax validation
+- **`test/test_relaxed*.vyb`**: Relaxed syntax parsing for improved developer experience
+- **`test/units/test_relaxed*.vyb`**: Additional relaxed syntax validation
 
 **Test Statistics:**
 - **Core Feature Tests**: 15+ dedicated auto-serialization and multi-value tests

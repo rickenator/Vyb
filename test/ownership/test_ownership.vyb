@@ -1,0 +1,23 @@
+// Test ownership and memory management
+test_basic_ownership()<Void> -> {
+    // Test MY ownership - should auto-cleanup when scope ends
+    v1<Vec<Int32>> = Vec::new(5);
+    println("Created Vec with my ownership");
+
+    {
+        // Inner scope test
+        v2<Vec<Float32>> = Vec::new(3);
+        println("Created inner scope Vec");
+    } // v2 should be cleaned up here
+
+    println("Inner scope exited, v2 should be cleaned up");
+} // v1 should be cleaned up here
+
+main()<Void> -> {
+    println("Testing ownership and memory management");
+
+    test_basic_ownership();
+    println("Basic ownership test completed");
+
+    println("All ownership tests completed");
+}

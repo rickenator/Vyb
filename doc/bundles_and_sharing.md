@@ -1,11 +1,11 @@
-# Bundles & Sharing in Vyn
+# Bundles & Sharing in VyB
 
-**Status:** Approved for roadmap, planned for future implementation  
+**Status:** Approved for roadmap, planned for future implementation
 **Last Updated:** May 21, 2025
 
 ## 1. Overview
 
-Vyn's visibility model uses **bundles** to group modules (similar to Java packages) and **share** directives to export individual symbols:
+VyB's visibility model uses **bundles** to group modules (similar to Java packages) and **share** directives to export individual symbols:
 
 - **`bundle(...)`** declares the module's package membership
 - **`share(...)`** on a declaration exports it to specific bundles (or all)
@@ -18,8 +18,8 @@ This system provides fine-grained control over symbol visibility while keeping t
 
 At the top of a file, use `bundle` to state which bundles (projects/subsystems) this module belongs to:
 
-```vyn
-// src/sort/Core.vyn
+```vyb
+// src/sort/Core.vyb
 bundle(sort.Core, sort.Common)
 ```
 
@@ -30,7 +30,7 @@ bundle(sort.Core, sort.Common)
 
 Prefix any `fn`/`struct`/`class`/`var` with `share` to export it:
 
-```vyn
+```vyb
 // Exported everywhere
 share(all) fn global_util() { ... }
 
@@ -47,9 +47,9 @@ fn internal() { ... }
 
 ## 4. Imports & Smuggle
 
-```vyn
+```vyb
 // In a file with bundle(sort.UI):
-import sort.Core      // OK if sort.Core.vyn did share(sort.UI) or share(all)
+import sort.Core      // OK if sort.Core.vyb did share(sort.UI) or share(all)
 import sort.Database  // ERROR if no overlapping bundle
 smuggle sort.Database // OK - always allowed
 ```
@@ -77,8 +77,8 @@ ModulePath      ::= identifier { "::" identifier }
 
 ### 6.1 Core Module
 
-```vyn
-// src/sort/Core.vyn
+```vyb
+// src/sort/Core.vyb
 bundle(sort, sort.Core, sort.Common)
 
 share(sort.Core)
@@ -91,8 +91,8 @@ fn partition(nums: my<[Int]>, pivot: Int) -> (my<[Int]>, my<[Int]>) {
 
 ### 6.2 UI Module
 
-```vyn
-// src/sort/UI.vyn
+```vyb
+// src/sort/UI.vyb
 bundle(sort, sort.UI, sort.Common)
 
 import sort.Core      // OK: sort.Core shared with `sort`
@@ -107,16 +107,16 @@ fn<String> pretty_sort(var<my<[Int]>> nums) -> {
 
 ### 6.3 External Library
 
-```vyn
-// src/net/http.vyn
+```vyb
+// src/net/http.vyb
 bundle(net.HTTP)
 
 share(all)
 fn request(url: String) -> Response { ... }
 ```
 
-```vyn
-// src/app/Main.vyn
+```vyb
+// src/app/Main.vyb
 bundle(app.Main)
 
 import net.http      // OK: net.http shared with `all`
@@ -124,8 +124,8 @@ import net.http      // OK: net.http shared with `all`
 
 ### 6.4 Math Library Example
 
-```vyn
-// File: src/math/Arithmetic.vyn
+```vyb
+// File: src/math/Arithmetic.vyb
 bundle(math)               // this module is in bundle "math"
 
 // Exported only to modules that also declare bundle(math)
@@ -144,11 +144,11 @@ fn validate(a: Int, b: Int) { ... }
 
 Consuming the library:
 
-```vyn
-// File: src/app/Main.vyn
+```vyb
+// File: src/app/Main.vyb
 bundle(app.Main)           // your app's bundle
 
-import math.Arithmetic     // OK: Arithmetic.vyn shared with bundle(math) or all
+import math.Arithmetic     // OK: Arithmetic.vyb shared with bundle(math) or all
 
 fn main() -> Int {
   println("Lib version: {}", version())   // public
@@ -160,7 +160,7 @@ fn main() -> Int {
 Notes:
 - `share(math)` on `add` means only modules that declare `bundle(math)` can import it
 - `share(all)` on `version` makes it universally available without needing `bundle(math)`
-- Anything without `share` remains private to `Arithmetic.vyn`
+- Anything without `share` remains private to `Arithmetic.vyb`
 
 ## 7. Benefits
 

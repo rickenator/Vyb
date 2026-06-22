@@ -1,44 +1,44 @@
-# Reference Syntax Unification for Vyn v0.4.0
+# Reference Syntax Unification for VyB v0.4.0
 
 ## Problem Statement
 
-Currently, Vyn has **three different syntaxes** for ownership and borrowing operations, causing confusion and inconsistency:
+Currently, VyB has **three different syntaxes** for ownership and borrowing operations, causing confusion and inconsistency:
 
 ### Current Inconsistent Syntaxes:
 
-1. **Function-style constructors** (examples/main.vyn, examples/binary_tree.vyn):
-   ```vyn
+1. **Function-style constructors** (examples/main.vyb, examples/binary_tree.vyb):
+   ```vyb
    my(Expression)     // Used in examples
-   our(Expression)    
+   our(Expression)
    their(Expression)
    ```
 
 2. **make_* functions** (README.md, doc/RUNTIME.md):
-   ```vyn
+   ```vyb
    my("data")    // Documented in README/docs
    our("data")
-   view "data"  
+   view "data"
    ```
 
 3. **Legacy prefix keyword-style** (deprecated; migrate to call syntax):
-   ```vyn
+   ```vyb
    view(expr)         // Creates their<T const>
    borrow(expr)       // Creates their<T>
    ```
 
 ## Unified Canonical Syntax
 
-This document establishes the **single, canonical syntax** for all ownership and borrowing operations in Vyn v0.4.0:
+This document establishes the **single, canonical syntax** for all ownership and borrowing operations in VyB v0.4.0:
 
 ### ✅ **Canonical Ownership Creation Syntax**
 
-```vyn
+```vyb
 // OWNERSHIP TYPES - These are type annotations
 name<my<Type>>      = ...    // Unique ownership type
-name<our<Type>>     = ...    // Shared ownership type  
+name<our<Type>>     = ...    // Shared ownership type
 name<their<Type>>   = ...    // Borrowed reference type
 
-// OWNERSHIP CREATION - These are value constructors  
+// OWNERSHIP CREATION - These are value constructors
 my(expression)              // Create unique ownership
 our(expression)             // Create shared ownership (reference counted)
 
@@ -51,17 +51,17 @@ view(expression)            // Create immutable borrow -> their<T const>
 
 ### ✅ **Complete Example with Canonical Syntax**
 
-```vyn
+```vyb
 // Type declarations use ownership types
 process_data(input<my<String>>)<their<String const>> -> {
     // Create owned values with constructors
     owned_copy<my<String>> = my(input.clone());
     shared_ref<our<String>> = our(input.clone());
-    
+
     // Create borrowed references with operators
     immutable_view<their<String const>> = view(owned_copy);
     mutable_borrow<their<String>> = borrow(owned_copy);
-    
+
     return view(owned_copy);  // Return immutable view
 }
 
@@ -86,7 +86,7 @@ main()<Void> -> {
 ## Migration Guide
 
 ### **For Code:**
-```vyn
+```vyb
 // OLD (inconsistent):
 data<my<String>> = my("text");      // ❌ Remove
 shared<our<String>> = our("text");  // ❌ Remove
@@ -104,9 +104,9 @@ All documentation must use the canonical syntax consistently.
 The parser recognizes these constructs with the following precedence:
 
 1. **Type Context**: `my<T>`, `our<T>`, `their<T>` → Ownership type wrappers
-2. **Expression Context**: 
+2. **Expression Context**:
    - `my(expr)` → Ownership constructor (function call)
-   - `our(expr)` → Ownership constructor (function call)  
+   - `our(expr)` → Ownership constructor (function call)
    - `borrow(expr)` → Borrowing function call
    - `view(expr)` → Borrowing function call
 
@@ -128,4 +128,4 @@ The parser recognizes these constructs with the following precedence:
 
 ---
 
-**This document serves as the authoritative reference for all ownership and borrowing syntax in Vyn v0.4.0.**
+**This document serves as the authoritative reference for all ownership and borrowing syntax in VyB v0.4.0.**

@@ -12,18 +12,18 @@ Errors propagate up until caught by a trap handler or reach the top of the stack
 - ✅ Mark function declarations as potentially failable (`canFail`, `needsErrorReturn`)
 - ✅ Track error types that can be raised (`errorTypes` vector)
 - **Verified**: `divide()` with fail marked `canFail=1`, `main()` marked `canFail=0`
-- **Files**: ast.hpp, semantic.cpp, cgen_decl.cpp, test_canfail.vyn
+- **Files**: ast.hpp, semantic.cpp, cgen_decl.cpp, test_canfail.vyb
 
 ### Phase 2: Dual Return Values ✅ COMPLETE
 - Functions that can fail return `{ T, ptr }` instead of `T`
 - First element: actual return value (or dummy if error)
 - Second element: error pointer (NULL = success, non-NULL = error)
-- Transparent to Vyn source code
+- Transparent to VyB source code
 
 ### Phase 3: Fail Statement Codegen ✅ COMPLETE
 - If trap handler in scope: store error, jump to landing pad (current behavior)
 - If no trap handler: pack error into return value, return to caller
-- Construct a runtime `VynError` payload via `__vyn_runtime_create_error`
+- Construct a runtime `VyBError` payload via `__vyb_runtime_create_error`
 - Execute registered `defer` statements before emitting the propagating return
 
 ### Phase 4: Call Site Instrumentation ✅ COMPLETE
@@ -36,7 +36,7 @@ Errors propagate up until caught by a trap handler or reach the top of the stack
 
 ### Phase 5: Top-Level Handling ✅ COMPLETE
 - Functions at top of call stack (main, no caller)
-- If error propagates out: call __vyn_runtime_untrapped_error()
+- If error propagates out: call __vyb_runtime_untrapped_error()
 - Clean termination with error display
 
 ## Data Structures
@@ -59,9 +59,9 @@ define i64 @safe_func()
 define { i64, ptr } @failable_func()
 ```
 
-### Runtime `VynError` Layout (codegen-emitted)
+### Runtime `VyBError` Layout (codegen-emitted)
 ```c
-struct VynError {
+struct VyBError {
     uint64_t type_hash;     // hash(typeof(error))
     const char* type_name;  // concrete error type name
     void* payload;          // copied bytes of failed value

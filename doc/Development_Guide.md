@@ -1,6 +1,6 @@
-# Vyn Development Guide v0.4.0
+# VyB Development Guide v0.4.0
 
-A comprehensive guide for developing with and contributing to the Vyn programming language, covering the complete development ecosystem from async programming to test harness usage.
+A comprehensive guide for developing with and contributing to the VyB programming language, covering the complete development ecosystem from async programming to test harness usage.
 
 ## Table of Contents
 
@@ -27,32 +27,32 @@ A comprehensive guide for developing with and contributing to the Vyn programmin
 
 ```bash
 # Clone the repository
-git clone https://github.com/rickenator/Vyn.git
-cd Vyn
+git clone https://github.com/rickenator/VyB.git
+cd VyB
 
 # Build the compiler
 mkdir -p build && cd build
 cmake .. && make clean && make -j
 
 # Verify installation
-./vyn --version
-echo 'main()<Int> -> return 42' > test.vyn
-./vyn test.vyn
+./vyb --version
+echo 'main()<Int> -> return 42' > test.vyb
+./vyb test.vyb
 echo $?  # Should output 42
 ```
 
 ### Project Structure
 
 ```
-Vyn/
+VyB/
 ├── src/                 # C++ source code
 │   ├── main.cpp         # Entry point with LLVM JIT
 │   ├── lexer.cpp        # Tokenization
-│   ├── parser.cpp       # Syntax analysis  
+│   ├── parser.cpp       # Syntax analysis
 │   ├── ast.cpp          # Abstract syntax tree
 │   └── vre/llvm/        # LLVM codegen and debug
-├── include/vyn/         # Header files
-├── test/                # 391+ Vyn test files
+├── include/vyb/         # Header files
+├── test/                # 391+ VyB test files
 ├── doc/                 # Comprehensive documentation
 ├── examples/            # Example programs
 ├── test_harness.py      # Modern parallel test runner
@@ -65,7 +65,7 @@ Vyn/
 ### Core Language (100% Complete)
 
 #### Variables and Types
-```vyn
+```vyb
 // Type inference
 x = 42          // Int
 name = "Alice"  // String
@@ -78,11 +78,11 @@ PI<Float> = 3.14159
 ```
 
 #### Functions with Dual Parameter Syntax
-```vyn
+```vyb
 // Standard syntax
 add_standard(a<Int>, b<Int>)<Int> -> a + b
 
-// Shorthand syntax  
+// Shorthand syntax
 add_shorthand(Int a, Int b)<Int> -> a + b
 
 // Mixed syntax
@@ -90,7 +90,7 @@ mixed_params(x<Int>, Int y, const Int z)<Int> -> x + y + z
 ```
 
 #### Advanced Collections
-```vyn
+```vyb
 // Dynamic vectors
 numbers<Vec<Int>> = Vec::new()
 numbers.push(10)
@@ -104,25 +104,25 @@ element<Int> = fixed[2]  // Array indexing
 ```
 
 #### Pattern Matching
-```vyn
+```vyb
 describe_number(x<Int>)<String> -> {
     match (x) {
         0 -> "zero",
         1 -> "one",
-        42 -> "the answer", 
+        42 -> "the answer",
         ? -> "some number"
     }
 }
 ```
 
 #### Control Flow
-```vyn
+```vyb
 // Conditionals
 check_sign(x<Int>)<String> -> {
     if (x > 0) {
         return "positive"
     } else if (x < 0) {
-        return "negative"  
+        return "negative"
     } else {
         return "zero"
     }
@@ -146,10 +146,10 @@ factorial(n<Int>)<Int> -> {
 
 ### Complete Async/Await System
 
-Vyn v0.4.0 includes a fully implemented async programming model with comprehensive debugging support.
+VyB v0.4.0 includes a fully implemented async programming model with comprehensive debugging support.
 
 #### Basic Async Functions
-```vyn
+```vyb
 // Simple async function
 async fetch_data()<Future<Int>> -> {
     result<Int> = 10
@@ -159,19 +159,19 @@ async fetch_data()<Future<Int>> -> {
 ```
 
 #### Complex Async Operations
-```vyn
+```vyb
 // Multiple await expressions with state machine debugging
 async process_data()<Future<Int>> -> {
     data1<Int> = await fetch_data()    // Suspension point 1
     data2<Int> = await fetch_data()    // Suspension point 2
-    
+
     combined<Int> = data1 + data2
     return combined
 }
 ```
 
 #### Integration with Main
-```vyn
+```vyb
 main()<Int> -> {
     println("=== Async Demo ===")
     result<Future<Int>> = process_data()
@@ -182,7 +182,7 @@ main()<Int> -> {
 ### Async Debug Features
 
 - **Suspension Point Tracking**: Each await creates a tracked suspension point
-- **State Transition Debugging**: Monitor async state machine progression  
+- **State Transition Debugging**: Monitor async state machine progression
 - **Continuation Debugging**: Debug async resume operations
 - **Variable Scope Tracking**: Track variable lifetime across suspensions
 
@@ -198,7 +198,7 @@ DEBUG: Resuming from suspension point at line 12 column 18
 
 ### LLVM Debug Integration
 
-Vyn provides comprehensive debug information through LLVM's debug infrastructure:
+VyB provides comprehensive debug information through LLVM's debug infrastructure:
 
 #### Debug Information Features
 - **DIBuilder Integration**: Complete LLVM debug metadata generation
@@ -208,12 +208,12 @@ Vyn provides comprehensive debug information through LLVM's debug infrastructure
 - **Async State Debugging**: Specialized async function debugging
 
 #### Debug Variable Information
-```vyn
+```vyb
 // Debug information is automatically generated for all variables
 async test_debug()<Future<Int>> -> {
     local_var<Int> = 42        // Debug info: DILocalVariable created
     param_value<String> = "test"  // Tracked in debug metadata
-    
+
     result<Int> = await some_async_op()  // Suspension point debugging
     return result
 }
@@ -222,11 +222,11 @@ async test_debug()<Future<Int>> -> {
 #### Debugging Commands
 ```bash
 # Compile with debug information
-build/vyn --emit-llvm --debug-info test.vyn
+build/vyb --emit-llvm --debug-info test.vyb
 
 # The debug output shows comprehensive information:
 # - Function debug info creation
-# - Variable debug declarations  
+# - Variable debug declarations
 # - Async state machine debugging
 # - Suspension point tracking
 ```
@@ -235,7 +235,7 @@ build/vyn --emit-llvm --debug-info test.vyn
 
 ### Modern Parallel Test Runner
 
-Vyn includes a sophisticated test harness managing 391+ test files:
+VyB includes a sophisticated test harness managing 391+ test files:
 
 #### Basic Usage
 ```bash
@@ -258,7 +258,7 @@ Vyn includes a sophisticated test harness managing 391+ test files:
 ./test_harness.py --priority high --exclude-slow
 
 # Pattern matching
-./test_harness.py --pattern "*async*.vyn"
+./test_harness.py --pattern "*async*.vyb"
 ```
 
 #### Test Analysis and Triage
@@ -273,7 +273,7 @@ Vyn includes a sophisticated test harness managing 391+ test files:
 ### Test Writing Guidelines
 
 #### Test File Structure
-```vyn
+```vyb
 // @test: Descriptive Test Name
 // @description: Detailed explanation of test purpose
 // @category: async, debug, parser, semantic, runtime
@@ -332,14 +332,14 @@ git add .
 git commit -m "Implement async state machine debugging
 
 - Add comprehensive suspension point tracking
-- Integrate with LLVM debug infrastructure  
+- Integrate with LLVM debug infrastructure
 - Test with working debug output examples"
 ```
 
 #### 3. Feature Testing
 ```bash
 # Test new async functionality
-build/vyn test/debug_async_test.vyn
+build/vyb test/debug_async_test.vyb
 
 # Run related test suite
 ./test_harness.py --category async --verbose
@@ -381,8 +381,8 @@ vim doc/Async_Programming_Debug_System.md
 #### 1. Setting Up Development Environment
 ```bash
 # Fork and clone
-git clone https://github.com/your-username/Vyn.git
-cd Vyn
+git clone https://github.com/your-username/VyB.git
+cd VyB
 
 # Create feature branch
 git checkout -b feature/new-async-debugging
@@ -398,7 +398,7 @@ cd ..
 ```bash
 # Implement new feature
 # - Add C++ implementation in src/
-# - Add header declarations in include/vyn/
+# - Add header declarations in include/vyb/
 # - Create tests in test/
 
 # Test your changes
@@ -426,7 +426,7 @@ git push origin feature/new-async-debugging
 ### Contribution Guidelines
 
 #### Code Quality Standards
-- **Consistent naming**: Follow existing C++ and Vyn naming conventions
+- **Consistent naming**: Follow existing C++ and VyB naming conventions
 - **Comprehensive testing**: Add tests for all new functionality
 - **Documentation**: Update relevant documentation files
 - **Debug support**: Ensure new features work with debug infrastructure
@@ -452,7 +452,7 @@ git push origin feature/new-async-debugging
 - **Documentation**: Expand examples and tutorials
 
 #### Advanced Projects
-- **Self-hosting**: Port compiler from C++ to Vyn
+- **Self-hosting**: Port compiler from C++ to VyB
 - **Garbage collection**: Implement optional GC system
 - **JIT optimization**: Enhance LLVM ORC JIT performance
 - **Parallel compilation**: Add multi-threaded compilation
@@ -463,7 +463,7 @@ git push origin feature/new-async-debugging
 
 #### Understanding the Backend
 ```cpp
-// Key LLVM components in Vyn
+// Key LLVM components in VyB
 class VRECodegen {
     llvm::LLVMContext context;           // LLVM context
     llvm::Module* module;                // LLVM module
@@ -527,24 +527,24 @@ llvm::DebugLoc createSuspensionPointDebugInfo(unsigned line, unsigned column, in
 #### Compiler Debugging
 ```bash
 # Enable verbose debug output
-build/vyn --emit-llvm --debug-info --verbose test.vyn
+build/vyb --emit-llvm --debug-info --verbose test.vyb
 
 # Analyze generated LLVM IR
-build/vyn --emit-llvm test.vyn > output.ll
+build/vyb --emit-llvm test.vyb > output.ll
 cat output.ll | grep -A 10 -B 10 "debug"
 ```
 
 #### Runtime Debugging
 ```bash
 # Use external debugging tools
-gdb build/vyn
-valgrind --tool=memcheck build/vyn test.vyn
+gdb build/vyb
+valgrind --tool=memcheck build/vyb test.vyb
 ```
 
 #### Test Debugging
 ```bash
 # Debug specific test failures
-./test_harness.py --pattern "failing_test.vyn" --verbose
+./test_harness.py --pattern "failing_test.vyb" --verbose
 
 # Analyze test patterns
 ./triage_tool.py results.json --priority critical
@@ -552,8 +552,8 @@ valgrind --tool=memcheck build/vyn test.vyn
 
 ## Conclusion
 
-Vyn v0.4.0 represents a complete, production-ready systems programming language with advanced async programming capabilities and comprehensive debugging support. The modern test harness ensures code quality with 391+ tests and intelligent failure analysis.
+VyB v0.4.0 represents a complete, production-ready systems programming language with advanced async programming capabilities and comprehensive debugging support. The modern test harness ensures code quality with 391+ tests and intelligent failure analysis.
 
-The combination of clean syntax, powerful async/await support, comprehensive debug infrastructure, and modern development tools makes Vyn an excellent choice for systems programming where debugging, maintainability, and performance are critical.
+The combination of clean syntax, powerful async/await support, comprehensive debug infrastructure, and modern development tools makes VyB an excellent choice for systems programming where debugging, maintainability, and performance are critical.
 
-Whether you're using Vyn for development projects or contributing to the language itself, this guide provides the foundation for effective work with the Vyn ecosystem.
+Whether you're using VyB for development projects or contributing to the language itself, this guide provides the foundation for effective work with the VyB ecosystem.

@@ -1,6 +1,6 @@
-# Canonical Reference Syntax for Vyn v0.4.0
+# Canonical Reference Syntax for VyB v0.4.0
 
-This document defines the **authoritative syntax** for all ownership and reference operations in Vyn. This syntax is **mandatory** for all code, documentation, and examples.
+This document defines the **authoritative syntax** for all ownership and reference operations in VyB. This syntax is **mandatory** for all code, documentation, and examples.
 
 ## 🎯 **Design Principles**
 
@@ -15,13 +15,13 @@ This document defines the **authoritative syntax** for all ownership and referen
 
 Used in variable declarations, function parameters, and return types:
 
-```vyn
+```vyb
 // Variable declarations
 name<my<Type>>     = ...    // Unique ownership type
 name<our<Type>>    = ...    // Shared ownership type (reference counted)
 name<their<Type>>  = ...    // Borrowed reference type
 
-// Function signatures  
+// Function signatures
 process(input<my<String>>, config<our<Settings>>)<my<Result>> -> { ... }
 
 // Complex nested types
@@ -33,7 +33,7 @@ futures<Vec<Future<my<Response>>>>     = Vec.new();
 
 Used to create owned values from expressions:
 
-```vyn
+```vyb
 // Basic construction
 unique_data<my<String>>   = my("hello");
 shared_config<our<Config>> = our(Config::default());
@@ -54,7 +54,7 @@ tree<my<TreeNode>>    = my(TreeNode {
 
 Borrowing uses function-call syntax `view(expr)` and `borrow(expr)`:
 
-```vyn
+```vyb
 readonly<their<String const>> = view(data);
 length<Int>                   = view(data).len();
 
@@ -71,14 +71,14 @@ borrow(buffer).write(data);
 
 ### **4. Complete Real-World Example**
 
-```vyn
+```vyb
 // Connection pool with canonical syntax
 struct ConnectionPool {
     connections<Vec<my<Connection>>>,
     shared_config<our<PoolConfig>>
 }
 
-// Methods on structs are standalone functions in Vyn
+// Methods on structs are standalone functions in VyB
 // Constructor
 ConnectionPool_new(config<our<PoolConfig>>)<my<ConnectionPool>> -> {
     return my(ConnectionPool {
@@ -113,11 +113,11 @@ async main()<Void> -> {
 
     // Create connection pool
     pool<my<ConnectionPool>> = ConnectionPool_new(config)
-    
+
     // Execute queries with borrowing
     result1<my<Result>> = await view(pool).execute_query("SELECT * FROM users");
     result2<my<Result>> = await view(pool).execute_query("SELECT * FROM orders");
-    
+
     # Print results using immutable views
     view(result1).print();
     view(result2).print();
@@ -127,15 +127,15 @@ async main()<Void> -> {
 ## ⚖️ **Syntax Comparison**
 
 ### **✅ Canonical (Use This)**
-```vyn
+```vyb
 data<my<String>>    = my("owned");        // ✅ Ownership construction
-shared<our<Config>> = our(Config::new()); // ✅ Shared construction  
+shared<our<Config>> = our(Config::new()); // ✅ Shared construction
 view<their<String>> = view(data);          // ✅ Immutable borrowing
 mutable<their<String>> = borrow(data);     // ✅ Mutable borrowing
 ```
 
 ### **❌ Legacy (Don't Use)**
-```vyn
+```vyb
 data<my<String>>    = make_my("owned");   // ❌ Deprecated function
 shared<our<Config>> = make_our(Config::new()); // ❌ Deprecated function
 view<their<String>> = view(data);   // ❌ Deprecated if written as `view data`
@@ -149,7 +149,7 @@ The canonical syntax integrates with the parser as follows:
 - `my<Type>`, `our<Type>`, `their<Type>` → Parsed as ownership type wrappers
 - Nested generics: `Vec<my<Future<String>>>` → Properly parsed with arbitrary nesting depth
 
-### **Expression Context Recognition**  
+### **Expression Context Recognition**
 - `my(expr)`, `our(expr)` → Parsed as function calls returning owned values
 - `view(expr)`, `borrow(expr)` → Parsed as function-like calls returning borrowed references
 
@@ -162,17 +162,17 @@ The canonical syntax integrates with the parser as follows:
 
 All tests must use canonical syntax:
 
-```vyn
+```vyb
 // Test file example
 test_canonical_ownership()<Void> -> {
     // Use canonical construction
     data<my<String>> = my("test data");
     shared<our<Config>> = our(Config::test());
-    
+
     // Use canonical borrowing
     length<Int> = view(data).len();
     borrow(data).clear();
-    
+
     println("Test completed with canonical syntax");
 }
 ```
@@ -189,11 +189,11 @@ All documentation must use canonical syntax:
 ## 🎯 **Benefits Summary**
 
 1. **Cognitive Load**: Single syntax to learn and remember
-2. **Code Consistency**: All Vyn code looks the same across projects
+2. **Code Consistency**: All VyB code looks the same across projects
 3. **Tool Support**: Simplified parsing and IDE integration
 4. **Learning Curve**: Clear, unambiguous syntax for newcomers
 5. **Maintenance**: No legacy syntax variants to support
 
 ---
 
-**This document is the authoritative reference for Vyn ownership and borrowing syntax. All code, documentation, and examples must follow these conventions.**
+**This document is the authoritative reference for VyB ownership and borrowing syntax. All code, documentation, and examples must follow these conventions.**

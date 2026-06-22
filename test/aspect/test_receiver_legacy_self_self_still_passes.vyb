@@ -1,0 +1,24 @@
+// @test: legacy self Self receiver still passes
+// @description: Existing self<Self> receiver syntax remains valid
+// @category: aspect, receiver, compatibility
+// @expect: pass
+
+aspect Greet {
+    greet(self<Self>)<Void>
+}
+
+struct Person {
+    name<String>
+}
+
+bind Greet -> Person {
+    greet(self<Self>)<Void> -> {
+        return
+    }
+}
+
+main()<Int> -> {
+    p<Person> = Person { name = "VyB" }
+    p.greet()
+    return 0
+}

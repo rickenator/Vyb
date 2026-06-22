@@ -1,7 +1,7 @@
-#include "vyn/parser/ast.hpp"
+#include "vyb/parser/ast.hpp"
 #include <string> // For std::to_string
 
-namespace vyn {
+namespace vyb {
 namespace ast { // Add ast namespace
 
 // --- LocationExpression ---
@@ -48,4 +48,4 @@ void ListComprehension::accept(Visitor& visitor) {
 }
 
 } // namespace ast
-} // namespace vyn
+} // namespace vyb

@@ -1,0 +1,14 @@
+// filepath: /home/rick/Projects/VyB/test/units/extracted/test45.vyb
+// @test: Semantic: 'addr(loc_var)' is safe (does not require freedom block)
+// @description: Extracted from tests.cpp - Semantic: 'addr(loc_var)' is safe (does not require freedom block)
+// @category: parser
+// @expect: pass
+// @parse-only: true
+// @expect-output: n/a
+// @expect-error: n/a
+// @expect-return: n/a
+
+main()<Int> -> {
+    x<Int> = 1;
+    return 0
+}

@@ -1,0 +1,14 @@
+// filepath: /home/rick/Projects/VyB/test/units/extracted/test40.vyb
+// @test: Parser: Basic freedom block
+// @description: Extracted from tests.cpp - Parser: Basic freedom block
+// @category: parser
+// @expect: fail
+// @parse-only: true
+// @expect-output: n/a
+// @expect-error: n/a
+// @expect-return: n/a
+
+    std::string source = R"(
+fn main() -> Int{
+    freedom {
+        x<Int> = 1;

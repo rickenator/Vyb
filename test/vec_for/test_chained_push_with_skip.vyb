@@ -1,0 +1,65 @@
+// Comprehensive test combining chained push and skip parameter
+
+main()<Int> -> {
+    // Test chained push with skip parameter
+    data<Vec<Int>> = Vec::new();
+    data.push(100).push(200).push(300).push(400).push(500)
+        .push(600).push(700).push(800);
+
+    // Test 1: Default iteration (skip = 1, implicit)
+    count1<Int> = 0;
+    for (val in data) {
+        count1 = count1 + 1;
+    }
+    if (count1 != 8) {
+        return 1;  // Should visit all 8 elements
+    }
+
+    // Test 2: Skip by 2 - get even positions (0, 2, 4, 6)
+    sum2<Int> = 0;
+    for (val in data, 2) {
+        sum2 = sum2 + val;
+    }
+    // 100 + 300 + 500 + 700 = 1600
+    if (sum2 != 1600) {
+        return 2;  // Test 2 failed
+    }
+
+    // Test 3: Skip by 4 - get every 4th element
+    sum3<Int> = 0;
+    for (val in data, 4) {
+        sum3 = sum3 + val;
+    }
+    // 100 + 500 = 600
+    if (sum3 != 600) {
+        return 3;  // Test 3 failed
+    }
+
+    // Test 4: Combine skip with break
+    sum4<Int> = 0;
+    for (val in data, 2) {
+        if (val >= 500) {
+            break;
+        }
+        sum4 = sum4 + val;
+    }
+    // 100 + 300 = 400 (stops before 500)
+    if (sum4 != 400) {
+        return 4;  // Test 4 failed
+    }
+
+    // Test 5: Combine skip with continue
+    sum5<Int> = 0;
+    for (val in data, 2) {
+        if (val == 300) {
+            continue;
+        }
+        sum5 = sum5 + val;
+    }
+    // 100 + 500 + 700 = 1300 (skips 300)
+    if (sum5 != 1300) {
+        return 5;  // Test 5 failed
+    }
+
+    return 0;  // All tests passed!
+}

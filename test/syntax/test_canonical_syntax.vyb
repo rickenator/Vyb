@@ -1,0 +1,19 @@
+// @parse-only: true
+// Simple test of canonical syntax
+main()<Int> -> {
+    # Test my() constructor
+    data<my<String>> = my("hello world")
+
+    # Test our() constructor
+    shared<our<String>> = our("shared data")
+
+    # Test view() borrowing
+    readonly<their<String const>> = view(data)
+    plain<String> = "hello world"
+    length<Int> = plain.len()
+
+    println("Data:", data)
+    println("Length:", length)
+
+    return 42
+}

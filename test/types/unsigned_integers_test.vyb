@@ -1,0 +1,47 @@
+// @test: Unsigned integers test
+// @description: Unsigned integers test
+// @category: types
+// @expect: pass
+// @expect-return: 120
+# Test all unsigned integer types: UInt8, UInt16, UInt32, UInt64
+
+test_uint8()<Int> -> {
+    small<UInt8> = 255
+    zero<UInt8> = 0
+    half<UInt8> = 128
+    return 8
+}
+
+test_uint16()<Int> -> {
+    medium<UInt16> = 65535
+    zero<UInt16> = 0
+    half<UInt16> = 32768
+    return 16
+}
+
+test_uint32()<Int> -> {
+    large<UInt32> = 4294967295
+    zero<UInt32> = 0
+    half<UInt32> = 2147483648
+    return 32
+}
+
+test_uint64()<Int> -> {
+    # Use reasonable values that fit in signed int64 for literals
+    huge<UInt64> = 9223372036854775807
+    zero<UInt64> = 0
+    large<UInt64> = 1000000000
+    return 64
+}
+
+main()<Int> -> {
+    result<Int> = 0
+
+    result = result + test_uint8()
+    result = result + test_uint16()
+    result = result + test_uint32()
+    result = result + test_uint64()
+
+    # Should return 8 + 16 + 32 + 64 = 120
+    return result
+}

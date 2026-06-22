@@ -1,10 +1,10 @@
 # Tuple Type Tests
 
-This directory contains tests for Vyn's tuple type system with full variadic support.
+This directory contains tests for VyB's tuple type system with full variadic support.
 
 ## Tuple Syntax
 
-Vyn supports two equivalent syntaxes for tuple types:
+VyB supports two equivalent syntaxes for tuple types:
 
 1. **Inline syntax**: `main()<Int, String, Bool>`
 2. **Generic syntax**: `main()<Tuple<Int, String, Bool>>`
@@ -16,7 +16,7 @@ Both syntaxes produce identical LLVM struct types.
 - **AST**: `TupleTypeNode` for type representation
 - **Expressions**: `SequenceExpression` for tuple literals `(1, 2, 3)`
 - **LLVM**: Anonymous struct types `{ i64, i64, i64 }`
-- **Codegen**: 
+- **Codegen**:
   - `cgen_types.cpp`: Handles `Tuple<T,U,...>` generic type resolution
   - `cgen_expr.cpp`: Builds tuple structs from sequence expressions
   - `cgen_stmt.cpp`: Wraps single values when returning to tuple types
@@ -24,17 +24,17 @@ Both syntaxes produce identical LLVM struct types.
 ## Test Coverage
 
 ### Variadic Support (1-7 elements)
-- ✅ `tuple_single.vyn` - 1 element: `Tuple<Int>`
-- ✅ `simple_tuple_return.vyn` - 2 elements: `(Int, Int)`
-- ✅ `three_ints.vyn` - 3 elements: `(Int, Int, Int)`
-- ✅ `tuple_four.vyn` - 4 elements: `Tuple<Int, Int, Int, Int>`
-- ✅ `tuple_five.vyn` - 5 elements: `Tuple<Int, Int, Int, Int, Int>`
-- ✅ `tuple_seven.vyn` - 7 elements: `Tuple<Int, Int, Bool, String, Int, Bool, Int>`
+- ✅ `tuple_single.vyb` - 1 element: `Tuple<Int>`
+- ✅ `simple_tuple_return.vyb` - 2 elements: `(Int, Int)`
+- ✅ `three_ints.vyb` - 3 elements: `(Int, Int, Int)`
+- ✅ `tuple_four.vyb` - 4 elements: `Tuple<Int, Int, Int, Int>`
+- ✅ `tuple_five.vyb` - 5 elements: `Tuple<Int, Int, Int, Int, Int>`
+- ✅ `tuple_seven.vyb` - 7 elements: `Tuple<Int, Int, Bool, String, Int, Bool, Int>`
 
 ### Type Mixing
-- ✅ `tuple_type_syntax.vyn` - Generic syntax: `Tuple<Int, Int>`
-- ✅ `tuple_with_string.vyn` - Complex types: `Tuple<String, Int, Bool>`
-- ✅ `tuple_mixed_types.vyn` - Mixed primitives and objects
+- ✅ `tuple_type_syntax.vyb` - Generic syntax: `Tuple<Int, Int>`
+- ✅ `tuple_with_string.vyb` - Complex types: `Tuple<String, Int, Bool>`
+- ✅ `tuple_mixed_types.vyb` - Mixed primitives and objects
 
 ## Edge Cases Handled
 
@@ -72,8 +72,8 @@ Both syntaxes produce identical LLVM struct types.
 All tests pass and compile without errors:
 
 ```bash
-for f in test/tuples/tuple_*.vyn; do 
-    build/vyn "$f" 2>&1 | grep -E "(Error|Successfully)" 
+for f in test/tuples/tuple_*.vyb; do
+    build/vyb "$f" 2>&1 | grep -E "(Error|Successfully)"
 done
 ```
 

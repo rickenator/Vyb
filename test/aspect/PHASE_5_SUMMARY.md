@@ -77,9 +77,9 @@ monomorphizedStructs[mangledName] = specializedType;
 ## Test Results
 
 ### ✅ Working: Template Storage
-**File**: `test/trait/test_mono_basic.vyn`
+**File**: `test/trait/test_mono_basic.vyb`
 
-```vyn
+```vyb
 struct Box<T> {
     value<T>
 }
@@ -106,10 +106,10 @@ DEBUG: Created specialized struct Box_Int with 1 fields
 ```
 
 ### ✅ Complete: Object Literal Creation
-**Files**: `test/trait/test_mono_direct.vyn`, `test/trait/test_mono_complete.vyn`
+**Files**: `test/trait/test_mono_direct.vyb`, `test/trait/test_mono_complete.vyb`
 
 **Syntax**:
-```vyn
+```vyb
 box_int<Box<Int>> = Box<Int> { value = 42 }
 box_str<Box<String>> = Box<String> { value = "hello" }
 pair<Pair<Int, String>> = Pair<Int, String> { first = 100, second = "world" }
@@ -121,11 +121,11 @@ pair<Pair<Int, String>> = Pair<Int, String> { first = 100, second = "world" }
 - Creates TypeName with genericArgs vector
 - Supports single and multiple type parameters
 
-**Output** (test_mono_complete.vyn):
+**Output** (test_mono_complete.vyb):
 ```
 DEBUG: Monomorphizing Box with 1 type arguments -> Box_Int
 DEBUG: Created specialized struct Box_Int with 1 fields
-DEBUG: Monomorphizing Box with 1 type arguments -> Box_String  
+DEBUG: Monomorphizing Box with 1 type arguments -> Box_String
 DEBUG: Created specialized struct Box_String with 1 fields
 DEBUG: Monomorphizing Pair with 2 type arguments -> Pair_Int_String
 DEBUG: Created specialized struct Pair_Int_String with 2 fields
@@ -181,7 +181,7 @@ DEBUG: Found cached monomorphized struct: Box_Int  # For second Box<Int>
 
 ## Files Modified
 
-1. **include/vyn/vre/llvm/codegen.hpp** - Added monomorphization data structures
+1. **include/vyb/vre/llvm/codegen.hpp** - Added monomorphization data structures
 2. **src/vre/llvm/cgen_decl.cpp** - Template storage logic
 3. **src/vre/llvm/cgen_types.cpp** - Instantiation detection
 4. **src/vre/llvm/cgen_monomorph.cpp** - NEW: Monomorphization implementation
@@ -193,14 +193,14 @@ DEBUG: Found cached monomorphized struct: Box_Int  # For second Box<Int>
 Now that monomorphization works for types, extend to trait methods:
 
 1. **Generic Trait Declarations**:
-   ```vyn
+   ```vyb
    trait From<T> {
        fn from(value<T>)<Self>
    }
    ```
 
 2. **Generic Method Implementations**:
-   ```vyn
+   ```vyb
    impl<T> From<T> for Box<T> {
        fn from(value<T>)<Box<T>> -> {
            return Box<T> { value = value }
@@ -226,7 +226,7 @@ Now that monomorphization works for types, extend to trait methods:
 
 **What Works**:
 - ✅ Generic struct templates stored correctly
-- ✅ Type instantiation detected  
+- ✅ Type instantiation detected
 - ✅ Type parameter substitution
 - ✅ Specialized LLVM types generated
 - ✅ Caching prevents duplicates
@@ -243,20 +243,20 @@ Now that monomorphization works for types, extend to trait methods:
 
 **Test Results**:
 
-1. **test_mono_direct.vyn** (Basic):
-   ```vyn
+1. **test_mono_direct.vyb** (Basic):
+   ```vyb
    b<Box<Int>> = Box<Int> { value = 42 }
    ```
    Output: ✅ Box_Int specialized struct created
 
-2. **test_mono_complete.vyn** (Comprehensive):
-   ```vyn
+2. **test_mono_complete.vyb** (Comprehensive):
+   ```vyb
    box_int<Box<Int>> = Box<Int> { value = 42 }
    box_str<Box<String>> = Box<String> { value = "hello" }
    pair<Pair<Int, String>> = Pair<Int, String> { first = 100, second = "world" }
    box_int2<Box<Int>> = Box<Int> { value = 84 }  # Uses cache
    ```
-   
+
    Generated LLVM Types:
    ```llvm
    %Box_Int = type { i64 }
@@ -268,7 +268,7 @@ Now that monomorphization works for types, extend to trait methods:
 The monomorphization system is fully functional and production-ready. It successfully:
 1. Stores generic templates without generating LLVM code
 2. Detects when concrete types are used (Box<Int>, Pair<Int, String>)
-3. Generates specialized struct types with substituted types  
+3. Generates specialized struct types with substituted types
 4. Caches to avoid duplicate generation
 5. Enables creation of generic type instances via object literals
 

@@ -1,8 +1,8 @@
 # AST Nodes: Expressions
 
-This document describes the Abstract Syntax Tree (AST) nodes for various expressions in the Vyn programming language, as defined in `include/vyn/parser/ast.hpp`. Expressions are constructs that evaluate to a value.
+This document describes the Abstract Syntax Tree (AST) nodes for various expressions in the VyB programming language, as defined in `include/vyb/parser/ast.hpp`. Expressions are constructs that evaluate to a value.
 
-All expression nodes inherit from `vyn::ast::Expression`.
+All expression nodes inherit from `vyb::ast::Expression`.
 
 ## Common Pointer Aliases
 
@@ -16,15 +16,15 @@ Throughout the AST definitions, the following smart pointer aliases are used for
 
 Represents a unary expression (e.g., `-x`, `!flag`).
 
--   **C++ Class**: `vyn::ast::UnaryExpression`
+-   **C++ Class**: `vyb::ast::UnaryExpression`
 -   **`NodeType`**: `UNARY_EXPRESSION`
 -   **Fields**:
     -   `op` (`std::string`): The unary operator (e.g., "-", "!").
     -   `operand` (`ExprPtr`): The expression the operator applies to.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 class UnaryExpression : public Expression {
 public:
     std::string op;
@@ -33,14 +33,14 @@ public:
     UnaryExpression(SourceLocation loc, std::string op, ExprPtr operand);
     // ... accept, getType, toString methods ...
 };
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ## 2. `BinaryExpression`
 
 Represents a binary expression (e.g., `a + b`, `x == y`).
 
--   **C++ Class**: `vyn::ast::BinaryExpression`
+-   **C++ Class**: `vyb::ast::BinaryExpression`
 -   **`NodeType`**: `BINARY_EXPRESSION`
 -   **Fields**:
     -   `op` (`std::string`): The binary operator (e.g., "+", "==").
@@ -48,8 +48,8 @@ Represents a binary expression (e.g., `a + b`, `x == y`).
     -   `right` (`ExprPtr`): The right-hand side operand.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 class BinaryExpression : public Expression {
 public:
     std::string op;
@@ -59,22 +59,22 @@ public:
     BinaryExpression(SourceLocation loc, std::string op, ExprPtr left, ExprPtr right);
     // ... accept, getType, toString methods ...
 };
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ## 3. `CallExpression`
 
 Represents a function or method call.
 
--   **C++ Class**: `vyn::ast::CallExpression`
+-   **C++ Class**: `vyb::ast::CallExpression`
 -   **`NodeType`**: `CALL_EXPRESSION`
 -   **Fields**:
     -   `callee` (`ExprPtr`): The expression that evaluates to the function to be called (e.g., an identifier or a member expression).
     -   `arguments` (`std::vector<ExprPtr>`): The list of arguments passed to the function.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 class CallExpression : public Expression {
 public:
     ExprPtr callee;
@@ -83,7 +83,7 @@ public:
     CallExpression(SourceLocation loc, ExprPtr callee, std::vector<ExprPtr> arguments);
     // ... accept, getType, toString methods ...
 };
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 Intrinsics Parsed as CallExpression
@@ -103,7 +103,7 @@ The following serialization intrinsics are parsed as CallExpression nodes:
 - **`lit(value)`**: Emits raw JSON literals without type wrapping. Restricted to primitive values (Int, Float, String, Bool).
 - **`notype(value)`**: Removes `<Type>` suffixes from field names in struct serialization. Only valid for structs.
 - **`bare(value)`**: Emits only raw field values as JSON array, removing all type and field metadata. Only valid for structs.
-- **`deserial(json_string)`**: Deserializes JSON string back to typed Vyn values.
+- **`deserial(json_string)`**: Deserializes JSON string back to typed VyB values.
 
 These intrinsics are primarily used for customizing JSON serialization behavior of `main()` function returns.
 See `doc/Auto_Serialization_Main_Returns.md` for comprehensive documentation.
@@ -112,15 +112,15 @@ See `doc/Auto_Serialization_Main_Returns.md` for comprehensive documentation.
 
 Represents an expression that constructs an instance of a type using constructor-like syntax (e.g., `Point(10, 20)`).
 
--   **C++ Class**: `vyn::ast::ConstructionExpression`
+-   **C++ Class**: `vyb::ast::ConstructionExpression`
 -   **`NodeType`**: `CONSTRUCTION_EXPRESSION`
 -   **Fields**:
     -   `type` (`TypeNodePtr`): The type being constructed.
     -   `arguments` (`std::vector<ExprPtr>`): The arguments passed to the constructor.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 class ConstructionExpression : public Expression {
 public:
     TypeNodePtr type;
@@ -129,14 +129,14 @@ public:
     ConstructionExpression(SourceLocation loc, TypeNodePtr type, std::vector<ExprPtr> arguments);
     // ... accept, getType, toString methods ...
 };
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ## 5. `ArrayInitializationExpression`
 
 Represents the initialization of an array with a specific type and size, potentially with an initializer list (e.g., `[int; 3](1, 2, 3)` or `[int; 10]()`).
 
--   **C++ Class**: `vyn::ast::ArrayInitializationExpression`
+-   **C++ Class**: `vyb::ast::ArrayInitializationExpression`
 -   **`NodeType`**: `ARRAY_INITIALIZATION_EXPRESSION`
 -   **Fields**:
     -   `elementType` (`TypeNodePtr`): The type of the array elements.
@@ -144,8 +144,8 @@ Represents the initialization of an array with a specific type and size, potenti
     -   `initializerList` (`std::optional<std::vector<ExprPtr>>`): Optional list of expressions to initialize array elements.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 class ArrayInitializationExpression : public Expression {
 public:
     TypeNodePtr elementType;
@@ -155,14 +155,14 @@ public:
     ArrayInitializationExpression(SourceLocation loc, TypeNodePtr elementType, ExprPtr size, std::optional<std::vector<ExprPtr>> initializerList);
     // ... accept, getType, toString methods ...
 };
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ## 6. `MemberExpression`
 
 Represents accessing a member of a struct, class, or object (e.g., `object.field`, `ptr->field`, `module::item`).
 
--   **C++ Class**: `vyn::ast::MemberExpression`
+-   **C++ Class**: `vyb::ast::MemberExpression`
 -   **`NodeType`**: `MEMBER_EXPRESSION`
 -   **Fields**:
     -   `object` (`ExprPtr`): The expression whose member is being accessed.
@@ -170,8 +170,8 @@ Represents accessing a member of a struct, class, or object (e.g., `object.field
     -   `isArrow` (`bool`): True if accessed with `->` (pointer dereference), false for `.`.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 class MemberExpression : public Expression {
 public:
     ExprPtr object;
@@ -181,22 +181,22 @@ public:
     MemberExpression(SourceLocation loc, ExprPtr object, IdentifierPtr member, bool isArrow);
     // ... accept, getType, toString methods ...
 };
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ## 7. `AssignmentExpression`
 
 Represents an assignment operation (e.g., `variable = value`).
 
--   **C++ Class**: `vyn::ast::AssignmentExpression`
+-   **C++ Class**: `vyb::ast::AssignmentExpression`
 -   **`NodeType`**: `ASSIGNMENT_EXPRESSION`
 -   **Fields**:
     -   `left` (`ExprPtr`): The left-hand side of the assignment (l-value).
     -   `right` (`ExprPtr`): The right-hand side of the assignment (r-value).
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 class AssignmentExpression : public Expression {
 public:
     ExprPtr left;
@@ -205,14 +205,14 @@ public:
     AssignmentExpression(SourceLocation loc, ExprPtr left, ExprPtr right);
     // ... accept, getType, toString methods ...
 };
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ## 8. `IfExpression`
 
 Represents an if-expression, which evaluates to one of two values based on a condition (e.g., `if (cond) expr1 else expr2`).
 
--   **C++ Class**: `vyn::ast::IfExpression`
+-   **C++ Class**: `vyb::ast::IfExpression`
 -   **`NodeType`**: `IF_EXPRESSION`
 -   **Fields**:
     -   `condition` (`ExprPtr`): The condition to evaluate.
@@ -220,8 +220,8 @@ Represents an if-expression, which evaluates to one of two values based on a con
     -   `elseBranch` (`ExprPtr`): The expression to evaluate if the condition is false (must be present for it to be an expression).
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 class IfExpression : public Expression {
 public:
     ExprPtr condition;
@@ -231,14 +231,14 @@ public:
     IfExpression(SourceLocation loc, ExprPtr condition, ExprPtr thenBranch, ExprPtr elseBranch);
     // ... accept, getType, toString methods ...
 };
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ## 9. `RangeExpression`
 
 Represents a range expression (e.g., `1..10`, `a..=b`).
 
--   **C++ Class**: `vyn::ast::RangeExpression`
+-   **C++ Class**: `vyb::ast::RangeExpression`
 -   **`NodeType`**: `RANGE_EXPRESSION`
 -   **Fields**:
     -   `start` (`ExprPtr`): The starting value of the range.
@@ -246,8 +246,8 @@ Represents a range expression (e.g., `1..10`, `a..=b`).
     -   `isInclusive` (`bool`): Whether the range includes the end value (true for `..=`, false for `..`).
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 class RangeExpression : public Expression {
 public:
     ExprPtr start;
@@ -257,22 +257,22 @@ public:
     RangeExpression(SourceLocation loc, ExprPtr start, ExprPtr end, bool isInclusive);
     // ... accept, getType, toString methods ...
 };
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ## 10. `BorrowExpression`
 
 Represents a borrow expression (e.g., `&x`, `&mut y`).
 
--   **C++ Class**: `vyn::ast::BorrowExpression`
+-   **C++ Class**: `vyb::ast::BorrowExpression`
 -   **`NodeType`**: `BORROW_EXPRESSION`
 -   **Fields**:
     -   `operand` (`ExprPtr`): The expression being borrowed.
     -   `kind` (`BorrowKind`): The kind of borrow e.g., `SHARED`, `MUTABLE`, `UNIQUE_MUTABLE`. `BorrowKind` is an enum defined in `ast.hpp`.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 // enum class BorrowKind { SHARED, MUTABLE, UNIQUE_MUTABLE }; // Defined in ast.hpp
 class BorrowExpression : public Expression {
 public:
@@ -282,21 +282,21 @@ public:
     BorrowExpression(SourceLocation loc, ExprPtr operand, BorrowKind kind);
     // ... accept, getType, toString methods ...
 };
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ## 11. `PointerDerefExpression`
 
 Represents dereferencing a pointer (e.g., `*ptr`).
 
--   **C++ Class**: `vyn::ast::PointerDerefExpression`
+-   **C++ Class**: `vyb::ast::PointerDerefExpression`
 -   **`NodeType`**: `POINTER_DEREF_EXPRESSION`
 -   **Fields**:
     -   `operand` (`ExprPtr`): The pointer expression being dereferenced.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 class PointerDerefExpression : public Expression {
 public:
     ExprPtr operand;
@@ -304,21 +304,21 @@ public:
     PointerDerefExpression(SourceLocation loc, ExprPtr operand);
     // ... accept, getType, toString methods ...
 };
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ## 12. `AddrOfExpression`
 
 Represents the address-of operation (e.g., `&variable` in contexts where it means address, distinct from borrow for ownership system).
 
--   **C++ Class**: `vyn::ast::AddrOfExpression`
+-   **C++ Class**: `vyb::ast::AddrOfExpression`
 -   **`NodeType`**: `ADDR_OF_EXPRESSION`
 -   **Fields**:
     -   `operand` (`ExprPtr`): The operand whose address is being taken.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 class AddrOfExpression : public Expression {
 public:
     ExprPtr operand;
@@ -326,22 +326,22 @@ public:
     AddrOfExpression(SourceLocation loc, ExprPtr operand);
     // ... accept, getType, toString methods ...
 };
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ## 13. `FromIntToLocExpression`
 
-Represents a Vyn-specific expression for converting integers to a source location. Likely for internal or metaprogramming use.
+Represents a VyB-specific expression for converting integers to a source location. Likely for internal or metaprogramming use.
 
--   **C++ Class**: `vyn::ast::FromIntToLocExpression`
+-   **C++ Class**: `vyb::ast::FromIntToLocExpression`
 -   **`NodeType`**: `FROM_INT_TO_LOC_EXPRESSION`
 -   **Fields**:
     -   `line` (`ExprPtr`): Expression evaluating to the line number.
     -   `column` (`ExprPtr`): Expression evaluating to the column number.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 class FromIntToLocExpression : public Expression {
 public:
     ExprPtr line;
@@ -350,22 +350,22 @@ public:
     FromIntToLocExpression(SourceLocation loc, ExprPtr line, ExprPtr column);
     // ... accept, getType, toString methods ...
 };
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ## 14. `ArrayElementExpression`
 
 Represents accessing an element of an array or slice (e.g., `array[index]`).
 
--   **C++ Class**: `vyn::ast::ArrayElementExpression`
+-   **C++ Class**: `vyb::ast::ArrayElementExpression`
 -   **`NodeType`**: `ARRAY_ELEMENT_EXPRESSION`
 -   **Fields**:
     -   `array` (`ExprPtr`): The array or slice expression.
     -   `index` (`ExprPtr`): The index expression.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 class ArrayElementExpression : public Expression {
 public:
     ExprPtr array;
@@ -374,32 +374,32 @@ public:
     ArrayElementExpression(SourceLocation loc, ExprPtr array, ExprPtr index);
     // ... accept, getType, toString methods ...
 };
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ## 15. `LocationExpression`
 
 Represents an expression that evaluates to the current source code location. Likely for metaprogramming or debugging.
 
--   **C++ Class**: `vyn::ast::LocationExpression`
+-   **C++ Class**: `vyb::ast::LocationExpression`
 -   **`NodeType`**: `LOCATION_EXPRESSION`
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 class LocationExpression : public Expression {
 public:
     LocationExpression(SourceLocation loc);
     // ... accept, getType, toString methods ...
 };
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ## 16. `ListComprehension`
 
 Represents a list comprehension (e.g., `[x * 2 for x in items if x > 0]`).
 
--   **C++ Class**: `vyn::ast::ListComprehension`
+-   **C++ Class**: `vyb::ast::ListComprehension`
 -   **`NodeType`**: `LIST_COMPREHENSION`
 -   **Fields**:
     -   `output` (`ExprPtr`): The expression for each element in the new list (e.g., `x * 2`).
@@ -408,8 +408,8 @@ Represents a list comprehension (e.g., `[x * 2 for x in items if x > 0]`).
     -   `condition` (`std::optional<ExprPtr>`): An optional condition to filter elements (e.g., `x > 0`).
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 class ListComprehension : public Expression {
 public:
     ExprPtr output;
@@ -420,22 +420,22 @@ public:
     ListComprehension(SourceLocation loc, ExprPtr output, IdentifierPtr variable, ExprPtr iterable, std::optional<ExprPtr> condition);
     // ... accept, getType, toString methods ...
 };
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ## 17. `ConstructionExpression`
 
 Represents a constructor call or type instantiation expression (e.g., `MyStruct(1, "hello")`, `Vec<i32>(10)`). This node is also used for various intrinsics and type conversions.
 
--   **C++ Class**: `vyn::ast::ConstructionExpression`
+-   **C++ Class**: `vyb::ast::ConstructionExpression`
 -   **`NodeType`**: `CONSTRUCTION_EXPRESSION`
 -   **Fields**:
     -   `constructedType` (`TypeNodePtr`): The type being constructed or instantiated.
     -   `arguments` (`std::vector<ExprPtr>`): The arguments passed to the constructor.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 class ConstructionExpression : public Expression {
 public:
     TypeNodePtr constructedType; // The type being constructed (e.g., MyStruct, my_module::MyType<T>)
@@ -444,12 +444,12 @@ public:
     ConstructionExpression(SourceLocation loc, TypeNodePtr constructedType, std::vector<ExprPtr> arguments);
     // ... accept, getType, toString methods ...
 };
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ### Memory Operation Expressions
 
-Several memory operations in Vyn are represented using `ConstructionExpression` or `CallExpression` nodes:
+Several memory operations in VyB are represented using `ConstructionExpression` or `CallExpression` nodes:
 
 #### 1. Creating pointers with `loc<T>(expr)`
 
@@ -494,7 +494,7 @@ AST Representation:
   - `callee`: An `Identifier` node for "at"
   - `arguments`: A vector containing one expression (the pointer to dereference)
 - When parsed as a `ConstructionExpression`:
-  - `constructedType`: A `TypeName` node for "at" 
+  - `constructedType`: A `TypeName` node for "at"
   - `arguments`: A vector containing one expression (the pointer to dereference)
 
 Note that the behavior of `at(ptr)` depends on context:
@@ -505,7 +505,7 @@ Note that the behavior of `at(ptr)` depends on context:
 
 Represents the initialization of an array with a specific type and size, potentially with an initializer list (e.g., `[int; 3](1, 2, 3)` or `[int; 10]()`).
 
--   **C++ Class**: `vyn::ast::ArrayInitializationExpression`
+-   **C++ Class**: `vyb::ast::ArrayInitializationExpression`
 -   **`NodeType`**: `ARRAY_INITIALIZATION_EXPRESSION`
 -   **Fields**:
     -   `elementType` (`TypeNodePtr`): The type of the array elements.
@@ -513,8 +513,8 @@ Represents the initialization of an array with a specific type and size, potenti
     -   `initializerList` (`std::optional<std::vector<ExprPtr>>`): Optional list of expressions to initialize array elements.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 class ArrayInitializationExpression : public Expression {
 public:
     TypeNodePtr elementType;
@@ -524,22 +524,22 @@ public:
     ArrayInitializationExpression(SourceLocation loc, TypeNodePtr elementType, ExprPtr size, std::optional<std::vector<ExprPtr>> initializerList);
     // ... accept, getType, toString methods ...
 };
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 ## 19. `SelectExpression`
 
 Represents a select expression for pattern matching that returns a value (e.g., `select(x) -> { 1 -> 10, 2 -> 20, ? -> 0 };`).
 
--   **C++ Class**: `vyn::ast::SelectExpression`
+-   **C++ Class**: `vyb::ast::SelectExpression`
 -   **`NodeType`**: `SELECT_EXPRESSION`
 -   **Fields**:
     -   `value` (`ExprPtr`): The expression being matched against.
     -   `cases` (`std::vector<std::pair<ExprPtr, ExprPtr>>`): Vector of pattern-result pairs.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 class SelectExpression : public Expression {
 public:
     ExprPtr value;
@@ -548,7 +548,7 @@ public:
     SelectExpression(SourceLocation loc, ExprPtr value, std::vector<std::pair<ExprPtr, ExprPtr>> cases);
     // ... accept, getType, toString methods ...
 };
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 **Key Characteristics**:
@@ -562,7 +562,7 @@ public:
 - Uses SelectContext stack for proper code generation
 
 **Example**:
-```vyn
+```vyb
 result<Int> = select(status) -> {
     1 -> 100,           // Naked expression
     2 -> {
@@ -577,14 +577,14 @@ result<Int> = select(status) -> {
 
 Represents a pass statement that returns a value from a select block without returning from the enclosing function.
 
--   **C++ Class**: `vyn::ast::PassStatement`
+-   **C++ Class**: `vyb::ast::PassStatement`
 -   **`NodeType`**: `PASS_STATEMENT`
 -   **Fields**:
     -   `value` (`ExprPtr`): The expression to return from the select block.
 
 ```cpp
-// From include/vyn/parser/ast.hpp
-namespace vyn::ast {
+// From include/vyb/parser/ast.hpp
+namespace vyb::ast {
 class PassStatement : public Statement {
 public:
     ExprPtr value;
@@ -592,7 +592,7 @@ public:
     PassStatement(SourceLocation loc, ExprPtr value);
     // ... accept, getType, toString methods ...
 };
-} // namespace vyn::ast
+} // namespace vyb::ast
 ```
 
 **Key Characteristics**:
@@ -603,7 +603,7 @@ public:
 - Generates store to resultAlloca and branch to endBlock in LLVM IR
 
 **Example**:
-```vyn
+```vyb
 select(code) -> {
     3 -> {
         msg<Int> = 300;
@@ -613,4 +613,4 @@ select(code) -> {
 };
 ```
 
-*Note: `TernaryExpression` was previously listed but is not present in `include/vyn/parser/ast.hpp` and has been removed. Other expression types might be detailed in `AST_Literals.md` (like `Identifier`) or `AST_Types.md` (if type constructs can be expressions).* For planned expressions, refer to `AST_Roadmap.md`.
+*Note: `TernaryExpression` was previously listed but is not present in `include/vyb/parser/ast.hpp` and has been removed. Other expression types might be detailed in `AST_Literals.md` (like `Identifier`) or `AST_Types.md` (if type constructs can be expressions).* For planned expressions, refer to `AST_Roadmap.md`.

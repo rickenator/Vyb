@@ -1,0 +1,18 @@
+// filepath: /home/rick/Projects/VyB/test/units/jit/test_basic_pointer_operations_test.vyb
+// @test: Basic pointer operations test
+// @description: Extracted from tests.cpp - Basic pointer operations test
+// @category: jit, pointer
+// @expect: pass
+// @expect-output: n/a
+// @expect-error: n/a
+// @expect-return: 99
+
+main()<Int> -> {
+    x<Int> = 77;
+    p<loc<Int>>;
+    freedom {
+        p = loc(x);
+        at(p) = 99;
+    }
+    return x;
+}

@@ -1,10 +1,10 @@
-# Vyn Test Harness and Analysis System
+# VyB Test Harness and Analysis System
 
-Vyn v0.4.0 includes a comprehensive, modern test harness designed to manage hundreds of test files with advanced parallel execution, rich reporting, and intelligent failure analysis.
+VyB v0.4.0 includes a comprehensive, modern test harness designed to manage hundreds of test files with advanced parallel execution, rich reporting, and intelligent failure analysis.
 
 ## Overview
 
-The Vyn test system consists of:
+The VyB test system consists of:
 - **391+ Test Files**: Comprehensive coverage across all language features
 - **Modern Test Harness**: Parallel execution with intelligent categorization
 - **Rich Reporting**: HTML, JSON, and console output formats
@@ -21,7 +21,7 @@ The Vyn test system consists of:
 - **Metadata extraction** from test file comments
 - **Pattern-based filtering** with glob support
 
-#### 2. TestRunner  
+#### 2. TestRunner
 - **Parallel execution** with configurable worker threads
 - **Timeout management** per test with customizable limits
 - **Comprehensive result collection** with detailed metrics
@@ -43,9 +43,9 @@ The Vyn test system consists of:
 
 ### Test Directives
 
-Vyn tests use comment-based directives for comprehensive metadata:
+VyB tests use comment-based directives for comprehensive metadata:
 
-```vyn
+```vyb
 // @test: Short descriptive name
 // @description: Detailed description of what this test validates
 // @category: parser, semantic, runtime, async
@@ -115,7 +115,7 @@ async test_function()<Future<Int>> -> {
 ./test_harness.py --exclude-slow --exclude-flaky
 
 # Pattern matching
-./test_harness.py --pattern "test_async_*.vyn"
+./test_harness.py --pattern "test_async_*.vyb"
 ```
 
 ### Report Generation
@@ -135,10 +135,10 @@ async test_function()<Future<Int>> -> {
 
 ```bash
 # Custom test directories
-./test_harness.py --test-dirs test/async test/debug --pattern "*.vyn"
+./test_harness.py --test-dirs test/async test/debug --pattern "*.vyb"
 
 # Custom executable
-./test_harness.py --vyn /path/to/custom/vyn
+./test_harness.py --vyb /path/to/custom/vyb
 
 # Timeout override
 ./test_harness.py --timeout 60
@@ -239,7 +239,7 @@ Average test time: 0.060s
 
 Results by Category:
   parser: 89/92 (96.7%)
-  semantic: 76/84 (90.5%) 
+  semantic: 76/84 (90.5%)
   runtime: 123/135 (91.1%)
   async: 57/80 (71.3%)
 
@@ -279,7 +279,7 @@ Structured JSON output for programmatic analysis:
   "results": [
     {
       "test": {
-        "filename": "test/async/debug_test.vyn",
+        "filename": "test/async/debug_test.vyb",
         "name": "Async State Machine Debug",
         "category": ["async", "debug"],
         "priority": "high"
@@ -309,7 +309,7 @@ The test harness tracks comprehensive performance data:
 
 Performance analysis reveals:
 - **Hot paths**: Most time-consuming test categories
-- **Bottlenecks**: Tests that consistently run slowly  
+- **Bottlenecks**: Tests that consistently run slowly
 - **Regression detection**: Performance degradations over time
 - **Scaling characteristics**: Behavior with different worker counts
 
@@ -419,6 +419,6 @@ The reporting system supports:
 
 ## Conclusion
 
-Vyn's test harness represents a modern approach to language testing, combining comprehensive coverage with intelligent analysis. The system's 391+ tests provide excellent coverage of language features, while the advanced reporting and triage capabilities enable efficient development and maintenance workflows.
+VyB's test harness represents a modern approach to language testing, combining comprehensive coverage with intelligent analysis. The system's 391+ tests provide excellent coverage of language features, while the advanced reporting and triage capabilities enable efficient development and maintenance workflows.
 
-The combination of parallel execution, rich reporting, and automated failure analysis makes the Vyn test harness a powerful tool for ensuring language quality and developer productivity.
+The combination of parallel execution, rich reporting, and automated failure analysis makes the VyB test harness a powerful tool for ensuring language quality and developer productivity.

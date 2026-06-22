@@ -1,7 +1,7 @@
 # Phase 6: Generic Aspects - Roadmap
 
 ## Overview
-Phase 6 extends the aspect system (Vyn's trait/interface system) to support:
+Phase 6 extends the aspect system (VyB's trait/interface system) to support:
 1. Generic aspects with type parameters
 2. Bounds on generic type parameters
 3. Generic implementations with Self type resolution
@@ -17,7 +17,7 @@ Phase 6 extends the aspect system (Vyn's trait/interface system) to support:
 - Storage: Bounds in symbol table for all type parameters
 - Method calls: Bounded parameters can call aspect methods
 - Documentation: ASPECT_BOUNDS.md comprehensive guide
-- Test: test_aspect_bounds.vyn validates all features
+- Test: test_aspect_bounds.vyb validates all features
 
 ### ⏳ IN PROGRESS / TODO Steps
 
@@ -41,31 +41,31 @@ Phase 6 extends the aspect system (Vyn's trait/interface system) to support:
 
 ### Current Aspect System Features
 
-**Aspects** (Vyn's name for traits/interfaces):
-```vyn
+**Aspects** (VyB's name for traits/interfaces):
+```vyb
 aspect Display {
     show(self<Self>)<String> -> { }
 }
 ```
 
-**Binds** (Vyn's name for trait implementations):
-```vyn
+**Binds** (VyB's name for trait implementations):
+```vyb
 bind Display -> Point {
     show(self<Self>)<String> -> { return "Point" }
 }
 ```
 
 **Generic Binds**:
-```vyn
+```vyb
 bind<T> Display -> Box<T> {
     show(self<Self>)<String> -> { return "Box" }
 }
 ```
 
 **Bounded Generic Binds** ✅:
-```vyn
+```vyb
 bind<T<Display>> Display -> Box<T> {
-    show(self<Self>)<String> -> { 
+    show(self<Self>)<String> -> {
         self.value.show();  // ✅ Works! T has Display bound
         return "Box containing: ..."
     }
@@ -75,10 +75,10 @@ bind<T<Display>> Display -> Box<T> {
 ## Next Steps for Phase 6
 
 ### Priority 1: Fix Self Type Resolution (Step 1)
-Currently blocking test_aspect_bounds.vyn with 6 errors.
+Currently blocking test_aspect_bounds.vyb with 6 errors.
 
 **Problem**: `self<Self>` in bind methods doesn't resolve properly
-```vyn
+```vyb
 bind Display -> Point {
     show(self<Self>)<String> -> {  // Self not resolving
         return "Point"
@@ -94,7 +94,7 @@ bind Display -> Point {
 Quality of life improvement, blocking 3 test errors.
 
 **Problem**: Can't infer type arguments from constructor
-```vyn
+```vyb
 box<Box<Point>> = Box { value = point };  // Says "got Box" not "Box<Point>"
 ```
 
@@ -134,7 +134,7 @@ struct MonomorphizedTypeInfo {
 
 ### Challenge 3: Multiple Trait Impls
 What if we have both:
-```vyn
+```vyb
 impl<T> Display for Box<T> { ... }
 impl<T> From<T> for Box<T> { ... }
 ```
@@ -146,7 +146,7 @@ impl<T> From<T> for Box<T> { ... }
 ## Future Enhancements (Post-Phase 6)
 
 ### Associated Types
-```vyn
+```vyb
 trait Iterator {
     type Item
     fn next(self<Self>)<Option<Self.Item>>
@@ -154,21 +154,21 @@ trait Iterator {
 ```
 
 ### Type Constraints
-```vyn
+```vyb
 impl<T: Display> Show for Box<T> {
     # Only implement if T implements Display
 }
 ```
 
 ### Generic Functions
-```vyn
+```vyb
 fn identity<T>(x<T>)<T> -> {
     return x
 }
 ```
 
 ### Higher-Kinded Types
-```vyn
+```vyb
 trait Functor<F<_>> {
     fn map<A, B>(fa<F<A>>, f<A -> B>)<F<B>>
 }

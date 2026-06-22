@@ -1,7 +1,7 @@
 # String Type Implementation - Complete
 
 ## Overview
-The Vyn String type is now fully implemented as a fat pointer struct with comprehensive method support.
+The VyB String type is now fully implemented as a fat pointer struct with comprehensive method support.
 
 ## Type Structure
 ```cpp
@@ -13,9 +13,9 @@ struct String {
 
 ## String Literals
 
-Vyn supports **natural string literal syntax** where quoted text is automatically treated as a String type:
+VyB supports **natural string literal syntax** where quoted text is automatically treated as a String type:
 
-```vyn
+```vyb
 # Direct literal assignment (no constructor needed!)
 data<String> = "Hello"
 
@@ -23,7 +23,7 @@ data<String> = "Hello"
 combined<String> = "this" + "that"
 
 # Method calls on literals
-length<Int> = "Vyn".len()
+length<Int> = "VyB".len()
 first<Int> = "Hello".char_at(0)
 check<Bool> = "Test".starts_with("Te")
 ```
@@ -50,7 +50,7 @@ String literals are converted to String structs in the code generation phase:
 - Safe: literals live for program duration
 
 **Example Code Generation:**
-```vyn
+```vyb
 data<String> = "Hello"
 # Generates LLVM IR approximately:
 # %literal_ptr = getelementptr @.str.hello
@@ -129,7 +129,7 @@ data<String> = "Hello"
 - **Transform methods** (substring, to_upper, to_lower, +): malloc new buffers
   - Always allocates length + 1 bytes for null terminator
   - Caller owns returned String values
-  - Vyn's ownership system handles cleanup
+  - VyB's ownership system handles cleanup
 
 ### Bounds Checking
 All index-based operations use LLVM BasicBlocks and PHI nodes:
@@ -185,7 +185,7 @@ All String operations that allocate memory add a null terminator:
   - Type resolution: "String" maps to `struct {*i8, i64}`
   - Ensures all String variables have correct fat pointer type
 
-- **`include/vyn/vre/llvm/codegen.hpp`**
+- **`include/vyb/vre/llvm/codegen.hpp`**
   - Function declarations for all String methods
 
 ### Build Integration
@@ -198,32 +198,32 @@ All String operations that allocate memory add a null terminator:
 All String tests are located in `test/string/` directory for better organization:
 
 ### Test Files
-- **`test/string/string_test.vyn`**: Basic String functionality
+- **`test/string/string_test.vyb`**: Basic String functionality
   - from_bytes() constructor
   - len() method
   - + operator concatenation
 
-- **`test/string/string_simple_test.vyn`**: Quick method validation
+- **`test/string/string_simple_test.vyb`**: Quick method validation
   - All 11 String methods in one test
   - Bounds checking verified
   - Memory management validated
 
-- **`test/string/string_methods_test.vyn`**: Comprehensive method tests
+- **`test/string/string_methods_test.vyb`**: Comprehensive method tests
   - Individual test functions for each method
   - Edge cases and bounds checking
   - Detailed output validation
 
-- **`test/string/string_literal_test.vyn`**: String literal syntax
+- **`test/string/string_literal_test.vyb`**: String literal syntax
   - Direct literal assignment
   - Literal concatenation
   - Method calls on literals
 
-- **`test/string/string_literal_simple.vyn`**: Simple literal tests
+- **`test/string/string_literal_simple.vyb`**: Simple literal tests
   - Basic concatenation validation
 
 ### Test Results
 
-**string_simple_test.vyn:**
+**string_simple_test.vyb:**
 ```
 Testing String methods...
 substring length: 5           ✅ (substring(0, 5) of "Hello World")
@@ -236,7 +236,7 @@ to_lower first char: 104     ✅ ('H' → 'h')
 All tests completed!
 ```
 
-**string_literal_test.vyn:**
+**string_literal_test.vyb:**
 ```
 String literal assigned: 5
 Concatenated length: 11      ✅ ("Hello" + " " + "World")
@@ -244,7 +244,7 @@ First char: 72               ✅ ("Hello World".char_at(0))
 Starts with Hello: true      ✅ (literal.starts_with() works)
 ```
 
-**string_test.vyn:**
+**string_test.vyb:**
 ```
 Starting String tests...
 Created string from bytes
@@ -259,7 +259,7 @@ String tests completed
 python3 test_harness.py --directory test/string
 
 # Run specific test
-build/vyn test/string/string_literal_test.vyn
+build/vyb test/string/string_literal_test.vyb
 ```
 
 ## Type Differentiation
@@ -293,7 +293,7 @@ This approach:
 - **Direct memory access**: GEP instructions for indexed access
 
 ### Trade-offs
-- **Immutability**: All transform operations create new strings (follows Vyn ownership model)
+- **Immutability**: All transform operations create new strings (follows VyB ownership model)
 - **Null termination overhead**: +1 byte per allocation for C compatibility
 - **ASCII-only case conversion**: to_upper/to_lower don't handle Unicode
 
@@ -313,7 +313,7 @@ This approach:
 - **UTF-8 support**: Unicode-aware operations
 
 ### Memory Safety
-- **Automatic cleanup**: Integrate with Vyn's ownership system for automatic free()
+- **Automatic cleanup**: Integrate with VyB's ownership system for automatic free()
 - **Move semantics**: Transfer ownership without copying
 - **Borrow checker**: Prevent use-after-free and double-free
 
@@ -351,4 +351,4 @@ The String type implementation is **complete and production-ready**:
 - **C compatible**: Null-terminated for printf, strstr, etc.
 - **Method chaining**: `text.to_lower().substring(0, 5)`
 
-This provides Vyn with a **robust and practical String type** that emphasizes **memory safety**, **natural syntax**, and **ownership awareness**, as requested.
+This provides VyB with a **robust and practical String type** that emphasizes **memory safety**, **natural syntax**, and **ownership awareness**, as requested.

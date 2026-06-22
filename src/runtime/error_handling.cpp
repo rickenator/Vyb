@@ -1,4 +1,4 @@
-#include "vyn/runtime/error_handling.hpp"
+#include "vyb/runtime/error_handling.hpp"
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
@@ -26,8 +26,8 @@
 
 extern "C" {
 
-// Keep metadata layout in sync with runtime/vyn_type_metadata.h.
-typedef struct VynFieldMetadata {
+// Keep metadata layout in sync with runtime/vyb_type_metadata.h.
+typedef struct VyBFieldMetadata {
     const char* name;
     const char* type_name;
     size_t offset;
@@ -35,27 +35,27 @@ typedef struct VynFieldMetadata {
     bool is_primitive;
     bool is_vec;
     const char* vec_element_type;
-} VynFieldMetadata;
+} VyBFieldMetadata;
 
-typedef struct VynTypeMetadata {
+typedef struct VyBTypeMetadata {
     const char* type_name;
     size_t struct_size;
     size_t num_fields;
-    VynFieldMetadata* fields;
+    VyBFieldMetadata* fields;
     size_t num_aspects;
     void* aspects;
-} VynTypeMetadata;
+} VyBTypeMetadata;
 
-VynTypeMetadata* __vyn_lookup_type(const char* type_name);
-char* __vyn_complex_to_json_with_metadata(void* instance, VynTypeMetadata* metadata);
+VyBTypeMetadata* __vyb_lookup_type(const char* type_name);
+char* __vyb_complex_to_json_with_metadata(void* instance, VyBTypeMetadata* metadata);
 
 // ===== Global State =====
 
-static std::atomic<VynUntrappedErrorHandler> g_custom_handler{nullptr};
+static std::atomic<VyBUntrappedErrorHandler> g_custom_handler{nullptr};
 
-// Vyn-level call stack for source-level stack traces (Phase 6.4)
+// VyB-level call stack for source-level stack traces (Phase 6.4)
 static std::mutex g_call_stack_mutex;
-static std::vector<VynStackFrame> g_call_stack;
+static std::vector<VyBStackFrame> g_call_stack;
 static constexpr size_t MAX_CALL_STACK_DEPTH = 256;
 
 // ===== Helper Functions =====
@@ -82,17 +82,17 @@ static void format_timestamp(uint64_t timestamp_ns, char* buffer, size_t bufsize
 
 // ===== Stack Trace Implementation =====
 
-VynStackTrace* __vyn_runtime_capture_stack_trace(size_t max_frames) {
-    VynStackTrace* trace = new VynStackTrace;
+VyBStackTrace* __vyb_runtime_capture_stack_trace(size_t max_frames) {
+    VyBStackTrace* trace = new VyBStackTrace;
     trace->capacity = max_frames;
-    trace->frames = new VynStackFrame[max_frames];
+    trace->frames = new VyBStackFrame[max_frames];
     trace->frame_count = 0;
-    
+
 #if defined(__linux__) || defined(__APPLE__)
     // Use backtrace
     void** addresses = new void*[max_frames];
     int count = backtrace(addresses, max_frames);
-    
+
     // For now, just store addresses
     // Full symbol resolution would require DWARF parsing
     for (int i = 0; i < count; i++) {
@@ -103,13 +103,13 @@ VynStackTrace* __vyn_runtime_capture_stack_trace(size_t max_frames) {
         trace->frames[i].native_address = addresses[i];
         trace->frame_count++;
     }
-    
+
     delete[] addresses;
 #elif defined(_WIN32)
     // Windows stack trace
     void** addresses = new void*[max_frames];
     USHORT count = CaptureStackBackTrace(0, max_frames, addresses, NULL);
-    
+
     for (USHORT i = 0; i < count; i++) {
         trace->frames[i].function_name = "<native>";
         trace->frames[i].location.file_path = "<unknown>";
@@ -118,7 +118,7 @@ VynStackTrace* __vyn_runtime_capture_stack_trace(size_t max_frames) {
         trace->frames[i].native_address = addresses[i];
         trace->frame_count++;
     }
-    
+
     delete[] addresses;
 #else
     // No stack trace support
@@ -129,19 +129,19 @@ VynStackTrace* __vyn_runtime_capture_stack_trace(size_t max_frames) {
     trace->frames[0].native_address = nullptr;
     trace->frame_count = 1;
 #endif
-    
+
     return trace;
 }
 
-void __vyn_runtime_print_stack_trace(VynStackTrace* trace, FILE* output) {
+void __vyb_runtime_print_stack_trace(VyBStackTrace* trace, FILE* output) {
     fprintf(output, "\nStack Trace:\n");
     if (!trace || trace->frame_count == 0) {
         fprintf(output, "  <no stack trace available>\n");
         return;
     }
-    
+
     for (size_t i = 0; i < trace->frame_count; i++) {
-        const VynStackFrame& frame = trace->frames[i];
+        const VyBStackFrame& frame = trace->frames[i];
         if (frame.location.line > 0) {
             fprintf(output, "  at %s (%s:%u:%u)\n",
                     frame.function_name,
@@ -156,36 +156,36 @@ void __vyn_runtime_print_stack_trace(VynStackTrace* trace, FILE* output) {
     }
 }
 
-void __vyn_runtime_free_stack_trace(VynStackTrace* trace) {
+void __vyb_runtime_free_stack_trace(VyBStackTrace* trace) {
     if (!trace) return;
     delete[] trace->frames;
     delete trace;
 }
 
-// ===== Vyn-Level Call Stack Management (Phase 6.4) =====
+// ===== VyB-Level Call Stack Management (Phase 6.4) =====
 
-void __vyn_runtime_push_call_frame(const char* function_name, const char* file_path, uint32_t line, uint32_t column) {
+void __vyb_runtime_push_call_frame(const char* function_name, const char* file_path, uint32_t line, uint32_t column) {
     std::lock_guard<std::mutex> lock(g_call_stack_mutex);
-    
+
     // Prevent stack overflow
     if (g_call_stack.size() >= MAX_CALL_STACK_DEPTH) {
         fprintf(stderr, "Warning: Call stack depth limit reached (%zu frames)\n", MAX_CALL_STACK_DEPTH);
         return;
     }
-    
-    VynStackFrame frame;
+
+    VyBStackFrame frame;
     frame.function_name = function_name;
     frame.location.file_path = file_path;
     frame.location.line = line;
     frame.location.column = column;
-    frame.native_address = nullptr;  // Not needed for Vyn-level traces
-    
+    frame.native_address = nullptr;  // Not needed for VyB-level traces
+
     g_call_stack.push_back(frame);
 }
 
-void __vyn_runtime_pop_call_frame() {
+void __vyb_runtime_pop_call_frame() {
     std::lock_guard<std::mutex> lock(g_call_stack_mutex);
-    
+
     if (!g_call_stack.empty()) {
         g_call_stack.pop_back();
     } else {
@@ -193,26 +193,26 @@ void __vyn_runtime_pop_call_frame() {
     }
 }
 
-VynStackTrace* __vyn_runtime_get_current_stack_trace() {
+VyBStackTrace* __vyb_runtime_get_current_stack_trace() {
     std::lock_guard<std::mutex> lock(g_call_stack_mutex);
-    
-    VynStackTrace* trace = new VynStackTrace;
+
+    VyBStackTrace* trace = new VyBStackTrace;
     trace->capacity = g_call_stack.size();
     trace->frame_count = g_call_stack.size();
-    trace->frames = new VynStackFrame[trace->capacity];
-    
+    trace->frames = new VyBStackFrame[trace->capacity];
+
     // Copy frames in reverse order (most recent first)
     for (size_t i = 0; i < g_call_stack.size(); i++) {
         size_t idx = g_call_stack.size() - 1 - i;
         trace->frames[i] = g_call_stack[idx];
     }
-    
+
     return trace;
 }
 
 // ===== Error Management =====
 
-VynError* __vyn_runtime_create_error_ex(
+VyBError* __vyb_runtime_create_error_ex(
     const char* type_name,
     void* type_id,
     void* data,
@@ -222,7 +222,7 @@ VynError* __vyn_runtime_create_error_ex(
     uint32_t line,
     uint32_t column
 ) {
-    VynError* error = new VynError;
+    VyBError* error = new VyBError;
     error->type_hash = type_name ? std::hash<std::string>{}(std::string(type_name)) : 0ULL;
     error->type_name = type_name;
     error->payload = nullptr;
@@ -238,7 +238,7 @@ VynError* __vyn_runtime_create_error_ex(
     error->cause = nullptr;
     error->timestamp = get_timestamp_ns();
     error->thread_id = get_thread_id();
-    
+
     // Copy error data
     if (data && data_size > 0) {
         error->data = malloc(data_size);
@@ -247,22 +247,22 @@ VynError* __vyn_runtime_create_error_ex(
         error->data = nullptr;
     }
     error->payload = error->data;
-    
-    // Capture Vyn-level stack trace (Phase 6.4)
-    error->stack_trace = __vyn_runtime_get_current_stack_trace();
-    
+
+    // Capture VyB-level stack trace (Phase 6.4)
+    error->stack_trace = __vyb_runtime_get_current_stack_trace();
+
     return error;
 }
 
-VynError* __vyn_runtime_create_error(
+VyBError* __vyb_runtime_create_error(
     const char* type_name,
     void* type_id,
     void* data,
     size_t data_size,
     void (*destructor)(void*),
-    VynSourceLocation location
+    VyBSourceLocation location
 ) {
-    return __vyn_runtime_create_error_ex(
+    return __vyb_runtime_create_error_ex(
         type_name,
         type_id,
         data,
@@ -274,39 +274,39 @@ VynError* __vyn_runtime_create_error(
     );
 }
 
-void __vyn_runtime_free_error(VynError* error) {
+void __vyb_runtime_free_error(VyBError* error) {
     if (!error) return;
-    
+
     // Call custom destructor if provided
     if (error->destructor && error->data) {
         error->destructor(error->data);
     }
-    
+
     // Free data
     if (error->data) {
         free(error->data);
     }
-    
+
     // Free stack trace
-    __vyn_runtime_free_stack_trace(error->stack_trace);
+    __vyb_runtime_free_stack_trace(error->stack_trace);
 
     if (error->file) {
         free((void*)error->file);
     }
-    
+
     // Recursively free cause chain
     if (error->cause) {
-        __vyn_runtime_free_error(error->cause);
+        __vyb_runtime_free_error(error->cause);
     }
-    
+
     delete error;
 }
 
-VynError* __vyn_runtime_clone_error(VynError* error) {
+VyBError* __vyb_runtime_clone_error(VyBError* error) {
     if (!error) return nullptr;
-    
-    VynError* clone = new VynError(*error);
-    
+
+    VyBError* clone = new VyBError(*error);
+
     // Deep copy data
     if (error->data && error->data_size > 0) {
         clone->data = malloc(error->data_size);
@@ -315,121 +315,121 @@ VynError* __vyn_runtime_clone_error(VynError* error) {
     clone->payload = clone->data;
     clone->file = error->file ? strdup(error->file) : nullptr;
     clone->location.file_path = clone->file;
-    
+
     // Clone stack trace
     if (error->stack_trace) {
-        clone->stack_trace = new VynStackTrace;
+        clone->stack_trace = new VyBStackTrace;
         clone->stack_trace->capacity = error->stack_trace->capacity;
         clone->stack_trace->frame_count = error->stack_trace->frame_count;
-        clone->stack_trace->frames = new VynStackFrame[error->stack_trace->capacity];
+        clone->stack_trace->frames = new VyBStackFrame[error->stack_trace->capacity];
         memcpy(clone->stack_trace->frames, error->stack_trace->frames,
-               error->stack_trace->frame_count * sizeof(VynStackFrame));
+               error->stack_trace->frame_count * sizeof(VyBStackFrame));
     }
-    
+
     // Clone cause chain
     if (error->cause) {
-        clone->cause = __vyn_runtime_clone_error(error->cause);
+        clone->cause = __vyb_runtime_clone_error(error->cause);
     }
-    
+
     return clone;
 }
 
-void __vyn_runtime_set_error_cause(VynError* error, VynError* cause) {
+void __vyb_runtime_set_error_cause(VyBError* error, VyBError* cause) {
     if (!error) return;
-    
+
     // Free existing cause if present
     if (error->cause) {
-        __vyn_runtime_free_error(error->cause);
+        __vyb_runtime_free_error(error->cause);
     }
-    
+
     error->cause = cause;
 }
 
 // ===== Type Dispatch =====
 
-bool __vyn_runtime_error_matches_type(
-    VynError* error,
+bool __vyb_runtime_error_matches_type(
+    VyBError* error,
     const char* trap_type_name,
     void* trap_type_id
 ) {
     if (!error || !trap_type_name) return false;
-    
+
     // Simple string comparison for now
     // TODO: Add aspect-based matching
     return strcmp(error->type_name, trap_type_name) == 0;
 }
 
-void* __vyn_runtime_cast_error(VynError* error, const char* target_type_name) {
+void* __vyb_runtime_cast_error(VyBError* error, const char* target_type_name) {
     if (!error || !target_type_name) return nullptr;
-    
+
     if (strcmp(error->type_name, target_type_name) == 0) {
         return error->data;
     }
-    
+
     return nullptr;
 }
 
 // ===== Custom Handler Management =====
 
-void __vyn_runtime_set_untrapped_handler(VynUntrappedErrorHandler handler) {
+void __vyb_runtime_set_untrapped_handler(VyBUntrappedErrorHandler handler) {
     g_custom_handler.store(handler);
 }
 
-void __vyn_runtime_clear_untrapped_handler() {
+void __vyb_runtime_clear_untrapped_handler() {
     g_custom_handler.store(nullptr);
 }
 
-VynUntrappedErrorHandler __vyn_runtime_get_untrapped_handler() {
+VyBUntrappedErrorHandler __vyb_runtime_get_untrapped_handler() {
     return g_custom_handler.load();
 }
 
 // ===== Panic Implementation =====
 
-void __vyn_runtime_panic(const char* message) {
+void __vyb_runtime_panic(const char* message) {
     char timestamp_buf[64];
     format_timestamp(get_timestamp_ns(), timestamp_buf, sizeof(timestamp_buf));
-    
+
     char thread_buf[128];
     snprintf(thread_buf, sizeof(thread_buf), "Thread: 0x%llx", (unsigned long long)get_thread_id());
-    
+
     char time_buf[128];
     snprintf(time_buf, sizeof(time_buf), "Time: %s", timestamp_buf);
-    
+
     fprintf(stderr, "\n");
     fprintf(stderr, "┌─ PANIC ──────────────────────────────────────────────────────┐\n");
     fprintf(stderr, "│ %-61s│\n", thread_buf);
     fprintf(stderr, "│ %-61s│\n", time_buf);
     fprintf(stderr, "└──────────────────────────────────────────────────────────────┘\n");
     fprintf(stderr, "\n");
-    
+
     // Print message (null-terminated C string)
     if (message) {
         fprintf(stderr, "Message: %s\n", message);
     } else {
         fprintf(stderr, "Message: <no message>\n");
     }
-    
+
     fprintf(stderr, "\nABORTING\n");
     fflush(stderr);
-    
+
     abort();
 }
 
 // ===== Untrapped Error Handler =====
 
-void __vyn_runtime_untrapped_error(VynError* error) {
+void __vyb_runtime_untrapped_error(VyBError* error) {
     char timestamp_buf[64];
     format_timestamp(get_timestamp_ns(), timestamp_buf, sizeof(timestamp_buf));
-    
+
     fprintf(stderr, "\n");
     fprintf(stderr, "┌─ UNTRAPPED FAILURE ──────────────────────────────────────────┐\n");
-    
+
     char line_buf[128];
-    
+
     const char* typeName = nullptr;
-    VynTypeMetadata* metadata = nullptr;
+    VyBTypeMetadata* metadata = nullptr;
     if (error && error->type_name) {
-        metadata = __vyn_lookup_type(error->type_name);
+        metadata = __vyb_lookup_type(error->type_name);
         if (metadata && metadata->type_name) {
             typeName = metadata->type_name;
         } else {
@@ -447,19 +447,19 @@ void __vyn_runtime_untrapped_error(VynError* error) {
 
     snprintf(line_buf, sizeof(line_buf), "Type: %s", typeName);
     fprintf(stderr, "│ %-61s│\n", line_buf);
-    
+
     snprintf(line_buf, sizeof(line_buf), "Thread: 0x%llx", (unsigned long long)get_thread_id());
     fprintf(stderr, "│ %-61s│\n", line_buf);
-    
+
     snprintf(line_buf, sizeof(line_buf), "Time: %s", timestamp_buf);
     fprintf(stderr, "│ %-61s│\n", line_buf);
-    
+
     fprintf(stderr, "└──────────────────────────────────────────────────────────────┘\n");
 
     if (error && error->payload) {
         char* payloadJson = nullptr;
         if (metadata) {
-            payloadJson = __vyn_complex_to_json_with_metadata(error->payload, metadata);
+            payloadJson = __vyb_complex_to_json_with_metadata(error->payload, metadata);
         }
         if (payloadJson) {
             fprintf(stderr, "Payload: %s\n", payloadJson);
@@ -479,31 +479,31 @@ void __vyn_runtime_untrapped_error(VynError* error) {
     } else {
         fprintf(stderr, "Fail site: <unknown>\n");
     }
-    
-    // Phase 6.4: Print Vyn-level call stack
+
+    // Phase 6.4: Print VyB-level call stack
     fprintf(stderr, "\nStack Trace:\n");
-    VynStackTrace* stack_trace = __vyn_runtime_get_current_stack_trace();
+    VyBStackTrace* stack_trace = __vyb_runtime_get_current_stack_trace();
     if (stack_trace && stack_trace->frame_count > 0) {
         for (size_t i = 0; i < stack_trace->frame_count; i++) {
-            const VynStackFrame* frame = &stack_trace->frames[i];
-            fprintf(stderr, "  at %s (%s:%u:%u)\n", 
+            const VyBStackFrame* frame = &stack_trace->frames[i];
+            fprintf(stderr, "  at %s (%s:%u:%u)\n",
                     frame->function_name ? frame->function_name : "<unknown>",
                     frame->location.file_path ? frame->location.file_path : "<unknown>",
                     frame->location.line,
                     frame->location.column);
         }
-        __vyn_runtime_free_stack_trace(stack_trace);
+        __vyb_runtime_free_stack_trace(stack_trace);
     } else {
         fprintf(stderr, "  (no stack trace available)\n");
     }
-    
+
     // Print stack trace if available
     // NOTE: Currently error is just a heap-allocated error struct (type_id + value)
-    // not a full VynError* with stack trace. We'll improve this in Phase 6.3.
+    // not a full VyBError* with stack trace. We'll improve this in Phase 6.3.
     int exitCode = 1;
     if (error && metadata && error->payload) {
         for (size_t i = 0; i < metadata->num_fields; ++i) {
-            const VynFieldMetadata& field = metadata->fields[i];
+            const VyBFieldMetadata& field = metadata->fields[i];
             if (!field.name || !field.type_name) continue;
             if (strcmp(field.name, "exitCode") == 0 && strcmp(field.type_name, "Int") == 0) {
                 int64_t payloadExitCode = *(int64_t*)((char*)error->payload + field.offset);
@@ -513,30 +513,30 @@ void __vyn_runtime_untrapped_error(VynError* error) {
         }
     }
     if (error) {
-        __vyn_runtime_free_error(error);
+        __vyb_runtime_free_error(error);
     }
 
     fprintf(stderr, "\nExit Code: %d\n", exitCode);
     fflush(stderr);
-    
+
     exit(exitCode);
 }
 
 // ===== Defer/Ensure Support (Stubs for now) =====
 
-void __vyn_runtime_register_defer(void (*cleanup_fn)(void*), void* context) {
+void __vyb_runtime_register_defer(void (*cleanup_fn)(void*), void* context) {
     // TODO: Implement defer stack
 }
 
-void __vyn_runtime_execute_defers() {
+void __vyb_runtime_execute_defers() {
     // TODO: Execute defers in LIFO order
 }
 
-void __vyn_runtime_push_ensure_block(void (*ensure_fn)()) {
+void __vyb_runtime_push_ensure_block(void (*ensure_fn)()) {
     // TODO: Implement ensure stack
 }
 
-void __vyn_runtime_pop_ensure_block() {
+void __vyb_runtime_pop_ensure_block() {
     // TODO: Pop ensure stack
 }
 

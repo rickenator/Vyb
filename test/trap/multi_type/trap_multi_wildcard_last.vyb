@@ -1,0 +1,16 @@
+// @expect-return: 99
+# Test: Multi-type doesn't match, wildcard catches
+# Expected: Wildcard catches Bool, return 70
+
+main()<Int> -> {
+    result<Int> = {
+        fail true
+    } trap (e<Int | String>) -> {
+        # Multi-type trap won't match Bool
+        return 99
+    } trap (e<?>) -> {
+        # Wildcard should catch Bool
+        return 70
+    }
+    return result
+}

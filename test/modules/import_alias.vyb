@@ -1,0 +1,13 @@
+// @test: Import specifier alias
+// @description: import module::{symbol as alias} exposes the selected declaration under the alias
+// @category: modules
+// @expect: pass
+// @expect-output: 21
+// @tags: modules, import-alias
+
+import visibility_export::{exported_value as public_value} from "./visibility_export.vyb"
+
+main()<Int> -> {
+    println_int(public_value())
+    return 0
+}

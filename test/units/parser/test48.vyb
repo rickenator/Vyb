@@ -1,0 +1,14 @@
+// filepath: /home/rick/Projects/VyB/test/units/extracted/test48.vyb
+// @test: Semantic: 'loc()' operand type matching loc<T>
+// @description: Extracted from tests.cpp - Semantic: 'loc()' operand type matching loc<T>
+// @category: parser
+// @expect: pass
+// @parse-only: true
+// @expect-output: n/a
+// @expect-error: n/a
+// @expect-return: n/a
+
+main()<Int> -> {
+    x<Float>; // x is Float
+    return 0
+}

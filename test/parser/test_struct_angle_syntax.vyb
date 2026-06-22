@@ -1,0 +1,35 @@
+// Test file using angle bracket syntax for struct fields
+
+struct Point {
+    x<Int>,    // Field name<Type> format
+    y<Int>
+}
+
+class Rectangle {
+    width<Int>,   // Field name<Type> format
+    height<Int>
+}
+
+struct Person {
+    id<Int>,
+    name<String>,
+    salary<Float>
+}
+
+struct Company {
+    name<String>,
+    employeeCount<Int>,
+    isPublic<Bool>
+}
+
+// Function that returns multiple values (a Person and a Company)
+createEntities()<Person, Company> -> {
+    person<Person> = Person { id=42, name="Alice", salary=75000.50 };
+    company<Company> = Company { name="Acme Inc", employeeCount=250, isPublic=true };
+    return person, company;
+}
+
+// Main function with multiple return values
+main()<Person, Company> -> {
+    return createEntities();  // Will produce JSON with Person and Company objects
+}

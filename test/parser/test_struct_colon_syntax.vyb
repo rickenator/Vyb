@@ -1,0 +1,10 @@
+// Test file to verify new angle bracket syntax for VyB consistency
+struct Point {
+    x<Int>,
+    y<Int>
+}
+
+main()<Point> -> {
+    p<Point> = Point { x=10, y=20 };
+    return p;
+}

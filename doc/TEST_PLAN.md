@@ -1,14 +1,14 @@
-# Vyn Test Plan & Quality Assurance
+# VyB Test Plan & Quality Assurance
 
-**Last Updated:** October 20, 2025  
-**Version:** 0.4.2 (freedom-1.0)  
+**Last Updated:** October 20, 2025
+**Version:** 0.4.2 (freedom-1.0)
 **Status:** Production Quality Initiative
 
 ---
 
 ## Philosophy
 
-Vyn is one of the most beautiful things we've worked on. Now we strive for **quality of implementation** - every feature must be rock solid, every edge case handled, every error message clear.
+VyB is one of the most beautiful things we've worked on. Now we strive for **quality of implementation** - every feature must be rock solid, every edge case handled, every error message clear.
 
 ---
 
@@ -47,7 +47,7 @@ python3 test_harness.py --category parser --verbose
 python3 test_harness.py --filter "async" --verbose
 
 # Test single file
-build/vyn test/path/to/test.vyn
+build/vyb test/path/to/test.vyb
 ```
 
 ---
@@ -99,16 +99,16 @@ build/vyn test/path/to/test.vyn
 ## Test Results Log
 
 ### Baseline Assessment (PENDING)
-**Date:** TBD  
-**Commit:** TBD  
+**Date:** TBD
+**Commit:** TBD
 **Command:** `python3 test_harness.py --parallel --html-report --json-report`
 
 **Results:**
-- Total Tests: 
-- Passed: 
-- Failed: 
-- Skipped: 
-- Pass Rate: 
+- Total Tests:
+- Passed:
+- Failed:
+- Skipped:
+- Pass Rate:
 
 **Critical Failures:**
 - (List high-priority failures here)
@@ -150,9 +150,9 @@ build/vyn test/path/to/test.vyn
 ### Template for Failed Tests
 
 ```markdown
-#### Test: test/path/to/test.vyn
-**Category:** [parser|semantic|codegen|runtime]  
-**Priority:** [CRITICAL|HIGH|MEDIUM|LOW]  
+#### Test: test/path/to/test.vyb
+**Category:** [parser|semantic|codegen|runtime]
+**Priority:** [CRITICAL|HIGH|MEDIUM|LOW]
 **Error Points:** 3/10 (example scoring)
 
 **Failure Description:**
@@ -198,7 +198,7 @@ For each test file, verify:
 ## Test Writing Guidelines
 
 ### Good Test Structure
-```vyn
+```vyb
 # Test: [Feature] - [Specific Case]
 # Expected: [Behavior]
 # Exit Code: [0 for success, non-zero for expected failures]
@@ -212,10 +212,10 @@ main()<Int> -> {
 ```
 
 ### Test Naming Convention
-- `test_[feature]_[case].vyn` - Basic functionality
-- `test_[feature]_edge_[case].vyn` - Edge cases
-- `test_[feature]_error_[case].vyn` - Error handling
-- `test_[feature]_integration_[case].vyn` - Multi-feature integration
+- `test_[feature]_[case].vyb` - Basic functionality
+- `test_[feature]_edge_[case].vyb` - Edge cases
+- `test_[feature]_error_[case].vyb` - Error handling
+- `test_[feature]_integration_[case].vyb` - Multi-feature integration
 
 ### Test Organization
 ```
@@ -321,7 +321,7 @@ Before tagging a release:
 
 ## Notes
 
-This is a living document. Update it after every major test run, after fixing failures, and when identifying new test gaps. The goal is **production quality** - Vyn should be rock solid, reliable, and beautiful in implementation as it is in design.
+This is a living document. Update it after every major test run, after fixing failures, and when identifying new test gaps. The goal is **production quality** - VyB should be rock solid, reliable, and beautiful in implementation as it is in design.
 
 **Quality is not an accident - it's a commitment.**
 

@@ -1,0 +1,28 @@
+# Complete monomorphization test
+# Tests multiple instantiations and caching
+
+struct Box<T> {
+    value<T>
+}
+
+struct Pair<A, B> {
+    first<A>,
+    second<B>
+}
+
+main()<Int> -> {
+    # Test single type parameter
+    box_int<Box<Int>> = Box<Int> { value = 42 }
+    box_str<Box<String>> = Box<String> { value = "hello" }
+
+    # Test multiple type parameters
+    pair<Pair<Int, String>> = Pair<Int, String> {
+        first = 100,
+        second = "world"
+    }
+
+    # Test duplicate instantiation (should use cached)
+    box_int2<Box<Int>> = Box<Int> { value = 84 }
+
+    return 0
+}

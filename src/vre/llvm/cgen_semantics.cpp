@@ -1,24 +1,24 @@
-#include "vyn/vre/llvm/codegen.hpp"
-#include "vyn/semantic.hpp"
-#include "vyn/parser/ast.hpp"
+#include "vyb/vre/llvm/codegen.hpp"
+#include "vyb/semantic.hpp"
+#include "vyb/parser/ast.hpp"
 
-using namespace vyn;
+using namespace vyb;
 
 // Helper method to extract original type name using semantic analysis data
-std::string LLVMCodegen::extractOriginalTypeNameFromSemantics(vyn::ast::Expression* expr) {
+std::string LLVMCodegen::extractOriginalTypeNameFromSemantics(vyb::ast::Expression* expr) {
     if (!expr) {
         return "unknown";
     }
-    
+
     return extractOriginalTypeNameFromAST(expr);
 }
 
 // Helper method to extract original type name from AST directly (fallback method)
-std::string LLVMCodegen::extractOriginalTypeNameFromAST(vyn::ast::Expression* expr) {
+std::string LLVMCodegen::extractOriginalTypeNameFromAST(vyb::ast::Expression* expr) {
     if (!expr) {
         return "unknown";
     }
-    
+
     // Handle different expression types
     if (auto intLiteral = dynamic_cast<ast::IntegerLiteral*>(expr)) {
         return "Int";
@@ -54,7 +54,7 @@ std::string LLVMCodegen::extractOriginalTypeNameFromAST(vyn::ast::Expression* ex
     } else if (auto arrayExpr = dynamic_cast<ast::ArrayElementExpression*>(expr)) {
         return "ArrayElement";
     }
-    
+
     // Default fallback
     return "Unknown";
 }

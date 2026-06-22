@@ -1,0 +1,17 @@
+// @test: Parser handles main.vyb async function
+// @description: Extracted from tests.cpp - Parser handles main.vyb async function
+// @category: parser
+// @expect: fail
+// @parse-only: true
+// @expect-output: n/a
+// @expect-error: n/a
+// @expect-return: n/a
+
+async fetch_data(url: String)<String> -> {
+    const<my<http::client::Connection>> conn = http::client::connect(url);
+    const<my<http::client::Response>> resp = await view(conn).get("/");
+    if (resp.status != 200) {
+        throw NetworkError("Failed to fetch: " + resp.status.to_string());
+    }
+    return view(resp).text();
+}

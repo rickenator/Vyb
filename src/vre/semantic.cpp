@@ -1,25 +1,25 @@
-#include "vyn/semantic.hpp"
-#include "vyn/parser/token.hpp"
-#include "vyn/parser/ast.hpp"
-#include "vyn/driver.hpp"
+#include "vyb/semantic.hpp"
+#include "vyb/parser/token.hpp"
+#include "vyb/parser/ast.hpp"
+#include "vyb/driver.hpp"
 #include <stdexcept>
 #include <memory>
-#include <unordered_set> 
-#include <string> 
+#include <unordered_set>
+#include <string>
 #include <map>
 #include <set>
-#include <functional> 
+#include <functional>
 
-namespace vyn {
-// Forward-declare g_debug_codegen so semantic.cpp can use VYN_CDBG without
+namespace vyb {
+// Forward-declare g_debug_codegen so semantic.cpp can use VYB_CDBG without
 // depending on the LLVM codegen headers.
 extern bool g_debug_codegen;
-} // namespace vyn
-#ifndef VYN_CDBG
-#define VYN_CDBG if (vyn::g_debug_codegen) std::cerr
+} // namespace vyb
+#ifndef VYB_CDBG
+#define VYB_CDBG if (vyb::g_debug_codegen) std::cerr
 #endif
 
-namespace vyn {
+namespace vyb {
 
 static bool isBuiltinVecMethodName(const std::string& methodName) {
     return methodName == "push" || methodName == "pop" || methodName == "len" ||
@@ -53,14 +53,14 @@ static std::string reprCUnsupportedReason(ast::TypeNode* typeNode) {
 
         const std::string name = typeName->identifier->name;
         if (name == "String" || name == "string" || name == "Bytes" || name == "bytes") {
-            return "cannot use Vyn " + name + "; use CString or an explicit C ABI representation";
+            return "cannot use VyB " + name + "; use CString or an explicit C ABI representation";
         }
         if (name == "my" || name == "our" || name == "their" ||
             name == "mild" || name == "view" || name == "borrow") {
             return "cannot use ownership-qualified type " + typeNode->toString() + " in a C ABI layout";
         }
         if (name == "Vec" || name == "Future" || name == "Tuple") {
-            return "cannot use Vyn runtime type " + typeNode->toString() + " in a C ABI layout";
+            return "cannot use VyB runtime type " + typeNode->toString() + " in a C ABI layout";
         }
 
         for (const auto& arg : typeName->genericArgs) {
@@ -79,10 +79,10 @@ static std::string reprCUnsupportedReason(ast::TypeNode* typeNode) {
         return reprCUnsupportedReason(arrayType->elementType.get());
     }
     if (auto* vecType = dynamic_cast<ast::VecType*>(typeNode)) {
-        return "cannot use Vyn runtime type " + typeNode->toString() + " in a C ABI layout";
+        return "cannot use VyB runtime type " + typeNode->toString() + " in a C ABI layout";
     }
     if (auto* futureType = dynamic_cast<ast::FutureType*>(typeNode)) {
-        return "cannot use Vyn runtime type " + typeNode->toString() + " in a C ABI layout";
+        return "cannot use VyB runtime type " + typeNode->toString() + " in a C ABI layout";
     }
     if (auto* optionalType = dynamic_cast<ast::OptionalType*>(typeNode)) {
         return "cannot use optional type " + typeNode->toString() + " in a C ABI layout";
@@ -250,7 +250,7 @@ void SemanticAnalyzer::analyze(ast::Module* root) {
 
 bool SemanticAnalyzer::checkCallsFailableFunction(ast::Node* node) {
     if (!node) return false;
-    
+
     // Check if this node is a CallExpression to a failable function
     if (auto callExpr = dynamic_cast<ast::CallExpression*>(node)) {
         if (auto idExpr = dynamic_cast<ast::Identifier*>(callExpr->callee.get())) {
@@ -264,7 +264,7 @@ bool SemanticAnalyzer::checkCallsFailableFunction(ast::Node* node) {
             }
         }
     }
-    
+
     // Recursively check statement types
     if (auto block = dynamic_cast<ast::BlockStatement*>(node)) {
         for (auto& stmt : block->body) {
@@ -297,7 +297,7 @@ bool SemanticAnalyzer::checkCallsFailableFunction(ast::Node* node) {
         if (checkCallsFailableFunction(binExpr->left.get())) return true;
         if (checkCallsFailableFunction(binExpr->right.get())) return true;
     }
-    
+
     return false;
 }
 
@@ -325,13 +325,13 @@ bool SemanticAnalyzer::isInUnsafeBlock() {
 
 bool SemanticAnalyzer::isIntegerType(ast::TypeNode* type) {
     if (!type) return false;
-    
+
     // Handle TypeName nodes (most common case)
     if (auto tn = dynamic_cast<ast::TypeName*>(type)) {
         if (!tn->identifier) return false;
         const std::string& name = tn->identifier->name;
         return name == "Int" || name == "i8" || name == "i16" || name == "i32" || name == "i64" ||
-               name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "size_t" || 
+               name == "u8" || name == "u16" || name == "u32" || name == "u64" || name == "size_t" ||
                name == "isize" || name == "usize" ||
                name == "Int8" || name == "Int16" || name == "Int32" || name == "Int64" ||
                name == "UInt8" || name == "UInt16" || name == "UInt32" || name == "UInt64" ||
@@ -340,7 +340,7 @@ bool SemanticAnalyzer::isIntegerType(ast::TypeNode* type) {
                name == "CInt" || name == "CUInt" || name == "CLong" || name == "CULong" ||
                name == "CSize" || name == "CSSize";
     }
-    
+
     // Handle array size expressions which might be integer literals
     if (auto arrayType = dynamic_cast<ast::ArrayType*>(type)) {
         // If it has a size expression that's a literal, it might be integer type
@@ -351,11 +351,11 @@ bool SemanticAnalyzer::isIntegerType(ast::TypeNode* type) {
             }
         }
     }
-    
+
     // Add any other type checks that could represent integer types
     // For example, if there are typedef'ed types or alias types
-    
-    return false; 
+
+    return false;
 }
 
 bool SemanticAnalyzer::isReservedWord(const std::string& name) {
@@ -366,7 +366,7 @@ bool SemanticAnalyzer::isLValue(ast::Expression* expr) {
     return dynamic_cast<ast::Identifier*>(expr) != nullptr ||
            dynamic_cast<ast::MemberExpression*>(expr) != nullptr ||
            dynamic_cast<ast::ArrayElementExpression*>(expr) != nullptr ||
-           dynamic_cast<ast::PointerDerefExpression*>(expr) != nullptr; 
+           dynamic_cast<ast::PointerDerefExpression*>(expr) != nullptr;
 }
 
 std::string SemanticAnalyzer::borrowedRootName(ast::Expression* expr) {
@@ -408,7 +408,7 @@ void SemanticAnalyzer::recordBorrow(const std::string& rootName, ast::BorrowKind
     }
 
     BorrowState active = aggregateBorrowState(rootName);
-    VYN_CDBG << "DEBUG: recordBorrow " << rootName
+    VYB_CDBG << "DEBUG: recordBorrow " << rootName
              << " kind=" << (kind == ast::BorrowKind::MUTABLE_BORROW ? "borrow" : "view")
              << " mutable=" << active.mutableBorrows
              << " immutable=" << active.immutableBorrows << std::endl;
@@ -436,7 +436,7 @@ bool SemanticAnalyzer::isRawLocationType(ast::Expression* expr) {
 
 std::shared_ptr<ast::TypeNode> SemanticAnalyzer::cloneTypeNode(ast::TypeNode* type) {
     if (!type) return nullptr;
-    
+
     // Use the existing clone() method on TypeNode
     return std::shared_ptr<ast::TypeNode>(type->clone());
 }
@@ -444,14 +444,14 @@ std::shared_ptr<ast::TypeNode> SemanticAnalyzer::cloneTypeNode(ast::TypeNode* ty
 // Helper to substitute Self with concrete type in return types
 ast::TypeNode* SemanticAnalyzer::substituteSelfType(ast::TypeNode* returnType, const std::string& concreteType) {
     if (!returnType) return nullptr;
-    
+
     // Check if return type is Self
     if (auto typeName = dynamic_cast<ast::TypeName*>(returnType)) {
         if (typeName->identifier && typeName->identifier->name == "Self") {
             // Replace Self with the concrete type
             // Need to parse concreteType to extract base name and generic arguments
             // E.g., "Box<Point>" -> base="Box", genericArgs=["Point"]
-            
+
             size_t anglePos = concreteType.find('<');
             if (anglePos != std::string::npos) {
                 // Has generic arguments
@@ -461,7 +461,7 @@ ast::TypeNode* SemanticAnalyzer::substituteSelfType(ast::TypeNode* returnType, c
                 if (!argsStr.empty() && argsStr.back() == '>') {
                     argsStr.pop_back();
                 }
-                
+
                 // Parse generic arguments (simple comma-separated list for now)
                 std::vector<ast::TypeNodePtr> genericArgs;
                 size_t start = 0;
@@ -475,18 +475,18 @@ ast::TypeNode* SemanticAnalyzer::substituteSelfType(ast::TypeNode* returnType, c
                         argName = argsStr.substr(start);
                         start = argsStr.length();
                     }
-                    
+
                     // Trim whitespace
                     argName.erase(0, argName.find_first_not_of(" \t"));
                     argName.erase(argName.find_last_not_of(" \t") + 1);
-                    
+
                     if (!argName.empty()) {
                         // Create TypeName for this argument
                         auto argId = std::make_unique<ast::Identifier>(typeName->loc, argName);
                         genericArgs.push_back(std::make_unique<ast::TypeName>(typeName->loc, std::move(argId)));
                     }
                 }
-                
+
                 // Create TypeName with base and generic args
                 auto baseId = std::make_unique<ast::Identifier>(typeName->loc, baseName);
                 return new ast::TypeName(typeName->loc, std::move(baseId), std::move(genericArgs));
@@ -496,7 +496,7 @@ ast::TypeNode* SemanticAnalyzer::substituteSelfType(ast::TypeNode* returnType, c
             }
         }
     }
-    
+
     // If not Self, return the original type
     return returnType;
 }
@@ -506,7 +506,7 @@ ast::TypeNode* SemanticAnalyzer::substituteSelfType(ast::TypeNode* returnType, c
 void SemanticAnalyzer::visit(ast::Identifier* node) {
     // Handle built-in type identifiers that don't need to be in symbol table
     // These are used in contexts like Vec::new(), Int::from_string() where the type is a namespace
-    if (node->name == "Vec" || node->name == "Int" || node->name == "Float" || 
+    if (node->name == "Vec" || node->name == "Int" || node->name == "Float" ||
         node->name == "Bool" || node->name == "String") {
         // Built-in types - don't error on them
         // They will be properly typed in the context where they're used (e.g., Int::from_string())
@@ -517,11 +517,11 @@ void SemanticAnalyzer::visit(ast::Identifier* node) {
     if (enumTypeNames.count(node->name)) {
         return;
     }
-    
+
     SymbolInfo* symbol = currentScope->lookup(node->name);
     if (!symbol) {
         addError("Undefined identifier: " + node->name, node);
-        expressionTypes[node] = nullptr; 
+        expressionTypes[node] = nullptr;
         return;
     }
     expressionTypes[node] = symbol->type;
@@ -529,7 +529,7 @@ void SemanticAnalyzer::visit(ast::Identifier* node) {
         node->type = std::shared_ptr<ast::TypeNode>(symbol->type->clone());
 
     } else {
-        VYN_CDBG << "DEBUG: No type found for identifier '" << node->name << "'" << std::endl;
+        VYB_CDBG << "DEBUG: No type found for identifier '" << node->name << "'" << std::endl;
     }
 }
 
@@ -591,7 +591,7 @@ void SemanticAnalyzer::visit(ast::Module* node) {
     // Two-pass analysis for error propagation:
     // Pass 1: Build function registry and detect explicit fail statements
     // Pass 2: Propagate failability transitively through function calls
-    
+
     // First pass: Build registry and visit all declarations
     functionRegistry.clear();
     externalFunctionNames.clear();
@@ -612,28 +612,28 @@ void SemanticAnalyzer::visit(ast::Module* node) {
             }
         }
     }
-    
+
     // Visit all declarations (this detects explicit fail statements)
     for (auto& item : node->body) {
         if (item) item->accept(*this);
     }
-    
+
     // Second pass: Propagate failability transitively
     bool changed = true;
     int iterations = 0;
     const int MAX_ITERATIONS = 100; // Prevent infinite loops
-    
+
     while (changed && iterations < MAX_ITERATIONS) {
         changed = false;
         iterations++;
-        
+
         for (auto& item : node->body) {
             if (auto funcDecl = dynamic_cast<ast::FunctionDeclaration*>(item.get())) {
                 // Skip main function - it's the entry point and should handle errors explicitly
                 if (funcDecl->id && funcDecl->id->name == "main") {
                     continue;
                 }
-                
+
                 if (!funcDecl->canFail) {
                     // Check if this function calls any failable functions
                     bool callsFailableFunction = checkCallsFailableFunction(funcDecl->body.get());
@@ -644,14 +644,14 @@ void SemanticAnalyzer::visit(ast::Module* node) {
                             funcDecl->errorTypes.push_back("Error");
                         }
                         changed = true;
-                        VYN_CDBG << "DEBUG: Marked function '" << funcDecl->id->name 
+                        VYB_CDBG << "DEBUG: Marked function '" << funcDecl->id->name
                                   << "' as failable (calls failable function)" << std::endl;
                     }
                 }
             }
         }
     }
-    
+
     if (iterations >= MAX_ITERATIONS) {
         std::cerr << "Warning: Error propagation analysis hit maximum iterations" << std::endl;
     }
@@ -749,11 +749,11 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
     if (isReservedWord(node->id->name)) {
         addError("Identifier \\\"" + node->id->name + "\\\" is a reserved word and cannot be used as a function name.", node->id.get());
     }
-    
+
     // Skip adding to scope if this is a method in an aspect or bind
     // These are stored in the trait registry, not the global symbol table
     if (!processingTraitOrBindMethod) {
-        if (currentScope->lookupDirect(node->id->name)) { 
+        if (currentScope->lookupDirect(node->id->name)) {
             addError("Redefinition of function \\\"" + node->id->name + "\\\" in the same scope.", node->id.get());
         }
 
@@ -767,14 +767,14 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
     currentFunction = node;
 
     enterScope();
-    
+
     // Handle generic parameters if present (e.g., fn printItem<T<Display>>)
     bool hasGenericParams = !node->genericParams.empty();
     if (hasGenericParams) {
         for (const auto& param : node->genericParams) {
             if (param && param->name) {
                 std::string paramName = param->name->name;
-                
+
                 // ============================================================================
                 // ASPECT BOUNDS VALIDATION
                 // ============================================================================
@@ -801,7 +801,7 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
                 // 2. Bounds are stored in symbol table for later use
                 // 3. Method calls on bounded parameters are allowed (checked in MemberExpression)
                 // ============================================================================
-                
+
                 // Validate aspect bounds (if any)
                 for (const auto& bound : param->bounds) {
                     if (bound) {
@@ -812,20 +812,20 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
                         }
                     }
                 }
-                
+
                 // Register the type parameter as a TYPE_PARAMETER symbol
                 SymbolInfo typeParamSymbol;
                 typeParamSymbol.name = paramName;
                 typeParamSymbol.kind = SymbolInfo::Kind::TYPE_PARAMETER;
                 typeParamSymbol.type = nullptr;
-                
+
                 // Store bounds for this type parameter
                 for (const auto& bound : param->bounds) {
                     if (bound) {
                         typeParamSymbol.bounds.push_back(bound->toString());
                     }
                 }
-                
+
                 currentScope->add(typeParamSymbol);
             }
         }
@@ -839,7 +839,7 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
     };
 
     std::vector<std::unique_ptr<ast::TypeNode>> paramTypesVec;
-    for (auto& param : node->params) { 
+    for (auto& param : node->params) {
         if (param.name) {
             if (!processingTraitOrBindMethod &&
                 param.name->name == "self" &&
@@ -864,18 +864,18 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
                         if (typeName->identifier && typeName->identifier->name == "Self") {
                             // Replace Self with the current impl type
                             resolvedType = currentImplType;
-                            VYN_CDBG << "DEBUG: Resolved parameter type Self to " << currentImplType->toString() << std::endl;
+                            VYB_CDBG << "DEBUG: Resolved parameter type Self to " << currentImplType->toString() << std::endl;
                         }
                     }
                 }
-                
+
                 resolvedType->accept(*this);
                 ast::TypeNode* effectiveType = resolvedType->type ? resolvedType->type.get() : resolvedType;
                 paramTypesVec.push_back(effectiveType->clone());
                 currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, param.name->name, false, ast::OwnershipKind::MY, effectiveType->clone().release()});
             } else {
                 addError("Parameter \\\"" + param.name->name + "\\\" missing type.", param.name.get());
-                paramTypesVec.push_back(nullptr); 
+                paramTypesVec.push_back(nullptr);
                 currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, param.name->name, false, ast::OwnershipKind::MY, nullptr});
             }
         }
@@ -890,7 +890,7 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
         auto void_type_id = std::make_unique<ast::Identifier>(node->loc, "void");
         returnTypeAstNode = new ast::TypeName(node->loc, std::move(void_type_id));
     }
-    
+
     // Only look up and set function type in symbol table for regular functions
     // For trait/bind methods, they're stored in the trait registry instead
     if (!processingTraitOrBindMethod) {
@@ -908,18 +908,18 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
 
     if (node->body) {
         node->body->accept(*this);
-        
+
         // Phase 1: Detect if this function contains fail statements
         // This enables automatic error propagation across function boundaries
         // Simple recursive helper to scan AST for FailStatement nodes
         std::function<bool(ast::Node*)> containsFailStatement = [&](ast::Node* n) -> bool {
             if (!n) return false;
-            
+
             // Check if this node is a FailStatement
             if (dynamic_cast<ast::FailStatement*>(n)) {
                 return true;
             }
-            
+
             // Recursively check statement types
             if (auto block = dynamic_cast<ast::BlockStatement*>(n)) {
                 for (auto& stmt : block->body) {
@@ -958,13 +958,13 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
             else if (auto retStmt = dynamic_cast<ast::ReturnStatement*>(n)) {
                 if (containsFailStatement(retStmt->argument.get())) return true;
             }
-            
+
             return false;
         };
-        
+
         // Scan the function body for fail statements
         bool hasFailStatement = containsFailStatement(node->body.get());
-        
+
         // Update function metadata for error propagation
         node->canFail = hasFailStatement;
         node->needsErrorReturn = hasFailStatement;
@@ -975,7 +975,7 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
     }
 
     exitScope();
-    
+
     // Restore previous function context
     currentFunction = previousFunction;
 }
@@ -985,11 +985,11 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
         addError("Identifier \\\"" + node->id->name + "\\\" is a reserved word and cannot be used as a variable name.", node->id.get());
     }
 
-    if (currentScope->lookupDirect(node->id->name)) { 
+    if (currentScope->lookupDirect(node->id->name)) {
         addError("Redefinition of variable \"" + node->id->name + "\" in the same scope.", node->id.get());
     }
 
-    // Enforce mandatory type annotation for Vyn variables (name<Type> = value syntax)
+    // Enforce mandatory type annotation for VyB variables (name<Type> = value syntax)
     // Allow compiler-generated internal variables (starting with __) to skip this check
     // Allow variables with initializers to use type inference (error if type can't be inferred)
     const std::string& varName = node->id ? node->id->name : "";
@@ -1001,7 +1001,7 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
         node->typeNode->accept(*this);
     }
 
-    if (node->init) { 
+    if (node->init) {
         // Special case: if initializer is Vec::new(), propagate the variable's type to it BEFORE visiting
         if (auto callExpr = dynamic_cast<ast::CallExpression*>(node->init.get())) {
             if (auto memberExpr = dynamic_cast<ast::MemberExpression*>(callExpr->callee.get())) {
@@ -1023,9 +1023,9 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
                 }
             }
         }
-        
+
         node->init->accept(*this);
-        
+
         // Type inference: if no annotation given, infer from initializer
         if (needsTypeCheck && expressionTypes.count(node->init.get())) {
             ast::TypeNode* initType = expressionTypes[node->init.get()];
@@ -1035,7 +1035,7 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
                 needsTypeCheck = false; // resolved via inference
             }
         }
-        // If still no type, report error with correct Vyn syntax
+        // If still no type, report error with correct VyB syntax
         if (needsTypeCheck) {
             if (node->isConst) {
                 addError("Missing type annotation on constant '" + node->id->name + "'; use const<Type> name = value syntax.", node);
@@ -1043,14 +1043,14 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
                 addError("Missing type annotation on '" + node->id->name + "'; use name<Type> = value syntax.", node);
             }
         }
-        
+
         // Now check types match (for both explicit types and inferred types)
         if (node->typeNode && expressionTypes.count(node->init.get())) {
             // Use resolved type if available (e.g., TypeName with ->type set to VecType or TupleTypeNode)
             ast::TypeNode* varType = node->typeNode->type ? node->typeNode->type.get() : node->typeNode.get();
             ast::TypeNode* initType = expressionTypes[node->init.get()];
-            if (initType) { 
-                if (!areTypesCompatible(varType, initType)) { 
+            if (initType) {
+                if (!areTypesCompatible(varType, initType)) {
                     addError("Initializer type does not match variable type for '" + node->id->name + "'. Expected " + varType->toString() + " but got " + initType->toString(), node);
                 }
             }
@@ -1076,7 +1076,7 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
             addError("Missing type annotation on '" + node->id->name + "'; use name<Type> = value syntax.", node);
         }
     }
-    
+
     // Get the resolved type - prefer the resolved type from typeNode->type if available
     ast::TypeNode* symbolType = nullptr;
     if (node->typeNode) {
@@ -1092,7 +1092,7 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
         symbolType = expressionTypes[node->init.get()];
     }
 
-    SymbolInfo::Kind kind = SymbolInfo::Kind::Variable; 
+    SymbolInfo::Kind kind = SymbolInfo::Kind::Variable;
     currentScope->add(SymbolInfo{kind, node->id->name, node->isConst, ast::OwnershipKind::MY, symbolType ? symbolType->clone().release() : nullptr}); // Explicit SymbolInfo
 }
 
@@ -1149,15 +1149,15 @@ void SemanticAnalyzer::visit(ast::NamespaceDeclaration* node) {
 }
 
 void SemanticAnalyzer::visit(ast::TypeAliasDeclaration* node) {
-    if (node->name && isReservedWord(node->name->name)) { 
+    if (node->name && isReservedWord(node->name->name)) {
         addError("Identifier \\\"" + node->name->name + "\\\" is a reserved word and cannot be used as a type alias name.", node->name.get());
     }
     if (node->name && currentScope->lookupDirect(node->name->name)) {
         addError("Redefinition of type alias \\\"" + node->name->name + "\\\" in the same scope.", node->name.get());
     }
 
-    if (node->typeNode) { 
-        node->typeNode->accept(*this); 
+    if (node->typeNode) {
+        node->typeNode->accept(*this);
     }
 
     if (node->name && node->typeNode && node->typeNode->type) {
@@ -1190,16 +1190,16 @@ void SemanticAnalyzer::visit(ast::BinaryExpression* node) {
 
     if (!leftType || !rightType) {
         // Cannot determine type without both operands
-        VYN_CDBG << "DEBUG: Binary expression - could not determine operand types" << std::endl;
+        VYB_CDBG << "DEBUG: Binary expression - could not determine operand types" << std::endl;
         return;
     }
 
     // For arithmetic operators (+, -, *, /, %), the result type is typically the same as the operands
     // For comparison operators (<, >, <=, >=, ==, !=), the result is Bool
     // For logical operators (&&, ||), the result is Bool
-    
+
     ast::TypeNode* resultType = nullptr;
-    
+
     switch (node->op.type) {
         case TokenType::PLUS:
         case TokenType::MINUS:
@@ -1209,7 +1209,7 @@ void SemanticAnalyzer::visit(ast::BinaryExpression* node) {
             // Arithmetic operations: result type is the same as operands (assuming compatible types)
             resultType = leftType;
             break;
-            
+
         case TokenType::LT:
         case TokenType::LTEQ:
         case TokenType::GT:
@@ -1217,28 +1217,28 @@ void SemanticAnalyzer::visit(ast::BinaryExpression* node) {
         case TokenType::EQEQ:
         case TokenType::NOTEQ:
             // Comparison operations: result is Bool
-            resultType = new ast::TypeName(node->loc, 
+            resultType = new ast::TypeName(node->loc,
                 std::make_unique<ast::Identifier>(node->loc, "Bool"));
             break;
-            
+
         case TokenType::AND:
         case TokenType::OR:
             // Logical operations: result is Bool
-            resultType = new ast::TypeName(node->loc, 
+            resultType = new ast::TypeName(node->loc,
                 std::make_unique<ast::Identifier>(node->loc, "Bool"));
             break;
-            
+
         default:
             // Unknown operator
             addError("Unknown binary operator in expression.", node);
             return;
     }
-    
+
     if (resultType) {
         expressionTypes[node] = resultType;
         node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
-        
-        VYN_CDBG << "DEBUG: Binary expression result type: " << resultType->toString() << std::endl;
+
+        VYB_CDBG << "DEBUG: Binary expression result type: " << resultType->toString() << std::endl;
     }
 }
 void SemanticAnalyzer::visit(ast::CallExpression* node) {
@@ -1246,7 +1246,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
     bool isIntrinsic = false;
     if (auto ident = dynamic_cast<ast::Identifier*>(node->callee.get())) {
         const std::string& name = ident->name;
-        if (name == "lit" || name == "notype" || name == "bare" || name == "deserial" || 
+        if (name == "lit" || name == "notype" || name == "bare" || name == "deserial" ||
             name == "borrow" || name == "view" || name == "my" || name == "their" || name == "our" ||
             name == "soft" || name == "println" || name == "print" || name == "println_int" ||
             name == "print_int" || name == "println_bool" || name == "print_bool" ||
@@ -1256,19 +1256,19 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             isIntrinsic = true;
         }
     }
-    
+
     // Only visit callee if it's not an intrinsic (intrinsics don't need symbol resolution)
     if (!isIntrinsic && node->callee) {
         node->callee->accept(*this);
     }
-    
+
     // Visit arguments
     for (auto& arg : node->arguments) {
         if (arg) arg->accept(*this);
     }
-    
 
-    
+
+
     // Handle intrinsics
     if (auto ident = dynamic_cast<ast::Identifier*>(node->callee.get())) {
         const std::string& name = ident->name;
@@ -1276,14 +1276,14 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
         if (externalFunctionNames.count(name) && !isInUnsafeBlock()) {
             addError("External function '" + name + "' can only be called inside a freedom block.", node);
         }
-        
+
         // Handle serialization intrinsics (lit, notype, bare, deserial)
         if (name == "lit" || name == "notype" || name == "bare" || name == "deserial") {
             if (node->arguments.empty()) {
                 addError(name + "() requires at least one argument", node);
                 return;
             }
-            
+
             // For notype(): validate that argument is a struct type, not a primitive
             if (name == "notype") {
                 ast::Expression* argExpr = node->arguments[0].get();
@@ -1311,7 +1311,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     }
                 }
             }
-            
+
             // Get the argument type
             ast::Expression* argExpr = node->arguments[0].get();
             if (argExpr) {
@@ -1333,7 +1333,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             }
             return;
         }
-        
+
         // Handle borrow()/view() intrinsics
         if (name == "borrow" || name == "view") {
             if (node->arguments.size() != 1) {
@@ -1373,60 +1373,20 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             node->type = std::shared_ptr<ast::TypeNode>(resultType->clone().release());
             return;
         }
-        
+
         // Handle ownership constructors: my(), their(), our()
         if (name == "my" || name == "their" || name == "our") {
             if (node->arguments.size() != 1) {
                 addError(name + "() expects exactly one argument", node);
                 return;
             }
-            
+
             ast::Expression* argExpr = node->arguments[0].get();
             if (!argExpr) {
                 addError(name + "() argument cannot be null", node);
                 return;
             }
-            
-            // Get the argument type 
-            ast::TypeNode* argType = nullptr;
-            if (argExpr->type) {
-                argType = argExpr->type.get();
-            } else {
-                auto typeIt = expressionTypes.find(argExpr);
-                if (typeIt != expressionTypes.end()) {
-                    argType = typeIt->second;
-                }
-            }
-            
-            if (!argType) {
-                addError("Cannot determine type of argument to " + name + "()", node);
-                return;
-            }
-            
-            // Create ownership type: my<T>, their<T>, or our<T>
-            auto ownershipId = std::make_unique<ast::Identifier>(node->loc, name);
-            std::vector<ast::TypeNodePtr> ownershipArgs;
-            ownershipArgs.push_back(argType->clone());
-            
-            ast::TypeNode* resultType = new ast::TypeName(node->loc, std::move(ownershipId), std::move(ownershipArgs));
-            expressionTypes[node] = resultType;
-            node->type = std::shared_ptr<ast::TypeNode>(resultType->clone().release());
-            return;
-        }
-        
-        // Handle soft() constructor: creates mild<T> from our<T>
-        if (name == "soft") {
-            if (node->arguments.size() != 1) {
-                addError("soft() expects exactly one argument", node);
-                return;
-            }
-            
-            ast::Expression* argExpr = node->arguments[0].get();
-            if (!argExpr) {
-                addError("soft() argument cannot be null", node);
-                return;
-            }
-            
+
             // Get the argument type
             ast::TypeNode* argType = nullptr;
             if (argExpr->type) {
@@ -1437,38 +1397,78 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     argType = typeIt->second;
                 }
             }
-            
+
+            if (!argType) {
+                addError("Cannot determine type of argument to " + name + "()", node);
+                return;
+            }
+
+            // Create ownership type: my<T>, their<T>, or our<T>
+            auto ownershipId = std::make_unique<ast::Identifier>(node->loc, name);
+            std::vector<ast::TypeNodePtr> ownershipArgs;
+            ownershipArgs.push_back(argType->clone());
+
+            ast::TypeNode* resultType = new ast::TypeName(node->loc, std::move(ownershipId), std::move(ownershipArgs));
+            expressionTypes[node] = resultType;
+            node->type = std::shared_ptr<ast::TypeNode>(resultType->clone().release());
+            return;
+        }
+
+        // Handle soft() constructor: creates mild<T> from our<T>
+        if (name == "soft") {
+            if (node->arguments.size() != 1) {
+                addError("soft() expects exactly one argument", node);
+                return;
+            }
+
+            ast::Expression* argExpr = node->arguments[0].get();
+            if (!argExpr) {
+                addError("soft() argument cannot be null", node);
+                return;
+            }
+
+            // Get the argument type
+            ast::TypeNode* argType = nullptr;
+            if (argExpr->type) {
+                argType = argExpr->type.get();
+            } else {
+                auto typeIt = expressionTypes.find(argExpr);
+                if (typeIt != expressionTypes.end()) {
+                    argType = typeIt->second;
+                }
+            }
+
             if (!argType) {
                 addError("Cannot determine type of argument to soft()", node);
                 return;
             }
-            
+
             // Validate that argument is our<T>
             ast::TypeName* argTypeName = dynamic_cast<ast::TypeName*>(argType);
             if (!argTypeName || !argTypeName->identifier || argTypeName->identifier->name != "our") {
                 addError("soft() can only be applied to our<T> (shared ownership) types", node);
                 return;
             }
-            
+
             // Extract inner type T from our<T>
             if (argTypeName->genericArgs.empty()) {
                 addError("soft() argument our<T> is missing type parameter", node);
                 return;
             }
-            
+
             ast::TypeNode* innerType = argTypeName->genericArgs[0].get();
-            
+
             // Create mild<T> type
             auto mildId = std::make_unique<ast::Identifier>(node->loc, "mild");
             std::vector<ast::TypeNodePtr> mildArgs;
             mildArgs.push_back(innerType->clone());
-            
+
             ast::TypeNode* resultType = new ast::TypeName(node->loc, std::move(mildId), std::move(mildArgs));
             expressionTypes[node] = resultType;
             node->type = std::shared_ptr<ast::TypeNode>(resultType->clone().release());
             return;
         }
-        
+
         // Handle println intrinsic
         if (name == "println") {
             // println accepts one or more arguments of any type and returns Void
@@ -1476,7 +1476,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 addError("println() requires at least one argument", node);
                 return;
             }
-            
+
             // Create Void return type
             auto voidId = std::make_unique<ast::Identifier>(node->loc, "Void");
             ast::TypeNode* voidType = new ast::TypeName(node->loc, std::move(voidId), std::vector<ast::TypeNodePtr>{});
@@ -1580,7 +1580,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             return;
         }
     }
-    
+
     // Handle Vec::new() constructor calls
     if (auto memberExpr = dynamic_cast<ast::MemberExpression*>(node->callee.get())) {
         // Check if this is Vec::new()
@@ -1592,7 +1592,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                         addError("Vec::new() accepts at most 1 argument (optional size)", node);
                         return;
                     }
-                    
+
                     // If size argument is provided, validate it's an integer type
                     if (node->arguments.size() == 1) {
                         auto sizeArg = node->arguments[0].get();
@@ -1601,40 +1601,40 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                             // TODO: In full implementation, validate that size argument is Int type
                         }
                     }
-                    
+
                     // Check if type was already set by VariableDeclaration (type propagation)
                     if (expressionTypes.count(node) && expressionTypes[node]) {
                         // Type already set - use it
-                        VYN_CDBG << "DEBUG: Vec::new() type already propagated: " << expressionTypes[node]->toString() << std::endl;
+                        VYB_CDBG << "DEBUG: Vec::new() type already propagated: " << expressionTypes[node]->toString() << std::endl;
                         return;
                     }
-                    
+
                     // Need to infer element type from context or default to a generic type
                     // For now, we'll default to Vec<Int> if no context is available
                     // TODO: In a full implementation, this should be inferred from the variable declaration
                     auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
                     auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
                     auto vecType = std::make_unique<ast::VecType>(node->loc, std::move(intType));
-                    
+
                     expressionTypes[node] = vecType.get();
                     node->type = std::shared_ptr<ast::TypeNode>(std::move(vecType));
                     return;
                 }
-                
+
                 // Handle T::from_string() static method calls for type conversion
                 const std::string& typeName = vecIdent->name;
                 const std::string& methodName = newIdent->name;
-                
+
                 if (methodName == "from_string") {
                     // Validate arguments
                     if (node->arguments.size() != 1) {
                         addError(typeName + "::from_string() expects exactly 1 argument (string to parse)", node);
                         return;
                     }
-                    
+
                     // Visit the string argument
                     node->arguments[0]->accept(*this);
-                    
+
                     // Validate argument is String type
                     auto argTypeIt = expressionTypes.find(node->arguments[0].get());
                     if (argTypeIt != expressionTypes.end() && argTypeIt->second) {
@@ -1645,7 +1645,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                             }
                         }
                     }
-                    
+
                     // Return the target type (Int, Float, Bool, String, or custom struct)
                     // For primitives, return the type directly
                     if (typeName == "Int" || typeName == "Float" || typeName == "Bool" || typeName == "String") {
@@ -1653,10 +1653,10 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                             std::make_unique<ast::Identifier>(node->loc, typeName));
                         expressionTypes[node] = resultType;
                         node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
-                        VYN_CDBG << "DEBUG: " << typeName << "::from_string() returns " << typeName << std::endl;
+                        VYB_CDBG << "DEBUG: " << typeName << "::from_string() returns " << typeName << std::endl;
                         return;
                     }
-                    
+
                     // For complex types (structs), check if type exists and return it
                     auto structIt = structFieldTypes.find(typeName);
                     if (structIt != structFieldTypes.end()) {
@@ -1664,10 +1664,10 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                             std::make_unique<ast::Identifier>(node->loc, typeName));
                         expressionTypes[node] = resultType;
                         node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
-                        VYN_CDBG << "DEBUG: " << typeName << "::from_string() returns " << typeName << " (custom struct)" << std::endl;
+                        VYB_CDBG << "DEBUG: " << typeName << "::from_string() returns " << typeName << " (custom struct)" << std::endl;
                         return;
                     }
-                    
+
                     addError("Unknown type '" + typeName + "' in from_string() call", node);
                     return;
                 }
@@ -1686,13 +1686,13 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 }
             }
         }
-        
+
         // Handle Vec instance method calls: obj.method()
         // First check if it's a simple identifier (e.g., vec.push())
         if (auto objIdent = dynamic_cast<ast::Identifier*>(memberExpr->object.get())) {
             if (auto methodIdent = dynamic_cast<ast::Identifier*>(memberExpr->property.get())) {
                 std::string methodName = methodIdent->name;
-                
+
                 // Look up the object's type
                 SymbolInfo* objSymbol = currentScope->lookup(objIdent->name);
                 if (objSymbol && objSymbol->type) {
@@ -1707,7 +1707,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                             return;
                         }
                     }
-                    
+
                     // Check if it's a Tuple type
                     if (auto tupleType = dynamic_cast<ast::TupleTypeNode*>(objSymbol->type)) {
                         if (methodName == "len") {
@@ -1723,7 +1723,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                             return;
                         }
                     }
-                    
+
                     struct AspectMethodCandidate {
                         std::string traitName;
                         ast::TypeNode* returnType;
@@ -1829,12 +1829,12 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     if (auto typeName = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
                         if (typeName->identifier) {
                             std::string typeNameStr = typeName->toString(); // Use full type with generic args
-                            
+
                             // Handle mild<T>.grab() and mild<T>.released() intrinsic methods
                             if (typeNameStr.find("mild<") == 0) {
                                 if (methodName == "grab") {
                                     // mild<T>.grab() returns our<T>
-                                    VYN_CDBG << "DEBUG: Setting return type for mild<T>.grab()" << std::endl;
+                                    VYB_CDBG << "DEBUG: Setting return type for mild<T>.grab()" << std::endl;
                                     // Extract T from mild<T>
                                     if (!typeName->genericArgs.empty()) {
                                         auto innerType = typeName->genericArgs[0].get();
@@ -1845,12 +1845,12 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                         auto resultType = new ast::TypeName(node->loc, std::move(ourId), std::move(ourArgs));
                                         expressionTypes[node] = resultType;
                                         node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
-                                        VYN_CDBG << "DEBUG: mild<T>.grab() returns " << resultType->toString() << std::endl;
+                                        VYB_CDBG << "DEBUG: mild<T>.grab() returns " << resultType->toString() << std::endl;
                                         return;
                                     }
                                 } else if (methodName == "released") {
                                     // mild<T>.released() returns Bool
-                                    VYN_CDBG << "DEBUG: Setting return type for mild<T>.released() to Bool" << std::endl;
+                                    VYB_CDBG << "DEBUG: Setting return type for mild<T>.released() to Bool" << std::endl;
                                     auto boolType = new ast::TypeName(node->loc,
                                         std::make_unique<ast::Identifier>(node->loc, "Bool"));
                                     expressionTypes[node] = boolType;
@@ -1858,7 +1858,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                     return;
                                 }
                             }
-                            
+
                             if (resolveAspectMethodForTypeString(typeNameStr)) {
                                 return;
                             }
@@ -1869,7 +1869,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                 for (const auto& traitEntry : typeImplsIt->second) {
                                     const std::string& traitName = traitEntry.first;
                                     const std::vector<ast::FunctionDeclaration*>& methods = traitEntry.second;
-                                    
+
                                     for (ast::FunctionDeclaration* method : methods) {
                                         if (method && method->id && method->id->name == methodName) {
                                             if (method->returnTypeNode) {
@@ -1878,19 +1878,19 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                                 expressionTypes[node] = actualReturnType;
                                                 node->type = std::shared_ptr<ast::TypeNode>(actualReturnType->clone());
                                             }
-                                            
-                                            VYN_CDBG << "DEBUG: Resolved trait method call: " << typeNameStr 
+
+                                            VYB_CDBG << "DEBUG: Resolved trait method call: " << typeNameStr
                                                       << "." << methodName << " from trait " << traitName << std::endl;
                                             return;
                                         }
                                     }
                                 }
                             }
-                            
+
                             // Also check generic trait impls
                             for (const auto& typeEntry : genericTraitImpls) {
                                 const std::string& pattern = typeEntry.first;
-                                
+
                                 if (matchesPattern(typeNameStr, pattern)) {
                                     for (const auto& traitEntry : typeEntry.second) {
                                         const std::string& traitName = traitEntry.first;
@@ -1907,7 +1907,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                                     return;
                                                 }
                                             }
-                                            
+
                                             // Not in impl - check if aspect has default implementation
                                             auto traitIt = traitRegistry.find(traitName);
                                             if (traitIt != traitRegistry.end()) {
@@ -1925,14 +1925,14 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                     }
                                 }
                             }
-                            
+
                             // Check concrete impls for default methods
                             auto concreteImplsIt = traitImpls.find(typeNameStr);
                             if (concreteImplsIt != traitImpls.end()) {
                                 for (const auto& traitEntry : concreteImplsIt->second) {
                                     const std::string& traitName = traitEntry.first;
                                     const std::vector<ast::FunctionDeclaration*>& methods = traitEntry.second;
-                                    
+
                                     // Check if method is in impl
                                     bool foundInImpl = false;
                                     for (ast::FunctionDeclaration* method : methods) {
@@ -1941,7 +1941,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                             break;
                                         }
                                     }
-                                    
+
                                     // If not in impl, check aspect for default implementation
                                     if (!foundInImpl) {
                                         auto traitIt = traitRegistry.find(traitName);
@@ -1962,7 +1962,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                         }
                     }
                 }
-                
+
                 // Check if this is a method call on a type parameter
                 if (objSymbol && objSymbol->type) {
                     if (auto typeName = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
@@ -1992,7 +1992,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                         }
                     }
                 }
-                
+
                 // If we reach here and it's a Vec type, try Vec-specific methods
                 // Otherwise, it's an unknown method error
                 if (objSymbol && objSymbol->type) {
@@ -2000,7 +2000,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                         handleVecMethodCall(node, objIdent->name, methodName);
                         return;
                     }
-                    
+
                     // Check for primitive type methods (Int.to_string(), etc.)
                     if (auto objTypeName = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
                         if (objTypeName->identifier && objTypeName->identifier->name == "Vec" && isBuiltinVecMethodName(methodName)) {
@@ -2009,17 +2009,17 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                         }
                         if (objTypeName->identifier) {
                             std::string typeStr = objTypeName->identifier->name;
-                            if (methodName == "to_string" && 
+                            if (methodName == "to_string" &&
                                 (typeStr == "Int" || typeStr == "Float" || typeStr == "Bool")) {
                                 // Return String type for .to_string() on primitives
                                 auto stringType = new ast::TypeName(node->loc,
                                     std::make_unique<ast::Identifier>(node->loc, "String"));
                                 expressionTypes[node] = stringType;
                                 node->type = std::shared_ptr<ast::TypeNode>(stringType->clone());
-                                VYN_CDBG << "DEBUG: Primitive method " << typeStr << ".to_string() returns String (early path)" << std::endl;
+                                VYB_CDBG << "DEBUG: Primitive method " << typeStr << ".to_string() returns String (early path)" << std::endl;
                                 return;
                             }
-                            
+
                             // Check for complex/struct type methods
                             if (methodName == "to_string") {
                                 auto structIt = structFieldTypes.find(typeStr);
@@ -2029,14 +2029,14 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                         std::make_unique<ast::Identifier>(node->loc, "String"));
                                     expressionTypes[node] = stringType;
                                     node->type = std::shared_ptr<ast::TypeNode>(stringType->clone());
-                                    VYN_CDBG << "DEBUG: Complex type " << typeStr << ".to_string() returns JSON String (early path)" << std::endl;
+                                    VYB_CDBG << "DEBUG: Complex type " << typeStr << ".to_string() returns JSON String (early path)" << std::endl;
                                     return;
                                 }
                             }
                         }
                     }
                 }
-                
+
                 // Check for String type methods
                 if (objSymbol && objSymbol->type) {
                     if (auto objTypeName = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
@@ -2082,17 +2082,17 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 return;
             }
         }
-        
+
         // Now handle the case where object is a member expression (e.g., tree.nodes.push())
         // In this case, we need to analyze the object to determine its type
         if (auto methodIdent = dynamic_cast<ast::Identifier*>(memberExpr->property.get())) {
             // Visit the object expression to determine its type
             memberExpr->object->accept(*this);
-            
+
             // Get the object's type
             auto objTypeIt = expressionTypes.find(memberExpr->object.get());
             if (objTypeIt != expressionTypes.end() && objTypeIt->second) {
-                
+
                 // Handle mild<T>.grab() and mild<T>.released() method calls
                 std::string objTypeStr = objTypeIt->second->toString();
                 std::string methodName = methodIdent->name;
@@ -2101,7 +2101,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                         // mild<T>.grab() returns our<T>? (optional)
                         // For now, just return the inner type wrapped in our<> (will be nil)
                         // TODO: Implement proper optional/result type
-                        VYN_CDBG << "DEBUG: Setting return type for mild<T>.grab()" << std::endl;
+                        VYB_CDBG << "DEBUG: Setting return type for mild<T>.grab()" << std::endl;
                         // Extract T from mild<T>
                         if (auto typeName = dynamic_cast<ast::TypeName*>(objTypeIt->second)) {
                             if (!typeName->genericArgs.empty()) {
@@ -2113,13 +2113,13 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                 auto resultType = new ast::TypeName(node->loc, std::move(ourId), std::move(ourArgs));
                                 expressionTypes[node] = resultType;
                                 node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
-                                VYN_CDBG << "DEBUG: mild<T>.grab() returns " << resultType->toString() << std::endl;
+                                VYB_CDBG << "DEBUG: mild<T>.grab() returns " << resultType->toString() << std::endl;
                                 return;
                             }
                         }
                     } else if (methodName == "released") {
                         // mild<T>.released() returns Bool
-                        VYN_CDBG << "DEBUG: Setting return type for mild<T>.released() to Bool" << std::endl;
+                        VYB_CDBG << "DEBUG: Setting return type for mild<T>.released() to Bool" << std::endl;
                         auto boolType = new ast::TypeName(node->loc,
                             std::make_unique<ast::Identifier>(node->loc, "Bool"));
                         expressionTypes[node] = boolType;
@@ -2127,7 +2127,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                         return;
                     }
                 }
-                
+
                 // Check if the object's type is a Vec type
                 if (auto vecType = dynamic_cast<ast::VecType*>(objTypeIt->second)) {
                     // This is a Vec method call, handle it
@@ -2147,14 +2147,14 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                         return;
                     }
                 }
-                
+
                 // Check if this is a trait method call
                 // Get the type name to look up trait implementations
                 if (auto typeName = dynamic_cast<ast::TypeName*>(objTypeIt->second)) {
                     if (typeName->identifier) {
                         std::string typeNameStr = typeName->toString(); // Use full type string with generic args
                         std::string methodName = methodIdent->name;
-                        
+
                         // Look for concrete trait implementations for this type
                         auto typeImplsIt = traitImpls.find(typeNameStr);
                         if (typeImplsIt != traitImpls.end()) {
@@ -2162,7 +2162,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                             for (const auto& traitEntry : typeImplsIt->second) {
                                 const std::string& traitName = traitEntry.first;
                                 const std::vector<ast::FunctionDeclaration*>& methods = traitEntry.second;
-                                
+
                                 // Look for the method in this trait's implementation
                                 for (ast::FunctionDeclaration* method : methods) {
                                     if (method && method->id && method->id->name == methodName) {
@@ -2171,19 +2171,19 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                             expressionTypes[node] = method->returnTypeNode.get();
                                             node->type = std::shared_ptr<ast::TypeNode>(method->returnTypeNode->clone());
                                         }
-                                        
-                                        VYN_CDBG << "DEBUG: Resolved trait method call: " << typeNameStr 
+
+                                        VYB_CDBG << "DEBUG: Resolved trait method call: " << typeNameStr
                                                   << "." << methodName << " from trait " << traitName << std::endl;
                                         return;
                                     }
                                 }
                             }
                         }
-                        
+
                         // Also check generic trait impls - check if typeNameStr matches any pattern
                         for (const auto& typeEntry : genericTraitImpls) {
                             const std::string& pattern = typeEntry.first; // e.g., "Box<T>"
-                            
+
                             // Check if typeNameStr matches pattern (e.g., Box<Int> matches Box<T>)
                             if (matchesPattern(typeNameStr, pattern)) {
                                 for (const auto& traitEntry : typeEntry.second) {
@@ -2194,17 +2194,17 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                             if (method && method->id && method->id->name == methodName) {
                                                 // Found the generic trait method! Substitute Self with concrete type
                                                 if (method->returnTypeNode) {
-                                                    VYN_CDBG << "DEBUG: Generic trait method " << methodName 
+                                                    VYB_CDBG << "DEBUG: Generic trait method " << methodName
                                                               << " return type before substitution: " << method->returnTypeNode->toString() << std::endl;
                                                     ast::TypeNode* actualReturnType = substituteSelfType(method->returnTypeNode.get(), typeNameStr);
-                                                    VYN_CDBG << "DEBUG: After Self substitution: " << actualReturnType->toString() << std::endl;
+                                                    VYB_CDBG << "DEBUG: After Self substitution: " << actualReturnType->toString() << std::endl;
                                                     expressionTypes[node] = actualReturnType;
                                                     node->type = std::shared_ptr<ast::TypeNode>(actualReturnType->clone());
                                                 }
                                                 return;
                                             }
                                         }
-                                        
+
                                         // Not in impl - check if aspect has default implementation
                                         auto traitIt = traitRegistry.find(traitName);
                                         if (traitIt != traitRegistry.end()) {
@@ -2222,14 +2222,14 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                 }
                             }
                         }
-                        
+
                         // Check concrete impls for default methods
                         auto concreteImplsIt = traitImpls.find(typeNameStr);
                         if (concreteImplsIt != traitImpls.end()) {
                             for (const auto& traitEntry : concreteImplsIt->second) {
                                 const std::string& traitName = traitEntry.first;
                                 const std::vector<ast::FunctionDeclaration*>& methods = traitEntry.second;
-                                
+
                                 // Check if method is in impl
                                 bool foundInImpl = false;
                                 for (ast::FunctionDeclaration* method : methods) {
@@ -2238,7 +2238,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                         break;
                                     }
                                 }
-                                
+
                                 // If not in impl, check aspect for default implementation
                                 if (!foundInImpl) {
                                     auto traitIt = traitRegistry.find(traitName);
@@ -2256,7 +2256,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                 }
                             }
                         }
-                        
+
                         // Check if this is a type parameter with bounds
                         SymbolInfo* typeParamSym = currentScope->lookup(typeNameStr);
                         if (typeParamSym && typeParamSym->kind == SymbolInfo::Kind::TYPE_PARAMETER) {
@@ -2266,8 +2266,8 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                 if (traitInfo) {
                                     for (const auto& method : traitInfo->methods) {
                                         if (method.name == methodName) {
-                                            VYN_CDBG << "DEBUG: CallExpression: Type parameter " << typeNameStr 
-                                                      << " with bound " << boundName 
+                                            VYB_CDBG << "DEBUG: CallExpression: Type parameter " << typeNameStr
+                                                      << " with bound " << boundName
                                                       << " allows method " << methodName << std::endl;
                                             // Found the method in bounds - substitute Self with type parameter
                                             if (method.returnType) {
@@ -2277,7 +2277,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                                     if (returnTypeName->identifier && returnTypeName->identifier->name == "Self") {
                                                         // Return Self -> substitute with type parameter
                                                         actualReturnType = typeName; // The type parameter itself
-                                                        VYN_CDBG << "DEBUG: Substituting Self return type with type parameter " << typeNameStr << std::endl;
+                                                        VYB_CDBG << "DEBUG: Substituting Self return type with type parameter " << typeNameStr << std::endl;
                                                     }
                                                 }
                                                 expressionTypes[node] = actualReturnType;
@@ -2289,7 +2289,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                 }
                             }
                         }
-                        
+
                         // Check for primitive type methods (Int.to_string(), Float.to_string(), Bool.to_string())
                         if (methodName == "to_string") {
                             if (typeNameStr == "Int" || typeNameStr == "Float" || typeNameStr == "Bool") {
@@ -2298,10 +2298,10 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                     std::make_unique<ast::Identifier>(node->loc, "String"));
                                 expressionTypes[node] = stringType;
                                 node->type = std::shared_ptr<ast::TypeNode>(stringType->clone());
-                                VYN_CDBG << "DEBUG: Primitive method " << typeNameStr << ".to_string() returns String" << std::endl;
+                                VYB_CDBG << "DEBUG: Primitive method " << typeNameStr << ".to_string() returns String" << std::endl;
                                 return;
                             }
-                            
+
                             // Check if this is a complex/struct type
                             auto structIt = structFieldTypes.find(typeNameStr);
                             if (structIt != structFieldTypes.end()) {
@@ -2310,11 +2310,11 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                     std::make_unique<ast::Identifier>(node->loc, "String"));
                                 expressionTypes[node] = stringType;
                                 node->type = std::shared_ptr<ast::TypeNode>(stringType->clone());
-                                VYN_CDBG << "DEBUG: Complex type " << typeNameStr << ".to_string() returns JSON String" << std::endl;
+                                VYB_CDBG << "DEBUG: Complex type " << typeNameStr << ".to_string() returns JSON String" << std::endl;
                                 return;
                             }
                         }
-                        
+
                         // If we didn't find a trait method, it might be a struct method (future feature)
                         // or it's an error
                         addError("Method '" + methodName + "' not found for type '" + typeNameStr + "'", node);
@@ -2324,7 +2324,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             }
         }
     }
-    
+
     // Fallback: look up return type from function registry for plain function calls
     if (auto ident = dynamic_cast<ast::Identifier*>(node->callee.get())) {
         auto it = functionRegistry.find(ident->name);
@@ -2343,7 +2343,7 @@ void SemanticAnalyzer::visit(ast::ArrayElementExpression* node) {
 
     // Process the array expression first
     node->array->accept(*this);
-    
+
     // Process the index expression
     node->index->accept(*this);
 
@@ -2358,7 +2358,7 @@ void SemanticAnalyzer::visit(ast::ArrayElementExpression* node) {
             }
         }
     }
-    
+
     // Validate index type (should be integer)
     auto indexTypeIt = expressionTypes.find(node->index.get());
     if (indexTypeIt != expressionTypes.end() && indexTypeIt->second) {
@@ -2398,16 +2398,16 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
                 std::make_unique<ast::Identifier>(node->loc, "Int"));
             return;
         }
-        
+
         // Vec::new() - create vector
         if (typeName == "Vec" && methodName == "new") {
             // Don't try to resolve the type of Vec as a value
             // The actual typing will be handled in CallExpression visitor
             return;
         }
-        
+
         // Primitive type static methods: Int::from_string(), Float::from_string(), etc.
-        if (methodName == "from_string" && 
+        if (methodName == "from_string" &&
             (typeName == "Int" || typeName == "Float" || typeName == "Bool" || typeName == "String")) {
             // Static method call for type conversion
             // The actual typing will be handled in CallExpression visitor
@@ -2418,7 +2418,7 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
         if (typeName == "String" && methodName == "from_bytes") {
             return;
         }
-        
+
         // Complex type static methods: Struct::from_string() for JSON deserialization
         // Check if this is a user-defined struct
         auto structIt = structFieldTypes.find(typeName);
@@ -2438,21 +2438,21 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
     // Get the full type string (e.g., "Box<Int>") not just the base name
     std::string structTypeName = it->second->toString();
     const std::string& fieldName = propertyId->name;
-    
-    VYN_CDBG << "DEBUG: MemberExpression type check: structTypeName=" << structTypeName 
-              << ", fieldName=" << fieldName 
+
+    VYB_CDBG << "DEBUG: MemberExpression type check: structTypeName=" << structTypeName
+              << ", fieldName=" << fieldName
               << ", typeNodeKind=" << typeid(*it->second).name() << std::endl;
-    
+
     // Handle mild<T>.grab() and mild<T>.released() intrinsic methods
     if (structTypeName.find("mild<") == 0) {
         if (fieldName == "grab" || fieldName == "released") {
-            VYN_CDBG << "DEBUG: Recognized mild<T>." << fieldName << "() method" << std::endl;
+            VYB_CDBG << "DEBUG: Recognized mild<T>." << fieldName << "() method" << std::endl;
             // These are intrinsic methods on mild<T>, allow them
             // Type will be set in CallExpression visitor
             return;
         }
     }
-    
+
     // Check if the object's TYPE is a type parameter with bounds
     // This handles both direct variable access (clonedValue.show()) and chained access (self.value.show())
     if (auto objTypeName = dynamic_cast<ast::TypeName*>(it->second)) {
@@ -2468,8 +2468,8 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
                         // Check if this aspect has the method
                         for (const auto& method : traitInfo->methods) {
                             if (method.name == fieldName) {
-                                VYN_CDBG << "DEBUG: Object of type parameter " << objTypeStr 
-                                          << " with bound " << boundName 
+                                VYB_CDBG << "DEBUG: Object of type parameter " << objTypeStr
+                                          << " with bound " << boundName
                                           << " allows method " << fieldName << std::endl;
                                 // Found the method in one of the bounds - allow it
                                 return;
@@ -2483,7 +2483,7 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
             }
         }
     }
-    
+
     // Also check if the object is a variable whose type is a type parameter (for additional safety)
     if (auto objIdent = dynamic_cast<ast::Identifier*>(node->object.get())) {
         SymbolInfo* varSym = currentScope->lookup(objIdent->name);
@@ -2501,9 +2501,9 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
                                 // Check if this aspect has the method
                                 for (const auto& method : traitInfo->methods) {
                                     if (method.name == fieldName) {
-                                        VYN_CDBG << "DEBUG: Variable " << objIdent->name 
-                                                  << " has type parameter " << varTypeStr 
-                                                  << " with bound " << boundName 
+                                        VYB_CDBG << "DEBUG: Variable " << objIdent->name
+                                                  << " has type parameter " << varTypeStr
+                                                  << " with bound " << boundName
                                                   << " allowing method " << fieldName << std::endl;
                                         // Found the method in one of the bounds - allow it
                                         return;
@@ -2519,7 +2519,7 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
             }
         }
     }
-    
+
     // Also check if the type name itself is a type parameter (for direct type parameter method calls)
     SymbolInfo* typeParamSym = currentScope->lookup(structTypeName);
     if (typeParamSym && typeParamSym->kind == SymbolInfo::Kind::TYPE_PARAMETER) {
@@ -2530,8 +2530,8 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
                 // Check if this aspect has the method
                 for (const auto& method : traitInfo->methods) {
                     if (method.name == fieldName) {
-                        VYN_CDBG << "DEBUG: Type parameter " << structTypeName 
-                                  << " with bound " << boundName 
+                        VYB_CDBG << "DEBUG: Type parameter " << structTypeName
+                                  << " with bound " << boundName
                                   << " allows method " << fieldName << std::endl;
                         // Found the method in one of the bounds - allow it
                         return;
@@ -2543,10 +2543,10 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
         addError("Type parameter '" + structTypeName + "' does not have bound that provides method '" + fieldName + "'", node);
         return;
     }
-    
+
     // Before checking struct fields, check if this might be a trait method call
     // (MemberExpression can be part of CallExpression, where callee is the MemberExpression)
-    
+
     // First check concrete trait impls
     auto typeImplsIt = traitImpls.find(structTypeName);
     if (typeImplsIt != traitImpls.end()) {
@@ -2556,18 +2556,18 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
                 if (method && method->id && method->id->name == fieldName) {
                     // This is a trait method, not a field
                     // Don't set type here - let CallExpression handle it
-                    VYN_CDBG << "DEBUG: MemberExpression identified trait method: " 
+                    VYB_CDBG << "DEBUG: MemberExpression identified trait method: "
                               << structTypeName << "." << fieldName << std::endl;
                     return;
                 }
             }
         }
     }
-    
+
     // Also check generic trait impls - check if structTypeName matches any pattern
     for (const auto& typeEntry : genericTraitImpls) {
         const std::string& pattern = typeEntry.first; // e.g., "Box<T>"
-        
+
         // Simple pattern matching: check if structTypeName matches pattern
         // Box<Int> should match Box<T>
         if (matchesPattern(structTypeName, pattern)) {
@@ -2580,7 +2580,7 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
                             return;
                         }
                     }
-                    
+
                     // Not in impl - check if aspect has default implementation
                     const std::string& traitName = traitEntry.first;
                     auto traitIt = traitRegistry.find(traitName);
@@ -2596,14 +2596,14 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
             }
         }
     }
-    
+
     // Check concrete trait impls for default methods
     auto concreteImplsIt = traitImpls.find(structTypeName);
     if (concreteImplsIt != traitImpls.end()) {
         for (const auto& traitEntry : concreteImplsIt->second) {
             const std::string& traitName = traitEntry.first;
             const std::vector<ast::FunctionDeclaration*>& methods = traitEntry.second;
-            
+
             // Check if method is in impl
             bool foundInImpl = false;
             for (ast::FunctionDeclaration* method : methods) {
@@ -2612,7 +2612,7 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
                     break;
                 }
             }
-            
+
             // If not in impl, check aspect for default implementation
             if (!foundInImpl) {
                 auto traitIt = traitRegistry.find(traitName);
@@ -2627,7 +2627,7 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
             }
         }
     }
-    
+
     // Check if this is a tuple type - tuples only support len() method
     if (auto tupleType = dynamic_cast<ast::TupleTypeNode*>(it->second)) {
         if (fieldName == "len") {
@@ -2638,16 +2638,16 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
             return;
         }
     }
-    
+
     // Extract base struct name for field lookup (Box<Int> -> Box)
     // Special handling for ownership wrappers: their<Counter> -> Counter
     std::string baseStructName = structTypeName;
     size_t anglePos = structTypeName.find('<');
     if (anglePos != std::string::npos) {
         baseStructName = structTypeName.substr(0, anglePos);
-        
+
         // Check if this is an ownership keyword (their, my, view, our, etc.)
-        if (baseStructName == "their" || baseStructName == "my" || baseStructName == "view" || 
+        if (baseStructName == "their" || baseStructName == "my" || baseStructName == "view" ||
             baseStructName == "our" || baseStructName == "borrow") {
             // Extract the inner type: their<Counter> -> Counter
             size_t closeAnglePos = structTypeName.find('>');
@@ -2665,7 +2665,7 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
             }
         }
     }
-    
+
     // Special handling for built-in types with methods (Vec, Future, etc.)
     // These are not user-defined structs, so they won't be in structFieldTypes
     // Their methods are handled in CallExpression visitor
@@ -2674,14 +2674,14 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
         // The actual method resolution will happen in CallExpression visitor
         return;
     }
-    
+
     // Special handling for primitive types with methods (Int.to_string(), etc.)
     if (baseStructName == "Int" || baseStructName == "Float" || baseStructName == "Bool" || baseStructName == "String") {
         // Primitive types can have methods like to_string()
         // The actual method resolution will happen in CallExpression visitor
         return;
     }
-    
+
     // Check if this is a user-defined struct type accessing a method (not a field)
     // We need to allow method calls on structs (like .to_string()) to pass through to CallExpression
     // So if the member name is a known method, don't treat it as a field access
@@ -2695,13 +2695,13 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
             return;
         }
     }
-    
+
     // Check if we have field information for this struct
     if (structIt == structFieldTypes.end()) {
         addError("Unknown struct type: " + baseStructName, node);
         return;
     }
-    
+
     // Look up the specific field
     auto& fieldMap = structIt->second;
     auto fieldIt = fieldMap.find(fieldName);
@@ -2709,13 +2709,13 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
         addError("Field '" + fieldName + "' not found in struct '" + structTypeName + "'", node);
         return;
     }
-    
+
     // Set the type of the member expression to the field's type
     ast::TypeNode* fieldType = fieldIt->second;
     expressionTypes[node] = fieldType;
     node->type = std::shared_ptr<ast::TypeNode>(fieldType->clone());
-    
-    VYN_CDBG << "DEBUG: Resolved member access " << structTypeName << "." << fieldName 
+
+    VYB_CDBG << "DEBUG: Resolved member access " << structTypeName << "." << fieldName
               << " to type: " << fieldType->toString() << std::endl;
 }
 void SemanticAnalyzer::visit(ast::AssignmentExpression* node) {
@@ -2774,9 +2774,9 @@ void SemanticAnalyzer::visit(ast::AssignmentExpression* node) {
     ast::TypeNode* leftType = (leftTypeIt != expressionTypes.end()) ? leftTypeIt->second : nullptr;
     ast::TypeNode* rightType = (rightTypeIt != expressionTypes.end()) ? rightTypeIt->second : nullptr;
 
-    VYN_CDBG << "DEBUG: Assignment type check - LHS type: " 
+    VYB_CDBG << "DEBUG: Assignment type check - LHS type: "
               << (leftType ? leftType->toString() : "null")
-              << ", RHS type: " 
+              << ", RHS type: "
               << (rightType ? rightType->toString() : "null") << std::endl;
 
     if (!leftType || !rightType) {
@@ -2786,16 +2786,16 @@ void SemanticAnalyzer::visit(ast::AssignmentExpression* node) {
     }
 
     // Check if the types are compatible for assignment
-    if (!areTypesCompatible(leftType, rightType)) { 
-        addError("Type error in assignment: incompatible types - cannot assign '" + rightType->toString() + 
-                "' to '" + leftType->toString() + "'.", node); 
+    if (!areTypesCompatible(leftType, rightType)) {
+        addError("Type error in assignment: incompatible types - cannot assign '" + rightType->toString() +
+                "' to '" + leftType->toString() + "'.", node);
         // Continue processing to avoid cascading errors, but mark this node as erroneous
         expressionTypes[node] = leftType; // Still use left type for further analysis
     } else {
         // The type of the assignment expression is typically the type of the LHS (or RHS after conversion).
         expressionTypes[node] = leftType; // Or rightType, depending on language rules for assignment expr type
     }
-    
+
     if (leftType) {
       node->type = std::shared_ptr<ast::TypeNode>(leftType->clone());
     }
@@ -2822,8 +2822,8 @@ void SemanticAnalyzer::visit(ast::LogicalExpression* node) {
     // Get types of operands
     auto leftTypeIt = expressionTypes.find(node->left.get());
     auto rightTypeIt = expressionTypes.find(node->right.get());
-    
-    if (leftTypeIt == expressionTypes.end() || rightTypeIt == expressionTypes.end() || 
+
+    if (leftTypeIt == expressionTypes.end() || rightTypeIt == expressionTypes.end() ||
         !leftTypeIt->second || !rightTypeIt->second) {
         addError("Cannot determine types for logical expression operands.", node);
         expressionTypes[node] = nullptr;
@@ -2834,23 +2834,23 @@ void SemanticAnalyzer::visit(ast::LogicalExpression* node) {
     // For now we'll do a simple check for boolean type
     bool isLeftBoolean = false;
     bool isRightBoolean = false;
-    
+
     if (auto* typeName = dynamic_cast<ast::TypeName*>(leftTypeIt->second)) {
         isLeftBoolean = typeName->identifier && typeName->identifier->name == "bool";
     }
-    
+
     if (auto* typeName = dynamic_cast<ast::TypeName*>(rightTypeIt->second)) {
         isRightBoolean = typeName->identifier && typeName->identifier->name == "bool";
     }
-    
+
     if (!isLeftBoolean) {
         addError("Left operand of logical expression must be boolean.", node->left.get());
     }
-    
+
     if (!isRightBoolean) {
         addError("Right operand of logical expression must be boolean.", node->right.get());
     }
-    
+
     // Result type is always boolean
     // Create a boolean TypeName
     auto identifier = std::make_unique<ast::Identifier>(node->loc, "bool");
@@ -2876,16 +2876,16 @@ void SemanticAnalyzer::visit(ast::ConditionalExpression* node) {
         expressionTypes[node] = nullptr;
         return;
     }
-    
+
     bool isConditionBoolean = false;
     if (auto* typeName = dynamic_cast<ast::TypeName*>(conditionTypeIt->second)) {
         isConditionBoolean = typeName->identifier && typeName->identifier->name == "bool";
     }
-    
+
     if (!isConditionBoolean) {
         addError("Condition of conditional expression must be boolean.", node->condition.get());
     }
-    
+
     // Check then branch
     if (node->thenExpr) {
         node->thenExpr->accept(*this);
@@ -2894,7 +2894,7 @@ void SemanticAnalyzer::visit(ast::ConditionalExpression* node) {
         expressionTypes[node] = nullptr;
         return;
     }
-    
+
     // Check else branch
     if (node->elseExpr) {
         node->elseExpr->accept(*this);
@@ -2903,23 +2903,23 @@ void SemanticAnalyzer::visit(ast::ConditionalExpression* node) {
         expressionTypes[node] = nullptr;
         return;
     }
-    
+
     // Get types of branches
     auto thenTypeIt = expressionTypes.find(node->thenExpr.get());
     auto elseTypeIt = expressionTypes.find(node->elseExpr.get());
-    
-    if (thenTypeIt == expressionTypes.end() || elseTypeIt == expressionTypes.end() || 
+
+    if (thenTypeIt == expressionTypes.end() || elseTypeIt == expressionTypes.end() ||
         !thenTypeIt->second || !elseTypeIt->second) {
         addError("Cannot determine types for conditional expression branches.", node);
         expressionTypes[node] = nullptr;
         return;
     }
-    
+
     // Check if branch types are compatible
-    if (!areTypesCompatible(thenTypeIt->second, elseTypeIt->second) && 
+    if (!areTypesCompatible(thenTypeIt->second, elseTypeIt->second) &&
         !areTypesCompatible(elseTypeIt->second, thenTypeIt->second)) {
-        addError("Incompatible types in conditional expression: '" + 
-                 thenTypeIt->second->toString() + "' and '" + 
+        addError("Incompatible types in conditional expression: '" +
+                 thenTypeIt->second->toString() + "' and '" +
                  elseTypeIt->second->toString() + "'.", node);
         // Use then branch type to continue analysis
         expressionTypes[node] = thenTypeIt->second;
@@ -2928,7 +2928,7 @@ void SemanticAnalyzer::visit(ast::ConditionalExpression* node) {
         }
         return;
     }
-    
+
     // The result type is the common type of both branches
     // For now, use the 'then' branch type as the result type
     expressionTypes[node] = thenTypeIt->second;
@@ -2946,7 +2946,7 @@ void SemanticAnalyzer::visit(ast::SequenceExpression* node) {
         node->type = std::shared_ptr<ast::TypeNode>(emptyTupleType.release());
         return;
     }
-    
+
     // Visit all expressions and collect their types
     std::vector<ast::TypeNodePtr> elementTypes;
     for (auto& expr : node->expressions) {
@@ -2966,7 +2966,7 @@ void SemanticAnalyzer::visit(ast::SequenceExpression* node) {
             return;
         }
     }
-    
+
     // Create a TupleTypeNode with all element types
     auto tupleType = std::make_unique<ast::TupleTypeNode>(node->loc, std::move(elementTypes));
     expressionTypes[node] = tupleType.get();
@@ -2979,7 +2979,7 @@ void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
         expressionTypes[node] = nullptr;
         return;
     }
-    
+
     // Get the struct name (base name without generic args)
     auto typeName = dynamic_cast<ast::TypeName*>(node->typePath.get());
     if (!typeName || !typeName->identifier) {
@@ -2987,16 +2987,16 @@ void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
         expressionTypes[node] = node->typePath->clone().release();
         return;
     }
-    
+
     std::string structName = typeName->identifier->name;
-    
+
     // Visit all field values to determine their types
     for (auto& prop : node->properties) {
         if (prop.value) {
             prop.value->accept(*this);
         }
     }
-    
+
     // Check if this struct has generic parameters that need to be inferred
     auto structFieldsIt = structFieldTypes.find(structName);
     if (structFieldsIt == structFieldTypes.end()) {
@@ -3017,7 +3017,7 @@ void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
         expressionTypes[node] = node->typePath->clone().release();
         return;
     }
-    
+
     const auto& fieldTypes = structFieldsIt->second;
 
     auto genericOrderIt = structGenericParamOrder.find(structName);
@@ -3052,41 +3052,41 @@ void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
         node->type = std::shared_ptr<ast::TypeNode>(node->typePath->clone());
         return;
     }
-    
+
     // Map type parameters to their inferred types
     // E.g., for Box<T> with field "value: T", if value=Point, then T → Point
     std::map<std::string, ast::TypeNode*> typeParamMap;
-    
+
     for (const auto& prop : node->properties) {
         if (!prop.key || !prop.value) continue;
-        
+
         std::string fieldName = prop.key->name;
-        
+
         // Look up the field's declared type in the struct
         auto fieldTypeIt = fieldTypes.find(fieldName);
         if (fieldTypeIt == fieldTypes.end()) {
             addError("Field '" + fieldName + "' does not exist in struct '" + structName + "'", node);
             continue;
         }
-        
+
         ast::TypeNode* declaredFieldType = fieldTypeIt->second;
-        
+
         // Get the actual type of the value
         auto valueTypeIt = expressionTypes.find(prop.value.get());
         if (valueTypeIt == expressionTypes.end() || !valueTypeIt->second) {
             continue; // Can't infer if value type unknown
         }
-        
+
         ast::TypeNode* actualValueType = valueTypeIt->second;
-        
+
         // Check if the declared field type is a type parameter
         if (auto declaredTypeName = dynamic_cast<ast::TypeName*>(declaredFieldType)) {
             if (declaredTypeName->identifier && declaredTypeName->genericArgs.empty()) {
                 std::string declaredTypeStr = declaredTypeName->identifier->name;
-                
+
                 // Check if this is a type parameter by looking for it as a primitive type
                 // Type parameters are NOT primitive types (Int, Float, String, Bool, etc.)
-                bool isPrimitive = (declaredTypeStr == "Int" || declaredTypeStr == "Float" || 
+                bool isPrimitive = (declaredTypeStr == "Int" || declaredTypeStr == "Float" ||
                                    declaredTypeStr == "String" || declaredTypeStr == "Bool" ||
                                    declaredTypeStr == "Void" ||
                                    declaredTypeStr == "CChar" || declaredTypeStr == "CUChar" ||
@@ -3096,12 +3096,12 @@ void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
                                    declaredTypeStr == "CSize" || declaredTypeStr == "CSSize" ||
                                    declaredTypeStr == "CFloat" || declaredTypeStr == "CDouble" ||
                                    declaredTypeStr == "CVoid" || declaredTypeStr == "CString");
-                
+
                 if (!isPrimitive) {
                     // Check if it's a known struct/type by looking it up
                     SymbolInfo* sym = currentScope->lookup(declaredTypeStr);
                     bool isKnownType = (sym && sym->kind == SymbolInfo::Kind::Type);
-                    
+
                     if (!isKnownType) {
                         // Not a primitive and not a known type - likely a type parameter
                         typeParamMap[declaredTypeStr] = actualValueType;
@@ -3110,12 +3110,12 @@ void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
             }
         }
     }
-    
+
     // Build the final type with inferred generic arguments
     if (!typeParamMap.empty()) {
         // Create TypeName with generic arguments
         std::vector<ast::TypeNodePtr> genericArgs;
-        
+
         if (genericParamOrder && !genericParamOrder->empty()) {
             for (const auto& paramName : *genericParamOrder) {
                 auto inferredIt = typeParamMap.find(paramName);
@@ -3128,13 +3128,13 @@ void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
                 genericArgs.push_back(std::unique_ptr<ast::TypeNode>(entry.second->clone()));
             }
         }
-        
+
         auto resultType = new ast::TypeName(
             typeName->loc,
             std::make_unique<ast::Identifier>(typeName->loc, structName),
             std::move(genericArgs)
         );
-        
+
         expressionTypes[node] = resultType;
         node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
     } else {
@@ -3153,7 +3153,7 @@ void SemanticAnalyzer::visit(ast::ArrayLiteral* node) {
     for (auto& element : node->elements) {
         if (element) {
             element->accept(*this);
-            
+
             // Get the element type
             auto elemTypeIt = expressionTypes.find(element.get());
             if (elemTypeIt != expressionTypes.end() && elemTypeIt->second) {
@@ -3167,20 +3167,20 @@ void SemanticAnalyzer::visit(ast::ArrayLiteral* node) {
             }
         }
     }
-    
+
     if (elementType) {
         // Create an array type [ElementType; Size]
         auto sizeExpr = std::make_unique<ast::IntegerLiteral>(
-            node->loc, 
+            node->loc,
             static_cast<int64_t>(node->elements.size())
         );
-        
+
         auto arrayType = std::make_unique<ast::ArrayType>(
             node->loc,
             elementType->clone(),
             std::move(sizeExpr)
         );
-        
+
         expressionTypes[node] = arrayType.release();
         node->type = std::shared_ptr<ast::TypeNode>(expressionTypes[node]->clone());
     }
@@ -3247,14 +3247,14 @@ void SemanticAnalyzer::visit(ast::BlockExpression* node) {
     if (node->block) {
         node->block->accept(*this);
     }
-    
+
     // Process trap clauses attached to this block
     for (auto& trapClause : node->trapClauses) {
         if (trapClause) {
             trapClause->accept(*this);
         }
     }
-    
+
     // Process ensure clause if present
     if (node->ensureClause) {
         node->ensureClause->accept(*this);
@@ -3265,124 +3265,124 @@ void SemanticAnalyzer::visit(ast::SelectExpression* node) {
     if (node->expr) {
         node->expr->accept(*this);
     }
-    
+
     // Track comparison patterns for unreachable detection
     struct ComparisonInfo {
-        vyn::TokenType op;
+        vyb::TokenType op;
         int64_t value;
         size_t caseIndex;
     };
     std::vector<ComparisonInfo> comparisons;
     size_t wildcardIndex = SIZE_MAX;
-    
+
     // Visit all patterns and check for unreachable patterns
     for (size_t i = 0; i < node->cases.size(); i++) {
         const auto& [pattern, result] = node->cases[i];
-        
+
         if (!pattern) {
             // Wildcard pattern (nullptr)
             if (wildcardIndex == SIZE_MAX) {
                 wildcardIndex = i;
             } else {
                 // Can't get loc from nullptr, use result as node
-                addError("Wildcard pattern already used in case " + 
+                addError("Wildcard pattern already used in case " +
                         std::to_string(wildcardIndex + 1) + ", this pattern is unreachable", result.get());
             }
         } else if (auto* comp = dynamic_cast<ast::ComparisonPattern*>(pattern.get())) {
             // Check if this pattern comes after a wildcard
             if (wildcardIndex != SIZE_MAX) {
-                addError("Pattern after wildcard in case " + 
+                addError("Pattern after wildcard in case " +
                         std::to_string(wildcardIndex + 1) + " is unreachable", pattern.get());
             }
-            
+
             // Try to extract constant value for unreachable detection
             if (auto* intLit = dynamic_cast<ast::IntegerLiteral*>(comp->value.get())) {
                 int64_t value = intLit->value;
-                vyn::TokenType op = comp->op.type;
-                
+                vyb::TokenType op = comp->op.type;
+
                 // Check against all previous comparison patterns
                 for (const auto& prev : comparisons) {
                     bool isUnreachable = false;
                     std::string reason;
-                    
+
                     // Check for duplicate patterns
                     if (prev.op == op && prev.value == value) {
                         isUnreachable = true;
                         reason = "duplicate pattern";
                     }
                     // Check for subsumption: >= 80 subsumes >= 90
-                    else if (prev.op == vyn::TokenType::GTEQ && op == vyn::TokenType::GTEQ && prev.value <= value) {
+                    else if (prev.op == vyb::TokenType::GTEQ && op == vyb::TokenType::GTEQ && prev.value <= value) {
                         isUnreachable = true;
                         reason = "subsumed by earlier '>= " + std::to_string(prev.value) + "'";
                     }
                     // Check for subsumption: <= 80 subsumes <= 70
-                    else if (prev.op == vyn::TokenType::LTEQ && op == vyn::TokenType::LTEQ && prev.value >= value) {
+                    else if (prev.op == vyb::TokenType::LTEQ && op == vyb::TokenType::LTEQ && prev.value >= value) {
                         isUnreachable = true;
                         reason = "subsumed by earlier '<= " + std::to_string(prev.value) + "'";
                     }
                     // Check for subsumption: >= 80 subsumes > 80
-                    else if (prev.op == vyn::TokenType::GTEQ && op == vyn::TokenType::GT && prev.value <= value) {
+                    else if (prev.op == vyb::TokenType::GTEQ && op == vyb::TokenType::GT && prev.value <= value) {
                         isUnreachable = true;
                         reason = "subsumed by earlier '>= " + std::to_string(prev.value) + "'";
                     }
                     // Check for subsumption: <= 80 subsumes < 80
-                    else if (prev.op == vyn::TokenType::LTEQ && op == vyn::TokenType::LT && prev.value >= value) {
+                    else if (prev.op == vyb::TokenType::LTEQ && op == vyb::TokenType::LT && prev.value >= value) {
                         isUnreachable = true;
                         reason = "subsumed by earlier '<= " + std::to_string(prev.value) + "'";
                     }
                     // Check for == within >= range: >= 70 subsumes == 75
-                    else if (prev.op == vyn::TokenType::GTEQ && op == vyn::TokenType::EQEQ && value >= prev.value) {
+                    else if (prev.op == vyb::TokenType::GTEQ && op == vyb::TokenType::EQEQ && value >= prev.value) {
                         isUnreachable = true;
                         reason = "covered by earlier '>= " + std::to_string(prev.value) + "'";
                     }
                     // Check for == within <= range: <= 80 subsumes == 75
-                    else if (prev.op == vyn::TokenType::LTEQ && op == vyn::TokenType::EQEQ && value <= prev.value) {
+                    else if (prev.op == vyb::TokenType::LTEQ && op == vyb::TokenType::EQEQ && value <= prev.value) {
                         isUnreachable = true;
                         reason = "covered by earlier '<= " + std::to_string(prev.value) + "'";
                     }
                     // Check for == within > range: > 70 subsumes == 75
-                    else if (prev.op == vyn::TokenType::GT && op == vyn::TokenType::EQEQ && value > prev.value) {
+                    else if (prev.op == vyb::TokenType::GT && op == vyb::TokenType::EQEQ && value > prev.value) {
                         isUnreachable = true;
                         reason = "covered by earlier '> " + std::to_string(prev.value) + "'";
                     }
                     // Check for == within < range: < 80 subsumes == 75
-                    else if (prev.op == vyn::TokenType::LT && op == vyn::TokenType::EQEQ && value < prev.value) {
+                    else if (prev.op == vyb::TokenType::LT && op == vyb::TokenType::EQEQ && value < prev.value) {
                         isUnreachable = true;
                         reason = "covered by earlier '< " + std::to_string(prev.value) + "'";
                     }
-                    
+
                     if (isUnreachable) {
                         std::string opStr;
                         switch (op) {
-                            case vyn::TokenType::EQEQ:  opStr = "=="; break;
-                            case vyn::TokenType::NOTEQ: opStr = "!="; break;
-                            case vyn::TokenType::LT:    opStr = "<"; break;
-                            case vyn::TokenType::LTEQ:  opStr = "<="; break;
-                            case vyn::TokenType::GT:    opStr = ">"; break;
-                            case vyn::TokenType::GTEQ:  opStr = ">="; break;
+                            case vyb::TokenType::EQEQ:  opStr = "=="; break;
+                            case vyb::TokenType::NOTEQ: opStr = "!="; break;
+                            case vyb::TokenType::LT:    opStr = "<"; break;
+                            case vyb::TokenType::LTEQ:  opStr = "<="; break;
+                            case vyb::TokenType::GT:    opStr = ">"; break;
+                            case vyb::TokenType::GTEQ:  opStr = ">="; break;
                             default: opStr = "?"; break;
                         }
-                        addError("Pattern '" + opStr + " " + std::to_string(value) + 
-                                "' in case " + std::to_string(i + 1) + " is " + reason + 
+                        addError("Pattern '" + opStr + " " + std::to_string(value) +
+                                "' in case " + std::to_string(i + 1) + " is " + reason +
                                 " (case " + std::to_string(prev.caseIndex + 1) + ")", pattern.get());
                         break;
                     }
                 }
-                
+
                 comparisons.push_back({op, value, i});
             }
-            
+
             comp->accept(*this);
         } else {
             // Other pattern types
             pattern->accept(*this);
         }
-        
+
         if (result) {
             result->accept(*this);
         }
     }
-    
+
     // TODO: Type checking:
     // - All result expressions should have compatible types
     // - Pattern types should match the expression type
@@ -3394,7 +3394,7 @@ void SemanticAnalyzer::visit(ast::ComparisonPattern* node) {
     if (node->value) {
         node->value->accept(*this);
     }
-    
+
     // TODO: Type checking:
     // - Verify the comparison operator is valid for the value type
     // - Check that the matched expression type supports the comparison
@@ -3406,17 +3406,17 @@ void SemanticAnalyzer::visit(ast::GenericInstantiationExpression* node) {
         addError("Invalid generic instantiation expression.", node);
         return;
     }
-    
+
     // Visit the base expression to understand what we're instantiating
     node->baseExpression->accept(*this);
-    
+
     // Visit all generic arguments (type parameters)
     for (auto& typeArg : node->genericArguments) {
         if (typeArg) {
             typeArg->accept(*this);
         }
     }
-    
+
     // Try to identify if this is a template instantiation
     if (auto identifier = dynamic_cast<ast::Identifier*>(node->baseExpression.get())) {
         handleTemplateInstantiation(identifier, node->genericArguments, node);
@@ -3477,7 +3477,7 @@ void SemanticAnalyzer::visit(ast::PointerDerefExpression* node) {
         if (node->type) node->type.reset();
         return;
     }
-    
+
     expressionTypes[node] = pointeeType; // raw pointer, ownership handled by clone().release()
     node->type = std::shared_ptr<ast::TypeNode>(pointeeType->clone()); // node->type takes ownership of a new clone
 }
@@ -3507,10 +3507,10 @@ void SemanticAnalyzer::visit(ast::AddrOfExpression* node) {
         expressionTypes[node] = nullptr;
         return;
     }
-    
+
     // The type of addr(operand) is an integer type representing an address.
     // Using "i64" as a placeholder for the address type.
-    // Vyn should have a dedicated address type (e.g., uintptr).
+    // VyB should have a dedicated address type (e.g., uintptr).
     auto addr_type_ident = std::make_unique<ast::Identifier>(node->loc, "i64");
     ast::TypeNode* addrAstType = new ast::TypeName(node->loc, std::move(addr_type_ident));
     expressionTypes[node] = addrAstType;
@@ -3567,7 +3567,7 @@ void SemanticAnalyzer::visit(ast::FromIntToLocExpression* node) {
         expressionTypes[node] = nullptr;
         return;
     }
-    
+
     expressionTypes[node] = targetType->clone().release();
     node->type = std::shared_ptr<ast::TypeNode>(targetType->clone());
 }
@@ -3585,7 +3585,7 @@ void SemanticAnalyzer::visit(ast::LocationExpression* node) {
         expressionTypes[node] = nullptr;
         return;
     }
-    
+
     node->expression->accept(*this);
 
     // Create a pointer type for the expression
@@ -3598,12 +3598,12 @@ void SemanticAnalyzer::visit(ast::LocationExpression* node) {
 
     // Set the type of the location expression
     ast::TypeNode* pointeeType = it->second;
-    
+
     // Create loc<T> type where T is the pointed-to type
     auto locIdent = std::make_unique<ast::Identifier>(node->loc, "loc");
     auto typeName = new ast::TypeName(node->loc, std::move(locIdent));
     typeName->genericArgs.push_back(std::unique_ptr<ast::TypeNode>(pointeeType->clone()));
-    
+
     expressionTypes[node] = typeName;
     node->type = std::shared_ptr<ast::TypeNode>(typeName->clone());
 }
@@ -3715,119 +3715,119 @@ void SemanticAnalyzer::visit(ast::MatchStatement* node) {
     if (node->expr) {
         node->expr->accept(*this);
     }
-    
+
     // Track comparison patterns for unreachable detection
     struct ComparisonInfo {
-        vyn::TokenType op;
+        vyb::TokenType op;
         int64_t value;
         size_t caseIndex;
     };
     std::vector<ComparisonInfo> comparisons;
     size_t wildcardIndex = SIZE_MAX;
-    
+
     // Visit all patterns and check for unreachable patterns
     for (size_t i = 0; i < node->cases.size(); i++) {
         const auto& [pattern, block] = node->cases[i];
-        
+
         if (!pattern) {
             // Wildcard pattern (nullptr)
             if (wildcardIndex == SIZE_MAX) {
                 wildcardIndex = i;
             } else {
                 // Can't get loc from nullptr, use block as node
-                addError("Wildcard pattern already used in case " + 
+                addError("Wildcard pattern already used in case " +
                         std::to_string(wildcardIndex + 1) + ", this pattern is unreachable", block.get());
             }
         } else if (auto* comp = dynamic_cast<ast::ComparisonPattern*>(pattern.get())) {
             // Check if this pattern comes after a wildcard
             if (wildcardIndex != SIZE_MAX) {
-                addError("Pattern after wildcard in case " + 
+                addError("Pattern after wildcard in case " +
                         std::to_string(wildcardIndex + 1) + " is unreachable", pattern.get());
             }
-            
+
             // Try to extract constant value for unreachable detection
             if (auto* intLit = dynamic_cast<ast::IntegerLiteral*>(comp->value.get())) {
                 int64_t value = intLit->value;
-                vyn::TokenType op = comp->op.type;
-                
+                vyb::TokenType op = comp->op.type;
+
                 // Check against all previous comparison patterns
                 for (const auto& prev : comparisons) {
                     bool isUnreachable = false;
                     std::string reason;
-                    
+
                     // Check for duplicate patterns
                     if (prev.op == op && prev.value == value) {
                         isUnreachable = true;
                         reason = "duplicate pattern";
                     }
                     // Check for subsumption: >= 80 subsumes >= 90
-                    else if (prev.op == vyn::TokenType::GTEQ && op == vyn::TokenType::GTEQ && prev.value <= value) {
+                    else if (prev.op == vyb::TokenType::GTEQ && op == vyb::TokenType::GTEQ && prev.value <= value) {
                         isUnreachable = true;
                         reason = "subsumed by earlier '>= " + std::to_string(prev.value) + "'";
                     }
                     // Check for subsumption: <= 80 subsumes <= 70
-                    else if (prev.op == vyn::TokenType::LTEQ && op == vyn::TokenType::LTEQ && prev.value >= value) {
+                    else if (prev.op == vyb::TokenType::LTEQ && op == vyb::TokenType::LTEQ && prev.value >= value) {
                         isUnreachable = true;
                         reason = "subsumed by earlier '<= " + std::to_string(prev.value) + "'";
                     }
                     // Check for subsumption: >= 80 subsumes > 80
-                    else if (prev.op == vyn::TokenType::GTEQ && op == vyn::TokenType::GT && prev.value <= value) {
+                    else if (prev.op == vyb::TokenType::GTEQ && op == vyb::TokenType::GT && prev.value <= value) {
                         isUnreachable = true;
                         reason = "subsumed by earlier '>= " + std::to_string(prev.value) + "'";
                     }
                     // Check for subsumption: <= 80 subsumes < 80
-                    else if (prev.op == vyn::TokenType::LTEQ && op == vyn::TokenType::LT && prev.value >= value) {
+                    else if (prev.op == vyb::TokenType::LTEQ && op == vyb::TokenType::LT && prev.value >= value) {
                         isUnreachable = true;
                         reason = "subsumed by earlier '<= " + std::to_string(prev.value) + "'";
                     }
                     // Check for == within >= range: >= 70 subsumes == 75
-                    else if (prev.op == vyn::TokenType::GTEQ && op == vyn::TokenType::EQEQ && value >= prev.value) {
+                    else if (prev.op == vyb::TokenType::GTEQ && op == vyb::TokenType::EQEQ && value >= prev.value) {
                         isUnreachable = true;
                         reason = "covered by earlier '>= " + std::to_string(prev.value) + "'";
                     }
                     // Check for == within <= range: <= 80 subsumes == 75
-                    else if (prev.op == vyn::TokenType::LTEQ && op == vyn::TokenType::EQEQ && value <= prev.value) {
+                    else if (prev.op == vyb::TokenType::LTEQ && op == vyb::TokenType::EQEQ && value <= prev.value) {
                         isUnreachable = true;
                         reason = "covered by earlier '<= " + std::to_string(prev.value) + "'";
                     }
                     // Check for == within > range: > 70 subsumes == 75
-                    else if (prev.op == vyn::TokenType::GT && op == vyn::TokenType::EQEQ && value > prev.value) {
+                    else if (prev.op == vyb::TokenType::GT && op == vyb::TokenType::EQEQ && value > prev.value) {
                         isUnreachable = true;
                         reason = "covered by earlier '> " + std::to_string(prev.value) + "'";
                     }
                     // Check for == within < range: < 80 subsumes == 75
-                    else if (prev.op == vyn::TokenType::LT && op == vyn::TokenType::EQEQ && value < prev.value) {
+                    else if (prev.op == vyb::TokenType::LT && op == vyb::TokenType::EQEQ && value < prev.value) {
                         isUnreachable = true;
                         reason = "covered by earlier '< " + std::to_string(prev.value) + "'";
                     }
-                    
+
                     if (isUnreachable) {
                         std::string opStr;
                         switch (op) {
-                            case vyn::TokenType::EQEQ:  opStr = "=="; break;
-                            case vyn::TokenType::NOTEQ: opStr = "!="; break;
-                            case vyn::TokenType::LT:    opStr = "<"; break;
-                            case vyn::TokenType::LTEQ:  opStr = "<="; break;
-                            case vyn::TokenType::GT:    opStr = ">"; break;
-                            case vyn::TokenType::GTEQ:  opStr = ">="; break;
+                            case vyb::TokenType::EQEQ:  opStr = "=="; break;
+                            case vyb::TokenType::NOTEQ: opStr = "!="; break;
+                            case vyb::TokenType::LT:    opStr = "<"; break;
+                            case vyb::TokenType::LTEQ:  opStr = "<="; break;
+                            case vyb::TokenType::GT:    opStr = ">"; break;
+                            case vyb::TokenType::GTEQ:  opStr = ">="; break;
                             default: opStr = "?"; break;
                         }
-                        addError("Pattern '" + opStr + " " + std::to_string(value) + 
-                                "' in case " + std::to_string(i + 1) + " is " + reason + 
+                        addError("Pattern '" + opStr + " " + std::to_string(value) +
+                                "' in case " + std::to_string(i + 1) + " is " + reason +
                                 " (case " + std::to_string(prev.caseIndex + 1) + ")", pattern.get());
                         break;
                     }
                 }
-                
+
                 comparisons.push_back({op, value, i});
             }
-            
+
             comp->accept(*this);
         } else {
             // Other pattern types
             pattern->accept(*this);
         }
-        
+
         if (block) {
             block->accept(*this);
         }
@@ -3836,12 +3836,12 @@ void SemanticAnalyzer::visit(ast::MatchStatement* node) {
 void SemanticAnalyzer::visit(ast::YieldStatement* node) {
     // Check if we're inside a generator function
     // For now, we'll just check for any yield expression
-    
+
     // Analyze the expression being yielded, if any
     if (node->expression) {
         node->expression->accept(*this);
     }
-    
+
     // In a full implementation, we would:
     // 1. Verify we're inside a generator function (function with yield)
     // 2. Track the yielded type for generator return type inference
@@ -3850,12 +3850,12 @@ void SemanticAnalyzer::visit(ast::YieldStatement* node) {
 
 void SemanticAnalyzer::visit(ast::YieldReturnStatement* node) {
     // Similar to YieldStatement but specifically for final return from generator
-    
+
     // Analyze the expression being returned, if any
     if (node->expression) {
         node->expression->accept(*this);
     }
-    
+
     // In a full implementation:
     // 1. Verify we're inside a generator function
     // 2. Check that the returned type is compatible with the generator's return type
@@ -3868,11 +3868,11 @@ void SemanticAnalyzer::visit(ast::ExternStatement* node) {
     // In an extern statement, we typically:
     // 1. Register the extern declaration in the current scope
     // 2. Don't analyze the body since it's external
-    
+
     // For now, we'll just mark the statement as visited
     // In a full implementation, we would register any external declarations
     // in the symbol table for later use
-    
+
     // No recursive visits needed as extern statements don't have a body to analyze
 }
 
@@ -3884,11 +3884,11 @@ void SemanticAnalyzer::visit(ast::StructDeclaration* node) {
     }
 
     const std::string& structName = node->name->name;
-    
+
     if (isReservedWord(structName)) {
         addError("Identifier \"" + structName + "\" is a reserved word and cannot be used as a struct name.", node->name.get());
     }
-    
+
     if (currentScope->lookupDirect(structName)) {
         addError("Redefinition of struct \"" + structName + "\" in the same scope.", node->name.get());
         return;
@@ -3910,11 +3910,11 @@ void SemanticAnalyzer::visit(ast::StructDeclaration* node) {
 
     if (hasGenericParams) {
         enterScope();  // Create scope for type parameters
-        
+
         for (const auto& param : node->genericParams) {
             if (param && param->name) {
                 std::string paramName = param->name->name;
-                
+
                 // Validate aspect bounds (if any)
                 for (const auto& bound : param->bounds) {
                     if (bound) {
@@ -3925,22 +3925,22 @@ void SemanticAnalyzer::visit(ast::StructDeclaration* node) {
                         }
                     }
                 }
-                
+
                 // Register the type parameter as a TYPE_PARAMETER symbol
                 SymbolInfo typeParamSymbol;
                 typeParamSymbol.name = paramName;
                 typeParamSymbol.kind = SymbolInfo::Kind::TYPE_PARAMETER;
                 typeParamSymbol.type = nullptr;
-                
+
                 // Store bounds for this type parameter
                 for (const auto& bound : param->bounds) {
                     if (bound) {
                         typeParamSymbol.bounds.push_back(bound->toString());
                     }
                 }
-                
+
                 currentScope->add(typeParamSymbol);
-                
+
 
             }
         }
@@ -3948,7 +3948,7 @@ void SemanticAnalyzer::visit(ast::StructDeclaration* node) {
 
     // Create and register the struct type in the symbol table
     auto structType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->name->loc, structName));
-    
+
     // Register in parent scope (not the type parameter scope)
     if (hasGenericParams) {
         currentScope->getParent()->add(SymbolInfo{SymbolInfo::Kind::Type, structName, false, ast::OwnershipKind::MY, structType});
@@ -3959,7 +3959,7 @@ void SemanticAnalyzer::visit(ast::StructDeclaration* node) {
     // Store struct field information for member access resolution
     // We'll use a map to store field types by struct name
     std::map<std::string, ast::TypeNode*> fieldTypes;
-    
+
     for (auto& field : node->fields) {
         if (field && field->name && field->typeNode) {
             if (node->reprC) {
@@ -3971,7 +3971,7 @@ void SemanticAnalyzer::visit(ast::StructDeclaration* node) {
 
             // Visit the field type to ensure it's valid (type params are now in scope)
             field->typeNode->accept(*this);
-            
+
             // Store the resolved field type for later member access resolution.
             ast::TypeNode* effectiveFieldType = field->typeNode->type ? field->typeNode->type.get() : field->typeNode.get();
             fieldTypes[field->name->name] = effectiveFieldType;
@@ -3983,15 +3983,15 @@ void SemanticAnalyzer::visit(ast::StructDeclaration* node) {
                              "> or another indirection type.", field.get());
                 }
             }
-            
-            VYN_CDBG << "DEBUG: Registered struct field " << structName << "." << field->name->name 
+
+            VYB_CDBG << "DEBUG: Registered struct field " << structName << "." << field->name->name
                       << " with type: " << effectiveFieldType->toString() << std::endl;
         }
     }
-    
+
     // Store field information in the semantic analyzer (we'll need to add this storage)
     structFieldTypes[structName] = fieldTypes;
-    
+
     // Exit type parameter scope if we entered one
     if (hasGenericParams) {
         exitScope();
@@ -4015,15 +4015,15 @@ void SemanticAnalyzer::visit(ast::TemplateDeclaration* node) {
         addError("Malformed template declaration.", node);
         return;
     }
-    
+
     const std::string& templateName = node->name->name;
-    
+
     // Check if template name is already registered
     if (templateRegistry.find(templateName) != templateRegistry.end()) {
         addError("Template '" + templateName + "' is already defined.", node);
         return;
     }
-    
+
     // Validate generic parameters
     for (const auto& param : node->genericParams) {
         if (!param || !param->name) {
@@ -4031,15 +4031,15 @@ void SemanticAnalyzer::visit(ast::TemplateDeclaration* node) {
             return;
         }
     }
-    
+
     // Clone the template declaration for storage
     auto clonedDecl = std::make_unique<ast::TemplateDeclaration>(
-        node->loc, 
+        node->loc,
         std::make_unique<ast::Identifier>(node->name->loc, node->name->name),
         std::vector<std::unique_ptr<ast::GenericParameter>>(),
         nullptr // Will be cloned separately if needed
     );
-    
+
     // Clone generic parameters
     for (const auto& param : node->genericParams) {
         if (param && param->name) {
@@ -4047,62 +4047,62 @@ void SemanticAnalyzer::visit(ast::TemplateDeclaration* node) {
                 param->loc,
                 std::make_unique<ast::Identifier>(param->name->loc, param->name->name)
             );
-            
+
             // Clone bounds if present
             for (const auto& bound : param->bounds) {
                 if (bound) {
                     clonedParam->bounds.push_back(bound->clone());
                 }
             }
-            
+
             clonedDecl->genericParams.push_back(std::move(clonedParam));
         }
     }
-    
+
     // Register the template BEFORE visiting the body
     // This allows recursive template definitions
     auto templateInfo = std::make_unique<TemplateInfo>(std::move(clonedDecl));
-    
+
     // Enter a new scope for the template body
     enterScope();
-    
+
     // Register all generic type parameters as valid types in this scope
     // This allows code inside the template to use T, K, V, etc.
     for (const auto& param : node->genericParams) {
         if (param && param->name) {
             const std::string& paramName = param->name->name;
-            
+
             // Create a placeholder TypeName for the generic parameter
             auto genericType = std::make_unique<ast::TypeName>(
                 param->loc,
                 std::make_unique<ast::Identifier>(param->loc, paramName)
             );
-            
+
             // Register it in the symbol table as a type parameter
             SymbolInfo sym;
             sym.name = paramName;
             sym.type = genericType.get(); // Store raw pointer, managed separately
             sym.kind = SymbolInfo::Kind::TYPE_PARAMETER; // Mark as generic type parameter
-            
+
             currentScope->add(sym);
-            
-            VYN_CDBG << "DEBUG: Registered template type parameter: " << paramName << std::endl;
+
+            VYB_CDBG << "DEBUG: Registered template type parameter: " << paramName << std::endl;
         }
     }
-    
+
     // Store template in registry
     templateRegistry[templateName] = std::move(templateInfo);
-    
+
     // Visit the template body with type parameters in scope
     if (node->body) {
-        VYN_CDBG << "DEBUG: Visiting template body for: " << templateName << std::endl;
+        VYB_CDBG << "DEBUG: Visiting template body for: " << templateName << std::endl;
         node->body->accept(*this);
     }
-    
+
     // Exit the template scope
     exitScope();
-    
-    VYN_CDBG << "DEBUG: Template '" << templateName << "' registered successfully" << std::endl;
+
+    VYB_CDBG << "DEBUG: Template '" << templateName << "' registered successfully" << std::endl;
 }
 
 void SemanticAnalyzer::visit(ast::AspectDeclaration* node) {
@@ -4110,15 +4110,15 @@ void SemanticAnalyzer::visit(ast::AspectDeclaration* node) {
         addError("Malformed aspect declaration.", node);
         return;
     }
-    
+
     const std::string& traitName = node->name->name;
-    
+
     // Check if aspect is already registered
     if (traitRegistry.find(traitName) != traitRegistry.end()) {
         addError("Aspect '" + traitName + "' is already defined.", node);
         return;
     }
-    
+
     // Validate generic parameters
     for (const auto& param : node->genericParams) {
         if (!param || !param->name) {
@@ -4140,14 +4140,14 @@ void SemanticAnalyzer::visit(ast::AspectDeclaration* node) {
             return;
         }
     }
-    
+
     // Validate aspect methods
     for (const auto& method : node->methods) {
         if (!method || !method->id) {
             addError("Invalid method in aspect '" + traitName + "'.", node);
             return;
         }
-        
+
         // Check for self parameter
         bool hasSelfParam = false;
         if (!method->params.empty() && method->params[0].name) {
@@ -4155,23 +4155,23 @@ void SemanticAnalyzer::visit(ast::AspectDeclaration* node) {
                 hasSelfParam = true;
             }
         }
-        
+
         if (!hasSelfParam) {
             addError("Aspect method '" + method->id->name + "' must have 'self' as first parameter.", method.get());
         }
-        
+
         // Validate return type
         if (!method->returnTypeNode) {
             addError("Aspect method '" + method->id->name + "' must declare a return type.", method.get());
         }
-        
-        VYN_CDBG << "DEBUG:   Method: " << method->id->name 
+
+        VYB_CDBG << "DEBUG:   Method: " << method->id->name
                   << " (default impl: " << (method->body ? "yes" : "no") << ")" << std::endl;
     }
-    
+
     // Register the aspect
     registerTrait(node);
-    
+
     // Register aspect as a type in the symbol table
     SymbolInfo traitSym;
     traitSym.name = traitName;
@@ -4185,23 +4185,23 @@ void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
         addError("Malformed bind declaration.", node);
         return;
     }
-    
+
     // Handle generic parameters if present (e.g., impl<T> ...)
     bool hasGenericParams = !node->genericParams.empty();
     std::vector<std::string> typeParamNames;
-    
+
     if (hasGenericParams) {
 
-        
+
         // Enter a new scope for type parameters
         enterScope();
-        
+
         // Register each type parameter as a valid type in this scope
         for (const auto& param : node->genericParams) {
             if (param && param->name) {
                 std::string paramName = param->name->name;
                 typeParamNames.push_back(paramName);
-                
+
                 // Validate aspect bounds (if any)
                 for (const auto& bound : param->bounds) {
                     if (bound) {
@@ -4212,41 +4212,41 @@ void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
                         }
                     }
                 }
-                
+
                 // Register the type parameter as a TYPE_PARAMETER symbol
                 SymbolInfo typeParamSymbol;
                 typeParamSymbol.name = paramName;
                 typeParamSymbol.kind = SymbolInfo::Kind::TYPE_PARAMETER;
                 typeParamSymbol.type = nullptr; // Generic type parameter has no concrete type yet
-                
+
                 // Store bounds for this type parameter
                 for (const auto& bound : param->bounds) {
                     if (bound) {
                         typeParamSymbol.bounds.push_back(bound->toString());
                     }
                 }
-                
+
                 currentScope->add(typeParamSymbol);
-                
-                VYN_CDBG << "DEBUG: Registered type parameter: " << paramName << std::endl;
+
+                VYB_CDBG << "DEBUG: Registered type parameter: " << paramName << std::endl;
             }
         }
     }
-    
+
     std::string typeName = node->selfType->toString();
     std::string traitName;
-    
+
     // Set current impl type for Self resolution (will be restored later)
     ast::TypeNode* previousImplType = currentImplType;
     currentImplType = node->selfType.get();
-    VYN_CDBG << "DEBUG: Set currentImplType to " << typeName << " for Self resolution" << std::endl;
-    
+    VYB_CDBG << "DEBUG: Set currentImplType to " << typeName << " for Self resolution" << std::endl;
+
     if (node->traitType) {
         // This is an aspect implementation: bind Aspect -> Type
         traitName = node->traitType->toString();
-        
-        VYN_CDBG << "DEBUG: Processing impl " << traitName << " for " << typeName << std::endl;
-        
+
+        VYB_CDBG << "DEBUG: Processing impl " << traitName << " for " << typeName << std::endl;
+
         // Check if trait exists
         TraitInfo* traitInfo = findTrait(traitName);
         if (!traitInfo) {
@@ -4254,13 +4254,13 @@ void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
             if (hasGenericParams) exitScope();
             return;
         }
-        
+
         // Check if type exists (for user-defined types)
         // Primitives like Int, Float, String are always valid
-        bool isBuiltinType = (typeName == "Int" || typeName == "Float" || 
+        bool isBuiltinType = (typeName == "Int" || typeName == "Float" ||
                              typeName == "Bool" || typeName == "String" ||
                              typeName == "Char" || typeName == "Rune");
-        
+
         // For generic impls, the type might contain type parameters (e.g., Vec<T>)
         // which should be allowed if T is a type parameter
         bool isGenericType = false;
@@ -4269,12 +4269,12 @@ void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
             for (const auto& paramName : typeParamNames) {
                 if (typeName.find(paramName) != std::string::npos) {
                     isGenericType = true;
-                    VYN_CDBG << "DEBUG: Type " << typeName << " uses type parameter " << paramName << std::endl;
+                    VYB_CDBG << "DEBUG: Type " << typeName << " uses type parameter " << paramName << std::endl;
                     break;
                 }
             }
         }
-        
+
         bool isBuiltinGenericType = isBuiltinVecType(node->selfType.get());
 
         if (!isBuiltinType && !isBuiltinGenericType && !isGenericType) {
@@ -4285,17 +4285,17 @@ void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
                 return;
             }
         }
-        
+
         // Validate that all required trait methods are implemented
         if (!validateTraitImpl(typeName, traitName, node->methods, node->associatedTypeBindings, node)) {
             addError("Incomplete implementation of trait '" + traitName + "' for type '" + typeName + "'.", node);
             if (hasGenericParams) exitScope();
             return;
         }
-        
+
         // Register the trait implementation
         registerTraitImpl(node);
-        
+
         // Visit all methods to validate their bodies (while type params are still in scope)
         std::string previousImplTraitName = currentImplTraitName;
         auto previousAssociatedTypeBindings = currentImplAssociatedTypeBindings;
@@ -4316,14 +4316,14 @@ void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
         processingTraitOrBindMethod = false;
         currentImplTraitName = previousImplTraitName;
         currentImplAssociatedTypeBindings = previousAssociatedTypeBindings;
-        
-        VYN_CDBG << "DEBUG: Successfully registered impl " << traitName << " for " << typeName 
+
+        VYB_CDBG << "DEBUG: Successfully registered impl " << traitName << " for " << typeName
                   << " with " << node->methods.size() << " methods" << std::endl;
     } else {
         // This is an inherent bind: bind Type { ... }
         // Just adds methods directly to the type without an aspect
-        VYN_CDBG << "DEBUG: Processing inherent bind for " << typeName << std::endl;
-        
+        VYB_CDBG << "DEBUG: Processing inherent bind for " << typeName << std::endl;
+
         // Visit all methods to validate them
         processingTraitOrBindMethod = true;  // Don't add inherent bind methods to global scope
         for (const auto& method : node->methods) {
@@ -4333,13 +4333,13 @@ void SemanticAnalyzer::visit(ast::BindDeclaration* node) {
         }
         processingTraitOrBindMethod = false;
     }
-    
+
     // Exit the type parameter scope if we entered one
     if (hasGenericParams) {
         exitScope();
 
     }
-    
+
     // Restore previous impl type
     currentImplType = previousImplType;
 }
@@ -4359,7 +4359,7 @@ void SemanticAnalyzer::visit(ast::FailStatement* node) {
         addError("fail statement requires an error expression", node);
         return;
     }
-    
+
     // Type check the error expression
     node->error->accept(*this);
 
@@ -4368,7 +4368,7 @@ void SemanticAnalyzer::visit(ast::FailStatement* node) {
         node->errorType->accept(*this);
         explicitErrorType = node->errorType->type ? node->errorType->type.get() : node->errorType.get();
     }
-    
+
     // Get the type of the error expression
     auto it = expressionTypes.find(node->error.get());
     if (it != expressionTypes.end() && it->second) {
@@ -4378,15 +4378,15 @@ void SemanticAnalyzer::visit(ast::FailStatement* node) {
                      " but error expression has type " + errorType->toString(), node);
             return;
         }
-        
+
         // TODO: Verify error type implements Errable aspect when aspect system is complete
         // For now, accept any struct/object type as potential error
-        
-        VYN_CDBG << "DEBUG: fail statement with error type: " << errorType->toString() << std::endl;
+
+        VYB_CDBG << "DEBUG: fail statement with error type: " << errorType->toString() << std::endl;
     } else {
         addError("Could not determine type of error expression in fail statement", node->error.get());
     }
-    
+
     // Note: Stack trace capture will be handled in codegen phase
 }
 
@@ -4396,21 +4396,21 @@ void SemanticAnalyzer::visit(ast::TrapClause* node) {
         addError("trap clause requires an error variable name", node);
         return;
     }
-    
+
     // Phase 6.5: Allow wildcard traps (e<?>) - errorType is nullptr but isWildcard is true
     // Phase 6.6: Allow multi-type traps (e<Type1 | Type2>) - errorTypes vector populated
     if (!node->isWildcard && !node->isMultiType && !node->errorType) {
         addError("trap clause requires an error type", node);
         return;
     }
-    
+
     // Validate multi-type trap
     if (node->isMultiType) {
         if (node->errorTypes.empty()) {
             addError("multi-type trap clause requires at least one error type", node);
             return;
         }
-        
+
         // Check for duplicate types in union
         std::set<std::string> seenTypes;
         for (auto& errorType : node->errorTypes) {
@@ -4418,14 +4418,14 @@ void SemanticAnalyzer::visit(ast::TrapClause* node) {
                 addError("invalid null type in multi-type trap clause", node);
                 return;
             }
-            
+
             std::string typeName = errorType->toString();
             if (seenTypes.count(typeName) > 0) {
                 addError("duplicate type '" + typeName + "' in multi-type trap clause", node);
                 return;
             }
             seenTypes.insert(typeName);
-            
+
             // Type check each error type
             errorType->accept(*this);
         }
@@ -4433,11 +4433,11 @@ void SemanticAnalyzer::visit(ast::TrapClause* node) {
         // Type check single error type (unless wildcard)
         node->errorType->accept(*this);
     }
-    
+
     // Enter new scope for trap handler
     enterScope();
     trapDepth++;
-    
+
     // Add error types to active trap stack
     if (node->isWildcard) {
         activeTrapTypes.push_back(nullptr);
@@ -4449,7 +4449,7 @@ void SemanticAnalyzer::visit(ast::TrapClause* node) {
     } else {
         activeTrapTypes.push_back(node->errorType.get());
     }
-    
+
     // Add error variable to scope (immutable binding)
     // For multi-type traps, use first type or mark as union (future: actual union type)
     SymbolInfo errorSymbol;
@@ -4462,25 +4462,25 @@ void SemanticAnalyzer::visit(ast::TrapClause* node) {
     errorSymbol.isConst = true;  // Error binding is immutable (const)
     errorSymbol.ownershipKind = ast::OwnershipKind::MY;  // Error value is owned
     currentScope->add(errorSymbol);
-    
+
     if (node->isWildcard) {
-        VYN_CDBG << "DEBUG: trap clause for wildcard error type" << std::endl;
+        VYB_CDBG << "DEBUG: trap clause for wildcard error type" << std::endl;
     } else if (node->isMultiType) {
-        VYN_CDBG << "DEBUG: trap clause for multi-type union: ";
+        VYB_CDBG << "DEBUG: trap clause for multi-type union: ";
         for (size_t i = 0; i < node->errorTypes.size(); ++i) {
             if (i > 0) std::cout << " | ";
             std::cout << node->errorTypes[i]->toString();
         }
         std::cout << std::endl;
     } else if (node->errorType) {
-        VYN_CDBG << "DEBUG: trap clause for error type: " << node->errorType->toString() << std::endl;
+        VYB_CDBG << "DEBUG: trap clause for error type: " << node->errorType->toString() << std::endl;
     }
-    
+
     // Type check handler block
     if (node->handler) {
         node->handler->accept(*this);
     }
-    
+
     // Pop error types from trap stack
     if (node->isMultiType) {
         for (size_t i = 0; i < node->errorTypes.size(); ++i) {
@@ -4490,10 +4490,10 @@ void SemanticAnalyzer::visit(ast::TrapClause* node) {
         activeTrapTypes.pop_back();
     }
     trapDepth--;
-    
+
     // Exit trap scope
     exitScope();
-    
+
     // TODO: Validate that handler return type matches the block expression's expected type
 }
 
@@ -4503,18 +4503,18 @@ void SemanticAnalyzer::visit(ast::EnsureClause* node) {
         addError("ensure clause requires a cleanup block", node);
         return;
     }
-    
-    VYN_CDBG << "DEBUG: processing ensure clause" << std::endl;
-    
+
+    VYB_CDBG << "DEBUG: processing ensure clause" << std::endl;
+
     // Enter new scope for ensure block
     enterScope();
-    
+
     // Type check cleanup block
     node->cleanupBlock->accept(*this);
-    
+
     // Exit ensure scope
     exitScope();
-    
+
     // Note: Cleanup blocks can return values but those are typically ignored
     // They execute for side effects (cleanup resources)
 }
@@ -4525,26 +4525,26 @@ void SemanticAnalyzer::visit(ast::RethrowStatement* node) {
         addError("rethrow statement can only be used inside a trap clause", node);
         return;
     }
-    
-    VYN_CDBG << "DEBUG: rethrow statement at trap depth " << trapDepth << std::endl;
-    
+
+    VYB_CDBG << "DEBUG: rethrow statement at trap depth " << trapDepth << std::endl;
+
     // If transforming the error, type check the new error expression
     if (node->transformedError) {
         node->transformedError->accept(*this);
-        
+
         // Get the type of the transformed error
         auto it = expressionTypes.find(node->transformedError.get());
         if (it != expressionTypes.end() && it->second) {
             ast::TypeNode* newErrorType = it->second;
-            VYN_CDBG << "DEBUG: rethrow with transformed error type: " << newErrorType->toString() << std::endl;
-            
+            VYB_CDBG << "DEBUG: rethrow with transformed error type: " << newErrorType->toString() << std::endl;
+
             // TODO: Verify new error type is compatible with outer trap handlers
         }
     } else {
         // Simple rethrow - propagates current error
         if (!activeTrapTypes.empty()) {
             ast::TypeNode* currentErrorType = activeTrapTypes.back();
-            VYN_CDBG << "DEBUG: rethrow current error type: " << currentErrorType->toString() << std::endl;
+            VYB_CDBG << "DEBUG: rethrow current error type: " << currentErrorType->toString() << std::endl;
         }
     }
 }
@@ -4555,22 +4555,22 @@ void SemanticAnalyzer::visit(ast::PanicStatement* node) {
         addError("panic statement requires a message expression", node);
         return;
     }
-    
+
     // Type check the message expression
     node->message->accept(*this);
-    
+
     // Get the type of the message
     auto it = expressionTypes.find(node->message.get());
     if (it != expressionTypes.end() && it->second) {
         ast::TypeNode* msgType = it->second;
-        
+
         // Verify message is a string type
         if (auto typeName = dynamic_cast<ast::TypeName*>(msgType)) {
-            if (typeName->identifier && 
-                (typeName->identifier->name == "String" || 
+            if (typeName->identifier &&
+                (typeName->identifier->name == "String" ||
                  typeName->identifier->name == "str" ||
                  typeName->identifier->name == "string")) {
-                VYN_CDBG << "DEBUG: panic statement with string message" << std::endl;
+                VYB_CDBG << "DEBUG: panic statement with string message" << std::endl;
             } else {
                 addError("panic message must be a String type, got: " + typeName->toString(), node->message.get());
             }
@@ -4580,7 +4580,7 @@ void SemanticAnalyzer::visit(ast::PanicStatement* node) {
     } else {
         addError("Could not determine type of panic message", node->message.get());
     }
-    
+
     // Note: panic is a noreturn operation - control flow never continues after panic
     // This will be tracked in control flow analysis
 }
@@ -4637,17 +4637,17 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
         return;
     }
     const std::string& typeNameStr = node->identifier->name;
-    
+
     // Handle 'Self' type - resolve to current impl type or allow as placeholder
     if (typeNameStr == "Self") {
         if (currentImplType) {
             // We're inside an impl block - resolve Self to the implementing type
-            VYN_CDBG << "DEBUG: Resolving Self to " << currentImplType->toString() << std::endl;
+            VYB_CDBG << "DEBUG: Resolving Self to " << currentImplType->toString() << std::endl;
             expressionTypes[node] = currentImplType;
             return;
         } else {
             // We're in an aspect declaration - treat Self as a valid placeholder type
-            VYN_CDBG << "DEBUG: Self used as placeholder in aspect declaration" << std::endl;
+            VYB_CDBG << "DEBUG: Self used as placeholder in aspect declaration" << std::endl;
             node->type = std::shared_ptr<ast::TypeNode>(node->clone());
             return;
         }
@@ -4667,21 +4667,21 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
             return;
         }
     }
-    
+
     if (typeNameStr == "Vec") {
         // Convert Vec<T> TypeName to VecType
         if (node->genericArgs.empty() || !node->genericArgs[0]) {
             addError("Vec type requires a type parameter (e.g., Vec<Int>).", node);
-            return; 
+            return;
         }
         if (node->genericArgs.size() > 1) {
             addError("Vec type accepts only one type parameter.", node);
-            return; 
+            return;
         }
-        
+
         // Visit the element type
         node->genericArgs[0]->accept(*this);
-        
+
         // Create a VecType instance
         auto vecType = std::make_unique<ast::VecType>(node->loc, node->genericArgs[0]->clone());
         node->type = std::shared_ptr<ast::TypeNode>(vecType.release());
@@ -4689,9 +4689,9 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
         // Convert Tuple<T, U, ...> TypeName to TupleTypeNode
         if (node->genericArgs.empty()) {
             addError("Tuple type requires at least one type parameter (e.g., Tuple<Int, String>).", node);
-            return; 
+            return;
         }
-        
+
         // Visit all element types
         std::vector<ast::TypeNodePtr> memberTypes;
         for (const auto& argTypeNode : node->genericArgs) {
@@ -4703,7 +4703,7 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
                 return;
             }
         }
-        
+
         // Create a TupleTypeNode instance
         auto tupleType = std::make_unique<ast::TupleTypeNode>(node->loc, std::move(memberTypes));
         node->type = std::shared_ptr<ast::TypeNode>(tupleType.release());
@@ -4711,23 +4711,23 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
         // Convert Future<T> TypeName to FutureType
         if (node->genericArgs.empty() || !node->genericArgs[0]) {
             addError("Future type requires a type parameter (e.g., Future<Int>).", node);
-            return; 
+            return;
         }
         if (node->genericArgs.size() > 1) {
             addError("Future type accepts only one type parameter.", node);
-            return; 
+            return;
         }
-        
+
         // Visit the result type
         node->genericArgs[0]->accept(*this);
-        
+
         // Create a FutureType instance
         auto futureType = std::make_unique<ast::FutureType>(node->loc, node->genericArgs[0]->clone());
         node->type = std::shared_ptr<ast::TypeNode>(futureType.release());
     } else if (typeNameStr == "loc" || typeNameStr == "CPtr") {
         if (node->genericArgs.empty() || !node->genericArgs[0]) {
             addError(typeNameStr + " type constructor requires a type parameter (e.g., " + typeNameStr + "<T>).", node);
-            return; 
+            return;
         }
         for ( auto& argTypeNode : node->genericArgs ) {
             if (argTypeNode) {
@@ -4753,8 +4753,8 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
                typeNameStr == "CLong" || typeNameStr == "CULong" || typeNameStr == "CSize" ||
                typeNameStr == "CSSize" || typeNameStr == "CFloat" || typeNameStr == "CDouble" ||
                typeNameStr == "CVoid" || typeNameStr == "CString" ||
-               typeNameStr == "my" || typeNameStr == "our" || typeNameStr == "their" || 
-               typeNameStr == "mild" || typeNameStr == "view" || typeNameStr == "borrow") { 
+               typeNameStr == "my" || typeNameStr == "our" || typeNameStr == "their" ||
+               typeNameStr == "mild" || typeNameStr == "view" || typeNameStr == "borrow") {
         node->type = std::shared_ptr<ast::TypeNode>(node->clone());
         // For ownership types, visit generic arguments if present
         for (auto& argTypeNode : node->genericArgs) {
@@ -4765,7 +4765,7 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
         SymbolInfo* symbol = currentScope->lookup(typeNameStr);
         if (symbol && symbol->kind == SymbolInfo::Kind::TYPE_PARAMETER) {
             // This is a valid generic type parameter (like T, K, V)
-            VYN_CDBG << "DEBUG: Recognized generic type parameter: " << typeNameStr << std::endl;
+            VYB_CDBG << "DEBUG: Recognized generic type parameter: " << typeNameStr << std::endl;
             node->type = std::shared_ptr<ast::TypeNode>(node->clone());
             // Visit generic arguments if present (e.g., Vec<T>)
             for (auto& argTypeNode : node->genericArgs) {
@@ -4773,13 +4773,13 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
             }
             return;
         }
-        
+
         // Check if it's a regular type
         if (!symbol || !symbol->type) {
             addError("Unknown type identifier: " + typeNameStr, node);
             return;
         }
-        
+
         // Clone the base type, but preserve generic arguments from this node
         if (!node->genericArgs.empty()) {
             // This is a parameterized user-defined type (e.g., Box<Int>)
@@ -4803,7 +4803,7 @@ void SemanticAnalyzer::visit(ast::ConstructionExpression* node) {
     }
     auto typeNameNode = dynamic_cast<ast::TypeName*>(node->constructedType.get());
     if (!typeNameNode || !typeNameNode->identifier) {
-         node->constructedType->accept(*this); 
+         node->constructedType->accept(*this);
          expressionTypes[node] = node->constructedType->clone().release();
          if (expressionTypes[node]) {
             node->type = std::shared_ptr<ast::TypeNode>(expressionTypes[node]->clone());
@@ -4811,7 +4811,7 @@ void SemanticAnalyzer::visit(ast::ConstructionExpression* node) {
          for (auto& arg : node->arguments) {
              if (arg) arg->accept(*this);
          }
-         return; 
+         return;
     }
     const std::string& constructedName = typeNameNode->identifier->name;
     if (constructedName == "addr") {
@@ -4842,7 +4842,7 @@ void SemanticAnalyzer::visit(ast::ConstructionExpression* node) {
             addError("from<T>() intrinsic expects 1 argument value.", node); expressionTypes[node] = nullptr; return;
         }
         ast::TypeNode* targetTypeAst = typeNameNode->genericArgs[0].get();
-        targetTypeAst->accept(*this); 
+        targetTypeAst->accept(*this);
         bool isTargetLocOrPointer = false;
         if (auto tn = dynamic_cast<ast::TypeName*>(targetTypeAst)) {
             if (tn->identifier->name == "loc" && !tn->genericArgs.empty()) isTargetLocOrPointer = true;
@@ -4852,18 +4852,18 @@ void SemanticAnalyzer::visit(ast::ConstructionExpression* node) {
         if (!isTargetLocOrPointer) {
              addError("Target type in from<T>() must be a location/pointer type (e.g., loc<ActualType>).", node); expressionTypes[node] = nullptr; return;
         }
-        node->arguments[0]->accept(*this); 
+        node->arguments[0]->accept(*this);
         ast::Expression* addrValExpr = node->arguments[0].get();
         auto addrValTypeIt = expressionTypes.find(addrValExpr);
         ast::TypeNode* addrValType = (addrValTypeIt != expressionTypes.end()) ? addrValTypeIt->second : nullptr;
-        
+
         bool isAddrValInteger = false;
         if(addrValType) {
             if(auto tn_val = dynamic_cast<ast::TypeName*>(addrValType)) {
                 isAddrValInteger = isIntegerType(tn_val);
             }
         }
-        if (!isAddrValInteger) { 
+        if (!isAddrValInteger) {
             addError("Address argument to from<T>() must be an integer type. Got: " + (addrValType ? addrValType->toString() : "unknown"), node);
             expressionTypes[node] = nullptr; return;
         }
@@ -4875,7 +4875,7 @@ void SemanticAnalyzer::visit(ast::ConstructionExpression* node) {
         if (node->arguments.size() != 1 || !node->arguments[0]) {
             addError("at() intrinsic expects 1 argument (the pointer).", node); expressionTypes[node] = nullptr; return;
         }
-        node->arguments[0]->accept(*this); 
+        node->arguments[0]->accept(*this);
         ast::Expression* ptrExpr = node->arguments[0].get();
         auto ptrTypeIt = expressionTypes.find(ptrExpr);
         if (ptrTypeIt == expressionTypes.end() || !ptrTypeIt->second) {
@@ -4901,7 +4901,7 @@ void SemanticAnalyzer::visit(ast::ConstructionExpression* node) {
         expressionTypes[node] = pointeeType;
         node->type = std::shared_ptr<ast::TypeNode>(pointeeType->clone());
     } else {
-        node->constructedType->accept(*this); 
+        node->constructedType->accept(*this);
         expressionTypes[node] = node->constructedType->clone().release();
         if (expressionTypes[node]) {
            node->type = std::shared_ptr<ast::TypeNode>(expressionTypes[node]->clone());
@@ -4939,7 +4939,7 @@ void SemanticAnalyzer::visit(ast::FutureType* node) {
 
 void SemanticAnalyzer::visit(ast::FunctionType* node) {
     if (node) {
-        for (auto& paramType : node->parameterTypes) { 
+        for (auto& paramType : node->parameterTypes) {
             if (paramType) paramType->accept(*this);
         }
         if (node->returnType) {
@@ -4948,8 +4948,8 @@ void SemanticAnalyzer::visit(ast::FunctionType* node) {
     }
 }
 void SemanticAnalyzer::visit(ast::OptionalType* node) {
-    if (node && node->containedType) { 
-        node->containedType->accept(*this); 
+    if (node && node->containedType) {
+        node->containedType->accept(*this);
     }
 }
 void SemanticAnalyzer::visit(ast::GenericParameter* node) {
@@ -4961,7 +4961,7 @@ void SemanticAnalyzer::visit(ast::GenericParameter* node) {
     // if (!symbol) { addError("Generic parameter " + node->name->name + " not found.", node); }
 }
 
-// Normalize LLVM-internal type names to their canonical Vyn surface-type names.
+// Normalize LLVM-internal type names to their canonical VyB surface-type names.
 // The LLVM backend accepts e.g. "i32" as an alias for "Int32"; the semantic
 // analyzer must honour the same aliases so validation is consistent with codegen.
 static std::string normalizeTypeName(const std::string& name) {
@@ -5035,7 +5035,7 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
                 if (categoryTarget == ast::TypeNode::Category::OPTIONAL) {
                     return true;
                 }
-                // Vyn might also allow assigning 'nil' to raw pointer types.
+                // VyB might also allow assigning 'nil' to raw pointer types.
                 // if (categoryTarget == ast::TypeNode::Category::POINTER) return true;
             }
         }
@@ -5060,18 +5060,18 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
                 return normalizeTypeName(tnTarget->identifier->name) ==
                        normalizeTypeName(tnValue->identifier->name);
             }
-            
+
             // Float literal (typed as "Float") can be assigned to any float type
-            bool isFloatTarget = (tnTarget->identifier->name == "Float" || 
-                                  tnTarget->identifier->name == "Float32" || 
+            bool isFloatTarget = (tnTarget->identifier->name == "Float" ||
+                                  tnTarget->identifier->name == "Float32" ||
                                   tnTarget->identifier->name == "Float64" ||
-                                  tnTarget->identifier->name == "f32" || 
+                                  tnTarget->identifier->name == "f32" ||
                                   tnTarget->identifier->name == "f64");
             bool isGenericFloatValue = (valName == "Float" || valName == "Float64" || valName == "f64");
             if (isFloatTarget && isGenericFloatValue) {
                 return true; // e.g., x<Float32> = 3.14
             }
-            
+
             // Special Case: Ownership wrappers. my<T>, their<T>, our<T>, mild<T> are compatible
             // with the inner type T for initialization (e.g., x<my<Int>> = 42).
             static const std::set<std::string> ownershipWrappers = {"my", "their", "our", "mild", "view"};
@@ -5084,7 +5084,7 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
             }
         }
     }
-    
+
     // If categories are different and not covered by the above special cases,
     // they are generally not compatible without an explicit cast.
     // Exception: if both types produce the same string representation, treat them as
@@ -5136,7 +5136,7 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
             if (!tnTarget->identifier || !tnValue->identifier) return false;
 
             // Normalize type names: treat LLVM aliases (i32, i64, …) as their
-            // canonical Vyn equivalents (Int32, Int, …) for compatibility checks.
+            // canonical VyB equivalents (Int32, Int, …) for compatibility checks.
             std::string nameTarget = normalizeTypeName(tnTarget->identifier->name);
             std::string nameValue  = normalizeTypeName(tnValue->identifier->name);
 
@@ -5157,7 +5157,7 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
             auto* ptTarget = static_cast<ast::PointerType*>(targetType);
             auto* ptValue = static_cast<ast::PointerType*>(valueType);
             // T* is compatible with U* if T is compatible with U (invariant for now).
-            // Vyn might have rules for void* or covariance/contravariance.
+            // VyB might have rules for void* or covariance/contravariance.
             return areTypesCompatible(ptTarget->pointeeType.get(), ptValue->pointeeType.get());
         }
         case ast::TypeNode::Category::ARRAY: {
@@ -5268,7 +5268,7 @@ void SemanticAnalyzer::visit(ast::TupleTypeNode* node) {
             element->accept(*this);
         } else {
             // Report error for null element type
-            errors.push_back("Tuple type contains a null element type at " + 
+            errors.push_back("Tuple type contains a null element type at " +
                               node->loc.toString());
         }
     }
@@ -5277,7 +5277,7 @@ void SemanticAnalyzer::visit(ast::TupleTypeNode* node) {
 bool SemanticAnalyzer::isRawLocationType(ast::TypeNode* type) {
     // Determine if the type is a raw location type (loc<T>)
     if (auto* typeName = dynamic_cast<ast::TypeName*>(type)) {
-        return typeName->identifier && typeName->identifier->name == "loc" && 
+        return typeName->identifier && typeName->identifier->name == "loc" &&
                !typeName->genericArgs.empty();
        }
     return false;
@@ -5293,26 +5293,26 @@ void SemanticAnalyzer::visit(ast::IfExpression* node) {
     } else {
         addError("If expression condition missing", node);
     }
-    
+
     // Check the then branch
     if (node->thenBranch) {
         node->thenBranch->accept(*this);
     } else {
         addError("If expression then branch missing", node);
     }
-    
+
     // Check the else branch (required in if expressions)
     if (node->elseBranch) {
         node->elseBranch->accept(*this);
     } else {
         addError("If expression else branch is required", node);
     }
-    
+
     // For a full implementation:
     // 1. Check that condition has boolean type
     // 2. Check that then and else branches have compatible types
     // 3. Set the if-expression's type to the common type of then and else
-    
+
     // For now we skip the type checking
 }
 
@@ -5322,14 +5322,14 @@ void SemanticAnalyzer::visit(ast::BorrowExpression* node) {
     if (node->expression) {
         node->expression->accept(*this);
     }
-    
+
     // Ensure that the borrowed expression is valid for borrowing
     if (!isLValue(node->expression.get())) {
         addError("Cannot borrow non-lvalue expression", node);
         expressionTypes[node] = nullptr;
         return;
     }
-    
+
     auto exprTypeIt = expressionTypes.find(node->expression.get());
     ast::TypeNode* exprType = (exprTypeIt != expressionTypes.end()) ? exprTypeIt->second : nullptr;
     if (!exprType) {
@@ -5366,7 +5366,7 @@ void SemanticAnalyzer::visit(ast::ArrayInitializationExpression* node) {
     } else {
         addError("Array initialization missing element type", node);
     }
-    
+
     // Check that the size expression is valid
     if (node->sizeExpression) {
         node->sizeExpression->accept(*this);
@@ -5375,11 +5375,11 @@ void SemanticAnalyzer::visit(ast::ArrayInitializationExpression* node) {
     } else {
         addError("Array initialization missing size expression", node);
     }
-    
+
     // For a full implementation:
     // 1. Check that the size expression is of integer type
     // 2. Set the array initialization expression's type to an array type with the element type
-    
+
     // For now we skip the advanced type checking
 }
 
@@ -5388,7 +5388,7 @@ void SemanticAnalyzer::registerTemplate(std::unique_ptr<ast::TemplateDeclaration
     if (!templateDecl || !templateDecl->name) {
         return;
     }
-    
+
     const std::string& templateName = templateDecl->name->name;
     auto templateInfo = std::make_unique<TemplateInfo>(std::move(templateDecl));
     templateRegistry[templateName] = std::move(templateInfo);
@@ -5408,19 +5408,19 @@ bool SemanticAnalyzer::isTemplateInstantiation(const std::string& name) {
 }
 
 std::unique_ptr<ast::Declaration> SemanticAnalyzer::instantiateTemplate(
-    const std::string& templateName, 
+    const std::string& templateName,
     const std::vector<std::string>& typeArgs) {
-    
+
     TemplateInfo* templateInfo = findTemplate(templateName);
     if (!templateInfo) {
         return nullptr;
     }
-    
+
     // Validate type argument count
     if (typeArgs.size() != templateInfo->parameterNames.size()) {
         return nullptr;
     }
-    
+
     // TODO: Implement actual monomorphization here
     // For now, return nullptr to indicate "not yet implemented"
     // This is where we would:
@@ -5428,31 +5428,31 @@ std::unique_ptr<ast::Declaration> SemanticAnalyzer::instantiateTemplate(
     // 2. Substitute type parameters with concrete types
     // 3. Generate specialized AST nodes
     // 4. Return the instantiated declaration
-    
+
     return nullptr;
 }
 
-void SemanticAnalyzer::handleTemplateInstantiation(ast::Identifier* identifier, 
+void SemanticAnalyzer::handleTemplateInstantiation(ast::Identifier* identifier,
                                                   const std::vector<ast::TypeNodePtr>& typeArgs,
                                                   ast::GenericInstantiationExpression* node) {
     if (!identifier) return;
-    
+
     std::string templateName = identifier->name;
     TemplateInfo* templateInfo = findTemplate(templateName);
-    
+
     if (!templateInfo) {
         addError("Template '" + templateName + "' not found.", node);
         return;
     }
-    
+
     // Validate type argument count
     if (typeArgs.size() != templateInfo->parameterNames.size()) {
-        addError("Template '" + templateName + "' expects " + 
-                std::to_string(templateInfo->parameterNames.size()) + 
+        addError("Template '" + templateName + "' expects " +
+                std::to_string(templateInfo->parameterNames.size()) +
                 " type arguments, got " + std::to_string(typeArgs.size()) + ".", node);
         return;
     }
-    
+
     // Convert type arguments to string representations for substitution
     std::vector<std::string> concreteTypes;
     for (const auto& typeArg : typeArgs) {
@@ -5463,12 +5463,12 @@ void SemanticAnalyzer::handleTemplateInstantiation(ast::Identifier* identifier,
             return;
         }
     }
-    
+
     // Validate template constraints before monomorphization
     if (!validateTemplateConstraints(templateInfo, concreteTypes, node)) {
         return; // Error already reported
     }
-    
+
     // Perform monomorphization
     auto instantiated = performMonomorphization(templateInfo, concreteTypes);
     if (instantiated) {
@@ -5486,7 +5486,7 @@ void SemanticAnalyzer::handleMemberTemplateInstantiation(ast::MemberExpression* 
         addError("Invalid member template instantiation.", node);
         return;
     }
-    
+
     // For now, delegate to regular template instantiation
     // In a full implementation, this would handle method templates and nested templates
     if (auto objectId = dynamic_cast<ast::Identifier*>(memberExpr->object.get())) {
@@ -5501,7 +5501,7 @@ std::unique_ptr<ast::Declaration> SemanticAnalyzer::performMonomorphization(Temp
     if (!templateInfo || !templateInfo->declaration) {
         return nullptr;
     }
-    
+
     // Generate a unique key for this instantiation
     std::string instanceKey = templateInfo->templateName + "<";
     for (size_t i = 0; i < concreteTypes.size(); ++i) {
@@ -5509,14 +5509,14 @@ std::unique_ptr<ast::Declaration> SemanticAnalyzer::performMonomorphization(Temp
         instanceKey += concreteTypes[i];
     }
     instanceKey += ">";
-    
+
     // For now, just return nullptr to indicate "monomorphization not yet implemented"
     // In a full implementation, this would:
     // 1. Clone the template body AST
     // 2. Substitute type parameters with concrete types
     // 3. Cache the result for reuse
     // 4. Return the instantiated declaration
-    
+
     return nullptr;
 }
 
@@ -5526,14 +5526,14 @@ std::unique_ptr<ast::Declaration> SemanticAnalyzer::cloneAndSubstituteAST(ast::D
     if (!templateBody) {
         return nullptr;
     }
-    
+
     // Placeholder implementation - proper AST cloning would require:
     // 1. Deep clone the AST structure
     // 2. Walk through all TypeName nodes in the cloned AST
     // 3. Replace generic parameter names with concrete types
     // 4. Update function signatures, struct fields, etc.
     // 5. Generate specialized mangled names
-    
+
     return nullptr;
 }
 
@@ -5544,34 +5544,34 @@ bool SemanticAnalyzer::validateTemplateConstraints(TemplateInfo* templateInfo,
     if (!templateInfo || concreteTypes.size() != templateInfo->parameterNames.size()) {
         return false;
     }
-    
+
     // Validate each type argument against its constraints
     for (size_t i = 0; i < concreteTypes.size(); ++i) {
         const std::string& concreteType = concreteTypes[i];
         const std::vector<std::string>& constraints = templateInfo->parameterConstraints[i];
-        
+
         // Check each trait constraint for this type parameter
         for (const std::string& traitName : constraints) {
             if (!typeImplementsTrait(concreteType, traitName)) {
-                addError("Type '" + concreteType + "' does not implement required trait '" + 
-                        traitName + "' for template parameter '" + 
+                addError("Type '" + concreteType + "' does not implement required trait '" +
+                        traitName + "' for template parameter '" +
                         templateInfo->parameterNames[i] + "'.", node);
                 return false;
             }
         }
     }
-    
+
     return true;
 }
 
 bool SemanticAnalyzer::typeImplementsTrait(const std::string& typeName, const std::string& traitName) {
     // Check if the type implements the specified trait
-    
+
     // First, check for built-in trait implementations
     if (isBuiltinTypeCompatible(typeName, traitName)) {
         return true;
     }
-    
+
     // Look up user-defined trait implementations
     auto typeIt = traitImpls.find(typeName);
     if (typeIt != traitImpls.end()) {
@@ -5581,15 +5581,15 @@ bool SemanticAnalyzer::typeImplementsTrait(const std::string& typeName, const st
             return true;
         }
     }
-    
+
     // TODO: Handle generic aspect implementations (bind<T> Aspect -> Type<T>)
-    
+
     return false;
 }
 
 std::vector<std::string> SemanticAnalyzer::getImplementedTraits(const std::string& typeName) {
     std::vector<std::string> traits;
-    
+
     // Add built-in trait implementations
     if (typeName == "Int" || typeName == "Int32" || typeName == "Float" || typeName == "Float32" || typeName == "Char") {
         traits.push_back("Comparable");
@@ -5598,18 +5598,18 @@ std::vector<std::string> SemanticAnalyzer::getImplementedTraits(const std::strin
             traits.push_back("Numeric");
         }
     }
-    
+
     if (typeName == "String" || typeName == "Char") {
         traits.push_back("Equatable");
         if (typeName == "String") {
             traits.push_back("Comparable");
         }
     }
-    
+
     if (typeName == "Bool") {
         traits.push_back("Equatable");
     }
-    
+
     // Look up user-defined trait implementations
     auto typeIt = traitImpls.find(typeName);
     if (typeIt != traitImpls.end()) {
@@ -5617,7 +5617,7 @@ std::vector<std::string> SemanticAnalyzer::getImplementedTraits(const std::strin
             traits.push_back(traitEntry.first);
         }
     }
-    
+
     return traits;
 }
 
@@ -5626,20 +5626,20 @@ bool SemanticAnalyzer::isBuiltinTypeCompatible(const std::string& typeName, cons
     if (traitName == "Comparable") {
         return typeName == "Int" || typeName == "Int32" || typeName == "Float" || typeName == "Float32" || typeName == "Char" || typeName == "String";
     }
-    
+
     if (traitName == "Equatable") {
-        return typeName == "Int" || typeName == "Int32" || typeName == "Float" || typeName == "Float32" || typeName == "Char" || 
+        return typeName == "Int" || typeName == "Int32" || typeName == "Float" || typeName == "Float32" || typeName == "Char" ||
                typeName == "String" || typeName == "Bool";
     }
-    
+
     if (traitName == "Numeric") {
         return typeName == "Int" || typeName == "Int32" || typeName == "Float" || typeName == "Float32";
     }
-    
+
     if (traitName == "Hashable") {
         return typeName == "Int" || typeName == "String" || typeName == "Char" || typeName == "Bool";
     }
-    
+
     return false;
 }
 
@@ -5649,7 +5649,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
     SymbolInfo* objSymbol = currentScope->lookup(objectName);
     bool isConstVec = false;
     bool isTheirVec = false;
-    
+
     if (objSymbol) {
         // Check if the variable is const or has ownership constraints
         if (objSymbol->isConst) {
@@ -5660,7 +5660,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
             isTheirVec = true;
         }
     }
-    
+
     if (methodName == "push") {
         // push(element) -> Vec<T> (for chaining)
         if (node->arguments.size() != 1) {
@@ -5679,7 +5679,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         auto vecType = std::make_unique<ast::VecType>(node->loc, std::move(intType));
         expressionTypes[node] = vecType.get();
         node->type = std::shared_ptr<ast::TypeNode>(std::move(vecType));
-        
+
     } else if (methodName == "pop") {
         // pop() -> T (element type)
         if (node->arguments.size() != 0) {
@@ -5696,7 +5696,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
         expressionTypes[node] = intType.get();
         node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
-        
+
     } else if (methodName == "len") {
         // len() -> Int
         if (node->arguments.size() != 0) {
@@ -5707,7 +5707,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
         expressionTypes[node] = intType.get();
         node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
-        
+
     } else if (methodName == "get") {
         // get(index) -> T (element type)
         if (node->arguments.size() != 1) {
@@ -5719,7 +5719,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
             node->arguments[0]->accept(*this);
             // TODO: Check that argument is Int type
         }
-        
+
         // Extract element type from Vec<T>
         // Look up the object in the symbol table to get its Vec type
         SymbolInfo* objSymbol = currentScope->lookup(objectName);
@@ -5747,13 +5747,13 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
                 }
             }
         }
-        
+
         // Fallback to Int if we couldn't determine the element type
         auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
         auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
         expressionTypes[node] = intType.get();
         node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
-        
+
     } else if (methodName == "push_array") {
         // push_array(array) -> Vec<T> (for chaining)
         if (node->arguments.size() != 1) {
@@ -5772,7 +5772,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         auto vecType = std::make_unique<ast::VecType>(node->loc, std::move(intType));
         expressionTypes[node] = vecType.get();
         node->type = std::shared_ptr<ast::TypeNode>(std::move(vecType));
-        
+
     } else if (methodName == "to_array") {
         // to_array(size) -> [T; N]
         if (node->arguments.size() != 1) {
@@ -5786,7 +5786,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         auto arrayType = std::make_unique<ast::ArrayType>(node->loc, std::move(intType), nullptr);
         expressionTypes[node] = arrayType.get();
         node->type = std::shared_ptr<ast::TypeNode>(std::move(arrayType));
-        
+
     } else if (methodName == "clear") {
         // clear() -> void
         if (node->arguments.size() != 0) {
@@ -5800,7 +5800,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         }
         // Return void (no type)
         node->type = nullptr;
-        
+
     } else if (methodName == "is_empty") {
         // is_empty() -> Bool
         if (node->arguments.size() != 0) {
@@ -5811,7 +5811,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         auto boolType = std::make_unique<ast::TypeName>(node->loc, std::move(boolId));
         expressionTypes[node] = boolType.get();
         node->type = std::shared_ptr<ast::TypeNode>(std::move(boolType));
-        
+
     } else if (methodName == "capacity") {
         // capacity() -> Int
         if (node->arguments.size() != 0) {
@@ -5822,7 +5822,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
         expressionTypes[node] = intType.get();
         node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
-        
+
     } else if (methodName == "concat") {
         // concat(other_vec) -> Vec<T> (for chaining)
         if (node->arguments.size() != 1) {
@@ -5835,7 +5835,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         auto vecType = std::make_unique<ast::VecType>(node->loc, std::move(intType));
         expressionTypes[node] = vecType.get();
         node->type = std::shared_ptr<ast::TypeNode>(std::move(vecType));
-        
+
     } else if (methodName == "contains") {
         // contains(value) -> Bool
         if (node->arguments.size() != 1) {
@@ -5847,7 +5847,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         auto boolType = std::make_unique<ast::TypeName>(node->loc, std::move(boolId));
         expressionTypes[node] = boolType.get();
         node->type = std::shared_ptr<ast::TypeNode>(std::move(boolType));
-        
+
     } else if (methodName == "remove_at") {
         // remove_at(index) -> T (removed element)
         if (node->arguments.size() != 1) {
@@ -5865,7 +5865,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
         expressionTypes[node] = intType.get();
         node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
-        
+
     } else if (methodName == "get_array") {
         // get_array(pre_allocated_array) -> Int (number of elements copied)
         if (node->arguments.size() != 1) {
@@ -5879,7 +5879,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
         expressionTypes[node] = intType.get();
         node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
-        
+
     } else if (methodName == "get_vec") {
         // get_vec(target_vec) -> Int (number of elements copied)
         // Extracts contents from any Vec into target Vec, respecting constness
@@ -5895,7 +5895,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
         expressionTypes[node] = intType.get();
         node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
-        
+
     } else {
         addError("Unknown Vec method: " + methodName, node);
     }
@@ -5904,14 +5904,14 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
 void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, ast::VecType* vecType, const std::string& methodName) {
     // Handle Vec method calls on member expressions (e.g., tree.nodes.push())
     // This variant doesn't need to look up the object in the symbol table since we already have the type
-    
+
     // Get the element type from the Vec<T>
     ast::TypeNode* elementType = vecType->elementType.get();
-    
+
     // IMPORTANT: vecType may point to a temporary unique_ptr in the caller (e.g. tempVecType).
     // To avoid use-after-free when that temporary is destroyed, always clone types into node->type
     // FIRST, then store node->type.get() in expressionTypes so the pointer is stable.
-    
+
     if (methodName == "push") {
         // push(element) -> Vec<T> (for chaining)
         if (node->arguments.size() != 1) {
@@ -5920,11 +5920,11 @@ void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, as
         }
         // Accept the argument to ensure it gets analyzed
         node->arguments[0]->accept(*this);
-        
+
         // Clone type into node->type first, then store stable pointer
         node->type = std::shared_ptr<ast::TypeNode>(vecType->clone());
         expressionTypes[node] = node->type.get();
-        
+
     } else if (methodName == "pop") {
         // pop() -> T (element type)
         if (node->arguments.size() != 0) {
@@ -5936,7 +5936,7 @@ void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, as
             node->type = std::shared_ptr<ast::TypeNode>(elementType->clone());
             expressionTypes[node] = node->type.get();
         }
-        
+
     } else if (methodName == "len") {
         // len() -> Int
         if (node->arguments.size() != 0) {
@@ -5947,7 +5947,7 @@ void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, as
         auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
         expressionTypes[node] = intType.get();
         node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
-        
+
     } else if (methodName == "get") {
         // get(index) -> T (element type)
         if (node->arguments.size() != 1) {
@@ -5963,7 +5963,7 @@ void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, as
             node->type = std::shared_ptr<ast::TypeNode>(elementType->clone());
             expressionTypes[node] = node->type.get();
         }
-        
+
     } else if (methodName == "clear") {
         // clear() -> void
         if (node->arguments.size() != 0) {
@@ -5971,7 +5971,7 @@ void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, as
             return;
         }
         node->type = nullptr;
-        
+
     } else if (methodName == "is_empty") {
         // is_empty() -> Bool
         if (node->arguments.size() != 0) {
@@ -5982,7 +5982,7 @@ void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, as
         auto boolType = std::make_unique<ast::TypeName>(node->loc, std::move(boolId));
         expressionTypes[node] = boolType.get();
         node->type = std::shared_ptr<ast::TypeNode>(std::move(boolType));
-        
+
     } else {
         addError("Unknown Vec method: " + methodName, node);
     }
@@ -5994,10 +5994,10 @@ void SemanticAnalyzer::registerTrait(ast::AspectDeclaration* traitDecl) {
     if (!traitDecl || !traitDecl->name) {
         return;
     }
-    
+
     auto traitInfo = std::make_unique<TraitInfo>(traitDecl);
     const std::string& traitName = traitInfo->name;
-    
+
     traitRegistry[traitName] = std::move(traitInfo);
 }
 
@@ -6013,30 +6013,30 @@ void SemanticAnalyzer::registerTraitImpl(ast::BindDeclaration* implDecl) {
     if (!implDecl || !implDecl->selfType || !implDecl->traitType) {
         return;
     }
-    
+
     std::string typeName = implDecl->selfType->toString();
     std::string traitName = implDecl->traitType->toString();
-    
+
     // Check if this is a generic implementation (has type parameters)
     bool isGeneric = !implDecl->genericParams.empty();
-    
+
     if (isGeneric) {
         // Store generic implementation separately
-        VYN_CDBG << "DEBUG: Storing generic trait impl: " << traitName << " for " << typeName << std::endl;
-        
+        VYB_CDBG << "DEBUG: Storing generic trait impl: " << traitName << " for " << typeName << std::endl;
+
         auto genericInfo = std::make_unique<GenericImplInfo>(implDecl);
         genericTraitImpls[typeName][traitName] = std::move(genericInfo);
     } else {
         // Store concrete implementation
-        VYN_CDBG << "DEBUG: Storing concrete trait impl: " << traitName << " for " << typeName << std::endl;
-        
+        VYB_CDBG << "DEBUG: Storing concrete trait impl: " << traitName << " for " << typeName << std::endl;
+
         std::vector<ast::FunctionDeclaration*> implMethods;
         for (const auto& method : implDecl->methods) {
             if (method) {
                 implMethods.push_back(method.get());
             }
         }
-        
+
         traitImpls[typeName][traitName] = implMethods;
 
         auto& associatedMap = traitAssociatedTypeImpls[typeName][traitName];
@@ -6049,7 +6049,7 @@ void SemanticAnalyzer::registerTraitImpl(ast::BindDeclaration* implDecl) {
     }
 }
 
-bool SemanticAnalyzer::validateTraitImpl(const std::string& typeName, 
+bool SemanticAnalyzer::validateTraitImpl(const std::string& typeName,
                                         const std::string& traitName,
                                         const std::vector<std::unique_ptr<ast::FunctionDeclaration>>& methods,
                                         const std::vector<ast::BindDeclaration::AssociatedTypeBinding>& associatedTypeBindings,
@@ -6094,36 +6094,36 @@ bool SemanticAnalyzer::validateTraitImpl(const std::string& typeName,
             return false;
         }
     }
-    
+
     // Check that all required trait methods are implemented
     for (const auto& traitMethod : traitInfo->methods) {
         // Skip methods with default implementations
         if (traitMethod.hasDefaultImpl) {
             continue;
         }
-        
+
         bool found = false;
         for (const auto& implMethod : methods) {
-            if (implMethod && implMethod->id && 
+            if (implMethod && implMethod->id &&
                 implMethod->id->name == traitMethod.name) {
-                
+
                 // Validate signature matches
                 if (!traitMethodSignatureMatches(traitMethod, implMethod.get(), associatedTypeBindingNames)) {
-                    VYN_CDBG << "DEBUG: Method signature mismatch for: " << traitMethod.name << std::endl;
+                    VYB_CDBG << "DEBUG: Method signature mismatch for: " << traitMethod.name << std::endl;
                     return false;
                 }
-                
+
                 found = true;
                 break;
             }
         }
-        
+
         if (!found) {
-            VYN_CDBG << "DEBUG: Missing required trait method: " << traitMethod.name << std::endl;
+            VYB_CDBG << "DEBUG: Missing required trait method: " << traitMethod.name << std::endl;
             return false;
         }
     }
-    
+
     return true;
 }
 
@@ -6133,16 +6133,16 @@ bool SemanticAnalyzer::traitMethodSignatureMatches(const TraitMethod& traitMetho
     if (!implMethod || !implMethod->id) {
         return false;
     }
-    
+
     // Check method name
     if (implMethod->id->name != traitMethod.name) {
         return false;
     }
-    
+
     // Check parameter count (including self)
     if (implMethod->params.size() != traitMethod.parameterNames.size()) {
-        VYN_CDBG << "DEBUG: Parameter count mismatch: " 
-                  << implMethod->params.size() << " vs " 
+        VYB_CDBG << "DEBUG: Parameter count mismatch: "
+                  << implMethod->params.size() << " vs "
                   << traitMethod.parameterNames.size() << std::endl;
         return false;
     }
@@ -6154,7 +6154,7 @@ bool SemanticAnalyzer::traitMethodSignatureMatches(const TraitMethod& traitMetho
             return false;
         }
     }
-    
+
     // Check return type matches
     if (implMethod->returnTypeNode && traitMethod.returnType) {
         std::string implReturnType = implMethod->returnTypeNode->toString();
@@ -6167,9 +6167,9 @@ bool SemanticAnalyzer::traitMethodSignatureMatches(const TraitMethod& traitMetho
                 traitReturnType = assocIt->second;
             }
         }
-        
+
         if (implReturnType != traitReturnType) {
-            VYN_CDBG << "DEBUG: Return type mismatch: " 
+            VYB_CDBG << "DEBUG: Return type mismatch: "
                       << implReturnType << " vs " << traitReturnType << std::endl;
             return false;
         }
@@ -6177,10 +6177,10 @@ bool SemanticAnalyzer::traitMethodSignatureMatches(const TraitMethod& traitMetho
         // One has return type, other doesn't
         return false;
     }
-    
+
     // TODO: More rigorous type checking for parameters
     // For now, just basic validation
-    
+
     return true;
 }
 
@@ -6252,28 +6252,28 @@ bool SemanticAnalyzer::setResolvedTraitReturnType(ast::CallExpression* callNode,
 bool SemanticAnalyzer::matchesPattern(const std::string& concreteType, const std::string& pattern) {
     // Simple pattern matching: Box<Int> matches Box<T>
     // Extract base type from both
-    
+
     size_t concreteAngle = concreteType.find('<');
     size_t patternAngle = pattern.find('<');
-    
+
     // If pattern has no angle brackets, must match exactly
     if (patternAngle == std::string::npos) {
         return concreteType == pattern;
     }
-    
+
     // If concrete type has no angle brackets but pattern does, no match
     if (concreteAngle == std::string::npos) {
         return false;
     }
-    
+
     // Check base types match (e.g., "Box" == "Box")
     std::string concreteBase = concreteType.substr(0, concreteAngle);
     std::string patternBase = pattern.substr(0, patternAngle);
-    
+
     if (concreteBase != patternBase) {
         return false;
     }
-    
+
     // For now, if base types match and both have angle brackets, consider it a match
     // A more sophisticated implementation would validate type argument counts
     return true;
@@ -6286,10 +6286,10 @@ void SemanticAnalyzer::visit(ast::TypeofExpression* node) {
         expressionTypes[node] = nullptr;
         return;
     }
-    
+
     // Analyze operand to determine its type
     node->operand->accept(*this);
-    
+
     // Result type is always "Type" (primitive introspection type)
     auto typeIdent = std::make_unique<ast::Identifier>(node->loc, "Type");
     ast::TypeNode* resultType = new ast::TypeName(node->loc, std::move(typeIdent));
@@ -6304,15 +6304,15 @@ void SemanticAnalyzer::visit(ast::TypenameExpression* node) {
         expressionTypes[node] = nullptr;
         return;
     }
-    
+
     // Analyze operand to determine its type
     node->operand->accept(*this);
-    
-    // Result type is always "String" — Vyn's string type uses PascalCase
+
+    // Result type is always "String" — VyB's string type uses PascalCase
     auto stringIdent = std::make_unique<ast::Identifier>(node->loc, "String");
     ast::TypeNode* resultType = new ast::TypeName(node->loc, std::move(stringIdent));
     expressionTypes[node] = resultType;
     node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
 }
 
-} // Added missing closing brace for namespace vyn
+} // Added missing closing brace for namespace vyb

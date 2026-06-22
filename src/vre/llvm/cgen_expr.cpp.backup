@@ -1,6 +1,6 @@
-#include "vyn/vre/llvm/codegen.hpp"
-#include "vyn/parser/ast.hpp"
-#include "vyn/parser/token.hpp" // For TokenType in BinaryExpression
+#include "vyb/vre/llvm/codegen.hpp"
+#include "vyb/parser/ast.hpp"
+#include "vyb/parser/token.hpp" // For TokenType in BinaryExpression
 
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Instructions.h>
@@ -9,23 +9,23 @@
 #include <llvm/ADT/APInt.h>     // For APInt in IntegerLiteral
 #include <regex>                // For regex in MemberExpression loaded value handling
 
-using namespace vyn;
+using namespace vyb;
 // using namespace llvm; // Uncomment if desired for brevity
 
 // --- Literal Codegen ---
-void LLVMCodegen::visit(vyn::ast::IntegerLiteral *node) {
+void LLVMCodegen::visit(vyb::ast::IntegerLiteral *node) {
     m_currentLLVMValue = llvm::ConstantInt::get(*context, llvm::APInt(64, node->value, true));
 }
 
-void LLVMCodegen::visit(vyn::ast::FloatLiteral *node) {
+void LLVMCodegen::visit(vyb::ast::FloatLiteral *node) {
     m_currentLLVMValue = llvm::ConstantFP::get(*context, llvm::APFloat(node->value));
 }
 
-void LLVMCodegen::visit(vyn::ast::BooleanLiteral *node) {
+void LLVMCodegen::visit(vyb::ast::BooleanLiteral *node) {
     m_currentLLVMValue = llvm::ConstantInt::get(*context, llvm::APInt(1, node->value));
 }
 
-void LLVMCodegen::visit(vyn::ast::StringLiteral *node) {
+void LLVMCodegen::visit(vyb::ast::StringLiteral *node) {
     if (currentFunction) {
         // Inside a function - use CreateGlobalStringPtr
         m_currentLLVMValue = builder->CreateGlobalStringPtr(node->value);
@@ -33,7 +33,7 @@ void LLVMCodegen::visit(vyn::ast::StringLiteral *node) {
         // Global scope - create a global constant string
         // Create a constant string
         llvm::Constant* stringConstant = llvm::ConstantDataArray::getString(*context, node->value, true);
-        
+
         // Create a global variable to hold the string
         llvm::GlobalVariable* globalString = new llvm::GlobalVariable(
             *module,
@@ -43,13 +43,13 @@ void LLVMCodegen::visit(vyn::ast::StringLiteral *node) {
             stringConstant,
             ".str"
         );
-        
+
         // Get a pointer to the first element (i8*)
         std::vector<llvm::Constant*> indices = {
             llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0),
             llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0)
         };
-        
+
         m_currentLLVMValue = llvm::ConstantExpr::getGetElementPtr(
             stringConstant->getType(),
             globalString,
@@ -58,7 +58,7 @@ void LLVMCodegen::visit(vyn::ast::StringLiteral *node) {
     }
 }
 
-void LLVMCodegen::visit(vyn::ast::NilLiteral* node) {
+void LLVMCodegen::visit(vyb::ast::NilLiteral* node) {
     // Nil is a polymorphic null pointer. For now, default to i8*.
     // Type inference or context should ideally provide a more specific pointer type.
     if (m_currentLLVMType && m_currentLLVMType->isPointerTy()) {
@@ -72,7 +72,7 @@ void LLVMCodegen::visit(vyn::ast::NilLiteral* node) {
     }
 }
 
-void LLVMCodegen::visit(vyn::ast::ObjectLiteral* node) {
+void LLVMCodegen::visit(vyb::ast::ObjectLiteral* node) {
     if (!node->typePath) {
         logError(node->loc, "Object literal is missing type information");
         m_currentLLVMValue = nullptr;
@@ -100,7 +100,7 @@ void LLVMCodegen::visit(vyn::ast::ObjectLiteral* node) {
 
     // Allocate stack space for the struct
     llvm::AllocaInst* allocaInst = builder->CreateAlloca(structTy, nullptr, structName + "_obj");
-    
+
     // Set metadata or debug info to help identify this as a struct of type structName
     // This can help when trying to determine the type in MemberExpression
     if (!structName.empty() && structName != "anon") {
@@ -113,7 +113,7 @@ void LLVMCodegen::visit(vyn::ast::ObjectLiteral* node) {
                 UserTypeInfo typeInfo;
                 typeInfo.llvmType = structType;
                 typeInfo.isStruct = true;
-                
+
                 // Try to populate field indices if we have the information
                 // This might be incomplete, but can be useful for debugging
                 userTypeMap[structName] = typeInfo;
@@ -149,16 +149,16 @@ void LLVMCodegen::visit(vyn::ast::ObjectLiteral* node) {
 
         // Create GEP to get pointer to field
         llvm::Value* fieldPtr = builder->CreateStructGEP(structTy, allocaInst, fieldIndex, fieldName + "_ptr");
-        
+
         // Store the value into the field
         llvm::Value* fieldValue = m_currentLLVMValue;
         builder->CreateStore(fieldValue, fieldPtr);
     }
-    
-    // In Vyn, struct initialization can be used both for creating temporary values
+
+    // In VyB, struct initialization can be used both for creating temporary values
     // and for direct assignment to variables. We need to decide if we should return
     // the pointer or load the actual struct value.
-    
+
     // Store the struct type information in userTypeMap if not already present
     if (!structName.empty() && structName != "anon") {
         auto it = userTypeMap.find(structName);
@@ -169,17 +169,17 @@ void LLVMCodegen::visit(vyn::ast::ObjectLiteral* node) {
             userTypeMap[structName] = typeInfo;
         }
     }
-    
+
     // For struct initialization in variable assignment or return statements,
     // we should load the struct value rather than return the pointer.
     // This ensures type compatibility with value semantics.
     llvm::Value* structValue = builder->CreateLoad(structTy, allocaInst, structName + "_val");
-    
+
     // Return the loaded struct value
     m_currentLLVMValue = structValue;
 }
 
-void LLVMCodegen::visit(vyn::ast::ArrayLiteral* node) {
+void LLVMCodegen::visit(vyb::ast::ArrayLiteral* node) {
     if (node->elements.empty()) {
         // Handle empty array literal. Need its type.
         // If node->type is set by semantic analysis:
@@ -248,7 +248,7 @@ void LLVMCodegen::visit(vyn::ast::ArrayLiteral* node) {
 }
 
 // --- Expressions ---
-void LLVMCodegen::visit(vyn::ast::UnaryExpression *node) {
+void LLVMCodegen::visit(vyb::ast::UnaryExpression *node) {
     node->operand->accept(*this);
     llvm::Value *operandValue = m_currentLLVMValue;
 
@@ -259,7 +259,7 @@ void LLVMCodegen::visit(vyn::ast::UnaryExpression *node) {
     }
 
     switch (node->op.type) {
-        case vyn::TokenType::MINUS: // Reverted to vyn::TokenType::MINUS
+        case vyb::TokenType::MINUS: // Reverted to vyb::TokenType::MINUS
             if (operandValue->getType()->isFloatingPointTy()) {
                 m_currentLLVMValue = builder->CreateFNeg(operandValue, "fnegtmp");
             } else if (operandValue->getType()->isIntegerTy()) {
@@ -269,7 +269,7 @@ void LLVMCodegen::visit(vyn::ast::UnaryExpression *node) {
                 m_currentLLVMValue = nullptr;
             }
             break;
-        case vyn::TokenType::BANG: // Reverted to vyn::TokenType::BANG
+        case vyb::TokenType::BANG: // Reverted to vyb::TokenType::BANG
             // Logical NOT: typically (operand == 0) for integers, or fcmp one for floats
              if (operandValue->getType()->isIntegerTy(1)) { // Already a boolean
                 m_currentLLVMValue = builder->CreateNot(operandValue, "nottmp");
@@ -290,14 +290,14 @@ void LLVMCodegen::visit(vyn::ast::UnaryExpression *node) {
     }
 }
 
-void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
+void LLVMCodegen::visit(vyb::ast::BinaryExpression *node) {
     node->left->accept(*this);
     llvm::Value *L = m_currentLLVMValue;
-    vyn::ast::TypeNode* leftTypeNode = node->left->type.get(); // Get AST type of left operand
+    vyb::ast::TypeNode* leftTypeNode = node->left->type.get(); // Get AST type of left operand
 
     node->right->accept(*this);
     llvm::Value *R = m_currentLLVMValue;
-    vyn::ast::TypeNode* rightTypeNode = node->right->type.get(); // Get AST type of right operand
+    vyb::ast::TypeNode* rightTypeNode = node->right->type.get(); // Get AST type of right operand
 
 
     if (!L || !R) {
@@ -319,7 +319,7 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
         // Coerce to the smaller width to preserve variable precision
         llvm::IntegerType* leftIntType = llvm::cast<llvm::IntegerType>(L->getType());
         llvm::IntegerType* rightIntType = llvm::cast<llvm::IntegerType>(R->getType());
-        
+
         if (leftIntType->getBitWidth() < rightIntType->getBitWidth()) {
             // Left is smaller, truncate right to match left
             R = builder->CreateTrunc(R, L->getType(), "inttrunctmp");
@@ -340,26 +340,26 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
 
 
     switch (node->op.type) {
-        case vyn::TokenType::PLUS: // Reverted to vyn::TokenType::PLUS
+        case vyb::TokenType::PLUS: // Reverted to vyb::TokenType::PLUS
             if (isFloatOp) {
                 m_currentLLVMValue = builder->CreateFAdd(L, R, "faddtmp");
             }
             // Debug output for string concatenation logic
             else {
                 if (verbose) {
-                    std::cout << "DEBUG PLUS: leftTypeNode=" << (leftTypeNode ? "yes" : "null") 
+                    std::cout << "DEBUG PLUS: leftTypeNode=" << (leftTypeNode ? "yes" : "null")
                               << ", rightTypeNode=" << (rightTypeNode ? "yes" : "null") << std::endl;
                     std::cout << "DEBUG PLUS: Checking LLVM types for string detection..." << std::endl;
                 }
-                
+
                 // First check for string types using LLVM types directly (more reliable)
                 bool leftIsString = (L->getType() == int8PtrType);
                 bool rightIsString = (R->getType() == int8PtrType);
-                
+
                 // If at least one operand is a string, treat as string concatenation
                 if (leftIsString || rightIsString) {
                     if (verbose) {
-                        std::cout << "DEBUG PLUS: Detected string concatenation (leftIsString=" 
+                        std::cout << "DEBUG PLUS: Detected string concatenation (leftIsString="
                                   << leftIsString << ", rightIsString=" << rightIsString << ")" << std::endl;
                     }
                     m_currentLLVMValue = generateMixedStringConcatenation(L, R, leftTypeNode, rightTypeNode, node->loc);
@@ -370,28 +370,28 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
                     break;
                 }
             }
-            
+
             // Check for string concatenation - either pure string + string or mixed types with string
             if (leftTypeNode && rightTypeNode) {
                 // Resolve type aliases to get base type names
                 std::string leftBaseName = resolveTypeAliasToBaseName(leftTypeNode);
                 std::string rightBaseName = resolveTypeAliasToBaseName(rightTypeNode);
-                
+
                 // Check if either operand is a string (including string literals)
                 bool leftIsString = (L->getType() == int8PtrType) || (leftBaseName == "String") ||
-                                   (leftTypeNode->getCategory() == vyn::ast::TypeNode::Category::IDENTIFIER &&
-                                    dynamic_cast<vyn::ast::TypeName*>(leftTypeNode) &&
-                                    dynamic_cast<vyn::ast::TypeName*>(leftTypeNode)->identifier &&
-                                    (dynamic_cast<vyn::ast::TypeName*>(leftTypeNode)->identifier->name == "String" ||
-                                     dynamic_cast<vyn::ast::TypeName*>(leftTypeNode)->identifier->name == "string"));
-                                     
+                                   (leftTypeNode->getCategory() == vyb::ast::TypeNode::Category::IDENTIFIER &&
+                                    dynamic_cast<vyb::ast::TypeName*>(leftTypeNode) &&
+                                    dynamic_cast<vyb::ast::TypeName*>(leftTypeNode)->identifier &&
+                                    (dynamic_cast<vyb::ast::TypeName*>(leftTypeNode)->identifier->name == "String" ||
+                                     dynamic_cast<vyb::ast::TypeName*>(leftTypeNode)->identifier->name == "string"));
+
                 bool rightIsString = (R->getType() == int8PtrType) || (rightBaseName == "String") ||
-                                    (rightTypeNode->getCategory() == vyn::ast::TypeNode::Category::IDENTIFIER &&
-                                     dynamic_cast<vyn::ast::TypeName*>(rightTypeNode) &&
-                                     dynamic_cast<vyn::ast::TypeName*>(rightTypeNode)->identifier &&
-                                     (dynamic_cast<vyn::ast::TypeName*>(rightTypeNode)->identifier->name == "String" ||
-                                      dynamic_cast<vyn::ast::TypeName*>(rightTypeNode)->identifier->name == "string"));
-                
+                                    (rightTypeNode->getCategory() == vyb::ast::TypeNode::Category::IDENTIFIER &&
+                                     dynamic_cast<vyb::ast::TypeName*>(rightTypeNode) &&
+                                     dynamic_cast<vyb::ast::TypeName*>(rightTypeNode)->identifier &&
+                                     (dynamic_cast<vyb::ast::TypeName*>(rightTypeNode)->identifier->name == "String" ||
+                                      dynamic_cast<vyb::ast::TypeName*>(rightTypeNode)->identifier->name == "string"));
+
                 // If at least one operand is a string, treat as string concatenation with auto-conversion
                 if (leftIsString || rightIsString) {
                     m_currentLLVMValue = generateMixedStringConcatenation(L, R, leftTypeNode, rightTypeNode, node->loc);
@@ -402,14 +402,14 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
                 }
                 // Check for pointer arithmetic
                 else if (L->getType()->isPointerTy() && R->getType()->isIntegerTy() && leftTypeNode) {
-                    vyn::ast::TypeNode* pointeeAstType = nullptr;
-                    
+                    vyb::ast::TypeNode* pointeeAstType = nullptr;
+
                     // Try to get pointee type from different sources
-                    if (auto ptrAstNode = dynamic_cast<vyn::ast::PointerType*>(leftTypeNode)) {
-                        pointeeAstType = ptrAstNode->pointeeType.get(); 
-                    } else if (auto arrayAstNode = dynamic_cast<vyn::ast::ArrayType*>(leftTypeNode)) {
+                    if (auto ptrAstNode = dynamic_cast<vyb::ast::PointerType*>(leftTypeNode)) {
+                        pointeeAstType = ptrAstNode->pointeeType.get();
+                    } else if (auto arrayAstNode = dynamic_cast<vyb::ast::ArrayType*>(leftTypeNode)) {
                         pointeeAstType = arrayAstNode->elementType.get();
-                    } else if (auto typeName = dynamic_cast<vyn::ast::TypeName*>(leftTypeNode)) {
+                    } else if (auto typeName = dynamic_cast<vyb::ast::TypeName*>(leftTypeNode)) {
                         // Check if it's a loc<T> type
                         if (typeName->identifier->name == "loc" && !typeName->genericArgs.empty()) {
                             pointeeAstType = typeName->genericArgs[0].get();
@@ -442,30 +442,30 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
                 m_currentLLVMValue = builder->CreateAdd(L, R, "addtmp");
             }
             break;
-        case vyn::TokenType::MINUS: // Reverted to vyn::TokenType::MINUS
+        case vyb::TokenType::MINUS: // Reverted to vyb::TokenType::MINUS
             if (isFloatOp) m_currentLLVMValue = builder->CreateFSub(L, R, "fsubtmp");
-            else if (L->getType()->isPointerTy() && R->getType()->isPointerTy()){ 
+            else if (L->getType()->isPointerTy() && R->getType()->isPointerTy()){
                  // Pointer subtraction (ptr - ptr) gives an integer distance
                  L = builder->CreatePtrToInt(L, int64Type, "ptrtointtmp_l");
                  R = builder->CreatePtrToInt(R, int64Type, "ptrtointtmp_r");
                  llvm::Value* diffBytes = builder->CreateSub(L, R, "subtmp");
-                 m_currentLLVMValue = diffBytes; 
+                 m_currentLLVMValue = diffBytes;
             }
             else if (L->getType()->isPointerTy() && leftTypeNode) { // ptr - int
-                 vyn::ast::TypeNode* pointeeAstType = nullptr;
-                 
+                 vyb::ast::TypeNode* pointeeAstType = nullptr;
+
                  // Try to get pointee type from different sources
-                 if (auto ptrAstNode = dynamic_cast<vyn::ast::PointerType*>(leftTypeNode)) {
-                    pointeeAstType = ptrAstNode->pointeeType.get(); 
-                 } else if (auto arrayAstNode = dynamic_cast<vyn::ast::ArrayType*>(leftTypeNode)) {
+                 if (auto ptrAstNode = dynamic_cast<vyb::ast::PointerType*>(leftTypeNode)) {
+                    pointeeAstType = ptrAstNode->pointeeType.get();
+                 } else if (auto arrayAstNode = dynamic_cast<vyb::ast::ArrayType*>(leftTypeNode)) {
                     pointeeAstType = arrayAstNode->elementType.get();
-                 } else if (auto typeName = dynamic_cast<vyn::ast::TypeName*>(leftTypeNode)) {
+                 } else if (auto typeName = dynamic_cast<vyb::ast::TypeName*>(leftTypeNode)) {
                     // Check if it's a loc<T> type
                     if (typeName->identifier->name == "loc" && !typeName->genericArgs.empty()) {
                         pointeeAstType = typeName->genericArgs[0].get();
                     }
                  }
-                 
+
                  if (pointeeAstType) {
                     llvm::Type* pointeeType = codegenType(pointeeAstType);
                     if (pointeeType) {
@@ -485,49 +485,49 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
             }
             else m_currentLLVMValue = builder->CreateSub(L, R, "subtmp");
             break;
-        case vyn::TokenType::MULTIPLY: // Reverted to vyn::TokenType::MULTIPLY
+        case vyb::TokenType::MULTIPLY: // Reverted to vyb::TokenType::MULTIPLY
             if (isFloatOp) m_currentLLVMValue = builder->CreateFMul(L, R, "fmultmp");
             else m_currentLLVMValue = builder->CreateMul(L, R, "multmp");
             break;
-        case vyn::TokenType::DIVIDE: // Reverted to vyn::TokenType::DIVIDE
+        case vyb::TokenType::DIVIDE: // Reverted to vyb::TokenType::DIVIDE
             if (isFloatOp) m_currentLLVMValue = builder->CreateFDiv(L, R, "fdivtmp");
-            else m_currentLLVMValue = builder->CreateSDiv(L, R, "sdivtmp"); 
+            else m_currentLLVMValue = builder->CreateSDiv(L, R, "sdivtmp");
             break;
-        case vyn::TokenType::MODULO: // Reverted to vyn::TokenType::MODULO
+        case vyb::TokenType::MODULO: // Reverted to vyb::TokenType::MODULO
              if (isFloatOp) m_currentLLVMValue = builder->CreateFRem(L, R, "fremtmp");
-             else m_currentLLVMValue = builder->CreateSRem(L, R, "sremtmp"); 
+             else m_currentLLVMValue = builder->CreateSRem(L, R, "sremtmp");
             break;
         // Comparison operators
-        case vyn::TokenType::EQEQ: // Reverted to vyn::TokenType::EQEQ
+        case vyb::TokenType::EQEQ: // Reverted to vyb::TokenType::EQEQ
             if (isFloatOp) m_currentLLVMValue = builder->CreateFCmpOEQ(L, R, "fcmpoeqtmp");
             else m_currentLLVMValue = builder->CreateICmpEQ(L, R, "icmpeqtmp");
             break;
-        case vyn::TokenType::NOTEQ: // Reverted to vyn::TokenType::NOTEQ
+        case vyb::TokenType::NOTEQ: // Reverted to vyb::TokenType::NOTEQ
             if (isFloatOp) m_currentLLVMValue = builder->CreateFCmpONE(L, R, "fcmponeqtmp");
             else m_currentLLVMValue = builder->CreateICmpNE(L, R, "icmpneqtmp");
             break;
-        case vyn::TokenType::LT: // Reverted to vyn::TokenType::LT
+        case vyb::TokenType::LT: // Reverted to vyb::TokenType::LT
             if (isFloatOp) m_currentLLVMValue = builder->CreateFCmpOLT(L, R, "fcmpltmp");
-            else m_currentLLVMValue = builder->CreateICmpSLT(L, R, "icmpslttmp"); 
+            else m_currentLLVMValue = builder->CreateICmpSLT(L, R, "icmpslttmp");
             break;
-        case vyn::TokenType::LTEQ: // Reverted to vyn::TokenType::LTEQ
+        case vyb::TokenType::LTEQ: // Reverted to vyb::TokenType::LTEQ
             if (isFloatOp) m_currentLLVMValue = builder->CreateFCmpOLE(L, R, "fcmpletmp");
-            else m_currentLLVMValue = builder->CreateICmpSLE(L, R, "icmpsletmp"); 
+            else m_currentLLVMValue = builder->CreateICmpSLE(L, R, "icmpsletmp");
             break;
-        case vyn::TokenType::GT: // Reverted to vyn::TokenType::GT
+        case vyb::TokenType::GT: // Reverted to vyb::TokenType::GT
             if (isFloatOp) m_currentLLVMValue = builder->CreateFCmpOGT(L, R, "fcmpgtmp");
-            else m_currentLLVMValue = builder->CreateICmpSGT(L, R, "icmpsgttmp"); 
+            else m_currentLLVMValue = builder->CreateICmpSGT(L, R, "icmpsgttmp");
             break;
-        case vyn::TokenType::GTEQ: // Reverted to vyn::TokenType::GTEQ
+        case vyb::TokenType::GTEQ: // Reverted to vyb::TokenType::GTEQ
             if (isFloatOp) m_currentLLVMValue = builder->CreateFCmpOGE(L, R, "fcmpgetmp");
-            else m_currentLLVMValue = builder->CreateICmpSGE(L, R, "icmpsgetmp"); 
+            else m_currentLLVMValue = builder->CreateICmpSGE(L, R, "icmpsgetmp");
             break;
         // Logical operators (short-circuiting needs careful handling with basic blocks)
         // For simplicity, this example evaluates both sides. Proper logical ops need control flow.
-        case vyn::TokenType::AND: // Reverted to vyn::TokenType::AND
+        case vyb::TokenType::AND: // Reverted to vyb::TokenType::AND
              m_currentLLVMValue = builder->CreateAnd(L, R, "andtmp"); // Bitwise AND, assumes L and R are i1
             break;
-        case vyn::TokenType::OR: // Reverted to vyn::TokenType::OR
+        case vyb::TokenType::OR: // Reverted to vyb::TokenType::OR
             m_currentLLVMValue = builder->CreateOr(L, R, "ortmp"); // Bitwise OR, assumes L and R are i1
             break;
         default:
@@ -537,61 +537,61 @@ void LLVMCodegen::visit(vyn::ast::BinaryExpression *node) {
     }
 }
 
-void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
+void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
     // Debug output to track CallExpression visits
     std::cout << "DEBUG: CallExpression visitor called with callee: " << (node->callee ? node->callee->toString() : "null") << std::endl;
-    
+
     // Check for Vec::new() constructor calls
     // std::cout << "DEBUG: Checking if callee is MemberExpression..." << std::endl;
-    if (auto memberExpr = dynamic_cast<vyn::ast::MemberExpression*>(node->callee.get())) {
+    if (auto memberExpr = dynamic_cast<vyb::ast::MemberExpression*>(node->callee.get())) {
         // std::cout << "DEBUG: Found MemberExpression callee" << std::endl;
         // std::cout << "DEBUG: MemberExpression object: " << (memberExpr->object ? memberExpr->object->toString() : "null") << std::endl;
         // std::cout << "DEBUG: MemberExpression property: " << (memberExpr->property ? memberExpr->property->toString() : "null") << std::endl;
-        if (auto vecIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->object.get())) {
+        if (auto vecIdent = dynamic_cast<vyb::ast::Identifier*>(memberExpr->object.get())) {
             std::cout << "DEBUG: MemberExpression object is Identifier: " << vecIdent->name << std::endl;
-            if (auto newIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->property.get())) {
+            if (auto newIdent = dynamic_cast<vyb::ast::Identifier*>(memberExpr->property.get())) {
                 std::cout << "DEBUG: MemberExpression property is Identifier: " << newIdent->name << std::endl;
                 if (vecIdent->name == "Vec" && newIdent->name == "new") {
                     // This is Vec::new() or Vec::new(size) - create a vector
                     std::cout << "DEBUG: Creating Vec::new() constructor" << std::endl;
-                    
+
                     // Create Vec struct: { ptr, size, capacity }
                     std::vector<llvm::Type*> vecFields = {
                         llvm::PointerType::get(*context, 0), // ptr to elements (opaque pointer)
                         llvm::Type::getInt64Ty(*context),    // size
                         llvm::Type::getInt64Ty(*context)     // capacity
                     };
-                    
+
                     llvm::StructType* vecStructType = llvm::StructType::get(*context, vecFields, false);
-                    
+
                     // Allocate the Vec struct
                     llvm::Value* vecAlloca = builder->CreateAlloca(vecStructType, nullptr, "vec.new");
-                    
+
                     // Check if size argument is provided
                     if (node->arguments.empty()) {
                         // Vec::new() - empty vector
                         std::cout << "DEBUG: Creating empty Vec" << std::endl;
-                        
+
                         // Initialize fields: ptr = null, size = 0, capacity = 0
                         llvm::Value* nullPtr = llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0));
                         llvm::Value* zero = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0);
-                        
+
                         // Store null pointer
                         llvm::Value* ptrFieldPtr = builder->CreateStructGEP(vecStructType, vecAlloca, 0, "vec.ptr_field");
                         builder->CreateStore(nullPtr, ptrFieldPtr);
-                        
+
                         // Store size = 0
                         llvm::Value* sizeFieldPtr = builder->CreateStructGEP(vecStructType, vecAlloca, 1, "vec.size_field");
                         builder->CreateStore(zero, sizeFieldPtr);
-                        
+
                         // Store capacity = 0
                         llvm::Value* capFieldPtr = builder->CreateStructGEP(vecStructType, vecAlloca, 2, "vec.cap_field");
                         builder->CreateStore(zero, capFieldPtr);
-                        
+
                     } else if (node->arguments.size() == 1) {
                         // Vec::new(size) - preallocated vector with zero-initialized elements
                         std::cout << "DEBUG: Creating preallocated Vec with size" << std::endl;
-                        
+
                         // Evaluate size argument
                         node->arguments[0]->accept(*this);
                         llvm::Value* sizeValue = m_currentLLVMValue;
@@ -600,30 +600,30 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                             m_currentLLVMValue = nullptr;
                             return;
                         }
-                        
+
                         // Convert size to i64 if needed
                         if (sizeValue->getType() != llvm::Type::getInt64Ty(*context)) {
                             sizeValue = builder->CreateSExtOrTrunc(sizeValue, llvm::Type::getInt64Ty(*context), "size.ext");
                         }
-                        
+
                         // Allocate memory for elements (assuming Int elements for now)
                         // In a reference model, we store pointers to boxed values, but for numeric types we can store values directly
                         llvm::Type* elementType = llvm::Type::getInt64Ty(*context); // Default to Int (i64)
-                        llvm::Value* allocSize = builder->CreateMul(sizeValue, 
+                        llvm::Value* allocSize = builder->CreateMul(sizeValue,
                             llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 8), // 8 bytes per Int64
                             "alloc.size");
-                        
+
                         // Allocate memory using malloc (assume malloc is available)
                         llvm::FunctionType* mallocType = llvm::FunctionType::get(
                             llvm::PointerType::get(*context, 0),
                             {llvm::Type::getInt64Ty(*context)},
                             false
                         );
-                        llvm::Function* mallocFunc = llvm::Function::Create(mallocType, 
+                        llvm::Function* mallocFunc = llvm::Function::Create(mallocType,
                             llvm::Function::ExternalLinkage, "malloc", module.get());
-                        
+
                         llvm::Value* dataPtr = builder->CreateCall(mallocFunc, {allocSize}, "vec.data");
-                        
+
                         // Zero-initialize the allocated memory for numeric types
                         llvm::FunctionType* memsetType = llvm::FunctionType::get(
                             llvm::PointerType::get(*context, 0),
@@ -632,25 +632,25 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                         );
                         llvm::Function* memsetFunc = llvm::Function::Create(memsetType,
                             llvm::Function::ExternalLinkage, "memset", module.get());
-                        
+
                         builder->CreateCall(memsetFunc, {
                             dataPtr,
                             llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0), // Fill with zeros
                             allocSize
                         });
-                        
+
                         // Store data pointer
                         llvm::Value* ptrFieldPtr = builder->CreateStructGEP(vecStructType, vecAlloca, 0, "vec.ptr_field");
                         builder->CreateStore(dataPtr, ptrFieldPtr);
-                        
+
                         // Store size = capacity = provided size
                         llvm::Value* sizeFieldPtr = builder->CreateStructGEP(vecStructType, vecAlloca, 1, "vec.size_field");
                         builder->CreateStore(sizeValue, sizeFieldPtr);
-                        
+
                         llvm::Value* capFieldPtr = builder->CreateStructGEP(vecStructType, vecAlloca, 2, "vec.cap_field");
                         builder->CreateStore(sizeValue, capFieldPtr);
                     }
-                    
+
                     // Load the struct value for return (not the pointer)
                     m_currentLLVMValue = builder->CreateLoad(vecStructType, vecAlloca, "vec.new.value");
                     return;
@@ -658,13 +658,13 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
             }
         }
     }
-    
+
     // First, check if this is an intrinsic function call
-    auto identCallee = dynamic_cast<vyn::ast::Identifier*>(node->callee.get());
+    auto identCallee = dynamic_cast<vyb::ast::Identifier*>(node->callee.get());
     std::string calleeName = node->callee->toString();
-    
+
     std::cout << "DEBUG: CallExpression calleeName: '" << calleeName << "', identCallee: " << (identCallee ? "valid" : "null") << std::endl;
-    
+
     // Special handling for intrinsic functions with potential variable name conflicts
     if (identCallee && node->arguments.size() == 1) {
         // Check for addr() intrinsic
@@ -675,23 +675,23 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 logError(node->arguments[0]->loc, "Argument to addr() evaluated to null");
                 return;
             }
-            
+
             // If the argument is a pointer type
             if (m_currentLLVMValue->getType()->isPointerTy()) {
                 llvm::Value* pointerValue = m_currentLLVMValue;
-                
+
                 // For pointer-to-pointer types (like loc<T>), load the pointer first
                 if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(m_currentLLVMValue)) {
                     if (allocaInst->getAllocatedType()->isPointerTy()) {
-                        pointerValue = builder->CreateLoad(allocaInst->getAllocatedType(), 
-                                                        m_currentLLVMValue, 
+                        pointerValue = builder->CreateLoad(allocaInst->getAllocatedType(),
+                                                        m_currentLLVMValue,
                                                         "ptr_load_for_addr");
                     }
                 }
-                
+
                 // Convert to integer value (address)
                 m_currentLLVMValue = builder->CreatePtrToInt(pointerValue, int64Type, "addr_cast");
-                
+
                 // If we're not in an assignment context, create an alloca to store the result
                 if (!m_isLHSOfAssignment) {
                     llvm::Value* tempAlloca = builder->CreateAlloca(int64Type, nullptr, "addr_temp");
@@ -700,7 +700,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 }
                 return;
             }
-        } 
+        }
         // Check for at() intrinsic
         else if (identCallee->name == "at") {
             // First evaluate the argument expression to get the pointer
@@ -709,13 +709,13 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 logError(node->arguments[0]->loc, "Argument to at() evaluated to null");
                 return;
             }
-            
+
             // If we have a valid pointer, handle it appropriately
             if (m_currentLLVMValue->getType()->isPointerTy()) {
-                // For at(p) where p is a loc<T> (i.e., a pointer-to-pointer), 
+                // For at(p) where p is a loc<T> (i.e., a pointer-to-pointer),
                 // we need to load the pointer value first
                 llvm::Value* pointerValue = m_currentLLVMValue;
-                
+
                 // AllocaInst for a loc<T> produces a pointer-to-pointer.
                 // Check if we're dealing with a pointer-to-pointer (i.e., loc<T>)
                 bool isPointerToPointer = false;
@@ -723,32 +723,32 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                     if (allocaInst->getAllocatedType()->isPointerTy()) {
                         isPointerToPointer = true;
                         // Load the pointer value
-                        pointerValue = builder->CreateLoad(allocaInst->getAllocatedType(), 
-                                               m_currentLLVMValue, 
+                        pointerValue = builder->CreateLoad(allocaInst->getAllocatedType(),
+                                               m_currentLLVMValue,
                                                "ptr_val");
                     }
                 }
-                
+
                 // Add a null check for the pointer value
                 llvm::Function* currentFn = builder->GetInsertBlock()->getParent();
                 llvm::BasicBlock* nonNullBB = llvm::BasicBlock::Create(*context, "ptr.not_null", currentFn);
                 llvm::BasicBlock* nullBB = llvm::BasicBlock::Create(*context, "ptr.null", currentFn);
                 llvm::BasicBlock* mergeBB = llvm::BasicBlock::Create(*context, "ptr.merge", currentFn);
-                
+
                 // Create the null check condition
                 llvm::Value* isNotNull = builder->CreateIsNotNull(pointerValue, "ptr.is_not_null");
                 builder->CreateCondBr(isNotNull, nonNullBB, nullBB);
-                
+
                 // Set up the non-null block
                 builder->SetInsertPoint(nonNullBB);
-                
+
                 if (m_isLHSOfAssignment) {
                     // In an assignment context, return the pointer itself
                     m_currentLLVMValue = pointerValue;
                 } else {
                     // Otherwise dereference the pointer (load)
                     llvm::Type* loadTy = int64Type; // Default to Int for tests
-                    
+
                     // Try to determine the appropriate load type
                     if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(pointerValue)) {
                         loadTy = allocaInst->getAllocatedType();
@@ -765,16 +765,16 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                             }
                         }
                     }
-                    
+
                     m_currentLLVMValue = builder->CreateLoad(loadTy, pointerValue, "deref.load");
                 }
-                
+
                 builder->CreateBr(mergeBB);
-                
+
                 // Set up the null block
                 builder->SetInsertPoint(nullBB);
                 builder->CreateUnreachable();
-                
+
                 // Set up the merge block
                 builder->SetInsertPoint(mergeBB);
                 return;
@@ -787,7 +787,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
         // Check for loc() intrinsic
         else if (identCallee->name == "loc") {
             // First evaluate the argument to get its address
-            auto ident = dynamic_cast<vyn::ast::Identifier*>(node->arguments[0].get());
+            auto ident = dynamic_cast<vyb::ast::Identifier*>(node->arguments[0].get());
             if (ident) {
                 auto it = namedValues.find(ident->name);
                 if (it != namedValues.end()) {
@@ -796,14 +796,14 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                     return;
                 }
             }
-            
+
             // If we couldn't find the variable directly, try evaluating the argument generically
             node->arguments[0]->accept(*this);
             if (!m_currentLLVMValue) {
                 logError(node->arguments[0]->loc, "Argument to loc() evaluated to null");
                 return;
             }
-            
+
             // The result of loc() is the pointer to the value
             if (auto* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(m_currentLLVMValue)) {
                 // If the value is already an alloca instruction, just use it directly
@@ -818,7 +818,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
             return;
         }
     }
-    
+
     // Handle from<T>() intrinsic - more complex because it requires a type parameter
     if (identCallee && identCallee->name == "from" && node->arguments.size() == 1) {
         // Evaluate the address expression
@@ -827,25 +827,25 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
             logError(node->arguments[0]->loc, "from<T>() operand evaluated to null");
             return;
         }
-        
+
         if (!m_currentLLVMValue->getType()->isIntegerTy()) {
-            logError(node->arguments[0]->loc, "from<T>() requires an integer address argument. Got: " + 
+            logError(node->arguments[0]->loc, "from<T>() requires an integer address argument. Got: " +
                                            getTypeName(m_currentLLVMValue->getType()));
             return;
         }
-        
+
         // Default to i64* pointer type
         llvm::Type* ptrTy = llvm::PointerType::getUnqual(int64Type);
-        
+
         // Convert integer to pointer
         m_currentLLVMValue = builder->CreateIntToPtr(m_currentLLVMValue, ptrTy, "from_cast");
         return;
     }
-    
+
     // Special handling for println with auto-serialization
     if (identCallee && identCallee->name == "println" && node->arguments.size() == 1) {
         llvm::Value* arg = nullptr;
-        
+
         // For array arguments, we need the pointer, not the loaded value
         if (node->arguments[0]->type) {
             auto* argType = node->arguments[0]->type.get();
@@ -864,20 +864,20 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 }
             }
         }
-        
+
         // If we didn't get the array pointer above, evaluate normally
         if (!arg) {
             node->arguments[0]->accept(*this);
             arg = m_currentLLVMValue;
         }
-        
+
         if (!arg) {
             logError(node->arguments[0]->loc, "Argument to println() evaluated to null");
             return;
         }
-        
+
         llvm::Value* serializedValue = nullptr;
-        
+
         // Priority 1: Check for arrays first (before string check)
         if (node->arguments[0]->type) {
             auto* argType = node->arguments[0]->type.get();
@@ -906,12 +906,12 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 serializedValue = generateGenericSerialization(arg, nullptr);
             }
         }
-        
+
         // Call println with the serialized string
-        llvm::Function* printlnFunc = getVynPrintlnFunction();
+        llvm::Function* printlnFunc = getVyBPrintlnFunction();
         std::vector<llvm::Value*> printlnArgs = {serializedValue};
         builder->CreateCall(printlnFunc, printlnArgs);
-        
+
         m_currentLLVMValue = nullptr; // println returns void
         return;
     }
@@ -927,7 +927,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 logError(node->arguments[0]->loc, "Argument to lit() evaluated to null");
                 return;
             }
-            
+
             // Call the lit conversion function
             std::cout << "DEBUG: Getting lit conversion function..." << std::endl;
             llvm::Function* litFunc = getLitConversionFunction();
@@ -957,13 +957,13 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
     }
 
     // Check for Vec method calls before trying function lookup
-    if (auto memberExpr = dynamic_cast<vyn::ast::MemberExpression*>(node->callee.get())) {
-        if (auto objIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->object.get())) {
-            if (auto methodIdent = dynamic_cast<vyn::ast::Identifier*>(memberExpr->property.get())) {
+    if (auto memberExpr = dynamic_cast<vyb::ast::MemberExpression*>(node->callee.get())) {
+        if (auto objIdent = dynamic_cast<vyb::ast::Identifier*>(memberExpr->object.get())) {
+            if (auto methodIdent = dynamic_cast<vyb::ast::Identifier*>(memberExpr->property.get())) {
                 // Check if this looks like a Vec method call (object.method pattern)
                 std::string methodName = methodIdent->name;
                 std::string objectName = objIdent->name;
-                
+
                 if (methodName == "push" || methodName == "pop" || methodName == "len" || methodName == "get" ||
                     methodName == "push_array" || methodName == "to_array" || methodName == "get_array" ||
                     methodName == "clear" || methodName == "is_empty" || methodName == "capacity" ||
@@ -1020,7 +1020,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
                 // Handle integer width mismatches (e.g., i64 to i32)
                 llvm::IntegerType* expectedIntType = llvm::cast<llvm::IntegerType>(expectedArgType);
                 llvm::IntegerType* actualIntType = llvm::cast<llvm::IntegerType>(argValue->getType());
-                
+
                 if (expectedIntType->getBitWidth() < actualIntType->getBitWidth()) {
                     // Truncate to smaller width (e.g., i64 to i32)
                     argValue = builder->CreateTrunc(argValue, expectedArgType, "callargtrunc");
@@ -1031,7 +1031,7 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
             }
             // Add more sophisticated casting rules as needed
         }
-        
+
         if (argValue->getType() != expectedArgType) {
              logError(node->arguments[i]->loc, "Argument type mismatch for call to " + calleeName + ". Expected " + getTypeName(expectedArgType) + " but got " + getTypeName(argValue->getType()));
              m_currentLLVMValue = nullptr;
@@ -1048,9 +1048,9 @@ void LLVMCodegen::visit(vyn::ast::CallExpression *node) {
     }
 }
 
-void LLVMCodegen::visit(vyn::ast::LocationExpression *node) {
+void LLVMCodegen::visit(vyb::ast::LocationExpression *node) {
     // loc(expr) creates a pointer to the expression's memory location
-    
+
     // 1. Evaluate the expression to get its value
     node->expression->accept(*this);
     llvm::Value *exprVal = m_currentLLVMValue;
@@ -1059,25 +1059,25 @@ void LLVMCodegen::visit(vyn::ast::LocationExpression *node) {
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // 2. If the expression is already a pointer type, use it directly
     if (exprVal->getType()->isPointerTy()) {
         m_currentLLVMValue = exprVal;
         return;
     }
-    
+
     // 3. Create an alloca for the value and store it
     llvm::Type* valType = exprVal->getType();
     llvm::Value* tempAlloca = builder->CreateAlloca(valType, nullptr, "loc_alloca");
     builder->CreateStore(exprVal, tempAlloca);
-    
+
     // 4. Return the pointer
     m_currentLLVMValue = tempAlloca;
 }
 
-void LLVMCodegen::visit(vyn::ast::AddrOfExpression *node) {
+void LLVMCodegen::visit(vyb::ast::AddrOfExpression *node) {
     // addr(expr) gets the address of a pointer expression
-    
+
     // 1. Evaluate the expression to get the pointer
     node->getLocation()->accept(*this);
     llvm::Value *exprVal = m_currentLLVMValue;
@@ -1086,7 +1086,7 @@ void LLVMCodegen::visit(vyn::ast::AddrOfExpression *node) {
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // 2. If we have a pointer to a pointer, load the actual pointer
     if (exprVal->getType()->isPointerTy()) {
         // Load the pointer value if we have a pointer-to-pointer
@@ -1096,20 +1096,20 @@ void LLVMCodegen::visit(vyn::ast::AddrOfExpression *node) {
             }
         }
     }
-    
+
     // 3. Convert the pointer to an integer
     if (!exprVal->getType()->isPointerTy()) {
         logError(node->loc, "Expression in addr() must be a pointer type");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     m_currentLLVMValue = builder->CreatePtrToInt(exprVal, int64Type, "addr_cast");
 }
 
-void LLVMCodegen::visit(vyn::ast::PointerDerefExpression *node) {
+void LLVMCodegen::visit(vyb::ast::PointerDerefExpression *node) {
     // at(ptr) dereferences a pointer for reading or writing
-    
+
     // 1. Evaluate the pointer expression
     node->pointer->accept(*this);
     llvm::Value *ptrVal = m_currentLLVMValue;
@@ -1118,7 +1118,7 @@ void LLVMCodegen::visit(vyn::ast::PointerDerefExpression *node) {
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // 2. If we have a pointer to a pointer (e.g., alloca of a pointer), load the actual pointer
     if (ptrVal->getType()->isPointerTy()) {
         // Load the pointer value if we have a pointer-to-pointer
@@ -1128,28 +1128,28 @@ void LLVMCodegen::visit(vyn::ast::PointerDerefExpression *node) {
             }
         }
     }
-    
+
     // 3. Verify we have a valid pointer type
     if (!ptrVal->getType()->isPointerTy()) {
         logError(node->loc, "Operand of at() must be a pointer type. Got: " + getTypeName(ptrVal->getType()));
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // 4. Add null check
     llvm::BasicBlock *currentBB = builder->GetInsertBlock();
     llvm::Function *currentFn = currentBB->getParent();
-    
+
     llvm::BasicBlock *notNullBB = llvm::BasicBlock::Create(*context, "ptr.not_null", currentFn);
     llvm::BasicBlock *nullBB = llvm::BasicBlock::Create(*context, "ptr.null", currentFn);
     llvm::BasicBlock *mergeBB = llvm::BasicBlock::Create(*context, "ptr.merge", currentFn);
-    
+
     llvm::Value *isNotNull = builder->CreateICmpNE(ptrVal, llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(ptrVal->getType())), "ptr.is_not_null");
     builder->CreateCondBr(isNotNull, notNullBB, nullBB);
-    
+
     // Not null case: perform the dereference
     builder->SetInsertPoint(notNullBB);
-    
+
     // For assignment target, return the pointer itself
     // For reading, load the value
     if (m_isLHSOfAssignment) {
@@ -1165,18 +1165,18 @@ void LLVMCodegen::visit(vyn::ast::PointerDerefExpression *node) {
         }
         m_currentLLVMValue = builder->CreateLoad(pointeeType, ptrVal, "deref.load");
     }
-    
+
     builder->CreateBr(mergeBB);
-    
+
     // Null case: handle the error
     builder->SetInsertPoint(nullBB);
     builder->CreateUnreachable();
-    
+
     // Merge point
     builder->SetInsertPoint(mergeBB);
 }
 
-void LLVMCodegen::visit(vyn::ast::AssignmentExpression *node) {
+void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
     // Save and set LHS flag before visiting LHS
     bool wasLHS = m_isLHSOfAssignment;
     m_isLHSOfAssignment = true;
@@ -1192,35 +1192,35 @@ void LLVMCodegen::visit(vyn::ast::AssignmentExpression *node) {
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Capture type information from AST if available
-    std::shared_ptr<vyn::ast::TypeNode> lhsTypeNode = node->left->type;
-    std::shared_ptr<vyn::ast::TypeNode> rhsTypeNode = node->right->type;
-    
+    std::shared_ptr<vyb::ast::TypeNode> lhsTypeNode = node->left->type;
+    std::shared_ptr<vyb::ast::TypeNode> rhsTypeNode = node->right->type;
+
     // Store location for error reporting
     SourceLocation errorLoc = node->left->loc;
-    
+
     // Check if we're assigning to a variable (used for special case handling)
     bool isAssignToVar = false;
     auto identLeft = dynamic_cast<ast::Identifier*>(node->left.get());
     if (identLeft) {
         isAssignToVar = true;
-        
+
         // For direct identifier assignments, register the RHS type with the identifier
         // This helps propagate type info for variables
         if (identLeft->type && RHS) {
             valueTypeMap[RHS] = identLeft->type;
-            std::cout << "DEBUG: In assignment, associated RHS value with identifier type: " 
+            std::cout << "DEBUG: In assignment, associated RHS value with identifier type: "
                       << identLeft->type->toString() << std::endl;
         }
     }
-    
+
     // Check if LHS is a valid target for assignment
     if (!LHS->getType()->isPointerTy()) {
         // Log detailed information about the LHS
         std::string lhsTypeStr = getTypeName(LHS->getType());
         std::string lhsNodeType = "<unknown>";
-        
+
         // Get more detailed info about the LHS expression type
         if (auto callExpr = dynamic_cast<ast::CallExpression*>(node->left.get())) {
             if (auto identCallee = dynamic_cast<ast::Identifier*>(callExpr->callee.get())) {
@@ -1233,8 +1233,8 @@ void LLVMCodegen::visit(vyn::ast::AssignmentExpression *node) {
         } else if (identLeft) {
             lhsNodeType = "Identifier: " + identLeft->name;
         }
-        
-        // If the LHS is a variable and RHS is a pointer-to-int conversion (addr()), 
+
+        // If the LHS is a variable and RHS is a pointer-to-int conversion (addr()),
         // we're probably assigning an address to an int variable, which is valid
         if (isAssignToVar && RHS->getType()->isIntegerTy()) {
             // Create an alloca if LHS doesn't point to memory yet
@@ -1251,26 +1251,26 @@ void LLVMCodegen::visit(vyn::ast::AssignmentExpression *node) {
                         allocaInst = llvm::cast<llvm::AllocaInst>(it->second);
                     }
                 }
-                
+
                 if (!allocaInst) {
                     logError(errorLoc, "Cannot assign to " + lhsNodeType + " (not a valid destination for assignment)");
                     m_currentLLVMValue = nullptr;
                     return;
                 }
             }
-            
+
             // Store the integer value directly
             builder->CreateStore(RHS, allocaInst);
-            
+
             // Preserve AST type information
             if (lhsTypeNode) {
                 valueTypeMap[allocaInst] = lhsTypeNode;
             }
-            
+
             m_currentLLVMValue = RHS;
             return;
         } else {
-            logError(errorLoc, "Destination for assignment is not a pointer type. Got: " + 
+            logError(errorLoc, "Destination for assignment is not a pointer type. Got: " +
                      lhsTypeStr + " (Node type: " + lhsNodeType + ")");
             m_currentLLVMValue = nullptr;
             return;
@@ -1306,7 +1306,7 @@ void LLVMCodegen::visit(vyn::ast::AssignmentExpression *node) {
                 }
             }
         }
-        
+
         // Fallback: Use RHS type if all else fails
         if (!destPointeeType) {
             destPointeeType = RHS->getType();
@@ -1330,13 +1330,13 @@ void LLVMCodegen::visit(vyn::ast::AssignmentExpression *node) {
 
     // If types still don't match, warn but proceed (might still work in some cases)
     if (RHS->getType() != destPointeeType) {
-        logWarning(node->loc, "Type mismatch in assignment. Storing " + getTypeName(RHS->getType()) + 
+        logWarning(node->loc, "Type mismatch in assignment. Storing " + getTypeName(RHS->getType()) +
                   " into location of type " + (destPointeeType ? getTypeName(destPointeeType) : "unknown"));
     }
 
     // Create the store instruction with proper alignment
     builder->CreateStore(RHS, LHS);
-    
+
     // If we're assigning to a member of a struct, we need to preserve type information
     if (auto memberExpr = dynamic_cast<ast::MemberExpression*>(node->left.get())) {
         if (memberExpr->object->type) {
@@ -1344,17 +1344,17 @@ void LLVMCodegen::visit(vyn::ast::AssignmentExpression *node) {
             // In a full implementation, we would look up the field's type from the struct definition
             // For now, we will propagate the object's type to help with future member accesses
             valueTypeMap[RHS] = memberExpr->object->type;
-            
+
             // If LHS is from a GEP instruction, associate the struct type with the GEP result
             if (auto gep = llvm::dyn_cast<llvm::GetElementPtrInst>(LHS)) {
                 valueTypeMap[gep] = memberExpr->object->type;
             }
         }
     }
-    
+
     // Return the value being stored (C semantics)
     m_currentLLVMValue = RHS;
-    
+
     // Make sure we also associate this result with the type if available
     if (rhsTypeNode) {
         valueTypeMap[RHS] = rhsTypeNode;
@@ -1362,14 +1362,14 @@ void LLVMCodegen::visit(vyn::ast::AssignmentExpression *node) {
 }
 
 
-void LLVMCodegen::visit(vyn::ast::ArrayElementExpression *node) {
+void LLVMCodegen::visit(vyb::ast::ArrayElementExpression *node) {
     // This is for using array[index] as an R-value (i.e., loading the value)
     // LHS usage is handled in AssignmentExpression
-    
+
     llvm::Value *arrayPtr = nullptr;
-    
+
     // Special handling for identifier expressions to get the alloca directly
-    if (auto* identExpr = dynamic_cast<vyn::ast::Identifier*>(node->array.get())) {
+    if (auto* identExpr = dynamic_cast<vyb::ast::Identifier*>(node->array.get())) {
         auto it = namedValues.find(identExpr->name);
         if (it != namedValues.end()) {
             if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(it->second)) {
@@ -1404,19 +1404,19 @@ void LLVMCodegen::visit(vyn::ast::ArrayElementExpression *node) {
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Determine element type for GEP and Load. This is the type GEP operates on.
     llvm::Type* elementType = nullptr;
     if (node->array->type) { // AST type of the array expression itself
-        vyn::ast::TypeNode* arrAstTypeNode = node->array->type.get();
-        if (auto arrayAstType = dynamic_cast<vyn::ast::ArrayType*>(arrAstTypeNode)) {
+        vyb::ast::TypeNode* arrAstTypeNode = node->array->type.get();
+        if (auto arrayAstType = dynamic_cast<vyb::ast::ArrayType*>(arrAstTypeNode)) {
             // If the AST says it's an array T[N], then GEP on a T* needs element type T
             elementType = codegenType(arrayAstType->elementType.get());
-        } else if (auto ptrAstType = dynamic_cast<vyn::ast::PointerType*>(arrAstTypeNode)) {
+        } else if (auto ptrAstType = dynamic_cast<vyb::ast::PointerType*>(arrAstTypeNode)) {
             // If the AST says it's a pointer T*, then GEP on T* needs element type T
             // Or if it's T(*)[N], GEP still needs T.
             // The key is what the pointer *ultimately points to* at the element level.
-            if (auto pointedToArrType = dynamic_cast<vyn::ast::ArrayType*>(ptrAstType->pointeeType.get())) { // Corrected member access
+            if (auto pointedToArrType = dynamic_cast<vyb::ast::ArrayType*>(ptrAstType->pointeeType.get())) { // Corrected member access
                 elementType = codegenType(pointedToArrType->elementType.get()); // Pointer to array, get element type of that array
             } else {
                 elementType = codegenType(ptrAstType->pointeeType.get()); // Corrected member access // Pointer to element
@@ -1424,7 +1424,7 @@ void LLVMCodegen::visit(vyn::ast::ArrayElementExpression *node) {
         }
     }
 
-    if (!elementType) { 
+    if (!elementType) {
         // This is a fallback/error if AST type information was insufficient or missing.
         // Relying on LLVM types directly is problematic with opaque pointers.
         logError(node->loc, "Could not determine element type for array access (R-value) from AST. Array AST type: " + (node->array->type ? node->array->type->toString() : "null"));
@@ -1435,9 +1435,9 @@ void LLVMCodegen::visit(vyn::ast::ArrayElementExpression *node) {
     // For array access, we need to handle the indexing properly
     // If arrayPtr is an alloca of array type, we need [0, index] to access the element
     // If arrayPtr points to the first element, we just use [index]
-    
+
     llvm::Value *elementAddress = nullptr;
-    
+
     if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(arrayPtr)) {
         // arrayPtr is an alloca of array type, so we need [0, index] to get to the element
         llvm::Value* zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0);
@@ -1447,7 +1447,7 @@ void LLVMCodegen::visit(vyn::ast::ArrayElementExpression *node) {
         // arrayPtr points to the first element, so just use [index]
         elementAddress = builder->CreateGEP(elementType, arrayPtr, indexVal, "arrayelemaddr_rval");
     }
-    
+
     m_currentLLVMValue = builder->CreateLoad(elementType, elementAddress, "arrayelemload");
 }
 
@@ -1470,7 +1470,7 @@ void LLVMCodegen::visit(ast::Identifier* node) {
         m_currentLLVMValue = it->second;
         return;
     }
-    
+
     // Also check current function named values
     auto funcIt = m_currentFunctionNamedValues.find(node->name);
     if (funcIt != m_currentFunctionNamedValues.end()) {
@@ -1479,14 +1479,14 @@ void LLVMCodegen::visit(ast::Identifier* node) {
         m_currentLLVMValue = builder->CreateLoad(loadType, funcIt->second, node->name);
         return;
     }
-    
+
     // Check if it's a global function
     llvm::Function* func = module->getFunction(node->name);
     if (func) {
         m_currentLLVMValue = func;
         return;
     }
-    
+
     logError(node->loc, "Undefined identifier: " + node->name);
     m_currentLLVMValue = nullptr;
 }
@@ -1497,17 +1497,17 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Evaluate the object expression
     node->object->accept(*this);
     llvm::Value* objectValue = m_currentLLVMValue;
-    
+
     if (!objectValue) {
         logError(node->object->loc, "Failed to evaluate object in member expression");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     if (node->computed) {
         // Computed member access: obj[prop]
         if (!node->property) {
@@ -1515,28 +1515,28 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
             m_currentLLVMValue = nullptr;
             return;
         }
-        
+
         // Evaluate the property expression to get the index
         node->property->accept(*this);
         llvm::Value* indexValue = m_currentLLVMValue;
-        
+
         if (!indexValue) {
             logError(node->property->loc, "Failed to evaluate property in computed member access");
             m_currentLLVMValue = nullptr;
             return;
         }
-        
+
         // This is similar to array element access
         if (!objectValue->getType()->isPointerTy()) {
             logError(node->object->loc, "Computed member access on non-pointer type");
             m_currentLLVMValue = nullptr;
             return;
         }
-        
+
         // For now, assume the object is a pointer to the first element
         // In a full implementation, we'd need type information to determine the element type
         llvm::Type* elementType = llvm::Type::getInt32Ty(*context); // Default fallback
-        
+
         llvm::Value* elementPtr = builder->CreateGEP(elementType, objectValue, indexValue, "member.computed");
         m_currentLLVMValue = builder->CreateLoad(elementType, elementPtr, "member.load");
     } else {
@@ -1546,7 +1546,7 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
             m_currentLLVMValue = nullptr;
             return;
         }
-        
+
         // For property access, we need to cast the property to an identifier
         ast::Identifier* propIdent = dynamic_cast<ast::Identifier*>(node->property.get());
         if (!propIdent) {
@@ -1554,15 +1554,15 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
             m_currentLLVMValue = nullptr;
             return;
         }
-        
+
         llvm::Value* structPtr = nullptr;
         llvm::Type* structType = nullptr;
-        
+
         // Check if the object is a pointer to a struct (alloca) or actual struct value
         if (objectValue->getType()->isPointerTy()) {
             // Object is a pointer (from alloca) - use it directly
             structPtr = objectValue;
-            
+
             // Get the pointee type from alloca instruction if available
             if (llvm::AllocaInst* allocaInst = llvm::dyn_cast<llvm::AllocaInst>(objectValue)) {
                 structType = allocaInst->getAllocatedType();
@@ -1602,16 +1602,16 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
         }
 
         // Debug output
-        std::cerr << "DEBUG: MemberExpression - Field '" << fieldName << "' at index " << fieldIndex 
+        std::cerr << "DEBUG: MemberExpression - Field '" << fieldName << "' at index " << fieldIndex
                   << " in struct " << llvmStructType->getName().str() << std::endl;
 
         // Create a GEP to get a pointer to the field
         llvm::Value* fieldPtr = builder->CreateStructGEP(llvmStructType, structPtr, fieldIndex, fieldName + "_ptr");
-        
+
         // Debug the field type
         llvm::Type* fieldType = llvmStructType->getElementType(fieldIndex);
         std::cerr << "DEBUG: Field type: " << getTypeName(fieldType) << std::endl;
-        
+
         // Check if we're on the LHS of an assignment - in that case return the pointer
         if (m_isLHSOfAssignment) {
             m_currentLLVMValue = fieldPtr;
@@ -1636,17 +1636,17 @@ void LLVMCodegen::visit(ast::BorrowExpression* node) {
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Evaluate the expression being borrowed
     node->expression->accept(*this);
     llvm::Value* borrowedValue = m_currentLLVMValue;
-    
+
     if (!borrowedValue) {
         logError(node->expression->loc, "Failed to evaluate borrow expression operand");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // For borrow expressions, we typically want the address of the value
     // The semantics depend on the kind of borrow
     switch (node->kind) {
@@ -1666,7 +1666,7 @@ void LLVMCodegen::visit(ast::BorrowExpression* node) {
                 m_currentLLVMValue = temp;
             }
             break;
-            
+
         case ast::BorrowKind::IMMUTABLE_VIEW:
             // view(expr) - creates an immutable reference
             if (borrowedValue->getType()->isPointerTy()) {
@@ -1683,7 +1683,7 @@ void LLVMCodegen::visit(ast::BorrowExpression* node) {
                 m_currentLLVMValue = temp;
             }
             break;
-            
+
         default:
             logError(node->loc, "Unknown borrow kind");
             m_currentLLVMValue = nullptr;
@@ -1697,17 +1697,17 @@ void LLVMCodegen::visit(ast::FromIntToLocExpression* node) {
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Evaluate the integer expression
     node->getAddressExpression()->accept(*this);
     llvm::Value* intValue = m_currentLLVMValue;
-    
+
     if (!intValue) {
         logError(node->getAddressExpression()->loc, "Failed to evaluate from<> expression operand");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Convert integer to pointer
     llvm::Type* targetType;
     if (node->getTargetType()) {
@@ -1716,13 +1716,13 @@ void LLVMCodegen::visit(ast::FromIntToLocExpression* node) {
         // Default to generic pointer
         targetType = llvm::PointerType::get(*context, 0);
     }
-    
+
     if (!targetType || !targetType->isPointerTy()) {
         logError(node->loc, "from<> target type must be a pointer type");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Convert integer to pointer
     m_currentLLVMValue = builder->CreateIntToPtr(intValue, targetType, "fromint.ptr");
 }
@@ -1735,7 +1735,7 @@ void LLVMCodegen::visit(ast::ListComprehension* node) {
 
 void LLVMCodegen::visit(ast::IfExpression* node) {
     // This is an if-expression that returns a value, unlike an if-statement
-    
+
     // Create basic blocks for the different paths
     llvm::Function* function = getCurrentFunction();
     if (!function) {
@@ -1743,11 +1743,11 @@ void LLVMCodegen::visit(ast::IfExpression* node) {
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     llvm::BasicBlock* thenBB = llvm::BasicBlock::Create(*context, "if.then", function);
     llvm::BasicBlock* elseBB = llvm::BasicBlock::Create(*context, "if.else", function);
     llvm::BasicBlock* mergeBB = llvm::BasicBlock::Create(*context, "if.end", function);
-    
+
     // Generate condition code
     node->condition->accept(*this);
     llvm::Value* condValue = m_currentLLVMValue;
@@ -1756,17 +1756,17 @@ void LLVMCodegen::visit(ast::IfExpression* node) {
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Convert condition to i1 (boolean) if it's not already
     if (condValue->getType() != int1Type) {
-        condValue = builder->CreateICmpNE(condValue, 
+        condValue = builder->CreateICmpNE(condValue,
                                          llvm::ConstantInt::get(condValue->getType(), 0),
                                          "ifcond");
     }
-    
+
     // Create the conditional branch
     builder->CreateCondBr(condValue, thenBB, elseBB);
-    
+
     // Generate 'then' block
     builder->SetInsertPoint(thenBB);
     node->thenBranch->accept(*this);
@@ -1778,7 +1778,7 @@ void LLVMCodegen::visit(ast::IfExpression* node) {
     }
     builder->CreateBr(mergeBB);
     thenBB = builder->GetInsertBlock(); // It might have been updated
-    
+
     // Generate 'else' block
     builder->SetInsertPoint(elseBB);
     node->elseBranch->accept(*this);
@@ -1790,10 +1790,10 @@ void LLVMCodegen::visit(ast::IfExpression* node) {
     }
     builder->CreateBr(mergeBB);
     elseBB = builder->GetInsertBlock(); // It might have been updated
-    
+
     // Generate merge block with PHI node
     builder->SetInsertPoint(mergeBB);
-    
+
     // Values from then and else branches should have the same type,
     // but we'll try to cast if they don't
     llvm::Type* resultType;
@@ -1810,12 +1810,12 @@ void LLVMCodegen::visit(ast::IfExpression* node) {
             return;
         }
     }
-    
+
     // Create PHI node to consolidate the different paths
     llvm::PHINode* phiNode = builder->CreatePHI(resultType, 2, "ifexpr.result");
     phiNode->addIncoming(thenValue, thenBB);
     phiNode->addIncoming(elseValue, elseBB);
-    
+
     m_currentLLVMValue = phiNode;
 }
 
@@ -1825,7 +1825,7 @@ void LLVMCodegen::visit(ast::ConstructionExpression* node) {
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Get the type being constructed
     llvm::Type* constructedLLVMType = codegenType(node->constructedType.get());
     if (!constructedLLVMType) {
@@ -1833,15 +1833,15 @@ void LLVMCodegen::visit(ast::ConstructionExpression* node) {
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // For now, implement basic construction with default values
     if (constructedLLVMType->isStructTy()) {
         // Struct construction
         llvm::StructType* structType = llvm::cast<llvm::StructType>(constructedLLVMType);
-        
+
         // Allocate memory for the struct
         llvm::AllocaInst* structAlloca = builder->CreateAlloca(structType, nullptr, "struct.tmp");
-        
+
         // Initialize with default values or provided arguments
         for (unsigned i = 0; i < structType->getNumElements() && i < node->arguments.size(); ++i) {
             if (node->arguments[i]) {
@@ -1853,7 +1853,7 @@ void LLVMCodegen::visit(ast::ConstructionExpression* node) {
                 }
             }
         }
-        
+
         m_currentLLVMValue = structAlloca;
     } else {
         // For primitive types, just use the first argument or default value
@@ -1888,13 +1888,13 @@ void LLVMCodegen::visit(ast::ArrayInitializationExpression* node) {
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     if (!node->sizeExpression) {
         logError(node->loc, "Array initialization missing size expression");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Get the element type
     llvm::Type* elementType = codegenType(node->elementType.get());
     if (!elementType) {
@@ -1902,7 +1902,7 @@ void LLVMCodegen::visit(ast::ArrayInitializationExpression* node) {
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Evaluate the size expression
     node->sizeExpression->accept(*this);
     llvm::Value* sizeValue = m_currentLLVMValue;
@@ -1911,46 +1911,46 @@ void LLVMCodegen::visit(ast::ArrayInitializationExpression* node) {
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Ensure size is an integer
     if (!sizeValue->getType()->isIntegerTy()) {
         logError(node->sizeExpression->loc, "Array size must be an integer");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Create array type
     llvm::ArrayType* arrayType = llvm::ArrayType::get(elementType, 0); // Dynamic size
-    
+
     // Allocate memory for the array
     llvm::AllocaInst* arrayAlloca = builder->CreateAlloca(elementType, sizeValue, "array.tmp");
-    
+
     // Initialize array elements to default values
     // For simplicity, we'll zero-initialize
     llvm::Value* zero = llvm::ConstantInt::get(sizeValue->getType(), 0);
     llvm::Value* one = llvm::ConstantInt::get(sizeValue->getType(), 1);
-    
+
     // Create a loop to initialize the array
     llvm::Function* function = getCurrentFunction();
     llvm::BasicBlock* loopHeaderBB = llvm::BasicBlock::Create(*context, "array.init.header", function);
     llvm::BasicBlock* loopBodyBB = llvm::BasicBlock::Create(*context, "array.init.body", function);
     llvm::BasicBlock* loopExitBB = llvm::BasicBlock::Create(*context, "array.init.exit", function);
-    
+
     // Initialize loop counter
     llvm::AllocaInst* counterAlloca = builder->CreateAlloca(sizeValue->getType(), nullptr, "counter");
     builder->CreateStore(zero, counterAlloca);
     builder->CreateBr(loopHeaderBB);
-    
+
     // Loop header: check condition
     builder->SetInsertPoint(loopHeaderBB);
     llvm::Value* currentCounter = builder->CreateLoad(sizeValue->getType(), counterAlloca, "counter.val");
     llvm::Value* condition = builder->CreateICmpSLT(currentCounter, sizeValue, "loop.cond");
     builder->CreateCondBr(condition, loopBodyBB, loopExitBB);
-    
+
     // Loop body: initialize element
     builder->SetInsertPoint(loopBodyBB);
     llvm::Value* elementPtr = builder->CreateGEP(elementType, arrayAlloca, currentCounter, "element.ptr");
-    
+
     // Initialize element with default value
     llvm::Value* defaultValue;
     if (elementType->isIntegerTy()) {
@@ -1962,21 +1962,21 @@ void LLVMCodegen::visit(ast::ArrayInitializationExpression* node) {
     } else {
         defaultValue = llvm::UndefValue::get(elementType);
     }
-    
+
     builder->CreateStore(defaultValue, elementPtr);
-    
+
     // Increment counter
     llvm::Value* nextCounter = builder->CreateAdd(currentCounter, one, "counter.next");
     builder->CreateStore(nextCounter, counterAlloca);
     builder->CreateBr(loopHeaderBB);
-    
+
     // Loop exit
     builder->SetInsertPoint(loopExitBB);
-    
+
     m_currentLLVMValue = arrayAlloca;
 }
 
-void LLVMCodegen::visit(vyn::ast::GenericInstantiationExpression* node) {
+void LLVMCodegen::visit(vyb::ast::GenericInstantiationExpression* node) {
     // TODO: Implement generic instantiation expression
     // This should handle generic type instantiation with specific type arguments
     m_currentLLVMValue = nullptr;
@@ -1986,32 +1986,32 @@ void LLVMCodegen::visit(ast::LogicalExpression* node) {
     // Logical expressions with short-circuit evaluation
     node->left->accept(*this);
     llvm::Value* leftValue = m_currentLLVMValue;
-    
+
     if (!leftValue) {
         logError(node->left->loc, "Invalid left operand in logical expression");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Convert to boolean if needed
     if (!leftValue->getType()->isIntegerTy(1)) {
         if (leftValue->getType()->isIntegerTy()) {
-            leftValue = builder->CreateICmpNE(leftValue, 
+            leftValue = builder->CreateICmpNE(leftValue,
                 llvm::ConstantInt::get(leftValue->getType(), 0), "left.bool");
         } else if (leftValue->getType()->isFloatingPointTy()) {
-            leftValue = builder->CreateFCmpONE(leftValue, 
+            leftValue = builder->CreateFCmpONE(leftValue,
                 llvm::ConstantFP::get(leftValue->getType(), 0.0), "left.bool");
         } else if (leftValue->getType()->isPointerTy()) {
-            leftValue = builder->CreateICmpNE(leftValue, 
+            leftValue = builder->CreateICmpNE(leftValue,
                 llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(leftValue->getType())), "left.bool");
         }
     }
-    
+
     // Create basic blocks for short-circuit evaluation
     llvm::BasicBlock* rightBB = llvm::BasicBlock::Create(*context, "logical.right", currentFunction);
     llvm::BasicBlock* endBB = llvm::BasicBlock::Create(*context, "logical.end", currentFunction);
     llvm::BasicBlock* leftBB = builder->GetInsertBlock();
-    
+
     if (node->op.lexeme == "&&") {
         // For &&: if left is false, don't evaluate right
         builder->CreateCondBr(leftValue, rightBB, endBB);
@@ -2019,39 +2019,39 @@ void LLVMCodegen::visit(ast::LogicalExpression* node) {
         // For ||: if left is true, don't evaluate right
         builder->CreateCondBr(leftValue, endBB, rightBB);
     }
-    
+
     // Right operand block
     builder->SetInsertPoint(rightBB);
     node->right->accept(*this);
     llvm::Value* rightValue = m_currentLLVMValue;
-    
+
     if (!rightValue) {
         logError(node->right->loc, "Invalid right operand in logical expression");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Convert to boolean if needed
     if (!rightValue->getType()->isIntegerTy(1)) {
         if (rightValue->getType()->isIntegerTy()) {
-            rightValue = builder->CreateICmpNE(rightValue, 
+            rightValue = builder->CreateICmpNE(rightValue,
                 llvm::ConstantInt::get(rightValue->getType(), 0), "right.bool");
         } else if (rightValue->getType()->isFloatingPointTy()) {
-            rightValue = builder->CreateFCmpONE(rightValue, 
+            rightValue = builder->CreateFCmpONE(rightValue,
                 llvm::ConstantFP::get(rightValue->getType(), 0.0), "right.bool");
         } else if (rightValue->getType()->isPointerTy()) {
-            rightValue = builder->CreateICmpNE(rightValue, 
+            rightValue = builder->CreateICmpNE(rightValue,
                 llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(rightValue->getType())), "right.bool");
         }
     }
-    
+
     builder->CreateBr(endBB);
     rightBB = builder->GetInsertBlock();
-    
+
     // End block with PHI node
     builder->SetInsertPoint(endBB);
     llvm::PHINode* phi = builder->CreatePHI(llvm::Type::getInt1Ty(*context), 2, "logical.result");
-    
+
     if (node->op.lexeme == "&&") {
         phi->addIncoming(llvm::ConstantInt::getFalse(*context), leftBB);
         phi->addIncoming(rightValue, rightBB);
@@ -2059,7 +2059,7 @@ void LLVMCodegen::visit(ast::LogicalExpression* node) {
         phi->addIncoming(llvm::ConstantInt::getTrue(*context), leftBB);
         phi->addIncoming(rightValue, rightBB);
     }
-    
+
     m_currentLLVMValue = phi;
 }
 
@@ -2067,45 +2067,45 @@ void LLVMCodegen::visit(ast::ConditionalExpression* node) {
     // Visit condition
     node->condition->accept(*this);
     llvm::Value* condValue = m_currentLLVMValue;
-    
+
     // Convert to boolean if needed
     if (condValue->getType() != int1Type) {
         if (condValue->getType()->isIntegerTy()) {
-            condValue = builder->CreateICmpNE(condValue, 
+            condValue = builder->CreateICmpNE(condValue,
                 llvm::ConstantInt::get(condValue->getType(), 0), "cond.bool");
         } else if (condValue->getType()->isFloatingPointTy()) {
-            condValue = builder->CreateFCmpONE(condValue, 
+            condValue = builder->CreateFCmpONE(condValue,
                 llvm::ConstantFP::get(condValue->getType(), 0.0), "cond.bool");
         } else if (condValue->getType()->isPointerTy()) {
-            condValue = builder->CreateICmpNE(condValue, 
+            condValue = builder->CreateICmpNE(condValue,
                 llvm::ConstantPointerNull::get(llvm::cast<llvm::PointerType>(condValue->getType())), "cond.bool");
         }
     }
-    
+
     // Create basic blocks
     llvm::BasicBlock* thenBB = llvm::BasicBlock::Create(*context, "cond.then", currentFunction);
     llvm::BasicBlock* elseBB = llvm::BasicBlock::Create(*context, "cond.else", currentFunction);
     llvm::BasicBlock* endBB = llvm::BasicBlock::Create(*context, "cond.end", currentFunction);
-    
+
     builder->CreateCondBr(condValue, thenBB, elseBB);
-    
+
     // Then branch
     builder->SetInsertPoint(thenBB);
     node->thenExpr->accept(*this);
     llvm::Value* thenValue = m_currentLLVMValue;
     llvm::BasicBlock* thenEndBB = builder->GetInsertBlock();
     builder->CreateBr(endBB);
-    
+
     // Else branch
     builder->SetInsertPoint(elseBB);
     node->elseExpr->accept(*this);
     llvm::Value* elseValue = m_currentLLVMValue;
     llvm::BasicBlock* elseEndBB = builder->GetInsertBlock();
     builder->CreateBr(endBB);
-    
+
     // Merge
     builder->SetInsertPoint(endBB);
-    
+
     // Ensure both values have compatible types
     llvm::Type* resultType = thenValue->getType();
     if (thenValue->getType() != elseValue->getType()) {
@@ -2130,57 +2130,57 @@ void LLVMCodegen::visit(ast::ConditionalExpression* node) {
             }
         }
     }
-    
+
     llvm::PHINode* phi = builder->CreatePHI(resultType, 2, "cond.result");
     phi->addIncoming(thenValue, thenEndBB);
     phi->addIncoming(elseValue, elseEndBB);
-    
+
     m_currentLLVMValue = phi;
 }
 
 void LLVMCodegen::visit(ast::FunctionExpression* node) {
     // A function expression creates an anonymous function (lambda) and returns a reference to it
-    
+
     // Generate a unique name for the lambda function
     std::string funcName = "lambda_" + std::to_string(reinterpret_cast<uintptr_t>(node));
-    
+
     // Process parameters
     std::vector<llvm::Type*> paramTypes;
     std::vector<std::string> paramNames;
-    
+
     for (const auto& param : node->params) {
         // Process parameter type
         llvm::Type* paramType = nullptr;
         if (param.typeNode) {
             paramType = codegenType(param.typeNode.get());
         }
-        
+
         // If type is not specified, default to generic pointer (i8*)
         if (!paramType) {
             paramType = llvm::PointerType::get(*context, 0);
             logWarning(node->loc, "Parameter type not specified in function expression, defaulting to pointer type");
         }
-        
+
         paramTypes.push_back(paramType);
-        
+
         if (param.name) {
             paramNames.push_back(param.name->name);
         } else {
             paramNames.push_back("param" + std::to_string(paramNames.size()));
         }
     }
-    
+
     // Process return type - FunctionExpression doesn't have returnTypeNode
     // For lambda expressions, default to void unless we can infer otherwise
     llvm::Type* returnType = llvm::Type::getVoidTy(*context);
-    
+
     // Create function type
     llvm::FunctionType* funcType = llvm::FunctionType::get(
         returnType,
         paramTypes,
         false // Not vararg
     );
-    
+
     // Create the function
     llvm::Function* function = llvm::Function::Create(
         funcType,
@@ -2188,7 +2188,7 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
         funcName,
         module.get()
     );
-    
+
     // Set parameter names for better IR readability
     unsigned idx = 0;
     for (auto &arg : function->args()) {
@@ -2197,20 +2197,20 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
         }
         idx++;
     }
-    
+
     // Create entry block for the function
     llvm::BasicBlock* entryBB = llvm::BasicBlock::Create(*context, "entry", function);
-    
+
     // Save current state to restore after function generation
     llvm::Function* savedFunction = currentFunction;
     llvm::BasicBlock* savedBlock = builder->GetInsertBlock();
     std::map<std::string, llvm::Value*> savedNamedValues = namedValues;
-    
+
     // Set up the new function context
     currentFunction = function;
     builder->SetInsertPoint(entryBB);
     namedValues.clear();
-    
+
     // Create allocas for parameters and store incoming values
     idx = 0;
     for (auto &arg : function->args()) {
@@ -2223,11 +2223,11 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
         namedValues[std::string(arg.getName())] = alloca;
         idx++;
     }
-    
+
     // Generate code for function body if provided
     if (node->body) {
         node->body->accept(*this);
-        
+
         // If body doesn't end with a return statement, add one
         if (!builder->GetInsertBlock()->getTerminator()) {
             if (returnType->isVoidTy()) {
@@ -2235,7 +2235,7 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
             } else {
                 // For non-void return type, return a default value for the type
                 llvm::Value* defaultValue = nullptr;
-                
+
                 if (returnType->isIntegerTy()) {
                     defaultValue = llvm::ConstantInt::get(returnType, 0);
                 } else if (returnType->isFloatingPointTy()) {
@@ -2249,7 +2249,7 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
                     defaultValue = llvm::UndefValue::get(returnType);
                     logWarning(node->loc, "Function expression with non-trivial return type is missing return statement");
                 }
-                
+
                 builder->CreateRet(defaultValue);
             }
         }
@@ -2260,7 +2260,7 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
         } else {
             // Create a default return value
             llvm::Value* defaultValue = nullptr;
-            
+
             if (returnType->isIntegerTy()) {
                 defaultValue = llvm::ConstantInt::get(returnType, 0);
             } else if (returnType->isFloatingPointTy()) {
@@ -2273,16 +2273,16 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
                 // For complex types, return an undef value
                 defaultValue = llvm::UndefValue::get(returnType);
             }
-            
+
             builder->CreateRet(defaultValue);
         }
     }
-    
+
     // Verify the function
     std::string verifyErrors;
     llvm::raw_string_ostream errStream(verifyErrors);
     bool hasErrors = llvm::verifyFunction(*function, &errStream);
-    
+
     if (hasErrors) {
         logError(node->loc, "Generated function expression has errors: " + verifyErrors);
         function->eraseFromParent();
@@ -2291,7 +2291,7 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
         // Return a pointer to the function
         m_currentLLVMValue = function;
     }
-    
+
     // Restore previous function context
     currentFunction = savedFunction;
     builder->SetInsertPoint(savedBlock);
@@ -2302,7 +2302,7 @@ void LLVMCodegen::visit(ast::SequenceExpression* node) {
     // For multi-value returns, create a struct containing all values
     std::vector<llvm::Value*> values;
     std::vector<llvm::Type*> types;
-    
+
     // Evaluate all expressions and collect their values and types
     for (const auto& expr : node->expressions) {
         expr->accept(*this);
@@ -2315,28 +2315,28 @@ void LLVMCodegen::visit(ast::SequenceExpression* node) {
             return;
         }
     }
-    
+
     if (values.empty()) {
         logError(node->loc, "Empty sequence expression");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // If only one value, return it directly (single-value return)
     if (values.size() == 1) {
         m_currentLLVMValue = values[0];
         return;
     }
-    
+
     // Create a struct type for multiple values
     llvm::StructType* tupleType = llvm::StructType::get(*context, types);
-    
+
     // Create an undef struct and insert each value
     llvm::Value* structValue = llvm::UndefValue::get(tupleType);
     for (size_t i = 0; i < values.size(); ++i) {
         structValue = builder->CreateInsertValue(structValue, values[i], i, "tuple_insert");
     }
-    
+
     m_currentLLVMValue = structValue;
 }
 
@@ -2359,92 +2359,92 @@ void LLVMCodegen::visit(ast::SuperExpression* node) {
 
 void LLVMCodegen::visit(ast::AwaitExpression* node) {
     // 'await' expression - suspend current async function and wait for Future<T>
-    
+
     // Set debug location for await expression (important for debugging async code)
     setDebugLocation(node->loc);
-    
+
     if (!node->expr) {
         logError(node->loc, "await expression missing operand");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Check if we're in an async context
     if (!currentAsyncState.isAsync) {
         logError(node->loc, "await can only be used in async functions");
         m_currentLLVMValue = nullptr;
         return;
     }
-    
+
     // Evaluate the expression being awaited (should be a Future<T>)
     node->expr->accept(*this);
     llvm::Value* futureValue = m_currentLLVMValue;
-    
+
     if (!futureValue) {
         logError(node->loc, "Failed to evaluate await expression");
         return;
     }
-    
+
     // Generate state machine suspension point
     // 1. Save current state and local variables
     // 2. Schedule continuation
     // 3. Return control to runtime
-    
+
     // Increment state counter for this suspension point
     int currentState = ++currentAsyncState.stateCounter;
-    
+
     // Create continuation block for when await completes
     llvm::BasicBlock* continuationBlock = llvm::BasicBlock::Create(
         *context, "await_continuation_" + std::to_string(currentState), currentFunction);
-    
-    std::cout << "DEBUG: Creating await suspension point at line " << node->loc.line 
+
+    std::cout << "DEBUG: Creating await suspension point at line " << node->loc.line
               << " column " << node->loc.column << " (state " << currentState << ")" << std::endl;
-    
+
     // Create debug information for this suspension point
     std::string suspensionDesc = "await_expression_" + std::to_string(currentState);
     createSuspensionPointDebugInfo(currentState, node->loc, suspensionDesc);
-    
+
     // Store the state number (if async state infrastructure is available)
     if (currentAsyncState.stateStructType && currentAsyncState.stateStructInstance) {
         llvm::Value* stateNumberPtr = builder->CreateStructGEP(
             currentAsyncState.stateStructType, currentAsyncState.stateStructInstance, 0);
         builder->CreateStore(
             llvm::ConstantInt::get(int32Type, currentState), stateNumberPtr);
-        
+
         // Add debug info for state transition (from previous state to suspension)
         int previousState = currentState - 1;
         insertAsyncStateTransitionDebugInfo(previousState, currentState, node->loc);
     } else {
         std::cout << "DEBUG: Async state infrastructure not initialized, skipping state storage" << std::endl;
     }
-    
+
     // Call runtime to await the future
     llvm::Function* awaitFunc = getOrCreateAwaitTaskFunction();
-    
+
     // For now, we'll create a simple placeholder implementation
     // In a real implementation, this would need proper LLVM coroutine intrinsics
     // or a more sophisticated state machine
-    
-    // Call vyn_await_task with a dummy task ID for now
+
+    // Call vyb_await_task with a dummy task ID for now
     llvm::Value* dummyTaskId = llvm::ConstantInt::get(int64Type, 0);
     builder->CreateCall(awaitFunc, {dummyTaskId});
-    
+
     // Branch to the continuation block to maintain proper control flow
     builder->CreateBr(continuationBlock);
-    
+
     // Switch to the continuation block
     builder->SetInsertPoint(continuationBlock);
-    
+
     // Insert continuation debug marker
     insertContinuationDebugMarker(currentState, node->loc);
-    
+
     // For simplicity, just return the input future value for now
     // This doesn't implement proper suspension/resumption semantics yet
     m_currentLLVMValue = futureValue;
 }
 
 // Array serialization helper function
-llvm::Value* LLVMCodegen::generateArraySerialization(llvm::Value* arrayPtr, vyn::ast::ArrayType* arrayType) {
+llvm::Value* LLVMCodegen::generateArraySerialization(llvm::Value* arrayPtr, vyb::ast::ArrayType* arrayType) {
     // Get the array size
     int arraySize = 0;
     if (arrayType->sizeExpression) {
@@ -2456,7 +2456,7 @@ llvm::Value* LLVMCodegen::generateArraySerialization(llvm::Value* arrayPtr, vyn:
     } else {
         return builder->CreateGlobalStringPtr("[]", "empty_array");
     }
-    
+
     // For arrays in LLVM 15+, we need to determine element type from AST
     llvm::Type* elementType_llvm = nullptr;
     std::string elementTypeName = "unknown";
@@ -2474,41 +2474,41 @@ llvm::Value* LLVMCodegen::generateArraySerialization(llvm::Value* arrayPtr, vyn:
     } else {
         return builder->CreateGlobalStringPtr("[]", "empty_array");
     }
-    
+
     // Create array type for GEP
     llvm::Type* arrayTypeForGEP = llvm::ArrayType::get(elementType_llvm, arraySize);
-    
+
     // Start building the array string: [10, 20, 30]
     std::string result = "[";
-    
+
     for (int i = 0; i < arraySize; i++) {
         // Get element at index i using GEP
         std::vector<llvm::Value*> indices = {
             llvm::ConstantInt::get(*context, llvm::APInt(32, 0, true)),  // First index: 0 (to dereference array ptr)
             llvm::ConstantInt::get(*context, llvm::APInt(32, i, true))   // Second index: i (array element)
         };
-        
+
         llvm::Value* elementPtr = builder->CreateGEP(
-            arrayTypeForGEP, 
-            arrayPtr, 
-            indices, 
+            arrayTypeForGEP,
+            arrayPtr,
+            indices,
             "element_ptr_" + std::to_string(i)
         );
-        
+
         // Load the element value
         llvm::Value* elementValue = builder->CreateLoad(
             elementType_llvm,
-            elementPtr, 
+            elementPtr,
             "element_" + std::to_string(i)
         );
-        
+
         // For integers, we need to convert to string at runtime
         // For now, let's create a simple runtime call to get string representation
-        
+
         if (i > 0) {
             result += ", ";
         }
-        
+
         if (elementTypeName == "Int") {
             // We'll use sprintf to convert integers to strings at runtime
             // For now, let's create static placeholders to test the structure
@@ -2518,28 +2518,28 @@ llvm::Value* LLVMCodegen::generateArraySerialization(llvm::Value* arrayPtr, vyn:
             else result += std::to_string(i * 10);
         }
     }
-    
+
     result += "]";
-    
+
     return builder->CreateGlobalStringPtr(result, "array_string");
 }
 
 // Generic serialization helper (extracted from original code)
-llvm::Value* LLVMCodegen::generateGenericSerialization(llvm::Value* objPtr, vyn::ast::TypeNode* typeNode) {
+llvm::Value* LLVMCodegen::generateGenericSerialization(llvm::Value* objPtr, vyb::ast::TypeNode* typeNode) {
     // Get the serialization function
     llvm::Function* serializeFunc = getSerializeToJsonFunction();
-    
+
     // Determine the type name from AST node if available
     llvm::Value* typeNameValue = nullptr;
     std::string typeName = "unknown";
-    
+
     if (typeNode) {
         typeName = typeNode->toString();
     }
-    
+
     // Create a global string for the type name
     typeNameValue = builder->CreateGlobalStringPtr(typeName, "type_name");
-    
+
     // Cast the argument to void* if needed
     llvm::Value* objPtrCasted = objPtr;
     if (!objPtrCasted->getType()->isPointerTy()) {
@@ -2548,10 +2548,10 @@ llvm::Value* LLVMCodegen::generateGenericSerialization(llvm::Value* objPtr, vyn:
         builder->CreateStore(objPtrCasted, tempAlloca);
         objPtrCasted = tempAlloca;
     }
-    
+
     // Cast to void* (i8*)
     objPtrCasted = builder->CreateBitCast(objPtrCasted, llvm::PointerType::getUnqual(int8Type), "obj_to_i8ptr");
-    
+
     // Call serialization function
     std::vector<llvm::Value*> args = {objPtrCasted, typeNameValue};
     return builder->CreateCall(serializeFunc, args, "serialized_json");
@@ -2561,48 +2561,48 @@ llvm::Value* LLVMCodegen::generateGenericSerialization(llvm::Value* objPtr, vyn:
 llvm::Value* LLVMCodegen::generateIntToString(llvm::Value* intValue) {
     // Create a buffer for the string representation
     llvm::AllocaInst* buffer = builder->CreateAlloca(
-        llvm::ArrayType::get(int8Type, 32), 
-        nullptr, 
+        llvm::ArrayType::get(int8Type, 32),
+        nullptr,
         "int_str_buffer"
     );
-    
+
     // Get sprintf function
     llvm::Function* sprintfFunc = getSprintfFunction();
-    
+
     // Format string for integer
     llvm::Value* formatStr = builder->CreateGlobalStringPtr("%lld", "int_format");
-    
+
     // Cast buffer to i8*
     llvm::Value* bufferPtr = builder->CreateBitCast(buffer, int8PtrType, "buffer_ptr");
-    
+
     // Call sprintf
     std::vector<llvm::Value*> args = {bufferPtr, formatStr, intValue};
     builder->CreateCall(sprintfFunc, args);
-    
+
     return bufferPtr;
 }
 
 llvm::Value* LLVMCodegen::generateFloatToString(llvm::Value* floatValue) {
     // Create a buffer for the string representation
     llvm::AllocaInst* buffer = builder->CreateAlloca(
-        llvm::ArrayType::get(int8Type, 32), 
-        nullptr, 
+        llvm::ArrayType::get(int8Type, 32),
+        nullptr,
         "float_str_buffer"
     );
-    
+
     // Get sprintf function
     llvm::Function* sprintfFunc = getSprintfFunction();
-    
+
     // Format string for float
     llvm::Value* formatStr = builder->CreateGlobalStringPtr("%.6f", "float_format");
-    
+
     // Cast buffer to i8*
     llvm::Value* bufferPtr = builder->CreateBitCast(buffer, int8PtrType, "buffer_ptr");
-    
+
     // Call sprintf
     std::vector<llvm::Value*> args = {bufferPtr, formatStr, floatValue};
     builder->CreateCall(sprintfFunc, args);
-    
+
     return bufferPtr;
 }
 
@@ -2612,25 +2612,25 @@ llvm::Value* LLVMCodegen::generateBoolToString(llvm::Value* boolValue) {
     llvm::BasicBlock* trueBB = llvm::BasicBlock::Create(*context, "bool_true", currentFunc);
     llvm::BasicBlock* falseBB = llvm::BasicBlock::Create(*context, "bool_false", currentFunc);
     llvm::BasicBlock* mergeBB = llvm::BasicBlock::Create(*context, "bool_merge", currentFunc);
-    
+
     // Create the conditional branch
     builder->CreateCondBr(boolValue, trueBB, falseBB);
-    
+
     // True branch
     builder->SetInsertPoint(trueBB);
     llvm::Value* trueStr = builder->CreateGlobalStringPtr("true", "true_str");
     builder->CreateBr(mergeBB);
-    
+
     // False branch
     builder->SetInsertPoint(falseBB);
     llvm::Value* falseStr = builder->CreateGlobalStringPtr("false", "false_str");
     builder->CreateBr(mergeBB);
-    
+
     // Merge block with PHI node
     builder->SetInsertPoint(mergeBB);
     llvm::PHINode* result = builder->CreatePHI(int8PtrType, 2, "bool_str_result");
     result->addIncoming(trueStr, trueBB);
     result->addIncoming(falseStr, falseBB);
-    
+
     return result;
 }

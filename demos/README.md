@@ -1,9 +1,9 @@
-# Vyn Demos
+# VyB Demos
 
 These demos are intended to run with the current compiler and runtime:
 
 ```bash
-build/vyn demos/<file>.vyn
+build/vyb demos/<file>.vyb
 ```
 
 The demos are intentionally compact; richer runtime examples, including
@@ -11,8 +11,8 @@ The demos are intentionally compact; richer runtime examples, including
 
 | Demo | Covers |
 |------|--------|
-| `control_flow.vyn` | recursion, arithmetic, `match`, `defer` |
-| `collections.vyn` | `Vec<Int>`, push, iteration, `len` |
-| `structs_aspects.vyn` | structs, aspects, `bind`, method dispatch |
-| `ffi_freedom.vyn` | `extern "C"` declarations called only inside `freedom` |
-| `finalization_targets.vyn` | borrow scope checks, typed `fail`/`trap`, and C ABI aliases |
+| `control_flow.vyb` | recursion, arithmetic, `match`, `defer` |
+| `collections.vyb` | `Vec<Int>`, push, iteration, `len` |
+| `structs_aspects.vyb` | structs, aspects, `bind`, method dispatch |
+| `ffi_freedom.vyb` | `extern "C"` declarations called only inside `freedom` |
+| `finalization_targets.vyb` | borrow scope checks, typed `fail`/`trap`, and C ABI aliases |

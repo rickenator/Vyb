@@ -1,0 +1,14 @@
+// Simple memory semantics test
+// @expect-return: 42
+main()<Int> -> {
+    x<Int> = 42;
+
+    freedom {
+        p<loc<Int>> = loc(x);
+        at(p) = 100;  // Change x through pointer
+        b<their<Int>> = borrow(x);
+        v<their<Int>> = view(x);
+    }
+
+    return x;  // Should return 100 since we changed it through pointer
+}

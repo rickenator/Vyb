@@ -1,9 +1,9 @@
-#include "vyn/vyn.hpp"
-#include "vyn/parser/lexer.hpp"   // For Lexer
-#include "vyn/parser/parser.hpp"  // For vyn::Parser
-#include "vyn/semantic.hpp"       // For vyn::SemanticAnalyzer
-#include "vyn/module_registry.hpp"
-#include "vyn/vre/llvm/codegen.hpp" // For vyn::LLVMCodegen
+#include "vyb/vyb.hpp"
+#include "vyb/parser/lexer.hpp"   // For Lexer
+#include "vyb/parser/parser.hpp"  // For vyb::Parser
+#include "vyb/semantic.hpp"       // For vyb::SemanticAnalyzer
+#include "vyb/module_registry.hpp"
+#include "vyb/vre/llvm/codegen.hpp" // For vyb::LLVMCodegen
 #include <catch2/catch_session.hpp>
 #include <fstream>
 #include <iostream>
@@ -25,74 +25,74 @@
 // Declare the intrinsic functions from intrinsics.cpp
 extern "C" {
     // This is just a declaration - implementation is in intrinsics.cpp
-    void __vyn_println(const char* str);
-    void __vyn_print(const char* str);
-    void __vyn_println_int(int64_t val);
-    void __vyn_print_int(int64_t val);
-    void __vyn_println_bool(int64_t val);
-    void __vyn_print_bool(int64_t val);
-    char* __vyn_serialize_to_json(void* obj, const char* type_name);
-    char* __vyn_convert_lit_string(const char* str);
-    char* __vyn_string_concat(const char* left, const char* right);
-    
+    void __vyb_println(const char* str);
+    void __vyb_print(const char* str);
+    void __vyb_println_int(int64_t val);
+    void __vyb_print_int(int64_t val);
+    void __vyb_println_bool(int64_t val);
+    void __vyb_print_bool(int64_t val);
+    char* __vyb_serialize_to_json(void* obj, const char* type_name);
+    char* __vyb_convert_lit_string(const char* str);
+    char* __vyb_string_concat(const char* left, const char* right);
+
     // String concatenation intrinsic function
-    char* __vyn_string_concat(const char* left, const char* right);
+    char* __vyb_string_concat(const char* left, const char* right);
 
     // String replace runtime helper
-    char* __vyn_string_replace(const char* src, int64_t src_len,
+    char* __vyb_string_replace(const char* src, int64_t src_len,
                                const char* old_s, const char* new_s,
                                int64_t* out_len);
-    
+
     // ToString intrinsic functions for automatic string conversion - all basic types
-    char* __vyn_toString_int(int64_t value);
-    char* __vyn_toString_int8(int8_t value);
-    char* __vyn_toString_int16(int16_t value);
-    char* __vyn_toString_int32(int32_t value);
-    char* __vyn_toString_int64(int64_t value);
-    char* __vyn_toString_uint8(uint8_t value);
-    char* __vyn_toString_uint16(uint16_t value);
-    char* __vyn_toString_uint32(uint32_t value);
-    char* __vyn_toString_uint64(uint64_t value);
-    char* __vyn_toString_float(double value);
-    char* __vyn_toString_float32(float value);
-    char* __vyn_toString_bool(bool value);
-    char* __vyn_toString_string(const char* value);
-    char* __vyn_toString_char(uint8_t value);
-    char* __vyn_toString_rune(uint32_t value);
-    char* __vyn_toString_byte(uint8_t value);
-    
+    char* __vyb_toString_int(int64_t value);
+    char* __vyb_toString_int8(int8_t value);
+    char* __vyb_toString_int16(int16_t value);
+    char* __vyb_toString_int32(int32_t value);
+    char* __vyb_toString_int64(int64_t value);
+    char* __vyb_toString_uint8(uint8_t value);
+    char* __vyb_toString_uint16(uint16_t value);
+    char* __vyb_toString_uint32(uint32_t value);
+    char* __vyb_toString_uint64(uint64_t value);
+    char* __vyb_toString_float(double value);
+    char* __vyb_toString_float32(float value);
+    char* __vyb_toString_bool(bool value);
+    char* __vyb_toString_string(const char* value);
+    char* __vyb_toString_char(uint8_t value);
+    char* __vyb_toString_rune(uint32_t value);
+    char* __vyb_toString_byte(uint8_t value);
+
     // New type conversion functions (primitive to_string/from_string)
-    char* __vyn_int_to_string(int64_t value);
-    char* __vyn_float_to_string(double value);
-    char* __vyn_bool_to_string(bool value);
-    char* __vyn_string_to_string(const char* str);
-    
-    int64_t __vyn_int_from_string(const char* str, bool* success);
-    double __vyn_float_from_string(const char* str, bool* success);
-    bool __vyn_bool_from_string(const char* str, bool* success);
-    char* __vyn_string_from_string(const char* str, bool* success);
-    
+    char* __vyb_int_to_string(int64_t value);
+    char* __vyb_float_to_string(double value);
+    char* __vyb_bool_to_string(bool value);
+    char* __vyb_string_to_string(const char* str);
+
+    int64_t __vyb_int_from_string(const char* str, bool* success);
+    double __vyb_float_from_string(const char* str, bool* success);
+    bool __vyb_bool_from_string(const char* str, bool* success);
+    char* __vyb_string_from_string(const char* str, bool* success);
+
     // JSON serialization for complex types
-    char* __vyn_complex_to_json(void* instance, const char* type_name);
-    void* __vyn_complex_from_json(const char* json_str, const char* type_name);
-    
+    char* __vyb_complex_to_json(void* instance, const char* type_name);
+    void* __vyb_complex_from_json(const char* json_str, const char* type_name);
+
     // Type metadata registration
-    void __vyn_register_type(void* metadata);
-    
+    void __vyb_register_type(void* metadata);
+
     // Error handling runtime functions (from error_handling.cpp)
-    void __vyn_runtime_panic(const char* message) __attribute__((noreturn));
-    void __vyn_runtime_untrapped_error(void* error) __attribute__((noreturn));
-    void* __vyn_runtime_create_error_ex(const char* type_name, void* type_id, void* data, uint64_t data_size, void (*destructor)(void*), const char* file, uint32_t line, uint32_t column);
-    void __vyn_runtime_free_error(void* error);
-    
+    void __vyb_runtime_panic(const char* message) __attribute__((noreturn));
+    void __vyb_runtime_untrapped_error(void* error) __attribute__((noreturn));
+    void* __vyb_runtime_create_error_ex(const char* type_name, void* type_id, void* data, uint64_t data_size, void (*destructor)(void*), const char* file, uint32_t line, uint32_t column);
+    void __vyb_runtime_free_error(void* error);
+
     // Stack trace runtime functions (Phase 6.4 - from error_handling.cpp)
-    void __vyn_runtime_push_call_frame(const char* function_name, const char* file_path, uint32_t line, uint32_t column);
-    void __vyn_runtime_pop_call_frame();
-    void* __vyn_runtime_get_current_stack_trace();  // Returns VynStackTrace*
-    
+    void __vyb_runtime_push_call_frame(const char* function_name, const char* file_path, uint32_t line, uint32_t column);
+    void __vyb_runtime_pop_call_frame();
+    void* __vyb_runtime_get_current_stack_trace();  // Returns VyBStackTrace*
+
     // TODO: Future toString functions for compound types:
-    // char* __vyn_toString_vec(void* vec_ptr, const char* element_type);
-    // char* __vyn_toString_tuple(void* tuple_ptr, const char* type_spec);
+    // char* __vyb_toString_vec(void* vec_ptr, const char* element_type);
+    // char* __vyb_toString_tuple(void* tuple_ptr, const char* type_spec);
 }
 
 // LLVM includes for ORC JIT compilation
@@ -133,7 +133,7 @@ bool g_make_all_tests_verbose = false;
 bool g_suppress_all_debug_output = false;
 
 // Globals for parser verbose control
-namespace vyn {
+namespace vyb {
     std::set<std::string> g_verbose_parser_test_specifiers;
     bool g_make_all_parser_verbose = false;
     bool g_suppress_all_parser_debug_output = false;
@@ -147,57 +147,57 @@ namespace vyn {
 // Function to optimize LLVM IR module based on optimization level
 void optimize_module(llvm::Module* module, llvm::TargetMachine* targetMachine, int optLevel) {
     if (optLevel == 0) {
-        if (vyn::g_debug_codegen) std::cout << "Skipping IR optimization (-O0)" << std::endl;
+        if (vyb::g_debug_codegen) std::cout << "Skipping IR optimization (-O0)" << std::endl;
         return;  // No optimization at -O0
     }
-    
-    if (vyn::g_debug_codegen) std::cout << "Applying IR optimization passes (-O" << optLevel << ")..." << std::endl;
-    
+
+    if (vyb::g_debug_codegen) std::cout << "Applying IR optimization passes (-O" << optLevel << ")..." << std::endl;
+
     // Create analysis managers
     llvm::LoopAnalysisManager LAM;
     llvm::FunctionAnalysisManager FAM;
     llvm::CGSCCAnalysisManager CGAM;
     llvm::ModuleAnalysisManager MAM;
-    
+
     // Create pass builder
     llvm::PassBuilder PB(targetMachine);
-    
+
     // Register all analysis passes
     PB.registerModuleAnalyses(MAM);
     PB.registerCGSCCAnalyses(CGAM);
     PB.registerFunctionAnalyses(FAM);
     PB.registerLoopAnalyses(LAM);
     PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
-    
+
     // Create module pass manager based on optimization level
     llvm::ModulePassManager MPM;
-    
+
     switch (optLevel) {
         case 1: {
-            if (vyn::g_debug_codegen) std::cout << "  Using O1 optimization pipeline (basic)" << std::endl;
+            if (vyb::g_debug_codegen) std::cout << "  Using O1 optimization pipeline (basic)" << std::endl;
             MPM = PB.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O1);
             break;
         }
         case 2: {
-            if (vyn::g_debug_codegen) std::cout << "  Using O2 optimization pipeline (default)" << std::endl;
+            if (vyb::g_debug_codegen) std::cout << "  Using O2 optimization pipeline (default)" << std::endl;
             MPM = PB.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O2);
             break;
         }
         case 3: {
-            if (vyn::g_debug_codegen) std::cout << "  Using O3 optimization pipeline (aggressive)" << std::endl;
+            if (vyb::g_debug_codegen) std::cout << "  Using O3 optimization pipeline (aggressive)" << std::endl;
             MPM = PB.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3);
             break;
         }
         default: {
-            if (vyn::g_debug_codegen) std::cout << "  Using O2 optimization pipeline (default)" << std::endl;
+            if (vyb::g_debug_codegen) std::cout << "  Using O2 optimization pipeline (default)" << std::endl;
             MPM = PB.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O2);
             break;
         }
     }
-    
+
     // Run the optimization pipeline
     MPM.run(*module, MAM);
-    if (vyn::g_debug_codegen) std::cout << "  IR optimization completed" << std::endl;
+    if (vyb::g_debug_codegen) std::cout << "  IR optimization completed" << std::endl;
 }
 
 namespace {
@@ -210,61 +210,61 @@ struct ModuleParseOptions {
 
 ModuleParseOptions g_module_parse_options;
 
-std::unique_ptr<vyn::ast::Module> parse_vyn_module(const std::string& source, const std::string& fileName) {
-    vyn::ModuleRegistryOptions options;
+std::unique_ptr<vyb::ast::Module> parse_vyb_module(const std::string& source, const std::string& fileName) {
+    vyb::ModuleRegistryOptions options;
     options.cliModulePaths = g_module_parse_options.cliModulePaths;
     options.executablePath = g_module_parse_options.executablePath;
-    vyn::ModuleRegistry registry(std::move(options));
+    vyb::ModuleRegistry registry(std::move(options));
     return registry.resolveRoot(source, fileName);
 }
 } // namespace
 
 
 
-// Function to compile Vyn code to object file
-int compile_vyn_to_object(const std::string& source, const std::string& fileName, 
+// Function to compile VyB code to object file
+int compile_vyb_to_object(const std::string& source, const std::string& fileName,
                           const std::string& outputFile, int optLevel = 2) {
     std::cout << "Compiling " << fileName << " to object file..." << std::endl;
-    
+
     // Initialize LLVM targets
     llvm::InitializeAllTargetInfos();
     llvm::InitializeAllTargets();
     llvm::InitializeAllTargetMCs();
     llvm::InitializeAllAsmParsers();
     llvm::InitializeAllAsmPrinters();
-    
+
     try {
         std::cout << "Creating driver instance..." << std::endl;
-        vyn::Driver driver;
+        vyb::Driver driver;
 
         std::cout << "Parsing source and resolving imports..." << std::endl;
-        auto ast = parse_vyn_module(source, fileName);
+        auto ast = parse_vyb_module(source, fileName);
         std::cout << "AST created successfully" << std::endl;
 
         std::cout << "Running semantic analysis..." << std::endl;
-        vyn::SemanticAnalyzer semanticAnalyzer(driver);
+        vyb::SemanticAnalyzer semanticAnalyzer(driver);
         driver.setSemanticAnalyzer(&semanticAnalyzer);
         semanticAnalyzer.analyze(ast.get());
-        
+
         const auto& semanticErrors = semanticAnalyzer.getErrors();
         if (!semanticErrors.empty()) {
             std::cerr << "\nSemantic Errors:" << std::endl;
             for (const auto& error : semanticErrors) {
                 std::cerr << "  " << error << std::endl;
             }
-            throw std::runtime_error("Semantic analysis failed with " + 
+            throw std::runtime_error("Semantic analysis failed with " +
                 std::to_string(semanticErrors.size()) + " error(s)");
         }
         std::cout << "Semantic analysis completed" << std::endl;
 
         std::cout << "Generating LLVM IR code..." << std::endl;
-        vyn::LLVMCodegen codegen(driver);
+        vyb::LLVMCodegen codegen(driver);
         codegen.generate(ast.get(), fileName + ".ll");
         std::cout << "LLVM IR generation completed" << std::endl;
 
         // Get the LLVM module
         llvm::Module* module = codegen.getModule();
-        
+
         // Verify the module
         std::cout << "Verifying module..." << std::endl;
         std::string verifyErrors;
@@ -275,38 +275,38 @@ int compile_vyn_to_object(const std::string& source, const std::string& fileName
             throw std::runtime_error("Module verification failed: " + verifyErrors);
         }
         std::cout << "Module verified successfully" << std::endl;
-        
+
         // Setup target machine
         auto targetTriple = llvm::sys::getDefaultTargetTriple();
         std::cout << "Target triple: " << targetTriple << std::endl;
         module->setTargetTriple(targetTriple);
-        
+
         std::string error;
         auto target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
         if (!target) {
             throw std::runtime_error("Failed to lookup target: " + error);
         }
-        
+
         auto CPU = "generic";
         auto features = "";
-        
+
         llvm::TargetOptions opt;
         auto relocModel = std::optional<llvm::Reloc::Model>(llvm::Reloc::PIC_);
-        auto targetMachine = target->createTargetMachine(targetTriple, CPU, features, 
+        auto targetMachine = target->createTargetMachine(targetTriple, CPU, features,
                                                          opt, relocModel);
-        
+
         module->setDataLayout(targetMachine->createDataLayout());
-        
+
         // Apply IR optimization passes before code generation
         optimize_module(module, targetMachine, optLevel);
-        
+
         // Open output file
         std::error_code EC;
         llvm::raw_fd_ostream dest(outputFile, EC, llvm::sys::fs::OF_None);
         if (EC) {
             throw std::runtime_error("Could not open file: " + EC.message());
         }
-        
+
         // Set optimization level
         llvm::CodeGenOptLevel cgOptLevel;
         switch (optLevel) {
@@ -315,22 +315,22 @@ int compile_vyn_to_object(const std::string& source, const std::string& fileName
             case 3: cgOptLevel = llvm::CodeGenOptLevel::Aggressive; break;
             default: cgOptLevel = llvm::CodeGenOptLevel::Default; break;
         }
-        
+
         // Emit object file
         llvm::legacy::PassManager pass;
         auto fileType = llvm::CodeGenFileType::ObjectFile;
-        
+
         if (targetMachine->addPassesToEmitFile(pass, dest, nullptr, fileType)) {
             throw std::runtime_error("TargetMachine can't emit a file of this type");
         }
-        
+
         std::cout << "Emitting object file with optimization level -O" << optLevel << "..." << std::endl;
         pass.run(*module);
         dest.flush();
-        
+
         std::cout << "Successfully compiled to: " << outputFile << std::endl;
         return 0;
-        
+
     } catch (const std::exception& e) {
         std::cerr << "Error compiling to object file: " << e.what() << std::endl;
         return 1;
@@ -338,16 +338,16 @@ int compile_vyn_to_object(const std::string& source, const std::string& fileName
 }
 
 // Function to link object files into executable
-int link_vyn_executable(const std::vector<std::string>& objectFiles,
+int link_vyb_executable(const std::vector<std::string>& objectFiles,
                         const std::string& outputExecutable,
                         const std::vector<std::string>& userLinkArgs = {},
                         bool staticLink = false) {
     std::cout << "Linking executable: " << outputExecutable << std::endl;
-    
+
     // First, compile the runtime support files if needed.
     std::vector<std::pair<std::string, std::string>> runtimeUnits = {
-        {"runtime/vyn_runtime.c", "runtime/vyn_runtime.o"},
-        {"runtime/vyn_type_metadata.c", "runtime/vyn_type_metadata.o"}
+        {"runtime/vyb_runtime.c", "runtime/vyb_runtime.o"},
+        {"runtime/vyb_type_metadata.c", "runtime/vyb_type_metadata.o"}
     };
     std::vector<std::string> runtimeObjects;
 
@@ -355,7 +355,7 @@ int link_vyn_executable(const std::vector<std::string>& objectFiles,
         const std::string& runtimeSource = unit.first;
         const std::string& runtimeObject = unit.second;
         if (access(runtimeSource.c_str(), F_OK) == 0) {
-            std::cout << "Compiling Vyn runtime library..." << std::endl;
+            std::cout << "Compiling VyB runtime library..." << std::endl;
 
             std::string compileCmd = "cc -c " + runtimeSource + " -o " + runtimeObject + " -O2";
             int compileResult = system(compileCmd.c_str());
@@ -366,11 +366,11 @@ int link_vyn_executable(const std::vector<std::string>& objectFiles,
             runtimeObjects.push_back(runtimeObject);
         }
     }
-    
+
     // Detect platform and choose linker
     std::string linker = "ld";
     std::vector<std::string> linkerArgs;
-    
+
 #ifdef __APPLE__
     // macOS uses different linker and flags
     linker = "ld";
@@ -393,16 +393,16 @@ int link_vyn_executable(const std::vector<std::string>& objectFiles,
     } else {
         linker = "ld";
     }
-    
+
     // Dynamic linker path for Linux
     linkerArgs.push_back("-dynamic-linker");
     linkerArgs.push_back("/lib64/ld-linux-x86-64.so.2");
 #endif
-    
+
     // Output file
     linkerArgs.push_back("-o");
     linkerArgs.push_back(outputExecutable);
-    
+
     // Add CRT startup files for proper C runtime initialization
 #ifdef __APPLE__
     // macOS doesn't need crt files explicitly in modern versions
@@ -416,7 +416,7 @@ int link_vyn_executable(const std::vector<std::string>& objectFiles,
         "/lib64/",
         "/lib/"
     };
-    
+
     auto findCrtFile = [&](const std::string& filename) -> std::string {
         for (const auto& path : crtPaths) {
             std::string fullPath = path + filename;
@@ -426,27 +426,27 @@ int link_vyn_executable(const std::vector<std::string>& objectFiles,
         }
         return "";
     };
-    
+
     std::string crt1 = findCrtFile("crt1.o");
     std::string crti = findCrtFile("crti.o");
     std::string crtn = findCrtFile("crtn.o");
-    
+
     if (!crt1.empty()) linkerArgs.push_back(crt1);
     if (!crti.empty()) linkerArgs.push_back(crti);
 #endif
-    
+
     // Add all object files
     for (const auto& objFile : objectFiles) {
         linkerArgs.push_back(objFile);
     }
-    
+
     // Add runtime libraries if they were compiled
     for (const auto& runtimeObject : runtimeObjects) {
         if (access(runtimeObject.c_str(), F_OK) == 0) {
             linkerArgs.push_back(runtimeObject);
         }
     }
-    
+
     // Add C runtime library paths
 #ifndef __APPLE__
     linkerArgs.push_back("-L/usr/lib/x86_64-linux-gnu");
@@ -471,7 +471,7 @@ int link_vyn_executable(const std::vector<std::string>& objectFiles,
     for (const auto& linkArg : userLinkArgs) {
         linkerArgs.push_back(normalizeLinkArg(linkArg));
     }
-    
+
     // Link against C standard library and math library
     if (staticLink) {
         linkerArgs.push_back("-static");
@@ -481,28 +481,28 @@ int link_vyn_executable(const std::vector<std::string>& objectFiles,
         linkerArgs.push_back("-lc");
         linkerArgs.push_back("-lm");
     }
-    
+
     // Add crtn at the end (Linux)
 #ifdef __APPLE__
     // macOS doesn't need this
 #else
     if (!crtn.empty()) linkerArgs.push_back(crtn);
 #endif
-    
+
     // Build command for display
     std::string command = linker;
     for (const auto& arg : linkerArgs) {
         command += " " + arg;
     }
     std::cout << "Linker command: " << command << std::endl;
-    
+
     // Execute linker using fork/exec for better control
     pid_t pid = fork();
     if (pid == -1) {
         std::cerr << "Failed to fork process" << std::endl;
         return 1;
     }
-    
+
     if (pid == 0) {
         // Child process - execute linker
         std::vector<char*> args;
@@ -511,9 +511,9 @@ int link_vyn_executable(const std::vector<std::string>& objectFiles,
             args.push_back(const_cast<char*>(arg.c_str()));
         }
         args.push_back(nullptr);
-        
+
         execvp(linker.c_str(), args.data());
-        
+
         // If execvp returns, it failed
         std::cerr << "Failed to execute linker: " << linker << std::endl;
         exit(1);
@@ -521,15 +521,15 @@ int link_vyn_executable(const std::vector<std::string>& objectFiles,
         // Parent process - wait for linker to complete
         int status;
         waitpid(pid, &status, 0);
-        
+
         if (WIFEXITED(status)) {
             int exitCode = WEXITSTATUS(status);
             if (exitCode == 0) {
                 std::cout << "Successfully linked executable: " << outputExecutable << std::endl;
-                
+
                 // Make executable
                 chmod(outputExecutable.c_str(), 0755);
-                
+
                 return 0;
             } else {
                 std::cerr << "Linker failed with exit code: " << exitCode << std::endl;
@@ -542,33 +542,33 @@ int link_vyn_executable(const std::vector<std::string>& objectFiles,
     }
 }
 
-// Function to execute Vyn code using LLVM JIT
-int run_vyn_code(const std::string& source, const std::string& fileName, bool generateLLVMIR) {
-    VYN_CDBG << "Starting run_vyn_code for file: " << fileName << std::endl;
-    
+// Function to execute VyB code using LLVM JIT
+int run_vyb_code(const std::string& source, const std::string& fileName, bool generateLLVMIR) {
+    VYB_CDBG << "Starting run_vyb_code for file: " << fileName << std::endl;
+
     // Initialize LLVM targets for JIT
-    VYN_CDBG << "Initializing LLVM targets..." << std::endl;
+    VYB_CDBG << "Initializing LLVM targets..." << std::endl;
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
     llvm::InitializeNativeTargetAsmParser();
-    
+
     // Setup for ORC JIT execution
-    VYN_CDBG << "Setting up ORC JIT options..." << std::endl;
-    VYN_CDBG << "LLVM components ready for ORC JIT." << std::endl;
+    VYB_CDBG << "Setting up ORC JIT options..." << std::endl;
+    VYB_CDBG << "LLVM components ready for ORC JIT." << std::endl;
 
     try {
-        VYN_CDBG << "Creating driver instance..." << std::endl;
-        vyn::Driver driver;
+        VYB_CDBG << "Creating driver instance..." << std::endl;
+        vyb::Driver driver;
 
-        VYN_CDBG << "Parsing source and resolving imports..." << std::endl;
-        auto ast = parse_vyn_module(source, fileName);
-        VYN_CDBG << "AST created successfully" << std::endl;
+        VYB_CDBG << "Parsing source and resolving imports..." << std::endl;
+        auto ast = parse_vyb_module(source, fileName);
+        VYB_CDBG << "AST created successfully" << std::endl;
 
-        VYN_CDBG << "Running semantic analysis..." << std::endl;
-        vyn::SemanticAnalyzer semanticAnalyzer(driver);
+        VYB_CDBG << "Running semantic analysis..." << std::endl;
+        vyb::SemanticAnalyzer semanticAnalyzer(driver);
         driver.setSemanticAnalyzer(&semanticAnalyzer);  // Make semantic data available to codegen
         semanticAnalyzer.analyze(ast.get());
-        
+
         // Check for semantic errors and fail if any exist
         const auto& semanticErrors = semanticAnalyzer.getErrors();
         if (!semanticErrors.empty()) {
@@ -576,15 +576,15 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             for (const auto& error : semanticErrors) {
                 std::cerr << "  " << error << std::endl;
             }
-            throw std::runtime_error("Semantic analysis failed with " + 
+            throw std::runtime_error("Semantic analysis failed with " +
                 std::to_string(semanticErrors.size()) + " error(s)");
         }
-        VYN_CDBG << "Semantic analysis completed" << std::endl;
+        VYB_CDBG << "Semantic analysis completed" << std::endl;
 
-        VYN_CDBG << "Generating LLVM IR code..." << std::endl;
-        vyn::LLVMCodegen codegen(driver);
+        VYB_CDBG << "Generating LLVM IR code..." << std::endl;
+        vyb::LLVMCodegen codegen(driver);
         codegen.generate(ast.get(), fileName + ".ll");
-        VYN_CDBG << "LLVM IR generation completed" << std::endl;
+        VYB_CDBG << "LLVM IR generation completed" << std::endl;
 
         if (generateLLVMIR) {
             // Generate LLVM IR to a file if requested
@@ -603,38 +603,38 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
         std::unique_ptr<llvm::Module> module = codegen.releaseModule();
         std::unique_ptr<llvm::LLVMContext> context = codegen.releaseContext();
 
-        VYN_CDBG << "Setting up execution engine..." << std::endl;
+        VYB_CDBG << "Setting up execution engine..." << std::endl;
 
         // Retrieve intrinsic functions before moving module into JIT
-        llvm::Function* printlnFunc = module->getFunction("__vyn_println");
-        llvm::Function* serializeFunc = module->getFunction("__vyn_serialize_to_json");
-        llvm::Function* litConvertFunc = module->getFunction("__vyn_convert_lit_string");
-        llvm::Function* stringConcatFunc = module->getFunction("__vyn_string_concat");
-        
+        llvm::Function* printlnFunc = module->getFunction("__vyb_println");
+        llvm::Function* serializeFunc = module->getFunction("__vyb_serialize_to_json");
+        llvm::Function* litConvertFunc = module->getFunction("__vyb_convert_lit_string");
+        llvm::Function* stringConcatFunc = module->getFunction("__vyb_string_concat");
+
         // Retrieve toString functions
-        llvm::Function* toStringIntFunc = module->getFunction("__vyn_toString_int");
-        llvm::Function* toStringInt8Func = module->getFunction("__vyn_toString_int8");
-        llvm::Function* toStringInt16Func = module->getFunction("__vyn_toString_int16");
-        llvm::Function* toStringInt32Func = module->getFunction("__vyn_toString_int32");
-        llvm::Function* toStringInt64Func = module->getFunction("__vyn_toString_int64");
-        llvm::Function* toStringUInt8Func = module->getFunction("__vyn_toString_uint8");
-        llvm::Function* toStringUInt16Func = module->getFunction("__vyn_toString_uint16");
-        llvm::Function* toStringUInt32Func = module->getFunction("__vyn_toString_uint32");
-        llvm::Function* toStringUInt64Func = module->getFunction("__vyn_toString_uint64");
-        llvm::Function* toStringFloatFunc = module->getFunction("__vyn_toString_float");
-        llvm::Function* toStringFloat32Func = module->getFunction("__vyn_toString_float32");
-        llvm::Function* toStringBoolFunc = module->getFunction("__vyn_toString_bool");
-        llvm::Function* toStringStringFunc = module->getFunction("__vyn_toString_string");
-        llvm::Function* toStringCharFunc = module->getFunction("__vyn_toString_char");
-        llvm::Function* toStringRuneFunc = module->getFunction("__vyn_toString_rune");
-        llvm::Function* toStringByteFunc = module->getFunction("__vyn_toString_byte");
-        
+        llvm::Function* toStringIntFunc = module->getFunction("__vyb_toString_int");
+        llvm::Function* toStringInt8Func = module->getFunction("__vyb_toString_int8");
+        llvm::Function* toStringInt16Func = module->getFunction("__vyb_toString_int16");
+        llvm::Function* toStringInt32Func = module->getFunction("__vyb_toString_int32");
+        llvm::Function* toStringInt64Func = module->getFunction("__vyb_toString_int64");
+        llvm::Function* toStringUInt8Func = module->getFunction("__vyb_toString_uint8");
+        llvm::Function* toStringUInt16Func = module->getFunction("__vyb_toString_uint16");
+        llvm::Function* toStringUInt32Func = module->getFunction("__vyb_toString_uint32");
+        llvm::Function* toStringUInt64Func = module->getFunction("__vyb_toString_uint64");
+        llvm::Function* toStringFloatFunc = module->getFunction("__vyb_toString_float");
+        llvm::Function* toStringFloat32Func = module->getFunction("__vyb_toString_float32");
+        llvm::Function* toStringBoolFunc = module->getFunction("__vyb_toString_bool");
+        llvm::Function* toStringStringFunc = module->getFunction("__vyb_toString_string");
+        llvm::Function* toStringCharFunc = module->getFunction("__vyb_toString_char");
+        llvm::Function* toStringRuneFunc = module->getFunction("__vyb_toString_rune");
+        llvm::Function* toStringByteFunc = module->getFunction("__vyb_toString_byte");
+
         if (!printlnFunc || !serializeFunc) {
             throw std::runtime_error("Missing required intrinsic functions in module");
         }
 
         // Verify the module before JIT compilation
-        VYN_CDBG << "Verifying module..." << std::endl;
+        VYB_CDBG << "Verifying module..." << std::endl;
         std::string verifyErrors;
         llvm::raw_string_ostream verifyStream(verifyErrors);
         if (llvm::verifyModule(*module, &verifyStream)) {
@@ -642,7 +642,7 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             std::cerr << "Module verification failed:\n" << verifyErrors << std::endl;
             throw std::runtime_error("Module verification failed: " + verifyErrors);
         }
-        VYN_CDBG << "Module verified successfully" << std::endl;
+        VYB_CDBG << "Module verified successfully" << std::endl;
 
         // Create the ORC JIT execution engine
         auto jitOrErr = llvm::orc::LLJITBuilder().create();
@@ -653,7 +653,7 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             throw std::runtime_error("Failed to create LLJIT: " + errorMsg);
         }
         auto& jit = *jitOrErr;
-        
+
         // Register runtime functions with the JIT before adding module
         auto& mainDylib = jit->getMainJITDylib();
         llvm::orc::MangleAndInterner mangle(jit->getExecutionSession(), jit->getDataLayout());
@@ -667,42 +667,42 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             throw std::runtime_error("Failed to expose process symbols to JIT: " + errorMsg);
         }
         mainDylib.addGenerator(std::move(*processSymbols));
-        
+
         // Define symbol mappings for our runtime functions
         llvm::orc::SymbolMap runtimeSymbols;
-        runtimeSymbols[mangle("__vyn_println")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr(&__vyn_println), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("__vyn_print")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr(&__vyn_print), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("__vyn_println_int")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr(&__vyn_println_int), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("__vyn_print_int")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr(&__vyn_print_int), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("__vyn_println_bool")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr(&__vyn_println_bool), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("__vyn_print_bool")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr(&__vyn_print_bool), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("__vyn_serialize_to_json")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr(&__vyn_serialize_to_json), llvm::JITSymbolFlags::Exported);
-        
+        runtimeSymbols[mangle("__vyb_println")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_println), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_print")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_print), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_println_int")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_println_int), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_print_int")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_print_int), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_println_bool")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_println_bool), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_print_bool")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_print_bool), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_serialize_to_json")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_serialize_to_json), llvm::JITSymbolFlags::Exported);
+
         // Register error handling runtime functions
-        runtimeSymbols[mangle("__vyn_runtime_panic")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr((void*)&__vyn_runtime_panic), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("__vyn_runtime_untrapped_error")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr((void*)&__vyn_runtime_untrapped_error), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("__vyn_runtime_create_error_ex")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr((void*)&__vyn_runtime_create_error_ex), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("__vyn_runtime_free_error")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr((void*)&__vyn_runtime_free_error), llvm::JITSymbolFlags::Exported);
-        
+        runtimeSymbols[mangle("__vyb_runtime_panic")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr((void*)&__vyb_runtime_panic), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_runtime_untrapped_error")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr((void*)&__vyb_runtime_untrapped_error), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_runtime_create_error_ex")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr((void*)&__vyb_runtime_create_error_ex), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_runtime_free_error")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr((void*)&__vyb_runtime_free_error), llvm::JITSymbolFlags::Exported);
+
         // Register stack trace runtime functions (Phase 6.4)
-        runtimeSymbols[mangle("__vyn_runtime_push_call_frame")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr((void*)&__vyn_runtime_push_call_frame), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("__vyn_runtime_pop_call_frame")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr((void*)&__vyn_runtime_pop_call_frame), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("__vyn_runtime_get_current_stack_trace")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr((void*)&__vyn_runtime_get_current_stack_trace), llvm::JITSymbolFlags::Exported);
-        
+        runtimeSymbols[mangle("__vyb_runtime_push_call_frame")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr((void*)&__vyb_runtime_push_call_frame), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_runtime_pop_call_frame")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr((void*)&__vyb_runtime_pop_call_frame), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_runtime_get_current_stack_trace")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr((void*)&__vyb_runtime_get_current_stack_trace), llvm::JITSymbolFlags::Exported);
+
         // Register standard library functions
         // Register malloc/free/memset/memcpy variants with numeric suffixes
         // LLVM may create renamed variants (malloc.1, malloc.2, etc.) when the same
@@ -740,115 +740,115 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
                 runtimeSymbols[mangle("strlen" + suffix)] = llvm::orc::ExecutorSymbolDef(strlenPtr, llvm::JITSymbolFlags::Exported);
             }
         }
-        
+
         if (litConvertFunc) {
-            runtimeSymbols[mangle("__vyn_convert_lit_string")] = llvm::orc::ExecutorSymbolDef(
-                llvm::orc::ExecutorAddr::fromPtr(&__vyn_convert_lit_string), llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("__vyb_convert_lit_string")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyb_convert_lit_string), llvm::JITSymbolFlags::Exported);
         }
         if (stringConcatFunc) {
-            runtimeSymbols[mangle("__vyn_string_concat")] = llvm::orc::ExecutorSymbolDef(
-                llvm::orc::ExecutorAddr::fromPtr(&__vyn_string_concat), llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("__vyb_string_concat")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyb_string_concat), llvm::JITSymbolFlags::Exported);
         }
 
         // Register string replace helper (always export — codegen may emit the symbol)
-        runtimeSymbols[mangle("__vyn_string_replace")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr(&__vyn_string_replace), llvm::JITSymbolFlags::Exported);
-        
+        runtimeSymbols[mangle("__vyb_string_replace")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_string_replace), llvm::JITSymbolFlags::Exported);
+
         // Register toString functions
         if (toStringIntFunc) {
-            runtimeSymbols[mangle("__vyn_toString_int")] = llvm::orc::ExecutorSymbolDef(
-                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_int), llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("__vyb_toString_int")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyb_toString_int), llvm::JITSymbolFlags::Exported);
         }
         if (toStringInt8Func) {
-            runtimeSymbols[mangle("__vyn_toString_int8")] = llvm::orc::ExecutorSymbolDef(
-                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_int8), llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("__vyb_toString_int8")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyb_toString_int8), llvm::JITSymbolFlags::Exported);
         }
         if (toStringInt16Func) {
-            runtimeSymbols[mangle("__vyn_toString_int16")] = llvm::orc::ExecutorSymbolDef(
-                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_int16), llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("__vyb_toString_int16")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyb_toString_int16), llvm::JITSymbolFlags::Exported);
         }
         if (toStringInt32Func) {
-            runtimeSymbols[mangle("__vyn_toString_int32")] = llvm::orc::ExecutorSymbolDef(
-                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_int32), llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("__vyb_toString_int32")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyb_toString_int32), llvm::JITSymbolFlags::Exported);
         }
         if (toStringInt64Func) {
-            runtimeSymbols[mangle("__vyn_toString_int64")] = llvm::orc::ExecutorSymbolDef(
-                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_int64), llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("__vyb_toString_int64")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyb_toString_int64), llvm::JITSymbolFlags::Exported);
         }
         if (toStringUInt8Func) {
-            runtimeSymbols[mangle("__vyn_toString_uint8")] = llvm::orc::ExecutorSymbolDef(
-                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_uint8), llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("__vyb_toString_uint8")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyb_toString_uint8), llvm::JITSymbolFlags::Exported);
         }
         if (toStringUInt16Func) {
-            runtimeSymbols[mangle("__vyn_toString_uint16")] = llvm::orc::ExecutorSymbolDef(
-                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_uint16), llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("__vyb_toString_uint16")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyb_toString_uint16), llvm::JITSymbolFlags::Exported);
         }
         if (toStringUInt32Func) {
-            runtimeSymbols[mangle("__vyn_toString_uint32")] = llvm::orc::ExecutorSymbolDef(
-                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_uint32), llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("__vyb_toString_uint32")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyb_toString_uint32), llvm::JITSymbolFlags::Exported);
         }
         if (toStringUInt64Func) {
-            runtimeSymbols[mangle("__vyn_toString_uint64")] = llvm::orc::ExecutorSymbolDef(
-                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_uint64), llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("__vyb_toString_uint64")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyb_toString_uint64), llvm::JITSymbolFlags::Exported);
         }
         if (toStringFloatFunc) {
-            runtimeSymbols[mangle("__vyn_toString_float")] = llvm::orc::ExecutorSymbolDef(
-                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_float), llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("__vyb_toString_float")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyb_toString_float), llvm::JITSymbolFlags::Exported);
         }
         if (toStringFloat32Func) {
-            runtimeSymbols[mangle("__vyn_toString_float32")] = llvm::orc::ExecutorSymbolDef(
-                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_float32), llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("__vyb_toString_float32")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyb_toString_float32), llvm::JITSymbolFlags::Exported);
         }
         if (toStringBoolFunc) {
-            runtimeSymbols[mangle("__vyn_toString_bool")] = llvm::orc::ExecutorSymbolDef(
-                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_bool), llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("__vyb_toString_bool")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyb_toString_bool), llvm::JITSymbolFlags::Exported);
         }
         if (toStringStringFunc) {
-            runtimeSymbols[mangle("__vyn_toString_string")] = llvm::orc::ExecutorSymbolDef(
-                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_string), llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("__vyb_toString_string")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyb_toString_string), llvm::JITSymbolFlags::Exported);
         }
         if (toStringCharFunc) {
-            runtimeSymbols[mangle("__vyn_toString_char")] = llvm::orc::ExecutorSymbolDef(
-                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_char), llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("__vyb_toString_char")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyb_toString_char), llvm::JITSymbolFlags::Exported);
         }
         if (toStringRuneFunc) {
-            runtimeSymbols[mangle("__vyn_toString_rune")] = llvm::orc::ExecutorSymbolDef(
-                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_rune), llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("__vyb_toString_rune")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyb_toString_rune), llvm::JITSymbolFlags::Exported);
         }
         if (toStringByteFunc) {
-            runtimeSymbols[mangle("__vyn_toString_byte")] = llvm::orc::ExecutorSymbolDef(
-                llvm::orc::ExecutorAddr::fromPtr(&__vyn_toString_byte), llvm::JITSymbolFlags::Exported);
+            runtimeSymbols[mangle("__vyb_toString_byte")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&__vyb_toString_byte), llvm::JITSymbolFlags::Exported);
         }
-        
+
         // Register new type conversion functions (to_string/from_string)
-        runtimeSymbols[mangle("__vyn_int_to_string")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr(&__vyn_int_to_string), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("__vyn_float_to_string")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr(&__vyn_float_to_string), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("__vyn_bool_to_string")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr(&__vyn_bool_to_string), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("__vyn_string_to_string")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr(&__vyn_string_to_string), llvm::JITSymbolFlags::Exported);
-        
-        runtimeSymbols[mangle("__vyn_int_from_string")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr(&__vyn_int_from_string), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("__vyn_float_from_string")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr(&__vyn_float_from_string), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("__vyn_bool_from_string")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr(&__vyn_bool_from_string), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("__vyn_string_from_string")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr(&__vyn_string_from_string), llvm::JITSymbolFlags::Exported);
-        
+        runtimeSymbols[mangle("__vyb_int_to_string")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_int_to_string), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_float_to_string")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_float_to_string), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_bool_to_string")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_bool_to_string), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_string_to_string")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_string_to_string), llvm::JITSymbolFlags::Exported);
+
+        runtimeSymbols[mangle("__vyb_int_from_string")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_int_from_string), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_float_from_string")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_float_from_string), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_bool_from_string")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_bool_from_string), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_string_from_string")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_string_from_string), llvm::JITSymbolFlags::Exported);
+
         // Register JSON serialization functions
-        runtimeSymbols[mangle("__vyn_complex_to_json")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr(&__vyn_complex_to_json), llvm::JITSymbolFlags::Exported);
-        runtimeSymbols[mangle("__vyn_complex_from_json")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr(&__vyn_complex_from_json), llvm::JITSymbolFlags::Exported);
-        
+        runtimeSymbols[mangle("__vyb_complex_to_json")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_complex_to_json), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_complex_from_json")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_complex_from_json), llvm::JITSymbolFlags::Exported);
+
         // Register type metadata functions
-        runtimeSymbols[mangle("__vyn_register_type")] = llvm::orc::ExecutorSymbolDef(
-            llvm::orc::ExecutorAddr::fromPtr(&__vyn_register_type), llvm::JITSymbolFlags::Exported);
-        
+        runtimeSymbols[mangle("__vyb_register_type")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_register_type), llvm::JITSymbolFlags::Exported);
+
         // Add all the runtime symbols to the main dylib
         auto defineErr = mainDylib.define(llvm::orc::absoluteSymbols(runtimeSymbols));
         if (defineErr) {
@@ -857,19 +857,19 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             stream << defineErr;
             throw std::runtime_error("Failed to define runtime symbols: " + errorMsg);
         }
-        
+
         // Check main function's return type before moving module
         llvm::Function* mainFuncForTypeCheck = module->getFunction("main");
         bool mainReturnsStruct = false;
-        bool mainReturnsString = false;    // { ptr, i64 } Vyn string struct
+        bool mainReturnsString = false;    // { ptr, i64 } VyB string struct
         bool mainReturnsFailableStruct = false; // { T, i8* }
         bool mainFailablePayloadIsInt = false;
         bool mainFailablePayloadIsVoidDummy = false;
-        
+
         if (mainFuncForTypeCheck) {
             llvm::Type* returnType = mainFuncForTypeCheck->getReturnType();
             mainReturnsStruct = returnType->isStructTy();
-            // Detect if this is a Vyn string struct: { ptr, i64 } with 2 elements
+            // Detect if this is a VyB string struct: { ptr, i64 } with 2 elements
             if (mainReturnsStruct) {
                 llvm::StructType* st = llvm::cast<llvm::StructType>(returnType);
                 if (st->getNumElements() == 2) {
@@ -885,7 +885,7 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
                 }
             }
         }
-        
+
         // Apply IR optimizations before JIT execution (default -O2 for JIT)
         // Note: We need a target machine for optimization, but JIT uses default target
         std::string targetTriple = llvm::sys::getDefaultTargetTriple();
@@ -895,7 +895,7 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             std::cerr << "Warning: Could not create target for optimization: " << error << std::endl;
         } else {
             llvm::TargetOptions opt;
-            auto targetMachine = target->createTargetMachine(targetTriple, "generic", "", 
+            auto targetMachine = target->createTargetMachine(targetTriple, "generic", "",
                                                              opt, std::optional<llvm::Reloc::Model>());
             if (targetMachine) {
                 module->setDataLayout(targetMachine->createDataLayout());
@@ -903,7 +903,7 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
                 delete targetMachine;
             }
         }
-        
+
         // Add the module to the JIT
         auto tsm = llvm::orc::ThreadSafeModule(std::move(module), std::move(context));
         auto addErr = jit->addIRModule(std::move(tsm));
@@ -913,29 +913,29 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             stream << addErr;
             throw std::runtime_error("Failed to add module to JIT: " + errorMsg);
         }
-        VYN_CDBG << "ORC JIT execution engine created successfully" << std::endl;
-        
+        VYB_CDBG << "ORC JIT execution engine created successfully" << std::endl;
+
         // Call type registration function before main (simulates global constructors)
-        auto registerTypesResult = jit->lookup("__vyn_register_all_types");
+        auto registerTypesResult = jit->lookup("__vyb_register_all_types");
         if (registerTypesResult) {
             typedef void (*RegisterTypesFuncType)();
             RegisterTypesFuncType registerFunc = reinterpret_cast<RegisterTypesFuncType>(
                 static_cast<void*>(registerTypesResult->toPtr<void*>()));
             registerFunc();
-            VYN_CDBG << "Type metadata registered successfully" << std::endl;
+            VYB_CDBG << "Type metadata registered successfully" << std::endl;
         } else {
-            VYN_CDBG << "No type registration function found (no custom types in program)" << std::endl;
+            VYB_CDBG << "No type registration function found (no custom types in program)" << std::endl;
         }
-        
+
         // Look up the main function symbol
         auto symbolResult = jit->lookup("main");
         if (!symbolResult) {
             std::cerr << "Error: Could not find main function" << std::endl;
             return 1;
         }
-        
+
         auto executorAddr = *symbolResult;
-        
+
         // Check if return type is a struct (for String returns handled specially)
         if (mainReturnsStruct) {
             if (mainReturnsFailableStruct) {
@@ -946,7 +946,7 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
                         static_cast<void*>(executorAddr.toPtr<void*>()));
                     FailableVoidMainResult result = fMain();
                     if (result.error != nullptr) {
-                        __vyn_runtime_untrapped_error(result.error);
+                        __vyb_runtime_untrapped_error(result.error);
                     }
                     return 0;
                 }
@@ -957,7 +957,7 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
                         static_cast<void*>(executorAddr.toPtr<void*>()));
                     FailableIntMainResult result = fMain();
                     if (result.error != nullptr) {
-                        __vyn_runtime_untrapped_error(result.error);
+                        __vyb_runtime_untrapped_error(result.error);
                     }
                     return 0;
                 }
@@ -965,11 +965,11 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             if (mainReturnsString) {
                 // Single String return: call as struct { char*, int64_t } returning function
                 // On x86_64 SysV ABI, { ptr, i64 } is returned in registers (rax + rdx)
-                struct VynStringResult { const char* ptr; int64_t len; };
-                typedef VynStringResult (*StringMainFuncType)();
+                struct VyBStringResult { const char* ptr; int64_t len; };
+                typedef VyBStringResult (*StringMainFuncType)();
                 StringMainFuncType strMainFunc = reinterpret_cast<StringMainFuncType>(
                     static_cast<void*>(executorAddr.toPtr<void*>()));
-                VynStringResult result = strMainFunc();
+                VyBStringResult result = strMainFunc();
                 if (result.ptr) {
                     // Output as JSON-encoded string with quotes
                     std::cout << "\"" << result.ptr << "\"" << std::endl;
@@ -990,7 +990,7 @@ int run_vyn_code(const std::string& source, const std::string& fileName, bool ge
             return 0;
         }
     } catch (const std::exception& e) {
-        std::cerr << "Error running Vyn code: " << e.what() << std::endl;
+        std::cerr << "Error running VyB code: " << e.what() << std::endl;
         throw; // Re-throw the exception to allow calling code to handle errors
     }
 }
@@ -1103,24 +1103,24 @@ int main(int argc, char* argv[]) {
             if (i + 1 < argc) {
                 std::string spec_str = argv[++i];
                 if (spec_str == "all") {
-                    vyn::g_make_all_parser_verbose = true;
+                    vyb::g_make_all_parser_verbose = true;
                 } else {
                     size_t start = 0;
                     size_t end = spec_str.find(',');
                     while (end != std::string::npos) {
-                        vyn::g_verbose_parser_test_specifiers.insert(spec_str.substr(start, end - start));
+                        vyb::g_verbose_parser_test_specifiers.insert(spec_str.substr(start, end - start));
                         start = end + 1;
                         end = spec_str.find(',', start);
                     }
-                    vyn::g_verbose_parser_test_specifiers.insert(spec_str.substr(start));
+                    vyb::g_verbose_parser_test_specifiers.insert(spec_str.substr(start));
                 }
             } else {
                 std::cerr << "Warning: --debug-parser-verbose requires an argument." << std::endl;
             }
         } else if (arg == "--no-parser-debug-output") {
-            vyn::g_suppress_all_parser_debug_output = true;
+            vyb::g_suppress_all_parser_debug_output = true;
         } else if (arg == "--debug-codegen") {
-            vyn::g_debug_codegen = true;
+            vyb::g_debug_codegen = true;
         }
         else if (test_mode_active || arg[0] == '-' || arg[0] == '+' || arg[0] == '[') {
             // In test mode, or it's a Catch2 flag/tag/filter — pass it along
@@ -1132,7 +1132,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (!test_mode_active && (g_make_all_tests_verbose || !g_verbose_test_specifiers.empty() || g_suppress_all_debug_output ||
-                              vyn::g_make_all_parser_verbose || !vyn::g_verbose_parser_test_specifiers.empty() || vyn::g_suppress_all_parser_debug_output)) {
+                              vyb::g_make_all_parser_verbose || !vyb::g_verbose_parser_test_specifiers.empty() || vyb::g_suppress_all_parser_debug_output)) {
          std::cerr << "Warning: Debug verbosity flags (--debug-verbose, --no-debug-output, --debug-parser-verbose, --no-parser-debug-output) are intended for use with --test mode." << std::endl;
     }
 
@@ -1142,7 +1142,7 @@ int main(int argc, char* argv[]) {
     if (exePathError) {
         g_module_parse_options.executablePath = argv[0];
     }
-    
+
     // Convert std::vector<std::string> to char* array for Catch2
     std::vector<char*> C_catch_args;
     for(const auto& s : catch_args) {
@@ -1159,7 +1159,7 @@ int main(int argc, char* argv[]) {
     if (!input_files.empty()) {
         // Use the first input file collected during argument parsing
         std::string filename = input_files[0];
-        VYN_CDBG << "Processing file: " << filename << std::endl;
+        VYB_CDBG << "Processing file: " << filename << std::endl;
         try {
             // Read the source file
             std::ifstream file(filename);
@@ -1172,24 +1172,24 @@ int main(int argc, char* argv[]) {
 
             // In parse-only mode, just tokenize and parse
             if (parse_only_mode) {
-                auto ast = parse_vyn_module(source, filename);
-                
+                auto ast = parse_vyb_module(source, filename);
+
                 std::cout << "Parse completed successfully" << std::endl;
                 return 0;
             }
-            
+
             // Generate LLVM IR to a file if requested
             if (emit_llvm_ir) {
-                auto ast = parse_vyn_module(source, filename);
-                
-                vyn::Driver driver;
-                
+                auto ast = parse_vyb_module(source, filename);
+
+                vyb::Driver driver;
+
                 // CRITICAL: Run semantic analysis to mark functions with needsErrorReturn
                 std::cout << "Running semantic analysis..." << std::endl;
-                vyn::SemanticAnalyzer semanticAnalyzer(driver);
+                vyb::SemanticAnalyzer semanticAnalyzer(driver);
                 driver.setSemanticAnalyzer(&semanticAnalyzer);
                 semanticAnalyzer.analyze(ast.get());
-                
+
                 // Check for semantic errors
                 const auto& semanticErrors = semanticAnalyzer.getErrors();
                 if (!semanticErrors.empty()) {
@@ -1200,26 +1200,26 @@ int main(int argc, char* argv[]) {
                     return 1;
                 }
                 std::cout << "Semantic analysis completed" << std::endl;
-                
-                vyn::LLVMCodegen codegen(driver);
-                
+
+                vyb::LLVMCodegen codegen(driver);
+
                 // Output file: <input>.ll
                 std::string out_ll = filename;
                 size_t dot = out_ll.find_last_of('.');
                 if (dot != std::string::npos) out_ll = out_ll.substr(0, dot);
                 out_ll += ".ll";
-                
+
                 codegen.generate(ast.get(), out_ll);
                 std::cout << "LLVM IR generated to " << out_ll << std::endl;
                 return 0;
             }
-            
+
             // In semantic-only mode, run semantic analysis without execution
             if (semantic_only_mode) {
-                auto ast = parse_vyn_module(source, filename);
-                
-                vyn::Driver driver;
-                vyn::SemanticAnalyzer semanticAnalyzer(driver);
+                auto ast = parse_vyb_module(source, filename);
+
+                vyb::Driver driver;
+                vyb::SemanticAnalyzer semanticAnalyzer(driver);
                 driver.setSemanticAnalyzer(&semanticAnalyzer);  // Make semantic data available
                 semanticAnalyzer.analyze(ast.get());
 
@@ -1231,11 +1231,11 @@ int main(int argc, char* argv[]) {
                     }
                     return 1;
                 }
-                
+
                 std::cout << "Semantic analysis completed successfully" << std::endl;
                 return 0;
             }
-            
+
             // Compile mode: emit object file
             if (compile_mode) {
                 std::string objFile = compile_output;
@@ -1248,9 +1248,9 @@ int main(int argc, char* argv[]) {
                     }
                     objFile += ".o";
                 }
-                return compile_vyn_to_object(source, filename, objFile, optimization_level);
+                return compile_vyb_to_object(source, filename, objFile, optimization_level);
             }
-            
+
             // Build mode: compile and link to executable
             if (build_mode) {
                 std::string executableName = build_output;
@@ -1262,35 +1262,35 @@ int main(int argc, char* argv[]) {
                         executableName = executableName.substr(0, dot);
                     }
                 }
-                
+
                 // Step 1: Compile to object file
                 std::string objFile = executableName + ".o";
                 std::cout << "Step 1: Compiling to object file..." << std::endl;
-                int compileResult = compile_vyn_to_object(source, filename, objFile, optimization_level);
+                int compileResult = compile_vyb_to_object(source, filename, objFile, optimization_level);
                 if (compileResult != 0) {
                     std::cerr << "Compilation failed" << std::endl;
                     return compileResult;
                 }
-                
+
                 // Step 2: Link to executable
                 std::cout << "\nStep 2: Linking to executable..." << std::endl;
                 std::vector<std::string> objectFiles = { objFile };
-                int linkResult = link_vyn_executable(objectFiles, executableName, link_libraries, static_link);
-                
+                int linkResult = link_vyb_executable(objectFiles, executableName, link_libraries, static_link);
+
                 if (linkResult == 0) {
                     std::cout << "\n✅ Build successful!" << std::endl;
                     std::cout << "Executable: " << executableName << std::endl;
                     std::cout << "Run with: ./" << executableName << std::endl;
                 }
-                
+
                 return linkResult;
             }
-            
+
             // Default behavior: JIT compile and execute the code
             if (execute_jit) {
                 try {
-                    VYN_CDBG << "Starting JIT execution of " << filename << std::endl;
-                    int result = run_vyn_code(source, filename, emit_llvm_ir);
+                    VYB_CDBG << "Starting JIT execution of " << filename << std::endl;
+                    int result = run_vyb_code(source, filename, emit_llvm_ir);
                     return result;
                 } catch (const std::exception& e) {
                     std::cerr << "Error during code execution: " << e.what() << std::endl;
@@ -1300,10 +1300,10 @@ int main(int argc, char* argv[]) {
 
             // --no-execute: parse + semantic analysis to validate the file without running it
             {
-                auto ast = parse_vyn_module(source, filename);
+                auto ast = parse_vyb_module(source, filename);
 
-                vyn::Driver driver;
-                vyn::SemanticAnalyzer semanticAnalyzer(driver);
+                vyb::Driver driver;
+                vyb::SemanticAnalyzer semanticAnalyzer(driver);
                 driver.setSemanticAnalyzer(&semanticAnalyzer);
                 semanticAnalyzer.analyze(ast.get());
 
@@ -1313,7 +1313,7 @@ int main(int argc, char* argv[]) {
                     for (const auto& err : semanticErrors) {
                         std::cerr << "  " << err << std::endl;
                     }
-                    std::cerr << "Error running Vyn code: Semantic analysis failed with "
+                    std::cerr << "Error running VyB code: Semantic analysis failed with "
                               << semanticErrors.size() << " error(s)" << std::endl;
                     return 1;
                 }
@@ -1324,7 +1324,7 @@ int main(int argc, char* argv[]) {
             return 1;
         }
     } else {
-        std::cout << "Vyn Compiler - Usage: " << argv[0] << " <filename> [options] | --test [catch2_options]" << std::endl;
+        std::cout << "VyB Compiler - Usage: " << argv[0] << " <filename> [options] | --test [catch2_options]" << std::endl;
         std::cout << "Options:" << std::endl;
         std::cout << "  --parse-only          Stop after parsing (validates syntax only)" << std::endl;
         std::cout << "  --semantic-only       Stop after semantic analysis" << std::endl;
@@ -1338,12 +1338,12 @@ int main(int argc, char* argv[]) {
         std::cout << "  --no-execute          Do not execute the code (JIT is on by default)" << std::endl;
         std::cout << std::endl;
         std::cout << "Examples:" << std::endl;
-        std::cout << "  " << argv[0] << " program.vyn                    # JIT compile and run" << std::endl;
-        std::cout << "  " << argv[0] << " program.vyn --build myapp      # Build executable" << std::endl;
-        std::cout << "  " << argv[0] << " program.vyn --build myapp --link m  # Build and link libm" << std::endl;
-        std::cout << "  " << argv[0] << " app.vyn --module-path modules   # Add module search path" << std::endl;
-        std::cout << "  " << argv[0] << " program.vyn -b myapp -O3       # Build with max optimization" << std::endl;
-        std::cout << "  " << argv[0] << " program.vyn --compile prog.o   # Compile to object file" << std::endl;
+        std::cout << "  " << argv[0] << " program.vyb                    # JIT compile and run" << std::endl;
+        std::cout << "  " << argv[0] << " program.vyb --build myapp      # Build executable" << std::endl;
+        std::cout << "  " << argv[0] << " program.vyb --build myapp --link m  # Build and link libm" << std::endl;
+        std::cout << "  " << argv[0] << " app.vyb --module-path modules   # Add module search path" << std::endl;
+        std::cout << "  " << argv[0] << " program.vyb -b myapp -O3       # Build with max optimization" << std::endl;
+        std::cout << "  " << argv[0] << " program.vyb --compile prog.o   # Compile to object file" << std::endl;
         std::cout << std::endl;
         std::cout << "Test Mode Options:" << std::endl;
         std::cout << "  --test                Run test suite" << std::endl;

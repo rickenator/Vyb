@@ -1,8 +1,8 @@
 \
-#include "vyn/vre/llvm/codegen.hpp"
-#include "vyn/parser/ast.hpp"
-#include "vyn/parser/source_location.hpp" // For vyn::SourceLocation
-#include "vyn/runtime/async_runtime.hpp" // For async runtime integration
+#include "vyb/vre/llvm/codegen.hpp"
+#include "vyb/parser/ast.hpp"
+#include "vyb/parser/source_location.hpp" // For vyb::SourceLocation
+#include "vyb/runtime/async_runtime.hpp" // For async runtime integration
 
 // LLVM Headers
 #include "llvm/ADT/APFloat.h"
@@ -34,7 +34,7 @@
 #include <system_error> // For std::error_code
 #include <vector>
 
-using namespace vyn;
+using namespace vyb;
 
 // Error Logging Utility
 void LLVMCodegen::logError(const SourceLocation& loc, const std::string& message) {
@@ -54,7 +54,7 @@ llvm::StructType* LLVMCodegen::getOrCreateRTTIStructType() {
         int32Type,
         int8PtrType
     };
-    rttiStructType = llvm::StructType::create(*context, rttiFields, "vyn.RTTI");
+    rttiStructType = llvm::StructType::create(*context, rttiFields, "vyb.RTTI");
     return rttiStructType;
 }
 
@@ -71,7 +71,7 @@ llvm::Value* LLVMCodegen::generateRTTIObject(const std::string& typeName, int ty
 LLVMCodegen::LLVMCodegen(Driver& driver)
     : driver_(driver),
       context(std::make_unique<llvm::LLVMContext>()),
-      module(std::make_unique<llvm::Module>("VynModule", *this->context)), 
+      module(std::make_unique<llvm::Module>("VyBModule", *this->context)),
       builder(std::make_unique<llvm::IRBuilder<>>(*this->context)),
       debugBuilder(std::make_unique<llvm::DIBuilder>(*module)),
       debugCompileUnit(nullptr),
@@ -81,7 +81,7 @@ LLVMCodegen::LLVMCodegen(Driver& driver)
       currentFunction(nullptr),
       currentClassType(nullptr),
       m_currentLLVMValue(nullptr),
-      m_currentVynModule(nullptr)
+      m_currentVyBModule(nullptr)
 {
     voidType = llvm::Type::getVoidTy(*this->context);
     int1Type = llvm::Type::getInt1Ty(*this->context);
@@ -92,14 +92,14 @@ LLVMCodegen::LLVMCodegen(Driver& driver)
     doubleType = llvm::Type::getDoubleTy(*this->context);
     int8PtrType = llvm::PointerType::getUnqual(int8Type);
 
-    rttiStructType = getOrCreateRTTIStructType(); 
+    rttiStructType = getOrCreateRTTIStructType();
 
     currentLoopContext = {nullptr, nullptr, nullptr, nullptr};
 }
 
 LLVMCodegen::~LLVMCodegen() = default;
 
-void LLVMCodegen::generate(vyn::ast::Module* astModule, const std::string& outputFilename) {
+void LLVMCodegen::generate(vyb::ast::Module* astModule, const std::string& outputFilename) {
     if (!astModule) {
         logError(SourceLocation(), "Cannot generate code: AST module is null.");
         return;
@@ -109,7 +109,7 @@ void LLVMCodegen::generate(vyn::ast::Module* astModule, const std::string& outpu
     initializeDebugInfo(outputFilename);
 
     astModule->accept(*this);
-    
+
     // Ensure all core intrinsic functions are declared in the module
     // This prevents JIT runtime errors when functions are not found
     ensureCoreIntrinsicFunctions();
@@ -119,20 +119,20 @@ void LLVMCodegen::generate(vyn::ast::Module* astModule, const std::string& outpu
 
     // DEBUG: Print divide function RIGHT before verification
     if (llvm::Function* divideFunc = module->getFunction("divide")) {
-        VYN_CDBG << "DEBUG: divide function RIGHT BEFORE VERIFICATION:" << std::endl;
+        VYB_CDBG << "DEBUG: divide function RIGHT BEFORE VERIFICATION:" << std::endl;
         divideFunc->print(llvm::outs());
         std::cout << std::endl;
     }
 
     bool verificationFailed = llvm::verifyModule(*module, &llvm::errs());
-    
+
     // DEBUG: Print divide function RIGHT after verification
     if (llvm::Function* divideFunc = module->getFunction("divide")) {
-        VYN_CDBG << "DEBUG: divide function RIGHT AFTER VERIFICATION:" << std::endl;
+        VYB_CDBG << "DEBUG: divide function RIGHT AFTER VERIFICATION:" << std::endl;
         divideFunc->print(llvm::outs());
         std::cout << std::endl;
     }
-    
+
     if (verificationFailed) {
         logError(SourceLocation(), "LLVM module verification failed.");
         // Still print the IR for debugging purposes
@@ -150,7 +150,7 @@ void LLVMCodegen::generate(vyn::ast::Module* astModule, const std::string& outpu
         return;
     }
 
-    if (vyn::g_debug_codegen) {
+    if (vyb::g_debug_codegen) {
         std::cerr << "DEBUG: Functions in module before printing IR:" << std::endl;
         for (llvm::Function& func : module->functions()) {
             std::cerr << "  - " << func.getName().str() << " (blocks: " << func.size() << ")" << std::endl;
@@ -169,55 +169,55 @@ void LLVMCodegen::dumpIR() const {
     }
 }
 
-void LLVMCodegen::visit(vyn::ast::Module* node) {
+void LLVMCodegen::visit(vyb::ast::Module* node) {
     if (!node) return;
 
-    VYN_CDBG << "DEBUG: Module visitor called with " << node->body.size() << " statements" << std::endl;
+    VYB_CDBG << "DEBUG: Module visitor called with " << node->body.size() << " statements" << std::endl;
 
-    vyn::ast::Module* previousModule = m_currentVynModule;
-    m_currentVynModule = node;
+    vyb::ast::Module* previousModule = m_currentVyBModule;
+    m_currentVyBModule = node;
 
     // FIRST PASS: Process all struct declarations to establish type information
-    VYN_CDBG << "DEBUG: First pass - processing struct declarations" << std::endl;
+    VYB_CDBG << "DEBUG: First pass - processing struct declarations" << std::endl;
     for (size_t i = 0; i < node->body.size(); ++i) {
         const auto& stmt = node->body[i];
-        if (stmt && stmt->getType() == vyn::ast::NodeType::STRUCT_DECLARATION) {
-            VYN_CDBG << "DEBUG: Processing struct declaration statement " << i << std::endl;
+        if (stmt && stmt->getType() == vyb::ast::NodeType::STRUCT_DECLARATION) {
+            VYB_CDBG << "DEBUG: Processing struct declaration statement " << i << std::endl;
             stmt->accept(*this);
         }
     }
 
     // SECOND PASS: Create forward declarations for all functions
-    VYN_CDBG << "DEBUG: Second pass - creating function forward declarations" << std::endl;
+    VYB_CDBG << "DEBUG: Second pass - creating function forward declarations" << std::endl;
     for (size_t i = 0; i < node->body.size(); ++i) {
         const auto& stmt = node->body[i];
-        if (stmt && stmt->getType() == vyn::ast::NodeType::FUNCTION_DECLARATION) {
-            VYN_CDBG << "DEBUG: Creating forward declaration for function statement " << i << std::endl;
-            vyn::ast::FunctionDeclaration* funcDecl = static_cast<vyn::ast::FunctionDeclaration*>(stmt.get());
+        if (stmt && stmt->getType() == vyb::ast::NodeType::FUNCTION_DECLARATION) {
+            VYB_CDBG << "DEBUG: Creating forward declaration for function statement " << i << std::endl;
+            vyb::ast::FunctionDeclaration* funcDecl = static_cast<vyb::ast::FunctionDeclaration*>(stmt.get());
             createFunctionForwardDeclaration(funcDecl);
         }
     }
 
     // THIRD PASS: Process all remaining statements (skip structs already processed in first pass)
-    VYN_CDBG << "DEBUG: Third pass - processing all statements" << std::endl;
+    VYB_CDBG << "DEBUG: Third pass - processing all statements" << std::endl;
     for (size_t i = 0; i < node->body.size(); ++i) {
         const auto& stmt = node->body[i];
         if (stmt) {
             // Skip struct declarations since they were already processed in first pass
-            if (stmt->getType() == vyn::ast::NodeType::STRUCT_DECLARATION) {
-                VYN_CDBG << "DEBUG: Skipping struct declaration statement " << i << " (already processed in first pass)" << std::endl;
+            if (stmt->getType() == vyb::ast::NodeType::STRUCT_DECLARATION) {
+                VYB_CDBG << "DEBUG: Skipping struct declaration statement " << i << " (already processed in first pass)" << std::endl;
                 continue;
             }
-            VYN_CDBG << "DEBUG: Processing module statement " << i << " (type: " << static_cast<int>(stmt->getType()) << ")" << std::endl;
+            VYB_CDBG << "DEBUG: Processing module statement " << i << " (type: " << static_cast<int>(stmt->getType()) << ")" << std::endl;
             stmt->accept(*this);
         }
     }
-    
+
     // FOURTH PASS: Register all type metadata for runtime JSON serialization
-    VYN_CDBG << "DEBUG: Fourth pass - registering type metadata" << std::endl;
+    VYB_CDBG << "DEBUG: Fourth pass - registering type metadata" << std::endl;
     registerTypeMetadata();
 
-    m_currentVynModule = previousModule;
+    m_currentVyBModule = previousModule;
     m_currentLLVMValue = nullptr;
 }
 
@@ -227,68 +227,68 @@ void LLVMCodegen::initializeDebugInfo(const std::string& filename) {
     if (!debugBuilder) {
         debugBuilder = std::make_unique<llvm::DIBuilder>(*module);
     }
-    
+
     // Create debug file
     llvm::SmallString<256> currentDir;
     llvm::sys::fs::current_path(currentDir);
     llvm::SmallString<256> absolutePath(filename);
     llvm::sys::fs::make_absolute(currentDir, absolutePath);
-    
+
     std::string directory = llvm::sys::path::parent_path(absolutePath).str();
     std::string fileName = llvm::sys::path::filename(absolutePath).str();
-    
+
     debugFile = debugBuilder->createFile(fileName, directory);
-    
+
     // Create compile unit
     debugCompileUnit = debugBuilder->createCompileUnit(
         llvm::dwarf::DW_LANG_C_plus_plus,  // Use C++ as closest language
         debugFile,
-        "Vyn Compiler",      // Producer
+        "VyB Compiler",      // Producer
         false,               // isOptimized
         "",                  // Flags
         0                    // Runtime version
     );
-    
+
     // Set debug info version
     module->addModuleFlag(llvm::Module::Warning, "Debug Info Version", llvm::DEBUG_METADATA_VERSION);
     module->addModuleFlag(llvm::Module::Warning, "Dwarf Version", 4);
-    
+
     // Push compile unit as initial scope
     debugScopeStack.push(debugCompileUnit);
-    
-    VYN_CDBG << "DEBUG: Initialized debug info for file: " << fileName << " in directory: " << directory << std::endl;
+
+    VYB_CDBG << "DEBUG: Initialized debug info for file: " << fileName << " in directory: " << directory << std::endl;
 }
 
 void LLVMCodegen::finalizeDebugInfo() {
     if (debugBuilder) {
         debugBuilder->finalize();
-        VYN_CDBG << "DEBUG: Finalized debug information" << std::endl;
+        VYB_CDBG << "DEBUG: Finalized debug information" << std::endl;
     }
 }
 
-llvm::DISubprogram* LLVMCodegen::createDebugFunctionInfo(llvm::Function* function, const std::string& name, 
+llvm::DISubprogram* LLVMCodegen::createDebugFunctionInfo(llvm::Function* function, const std::string& name,
                                                         const SourceLocation& loc, bool isAsync) {
     if (!debugBuilder || !debugFile) {
         return nullptr;
     }
-    
+
     // Create function type for debug info
     llvm::SmallVector<llvm::Metadata*, 8> paramTypes;
-    
+
     // Add return type (first element)
     llvm::DIType* returnType = getDebugType(function->getReturnType(), "return");
     paramTypes.push_back(returnType);
-    
+
     // Add parameter types
     for (auto& arg : function->args()) {
         llvm::DIType* paramType = getDebugType(arg.getType(), arg.getName().str());
         paramTypes.push_back(paramType);
     }
-    
+
     llvm::DISubroutineType* functionType = debugBuilder->createSubroutineType(
         debugBuilder->getOrCreateTypeArray(paramTypes)
     );
-    
+
     // Create subprogram
     std::string displayName = isAsync ? ("async " + name) : name;
     llvm::DISubprogram* subprogram = debugBuilder->createFunction(
@@ -302,16 +302,16 @@ llvm::DISubprogram* LLVMCodegen::createDebugFunctionInfo(llvm::Function* functio
         llvm::DINode::FlagPrototyped, // Flags
         llvm::DISubprogram::SPFlagDefinition
     );
-    
+
     // Set subprogram for the function
     function->setSubprogram(subprogram);
-    
+
     // Push function scope
     debugScopeStack.push(subprogram);
-    
-    VYN_CDBG << "DEBUG: Created debug info for " << (isAsync ? "async " : "") << "function: " << name 
+
+    VYB_CDBG << "DEBUG: Created debug info for " << (isAsync ? "async " : "") << "function: " << name
               << " at line " << loc.line << std::endl;
-    
+
     return subprogram;
 }
 
@@ -319,7 +319,7 @@ void LLVMCodegen::setDebugLocation(const SourceLocation& loc) {
     if (!debugBuilder || debugScopeStack.empty()) {
         return;
     }
-    
+
     llvm::DIScope* scope = debugScopeStack.top();
     llvm::DILocation* debugLoc = llvm::DILocation::get(*context, loc.line, loc.column, scope);
     builder->SetCurrentDebugLocation(debugLoc);
@@ -341,7 +341,7 @@ llvm::DIType* LLVMCodegen::getDebugType(llvm::Type* llvmType, const std::string&
     if (!debugBuilder) {
         return nullptr;
     }
-    
+
     if (llvmType->isVoidTy()) {
         return nullptr; // Void type
     } else if (llvmType->isIntegerTy(1)) {
@@ -363,7 +363,7 @@ llvm::DIType* LLVMCodegen::getDebugType(llvm::Type* llvmType, const std::string&
     } else if (llvmType->isStructTy()) {
         llvm::StructType* structType = llvm::cast<llvm::StructType>(llvmType);
         std::string structName = structType->hasName() ? structType->getName().str() : ("struct_" + typeName);
-        
+
         // Create a basic struct type for now
         return debugBuilder->createStructType(
             debugFile,                          // Scope
@@ -377,27 +377,27 @@ llvm::DIType* LLVMCodegen::getDebugType(llvm::Type* llvmType, const std::string&
             llvm::DINodeArray()                 // Elements (empty for now)
         );
     }
-    
+
     // Default case: create an unspecified type
     return debugBuilder->createUnspecifiedType(typeName.empty() ? "unknown" : typeName);
 }
 
-llvm::DILocalVariable* LLVMCodegen::createDebugVariableInfo(const std::string& varName, llvm::DIType* debugType, 
+llvm::DILocalVariable* LLVMCodegen::createDebugVariableInfo(const std::string& varName, llvm::DIType* debugType,
                                                            const SourceLocation& loc, llvm::DIScope* scope) {
     if (!debugBuilder || !debugType) {
         return nullptr;
     }
-    
+
     // Use provided scope or current scope from stack
     llvm::DIScope* currentScope = scope;
     if (!currentScope && !debugScopeStack.empty()) {
         currentScope = debugScopeStack.top();
     }
-    
+
     if (!currentScope) {
         return nullptr;
     }
-    
+
     // Create local variable debug info
     llvm::DILocalVariable* debugVar = debugBuilder->createAutoVariable(
         currentScope,           // Scope
@@ -408,17 +408,17 @@ llvm::DILocalVariable* LLVMCodegen::createDebugVariableInfo(const std::string& v
         true,                  // Always preserve
         llvm::DINode::FlagZero // Flags
     );
-    
-    VYN_CDBG << "DEBUG: Created debug info for variable '" << varName << "' at line " << loc.line << std::endl;
+
+    VYB_CDBG << "DEBUG: Created debug info for variable '" << varName << "' at line " << loc.line << std::endl;
     return debugVar;
 }
 
-void LLVMCodegen::insertDebugVariableDeclaration(llvm::DILocalVariable* debugVar, llvm::Value* alloca, 
+void LLVMCodegen::insertDebugVariableDeclaration(llvm::DILocalVariable* debugVar, llvm::Value* alloca,
                                                  const SourceLocation& loc) {
     if (!debugBuilder || !debugVar || !alloca) {
         return;
     }
-    
+
     // Insert a debug declaration at the current insertion point
     debugBuilder->insertDeclare(
         alloca,                                    // Storage
@@ -432,8 +432,8 @@ void LLVMCodegen::insertDebugVariableDeclaration(llvm::DILocalVariable* debugVar
         ),
         builder->GetInsertBlock()                  // Basic block
     );
-    
-    VYN_CDBG << "DEBUG: Inserted debug declaration for variable '" << debugVar->getName().str() 
+
+    VYB_CDBG << "DEBUG: Inserted debug declaration for variable '" << debugVar->getName().str()
               << "' at line " << loc.line << " column " << loc.column << std::endl;
 }
 
@@ -443,33 +443,33 @@ void LLVMCodegen::initializeAsyncStateDebugInfo(const std::string& functionName,
     if (!debugBuilder || !currentAsyncState.isAsync) {
         return;
     }
-    
+
     // Create debug variables for async state tracking
     if (currentAsyncState.stateStructType && currentAsyncState.stateStructInstance) {
         // Create debug info for the state variable
         llvm::DIType* stateType = getDebugType(int32Type, "AsyncState");
         currentAsyncState.stateDebugVar = createDebugVariableInfo(
             functionName + "_state", stateType, loc);
-        
+
         if (currentAsyncState.stateDebugVar) {
-            insertDebugVariableDeclaration(currentAsyncState.stateDebugVar, 
+            insertDebugVariableDeclaration(currentAsyncState.stateDebugVar,
                                            currentAsyncState.stateStructInstance, loc);
         }
     }
-    
-    // Create debug info for the future result variable  
+
+    // Create debug info for the future result variable
     if (currentAsyncState.futureValue) {
         llvm::DIType* futureType = getDebugType(currentAsyncState.futureValue->getType(), "Future");
         currentAsyncState.futureDebugVar = createDebugVariableInfo(
             functionName + "_future", futureType, loc);
-        
+
         if (currentAsyncState.futureDebugVar && currentAsyncState.futureValue) {
-            insertDebugVariableDeclaration(currentAsyncState.futureDebugVar, 
+            insertDebugVariableDeclaration(currentAsyncState.futureDebugVar,
                                            currentAsyncState.futureValue, loc);
         }
     }
-    
-    VYN_CDBG << "DEBUG: Initialized async state debug info for function '" << functionName 
+
+    VYB_CDBG << "DEBUG: Initialized async state debug info for function '" << functionName
               << "' at line " << loc.line << std::endl;
 }
 
@@ -477,7 +477,7 @@ void LLVMCodegen::createSuspensionPointDebugInfo(int stateNumber, const SourceLo
     if (!debugBuilder || !currentAsyncState.isAsync) {
         return;
     }
-    
+
     // Create debug location for this suspension point
     llvm::DILocation* suspensionLocation = llvm::DILocation::get(
         *context,
@@ -485,12 +485,12 @@ void LLVMCodegen::createSuspensionPointDebugInfo(int stateNumber, const SourceLo
         loc.column,
         debugScopeStack.empty() ? debugCompileUnit : debugScopeStack.top()
     );
-    
+
     // Store suspension point information
     currentAsyncState.suspensionPointLocations[stateNumber] = suspensionLocation;
     currentAsyncState.stateDescriptions[stateNumber] = description;
-    
-    VYN_CDBG << "DEBUG: Created suspension point " << stateNumber << " (" << description 
+
+    VYB_CDBG << "DEBUG: Created suspension point " << stateNumber << " (" << description
               << ") at line " << loc.line << " column " << loc.column << std::endl;
 }
 
@@ -498,21 +498,21 @@ void LLVMCodegen::insertAsyncStateTransitionDebugInfo(int fromState, int toState
     if (!debugBuilder || !currentAsyncState.isAsync) {
         return;
     }
-    
+
     // Set debug location for the state transition
     setDebugLocation(loc);
-    
+
     // Log the state transition for debugging
-    VYN_CDBG << "DEBUG: Async state transition from " << fromState << " to " << toState 
+    VYB_CDBG << "DEBUG: Async state transition from " << fromState << " to " << toState
               << " at line " << loc.line << " column " << loc.column << std::endl;
-    
+
     // Store the transition information (could be used for more sophisticated debug info later)
     auto fromDesc = currentAsyncState.stateDescriptions.find(fromState);
     auto toDesc = currentAsyncState.stateDescriptions.find(toState);
-    
-    if (fromDesc != currentAsyncState.stateDescriptions.end() && 
+
+    if (fromDesc != currentAsyncState.stateDescriptions.end() &&
         toDesc != currentAsyncState.stateDescriptions.end()) {
-        VYN_CDBG << "DEBUG: State transition: '" << fromDesc->second << "' -> '" << toDesc->second << "'" << std::endl;
+        VYB_CDBG << "DEBUG: State transition: '" << fromDesc->second << "' -> '" << toDesc->second << "'" << std::endl;
     }
 }
 
@@ -520,23 +520,23 @@ void LLVMCodegen::insertContinuationDebugMarker(int stateNumber, const SourceLoc
     if (!debugBuilder || !currentAsyncState.isAsync) {
         return;
     }
-    
+
     // Set debug location for the continuation point
     setDebugLocation(loc);
-    
+
     // Find the suspension point location if available
     auto suspensionPoint = currentAsyncState.suspensionPointLocations.find(stateNumber);
     auto stateDesc = currentAsyncState.stateDescriptions.find(stateNumber);
-    
-    VYN_CDBG << "DEBUG: Continuation point for state " << stateNumber;
+
+    VYB_CDBG << "DEBUG: Continuation point for state " << stateNumber;
     if (stateDesc != currentAsyncState.stateDescriptions.end()) {
         std::cout << " (" << stateDesc->second << ")";
     }
     std::cout << " at line " << loc.line << " column " << loc.column << std::endl;
-    
+
     if (suspensionPoint != currentAsyncState.suspensionPointLocations.end()) {
-        VYN_CDBG << "DEBUG: Resuming from suspension point at line " 
-                  << suspensionPoint->second->getLine() << " column " 
+        VYB_CDBG << "DEBUG: Resuming from suspension point at line "
+                  << suspensionPoint->second->getLine() << " column "
                   << suspensionPoint->second->getColumn() << std::endl;
     }
 }

@@ -1,9 +1,0 @@
-// @expect: fail
-// @expect-error: loc<Int>
-main()<Int> -> {
-    x<Float>; // x is Float
-    freedom {
-        p<loc<Int>> = loc(x); // Error: trying to get loc<Int> from Float
-    }
-    return 0;
-} 

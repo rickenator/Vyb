@@ -1,14 +1,14 @@
 # filepath: build.sh
 #!/bin/bash
-# Build and run Vyn compiler with optional test support
+# Build and run VyB compiler with optional test support
 
 # Define project root (use the directory containing this script)
-VYN_ROOT=$(dirname "$(readlink -f "$0")")
+VYB_ROOT=$(dirname "$(readlink -f "$0")")
 
 # Process arguments
 RUN_TESTS=0
 VERBOSE=0
-TEST_PATTERN="*.vyn"
+TEST_PATTERN="*.vyb"
 TEST_CATEGORY=""
 
 while [[ $# -gt 0 ]]; do
@@ -38,9 +38,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Clean and rebuild
-rm -rf $VYN_ROOT/build/*
-mkdir -p $VYN_ROOT/build
-cd $VYN_ROOT/build
+rm -rf $VYB_ROOT/build/*
+mkdir -p $VYB_ROOT/build
+cd $VYB_ROOT/build
 cmake ..
 make -j > build_output.log 2>&1
 
@@ -51,16 +51,16 @@ if [ $RUN_TESTS -eq 1 ]; then
     if [ $VERBOSE -eq 1 ]; then
         VERBOSITY="-v"
     fi
-    
+
     CATEGORY_FILTER=""
     if [ ! -z "$TEST_CATEGORY" ]; then
         CATEGORY_FILTER="--category $TEST_CATEGORY"
     fi
-    
+
     make run-tests ARGS="--pattern '$TEST_PATTERN' $VERBOSITY $CATEGORY_FILTER"
 elif [ ! -z "$INPUT_FILE" ]; then
     # Run the compiler on the specified file
     echo "Compiling $INPUT_FILE..."
-    cd $VYN_ROOT
-    ./build/vyn "$INPUT_FILE"
+    cd $VYB_ROOT
+    ./build/vyb "$INPUT_FILE"
 fi

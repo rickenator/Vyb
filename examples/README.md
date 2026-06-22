@@ -1,12 +1,12 @@
-# Vyn Examples
+# VyB Examples
 
-Runnable Vyn programs demonstrating the current language surface.
+Runnable VyB programs demonstrating the current language surface.
 
 ```bash
-build/vyn examples/<file>.vyn
+build/vyb examples/<file>.vyb
 ```
 
-All top-level `.vyn` files in this directory are expected to execute
+All top-level `.vyb` files in this directory are expected to execute
 successfully with the current compiler. Support modules live under
 `examples/modules/`. Heavier feature walkthroughs live in `demos/`.
 
@@ -14,26 +14,26 @@ successfully with the current compiler. Support modules live under
 
 | Example | Covers |
 |---------|--------|
-| `main.vyn` | arithmetic, structs, `Vec<T>`, `match`, strings, recursion, `defer` |
-| `sort.vyn` | insertion sort with `Vec<Int>` helper functions |
-| `quicksort.vyn` | recursive quicksort returning `Vec<Int>` |
-| `stack.vyn` | stack helpers over a struct containing `Vec<Int>` |
-| `binary_tree_clean.vyn` | flat tree-node storage and lookup with `Vec<TreeNode>` |
-| `vec_filter.vyn` | filtering values into a second vector |
-| `vec_max.vyn` | scanning a vector for a maximum value |
-| `vec_point_distance.vyn` | iterating over `Vec<Point>` structs |
-| `memory_semantics.vyn` | `freedom`, `loc<T>`, and `at(ptr)` |
-| `mild_references.vyn` | `our<T>` and `mild<T>` syntax |
-| `ffi_puts.vyn` | `extern "C"` plus `freedom`-gated calls |
-| `module_import.vyn` | local module import from `examples/modules/` |
-| `module_visibility.vyn` | `bundle(...)`, `share(...)`, and selective import aliases |
+| `main.vyb` | arithmetic, structs, `Vec<T>`, `match`, strings, recursion, `defer` |
+| `sort.vyb` | insertion sort with `Vec<Int>` helper functions |
+| `quicksort.vyb` | recursive quicksort returning `Vec<Int>` |
+| `stack.vyb` | stack helpers over a struct containing `Vec<Int>` |
+| `binary_tree_clean.vyb` | flat tree-node storage and lookup with `Vec<TreeNode>` |
+| `vec_filter.vyb` | filtering values into a second vector |
+| `vec_max.vyb` | scanning a vector for a maximum value |
+| `vec_point_distance.vyb` | iterating over `Vec<Point>` structs |
+| `memory_semantics.vyb` | `freedom`, `loc<T>`, and `at(ptr)` |
+| `mild_references.vyb` | `our<T>` and `mild<T>` syntax |
+| `ffi_puts.vyb` | `extern "C"` plus `freedom`-gated calls |
+| `module_import.vyb` | local module import from `examples/modules/` |
+| `module_visibility.vyb` | `bundle(...)`, `share(...)`, and selective import aliases |
 
 ### Module path demo
 
 This repository also includes a multi-file `--module-path` demo:
 
 ```bash
-build/vyn examples/module_path_demo/main.vyn --module-path examples/module_path_demo/modules
+build/vyb examples/module_path_demo/main.vyb --module-path examples/module_path_demo/modules
 ```
 
 ## Known Boundaries

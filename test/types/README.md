@@ -1,24 +1,24 @@
 # Primitive Type Tests
 
-This directory contains comprehensive tests for all Vyn primitive types.
+This directory contains comprehensive tests for all VyB primitive types.
 
 ## Test Files
 
 ### Integer Types
-- **`sized_integers_test.vyn`** - Tests signed integers: Int8, Int16, Int32, Int64 (Int)
-- **`unsigned_integers_test.vyn`** - Tests unsigned integers: UInt8, UInt16, UInt32, UInt64
+- **`sized_integers_test.vyb`** - Tests signed integers: Int8, Int16, Int32, Int64 (Int)
+- **`unsigned_integers_test.vyb`** - Tests unsigned integers: UInt8, UInt16, UInt32, UInt64
 
 ### Floating Point Types
-- **`float_types_test.vyn`** - Tests Float32 and Float64 (Float)
+- **`float_types_test.vyb`** - Tests Float32 and Float64 (Float)
 
 ### Character Types
-- **`char_types_test.vyn`** - Tests Char (UTF-8 code unit) and Rune (Unicode code point)
+- **`char_types_test.vyb`** - Tests Char (UTF-8 code unit) and Rune (Unicode code point)
 
 ### Binary Data
-- **`bytes_type_test.vyn`** - Tests Bytes type for raw binary data
+- **`bytes_type_test.vyb`** - Tests Bytes type for raw binary data
 
 ### Comprehensive
-- **`all_primitives_test.vyn`** - Tests all primitive types together
+- **`all_primitives_test.vyb`** - Tests all primitive types together
 
 ## Type System Reference
 
@@ -61,31 +61,31 @@ This directory contains comprehensive tests for all Vyn primitive types.
 
 ```bash
 # Run all type tests
-for test in test/types/*.vyn; do
+for test in test/types/*.vyb; do
     echo "Testing: $test"
-    build/vyn "$test"
+    build/vyb "$test"
 done
 
 # Run specific test
-build/vyn test/types/sized_integers_test.vyn  # Should exit with code 120
-build/vyn test/types/char_types_test.vyn      # Should exit with code 313
+build/vyb test/types/sized_integers_test.vyb  # Should exit with code 120
+build/vyb test/types/char_types_test.vyb      # Should exit with code 313
 ```
 
 ## Expected Results
 
-- **sized_integers_test.vyn**: Exit code 120 (8 + 16 + 32 + 64)
-- **unsigned_integers_test.vyn**: Exit code 120 (8 + 16 + 32 + 64)
-- **float_types_test.vyn**: Exit code 96 (32 + 64)
-- **char_types_test.vyn**: Exit code 313 (309 + 4)
-- **bytes_type_test.vyn**: Exit code 42
-- **all_primitives_test.vyn**: Exit code 120 (8 + 16 + 32 + 64)
+- **sized_integers_test.vyb**: Exit code 120 (8 + 16 + 32 + 64)
+- **unsigned_integers_test.vyb**: Exit code 120 (8 + 16 + 32 + 64)
+- **float_types_test.vyb**: Exit code 96 (32 + 64)
+- **char_types_test.vyb**: Exit code 313 (309 + 4)
+- **bytes_type_test.vyb**: Exit code 42
+- **all_primitives_test.vyb**: Exit code 120 (8 + 16 + 32 + 64)
 
 ## Implementation Notes
 
 ### Type Aliases
 All types support multiple naming conventions:
-- Vyn style: `Int32`, `Float64`, `UInt8`
-- C style: `int32`, `float64`, `uint8`  
+- VyB style: `Int32`, `Float64`, `UInt8`
+- C style: `int32`, `float64`, `uint8`
 - LLVM style: `i32`, `f64`, `u8`
 
 ### LLVM Representation

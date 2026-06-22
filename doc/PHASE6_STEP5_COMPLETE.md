@@ -1,16 +1,16 @@
 # Phase 6 Step 5: Status Re-Assessment
 
-**Date:** 2025-10-19  
+**Date:** 2025-10-19
 **Conclusion:** Core feature COMPLETE for current implementation stage
 
 ## What We Discovered
 
 After analyzing the codebase and test file, I realized that:
 
-1. **No explicit type instantiation syntax exists yet** in Vyn
+1. **No explicit type instantiation syntax exists yet** in VyB
    - The test uses `printItem(p)` not `printItem<Point>(p)`
    - Type inference for generic functions isn't implemented
-   
+
 2. **Bounds checking DOES work** where it matters:
    - ✅ Parser validates bounds syntax
    - ✅ Semantic analyzer stores bounds in symbol table
@@ -27,13 +27,13 @@ After analyzing the codebase and test file, I realized that:
 
 ### Currently Implemented ✅
 **Declaration-time validation**:
-```vyn
+```vyb
 bind<T<Display>> Display -> Box<T> { ... }  # ✅ Validates Display is an aspect
 bind<T<Point>> Display -> Box<T> { ... }     # ❌ Rejects: Point is not an aspect
 ```
 
 **Method call validation**:
-```vyn
+```vyb
 fn<T<Display>>(item<T>) -> {
     item.show();  # ✅ Allowed: MemberExpression visitor checks bounds
 }
@@ -41,7 +41,7 @@ fn<T<Display>>(item<T>) -> {
 
 ### Future Work (Not Step 5) ⏳
 **Call-site instantiation validation**:
-```vyn
+```vyb
 printItem<Point>(p);   # Would validate Point has Display
 printItem<Int>(42);    # Would reject: Int doesn't have Display
 ```

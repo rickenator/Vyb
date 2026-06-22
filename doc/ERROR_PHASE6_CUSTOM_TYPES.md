@@ -15,7 +15,7 @@
 ### 6.1: Basic Error Struct Type ✅ IN PROGRESS
 Instead of failing with bare `Int`, support structured errors:
 
-```vyn
+```vyb
 struct DivisionError {
     code<Int>,
     divisor<Int>,
@@ -40,7 +40,7 @@ fn divide(a<Int>, b<Int>)<Int> -> {
 ### 6.2: Multiple Error Types per Function
 Functions can fail with different error types:
 
-```vyn
+```vyb
 struct DivisionError { code<Int>, dividend<Int> }
 struct OverflowError { code<Int>, value<Int> }
 
@@ -65,14 +65,14 @@ fn compute(a<Int>, b<Int>)<Int> -> {
 ### 6.3: Error Type Matching in Trap Clauses
 Trap clauses match specific error types:
 
-```vyn
+```vyb
 {
     compute(10, 0)
 } trap (e<DivisionError>) -> {
     print("Division error: " + e.dividend.to_string())
     -1
 } trap (e<OverflowError>) -> {
-    print("Overflow: " + e.value.to_string()) 
+    print("Overflow: " + e.value.to_string())
     -2
 }
 ```
@@ -85,7 +85,7 @@ Trap clauses match specific error types:
 ### 6.4: Generic Error Type (Future)
 Base error type that all errors extend:
 
-```vyn
+```vyb
 struct Error {
     message<String>,
     location<SourceLocation>,
@@ -122,14 +122,14 @@ if (auto* objLit = dynamic_cast<ast::ObjectLiteral*>(node->value.get())) {
     // 1. Generate the struct value
     objLit->accept(*this);
     llvm::Value* errorStruct = m_currentLLVMValue;
-    
+
     // 2. Allocate on heap (use malloc or runtime allocator)
     llvm::Type* errorType = errorStruct->getType();
     llvm::Value* errorPtr = createHeapAlloc(errorType);
-    
+
     // 3. Store struct to heap
     builder->CreateStore(errorStruct, errorPtr);
-    
+
     // 4. Return as error pointer
     return createFailReturn(errorPtr);
 }
@@ -150,7 +150,7 @@ namedValues[trapClause->errorName->name] = typedError;
 ```
 
 ### Step 4: Test with custom error types
-```vyn
+```vyb
 struct DivisionError {
     code<Int>,
     dividend<Int>

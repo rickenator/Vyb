@@ -1,15 +1,15 @@
-# Vyn Language Completion Review
+# VyB Language Completion Review
 
 Date: 2026-05-23
 
-Vyn is usable, but not complete. The remaining completion work is now explicit:
+VyB is usable, but not complete. The remaining completion work is now explicit:
 
 | Area | Missing Work |
 |------|--------------|
 | Ownership runtime | Finish full move/drop enforcement for owned aggregates; current `Vec<T>` function parameter/return cases have runtime coverage |
 | Borrowing | Complete `their<T>`/`borrow` semantics outside ad hoc cases, including mutable borrow validation |
 | FFI | Add `repr(C)` structs, ABI validation, varargs policy, header/library linking, and platform symbol tests |
-| Modules | Local `.vyn` imports now resolve and splice declarations; package metadata, bundle visibility, aliases/specifiers, and remote `smuggle` locators remain |
+| Modules | Local `.vyb` imports now resolve and splice declarations; package metadata, bundle visibility, aliases/specifiers, and remote `smuggle` locators remain |
 | Error model | Finish typed `fail`/`trap` propagation and integrate it with runtime/AOT paths |
 | Sum types | Complete enums, `Option<T>`, and `Result<T,E>` as first-class runtime features |
 | Generics/aspects | Finish bounded generic validation and monomorphized method dispatch across modules |

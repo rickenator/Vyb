@@ -2,7 +2,7 @@
 
 ## ✅ COMPLETE - v0.4.2
 
-The `ensure` keyword is **fully implemented and working** in Vyn v0.4.2.
+The `ensure` keyword is **fully implemented and working** in VyB v0.4.2.
 
 ---
 
@@ -12,10 +12,10 @@ The `ensure` keyword is **fully implemented and working** in Vyn v0.4.2.
 - **File**: `src/parser/statement_parser.cpp`, `src/parser/expression_parser.cpp`
 - **Status**: Fully implemented
 - **Syntax**: `} ensure -> { cleanup_code }`
-- **Token**: `KEYWORD_ENSURE` defined in `include/vyn/parser/token.hpp:33`
+- **Token**: `KEYWORD_ENSURE` defined in `include/vyb/parser/token.hpp:33`
 
 ### 2. **AST** ✅
-- **File**: `include/vyn/parser/ast.hpp:1524-1534`
+- **File**: `include/vyb/parser/ast.hpp:1524-1534`
 - **Class**: `EnsureClause`
 - **Fields**:
   ```cpp
@@ -41,12 +41,12 @@ The `ensure` keyword is **fully implemented and working** in Vyn v0.4.2.
   // Generate ensure cleanup
   if (hasEnsure) {
       builder->SetInsertPoint(ensureBB);
-      
+
       // Execute ensure cleanup code
       if (node->ensureClause->cleanupBlock) {
           node->ensureClause->cleanupBlock->accept(*this);
       }
-      
+
       // Branch to continue
       if (!builder->GetInsertBlock()->getTerminator()) {
           builder->CreateBr(continueBB);
@@ -73,7 +73,7 @@ entry → block.normal → fail → trap.landing → trap.handler → block.ensu
 
 ## LLVM IR Example
 
-From `test/trap/test_ensure_simple.vyn`:
+From `test/trap/test_ensure_simple.vyb`:
 
 ```llvm
 block.normal:                                     ; preds = %entry
@@ -115,8 +115,8 @@ block.continue11:                                 ; preds = %block.ensure10
 
 ## Test Coverage
 
-### Primary Test: `test/trap/test_ensure_simple.vyn`
-```vyn
+### Primary Test: `test/trap/test_ensure_simple.vyb`
+```vyb
 main()<Int> -> {
     # Test 1: ensure on success path
     result1<Int> = {
@@ -125,7 +125,7 @@ main()<Int> -> {
     } ensure -> {
         println("  ** ENSURE cleanup executed **")
     }
-    
+
     # Test 2: ensure with trap
     result2<Int> = {
         println("  About to fail with error 99")
@@ -136,7 +136,7 @@ main()<Int> -> {
     } ensure -> {
         println("  ** ENSURE cleanup executed (failure path) **")
     }
-    
+
     return 0
 }
 ```
@@ -148,9 +148,9 @@ main()<Int> -> {
 **Actual Result**: ✅ Both paths execute correctly with proper control flow
 
 ### Additional Tests:
-- `test/trap/05_ensure.vyn` - Has syntax issues with global variables
-- `test/trap/11_ensure_with_trap.vyn` - Requires File API (not yet implemented)
-- `test/trap/semantic_test.vyn` - Shows LLVM IR with ensure blocks
+- `test/trap/05_ensure.vyb` - Has syntax issues with global variables
+- `test/trap/11_ensure_with_trap.vyb` - Requires File API (not yet implemented)
+- `test/trap/semantic_test.vyb` - Shows LLVM IR with ensure blocks
 
 ---
 
@@ -160,8 +160,8 @@ The following functions exist but are **NOT USED** by the current implementation
 
 ```cpp
 // src/runtime/error_handling.cpp:342-358
-void __vyn_runtime_push_ensure_block(void (*ensure_fn)());  // TODO stub
-void __vyn_runtime_pop_ensure_block();                     // TODO stub
+void __vyb_runtime_push_ensure_block(void (*ensure_fn)());  // TODO stub
+void __vyb_runtime_pop_ensure_block();                     // TODO stub
 ```
 
 **Why Not Used**: The inline codegen approach is more efficient than maintaining a runtime stack of function pointers. These stubs exist for potential future optimization but aren't needed.
@@ -173,7 +173,7 @@ void __vyn_runtime_pop_ensure_block();                     // TODO stub
 The ensure keyword provides these guarantees:
 
 1. **Always Executes**: Ensure blocks run whether the protected block succeeds or fails
-2. **Proper Order**: 
+2. **Proper Order**:
    - On success: block → ensure
    - On failure: block → trap → ensure
 3. **Resource Cleanup**: Perfect for closing files, releasing locks, freeing memory
@@ -193,7 +193,7 @@ The ensure keyword provides these guarantees:
 ### Test Infrastructure Issues:
 - ❌ println() JSON serialization bug affects output display
 - ⚠️ Some ensure tests have syntax errors (global variables)
-- ⚠️ File API not implemented yet (blocks test/trap/11_ensure_with_trap.vyn)
+- ⚠️ File API not implemented yet (blocks test/trap/11_ensure_with_trap.vyb)
 
 ---
 
@@ -202,7 +202,7 @@ The ensure keyword provides these guarantees:
 These are **NOT REQUIRED** for ensure to be complete, but could be added:
 
 ### 1. Nested Ensure Support
-```vyn
+```vyb
 {
     outer_setup()
     {
@@ -217,7 +217,7 @@ These are **NOT REQUIRED** for ensure to be complete, but could be added:
 ```
 
 ### 2. Control Flow from Ensure
-```vyn
+```vyb
 {
     risky_operation()
 } ensure -> {
@@ -229,7 +229,7 @@ These are **NOT REQUIRED** for ensure to be complete, but could be added:
 ```
 
 ### 3. Defer Keyword (Different from ensure)
-```vyn
+```vyb
 # defer executes in LIFO order at scope exit
 # ensure executes immediately after block
 func()<Int> -> {
@@ -271,8 +271,8 @@ finally:
     cleanup()  # Always runs
 ```
 
-### Vyn's ensure
-```vyn
+### VyB's ensure
+```vyb
 {
     do_work()
 } trap (e<Error>) -> {
@@ -282,7 +282,7 @@ finally:
 }
 ```
 
-**Key Difference**: Vyn's ensure is **block-scoped**, not function-scoped. This allows finer-grained resource management.
+**Key Difference**: VyB's ensure is **block-scoped**, not function-scoped. This allows finer-grained resource management.
 
 ---
 
@@ -340,6 +340,6 @@ The implementation uses an efficient inline codegen approach that provides zero-
 
 ---
 
-**Last Updated**: 2025-01-XX  
-**Status**: COMPLETE ✅  
+**Last Updated**: 2025-01-XX
+**Status**: COMPLETE ✅
 **Version**: v0.4.2

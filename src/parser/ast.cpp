@@ -6,10 +6,10 @@
 #include <vector>
 #include <algorithm>
 #include <stdexcept>
-#include "vyn/parser/ast.hpp" // This now includes iostream, BorrowKind, OwnershipKind
-#include "vyn/parser/token.hpp"
+#include "vyb/parser/ast.hpp" // This now includes iostream, BorrowKind, OwnershipKind
+#include "vyb/parser/token.hpp"
 
-namespace vyn {
+namespace vyb {
 namespace ast {
 
 // ObjectLiteral destructor
@@ -295,7 +295,7 @@ NodeType FromIntToLocExpression::getType() const {
 }
 
 std::string FromIntToLocExpression::toString() const {
-    return "from<" + (target_type ? target_type->toString() : "UnknownType") + ">(" + 
+    return "from<" + (target_type ? target_type->toString() : "UnknownType") + ">(" +
            (address_expr ? address_expr->toString() : "nullptr") + ")";
 }
 
@@ -332,7 +332,7 @@ NodeType BinaryExpression::getType() const {
 }
 
 std::string BinaryExpression::toString() const {
-    return "(" + (left ? left->toString() : "nullptr") + " " + op.lexeme + " " + 
+    return "(" + (left ? left->toString() : "nullptr") + " " + op.lexeme + " " +
            (right ? right->toString() : "nullptr") + ")";
 }
 
@@ -405,7 +405,7 @@ NodeType ArrayInitializationExpression::getType() const {
 }
 
 std::string ArrayInitializationExpression::toString() const {
-    return "[" + (elementType ? elementType->toString() : "UnknownType") + "; " + 
+    return "[" + (elementType ? elementType->toString() : "UnknownType") + "; " +
            (sizeExpression ? sizeExpression->toString() : "UnknownSize") + "]()";
 }
 
@@ -452,10 +452,10 @@ NodeType MemberExpression::getType() const {
 
 std::string MemberExpression::toString() const {
     if (computed) {
-        return (object ? object->toString() : "nullptr") + "[" + 
+        return (object ? object->toString() : "nullptr") + "[" +
                (property ? property->toString() : "nullptr") + "]";
     } else {
-        return (object ? object->toString() : "nullptr") + "." + 
+        return (object ? object->toString() : "nullptr") + "." +
                (property ? property->toString() : "nullptr");
     }
 }
@@ -475,7 +475,7 @@ NodeType AssignmentExpression::getType() const {
 }
 
 std::string AssignmentExpression::toString() const {
-    return "(" + (left ? left->toString() : "nullptr") + " " + op.lexeme + " " + 
+    return "(" + (left ? left->toString() : "nullptr") + " " + op.lexeme + " " +
            (right ? right->toString() : "nullptr") + ")";
 }
 
@@ -590,7 +590,7 @@ NodeType IfStatement::getType() const {
 }
 
 std::string IfStatement::toString() const {
-    std::string str = "if (" + (test ? test->toString() : "nullptr") + ") " + 
+    std::string str = "if (" + (test ? test->toString() : "nullptr") + ") " +
                       (consequent ? consequent->toString() : "{}");
     if (alternate) {
         str += " else " + alternate->toString();
@@ -628,9 +628,9 @@ std::string ForStatement::toString() const {
         initStr = ""; // No initializer part
     }
 
-    return "for (" + initStr + "; " + 
-           (test ? test->toString() : "") + "; " + 
-           (update ? update->toString() : "") + ") " + 
+    return "for (" + initStr + "; " +
+           (test ? test->toString() : "") + "; " +
+           (update ? update->toString() : "") + ") " +
            (body ? body->toString() : "{}");
 }
 
@@ -649,7 +649,7 @@ NodeType WhileStatement::getType() const {
 }
 
 std::string WhileStatement::toString() const {
-    return "while (" + (test ? test->toString() : "nullptr") + ") " + 
+    return "while (" + (test ? test->toString() : "nullptr") + ") " +
            (body ? body->toString() : "{}");
 }
 
@@ -805,8 +805,8 @@ NodeType IfExpression::getType() const {
 }
 
 std::string IfExpression::toString() const {
-    return "if (" + (condition ? condition->toString() : "nullptr") + ") { " + 
-           (thenBranch ? thenBranch->toString() : "nullptr") + " } else { " + 
+    return "if (" + (condition ? condition->toString() : "nullptr") + ") { " +
+           (thenBranch ? thenBranch->toString() : "nullptr") + " } else { " +
            (elseBranch ? elseBranch->toString() : "nullptr") + " }";
 }
 
@@ -898,7 +898,7 @@ NodeType ArrayType::getType() const {
 }
 
 std::string ArrayType::toString() const {
-    return "[" + (elementType ? elementType->toString() : "UnknownType") + 
+    return "[" + (elementType ? elementType->toString() : "UnknownType") +
            (sizeExpression ? "; " + sizeExpression->toString() : "") + "]";
 }
 
@@ -919,10 +919,10 @@ std::unique_ptr<TypeNode> ArrayType::clone() const {
             clonedSizeExpr = nullptr;
         }
     }
-    
+
     return std::make_unique<ArrayType>(
-        loc, 
-        elementType ? elementType->clone() : nullptr, 
+        loc,
+        elementType ? elementType->clone() : nullptr,
         std::move(clonedSizeExpr)
     );
 }
@@ -945,7 +945,7 @@ void VecType::accept(Visitor& visitor) {
 
 std::unique_ptr<TypeNode> VecType::clone() const {
     return std::make_unique<VecType>(
-        loc, 
+        loc,
         elementType ? elementType->clone() : nullptr
     );
 }
@@ -968,7 +968,7 @@ void FutureType::accept(Visitor& visitor) {
 
 std::unique_ptr<TypeNode> FutureType::clone() const {
     return std::make_unique<FutureType>(
-        loc, 
+        loc,
         resultType ? resultType->clone() : nullptr
     );
 }
@@ -1139,12 +1139,12 @@ std::string FunctionDeclaration::toString() const {
     std::stringstream ss;
     if (isAsync) ss << "async ";
     ss << "fn";
-    
-    // Add return type in angle brackets (correct Vyn syntax)
+
+    // Add return type in angle brackets (correct VyB syntax)
     if (returnTypeNode) {
         ss << "<" << returnTypeNode->toString() << ">";
     }
-    
+
     ss << " " << (id ? id->toString() : "") << "(";
     for (size_t i = 0; i < params.size(); ++i) {
         ss << params[i].name->toString();
@@ -1556,7 +1556,7 @@ void RangeExpression::accept(Visitor& visitor) {
 BlockExpression::BlockExpression(SourceLocation loc, std::unique_ptr<BlockStatement> block,
                                  std::vector<std::unique_ptr<TrapClause>> trapClauses,
                                  std::unique_ptr<EnsureClause> ensureClause)
-    : Expression(loc), block(std::move(block)), trapClauses(std::move(trapClauses)), 
+    : Expression(loc), block(std::move(block)), trapClauses(std::move(trapClauses)),
       ensureClause(std::move(ensureClause)) {}
 
 NodeType BlockExpression::getType() const {
@@ -1774,9 +1774,9 @@ ExternStatement::ExternStatement(
     std::unique_ptr<Identifier> name,
     TypeNodePtr returnType,
     std::vector<FunctionParameter> parameters
-) : Statement(loc), 
-    name(std::move(name)), 
-    returnType(std::move(returnType)), 
+) : Statement(loc),
+    name(std::move(name)),
+    returnType(std::move(returnType)),
     parameters(std::move(parameters)) {}
 
 NodeType ExternStatement::getType() const {
@@ -1786,7 +1786,7 @@ NodeType ExternStatement::getType() const {
 std::string ExternStatement::toString() const {
     std::stringstream ss;
     ss << "extern " << (name ? name->toString() : "");
-    
+
     // Add parameters if this is a function declaration
     if (!parameters.empty()) {
         ss << "(";
@@ -1796,19 +1796,19 @@ std::string ExternStatement::toString() const {
             } else {
                 ss << parameters[i].name->toString();
             }
-            
+
             if (i < parameters.size() - 1) {
                 ss << ", ";
             }
         }
         ss << ")";
     }
-    
+
     // Add return type if specified
     if (returnType) {
         ss << " -> " << returnType->toString();
     }
-    
+
     ss << ";";
     return ss.str();
 }
@@ -1888,7 +1888,7 @@ void FailStatement::accept(Visitor& visitor) {
 // TrapClause implementation
 TrapClause::TrapClause(SourceLocation loc, std::unique_ptr<Identifier> errorName,
                        TypeNodePtr errorType, StmtPtr handler, bool isWildcard, bool isMultiType)
-    : Node(loc), errorName(std::move(errorName)), 
+    : Node(loc), errorName(std::move(errorName)),
       errorType(std::move(errorType)), handler(std::move(handler)),
       isWildcard(isWildcard), isMultiType(isMultiType) {}
 
@@ -2026,4 +2026,4 @@ void DeferStatement::accept(Visitor& visitor) {
 }
 
 } // namespace ast
-} // namespace vyn
+} // namespace vyb
