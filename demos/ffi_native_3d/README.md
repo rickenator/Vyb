@@ -18,3 +18,11 @@ Requirements:
 - an active local display
 
 The generated binary is written to `/tmp/vyb_native_cube`.
+
+## Direction
+
+This demo proves Vyb can reach native graphics today through FFI, but it is not
+the intended long-term shape. The next step is a real Vyb 3D API that exposes
+windowing, render loops, meshes, cameras, transforms, input, and shaders
+directly from Vyb instead of shelling out to build and run a separate OpenGL C
+program.
