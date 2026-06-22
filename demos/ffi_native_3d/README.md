@@ -1,8 +1,8 @@
 # Native 3D FFI Demo
 
 This demo uses Vyb FFI to call libc `system()`, then builds and launches a local
-GLFW/OpenGL program. It opens a native window and renders a rotating cube until
-the window is closed.
+GLFW/OpenGL program. It opens a native window and renders orbiting cubes over a
+grid until the window is closed.
 
 Run it from the repository root:
 

@@ -10,7 +10,7 @@ extern "C" {
 
 main()<Int> -> {
     freedom {
-        puts("building and launching native OpenGL cube")
+        puts("building and launching native OpenGL scene")
         status<CInt> = system("cc demos/ffi_native_3d/native_cube.c -o /tmp/vyb_native_cube -lglfw -lGL -lm && /tmp/vyb_native_cube 0")
         if (status == 0) {
             puts("native 3D demo completed")
