@@ -52,6 +52,12 @@ for runtime/output tests. The milestone runner aggregates the stable runtime,
 module, FFI, introspection, primitive type, range, Vec iteration, and stdlib
 suites and enforces at least 126 passing tests before the next milestone.
 
+You can run the same gate through CMake with:
+
+```bash
+cmake --build build --target run-milestone
+```
+
 ## Writing Tests
 
 Use current name-first Vyb syntax:

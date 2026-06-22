@@ -2395,6 +2395,10 @@ build/vyb test/string/string_test.vyb
 # Run demos and examples
 python3 test/run_examples.py --vyb build/vyb
 cmake --build build --target run-examples
+
+# Run the milestone gate
+python3 test/run_milestone_tests.py --vyb build/vyb
+cmake --build build --target run-milestone
 ```
 
 ## Test Harness
