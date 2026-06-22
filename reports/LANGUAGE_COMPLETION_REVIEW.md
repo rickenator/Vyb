@@ -1,8 +1,8 @@
-# VyB Language Completion Review
+# Vyb Language Completion Review
 
 Date: 2026-05-23
 
-VyB is usable, but not complete. The remaining completion work is now explicit:
+Vyb is usable, but not complete. The remaining completion work is now explicit:
 
 | Area | Missing Work |
 |------|--------------|

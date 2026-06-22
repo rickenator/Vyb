@@ -18,7 +18,7 @@ bind PrefixName -> Person {
 }
 
 main()<Int> -> {
-    p<Person> = Person { name = "VyB" }
+    p<Person> = Person { name = "Vyb" }
     label<String> = p.format("hello ")
     return 0
 }

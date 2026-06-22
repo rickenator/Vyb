@@ -2,7 +2,7 @@
 
 ## ✅ COMPLETE - v0.4.2
 
-The `ensure` keyword is **fully implemented and working** in VyB v0.4.2.
+The `ensure` keyword is **fully implemented and working** in Vyb v0.4.2.
 
 ---
 
@@ -271,7 +271,7 @@ finally:
     cleanup()  # Always runs
 ```
 
-### VyB's ensure
+### Vyb's ensure
 ```vyb
 {
     do_work()
@@ -282,7 +282,7 @@ finally:
 }
 ```
 
-**Key Difference**: VyB's ensure is **block-scoped**, not function-scoped. This allows finer-grained resource management.
+**Key Difference**: Vyb's ensure is **block-scoped**, not function-scoped. This allows finer-grained resource management.
 
 ---
 

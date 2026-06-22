@@ -1,6 +1,6 @@
-# VyB Development Guide v0.4.0
+# Vyb Development Guide v0.4.0
 
-A comprehensive guide for developing with and contributing to the VyB programming language, covering the complete development ecosystem from async programming to test harness usage.
+A comprehensive guide for developing with and contributing to the Vyb programming language, covering the complete development ecosystem from async programming to test harness usage.
 
 ## Table of Contents
 
@@ -27,8 +27,8 @@ A comprehensive guide for developing with and contributing to the VyB programmin
 
 ```bash
 # Clone the repository
-git clone https://github.com/rickenator/VyB.git
-cd VyB
+git clone https://github.com/rickenator/Vyb.git
+cd Vyb
 
 # Build the compiler
 mkdir -p build && cd build
@@ -44,7 +44,7 @@ echo $?  # Should output 42
 ### Project Structure
 
 ```
-VyB/
+Vyb/
 ├── src/                 # C++ source code
 │   ├── main.cpp         # Entry point with LLVM JIT
 │   ├── lexer.cpp        # Tokenization
@@ -52,7 +52,7 @@ VyB/
 │   ├── ast.cpp          # Abstract syntax tree
 │   └── vre/llvm/        # LLVM codegen and debug
 ├── include/vyb/         # Header files
-├── test/                # 391+ VyB test files
+├── test/                # 391+ Vyb test files
 ├── doc/                 # Comprehensive documentation
 ├── examples/            # Example programs
 ├── test_harness.py      # Modern parallel test runner
@@ -146,7 +146,7 @@ factorial(n<Int>)<Int> -> {
 
 ### Complete Async/Await System
 
-VyB v0.4.0 includes a fully implemented async programming model with comprehensive debugging support.
+Vyb v0.4.0 includes a fully implemented async programming model with comprehensive debugging support.
 
 #### Basic Async Functions
 ```vyb
@@ -198,7 +198,7 @@ DEBUG: Resuming from suspension point at line 12 column 18
 
 ### LLVM Debug Integration
 
-VyB provides comprehensive debug information through LLVM's debug infrastructure:
+Vyb provides comprehensive debug information through LLVM's debug infrastructure:
 
 #### Debug Information Features
 - **DIBuilder Integration**: Complete LLVM debug metadata generation
@@ -235,7 +235,7 @@ build/vyb --emit-llvm --debug-info test.vyb
 
 ### Modern Parallel Test Runner
 
-VyB includes a sophisticated test harness managing 391+ test files:
+Vyb includes a sophisticated test harness managing 391+ test files:
 
 #### Basic Usage
 ```bash
@@ -381,8 +381,8 @@ vim doc/Async_Programming_Debug_System.md
 #### 1. Setting Up Development Environment
 ```bash
 # Fork and clone
-git clone https://github.com/your-username/VyB.git
-cd VyB
+git clone https://github.com/your-username/Vyb.git
+cd Vyb
 
 # Create feature branch
 git checkout -b feature/new-async-debugging
@@ -426,7 +426,7 @@ git push origin feature/new-async-debugging
 ### Contribution Guidelines
 
 #### Code Quality Standards
-- **Consistent naming**: Follow existing C++ and VyB naming conventions
+- **Consistent naming**: Follow existing C++ and Vyb naming conventions
 - **Comprehensive testing**: Add tests for all new functionality
 - **Documentation**: Update relevant documentation files
 - **Debug support**: Ensure new features work with debug infrastructure
@@ -452,7 +452,7 @@ git push origin feature/new-async-debugging
 - **Documentation**: Expand examples and tutorials
 
 #### Advanced Projects
-- **Self-hosting**: Port compiler from C++ to VyB
+- **Self-hosting**: Port compiler from C++ to Vyb
 - **Garbage collection**: Implement optional GC system
 - **JIT optimization**: Enhance LLVM ORC JIT performance
 - **Parallel compilation**: Add multi-threaded compilation
@@ -463,7 +463,7 @@ git push origin feature/new-async-debugging
 
 #### Understanding the Backend
 ```cpp
-// Key LLVM components in VyB
+// Key LLVM components in Vyb
 class VRECodegen {
     llvm::LLVMContext context;           // LLVM context
     llvm::Module* module;                // LLVM module
@@ -552,8 +552,8 @@ valgrind --tool=memcheck build/vyb test.vyb
 
 ## Conclusion
 
-VyB v0.4.0 represents a complete, production-ready systems programming language with advanced async programming capabilities and comprehensive debugging support. The modern test harness ensures code quality with 391+ tests and intelligent failure analysis.
+Vyb v0.4.0 represents a complete, production-ready systems programming language with advanced async programming capabilities and comprehensive debugging support. The modern test harness ensures code quality with 391+ tests and intelligent failure analysis.
 
-The combination of clean syntax, powerful async/await support, comprehensive debug infrastructure, and modern development tools makes VyB an excellent choice for systems programming where debugging, maintainability, and performance are critical.
+The combination of clean syntax, powerful async/await support, comprehensive debug infrastructure, and modern development tools makes Vyb an excellent choice for systems programming where debugging, maintainability, and performance are critical.
 
-Whether you're using VyB for development projects or contributing to the language itself, this guide provides the foundation for effective work with the VyB ecosystem.
+Whether you're using Vyb for development projects or contributing to the language itself, this guide provides the foundation for effective work with the Vyb ecosystem.

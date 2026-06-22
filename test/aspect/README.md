@@ -1,6 +1,6 @@
-# VyB Aspect System Tests
+# Vyb Aspect System Tests
 
-This directory contains test files for the VyB aspect system implementation.
+This directory contains test files for the Vyb aspect system implementation.
 
 ## Working Features (Phase 1 & 2)
 

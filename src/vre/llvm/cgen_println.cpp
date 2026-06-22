@@ -7,7 +7,7 @@
 
 namespace vyb {
 
-// Implementation for println function in the VyB language
+// Implementation for println function in the Vyb language
 // For use in the CallExpression visitor
 llvm::Function* LLVMCodegen::getPrintlnFunction() {
     // Check if the println function has already been declared in the module
@@ -74,7 +74,7 @@ llvm::Function* LLVMCodegen::getSerializeToJsonFunction() {
 }
 
 // Get the function for actual println implementation
-llvm::Function* LLVMCodegen::getVyBPrintlnFunction() {
+llvm::Function* LLVMCodegen::getVybPrintlnFunction() {
     // Check if the __vyb_println function has already been declared in the module
     llvm::Function* vybPrintlnFunc = module->getFunction("__vyb_println");
 
@@ -103,7 +103,7 @@ llvm::Function* LLVMCodegen::getVyBPrintlnFunction() {
     return vybPrintlnFunc;
 }
 
-llvm::Function* LLVMCodegen::getVyBPrintFunction() {
+llvm::Function* LLVMCodegen::getVybPrintFunction() {
     llvm::Function* f = module->getFunction("__vyb_print");
     if (!f) {
         std::vector<llvm::Type*> paramTypes = {int8PtrType};
@@ -114,7 +114,7 @@ llvm::Function* LLVMCodegen::getVyBPrintFunction() {
     return f;
 }
 
-llvm::Function* LLVMCodegen::getVyBPrintlnIntFunction() {
+llvm::Function* LLVMCodegen::getVybPrintlnIntFunction() {
     llvm::Function* f = module->getFunction("__vyb_println_int");
     if (!f) {
         std::vector<llvm::Type*> paramTypes = {llvm::Type::getInt64Ty(*context)};
@@ -125,7 +125,7 @@ llvm::Function* LLVMCodegen::getVyBPrintlnIntFunction() {
     return f;
 }
 
-llvm::Function* LLVMCodegen::getVyBPrintIntFunction() {
+llvm::Function* LLVMCodegen::getVybPrintIntFunction() {
     llvm::Function* f = module->getFunction("__vyb_print_int");
     if (!f) {
         std::vector<llvm::Type*> paramTypes = {llvm::Type::getInt64Ty(*context)};
@@ -136,7 +136,7 @@ llvm::Function* LLVMCodegen::getVyBPrintIntFunction() {
     return f;
 }
 
-llvm::Function* LLVMCodegen::getVyBPrintlnBoolFunction() {
+llvm::Function* LLVMCodegen::getVybPrintlnBoolFunction() {
     llvm::Function* f = module->getFunction("__vyb_println_bool");
     if (!f) {
         std::vector<llvm::Type*> paramTypes = {llvm::Type::getInt64Ty(*context)};
@@ -147,7 +147,7 @@ llvm::Function* LLVMCodegen::getVyBPrintlnBoolFunction() {
     return f;
 }
 
-llvm::Function* LLVMCodegen::getVyBPrintBoolFunction() {
+llvm::Function* LLVMCodegen::getVybPrintBoolFunction() {
     llvm::Function* f = module->getFunction("__vyb_print_bool");
     if (!f) {
         std::vector<llvm::Type*> paramTypes = {llvm::Type::getInt64Ty(*context)};
@@ -189,7 +189,7 @@ llvm::Function* LLVMCodegen::getSprintfFunction() {
 }
 
 // Runtime function for panic - terminates program with message
-llvm::Function* LLVMCodegen::getVyBPanicFunction() {
+llvm::Function* LLVMCodegen::getVybPanicFunction() {
     // Check if the panic function has already been declared
     llvm::Function* panicFunc = module->getFunction("__vyb_runtime_panic");
 
@@ -222,7 +222,7 @@ llvm::Function* LLVMCodegen::getVyBPanicFunction() {
 }
 
 // Runtime function for untrapped errors - terminates program with error info
-llvm::Function* LLVMCodegen::getVyBUntrappedErrorFunction() {
+llvm::Function* LLVMCodegen::getVybUntrappedErrorFunction() {
     // Check if the untrapped error function has already been declared
     llvm::Function* untrappedFunc = module->getFunction("__vyb_runtime_untrapped_error");
 

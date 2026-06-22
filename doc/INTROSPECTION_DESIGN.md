@@ -8,11 +8,11 @@
 
 > *"Before code can reason about the world, it must first reason about itself."*
 
-Introspection in VyB is not merely a feature—it's a fundamental capability that allows code to understand its own nature. Like a zen monk examining their own consciousness, VyB programs can examine their own type structure.
+Introspection in Vyb is not merely a feature—it's a fundamental capability that allows code to understand its own nature. Like a zen monk examining their own consciousness, Vyb programs can examine their own type structure.
 
 ## The Nature of Types
 
-In VyB, every value has a **type identity**—an immutable essence that defines what it *is*. This identity exists at both compile-time and runtime:
+In Vyb, every value has a **type identity**—an immutable essence that defines what it *is*. This identity exists at both compile-time and runtime:
 
 - **Compile-time**: The parser and semantic analyzer know types
 - **Runtime**: Values carry their type identity as a hash (8 bytes)
@@ -45,14 +45,14 @@ Introspection reveals what *is*, not what might be:
 ### 4. **Integration with Existing Systems**
 The error handling system (Phase 6) already uses type IDs:
 ```cpp
-struct VyBError {
+struct VybError {
     const char* type_name;  // "ParseError"
     void* type_id;          // Hash as void*
     // ...
 };
 ```
 
-We extend this pattern to **all VyB values**.
+We extend this pattern to **all Vyb values**.
 
 ## Phase 1: The Three Operators
 
@@ -121,7 +121,7 @@ println("Value is of type: " + typename(value))
 **Implementation**:
 - At compile-time, resolve expression type name
 - At codegen, generate pointer to string literal containing type name
-- Wrap in VyB String struct: `VyBString { data: "Int", length: 3 }`
+- Wrap in Vyb String struct: `VybString { data: "Int", length: 3 }`
 - Return as String value
 
 **AST Node**:
@@ -348,8 +348,8 @@ void LLVMCodegen::visit(const TypenameExpression* node) {
     // Create global string constant
     llvm::Constant* typeNameStr = builder->CreateGlobalStringPtr(typeName);
 
-    // Create VyBString struct
-    llvm::Value* stringStruct = createVyBString(typeName);
+    // Create VybString struct
+    llvm::Value* stringStruct = createVybString(typeName);
 
     m_currentLLVMValue = stringStruct;
 }
@@ -443,7 +443,7 @@ const char* __vyb_get_typename(uint64_t type_id) {
 
 The error handling system **already** stores type IDs:
 ```cpp
-struct VyBError {
+struct VybError {
     void* type_id;  // Stored as void* (8 bytes)
     // ...
 };
@@ -468,7 +468,7 @@ In wildcard trap handlers, we can now use introspection:
 **Built-in Function**:
 ```cpp
 // Extract type from error pointer
-uint64_t __vyb_error_typeof(VyBError* error) {
+uint64_t __vyb_error_typeof(VybError* error) {
     return (uint64_t)error->type_id;
 }
 ```
@@ -487,7 +487,7 @@ Or, we extend `typeof()` to work directly on wildcard error values:
 
 The codegen for `typeof(e)` when `e` is a wildcard error:
 ```cpp
-// e is VyBError* pointer
+// e is VybError* pointer
 // Load type_id field (offset 8 bytes after type_name pointer)
 llvm::Value* typeIdPtr = builder->CreateStructGEP(errorType, errorPtr, 1);
 llvm::Value* typeId = builder->CreateLoad(builder->getInt64Ty(), typeIdPtr);
@@ -593,7 +593,7 @@ Add section on introspection:
 ```markdown
 ### Introspection
 
-VyB provides runtime type information through three operators:
+Vyb provides runtime type information through three operators:
 
 **typeof(expr)** - Get runtime type identity:
 ```vyb

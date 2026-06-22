@@ -1,4 +1,4 @@
-// filepath: /home/rick/Projects/VyB/test/units/extracted/test58.vyb
+// filepath: /home/rick/Projects/Vyb/test/units/extracted/test58.vyb
 // @test: Semantic: from<Type>(expr) type mismatch between Type and expression
 // @description: Extracted from tests.cpp - Semantic: from<Type>(expr) type mismatch between Type and expression
 // @category: parser

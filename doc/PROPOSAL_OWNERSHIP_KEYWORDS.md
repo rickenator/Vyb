@@ -5,28 +5,28 @@
 
 ## 1. Abstract
 
-This proposal outlines a comprehensive set of keywords—`my`, `our`, and `their`—to explicitly manage memory ownership and borrowing in the VyB language.
+This proposal outlines a comprehensive set of keywords—`my`, `our`, and `their`—to explicitly manage memory ownership and borrowing in the Vyb language.
 - `my Type` will denote explicit unique ownership.
 - `our Type` will denote shared, reference-counted ownership.
 - `their Type` (and `their const Type`) will replace the `&` sigil for non-owning mutable (and immutable) borrows.
-These changes aim to enhance syntactic clarity, align the language more directly with VyB Runtime Environment (VRE) concepts (`my<T>`, `our<T>`, `their<T>`), and provide a more descriptive and intuitive memory management model.
+These changes aim to enhance syntactic clarity, align the language more directly with Vyb Runtime Environment (VRE) concepts (`my<T>`, `our<T>`, `their<T>`), and provide a more descriptive and intuitive memory management model.
 
 ## 2. Motivation
 
-The VyB language aims for a balance of performance, safety, and developer ergonomics. Explicitly representing ownership and borrowing semantics in the type system and syntax is crucial for achieving these goals. The motivations for introducing `my`, `our`, and `their` are:
+The Vyb language aims for a balance of performance, safety, and developer ergonomics. Explicitly representing ownership and borrowing semantics in the type system and syntax is crucial for achieving these goals. The motivations for introducing `my`, `our`, and `their` are:
 
 *   **Enhanced Clarity and Explicitness**: Keywords make ownership and borrowing semantics more explicit than sigils or implicit conventions.
     *   `my Type` explicitly states unique ownership.
     *   `our Type` explicitly states shared ownership.
     *   `their x` (for creating a borrow) is more descriptive than `&x`.
-*   **Alignment with VRE Terminology**: The VRE uses `my<T>`, `our<T>`, and `their<T>` as conceptual (and C++ implementation) types. Adopting these keywords in VyB creates a direct and intuitive mapping.
-*   **Differentiation from C-style Pointers**: Replacing `&` with `their` helps differentiate VyB's safer, managed references from raw C/C++ pointers and their associated risks.
+*   **Alignment with VRE Terminology**: The VRE uses `my<T>`, `our<T>`, and `their<T>` as conceptual (and C++ implementation) types. Adopting these keywords in Vyb creates a direct and intuitive mapping.
+*   **Differentiation from C-style Pointers**: Replacing `&` with `their` helps differentiate Vyb's safer, managed references from raw C/C++ pointers and their associated risks.
 *   **Comprehensive Memory Model**: Providing keywords for all three core VRE ownership concepts (`my`, `our`, `their`) directly in the language offers a complete and understandable memory management story to the developer.
 *   **User Preference**: Feedback indicates a desire for more descriptive keywords for these fundamental concepts.
 
 ## 3. Proposed Changes
 
-We propose the following modifications to the VyB language syntax and EBNF:
+We propose the following modifications to the Vyb language syntax and EBNF:
 
 ### 3.1. Keyword Introduction
 
@@ -155,7 +155,7 @@ read_item(borrowed_c_const);
     *   `our`: Introduces shared (reference-counted) ownership as a language type. This has significant semantic implications (heap allocation, reference counting, potential cycle issues if not handled with mild references – which are beyond this initial proposal).
 *   **Parser**: Needs updates for new keywords (`my`, `our`, `their`) in type expressions, `their` in unary expressions and patterns.
 *   **Type System**: Must recognize `my Type`, `our Type`, `their Type`, `their const Type`.
-*   **VRE Integration**: `my`, `our`, `their` types in VyB will map directly to VRE's `my<T>`, `our<T>`, `their<T>` mechanisms.
+*   **VRE Integration**: `my`, `our`, `their` types in Vyb will map directly to VRE's `my<T>`, `our<T>`, `their<T>` mechanisms.
 *   **Documentation**: Significant updates required for all language materials.
 *   **Existing Code**: This is a breaking change. Tooling for migration would be highly beneficial.
 *   **Keyword Reservation**: `my`, `our`, `their` become reserved keywords.
@@ -192,4 +192,4 @@ read_item(borrowed_c_const);
 
 ## 10. Conclusion
 
-Introducing `my`, `our`, and `their` as keywords provides a powerful and explicit way to manage memory in VyB, aligning the language closely with its runtime environment's philosophy. While `their` is a direct replacement for `&` to improve clarity for borrows, `my` formalizes unique ownership typing, and `our` introduces shared ownership as a first-class type concept. This comprehensive approach aims to make VyB's memory management robust, understandable, and ergonomic. Feedback is crucial to refine these ideas.
+Introducing `my`, `our`, and `their` as keywords provides a powerful and explicit way to manage memory in Vyb, aligning the language closely with its runtime environment's philosophy. While `their` is a direct replacement for `&` to improve clarity for borrows, `my` formalizes unique ownership typing, and `our` introduces shared ownership as a first-class type concept. This comprehensive approach aims to make Vyb's memory management robust, understandable, and ergonomic. Feedback is crucial to refine these ideas.

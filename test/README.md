@@ -1,6 +1,6 @@
-# VyB Test System
+# Vyb Test System
 
-This directory contains the VyB language test suite and Python test harness.
+This directory contains the Vyb language test suite and Python test harness.
 There are currently 687 `.vyb` tests.
 
 ## Test Directives
@@ -54,7 +54,7 @@ suites and enforces at least 126 passing tests before the next milestone.
 
 ## Writing Tests
 
-Use current name-first VyB syntax:
+Use current name-first Vyb syntax:
 
 ```vyb
 // @test: Integer Addition

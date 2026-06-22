@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-VyB Test Triage Tool
+Vyb Test Triage Tool
 
 Analyzes test results to create comprehensive triage plans, identify patterns in failures,
 and provide actionable insights for development priorities.
@@ -319,7 +319,7 @@ class TestTriageAnalyzer:
 
         report = f"""
 {'='*80}
-VyB Test Triage Report
+Vyb Test Triage Report
 {'='*80}
 
 📊 OVERALL STATISTICS
@@ -366,7 +366,7 @@ VyB Test Triage Report
         stats = analysis['stats']
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        report = f"""# VyB Test Triage Report
+        report = f"""# Vyb Test Triage Report
 
 *Generated: {timestamp}*
 
@@ -420,7 +420,7 @@ VyB Test Triage Report
 def main():
     """Main entry point for the triage tool."""
     parser = argparse.ArgumentParser(
-        description='VyB Test Triage Tool',
+        description='Vyb Test Triage Tool',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

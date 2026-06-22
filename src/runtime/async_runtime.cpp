@@ -293,7 +293,7 @@ AsyncRuntime& getAsyncRuntime() {
     return AsyncRuntime::getInstance();
 }
 
-// Utility functions for integration with VyB language
+// Utility functions for integration with Vyb language
 TaskId scheduleAsyncFunction(TaskFunction func) {
     auto& runtime = AsyncRuntime::getInstance();
     TaskId id = runtime.createTask(std::move(func));

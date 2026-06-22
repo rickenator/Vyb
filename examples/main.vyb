@@ -1,4 +1,4 @@
-// VyB language showcase using current runtime-safe patterns.
+// Vyb language showcase using current runtime-safe patterns.
 
 struct Point {
     x<Int>,
@@ -13,7 +13,7 @@ factorial(n<Int>)<Int> -> {
 }
 
 main()<Int> -> {
-    println("=== VyB Showcase ===")
+    println("=== Vyb Showcase ===")
 
     a<Int> = 10
     b<Int> = 3
@@ -43,7 +43,7 @@ main()<Int> -> {
         ? -> println("grade bucket: low")
     }
 
-    msg<String> = "Hello, VyB!"
+    msg<String> = "Hello, Vyb!"
     println("message length = " + msg.len().to_string())
     println("factorial 5 = " + factorial(5).to_string())
 

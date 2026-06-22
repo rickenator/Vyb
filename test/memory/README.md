@@ -1,6 +1,6 @@
 # Memory & Ownership Tests
 
-This directory contains comprehensive tests for VyB's ownership and memory management system, including the unique ownership types (`my<T>`, `our<T>`, `their<T>`), borrowing operations (`borrow()`, `view()`), and low-level memory operations (`loc()`, `at()`).
+This directory contains comprehensive tests for Vyb's ownership and memory management system, including the unique ownership types (`my<T>`, `our<T>`, `their<T>`), borrowing operations (`borrow()`, `view()`), and low-level memory operations (`loc()`, `at()`).
 
 ## Test Files
 

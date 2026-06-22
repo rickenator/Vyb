@@ -1,4 +1,4 @@
-// filepath: /home/rick/Projects/VyB/test/units/extracted/test25.vyb
+// filepath: /home/rick/Projects/Vyb/test/units/extracted/test25.vyb
 // @test: Parser handles expression statements
 // @description: Extracted from tests.cpp - Parser handles expression statements
 // @category: parser

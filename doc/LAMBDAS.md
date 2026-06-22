@@ -1,8 +1,8 @@
-# Lambda Expressions and Closures in VyB
+# Lambda Expressions and Closures in Vyb
 
 ## Overview
 
-VyB supports **lambda expressions** (anonymous functions) with **closure capture**, enabling functional programming patterns like map/filter/reduce, callbacks, and higher-order functions.
+Vyb supports **lambda expressions** (anonymous functions) with **closure capture**, enabling functional programming patterns like map/filter/reduce, callbacks, and higher-order functions.
 
 ## Syntax
 
@@ -296,10 +296,10 @@ add = lambda x, y: x + y
 adder = lambda x: lambda y: x + y  # Closure
 ```
 
-### VyB
+### Vyb
 
 ```vyb
-// VyB
+// Vyb
 add = |x, y| -> x + y
 adder = |x| -> |y| -> x + y  // Closure
 ```

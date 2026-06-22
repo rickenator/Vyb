@@ -170,7 +170,7 @@ void initializeAsyncRuntime();
 void shutdownAsyncRuntime();
 AsyncRuntime& getAsyncRuntime();
 
-// Utility functions for integration with VyB language
+// Utility functions for integration with Vyb language
 TaskId scheduleAsyncFunction(TaskFunction func);
 std::shared_ptr<Future> awaitTask(TaskId task_id);
 

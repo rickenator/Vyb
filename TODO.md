@@ -1,10 +1,10 @@
-# VyB Language — Road to 1.0
+# Vyb Language — Road to 1.0
 
-> **What is VyB?** A statically typed, systems programming language with an LLVM backend,
+> **What is Vyb?** A statically typed, systems programming language with an LLVM backend,
 > ownership semantics expressed as readable keywords (`my`, `our`, `their`, `mild`),
 > programmer-first memory control via `freedom` blocks, a struct + aspect model for
 > polymorphism, and a uniquely clean name-first function syntax—no `fn` keyword noise.
-> VyB is not Rust. It is not C++. It is its own thing.
+> Vyb is not Rust. It is not C++. It is its own thing.
 
 ---
 
@@ -95,7 +95,7 @@ is the working audit for what needs to be implemented next.
   - Comparison patterns (`>= 90`, `< 0`, etc.)
   - Literal patterns (int, float, string)
 - [x] **`select` expressions** — Pattern matching that yields a value, with `pass` for
-  explicit multi-statement returns (VyB-original concept, no equivalent in other languages)
+  explicit multi-statement returns (Vyb-original concept, no equivalent in other languages)
 
 ### Type System
 - [x] **Generic types** — `<T>`, `<K, V>` with proper scoping and substitution
@@ -112,7 +112,7 @@ is the working audit for what needs to be implemented next.
 - [x] **Member access** — `obj.field`, `arr[index]`
 - [x] **String concatenation** — `str1 + str2` with mixed-type auto-`toString`
 - [x] **`toString` intrinsics** — All primitive types
-- [x] **`typeof(expr)`** — Runtime type hash (8-byte i64) — uniquely VyB introspection
+- [x] **`typeof(expr)`** — Runtime type hash (8-byte i64) — uniquely Vyb introspection
 - [x] **`typename(expr)`** — Type name as `String`
 
 ### Memory & Ownership
@@ -121,7 +121,7 @@ is the working audit for what needs to be implemented next.
 - [x] **`view(expr)`/`borrow(expr)`** — Canonical call syntax with lexical borrow validation
 - [x] **`soft(expr)`** — Creates `mild<T>` from `our<T>` and attaches to the shared control block
 
-### Aspect/Bind System (VyB's Polymorphism)
+### Aspect/Bind System (Vyb's Polymorphism)
 - [x] **`aspect` declarations** — Method signatures, optional default implementations
 - [x] **Receiver shorthand** — `method(self)<T>` is canonical sugar for simple `self<Self>` aspect/bind receivers
 - [x] **`bind Aspect -> Type { ... }`** — Unbounded bind for concrete types
@@ -206,7 +206,7 @@ is the working audit for what needs to be implemented next.
 ## Planned — Needed for 1.0
 
 ### 1. Module System (HIGH PRIORITY)
-VyB's `import`/`smuggle`/`bundle`/`share` system is a unique approach to module visibility.
+Vyb's `import`/`smuggle`/`bundle`/`share` system is a unique approach to module visibility.
 See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
 
 - [x] **Phase 1.1 — Import Parsing** — `import <path>`, `import <path> as <alias>`, `import <path> from "<locator>"`, `smuggle <path> as <alias>`, `ImportKind` (TrustedImport / Smuggle) captured in AST
@@ -229,10 +229,10 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
 - [x] **`extern` function modifier** — Individual extern function declarations compile to LLVM `ExternalLinkage` via `ExternStatement` codegen; syntax: `extern funcName(params)<ReturnType>`
 - [x] **`extern "C" { }` block syntax** — Multi-declaration blocks parse, register external functions, and codegen LLVM declarations
 - [x] **C type mapping** — Common C aliases (`CInt`, `CSize`, `CString`, `CPtr<T>`, `CVoid`, etc.) lower through semantic/codegen
-- [x] **`#[repr(C)]` on structs** — Attribute parses on structs, preserves declaration-order unpacked LLVM layout, and rejects generic/VyB-runtime fields that are not C ABI-stable
+- [x] **`#[repr(C)]` on structs** — Attribute parses on structs, preserves declaration-order unpacked LLVM layout, and rejects generic/Vyb-runtime fields that are not C ABI-stable
 - [x] **Native `--link <lib-or-path>` flow** — Repeatable build flag passes `-l<lib>` or explicit library/object paths to the native linker
 - [ ] **Variadic C functions** — `printf(format: *i8, ...) -> Int`
-- [ ] **`vyb bindgen`** — Tool to generate VyB bindings from C headers (v0.6+)
+- [ ] **`vyb bindgen`** — Tool to generate Vyb bindings from C headers (v0.6+)
 
 ### 3. Ownership Types — Runtime Enforcement (HIGH PRIORITY)
 - [ ] **`my<T>` move semantics** — Enforce single-owner at compile time; error on copy
@@ -260,8 +260,8 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
 - [ ] **`Vec<T>` expansion** — `.map()`, `.filter()`, `.reduce()`, `.find()`, `.sort()`; `.contains()` is now correctly implemented
 
 ### 5. Sum Types / Enums (MEDIUM PRIORITY)
-VyB needs a way to express sum types. Essential for `Option<T>`, `Result<T,E>`, and
-expressive APIs. **VyB-natural approach:** enums should integrate with the aspect system
+Vyb needs a way to express sum types. Essential for `Option<T>`, `Result<T,E>`, and
+expressive APIs. **Vyb-natural approach:** enums should integrate with the aspect system
 and pattern matching, not be a separate OOP mechanism.
 
 - [x] **Enum declaration syntax** — `enum Direction { North, South, East, West }` — variants compile to sequential `i64` integer constants (0, 1, 2, …); access via `Direction::North`
@@ -280,7 +280,7 @@ and pattern matching, not be a separate OOP mechanism.
 - [ ] **`Type` as first-class type** — `t<Type> = typeof(42)`, equality comparison
 
 ### 7. Select Expressions — Polish (MEDIUM PRIORITY)
-The `select` expression is a uniquely VyB concept: pattern matching that produces a value,
+The `select` expression is a uniquely Vyb concept: pattern matching that produces a value,
 with `pass` for multi-statement case bodies. Needs polishing:
 
 - [ ] **`select` exhaustiveness** — Warn when no `?` wildcard and possible no-match
@@ -291,7 +291,7 @@ with `pass` for multi-statement case bodies. Needs polishing:
 ### 8. Wildcard Trap Handler (MEDIUM PRIORITY)
 - [ ] **`trap (e<?>)` syntax** — Catch any error type
 - [ ] **`typeof(e)` in wildcard handler** — Runtime type discrimination
-- [ ] **Multi-type trap** — `trap (e<ParseError | IOError>) -> { ... }` (VyB-native syntax)
+- [ ] **Multi-type trap** — `trap (e<ParseError | IOError>) -> { ... }` (Vyb-native syntax)
 
 ### 9. Advanced Control Flow (LOWER PRIORITY)
 - [x] **`defer` statement** — `defer cleanup()` runs on scope exit (LIFO order, function-level)
@@ -303,7 +303,7 @@ with `pass` for multi-statement case bodies. Needs polishing:
 - [ ] **`spawn` for concurrent tasks** — `task<Future<T>> = spawn compute()`
 - [ ] **Typed channels** — `chan<T>` for message passing between tasks (planned)
 - [ ] **Actors** — Lightweight isolated concurrency units (planned)
-- [ ] **`select` over channels** — Wait on multiple channels (VyB-natural extension)
+- [ ] **`select` over channels** — Wait on multiple channels (Vyb-natural extension)
 - [ ] **Async lambdas** — `async |x| -> await process(x)`
 - [ ] **`async for`** — Iterate over async streams
 
@@ -316,7 +316,7 @@ with `pass` for multi-statement case bodies. Needs polishing:
 - [ ] **`vyb build`** — Build multi-file projects from manifest
 - [ ] **Dependency resolution** — Version constraints and lock file (`vyb.lock`)
 - [ ] **Package registry** — Central registry for published packages
-- [ ] **`vyb new`** — Scaffold a new VyB project
+- [ ] **`vyb new`** — Scaffold a new Vyb project
 
 ### Language Server Protocol (LSP)
 - [ ] **Go-to-definition** — Jump to symbol definitions across files
@@ -340,7 +340,7 @@ with `pass` for multi-statement case bodies. Needs polishing:
 - [ ] **`vyb test`** — Run test files alongside source (`*.test.vyb`)
 - [ ] **Code formatter** — `vyb fmt` for canonical formatting
 - [ ] **Linter** — `vyb check` for warnings beyond errors
-- [ ] **Debugger integration** — `gdb`/`lldb` with VyB source stepping (DWARF done, validate end-to-end)
+- [ ] **Debugger integration** — `gdb`/`lldb` with Vyb source stepping (DWARF done, validate end-to-end)
 
 ### Polish — Silent by Default (HIGH PRIORITY)
 The compiler must be silent in normal use. DEBUG output makes the language feel unfinished.
@@ -386,9 +386,9 @@ reference so that contributors do not re-open them.
 
 ### [DECIDED] Class System vs. Struct + Aspect
 
-**Decision:** VyB has no class system. Struct + aspect composition is the only model.
+**Decision:** Vyb has no class system. Struct + aspect composition is the only model.
 
-Classes are an anti-pattern in VyB's design. Inheritance-like patterns are achieved via
+Classes are an anti-pattern in Vyb's design. Inheritance-like patterns are achieved via
 aspect composition + `bind`. The `class` keyword is not planned, not accepted as a
 proposal, and should not be re-proposed. `doc/TRAIT_SYSTEM_DESIGN.md` Phase 5 (class
 system) has been removed. All references to an optional class system have been excised
@@ -396,12 +396,12 @@ from the roadmap.
 
 ### [DECIDED] `trait`/`impl` vs. `aspect`/`bind` Terminology
 
-**Decision:** VyB uses `aspect`/`bind`. `trait`/`impl` is Rust vocabulary.
+**Decision:** Vyb uses `aspect`/`bind`. `trait`/`impl` is Rust vocabulary.
 
 `aspect` captures that it adds a dimension of behavior. `bind` clearly expresses that you
 are attaching that aspect to a type. All documentation uses `aspect`/`bind`. The `impl`
 keyword may be accepted as an alias for backward compatibility only; `bind` is the
-idiomatic VyB path. All `trait`/`impl` examples in documentation have been updated to
+idiomatic Vyb path. All `trait`/`impl` examples in documentation have been updated to
 `aspect`/`bind`. `doc/TRAIT_SYSTEM_DESIGN.md` and `doc/WHY_TRAITS_NOT_CLASSES.md` have
 been updated accordingly.
 
@@ -409,24 +409,24 @@ been updated accordingly.
 
 **Decision:** `fn` syntax is deprecated as of v0.5 and will be removed in v1.0.
 
-The name-first syntax `name(params)<ReturnType> ->` is cleaner and uniquely VyB. One
+The name-first syntax `name(params)<ReturnType> ->` is cleaner and uniquely Vyb. One
 syntax is better than two. The `fn` keyword is legacy. New code must use name-first
 syntax. The README note about `fn` support is historical; it will not persist to 1.0.
 
 ### [DECIDED] `try`/`catch`/`finally` vs. `fail`/`trap`
 
-**Decision:** VyB uses `fail`/`trap`. There is no `try`, `catch`, `finally`, or `throw`.
+**Decision:** Vyb uses `fail`/`trap`. There is no `try`, `catch`, `finally`, or `throw`.
 
 `TryStatement` and `ThrowStatement` have been removed from `doc/AST_Roadmap.md`. These
-are vestigial C++ vocabulary and have no place in VyB. `fail`/`trap` provides zero-cost
-success path, typed errors, and explicit propagation — the VyB way. `doc/AST_Roadmap.md`
+are vestigial C++ vocabulary and have no place in Vyb. `fail`/`trap` provides zero-cost
+success path, typed errors, and explicit propagation — the Vyb way. `doc/AST_Roadmap.md`
 has been updated to reflect this.
 
 ### [DECIDED] Generic Bound Syntax
 
-**Decision:** `<T<Aspect>>` only. `T: Aspect` is Rust syntax and is not VyB.
+**Decision:** `<T<Aspect>>` only. `T: Aspect` is Rust syntax and is not Vyb.
 
-All documentation now uses `<T<Aspect>>` exclusively. This is consistent with VyB's
+All documentation now uses `<T<Aspect>>` exclusively. This is consistent with Vyb's
 unified `name<Type>` syntax. All `<T: Trait>` examples have been removed from docs.
 
 ### [DECIDED] Iterator Protocol: Aspect-Based
@@ -454,9 +454,9 @@ implementation. The README has been updated to remove them from the v1.0 scope.
 
 ---
 
-## VyB-Native Ideas Worth Exploring
+## Vyb-Native Ideas Worth Exploring
 
-These are not in any current design document but feel natural given VyB's identity and
+These are not in any current design document but feel natural given Vyb's identity and
 should be prototyped or at least documented before 1.0:
 
 ### `pipe` Operator (`|>`)
@@ -468,7 +468,7 @@ result<String> = data
     |> to_string()
 ```
 The `|>` pipe operator threads the left-hand value as the first argument to the right-hand
-function. Fits VyB's clean aesthetic; makes functional chains readable without a method
+function. Fits Vyb's clean aesthetic; makes functional chains readable without a method
 chain API requirement.
 
 ### `ensure` Contracts
@@ -494,7 +494,7 @@ Implemented by the compiler calling a `Drop` aspect method on scope exit. Does n
 Aligns with `mild<T>` and `our<T>` lifecycle semantics.
 
 ### Named Arguments at Call Sites
-VyB's `name<Type>` syntax already names parameters. Callers should be allowed to use names:
+Vyb's `name<Type>` syntax already names parameters. Callers should be allowed to use names:
 ```vyb
 result<Int> = add(x: 10, y: 20)   # Named args, order-independent
 ```
@@ -510,13 +510,13 @@ result<Int> = select(risky_operation()) -> {
     ?                  -> 0
 };
 ```
-Unifies error handling with pattern matching in a uniquely VyB way. No try-catch pyramid.
+Unifies error handling with pattern matching in a uniquely Vyb way. No try-catch pyramid.
 
 ---
 
 ## 1.0 Release Criteria
 
-For VyB to be considered production-ready at 1.0, **all of the following must be true**:
+For Vyb to be considered production-ready at 1.0, **all of the following must be true**:
 
 ### Must-Have for 1.0
 - [x] Module system core working (`import`, `smuggle`, `bundle`, `share`, module paths, stdlib discovery)
@@ -548,7 +548,7 @@ For VyB to be considered production-ready at 1.0, **all of the following must be
 ### Post-1.0 Roadmap
 - [ ] Channels + actors (design doc first!)
 - [ ] Networking + Sockets (see section below)
-- [ ] Self-hosting compiler (VyB written in VyB)
+- [ ] Self-hosting compiler (Vyb written in Vyb)
 - [ ] Macros / metaprogramming
 - [ ] Package registry
 - [ ] `vyb bindgen` for C header automation
@@ -562,10 +562,10 @@ For VyB to be considered production-ready at 1.0, **all of the following must be
 ## Networking and Sockets
 
 Networking is a post-1.0 feature that **depends entirely on FFI being complete first**.
-Raw sockets are POSIX system calls (`socket`, `connect`, `bind`, `recv`, `send`), so VyB
+Raw sockets are POSIX system calls (`socket`, `connect`, `bind`, `recv`, `send`), so Vyb
 networking is FFI + a thin standard-library wrapper — not a language feature per se.
 
-### Design Approach (VyB-native)
+### Design Approach (Vyb-native)
 
 Once `extern "C"` FFI lands (v0.5), networking follows naturally:
 
@@ -593,10 +593,10 @@ async tcp_connect(host<String>, port<Int>)<TcpStream> -> {
 
 - [ ] **v0.5 — FFI foundation** (`extern "C"` blocks, C type mapping)
 - [ ] **v0.5 — Raw socket FFI bindings** — `stdlib/net/raw.vyb` wrapping POSIX socket API
-- [ ] **v0.6 — `TcpStream` / `UdpSocket`** — Safe VyB wrappers with `fail`/`trap` error handling
+- [ ] **v0.6 — `TcpStream` / `UdpSocket`** — Safe Vyb wrappers with `fail`/`trap` error handling
 - [ ] **v0.6 — `TcpListener`** — Server-side accept loop integrated with async runtime
 - [ ] **v0.6 — Async I/O** — Non-blocking socket I/O using the async executor (requires real event loop)
-- [ ] **v0.7 — HTTP/1.1 client** — Built on `TcpStream`, pure VyB implementation
+- [ ] **v0.7 — HTTP/1.1 client** — Built on `TcpStream`, pure Vyb implementation
 - [ ] **Post-1.0 — TLS** — Via `extern "C"` bindings to OpenSSL or mbedTLS
 - [ ] **Post-1.0 — UDP multicast, raw packets** — Advanced socket options
 
@@ -604,14 +604,14 @@ async tcp_connect(host<String>, port<Int>)<TcpStream> -> {
 
 **Q: Is networking a language feature or a library?**
 Networking is *stdlib*, not a language feature. The only language feature required is
-`extern "C"` FFI, which is planned for v0.5. Everything else is library code written in VyB.
+`extern "C"` FFI, which is planned for v0.5. Everything else is library code written in Vyb.
 
 **Q: How do errors surface?**
-Socket errors surface as VyB `fail`/`trap`: failable functions return `{value, error}` pairs.
+Socket errors surface as Vyb `fail`/`trap`: failable functions return `{value, error}` pairs.
 There is no exception for network I/O — the `fail`/`trap` system handles it uniformly.
 
 **Q: What about async I/O?**
-Async socket I/O requires a real event loop in the VyB async runtime (currently a stub).
+Async socket I/O requires a real event loop in the Vyb async runtime (currently a stub).
 Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `TcpStream`.
 
 ## Consistency Work
@@ -634,12 +634,12 @@ Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `
 ### Action Items
 
 - Keep `UPDATE_LOG.md` current as the source-biased implementation audit.
-- Fix or move non-VyB *.vyb fixtures (e.g. extracted tests containing C++ snippets).
+- Fix or move non-Vyb *.vyb fixtures (e.g. extracted tests containing C++ snippets).
 - Pick a single canonical test runner.
 
 ---
 
 *Last Updated: February 2026*
-*Current Version: VyB v0.5.0 (freedom-1.0 series)*
+*Current Version: Vyb v0.5.0 (freedom-1.0 series)*
 *Overall Status: ~60-65% complete toward 1.0 — 657 tests, 315 passing (47.9%)*
 *SUGGESTIONS.md merged into this document.*

@@ -1,7 +1,7 @@
 # core::option
 #
 # Transitional stdlib bridge while tagged enum payload variants are still
-# unimplemented in VyB. This file intentionally provides only `OptionInt`.
+# unimplemented in Vyb. This file intentionally provides only `OptionInt`.
 # Canonical `Option<T>` / `Some(T)` / `None` remains a future feature.
 
 share(all)

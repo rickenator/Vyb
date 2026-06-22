@@ -17,7 +17,7 @@ main()<Int> -> {
     }
 
     freedom {
-        length<CSize> = strlen("VyB")
+        length<CSize> = strlen("Vyb")
         println_int(length)
     }
 

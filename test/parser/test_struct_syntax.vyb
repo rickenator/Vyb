@@ -36,7 +36,7 @@ createEntities()<Person, Company> -> {
     return person, company
 }
 
-// Main function with multiple return values - VyB runtime will automatically
+// Main function with multiple return values - Vyb runtime will automatically
 // serialize these values to JSON output
 main()<Person, Company> -> {
     // Receive multiple return values from createShapes()
@@ -53,6 +53,6 @@ main()<Person, Company> -> {
     person.salary = person.salary * 1.1  // 10% raise
     company.employeeCount += 50          // Company growth
 
-    // Return multiple values - the VyB runtime automatically serializes these to JSON
+    // Return multiple values - the Vyb runtime automatically serializes these to JSON
     return person, company  // Will produce JSON with Person and Company objects
 }

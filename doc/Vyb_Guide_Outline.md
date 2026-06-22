@@ -1,13 +1,13 @@
 
-# VyB Programmer’s Guide — Detailed Outline
+# Vyb Programmer’s Guide — Detailed Outline
 
 1. **Introduction**
-   1.1. Why VyB? (Goals & Philosophy)
+   1.1. Why Vyb? (Goals & Philosophy)
    1.2. Key Features at a Glance
    1.3. Setup & Tooling (Compiler, REPL, Package Manager)
 
 2. **Quick Start**
-   2.1. Hello, VyB World
+   2.1. Hello, Vyb World
    2.2. Building & Running
    2.3. First Ownership Example
 
@@ -64,13 +64,13 @@
     11.1. Resource Management
     11.2. Error Handling Idioms
     11.3. Performance Tips
-    11.4. Design Patterns in VyB
+    11.4. Design Patterns in Vyb
 
 12. **Deep Dives**
     12.1. AST Internals & Parser
     12.2. Semantic Analysis
     12.3. Codegen & JIT Integration
-    12.4. Embedding VyB in C/C++
+    12.4. Embedding Vyb in C/C++
 
 13. **Appendices**
     A. Full EBNF Grammar

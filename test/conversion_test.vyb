@@ -29,7 +29,7 @@ main()<Int> -> {
     println("=== Testing String conversions ===")
 
     // String identity
-    original<String> = "Hello, VyB!"
+    original<String> = "Hello, Vyb!"
     copied<String> = String::from_string(original)
     println("String copy: " + copied)
 

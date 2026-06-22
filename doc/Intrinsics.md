@@ -1,12 +1,12 @@
-# VyB Intrinsics & Core Syntax
+# Vyb Intrinsics & Core Syntax
 
-This document covers VyB’s built-in intrinsics, variable declaration syntax (including type inference), and function declaration syntax, all aligned with the `<T>`‑first style.
+This document covers Vyb’s built-in intrinsics, variable declaration syntax (including type inference), and function declaration syntax, all aligned with the `<T>`‑first style.
 
 ---
 
 ## 1. Variable & Constant Declarations
 
-VyB uses two primary declaration forms:
+Vyb uses two primary declaration forms:
 
 ```ebnf
 Declaration ::= "var" "<" Type ">" Identifier [ "=" Expression ]
@@ -69,7 +69,7 @@ Body         ::= Block
                | Expression
 
 Block        ::= "{" Statement* [ Expression ] "}"
-Expression   ::= <any single VyB expression>
+Expression   ::= <any single Vyb expression>
 ```
 
 - **Return type**: declared in `<Type>` after `fn`.
@@ -247,7 +247,7 @@ fs<String> = flag.to_string() // "false"
 
 ## 8. Auto-Serialization Intrinsics (stable)
 
-VyB provides built-in serialization support for automatic JSON generation of data structures, particularly for values returned from `main()`. These intrinsics are stable and ready for production use.
+Vyb provides built-in serialization support for automatic JSON generation of data structures, particularly for values returned from `main()`. These intrinsics are stable and ready for production use.
 
 ### 7.1 Serialization Mode Intrinsics
 
@@ -264,7 +264,7 @@ fn deserial(value: T) -> T
 
 - **`bare(value)`**: Emits only raw field values as JSON array, removing all type and field metadata. For structs, outputs values in field declaration order as a JSON array. Only valid for structs.
 
-- **`deserial(json_string)`**: Deserializes JSON string back to typed VyB values. Used for converting JSON input back to VyB data structures.
+- **`deserial(json_string)`**: Deserializes JSON string back to typed Vyb values. Used for converting JSON input back to Vyb data structures.
 
 #### Examples
 

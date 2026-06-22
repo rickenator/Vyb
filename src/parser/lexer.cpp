@@ -522,7 +522,7 @@ bool Lexer::is_digit(char c) {
 }
 
 /*
-std::string Lexer::token_type_to_string(VyB::TokenType type)
+std::string Lexer::token_type_to_string(Vyb::TokenType type)
 This function is now globally available as vyb::token_type_to_string
 from "vyb/token.hpp" and implemented in "vyb/token.cpp".
 The Lexer should use that one if it ever needs to generate a TokenType to a string,

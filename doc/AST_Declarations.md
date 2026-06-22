@@ -1,6 +1,6 @@
-# VyB AST: Declarations
+# Vyb AST: Declarations
 
-This document details the various declaration AST nodes used in VyB, as defined in `include/vyb/parser/ast.hpp`. All declaration nodes inherit from `vyb::ast::Declaration` (which itself inherits from `vyb::ast::Statement`).
+This document details the various declaration AST nodes used in Vyb, as defined in `include/vyb/parser/ast.hpp`. All declaration nodes inherit from `vyb::ast::Declaration` (which itself inherits from `vyb::ast::Statement`).
 
 ## Common Pointer Aliases
 
@@ -43,7 +43,7 @@ public:
 } // namespace vyb::ast
 ```
 
-**Note:** As of v0.3.7, VyB uses the `var<T>`/`const<T>` declaration syntax with full support for modern struct syntax (`field<Type>`), match statements, break/continue, and Vec<T> collections, so every `VariableDeclaration` node will have `type` set (no longer optional in practice).
+**Note:** As of v0.3.7, Vyb uses the `var<T>`/`const<T>` declaration syntax with full support for modern struct syntax (`field<Type>`), match statements, break/continue, and Vec<T> collections, so every `VariableDeclaration` node will have `type` set (no longer optional in practice).
 
 ## 2. Function Parameter (`vyb::ast::FunctionParameter`)
 
@@ -68,7 +68,7 @@ public:
 
 ### Function Parameter Syntax
 
-VyB supports two parameter syntax styles that produce identical AST structures:
+Vyb supports two parameter syntax styles that produce identical AST structures:
 
 #### Standard Syntax
 ```vyb
@@ -125,7 +125,7 @@ public:
 
 ### Multi-Value Returns & Auto-Serialization
 
-Function declarations in VyB support multi-value return types using the generic syntax `fn<T1, T2, ...>`. When the function name is `main`, the VyB runtime automatically serializes returned values to JSON format:
+Function declarations in Vyb support multi-value return types using the generic syntax `fn<T1, T2, ...>`. When the function name is `main`, the Vyb runtime automatically serializes returned values to JSON format:
 
 ```vyb
 // Single return type with standard parameter syntax
@@ -237,7 +237,7 @@ public:
 
 ### Field Declaration Syntax
 
-VyB supports two syntaxes for struct field declarations that can be used interchangeably or mixed within the same struct:
+Vyb supports two syntaxes for struct field declarations that can be used interchangeably or mixed within the same struct:
 
 #### Colon Syntax (Original)
 ```vyb
@@ -263,16 +263,16 @@ struct MixedPoint {
 }
 ```
 
-The angle bracket syntax aligns with VyB's type-first approach used in function signatures (`fn<ReturnType>`) and variable declarations (`var<Type>`), providing visual consistency across the language.
+The angle bracket syntax aligns with Vyb's type-first approach used in function signatures (`fn<ReturnType>`) and variable declarations (`var<Type>`), providing visual consistency across the language.
 
 ## 8. Class Declaration (`vyb::ast::ClassDeclaration`)
 
-*Note: VyB does not have a class system. The `ClassDeclaration` AST node exists as a
+*Note: Vyb does not have a class system. The `ClassDeclaration` AST node exists as a
 parser artifact from early development and is **not** exposed in the language. Use structs
 + aspects instead. This node may be removed in a future cleanup.*
 
 ```cpp
-// Structure in include/vyb/parser/ast.hpp (legacy — not exposed to VyB programs)
+// Structure in include/vyb/parser/ast.hpp (legacy — not exposed to Vyb programs)
 namespace vyb::ast {
 
 class ClassDeclaration : public Declaration {
@@ -340,7 +340,7 @@ Both syntaxes produce identical AST structures and runtime behavior. The choice 
 ## 10. Bind Declaration (`vyb::ast::ImplDeclaration`)
 
 Represents a `bind` block — binding an aspect to a type. The underlying AST node is
-`ImplDeclaration` (legacy name); the VyB keyword is `bind`. See `doc/TRAIT_SYSTEM_DESIGN.md`.
+`ImplDeclaration` (legacy name); the Vyb keyword is `bind`. See `doc/TRAIT_SYSTEM_DESIGN.md`.
 
 ```cpp
 // Structure in include/vyb/parser/ast.hpp
@@ -410,7 +410,7 @@ public:
 
 Represents a generic parameter in a declaration (e.g., `T` in `foo<T>(p<T>)` or
 `struct Bar<T<SomeAspect>>`). This node was formerly named `GenericParamNode`. It inherits
-directly from `Node`. VyB uses `<T<Aspect>>` bound syntax — not `T: Aspect`.
+directly from `Node`. Vyb uses `<T<Aspect>>` bound syntax — not `T: Aspect`.
 
 ```cpp
 // Structure in include/vyb/parser/ast.hpp

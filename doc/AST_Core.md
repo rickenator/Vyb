@@ -1,10 +1,10 @@
 # Core AST Design
 
-This document describes the fundamental building blocks of the VyB Abstract Syntax Tree (AST), including the base `Node` class, its primary derivatives (`Expression`, `Statement`, `Declaration`), the `NodeType` enumeration, and the Visitor pattern implementation. All definitions are sourced from `include/vyb/parser/ast.hpp`.
+This document describes the fundamental building blocks of the Vyb Abstract Syntax Tree (AST), including the base `Node` class, its primary derivatives (`Expression`, `Statement`, `Declaration`), the `NodeType` enumeration, and the Visitor pattern implementation. All definitions are sourced from `include/vyb/parser/ast.hpp`.
 
 ## 1. Base AST Node (`vyb::ast::Node`) and Derivatives
 
-All AST nodes in VyB inherit from a base `Node` class. `Expression`, `Statement`, and `Declaration` are key abstract base classes derived from `Node`.
+All AST nodes in Vyb inherit from a base `Node` class. `Expression`, `Statement`, and `Declaration` are key abstract base classes derived from `Node`.
 
 ```cpp
 // Structure in include/vyb/parser/ast.hpp

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-VyB Parser Test Runner
+Vyb Parser Test Runner
 
-This script specifically runs parser test files in the VyB language,
+This script specifically runs parser test files in the Vyb language,
 focusing on the parser category tests.
 """
 
@@ -19,22 +19,22 @@ import json
 
 
 def find_vyb_root():
-    """Find the VyB repository root directory.
+    """Find the Vyb repository root directory.
 
     This function looks for the repository root by starting from this script's directory
     and walking up until it finds a directory with CMakeLists.txt and src/tests.cpp
-    (which are clear indicators of the VyB repository root).
+    (which are clear indicators of the Vyb repository root).
 
     Returns:
-        Path: The absolute path to the VyB repository root
+        Path: The absolute path to the Vyb repository root
     """
     # Start from the directory where this script is located
     script_dir = Path(os.path.dirname(os.path.abspath(__file__)))
     current_dir = script_dir
 
-    # Walk up directories until we find the VyB repo root
+    # Walk up directories until we find the Vyb repo root
     while True:
-        # Check if this looks like the VyB repo root
+        # Check if this looks like the Vyb repo root
         if (current_dir / "CMakeLists.txt").exists() and (current_dir / "src" / "tests.cpp").exists():
             return current_dir
 
@@ -43,13 +43,13 @@ def find_vyb_root():
 
         # If we've reached the filesystem root without finding it
         if parent_dir == current_dir:
-            raise RuntimeError("Could not find VyB repository root directory")
+            raise RuntimeError("Could not find Vyb repository root directory")
 
         current_dir = parent_dir
 
 @dataclass
 class TestCase:
-    """Represents a single VyB test case with its directives."""
+    """Represents a single Vyb test case with its directives."""
     filename: str
     name: str = "Unnamed test"
     description: str = ""
@@ -119,7 +119,7 @@ def parse_directives(file_path):
         return test
 
 def run_test(test, vyb_executable, debug=False):
-    """Run a single test using the VyB compiler."""
+    """Run a single test using the Vyb compiler."""
     start_time = time.time()
 
     # Prepare the command
@@ -205,7 +205,7 @@ def format_result(result, test, verbose=0):
 
 def main():
     """Main function to parse arguments and run tests."""
-    # Find the VyB repository root
+    # Find the Vyb repository root
     try:
         vyb_root = find_vyb_root()
     except RuntimeError as e:
@@ -213,7 +213,7 @@ def main():
         sys.exit(1)
 
     parser = argparse.ArgumentParser(
-        description='VyB parser test runner',
+        description='Vyb parser test runner',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -252,8 +252,8 @@ Examples:
 
     # Verify executable exists
     if not os.path.isfile(vyb_executable):
-        print(f"Error: Cannot find VyB executable at {vyb_executable}")
-        print(f"Build VyB or specify executable with --vyb option")
+        print(f"Error: Cannot find Vyb executable at {vyb_executable}")
+        print(f"Build Vyb or specify executable with --vyb option")
         sys.exit(1)
 
     # Verify test directory exists
@@ -262,8 +262,8 @@ Examples:
         sys.exit(1)
 
     if args.verbose:
-        print(f"VyB repository root: {vyb_root}")
-        print(f"Using VyB executable: {vyb_executable}")
+        print(f"Vyb repository root: {vyb_root}")
+        print(f"Using Vyb executable: {vyb_executable}")
         print(f"Using test directory: {test_dir}")
 
     results = []

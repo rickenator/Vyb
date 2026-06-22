@@ -155,7 +155,7 @@ void LLVMCodegen::visit(vyb::ast::ObjectLiteral* node) {
         builder->CreateStore(fieldValue, fieldPtr);
     }
 
-    // In VyB, struct initialization can be used both for creating temporary values
+    // In Vyb, struct initialization can be used both for creating temporary values
     // and for direct assignment to variables. We need to decide if we should return
     // the pointer or load the actual struct value.
 
@@ -908,7 +908,7 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
         }
 
         // Call println with the serialized string
-        llvm::Function* printlnFunc = getVyBPrintlnFunction();
+        llvm::Function* printlnFunc = getVybPrintlnFunction();
         std::vector<llvm::Value*> printlnArgs = {serializedValue};
         builder->CreateCall(printlnFunc, printlnArgs);
 

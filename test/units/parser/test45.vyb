@@ -1,4 +1,4 @@
-// filepath: /home/rick/Projects/VyB/test/units/extracted/test45.vyb
+// filepath: /home/rick/Projects/Vyb/test/units/extracted/test45.vyb
 // @test: Semantic: 'addr(loc_var)' is safe (does not require freedom block)
 // @description: Extracted from tests.cpp - Semantic: 'addr(loc_var)' is safe (does not require freedom block)
 // @category: parser

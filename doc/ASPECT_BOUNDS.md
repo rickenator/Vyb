@@ -1,4 +1,4 @@
-# Aspect Bounds in VyB
+# Aspect Bounds in Vyb
 
 **Version:** 0.4.1
 **Status:** Implementation in Progress (Phase 6 Step 5)

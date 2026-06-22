@@ -1,6 +1,6 @@
-# VyB Programming Language - Changelog
+# Vyb Programming Language - Changelog
 
-All notable changes to the VyB programming language will be documented in this file.
+All notable changes to the Vyb programming language will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -46,7 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CMakeLists.txt version**: Project version updated from `0.3.5` → `0.5.0` to match the language's actual state
 
 ### Status
-VyB v0.5.0 delivers a complete systems programming language with LLVM backend, native code generation, generics, aspect/bind polymorphism, pattern matching, defer, error propagation (fail/trap), async/await stubs, Vec<T>, String methods, and now C-like enums.
+Vyb v0.5.0 delivers a complete systems programming language with LLVM backend, native code generation, generics, aspect/bind polymorphism, pattern matching, defer, error propagation (fail/trap), async/await stubs, Vec<T>, String methods, and now C-like enums.
 
 ---
 
@@ -86,7 +86,7 @@ VyB v0.5.0 delivers a complete systems programming language with LLVM backend, n
   - Removed obsolete test scripts
 
 ### Status
-VyB v0.4.2 is a **fully functional, production-ready systems programming language** with complete core features, generic functions, and aspect system foundation.
+Vyb v0.4.2 is a **fully functional, production-ready systems programming language** with complete core features, generic functions, and aspect system foundation.
 
 ### Tagged Release
 **freedom-1.0**: First release emphasizing programmer FREEDOM with generic functions and aspect system
@@ -127,7 +127,7 @@ VyB v0.4.2 is a **fully functional, production-ready systems programming languag
 - **Memory Function Support**: Full registration of malloc/free/memset with proper mangling
 
 ### Migration Impact
-- **Developer Experience**: No changes to VyB language syntax or semantics
+- **Developer Experience**: No changes to Vyb language syntax or semantics
 - **Runtime Stability**: Dramatically improved stability for memory-intensive operations
 - **Vec System**: Full functionality restored with automatic cleanup working perfectly
 - **Performance**: Better JIT compilation performance with modern LLVM infrastructure

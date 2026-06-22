@@ -165,7 +165,7 @@ void LLVMCodegen::visit(vyb::ast::ObjectLiteral* node) {
         builder->CreateStore(fieldValue, fieldPtr);
     }
 
-    // In VyB, struct initialization can be used both for creating temporary values
+    // In Vyb, struct initialization can be used both for creating temporary values
     // and for direct assignment to variables. We need to decide if we should return
     // the pointer or load the actual struct value.
 
@@ -847,7 +847,7 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                         return;
                     }
 
-                    // Extract the char* from the VyB String struct { ptr, i64 }
+                    // Extract the char* from the Vyb String struct { ptr, i64 }
                     llvm::Value* charPtr = builder->CreateExtractValue(stringArg, 0, "str.ptr");
 
                     // Handle primitive types
@@ -908,7 +908,7 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                         m_currentLLVMValue = result;
                         return;
                     } else if (typeName == "String") {
-                        // String::from_string() is identity - just return a copy as VyB String struct
+                        // String::from_string() is identity - just return a copy as Vyb String struct
                         llvm::FunctionType* fromStringType = llvm::FunctionType::get(
                             int8PtrType,
                             {int8PtrType, llvm::PointerType::get(int1Type, 0)},
@@ -923,7 +923,7 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                         llvm::Value* successPtr = builder->CreateAlloca(int1Type, nullptr, "success");
                         llvm::Value* charResult = builder->CreateCall(fromStringFunc, {charPtr, successPtr}, "from_string.char_result");
 
-                        // Convert char* to VyB String struct { ptr, len }
+                        // Convert char* to Vyb String struct { ptr, len }
                         // Declare strlen
                         llvm::FunctionType* strlenType = llvm::FunctionType::get(int64Type, {int8PtrType}, false);
                         llvm::Function* strlenFunc = module->getFunction("strlen");
@@ -1793,14 +1793,14 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
 
         llvm::Value* serializedValue = nullptr;
 
-        // Check for string type first (VyB string struct {ptr, len})
+        // Check for string type first (Vyb string struct {ptr, len})
         if (node->arguments[0]->type) {
             auto* argType = node->arguments[0]->type.get();
             std::string typeStr = argType->toString();
 
-            // Priority 1: Check if it's a VyB string type
+            // Priority 1: Check if it's a Vyb string type
             if (typeStr == "string" || typeStr == "String") {
-                // It's a VyB string struct {ptr, len} - extract the ptr field
+                // It's a Vyb string struct {ptr, len} - extract the ptr field
                 if (arg->getType()->isStructTy()) {
                     // Extract the ptr field (index 0) from the string struct
                     serializedValue = builder->CreateExtractValue(arg, 0, "str.ptr");
@@ -1855,7 +1855,7 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
         }
 
         // Call println with the serialized string
-        llvm::Function* printlnFunc = getVyBPrintlnFunction();
+        llvm::Function* printlnFunc = getVybPrintlnFunction();
         std::vector<llvm::Value*> printlnArgs = {serializedValue};
         builder->CreateCall(printlnFunc, printlnArgs);
 
@@ -1863,8 +1863,8 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
         return;
         } else {
             // Multiple arguments: print each with space separator, last with newline
-            llvm::Function* printFunc = getVyBPrintFunction();
-            llvm::Function* printlnFunc = getVyBPrintlnFunction();
+            llvm::Function* printFunc = getVybPrintFunction();
+            llvm::Function* printlnFunc = getVybPrintlnFunction();
             // Space constant
             llvm::Value* spaceStr = builder->CreateGlobalStringPtr(" ", "println.space");
             for (size_t i = 0; i < node->arguments.size(); ++i) {
@@ -1890,7 +1890,7 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
 
     // Handle print() intrinsic (no newline)
     if (identCallee && identCallee->name == "print" && node->arguments.size() >= 1) {
-        llvm::Function* printFunc = getVyBPrintFunction();
+        llvm::Function* printFunc = getVybPrintFunction();
         llvm::Value* spaceStr = nullptr;
         if (node->arguments.size() > 1) {
             spaceStr = builder->CreateGlobalStringPtr(" ", "print.space");
@@ -1954,9 +1954,9 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
         }
         llvm::Value* strVal = generateToStringCall(arg, arg->getType(), nullptr, node->loc);
         if (identCallee->name == "println_int") {
-            builder->CreateCall(getVyBPrintlnFunction(), {strVal});
+            builder->CreateCall(getVybPrintlnFunction(), {strVal});
         } else {
-            builder->CreateCall(getVyBPrintFunction(), {strVal});
+            builder->CreateCall(getVybPrintFunction(), {strVal});
         }
         m_currentLLVMValue = nullptr;
         return;
@@ -1976,9 +1976,9 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
         }
         llvm::Value* strVal = generateToStringCall(arg, arg->getType(), nullptr, node->loc);
         if (identCallee->name == "println_bool") {
-            builder->CreateCall(getVyBPrintlnFunction(), {strVal});
+            builder->CreateCall(getVybPrintlnFunction(), {strVal});
         } else {
-            builder->CreateCall(getVyBPrintFunction(), {strVal});
+            builder->CreateCall(getVybPrintFunction(), {strVal});
         }
         m_currentLLVMValue = nullptr;
         return;
@@ -2084,7 +2084,7 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
 
             llvm::Type* argType = arg->getType();
 
-            // If the argument is a VyB string struct { ptr, i64 }, extract the ptr field
+            // If the argument is a Vyb string struct { ptr, i64 }, extract the ptr field
             if (argType->isStructTy() && argType->getStructNumElements() == 2 &&
                 argType->getStructElementType(1)->isIntegerTy(64)) {
                 arg = builder->CreateExtractValue(arg, 0, "lit.strptr");
@@ -2509,8 +2509,8 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
         // Phase 4: Check if this is a call to a semantically failable function.
         bool calleeNeedsErrorReturn = false;
         if (auto* calleeIdent = dynamic_cast<ast::Identifier*>(node->callee.get())) {
-            if (m_currentVyBModule) {
-                for (const auto& stmt : m_currentVyBModule->body) {
+            if (m_currentVybModule) {
+                for (const auto& stmt : m_currentVybModule->body) {
                     auto* decl = dynamic_cast<ast::FunctionDeclaration*>(stmt.get());
                     if (decl && decl->id && decl->id->name == calleeIdent->name && decl->needsErrorReturn) {
                         calleeNeedsErrorReturn = true;
@@ -2564,7 +2564,7 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                 } else {
                     // No trap and not a failable function - call untrapped error handler
                     VYB_CDBG << "DEBUG: Error reaching untrapped handler" << std::endl;
-                    llvm::Function* untrappedFn = getVyBUntrappedErrorFunction();
+                    llvm::Function* untrappedFn = getVybUntrappedErrorFunction();
 
                     // Pass the actual error pointer
                     builder->CreateCall(untrappedFn, {errorPtr});
@@ -4511,7 +4511,7 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
             emitPropagatingErrorReturn(errorPtr);
         } else {
             // Not in failable function - call untrapped error handler
-            llvm::Function* untrappedFn = getVyBUntrappedErrorFunction();
+            llvm::Function* untrappedFn = getVybUntrappedErrorFunction();
             builder->CreateCall(untrappedFn, {errorPtr});
             builder->CreateUnreachable();
         }

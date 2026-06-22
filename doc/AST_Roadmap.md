@@ -1,7 +1,7 @@
-<!-- filepath: /home/rick/Projects/VyB/doc/AST_Roadmap.md -->
-# VyB AST: Roadmap and Planned Features
+<!-- filepath: /home/rick/Projects/Vyb/doc/AST_Roadmap.md -->
+# Vyb AST: Roadmap and Planned Features
 
-This document outlines planned features, future extensions, and areas for improvement for the VyB Abstract Syntax Tree (AST). It incorporates items previously marked as "planned" in the original `AST.md` and addresses review suggestions related to future development (like Suggestion 10).
+This document outlines planned features, future extensions, and areas for improvement for the Vyb Abstract Syntax Tree (AST). It incorporates items previously marked as "planned" in the original `AST.md` and addresses review suggestions related to future development (like Suggestion 10).
 
 ## 1. Planned AST Node Types
 
@@ -36,7 +36,7 @@ This section consolidates nodes that were previously mentioned as "planned" or a
 ### 1.3. Module System Nodes
 
 *   **Status:** Partially implemented through `ImportDeclaration`, but needs expansion.
-*   **Description:** Nodes to fully support VyB's module system, including module declarations and more complex import/export capabilities.
+*   **Description:** Nodes to fully support Vyb's module system, including module declarations and more complex import/export capabilities.
 *   **Key Nodes:**
     *   `ModuleDeclaration`: (Potentially at the root of an AST file or as a special node) Declares the current file as a module with a specific path.
     *   `ExportDeclaration`: Wraps a declaration (function, struct, enum, const) to mark it as exported. Could also be a flag on existing declaration nodes.
@@ -45,12 +45,12 @@ This section consolidates nodes that were previously mentioned as "planned" or a
 
 ### 1.4. Error Handling Nodes
 
-*   **Status:** `fail`/`trap` is the VyB error system. `TryStatement` and `ThrowStatement`
-    are **not** part of VyB — they are vestigial C++/Java vocabulary and have been removed
+*   **Status:** `fail`/`trap` is the Vyb error system. `TryStatement` and `ThrowStatement`
+    are **not** part of Vyb — they are vestigial C++/Java vocabulary and have been removed
     from this roadmap.
-*   **Description:** VyB uses `fail`/`trap` for error propagation. These provide a
+*   **Description:** Vyb uses `fail`/`trap` for error propagation. These provide a
     zero-cost success path with typed errors. There is no `throw`, no `try`, no `catch`,
-    and no `finally` in VyB. AST nodes for VyB error handling:
+    and no `finally` in Vyb. AST nodes for Vyb error handling:
 *   **Key Nodes:**
     *   `FailExpression`: Represents a `fail<ErrorType>(value)` expression — typed error
         propagation.
@@ -60,12 +60,12 @@ This section consolidates nodes that were previously mentioned as "planned" or a
         failed to parse correctly but where recovery was possible. Used by the parser to
         record errors without aborting the whole parse.
 *   **Action:** Implement `FailExpression` and `TrapStatement` nodes. `ErrorNode` for
-    parser recovery. Do not add any try/catch/throw/finally nodes — they are not VyB.
+    parser recovery. Do not add any try/catch/throw/finally nodes — they are not Vyb.
 
 ### 1.5. Metaprogramming / Macros
 
 *   **Status:** Future consideration.
-*   **Description:** If VyB incorporates procedural or declarative macros, the AST will need to represent macro definitions and invocations.
+*   **Description:** If Vyb incorporates procedural or declarative macros, the AST will need to represent macro definitions and invocations.
 *   **Key Nodes:**
     *   `MacroDefinition`
     *   `MacroInvocationExpression`
@@ -107,7 +107,7 @@ This section consolidates nodes that were previously mentioned as "planned" or a
 
 *   **Status:** Partially implemented (`AspectDeclaration`, `BindDeclaration`).
 *   **Description:** Nodes to support aspect definitions, method signatures within aspects,
-    and aspect bounds for generics. These are fundamental for VyB's polymorphism. VyB uses
+    and aspect bounds for generics. These are fundamental for Vyb's polymorphism. Vyb uses
     `aspect`/`bind` — not `trait`/`impl`. `BindDeclaration` for binding aspects to types
     is already part of the AST.
 *   **Key Nodes:**
@@ -193,7 +193,7 @@ This section consolidates nodes that were previously mentioned as "planned" or a
 ### 2.5. AST Pretty Printer
 
 *   **Status:** `toString()` methods exist for debugging.
-*   **Description:** A more robust AST pretty printer that can reconstruct VyB-like source code from the AST. Useful for debugging and code generation/transformation tools.
+*   **Description:** A more robust AST pretty printer that can reconstruct Vyb-like source code from the AST. Useful for debugging and code generation/transformation tools.
 *   **Action:** Enhance `toString()` or create a dedicated pretty-printing visitor.
 
 ## 3. Documentation and Consistency (Review Suggestion 10)
@@ -210,4 +210,4 @@ This section consolidates nodes that were previously mentioned as "planned" or a
 *   **Performance:** For large codebases, AST construction and traversal performance can be critical. Re-evaluate choices like `std::shared_ptr` vs `std::unique_ptr` and consider arena allocation (see `AST_Design_Considerations.md`).
 *   **IDE Integration:** Design the AST to be amenable to consumption by language servers for features like code completion, hover information, and refactoring.
 
-This roadmap provides a forward-looking view for the VyB AST. Priorities and specific designs may evolve as the language implementation progresses.
+This roadmap provides a forward-looking view for the Vyb AST. Priorities and specific designs may evolve as the language implementation progresses.

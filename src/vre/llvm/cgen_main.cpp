@@ -71,7 +71,7 @@ llvm::Value* LLVMCodegen::generateRTTIObject(const std::string& typeName, int ty
 LLVMCodegen::LLVMCodegen(Driver& driver)
     : driver_(driver),
       context(std::make_unique<llvm::LLVMContext>()),
-      module(std::make_unique<llvm::Module>("VyBModule", *this->context)),
+      module(std::make_unique<llvm::Module>("VybModule", *this->context)),
       builder(std::make_unique<llvm::IRBuilder<>>(*this->context)),
       debugBuilder(std::make_unique<llvm::DIBuilder>(*module)),
       debugCompileUnit(nullptr),
@@ -81,7 +81,7 @@ LLVMCodegen::LLVMCodegen(Driver& driver)
       currentFunction(nullptr),
       currentClassType(nullptr),
       m_currentLLVMValue(nullptr),
-      m_currentVyBModule(nullptr)
+      m_currentVybModule(nullptr)
 {
     voidType = llvm::Type::getVoidTy(*this->context);
     int1Type = llvm::Type::getInt1Ty(*this->context);
@@ -174,8 +174,8 @@ void LLVMCodegen::visit(vyb::ast::Module* node) {
 
     VYB_CDBG << "DEBUG: Module visitor called with " << node->body.size() << " statements" << std::endl;
 
-    vyb::ast::Module* previousModule = m_currentVyBModule;
-    m_currentVyBModule = node;
+    vyb::ast::Module* previousModule = m_currentVybModule;
+    m_currentVybModule = node;
 
     // FIRST PASS: Process all struct declarations to establish type information
     VYB_CDBG << "DEBUG: First pass - processing struct declarations" << std::endl;
@@ -217,7 +217,7 @@ void LLVMCodegen::visit(vyb::ast::Module* node) {
     VYB_CDBG << "DEBUG: Fourth pass - registering type metadata" << std::endl;
     registerTypeMetadata();
 
-    m_currentVyBModule = previousModule;
+    m_currentVybModule = previousModule;
     m_currentLLVMValue = nullptr;
 }
 
@@ -243,7 +243,7 @@ void LLVMCodegen::initializeDebugInfo(const std::string& filename) {
     debugCompileUnit = debugBuilder->createCompileUnit(
         llvm::dwarf::DW_LANG_C_plus_plus,  // Use C++ as closest language
         debugFile,
-        "VyB Compiler",      // Producer
+        "Vyb Compiler",      // Producer
         false,               // isOptimized
         "",                  // Flags
         0                    // Runtime version

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Run the VyB milestone gate.
+Run the Vyb milestone gate.
 
 The gate intentionally aggregates multiple stable suites through run_tests.py
 and fails if the total number of passing tests drops below the milestone floor.
@@ -54,7 +54,7 @@ def repo_root() -> Path:
         if (current / "CMakeLists.txt").exists() and (current / "src" / "tests.cpp").exists():
             return current
         current = current.parent
-    raise RuntimeError("Could not find VyB repository root")
+    raise RuntimeError("Could not find Vyb repository root")
 
 
 def run_suite(root: Path, suite: Suite, vyb: str, verbose: bool) -> tuple[int, int]:
@@ -98,14 +98,14 @@ def run_suite(root: Path, suite: Suite, vyb: str, verbose: bool) -> tuple[int, i
 
 def main() -> int:
     root = repo_root()
-    parser = argparse.ArgumentParser(description="Run the VyB milestone test gate")
-    parser.add_argument("--vyb", default=str(root / "build" / "vyb"), help="Path to the VyB executable")
+    parser = argparse.ArgumentParser(description="Run the Vyb milestone test gate")
+    parser.add_argument("--vyb", default=str(root / "build" / "vyb"), help="Path to the Vyb executable")
     parser.add_argument("--minimum", type=int, default=MILESTONE_MINIMUM, help="Minimum passing tests required")
     parser.add_argument("--verbose", "-v", action="store_true", help="Show full per-test output")
     args = parser.parse_args()
 
     if not os.path.isfile(args.vyb):
-        print(f"Error: Cannot find VyB executable at {args.vyb}", file=sys.stderr)
+        print(f"Error: Cannot find Vyb executable at {args.vyb}", file=sys.stderr)
         return 1
 
     total_ran = 0

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `match` statement provides pattern matching in VyB with clean, intuitive syntax designed for clarity and consistency.
+The `match` statement provides pattern matching in Vyb with clean, intuitive syntax designed for clarity and consistency.
 
 ## Syntax
 
@@ -204,7 +204,7 @@ pattern         ::= literal
 
 ### Why `->` Instead of `=>`?
 - **Consistency**: Matches function declaration syntax `foo() -> { ... }`
-- **Familiarity**: Standard arrow operator used throughout VyB
+- **Familiarity**: Standard arrow operator used throughout Vyb
 - **Clarity**: Clearly shows flow from pattern to result
 - **Uniformity**: Same arrow for all "points to" semantics
 
@@ -236,7 +236,7 @@ default: return "other"
 }
 ```
 
-### VyB
+### Vyb
 ```vyb
 match (x) {
     0 -> "zero",

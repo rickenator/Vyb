@@ -1,5 +1,5 @@
-// VyB Runtime Library - Type Conversion Functions
-// Comprehensive runtime support for VyB type conversions
+// Vyb Runtime Library - Type Conversion Functions
+// Comprehensive runtime support for Vyb type conversions
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -164,7 +164,7 @@ char* __vyb_string_from_string(const char* str, bool* success) {
 
 // Generic JSON serialization using type metadata
 char* __vyb_complex_to_json(void* instance, const char* type_name) {
-    VyBTypeMetadata* metadata = __vyb_lookup_type(type_name);
+    VybTypeMetadata* metadata = __vyb_lookup_type(type_name);
     if (!metadata) {
         fprintf(stderr, "Error: Type '%s' not found in registry\n", type_name);
         return strdup("{}");
@@ -174,7 +174,7 @@ char* __vyb_complex_to_json(void* instance, const char* type_name) {
 
 // Generic JSON deserialization using type metadata
 void* __vyb_complex_from_json(const char* json_str, const char* type_name) {
-    VyBTypeMetadata* metadata = __vyb_lookup_type(type_name);
+    VybTypeMetadata* metadata = __vyb_lookup_type(type_name);
     if (!metadata) {
         fprintf(stderr, "Error: Type '%s' not found in registry\n", type_name);
         return NULL;

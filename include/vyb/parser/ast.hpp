@@ -885,7 +885,7 @@ class IfExpression : public Expression {
 public:
     ExprPtr condition;
     ExprPtr thenBranch;
-    ExprPtr elseBranch; // VyB requires else for if-expressions
+    ExprPtr elseBranch; // Vyb requires else for if-expressions
 
     IfExpression(SourceLocation loc, ExprPtr condition, ExprPtr thenBranch, ExprPtr elseBranch);
     ~IfExpression() override = default; // Or implement if needed

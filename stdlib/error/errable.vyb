@@ -1,7 +1,7 @@
 # Errable Aspect - Core error type interface
 #
 # Any type implementing Errable can be used with fail/trap error handling.
-# This aspect defines the minimum interface for error types in VyB.
+# This aspect defines the minimum interface for error types in Vyb.
 
 aspect Errable {
     # Get human-readable error message

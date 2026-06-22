@@ -2,7 +2,7 @@
 
 ## Status: ✅ COMPLETE
 
-Vec<T> iteration is fully implemented and working in VyB v0.4.1.
+Vec<T> iteration is fully implemented and working in Vyb v0.4.1.
 
 ## Syntax
 
@@ -12,7 +12,7 @@ for (item in vector_expr) {
 }
 ```
 
-**Note**: Parentheses are MANDATORY for all for loops in VyB.
+**Note**: Parentheses are MANDATORY for all for loops in Vyb.
 
 ## Features
 

@@ -1,13 +1,13 @@
-# Aspects vs Classes: Why VyB Chose Aspects
+# Aspects vs Classes: Why Vyb Chose Aspects
 
 ## Philosophy: Composition Over Inheritance
 
-VyB's aspect system provides all the benefits of object-oriented programming without the
+Vyb's aspect system provides all the benefits of object-oriented programming without the
 complexity and pitfalls of class hierarchies. This document explains why **structs +
 aspects** are sufficient for modern software development.
 
-> **Terminology:** VyB uses `aspect`/`bind`. Earlier drafts used `trait`/`impl` (Rust
-> vocabulary). This document uses VyB-native terms throughout.
+> **Terminology:** Vyb uses `aspect`/`bind`. Earlier drafts used `trait`/`impl` (Rust
+> vocabulary). This document uses Vyb-native terms throughout.
 
 ## The Problem with Classes
 
@@ -276,9 +276,9 @@ bind ToJson -> User {
 # Everything composes naturally!
 ```
 
-## Classes Are Not Planned for VyB
+## Classes Are Not Planned for Vyb
 
-**Classes are NOT part of VyB's design — now or in the future.**
+**Classes are NOT part of Vyb's design — now or in the future.**
 
 Why?
 1. **Aspects are strictly more powerful** — Everything classes do, aspects do better
@@ -291,7 +291,7 @@ If you come from an OOP background and feel the urge to propose a class system, 
 document again. Then read `doc/TRAIT_SYSTEM_DESIGN.md`. Aspects + structs cover every
 use case that classes address, without the drawbacks.
 
-## The VyB Way
+## The Vyb Way
 
 ```vyb
 # Data = Structs

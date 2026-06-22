@@ -1,4 +1,4 @@
-// filepath: /home/rick/Projects/VyB/test/units/jit/test_basic_pointer_operations_test.vyb
+// filepath: /home/rick/Projects/Vyb/test/units/jit/test_basic_pointer_operations_test.vyb
 // @test: Basic pointer operations test
 // @description: Extracted from tests.cpp - Basic pointer operations test
 // @category: jit, pointer

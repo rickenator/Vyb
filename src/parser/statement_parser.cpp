@@ -146,7 +146,7 @@ vyb::ast::StmtPtr StatementParser::parse() {
                 }
 
                 // Check for type-inferred lambda declaration: name = |params| -> body
-                // Per LAMBDAS.md, `add = |x, y| -> x + y` is valid VyB syntax (type inferred from RHS).
+                // Per LAMBDAS.md, `add = |x, y| -> x + y` is valid Vyb syntax (type inferred from RHS).
                 if (next_token.type == vyb::TokenType::EQ) {
                     size_t saved_pos = this->pos_;
                     this->consume(); // consume identifier
@@ -796,7 +796,7 @@ std::unique_ptr<vyb::ast::VariableDeclaration> StatementParser::parse_var_decl()
 
         // Support both const<Type> syntax and relaxed "const Type name" syntax
         if (this->peek().type == vyb::TokenType::LT) {
-            // VyB const<Type> syntax - parse type in angle brackets
+            // Vyb const<Type> syntax - parse type in angle brackets
             this->consume(); // consume '<'
 
         // Parse comma-separated types for inline tuple syntax

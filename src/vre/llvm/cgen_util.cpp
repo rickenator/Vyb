@@ -125,7 +125,7 @@ llvm::Value* LLVMCodegen::tryCast(llvm::Value* value, llvm::Type* targetType, co
         }
         return builder->CreateBitCast(value, targetType, "ptr_bitcast");
     }
-    // Pointer to VyB String struct { ptr, i64 }: wrap char* in a string struct
+    // Pointer to Vyb String struct { ptr, i64 }: wrap char* in a string struct
     if (targetType->isStructTy() && value->getType()->isPointerTy()) {
         llvm::StructType* st = llvm::dyn_cast<llvm::StructType>(targetType);
         if (st && st->getNumElements() == 2 &&

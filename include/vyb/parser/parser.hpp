@@ -15,7 +15,7 @@
 #include <set> // For parser verbose specifiers
 #include <catch2/interfaces/catch_interfaces_capture.hpp> // For accessing current test name
 
-namespace vyb { // Changed VyB to vyb
+namespace vyb { // Changed Vyb to vyb
 
     // Forward declaration for SourceLocation if not already included via ast.hpp indirectly
     // struct SourceLocation; // Assuming SourceLocation is in the vyb namespace

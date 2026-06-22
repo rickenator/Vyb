@@ -1,4 +1,4 @@
-// filepath: /home/rick/Projects/VyB/test/units/extracted/test37.vyb
+// filepath: /home/rick/Projects/Vyb/test/units/extracted/test37.vyb
 // @test: Semantic: loc<T> cannot be assigned from integer literal
 // @description: Extracted from tests.cpp - Semantic: loc<T> cannot be assigned from integer literal
 // @category: parser

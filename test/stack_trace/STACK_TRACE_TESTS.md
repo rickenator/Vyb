@@ -1,7 +1,7 @@
 # Stack Trace Tests - Examples and Analysis
 
 ## Overview
-These tests demonstrate Phase 6.4 (v0.5.1) stack trace capture implementation in VyB.
+These tests demonstrate Phase 6.4 (v0.5.1) stack trace capture implementation in Vyb.
 
 ## Test Files
 
@@ -84,13 +84,13 @@ void __vyb_runtime_pop_call_frame();
 
 **Get stack trace** (when error created):
 ```c
-VyBStackTrace* __vyb_runtime_get_current_stack_trace();
+VybStackTrace* __vyb_runtime_get_current_stack_trace();
 ```
 
 ## Stack Trace Information Captured
 
 Each frame in the stack trace contains:
-- **Function name**: VyB-level name (not mangled C++ name)
+- **Function name**: Vyb-level name (not mangled C++ name)
 - **File path**: Source file where function is defined
 - **Line number**: Line where function declaration starts
 - **Column number**: Column where function declaration starts
@@ -124,7 +124,7 @@ Run the demonstration scripts:
 
 ## Benefits
 
-✅ **Accurate debugging**: Shows VyB function names, not native addresses
+✅ **Accurate debugging**: Shows Vyb function names, not native addresses
 ✅ **Source locations**: Exact file/line/column information
 ✅ **Multi-level**: Captures entire call chain
 ✅ **Thread-safe**: Mutex-protected global stack

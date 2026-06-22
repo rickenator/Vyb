@@ -1,6 +1,6 @@
-# VyB Unified Declaration Syntax
+# Vyb Unified Declaration Syntax
 
-VyB uses a unified **`name<Type>`** syntax pattern across all language constructs for consistency and clarity. This replaces the old keyword-heavy approach with a clean, uniform pattern.
+Vyb uses a unified **`name<Type>`** syntax pattern across all language constructs for consistency and clarity. This replaces the old keyword-heavy approach with a clean, uniform pattern.
 
 ## Core Syntax Principles
 
@@ -107,4 +107,4 @@ x<Int> = 42
 add(x<Int>, y<Int>)<Int> -> { return x + y }
 ```
 
-The unified syntax represents VyB's evolution toward maximum clarity and consistency across all language constructs.
+The unified syntax represents Vyb's evolution toward maximum clarity and consistency across all language constructs.

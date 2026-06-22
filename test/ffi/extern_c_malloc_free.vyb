@@ -1,5 +1,5 @@
 // @test: extern C malloc/free smoke test
-// @description: Top-level extern "C" blocks declare C functions callable from VyB
+// @description: Top-level extern "C" blocks declare C functions callable from Vyb
 // @category: ffi, interop
 // @expect: pass
 // @tags: ffi, extern

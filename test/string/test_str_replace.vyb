@@ -7,7 +7,7 @@
 main()<Int> -> {
     s<String> = String::from_bytes("Hello World", 11)
     old<String> = String::from_bytes("World", 5)
-    new_s<String> = String::from_bytes("VyB", 3)
+    new_s<String> = String::from_bytes("Vyb", 3)
     result<String> = s.replace(old, new_s)
     println_int(result.len())
     return 0

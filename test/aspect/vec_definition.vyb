@@ -1,5 +1,5 @@
 // @test: builtin Vec smoke fixture
-// @description: Current VyB uses builtin Vec<T>; this replaces the obsolete hand-rolled non-generic Vec fixture
+// @description: Current Vyb uses builtin Vec<T>; this replaces the obsolete hand-rolled non-generic Vec fixture
 // @category: vec, aspect-fixture
 // @expect: pass
 // @expect-return: 2

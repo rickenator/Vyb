@@ -1,10 +1,10 @@
 # Range-Based For Loop Tests
 
-This directory contains tests for VyB's range-based for loop syntax.
+This directory contains tests for Vyb's range-based for loop syntax.
 
 ## Syntax
 
-VyB supports range-based for loops with **inclusive** ranges:
+Vyb supports range-based for loops with **inclusive** ranges:
 
 ### Basic Range (`..`)
 ```vyb

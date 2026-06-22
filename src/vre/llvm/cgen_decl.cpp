@@ -14,9 +14,9 @@
 #include <vector>
 #include <map>
 
-// File-local helper: detect the VyB String struct representation { ptr, i64 }.
+// File-local helper: detect the Vyb String struct representation { ptr, i64 }.
 // Used by both function declaration and forward-declaration code paths.
-static bool isVyBStringStructType(llvm::Type* t) {
+static bool isVybStringStructType(llvm::Type* t) {
     if (!t->isStructTy()) return false;
     auto* st = llvm::cast<llvm::StructType>(t);
     return st->getNumElements() == 2 &&
@@ -426,7 +426,7 @@ void LLVMCodegen::visit(vyb::ast::FunctionDeclaration* node) {
         //   m_mainAutoSerializeOrigRetType records the original type for cgen_stmt.
         if (node->id->name == "main" && !node->needsErrorReturn) {
             bool isVoidReturn  = returnType->isVoidTy();
-            bool isStringRet   = isVyBStringStructType(returnType);
+            bool isStringRet   = isVybStringStructType(returnType);
             if (!isVoidReturn && !isStringRet) {
                 // Emit serialization inside main(); change LLVM return type to void.
                 m_mainAutoSerializeOrigRetType = returnType;
@@ -780,7 +780,7 @@ void LLVMCodegen::visit(vyb::ast::ClassDeclaration* node) {
     typeInfo.isStruct = false; // It's a class
 
     std::vector<llvm::Type*> fieldTypes;
-    // TODO: Add vtable pointer as the first field if VyB classes have virtual methods.
+    // TODO: Add vtable pointer as the first field if Vyb classes have virtual methods.
     // llvm::Type* vtablePtrType = llvm::PointerType::getUnqual(llvm::FunctionType::get(voidType, true)->getPointerTo());
     // fieldTypes.push_back(vtablePtrType);
     // typeInfo.fieldIndices["_vptr"] = 0; // Example vptr
@@ -1106,7 +1106,7 @@ void LLVMCodegen::createFunctionForwardDeclaration(vyb::ast::FunctionDeclaration
     // main() with any non-Void, non-String return → use void (auto-serialization).
     if (node->id->name == "main" && !node->needsErrorReturn) {
         bool isVoidReturn  = returnType->isVoidTy();
-        bool isStringRet   = isVyBStringStructType(returnType);
+        bool isStringRet   = isVybStringStructType(returnType);
         if (!isVoidReturn && !isStringRet) {
             returnType = voidType;
         }

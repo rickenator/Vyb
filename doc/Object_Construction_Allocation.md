@@ -1,7 +1,7 @@
 
-# Object Construction & Allocation in VyB
+# Object Construction & Allocation in Vyb
 
-VyB provides two primary ways to create instances of user-defined types, each with different semantics and use-cases:
+Vyb provides two primary ways to create instances of user-defined types, each with different semantics and use-cases:
 
 ---
 
@@ -76,4 +76,4 @@ var<Vector> v2 = Vector::new(1.0, 2.0)
 
 ---
 
-By explicitly documenting these distinctions—struct literals, constructors, pass-by-value, and optional heap allocation—VyB’s programming guide will help users choose the right creation pattern for their needs.
+By explicitly documenting these distinctions—struct literals, constructors, pass-by-value, and optional heap allocation—Vyb’s programming guide will help users choose the right creation pattern for their needs.

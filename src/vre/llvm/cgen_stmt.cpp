@@ -139,7 +139,7 @@ void LLVMCodegen::visit(vyb::ast::ReturnStatement *node) {
                         llvm::FunctionType* ft = llvm::FunctionType::get(int8PtrType, {doubleType}, false);
                         return builder->CreateCall(getOrDeclFunc("__vyb_float_to_string", ft), {vdbl}, "float.json");
                     } else if (t->isStructTy()) {
-                        // Check for VyB String struct { ptr, i64 } → JSON-quoted string
+                        // Check for Vyb String struct { ptr, i64 } → JSON-quoted string
                         auto* st = llvm::cast<llvm::StructType>(t);
                         if (st->getNumElements() == 2 &&
                                 st->getElementType(0)->isPointerTy() &&
@@ -184,7 +184,7 @@ void LLVMCodegen::visit(vyb::ast::ReturnStatement *node) {
                 }
 
                 // Print the JSON output
-                llvm::Function* printlnFunc = getVyBPrintlnFunction();
+                llvm::Function* printlnFunc = getVybPrintlnFunction();
                 if (jsonStr) builder->CreateCall(printlnFunc, {jsonStr});
 
                 // Clean up scope and pop call frame, then return void
@@ -728,7 +728,7 @@ void LLVMCodegen::visit(vyb::ast::TryStatement* node) {
 
 void LLVMCodegen::visit(vyb::ast::UnsafeStatement* node) {
     // For LLVM codegen, an freedom block doesn't typically translate to specific LLVM instructions.
-    // Its purpose is to bypass semantic checks in the VyB language itself.
+    // Its purpose is to bypass semantic checks in the Vyb language itself.
     // So, we just visit the inner block.
     if (node->block) {
         node->block->accept(*this);
@@ -1432,7 +1432,7 @@ void LLVMCodegen::visit(vyb::ast::FailStatement* node) {
         return;
     }
 
-    // Construct a concrete runtime VyBError object.
+    // Construct a concrete runtime VybError object.
     std::string typeName;
     if (node->errorType) {
         typeName = node->errorType->toString();
@@ -1519,7 +1519,7 @@ void LLVMCodegen::visit(vyb::ast::FailStatement* node) {
             emitPropagatingErrorReturn(errorPtr);
         } else {
             // No trap handler and not a failable function - this is an untrapped error
-            llvm::Function* untrappedFn = getVyBUntrappedErrorFunction();
+            llvm::Function* untrappedFn = getVybUntrappedErrorFunction();
             // Call untrapped error handler (noreturn)
             builder->CreateCall(untrappedFn, {errorPtr});
 
@@ -1603,7 +1603,7 @@ void LLVMCodegen::visit(vyb::ast::RethrowStatement* node) {
         builder->CreateBr(outerTrap.landingPad);
     } else {
         // No outer trap - call untrapped error handler
-        llvm::Function* untrappedFn = getVyBUntrappedErrorFunction();
+        llvm::Function* untrappedFn = getVybUntrappedErrorFunction();
 
         llvm::Value* errorPtr = errorToRethrow;
         if (!errorToRethrow->getType()->isPointerTy()) {
@@ -1651,10 +1651,10 @@ void LLVMCodegen::visit(vyb::ast::PanicStatement* node) {
     }
 
     // Get or create the panic runtime function
-    llvm::Function* panicFn = getVyBPanicFunction();
+    llvm::Function* panicFn = getVybPanicFunction();
 
     // Extract the char* pointer from the String struct
-    // String literals in VyB are { ptr, i64 } structs
+    // String literals in Vyb are { ptr, i64 } structs
     llvm::Value* messageStr = messageValue;
 
     if (messageValue->getType()->isStructTy()) {

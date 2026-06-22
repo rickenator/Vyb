@@ -1,11 +1,11 @@
-# Bundles & Sharing in VyB
+# Bundles & Sharing in Vyb
 
 **Status:** Approved for roadmap, planned for future implementation
 **Last Updated:** May 21, 2025
 
 ## 1. Overview
 
-VyB's visibility model uses **bundles** to group modules (similar to Java packages) and **share** directives to export individual symbols:
+Vyb's visibility model uses **bundles** to group modules (similar to Java packages) and **share** directives to export individual symbols:
 
 - **`bundle(...)`** declares the module's package membership
 - **`share(...)`** on a declaration exports it to specific bundles (or all)

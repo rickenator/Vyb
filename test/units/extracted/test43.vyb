@@ -1,4 +1,4 @@
-// filepath: /home/rick/Projects/VyB/test/units/extracted/test43.vyb
+// filepath: /home/rick/Projects/Vyb/test/units/extracted/test43.vyb
 // @test: Semantic: 'at(loc_var) = val' (write) requires freedom block
 // @description: Extracted from tests.cpp - Semantic: 'at(loc_var) = val' (write) requires freedom block
 // @category: parser

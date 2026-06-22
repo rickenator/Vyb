@@ -1,23 +1,23 @@
-# VyB Runtime Design (Preliminary)
+# Vyb Runtime Design (Preliminary)
 
 **Last Updated:** May 13, 2025
 
-**Note:** This document outlines a preliminary design for the VyB runtime. It is based on current understanding of the language features (as defined in `AST.md` and `vyb.hpp`), example code, and overall project goals. This design is subject to significant change and refinement as development progresses, particularly with the onset of LLVM integration.
+**Note:** This document outlines a preliminary design for the Vyb runtime. It is based on current understanding of the language features (as defined in `AST.md` and `vyb.hpp`), example code, and overall project goals. This design is subject to significant change and refinement as development progresses, particularly with the onset of LLVM integration.
 
 ## 1. Introduction
 
-The VyB runtime environment (VRE) will be responsible for executing compiled VyB code. The primary goal is to create an efficient, safe, and potentially embeddable runtime. Initially, the focus will be on compiling VyB to native code via LLVM, which will influence many runtime design decisions.
+The Vyb runtime environment (VRE) will be responsible for executing compiled Vyb code. The primary goal is to create an efficient, safe, and potentially embeddable runtime. Initially, the focus will be on compiling Vyb to native code via LLVM, which will influence many runtime design decisions.
 
 ## 2. Core Goals
 
 *   **Performance:** Leverage LLVM for optimization and native code generation.
-*   **Safety:** Provide memory safety and type safety, aligning with VyB's language features (e.g., ownership, optionals, results).
-*   **Interoperability:** Allow seamless calling of C functions and potentially expose VyB functions to C.
+*   **Safety:** Provide memory safety and type safety, aligning with Vyb's language features (e.g., ownership, optionals, results).
+*   **Interoperability:** Allow seamless calling of C functions and potentially expose Vyb functions to C.
 *   **Concurrency:** (Future Goal) Design with concurrency in mind, likely through async/await patterns and message passing.
 
 ## 3. Memory Management
 
-VyB aims for memory safety without a traditional garbage collector by default.
+Vyb aims for memory safety without a traditional garbage collector by default.
 
 *   **Ownership and Borrowing:** The primary mechanism, similar to Rust. The compiler will enforce these rules at compile time.
     *   `Box<T>`: For heap-allocated data with a single owner.
@@ -28,7 +28,7 @@ VyB aims for memory safety without a traditional garbage collector by default.
 
 ## 4. Type System and Data Representation
 
-VyB's static type system will be mapped to efficient runtime representations.
+Vyb's static type system will be mapped to efficient runtime representations.
 
 *   **Primitive Types:**
     *   `i8, i16, i32, i64, i128, isize`: Mapped directly to LLVM integer types.
@@ -45,7 +45,7 @@ VyB's static type system will be mapped to efficient runtime representations.
     *   **Simple Enums (C-like):** Represented as integers.
     *   **Tagged Unions (Enums with data):** Represented as a struct containing a tag (integer) and a union of the possible data types. The layout will be optimized to minimize space, e.g., by placing the tag and data in a way that leverages alignment.
         ```
-        // VyB: enum Option<T> { Some(T), None }
+        // Vyb: enum Option<T> { Some(T), None }
         // Runtime (conceptual):
         // struct Option<T> {
         //   tag: u8, // 0 for None, 1 for Some
@@ -65,7 +65,7 @@ VyB's static type system will be mapped to efficient runtime representations.
         1.  A pointer to the actual object data.
         2.  A pointer to a Virtual Table (vtable) containing function pointers for the aspect methods.
         ```
-        // VyB: bind MyAspect -> MyStruct { ... }
+        // Vyb: bind MyAspect -> MyStruct { ... }
         // let x<dyn MyAspect> = MyStruct {}
         // Runtime (conceptual):
         // struct AspectObject {
@@ -82,7 +82,7 @@ VyB's static type system will be mapped to efficient runtime representations.
 
 ## 5. Execution Model
 
-*   **Compilation:** VyB source code -> VyB AST -> LLVM IR -> Native Machine Code.
+*   **Compilation:** Vyb source code -> Vyb AST -> LLVM IR -> Native Machine Code.
 *   **Entry Point:** A `main` function will be the entry point of execution.
 *   **Modules:** Compiled into object files and linked together.
 *   **Function Calls:** Standard native calling conventions will be used, managed by LLVM.
@@ -97,7 +97,7 @@ VyB's static type system will be mapped to efficient runtime representations.
 
 ## 6. Standard Library (Prelim)
 
-A minimal standard library will be needed, providing core functionalities. This will be implemented in VyB itself where possible, or via C FFI for OS interactions.
+A minimal standard library will be needed, providing core functionalities. This will be implemented in Vyb itself where possible, or via C FFI for OS interactions.
 
 *   **Core Types:** `Option<T>`, `Result<T, E>`, `Box<T>`, `Shared<T>` (if ARC).
 *   **Collections:** `Vec<T>` (dynamic array), `HashMap<K, V>`, `String`.
@@ -107,10 +107,10 @@ A minimal standard library will be needed, providing core functionalities. This 
 
 ## 7. LLVM Integration Aspects
 
-*   **Module:** Each VyB module (`.vyb` file) could correspond to an LLVM module.
-*   **Types:** Map VyB types to `llvm::Type`.
+*   **Module:** Each Vyb module (`.vyb` file) could correspond to an LLVM module.
+*   **Types:** Map Vyb types to `llvm::Type`.
     *   `IntegerType`, `FloatType`, `DoubleType`, `PointerType`, `StructType`, `ArrayType`, `FunctionType`.
-*   **Functions:** VyB functions map to `llvm::Function`.
+*   **Functions:** Vyb functions map to `llvm::Function`.
     *   Function bodies will be built using `llvm::IRBuilder`.
 *   **Control Flow:**
     *   `if/else`: `CreateCondBr` instruction.
@@ -118,17 +118,17 @@ A minimal standard library will be needed, providing core functionalities. This 
     *   `match`: Lowered to a series of conditional branches or a `SwitchInst`.
 *   **Variables:**
     *   Stack variables: `CreateAlloca`.
-    *   Heap allocations (`Box<T>`): Calls to allocation functions (e.g., `malloc` or a custom VyB allocator), followed by `CreateStore`.
+    *   Heap allocations (`Box<T>`): Calls to allocation functions (e.g., `malloc` or a custom Vyb allocator), followed by `CreateStore`.
 *   **Intrinsics:** Certain operations (e.g., some arithmetic, memory operations) might map to LLVM intrinsics for better optimization.
 *   **Debug Information:** Generate DWARF debug information via LLVM for source-level debugging.
 
 ## 8. Foreign Function Interface (FFI)
 
-*   **Calling C from VyB:**
-    *   `extern "C" fn ...` declarations in VyB will map to LLVM function declarations with C calling conventions.
-    *   Type mapping between VyB and C types will be crucial (e.g., VyB `string` vs. C `char*`).
-*   **Calling VyB from C:**
-    *   VyB functions marked with `#[no_mangle]` and `extern "C"` can be exposed with a C-compatible ABI.
+*   **Calling C from Vyb:**
+    *   `extern "C" fn ...` declarations in Vyb will map to LLVM function declarations with C calling conventions.
+    *   Type mapping between Vyb and C types will be crucial (e.g., Vyb `string` vs. C `char*`).
+*   **Calling Vyb from C:**
+    *   Vyb functions marked with `#[no_mangle]` and `extern "C"` can be exposed with a C-compatible ABI.
 
 ## 9. Runtime Initialization and Teardown
 
@@ -144,14 +144,14 @@ A minimal standard library will be needed, providing core functionalities. This 
 
 *   **Garbage Collection:** While the primary approach is ownership/ARC, a tracing GC might be an option for specific use cases or to simplify certain types of programming, perhaps as an opt-in feature.
 *   **JIT Compilation:** For scripting or dynamic code loading.
-*   **WebAssembly Target:** Compiling VyB to WASM.
+*   **WebAssembly Target:** Compiling Vyb to WASM.
 *   **Coroutine/Async Support:** Requires careful design of task scheduling and state machine transformation at the LLVM IR level.
 
 ## 11. REPL (Read-Eval-Print Loop) Integration
 
-A REPL for VyB would allow for interactive programming and experimentation. Its integration with the runtime would likely involve the following:
+A REPL for Vyb would allow for interactive programming and experimentation. Its integration with the runtime would likely involve the following:
 
-*   **Interactive Input Loop:** The REPL would read VyB code snippets (single expressions, statements, or small blocks) from the user.
+*   **Interactive Input Loop:** The REPL would read Vyb code snippets (single expressions, statements, or small blocks) from the user.
 *   **Incremental Compilation and Execution:**
     *   Each snippet would be parsed into an AST fragment.
     *   This AST fragment would then be compiled into LLVM IR.
@@ -165,7 +165,7 @@ A REPL for VyB would allow for interactive programming and experimentation. Its 
     *   If the user inputs an expression, the REPL would compile and run it, then print its resulting value. This requires the runtime to be able to serialize or format values for display.
     *   For statements (like variable declarations or function definitions), the REPL might just acknowledge the definition or report errors.
 *   **Error Handling:** Compile-time and runtime errors from snippets need to be caught and reported gracefully to the user without terminating the REPL session.
-*   **Standard Library Access:** The REPL environment should have access to the VyB standard library.
+*   **Standard Library Access:** The REPL environment should have access to the Vyb standard library.
 *   **Potential Challenges:**
     *   Managing the lifetime of JIT-compiled code and associated data.
     *   Redefinitions and shadowing of variables/functions in an interactive session.

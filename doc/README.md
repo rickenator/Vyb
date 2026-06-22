@@ -1,6 +1,6 @@
-# VyB Documentation Index
+# Vyb Documentation Index
 
-This directory contains the authoritative documentation for the VyB programming language.
+This directory contains the authoritative documentation for the Vyb programming language.
 
 ---
 
@@ -22,7 +22,7 @@ This directory contains the authoritative documentation for the VyB programming 
 |----------|---------|
 | [`Canonical_Reference_Syntax.md`](Canonical_Reference_Syntax.md) | **Authoritative ownership syntax** (`my`, `our`, `their`, `borrow`, `view`) |
 | [`Declaration_Syntax.md`](Declaration_Syntax.md) | Function and variable declaration syntax |
-| [`VyB_Function_Declaration_Syntax.md`](VyB_Function_Declaration_Syntax.md) | Name-first function syntax deep-dive |
+| [`Vyb_Function_Declaration_Syntax.md`](Vyb_Function_Declaration_Syntax.md) | Name-first function syntax deep-dive |
 | [`MATCH_SYNTAX.md`](MATCH_SYNTAX.md) | Pattern matching (`match`/`select`) |
 | [`LAMBDAS.md`](LAMBDAS.md) | Lambda expressions and closures |
 | [`VEC_ITERATION.md`](VEC_ITERATION.md) | `Vec<T>` and `for (item in vec)` |
@@ -36,7 +36,7 @@ This directory contains the authoritative documentation for the VyB programming 
 | Document | Purpose |
 |----------|---------|
 | [`ROADMAP.md`](ROADMAP.md) | High-level language roadmap |
-| [`VRE.md`](VRE.md) | VyB Runtime Environment internals |
+| [`VRE.md`](VRE.md) | Vyb Runtime Environment internals |
 | [`RUNTIME.md`](RUNTIME.md) | Runtime design |
 | [`WHY_TRAITS_NOT_CLASSES.md`](WHY_TRAITS_NOT_CLASSES.md) | Rationale for aspect/bind over classes (uses `aspect`/`bind` terminology) |
 | [`TRAIT_SYSTEM_DESIGN.md`](TRAIT_SYSTEM_DESIGN.md) | Aspect system design (`aspect`/`bind`) |
@@ -61,4 +61,4 @@ This directory contains the authoritative documentation for the VyB programming 
 
 ---
 
-*VyB is not Rust. It is not C++. It is its own thing.*
+*Vyb is not Rust. It is not C++. It is its own thing.*

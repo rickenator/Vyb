@@ -728,7 +728,7 @@ std::unique_ptr<vyb::ast::Declaration> DeclarationParser::parse_struct() {
             throw std::runtime_error("Expected field name in struct \'" + name->name + "\' at " + location_to_string(this->current_location()));
         }
 
-        // Support both VyB syntax: fieldName<Type>
+        // Support both Vyb syntax: fieldName<Type>
         // and relaxed C-style syntax: TypeName fieldName
         // Detect C-style: current token is IDENTIFIER and next token (after consuming) is also IDENTIFIER
         std::unique_ptr<ast::Identifier> field_name;
@@ -746,7 +746,7 @@ std::unique_ptr<vyb::ast::Declaration> DeclarationParser::parse_struct() {
             auto typeIdent = std::make_unique<ast::Identifier>(field_loc, typeName);
             field_type_node = std::make_unique<ast::TypeName>(field_loc, std::move(typeIdent), std::vector<std::unique_ptr<ast::TypeNode>>{});
         } else if (this->peek().type == vyb::TokenType::COLON) {
-            // VyB colon-style: fieldName: Type
+            // Vyb colon-style: fieldName: Type
             field_name = std::make_unique<ast::Identifier>(field_loc, firstIdent.lexeme);
             this->consume(); // consume ':'
             field_type_node = this->type_parser_.parse();
@@ -754,10 +754,10 @@ std::unique_ptr<vyb::ast::Declaration> DeclarationParser::parse_struct() {
                 throw std::runtime_error("Expected type for field \'" + field_name->name + "\' in struct \'" + name->name + "\' at " + location_to_string(this->current_location()));
             }
         } else {
-            // VyB-style: field<Type>
+            // Vyb-style: field<Type>
             field_name = std::make_unique<ast::Identifier>(field_loc, firstIdent.lexeme);
 
-            // Use VyB's consistent template syntax: field<Type>
+            // Use Vyb's consistent template syntax: field<Type>
             this->expect(vyb::TokenType::LT);
 
             field_type_node = this->type_parser_.parse();
@@ -1357,7 +1357,7 @@ std::unique_ptr<vyb::ast::Declaration> DeclarationParser::parse_class_declaratio
             }
             auto field_name = std::make_unique<ast::Identifier>(field_loc, this->consume().lexeme);
 
-            // Use VyB's consistent template syntax: field<Type>
+            // Use Vyb's consistent template syntax: field<Type>
             this->expect(vyb::TokenType::LT);
 
             auto field_type = this->type_parser_.parse();

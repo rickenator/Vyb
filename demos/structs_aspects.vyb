@@ -16,7 +16,7 @@ bind Greet -> Person {
 }
 
 main()<Int> -> {
-    p<Person> = Person { name = "VyB" }
+    p<Person> = Person { name = "Vyb" }
     p.greet()
     return 0
 }

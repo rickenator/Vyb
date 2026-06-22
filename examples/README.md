@@ -1,6 +1,6 @@
-# VyB Examples
+# Vyb Examples
 
-Runnable VyB programs demonstrating the current language surface.
+Runnable Vyb programs demonstrating the current language surface.
 
 ```bash
 build/vyb examples/<file>.vyb
