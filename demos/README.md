@@ -15,4 +15,5 @@ The demos are intentionally compact; richer runtime examples, including
 | `collections.vyb` | `Vec<Int>`, push, iteration, `len` |
 | `structs_aspects.vyb` | structs, aspects, `bind`, method dispatch |
 | `ffi_freedom.vyb` | `extern "C"` declarations called only inside `freedom` |
+| `ffi_http_get/` | external URL request through C FFI and `curl` |
 | `finalization_targets.vyb` | borrow scope checks, typed `fail`/`trap`, and C ABI aliases |
