@@ -1,0 +1,22 @@
+// Demo: native 3D through C FFI.
+//
+// Vyb calls libc `system()`, builds a tiny GLFW/OpenGL renderer, and launches
+// it directly on the local display.
+
+extern "C" {
+    puts(s<loc<Int8>>)<CInt>
+    system(command<loc<Int8>>)<CInt>
+}
+
+main()<Int> -> {
+    freedom {
+        puts("building and launching native OpenGL cube")
+        status<CInt> = system("cc demos/ffi_native_3d/native_cube.c -o /tmp/vyb_native_cube -lglfw -lGL -lm && /tmp/vyb_native_cube 0")
+        if (status == 0) {
+            puts("native 3D demo completed")
+        } else {
+            puts("native 3D demo failed")
+        }
+    }
+    return 0
+}

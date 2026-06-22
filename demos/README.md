@@ -16,4 +16,5 @@ The demos are intentionally compact; richer runtime examples, including
 | `structs_aspects.vyb` | structs, aspects, `bind`, method dispatch |
 | `ffi_freedom.vyb` | `extern "C"` declarations called only inside `freedom` |
 | `ffi_http_get/` | external URL request through C FFI and `curl` |
+| `ffi_native_3d/` | native GLFW/OpenGL cube launched through C FFI |
 | `finalization_targets.vyb` | borrow scope checks, typed `fail`/`trap`, and C ABI aliases |
