@@ -44,6 +44,7 @@ GUIDE_MODULE_ORDER = [
     "core", "error", "io", "term", "curses", "qt", "time", "collections", "channels", "threads",
     "tasks", "asyncs", "agents", "network", "tls", "http", "https", "prelude",
     "utf8", "env", "rand", "process", "regex",
+    "archive", "crypto", "chain", "fs", "url",
 ]
 GUIDE_API_AREA = {
     "core": "Contracts & math", "error": "Domain errors", "io": "Files",
@@ -55,9 +56,12 @@ GUIDE_API_AREA = {
     "https": "HTTPS client", "prelude": "Auto-imported facade",
     "utf8": "UTF-8 codepoints", "env": "Environment",
     "rand": "Pseudo-random", "process": "External commands", "regex": "Regex",
+    "archive": "gzip/tar extraction", "crypto": "Hashing",
+    "chain": "Hash-chained ledger", "fs": "Filesystem", "url": "URL parsing",
 }
 GUIDE_API_CROSS = {
     "core": "[aspects & binds](aspects.md)", "io": "[types](types.md)",
+    "chain": "[crypto](crypto.md)",
     "collections": "[functions](functions.md)", "channels": "[functions](functions.md)",
     "threads": "[functions](functions.md)", "network": "[shared types](interfaces.md)",
     "tls": "[shared types](interfaces.md)", "http": "[shared types](interfaces.md)",

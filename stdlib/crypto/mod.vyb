@@ -16,3 +16,40 @@ share(all)
 sha256(data<String>)<String> -> {
     return vyb_crypto_sha256(data)
 }
+
+# Ed25519 signature primitives (VybChain signature layer, issue #8).
+#
+# Key model (RFC 8032): a 32-byte SEED is the private key; the public key is a
+# deterministic derivation of it. Signatures are deterministic (same seed+message
+# -> same signature), so reproducibility holds for ledger receipts. Keys and
+# signatures cross the FFI as lowercase HEX Strings (pub=64 hex chars, sig=128)
+# so they are printable and persistable in JSON receipts. These are
+# integrity+AUTHENTICITY primitives: unlike sha256, a verify success binds the
+# message to the holder of the seed, defeating the forgeable-constant-origin
+# weakness in the plain hash chain.
+#
+#   import crypto::{ed25519_publickey, ed25519_sign, ed25519_verify}
+#
+#   seed = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"  # 32-byte seed (hex)
+#   pub  = ed25519_publickey(seed)                 # 64-char hex public key
+#   sig  = ed25519_sign(seed, "payload")           # 128-char hex signature
+#   ok   = ed25519_verify(pub, "payload", sig)     # Bool
+#
+# Hosted on the runtime helpers __vyb_ed25519_* (OpenSSL EVP_ED25519); on a
+# no-OpenSSL build the helpers fail cleanly (empty keys/sigs, verify=false).
+
+share(all)
+ed25519_publickey(seed<String>)<String> -> {
+    return vyb_crypto_ed25519_publickey(seed)
+}
+
+share(all)
+ed25519_sign(seed<String>, message<String>)<String> -> {
+    return vyb_crypto_ed25519_sign(seed, message)
+}
+
+share(all)
+ed25519_verify(public_key<String>, message<String>, signature<String>)<Bool> -> {
+    ok<Int> = vyb_crypto_ed25519_verify(public_key, message, signature)
+    return ok != 0
+}

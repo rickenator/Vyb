@@ -1,9 +1,10 @@
 {
-  "git_rev": "4a1ca771b5a93d1588b9e6d609377b16e747acb3",
+  "git_rev": "6d89575122cb0099358860178014478775a684b2",
   "modules": [
     "agents",
     "archive",
     "asyncs",
+    "chain",
     "channels",
     "collections",
     "core",
@@ -58,6 +59,15 @@
         "fan_out": 0
       },
       {
+        "name": "chain",
+        "files": [
+          "stdlib/chain/mod.vyb"
+        ],
+        "exported": 17,
+        "fan_in": 1,
+        "fan_out": 1
+      },
+      {
         "name": "channels",
         "files": [
           "stdlib/channels/mod.vyb"
@@ -73,7 +83,7 @@
         ],
         "exported": 33,
         "fan_in": 0,
-        "fan_out": 1
+        "fan_out": 2
       },
       {
         "name": "core",
@@ -93,8 +103,8 @@
         "files": [
           "stdlib/crypto/mod.vyb"
         ],
-        "exported": 1,
-        "fan_in": 0,
+        "exported": 4,
+        "fan_in": 1,
         "fan_out": 0
       },
       {
@@ -336,6 +346,29 @@
         ]
       },
       {
+        "path": "stdlib/chain/mod.vyb",
+        "module": "chain",
+        "symbols": [
+          "Record",
+          "ChainBlock",
+          "Chain",
+          "record_digest",
+          "block_root",
+          "block_hash",
+          "new_chain",
+          "append",
+          "tip_hash",
+          "first_root",
+          "verify",
+          "contains",
+          "record_count",
+          "to_text",
+          "serialize",
+          "parse_int",
+          "deserialize"
+        ]
+      },
+      {
         "path": "stdlib/channels/mod.vyb",
         "module": "channels",
         "symbols": [
@@ -465,7 +498,10 @@
         "path": "stdlib/crypto/mod.vyb",
         "module": "crypto",
         "symbols": [
-          "sha256"
+          "sha256",
+          "ed25519_publickey",
+          "ed25519_sign",
+          "ed25519_verify"
         ]
       },
       {
@@ -1371,6 +1407,159 @@
         "fan_in": 0
       },
       {
+        "name": "Chain",
+        "module": "chain",
+        "file": "stdlib/chain/mod.vyb",
+        "kind": "struct",
+        "signature": "struct Chain {",
+        "summary": "",
+        "fan_in": 0
+      },
+      {
+        "name": "ChainBlock",
+        "module": "chain",
+        "file": "stdlib/chain/mod.vyb",
+        "kind": "struct",
+        "signature": "struct ChainBlock {",
+        "summary": "",
+        "fan_in": 0
+      },
+      {
+        "name": "Record",
+        "module": "chain",
+        "file": "stdlib/chain/mod.vyb",
+        "kind": "struct",
+        "signature": "struct Record { label<String>, value<String> }",
+        "summary": "",
+        "fan_in": 0
+      },
+      {
+        "name": "append",
+        "module": "chain",
+        "file": "stdlib/chain/mod.vyb",
+        "kind": "fn",
+        "signature": "append(chain<Chain>, records<Vec<Record>>)<Chain> ->",
+        "summary": "Append a new block sealing `records` on top of `chain`, linking to the",
+        "fan_in": 0
+      },
+      {
+        "name": "block_hash",
+        "module": "chain",
+        "file": "stdlib/chain/mod.vyb",
+        "kind": "fn",
+        "signature": "block_hash(index<Int>, prev<String>, root<String>)<String> ->",
+        "summary": "Seal a fresh block hash from its (index, prev, root) triple.",
+        "fan_in": 0
+      },
+      {
+        "name": "block_root",
+        "module": "chain",
+        "file": "stdlib/chain/mod.vyb",
+        "kind": "fn",
+        "signature": "block_root(records<Vec<Record>>)<String> ->",
+        "summary": "Block digest over an ordered set of records: the Merkle\u2013Damg\u00e5rd fold",
+        "fan_in": 0
+      },
+      {
+        "name": "contains",
+        "module": "chain",
+        "file": "stdlib/chain/mod.vyb",
+        "kind": "fn",
+        "signature": "contains(chain<Chain>, label<String>, value<String>)<Bool> ->",
+        "summary": "True iff some sealed block contains a record with exactly (label, value).",
+        "fan_in": 1
+      },
+      {
+        "name": "deserialize",
+        "module": "chain",
+        "file": "stdlib/chain/mod.vyb",
+        "kind": "fn",
+        "signature": "deserialize(text<String>)<Chain> ->",
+        "summary": "Parse `text` (the output of `serialize`) back into a Chain. Field splits use",
+        "fan_in": 0
+      },
+      {
+        "name": "first_root",
+        "module": "chain",
+        "file": "stdlib/chain/mod.vyb",
+        "kind": "fn",
+        "signature": "first_root(chain<Chain>)<String> ->",
+        "summary": "Re-seal the genesis block from its records: true iff the stored genesis",
+        "fan_in": 0
+      },
+      {
+        "name": "new_chain",
+        "module": "chain",
+        "file": "stdlib/chain/mod.vyb",
+        "kind": "fn",
+        "signature": "new_chain(origin<String>, records<Vec<Record>>)<Chain> ->",
+        "summary": "Seal the genesis block (index 0) of a new chain rooted at `origin`, with",
+        "fan_in": 0
+      },
+      {
+        "name": "parse_int",
+        "module": "chain",
+        "file": "stdlib/chain/mod.vyb",
+        "kind": "fn",
+        "signature": "parse_int(s<String>)<Int> ->",
+        "summary": "Decimal Int parse (0..9 digits; 0 on anything else). Used only for the",
+        "fan_in": 0
+      },
+      {
+        "name": "record_count",
+        "module": "chain",
+        "file": "stdlib/chain/mod.vyb",
+        "kind": "fn",
+        "signature": "record_count(chain<Chain>)<Int> ->",
+        "summary": "Number of sealed records across the chain.",
+        "fan_in": 0
+      },
+      {
+        "name": "record_digest",
+        "module": "chain",
+        "file": "stdlib/chain/mod.vyb",
+        "kind": "fn",
+        "signature": "record_digest(r<Record>)<String> ->",
+        "summary": "The digest sealed for one record. Deterministic in (label, value) and",
+        "fan_in": 0
+      },
+      {
+        "name": "serialize",
+        "module": "chain",
+        "file": "stdlib/chain/mod.vyb",
+        "kind": "fn",
+        "signature": "serialize(chain<Chain>)<String> ->",
+        "summary": "Machine serialization (tab- and newline-delimited). Layout:",
+        "fan_in": 0
+      },
+      {
+        "name": "tip_hash",
+        "module": "chain",
+        "file": "stdlib/chain/mod.vyb",
+        "kind": "fn",
+        "signature": "tip_hash(chain<Chain>)<String> ->",
+        "summary": "The legitimizing tip hash (the last block's hash), or \"EMPTY\" if the chain",
+        "fan_in": 0
+      },
+      {
+        "name": "to_text",
+        "module": "chain",
+        "file": "stdlib/chain/mod.vyb",
+        "kind": "fn",
+        "signature": "to_text(chain<Chain>)<String> ->",
+        "summary": "Human-readable ledger: one line per record, block boundaries marked.",
+        "fan_in": 0
+      },
+      {
+        "name": "verify",
+        "module": "chain",
+        "file": "stdlib/chain/mod.vyb",
+        "kind": "fn",
+        "signature": "verify(chain<Chain>)<Bool> ->",
+        "summary": "Full integrity check: recompute every block's Merkle root, block hash and",
+        "fan_in": 0
+      },
+      {
         "name": "chan_bounded",
         "module": "channels",
         "file": "stdlib/channels/mod.vyb",
@@ -2127,13 +2316,40 @@
         "fan_in": 0
       },
       {
+        "name": "ed25519_publickey",
+        "module": "crypto",
+        "file": "stdlib/crypto/mod.vyb",
+        "kind": "fn",
+        "signature": "ed25519_publickey(seed<String>)<String> ->",
+        "summary": "",
+        "fan_in": 0
+      },
+      {
+        "name": "ed25519_sign",
+        "module": "crypto",
+        "file": "stdlib/crypto/mod.vyb",
+        "kind": "fn",
+        "signature": "ed25519_sign(seed<String>, message<String>)<String> ->",
+        "summary": "",
+        "fan_in": 0
+      },
+      {
+        "name": "ed25519_verify",
+        "module": "crypto",
+        "file": "stdlib/crypto/mod.vyb",
+        "kind": "fn",
+        "signature": "ed25519_verify(public_key<String>, message<String>, signature<String>)<Bool> ->",
+        "summary": "",
+        "fan_in": 0
+      },
+      {
         "name": "sha256",
         "module": "crypto",
         "file": "stdlib/crypto/mod.vyb",
         "kind": "fn",
         "signature": "sha256(data<String>)<String> ->",
         "summary": "",
-        "fan_in": 0
+        "fan_in": 1
       },
       {
         "name": "CursColor",
@@ -5299,7 +5515,7 @@
         "module": "tls",
         "file": "stdlib/tls/mod.vyb",
         "kind": "fn",
-        "signature": "tls_free_context(ctx<TlsContext>)<Void> ->",
+        "signature": "tls_free_context(ctx<TlsContext>) ->",
         "summary": "Release an SSL_CTX returned by tls_client_context / tls_server_context.",
         "fan_in": 1
       },
@@ -5553,6 +5769,97 @@
       "from_symbol": "inflate_gzip",
       "to_module": "archive",
       "to_symbol": "inflate_def"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
+      "from_symbol": "append",
+      "to_module": "chain",
+      "to_symbol": "block_hash"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
+      "from_symbol": "append",
+      "to_module": "chain",
+      "to_symbol": "block_root"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
+      "from_symbol": "block_hash",
+      "to_module": "crypto",
+      "to_symbol": "sha256"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
+      "from_symbol": "block_root",
+      "to_module": "chain",
+      "to_symbol": "record_digest"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
+      "from_symbol": "block_root",
+      "to_module": "crypto",
+      "to_symbol": "sha256"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
+      "from_symbol": "deserialize",
+      "to_module": "chain",
+      "to_symbol": "parse_int"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
+      "from_symbol": "first_root",
+      "to_module": "crypto",
+      "to_symbol": "sha256"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
+      "from_symbol": "new_chain",
+      "to_module": "chain",
+      "to_symbol": "block_hash"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
+      "from_symbol": "new_chain",
+      "to_module": "chain",
+      "to_symbol": "block_root"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
+      "from_symbol": "record_digest",
+      "to_module": "crypto",
+      "to_symbol": "sha256"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
+      "from_symbol": "to_text",
+      "to_module": "chain",
+      "to_symbol": "tip_hash"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
+      "from_symbol": "verify",
+      "to_module": "chain",
+      "to_symbol": "block_hash"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
+      "from_symbol": "verify",
+      "to_module": "chain",
+      "to_symbol": "block_root"
     },
     {
       "type": "call",
@@ -6865,6 +7172,15 @@
     },
     {
       "type": "import",
+      "from_module": "chain",
+      "from_symbol": "",
+      "to_module": "crypto",
+      "to_symbol": "sha256",
+      "reexport": false,
+      "resolved": true
+    },
+    {
+      "type": "import",
       "from_module": "collections",
       "from_symbol": "",
       "to_module": "core",
@@ -7450,6 +7766,34 @@
     },
     {
       "type": "proseRef",
+      "from_module": "chain",
+      "from_symbol": "deserialize",
+      "to_module": "chain",
+      "to_symbol": "serialize"
+    },
+    {
+      "type": "proseRef",
+      "from_module": "chain",
+      "from_symbol": "deserialize",
+      "to_module": "chain",
+      "to_symbol": "verify"
+    },
+    {
+      "type": "proseRef",
+      "from_module": "chain",
+      "from_symbol": "serialize",
+      "to_module": "chain",
+      "to_symbol": "deserialize"
+    },
+    {
+      "type": "proseRef",
+      "from_module": "chain",
+      "from_symbol": "serialize",
+      "to_module": "chain",
+      "to_symbol": "verify"
+    },
+    {
+      "type": "proseRef",
       "from_module": "channels",
       "from_symbol": "chan_recv_opt",
       "to_module": "channels",
@@ -7510,6 +7854,13 @@
       "from_symbol": "VecIter<T>",
       "to_module": "collections",
       "to_symbol": "VecHigherOps"
+    },
+    {
+      "type": "proseRef",
+      "from_module": "collections",
+      "from_symbol": "VecOps",
+      "to_module": "chain",
+      "to_symbol": "contains"
     },
     {
       "type": "proseRef",
@@ -7999,6 +8350,24 @@
       "from_module": "channels",
       "from_symbol": "strchan_try",
       "to_symbol": "vyb_strchan_try_opt"
+    },
+    {
+      "type": "runtimeRef",
+      "from_module": "crypto",
+      "from_symbol": "ed25519_publickey",
+      "to_symbol": "vyb_crypto_ed25519_publickey"
+    },
+    {
+      "type": "runtimeRef",
+      "from_module": "crypto",
+      "from_symbol": "ed25519_sign",
+      "to_symbol": "vyb_crypto_ed25519_sign"
+    },
+    {
+      "type": "runtimeRef",
+      "from_module": "crypto",
+      "from_symbol": "ed25519_verify",
+      "to_symbol": "vyb_crypto_ed25519_verify"
     },
     {
       "type": "runtimeRef",
@@ -9763,6 +10132,111 @@
       "from_symbol": "extract_tar",
       "to_module": "archive",
       "to_symbol": "TarEntry"
+    },
+    {
+      "type": "usesType",
+      "from_module": "chain",
+      "from_symbol": "append",
+      "to_module": "chain",
+      "to_symbol": "Chain"
+    },
+    {
+      "type": "usesType",
+      "from_module": "chain",
+      "from_symbol": "append",
+      "to_module": "chain",
+      "to_symbol": "Chain"
+    },
+    {
+      "type": "usesType",
+      "from_module": "chain",
+      "from_symbol": "append",
+      "to_module": "chain",
+      "to_symbol": "Record"
+    },
+    {
+      "type": "usesType",
+      "from_module": "chain",
+      "from_symbol": "block_root",
+      "to_module": "chain",
+      "to_symbol": "Record"
+    },
+    {
+      "type": "usesType",
+      "from_module": "chain",
+      "from_symbol": "contains",
+      "to_module": "chain",
+      "to_symbol": "Chain"
+    },
+    {
+      "type": "usesType",
+      "from_module": "chain",
+      "from_symbol": "deserialize",
+      "to_module": "chain",
+      "to_symbol": "Chain"
+    },
+    {
+      "type": "usesType",
+      "from_module": "chain",
+      "from_symbol": "first_root",
+      "to_module": "chain",
+      "to_symbol": "Chain"
+    },
+    {
+      "type": "usesType",
+      "from_module": "chain",
+      "from_symbol": "new_chain",
+      "to_module": "chain",
+      "to_symbol": "Chain"
+    },
+    {
+      "type": "usesType",
+      "from_module": "chain",
+      "from_symbol": "new_chain",
+      "to_module": "chain",
+      "to_symbol": "Record"
+    },
+    {
+      "type": "usesType",
+      "from_module": "chain",
+      "from_symbol": "record_count",
+      "to_module": "chain",
+      "to_symbol": "Chain"
+    },
+    {
+      "type": "usesType",
+      "from_module": "chain",
+      "from_symbol": "record_digest",
+      "to_module": "chain",
+      "to_symbol": "Record"
+    },
+    {
+      "type": "usesType",
+      "from_module": "chain",
+      "from_symbol": "serialize",
+      "to_module": "chain",
+      "to_symbol": "Chain"
+    },
+    {
+      "type": "usesType",
+      "from_module": "chain",
+      "from_symbol": "tip_hash",
+      "to_module": "chain",
+      "to_symbol": "Chain"
+    },
+    {
+      "type": "usesType",
+      "from_module": "chain",
+      "from_symbol": "to_text",
+      "to_module": "chain",
+      "to_symbol": "Chain"
+    },
+    {
+      "type": "usesType",
+      "from_module": "chain",
+      "from_symbol": "verify",
+      "to_module": "chain",
+      "to_symbol": "Chain"
     },
     {
       "type": "usesType",

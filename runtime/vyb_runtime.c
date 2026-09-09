@@ -923,6 +923,144 @@ VYB_WEAK vyb_file_str __vyb_sha256_hex(const char* data, int64_t len) {
     return r;
 }
 
+// ============================================================================
+// Ed25519 signature primitives (crypto stdlib module, issue #8 / VybChain
+// signature layer). Hosted on OpenSSL EVP (`EVP_PKEY_ED25519`); OpenSSL is an
+// optional build dependency (VYB_HAVE_OPENSSL), so each helper has a failure
+// stub for no-OpenSSL builds. Key model (RFC 8032): a 32-byte SEED is the
+// private key; the public key is a deterministic derivation of it, so
+// signatures are deterministic and reproducible (a property the ledger
+// receipts depend on). Keys and signatures cross the FFI boundary as lowercase
+// HEX Strings (matching sha256's convention) so they are printable and
+// persistable in JSON receipts: pub=64 hex chars, sig=128 hex chars. The
+// message is passed raw (any byte content).
+//   - __vyb_ed25519_publickey(seed_hex[64])        -> String(64 hex)
+//   - __vyb_ed25519_sign(seed_hex[64], msg)        -> String(128 hex)
+//   - __vyb_ed25519_verify(pub_hex[64], msg, sig_hex[128]) -> Int 0/1
+// ============================================================================
+static int vyb_hex_nibble(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+// Decode `n` lowercase/uppercase hex chars into `out`; returns bytes written,
+// or -1 on a bad char / odd length.
+static int_least64_t vyb_hex_decode(const char* hex, size_t n, unsigned char* out) {
+    if (hex == NULL || (n & 1u)) return -1;
+    size_t o = 0;
+    for (size_t i = 0; i < n; i += 2) {
+        int hi = vyb_hex_nibble(hex[i]);
+        int lo = vyb_hex_nibble(hex[i + 1]);
+        if (hi < 0 || lo < 0) return -1;
+        out[o++] = (unsigned char)((hi << 4) | lo);
+    }
+    return (int_least64_t)o;
+}
+static void vyb_hex_encode(const unsigned char* data, size_t n, char* out) {
+    static const char* HX = "0123456789abcdef";
+    for (size_t i = 0; i < n; ++i) {
+        out[i*2]   = HX[data[i] >> 4];
+        out[i*2+1] = HX[data[i] & 0x0f];
+    }
+    out[n*2] = '\0';
+}
+#if defined(VYB_HAVE_OPENSSL)
+VYB_WEAK vyb_file_str __vyb_ed25519_publickey(const char* seed_hex, int64_t seed_hex_len) {
+    vyb_file_str r = { NULL, 0 };
+    if (!seed_hex || seed_hex_len != 64) { errno = EINVAL; return r; }
+    unsigned char seed[32];
+    if (vyb_hex_decode(seed_hex, 64, seed) != 32) { errno = EINVAL; return r; }
+    EVP_PKEY* sk = EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, NULL, seed, 32);
+    if (!sk) return r;
+    unsigned char pub[32];
+    size_t publen = 32;
+    if (EVP_PKEY_get_raw_public_key(sk, pub, &publen) != 1 || publen != 32) {
+        EVP_PKEY_free(sk); return r;
+    }
+    EVP_PKEY_free(sk);
+    char* hex = (char*)malloc(65);
+    if (!hex) { errno = ENOMEM; return r; }
+    vyb_hex_encode(pub, 32, hex);
+    __vyb_string_register(hex);
+    r.ptr = hex; r.len = 64;
+    return r;
+}
+
+VYB_WEAK vyb_file_str __vyb_ed25519_sign(const char* seed_hex, int64_t seed_hex_len,
+                                         const char* msg, int64_t msg_len) {
+    vyb_file_str r = { NULL, 0 };
+    if (!seed_hex || seed_hex_len != 64 || !msg || msg_len < 0) { errno = EINVAL; return r; }
+    unsigned char seed[32];
+    if (vyb_hex_decode(seed_hex, 64, seed) != 32) { errno = EINVAL; return r; }
+    EVP_PKEY* sk = EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, NULL, seed, 32);
+    if (!sk) return r;
+    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    if (!ctx) { EVP_PKEY_free(sk); return r; }
+    if (EVP_DigestSignInit(ctx, NULL, NULL, NULL, sk) != 1) {
+        EVP_MD_CTX_free(ctx); EVP_PKEY_free(sk); return r;
+    }
+    size_t siglen = 0;
+    // First call sizes the buffer (Ed25519 signatures are fixed at 64 bytes).
+    if (EVP_DigestSign(ctx, NULL, &siglen, (const unsigned char*)msg,
+                       (size_t)msg_len) != 1 || siglen != 64) {
+        EVP_MD_CTX_free(ctx); EVP_PKEY_free(sk); return r;
+    }
+    unsigned char* sig = (unsigned char*)malloc(siglen);
+    char* hex = NULL;
+    if (!sig) { EVP_MD_CTX_free(ctx); EVP_PKEY_free(sk); errno = ENOMEM; return r; }
+    if (EVP_DigestSign(ctx, sig, &siglen, (const unsigned char*)msg,
+                       (size_t)msg_len) != 1) {
+        free(sig); EVP_MD_CTX_free(ctx); EVP_PKEY_free(sk); return r;
+    }
+    hex = (char*)malloc((size_t)siglen * 2 + 1);
+    if (!hex) { free(sig); EVP_MD_CTX_free(ctx); EVP_PKEY_free(sk); errno = ENOMEM; return r; }
+    vyb_hex_encode(sig, siglen, hex);
+    free(sig); EVP_MD_CTX_free(ctx); EVP_PKEY_free(sk);
+    __vyb_string_register(hex);
+    r.ptr = hex; r.len = (int64_t)siglen * 2;
+    return r;
+}
+
+VYB_WEAK int64_t __vyb_ed25519_verify(const char* pub_hex, int64_t pub_hex_len,
+                                      const char* msg, int64_t msg_len,
+                                      const char* sig_hex, int64_t sig_hex_len) {
+    if (!pub_hex || pub_hex_len != 64 || !msg || msg_len < 0 || !sig_hex || sig_hex_len != 128) {
+        errno = EINVAL; return 0;
+    }
+    unsigned char pub[32], sig[64];
+    if (vyb_hex_decode(pub_hex, 64, pub) != 32 ||
+        vyb_hex_decode(sig_hex, 128, sig) != 64) { errno = EINVAL; return 0; }
+    EVP_PKEY* pk = EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, NULL, pub, 32);
+    if (!pk) return 0;
+    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    if (!ctx) { EVP_PKEY_free(pk); return 0; }
+    int ok = (EVP_DigestVerifyInit(ctx, NULL, NULL, NULL, pk) == 1) &&
+             (EVP_DigestVerify(ctx, sig, 64, (const unsigned char*)msg,
+                               (size_t)msg_len) == 1);
+    EVP_MD_CTX_free(ctx); EVP_PKEY_free(pk);
+    return ok ? 1 : 0;
+}
+#else
+// No-OpenSSL build: keep the symbols present so the JIT table and stdlib always
+// resolve; every call fails cleanly (empty key/sig, verify -> 0).
+VYB_WEAK vyb_file_str __vyb_ed25519_publickey(const char* seed, int64_t seed_len) {
+    (void)seed; (void)seed_len; errno = ENOTSUP;
+    vyb_file_str r = { NULL, 0 }; return r;
+}
+VYB_WEAK vyb_file_str __vyb_ed25519_sign(const char* seed, int64_t seed_len,
+                                         const char* msg, int64_t msg_len) {
+    (void)seed; (void)seed_len; (void)msg; (void)msg_len; errno = ENOTSUP;
+    vyb_file_str r = { NULL, 0 }; return r;
+}
+VYB_WEAK int64_t __vyb_ed25519_verify(const char* pub, int64_t pub_len,
+                                      const char* msg, int64_t msg_len,
+                                      const char* sig, int64_t sig_len) {
+    (void)pub; (void)pub_len; (void)msg; (void)msg_len; (void)sig; (void)sig_len;
+    errno = ENOTSUP; return 0;
+}
+#endif
+
 // Lossless whole-file read: returns 1 and writes the content's vyb_file_str to
 // *out when the read succeeded (even for an empty file), or 0 when it failed.
 // Unlike __vyb_file_read_all (which returns "" for both failure and a genuinely

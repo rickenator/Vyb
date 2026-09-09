@@ -3108,6 +3108,9 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
         else if (fname == "vyb_io_error_message") rtName = "__vyb_file_error_message";
         else if (fname == "vyb_fs_mkdir") rtName = "__vyb_mkdir";
         else if (fname == "vyb_crypto_sha256") rtName = "__vyb_sha256_hex";
+        else if (fname == "vyb_crypto_ed25519_publickey") rtName = "__vyb_ed25519_publickey";
+        else if (fname == "vyb_crypto_ed25519_sign") rtName = "__vyb_ed25519_sign";
+        else if (fname == "vyb_crypto_ed25519_verify") rtName = "__vyb_ed25519_verify";
         if (!rtName.empty()) {
             auto getFileFn = [&](llvm::FunctionType* ft) -> llvm::Function* {
                 llvm::Function* f = module->getFunction(rtName);
@@ -3126,6 +3129,19 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                 if (v && v->getType()->isStructTy())
                     return builder->CreateExtractValue(v, 0, "file.strptr");
                 return v;
+            };
+            // Emit a Vyb String argument at index i, returning its { ptr, len }.
+            auto emitStrArg = [&](unsigned i, llvm::Value** outPtr,
+                                  llvm::Value** outLen) -> bool {
+                if (i >= node->arguments.size()) return false;
+                node->arguments[i]->accept(*this);
+                llvm::Value* v = m_currentLLVMValue;
+                if (!v) return false;
+                *outPtr = toStrPtr(v);
+                *outLen = llvm::ConstantInt::get(int64Type, 0);
+                if (v->getType()->isStructTy())
+                    *outLen = builder->CreateExtractValue(v, 1, "arg.len");
+                return true;
             };
 
             if (fname == "vyb_io_open") {
@@ -3241,6 +3257,48 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                 llvm::StructType* strStructType = llvm::StructType::get(*context, strFields, false);
                 llvm::FunctionType* ft = llvm::FunctionType::get(strStructType, {int8PtrType, int64Type}, false);
                 m_currentLLVMValue = builder->CreateCall(getFileFn(ft), {dataPtr, dataLen}, "crypto.sha256");
+                return;
+            } else if (fname == "vyb_crypto_ed25519_publickey") {
+                if (node->arguments.size() != 1) {
+                    logError(node->loc, "__vyb_ed25519_publickey expects 1 argument (seed)");
+                    m_currentLLVMValue = nullptr; return;
+                }
+                llvm::Value* seedP, *seedL;
+                if (!emitStrArg(0, &seedP, &seedL)) { m_currentLLVMValue = nullptr; return; }
+                std::vector<llvm::Type*> strFields = {int8PtrType, int64Type};
+                llvm::StructType* st = llvm::StructType::get(*context, strFields, false);
+                llvm::FunctionType* ft = llvm::FunctionType::get(st, {int8PtrType, int64Type}, false);
+                m_currentLLVMValue = builder->CreateCall(getFileFn(ft), {seedP, seedL}, "crypto.pub");
+                return;
+            } else if (fname == "vyb_crypto_ed25519_sign") {
+                if (node->arguments.size() != 2) {
+                    logError(node->loc, "__vyb_ed25519_sign expects 2 arguments (seed, message)");
+                    m_currentLLVMValue = nullptr; return;
+                }
+                llvm::Value* seedP, *seedL, *msgP, *msgL;
+                if (!emitStrArg(0, &seedP, &seedL) || !emitStrArg(1, &msgP, &msgL)) {
+                    m_currentLLVMValue = nullptr; return;
+                }
+                std::vector<llvm::Type*> strFields = {int8PtrType, int64Type};
+                llvm::StructType* st = llvm::StructType::get(*context, strFields, false);
+                llvm::FunctionType* ft = llvm::FunctionType::get(
+                    st, {int8PtrType, int64Type, int8PtrType, int64Type}, false);
+                m_currentLLVMValue = builder->CreateCall(getFileFn(ft), {seedP, seedL, msgP, msgL}, "crypto.sig");
+                return;
+            } else if (fname == "vyb_crypto_ed25519_verify") {
+                if (node->arguments.size() != 3) {
+                    logError(node->loc, "__vyb_ed25519_verify expects 3 arguments (public, message, signature)");
+                    m_currentLLVMValue = nullptr; return;
+                }
+                llvm::Value* pubP, *pubL, *msgP, *msgL, *sigP, *sigL;
+                if (!emitStrArg(0, &pubP, &pubL) || !emitStrArg(1, &msgP, &msgL) ||
+                    !emitStrArg(2, &sigP, &sigL)) {
+                    m_currentLLVMValue = nullptr; return;
+                }
+                llvm::FunctionType* ft = llvm::FunctionType::get(int64Type, {
+                    int8PtrType, int64Type, int8PtrType, int64Type, int8PtrType, int64Type}, false);
+                m_currentLLVMValue = builder->CreateCall(getFileFn(ft),
+                    {pubP, pubL, msgP, msgL, sigP, sigL}, "crypto.verify");
                 return;
             } else if (fname == "vyb_io_error_code") {
                 if (!node->arguments.empty()) {
@@ -7598,36 +7656,54 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
         }
     }
 
-    // Vec-typed overwrites: a `my` Vec binding owns an exclusive heap data
+    // Vec-typed overwrites: Vec is a VALUE TYPE — every storage location (a
+    // `my` binding OR a struct field) that stores a Vec owns its own backing
     // buffer. Storing a new value over it must release the outgoing buffer, or
     // the old data leaks (e.g. reassigning a build-up Vec from a function's
-    // return in quicksort / insertion-sort / select-return paths). Guard against
-    // a null buffer and against a self-assignment (old data == new data) so a
-    // `s = s` style store does not free the value it just wrote.
+    // return). A *borrowed read* RHS (a bare owning binding or member read that
+    // will itself be reclaimed on scope exit) must be deep-copied before the
+    // store so the destination does not alias the source; a transfer RHS (a
+    // Vec-returning call) hands over a fresh single owner and is stored as-is.
+    // (Fix #217: `b.records = rs` previously shallow-stored rs's data pointer
+    // into the field with no clone and no old-buffer release, so both b and rs
+    // free()'d the same Vec buffer at scope exit -> double free / heap
+    // corruption, made deterministic when a later verify pass perturbs the
+    // allocator. Mirrors the ownedStructAst value-semantics path below; applies
+    // to member Vec destinations too, symmetric with the DECL path which
+    // already clones on borrow.)
     bool vecOverwrite = false;
     llvm::Value* oldVecVal = nullptr;
-    if (isAssignToVar && destPointeeType && isVecStructType(destPointeeType)) {
-        const ScopeVariable* owner = nullptr;
-        for (auto sit = scopeStack.rbegin(); sit != scopeStack.rend(); ++sit) {
-            for (const auto& sv : *sit) {
-                if (sv.name == identLeft->name && sv.allocaInst == LHS) { owner = &sv; break; }
-            }
-            if (owner) break;
-        }
-        if (owner && owner->ownership == ast::OwnershipKind::MY && owner->isVecWithMallocData) {
+    const vyb::ast::TypeNode* vecDestAst = nullptr;
+    const vyb::ast::TypeNode* vecElemAst = nullptr;
+    if (destPointeeType && isVecStructType(destPointeeType)) {
+        const vyb::ast::TypeNode* destAst = lhsTypeNode.get();
+        auto vtIt = valueTypeMap.find(LHS);
+        if (vtIt != valueTypeMap.end() && vtIt->second) destAst = vtIt->second.get();
+        if (destAst && objFieldTypeIsVec(destAst)) {
+            vecDestAst = destAst;
+            vecElemAst = objFieldVecElement(destAst);
             vecOverwrite = true;
             oldVecVal = builder->CreateLoad(destPointeeType, LHS, "assign.old_vec");
+            bool borrowedRead =
+                dynamic_cast<ast::Identifier*>(node->right.get()) != nullptr ||
+                dynamic_cast<ast::MemberExpression*>(node->right.get()) != nullptr ||
+                selectAllArmsAreOwnedReads(node->right.get());
+            if (borrowedRead && vecElemAst) {
+                if (llvm::Type* elemT = codegenType(const_cast<vyb::ast::TypeNode*>(vecElemAst))) {
+                    if (auto* vecTy = llvm::dyn_cast<llvm::StructType>(destPointeeType)) {
+                        llvm::Value* copy = generateVecDeepCopy(RHS, elemT, vecTy, vecElemAst);
+                        if (copy) RHS = copy;
+                    }
+                }
+            }
         }
     }
     // A Vec<String> keeps one reference per element; releasing the buffer on
     // overwrite must drop those element references first (mirrors scope-exit
     // cleanup) or the pointed-to String buffers would leak.
     bool vecHoldsStrings = false;
-    if (vecOverwrite) {
-        auto vtIt = valueTypeMap.find(LHS);
-        if (vtIt != valueTypeMap.end() && vtIt->second) {
-            vecHoldsStrings = isVecOfStringTypeNode(vtIt->second.get());
-        }
+    if (vecOverwrite && vecDestAst) {
+        vecHoldsStrings = isVecOfStringTypeNode(vecDestAst);
     }
 
     // A `my<Struct>` field (or binding) exclusively owns a heap allocation that
@@ -8731,8 +8807,7 @@ void LLVMCodegen::visit(ast::IfExpression* node) {
         m_currentLLVMValue = nullptr;
         return;
     }
-    builder->CreateBr(mergeBB);
-    thenBB = builder->GetInsertBlock(); // It might have been updated
+    llvm::BasicBlock* thenTerm = builder->GetInsertBlock(); // may have sub-blocks
 
     // Generate 'else' block
     builder->SetInsertPoint(elseBB);
@@ -8743,33 +8818,72 @@ void LLVMCodegen::visit(ast::IfExpression* node) {
         m_currentLLVMValue = nullptr;
         return;
     }
-    builder->CreateBr(mergeBB);
-    elseBB = builder->GetInsertBlock(); // It might have been updated
+    llvm::BasicBlock* elseTerm = builder->GetInsertBlock();
 
-    // Generate merge block with PHI node
-    builder->SetInsertPoint(mergeBB);
+    // Values from then and else branches must have the same LLVM type. String
+    // values may appear in two representations: an already-wrapped {ptr,i64}
+    // struct (literals, String-typed expressions) or a raw char* (the result of
+    // __vyb_string_concat / .to_string in a branch). Unify UP to the
+    // {ptr,i64} String struct whenever either branch already carries one, so we
+    // only ever wrap a raw char* into String — never cast a String struct DOWN
+    // to char* (which tryCast rejects). (Fix #218: each unification cast is
+    // emitted inside its own branch's terminal block, strictly before that
+    // block's `br mergeBB`, so the wrapped value dominates the merge edge and
+    // nothing but PHIs sits at the merge-block head. The old code ran tryCast
+    // after SetInsertPoint(mergeBB), landing the wrap above the PHI and
+    // referencing a value from %if.else -> 'does not dominate all uses!' +
+    // 'PHI nodes not grouped at top of basic block!'.)
+    auto isStrStruct = [](llvm::Type* t) {
+        if (t && t->isStructTy()) {
+            llvm::StructType* st = llvm::cast<llvm::StructType>(t);
+            return st->getNumElements() == 2 && st->getElementType(0)->isPointerTy();
+        }
+        return false;
+    };
+    llvm::Type* resultType = thenValue->getType();
+    if (isStrStruct(elseValue->getType()) && !isStrStruct(thenValue->getType()))
+        resultType = elseValue->getType();
 
-    // Values from then and else branches should have the same type,
-    // but we'll try to cast if they don't
-    llvm::Type* resultType;
-    if (thenValue->getType() == elseValue->getType()) {
-        resultType = thenValue->getType();
-    } else {
-        // For simplicity, we'll just use the then-branch type as the result type
-        // A more sophisticated implementation would use type unification
-        resultType = thenValue->getType();
+    // Terminate both branches (defensive: on any cast error the IR still has
+    // valid terminators so the module abort is clean, matching the pre-fix
+    // behaviour where the brs were emitted before unification).
+    auto terminateBranches = [&]() {
+        builder->SetInsertPoint(thenTerm);
+        builder->CreateBr(mergeBB);
+        builder->SetInsertPoint(elseTerm);
+        builder->CreateBr(mergeBB);
+    };
+
+    if (elseValue->getType() != resultType) {
+        builder->SetInsertPoint(elseTerm);
         elseValue = tryCast(elseValue, resultType, node->elseBranch->loc);
         if (!elseValue) {
+            terminateBranches();
             logError(node->elseBranch->loc, "Type mismatch in if-expression branches");
             m_currentLLVMValue = nullptr;
             return;
         }
+        elseTerm = builder->GetInsertBlock();
     }
+    if (thenValue->getType() != resultType) {
+        builder->SetInsertPoint(thenTerm);
+        thenValue = tryCast(thenValue, resultType, node->thenBranch->loc);
+        if (!thenValue) {
+            terminateBranches();
+            logError(node->thenBranch->loc, "Type mismatch in if-expression branches");
+            m_currentLLVMValue = nullptr;
+            return;
+        }
+        thenTerm = builder->GetInsertBlock();
+    }
+    terminateBranches();
 
-    // Create PHI node to consolidate the different paths
+    // Generate merge block with PHI node. Nothing but PHIs may precede the phi
+    // here, so the merge block is created only now.
+    builder->SetInsertPoint(mergeBB);
     llvm::PHINode* phiNode = builder->CreatePHI(resultType, 2, "ifexpr.result");
-    phiNode->addIncoming(thenValue, thenBB);
-    phiNode->addIncoming(elseValue, elseBB);
+    phiNode->addIncoming(thenValue, thenTerm);
+    phiNode->addIncoming(elseValue, elseTerm);
 
     m_currentLLVMValue = phiNode;
 }

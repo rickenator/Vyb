@@ -164,7 +164,7 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 ### Running the test suite
 
 ```bash
-# 1077 .vyb tests exercised through compile + run + output/return checks
+# 1132 .vyb tests exercised through compile + run + output/return checks
 python3 test/run_tests.py --vyb ./build/vyb --test-dir test --execute-jit
 ```
 
@@ -2213,7 +2213,50 @@ import crypto::{sha256}
 println(sha256(""))   # e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 ```
 
-### 4.25 `fs` — filesystem primitives
+### 4.25 `chain` — hash-chained legitimization core
+
+Module page: [`chain.md`](chain.md). A hash-chained ledger of small, named
+records used to *legitimize* an artifact: an OS package (VybForge), a
+boot/generation (VybOS), or a smuggled-in dependency's identity. One shared
+core, three consumers — every consumer seals its facts into a `Chain` and gets
+back a tamper-evident tip hash (the "legit token") it can later re-verify.
+
+Model: `Record { label, value }` → `ChainBlock { index, prev_hash, root, hash,
+records }` → `Chain { origin, blocks }`. Each block's `root` is the Merkle root
+over its records (per-record digests pair-folded; an odd leaf pairs with
+itself), and `hash = sha256(index | prev_hash | root)` with block 0 linking to
+the chain's `origin` marker. `verify` recomputes every root, hash, and
+prev-link — any tamper with a record, order, or link breaks it.
+
+```vyb
+new_chain(origin<String>, records<Vec<Record>>)<Chain>
+append(chain<Chain>, records<Vec<Record>>)<Chain>   # value semantics: input untouched
+verify(chain<Chain>)<Bool>
+tip_hash(chain<Chain>)<String>
+contains(chain<Chain>, label<String>, value<String>)<Bool>
+record_count(chain<Chain>)<Int>
+to_text(chain<Chain>)<String>                       # human-readable ledger
+```
+
+```vyb
+import chain::{new_chain, append, verify, tip_hash, Record}
+r<Vec<Record>> = Vec()
+r.push(Record { label = "name", value = "busybox" })
+r.push(Record { label = "version", value = "1.36.1" })
+c<Chain> = new_chain("vybforge/forge-1", r)
+println(if (verify(c)) { "LEGIT" } else { "TAMPERED" })
+```
+
+**Security boundary (integrity, not authentication).** This core is
+*tamper-evident*, not *signed*: the `origin` is a shared constant, so anyone
+can forge a chain that passes `verify`. Authenticity/authorship needs a real
+signature layer over the same records (keyed `origin`s, `replace_key`
+rotation, registry-signed checkpoints) — that is the next increment on top of
+this core, built from `crypto` signature primitives. A ledger is a
+provenance/trust-history structure, **not** a currency: no tokens, no
+mining, no consensus.
+
+### 4.26 `fs` — filesystem primitives
 
 Module page: [`fs.md`](fs.md). Path/fs operations over the runtime's `__vyb_*`
 helpers; the Vyb surface stays allocation/pointer-free like `io`. Today it is
@@ -2233,7 +2276,7 @@ match (mkdir("/store/a/b/c")) {
 }
 ```
 
-### 4.26 `url` — URL parsing in pure Vyb
+### 4.27 `url` — URL parsing in pure Vyb
 
 Module page: [`url.md`](url.md). Splits an absolute URL into
 (scheme, host, port, path), resolving the scheme's conventional default port
@@ -2396,7 +2439,7 @@ runtime points a single process at a list of tests if needed.
 
 Canonical suite runner (wired into CTest as `run-tests`):
 ```bash
-python3 test/run_tests.py --vyb ./build/vyb --test-dir test --execute-jit   # full suite (1077 tests)
+python3 test/run_tests.py --vyb ./build/vyb --test-dir test --execute-jit   # full suite (1132 tests)
 python3 test/run_tests.py --vyb ./build/vyb --test-dir test --category async    # filter by category
 ```
 The auxiliary parallel harness (`test_harness.py`, `triage_tool.py`) adds HTML
@@ -2456,12 +2499,15 @@ regenerates byte-identical output.
 | Pseudo-random | [`rand`](rand.md) | — |
 | External commands | [`process`](process.md) | — |
 | Regex | [`regex`](regex.md) | — |
-| archive | [`archive`](archive.md) | — |
-| crypto | [`crypto`](crypto.md) | — |
-| fs | [`fs`](fs.md) | — |
-| url | [`url`](url.md) | — |
+| gzip/tar extraction | [`archive`](archive.md) | — |
+| Hashing | [`crypto`](crypto.md) | — |
+| Hash-chained ledger | [`chain`](chain.md) | [crypto](crypto.md) |
+| Filesystem | [`fs`](fs.md) | — |
+| URL parsing | [`url`](url.md) | — |
 | Runtime intrinsics | [`runtime`](runtime.md) | — |
 <!-- refman:api-index end -->
+
+
 
 
 

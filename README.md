@@ -69,7 +69,7 @@ git clone https://github.com/rickenator/Vyb.git
 cd Vyb
 mkdir -p build && cd build && LLVM_DIR=/usr/lib/llvm-18/cmake cmake .. && make -j$(nproc) && cd ..
 
-# Run the full test suite (1130 .vyb tests) with the canonical harness
+# Run the full test suite (1132 .vyb tests) with the canonical harness
 python3 test/run_tests.py --vyb build/vyb --test-dir test --execute-jit
 
 # Run your first Vyb program
@@ -2945,6 +2945,18 @@ See `doc/` directory for detailed design documents and RFCs.
 ## Recent Progress
 
 **Latest cycle (v0.7.x)**: stdlib concurrency + a network/UI demo
+- ✅ **`chain` stdlib module** — a hash-chained legitimization core written
+  entirely in Vyb over `crypto.sha256`: `Record {label, value}` facts are
+  sealed into Merkle-rooted, prev-hash-linked `ChainBlock`s, producing a
+  tamper-evident tip hash that a consumer can re-verify offline. One shared
+  core, three consumers (VybOS package/boot legitimization, VybForge
+  build records, smuggled-dependency receipts). Integrity layer by design —
+  any record/order/link tamper fails `verify`; a signature layer (authenticity
+  over keyed origins, key rotation, registry checkpoints) is the next
+  increment on the same records. A provenance ledger, not a currency.
+- ✅ **Serializer field-offset fix (#215)** — codegen now sets the host
+  `DataLayout` before baking struct field offsets, so `to_string()` no longer
+  mis-encodes an `Int` field that follows a `Bool` field at index ≥ 1.
 - ✅ **Set patterns in `select` arms (`{ … }`)** — group several values into one
   arm; the arm matches when the target equals *any* element. Sets hold literals
   and bare enum-variant names; empty `{}` and mixed types are rejected, and the

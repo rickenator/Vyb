@@ -1,0 +1,308 @@
+# chain - hash-chained legitimization core.
+#
+# A hash-chained ledger of small, named records used to *legitimize* an
+# artifact: an OS package (VybForge), a boot/generation (VybOS), or a
+# smuggled-in dependency's identity (Vyb `smuggle`). One shared core, three
+# consumers — every consumer seals its facts into a `Chain` and gets back a
+# tamper-evident tip hash (the "legit token") it can later re-verify.
+#
+# Model (the exact shape pre-flight-pinned by VybOS's
+# repro/probe_vyb_chain_primitives.vyb):
+#   Record       { label, value }          one fact to seal
+#   ChainBlock   { index, prev_hash, root, hash, records }
+#   Chain        { origin, blocks }
+#
+# Each block:
+#   root       = the Merkle root over its records (pair-fold of per-record
+#                SHA-256 digests; odd nodes duplicate the last leaf).
+#   hash       = sha256(index | prev_hash | root)
+#   prev_hash  = the previous block's hash (block 0 uses the chain `origin`).
+#
+# `verify` recomputes every root, hash and prev-link; any tamper with a
+# record, order, or link breaks it. This is content integrity, NOT a
+# signature: it binds the facts to the chain's `origin` marker but the
+# origin is a shared constant, so anyone can forge a chain that verifies.
+# Authenticity/authorship needs real signatures (#204 freedom capability) —
+# this core deliberately stops at integrity.
+#
+# Usage:
+#   import chain::{new_chain, append, verify, tip_hash, contains, Record}
+#   r<Vec<Record>> = Vec()
+#   r.push(Record { label = "name", value = "busybox" })
+#   r.push(Record { label = "version", value = "1.36.1" })
+#   c<Chain> = new_chain("vybforge/forge-1", r)
+#   println(tip_hash(c))
+#   println(if (verify(c)) { "LEGIT" } else { "TAMPERED" })
+#
+# NOTE: Vyb ranges are INCLUSIVE; iterate 0..len-1 and guard empties.
+
+import crypto::{sha256}
+
+share(all)
+struct Record { label<String>, value<String> }
+
+share(all)
+struct ChainBlock {
+    index<Int>,
+    prev_hash<String>,
+    root<String>,
+    hash<String>,
+    records<Vec<Record>>
+}
+
+share(all)
+struct Chain {
+    origin<String>,
+    blocks<Vec<ChainBlock>>
+}
+
+// The digest sealed for one record. Deterministic in (label, value) and
+// order-independent within a record, so a given fact always hashes the same.
+share(all)
+record_digest(r<Record>)<String> -> {
+    return sha256(r.label + "=" + r.value)
+}
+
+// Block digest over an ordered set of records: the Merkle–Damgård fold
+// sha256( sha256("") ++ d(r0) ++ d(r1) ++ ... ), where d(r) is the per-record
+// digest. It is content- AND order-dependent — any change to a record, its
+// position, or the count changes the result — so it legitimizes an ordered
+// fact set. Empty -> sha256("").
+// (A full Merkle tree was tried here; this toolchain build asserts in LLVM
+// codegen on the nested Vec<Vec<..>> fold, so the sequential fold is used —
+// it is strictly stronger for this purpose: order is binding, which a tree
+// would not be.)
+share(all)
+block_root(records<Vec<Record>>)<String> -> {
+    acc<String> = sha256("")
+    n<Int> = records.len()
+    for (i in 0..n-1) {
+        acc = acc + record_digest(records.get(i))
+    }
+    return sha256(acc)
+}
+
+// Seal a fresh block hash from its (index, prev, root) triple.
+share(all)
+block_hash(index<Int>, prev<String>, root<String>)<String> -> {
+    return sha256(index.to_string() + "|" + prev + "|" + root)
+}
+
+// Seal the genesis block (index 0) of a new chain rooted at `origin`, with
+// `records` as its first batch. `origin` is the legitimizing authority id
+// (e.g. "vybforge/forge-1", "vybos/boot", "vyb/smuggle").
+share(all)
+new_chain(origin<String>, records<Vec<Record>>)<Chain> -> {
+    root<String> = block_root(records)
+    h<String> = block_hash(0, origin, root)
+    b<ChainBlock> = ChainBlock { index = 0, prev_hash = origin, root = root, hash = h, records = records }
+    blocks<Vec<ChainBlock>> = Vec()
+    blocks.push(b)
+    return Chain { origin = origin, blocks = blocks }
+}
+
+// Append a new block sealing `records` on top of `chain`, linking to the
+// current tip. Value semantics: the caller's chain is untouched.
+share(all)
+append(chain<Chain>, records<Vec<Record>>)<Chain> -> {
+    idx<Int> = chain.blocks.len()
+    prev<String> = chain.origin
+    if (idx > 0) { prev = chain.blocks.get(idx - 1).hash }
+    root<String> = block_root(records)
+    h<String> = block_hash(idx, prev, root)
+    b<ChainBlock> = ChainBlock { index = idx, prev_hash = prev, root = root, hash = h, records = records }
+    blocks<Vec<ChainBlock>> = chain.blocks
+    blocks.push(b)
+    return Chain { origin = chain.origin, blocks = blocks }
+}
+
+// The legitimizing tip hash (the last block's hash), or "EMPTY" if the chain
+// has no blocks. This is the token a consumer presents to prove it sealed the
+// artifact.
+share(all)
+tip_hash(chain<Chain>)<String> -> {
+    n<Int> = chain.blocks.len()
+    if (n == 0) { return "EMPTY" }
+    return chain.blocks.get(n - 1).hash
+}
+
+// Re-seal the genesis block from its records: true iff the stored genesis
+// (index 0) matches what its records would produce. (Used to pin the origin.)
+share(all)
+first_root(chain<Chain>)<String> -> {
+    n<Int> = chain.blocks.len()
+    if (n == 0) { return sha256("") }
+    return chain.blocks.get(0).root
+}
+
+// Full integrity check: recompute every block's Merkle root, block hash and
+// prev-link against its successor. Any record/order/link tamper -> false.
+share(all)
+verify(chain<Chain>)<Bool> -> {
+    n<Int> = chain.blocks.len()
+    for (i in 0..n-1) {
+        b<ChainBlock> = chain.blocks.get(i)
+        // prev-link: block 0 -> origin, else previous block's hash.
+        exp_prev<String> = chain.origin
+        if (i > 0) { exp_prev = chain.blocks.get(i - 1).hash }
+        if (b.prev_hash != exp_prev) { return false }
+        // index must be positional.
+        if (b.index != i) { return false }
+        // root must recompute from the block's own records.
+        if (b.root != block_root(b.records)) { return false }
+        // hash must recompute from (index, prev, root).
+        if (b.hash != block_hash(b.index, b.prev_hash, b.root)) { return false }
+    }
+    return true
+}
+
+// True iff some sealed block contains a record with exactly (label, value).
+share(all)
+contains(chain<Chain>, label<String>, value<String>)<Bool> -> {
+    nb<Int> = chain.blocks.len()
+    for (i in 0..nb-1) {
+        rs<Vec<Record>> = chain.blocks.get(i).records
+        m<Int> = rs.len()
+        for (j in 0..m-1) {
+            r<Record> = rs.get(j)
+            if (r.label == label && r.value == value) { return true }
+        }
+    }
+    return false
+}
+
+// Number of sealed records across the chain.
+share(all)
+record_count(chain<Chain>)<Int> -> {
+    total<Int> = 0
+    nb<Int> = chain.blocks.len()
+    for (i in 0..nb-1) {
+        total = total + chain.blocks.get(i).records.len()
+    }
+    return total
+}
+
+// Human-readable ledger: one line per record, block boundaries marked.
+share(all)
+to_text(chain<Chain>)<String> -> {
+    s<String> = "origin=" + chain.origin + "\n"
+    nb<Int> = chain.blocks.len()
+    for (i in 0..nb-1) {
+        b<ChainBlock> = chain.blocks.get(i)
+        s = s + "#block " + b.index.to_string() + " hash=" + b.hash + "\n"
+        m<Int> = b.records.len()
+        for (j in 0..m-1) {
+            r<Record> = b.records.get(j)
+            s = s + "  " + r.label + " = " + r.value + "\n"
+        }
+    }
+    s = s + "tip=" + tip_hash(chain) + "\n"
+    return s
+}
+
+// Machine serialization (tab- and newline-delimited). Layout:
+//   O<TAB>origin
+//   B<TAB>index<TAB>prev<TAB>root<TAB>hash          (per block, then its records)
+//   R<TAB>label<TAB>value                           (per record)
+// A label must never contain a tab (values may contain tabs -> label is the
+// first field, everything after the second tab is the value). This is the form
+// a consumer PERSISTS (VybOS index.json, a VybForge manifest sidecar, a
+// smuggle receipt); `deserialize` + `verify` re-establish integrity after any
+// on-disk tamper.
+share(all)
+serialize(chain<Chain>)<String> -> {
+    s<String> = "O\t" + chain.origin + "\n"
+    nb<Int> = chain.blocks.len()
+    for (i in 0..nb-1) {
+        b<ChainBlock> = chain.blocks.get(i)
+        s = s + "B\t" + b.index.to_string() + "\t" + b.prev_hash + "\t" + b.root + "\t" + b.hash + "\n"
+        m<Int> = b.records.len()
+        for (j in 0..m-1) {
+            r<Record> = b.records.get(j)
+            s = s + "R\t" + r.label + "\t" + r.value + "\n"
+        }
+    }
+    return s
+}
+
+// Decimal Int parse (0..9 digits; 0 on anything else). Used only for the
+// block index, which this serializer writes via `to_string()`.
+share(all)
+parse_int(s<String>)<Int> -> {
+    acc<Int> = 0
+    n<Int> = s.len()
+    for (i in 0..n-1) {
+        d<Int> = s.char_at(i)
+        if (d < 48 || d > 57) { return 0 }
+        acc = acc * 10 + (d - 48)
+    }
+    return acc
+}
+
+// Parse `text` (the output of `serialize`) back into a Chain. Field splits use
+// the TAB character, so values may contain any other byte. Malformed input
+// yields a 0-block chain (callers gate on `verify`, which is false for a
+// chain whose blocks don't line up with the text they came from).
+share(all)
+deserialize(text<String>)<Chain> -> {
+    origin<String> = ""
+    blocks<Vec<ChainBlock>> = Vec()
+    lines<Vec<String>> = text.split("\n")
+    ln<Int> = lines.len()
+    i<Int> = 0
+    while (i < ln) {
+        line<String> = lines.get(i)
+        if (line.len() < 2) { i = i + 1; continue }
+        tag<String> = line.substring(0, 1)
+        if (tag == "O") {
+            origin = line.substring(2)
+            i = i + 1
+            continue
+        }
+        if (tag != "B") { i = i + 1; continue }
+        # B<TAB>index<TAB>prev<TAB>root<TAB>hash — split with 1-arg index_of on
+        # successive substrings (the 2-arg index_of form is not in this build).
+        t1<Int> = line.index_of("\t")
+        if (t1 < 0) { i = i + 1; continue }
+        rest1<String> = line.substring(t1 + 1)
+        t2r<Int> = rest1.index_of("\t")
+        if (t2r < 0) { i = i + 1; continue }
+        rest2<String> = rest1.substring(t2r + 1)
+        t3r<Int> = rest2.index_of("\t")
+        if (t3r < 0) { i = i + 1; continue }
+        rest3<String> = rest2.substring(t3r + 1)
+        t4r<Int> = rest3.index_of("\t")
+        if (t4r < 0) { i = i + 1; continue }
+        idx_s<String> = rest1.substring(0, t2r)
+        prev<String> = rest2.substring(0, t3r)
+        root<String> = rest3.substring(0, t4r)
+        hash<String> = rest3.substring(t4r + 1)
+        # collect this block's records: the R lines until the next B / EOF.
+        recs<Vec<Record>> = Vec()
+        j<Int> = i + 1
+        while (j < ln) {
+            next_line<String> = lines.get(j)
+            if (next_line.len() < 2) { j = j + 1; continue }
+            nt<String> = next_line.substring(0, 1)
+            if (nt != "R") { break }
+            # R<TAB>label<TAB>value — label = up to the next tab, value = the
+            # REST of the line (so a value may itself contain tabs). Split the
+            # label with 1-arg index_of on a substring (2-arg form is absent).
+            r1<Int> = next_line.index_of("\t")
+            if (r1 < 0) { j = j + 1; continue }
+            after1<String> = next_line.substring(r1 + 1)
+            r2a<Int> = after1.index_of("\t")
+            if (r2a < 0) { j = j + 1; continue }
+            label<String> = after1.substring(0, r2a)
+            value<String> = after1.substring(r2a + 1)
+            recs.push(Record { label = label, value = value })
+            j = j + 1
+        }
+        idx<Int> = parse_int(idx_s)
+        b<ChainBlock> = ChainBlock { index = idx, prev_hash = prev, root = root, hash = hash, records = recs }
+        blocks.push(b)
+        i = j
+    }
+    return Chain { origin = origin, blocks = blocks }
+}
+

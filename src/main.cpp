@@ -121,6 +121,15 @@ extern "C" {
 
     // Crypto runtime helpers (crypto stdlib module, #195)
     vyb_file_str __vyb_sha256_hex(const char* data, int64_t len);
+    // Ed25519 signature primitives (crypto stdlib module, VybChain sig layer,
+    // issue #8): publickey derives the 32-byte pub from a 32-byte seed, sign
+    // returns a 64-byte RFC-8032 signature, verify returns Int 0/1.
+    vyb_file_str __vyb_ed25519_publickey(const char* seed, int64_t seed_len);
+    vyb_file_str __vyb_ed25519_sign(const char* seed, int64_t seed_len,
+                                    const char* msg, int64_t msg_len);
+    int64_t __vyb_ed25519_verify(const char* pub, int64_t pub_len,
+                                 const char* msg, int64_t msg_len,
+                                 const char* sig, int64_t sig_len);
 
     // Network I/O runtime helpers (network stdlib module)
     int64_t __vyb_net_open(int64_t domain, int64_t t, int64_t protocol);
@@ -2344,6 +2353,12 @@ int run_vyb_code(const std::string& source, const std::string& fileName, bool ge
             llvm::orc::ExecutorAddr::fromPtr(&__vyb_mkdir), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyb_sha256_hex")] = llvm::orc::ExecutorSymbolDef(
             llvm::orc::ExecutorAddr::fromPtr(&__vyb_sha256_hex), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_ed25519_publickey")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_ed25519_publickey), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_ed25519_sign")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_ed25519_sign), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_ed25519_verify")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_ed25519_verify), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyb_stdin_read")] = llvm::orc::ExecutorSymbolDef(
             llvm::orc::ExecutorAddr::fromPtr(&__vyb_stdin_read), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyb_stdin_read_line")] = llvm::orc::ExecutorSymbolDef(

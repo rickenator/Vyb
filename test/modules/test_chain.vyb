@@ -1,0 +1,104 @@
+// @test: stdlib chain module — hash-chained legitimization core
+// @description: seal records into a prev-linked chain (sha256 block digest +
+//   prev-links), verify full integrity, append a block that links the tip,
+//   persist via serialize and restore via deserialize, then detect tamper by
+//   editing the SERIALIZED text (a record value, a record order, a prev-link)
+//   and confirming verify fails — while the unedited chain still verifies.
+//   Self-contained; no file deps (the round-trip is exercised in-memory, the
+//   same way a persisted ledger is re-read and re-verified).
+// @category: modules, chain, crypto, stdlib, legitimization
+// @expect: pass
+// @expect-output: chain-ok
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+
+import chain::{new_chain, append, verify, tip_hash, contains, record_count,
+              to_text, serialize, deserialize, Record, Chain}
+
+// Build the same package-identity chain from the same facts (determinism).
+facts_a()<Vec<Record>> -> {
+    r<Vec<Record>> = Vec()
+    r.push(Record { label = "name", value = "busybox" })
+    r.push(Record { label = "version", value = "1.36.1" })
+    r.push(Record { label = "source", value = "https://busybox.net" })
+    return r
+}
+
+main()<Int> -> {
+    // --- genesis: seal an OS package's identity (the VybForge consumer case) ---
+    c<Chain> = new_chain("vybforge/forge-1", facts_a())
+    if (!verify(c)) { return 1 }
+    if (c.blocks.len() != 1) { return 2 }
+    tip<String> = tip_hash(c)
+    if (tip.len() != 64) { return 3 }                 // a sha256 hex digest
+
+    // --- append a build-event block that links the tip ---
+    r2<Vec<Record>> = Vec()
+    r2.push(Record { label = "event", value = "build-complete" })
+    r2.push(Record { label = "store", value = "store/ca-9f2/" })
+    c2<Chain> = append(c, r2)
+    if (c2.blocks.len() != 2) { return 4 }
+    if (!verify(c2)) { return 5 }
+    if (c2.blocks.get(1).prev_hash != c.blocks.get(0).hash) { return 6 }   // linked
+    if (record_count(c2) != 5) { return 7 }
+
+    // --- the consumer's token: tip moved after append ---
+    if (tip_hash(c2) == tip) { return 8 }
+    if (!contains(c2, "name", "busybox")) { return 9 }
+    if (contains(c2, "name", "other")) { return 10 }
+    if (!contains(c2, "event", "build-complete")) { return 11 }
+
+    // --- PERSIST + RESTORE: serialize -> deserialize -> verify (round trip) ---
+    txt<String> = serialize(c2)
+    back<Chain> = deserialize(txt)
+    if (back.blocks.len() != 2) { return 12 }
+    if (!verify(back)) { return 13 }
+    if (tip_hash(back) != tip_hash(c2)) { return 14 }
+    if (!contains(back, "name", "busybox")) { return 15 }
+
+    // --- TAMPER the persisted text: change a record VALUE -> verify fails ---
+    evil<String> = txt.replace("busybox", "EVIL")
+    back_evil<Chain> = deserialize(evil)
+    if (verify(back_evil)) { return 16 }              // value no longer matches hash
+
+    // --- TAMPER: swap two records' ORDER in the text -> digest changes -> fail ---
+    // (the genesis block's records are name then version; flip the two R lines)
+    lines<Vec<String>> = txt.split("\n")
+    // find the two R lines of block 0 (right after its B line)
+    bi<Int> = -1
+    for (i in 0..lines.len() - 1) {
+        if (lines.get(i).substring(0, 1) == "B" && lines.get(i).contains("\t0\t")) { bi = i; break }
+    }
+    if (bi < 0) { return 17 }
+    r0<String> = lines.get(bi + 1)                    // R\tname\tbusybox
+    r1<String> = lines.get(bi + 2)                    // R\tversion\t1.36.1
+    lines.set(bi + 1, r1)
+    lines.set(bi + 2, r0)
+    swapped<String> = ""
+    for (i in 0..lines.len() - 1) {
+        swapped = swapped + lines.get(i) + "\n"
+    }
+    back_swap<Chain> = deserialize(swapped)
+    if (verify(back_swap)) { return 18 }              // order is binding
+
+    // --- TAMPER: break a prev-link in the text -> fail ---
+    linkbroken<String> = txt.replace(c2.blocks.get(1).prev_hash, "deadbeef")
+    back_link<Chain> = deserialize(linkbroken)
+    if (verify(back_link)) { return 19 }
+
+    // --- the UNEDITED chain still verifies (value semantics, no aliasing) ---
+    if (!verify(c2)) { return 20 }
+
+    // --- determinism: sealing the same facts twice yields the same tip ---
+    c3<Chain> = new_chain("vybforge/forge-1", facts_a())
+    if (tip_hash(c3) != tip) { return 21 }
+
+    // --- to_text renders the ledger ---
+    t<String> = to_text(c2)
+    if (!t.contains("origin=")) { return 22 }
+    if (!t.contains("#block 1")) { return 23 }
+    if (!t.contains("tip=")) { return 24 }
+
+    println("chain-ok")
+    return 0
+}
