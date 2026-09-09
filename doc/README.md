@@ -59,6 +59,7 @@ language. Superseded documents are folded into the repository history.
 | [`stdlib_layout.md`](stdlib_layout.md) | Standard library module layout |
 | [`HTTP_CAPABILITY_BOUNDARIES.md`](HTTP_CAPABILITY_BOUNDARIES.md) | HTTP/HTTPS client & server capability boundary, non-goals, and error model |
 | [`NETWORK_ERROR_CONTRACTS.md`](NETWORK_ERROR_CONTRACTS.md) | `network` module raw-socket / async-I/O / UDP-peer error contracts |
+| [`CUDA.md`](CUDA.md) | CUDA/NVPTX device backend: `--kernel` lowering, device intrinsics, host driver-API launch |
 
 ---
 

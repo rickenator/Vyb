@@ -38,11 +38,12 @@ through the test harness.
 6. [Networking cookbook](#6-networking-cookbook)
 7. [Performance and memory model](#7-performance-and-memory-model)
 8. [Testing and tooling](#8-testing-and-tooling)
-9. [API index](#9-api-index)
-10. [Appendix A — Memory model](#appendix-a--memory-model)
-11. [Appendix B — Auto-serialization](#appendix-b--auto-serialization)
-12. [Appendix C — Glossary](#appendix-c--glossary)
-13. [Appendix D — Grammar (EBNF)](#appendix-d--grammar-ebnf)
+9. [GPU kernels (CUDA/NVPTX)](#9-gpu-kernels-cudanvptx)
+10. [API index](#10-api-index)
+11. [Appendix A — Memory model](#appendix-a--memory-model)
+12. [Appendix B — Auto-serialization](#appendix-b--auto-serialization)
+13. [Appendix C — Glossary](#appendix-c--glossary)
+14. [Appendix D — Grammar (EBNF)](#appendix-d--grammar-ebnf)
 
 ---
 ## 1. Mental model
@@ -2472,7 +2473,162 @@ regenerates byte-identical output.
 
 ---
 
-## 9. API index
+## 9. GPU kernels (CUDA/NVPTX)
+
+Vyb can compile a module as pure **NVPTX device code** and lower it to a PTX
+artifact that runs on an NVIDIA GPU. This is a two-half system:
+
+1. **Device half (compiler):** `--kernel` lowers a Vyb module to LLVM IR with
+   the `nvptx64-nvidia-cuda` target and emits PTX via the in-process NVPTX
+   backend. Device code is value/data-parallel only — it has **no host runtime**:
+   no strings, no heap, no call-stack, no channel machinery, no crypto/ledger
+   runtime.
+2. **Host half (Vyb source):** a Vyb program uses the CUDA **driver API**
+   (not the runtime API) through `freedom` `extern "C"` blocks to load the
+   `.ptx`, launch a kernel, and copy results back. No C host is generated — the
+   host is ordinary Vyb source.
+
+```
+  fixtures/kernel/*.vyb                      fixtures/cuda/*.ptx   (emitted artifacts)
+        |  vyb --kernel ... --ptx out.ptx          |
+        v                                          v
+   NVPTX IR -> PTX  ----------------------->  cuModuleLoadData / cuLaunchKernel
+                                                 (from a Vyb main via freedom FFI)
+```
+
+### 9.1 Building a kernel
+
+```
+vyb --kernel axpy.vyb                    # lower as NVPTX, writes axpy.ptx
+vyb --kernel axpy_buf.vyb --ptx out.ptx  # explicit output path
+vyb --kernel k.vyb --gpu sm_90           # arch override
+```
+
+- `--kernel` opts the module into device codegen (NVPTX triple, no host
+  runtime externs).
+- GPU arch resolution: `--gpu sm_90`, else `$VYB_KERNEL_GPU`, else `sm_86`
+  (the default feasibility target). Used for both NVPTX lowering and the
+  `ptxas` assembly check.
+- PTX defaults to `<source-base>.ptx` next to the input, or `--ptx <path>`.
+
+### 9.2 Kernel vs. helper functions
+
+- A **Void-returning top-level function** in kernel mode is marked with the
+  `nvvm.kernel` attribute and the `PTX_Kernel` calling convention, so NVPTX
+  emits it as a PTX **`.entry`** — that is what makes `cuLaunchKernel` able to
+  run it.
+- A **value-returning top-level function** stays a `.visible .func` device
+  helper — callable from kernels, but not launchable on its own.
+
+All kernel parameters cross the FFI as 8-byte typed values (`Int` buffer
+addresses, `Int` counts, `Float` scalars), so the host packs `kernelParams`
+purely from 64-bit values with no device staging buffer.
+
+### 9.3 Device intrinsics
+
+Kernel-mode intrinsics are recognized by the semantic layer and lowered
+directly; no symbol resolution.
+
+Thread / block / grid / lane reads (lower to NVPTX special registers, returned
+as `Int`):
+
+```
+tid_x tid_y tid_z        # thread index within block
+blk_x blk_y blk_z        # block index within grid
+dim_x dim_y dim_z        # block dimensions (blockDim)
+grid_x grid_y            # grid dimensions (gridDim)
+lane_id warp_size        # warp lane / warp size
+```
+
+Block barrier:
+
+```
+kernel_barrier            # bar.sync 0
+```
+
+Device-global load/store — the address is a Vyb `Int` (i64) buffer address,
+lowered to a pointer in global memory (addrspace 1):
+
+```
+ld_f64 ld_f32 ld_i64 ld_i32 ld_i16 ld_u16 ld_i8 ld_u8   # typed loads
+st_f64 st_f32 st_i64 st_i32 st_i16 st_u16 st_i8 st_u8   # typed stores
+ld_f16  ld_bf16                                            # widen to Float
+st_f16  st_bf16                                            # narrow from Float
+```
+
+GGUF q4_0 dequant — a block at `addr` holds `[f16 d][32 x 4-bit signed]`;
+value(i) = (nibble−8)·d:
+
+```
+deq_q4_0(addr<Int>, idx<Int>)<Float>
+```
+
+Shared memory — a module-wide 32 KB buffer; caller bounds-checks:
+
+```
+ld_shared_f64(off<Int>)<Float>
+st_shared_f64(off<Int>, v<Float>)
+```
+
+Global atomics (monotonic):
+
+```
+atomic_add_f64(addr<Int>, v<Float>)<Float>
+atomic_add_i32(addr<Int>, v<CInt>)<CInt>
+```
+
+### 9.4 Compile-time acceptance gates
+
+- **Host-runtime-free:** any reference to a `__vyb_*` host-runtime symbol is a
+  hard error (device code cannot call strings/heap/channels), reported with the
+  offending symbol list.
+- **Symbol presence:** every emitted device function must survive into the PTX
+  text result, and there must be at least one — catches kernels optimized away.
+- **ptxas validation:** if `ptxas` is on PATH, the emitted PTX is assembled
+  with `--gpu-name=<arch>`; a rejection is a hard error, absent `ptxas` is a
+  warning.
+
+### 9.5 Launching from Vyb (freedom FFI)
+
+The reference launcher is `fixtures/cuda/launch_fill.vyb`: `cuInit`,
+`cuDeviceGetCount`/`cuDeviceGet`, `cuCtxCreate_v2`, read the `.ptx` file,
+`cuModuleLoadData`, `cuModuleGetFunction`, `cuMemAlloc_v2`, `cuLaunchKernel`,
+`cuCtxSynchronize`, `cuMemcpyDtoH_v2`, `cuMemFree_v2`.
+
+**Launch-argument pitfall:** `cuLaunchKernel`'s `kernelParams` is a `void*[]`
+whose element *i* points to the buffer holding argument *i*'s **value**. Pack
+it one level short (passing `&slot` as the array base) and the driver
+dereferences a device address as a host pointer, SIGSEGVing inside libcuda.
+Correct pattern:
+
+```
+slot<loc<CVoid>> = from<loc<CVoid>>(dptr)   # buffer holding arg0's VALUE
+sel<loc<loc<CVoid>>> = loc(slot)             # &slot
+pp<loc<CVoid>> = from<loc<CVoid>>(addr(sel)) # pp holds &slot
+cuLaunchKernel(hf, ..., loc(pp), ...)        # *kernelParams == &slot
+```
+
+### 9.6 Security note
+
+Kernels are pure value/data-parallel compute. Only integer buffer addresses
+and raw typed data cross the FFI to the device; the runtime never stages
+key/seed material on the GPU. Crypto/ledger integration stays host-side.
+
+### 9.7 Fixtures
+
+| File | Role |
+|------|------|
+| `fixtures/kernel/axpy.vyb` | Pure-device, zero-runtime scalar sample (no `main`) |
+| `fixtures/kernel/axpy_buf.vyb` | Launchable Void 1-D axpy over a flattened buffer |
+| `fixtures/kernel/matmul.vyb` | Register-tiled 4x4 tile matmul, no shared memory |
+| `fixtures/kernel/p203_verify.vyb` | deq_q4_0 + fp16/bf16 loads on device |
+| `fixtures/cuda/launch_fill.vyb` | Host driver-API launcher (reads `fill_kernel.ptx`, expects 42) |
+| `fixtures/cuda/*.ptx` | Emitted PTX artifacts |
+| `fixtures/cuda/*.vyb.ll` | Generated LLVM IR |
+
+---
+
+## 10. API index
 
 <!-- refman:api-index begin -->
 | Area | Module page | Cross-index |
