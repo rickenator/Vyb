@@ -10,6 +10,7 @@
 #include "vyb/lint.hpp"             // For vyb::lint::lintModule (vyb check)
 #include "vyb/docgen.hpp"           // For vyb::docgen (vyb doc)
 #include "vyb/lsp.hpp"              // For vyb::lsp::serveLsp (vyb lsp)
+#include "vyb/repl.hpp"             // For vyb::repl::runRepl (vyb repl)
 #include "vyb/vre/llvm/codegen.hpp" // For vyb::LLVMCodegen
 #include "vyb/bindgen.hpp"      // For vyb::bindgen::generateBindings
 #include <catch2/catch_session.hpp>
@@ -1885,6 +1886,7 @@ void print_subcommand_help() {
               << "  check <file.vyb> [files/dirs...]  AST lint warnings beyond errors\n"
               << "  doc <file.vyb> [files/dirs...] [-o outdir]  generate HTML documentation\n"
               << "  lsp  serve the Language Server Protocol over stdio\n"
+              << "  repl  interactive read-eval-print loop (JIT-backed)\n"
               << "  bindgen <header.h> [--full]   generate Vyb bindings from a C header\n"
               << "\n"
               << "Compile/run a file directly ('vyb program.vyb ...'); 'vyb --help' shows\n"
@@ -2289,6 +2291,19 @@ int run_lsp_command(int argc, char** argv, const std::string& exeArg) {
         }
     };
     return vyb::lsp::serveLsp(std::move(parse));
+}
+
+// `vyb repl` — interactive read-eval-print loop backed by the ORC JIT executor.
+// Each submission is evaluated by spawning this same binary on a temp file, so
+// selfExe must resolve to the running `vyb` (canonicalized from argv[0]).
+int run_repl_command(int argc, char** argv, const std::string& exeArg) {
+    (void)argc; (void)argv;
+    std::error_code ec;
+    std::filesystem::path exe = exeArg;
+    std::filesystem::path canon = std::filesystem::canonical(exeArg, ec);
+    if (!ec) exe = canon;
+    else exe = std::filesystem::absolute(exeArg, ec);
+    return vyb::repl::runRepl(exe.string());
 }
 
 } // namespace
@@ -4261,6 +4276,10 @@ int main(int argc, char* argv[]) {
     if (argc >= 2 && std::string(argv[1]) == "lsp") {
         // `vyb lsp` (#154): Language Server Protocol over stdio (blocking).
         return run_lsp_command(argc - 2, argv + 2, std::string(argv[0]));
+    }
+    if (argc >= 2 && std::string(argv[1]) == "repl") {
+        // `vyb repl` (#154): interactive read-eval-print loop.
+        return run_repl_command(argc - 2, argv + 2, std::string(argv[0]));
     }
     if (argc >= 2 && std::string(argv[1]) == "doc") {
         // `vyb doc [files/dirs...] [-o outdir]` (#154): generate HTML docs.

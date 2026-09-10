@@ -215,7 +215,7 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 | Pattern matching | ~85% | Struct destructuring, guards, range/`?`/comparison patterns, data-enum variants, `match`-as-expression shipped |
 | Package manager / `vyb.toml` | ~90% | Core complete: `vyb.toml`, `vyb build` (multi-file + local path deps), `vyb new`, `vyb.lock`. Remote git/version dependency fetching + package registry are separate staged follow-ups |
 | Language server (LSP) | ~80% | `vyb lsp` shipped (v0.1): diagnostics (parse+lint), go-to-def, hover (kind+signature), completion over declarations; smoke test in CI. Struct-field/method completion, doc-in-hover, cross-file follow on |
-| REPL | ~0% | Not started |
+| REPL | ~70% | `vyb repl` shipped (v0.1): JIT-backed eval loop, persistent decls/vars, auto-display, multiline + error recovery; smoke test in CI. readline editing + `:type` follow on |
 | Self-hosting compiler | ~0% | Long-term goal |
 
 **Overall: approximately 60-65% complete toward a production 1.0 release.**
@@ -877,9 +877,9 @@ with `pass` for multi-statement case bodies. Needs polishing:
 - [x] **Diagnostics** — `textDocument/publishDiagnostics` after open/change: parse/syntax errors (severity 1) + `vyb check`-style AST lint warnings (severity 2).
 
 ### REPL
-- [ ] **Interactive mode** — `vyb repl` launches a read-eval-print loop
-- [ ] **JIT-backed** — Reuse existing ORC JIT infrastructure
-- [ ] **History + multiline** — Standard readline-style editing
+- [x] **Interactive mode** — `vyb repl` launches a read-eval-print loop (statement/declaration-oriented; bare expressions auto-display their value). Subprocess-per-eval: each submitted entry reuses the standard `vyb file.vyb` ORC-JIT path on a temp file (clean I/O capture + crash isolation).
+- [x] **JIT-backed** — Reuses the existing ORC JIT infrastructure via the normal run path; declarations (fn/struct/enum/...) and variable assignments persist across entries (re-run per eval); bare-expression auto-display is `println(expr)`.
+- [ ] **History + multiline** — Standard readline-style editing (bracket-balanced multiline input works; readline history/line editing is a follow-on)
 - [ ] **`:type` command** — Print the type of an expression
 
 ### Documentation Tools
@@ -1222,7 +1222,7 @@ For Vyb to be considered production-ready at 1.0, **all of the following must be
 - [ ] All open contradictions resolved (see section above)
 
 ### Should-Have for 1.0
-- [ ] REPL (`vyb repl`)
+- [x] REPL (`vyb repl`) — JIT-backed eval loop (persistent declarations + variables, bare-expression auto-display, multiline via bracket balance, error recovery); protocol smoke test in hosted CI (`test/repl_smoke.py`). readline history/editing + `:type` are follow-ons
 - [x] Language server (LSP) — `vyb lsp` shipped (v0.1): diagnostics (parse + lint), go-to-definition, hover (kind + signature), declaration completion; protocol smoke test in hosted CI (`test/lsp_smoke.py`)
 - [x] `vyb fmt` code formatter (`--format`/`--check`; idempotent core, see Testing & Tooling)
 - [x] `vyb doc` documentation generator (`vyb doc <file> [-o outdir]`, see Testing & Tooling)
