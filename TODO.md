@@ -868,6 +868,12 @@ with `pass` for multi-statement case bodies. Needs polishing:
   optional `--require-signed`). Auto-fetch-on-build (a `github:` dep the user hasn't
   installed errors with a `vyb mod install` hint), `git:`-clone deps, `version:`-spec deps
   (registry-gated lock pins, offline/cache) — staged follow-ons beyond the smuggle channel.
+- [x] **`git:`-clone deps** — `vyb build` accepts a `git:` dependency (`git = "<clone-url>"`),
+  AUTO-CLONES it into `.vybmod/<name>/` on build (shallow clone; the repo root's `mod.vyb`
+  is the module), wires `import <name>` to `.vybmod/<name>/mod.vyb`, and records
+  `source="git", resolved=...` in `vyb.lock`. Regression: `test/gitdep_smoke.py` in hosted CI.
+  `version:`-spec deps (registry-gated lock pins, offline/cache) and the central package
+  registry remain staged beyond the smuggle channel.
 - [ ] **Package registry** — Central registry for published packages
 
 ### Language Server Protocol (LSP)

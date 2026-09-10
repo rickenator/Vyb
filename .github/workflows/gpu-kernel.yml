@@ -63,6 +63,11 @@ jobs:
         # stdout lines (auto-display, persistent decls/vars, error recovery, :clear).
         run: python3 test/repl_smoke.py
 
+      - name: git dependency smoke test
+        # Creates a local git repo + consumer with a `git:` dependency; asserts
+        # clone-on-build into .vybmod, vyb.lock source="git", and a runnable binary.
+        run: python3 test/gitdep_smoke.py
+
       - name: Emit + ptxas-validate kernel PTX across arches
         # The --kernel path runs ptxas automatically and FAILS the build if it
         # rejects the artifact (P2.2 gate). For each fixture x arch we assert the

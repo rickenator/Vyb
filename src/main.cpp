@@ -1656,10 +1656,9 @@ std::vector<fs::path> project_module_paths(const vyb::Manifest& m) {
             paths.push_back(p);
             auto depSrc = p / "src";
             if (fs::is_directory(depSrc)) paths.push_back(depSrc);
-        } else if (d.source == "github") {
-            // Materialized (<root>/.vybmod/<name>/mod.vyb by `vyb mod install github:`).
-            // `import <name>` resolves as <searchPath>/<name>/mod.vyb, so the search
-            // path is the .vybmod CONTAINER, not the per-dep directory.
+        } else if (d.source == "github" || d.source == "git") {
+            // `github:` / `git:` deps materialize as .vybmod/<name>/mod.vyb, so the
+            // search path is the .vybmod CONTAINER (import <name> -> <name>/mod.vyb).
             fs::path p = m.rootDir / ".vybmod";
             if (fs::is_directory(p))
                 if (std::find(paths.begin(), paths.end(), p.lexically_normal()) == paths.end())
@@ -1682,10 +1681,10 @@ void write_lockfile(const vyb::Manifest& m) {
             out << "[[" << d.name << "]]\n";
             out << "source = \"path\"\n";
             out << "resolved = \"" << fs::absolute(p).lexically_normal().string() << "\"\n\n";
-        } else if (d.source == "github") {
+        } else if (d.source == "github" || d.source == "git") {
             fs::path p = m.rootDir / ".vybmod" / d.name;
             out << "[[" << d.name << "]]\n";
-            out << "source = \"github\"\n";
+            out << "source = \"" << d.source << "\"\n";
             out << "resolved = \"" << fs::absolute(p).lexically_normal().string() << "\"\n\n";
         } else {
             out << "[[" << d.name << "]]\n";
@@ -1693,6 +1692,23 @@ void write_lockfile(const vyb::Manifest& m) {
             out << "resolved = \"UNRESOLVED - " << (d.source == "git" ? "git-clone backend not implemented" : "version resolution requires a package registry") << "\"\n\n";
         }
     }
+}
+
+// git-clone backend for `git:` dependencies. Runs `git clone --depth 1 <url> <target>`
+// (shallow; full history isn't needed for module resolution). Returns true on success.
+static bool gitClone(const std::string& url, const fs::path& target) {
+    pid_t pid = fork();
+    if (pid == 0) {
+        std::string targetStr = target.string(); // keep alive for argv below
+        const char* argv[] = {"git", "clone", "--depth", "1",
+                              url.c_str(), targetStr.c_str(), nullptr};
+        execvp("git", (char* const*)argv);
+        _exit(127);
+    }
+    if (pid < 0) return false;
+    int status = 0;
+    waitpid(pid, &status, 0);
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
 }
 
 int run_build_command(int argc, char** argv, const std::string& exeArg) {
@@ -1740,8 +1756,10 @@ int run_build_command(int argc, char** argv, const std::string& exeArg) {
     //    the verified `vyb mod install github:...` resolver — the doc/MANIFEST.md
     //    design: install resolves, build consumes). If not materialized, error with a
     //    hint; auto-fetch on build is a staged follow-up (#165).
-    //  - `git`/`version` deps remain staged: git needs a clone backend, version needs
-    //    a package registry (none exists yet).
+    //  - `git:` deps are AUTO-CLONED into .vybmod/<name>/ on build (shallow clone),
+    //    and consumed as a module rooted at the repo (mod.vyb). Auto-fetch on build
+    //    is native for git deps.
+    //  - `version` deps remain staged (they need a package registry, none exists).
     for (const auto& d : manifest->dependencies) {
         if (d.source == "github") {
             fs::path depDir = root / ".vybmod" / d.name;
@@ -1753,13 +1771,33 @@ int run_build_command(int argc, char** argv, const std::string& exeArg) {
                           << "(auto-fetch on build is staged, #165)\n";
                 return 1;
             }
+        } else if (d.source == "git") {
+            fs::path depDir = root / ".vybmod" / d.name;
+            std::error_code ec;
+            if (!fs::is_directory(depDir, ec) || !fs::exists(depDir / "mod.vyb", ec)) {
+                if (d.url.empty()) {
+                    std::cerr << "Error: git dependency '" << d.name << "' has no git URL.\n";
+                    return 1;
+                }
+                std::cerr << "Fetching git dependency '" << d.name << "' from " << d.url << " ...\n";
+                fs::create_directories(root / ".vybmod", ec);
+                fs::remove_all(depDir, ec);
+                if (!gitClone(d.url, depDir)) {
+                    std::cerr << "Error: failed to git-clone dependency '" << d.name
+                              << "' from " << d.url << "\n";
+                    return 1;
+                }
+                if (!fs::exists(depDir / "mod.vyb")) {
+                    std::cerr << "Error: git dependency '" << d.name
+                              << "' has no mod.vyb at its repository root.\n";
+                    return 1;
+                }
+            }
         } else if (d.source != "path") {
             std::cerr << "Error: dependency '" << d.name << "' uses source '"
                       << d.source << "', not supported yet (#165): "
-                      << (d.source == "git"
-                              ? "git-clone backend not implemented"
-                              : "version resolution requires a package registry (none exists yet)")
-                      << ". Use a 'path' or 'github:' dependency."
+                      << "version resolution requires a package registry (none exists yet)"
+                      << ". Use a 'path', 'github:' or 'git:' dependency."
                       << std::endl;
             return 1;
         }
