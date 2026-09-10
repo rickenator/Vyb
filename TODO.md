@@ -880,8 +880,8 @@ with `pass` for multi-statement case bodies. Needs polishing:
 ### REPL
 - [x] **Interactive mode** — `vyb repl` launches a read-eval-print loop (statement/declaration-oriented; bare expressions auto-display their value). Subprocess-per-eval: each submitted entry reuses the standard `vyb file.vyb` ORC-JIT path on a temp file (clean I/O capture + crash isolation).
 - [x] **JIT-backed** — Reuses the existing ORC JIT infrastructure via the normal run path; declarations (fn/struct/enum/...) and variable assignments persist across entries (re-run per eval); bare-expression auto-display is `println(expr)`.
-- [ ] **History + multiline** — Standard readline-style editing (bracket-balanced multiline input works; readline history/line editing is a follow-on)
-- [ ] **`:type` command** — Print the type of an expression
+- [x] **History + multiline** — Bracket-balanced multiline input works; interactive TTY line editing shipped: raw-mode editor with up/down history recall, left/right/home/end, backspace, Ctrl-D/U/W, and `:quit` etc. (falls back to plain `getline` when not a TTY, so piped/CI sessions are unaffected)
+- [x] **`:type` command** — `:type <expr>` prints the inferred type of an expression in the accumulated session context, backed by a new `vyb type <file.vyb> <binding>` compiler subcommand (parses + semantic-analyzes, reports the binding's expression type). Regression: `test/repl_smoke.py` asserts `:type v = Int`.
 
 ### Documentation Tools
 - [x] **Doc comments + `vyb doc`** — `/// comment` lines above a declaration are doc comments; `vyb doc <file.vyb> [files/dirs...] [-o outdir]` generates a self-contained HTML reference page per module (signature + doc text per declaration, TOC, HTML-escaped). Regression: `test/units/test_doc_generation.vyb`.

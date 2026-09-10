@@ -40,6 +40,7 @@ SESSION = "\n".join([
     "f(6, 7)",                    # 42
     "v = 5",                      # variable assignment (persisted)
     "v + 2",                      # 7
+    ":type v",                    # ":type v = Int"
     "broken_expr_zz",             # error -> reported, session continues
     "9 - 4",                      # 5
     ":clear",
@@ -48,7 +49,7 @@ SESSION = "\n".join([
     "",
 ])
 
-EXPECTED_STDOUT = ["12", "42", "7", "5", "5"]
+EXPECTED_STDOUT = ["12", "42", "7", ":type v = Int", "5", "5"]
 
 
 def main():

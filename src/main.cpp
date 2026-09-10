@@ -1887,6 +1887,7 @@ void print_subcommand_help() {
               << "  doc <file.vyb> [files/dirs...] [-o outdir]  generate HTML documentation\n"
               << "  lsp  serve the Language Server Protocol over stdio\n"
               << "  repl  interactive read-eval-print loop (JIT-backed)\n"
+              << "  type <file.vyb> <binding>  print an inferred type (REPL :type backend)\n"
               << "  bindgen <header.h> [--full]   generate Vyb bindings from a C header\n"
               << "\n"
               << "Compile/run a file directly ('vyb program.vyb ...'); 'vyb --help' shows\n"
@@ -2304,6 +2305,68 @@ int run_repl_command(int argc, char** argv, const std::string& exeArg) {
     if (!ec) exe = canon;
     else exe = std::filesystem::absolute(exeArg, ec);
     return vyb::repl::runRepl(exe.string());
+}
+
+// Recursively find a VariableDeclaration named `name` (used by `vyb type`).
+static bool typeFindVar(std::vector<vyb::ast::StmtPtr>& stmts, const std::string& name,
+                        vyb::ast::VariableDeclaration*& out) {
+    for (auto& s : stmts) {
+        if (auto* vd = dynamic_cast<vyb::ast::VariableDeclaration*>(s.get())) {
+            if (vd->id && vd->id->name == name) { out = vd; return true; }
+        }
+        if (auto* blk = dynamic_cast<vyb::ast::BlockStatement*>(s.get())) {
+            if (typeFindVar(blk->body, name, out)) return true;
+        } else if (auto* fn = dynamic_cast<vyb::ast::FunctionDeclaration*>(s.get())) {
+            if (fn->body && typeFindVar(fn->body->body, name, out)) return true;
+        }
+    }
+    return false;
+}
+
+// `vyb type <file.vyb> <var>` — after semantic analysis, print the inferred type
+// of the named top-level/block binding (via the initializer expression's type).
+// Backs the REPL `:type <expr>` command: the REPL binds `__vyb_t = <expr>` in a
+// temp program and asks for `__vyb_t`.
+int run_type_command(int argc, char** argv) {
+    if (argc < 2) {
+        std::cerr << "usage: vyb type <file.vyb> <binding>" << std::endl;
+        return 1;
+    }
+    std::string file = argv[0];
+    std::string varname = argv[1];
+
+    std::ifstream ifs(file, std::ios::binary);
+    if (!ifs) { std::cerr << "type: cannot open " << file << std::endl; return 1; }
+    std::stringstream ss; ss << ifs.rdbuf();
+    std::string source = ss.str();
+
+    try {
+        vyb::Driver driver;
+        auto parsed = parse_vyb_module(source, file);
+        vyb::SemanticAnalyzer semanticAnalyzer(driver);
+        driver.setSemanticAnalyzer(&semanticAnalyzer);
+        semanticAnalyzer.setModuleScoping(parsed.ownerByName, parsed.effectiveScope);
+        semanticAnalyzer.analyze(parsed.ast.get());
+        const auto& errs = semanticAnalyzer.getErrors();
+        if (!errs.empty()) {
+            for (const auto& e : errs) std::cerr << "  " << e << std::endl;
+            return 1;
+        }
+        vyb::ast::VariableDeclaration* vd = nullptr;
+        if (typeFindVar(parsed.ast->body, varname, vd)) {
+            vyb::ast::TypeNode* t = nullptr;
+            if (vd->init && vd->init->type) t = vd->init->type.get();
+            else if (vd->typeNode) t = vd->typeNode.get();
+            if (!t && vd->type) t = vd->type.get();
+            std::cout << (t ? t->toString() : "unknown") << std::endl;
+            return 0;
+        }
+        std::cerr << "type: no binding named '" << varname << "'" << std::endl;
+        return 1;
+    } catch (const std::exception& e) {
+        std::cerr << "type error: " << e.what() << std::endl;
+        return 1;
+    }
 }
 
 } // namespace
@@ -4280,6 +4343,10 @@ int main(int argc, char* argv[]) {
     if (argc >= 2 && std::string(argv[1]) == "repl") {
         // `vyb repl` (#154): interactive read-eval-print loop.
         return run_repl_command(argc - 2, argv + 2, std::string(argv[0]));
+    }
+    if (argc >= 2 && std::string(argv[1]) == "type") {
+        // `vyb type <file> <binding>`: print an expression's inferred type (REPL :type).
+        return run_type_command(argc - 2, argv + 2);
     }
     if (argc >= 2 && std::string(argv[1]) == "doc") {
         // `vyb doc [files/dirs...] [-o outdir]` (#154): generate HTML docs.
