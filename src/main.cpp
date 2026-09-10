@@ -6,6 +6,7 @@
 #include "vyb/semantic.hpp"       // For vyb::SemanticAnalyzer
 #include "vyb/module_registry.hpp"
 #include "vyb/manifest.hpp"
+#include "vyb/format.hpp"           // For vyb::fmt::SourcePrinter (--format/--check)
 #include "vyb/vre/llvm/codegen.hpp" // For vyb::LLVMCodegen
 #include "vyb/bindgen.hpp"      // For vyb::bindgen::generateBindings
 #include <catch2/catch_session.hpp>
@@ -3870,6 +3871,8 @@ int main(int argc, char* argv[]) {
     bool test_mode_active = false;
     bool parse_only_mode = false;
     bool semantic_only_mode = false;
+    bool format_mode = false;       // --format <file>: canonical pretty-printer
+    bool format_check_mode = false; // --check: exit 1 if file differs from canonical form
     bool emit_llvm_ir = false;
     bool compile_mode = false;
     bool build_mode = false;
@@ -3894,6 +3897,17 @@ int main(int argc, char* argv[]) {
             parse_only_mode = true;
             g_module_parse_options.skipImportResolution = true;
             execute_jit = false;  // Don't execute if parse-only
+            continue;
+        } else if (arg == "--format") {
+            format_mode = true;
+            g_module_parse_options.skipImportResolution = true;
+            execute_jit = false;
+            continue;
+        } else if (arg == "--check") {
+            format_mode = true;
+            format_check_mode = true;
+            g_module_parse_options.skipImportResolution = true;
+            execute_jit = false;
             continue;
         } else if (arg == "--semantic-only") {
             semantic_only_mode = true;
@@ -4066,6 +4080,37 @@ int main(int argc, char* argv[]) {
                 return 0;
             }
 
+            // Format mode: parse and pretty-print canonically. --check exits 1 if
+            // the file does not already match the canonical (idempotent) output.
+            if (format_mode) {
+                auto parsed = parse_vyb_module(source, filename);
+                // Drop the synthetic core::aspects prelude import (its empty
+                // SourceLocation filePath marks it as auto-inserted by the module
+                // registry, not authored by the user), so the canonical output
+                // reflects only the source as written and --check stays meaningful.
+                parsed.ast->body.erase(
+                    std::remove_if(parsed.ast->body.begin(), parsed.ast->body.end(),
+                        [](const vyb::ast::StmtPtr& s) {
+                            if (auto* imp = dynamic_cast<vyb::ast::ImportDeclaration*>(s.get())) {
+                                return imp->loc.filePath.empty() && imp->source &&
+                                       imp->source->value == "core::aspects";
+                            }
+                            return false;
+                        }),
+                    parsed.ast->body.end());
+                std::string formatted = vyb::fmt::SourcePrinter::format(parsed.ast.get());
+                if (format_check_mode) {
+                    if (formatted != source) {
+                        std::cerr << "vyb: " << filename << " is not formatted"
+                                  << std::endl;
+                        return 1;
+                    }
+                    return 0;
+                }
+                std::cout << formatted;
+                return 0;
+            }
+
             // Generate LLVM IR to a file if requested
             if (emit_llvm_ir) {
                 auto parsed = parse_vyb_module(source, filename);
@@ -4226,6 +4271,8 @@ int main(int argc, char* argv[]) {
         std::cout << "Options:" << std::endl;
         std::cout << "  --parse-only          Stop after parsing (validates syntax only)" << std::endl;
         std::cout << "  --semantic-only       Stop after semantic analysis" << std::endl;
+        std::cout << "  --format              Pretty-print a file to canonical (idempotent) source" << std::endl;
+        std::cout << "  --check               Exit 1 if the file is not already canonical (with --format)" << std::endl;
         std::cout << "  --emit-llvm           Generate LLVM IR to a .ll file" << std::endl;
         std::cout << "  --kernel              (issue #198) Lower the module as NVPTX device" << std::endl;
         std::cout << "                        code: no main, no host runtime; emit kernel.ptx" << std::endl;

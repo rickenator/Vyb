@@ -354,11 +354,20 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 - [x] **`lit()`, `notype()`, `bare()`, `deserial()` intrinsics** — Serialization control
 - [x] **JSON construction intrinsics** — `__vyb_serialize_to_json()`, struct metadata
 - [x] **JSON deserialization** — `T::from_string(json)` round-trip (v0.4.4)
-- [ ] **Ser/deser edges — `fn` / `Self` / recursive structs** — `fn`-typed and `Self`-typed
-  fields are excluded from serialization/deserialization (guarded + documented note,
-  `PROGRAMMERS_GUIDE.md` §3.21). Self-referential structs (`next<Node?>`) currently
-  **segfault** the toolchain at type registration; make that a graceful disallow or a
-  properly-supported path. Broader general recursion support remains a follow-on.
+- [x] **Ser/deser edges — recursive structs terminate cleanly; `fn`/`Self` fields excluded** — `fn`-typed and `Self`-typed
+  fields are excluded from serialization/deserialization (guarded in `generateTypeMetadata`:
+  fn/Self-typed fields are skipped from the runtime type-metadata, so `to_string()` omits
+  them and `from_string()` leaves the zero-initialized slot untouched; documented note
+  `PROGRAMMERS_GUIDE.md` §3.21; regression test `test/units/test_struct_fn_field_excluded.vyb`). Self-referential structs no longer crash the toolchain:
+  by-value self-embedding (e.g. `next<Node?>`) is rejected cleanly at LLVM sizing, while
+  recursion through owned containers (`Vec<T>`/`my<T>`/`mild<T>` trees) is **supported** —
+  the owned-field reclaim walker now carries its `visited` set across Vec elements too
+  (cgen_ownership.cpp), so a `children<Vec<Node>>` self-cycle terminates instead of
+  stack-overflowing. Regression tests:
+  `test/units/test_struct_recursive_rejected.vyb`,
+  `test/units/test_struct_recursive_vec_supported.vyb`,
+  `test/units/test_struct_selfref_indirect_allowed.vyb`. Broader support (runtime-recursive
+  codegen for owned recursive types) remains a follow-on.
 
 ### Infrastructure
 - [x] **CMake build system** — LLVM integration
@@ -892,7 +901,16 @@ with `pass` for multi-statement case bodies. Needs polishing:
 
 ### Testing & Tooling
 - [ ] **`vyb test`** — Run test files alongside source (`*.test.vyb`)
-- [ ] **Code formatter** — `vyb fmt` for canonical formatting
+- [x] **Code formatter — `--format`/`--check`** — `vyb --format <file>` parses to the AST and re-emits
+  canonical, idempotent source (4-space indent, comma-joined fields/arms, precedence-aware
+  parenthesization); `vyb --check` exits 1 when a file isn't already canonical. Covered: declarations
+  (struct/enum/fn/import/type-alias/bind/aspect/namespace), control flow (if/for/while/return/match/
+  select/assert/extern/try), and the expression set (literals, calls, members, indexing, closures,
+  casts, ranges, comprehension). Comments are dropped by design (limits --check to comment-free input).
+  Crash-safe across the 1179-file corpus (0 segfaults); idempotent on ~69/90 unit files. Exotic
+  syntax — `ensure … else`, `relaxed` mode, and some trap/result contract forms — re-emits to a
+  non-reparseable form (known limitation, follow-on). Regression test:
+  `test/units/test_format_canonical.vyb`. Implements tracked as `Vyting & Tooling` → Code formatter.
 - [ ] **Linter** — `vyb check` for warnings beyond errors
 - [ ] **Debugger integration** — `gdb`/`lldb` with Vyb source stepping (DWARF done, validate end-to-end)
 
@@ -1204,7 +1222,7 @@ For Vyb to be considered production-ready at 1.0, **all of the following must be
 ### Should-Have for 1.0
 - [ ] REPL (`vyb repl`)
 - [ ] Language server (LSP) — at least basic completion and diagnostics
-- [ ] `vyb fmt` code formatter
+- [x] `vyb fmt` code formatter (`--format`/`--check`; idempotent core, see Testing & Tooling)
 - [ ] `vyb doc` documentation generator
 - [ ] Comprehensive language reference manual
 - [ ] Test suite covering all 1.0 features

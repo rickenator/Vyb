@@ -1,0 +1,23 @@
+// @test: recursive tree via Vec<Self> and my<Self> is supported (no crash)
+// @description: a struct may refer to itself through owned containers (`Vec<Node>`,
+//   `my<Node>`) — pointer-indirected, sized by LLVM. The owned-field reclaim codegen
+//   walks the type graph, so a self-cycle must terminate via the shared `visited` set
+//   (it used to reset for Vec elements and stack-overflow/segfault on scope exit). This
+//   verifies such recursive shapes compile and run without crashing. (By-value
+//   self-embedding, e.g. `next<Node?>`, is still rejected in
+//   test_struct_recursive_rejected.vyb.)
+// @category: struct, ownership, serialization, codegen
+// @expect: pass
+// @expect-output: ok
+// @expect-return: 0
+
+struct Node {
+    value<Int>,
+    children<Vec<Node>>
+}
+
+main()<Int> -> {
+    n<Node> = Node { value = 1, children = Vec<Node>() }
+    println("ok")
+    return 0
+}

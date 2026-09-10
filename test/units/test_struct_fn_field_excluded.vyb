@@ -1,0 +1,33 @@
+// @test: fn-typed struct fields are excluded from ser/deser metadata
+// @description: a struct may carry a closure (`fn(...)`) field, but closures hold code
+//   and a capture environment at a byte offset — not JSON data. Ser/deser therefore
+//   omits such fields entirely (documented in PROGRAMMERS_GUIDE §3.21): to_string() must
+//   not emit the fn field, and from_string() must ignore it and leave the zero-initialized
+//   closure slot untouched (never walk raw closure bytes as `null`). Assert both
+//   properties in-program.
+// @category: struct, serialization, closure
+// @expect: pass
+// @expect-output: ok
+// @expect-return: 0
+
+struct Task {
+    id<Int>,
+    name<String>,
+    cb<fn(Int) -> Int>
+}
+
+main()<Int> -> {
+    t<Task> = Task { id = 7, name = "x", cb = |x<Int>| -> x * 2 }
+    j<String> = t.to_string()
+    if (j.contains("cb")) {
+        println("serialized-fn-field")
+        return 1
+    }
+    u<Task> = Task::from_string(j)
+    if (u.id != 7 || u.name != "x") {
+        println("roundtrip-bad")
+        return 2
+    }
+    println("ok")
+    return 0
+}

@@ -1,0 +1,18 @@
+// @test: non-owning (mild) self-referential struct is allowed
+// @description: a struct may refer to itself through a non-owning reference (`mild<T>`,
+//   a weak pointer that carries no owned reclaim), so a linked shape using `mild`
+//   self-links is constructible and compiles. This is the supported indirection for
+//   recursive shapes; owned-container self-recursion (Vec/my/our) is rejected in
+//   test_struct_recursive_vec_rejected.vyb.
+// @category: struct, ownership, mild, serialization
+// @expect: pass
+// @expect-return: 0
+
+struct Chain {
+    val<Int>,
+    link<mild<Chain>>
+}
+
+main()<Int> -> {
+    return 0
+}

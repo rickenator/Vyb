@@ -50,6 +50,19 @@ void LLVMCodegen::generateTypeMetadata(const std::string& typeName, ast::StructD
         std::string fieldName = fieldDecl->name->name;
         std::string fieldTypeName = fieldDecl->typeNode->toString();
 
+        // Exclude fn / Self-typed fields from ser/deser metadata (documented behavior).
+        // A closure (or `Self`) field holds code / a self-type at a byte offset, not
+        // JSON data: emitting it would either leak closure capture internals as `null`
+        // or — if the closure's synthetic struct type happened to be registered — walk
+        // raw env/fn-pointer bytes. Skipping it here makes serialization omit the field
+        // and deserialization leave the (zero-initialized) slot untouched, consistently.
+        if (isFnTypeNode(fieldDecl->typeNode.get()) || fieldTypeName == "Self") {
+            VYB_CDBG << "DEBUG: Excluding non-serializable field '" << fieldName
+                     << "' (" << fieldTypeName << ") of " << typeName
+                     << " from ser/deser metadata" << std::endl;
+            continue;
+        }
+
         // Determine if field is primitive
         bool isPrimitive = (fieldTypeName == "Int" || fieldTypeName == "Float" ||
                            fieldTypeName == "Bool" || fieldTypeName == "String");

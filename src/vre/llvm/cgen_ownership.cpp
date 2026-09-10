@@ -885,8 +885,11 @@ void LLVMCodegen::reclaimStructOwnedFieldsAt(llvm::Value* structPtr,
                     builder->SetInsertPoint(bdy);
                     llvm::Value* off = builder->CreateMul(idx, elemBytes, "reclaim.elem.off");
                     llvm::Value* ep = builder->CreateGEP(llvm::Type::getInt8Ty(*context), data, off, "reclaim.elem.ptr");
-                    std::set<std::string> v2;
-                    reclaimStructOwnedFieldsAt(ep, eAst, llvm::cast<llvm::StructType>(eLlvm), v2);
+                    // Carry the shared `visited` set instead of a fresh empty one, so a
+                    // self-referential Vec<Struct> element (e.g. `children<Vec<Node>>`) hits
+                    // the cycle guard and TERMINATES like the my<Self> path does, instead of
+                    // recursing forever (formerly a stack-overflow segfault).
+                    reclaimStructOwnedFieldsAt(ep, eAst, llvm::cast<llvm::StructType>(eLlvm), visited);
                     builder->CreateStore(builder->CreateAdd(idx, one, "reclaim.elem.next"), idxA);
                     builder->CreateBr(hdr);
                     builder->SetInsertPoint(ext);

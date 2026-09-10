@@ -1,0 +1,23 @@
+// @test: vyb --format canonicalizes source (idempotent formatter)
+// @description: `vyb --format` re-emits canonical source with 4-space indent,
+//   expanded blocks, and precedence-aware parenthesization. This file is written
+//   non-canonically on purpose (odd indentation, tight parens); --format must
+//   produce canonical, reparseable output (the @expect-output lines assert
+//   canonical markers). Comments are stripped by design.
+// @category: tooling, format
+// @vyb-args: --format
+// @expect: pass
+// @expect-output:     if (a == 1 && b == 2) {
+// @expect-output:     return 0
+
+struct P { x<Int>, y<Int> }
+
+main()<Int> -> {
+   a<Int> = 1
+   b<Int> = 2
+   if(a==1&&b==2){
+       println("y")
+       return 0
+   }
+   return 1
+}
