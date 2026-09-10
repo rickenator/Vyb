@@ -154,12 +154,15 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
   forward) and verifies the transform of a **unit impulse** is the exact flat unit
   spectrum `(1,0)` in all 16 bins on an RTX 3090 — an exact, trig-free DFT reference
   (`CUFFT CROSS-VALIDATION`, exit 0).
-- [x] **cuDNN accelerator binding (softmax), verified on silicon** —
+- [x] **cuDNN accelerator binding (softmax + convolution), verified on silicon** —
   `fixtures/cuda/cudnn_verify.vyb` binds `cudnnCreate`/`cudnnSetTensor4dDescriptor`/
-  `cudnnSoftmaxForward`/`cudnnDestroy` (double, n=1 c=8 NCHW, softmax over the 8 channels)
-  and verifies the softmax invariants on an RTX 3090 exp-free: outputs strictly positive,
-  sum to 1, and for the consecutive input `x[i]=i` every adjacent output ratio equals `e`
-  (`CUDNN CROSS-VALIDATION`, exit 0).
+  `cudnnSoftmaxForward`/`cudnnDestroy` and verifies softmax invariants exp-free on an RTX
+  3090 (positive, sum=1, adjacent ratio=e). `fixtures/cuda/cudnn_conv_verify.vyb` binds the
+  full convolution path (`cudnnSetConvolution2dDescriptor` + workspace query +
+  `cudnnConvolutionForward`, double, cross-correlation) and verifies an 8×8×3×3 conv (stride
+  1, pad 1, SAME) against a host reference on all 64 outputs (`CUDNN CONV CROSS-VALIDATION`,
+  exit 0). Gotchas: `cudnnGetConvolutionForwardWorkspaceSize` has NO `_v8` suffix in cuDNN 9;
+  conv mode `0` is `CONVOLUTION` (kernel flipped), `1` is `CROSS_CORRELATION`.
 - [x] **Arch portability, validated** — `$VYB_KERNEL_GPU=sm_75/80/86/90` emits the kernel
   and ptxas-validates each (`sm_75`→`sm_90a` supported by ptxas); only `sm_86` has real
   silicon here. Note: arch is selected via `$VYB_KERNEL_GPU` env (a `--gpu` CLI flag is
@@ -184,8 +187,6 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
   Build modes: JIT for io-importing runners; native `--build -lcublas -lcuda` for io-free
   runners. Avoid `import io` in a `--build` standalone — its global `open` symbol interposes
   over libc's `open` on libcuda's internal calls (SIGSEGV in cuInit).
-- [ ] **cuDNN beyond softmax** — softmax is bound and verified; convolution requires tensor
-  descriptors, filter descriptors, algorithm selection, and a workspace.
 
 ---
 
@@ -208,7 +209,7 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 | Lambda/closure codegen | ~90% | Closure env structs, mutable/move/`our` capture, returned-closure env release shipped; rare receiver edge cases remain |
 | Module system (`import`/`smuggle`/`bundle`) | ~90% | Phases 1.1–1.5 shipped (`ModuleRegistry`, aliases, `share`/bundle visibility, path resolution); stdlib package integration / `vyb.toml` pending |
 | FFI (`extern "C"`) | ~98% | Complete: extern blocks, ABI aliases, `#[repr(C)]`, native `--link`, variadics, OpenSSL binding, `vyb bindgen` (MVP + libclang `--full`) (`test/ffi/`, `test/bindgen/`); niche caveat: bindgen macros calling other macros unbound |
-| GPU / device kernels (CUDA/NVPTX) | ~70% | `--kernel` NVPTX lowering + device intrinsics + acceptance gates ship; shared-memory tiled matmul and cuBLAS (DGEMM), cuFFT (Z2Z), and cuDNN (softmax) bindings all **verified on an RTX 3090**; CPU-only CI gate + arch portability (sm_75→sm_90) added. Remaining: reusable `bindings/cuda` module adoption, hosted-GPU CI, `--gpu` flag, cuDNN convolution, arch 1.0 decisions |
+| GPU / device kernels (CUDA/NVPTX) | ~80% | `--kernel` lowering + device intrinsics + acceptance gates + `--gpu` flag ship; shared-memory tiled matmul and cuBLAS (DGEMM), cuFFT (Z2Z), cuDNN (softmax **and convolution**) bindings all **verified on an RTX 3090**; on-silicon carried by a self-hosted GPU runner in CI (`gpu-silicon`); CPU-only gate + arch portability (sm_75→sm_90). Remaining: `bindings/cuda` f64 re-export (publisher), arch 1.0 decisions |
 | Standard library | ~85% | Vec, String, HashMap/HashSet, BTreeMap, File I/O, Math, `threads`, `channels`, `tasks`, `asyncs`, `time`, `network` (TCP/UDP/`TcpStream`/`TcpListener`/`UdpSocket`), HTTP server + client, TLS, verified HTTPS client shipped |
 | Introspection (`typeof`/`typename`) | ~75% | Downcasting, type assertions |
 | Auto-serialization | ~80% | Edge cases remain |

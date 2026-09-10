@@ -1,0 +1,162 @@
+# Vyb CUDA cross-validation: NVIDIA cuDNN convolution (cudnnConvolutionForward,
+# double, cross-correlation) verified on silicon against a host reference. Build +
+# run natively (no io -> no `open` collision; cuDNN from -lcudnn):
+#     build/vyb fixtures/cuda/cudnn_conv_verify.vyb --module-path bindings \
+#         --build /tmp/gpudrive/cudnn_conv --link -lcudnn --link -lcuda
+#     /tmp/gpudrive/cudnn_conv
+#
+# Setup: 1 input channel, 8x8, padded/same; 1 filter channel, 3x3 kernel; stride 1,
+# pad 1, cross-correlation (cuDNN's conv is cross-correlation, no kernel flip).
+# Output 8x8. Verification data: in[y*8+x]=y*8+x+1, filt[kh*3+kw]=kh*3+kw+1.
+# Reference (computed in Vyb, pure arithmetic):
+#   out[y][x] = sum_{kh,kw in 0..2} filt[kh*3+kw] * in[(y-1+kh)*8 + (x-1+kw)]
+#   with zero outside the 8x8 input (zero padding).
+
+extern "C" {
+    cuInit(flags<CUInt>)<CInt>
+    cuDeviceGetCount(count<loc<CInt>>)<CInt>
+    cuCtxCreate_v2(pctx<loc<loc<CVoid>>>, flags<CUInt>, dev<CInt>)<CInt>
+    cuMemAlloc_v2(dptr<loc<Int>>, bytesize<Int>)<CInt>
+    cuMemcpyHtoD_v2(dstDevice<Int>, srcHost<loc<CVoid>>, ByteCount<Int>)<CInt>
+    cuMemcpyDtoH_v2(dstHost<loc<CVoid>>, srcDevice<Int>, ByteCount<Int>)<CInt>
+    cuMemFree_v2(dptr<Int>)<CInt>
+    cuCtxSynchronize()<CInt>
+
+    # cuDNN v8/9 (double convolution). Param names dodge reserved Vyb words.
+    cudnnCreate(handle<loc<loc<CVoid>>>)<CInt>
+    cudnnDestroy(handle<loc<CVoid>>)<CInt>
+
+    cudnnCreateTensorDescriptor(dsc_p<loc<loc<CVoid>>>)<CInt>
+    cudnnSetTensor4dDescriptor(dsc<loc<CVoid>>, frmt<CInt>, dtype<CInt>, nn<CInt>, cc<CInt>, hh<CInt>, ww<CInt>)<CInt>
+    cudnnDestroyTensorDescriptor(dsc<loc<CVoid>>)<CInt>
+
+    cudnnCreateFilterDescriptor(fd_p<loc<loc<CVoid>>>)<CInt>
+    cudnnSetFilter4dDescriptor(fd<loc<CVoid>>, dtype<CInt>, frmt<CInt>, kk<CInt>, cc<CInt>, hh<CInt>, ww<CInt>)<CInt>
+    cudnnDestroyFilterDescriptor(fd<loc<CVoid>>)<CInt>
+
+    cudnnCreateConvolutionDescriptor(cd_p<loc<loc<CVoid>>>)<CInt>
+    cudnnSetConvolution2dDescriptor(cd<loc<CVoid>>, pah<CInt>, paw<CInt>, sth<CInt>, stw<CInt>, dlh<CInt>, dlw<CInt>, mode<CInt>, ctype<CInt>)<CInt>
+    cudnnDestroyConvolutionDescriptor(cd<loc<CVoid>>)<CInt>
+
+    cudnnGetConvolutionForwardWorkspaceSize(handle<loc<CVoid>>, srcD<loc<CVoid>>, fltD<loc<CVoid>>, convD<loc<CVoid>>, dstD<loc<CVoid>>, algo<CInt>, spaceP<loc<Int>>)<CInt>
+    cudnnConvolutionForward(handle<loc<CVoid>>, alpha<loc<Float>>, srcD<loc<CVoid>>, src<Int>, fltD<loc<CVoid>>, filt<Int>, convD<loc<CVoid>>, algo<CInt>, work<loc<CVoid>>, workSize<Int>, beta<loc<Float>>, dstD<loc<CVoid>>, dst<Int>)<CInt>
+}
+
+main()<Int> -> {
+    ds<Int> = 0   # device src (64 doubles)
+    df<Int> = 0   # device filter (9 doubles)
+    do<Int> = 0   # device output (64 doubles)
+    dw<Int> = 0   # device workspace
+    freedom {
+        if (cuInit(0) != 0) { return 7 }
+        var<CInt> ndev = 0
+        if (cuDeviceGetCount(loc(ndev)) != 0 || ndev < 1) { return 8 }
+        ctx<loc<CVoid>> = from<loc<CVoid>>(0)
+        if (cuCtxCreate_v2(loc(ctx), 0, 0) != 0) { return 14 }
+
+        # CUDNN_DATA_DOUBLE=1, CUDNN_TENSOR_NCHW=0, CUDNN_CROSS_CORRELATION=0,
+        # CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM=0
+        hnd<loc<CVoid>> = from<loc<CVoid>>(0)
+        if (cudnnCreate(loc(hnd)) != 0) { return 50 }
+        sd<loc<CVoid>> = from<loc<CVoid>>(0)
+        fd<loc<CVoid>> = from<loc<CVoid>>(0)
+        od<loc<CVoid>> = from<loc<CVoid>>(0)
+        cdd<loc<CVoid>> = from<loc<CVoid>>(0)
+        if (cudnnCreateTensorDescriptor(loc(sd)) != 0) { return 51 }
+        if (cudnnCreateFilterDescriptor(loc(fd)) != 0) { return 51 }
+        if (cudnnCreateTensorDescriptor(loc(od)) != 0) { return 51 }
+        if (cudnnCreateConvolutionDescriptor(loc(cdd)) != 0) { return 51 }
+        # n,c,h,w
+        if (cudnnSetTensor4dDescriptor(sd, 0 as CInt, 1 as CInt, 1 as CInt, 1 as CInt, 8 as CInt, 8 as CInt) != 0) { return 52 }
+        if (cudnnSetFilter4dDescriptor(fd, 1 as CInt, 0 as CInt, 1 as CInt, 1 as CInt, 3 as CInt, 3 as CInt) != 0) { return 52 }
+        if (cudnnSetTensor4dDescriptor(od, 0 as CInt, 1 as CInt, 1 as CInt, 1 as CInt, 8 as CInt, 8 as CInt) != 0) { return 52 }
+        # pad(1,1) stride(1,1) dilation(1,1), mode=CROSS_CORRELATION(1), compute DOUBLE(1)
+        if (cudnnSetConvolution2dDescriptor(cdd, 1 as CInt, 1 as CInt, 1 as CInt, 1 as CInt, 1 as CInt, 1 as CInt, 1 as CInt, 1 as CInt) != 0) { return 52 }
+
+        # query required workspace for IMPLICIT_GEMM and allocate it
+        var<Int> space = 0
+        if (cudnnGetConvolutionForwardWorkspaceSize(hnd, sd, fd, cdd, od, 0 as CInt, loc(space)) != 0) { return 53 }
+
+        if (cuMemAlloc_v2(loc(ds), 512) != 0) { return 11 }
+        if (cuMemAlloc_v2(loc(df), 72) != 0) { return 11 }
+        if (cuMemAlloc_v2(loc(do), 512) != 0) { return 11 }
+        if (space > 0) {
+            if (cuMemAlloc_v2(loc(dw), space) != 0) { return 11 }
+        }
+
+        # upload input in[y*8+x]=y*8+x+1
+        iy<Int> = 0
+        for (iy in 0..7) {
+            ix<Int> = 0
+            for (ix in 0..7) {
+                vv<Float> = 1.0 * (iy * 8 + ix + 1)
+                if (cuMemcpyHtoD_v2(ds + (iy * 8 + ix) * 8, loc(vv), 8) != 0) { return 15 }
+            }
+        }
+        # upload filter filt[kh*3+kw]=kh*3+kw+1
+        kh<Int> = 0
+        for (kh in 0..2) {
+            kw<Int> = 0
+            for (kw in 0..2) {
+                fv<Float> = 1.0 * (kh * 3 + kw + 1)
+                if (cuMemcpyHtoD_v2(df + (kh * 3 + kw) * 8, loc(fv), 8) != 0) { return 15 }
+            }
+        }
+
+        al<Float> = 1.0
+        be<Float> = 0.0
+        if (space > 0) {
+            # nonzero workspace -> pass a real pointer + size
+            if (cudnnConvolutionForward(hnd, loc(al), sd, ds, fd, df, cdd, 0 as CInt, from<loc<CVoid>>(dw), space, loc(be), od, do) != 0) { return 54 }
+        } else {
+            if (cudnnConvolutionForward(hnd, loc(al), sd, ds, fd, df, cdd, 0 as CInt, from<loc<CVoid>>(0), 0, loc(be), od, do) != 0) { return 54 }
+        }
+        cuCtxSynchronize()
+
+        cudnnDestroyConvolutionDescriptor(cdd)
+        cudnnDestroyTensorDescriptor(sd)
+        cudnnDestroyTensorDescriptor(od)
+        cudnnDestroyFilterDescriptor(fd)
+        cudnnDestroy(hnd)
+    }
+
+    # host reference + compare
+    ok<Bool> = true
+    v<Float> = 0.0
+    oy<Int> = 0
+    for (oy in 0..7) {
+        ox<Int> = 0
+        for (ox in 0..7) {
+            freedom {
+                if (cuMemcpyDtoH_v2(loc(v), do + (oy * 8 + ox) * 8, 8) != 0) { return 16 }
+            }
+            exp<Float> = 0.0
+            mkh<Int> = 0
+            for (mkh in 0..2) {
+                mkw<Int> = 0
+                for (mkw in 0..2) {
+                    cy<Int> = oy + mkh - 1
+                    cx<Int> = ox + mkw - 1
+                    if (cy >= 0 && cy <= 7) {
+                        if (cx >= 0 && cx <= 7) {
+                            ivv<Float> = 1.0 * (cy * 8 + cx + 1)
+                            fv2<Float> = 1.0 * (mkh * 3 + mkw + 1)
+                            exp = exp + fv2 * ivv
+                        }
+                    }
+                }
+            }
+            if (abs(v - exp) > 0.000001) { ok = false }
+        }
+    }
+    freedom {
+        cuMemFree_v2(ds); cuMemFree_v2(df); cuMemFree_v2(do)
+        if (dw > 0) { cuMemFree_v2(dw) }
+    }
+    if (ok) {
+        println("CUDNN CONV CROSS-VALIDATION: 8x8 x 3x3 conv matches host reference (64/64)")
+        return 0
+    }
+    println("CUDNN CONV mismatch")
+    return 1
+}
