@@ -914,7 +914,7 @@ with `pass` for multi-statement case bodies. Needs polishing:
   syntax — `ensure … else`, `relaxed` mode, and some trap/result contract forms — re-emits to a
   non-reparseable form (known limitation, follow-on). Regression test:
   `test/units/test_format_canonical.vyb`. Implements tracked as `Vyting & Tooling` → Code formatter.
-- [ ] **Linter** — `vyb check` for warnings beyond errors
+- [x] **`vyb check`** — AST lint warnings beyond errors: `vyb check <file.vyb> [files/dirs...]`. Parses each `.vyb` (AST only, no execution) and emits `file:line:col: warning: <msg>` for unused variables/parameters, constant boolean conditions, empty blocks, self-comparison, and unreachable code; exits 1 when warnings are found. Regression: `test/units/test_check_warnings.vyb`.
 - [ ] **Debugger integration** — `gdb`/`lldb` with Vyb source stepping (DWARF done, validate end-to-end)
 
 ### Polish — Silent by Default (HIGH PRIORITY)

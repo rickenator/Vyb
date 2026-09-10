@@ -1,0 +1,19 @@
+// @test: vyb check emits lint warnings and exits nonzero
+// @description: `vyb check` is the AST lint mode (warnings beyond errors). This file
+//   has intentional lint findings (unused local, constant condition, self-comparison,
+//   unreachable code). Run via --check? No — via the `check` subcommand (@vyb-args: check);
+//   it must exit 1 and print a file:line:col: warning diagnostic on stdout.
+// @category: tooling, lint
+// @vyb-args: check
+// @expect: fail
+// @expect-output: unused variable 'y'
+
+main()<Int> -> {
+    x<Int> = 1
+    y<Int> = 2
+    if (true) {
+        println("y")
+    }
+    return x
+    println("unreachable")
+}

@@ -7,6 +7,7 @@
 #include "vyb/module_registry.hpp"
 #include "vyb/manifest.hpp"
 #include "vyb/format.hpp"           // For vyb::fmt::SourcePrinter (--format/--check)
+#include "vyb/lint.hpp"             // For vyb::lint::lintModule (vyb check)
 #include "vyb/vre/llvm/codegen.hpp" // For vyb::LLVMCodegen
 #include "vyb/bindgen.hpp"      // For vyb::bindgen::generateBindings
 #include <catch2/catch_session.hpp>
@@ -1879,6 +1880,7 @@ void print_subcommand_help() {
               << "  build <dir> [--link <lib>]* [--static] [-O0..3]  build [[bin]] in a vyb.toml project\n"
               << "  new <name> [--version X.Y.Z]  scaffold a fresh project\n"
               << "  test [paths...] [--category C] [--pattern P] [--no-execute] [--repo]  run test files\n"
+              << "  check <file.vyb> [files/dirs...]  AST lint warnings beyond errors\n"
               << "  bindgen <header.h> [--full]   generate Vyb bindings from a C header\n"
               << "\n"
               << "Compile/run a file directly ('vyb program.vyb ...'); 'vyb --help' shows\n"
@@ -2138,6 +2140,55 @@ int run_test_command(int argc, char** argv, const std::string& exeArg) {
     std::cout << "\nRan " << (passed + failed + skipped) << " tests\nPassed: " << passed
               << "\nFailed: " << failed << "\n";
     return failed == 0 ? 0 : 1;
+}
+
+// `vyb check` — lint warnings beyond errors (issue #154 / Testing & Tooling):
+//   vyb check <file.vyb> [files/dirs...]
+// Parses each .vyb (AST only, no execution), runs the lint pass (unused variables,
+// constant boolean conditions, empty blocks, self-comparison, unreachable code),
+// prints `file:line:col: warning: <msg>`, and exits 1 when any warning or parse
+// error was encountered.
+int run_check_command(int argc, char** argv, const std::string& exeArg) {
+    (void)exeArg;
+    std::vector<std::string> args;
+    for (int i = 0; i < argc; ++i) args.push_back(argv[i]);
+    if (args.empty()) { std::cerr << "Usage: vyb check <file.vyb> [files...]\n"; return 1; }
+
+    std::vector<fs::path> targets;
+    for (auto& a : args) {
+        std::error_code ec;
+        fs::path p(a);
+        if (fs::is_directory(p, ec)) {
+            for (auto& e : fs::recursive_directory_iterator(p, ec)) {
+                if (ec) { ec.clear(); continue; }
+                if (e.path().extension() == ".vyb") targets.push_back(e.path());
+            }
+        } else targets.push_back(p);
+    }
+    std::sort(targets.begin(), targets.end());
+
+    g_module_parse_options.skipImportResolution = true;
+    int warnCount = 0, errors = 0, filesChecked = 0;
+    for (auto& t : targets) {
+        std::ifstream file(t.string());
+        if (!file) { std::cerr << "Error: could not open " << t.string() << "\n"; ++errors; continue; }
+        std::string source((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        file.close();
+        try {
+            auto parsed = parse_vyb_module(source, t.string());
+            std::vector<std::string> warns;
+            vyb::lint::lintModule(parsed.ast.get(), t.string(), warns);
+            for (auto& w : warns) { std::cout << w << "\n"; ++warnCount; }
+            ++filesChecked;
+        } catch (const std::exception& ex) {
+            std::cerr << "Error linting " << t.string() << ": " << ex.what() << "\n";
+            ++errors;
+        }
+    }
+    std::cout << "\nChecked " << filesChecked << " file(s); " << warnCount << " warning(s)";
+    if (errors) std::cout << "; " << errors << " error(s)";
+    std::cout << "\n";
+    return (warnCount + errors) == 0 ? 0 : 1;
 }
 
 } // namespace
@@ -4106,6 +4157,10 @@ int main(int argc, char* argv[]) {
             return 0;
         }
         return run_new_command(argc - 2, argv + 2);
+    }
+    if (argc >= 2 && std::string(argv[1]) == "check") {
+        // `vyb check [files/dirs...]` (#154): AST lint warnings beyond errors.
+        return run_check_command(argc - 2, argv + 2, std::string(argv[0]));
     }
     if (argc >= 2 && std::string(argv[1]) == "test") {
         // `vyb test [--category C] [--pattern P] [--test-dir D] ...` (#154): run the

@@ -224,7 +224,7 @@ set(RUNTIME_HEADERS
 )
 
 # Main and tests
-set(MAIN_SOURCES src/main.cpp src/bindgen.cpp src/module_registry.cpp src/manifest.cpp src/tests.cpp src/format.cpp)
+set(MAIN_SOURCES src/main.cpp src/bindgen.cpp src/module_registry.cpp src/manifest.cpp src/tests.cpp src/format.cpp src/lint.cpp)
 
 add_executable(vyb
     ${PARSER_SOURCES}
