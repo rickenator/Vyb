@@ -1,0 +1,20 @@
+// @test: vyb doc generates HTML documentation
+// @description: `vyb doc` builds a self-contained HTML reference page from a .vyb
+//   source, attaching `///` doc-comment blocks to declarations. Run via the `doc`
+//   subcommand (@vyb-args), write to a temp dir, and assert it completes and reports
+//   the written page on stdout.
+// @category: tooling, docgen
+// @vyb-args: doc -o /tmp/vybdoc_test
+// @expect: pass
+// @expect-output: wrote
+
+/// Adds two integers.
+add(a<Int>, b<Int>)<Int> -> {
+    return a + b
+}
+
+/// A point.
+struct Pt {
+    x<Int>,
+    y<Int>
+}

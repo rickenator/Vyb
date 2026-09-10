@@ -8,6 +8,7 @@
 #include "vyb/manifest.hpp"
 #include "vyb/format.hpp"           // For vyb::fmt::SourcePrinter (--format/--check)
 #include "vyb/lint.hpp"             // For vyb::lint::lintModule (vyb check)
+#include "vyb/docgen.hpp"           // For vyb::docgen (vyb doc)
 #include "vyb/vre/llvm/codegen.hpp" // For vyb::LLVMCodegen
 #include "vyb/bindgen.hpp"      // For vyb::bindgen::generateBindings
 #include <catch2/catch_session.hpp>
@@ -1881,6 +1882,7 @@ void print_subcommand_help() {
               << "  new <name> [--version X.Y.Z]  scaffold a fresh project\n"
               << "  test [paths...] [--category C] [--pattern P] [--no-execute] [--repo]  run test files\n"
               << "  check <file.vyb> [files/dirs...]  AST lint warnings beyond errors\n"
+              << "  doc <file.vyb> [files/dirs...] [-o outdir]  generate HTML documentation\n"
               << "  bindgen <header.h> [--full]   generate Vyb bindings from a C header\n"
               << "\n"
               << "Compile/run a file directly ('vyb program.vyb ...'); 'vyb --help' shows\n"
@@ -2189,6 +2191,81 @@ int run_check_command(int argc, char** argv, const std::string& exeArg) {
     if (errors) std::cout << "; " << errors << " error(s)";
     std::cout << "\n";
     return (warnCount + errors) == 0 ? 0 : 1;
+}
+
+// `vyb doc` — generate HTML documentation from source (issue #154 / Testing &
+// Tooling): `///` doc comments on declarations + parsed AST -> a self-contained
+// HTML reference page per module. `vyb doc <file.vyb> [files/dirs...] [-o outdir]`.
+int run_doc_command(int argc, char** argv, const std::string& exeArg) {
+    (void)exeArg;
+    std::string outdir = ".";
+    std::vector<std::string> args;
+    for (int i = 0; i < argc; ++i) {
+        if (std::string(argv[i]) == "-o" && i + 1 < argc) outdir = argv[++i];
+        else args.push_back(argv[i]);
+    }
+    if (args.empty()) { std::cerr << "Usage: vyb doc <file.vyb> [files...] [-o outdir]\n"; return 1; }
+    std::vector<fs::path> targets;
+    for (auto& a : args) {
+        std::error_code ec;
+        fs::path p(a);
+        if (fs::is_directory(p, ec)) {
+            for (auto& e : fs::recursive_directory_iterator(p, ec)) {
+                if (ec) { ec.clear(); continue; }
+                if (e.path().extension() == ".vyb") targets.push_back(e.path());
+            }
+        } else targets.push_back(p);
+    }
+    std::sort(targets.begin(), targets.end());
+    std::error_code ec;
+    fs::create_directories(outdir, ec);
+    g_module_parse_options.skipImportResolution = true;
+    int errors = 0;
+    std::vector<std::pair<std::string, std::string>> pages; // title -> rel path
+    for (auto& t : targets) {
+        std::ifstream file(t.string());
+        if (!file) { std::cerr << "Error: could not open " << t.string() << "\n"; ++errors; continue; }
+        std::string source((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        file.close();
+        try {
+            auto parsed = parse_vyb_module(source, t.string());
+            // Drop the synthetic core::aspects prelude import (empty filePath loc)
+            // so the reference page reflects only authored declarations.
+            parsed.ast->body.erase(
+                std::remove_if(parsed.ast->body.begin(), parsed.ast->body.end(),
+                    [](const vyb::ast::StmtPtr& s) {
+                        if (auto* imp = dynamic_cast<vyb::ast::ImportDeclaration*>(s.get())) {
+                            return imp->loc.filePath.empty() && imp->source &&
+                                   imp->source->value == "core::aspects";
+                        }
+                        return false;
+                    }),
+                parsed.ast->body.end());
+            std::string title = t.stem().string();
+            std::string body;
+            vyb::docgen::renderModule(parsed.ast.get(), source, title, body);
+            fs::path htmlPath = fs::path(outdir) / (title + ".html");
+            std::ofstream out(htmlPath);
+            out << vyb::docgen::buildPage(title, {body}, {});
+            out.close();
+            pages.push_back({title, title + ".html"});
+            std::cout << "wrote " << htmlPath.string() << "\n";
+        } catch (const std::exception& ex) {
+            std::cerr << "Error generating docs for " << t.string() << ": " << ex.what() << "\n";
+            ++errors;
+        }
+    }
+    if (pages.size() > 1) {
+        fs::path idx = fs::path(outdir) / "index.html";
+        std::ofstream out(idx);
+        out << "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Vyb docs</title></head><body>"
+            << "<h1>Vyb docs</h1><ul>";
+        for (auto& p : pages) out << "<li><a href=\"" << p.second << "\">" << p.first << "</a></li>";
+        out << "</ul></body></html>\n";
+        out.close();
+        std::cout << "wrote " << idx.string() << "\n";
+    }
+    return errors == 0 ? 0 : 1;
 }
 
 } // namespace
@@ -4157,6 +4234,10 @@ int main(int argc, char* argv[]) {
             return 0;
         }
         return run_new_command(argc - 2, argv + 2);
+    }
+    if (argc >= 2 && std::string(argv[1]) == "doc") {
+        // `vyb doc [files/dirs...] [-o outdir]` (#154): generate HTML docs.
+        return run_doc_command(argc - 2, argv + 2, std::string(argv[0]));
     }
     if (argc >= 2 && std::string(argv[1]) == "check") {
         // `vyb check [files/dirs...]` (#154): AST lint warnings beyond errors.

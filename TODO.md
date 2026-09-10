@@ -883,8 +883,7 @@ with `pass` for multi-statement case bodies. Needs polishing:
 - [ ] **`:type` command** — Print the type of an expression
 
 ### Documentation Tools
-- [ ] **Doc comments** — `/// comment` on declarations
-- [ ] **`vyb doc`** — Generate HTML documentation from source
+- [x] **Doc comments + `vyb doc`** — `/// comment` lines above a declaration are doc comments; `vyb doc <file.vyb> [files/dirs...] [-o outdir]` generates a self-contained HTML reference page per module (signature + doc text per declaration, TOC, HTML-escaped). Regression: `test/units/test_doc_generation.vyb`.
 - [ ] **Online reference** — Language reference manual (derived from existing docs)
 - [ ] **Web landing page** — `docs/web/landing_page/index.html` is the deployed
   project site (see `vyb-lang.org` / `aniviza.com`). Update it periodically as
@@ -1226,7 +1225,7 @@ For Vyb to be considered production-ready at 1.0, **all of the following must be
 - [ ] REPL (`vyb repl`)
 - [ ] Language server (LSP) — at least basic completion and diagnostics
 - [x] `vyb fmt` code formatter (`--format`/`--check`; idempotent core, see Testing & Tooling)
-- [ ] `vyb doc` documentation generator
+- [x] `vyb doc` documentation generator (`vyb doc <file> [-o outdir]`, see Testing & Tooling)
 - [ ] Comprehensive language reference manual
 - [ ] Test suite covering all 1.0 features
 - [x] `vyb test` integrated test runner (`vyb test [paths...]`, see Testing & Tooling)
