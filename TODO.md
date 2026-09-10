@@ -943,8 +943,16 @@ These are architectural improvements that will pay dividends as the codebase gro
 The semantic analyzer currently mutates AST nodes directly (sets `node->type`,
 `expressionTypes[node]`, etc.), creating fragile cross-pass dependencies.
 
-- [ ] Use an immutable AST + a separate `TypeTable` (map from node ID → type)
-- [ ] Avoid raw pointer storage in `expressionTypes` (use stable IDs or `shared_ptr`)
+- [ ] Use an immutable AST + a separate `TypeTable` (map from node ID → type) — the
+  remaining large, dedicated architectural rewrite (358 `expressionTypes` sites,
+  mixed ownership: `retainType` registry + `node->type` shared_ptr + raw mirror).
+- [x] Avoid raw pointer storage in `expressionTypes` (use stable IDs or `shared_ptr`)
+  — AUDITED 2026-09-10: every `.get()` stored in `expressionTypes` is backed by a
+  long-lived owner (`node->type`, a `retainType`/function-registry entry, or an
+  operand's owned type), so it is currently safe; the one real dangling case (a
+  temporary `VecType` in `handleVecMethodCallOnMember`) is already fixed. Fragile
+  by coupling, not by a live UAF — reintroducing a bare `.get()` of a temporary is
+  the risk to guard against during future edits.
 
 ### B. IR Optimization as a Separate Phase
 IR optimization is currently applied inline during JIT setup.
