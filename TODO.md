@@ -117,9 +117,9 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 `doc/CUDA.md` (design) and `PROGRAMMERS_GUIDE.md` §9 (authoritative manual).
 
 ### Shipped (probe)
-- [x] **`--kernel` NVPTX lowering** — `--kernel` / `--ptx <path>` emit PTX for the arch
-  selected by `$VYB_KERNEL_GPU` (default `sm_86`) via the in-process NVPTX backend; kernel
-  mode suppresses host-runtime `__vyb_*` externs and DWARF debug info.
+- [x] **`--kernel` NVPTX lowering** — `--kernel` / `--ptx <path>` / `--gpu <arch>` emit PTX
+  (arch: `--gpu`, else `$VYB_KERNEL_GPU`, else `sm_86`) via the in-process NVPTX backend;
+  kernel mode suppresses host-runtime `__vyb_*` externs and DWARF debug info.
 - [x] **Kernel vs. helper** — Void-returning top-level functions become PTX `.entry`
   kernels (`nvvm.kernel` + `PTX_Kernel`); value-returning functions stay `.visible .func`
   device helpers.
@@ -183,8 +183,6 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
   native `--build -lcublas -lcuda` for io-free runners. Avoid `import io` in a `--build`
   standalone — its global `open` symbol interposes over libc's `open` on libcuda's internal
   calls (SIGSEGV in cuInit).
-- [ ] **Implement the `--gpu` CLI flag** — today arch is set only via `$VYB_KERNEL_GPU`
-  (the flag is documented but unimplemented; src/main.cpp reads only the env var).
 - [ ] **cuDNN beyond softmax** — softmax is bound and verified; convolution requires tensor
   descriptors, filter descriptors, algorithm selection, and a workspace.
 

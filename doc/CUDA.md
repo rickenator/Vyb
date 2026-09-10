@@ -37,15 +37,14 @@ runs on an NVIDIA GPU. The support is two halves:
 ```
 vyb --kernel axpy.vyb                    # lower as NVPTX, writes axpy.ptx
 vyb --kernel axpy_buf.vyb --ptx out.ptx  # explicit output path
-VYB_KERNEL_GPU=sm_90 vyb --kernel k.vyb  # arch override via env var
+vyb --kernel k.vyb --gpu sm_90           # arch override (flag, or $VYB_KERNEL_GPU env)
 ```
 
 - `--kernel` sets `g_kernel_mode` (main.cpp), which is what makes codegen choose the
   NVPTX triple and suppress the host-runtime `__vyb_*` intrinsic externs.
-- GPU arch resolution: `$VYB_KERNEL_GPU` (e.g. `VYB_KERNEL_GPU=sm_90`), else `sm_86` (the P0
-  feasibility-probe target, RTX-3090 class). Used for both NVPTX lowering and the `ptxas`
-  assembly check. (A `--gpu` CLI flag is documented but **not yet implemented** — the
-  effective control is the env var.)
+- GPU arch resolution: `--gpu sm_90` (CLI flag, overrides env), else `$VYB_KERNEL_GPU`, else
+  `sm_86` (the P0 feasibility-probe target, RTX-3090 class). Used for both NVPTX lowering and
+  the `ptxas` assembly check.
 - PTX defaults to `<source-base>.ptx` next to the input, or `--ptx <path>`.
 
 ## Device intrinsics

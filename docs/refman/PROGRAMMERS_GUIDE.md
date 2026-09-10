@@ -2501,14 +2501,13 @@ artifact that runs on an NVIDIA GPU. This is a two-half system:
 ```
 vyb --kernel axpy.vyb                    # lower as NVPTX, writes axpy.ptx
 vyb --kernel axpy_buf.vyb --ptx out.ptx  # explicit output path
-VYB_KERNEL_GPU=sm_90 vyb --kernel k.vyb  # arch override (env var)
+vyb --kernel k.vyb --gpu sm_90           # arch override (flag; $VYB_KERNEL_GPU env also works)
 ```
 
 - `--kernel` opts the module into device codegen (NVPTX triple, no host
   runtime externs).
-- GPU arch: set `$VYB_KERNEL_GPU` (e.g. `VYB_KERNEL_GPU=sm_90`) to select the target
-  (used for both NVPTX lowering and the `ptxas` check); the default is `sm_86`. A
-  `--gpu` CLI flag is documented here but **not yet implemented** — use the env var.
+- GPU arch: `--gpu sm_90` sets the target (used for both NVPTX lowering and the
+  `ptxas` check), overriding `$VYB_KERNEL_GPU`; default is `sm_86`.
 - PTX defaults to `<source-base>.ptx` next to the input, or `--ptx <path>`.
 
 ### 9.2 Kernel vs. helper functions

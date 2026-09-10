@@ -56,7 +56,7 @@ jobs:
       - name: Emit + ptxas-validate kernel PTX across arches
         # The --kernel path runs ptxas automatically and FAILS the build if it
         # rejects the artifact (P2.2 gate). For each fixture x arch we assert the
-        # target arch landed in the header AND the gate passed.
+        # target arch landed in the header AND the gate passed. Uses the --gpu flag.
         shell: bash
         run: |
           set -euo pipefail
@@ -64,7 +64,7 @@ jobs:
           arches="sm_75 sm_80 sm_86 sm_90"
           for arch in $arches; do
             for k in axpy_buf matmul matmul_smem p203_verify; do
-              VYB_KERNEL_GPU="$arch" ./build/vyb --kernel "fixtures/kernel/$k.vyb" --ptx "/tmp/$k-$arch.ptx" \
+              ./build/vyb --kernel "fixtures/kernel/$k.vyb" --gpu "$arch" --ptx "/tmp/$k-$arch.ptx" \
                 | tee /tmp/emit.log
               grep -q "validated by ptxas ($arch)" /tmp/emit.log \
                 || { echo "FAIL: $k/$arch not ptxas-validated"; exit 1; }

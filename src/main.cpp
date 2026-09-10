@@ -591,6 +591,8 @@ namespace vyb {
     bool g_debug_codegen = false;
     // Kernel mode (issue #198): off by default; enable with --kernel.
     bool g_kernel_mode = false;
+    // NVPTX GPU arch for --kernel (e.g. sm_90) from --gpu; empty => $VYB_KERNEL_GPU / sm_86.
+    std::string g_kernel_gpu = "";
 }
 
 // Concrete implementation of SemanticAnalyzer
@@ -1175,11 +1177,12 @@ int compile_vyb_kernel(const std::string& source, const std::string& fileName, i
             throw std::runtime_error("NVPTX target not available (not linked into vyb): " + error);
         }
 
-        // GPU arch: `--gpu sm_90`, else $VYB_KERNEL_GPU, else sm_86 (RTX 3090,
+        // GPU arch: `--gpu sm_90` (CLI flag), else $VYB_KERNEL_GPU, else sm_86 (RTX 3090,
         // the P0 feasibility-probe target). Used for both NVPTX lowering and the
         // ptxas assembly check.
         std::string gpu = "sm_86";
-        if (const char* g = getenv("VYB_KERNEL_GPU")) { if (*g) gpu = g; }
+        if (!vyb::g_kernel_gpu.empty()) { gpu = vyb::g_kernel_gpu; }
+        else if (const char* g = getenv("VYB_KERNEL_GPU")) { if (*g) gpu = g; }
 
         auto CPU = gpu;
         auto features = "";
@@ -3928,6 +3931,14 @@ int main(int argc, char* argv[]) {
                 kernel_output = argv[++i];
             }
             continue;
+        } else if (arg == "--gpu") {
+            // NVPTX GPU arch for --kernel (e.g. sm_90); overrides $VYB_KERNEL_GPU.
+            if (i + 1 >= argc) {
+                std::cerr << "Error: --gpu requires an arch, e.g. --gpu sm_90" << std::endl;
+                return 1;
+            }
+            vyb::g_kernel_gpu = argv[++i];
+            continue;
         } else if (arg == "--static") {
             static_link = true;
             continue;
@@ -4219,6 +4230,8 @@ int main(int argc, char* argv[]) {
         std::cout << "  --kernel              (issue #198) Lower the module as NVPTX device" << std::endl;
         std::cout << "                        code: no main, no host runtime; emit kernel.ptx" << std::endl;
         std::cout << "  --ptx <path>          Write the --kernel PTX artifact to <path>" << std::endl;
+        std::cout << "  --gpu <arch>          NVPTX GPU arch for --kernel (e.g. sm_90; default sm_86," << std::endl;
+        std::cout << "                        overrides $VYB_KERNEL_GPU)" << std::endl;
         std::cout << "  --compile, -c [file]  Compile to object file (.o)" << std::endl;
         std::cout << "  --build, -b [file]    Compile and link to executable (NEW!)" << std::endl;
         std::cout << "  --link <lib-or-path>  Link a native build with -l<lib> or an explicit library/object path (repeatable)" << std::endl;
