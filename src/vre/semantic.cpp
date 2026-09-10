@@ -150,6 +150,15 @@ static bool isBuiltinVecMethodName(const std::string& methodName) {
            methodName == "get_vec";
 }
 
+// `last()`/`peek()` are Vec tail-accessors, but unlike the names above they are
+// NOT Vec-exclusive (user aspects/binds may legitimately define a method named
+// `peek` or `last`). They are therefore dispatched as Vec builtins ONLY at the
+// Vec-receiver-verified call sites (via isVecTailMethodName), never added to the
+// globally-reserved isBuiltinVecMethodName set that bind/aspect dispatch consults.
+static bool isVecTailMethodName(const std::string& methodName) {
+    return methodName == "last" || methodName == "peek";
+}
+
 // Name a top-level declaration (mirrors ModuleRegistry::declarationName) so
 // module-body statements can be attributed to the module that owns them.
 static std::string topLevelDeclarationName(const ast::StmtPtr& stmt) {
@@ -3845,12 +3854,12 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 SymbolInfo* objSymbol = currentScope->lookup(objIdent->name);
                 if (objSymbol && objSymbol->type) {
                     // Check if it's a Vec type (directly or as TypeName "Vec<T>" from function params)
-                    if (dynamic_cast<ast::VecType*>(objSymbol->type) && isBuiltinVecMethodName(methodName)) {
+                    if (dynamic_cast<ast::VecType*>(objSymbol->type) && (isBuiltinVecMethodName(methodName) || isVecTailMethodName(methodName))) {
                         handleVecMethodCall(node, objIdent->name, methodName);
                         return;
                     }
                     if (auto tn = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
-                        if (tn->identifier && tn->identifier->name == "Vec" && isBuiltinVecMethodName(methodName)) {
+                        if (tn->identifier && tn->identifier->name == "Vec" && (isBuiltinVecMethodName(methodName) || isVecTailMethodName(methodName))) {
                             handleVecMethodCall(node, objIdent->name, methodName);
                             return;
                         }
@@ -4335,14 +4344,14 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 // If we reach here and it's a Vec type, try Vec-specific methods
                 // Otherwise, it's an unknown method error
                 if (objSymbol && objSymbol->type) {
-                    if (dynamic_cast<ast::VecType*>(objSymbol->type) && isBuiltinVecMethodName(methodName)) {
+                    if (dynamic_cast<ast::VecType*>(objSymbol->type) && (isBuiltinVecMethodName(methodName) || isVecTailMethodName(methodName))) {
                         handleVecMethodCall(node, objIdent->name, methodName);
                         return;
                     }
 
                     // Check for primitive type methods (Int.to_string(), etc.)
                     if (auto objTypeName = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
-                        if (objTypeName->identifier && objTypeName->identifier->name == "Vec" && isBuiltinVecMethodName(methodName)) {
+                        if (objTypeName->identifier && objTypeName->identifier->name == "Vec" && (isBuiltinVecMethodName(methodName) || isVecTailMethodName(methodName))) {
                             handleVecMethodCall(node, objIdent->name, methodName);
                             return;
                         }
@@ -4357,7 +4366,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                              objTypeName->identifier->name == "our" ||
                              objTypeName->identifier->name == "view" ||
                              objTypeName->identifier->name == "borrow") &&
-                            objTypeName->genericArgs.size() == 1 && isBuiltinVecMethodName(methodName)) {
+                            objTypeName->genericArgs.size() == 1 && (isBuiltinVecMethodName(methodName) || isVecTailMethodName(methodName))) {
                             ast::TypeNode* inner = objTypeName->genericArgs[0].get();
                             bool innerIsVec = dynamic_cast<ast::VecType*>(inner) != nullptr;
                             if (!innerIsVec) {
@@ -4501,7 +4510,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     // dispatched here; aspect/bind methods bound to Vec (VecOps/
                     // VecHigherOps, e.g. sort_in_place) fall through to the general
                     // trait dispatch below.
-                    if (isBuiltinVecMethodName(methodIdent->name)) {
+                    if (isBuiltinVecMethodName(methodIdent->name) || isVecTailMethodName(methodIdent->name)) {
                         handleVecMethodCallOnMember(node, vecType, methodIdent->name);
                         return;
                     }
@@ -4518,7 +4527,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                         return;
                     }
                     if (tn->identifier && tn->identifier->name == "Vec" &&
-                        isBuiltinVecMethodName(methodIdent->name)) {
+                        (isBuiltinVecMethodName(methodIdent->name) || isVecTailMethodName(methodIdent->name))) {
                         // Create a temporary VecType to pass to handleVecMethodCallOnMember
                         ast::TypeNodePtr elemType = tn->genericArgs.empty()
                             ? std::make_unique<ast::TypeName>(node->loc, std::make_unique<ast::Identifier>(node->loc, "Int"))
@@ -4536,7 +4545,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                         (tn->identifier->name == "their" || tn->identifier->name == "my" ||
                          tn->identifier->name == "our" || tn->identifier->name == "view" ||
                          tn->identifier->name == "borrow") &&
-                        tn->genericArgs.size() == 1 && isBuiltinVecMethodName(methodIdent->name)) {
+                        tn->genericArgs.size() == 1 && (isBuiltinVecMethodName(methodIdent->name) || isVecTailMethodName(methodIdent->name))) {
                         ast::TypeNode* inner = tn->genericArgs[0].get();
                         bool innerIsVec = dynamic_cast<ast::VecType*>(inner) != nullptr;
                         ast::TypeNodePtr elemType = nullptr;
@@ -10026,6 +10035,34 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         expressionTypes[node] = intType.get();
         node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
 
+    } else if (methodName == "last" || methodName == "peek") {
+        // last()/peek() -> T (last element, read-only: no removal, no mutation).
+        if (node->arguments.size() != 0) {
+            addError("Vec::" + methodName + " expects no arguments", node);
+            return;
+        }
+        if (vecTypeNode) {
+            if (auto* vty = dynamic_cast<ast::VecType*>(vecTypeNode)) {
+                if (vty->elementType) {
+                    std::shared_ptr<ast::TypeNode> et = cloneTypeNode(vty->elementType.get());
+                    expressionTypes[node] = et.get();
+                    node->type = et;
+                    return;
+                }
+            } else if (auto* tny = dynamic_cast<ast::TypeName*>(vecTypeNode)) {
+                if (tny->identifier && tny->identifier->name == "Vec" && !tny->genericArgs.empty()) {
+                    std::shared_ptr<ast::TypeNode> et = tny->genericArgs[0]->clone();
+                    expressionTypes[node] = et.get();
+                    node->type = et;
+                    return;
+                }
+            }
+        }
+        auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
+        auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
+        expressionTypes[node] = intType.get();
+        node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
+
     } else {
         addError("Unknown Vec method: " + methodName, node);
     }
@@ -10089,6 +10126,17 @@ void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, as
             node->arguments[0]->accept(*this);
         }
         // Return element type
+        if (elementType) {
+            node->type = std::shared_ptr<ast::TypeNode>(elementType->clone());
+            expressionTypes[node] = node->type.get();
+        }
+
+    } else if (methodName == "last" || methodName == "peek") {
+        // last()/peek() -> T (last element, read-only: no removal, no mutation).
+        if (node->arguments.size() != 0) {
+            addError("Vec::" + methodName + " expects no arguments", node);
+            return;
+        }
         if (elementType) {
             node->type = std::shared_ptr<ast::TypeNode>(elementType->clone());
             expressionTypes[node] = node->type.get();

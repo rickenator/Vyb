@@ -432,6 +432,7 @@ private:
     void handleVecPop(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecLen(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecGet(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
+    void handleVecLast(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecSet(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecPushArray(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     llvm::Value* normalizeVecStringElement(llvm::Value* value);

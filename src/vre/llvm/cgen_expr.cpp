@@ -6194,6 +6194,7 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                         methodName == "push_array" || methodName == "to_array" || methodName == "get_array" ||
                         methodName == "clear" || methodName == "is_empty" || methodName == "capacity" ||
                         methodName == "concat" || methodName == "contains" || methodName == "remove_at" ||
+                        methodName == "last" || methodName == "peek" ||
                         methodName == "get_vec") {
                         // By-ref receiver (their<Vec<T>> / my<Vec<T>> / ...): the
                         // named slot holds a `Vec*` (a mutable borrow), so load that
@@ -6368,12 +6369,23 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
             }
 
             // Handle Vec method calls on member expressions (e.g., tree.nodes.push())
-            // The object is itself a member expression
+            // The object is itself a member expression. The plain Vec-exclusive
+            // builtins route by name; last()/peek() (NOT Vec-exclusive, may collide
+            // with a user bind method named peek/last) are routed to the Vec handler
+            // only when the member's object type is genuinely a Vec.
+            ast::TypeNode* mcObjTy = memberExpr->object->type ? memberExpr->object->type.get() : nullptr;
+            bool mcObjIsVec = false;
+            if (mcObjTy) {
+                if (dynamic_cast<ast::VecType*>(mcObjTy)) mcObjIsVec = true;
+                else if (auto mo = dynamic_cast<ast::TypeName*>(mcObjTy))
+                    mcObjIsVec = mo->identifier && mo->identifier->name == "Vec";
+            }
             if (methodName == "push" || methodName == "pop" || methodName == "len" || methodName == "get" || methodName == "set" ||
                 methodName == "push_array" || methodName == "to_array" || methodName == "get_array" ||
                 methodName == "clear" || methodName == "is_empty" || methodName == "capacity" ||
                 methodName == "concat" || methodName == "contains" || methodName == "remove_at" ||
-                methodName == "get_vec") {
+                methodName == "get_vec" ||
+                ((methodName == "last" || methodName == "peek") && mcObjIsVec)) {
                 // Evaluate the object in "LHS mode" (pointer mode) to get a pointer to the Vec field.
                 // Without this, evaluating `s.items` loads a copy of the Vec struct and mutations
                 // (like push) would be applied to a temporary, losing the changes.

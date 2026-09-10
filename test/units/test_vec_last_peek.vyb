@@ -1,0 +1,44 @@
+// @test: Vec::last() and Vec::peek() return the tail element without removing it
+// @description: last()/peek() are read-only tail-element accessors (unlike pop,
+//   which removes). They return the element type T, work on identifier and
+//   member-expression receivers, are safe on an empty Vec (type default), and
+//   handle String<Vec> elements. Self-checking: prints PASS only if every check
+//   holds, returns non-zero on failure.
+// @category: vec, codegen, last, peek
+// @expect: pass
+// @expect-output: PASS
+// @expect-return: 0
+
+struct Bag {
+    items<Vec<Int>>,
+    id<Int>
+}
+
+main()<Int> -> {
+    v<Vec<Int>> = Vec::new()
+    v.push(10)
+    v.push(20)
+    v.push(30)
+    if (v.last() != 30) { println("FAIL last"); return 1 }
+    if (v.peek() != 30) { println("FAIL peek"); return 1 }
+    if (v.len() != 3)   { println("FAIL len (last/peek removed)"); return 1 }
+
+    b<Bag> = Bag { items = Vec::new(), id = 1 }
+    b.items.push(100)
+    b.items.push(200)
+    if (b.items.last() != 200) { println("FAIL member last"); return 1 }
+    if (b.items.peek() != 200) { println("FAIL member peek"); return 1 }
+
+    e<Vec<Int>> = Vec::new()
+    if (e.last() != 0) { println("FAIL empty last"); return 1 }
+    if (e.peek() != 0) { println("FAIL empty peek"); return 1 }
+
+    s<Vec<String>> = Vec::new()
+    s.push("hello")
+    s.push("world")
+    if (s.last() != "world") { println("FAIL string last"); return 1 }
+    if (s.peek() != "world") { println("FAIL string peek"); return 1 }
+
+    println("PASS")
+    return 0
+}

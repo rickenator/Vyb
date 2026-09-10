@@ -47,6 +47,8 @@ void LLVMCodegen::handleVecMethod(vyb::ast::CallExpression* node, const std::str
         handleVecLen(node, vecPtr, vecStructType);
     } else if (methodName == "get") {
         handleVecGet(node, vecPtr, vecStructType);
+    } else if (methodName == "last" || methodName == "peek") {
+        handleVecLast(node, vecPtr, vecStructType);
     } else if (methodName == "set") {
         handleVecSet(node, vecPtr, vecStructType);
     } else if (methodName == "push_array") {
@@ -492,6 +494,89 @@ void LLVMCodegen::handleVecGet(vyb::ast::CallExpression* node, llvm::Value* vecP
     m_currentLLVMValue = result;
 
     VYB_CDBG << "DEBUG: Vec::get() called - bounds-safe element retrieval" << std::endl;
+}
+
+void LLVMCodegen::handleVecLast(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
+    if (node->arguments.size() != 0) {
+        logError(node->loc, "Vec::last expects no arguments");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    // Element type from the CallExpression's return type (semantic analyzer sets
+    // this to T from Vec<T>), mirroring Vec::get.
+    llvm::Type* elementLLVMType = nullptr;
+    uint64_t elementSizeBytes = 8;
+    if (node->type) {
+        elementLLVMType = codegenType(node->type.get());
+        if (elementLLVMType) {
+            llvm::DataLayout dataLayout(module.get());
+            elementSizeBytes = dataLayout.getTypeAllocSize(elementLLVMType);
+        }
+    }
+    if (!elementLLVMType) {
+        elementLLVMType = llvm::Type::getInt64Ty(*context);
+        elementSizeBytes = 8;
+    }
+
+    llvm::Value* dataFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 0, "vec.data_ptr");
+    llvm::Value* sizeFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 1, "vec.size_ptr");
+    llvm::Value* dataPtr = builder->CreateLoad(llvm::PointerType::get(*context, 0), dataFieldPtr, "vec.data");
+    llvm::Value* size = builder->CreateLoad(llvm::Type::getInt64Ty(*context), sizeFieldPtr, "vec.size");
+
+    // last index = size - 1. For an empty Vec, size-1 underflows to a huge
+    // unsigned value, so the same unsigned bound check as get() rejects it and
+    // the empty Vec yields the type's default (never dereferencing garbage).
+    llvm::Value* lastIndex = builder->CreateSub(
+        size, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1), "vec.last_index");
+    llvm::Value* indexInBounds = builder->CreateICmpULT(lastIndex, size, "vec.last.in_bounds");
+    llvm::BasicBlock* boundsCheckBlock = builder->GetInsertBlock();
+    llvm::BasicBlock* validBlock = llvm::BasicBlock::Create(
+        *context, "vec.last.valid", boundsCheckBlock->getParent());
+    llvm::BasicBlock* mergeBlock = llvm::BasicBlock::Create(
+        *context, "vec.last.merge", boundsCheckBlock->getParent());
+    builder->CreateCondBr(indexInBounds, validBlock, mergeBlock);
+
+    builder->SetInsertPoint(validBlock);
+    llvm::Value* elementSize = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), elementSizeBytes);
+    llvm::Value* offset = builder->CreateMul(lastIndex, elementSize, "vec.last.offset");
+    llvm::Value* elementPtr = builder->CreateGEP(llvm::Type::getInt8Ty(*context), dataPtr, offset, "vec.last.element_ptr");
+
+    llvm::Value* element;
+    llvm::BasicBlock* validIncoming = validBlock;
+    if (elementLLVMType->isStructTy()) {
+        element = builder->CreateLoad(elementLLVMType, elementPtr, "vec.last.element_struct");
+        // Deep-copy owned struct fields so the returned value owns data
+        // independent of the Vec slot (avoids double free on slot/caller reclaim).
+        if (node->type &&
+            isKnownStructTypeNode(node->type.get()) &&
+            structTypeHasOwnedFields(node->type.get())) {
+            element = generateStructDeepCopy(
+                element, node->type.get(), llvm::cast<llvm::StructType>(elementLLVMType));
+            validIncoming = builder->GetInsertBlock();
+        }
+    } else {
+        element = builder->CreateLoad(elementLLVMType, elementPtr, "vec.last.element");
+    }
+    builder->CreateBr(mergeBlock);
+
+    builder->SetInsertPoint(mergeBlock);
+    llvm::Value* defaultValue;
+    if (elementLLVMType->isIntegerTy()) {
+        defaultValue = llvm::ConstantInt::get(elementLLVMType, 0);
+    } else if (elementLLVMType->isFloatingPointTy()) {
+        defaultValue = llvm::ConstantFP::get(elementLLVMType, 0.0);
+    } else if (elementLLVMType->isStructTy() || elementLLVMType->isArrayTy()) {
+        defaultValue = llvm::ConstantAggregateZero::get(elementLLVMType);
+    } else {
+        defaultValue = llvm::Constant::getNullValue(elementLLVMType);
+    }
+    llvm::PHINode* result = builder->CreatePHI(elementLLVMType, 2, "vec.last.result");
+    result->addIncoming(element, validIncoming);
+    result->addIncoming(defaultValue, boundsCheckBlock);
+    m_currentLLVMValue = result;
+
+    VYB_CDBG << "DEBUG: Vec::last() called - bounds-safe tail element retrieval" << std::endl;
 }
 
 void LLVMCodegen::handleVecSet(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
@@ -1392,6 +1477,8 @@ void LLVMCodegen::handleVecMethodOnValue(vyb::ast::CallExpression* node, llvm::V
         handleVecLen(node, vecPtr, vecStructType);
     } else if (methodName == "get") {
         handleVecGet(node, vecPtr, vecStructType);
+    } else if (methodName == "last" || methodName == "peek") {
+        handleVecLast(node, vecPtr, vecStructType);
     } else if (methodName == "push_array") {
         handleVecPushArray(node, vecPtr, vecStructType);
     } else if (methodName == "to_array") {

@@ -1340,7 +1340,7 @@ Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `
 3. Reconcile docs vs runtime regarding `println_int`/`println_bool` intrinsics.
 
 ### Syntax Consistency
-- [ ] **`Vec::last()` / `Vec::peek()`** — `pop()` removes the last element but there is no non-removing accessor. Add `Vec::last()` or `Vec::peek()`.
+- [x] **`Vec::last()` / `Vec::peek()`** — read-only tail-element accessors: both return the last element of type T WITHOUT removing it (unlike `pop()`). No-arg, work on identifier and member-expression receivers, safe on an empty Vec (yield the element type's default via the same unsigned bounds check as `get()`; the empty-slot address is never dereferenced), deep-copy owned struct/String elements. Regression: `test/units/test_vec_last_peek.vyb`.
 - [x] **String indexing** — canonical is `s[i]` (compiles, yields `Char`); `.char_at(i)` fails semantic analysis and is non-canonical. Pinned in `doc/Canonical_Reference_Syntax.md`.
 - [x] **Struct construction** — BOTH named-field `Point { x = 1, y = 2 }` and positional `Point(1, 2)` compile/output identically; named is canonical (non-deprecating). Pinned in `doc/Canonical_Reference_Syntax.md`.
 - [x] **`for (item in vec)` mutation** — iteration copies by value (write-back does NOT propagate); mutable `for (ref/borrow item in vec)` is a staged follow-on. Copy semantics pinned in `doc/Canonical_Reference_Syntax.md`. (A `Vec::last()`/`peek()` non-removing accessor remains a codegen follow-on above.)
