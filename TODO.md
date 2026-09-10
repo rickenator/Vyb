@@ -949,9 +949,13 @@ These are architectural improvements that will pay dividends as the codebase gro
 The semantic analyzer currently mutates AST nodes directly (sets `node->type`,
 `expressionTypes[node]`, etc.), creating fragile cross-pass dependencies.
 
-- [ ] Use an immutable AST + a separate `TypeTable` (map from node ID → type) — the
-  remaining large, dedicated architectural rewrite (358 `expressionTypes` sites,
-  mixed ownership: `retainType` registry + `node->type` shared_ptr + raw mirror).
+- [~] Use an immutable AST + a separate `TypeTable` (map from node ID → type) — IN
+  PROGRESS (dedicated, multi-session migration, started 2026-09-10).
+  * Landed: a stable `Node::typeId()` (lazy, process-unique) plus a `TypeTable`
+    (node-id -> owning shared_ptr<TypeNode>) on `SemanticAnalyzer` with
+    `typeOf`/`setType` accessors. The 358 `expressionTypes` raw-pointer sites +
+    ~200 `retainType` sites still need migrating onto it, then the raw mirror and
+    `_ownedTypes` are removed.
 - [x] Avoid raw pointer storage in `expressionTypes` (use stable IDs or `shared_ptr`)
   — AUDITED 2026-09-10: every `.get()` stored in `expressionTypes` is backed by a
   long-lived owner (`node->type`, a `retainType`/function-registry entry, or an

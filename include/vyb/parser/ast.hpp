@@ -8,6 +8,7 @@
 #include <memory>
 #include <variant>
 #include <optional>
+#include <atomic>
 #include <iostream> // Added for std::cout
 #include <cstdint>
 #include "token.hpp"
@@ -413,6 +414,21 @@ public:
     virtual NodeType getType() const = 0;
     virtual std::string toString() const = 0;
     virtual void accept(Visitor& visitor) = 0;
+
+    // Stable, process-unique id for this node, used as the key of the semantic
+    // TypeTable (node-id -> owned type). Assigned lazily on first access so it
+    // needs no constructor churn; every Node therefore has a stable identity even
+    // though the AST is still mutable during the incremental migration.
+    unsigned typeId() const {
+        if (!id_) {
+            static std::atomic<unsigned> counter{0};
+            id_ = ++counter;
+        }
+        return id_;
+    }
+
+private:
+    mutable unsigned id_ = 0;
 };
 
 // Base Expression Node

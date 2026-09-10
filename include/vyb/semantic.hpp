@@ -536,6 +536,18 @@ private:
     std::vector<std::string> ownerStack_;
     std::vector<std::string> errors;
     std::unordered_map<ast::Node*, ast::TypeNode*> expressionTypes;
+    // TypeTable (node-id -> owned type): the target of the immutable-AST migration.
+    // Analyzed types are recorded here by stable Node::typeId. As sites migrate
+    // off the raw Node* mirror above they land here; a future pass removes
+    // expressionTypes + _ownedTypes entirely.
+    std::unordered_map<unsigned, std::shared_ptr<ast::TypeNode>> typeTable_;
+    std::shared_ptr<ast::TypeNode> typeOf(const ast::Node* n) const {
+        auto it = typeTable_.find(n->typeId());
+        return it == typeTable_.end() ? std::shared_ptr<ast::TypeNode>() : it->second;
+    }
+    void setType(const ast::Node* n, std::shared_ptr<ast::TypeNode> t) {
+        typeTable_[n->typeId()] = std::move(t);
+    }
     // Type nodes the analyzer synthesizes during analysis (owned by no AST node).
     // Kept here so the destructor can release them without ever touching the
     // borrowed pointers (which point into the module AST and are owned there).
