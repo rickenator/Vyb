@@ -136,17 +136,25 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 - [x] **Host launch via CUDA driver API (`freedom` FFI)** — `fixtures/cuda/launch_fill.vyb`
   drives cuInit → cuModuleLoadData → cuLaunchKernel → cuMemcpyDtoH with the #199
   two-level `kernelParams` packing (a `void*` slot holds the arg value; pass `&slot`).
+- [x] **Shared-memory tiled matmul, verified on silicon** — `fixtures/kernel/matmul_smem.vyb`
+  is a genuine blocking kernel: each 16×16 inner-product tile is staged in the
+  `__vyb_kernel_shared` buffer (A-tile [0,256), B-tile [256,512)) with `kernel_barrier`
+  between load and compute. `fixtures/cuda/matmul_verify.vyb` (a single-arg descriptor
+  launcher) ran it on an RTX 3090 (sm_86) and verified **all 256** elements of `C = A×B`
+  against a host reference (`MATMUL PASS`, exit 0).
 
 ### Staged follow-ons
-- [ ] **Real shared-memory kernel** — the reference `matmul.vyb` is register-tiled
-  (TILE=4, no smem); a blocking shared-memory tiled matmul is the natural first
-  real-performance kernel.
 - [ ] **Higher-level kernel/launch ergonomics** — a typed host-side wrapper (buffers,
-  launch DSL) over the raw hand-written driver-API packing.
+  launch DSL) over the raw hand-written driver-API packing. (The single-arg descriptor
+  pattern in `matmul_verify.vyb` is the working simplification; a reusable library is
+  the follow-on.)
 - [ ] **Accelerator-library bindings** — cuBLAS / cuDNN / cuFFT beyond the raw driver API.
-- [ ] **GPU CI / hardware-backed integration workload** — a real NVIDIA host (or runner)
-  executing the emitted PTX end-to-end; today device paths validate against `build/vyb`
-  and `ptxas`, with hardware runs out-of-tree.
+- [ ] **GPU CI / hardware-backed integration workload** — kernels now **execute and verify
+  on the RTX 3090 in this repo** (out-of-tree standalone runners); wiring that into CI is
+  the remaining gap. Note: a `--build` standalone runner collides Vyb's `open` symbol with
+  libc's on libcuda's internal calls (SIGSEGV in cuInit) — run host launchers via JIT
+  (`./build/vyb --module-path bindings fixtures/cuda/<runner>.vyb`), which avoids the
+  interposition.
 - [ ] **Productionize arch targets** — validate/tune beyond the `sm_86` default
   (`sm_90`, etc.) and decide kernel-mode's place in the 1.0 release surface.
 

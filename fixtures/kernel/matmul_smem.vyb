@@ -1,0 +1,46 @@
+// Vyb CUDA shared-memory tiled matmul (issue #198 P4 follow-on) — C = A x B,
+// all n x n doubles, n divisible by 16. A real blocking kernel: each 16x16 tile
+// of the inner product is staged in the module-wide __vyb_kernel_shared buffer
+// (A-tile at [0,256), B-tile at [256,512)) and synced with kernel_barrier
+// between the load and compute phases — the launchable-shared-memory path the
+// register-tiled matmul.vyb deliberately skipped.
+//     vyb --kernel <this> --ptx matmul_smem.ptx
+// Grid = (n/16, n/16), block = (16, 16).
+//
+// The kernel takes ONE descriptor pointer so the host uses the proven
+// single-8-byte-arg launch pattern (issue #199) instead of packing a 4-element
+// kernelParams. dsc is an i64 array on device: dsc[0]=n, dsc[1]=A, dsc[2]=B,
+// dsc[3]=C (buffer addresses; matrices are n x n doubles, row-major). Seen by
+// fixtures/cuda/matmul_verify.vyb (host runner).
+//
+// Correctness contract: C[row*n + col] == sum_k A[row*n + k] * B[k*n + col],
+// verified on device by the runner against a host-computed reference.
+
+matmul_smem(w<Int>) -> {
+    n<Int> = ld_i64(w)
+    A<Int> = ld_i64(w + 8)
+    B<Int> = ld_i64(w + 16)
+    C<Int> = ld_i64(w + 24)
+    row<Int> = blk_y() * dim_y() + tid_y()
+    col<Int> = blk_x() * dim_x() + tid_x()
+    r16<Int> = tid_y() * 16 + tid_x()          # flat id in the 16x16 block
+    acc<Float> = 0.0
+    nt<Int> = n / 16
+    kt<Int> = 0
+    for (kt in 0..nt - 1) {
+        # Stage this inner-product tile into shared memory (coalesced global loads).
+        st_shared_f64(r16, ld_f64(A + (row * n + kt * 16 + tid_x()) * 8))
+        st_shared_f64(256 + r16, ld_f64(B + ((kt * 16 + tid_y()) * n + col) * 8))
+        kernel_barrier()
+        kk<Int> = 0
+        for (kk in 0..15) {
+            acc = acc + ld_shared_f64(tid_y() * 16 + kk) * ld_shared_f64(256 + kk * 16 + tid_x())
+        }
+        kernel_barrier()
+    }
+    if (row < n) {
+        if (col < n) {
+            st_f64(C + (row * n + col) * 8, acc)
+        }
+    }
+}

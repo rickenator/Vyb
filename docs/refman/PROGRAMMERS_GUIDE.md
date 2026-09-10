@@ -2621,8 +2621,10 @@ key/seed material on the GPU. Crypto/ledger integration stays host-side.
 | `fixtures/kernel/axpy.vyb` | Pure-device, zero-runtime scalar sample (no `main`) |
 | `fixtures/kernel/axpy_buf.vyb` | Launchable Void 1-D axpy over a flattened buffer |
 | `fixtures/kernel/matmul.vyb` | Register-tiled 4x4 tile matmul, no shared memory |
+| `fixtures/kernel/matmul_smem.vyb` | **Shared-memory tiled matmul** (16×16 tiles in `__vyb_kernel_shared` + `kernel_barrier`) — verified on an RTX 3090 |
 | `fixtures/kernel/p203_verify.vyb` | deq_q4_0 + fp16/bf16 loads on device |
 | `fixtures/cuda/launch_fill.vyb` | Host driver-API launcher (reads `fill_kernel.ptx`, expects 42) |
+| `fixtures/cuda/matmul_verify.vyb` | Host runner — launches `matmul_smem` via a single descriptor arg and verifies `C = A×B` on silicon (`MATMUL PASS`) |
 | `fixtures/cuda/*.ptx` | Emitted PTX artifacts |
 | `fixtures/cuda/*.vyb.ll` | Generated LLVM IR |
 

@@ -152,10 +152,10 @@ is staged. See `doc/CUDA.md` (design) and `PROGRAMMERS_GUIDE.md` §9 (authoritat
 | `deq_q4_0` (GGUF q4_0 dequant on device) | ✅ | \( nibble − 8 \) · d per `[f16 d][32 x 4-bit]` block; 4-bit weight path for a packed ~2.2 GB 4B model (`p203_verify.vyb`). |
 | Compile-time acceptance gates | ✅ | Host-runtime-free check (no declared-only `__vyb_*`), PTX symbol-presence check (no silently-dropped kernels), and best-effort `ptxas --gpu-name=<arch>` validation. |
 | Host launch via CUDA driver API (`freedom` FFI) | ✅ | `launch_fill.vyb` drives cuInit/cuModuleLoadData/cuLaunchKernel/cuMem{cpy,Alloc,Free} with the #199 two-level `kernelParams` packing (a `void*` slot holds the arg value; pass `&slot`). |
-| Shared-memory tile matmul (TILE=4, no smem) | 🚧 | Reference `matmul.vyb` is register-tiled; a real shared-memory blocking kernel is a follow-on. |
-| Higher-level kernel/launch ergonomics (host API, buffers, launch DSL) | 📋 | Today the host pack is hand-written `extern "C"` `freedom` calls; a typed wrapper / launch ergonomic is planned. |
+| Shared-memory tiled matmul | ✅ | `fixtures/kernel/matmul_smem.vyb` stages 16×16 inner-product tiles in `__vyb_kernel_shared` with `kernel_barrier` between load and compute; `fixtures/cuda/matmul_verify.vyb` (single-arg descriptor launcher) ran it on an RTX 3090 (sm_86) and verified **all 256** elements of `C = A×B` against a host reference (`MATMUL PASS`, exit 0). |
+| Higher-level kernel/launch ergonomics (host API, buffers, launch DSL) | 🚧 | The single-arg descriptor pattern (`dsc=[n, A, B, C]`) avoids 4-element `kernelParams` packing and is demonstrated (`matmul_verify.vyb`); a reusable typed wrapper is the follow-on. |
 | cuBLAS / cuDNN / cuFFT bindings | 📋 | No accelerator-library bindings beyond the raw driver API yet. |
-| GPU CI / hardware-backed integration workload | 📋 | Device paths validate against `build/vyb`; running kernels on real hardware is out-of-tree (an NVIDIA host + `ptxas`) and not in CI. |
+| GPU CI / hardware-backed integration workload | 🚧 | Kernels now **execute and verify on the RTX 3090 in this repo** via out-of-tree standalone runners; wiring that into CI is the remaining gap. Host launchers run via JIT (`./build/vyb --module-path bindings fixtures/cuda/<runner>.vyb`) — a `--build` standalone collides Vyb's `open` symbol with libc's on libcuda's internal calls (SIGSEGV in cuInit). |
 
 ---
 

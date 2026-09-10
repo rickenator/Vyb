@@ -1,0 +1,116 @@
+# Vyb CUDA shared-memory tiled-matmul host runner (issue #198 P4 follow-on).
+# Build + run on an NVIDIA host:
+#     build/vyb --module-path bindings fixtures/cuda/matmul_verify.vyb --kernel-ptx ... 
+#     ... but you must first emit the kernel:
+#     build/vyb --kernel fixtures/kernel/matmul_smem.vyb --ptx <ptx>
+# This runner reads that PTX, launches `matmul_smem` once with a single
+# descriptor arg (the proven issue #199 one-arg pattern), then reads C back and
+# checks every element against a host reference. Prints PASS/FAIL and returns 0.
+#
+# Matrices: n=16; A[r][c] = r+1, B[r][c] = c+1  =>  C[r][c] = 16*(r+1)*(c+1).
+import io::{open_read, read_all}
+
+extern "C" {
+    cuInit(flags<CUInt>)<CInt>
+    cuDeviceGetCount(count<loc<CInt>>)<CInt>
+    cuDeviceGet(device<loc<CInt>>, ordinal<CInt>)<CInt>
+    cuCtxCreate_v2(pctx<loc<loc<CVoid>>>, flags<CUInt>, dev<CInt>)<CInt>
+    cuModuleLoadData(hmod<loc<loc<CVoid>>>, image<CString>)<CInt>
+    cuModuleGetFunction(hfunc<loc<loc<CVoid>>>, hmod<loc<CVoid>>, name<CString>)<CInt>
+    cuLaunchKernel(f<loc<CVoid>>, gridX<CUInt>, gridY<CUInt>, gridZ<CUInt>, blockX<CUInt>, blockY<CUInt>, blockZ<CUInt>, sharedMemBytes<CUInt>, hStream<loc<CVoid>>, kernelParams<loc<CVoid>>, extra<loc<CVoid>>)<CInt>
+    cuMemAlloc_v2(dptr<loc<Int>>, bytesize<Int>)<CInt>
+    cuMemcpyHtoD_v2(dstDevice<Int>, srcHost<loc<CVoid>>, ByteCount<Int>)<CInt>
+    cuMemcpyDtoH_v2(dstHost<loc<CVoid>>, srcDevice<Int>, ByteCount<Int>)<CInt>
+    cuMemFree_v2(dptr<Int>)<CInt>
+    cuCtxSynchronize()<CInt>
+}
+
+main()<Int> -> {
+    n<Int> = 16
+    nbytes<Int> = n * n * 8                       # 2048
+    # --- context ---
+    freedom {
+        if (cuInit(0) != 0) { return 7 }
+        var<CInt> ndev = 0
+        if (cuDeviceGetCount(loc(ndev)) != 0 || ndev < 1) { return 8 }
+        var<CInt> dev = 0
+        if (cuDeviceGet(loc(dev), 0) != 0) { return 14 }
+        ctx<loc<CVoid>> = from<loc<CVoid>>(0)
+        if (cuCtxCreate_v2(loc(ctx), 0, dev) != 0) { return 14 }
+    }
+
+    ptx<String> = ""
+    match (open_read("/tmp/gpudrive/matmul_smem.ptx")) {
+        f -> {
+            match (read_all(f)) {
+                s -> { ptx = s }
+                ? -> { return 13 }
+            }
+        }
+        ? -> { return 13 }
+    }
+
+    bad<Int> = -1
+    freedom {
+        # device buffers: A, B, C (each 2048 B) plus a 32 B descriptor [n, A, B, C].
+        dA<Int> = 0; dB<Int> = 0; dC<Int> = 0; dd<Int> = 0
+        if (cuMemAlloc_v2(loc(dA), nbytes) != 0) { return 11 }
+        if (cuMemAlloc_v2(loc(dB), nbytes) != 0) { return 11 }
+        if (cuMemAlloc_v2(loc(dC), nbytes) != 0) { return 11 }
+        if (cuMemAlloc_v2(loc(dd), 32) != 0) { return 11 }
+
+        # Upload A[r][c]=r+1 and B[r][c]=c+1 element-wise (proven loc() pattern).
+        i<Int> = 0
+        for (i in 0..(n * n - 1)) {
+            r<Int> = i / n
+            c<Int> = i % n
+            av<Float> = 1.0 * (r + 1)   # r+1 as Float (Int coerced by Float mult)
+            bv<Float> = 1.0 * (c + 1)
+            if (cuMemcpyHtoD_v2(dA + i * 8, loc(av), 8) != 0) { return 15 }
+            if (cuMemcpyHtoD_v2(dB + i * 8, loc(bv), 8) != 0) { return 15 }
+        }
+
+        # Write the descriptor dsc=[n, A, B, C] on device.
+        nv<Int> = n; avp<Int> = dA; bvp<Int> = dB; cvp<Int> = dC
+        if (cuMemcpyHtoD_v2(dd + 0, loc(nv), 8) != 0) { return 15 }
+        if (cuMemcpyHtoD_v2(dd + 8, loc(avp), 8) != 0) { return 15 }
+        if (cuMemcpyHtoD_v2(dd + 16, loc(bvp), 8) != 0) { return 15 }
+        if (cuMemcpyHtoD_v2(dd + 24, loc(cvp), 8) != 0) { return 15 }
+
+        # Load the module and get the kernel.
+        hmod<loc<CVoid>> = from<loc<CVoid>>(0)
+        if (cuModuleLoadData(loc(hmod), ptx) != 0) { return 9 }
+        hf<loc<CVoid>> = from<loc<CVoid>>(0)
+        if (cuModuleGetFunction(loc(hf), hmod, "matmul_smem") != 0) { return 10 }
+
+        # Single 8-byte arg (the descriptor pointer) — issue #199 two-level packing.
+        slot<loc<CVoid>> = from<loc<CVoid>>(dd)
+        sel<loc<loc<CVoid>>> = loc(slot)
+        pp<loc<CVoid>> = from<loc<CVoid>>(addr(sel))
+        # grid = (n/16, n/16) = (1,1); block = (16,16).
+        rc<CInt> = cuLaunchKernel(from<loc<CVoid>>(addr(hf)), 1, 1, 1, 16, 16, 1, 0, from<loc<CVoid>>(0), loc(pp), from<loc<CVoid>>(0))
+        if (rc != 0) { return 12 }
+        cuCtxSynchronize()
+
+        # Read back and verify against the reference 16*(r+1)*(c+1).
+        r2<Int> = 0
+        for (r2 in 0..(n - 1)) {
+            c2<Int> = 0
+            for (c2 in 0..(n - 1)) {
+                cv<Float> = 0.0
+                if (cuMemcpyDtoH_v2(loc(cv), dC + (r2 * n + c2) * 8, 8) != 0) { return 16 }
+                exp<Float> = 16.0 * (r2 + 1) * (c2 + 1)
+                if (cv != exp) { bad = r2 * n + c2 }
+            }
+        }
+
+        cuMemFree_v2(dA); cuMemFree_v2(dB); cuMemFree_v2(dC); cuMemFree_v2(dd)
+    }
+    if (bad < 0) {
+        println("MATMUL PASS")
+        return 0
+    }
+    println("MATMUL FAIL at flat index ")
+    println_int(bad)
+    return 1
+}
