@@ -956,14 +956,15 @@ The semantic analyzer currently mutates AST nodes directly (sets `node->type`,
 
 - [~] Use an immutable AST + a separate `TypeTable` (map from node ID → type) — IN
   PROGRESS (dedicated, multi-session migration, started 2026-09-10).
-  * Landed: a stable `Node::typeId()` (lazy, process-unique) plus a `TypeTable`
-    (node-id -> owning shared_ptr<TypeNode>) on `SemanticAnalyzer` with
-    `typeOf`/`setType` accessors.
-  * Turnkey execution plan: `doc/TYPETABLE_MIGRATION.md` (surveyed site anchors,
-    all step 1–5. The remaining atomic flip — map + `retainType` return +
-    `SymbolInfo.type` + raw `resultType` locals, ~300–500 sites, NO intermediate
-    green — is the next dedicated session's work. Rollback = clean checkout of
-    semantic.cpp/.hpp back to increment #1.)
+  * CHECKPOINT A (core flip) LANDED + GREEN (1141/1141): `expressionTypes` is now an
+    owning `std::shared_ptr<TypeNode>` map (`Node*`-keyed); `retainType()` returns a
+    shared_ptr (`_ownedTypes` holds shared); `SymbolInfo.type`/raw `resultType`
+    locals stay raw views via `.get()`. The raw-pointer-into-registry mirror the
+    UAF audit flagged is gone.
+  * CHECKPOINT B (remaining, next session): rekey onto `node->typeId()` via
+    `setType`/`typeOf`, then remove `_ownedTypes`/`retainType` (requires flipping
+    `SymbolInfo.type` to owning shared_ptr — the last coupling) — full checklist
+    in `doc/TYPETABLE_MIGRATION.md`.
 - [x] Avoid raw pointer storage in `expressionTypes` (use stable IDs or `shared_ptr`)
   — AUDITED 2026-09-10: every `.get()` stored in `expressionTypes` is backed by a
   long-lived owner (`node->type`, a `retainType`/function-registry entry, or an

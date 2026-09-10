@@ -1,10 +1,32 @@
 # TypeTable migration — precise plan (turnkey for the dedicated session)
 
-Status: **increments #1 landed** (2026-09-10, commit `2944d69`). What remains is
-the big, atomic flip. This document is the complete migration checklist/plan so
-a fresh session can execute it top-to-bottom with the highest chance of landing
-green. It was written from a full site survey on 2026-09-10; line numbers are
-anchors that may drift a little since — re-grep before trusting any one of them.
+Status: **increment #1 landed** (2026-09-10, commit `2944d69`) and **CHECKPOINT A
+(the core flip) landed + green** (2026-09-10): `expressionTypes` is now an owning
+`std::shared_ptr<TypeNode>` map (still `Node*`-keyed), `retainType()` returns a
+shared_ptr (registry `_ownedTypes` holds shared), `SymbolInfo.type` remains a raw
+view into the registry, and raw `resultType` locals stay raw with `.get()` at
+retain sites. This removed the raw-pointer-into-registry mirror that the UAF
+audit flagged as "fragile by coupling." What remains is CHECKPOINT B (below).
+
+### CHECKPOINT B — what remains (the final cleanup)
+1. Rekey `expressionTypes` from `Node*` onto `node->typeId()` via `setType(node,
+   t)` / `typeOf(node)` (mechanical: `expressionTypes[n] = t` -> `setType(n,t)`,
+   `it = expressionTypes.find(n)` -> `typeOf(n)`, `expressionTypes[n]` reads ->
+   `typeOf(n)`). Remove the `expressionTypes` member once empty.
+2. Remove the `_ownedTypes` registry + `retainType`: now that `expressionTypes`
+   is owning, only the `SymbolInfo.type` raw field (and raw `resultType` locals)
+   still view into the registry. Give `SymbolInfo.type` an owning
+   `std::shared_ptr<TypeNode>` (semantic.hpp:112) and convert its ~7 retain call
+   sites (`.get()` -> hold the shared_ptr), convert raw `resultType`/`actualReturnType`
+   locals to `shared_ptr`, then delete `_ownedTypes`/`retainType`.
+   NOTE: this re-introduces the `SymbolInfo.type` flip that CHECKPOINT A avoided —
+   it is the last coupling, and it is what makes the AST immutable-ready.
+3. Make the AST fields read-only after parse (stretch).
+
+This document is the complete migration checklist/plan so a fresh session can
+execute the rest top-to-bottom with the highest chance of landing green. It was
+written from a full site survey on 2026-09-10; line numbers are anchors that may
+drift a little since — re-grep before trusting any one of them.
 
 ## Goal
 
@@ -52,7 +74,7 @@ The migration is **atomic over these surfaces** — the map's value type,
 `retainType`'s return, `SymbolInfo.type`, and the raw `resultType` locals must
 change together. There is **no intermediate green state** until they all compile.
 
-## Execution steps (fresh session, run `git status` first; tree should be clean)
+## Execution steps (historical — Steps 1–4 below are fulfilled by CHECKPOINT A; remaining = CHECKPOINT B)
 
 ### Step 0 — baseline
 Build `build/vyb`; confirm it builds. (Full suite 1141 is the gate at the end.)
