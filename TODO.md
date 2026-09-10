@@ -214,7 +214,7 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 | Auto-serialization | ~80% | Edge cases remain |
 | Pattern matching | ~85% | Struct destructuring, guards, range/`?`/comparison patterns, data-enum variants, `match`-as-expression shipped |
 | Package manager / `vyb.toml` | ~90% | Core complete: `vyb.toml`, `vyb build` (multi-file + local path deps), `vyb new`, `vyb.lock`. Remote git/version dependency fetching + package registry are separate staged follow-ups |
-| Language server (LSP) | ~0% | Not started |
+| Language server (LSP) | ~80% | `vyb lsp` shipped (v0.1): diagnostics (parse+lint), go-to-def, hover (kind+signature), completion over declarations; smoke test in CI. Struct-field/method completion, doc-in-hover, cross-file follow on |
 | REPL | ~0% | Not started |
 | Self-hosting compiler | ~0% | Long-term goal |
 
@@ -870,11 +870,11 @@ with `pass` for multi-statement case bodies. Needs polishing:
 - [ ] **Package registry** — Central registry for published packages
 
 ### Language Server Protocol (LSP)
-- [ ] **Go-to-definition** — Jump to symbol definitions across files
-- [ ] **Hover documentation** — Show type signatures and doc comments
-- [ ] **Completion** — Aspect method names, struct fields, imports
-- [ ] **Diagnostics** — Real-time error reporting in editors
-- [ ] **`vyb lsp`** — Launch LSP server mode
+- [x] **`vyb lsp`** — Launch LSP server mode (JSON-RPC 2.0 over stdio, Content-Length framing). Shipped as `vyb lsp`; protocol smoke test `test/lsp_smoke.py` runs in hosted CI.
+- [x] **Go-to-definition** — `textDocument/definition` resolves an identifier to its declaration (top-level functions, structs, enums, aliases, aspects, imports of the open document).
+- [x] **Hover documentation** — `textDocument/hover` returns the declaration's kind + signature. Doc-comment (`///`) text in hover is a follow-on.
+- [x] **Completion** — `textDocument/completion` proposes the open document's declaration names (functions, structs/enums/aliases, imports). Struct-field / aspect-method completion is a follow-on.
+- [x] **Diagnostics** — `textDocument/publishDiagnostics` after open/change: parse/syntax errors (severity 1) + `vyb check`-style AST lint warnings (severity 2).
 
 ### REPL
 - [ ] **Interactive mode** — `vyb repl` launches a read-eval-print loop
@@ -1223,7 +1223,7 @@ For Vyb to be considered production-ready at 1.0, **all of the following must be
 
 ### Should-Have for 1.0
 - [ ] REPL (`vyb repl`)
-- [ ] Language server (LSP) — at least basic completion and diagnostics
+- [x] Language server (LSP) — `vyb lsp` shipped (v0.1): diagnostics (parse + lint), go-to-definition, hover (kind + signature), declaration completion; protocol smoke test in hosted CI (`test/lsp_smoke.py`)
 - [x] `vyb fmt` code formatter (`--format`/`--check`; idempotent core, see Testing & Tooling)
 - [x] `vyb doc` documentation generator (`vyb doc <file> [-o outdir]`, see Testing & Tooling)
 - [ ] Comprehensive language reference manual

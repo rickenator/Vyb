@@ -9,6 +9,7 @@
 #include "vyb/format.hpp"           // For vyb::fmt::SourcePrinter (--format/--check)
 #include "vyb/lint.hpp"             // For vyb::lint::lintModule (vyb check)
 #include "vyb/docgen.hpp"           // For vyb::docgen (vyb doc)
+#include "vyb/lsp.hpp"              // For vyb::lsp::serveLsp (vyb lsp)
 #include "vyb/vre/llvm/codegen.hpp" // For vyb::LLVMCodegen
 #include "vyb/bindgen.hpp"      // For vyb::bindgen::generateBindings
 #include <catch2/catch_session.hpp>
@@ -1883,6 +1884,7 @@ void print_subcommand_help() {
               << "  test [paths...] [--category C] [--pattern P] [--no-execute] [--repo]  run test files\n"
               << "  check <file.vyb> [files/dirs...]  AST lint warnings beyond errors\n"
               << "  doc <file.vyb> [files/dirs...] [-o outdir]  generate HTML documentation\n"
+              << "  lsp  serve the Language Server Protocol over stdio\n"
               << "  bindgen <header.h> [--full]   generate Vyb bindings from a C header\n"
               << "\n"
               << "Compile/run a file directly ('vyb program.vyb ...'); 'vyb --help' shows\n"
@@ -2266,6 +2268,27 @@ int run_doc_command(int argc, char** argv, const std::string& exeArg) {
         std::cout << "wrote " << idx.string() << "\n";
     }
     return errors == 0 ? 0 : 1;
+}
+
+// `vyb lsp` — serve the Language Server Protocol over stdio (issue #154 / Testing
+// & Tooling): diagnostics (parse + lint), go-to-definition, hover (signature +
+// doc), completion. The parse callback lives here because parse_vyb_module is in
+// this TU.
+int run_lsp_command(int argc, char** argv, const std::string& exeArg) {
+    (void)argc; (void)argv; (void)exeArg;
+    g_module_parse_options.skipImportResolution = true;
+    vyb::lsp::ParseFn parse =
+        [](const std::string& source, const std::string& uri,
+           std::vector<std::string>& errors) -> std::unique_ptr<vyb::ast::Module> {
+        try {
+            auto parsed = parse_vyb_module(source, uri);
+            return std::move(parsed.ast);
+        } catch (const std::exception& ex) {
+            errors.push_back(ex.what());
+            return nullptr;
+        }
+    };
+    return vyb::lsp::serveLsp(std::move(parse));
 }
 
 } // namespace
@@ -4234,6 +4257,10 @@ int main(int argc, char* argv[]) {
             return 0;
         }
         return run_new_command(argc - 2, argv + 2);
+    }
+    if (argc >= 2 && std::string(argv[1]) == "lsp") {
+        // `vyb lsp` (#154): Language Server Protocol over stdio (blocking).
+        return run_lsp_command(argc - 2, argv + 2, std::string(argv[0]));
     }
     if (argc >= 2 && std::string(argv[1]) == "doc") {
         // `vyb doc [files/dirs...] [-o outdir]` (#154): generate HTML docs.
