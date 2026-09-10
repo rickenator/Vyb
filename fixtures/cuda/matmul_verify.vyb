@@ -1,46 +1,43 @@
-# Vyb CUDA shared-memory tiled-matmul host runner (issue #198 P4 follow-on).
-# Build + run on an NVIDIA host:
-#     build/vyb --module-path bindings fixtures/cuda/matmul_verify.vyb --kernel-ptx ... 
-#     ... but you must first emit the kernel:
-#     build/vyb --kernel fixtures/kernel/matmul_smem.vyb --ptx <ptx>
-# This runner reads that PTX, launches `matmul_smem` once with a single
-# descriptor arg (the proven issue #199 one-arg pattern), then reads C back and
-# checks every element against a host reference. Prints PASS/FAIL and returns 0.
+# Vyb CUDA shared-memory tiled-matmul host runner (issue #198 P4 + module adoption).
+# This runner ADOPTS the posted, SIGNED bindings/cuda module (issue #198 P3) instead
+# of hand-rolling the CUDA driver API: init/ctx/device, module load, function lookup,
+# alloc, single-arg launch, sync, and free all come from `import cuda::{...}`. The f64
+# (Float) data transfers come from the SAME signed binding's raw externs via
+# `import cuda_binding::{cuMemcpyHtoD_v2, cuMemcpyDtoH_v2}` — requiring the binding
+# subdir on the module path (see below), since cuMemcpy is not re-exported from the
+# `cuda` wrapper surface (which ships i32 read/write helpers only).
 #
-# Matrices: n=16; A[r][c] = r+1, B[r][c] = c+1  =>  C[r][c] = 16*(r+1)*(c+1).
+# Run (JIT, io-importing runner):
+#     build/vyb --module-path bindings --module-path bindings/cuda \
+#         fixtures/cuda/matmul_verify.vyb
+# after emitting the kernel: build/vyb --kernel fixtures/kernel/matmul_smem.vyb
+#   --ptx fixtures/cuda/matmul_smem.ptx
+#
+# NOTE: importing both `cuda` (dir bindings/cuda/mod.vyb) and `cuda_binding` requires
+# BOTH --module-path bindings (for `cuda`) and --module-path bindings/cuda (for
+# `cuda_binding.vyb`). Do NOT re-declare cuMemcpyHtoD_v2 locally — the `cuda` module
+# already carries that symbol and a local extern becomes unresolved (name collision).
+#
+# Matrices: n=16; A[r][c]=r+1, B[r][c]=c+1  =>  C[r][c] = 16*(r+1)*(c+1).
 import io::{open_read, read_all}
-
-extern "C" {
-    cuInit(flags<CUInt>)<CInt>
-    cuDeviceGetCount(count<loc<CInt>>)<CInt>
-    cuDeviceGet(device<loc<CInt>>, ordinal<CInt>)<CInt>
-    cuCtxCreate_v2(pctx<loc<loc<CVoid>>>, flags<CUInt>, dev<CInt>)<CInt>
-    cuModuleLoadData(hmod<loc<loc<CVoid>>>, image<CString>)<CInt>
-    cuModuleGetFunction(hfunc<loc<loc<CVoid>>>, hmod<loc<CVoid>>, name<CString>)<CInt>
-    cuLaunchKernel(f<loc<CVoid>>, gridX<CUInt>, gridY<CUInt>, gridZ<CUInt>, blockX<CUInt>, blockY<CUInt>, blockZ<CUInt>, sharedMemBytes<CUInt>, hStream<loc<CVoid>>, kernelParams<loc<CVoid>>, extra<loc<CVoid>>)<CInt>
-    cuMemAlloc_v2(dptr<loc<Int>>, bytesize<Int>)<CInt>
-    cuMemcpyHtoD_v2(dstDevice<Int>, srcHost<loc<CVoid>>, ByteCount<Int>)<CInt>
-    cuMemcpyDtoH_v2(dstHost<loc<CVoid>>, srcDevice<Int>, ByteCount<Int>)<CInt>
-    cuMemFree_v2(dptr<Int>)<CInt>
-    cuCtxSynchronize()<CInt>
-}
+import cuda::{cuda_init, cuda_device_count, cuda_device, cuda_ctx_retain,
+              cuda_module_load, cuda_module_func, cuda_mem_alloc, cuda_mem_free,
+              cuda_launch, cuda_sync}
+import cuda_binding::{cuMemcpyHtoD_v2, cuMemcpyDtoH_v2}
 
 main()<Int> -> {
     n<Int> = 16
     nbytes<Int> = n * n * 8                       # 2048
-    # --- context ---
-    freedom {
-        if (cuInit(0) != 0) { return 7 }
-        var<CInt> ndev = 0
-        if (cuDeviceGetCount(loc(ndev)) != 0 || ndev < 1) { return 8 }
-        var<CInt> dev = 0
-        if (cuDeviceGet(loc(dev), 0) != 0) { return 14 }
-        ctx<loc<CVoid>> = from<loc<CVoid>>(0)
-        if (cuCtxCreate_v2(loc(ctx), 0, dev) != 0) { return 14 }
-    }
+
+    # --- context via the signed module ---
+    if (cuda_init() != 0) { return 7 }
+    if (cuda_device_count() < 1) { return 8 }
+    dev<CInt> = cuda_device(0)
+    if (dev < 0) { return 14 }
+    if (cuda_ctx_retain(dev) != 0) { return 14 }
 
     ptx<String> = ""
-    match (open_read("/tmp/gpudrive/matmul_smem.ptx")) {
+    match (open_read("fixtures/cuda/matmul_smem.ptx")) {
         f -> {
             match (read_all(f)) {
                 s -> { ptx = s }
@@ -50,49 +47,46 @@ main()<Int> -> {
         ? -> { return 13 }
     }
 
-    bad<Int> = -1
-    freedom {
-        # device buffers: A, B, C (each 2048 B) plus a 32 B descriptor [n, A, B, C].
-        dA<Int> = 0; dB<Int> = 0; dC<Int> = 0; dd<Int> = 0
-        if (cuMemAlloc_v2(loc(dA), nbytes) != 0) { return 11 }
-        if (cuMemAlloc_v2(loc(dB), nbytes) != 0) { return 11 }
-        if (cuMemAlloc_v2(loc(dC), nbytes) != 0) { return 11 }
-        if (cuMemAlloc_v2(loc(dd), 32) != 0) { return 11 }
+    # --- device resources via the module ---
+    hmod<Int> = cuda_module_load(ptx)
+    if (hmod == 0) { return 9 }
+    hf<Int> = cuda_module_func(hmod, "matmul_smem")
+    if (hf == 0) { return 10 }
+    dA<Int> = cuda_mem_alloc(nbytes)
+    dB<Int> = cuda_mem_alloc(nbytes)
+    dC<Int> = cuda_mem_alloc(nbytes)
+    dd<Int> = cuda_mem_alloc(32)
+    if (dA == 0 || dB == 0 || dC == 0 || dd == 0) { return 11 }
 
-        # Upload A[r][c]=r+1 and B[r][c]=c+1 element-wise (proven loc() pattern).
+    # Upload A[r][c]=r+1 and B[r][c]=c+1 element-wise (raw f64 HtoD; module has i32 only).
+    freedom {
         i<Int> = 0
         for (i in 0..(n * n - 1)) {
             r<Int> = i / n
             c<Int> = i % n
-            av<Float> = 1.0 * (r + 1)   # r+1 as Float (Int coerced by Float mult)
+            av<Float> = 1.0 * (r + 1)
             bv<Float> = 1.0 * (c + 1)
             if (cuMemcpyHtoD_v2(dA + i * 8, loc(av), 8) != 0) { return 15 }
             if (cuMemcpyHtoD_v2(dB + i * 8, loc(bv), 8) != 0) { return 15 }
         }
-
-        # Write the descriptor dsc=[n, A, B, C] on device.
+    }
+    # Write the descriptor dsc=[n, A, B, C] on device.
+    freedom {
         nv<Int> = n; avp<Int> = dA; bvp<Int> = dB; cvp<Int> = dC
         if (cuMemcpyHtoD_v2(dd + 0, loc(nv), 8) != 0) { return 15 }
         if (cuMemcpyHtoD_v2(dd + 8, loc(avp), 8) != 0) { return 15 }
         if (cuMemcpyHtoD_v2(dd + 16, loc(bvp), 8) != 0) { return 15 }
         if (cuMemcpyHtoD_v2(dd + 24, loc(cvp), 8) != 0) { return 15 }
+    }
 
-        # Load the module and get the kernel.
-        hmod<loc<CVoid>> = from<loc<CVoid>>(0)
-        if (cuModuleLoadData(loc(hmod), ptx) != 0) { return 9 }
-        hf<loc<CVoid>> = from<loc<CVoid>>(0)
-        if (cuModuleGetFunction(loc(hf), hmod, "matmul_smem") != 0) { return 10 }
+    # Launch via the module's cuda_launch (single 8-byte arg = descriptor ptr).
+    rc<CInt> = cuda_launch(hf, 1 as CInt, 1 as CInt, 1 as CInt, 16 as CInt, 16 as CInt, 1 as CInt, dd)
+    if (rc != 0) { return 12 }
+    cuda_sync()
 
-        # Single 8-byte arg (the descriptor pointer) — issue #199 two-level packing.
-        slot<loc<CVoid>> = from<loc<CVoid>>(dd)
-        sel<loc<loc<CVoid>>> = loc(slot)
-        pp<loc<CVoid>> = from<loc<CVoid>>(addr(sel))
-        # grid = (n/16, n/16) = (1,1); block = (16,16).
-        rc<CInt> = cuLaunchKernel(from<loc<CVoid>>(addr(hf)), 1, 1, 1, 16, 16, 1, 0, from<loc<CVoid>>(0), loc(pp), from<loc<CVoid>>(0))
-        if (rc != 0) { return 12 }
-        cuCtxSynchronize()
-
-        # Read back and verify against the reference 16*(r+1)*(c+1).
+    # Read back and verify against the reference 16*(r+1)*(c+1).
+    bad<Int> = -1
+    freedom {
         r2<Int> = 0
         for (r2 in 0..(n - 1)) {
             c2<Int> = 0
@@ -103,11 +97,11 @@ main()<Int> -> {
                 if (cv != exp) { bad = r2 * n + c2 }
             }
         }
-
-        cuMemFree_v2(dA); cuMemFree_v2(dB); cuMemFree_v2(dC); cuMemFree_v2(dd)
     }
+    cuda_mem_free(dA); cuda_mem_free(dB); cuda_mem_free(dC); cuda_mem_free(dd)
+
     if (bad < 0) {
-        println("MATMUL PASS")
+        println("MATMUL PASS (via bindings/cuda module)")
         return 0
     }
     println("MATMUL FAIL at flat index ")

@@ -117,10 +117,9 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 `doc/CUDA.md` (design) and `PROGRAMMERS_GUIDE.md` §9 (authoritative manual).
 
 ### Shipped (probe)
-- [x] **`--kernel` NVPTX lowering** — `--kernel` / `--ptx <path>` / `--gpu sm_xx`
-  (`$VYB_KERNEL_GPU`, default `sm_86`) compiles to the `nvptx64-nvidia-cuda` target and
-  emits PTX via the in-process NVPTX backend; kernel mode suppresses host-runtime
-  `__vyb_*` externs and DWARF debug info.
+- [x] **`--kernel` NVPTX lowering** — `--kernel` / `--ptx <path>` emit PTX for the arch
+  selected by `$VYB_KERNEL_GPU` (default `sm_86`) via the in-process NVPTX backend; kernel
+  mode suppresses host-runtime `__vyb_*` externs and DWARF debug info.
 - [x] **Kernel vs. helper** — Void-returning top-level functions become PTX `.entry`
   kernels (`nvvm.kernel` + `PTX_Kernel`); value-returning functions stay `.visible .func`
   device helpers.
@@ -150,20 +149,44 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
   (`CUDA CROSS-VALIDATION ... (256/256)`, exit 0). Built natively with `--build --link
   -lcublas --link -lcuda`. This also proves the higher-level launch ergonomics: the
   typed wrapper + single-arg descriptor replace hand-packed 4-element `kernelParams`.
+- [x] **cuFFT accelerator binding, verified on silicon** — `fixtures/cuda/cufft_verify.vyb`
+  binds `cufftPlan1d`/`cufftExecZ2Z`/`cufftDestroy` (complex-double plan, `CUFFT_Z2Z=105`,
+  forward) and verifies the transform of a **unit impulse** is the exact flat unit
+  spectrum `(1,0)` in all 16 bins on an RTX 3090 — an exact, trig-free DFT reference
+  (`CUFFT CROSS-VALIDATION`, exit 0).
+- [x] **cuDNN accelerator binding (softmax), verified on silicon** —
+  `fixtures/cuda/cudnn_verify.vyb` binds `cudnnCreate`/`cudnnSetTensor4dDescriptor`/
+  `cudnnSoftmaxForward`/`cudnnDestroy` (double, n=1 c=8 NCHW, softmax over the 8 channels)
+  and verifies the softmax invariants on an RTX 3090 exp-free: outputs strictly positive,
+  sum to 1, and for the consecutive input `x[i]=i` every adjacent output ratio equals `e`
+  (`CUDNN CROSS-VALIDATION`, exit 0).
+- [x] **Arch portability, validated** — `$VYB_KERNEL_GPU=sm_75/80/86/90` emits the kernel
+  and ptxas-validates each (`sm_75`→`sm_90a` supported by ptxas); only `sm_86` has real
+  silicon here. Note: arch is selected via `$VYB_KERNEL_GPU` env (a `--gpu` CLI flag is
+  documented but **not yet implemented**).
+- [x] **CPU-only CI gate** — `.github/workflows/gpu-kernel.yml` builds the compiler, emits
+  every kernel fixture across `sm_75/80/86/90`, enforces the ptxas acceptance gate, and
+  compile-checks the host-side binding runners. Hardware execution stays out-of-band on
+  the repo's RTX 3090.
 
 ### Staged follow-ons
-- [ ] **Typed host-launch library** — package the `cublas_dgemm_nn` wrapper and the
-  descriptor/single-arg launch pattern into a reusable Vyb module (a `bindings/cuda`
-  stdlib-style module) instead of per-runner helpers.
-- [ ] **More accelerator bindings** — cuDNN / cuFFT (cuBLAS DGEMM is done and verified).
+- [ ] **Typed host-launch library** — `bindings/cuda` (a posted, **signed** binding, issue
+  #198 P3) provides the reusable launch surface (`cuda_init`/`cuda_launch`/
+  `cuda_mem_alloc`/`cuda_read`/`cuda_write`/`cuda_sync`) and is now **adopted** by
+  `fixtures/cuda/matmul_verify.vyb` (`import cuda::{...}` + `import cuda_binding::{cuMemcpy*_v2}`
+  via `--module-path bindings --module-path bindings/cuda`). Gap: the module ships i32-only
+  transfers and does not re-export `cuMemcpyHtoD/DtoH_v2` — extending it to re-export f64
+  transfers (or add a Float read/write) needs a new publisher signature.
 - [ ] **GPU CI / hardware-backed integration workload** — kernels now **execute and verify
-  on the RTX 3090 in this repo** (out-of-tree native runners); wiring that into CI is the
-  remaining gap. Two build modes work: JIT (no-linked) for io-importing runners, and
-  native `--build -lcublas -lcuda` for runners that avoid `import io`. Avoid `import io`
-  in a `--build` standalone — its global `open` symbol interposes over libc's `open` on
-  libcuda's internal calls (SIGSEGV in cuInit).
-- [ ] **Productionize arch targets** — validate/tune beyond the `sm_86` default
-  (`sm_90`, etc.) and decide kernel-mode's place in the 1.0 release surface.
+  on the RTX 3090 in this repo** (out-of-tree native runners); wiring that into hosted CI
+  needs a self-hosted GPU runner. Two build modes work: JIT for io-importing runners;
+  native `--build -lcublas -lcuda` for io-free runners. Avoid `import io` in a `--build`
+  standalone — its global `open` symbol interposes over libc's `open` on libcuda's internal
+  calls (SIGSEGV in cuInit).
+- [ ] **Implement the `--gpu` CLI flag** — today arch is set only via `$VYB_KERNEL_GPU`
+  (the flag is documented but unimplemented; src/main.cpp reads only the env var).
+- [ ] **cuDNN beyond softmax** — softmax is bound and verified; convolution requires tensor
+  descriptors, filter descriptors, algorithm selection, and a workspace.
 
 ---
 
@@ -186,7 +209,7 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 | Lambda/closure codegen | ~90% | Closure env structs, mutable/move/`our` capture, returned-closure env release shipped; rare receiver edge cases remain |
 | Module system (`import`/`smuggle`/`bundle`) | ~90% | Phases 1.1–1.5 shipped (`ModuleRegistry`, aliases, `share`/bundle visibility, path resolution); stdlib package integration / `vyb.toml` pending |
 | FFI (`extern "C"`) | ~98% | Complete: extern blocks, ABI aliases, `#[repr(C)]`, native `--link`, variadics, OpenSSL binding, `vyb bindgen` (MVP + libclang `--full`) (`test/ffi/`, `test/bindgen/`); niche caveat: bindgen macros calling other macros unbound |
-| GPU / device kernels (CUDA/NVPTX) | ~40% | **Probe shipped** (#198/#199/#203): `--kernel` NVPTX lowering, device intrinsics, acceptance gates, host driver-API launch. Staged: shared-memory tiled matmul, launch ergonomics, accelerator bindings, GPU CI/hardware, arch productionizing |
+| GPU / device kernels (CUDA/NVPTX) | ~70% | `--kernel` NVPTX lowering + device intrinsics + acceptance gates ship; shared-memory tiled matmul and cuBLAS (DGEMM), cuFFT (Z2Z), and cuDNN (softmax) bindings all **verified on an RTX 3090**; CPU-only CI gate + arch portability (sm_75→sm_90) added. Remaining: reusable `bindings/cuda` module adoption, hosted-GPU CI, `--gpu` flag, cuDNN convolution, arch 1.0 decisions |
 | Standard library | ~85% | Vec, String, HashMap/HashSet, BTreeMap, File I/O, Math, `threads`, `channels`, `tasks`, `asyncs`, `time`, `network` (TCP/UDP/`TcpStream`/`TcpListener`/`UdpSocket`), HTTP server + client, TLS, verified HTTPS client shipped |
 | Introspection (`typeof`/`typename`) | ~75% | Downcasting, type assertions |
 | Auto-serialization | ~80% | Edge cases remain |

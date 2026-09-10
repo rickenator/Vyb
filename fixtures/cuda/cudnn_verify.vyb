@@ -1,0 +1,99 @@
+# Vyb CUDA cross-validation: NVIDIA cuDNN (cudnnSoftmaxForward, double) verified
+# on silicon against exp-free invariants. Build + run natively (no io -> no
+# `open`-symbol collision; cuDNN comes from -lcudnn):
+#     build/vyb fixtures/cuda/cudnn_verify.vyb --module-path bindings \
+#         --build /tmp/gpudrive/cudnn_verify --link -lcudnn --link -lcuda
+#     /tmp/gpudrive/cudnn_verify
+#
+# Reference (no host exp needed): softmax over the 8-element instance x[i]=i
+# (i=0..7), consecutive inputs differ by 1, so softmax[i+1]/softmax[i] == e for
+# every adjacent pair, outputs are strictly positive, and they sum to 1. We check
+# those exactly against the constants e and 1.
+# Tensor: 8 x 1 x 1 x 1, double, NCHW; mode INSTANCE, algo FAST.
+
+extern "C" {
+    cuInit(flags<CUInt>)<CInt>
+    cuDeviceGetCount(count<loc<CInt>>)<CInt>
+    cuCtxCreate_v2(pctx<loc<loc<CVoid>>>, flags<CUInt>, dev<CInt>)<CInt>
+    cuMemAlloc_v2(dptr<loc<Int>>, bytesize<Int>)<CInt>
+    cuMemcpyHtoD_v2(dstDevice<Int>, srcHost<loc<CVoid>>, ByteCount<Int>)<CInt>
+    cuMemcpyDtoH_v2(dstHost<loc<CVoid>>, srcDevice<Int>, ByteCount<Int>)<CInt>
+    cuMemFree_v2(dptr<Int>)<CInt>
+    cuCtxSynchronize()<CInt>
+
+    # cuDNN v8/9 (double softmax). Param names dodge Vyb reserved words.
+    cudnnCreate(handle<loc<loc<CVoid>>>)<CInt>
+    cudnnDestroy(handle<loc<CVoid>>)<CInt>
+    cudnnCreateTensorDescriptor(dsc_p<loc<loc<CVoid>>>)<CInt>
+    cudnnSetTensor4dDescriptor(dsc<loc<CVoid>>, frmt<CInt>, dtype<CInt>, nn<CInt>, cc<CInt>, hh<CInt>, ww<CInt>)<CInt>
+    cudnnDestroyTensorDescriptor(dsc<loc<CVoid>>)<CInt>
+    cudnnSoftmaxForward(hnd<loc<CVoid>>, algo<CInt>, smode<CInt>, alpha<loc<Float>>, sdesc<loc<CVoid>>, src<Int>, beta<loc<Float>>, ddesc<loc<CVoid>>, dst<Int>)<CInt>
+}
+
+main()<Int> -> {
+    src<Int> = 0
+    dst<Int> = 0
+    freedom {
+        if (cuInit(0) != 0) { return 7 }
+        var<CInt> ndev = 0
+        if (cuDeviceGetCount(loc(ndev)) != 0 || ndev < 1) { return 8 }
+        ctx<loc<CVoid>> = from<loc<CVoid>>(0)
+        if (cuCtxCreate_v2(loc(ctx), 0, 0) != 0) { return 14 }
+
+        # CUDNN_DATA_DOUBLE=1, CUDNN_TENSOR_NCHW=0, CUDNN_SOFTMAX_ACCURATE=1, _MODE_CHANNEL=1
+        # n=1, c=8, h=1, w=1 + CHANNEL mode => softmax over the 8 channels (= all elements).
+        hnd<loc<CVoid>> = from<loc<CVoid>>(0)
+        if (cudnnCreate(loc(hnd)) != 0) { return 50 }
+        sdesc<loc<CVoid>> = from<loc<CVoid>>(0)
+        ddesc<loc<CVoid>> = from<loc<CVoid>>(0)
+        if (cudnnCreateTensorDescriptor(loc(sdesc)) != 0) { return 51 }
+        if (cudnnCreateTensorDescriptor(loc(ddesc)) != 0) { return 51 }
+        if (cudnnSetTensor4dDescriptor(sdesc, 0 as CInt, 1 as CInt, 1 as CInt, 8 as CInt, 1 as CInt, 1 as CInt) != 0) { return 52 }
+        if (cudnnSetTensor4dDescriptor(ddesc, 0 as CInt, 1 as CInt, 1 as CInt, 8 as CInt, 1 as CInt, 1 as CInt) != 0) { return 52 }
+
+        if (cuMemAlloc_v2(loc(src), 64) != 0) { return 11 }
+        if (cuMemAlloc_v2(loc(dst), 64) != 0) { return 11 }
+        # upload x[i] = i
+        i<Int> = 0
+        for (i in 0..7) {
+            xv<Float> = 1.0 * i
+            if (cuMemcpyHtoD_v2(src + i * 8, loc(xv), 8) != 0) { return 15 }
+        }
+        al<Float> = 1.0
+        be<Float> = 0.0
+        if (cudnnSoftmaxForward(hnd, 1 as CInt, 1 as CInt, loc(al), sdesc, src, loc(be), ddesc, dst) != 0) { return 53 }
+        cuCtxSynchronize()
+        cudnnDestroyTensorDescriptor(sdesc)
+        cudnnDestroyTensorDescriptor(ddesc)
+        cudnnDestroy(hnd)
+    }
+
+    # verify softmax invariants, exp-free
+    e<Float> = 2.718281828459045
+    ok<Bool> = true
+    sum<Float> = 0.0
+    prev<Float> = -1.0
+    v<Float> = 0.0
+    j<Int> = 0
+    for (j in 0..7) {
+        freedom {
+            if (cuMemcpyDtoH_v2(loc(v), dst + j * 8, 8) != 0) { return 16 }
+        }
+        if (v <= 0.0) { ok = false }            # strictly positive
+        sum = sum + v                            # normalize to 1
+        if (j >= 1) {
+            if (abs(v - prev * e) > 0.000001) { ok = false }   # adjacent ratio e
+        }
+        prev = v
+    }
+    if (abs(sum - 1.0) > 0.000001) { ok = false }
+    freedom {
+        cuMemFree_v2(src); cuMemFree_v2(dst)
+    }
+    if (ok) {
+        println("CUDNN CROSS-VALIDATION: softmax invariants pass (sum=1, positive, adjacent ratio=e)")
+        return 0
+    }
+    println("CUDNN mismatch")
+    return 1
+}

@@ -1,0 +1,91 @@
+name: gpu-kernel
+
+# GPU / device-kernel (CUDA/NVPTX) validation (issue #198 + follow-ons). These
+# checks are CPU-only: they build the compiler, emit PTX via the in-process NVPTX
+# backend for every kernel fixture and arch, and enforce the ptxas acceptance
+# gate (the --kernel path hard-fails on a ptxas rejection). They also compile the
+# host-side binding runners to verify the FFI surface type-checks. Kernel
+# EXECUTION on real silicon is done out-of-band on a host with an NVIDIA GPU (the
+# repo's RTX 3090), not in hosted CI — see doc/CUDA.md and the vyb-cuda-kernels
+# skill for how to run fixtures/cuda/<runner>.vyb on hardware.
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: gpu-kernel-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kernel-emit-and-validate:
+    name: Emit PTX + ptxas across arches + compile FFI runners
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake \
+            llvm-18-dev libclang-18-dev \
+            catch2 \
+            nvidia-cuda-toolkit      # provides ptxas for the acceptance gate; NVPTX lowering itself is in-process (no nvcc needed)
+
+      - name: Verify ptxas present
+        run: ptxas --version | head -1
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DLLVM_DIR=/usr/lib/llvm-18/cmake
+          -DVYB_USE_QT5=OFF
+          -DVYB_USE_OPENSSL=ON
+          -DVYB_BINDGEN_LIBCLANG=ON
+
+      - name: Build
+        run: cmake --build build --parallel "$(nproc)"
+
+      - name: Emit + ptxas-validate kernel PTX across arches
+        # The --kernel path runs ptxas automatically and FAILS the build if it
+        # rejects the artifact (P2.2 gate). For each fixture x arch we assert the
+        # target arch landed in the header AND the gate passed.
+        shell: bash
+        run: |
+          set -euo pipefail
+          export VYB_STDLIB="$PWD/stdlib"
+          arches="sm_75 sm_80 sm_86 sm_90"
+          for arch in $arches; do
+            for k in axpy_buf matmul matmul_smem p203_verify; do
+              VYB_KERNEL_GPU="$arch" ./build/vyb --kernel "fixtures/kernel/$k.vyb" --ptx "/tmp/$k-$arch.ptx" \
+                | tee /tmp/emit.log
+              grep -q "validated by ptxas ($arch)" /tmp/emit.log \
+                || { echo "FAIL: $k/$arch not ptxas-validated"; exit 1; }
+              grep -q ".target $arch" "/tmp/$k-$arch.ptx" \
+                || { echo "FAIL: $k/$arch wrong .target"; exit 1; }
+            done
+          done
+          echo "All kernel fixtures emitted + ptxas-validated for: $arches"
+
+      - name: Compile host-side binding runners (FFI surface, no GPU needed)
+        # Compile-only: verifies the CUDA/cuBLAS extern surfaces type-check and
+        # codegen without needing a GPU or the CUDA libs at run time. The cuda
+        # module runners need BOTH --module-path bindings and --module-path bindings/cuda.
+        shell: bash
+        run: |
+          set -euo pipefail
+          export VYB_STDLIB="$PWD/stdlib"
+          for r in launch_fill cublas_verify cufft_verify cudnn_verify; do
+            ./build/vyb "fixtures/cuda/$r.vyb" --module-path bindings --compile "/tmp/$r.o"
+            test -s "/tmp/$r.o" || { echo "FAIL: no object for $r"; exit 1; }
+          done
+          ./build/vyb fixtures/cuda/matmul_verify.vyb --module-path bindings --module-path bindings/cuda --compile "/tmp/matmul_verify.o"
+          test -s "/tmp/matmul_verify.o" || { echo "FAIL: no object for matmul_verify"; exit 1; }
+          echo "All host-side binding runners compile cleanly"

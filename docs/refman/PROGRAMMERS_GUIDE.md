@@ -2501,14 +2501,14 @@ artifact that runs on an NVIDIA GPU. This is a two-half system:
 ```
 vyb --kernel axpy.vyb                    # lower as NVPTX, writes axpy.ptx
 vyb --kernel axpy_buf.vyb --ptx out.ptx  # explicit output path
-vyb --kernel k.vyb --gpu sm_90           # arch override
+VYB_KERNEL_GPU=sm_90 vyb --kernel k.vyb  # arch override (env var)
 ```
 
 - `--kernel` opts the module into device codegen (NVPTX triple, no host
   runtime externs).
-- GPU arch resolution: `--gpu sm_90`, else `$VYB_KERNEL_GPU`, else `sm_86`
-  (the default feasibility target). Used for both NVPTX lowering and the
-  `ptxas` assembly check.
+- GPU arch: set `$VYB_KERNEL_GPU` (e.g. `VYB_KERNEL_GPU=sm_90`) to select the target
+  (used for both NVPTX lowering and the `ptxas` check); the default is `sm_86`. A
+  `--gpu` CLI flag is documented here but **not yet implemented** — use the env var.
 - PTX defaults to `<source-base>.ptx` next to the input, or `--ptx <path>`.
 
 ### 9.2 Kernel vs. helper functions
@@ -2624,8 +2624,10 @@ key/seed material on the GPU. Crypto/ledger integration stays host-side.
 | `fixtures/kernel/matmul_smem.vyb` | **Shared-memory tiled matmul** (16×16 tiles in `__vyb_kernel_shared` + `kernel_barrier`) — verified on an RTX 3090 |
 | `fixtures/kernel/p203_verify.vyb` | deq_q4_0 + fp16/bf16 loads on device |
 | `fixtures/cuda/launch_fill.vyb` | Host driver-API launcher (reads `fill_kernel.ptx`, expects 42) |
-| `fixtures/cuda/matmul_verify.vyb` | Host runner — launches `matmul_smem` via a single descriptor arg and verifies `C = A×B` on silicon (`MATMUL PASS`) |
+| `fixtures/cuda/matmul_verify.vyb` | Host runner — **adopts the signed `bindings/cuda` module** (`import cuda::{...}` + `import cuda_binding::{cuMemcpy*_v2}` via `--module-path bindings --module-path bindings/cuda`), launches `matmul_smem` via `cuda_launch`'s single descriptor arg, and verifies `C = A×B` on silicon (`MATMUL PASS`) |
 | `fixtures/cuda/cublas_verify.vyb` | **cuBLAS cross-validation** — runs the same random A,B through our `matmul_smem` kernel, NVIDIA cuBLAS DGEMM, and a host reference; all 256 elements agree on RTX 3090 (`CUDA CROSS-VALIDATION`). Native `--build --link -lcublas --link -lcuda`, no `import io`. |
+| `fixtures/cuda/cufft_verify.vyb` | **cuFFT cross-validation** — `cufftExecZ2Z` forward Z2Z of a unit impulse returns the exact flat unit spectrum `(1,0)` in all 16 bins on RTX 3090 (`CUFFT CROSS-VALIDATION`). Native `--build --link -lcufft --link -lcuda`, no `import io`. |
+| `fixtures/cuda/cudnn_verify.vyb` | **cuDNN cross-validation** — `cudnnSoftmaxForward` (double, n1-c8 NCHW, channel softmax) passes exp-free invariants on RTX 3090: positive, sum=1, adjacent output ratio = `e` (`CUDNN CROSS-VALIDATION`). Native `--build --link -lcudnn --link -lcuda`, no `import io`. |
 | `fixtures/cuda/*.ptx` | Emitted PTX artifacts |
 | `fixtures/cuda/*.vyb.ll` | Generated LLVM IR |
 

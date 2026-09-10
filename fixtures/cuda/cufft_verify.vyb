@@ -1,0 +1,83 @@
+# Vyb CUDA cross-validation: NVIDIA cuFFT (cufftExecZ2Z, complex double FFT)
+# verified on silicon against an EXACT, trig-free reference. Build + run natively
+# (no io -> no `open`-symbol collision; cuFFT comes from -lcufft):
+#     build/vyb fixtures/cuda/cufft_verify.vyb --module-path bindings \
+#         --build /tmp/gpudrive/cufft_verify --link -lcufft --link -lcuda
+#     /tmp/gpudrive/cufft_verify
+#
+# Reference: feed the unit impulse x[0]=1, x[1..15]=0 (complex double buffer:
+# slot 2k = real, 2k+1 = imag). The DFT of a unit impulse is the constant vector
+# X[n] = 1 + 0i in every bin, so no host trig is needed and the check is exact.
+# A forward Z2Z transform must reproduce that flat unit spectrum.
+
+extern "C" {
+    cuInit(flags<CUInt>)<CInt>
+    cuDeviceGetCount(count<loc<CInt>>)<CInt>
+    cuCtxCreate_v2(pctx<loc<loc<CVoid>>>, flags<CUInt>, dev<CInt>)<CInt>
+    cuMemAlloc_v2(dptr<loc<Int>>, bytesize<Int>)<CInt>
+    cuMemcpyHtoD_v2(dstDevice<Int>, srcHost<loc<CVoid>>, ByteCount<Int>)<CInt>
+    cuMemcpyDtoH_v2(dstHost<loc<CVoid>>, srcDevice<Int>, ByteCount<Int>)<CInt>
+    cuMemFree_v2(dptr<Int>)<CInt>
+    cuCtxSynchronize()<CInt>
+
+    # cuFFT v11 (param names avoid Vyb reserved words: type/direction)
+    cufftPlan1d(pln<loc<loc<CVoid>>>, nn<CInt>, knd<CInt>, bat<CInt>)<CInt>
+    cufftExecZ2Z(pln<loc<CVoid>>, pIn<Int>, pOut<Int>, ddir<CInt>)<CInt>
+    cufftDestroy(pln<loc<CVoid>>)<CInt>
+}
+
+main()<Int> -> {
+    di<Int> = 0
+    do<Int> = 0
+    freedom {
+        if (cuInit(0) != 0) { return 7 }
+        var<CInt> ndev = 0
+        if (cuDeviceGetCount(loc(ndev)) != 0 || ndev < 1) { return 8 }
+        ctx<loc<CVoid>> = from<loc<CVoid>>(0)
+        if (cuCtxCreate_v2(loc(ctx), 0, 0) != 0) { return 14 }
+
+        # CUFFT_Z2Z = 0x69 = 105; CUFFT_FORWARD = -1
+        plan<loc<CVoid>> = from<loc<CVoid>>(0)
+        if (cufftPlan1d(loc(plan), 16 as CInt, 105 as CInt, 1 as CInt) != 0) { return 40 }
+        if (cuMemAlloc_v2(loc(di), 256) != 0) { return 11 }
+        if (cuMemAlloc_v2(loc(do), 256) != 0) { return 11 }
+
+        # unit impulse: x[0]=1+0i, x[k>0]=0+0i
+        one<Float> = 1.0
+        zer<Float> = 0.0
+        if (cuMemcpyHtoD_v2(di + 0, loc(one), 8) != 0) { return 15 }
+        if (cuMemcpyHtoD_v2(di + 8, loc(zer), 8) != 0) { return 15 }
+        k<Int> = 1
+        for (k in 1..15) {
+            if (cuMemcpyHtoD_v2(di + (2 * k) * 8, loc(zer), 8) != 0) { return 15 }
+            if (cuMemcpyHtoD_v2(di + (2 * k + 1) * 8, loc(zer), 8) != 0) { return 15 }
+        }
+
+        if (cufftExecZ2Z(plan, di, do, -1 as CInt) != 0) { return 41 }
+        cuCtxSynchronize()
+        cufftDestroy(plan)
+    }
+
+    # DFT of a unit impulse == (1, 0) in every bin. Check exactly.
+    ok<Bool> = true
+    vre<Float> = 0.0
+    vim<Float> = 0.0
+    b<Int> = 0
+    for (b in 0..15) {
+        freedom {
+            if (cuMemcpyDtoH_v2(loc(vre), do + (2 * b) * 8, 8) != 0) { return 16 }
+            if (cuMemcpyDtoH_v2(loc(vim), do + (2 * b + 1) * 8, 8) != 0) { return 16 }
+        }
+        if (vre != 1.0) { ok = false }
+        if (vim != 0.0) { ok = false }
+    }
+    freedom {
+        cuMemFree_v2(di); cuMemFree_v2(do)
+    }
+    if (ok) {
+        println("CUFFT CROSS-VALIDATION: impulse FFT == flat unit spectrum (16/16 bins)")
+        return 0
+    }
+    println("CUFFT mismatch")
+    return 1
+}
