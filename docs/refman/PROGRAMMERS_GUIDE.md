@@ -2625,6 +2625,7 @@ key/seed material on the GPU. Crypto/ledger integration stays host-side.
 | `fixtures/kernel/p203_verify.vyb` | deq_q4_0 + fp16/bf16 loads on device |
 | `fixtures/cuda/launch_fill.vyb` | Host driver-API launcher (reads `fill_kernel.ptx`, expects 42) |
 | `fixtures/cuda/matmul_verify.vyb` | Host runner — launches `matmul_smem` via a single descriptor arg and verifies `C = A×B` on silicon (`MATMUL PASS`) |
+| `fixtures/cuda/cublas_verify.vyb` | **cuBLAS cross-validation** — runs the same random A,B through our `matmul_smem` kernel, NVIDIA cuBLAS DGEMM, and a host reference; all 256 elements agree on RTX 3090 (`CUDA CROSS-VALIDATION`). Native `--build --link -lcublas --link -lcuda`, no `import io`. |
 | `fixtures/cuda/*.ptx` | Emitted PTX artifacts |
 | `fixtures/cuda/*.vyb.ll` | Generated LLVM IR |
 

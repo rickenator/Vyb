@@ -1,0 +1,173 @@
+# Vyb CUDA cross-validation: Vyb tiled matmul kernel vs NVIDIA cuBLAS DGEMM.
+# Built + run as a native executable (NOT JIT — see note):
+#     build/vyb --kernel fixtures/kernel/matmul_smem.vyb --ptx fixtures/cuda/matmul_smem.ptx
+#     build/vyb fixtures/cuda/cublas_verify.vyb --module-path bindings \
+#         --build /tmp/gpudrive/cublas_verify --link -lcublas --link -lcuda
+#     /tmp/gpudrive/cublas_verify
+#
+# Runs the SAME 16x16 random A,B through three paths and asserts they agree:
+#   (1) our shared-memory tiled kernel (fixtures/kernel/matmul_smem.vyb)
+#   (2) NVIDIA cuBLAS cublasDgemm (vendor reference)
+#   (3) a plain host triple-loop reference computed in Vyb
+# Also demonstrates a typed higher-level wrapper (cublas_dgemm_nn) over the raw extern.
+#
+# NOTE on io: this deliberately does NOT import io. The io module emits a global
+# `open` symbol in a --build executable that interposes over libc's `open`, which
+# libcuda calls internally -> SIGSEGV inside cuInit. The PTX is read with raw C
+# stdio (fopen/fread/malloc) to keep the binary free of that collision.
+
+extern "C" {
+    cuInit(flags<CUInt>)<CInt>
+    cuDeviceGetCount(count<loc<CInt>>)<CInt>
+    cuCtxCreate_v2(pctx<loc<loc<CVoid>>>, flags<CUInt>, dev<CInt>)<CInt>
+    cuMemAlloc_v2(dptr<loc<Int>>, bytesize<Int>)<CInt>
+    cuMemcpyHtoD_v2(dstDevice<Int>, srcHost<loc<CVoid>>, ByteCount<Int>)<CInt>
+    cuMemcpyDtoH_v2(dstHost<loc<CVoid>>, srcDevice<Int>, ByteCount<Int>)<CInt>
+    cuMemFree_v2(dptr<Int>)<CInt>
+    cuCtxSynchronize()<CInt>
+    cuModuleLoadData(hmod<loc<loc<CVoid>>>, image<loc<CVoid>>)<CInt>
+    cuModuleGetFunction(hfunc<loc<loc<CVoid>>>, hmod<loc<CVoid>>, name<CString>)<CInt>
+    cuLaunchKernel(f<loc<CVoid>>, gridX<CUInt>, gridY<CUInt>, gridZ<CUInt>, blockX<CUInt>, blockY<CUInt>, blockZ<CUInt>, sharedMemBytes<CUInt>, hStream<loc<CVoid>>, kernelParams<loc<CVoid>>, extra<loc<CVoid>>)<CInt>
+
+    # cuBLAS v2 API
+    cublasCreate_v2(handle<loc<loc<CVoid>>>)<CInt>
+    cublasDgemm_v2(handle<loc<CVoid>>, transa<CInt>, transb<CInt>, m<CInt>, nn<CInt>, k<CInt>, alpha<loc<Float>>, A<Int>, lda<CInt>, B<Int>, ldb<CInt>, beta<loc<Float>>, C<Int>, ldc<CInt>)<CInt>
+    cublasDestroy_v2(handle<loc<CVoid>>)<CInt>
+
+    # raw C file IO + heap (keeps the binary io-/open-free)
+    malloc(size<Int>)<loc<CVoid>>
+    fopen(path<loc<Int8>>, mode<loc<Int8>>)<loc<CVoid>>
+    fseek(fh<loc<CVoid>>, off<Int>, wh<CInt>)<CInt>
+    ftell(fh<loc<CVoid>>)<Int>
+    fread(buf<loc<CVoid>>, esz<Int>, cnt<Int>, fh<loc<CVoid>>)<Int>
+    fclose(fh<loc<CVoid>>)<CInt>
+}
+
+# ---- typed higher-level wrapper over the raw extern (roadmap: ergonomics) ----
+# C = alpha*A*B + beta*C (all n x n, already on device). A/B/C are device ptrs as Int.
+cublas_dgemm_nn(handle<loc<CVoid>>, n<CInt>, alpha<Float>, A<Int>, B<Int>, beta<Float>, C<Int>)<CInt> -> {
+    freedom {
+        al<Float> = alpha
+        be<Float> = beta
+        # CUBLAS_OP_N=0; lda=ldb=ldc=n
+        return cublasDgemm_v2(handle, 0, 0, n, n, n, loc(al), A, n, B, n, loc(be), C, n)
+    }
+    return -1
+}
+
+main()<Int> -> {
+    n<Int> = 16
+    Ah<[Float; 256]> = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    Bh<[Float; 256]> = Ah
+    Cref<[Float; 256]> = Ah
+
+    i<Int> = 0
+    for (i in 0..255) {
+        r<Int> = i / n
+        c<Int> = i % n
+        Ah[i] = 1.0 * (((r * 7 + c * 3) % 10) + 1)
+        Bh[i] = 1.0 * (((r * 11 + c * 5) % 7) + 1)
+    }
+    rr<Int> = 0
+    for (rr in 0..15) {
+        cc<Int> = 0
+        for (cc in 0..15) {
+            acc<Float> = 0.0
+            kk<Int> = 0
+            for (kk in 0..15) {
+                acc = acc + Ah[rr * 16 + kk] * Bh[kk * 16 + cc]
+            }
+            Cref[rr * 16 + cc] = acc
+        }
+    }
+
+    dA<Int> = 0; dB<Int> = 0; dCv<Int> = 0; dCb<Int> = 0; dd<Int> = 0
+    freedom {
+        if (cuInit(0) != 0) { return 7 }
+        var<CInt> ndev = 0
+        if (cuDeviceGetCount(loc(ndev)) != 0 || ndev < 1) { return 8 }
+        ctx<loc<CVoid>> = from<loc<CVoid>>(0)
+        if (cuCtxCreate_v2(loc(ctx), 0, 0) != 0) { return 14 }
+
+        # read the kernel PTX with raw C stdio (no io import -> no `open` symbol collision)
+        tf<loc<CVoid>> = fopen("fixtures/cuda/matmul_smem.ptx", "rb")
+        if (tf == from<loc<CVoid>>(0)) { return 13 }
+        fseek(tf, 0, 2)
+        ptxsz<Int> = ftell(tf)
+        fseek(tf, 0, 0)
+        ptximg<loc<CVoid>> = malloc(ptxsz)
+        prd<Int> = fread(ptximg, 1, ptxsz, tf)
+        fclose(tf)
+        if (prd < ptxsz) { return 13 }
+        hmod<loc<CVoid>> = from<loc<CVoid>>(0)
+        if (cuModuleLoadData(loc(hmod), ptximg) != 0) { return 9 }
+
+        if (cuMemAlloc_v2(loc(dA), 2048) != 0) { return 11 }
+        if (cuMemAlloc_v2(loc(dB), 2048) != 0) { return 11 }
+        if (cuMemAlloc_v2(loc(dCv), 2048) != 0) { return 11 }
+        if (cuMemAlloc_v2(loc(dCb), 2048) != 0) { return 11 }
+        if (cuMemAlloc_v2(loc(dd), 32) != 0) { return 11 }
+
+        up<Int> = 0
+        for (up in 0..255) {
+            fval<Float> = Ah[up]
+            if (cuMemcpyHtoD_v2(dA + up * 8, loc(fval), 8) != 0) { return 15 }
+            fval2<Float> = Bh[up]
+            if (cuMemcpyHtoD_v2(dB + up * 8, loc(fval2), 8) != 0) { return 15 }
+        }
+
+        # (1) our tiled kernel via a descriptor [n, A, B, Cv]
+        nv<Int> = n; avp<Int> = dA; bvp<Int> = dB; cvp<Int> = dCv
+        if (cuMemcpyHtoD_v2(dd + 0, loc(nv), 8) != 0) { return 15 }
+        if (cuMemcpyHtoD_v2(dd + 8, loc(avp), 8) != 0) { return 15 }
+        if (cuMemcpyHtoD_v2(dd + 16, loc(bvp), 8) != 0) { return 15 }
+        if (cuMemcpyHtoD_v2(dd + 24, loc(cvp), 8) != 0) { return 15 }
+        hf<loc<CVoid>> = from<loc<CVoid>>(0)
+        if (cuModuleGetFunction(loc(hf), hmod, "matmul_smem") != 0) { return 10 }
+        slot<loc<CVoid>> = from<loc<CVoid>>(dd)
+        sel<loc<loc<CVoid>>> = loc(slot)
+        pp<loc<CVoid>> = from<loc<CVoid>>(addr(sel))
+        if (cuLaunchKernel(from<loc<CVoid>>(addr(hf)), 1, 1, 1, 16, 16, 1, 0, from<loc<CVoid>>(0), loc(pp), from<loc<CVoid>>(0)) != 0) { return 12 }
+        cuCtxSynchronize()
+
+        # (2) cuBLAS DGEMM into dCb: Cb = alpha*A*B + beta*Cb, alpha=1 beta=0.
+        # cuBLAS is column-major; feeding our row-major (A,B) computed B*A, so swap to get A*B.
+        hblas<loc<CVoid>> = from<loc<CVoid>>(0)
+        if (cublasCreate_v2(loc(hblas)) != 0) { return 20 }
+        if (cublas_dgemm_nn(hblas, n as CInt, 1.0, dB, dA, 0.0, dCb) != 0) { return 21 }
+        cuCtxSynchronize()
+        cublasDestroy_v2(hblas)
+    }
+
+    # ---- read back + compare against the host reference ----
+    kv<Float> = 0.0; cb<Float> = 0.0
+    j<Int> = 0
+    for (j in 0..255) {
+        freedom {
+            if (cuMemcpyDtoH_v2(loc(kv), dCv + j * 8, 8) != 0) { return 16 }
+            if (cuMemcpyDtoH_v2(loc(cb), dCb + j * 8, 8) != 0) { return 16 }
+        }
+        if (kv != Cref[j]) { println("kernel mismatch at "); println_int(j); return 30 }
+        if (cb != Cref[j]) { println("cuBLAS mismatch at "); println_int(j); return 31 }
+    }
+    freedom {
+        cuMemFree_v2(dA); cuMemFree_v2(dB); cuMemFree_v2(dCv); cuMemFree_v2(dCb); cuMemFree_v2(dd)
+    }
+    println("CUDA CROSS-VALIDATION: kernel AND cuBLAS agree with host reference (256/256)")
+    return 0
+}

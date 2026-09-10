@@ -142,19 +142,26 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
   between load and compute. `fixtures/cuda/matmul_verify.vyb` (a single-arg descriptor
   launcher) ran it on an RTX 3090 (sm_86) and verified **all 256** elements of `C = A×B`
   against a host reference (`MATMUL PASS`, exit 0).
+- [x] **cuBLAS accelerator binding + cross-validation, verified on silicon** —
+  `fixtures/cuda/cublas_verify.vyb` binds the cuBLAS v2 API (`cublasCreate_v2`/`cublasDgemm_v2`/
+  `cublasDestroy_v2`) through a typed wrapper (`cublas_dgemm_nn`), runs the SAME random
+  matrices through (1) our `matmul_smem` kernel, (2) NVIDIA cuBLAS DGEMM, and (3) a host
+  triple-loop reference, and asserts all three agree on all 256 elements
+  (`CUDA CROSS-VALIDATION ... (256/256)`, exit 0). Built natively with `--build --link
+  -lcublas --link -lcuda`. This also proves the higher-level launch ergonomics: the
+  typed wrapper + single-arg descriptor replace hand-packed 4-element `kernelParams`.
 
 ### Staged follow-ons
-- [ ] **Higher-level kernel/launch ergonomics** — a typed host-side wrapper (buffers,
-  launch DSL) over the raw hand-written driver-API packing. (The single-arg descriptor
-  pattern in `matmul_verify.vyb` is the working simplification; a reusable library is
-  the follow-on.)
-- [ ] **Accelerator-library bindings** — cuBLAS / cuDNN / cuFFT beyond the raw driver API.
+- [ ] **Typed host-launch library** — package the `cublas_dgemm_nn` wrapper and the
+  descriptor/single-arg launch pattern into a reusable Vyb module (a `bindings/cuda`
+  stdlib-style module) instead of per-runner helpers.
+- [ ] **More accelerator bindings** — cuDNN / cuFFT (cuBLAS DGEMM is done and verified).
 - [ ] **GPU CI / hardware-backed integration workload** — kernels now **execute and verify
-  on the RTX 3090 in this repo** (out-of-tree standalone runners); wiring that into CI is
-  the remaining gap. Note: a `--build` standalone runner collides Vyb's `open` symbol with
-  libc's on libcuda's internal calls (SIGSEGV in cuInit) — run host launchers via JIT
-  (`./build/vyb --module-path bindings fixtures/cuda/<runner>.vyb`), which avoids the
-  interposition.
+  on the RTX 3090 in this repo** (out-of-tree native runners); wiring that into CI is the
+  remaining gap. Two build modes work: JIT (no-linked) for io-importing runners, and
+  native `--build -lcublas -lcuda` for runners that avoid `import io`. Avoid `import io`
+  in a `--build` standalone — its global `open` symbol interposes over libc's `open` on
+  libcuda's internal calls (SIGSEGV in cuInit).
 - [ ] **Productionize arch targets** — validate/tune beyond the `sm_86` default
   (`sm_90`, etc.) and decide kernel-mode's place in the 1.0 release surface.
 
