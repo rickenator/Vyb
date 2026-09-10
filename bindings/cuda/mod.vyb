@@ -113,6 +113,25 @@ cuda_read_i32(src<Int>)<CInt> -> {
     }
 }
 
+# Copy host f64 (double) -> device (8 bytes). 0 on success.
+share(all)
+cuda_write_f64(dst<Int>, value<Float>)<CInt> -> {
+    freedom {
+        h<Float> = value
+        return cuMemcpyHtoD_v2(dst, loc(h), 8)
+    }
+}
+
+# Copy device -> host f64 (8 bytes). Returns the value, or -1.0 on failure.
+share(all)
+cuda_read_f64(src<Int>)<Float> -> {
+    freedom {
+        h<Float> = 0.0
+        if (cuMemcpyDtoH_v2(loc(h), src, 8) != 0) { return -1.0 }
+        return h
+    }
+}
+
 # Free device memory. 0 on success.
 share(all)
 cuda_mem_free(devptr<Int>)<CInt> -> {
