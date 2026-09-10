@@ -9,6 +9,16 @@ retain sites. This removed the raw-pointer-into-registry mirror that the UAF
 audit flagged as "fragile by coupling." What remains is CHECKPOINT B (below).
 
 ### CHECKPOINT B — what remains (the final cleanup)
+REKEY PITFALL (learned 2026-09-10, reverted cleanly to CHECKPOINT A= f5c2366): a
+regex rekey of `expressionTypes[K]` -> `expressionTypes[exprKey(K)]` BREAKS on
+bracket keys containing a nested `]` — e.g. `expressionTypes[node->arguments[i].get()]`
+matches the FIRST `]` (of `[i]`), producing unbalanced parens that derail the
+whole rest of the file (~578 errors). Do the rekey with a paren AND bracket-aware
+scanner, or per-site edits; never a naive `\[([^\]]*)\]` regex. Use
+`exprKey(n) = n ? n->typeId() : 0` (sentinel 0 for null — typeId starts at 1).
+Also: a file-scope helper MUST be `vyb::ast::Node` (file scope is outside
+`namespace vyb`) or the whole file cascades.
+
 1. Rekey `expressionTypes` from `Node*` onto `node->typeId()` via `setType(node,
    t)` / `typeOf(node)` (mechanical: `expressionTypes[n] = t` -> `setType(n,t)`,
    `it = expressionTypes.find(n)` -> `typeOf(n)`, `expressionTypes[n]` reads ->
