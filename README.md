@@ -17,7 +17,7 @@
 
 ## 1. Introduction
 
-Welcome to the Vyb programming language version 0.7.4. This overview walks you through what Vyb is and the thinking behind it. Vyb is a systems language built on a simple conviction: you should not have to choose between safety and power. Strong type safety and explicit ownership give your code discipline and predictability, while low-level escape hatches keep raw, machine-near control within reach when you need it. Code runs as fast native executables or through a JIT, so performance stays predictable from first prototype to final program. The syntax is readable and name-first, the abstractions are zero-cost, and the language aims to stay out of your way as your ambitions grow. The rest of this guide shows how those ideas take shape through feature summaries and examples.
+Welcome to the Vyb programming language version 0.7.5. This overview walks you through what Vyb is and the thinking behind it. Vyb is a systems language built on a simple conviction: you should not have to choose between safety and power. Strong type safety and explicit ownership give your code discipline and predictability, while low-level escape hatches keep raw, machine-near control within reach when you need it. Code runs as fast native executables or through a JIT, so performance stays predictable from first prototype to final program. The syntax is readable and name-first, the abstractions are zero-cost, and the language aims to stay out of your way as your ambitions grow. The rest of this guide shows how those ideas take shape through feature summaries and examples.
 
 ### 1.1 Purpose & Audience
 
@@ -308,7 +308,7 @@ This unique `import`/`smuggle` distinction makes Vyb's module system both secure
 
 ## In This Release
 
-Vyb **v0.7.4** (freedom-1.0 series) is a mature systems programming language with **native executable generation** and a broad core feature set.
+Vyb **v0.7.5** (freedom-1.0 series) is a mature systems programming language with **native executable generation** and a broad core feature set.
 
 ### ✅ **Recent Milestones**
 These features were completed in the current release cycle and are fully tested:
@@ -2628,7 +2628,7 @@ cmake --build build --target run-milestone
 
 Vyb's canonical test runner is `test/run_tests.py`, the same suite wired into
 CTest as the `run-tests` target and used for the full regression gate (currently
-**1130 `.vyb` tests, all passing**):
+**1132 `.vyb` tests, all passing**):
 
 ### Quick Testing
 ```bash
@@ -2659,7 +2659,7 @@ authoritative pass/fail count is always the `run-tests` CTest target output.
 ```
 
 ### Test Features
-- **1130 Tests, All Passing**: The full `run_tests.py` suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area
+- **1132 Tests, All Passing**: The full `run_tests.py` suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area
 - **Parallel Execution**: Multi-threaded test runner for fast feedback
 - **Rich Reporting**: HTML, JSON, and console output with detailed metrics
 - **Smart Categorization**: Automatic test categorization and filtering
@@ -2869,10 +2869,10 @@ python3 test_harness.py --directory test/units --timeout 30
 - **Error Context**: Detailed failure information with context and suggestions
 
 #### **Test Statistics**
-- **Total Tests**: 1130 `.vyb` tests (full suite, all passing as of v0.7.4)
+- **Total Tests**: 1132 `.vyb` tests (full suite, all passing as of v0.7.5)
 - **Coverage Areas**: Language features, control flow, error handling, type system, math, strings, introspection
 - **Test Types**: Feature tests (with `@expect: pass`), future-feature docs (with `@expect: fail`), parser tests
-- **Success Rate**: 100% (1130/1130) on the current suite
+- **Success Rate**: 100% (1132/1132) on the current suite
 
 ### 🔧 **Syntax Migration Tools**
 
@@ -2986,7 +2986,7 @@ See `doc/` directory for detailed design documents and RFCs.
   - **Type inference**: First case determines result type for entire select
   - **Pattern matching**: Exact equality patterns with wildcard `?` support
 - ✅ **Canonical Syntax Unification**: Complete migration to unified `my()`/`our()` constructors and `view`/`borrow` operators
-- ✅ **Modern Test Harness**: `test/run_tests.py` running the full suite — 1130 `.vyb` tests all passing — with an auxiliary parallel/HTML/triage harness
+- ✅ **Modern Test Harness**: `test/run_tests.py` running the full suite — 1132 `.vyb` tests all passing — with an auxiliary parallel/HTML/triage harness
 - ✅ **Syntax Migration Tools**: Automated migration from legacy to canonical syntax with comprehensive reporting
 - ✅ **Match Statements**: Complete pattern matching with `->` arrow syntax and `?` wildcard; no-match results in NOP
 - ✅ **Break/Continue**: Loop control flow statements working in all loop types
