@@ -958,9 +958,12 @@ The semantic analyzer currently mutates AST nodes directly (sets `node->type`,
   PROGRESS (dedicated, multi-session migration, started 2026-09-10).
   * Landed: a stable `Node::typeId()` (lazy, process-unique) plus a `TypeTable`
     (node-id -> owning shared_ptr<TypeNode>) on `SemanticAnalyzer` with
-    `typeOf`/`setType` accessors. The 358 `expressionTypes` raw-pointer sites +
-    ~200 `retainType` sites still need migrating onto it, then the raw mirror and
-    `_ownedTypes` are removed.
+    `typeOf`/`setType` accessors.
+  * Turnkey execution plan: `doc/TYPETABLE_MIGRATION.md` (surveyed site anchors,
+    all step 1–5. The remaining atomic flip — map + `retainType` return +
+    `SymbolInfo.type` + raw `resultType` locals, ~300–500 sites, NO intermediate
+    green — is the next dedicated session's work. Rollback = clean checkout of
+    semantic.cpp/.hpp back to increment #1.)
 - [x] Avoid raw pointer storage in `expressionTypes` (use stable IDs or `shared_ptr`)
   — AUDITED 2026-09-10: every `.get()` stored in `expressionTypes` is backed by a
   long-lived owner (`node->type`, a `retainType`/function-registry entry, or an
