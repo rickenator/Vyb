@@ -1,0 +1,17 @@
+// @test: parse error recovery reports multiple errors per file
+// @description: Instead of aborting on the first syntax error, the module parser
+//   synchronizes to each top-level declaration boundary and collects every error,
+//   surfacing them as an aggregated report ("Parse errors (N)" with one
+//   "- Parse error at <loc>" bullet per failure, not just the first one).
+// @category: parser, diagnostics, recovery
+// @expect: fail
+// @expect-error: Parse errors (
+// @parse-only: true
+
+struct BrokenOne {
+
+fn good_fn()<Int> -> { return 1 }
+
+struct BrokenTwo( {
+
+fn still_good()<Int> -> { return 2 }

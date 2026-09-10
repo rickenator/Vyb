@@ -244,6 +244,7 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 - [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite now runs **1132 tests, 1132 passing** via `test/run_tests.py --execute-jit` (re-anchored 2026-09-09)
 - [x] **Vec parameter deep copy** — Vec parameters receive an independent copy of the data on function entry, eliminating double-free bugs (e.g. recursive quicksort base-case return)
 - [x] **Vec mutation through borrowed struct fields** — `s.items.push(val)` where `s<their<T>>` now correctly mutates in-place; member-expression Vec calls now get a field *pointer* (not a loaded copy)
+- [x] **`their<T>` nested-access audit** — verified multi-level member reads/writes through a `their<T>` borrow receiver (`r.mid.leaf.n`, 2-level writes), borrow-typed struct fields accessed through an outer borrow (`h.inner.n` where `Holder.inner<their<Leaf>>`), and member Vec reads through a borrow. All correct; locked in by `test/ownership/test_their_nested_access.vyb`. (Note: `Vec::get()` returns a copy, so in-place mutation of a nested `Vec<Vec<T>>` needs the inner Vec accessed by reference — not a `their` bug.)
 - [x] **Semantic use-after-free fix** — `handleVecMethodCallOnMember` no longer stores raw pointers from temporary `VecType` objects into `expressionTypes`; all return types are cloned into `node->type` first
 - [x] **`test/new_features` 100% pass** — All new-features tests pass (quicksort, stack, insertion sort, etc.)
 - [x] **C-like enum codegen** — `enum Color { Red, Green, Blue }` compiles; variants are first-class typed values (`r<Color> = Color::Red`) rendered as `Color::Red` by `println`, matching by name in `match`/`select` with the same exhaustiveness as data enums; the raw positional tag stays available for FFI
@@ -952,11 +953,12 @@ IR optimization is currently applied inline during JIT setup.
 - [ ] Expose `-O0`–`-O3` flags consistently for both JIT and AOT paths
 
 ### C. Error Recovery in Parsing
-The parser throws on the first error. Adding error recovery would allow reporting
-multiple errors per file — a significant developer experience improvement.
+The parser used to throw on the first error. It now synchronizes per top-level
+declaration and collects every error, reporting them all as an aggregated
+"Parse errors (N)" block.
 
-- [ ] Synchronize to the next statement/declaration boundary on parse error
-- [ ] Collect and report all errors before aborting
+- [x] Synchronize to the next statement/declaration boundary on parse error
+- [x] Collect and report all errors before aborting
 
 ---
 

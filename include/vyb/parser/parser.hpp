@@ -284,9 +284,15 @@ namespace vyb { // Changed Vyb to vyb
 
     class ModuleParser : public BaseParser {
         DeclarationParser& declaration_parser_;
+        std::vector<std::string> errors_;
+        // Synchronize past a failed top-level declaration to the next one so the
+        // parser can collect multiple errors per file instead of aborting.
+        static bool isTopLevelStarter(vyb::TokenType tt);
+        void synchronizeToNextDeclaration();
     public:
         ModuleParser(const std::vector<vyb::token::Token>& tokens, size_t& pos, const std::string& file_path, DeclarationParser& declaration_parser);
         std::unique_ptr<vyb::ast::Module> parse();
+        const std::vector<std::string>& errors() const { return errors_; }
     };
 
     class Parser {

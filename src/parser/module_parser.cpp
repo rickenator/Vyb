@@ -12,6 +12,44 @@ namespace vyb {
 ModuleParser::ModuleParser(const std::vector<vyb::token::Token>& tokens, size_t& pos, const std::string& file_path, DeclarationParser& declaration_parser)
     : BaseParser(tokens, pos, file_path), declaration_parser_(declaration_parser) {}
 
+bool ModuleParser::isTopLevelStarter(vyb::TokenType tt) {
+    switch (tt) {
+        case vyb::TokenType::KEYWORD_STRUCT:
+        case vyb::TokenType::KEYWORD_ENUM:
+        case vyb::TokenType::KEYWORD_TYPE:
+        case vyb::TokenType::KEYWORD_IMPORT:
+        case vyb::TokenType::KEYWORD_SMUGGLE:
+        case vyb::TokenType::KEYWORD_ASPECT:
+        case vyb::TokenType::KEYWORD_BIND:
+        case vyb::TokenType::KEYWORD_CLASS:
+        case vyb::TokenType::KEYWORD_MODULE:
+        case vyb::TokenType::KEYWORD_USE:
+        case vyb::TokenType::KEYWORD_FN:
+        case vyb::TokenType::KEYWORD_EXTERN:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// Skip tokens until the next top-level declaration starts (a known declaration
+// keyword at brace depth 0) or EOF. Anything in an unclosed block in the failed
+// region is skipped too, so recovery never re-enters a half-parsed body.
+void ModuleParser::synchronizeToNextDeclaration() {
+    int depth = 0;
+    while (this->peek().type != vyb::TokenType::END_OF_FILE) {
+        vyb::TokenType tt = this->peek().type;
+        if (tt == vyb::TokenType::LBRACE) {
+            ++depth;
+        } else if (tt == vyb::TokenType::RBRACE) {
+            if (depth > 0) --depth;
+        } else if (depth == 0 && isTopLevelStarter(tt)) {
+            break;
+        }
+        this->consume();
+    }
+}
+
 std::unique_ptr<vyb::ast::Module> ModuleParser::parse() {
     vyb::SourceLocation module_loc = this->current_location();
     std::vector<vyb::ast::StmtPtr> module_body;
@@ -20,40 +58,37 @@ std::unique_ptr<vyb::ast::Module> ModuleParser::parse() {
 
     while (this->peek().type != vyb::TokenType::END_OF_FILE) {
         vyb::token::Token current_token_before_parse = this->peek();
-        size_t pos_before_parse = this->pos_;
 
-        auto decl_node = this->declaration_parser_.parse();
+        std::unique_ptr<vyb::ast::Declaration> decl_node;
+        try {
+            decl_node = this->declaration_parser_.parse();
+        } catch (const std::exception& e) {
+            // A top-level declaration failed to parse. Record it, skip past the
+            // broken region to the next declaration boundary, and keep going so
+            // every error in the file is reported, not just the first.
+            std::string msg = "Parse error at " + current_token_before_parse.location.toString()
+                              + ": " + e.what();
+            errors_.push_back(msg);
+            synchronizeToNextDeclaration();
+            continue;
+        }
+
         if (decl_node) {
             module_body.push_back(std::move(decl_node));
-            #ifdef VERBOSE
-            std::cerr << "[ModuleParser] Before consuming semicolons, next token: "
-                      << vyb::token_type_to_string(this->peek().type) << " (" << this->peek().lexeme << ")\\\\n";
-            #endif
             // Consume all consecutive semicolons after top-level declaration (e.g., class, struct, etc.)
             while (this->peek().type == vyb::TokenType::SEMICOLON) {
-                #ifdef VERBOSE
-                std::cerr << "[ModuleParser] Consuming semicolon at: " << this->peek().location.toString() << "\\\\n";
-                #endif
                 this->consume();
             }
-            #ifdef VERBOSE
-            std::cerr << "[ModuleParser] After consuming semicolons, next token: "
-                      << vyb::token_type_to_string(this->peek().type) << " (" << this->peek().lexeme << ")\\\\n";
-            #endif
         } else {
-            // If parsing a declaration failed and no tokens were consumed,
-            // it means we encountered something unexpected.
-            // To prevent an infinite loop, consume the token and report an error, or break.
-            if (this->pos_ == pos_before_parse && this->peek().type == current_token_before_parse.type && this->peek().lexeme == current_token_before_parse.lexeme) {
-                std::cerr << "[ModuleParser] Error: No progress made. Unexpected token: "
-                          << vyb::token_type_to_string(this->peek().type)
-                          << " (\\\"" << this->peek().lexeme << "\\\") at "
-                          << this->peek().location.toString() << ". Stopping parse.\\\\n";
-                // Optionally, throw an exception here or add to an error list
-                // For now, let's break to prevent infinite loop.
-                // You might want to consume the token: this->consume();
-                break;
-            }
+            // Declaration parse returned null (failed without throwing): report it
+            // and recover. If no progress was made the error loop still terminates
+            // because synchronizeToNextDeclaration() always advances the position.
+            std::string msg = "Parse error at " + this->peek().location.toString()
+                              + ": unexpected token '" + vyb::token_type_to_string(this->peek().type) + "'";
+            errors_.push_back(msg);
+            // Always advance past the failure via sync; this also terminates the
+            // loop even if no progress was made during the failed parse itself.
+            synchronizeToNextDeclaration();
         }
     }
 

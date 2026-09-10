@@ -1,0 +1,56 @@
+// @test: nested member access through their<T> borrows
+// @description: Audit-verified: multi-level member reads and writes work through a
+//   `their<T>` borrow receiver (r.mid.leaf.n), including a borrow-typed field
+//   inside a struct (Holder.inner<their<Leaf>>) accessed through an outer borrow
+//   (h.inner.n). Self-checking: prints PASS only if every check holds, non-zero on
+//   failure.
+// @category: aspect, ownership, their, borrow, nested-access
+// @expect: pass
+// @expect-output: PASS
+// @expect-return: 0
+
+struct Leaf {
+    n<Int>
+}
+
+struct Mid {
+    leaf<Leaf>,
+    tag<String>
+}
+
+struct Root {
+    mid<Mid>
+}
+
+struct Holder {
+    inner<their<Leaf>>
+}
+
+// 3-level read through their<Root>
+deep_read(r<their<Root>>)<Int> -> {
+    return r.mid.leaf.n
+}
+
+// borrow-typed field accessed through an outer borrow
+hold_contents(h<their<Holder>>)<Int> -> {
+    return h.inner.n
+}
+
+// write through 2 levels into a leaf
+deep_write(r<their<Root>>)<Int> -> {
+    r.mid.leaf.n = 7
+    return r.mid.leaf.n
+}
+
+main()<Int> -> {
+    leaf<Leaf> = Leaf { n = 3 }
+    h<Holder> = Holder { inner = borrow(leaf) }
+    root<Root> = Root { mid = Mid { leaf = Leaf { n = 1 }, tag = "t" } }
+
+    if (deep_read(view(root)) != 1)   { println("FAIL deep_read"); return 1 }
+    if (hold_contents(view(h)) != 3)  { println("FAIL hold"); return 1 }
+    if (deep_write(view(root)) != 7)  { println("FAIL deep_write"); return 1 }
+
+    println("PASS")
+    return 0
+}

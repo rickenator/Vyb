@@ -25,6 +25,15 @@ Parser::Parser(const std::vector<vyb::token::Token>& tokens, std::string file_pa
 std::unique_ptr<vyb::ast::Module> Parser::parse_module() { // Corrected return type
     auto module_node = this->module_parser_.parse();
 
+    // Multi-error recovery: if per-declaration parsing recovered from any errors,
+    // surface ALL of them as one aggregated parse error instead of an early abort.
+    const std::vector<std::string>& recovered = this->module_parser_.errors();
+    if (!recovered.empty()) {
+        std::string agg = "Parse errors (" + std::to_string(recovered.size()) + "):\n";
+        for (const auto& e : recovered) agg += "  - " + e + "\n";
+        throw std::runtime_error("Parser::parse_module: " + agg);
+    }
+
     if (!module_node) {
         size_t temp_pos = this->current_pos_;
         while (temp_pos < this->tokens_.size() &&
