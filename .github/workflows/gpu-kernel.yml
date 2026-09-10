@@ -89,3 +89,51 @@ jobs:
           ./build/vyb fixtures/cuda/matmul_verify.vyb --module-path bindings --module-path bindings/cuda --compile "/tmp/matmul_verify.o"
           test -s "/tmp/matmul_verify.o" || { echo "FAIL: no object for matmul_verify"; exit 1; }
           echo "All host-side binding runners compile cleanly"
+
+  # Executes the emitted kernels and the cuBLAS/cuFFT/cuDNN bindings on a REAL
+  # NVIDIA GPU via the self-hosted runner registered on the repo's RTX 3090 host
+  # (godzilla, labels: self-hosted linux x64 gpu; systemd user unit vyb-gpu-runner).
+  # Gated to push + workflow_dispatch: GitHub blocks fork PRs from self-hosted
+  # runners by default, and we also skip PRs here explicitly. Builds into a
+  # throwaway build-ci dir using the host's pre-installed toolchain (no sudo, so
+  # it works on the self-hosted box).
+  gpu-silicon:
+    name: Execute + verify kernels + bindings on RTX 3090 (self-hosted)
+    runs-on: [self-hosted, linux, x64, gpu]
+    if: ${{ github.event_name != 'pull_request' }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure (host toolchain, no sudo)
+        run: >
+          cmake -S . -B build-ci
+          -DCMAKE_BUILD_TYPE=Release
+          -DLLVM_DIR=/usr/lib/llvm-18/cmake
+          -DVYB_USE_QT5=OFF
+          -DVYB_USE_OPENSSL=ON
+          -DVYB_BINDGEN_LIBCLANG=ON
+
+      - name: Build vyb
+        run: cmake --build build-ci --target vyb --parallel "$(nproc)"
+
+      - name: Emit kernel PTX (--gpu sm_86)
+        run: VYB_STDLIB="$PWD/stdlib" ./build-ci/vyb --kernel fixtures/kernel/matmul_smem.vyb --gpu sm_86 --ptx fixtures/cuda/matmul_smem.ptx
+
+      - name: cuBLAS cross-validation (on silicon)
+        run: |
+          ./build-ci/vyb fixtures/cuda/cublas_verify.vyb --module-path bindings --build /tmp/x_cublas --link -lcublas --link -lcuda
+          /tmp/x_cublas
+
+      - name: cuFFT cross-validation (on silicon)
+        run: |
+          ./build-ci/vyb fixtures/cuda/cufft_verify.vyb --module-path bindings --build /tmp/x_cufft --link -lcufft --link -lcuda
+          /tmp/x_cufft
+
+      - name: cuDNN cross-validation (on silicon)
+        run: |
+          ./build-ci/vyb fixtures/cuda/cudnn_verify.vyb --module-path bindings --build /tmp/x_cudnn --link -lcudnn --link -lcuda
+          /tmp/x_cudnn
+
+      - name: Matmul via signed bindings/cuda module (JIT, on silicon)
+        run: VYB_STDLIB="$PWD/stdlib" ./build-ci/vyb --module-path bindings --module-path bindings/cuda fixtures/cuda/matmul_verify.vyb

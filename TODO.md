@@ -177,12 +177,13 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
   via `--module-path bindings --module-path bindings/cuda`). Gap: the module ships i32-only
   transfers and does not re-export `cuMemcpyHtoD/DtoH_v2` — extending it to re-export f64
   transfers (or add a Float read/write) needs a new publisher signature.
-- [ ] **GPU CI / hardware-backed integration workload** — kernels now **execute and verify
-  on the RTX 3090 in this repo** (out-of-tree native runners); wiring that into hosted CI
-  needs a self-hosted GPU runner. Two build modes work: JIT for io-importing runners;
-  native `--build -lcublas -lcuda` for io-free runners. Avoid `import io` in a `--build`
-  standalone — its global `open` symbol interposes over libc's `open` on libcuda's internal
-  calls (SIGSEGV in cuInit).
+- [ ] **GPU CI / hardware-backed integration workload** — **done on push**: self-hosted GPU
+  runner `godzilla-gpu` (RTX 3090; systemd user unit `vyb-gpu-runner`, linger enabled) runs
+  the `gpu-silicon` job (build + cuBLAS/cuFFT/cuDNN cross-validations + module matmul on real
+  silicon) on every non-PR push. Fork PRs are blocked from self-hosted runners by default.
+  Build modes: JIT for io-importing runners; native `--build -lcublas -lcuda` for io-free
+  runners. Avoid `import io` in a `--build` standalone — its global `open` symbol interposes
+  over libc's `open` on libcuda's internal calls (SIGSEGV in cuInit).
 - [ ] **cuDNN beyond softmax** — softmax is bound and verified; convolution requires tensor
   descriptors, filter descriptors, algorithm selection, and a workspace.
 
