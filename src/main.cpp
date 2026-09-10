@@ -29,6 +29,8 @@
 #include <cstdio> // For printf and fflush
 #include <cstdlib> // For malloc/free
 #include <cstring> // For memset
+#include <regex>
+#include <map>
 #if defined(__unix__) || defined(__APPLE__)
 #include <unistd.h>
 #include <sys/wait.h>
@@ -1636,19 +1638,29 @@ std::string read_source_file(const std::string& filename) {
 // Module search paths for a project: the project root + src/, then each local
 // path dependency (the dependency dir and its src subdir). Local imports in the
 // project's own src tree and in dependency trees resolve through these paths.
+
 std::vector<fs::path> project_module_paths(const vyb::Manifest& m) {
     std::vector<fs::path> paths;
     paths.push_back(m.rootDir);
     auto srcDir = m.rootDir / "src";
     if (fs::is_directory(srcDir)) paths.push_back(srcDir);
     for (const auto& d : m.dependencies) {
-        if (d.source != "path") continue;
-        fs::path p = d.path.empty() ? fs::path(d.name) : fs::path(d.path);
-        if (p.is_relative()) p = m.rootDir / p;
-        p = fs::absolute(p).lexically_normal();
-        paths.push_back(p);
-        auto depSrc = p / "src";
-        if (fs::is_directory(depSrc)) paths.push_back(depSrc);
+        if (d.source == "path") {
+            fs::path p = d.path.empty() ? fs::path(d.name) : fs::path(d.path);
+            if (p.is_relative()) p = m.rootDir / p;
+            p = fs::absolute(p).lexically_normal();
+            paths.push_back(p);
+            auto depSrc = p / "src";
+            if (fs::is_directory(depSrc)) paths.push_back(depSrc);
+        } else if (d.source == "github") {
+            // Materialized (<root>/.vybmod/<name>/mod.vyb by `vyb mod install github:`).
+            // `import <name>` resolves as <searchPath>/<name>/mod.vyb, so the search
+            // path is the .vybmod CONTAINER, not the per-dep directory.
+            fs::path p = m.rootDir / ".vybmod";
+            if (fs::is_directory(p))
+                if (std::find(paths.begin(), paths.end(), p.lexically_normal()) == paths.end())
+                    paths.push_back(p.lexically_normal());
+        }
     }
     return paths;
 }
@@ -1666,10 +1678,15 @@ void write_lockfile(const vyb::Manifest& m) {
             out << "[[" << d.name << "]]\n";
             out << "source = \"path\"\n";
             out << "resolved = \"" << fs::absolute(p).lexically_normal().string() << "\"\n\n";
+        } else if (d.source == "github") {
+            fs::path p = m.rootDir / ".vybmod" / d.name;
+            out << "[[" << d.name << "]]\n";
+            out << "source = \"github\"\n";
+            out << "resolved = \"" << fs::absolute(p).lexically_normal().string() << "\"\n\n";
         } else {
             out << "[[" << d.name << "]]\n";
             out << "source = \"" << d.source << "\"\n";
-            out << "resolved = \"UNRESOLVED - dependency backend not implemented\"\n\n";
+            out << "resolved = \"UNRESOLVED - " << (d.source == "git" ? "git-clone backend not implemented" : "version resolution requires a package registry") << "\"\n\n";
         }
     }
 }
@@ -1713,13 +1730,32 @@ int run_build_command(int argc, char** argv, const std::string& exeArg) {
         return 1;
     }
 
+    // Resolve dependencies before compiling.
+    //  - `path` deps are used as-is.
+    //  - `github:` deps are WIRED from .vybmod/<name>/ when present (materialized by
+    //    the verified `vyb mod install github:...` resolver — the doc/MANIFEST.md
+    //    design: install resolves, build consumes). If not materialized, error with a
+    //    hint; auto-fetch on build is a staged follow-up (#165).
+    //  - `git`/`version` deps remain staged: git needs a clone backend, version needs
+    //    a package registry (none exists yet).
     for (const auto& d : manifest->dependencies) {
-        if (d.source != "path") {
+        if (d.source == "github") {
+            fs::path depDir = root / ".vybmod" / d.name;
+            std::error_code ec;
+            if (!fs::is_directory(depDir, ec) || !fs::exists(depDir / "mod.vyb", ec)) {
+                std::cerr << "Error: dependency '" << d.name << "' (github) is not "
+                          << "materialized in " << depDir.string() << ". "
+                          << (d.url.empty() ? "" : "Run `vyb mod install github:" + d.url + "` first. ")
+                          << "(auto-fetch on build is staged, #165)\n";
+                return 1;
+            }
+        } else if (d.source != "path") {
             std::cerr << "Error: dependency '" << d.name << "' uses source '"
-                      << d.source << "', which is not supported yet (#165): only "
-                         "local 'path' dependencies resolve. "
-                      << (d.source == "git" && !d.url.empty() ? "Git URL: " + d.url + ". " : "")
-                      << "See doc/DEVELOPER_TOOLING.md for the staged resolver."
+                      << d.source << "', not supported yet (#165): "
+                      << (d.source == "git"
+                              ? "git-clone backend not implemented"
+                              : "version resolution requires a package registry (none exists yet)")
+                      << ". Use a 'path' or 'github:' dependency."
                       << std::endl;
             return 1;
         }
@@ -1842,7 +1878,7 @@ void print_subcommand_help() {
               << "Subcommands:\n"
               << "  build <dir> [--link <lib>]* [--static] [-O0..3]  build [[bin]] in a vyb.toml project\n"
               << "  new <name> [--version X.Y.Z]  scaffold a fresh project\n"
-              << "  test [--category C] [--pattern P] [--test-dir D]  run the language test suite\n"
+              << "  test [paths...] [--category C] [--pattern P] [--no-execute] [--repo]  run test files\n"
               << "  bindgen <header.h> [--full]   generate Vyb bindings from a C header\n"
               << "\n"
               << "Compile/run a file directly ('vyb program.vyb ...'); 'vyb --help' shows\n"
@@ -1868,24 +1904,240 @@ static int run_exec(const std::vector<std::string>& args) {
 // run the canonical language suite via the repo's test harness (#154). The test
 // tree is resolved from the compiler binary's own location so `vyb test` works
 // from anywhere, not just the repo root.
-int run_test_command(int argc, char** argv, const std::string& exeArg) {
-    std::error_code ec;
-    fs::path exePath = fs::path(exeArg);
-    if (exePath.is_relative()) exePath = fs::absolute(exePath, ec);
-    fs::path repoRoot = exePath.parent_path().parent_path();   // <root>/build/vyb -> <root>
-    fs::path harness = repoRoot / "test" / "run_tests.py";
-    if (!fs::exists(harness)) {
-        std::cerr << "Error: test harness not found at " << harness.string() << std::endl;
-        return 1;
+// Read a `// @key: value` directive from test-file content. Returns the value or "".
+static std::string test_directive(const std::string& content, const std::string& key) {
+    std::regex re("//\\s*@" + key + "\\s*:\\s*(.*?)$", std::regex::multiline);
+    std::smatch m;
+    if (std::regex_search(content, m, re)) {
+        std::string v = m[1].str();
+        // Trim trailing CR (CRLF files) and surrounding whitespace.
+        size_t e = v.size();
+        while (e > 0 && (v[e-1] == '\r' || v[e-1] == ' ' || v[e-1] == '\t')) --e;
+        size_t b = 0;
+        while (b < e && (v[b] == ' ' || v[b] == '\t')) ++b;
+        return v.substr(b, e - b);
     }
-    std::vector<std::string> args;
-    args.push_back("python3");
-    args.push_back(harness.string());
-    args.push_back("--vyb");
-    args.push_back(exeArg);                 // the compiler binary itself (main's argv[0])
-    args.push_back("--execute-jit");
-    for (int i = 0; i < argc; ++i) args.push_back(std::string(argv[i]));
-    return run_exec(args);
+    return "";
+}
+static bool test_directive_true(const std::string& content, const std::string& key) {
+    std::string v = test_directive(content, key);
+    return v == "true" || v == "yes" || v == "1";
+}
+// A file is a test candidate if it carries any test/expect directive comment or is *.test.vyb.
+static bool has_test_markers(const std::string& c) {
+    static const char* markers[] = {"@test:", "@expect:", "@expect-output:",
+                                    "@expect-return:", "@expect-error:", "@execute-jit:",
+                                    "@parse-only:", "@semantic-only:"};
+    for (auto* m : markers) if (c.find(m) != std::string::npos) return true;
+    return false;
+}
+
+// Run a subprocess with stdout+stderr captured into \p out / \p err; returns its
+// exit status (mirrors run_tests.py's per-test isolation).
+static int run_test_capture(const std::vector<std::string>& args,
+                            const std::vector<std::pair<std::string,std::string>>& envPairs,
+                            std::string& out, std::string& err) {
+    int outPipe[2], errPipe[2];
+    if (pipe(outPipe) != 0 || pipe(errPipe) != 0) return 1;
+    std::vector<char*> v;
+    for (auto& s : args) v.push_back(const_cast<char*>(s.c_str()));
+    v.push_back(nullptr);
+    pid_t pid = fork();
+    if (pid == 0) {
+        dup2(outPipe[1], STDOUT_FILENO);
+        dup2(errPipe[1], STDERR_FILENO);
+        ::close(outPipe[0]); ::close(outPipe[1]);
+        ::close(errPipe[0]); ::close(errPipe[1]);
+        for (auto& kv : envPairs) setenv(kv.first.c_str(), kv.second.c_str(), 1);
+        execvp(v[0], v.data());
+        _exit(127);
+    }
+    ::close(outPipe[1]); ::close(errPipe[1]);
+    char buf[8192];
+    ssize_t n;
+    while ((n = ::read(outPipe[0], buf, sizeof(buf))) > 0) out.append(buf, (size_t)n);
+    while ((n = ::read(errPipe[0], buf, sizeof(buf))) > 0) err.append(buf, (size_t)n);
+    ::close(outPipe[0]); ::close(errPipe[0]);
+    int status = 0;
+    waitpid(pid, &status, 0);
+    return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+}
+
+// Recursively collect test candidates (.vyb files whose header carries a `@test`
+// or `@expect` directive, or any `*.test.vyb`) under \p fileOrDir.
+static void collect_test_files(const fs::path& fileOrDir, std::vector<fs::path>& out) {
+    std::error_code ec;
+    if (fs::is_regular_file(fileOrDir, ec)) {
+        if (fileOrDir.extension() == ".vyb") {
+            std::ifstream in(fileOrDir.string());
+            std::ostringstream ss; ss << in.rdbuf();
+            std::string c = ss.str();
+            if (has_test_markers(c) || fileOrDir.filename().string().rfind(".test.vyb") != std::string::npos)
+                out.push_back(fileOrDir);
+        }
+        return;
+    }
+    if (!fs::is_directory(fileOrDir, ec)) return;
+    std::vector<fs::path> stack;
+    stack.push_back(fileOrDir);
+    while (!stack.empty()) {
+        fs::path d = stack.back(); stack.pop_back();
+        for (auto& e : fs::directory_iterator(d, ec)) {
+            if (ec) { ec.clear(); continue; }
+            if (e.is_directory()) stack.push_back(e.path());
+            else if (e.path().extension() == ".vyb") {
+                std::ifstream in(e.path().string());
+                std::ostringstream ss; ss << in.rdbuf();
+                if (has_test_markers(ss.str()) ||
+                    e.path().filename().string().rfind(".test.vyb") != std::string::npos)
+                    out.push_back(e.path());
+            }
+        }
+    }
+}
+
+// `vyb test` — integrated test runner (issue #154 / Testing & Tooling):
+//   vyb test [paths...] [--test-dir DIR] [--pattern GLOB] [--category C]
+//            [--no-execute] [--verbose] [--repo]
+// Runs test files (`.vyb` with `// @test` / `// @expect*` directives, or `*.test.vyb`)
+// against the compiler, checking exit code / stdout / main-return / stderr against the
+// file's directives — self-contained per-file subprocess isolation. With --repo, or when
+// run inside the compiler repo with no explicit paths, it delegates to test/run_tests.py.
+int run_test_command(int argc, char** argv, const std::string& exeArg) {
+    std::vector<std::string> positional;
+    std::string testDir;
+    std::string pattern;
+    std::string category;
+    bool noExecute = false, verbose = false, repoMode = false;
+    for (int i = 0; i < argc; ++i) {
+        std::string a = argv[i];
+        if (a == "--repo") repoMode = true;
+        else if (a == "--no-execute") noExecute = true;
+        else if (a == "--verbose" || a == "-v") verbose = true;
+        else if ((a == "--test-dir" || a == "--category" || a == "--pattern") && i + 1 < argc) {
+            if (a == "--test-dir") testDir = argv[++i];
+            else if (a == "--category") category = argv[++i];
+            else if (a == "--pattern") pattern = argv[++i];
+        }
+        else if (a == "--") { for (++i; i < argc; ++i) positional.push_back(argv[i]); break; }
+        else positional.push_back(a);
+    }
+
+    // Repo-harness delegation (backwards compatible with the existing `vyb test`).
+    {
+        std::error_code ec;
+        fs::path exePath = fs::path(exeArg);
+        if (exePath.is_relative()) exePath = fs::absolute(exePath, ec);
+        fs::path repoRoot = exePath.parent_path().parent_path();
+        fs::path harness = repoRoot / "test" / "run_tests.py";
+        if (repoMode || (positional.empty() && fs::exists(harness))) {
+            if (!fs::exists(harness)) {
+                std::cerr << "Error: --repo test harness not found at " << harness.string() << std::endl;
+                return 1;
+            }
+            std::vector<std::string> args = {"python3", harness.string(), "--vyb", exeArg, "--execute-jit"};
+            if (testDir.empty() && !positional.empty()) testDir = positional.front();
+            if (!testDir.empty()) { args.push_back("--test-dir"); args.push_back(testDir); }
+            if (!category.empty()) { args.push_back("--category"); args.push_back(category); }
+            if (!pattern.empty()) { args.push_back("--pattern"); args.push_back(pattern); }
+            if (noExecute) args.push_back("--no-execute");
+            if (verbose) { args.push_back("--verbose"); }
+            return run_exec(args);
+        }
+    }
+
+    // Native project runner.
+    std::vector<fs::path> files;
+    for (const auto& p : positional) collect_test_files(fs::path(p), files);
+    if (files.empty()) {
+        // Default discovery: ./test if it exists, else the current directory.
+        fs::path cwd = fs::current_path();
+        fs::path dir = cwd;
+        std::error_code ec;
+        if (fs::is_directory(cwd / "test", ec)) dir = cwd / "test";
+        collect_test_files(dir, files);
+    }
+    std::sort(files.begin(), files.end());
+
+    long passed = 0, failed = 0, skipped = 0;
+    for (const auto& f : files) {
+        std::ifstream in(f.string());
+        std::ostringstream ss; ss << in.rdbuf();
+        std::string content = ss.str();
+        std::string name = test_directive(content, "test");
+        if (name.empty()) name = f.filename().string();
+
+        std::string expect = test_directive(content, "expect");
+        if (expect.empty()) expect = "pass";
+        std::string expectOut = test_directive(content, "expect-output");
+        std::string expectRet = test_directive(content, "expect-return");
+        std::string expectErr = test_directive(content, "expect-error");
+        bool parseOnly = test_directive_true(content, "parse-only");
+        bool semanticOnly = test_directive_true(content, "semantic-only");
+
+        // Build the child invocation, honoring @vyb-args and @env.
+        std::vector<std::string> args = {exeArg};
+        std::string vargs = test_directive(content, "vyb-args");
+        if (!vargs.empty()) {
+            std::stringstream vs(vargs); std::string tok;
+            while (vs >> tok) args.push_back(tok);
+        }
+        bool willExecute = !parseOnly && !semanticOnly && !noExecute;
+        if (parseOnly) args.push_back("--parse-only");
+        else if (semanticOnly) args.push_back("--semantic-only");
+        else if (noExecute) args.push_back("--no-execute");
+        args.push_back(f.string());
+
+        std::vector<std::pair<std::string,std::string>> envPairs;
+        std::string env = test_directive(content, "env");
+        if (!env.empty()) {
+            std::stringstream es(env); std::string item;
+            while (std::getline(es, item, ';')) {
+                size_t eq = item.find('=');
+                if (eq != std::string::npos) envPairs.push_back({item.substr(0, eq), item.substr(eq + 1)});
+            }
+        }
+
+        std::string out, err;
+        int ret = run_test_capture(args, envPairs, out, err);
+        int expectedExit = (expect == "pass") ? 0 : 1;
+        if (expect == "fail" && !expectRet.empty() && expectRet != "n/a") {
+            try { expectedExit = std::stoi(expectRet); } catch (...) {}
+        }
+        bool ok = (ret == expectedExit);
+        std::vector<std::string> reasons;
+        if (!ok) reasons.push_back("expected exit " + std::to_string(expectedExit) + ", got " + std::to_string(ret));
+        if (!expectOut.empty() && expectOut != "n/a") {
+            if (out.find(expectOut) == std::string::npos) { ok = false; reasons.push_back("stdout missing: " + expectOut); }
+        }
+        if (willExecute && expect == "pass" && !expectRet.empty() && expectRet != "n/a") {
+            std::vector<std::string> lines;
+            size_t pos = 0;
+            while (pos <= out.size()) {
+                size_t nl = out.find('\n', pos);
+                std::string line = (nl == std::string::npos) ? out.substr(pos) : out.substr(pos, nl - pos);
+                std::string t = line;
+                size_t b = t.find_first_not_of(" \t\r"); if (b != std::string::npos) t = t.substr(b);
+                else t = "";
+                size_t e2 = t.find_last_not_of(" \t\r"); if (e2 != std::string::npos) t = t.substr(0, e2 + 1);
+                if (!t.empty()) lines.push_back(t);
+                if (nl == std::string::npos) break;
+                pos = nl + 1;
+            }
+            std::string actual = lines.empty() ? "" : lines.back();
+            if (actual != expectRet) { ok = false; reasons.push_back("expected return " + expectRet + ", got " + (actual.empty() ? std::string("<no stdout>") : actual)); }
+        }
+        if (expect == "fail" && !expectErr.empty() && expectErr != "n/a") {
+            if (err.find(expectErr) == std::string::npos) { ok = false; reasons.push_back("stderr missing: " + expectErr); }
+        }
+
+        if (ok) { ++passed; if (verbose) std::cout << "PASS: " << name << "\n"; }
+        else { ++failed; std::cout << "FAIL: " << name << " [" << f.string() << "]\n      " << reasons.front() << "\n"; }
+    }
+
+    std::cout << "\nRan " << (passed + failed + skipped) << " tests\nPassed: " << passed
+              << "\nFailed: " << failed << "\n";
+    return failed == 0 ? 0 : 1;
 }
 
 } // namespace
@@ -3294,7 +3546,7 @@ static std::string modReadFile(const std::string& path) {
 static const char* mod_publisher_pubkey() {
     const char* e = getenv("VYB_PUBLISHER_KEY");
     if (e && *e) return e;
-    return "1b4900f7b96ea184b0d15076afbb39dc7895bf33b903e2089a3c60f8a3166e2a";
+    return "69d14aff0fe9b787694e98ec56077047e2e9f3ea1706ec14dfe5590196cde93e";
 }
 // SDK Phase 4 key management. Private signing keys live OUT of the source tree
 // in $VYB_SIGNING_DIR (default ~/.vyb/signing/), mode 0600, generated ONCE and
@@ -3554,6 +3806,7 @@ static int mod_fetch_github(const std::string& ownerRepoPath, const std::string&
     outDir = proj;
     return 0;
 }
+
 static int mod_install(const std::string& spec, const std::string& exePath, bool requireSigned) {
     std::string src = spec;
     std::string pin;

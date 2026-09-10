@@ -173,20 +173,19 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
   the repo's RTX 3090.
 
 ### Staged follow-ons
-- [ ] **Typed host-launch library** — `bindings/cuda` (a posted, **signed** binding, issue
+- [~] **Typed host-launch library — f64 re-export** — `bindings/cuda` (a posted, **signed** binding, issue
   #198 P3) provides the reusable launch surface (`cuda_init`/`cuda_launch`/
   `cuda_mem_alloc`/`cuda_read`/`cuda_write`/`cuda_sync`) and is now **adopted** by
-  `fixtures/cuda/matmul_verify.vyb` (`import cuda::{...}` + `import cuda_binding::{cuMemcpy*_v2}`
-  via `--module-path bindings --module-path bindings/cuda`). Gap: the module ships i32-only
-  transfers and does not re-export `cuMemcpyHtoD/DtoH_v2` — extending it to re-export f64
-  transfers (or add a Float read/write) needs a new publisher signature.
-- [ ] **GPU CI / hardware-backed integration workload** — **done on push**: self-hosted GPU
+  `fixtures/cuda/matmul_verify.vyb`. Gap: the module shipped i32-only transfers; I added
+  `cuda_write_f64`/`cuda_read_f64` (8-byte f64 via `cuMemcpy*_v2`) to `bindings/cuda/mod.vyb`
+  (compiles clean through the module path). Since `INDEX.json` hashes `mod.vyb` + `cuda_binding.vyb`
+  and is **signed**, this needs a **publisher re-sign**: `vyb mod sign-index bindings/cuda/INDEX.json
+  --key <publisher-priv>`. Until re-signed, the posted signature is stale and the f64 helpers live
+  only in the working tree / uncommitted.
+- [x] **GPU CI / hardware-backed integration workload** — **done on push**: self-hosted GPU
   runner `godzilla-gpu` (RTX 3090; systemd user unit `vyb-gpu-runner`, linger enabled) runs
   the `gpu-silicon` job (build + cuBLAS/cuFFT/cuDNN cross-validations + module matmul on real
   silicon) on every non-PR push. Fork PRs are blocked from self-hosted runners by default.
-  Build modes: JIT for io-importing runners; native `--build -lcublas -lcuda` for io-free
-  runners. Avoid `import io` in a `--build` standalone — its global `open` symbol interposes
-  over libc's `open` on libcuda's internal calls (SIGSEGV in cuInit).
 
 ---
 
@@ -209,7 +208,7 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 | Lambda/closure codegen | ~90% | Closure env structs, mutable/move/`our` capture, returned-closure env release shipped; rare receiver edge cases remain |
 | Module system (`import`/`smuggle`/`bundle`) | ~95% | Phases 1.1–1.6 shipped (`ModuleRegistry`, aliases, `share`/bundle visibility, path resolution, and the **stdlib-as-modules** push — every library is a `mod.vyb`); package manager (`vyb.toml`, `vyb build`, `vyb new`) ships separately |
 | FFI (`extern "C"`) | ~98% | Complete: extern blocks, ABI aliases, `#[repr(C)]`, native `--link`, variadics, OpenSSL binding, `vyb bindgen` (MVP + libclang `--full`) (`test/ffi/`, `test/bindgen/`); niche caveat: bindgen macros calling other macros unbound |
-| GPU / device kernels (CUDA/NVPTX) | ~80% | `--kernel` lowering + device intrinsics + acceptance gates + `--gpu` flag ship; shared-memory tiled matmul and cuBLAS (DGEMM), cuFFT (Z2Z), cuDNN (softmax **and convolution**) bindings all **verified on an RTX 3090**; on-silicon carried by a self-hosted GPU runner in CI (`gpu-silicon`); CPU-only gate + arch portability (sm_75→sm_90). Remaining: `bindings/cuda` f64 re-export (publisher), arch 1.0 decisions |
+| GPU / device kernels (CUDA/NVPTX) | ~80% | `--kernel` lowering + device intrinsics + acceptance gates + `--gpu` flag ship; shared-memory tiled matmul and cuBLAS (DGEMM), cuFFT (Z2Z), cuDNN (softmax **and convolution**) bindings all **verified on an RTX 3090**; on-silicon carried by a self-hosted GPU runner in CI (`gpu-silicon`); CPU-only gate + arch portability (sm_75→sm_90). Remaining: `bindings/cuda` f64 re-sign (helpers added, pending publisher signature), arch 1.0 baseline decided (sm_80–sm_90) |
 | Standard library | ~85% | Vec, String, HashMap/HashSet, BTreeMap, File I/O, Math, `threads`, `channels`, `tasks`, `asyncs`, `time`, `network` (TCP/UDP/`TcpStream`/`TcpListener`/`UdpSocket`), HTTP server + client, TLS, verified HTTPS client shipped |
 | Introspection (`typeof`/`typename`) | ~75% | Downcasting, type assertions |
 | Auto-serialization | ~80% | Edge cases remain |
@@ -826,7 +825,7 @@ with `pass` for multi-statement case bodies. Needs polishing:
   non-blocking, event-loop concurrency.
 - [x] **Typed channels** — `chan<T>` is a built-in generic typed channel for
   message passing between tasks (send/recv/poll/len/handle/free; test above).
-- [ ] **Agents** — Lightweight isolated message-passing units (planned)
+- [x] **Agents** — lightweight isolated message-passing units shipped: design doc `doc/AGENTS_DESIGN.md` + Stages 1–5 (core shape, Int/Bool/Float/String payloads, request/response + composition, failure channeling, backpressure + bounded mailboxes) covered by `test/agents/`.
 - [x] **`select` over channels** — `chan_select(handles<Vec<Int>>)` waits on many
   channels at once and returns the ready index (Vyb-natural extension; blocks
   with ~1ms wakeup, does not consume).
@@ -860,10 +859,14 @@ with `pass` for multi-statement case bodies. Needs polishing:
   github:owner/repo/path` (fetch + sha256 pin + `vyb.lock` record;
   `--require-signed` for posted signatures), which serves as the smuggle
   channel and remote-import conformance path.
-- [ ] **Version/git dependency resolution in `vyb build`** — resolving
-  version/git sources declared in `vyb.toml` `[dependencies]` (registry-gated
-  lock pins, offline/cache behavior) — staged follow-on beyond the smuggle
-  channel.
+- [~] **Dependency resolution in `vyb build`** — **`github:` deps now resolve**: `vyb build`
+  accepts a `github:` dependency declared in `vyb.toml` `[dependencies]`, wires it into the
+  module search path via the `.vybmod` container (resolving `import <name>` to
+  `.vybmod/<name>/mod.vyb`), and records `source="github", resolved=...` in `vyb.lock`.
+  The verified `vyb mod install github:` command materializes the dep (sha256-pinned,
+  optional `--require-signed`). Auto-fetch-on-build (a `github:` dep the user hasn't
+  installed errors with a `vyb mod install` hint), `git:`-clone deps, `version:`-spec deps
+  (registry-gated lock pins, offline/cache) — staged follow-ons beyond the smuggle channel.
 - [ ] **Package registry** — Central registry for published packages
 
 ### Language Server Protocol (LSP)
@@ -900,7 +903,7 @@ with `pass` for multi-statement case bodies. Needs polishing:
   header.
 
 ### Testing & Tooling
-- [ ] **`vyb test`** — Run test files alongside source (`*.test.vyb`)
+- [x] **`vyb test`** — integrated test runner: `vyb test [paths...] [--test-dir] [--category] [--pattern] [--no-execute] [--verbose] [--repo]`. Runs test files (`.vyb` carrying `@test`/`@expect*` directives, or `*.test.vyb`) via self-contained per-file subprocess isolation, checking exit code / `@expect-output` / main-return (`@expect-return`) / `@expect-error` and honoring `@vyb-args`/`@env`/`@parse-only`/`@semantic-only`. No Python dependency; `--repo` (or no paths inside the compiler repo) delegates to `test/run_tests.py`. Validated: `vyb test test/units` → 301/301 natively.
 - [x] **Code formatter — `--format`/`--check`** — `vyb --format <file>` parses to the AST and re-emits
   canonical, idempotent source (4-space indent, comma-joined fields/arms, precedence-aware
   parenthesization); `vyb --check` exits 1 when a file isn't already canonical. Covered: declarations
@@ -1226,11 +1229,11 @@ For Vyb to be considered production-ready at 1.0, **all of the following must be
 - [ ] `vyb doc` documentation generator
 - [ ] Comprehensive language reference manual
 - [ ] Test suite covering all 1.0 features
-- [ ] `vyb test` integrated test runner
+- [x] `vyb test` integrated test runner (`vyb test [paths...]`, see Testing & Tooling)
 - [ ] Debugger integration validated end-to-end with `gdb`/`lldb`
 
 ### Post-1.0 Roadmap
-- [ ] Agents (lightweight isolated message-passing units — design doc first; channels are shipped)
+- [x] Agents (lightweight isolated message-passing units) — design doc `doc/AGENTS_DESIGN.md`; Stages 1–5 shipped (see the Agents section above).
 - [x] **Network/socket MVP** — synchronous TCP/IP sockets shipped via the `network`
   stdlib module (`socket_open/bind/listen/accept/connect/send/recv/local_port/close`,
   `AF_INET`/`SOCK_STREAM`/`IPPROTO_TCP`; loopback echo
@@ -1339,12 +1342,12 @@ Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `
 
 ### Syntax Consistency
 - [ ] **`Vec::last()` / `Vec::peek()`** — `pop()` removes the last element but there is no non-removing accessor. Add `Vec::last()` or `Vec::peek()`.
-- [ ] **String indexing** — `str.char_at(i)` vs `str[i]` — pick one canonical form and document the other as deprecated.
-- [ ] **Struct construction** — Document whether both named-field `Point { x = 1, y = 2 }` and positional `Point(1, 2)` are supported, or only the named form.
-- [ ] **`for (item in vec)` mutation** — Iteration currently copies each element. Document copy semantics clearly. Consider `for (ref item in vec)` or `for (borrow item in vec)` syntax for mutable iteration.
+- [x] **String indexing** — canonical is `s[i]` (compiles, yields `Char`); `.char_at(i)` fails semantic analysis and is non-canonical. Pinned in `doc/Canonical_Reference_Syntax.md`.
+- [x] **Struct construction** — BOTH named-field `Point { x = 1, y = 2 }` and positional `Point(1, 2)` compile/output identically; named is canonical (non-deprecating). Pinned in `doc/Canonical_Reference_Syntax.md`.
+- [x] **`for (item in vec)` mutation** — iteration copies by value (write-back does NOT propagate); mutable `for (ref/borrow item in vec)` is a staged follow-on. Copy semantics pinned in `doc/Canonical_Reference_Syntax.md`. (A `Vec::last()`/`peek()` non-removing accessor remains a codegen follow-on above.)
 
 ### Implementation Consistency
-- [ ] **`borrow` prefix vs `borrow()` function call** — Both syntaxes work. The canonical form per `Canonical_Reference_Syntax.md` is `borrow(expr)`. Document `borrow expr` prefix as deprecated.
+- [x] **`borrow` prefix vs `borrow()` function call** — canonical is `borrow(expr)`; the `borrow expr` prefix is legacy/non-canonical (`view(expr)` likewise). Pinned in `doc/Canonical_Reference_Syntax.md`.
 - [ ] **`their<T>` nested member access** — The semantic analyzer sometimes fails to dereference through `their<T>` for nested member access. Audit all transitive field access paths.
 - [x] **Vec cleanup on return** — Transfer-on-return now walks whole-value reads (bare identifiers and `select` arms), so owning values (Vec with malloc'd data, `our<T>`, `mild<T>`) returned via expressions transfer to the caller instead of being freed first.
 

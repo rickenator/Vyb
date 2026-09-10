@@ -45,6 +45,12 @@ vyb --kernel k.vyb --gpu sm_90           # arch override (flag, or $VYB_KERNEL_G
 - GPU arch resolution: `--gpu sm_90` (CLI flag, overrides env), else `$VYB_KERNEL_GPU`, else
   `sm_86` (the P0 feasibility-probe target, RTX-3090 class). Used for both NVPTX lowering and
   the `ptxas` assembly check.
+- **1.0 arch baseline**: officially supported compute capabilities are **sm_80–sm_90**
+  (Ampere A100/A30/RTX 3xxx, Ada L4/L40/RTX 4xxx, Hopper H100). The default target is
+  `sm_86` (RTX 3090, the repo's primary silicon) and that is the **primary** capability —
+  everything is validated against it on silicon; other arches in the range are validated at
+  the `ptxas` acceptance-gate level (portability gate, no on-GPU execution per arch). Older
+  `sm_75` et al. are out of the 1.0 support range.
 - PTX defaults to `<source-base>.ptx` next to the input, or `--ptx <path>`.
 
 ## Device intrinsics

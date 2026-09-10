@@ -217,6 +217,7 @@ std::optional<Manifest> load_manifest(const std::filesystem::path& rootDir,
                     for (const auto& pk : parse_inline_table(raw)) {
                         if (pk.first == "path") { dep.source = "path"; dep.path = pk.second; }
                         else if (pk.first == "git") { dep.source = "git"; dep.url = pk.second; }
+                        else if (pk.first == "github") { dep.source = "github"; dep.url = pk.second; }
                         else if (pk.first == "version") { dep.source = "version"; dep.version = pk.second; }
                         else if (pk.first == "tag") { dep.version = pk.second; }
                     }

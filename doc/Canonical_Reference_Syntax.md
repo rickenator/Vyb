@@ -197,3 +197,12 @@ All documentation must use canonical syntax:
 ---
 
 **This document is the authoritative reference for Vyb ownership and borrowing syntax. All code, documentation, and examples must follow these conventions.**
+
+## ✅ Resolved canonical decisions (2026-09-10)
+
+Decisions below were checked against the current compiler (`build/vyb`) before being pinned.
+
+- **Struct literal construction — BOTH forms are supported; named is canonical.** `Point { x = 1, y = 2 }` (named-field) and `Point(1, 2)` (positional) both compile and produce identical values. Prefer the **named** form (self-documenting, field-order independent); positional is valid and accepted, not deprecated.
+- **String indexing — `s[i]` is canonical; `.char_at(i)` is not.** `s[i]` compiles and yields a `Char`; `s.char_at(1)` currently fails semantic analysis. Use `s[i]`; if `char_at` is restored later it should be an alias of `s[i]`, not a competing form.
+- **`for (item in vec)` copies each element (by value).** Mutable iteration is NOT yet supported — assigning `item` inside the loop does not write back to the vector. A `for (ref item in vec)` / `for (borrow item in vec)` mutable-iteration form is a staged follow-on; until then, mutate via index (`for (i in 0..v.len-1) { v[i] = ... }`).
+- **Borrowing — `borrow(expr)` is canonical.** The `borrow expr` prefix is non-canonical/legacy; write `borrow(expr)`. (Same for `view(expr)`.)
