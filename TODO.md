@@ -207,7 +207,7 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 | Async/await | ~98% | agents (message-passing units) — design doc (`doc/AGENTS_DESIGN.md`); Stages 1-5 shipped (core shape, Int/Bool/Float/String payloads, request/response + composition, failure channeling, backpressure + bounded mailboxes) (`test/agents/`, 5/5) |
 | Error propagation (`fail`/`trap`/`ensure`/`refail`) | ~100% | Complete: call-site instrumentation, untrapped handler, `ensure` cleanup, first-class `refail` (`test/trap/`) |
 | Lambda/closure codegen | ~90% | Closure env structs, mutable/move/`our` capture, returned-closure env release shipped; rare receiver edge cases remain |
-| Module system (`import`/`smuggle`/`bundle`) | ~90% | Phases 1.1–1.5 shipped (`ModuleRegistry`, aliases, `share`/bundle visibility, path resolution); stdlib package integration / `vyb.toml` pending |
+| Module system (`import`/`smuggle`/`bundle`) | ~95% | Phases 1.1–1.6 shipped (`ModuleRegistry`, aliases, `share`/bundle visibility, path resolution, and the **stdlib-as-modules** push — every library is a `mod.vyb`); package manager (`vyb.toml`, `vyb build`, `vyb new`) ships separately |
 | FFI (`extern "C"`) | ~98% | Complete: extern blocks, ABI aliases, `#[repr(C)]`, native `--link`, variadics, OpenSSL binding, `vyb bindgen` (MVP + libclang `--full`) (`test/ffi/`, `test/bindgen/`); niche caveat: bindgen macros calling other macros unbound |
 | GPU / device kernels (CUDA/NVPTX) | ~80% | `--kernel` lowering + device intrinsics + acceptance gates + `--gpu` flag ship; shared-memory tiled matmul and cuBLAS (DGEMM), cuFFT (Z2Z), cuDNN (softmax **and convolution**) bindings all **verified on an RTX 3090**; on-silicon carried by a self-hosted GPU runner in CI (`gpu-silicon`); CPU-only gate + arch portability (sm_75→sm_90). Remaining: `bindings/cuda` f64 re-export (publisher), arch 1.0 decisions |
 | Standard library | ~85% | Vec, String, HashMap/HashSet, BTreeMap, File I/O, Math, `threads`, `channels`, `tasks`, `asyncs`, `time`, `network` (TCP/UDP/`TcpStream`/`TcpListener`/`UdpSocket`), HTTP server + client, TLS, verified HTTPS client shipped |
@@ -242,7 +242,7 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 - [x] **`println()`/`print()` with multiple arguments** — Space-separated output; all args formatted into a single call
 - [x] **Semantic type recognition** — `Int16`, `Int32`, `Int64`, `UInt8`–`UInt64`, `Float32`, `Float64`, `Char`, `Rune` now fully recognized in semantic analysis (were silently rejected)
 - [x] **Relaxed struct field syntax** — C-style `Type fieldName` accepted alongside canonical `fieldName<Type>`; helps parse legacy/interop fixtures
-- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite now runs **1077 tests, 1077 passing** via `test/run_tests.py`
+- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite now runs **1132 tests, 1132 passing** via `test/run_tests.py --execute-jit` (re-anchored 2026-09-09)
 - [x] **Vec parameter deep copy** — Vec parameters receive an independent copy of the data on function entry, eliminating double-free bugs (e.g. recursive quicksort base-case return)
 - [x] **Vec mutation through borrowed struct fields** — `s.items.push(val)` where `s<their<T>>` now correctly mutates in-place; member-expression Vec calls now get a field *pointer* (not a loaded copy)
 - [x] **Semantic use-after-free fix** — `handleVecMethodCallOnMember` no longer stores raw pointers from temporary `VecType` objects into `expressionTypes`; all return types are cloned into `node->type` first
@@ -476,9 +476,17 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
   - `VYB_MODULE_PATH` environment variable
   - `--module-path` CLI flag
   - Standard library auto-discovery
-- [ ] **Phase 1.6 — Standard Library as Modules**
-  - [x] Foundation scaffold landed: `stdlib/core/`, `stdlib/io/`, `stdlib/collections/`, top-level/core preludes, transitional `core::option` bridge, and placeholder `core::result`
-  - [ ] Expand with full module contents (`math`, collections, io, iterator/core aspects)
+- [x] **Phase 1.6 — Standard Library as Modules** — every stdlib library ships as a
+  `mod.vyb` module (`agents archive asyncs chain channels collections crypto curses env fs
+  http https io network process qt rand regex tasks term threads time tls url utf8`), plus
+  the `core/` namespace (`aspects`, `iter`, `math`, `prelude`, `result`). Verified: the
+  **modules test category runs 97/97 PASS** with `--execute-jit` (core::result façade,
+  collections map/growth, io, http, core::iter protocol + for-desugar, network, threads/
+  chans/tasks/asyncs, module visibility & re-export, forward refs, TLS/https). No
+  transitional `core::option`/`OptionInt` remnants remain; `core::result` is an intentional
+  source-compat façade over the compiler-builtin `Result`.
+  - [x] Foundation scaffold landed: `stdlib/core/`, `stdlib/io/`, `stdlib/collections/`, top-level/core preludes, transitional `core::option` bridge (removed), and placeholder `core::result`
+  - [x] Expand with full module contents (`math`, collections, io, iterator/core aspects)
     - [x] `core::math` — composition helpers (`clamp`, `is_close`) layered over the global math intrinsics, explicitly imported via `import core::math` (`test/modules/stdlib_core_math.vyb`)
     - [x] `collections` — `HashMap<K,V>` / `HashSet<K>` shipped (`import collections`, by-ref bind methods, auto-growing hash-bucket `Hashable` key lookup; `test/modules/test_collections_hashmap.vyb`, `test/modules/test_collections_growth.vyb`), plus the `VecOps` view/ordering helpers, the unconstrained `VecHigherOps` `map`/`filter`/`reduce`/`iter` combinators, and the generic `VecIter<T>` iterator (`v.iter()`, bound to `Iterator`, `test/modules/test_vec_iter.vyb`)
     - [x] `io` — File I/O shipped (`import io`): `File { fd, path }`, `open` + `open_read`/`open_write`/`open_append`, `close`, `write_str`, `read_all`, `error_code`/`error_message`, and the `FileFlag` constant-enum modes (`FileFlag::READ` &c., combined with `|`) over the runtime `__vyb_file_*` intrinsics (`test/modules/test_file_io.vyb`)
@@ -1332,5 +1340,5 @@ Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `
 
 *Last Updated: 2026-08-28 (v0.7.4 release)*
 *Current Version: Vyb v0.7.4 (freedom-1.0 series)*
-*Overall Status: ~60-65% complete toward 1.0 — 1077 tests, 1077 passing (full --execute-jit directory sweep)*
+*Overall Status: ~60-65% complete toward 1.0 — 1132 tests, 1132 passing (full --execute-jit directory sweep, re-anchored 2026-09-09)*
 *SUGGESTIONS.md merged into this document.*
