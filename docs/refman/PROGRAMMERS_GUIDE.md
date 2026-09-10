@@ -9,6 +9,8 @@ This manual sits alongside the auto-generated reference under
 [`docs/refman/`](index.md):
 
 - [`index.md`](index.md) — module map with fan-in / fan-out.
+- [`language.md`](language.md) — a lookup quick-reference of keywords,
+  operators, types, and syntax forms (same canonical forms as this guide).
 - `<module>.md` — one page per stdlib module with every exported symbol,
   signature, and its inter-relationship list.
 - [`interfaces.md`](interfaces.md) — shared cross-module types and who

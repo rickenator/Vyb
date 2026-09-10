@@ -891,7 +891,12 @@ with `pass` for multi-statement case bodies. Needs polishing:
 
 ### Documentation Tools
 - [x] **Doc comments + `vyb doc`** — `/// comment` lines above a declaration are doc comments; `vyb doc <file.vyb> [files/dirs...] [-o outdir]` generates a self-contained HTML reference page per module (signature + doc text per declaration, TOC, HTML-escaped). Regression: `test/units/test_doc_generation.vyb`.
-- [ ] **Online reference** — Language reference manual (derived from existing docs)
+- [x] **Online reference** — Language reference manual (derived from existing docs):
+  `docs/refman/language.md` — a lookup quick-reference of keywords, operators,
+  types, ownership modes, and syntax forms, **derived from** the Programmer's
+  Guide (`§3`) and `doc/Canonical_Reference_Syntax.md`, cross-linked to the deeper
+  guide sections; registered in the guide's front matter; validated by
+  `refman --check` (no drift — hand-authored page).
 - [ ] **Web landing page** — `docs/web/landing_page/index.html` is the deployed
   project site (see `vyb-lang.org` / `aniviza.com`). Update it periodically as
   needed to reflect the current feature set and project status — ad hoc, no
@@ -1246,7 +1251,11 @@ For Vyb to be considered production-ready at 1.0, **all of the following must be
 - [x] Language server (LSP) — `vyb lsp` shipped (v0.1): diagnostics (parse + lint), go-to-definition, hover (kind + signature), declaration completion; protocol smoke test in hosted CI (`test/lsp_smoke.py`)
 - [x] `vyb fmt` code formatter (`--format`/`--check`; idempotent core, see Testing & Tooling)
 - [x] `vyb doc` documentation generator (`vyb doc <file> [-o outdir]`, see Testing & Tooling)
-- [ ] Comprehensive language reference manual
+- [x] Comprehensive language reference manual — the authoritative surface is the
+  Programmer's Guide (full narrative tour, `§1–4`), the lookup quick-reference
+  `docs/refman/language.md` (keywords/operators/types/forms with cross-links), and
+  the EBNF grammar in `PROGRAMMERS_GUIDE.md` Appendix D; all validated by
+  `refman --check` in CI.
 - [ ] Test suite covering all 1.0 features
 - [x] `vyb test` integrated test runner (`vyb test [paths...]`, see Testing & Tooling)
 - [ ] Debugger integration validated end-to-end with `gdb`/`lldb`
