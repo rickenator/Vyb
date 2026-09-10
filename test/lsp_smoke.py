@@ -138,6 +138,20 @@ def main():
         labels = [i["label"] for i in items] if items else []
         check("completion(add,Point)", "add" in labels and "Point" in labels)
 
+        # Dot-completion: after "p." offer Point's struct fields (x, y).
+        # Use a comment line so the document still parses cleanly.
+        compDoc = doc + "// p.\n"
+        c.notify("textDocument/didChange",
+                 {"textDocument": {"uri": uri, "version": 2},
+                  "contentChanges": [{"text": compDoc}]})
+        p = c.until("textDocument/publishDiagnostics")
+        comp = c.request(seq := seq + 1, "textDocument/completion",
+                         {"textDocument": {"uri": uri},
+                          "position": {"line": 10, "character": 5}})
+        dotlabels = [i["label"] for i in comp] if comp else []
+        check("dot-completion(Point fields)",
+              "x" in dotlabels and "y" in dotlabels)
+
         # Lint diagnostics via didChange: self-comparison 'a == a' -> warning sev 2
         dirty = doc + ("\nself_check(a<Int>)<Int> -> {\n"
                        "    if (a == a) {\n        return 1\n    }\n"
@@ -157,7 +171,7 @@ def main():
         if c.proc.poll() is None:
             c.proc.kill()
 
-    total = 7
+    total = 8
     passed = total - len(failures)
     if failures:
         print("LSP smoke FAILED: %d/%d passed -> " % (passed, total) + ", ".join(failures))

@@ -201,6 +201,8 @@ public:
     std::string uri;
     std::string text;
     std::vector<Symbol> symbols;
+    // Struct fields + bind/aspect methods, offered on dot-completion (`obj.`).
+    std::vector<std::pair<std::string, std::string>> dotSuggest_; // name, kind
     bool shuttingDown = false;
 
     explicit Server(ParseFn p) : parse(std::move(p)) {}
@@ -239,6 +241,7 @@ public:
     // ---- document model ----
     void reindex() {
         symbols.clear();
+        dotSuggest_.clear();
         std::vector<std::string> errors;
         auto module = parse(text, uri, errors);
         if (module) {
@@ -249,6 +252,14 @@ public:
                 sym.line = d->loc.line; sym.col = d->loc.column;
                 if (!buildSymbol(d, sym)) continue;
                 symbols.push_back(sym);
+                // Collect dot-completion candidates: struct fields and bind methods.
+                if (auto* st = dynamic_cast<ast::StructDeclaration*>(d)) {
+                    for (auto& f : st->fields)
+                        if (f && f->name) dotSuggest_.push_back({f->name->name, "field"});
+                } else if (auto* bd = dynamic_cast<ast::BindDeclaration*>(d)) {
+                    for (auto& m : bd->methods)
+                        if (m && m->id) dotSuggest_.push_back({m->id->name, "method"});
+                }
             }
         }
     }
@@ -443,14 +454,52 @@ public:
 
     Json completions(const Json& params) {
         Json items = Json::makeArr();
-        const Json* td = params.get("textDocument");
         const Json* pos = params.get("position");
-        std::string prefix;
-        if (pos) {
-            std::string w = wordAt((unsigned)pos->get("line")->num + 0, (unsigned)pos->get("character")->num);
-            // wordAt may have grabbed a trailing '.'; restrict to identifier prefix before cursor
-            prefix = w;
+        if (!pos) return items;
+        unsigned line0 = (unsigned)pos->get("line")->num;
+        unsigned col0 = (unsigned)pos->get("character")->num;
+
+        // Text before the cursor on this line, for member-access (:dot) detection.
+        std::string before;
+        {
+            std::vector<std::string> lines; std::string cur;
+            for (size_t i = 0; i <= text.size(); ++i) {
+                if (i == text.size() || text[i] == '\n') { lines.push_back(cur); cur.clear(); }
+                else cur += text[i];
+            }
+            if (line0 < lines.size()) {
+                std::string ln = lines[line0];
+                if (col0 > ln.size()) col0 = (unsigned)ln.size();
+                before = ln.substr(0, col0);
+            }
         }
+
+        // Member-access completion: cursor after `obj.` (or `obj.na`) -> offer
+        // struct fields and bind/aspect methods.
+        size_t lastDot = before.find_last_of('.');
+        bool memberDot = false;
+        if (lastDot != std::string::npos) {
+            memberDot = true;
+            // Only a genuine member dot if it follows a word char (not `..`, `0.5`-like, etc.)
+            if (lastDot > 0 && !(std::isalnum((unsigned char)before[lastDot - 1]) || before[lastDot - 1] == '_'))
+                memberDot = false;
+        }
+        if (memberDot) {
+            std::string filter = before.substr(lastDot + 1);
+            for (auto& sug : dotSuggest_) {
+                if (filter.empty() || sug.first.rfind(filter, 0) == 0) {
+                    Json it = Json::makeObj();
+                    it.set("label", Json::makeStr(sug.first));
+                    it.set("kind", Json::makeNum(sug.second == "field" ? 4 : (sug.second == "method" ? 2 : 6)));
+                    it.set("detail", Json::makeStr(sug.second));
+                    items.arr.push_back(it);
+                }
+            }
+            return items;
+        }
+
+        // Otherwise: completion over the document's declarations.
+        std::string prefix = wordAt(line0, col0);
         for (auto& s : symbols) {
             if (prefix.empty() || s.name.rfind(prefix, 0) == 0) {
                 Json it = Json::makeObj();

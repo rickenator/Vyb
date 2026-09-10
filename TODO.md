@@ -874,7 +874,7 @@ with `pass` for multi-statement case bodies. Needs polishing:
 - [x] **`vyb lsp`** — Launch LSP server mode (JSON-RPC 2.0 over stdio, Content-Length framing). Shipped as `vyb lsp`; protocol smoke test `test/lsp_smoke.py` runs in hosted CI.
 - [x] **Go-to-definition** — `textDocument/definition` resolves an identifier to its declaration (top-level functions, structs, enums, aliases, aspects, imports of the open document).
 - [x] **Hover documentation** — `textDocument/hover` returns the declaration's kind + signature. Doc-comment (`///`) text in hover is a follow-on.
-- [x] **Completion** — `textDocument/completion` proposes the open document's declaration names (functions, structs/enums/aliases, imports). Struct-field / aspect-method completion is a follow-on.
+- [x] **Completion** — `textDocument/completion` proposes the open document's declaration names, and after `obj.` (dot-completion) offers struct fields + bind/aspect methods. Regression: `test/lsp_smoke.py` (decl + dot checks).
 - [x] **Diagnostics** — `textDocument/publishDiagnostics` after open/change: parse/syntax errors (severity 1) + `vyb check`-style AST lint warnings (severity 2).
 
 ### REPL
