@@ -106,6 +106,52 @@ being treated as an untracked footnote.
 
 ---
 
+## GPU / Device Kernels (CUDA/NVPTX)
+
+Vyb can lower a module as pure NVPTX device code and emit PTX, then launch it from a Vyb
+`main` through the CUDA driver API. Landed from **#198** (NVPTX backend + device
+intrinsics), **#199** (launch-arg packing — a two-level `kernelParams` to avoid a libcuda
+host-pointer SIGSEGV), **#203** (fp16/bf16 + GGUF q4_0 dequant on device). Ship shape is a
+**P0 feasibility probe** — device lowering, intrinsics, acceptance gates, and the host
+launch path are done; the surrounding ecosystem is staged. Reference material:
+`doc/CUDA.md` (design) and `PROGRAMMERS_GUIDE.md` §9 (authoritative manual).
+
+### Shipped (probe)
+- [x] **`--kernel` NVPTX lowering** — `--kernel` / `--ptx <path>` / `--gpu sm_xx`
+  (`$VYB_KERNEL_GPU`, default `sm_86`) compiles to the `nvptx64-nvidia-cuda` target and
+  emits PTX via the in-process NVPTX backend; kernel mode suppresses host-runtime
+  `__vyb_*` externs and DWARF debug info.
+- [x] **Kernel vs. helper** — Void-returning top-level functions become PTX `.entry`
+  kernels (`nvvm.kernel` + `PTX_Kernel`); value-returning functions stay `.visible .func`
+  device helpers.
+- [x] **Device intrinsic surface** — thread/block/grid/lane reads, `kernel_barrier`,
+  device-global `ld_*`/`st_*` (addrspace 1), fp16/bf16, shared memory
+  (`ld/st_shared_f64`, addrspace 3), and monotonic atomics — recognized by semantic and
+  lowered directly by codegen (no symbol resolution).
+- [x] **`deq_q4_0` on device** — inline GGUF q4_0 dequant `(nibble − 8) · d`; the 4-bit
+  weight path for a packed ~2.2 GB 4B model without an fp16 mirror.
+- [x] **Compile-time acceptance gates** — host-runtime-free check (no declared-only
+  `__vyb_*`), PTX symbol-presence check (no silently-dropped kernels), best-effort
+  `ptxas --gpu-name=<arch>` validation (rejection is a hard error).
+- [x] **Host launch via CUDA driver API (`freedom` FFI)** — `fixtures/cuda/launch_fill.vyb`
+  drives cuInit → cuModuleLoadData → cuLaunchKernel → cuMemcpyDtoH with the #199
+  two-level `kernelParams` packing (a `void*` slot holds the arg value; pass `&slot`).
+
+### Staged follow-ons
+- [ ] **Real shared-memory kernel** — the reference `matmul.vyb` is register-tiled
+  (TILE=4, no smem); a blocking shared-memory tiled matmul is the natural first
+  real-performance kernel.
+- [ ] **Higher-level kernel/launch ergonomics** — a typed host-side wrapper (buffers,
+  launch DSL) over the raw hand-written driver-API packing.
+- [ ] **Accelerator-library bindings** — cuBLAS / cuDNN / cuFFT beyond the raw driver API.
+- [ ] **GPU CI / hardware-backed integration workload** — a real NVIDIA host (or runner)
+  executing the emitted PTX end-to-end; today device paths validate against `build/vyb`
+  and `ptxas`, with hardware runs out-of-tree.
+- [ ] **Productionize arch targets** — validate/tune beyond the `sm_86` default
+  (`sm_90`, etc.) and decide kernel-mode's place in the 1.0 release surface.
+
+---
+
 ## Overall Completion Estimate
 
 | Domain | Done | Remaining |
@@ -125,6 +171,7 @@ being treated as an untracked footnote.
 | Lambda/closure codegen | ~90% | Closure env structs, mutable/move/`our` capture, returned-closure env release shipped; rare receiver edge cases remain |
 | Module system (`import`/`smuggle`/`bundle`) | ~90% | Phases 1.1–1.5 shipped (`ModuleRegistry`, aliases, `share`/bundle visibility, path resolution); stdlib package integration / `vyb.toml` pending |
 | FFI (`extern "C"`) | ~98% | Complete: extern blocks, ABI aliases, `#[repr(C)]`, native `--link`, variadics, OpenSSL binding, `vyb bindgen` (MVP + libclang `--full`) (`test/ffi/`, `test/bindgen/`); niche caveat: bindgen macros calling other macros unbound |
+| GPU / device kernels (CUDA/NVPTX) | ~40% | **Probe shipped** (#198/#199/#203): `--kernel` NVPTX lowering, device intrinsics, acceptance gates, host driver-API launch. Staged: shared-memory tiled matmul, launch ergonomics, accelerator bindings, GPU CI/hardware, arch productionizing |
 | Standard library | ~85% | Vec, String, HashMap/HashSet, BTreeMap, File I/O, Math, `threads`, `channels`, `tasks`, `asyncs`, `time`, `network` (TCP/UDP/`TcpStream`/`TcpListener`/`UdpSocket`), HTTP server + client, TLS, verified HTTPS client shipped |
 | Introspection (`typeof`/`typename`) | ~75% | Downcasting, type assertions |
 | Auto-serialization | ~80% | Edge cases remain |

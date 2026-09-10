@@ -136,6 +136,27 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 | Variadic C functions | ✅ | A trailing `...` marks an extern declaration variadic (isVarArg); call sites accept extra args and auto-extract Vyb `String` data pointers for `%s` (`test/ffi/variadic_c_printf.vyb`) |
 | `vyb bindgen` (MVP + libclang `--full`) | ✅ | `vyb bindgen <header.h> [-o out.vyb]` parses a C subset and emits importable extern/`repr(C)`/enum bindings (`test/bindgen/*`). `--full` adds the libclang full-preprocessor backend (`#include` expansion, conditional evaluation, object-like/expression/function-like macros (incl. comparison, C `?:` ternary, and string bodies mapped to typed Int/Float/Bool/String functions; `full_preproc.h`/`test_full_preproc_bindings.vyb`). Fixed-size C array struct fields bind as value-array fields (`arrstruct.h`/`test_arrstruct_bindings.vyb`); unions bind as `#[repr(C)]` structs (`unions.h`/`test_unions_bindings.vyb`); flexible array members skip.) |
 
+## GPU / Device Kernels (CUDA/NVPTX)
+
+Feature landed from issues #198 (backend + device intrinsics), #199 (launch arg
+packing), #203 (fp16/bf16 + GGUF q4_0 dequant on device). Self-described as a **P0
+feasibility probe**; device lowering and intrinsics are implemented and the host launch
+path is worked out, but the ecosystem (higher-level ergonomics, real accelerators, GPU CI)
+is staged. See `doc/CUDA.md` (design) and `PROGRAMMERS_GUIDE.md` §9 (authoritative manual).
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `--kernel` NVPTX lowering (`--kernel` / `--ptx` / `--gpu`, `$VYB_KERNEL_GPU`, default `sm_86`) | ✅ | Compiles a module to the `nvptx64-nvidia-cuda` target and emits PTX via the in-process NVPTX backend (`compile_vyb_kernel`, src/main.cpp). Kernel mode suppresses host-runtime `__vyb_*` externs and DWARF debug info. |
+| Kernel vs. helper functions | ✅ | Void-returning top-level functions get `nvvm.kernel` + `PTX_Kernel` → PTX `.entry` (launchable); value-returning functions stay `.visible .func` device helpers. |
+| Device intrinsics (thread/block/lane, barrier, device-global ld/st, fp16/bf16, shared mem, atomics) | ✅ | Recognized by semantic (`kernelIntrinsicReturnType`) and lowered by codegen (`emitKernelIntrinsic`) to NVPTX: `llvm.nvvm.read.ptx.sreg.*`, `llvm.nvvm.barrier0`, addrspace(1) global loads/stores, addrspace(3) shared buffer, monotonic atomics. |
+| `deq_q4_0` (GGUF q4_0 dequant on device) | ✅ | \( nibble − 8 \) · d per `[f16 d][32 x 4-bit]` block; 4-bit weight path for a packed ~2.2 GB 4B model (`p203_verify.vyb`). |
+| Compile-time acceptance gates | ✅ | Host-runtime-free check (no declared-only `__vyb_*`), PTX symbol-presence check (no silently-dropped kernels), and best-effort `ptxas --gpu-name=<arch>` validation. |
+| Host launch via CUDA driver API (`freedom` FFI) | ✅ | `launch_fill.vyb` drives cuInit/cuModuleLoadData/cuLaunchKernel/cuMem{cpy,Alloc,Free} with the #199 two-level `kernelParams` packing (a `void*` slot holds the arg value; pass `&slot`). |
+| Shared-memory tile matmul (TILE=4, no smem) | 🚧 | Reference `matmul.vyb` is register-tiled; a real shared-memory blocking kernel is a follow-on. |
+| Higher-level kernel/launch ergonomics (host API, buffers, launch DSL) | 📋 | Today the host pack is hand-written `extern "C"` `freedom` calls; a typed wrapper / launch ergonomic is planned. |
+| cuBLAS / cuDNN / cuFFT bindings | 📋 | No accelerator-library bindings beyond the raw driver API yet. |
+| GPU CI / hardware-backed integration workload | 📋 | Device paths validate against `build/vyb`; running kernels on real hardware is out-of-tree (an NVIDIA host + `ptxas`) and not in CI. |
+
 ---
 
 ## Standard Module Error Handling
@@ -158,4 +179,4 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 
 **Runtime behavior (SIGPIPE):** the runtime installs `SIGPIPE = SIG_IGN` process-wide (a constructor in `runtime/vyb_runtime.c`) so a TLS `send` after a peer RST returns `EPIPE` instead of killing the process. This is global: any program that links the runtime gets the non-default `SIGPIPE` behavior, so a write to a closed pipe/peer reports an error rather than raising `SIGPIPE`. Applications that need the default `SIGPIPE` kill-semantics can re-install the handler at startup (`signal(SIGPIPE, SIG_DFL)`).
 
-*Last updated: v0.7.4 (2026-08-28)*
+*Last updated: 2026-09-09 (added GPU / Device Kernels (CUDA/NVPTX) section — issue #198/#199/#203)*
