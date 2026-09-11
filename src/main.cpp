@@ -1656,9 +1656,10 @@ std::vector<fs::path> project_module_paths(const vyb::Manifest& m) {
             paths.push_back(p);
             auto depSrc = p / "src";
             if (fs::is_directory(depSrc)) paths.push_back(depSrc);
-        } else if (d.source == "github" || d.source == "git") {
-            // `github:` / `git:` deps materialize as .vybmod/<name>/mod.vyb, so the
-            // search path is the .vybmod CONTAINER (import <name> -> <name>/mod.vyb).
+        } else if (d.source == "github" || d.source == "git" || d.source == "version") {
+            // `github:` / `git:` / registry `version:` deps materialize as
+            // .vybmod/<name>/mod.vyb, so the search path is the .vybmod CONTAINER
+            // (import <name> -> <name>/mod.vyb).
             fs::path p = m.rootDir / ".vybmod";
             if (fs::is_directory(p))
                 if (std::find(paths.begin(), paths.end(), p.lexically_normal()) == paths.end())
@@ -1681,7 +1682,7 @@ void write_lockfile(const vyb::Manifest& m) {
             out << "[[" << d.name << "]]\n";
             out << "source = \"path\"\n";
             out << "resolved = \"" << fs::absolute(p).lexically_normal().string() << "\"\n\n";
-        } else if (d.source == "github" || d.source == "git") {
+        } else if (d.source == "github" || d.source == "git" || d.source == "version") {
             fs::path p = m.rootDir / ".vybmod" / d.name;
             out << "[[" << d.name << "]]\n";
             out << "source = \"" << d.source << "\"\n";
@@ -1689,13 +1690,94 @@ void write_lockfile(const vyb::Manifest& m) {
         } else {
             out << "[[" << d.name << "]]\n";
             out << "source = \"" << d.source << "\"\n";
-            out << "resolved = \"UNRESOLVED - " << (d.source == "git" ? "git-clone backend not implemented" : "version resolution requires a package registry") << "\"\n\n";
+            out << "resolved = \"UNRESOLVED\"\n\n";
         }
     }
 }
 
-// git-clone backend for `git:` dependencies. Runs `git clone --depth 1 <url> <target>`
-// (shallow; full history isn't needed for module resolution). Returns true on success.
+// Package registry backends for `version:` dependencies.
+//
+// v1 is a DIRECTORY registry (no service): packages publish under
+//   <registry>/<name>/<version>/mod.vyb (+ *.vyb siblings)
+// and `vyb build` resolves a `{ version = "..." }` dep by enumerating those
+// version dirs, choosing the best match for the spec, and copying it into
+// .vybmod/<name>/. The registry root resolves from VYB_REGISTRY (env) else
+// ~/.vyb/registry. A central/remote registry is the same layout served over
+// HTTP (file:// and a plain directory both work today).
+
+static fs::path registry_root(const vyb::Manifest&, bool* ok = nullptr) {
+    if (const char* e = getenv("VYB_REGISTRY")) {
+        fs::path p(e);
+        if (p.string().rfind("file:", 0) == 0) p = fs::path(p.string().substr(5));
+        if (ok) *ok = true;
+        return p;
+    }
+    if (const char* h = getenv("HOME")) {
+        if (ok) *ok = true;
+        return fs::path(h) / ".vyb" / "registry";
+    }
+    if (ok) *ok = false;
+    return fs::path();
+}
+
+// Parse "x.y.z" -> (x,y,z). Returns true on success.
+static bool parse_version(const std::string& s, int* X, int* Y, int* Z) {
+    int x = 0, y = 0, z = 0;
+    if (sscanf(s.c_str(), "%d.%d.%d", &x, &y, &z) == 3) { *X = x; *Y = y; *Z = z; return true; }
+    return false;
+}
+
+// Does version (x,y,z) match the spec? "latest"/"" = any; exact "1.2.3";
+// a bare component "1" or "1.2" is a prefix match (highest of that line).
+static bool match_spec(const std::string& spec, int x, int y, int z) {
+    if (spec.empty() || spec == "latest") return true;
+    int sx, sy, sz;
+    if (parse_version(spec, &sx, &sy, &sz)) return x == sx && y == sy && z == sz;
+    if (spec.find('.') == std::string::npos) return x == atoi(spec.c_str());   // "1" -> highest 1.x.y
+    int nx, ny;                                                                  // "1.2" -> highest 1.2.y
+    if (sscanf(spec.c_str(), "%d.%d", &nx, &ny) == 2) return x == nx && y == ny;
+    return true; // unknown spec form -> treat as "any"
+}
+
+// Pick the best version dir under <reg>/<name> for `spec`. Out: source dir.
+static bool resolve_version_dep(const std::string& name, const std::string& spec,
+                                const fs::path& reg, fs::path& outSrc,
+                                std::string& outVer, std::string& err) {
+    fs::path pkg = reg / name;
+    std::error_code ec;
+    if (!fs::is_directory(pkg, ec)) { err = "package '" + name + "' not found in registry (" + pkg.string() + ")"; return false; }
+    fs::path best; int bx = -1, by = -1, bz = -1;
+    for (auto& e : fs::directory_iterator(pkg, fs::directory_options::skip_permission_denied, ec)) {
+        if (!e.is_directory()) continue;
+        std::string v = e.path().filename().string();
+        int x, y, z;
+        if (!parse_version(v, &x, &y, &z)) continue;
+        if (!match_spec(spec, x, y, z)) continue;
+        if (x > bx || (x == bx && y > by) || (x == bx && y == by && z > bz)) {
+            best = e.path(); bx = x; by = y; bz = z;
+        }
+    }
+    if (best.empty()) {
+        err = "no version of '" + name + "' matches spec '" + (spec.empty() ? "latest" : spec) + "' in registry (" + pkg.string() + ")";
+        return false;
+    }
+    outSrc = best; outVer = best.filename().string(); return true;
+}
+
+// Copy a package's module files (*.vyb) from src into dst (dst created).
+static bool copy_package_files(const fs::path& src, const fs::path& dst, std::string& err) {
+    std::error_code ec;
+    fs::create_directories(dst, ec);
+    for (auto& e : fs::directory_iterator(src, fs::directory_options::skip_permission_denied, ec)) {
+        if (e.is_directory()) continue;
+        if (e.path().extension() != ".vyb") continue;
+        fs::copy_file(e.path(), dst / e.path().filename(), fs::copy_options::overwrite_existing, ec);
+        if (ec) { err = "failed to copy " + e.path().string() + ": " + ec.message(); return false; }
+    }
+    return true;
+}
+
+
 static bool gitClone(const std::string& url, const fs::path& target) {
     pid_t pid = fork();
     if (pid == 0) {
@@ -1793,11 +1875,39 @@ int run_build_command(int argc, char** argv, const std::string& exeArg) {
                     return 1;
                 }
             }
+        } else if (d.source == "version") {
+            fs::path depDir = root / ".vybmod" / d.name;
+            std::error_code ec;
+            if (!fs::is_directory(depDir, ec) || !fs::exists(depDir / "mod.vyb", ec)) {
+                fs::path reg = registry_root(*manifest);
+                if (reg.empty()) {
+                    std::cerr << "Error: no package registry configured for version dependency '"
+                              << d.name << "'. Set VYB_REGISTRY (or default ~/.vyb/registry) and "
+                              << "publish with `vyb mod publish <dir>`.\n";
+                    return 1;
+                }
+                fs::path src; std::string ver, err;
+                if (!resolve_version_dep(d.name, d.version, reg, src, ver, err)) {
+                    std::cerr << "Error: " << err << "\n";
+                    return 1;
+                }
+                std::cerr << "Fetching " << d.name << "@" << ver << " from registry ...\n";
+                fs::create_directories(root / ".vybmod", ec);
+                fs::remove_all(depDir, ec);
+                if (!copy_package_files(src, depDir, err)) {
+                    std::cerr << "Error: " << err << "\n";
+                    return 1;
+                }
+                if (!fs::exists(depDir / "mod.vyb")) {
+                    std::cerr << "Error: registry package '" << d.name << "@" << ver
+                              << "' has no mod.vyb at its root.\n";
+                    return 1;
+                }
+            }
         } else if (d.source != "path") {
             std::cerr << "Error: dependency '" << d.name << "' uses source '"
-                      << d.source << "', not supported yet (#165): "
-                      << "version resolution requires a package registry (none exists yet)"
-                      << ". Use a 'path', 'github:' or 'git:' dependency."
+                      << d.source << "', not supported."
+                      << " Use a 'path', 'github:', 'git:' or 'version:' dependency."
                       << std::endl;
             return 1;
         }
@@ -4182,11 +4292,35 @@ static bool mod_verify_index(const std::string& indexPath, const std::string& si
     return mod_verify_ed25519(index, sig, mod_resolve_pubkey(optKey), err);
 }
 
+static int run_mod_publish(const fs::path& pkgDir, const fs::path& reg) {
+    std::string merr;
+    auto man = vyb::load_manifest(pkgDir, &merr);
+    if (!man) { std::cerr << "Error: " << merr << "\n"; return 1; }
+    if (man->name.empty() || man->version.empty()) {
+        std::cerr << "Error: package needs [package] name + version in " << (pkgDir / "vyb.toml").string() << "\n";
+        return 1;
+    }
+    if (!fs::exists(pkgDir / "mod.vyb")) {
+        std::cerr << "Error: no mod.vyb at package root " << pkgDir.string() << "\n";
+        return 1;
+    }
+    fs::path dst = reg / man->name / man->version;
+    std::error_code ec;
+    fs::create_directories(dst, ec);
+    std::string err;
+    if (!copy_package_files(pkgDir, dst, err)) { std::cerr << "Error: " << err << "\n"; return 1; }
+    if (!fs::exists(dst / "mod.vyb")) { std::cerr << "Error: publish failed; mod.vyb not copied\n"; return 1; }
+    std::cout << "Published " << man->name << "@" << man->version << " -> " << fs::absolute(dst).string() << "\n";
+    return 0;
+}
+
 static int run_mod_command(int argc, char** argv, const std::string& exePath) {
     if (argc >= 1 && (std::string(argv[0]) == "--help" || std::string(argv[0]) == "help")) {
         std::cout << "Usage:\n"
                   << "  vyb mod install <path:DIR|github:owner/repo/path>[@sha256:HEX] [--require-signed]\n"
                   << "  vyb mod verify-signed <INDEX.json> [<INDEX.sig>]\n"
+                  << "  vyb mod publish <pkgdir>  # publish a package (dir with vyb.toml + mod.vyb)\n"
+                  << "                              # into the registry (VYB_REGISTRY | ~/.vyb/registry)\n"
                   << "\n"
                   << "  install fetches a module (+ relative-import siblings) into .vybmod/<name>/,\n"
                   << "  pin-verifies an optional @sha256:HEX, records vyb.lock, and registers a path\n"
@@ -4228,8 +4362,19 @@ static int run_mod_command(int argc, char** argv, const std::string& exePath) {
         std::cout << "SIGNED VERIFY OK\n";
         return 0;
     }
+    if (argc >= 1 && std::string(argv[0]) == "publish") {
+        if (argc < 2) { std::cerr << "Error: vyb mod publish <pkgdir>\n"; return 1; }
+        fs::path pkgDir(argv[1]);
+        std::error_code ec;
+        if (!fs::is_directory(pkgDir, ec)) { std::cerr << "Error: not a directory: " << pkgDir.string() << "\n"; return 1; }
+        bool ok = false;
+        fs::path reg = registry_root(vyb::Manifest{}, &ok);
+        if (!ok || reg.empty()) { std::cerr << "Error: no registry configured (set VYB_REGISTRY)\n"; return 1; }
+        fs::create_directories(reg, ec);
+        return run_mod_publish(pkgDir, reg);
+    }
     if (argc < 1 || std::string(argv[0]) != "install") {
-        std::cerr << "Error: unknown vyb mod subcommand (expected 'install'/'verify-signed'); try 'vyb mod help'.\n";
+        std::cerr << "Error: unknown vyb mod subcommand (expected 'install'/'verify-signed'/'publish'); try 'vyb mod help'.\n";
         return 1;
     }
     std::string spec;

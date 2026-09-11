@@ -68,6 +68,12 @@ jobs:
         # clone-on-build into .vybmod, vyb.lock source="git", and a runnable binary.
         run: python3 test/gitdep_smoke.py
 
+      - name: registry + version dependency smoke test
+        # Publishes a package via `vyb mod publish` into a temp VYB_REGISTRY dir,
+        # resolves a `{ version = "..." }` dep on build (prefix->highest + exact),
+        # asserts vyb.lock source="version", and runs the built binary.
+        run: python3 test/registry_smoke.py
+
       - name: Emit + ptxas-validate kernel PTX across arches
         # The --kernel path runs ptxas automatically and FAILS the build if it
         # rejects the artifact (P2.2 gate). For each fixture x arch we assert the

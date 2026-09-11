@@ -872,9 +872,15 @@ with `pass` for multi-statement case bodies. Needs polishing:
   AUTO-CLONES it into `.vybmod/<name>/` on build (shallow clone; the repo root's `mod.vyb`
   is the module), wires `import <name>` to `.vybmod/<name>/mod.vyb`, and records
   `source="git", resolved=...` in `vyb.lock`. Regression: `test/gitdep_smoke.py` in hosted CI.
-  `version:`-spec deps (registry-gated lock pins, offline/cache) and the central package
-  registry remain staged beyond the smuggle channel.
-- [ ] **Package registry** — Central registry for published packages
+- [x] **Package registry + `version:`-spec deps** — a package registry transport and
+  `vyb build` resolution for `name = { version = "..." }` deps. v1 is a DIRECTORY
+  registry (no service): `vyb mod publish <dir>` copies a package's module files into
+  `<registry>/<name>/<version>/`; `vyb build` resolves a version dep by enumerating
+  those dirs (exact / prefix / "latest" semver matching), materializes the best match
+  into `.vybmod/<name>/`, and records `source="version", resolved=...` in `vyb.lock`.
+  Registry root = `VYB_REGISTRY` (env, `file://` ok) else `~/.vyb/registry`. A central/
+  remote registry is the same layout served over HTTP. Regression:
+  `test/registry_smoke.py` (publish, prefix->highest, exact, lockfile, run) in hosted CI.
 
 ### Language Server Protocol (LSP)
 - [x] **`vyb lsp`** — Launch LSP server mode (JSON-RPC 2.0 over stdio, Content-Length framing). Shipped as `vyb lsp`; protocol smoke test `test/lsp_smoke.py` runs in hosted CI.
