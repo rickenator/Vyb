@@ -1,0 +1,69 @@
+// @test: VybChain signature layer — authenticity + key rotation + checkpoints (#219)
+// @description: a SignedChain wraps the integrity Chain with Ed25519 per-block
+//   signatures. Verifies a correctly signed chain (genesis key == registry,
+//   same-key appends, and an AUTHORIZED key rotation); rejects a wrong registry
+//   root, a record-edited chain re-wrapped with the ORIGINAL signatures (the
+//   signature gate, not just integrity), and a rotation signed by the WRONG
+//   (not-previous) key; and rounds a registry checkpoint (seq, tip) with tamper
+//   rejection.
+// @category: modules, chain, crypto, signatures, stdlib, legitimization
+// @expect: pass
+// @expect-output: signed-ok
+// @expect-return: 0
+
+import chain::{signed_genesis, signed_append, signed_verify, tip_hash, block_root, block_hash,
+               sign_checkpoint, verify_checkpoint, chain_checkpoint, Record, Chain, ChainBlock, SignedChain}
+import crypto::{ed25519_publickey}
+
+main()<Int> -> {
+    # RFC-ed25519 seeds; k1 = genesis/registry key, k2 = rotate-to, k3 = an outsider.
+    seed1<String> = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
+    seed2<String> = "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb"
+    seed3<String> = "c5aa8df43f9f837bedb7442f31dcb7b166d38535076f094b85ce3a2e0b4458f7"
+    regPub<String> = ed25519_publickey(seed1)
+
+    r1<Vec<Record>> = Vec(); r1.push(Record { label = "name", value = "busybox" })
+    r2<Vec<Record>> = Vec(); r2.push(Record { label = "version", value = "1.36.1" })
+    r3<Vec<Record>> = Vec(); r3.push(Record { label = "arch", value = "x86_64" })
+
+    # 1. genesis + same-key append + AUTHORIZED rotation must all verify
+    s<SignedChain> = signed_genesis("vybos/boot", r1, seed1)
+    s = signed_append(s, r2, seed1, seed1)          # same key (no rotation)
+    s = signed_append(s, r3, seed2, seed1)          # ROTATE k1 -> k2, authorized by k1
+    if (!signed_verify(s, regPub)) { println("VALID_REJECTED"); return 1 }
+
+    # 2. wrong registry root must be rejected
+    if (signed_verify(s, ed25519_publickey(seed2))) { println("WRONG_REGISTRY_ACCEPTED"); return 2 }
+
+    # 3. SIGNATURE gate: edit block 0's sealed record, recompute a CONSISTENT
+    #    chain (so plain integrity verify would PASS), but keep the ORIGINAL
+    #    signatures wired to the old hashes -> the sig check must reject.
+    b0<ChainBlock> = s.chain.blocks.get(0)
+    rec<Record> = s.chain.blocks.get(0).records.get(0)
+    rec.value = "evilbox"
+    evrecs<Vec<Record>> = Vec(); evrecs.push(rec)
+    evroot<String> = block_root(evrecs)
+    evhash<String> = block_hash(0, s.chain.origin, evroot)
+    b0e<ChainBlock> = ChainBlock { index = 0, prev_hash = s.chain.origin, root = evroot, hash = evhash, records = evrecs }
+    tb<Vec<ChainBlock>> = Vec()
+    tb.push(b0e)
+    tb.push(s.chain.blocks.get(1))
+    tb.push(s.chain.blocks.get(2))
+    tchain<Chain> = Chain { origin = s.chain.origin, blocks = tb }
+    forged<SignedChain> = SignedChain { chain = tchain, signers = s.signers, sigs = s.sigs, rotations = s.rotations }
+    if (signed_verify(forged, regPub)) { println("RECORD_TAMPER_ACCEPTED"); return 3 }
+
+    # 4. rotation signed by the WRONG (not-previous) key must be rejected
+    bad<SignedChain> = signed_genesis("vybos/boot", r1, seed1)
+    bad = signed_append(bad, r2, seed2, seed3)      # rotates to k2 but old_seed=seed3 != k1
+    if (signed_verify(bad, regPub)) { println("BAD_ROTATION_ACCEPTED"); return 4 }
+
+    # 5. registry checkpoint: sign (tip, seq=3) and verify; reject tampered seq
+    tip<String> = tip_hash(s.chain)
+    ck<String> = chain_checkpoint(s, seed1)
+    if (!verify_checkpoint(tip, 3, regPub, ck)) { println("CK_VERIFY_FAIL"); return 5 }
+    if (verify_checkpoint(tip, 4, regPub, ck)) { println("CK_WRONG_SEQ_ACCEPTED"); return 6 }
+
+    println("signed-ok")
+    return 0
+}

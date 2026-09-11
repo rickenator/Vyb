@@ -36,7 +36,7 @@
 #
 # NOTE: Vyb ranges are INCLUSIVE; iterate 0..len-1 and guard empties.
 
-import crypto::{sha256}
+import crypto::{sha256, ed25519_publickey, ed25519_sign, ed25519_verify}
 
 share(all)
 struct Record { label<String>, value<String> }
@@ -306,3 +306,123 @@ deserialize(text<String>)<Chain> -> {
     return Chain { origin = origin, blocks = blocks }
 }
 
+#
+# =============================================================================
+# VybChain signature layer (issue #8): authenticity over the plain integrity
+# chain. A SignedChain wraps a `Chain` with per-block signing metadata:
+#   SignedChain { chain, signers[], sigs[], rotations[] }
+#     signers[i]   = public key (64-hex) that signed block i.
+#     sigs[i]      = Ed25519(signers[i], block_i.hash | prev_signer) where
+#                    prev_signer = "" for genesis, else signers[i-1]. Signing the
+#                    block hash (which already binds index|prev|root) authenticates
+#                    the whole block; binding the previous signer ALSO makes the
+#                    signer list tamper-evident.
+#     rotations[i] = "" or Ed25519(signer_{i-1}, "rotate:"+signers[i]) when block i
+#                    rotated to a NEW key — the OLD key must authorize the handoff,
+#                    so a chain cannot silently change hands.
+#   Trust root: the genesis signer MUST equal the registry's public key.
+#   Checkpoints: a registry signs (seq, tip) so an external party can validate the
+#   chain's current state without holding the whole ledger.
+# =============================================================================
+# NOTE: Vyb ranges are INCLUSIVE; guard empties (len == 0).
+
+share(all)
+struct SignedChain {
+    chain<Chain>,
+    signers<Vec<String>>,
+    sigs<Vec<String>>,
+    rotations<Vec<String>>
+}
+
+# Seal the genesis block (index 0) and sign it with `seed`. The genesis signer
+# becomes the chain's trust root (must match the registry when verified).
+share(all)
+signed_genesis(origin<String>, records<Vec<Record>>, seed<String>)<SignedChain> -> {
+    c<Chain> = new_chain(origin, records)
+    signer<String> = ed25519_publickey(seed)
+    h<String> = c.blocks.get(0).hash
+    sig<String> = ed25519_sign(seed, h + "|")
+    signers<Vec<String>> = Vec(); signers.push(signer)
+    sigs<Vec<String>> = Vec(); sigs.push(sig)
+    rotations<Vec<String>> = Vec(); rotations.push("")
+    return SignedChain { chain = c, signers = signers, sigs = sigs, rotations = rotations }
+}
+
+# Append a block sealing `records`, signed by `seed`. If the new block's signer
+# differs from the previous (key rotation), the PREVIOUS key (`old_seed`) must
+# authorize the handoff via a `"rotate:"+new_signer` signature stored in
+# rotations[]; signed_verify enforces it. Value semantics: the caller's
+# SignedChain is untouched.
+share(all)
+signed_append(sc<SignedChain>, records<Vec<Record>>, seed<String>, old_seed<String>)<SignedChain> -> {
+    c<Chain> = sc.chain
+    idx<Int> = c.blocks.len()
+    prev<String> = c.origin
+    if (idx > 0) { prev = c.blocks.get(idx - 1).hash }
+    root<String> = block_root(records)
+    h<String> = block_hash(idx, prev, root)
+    b<ChainBlock> = ChainBlock { index = idx, prev_hash = prev, root = root, hash = h, records = records }
+    blocks<Vec<ChainBlock>> = c.blocks
+    blocks.push(b)
+    newChain<Chain> = Chain { origin = c.origin, blocks = blocks }
+    prev_signer<String> = ""
+    if (idx > 0) { prev_signer = sc.signers.get(idx - 1) }
+    signer<String> = ed25519_publickey(seed)
+    sig<String> = ed25519_sign(seed, h + "|" + prev_signer)
+    rotation<String> = ""
+    if (idx > 0 && signer != prev_signer) {
+        rotation = ed25519_sign(old_seed, "rotate:" + signer)
+    }
+    signers<Vec<String>> = sc.signers; signers.push(signer)
+    sigs<Vec<String>> = sc.sigs; sigs.push(sig)
+    rotations<Vec<String>> = sc.rotations; rotations.push(rotation)
+    return SignedChain { chain = newChain, signers = signers, sigs = sigs, rotations = rotations }
+}
+
+# Full signature verification: block integrity (plain verify) AND each block's
+# Ed25519 signature under its recorded signer, AND trust-root anchoring (genesis
+# signer == registry_pub), AND each key rotation authorized by the old key.
+# Any tamper with a record/order/link/signer/signature/rotation -> false.
+share(all)
+signed_verify(sc<SignedChain>, registry_pub<String>)<Bool> -> {
+    if (!verify(sc.chain)) { return false }
+    n<Int> = sc.chain.blocks.len()
+    if (sc.signers.len() != n || sc.sigs.len() != n || sc.rotations.len() != n) { return false }
+    if (n == 0) { return false }
+    if (sc.signers.get(0) != registry_pub) { return false }
+    for (i in 0..n-1) {
+        b<ChainBlock> = sc.chain.blocks.get(i)
+        prev_signer<String> = ""
+        if (i > 0) { prev_signer = sc.signers.get(i - 1) }
+        # this block's own signature under its signer, over (hash | prev_signer)
+        if (!ed25519_verify(sc.signers.get(i), b.hash + "|" + prev_signer, sc.sigs.get(i))) { return false }
+        if (i > 0 && sc.signers.get(i) != sc.signers.get(i - 1)) {
+            # key rotation: the previous key must have authorized the handoff
+            rot<String> = sc.rotations.get(i)
+            if (rot.len() != 128) { return false }
+            if (!ed25519_verify(sc.signers.get(i - 1), "rotate:" + sc.signers.get(i), rot)) { return false }
+        } else {
+            if (sc.rotations.get(i) != "") { return false }
+        }
+    }
+    return true
+}
+
+# Sign a checkpoint over (seq, tip): the registry attests the chain's tip at
+# sequence `seq`. Deterministic (Ed25519). Returns the 128-hex signature token.
+share(all)
+sign_checkpoint(tip<String>, seq<Int>, seed<String>)<String> -> {
+    return ed25519_sign(seed, "checkpoint:" + seq.to_string() + ":" + tip)
+}
+
+# Validate a registry checkpoint signature over (seq, tip) with `registry_pub`.
+share(all)
+verify_checkpoint(tip<String>, seq<Int>, registry_pub<String>, sig<String>)<Bool> -> {
+    return ed25519_verify(registry_pub, "checkpoint:" + seq.to_string() + ":" + tip, sig)
+}
+
+# Convenience: sign the current tip with the number of blocks as the sequence.
+share(all)
+chain_checkpoint(sc<SignedChain>, seed<String>)<String> -> {
+    return sign_checkpoint(tip_hash(sc.chain), sc.chain.blocks.len(), seed)
+}
