@@ -1,5 +1,5 @@
 {
-  "git_rev": "8e1a3f4748fbb99b55d8e7b8af515afce7c907fb",
+  "git_rev": "2b1476c63343578b233f1ac888cf9f328eb4e677",
   "modules": [
     "agents",
     "archive",
@@ -284,7 +284,7 @@
         "files": [
           "stdlib/vllm/mod.vyb"
         ],
-        "exported": 4,
+        "exported": 5,
         "fan_in": 0,
         "fan_out": 3
       }
@@ -1005,7 +1005,8 @@
           "ReadTok",
           "ReadInt",
           "Tok",
-          "SampleSet"
+          "SampleSet",
+          "Model"
         ]
       }
     ],
@@ -5715,6 +5716,15 @@
         "kind": "fn",
         "signature": "utf8_valid(s<String>)<Int> ->",
         "summary": "",
+        "fan_in": 0
+      },
+      {
+        "name": "Model",
+        "module": "vllm",
+        "file": "stdlib/vllm/mod.vyb",
+        "kind": "struct",
+        "signature": "struct Model {",
+        "summary": "---------------- high-level Model facade ----------------",
         "fan_in": 0
       },
       {
