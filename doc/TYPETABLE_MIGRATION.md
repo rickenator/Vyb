@@ -13,9 +13,16 @@ UPDATE 2026-09-11 (#223): the Node-ID data race is fixed — `Node::typeId()` is
 now assigned EAGERLY in Node's single constructor from a static atomic counter
 and stored in a `const unsigned`, so identity is immutable and race-free (the
 old lazy plain-`unsigned` write could assign different ids to one node under
-concurrent access). The open stretch remains retiring the mutable `Node::type`
-field so the node-id TypeTable is the ONE type authority for both semantic and
-codegen (~850 refs: semantic 440, codegen 410).
+concurrent access).
+
+UPDATE 2026-09-11 (#223, COMPLETE): the mutable `Node::type` field is DELETED.
+The node-id `expressionTypes` TypeTable is now the single type authority for
+both semantic and codegen, in checkpointed commits db4057e (X1 writer
+unification) -> c51031c (X2a codegen query) -> 7bdd80c (X2b codegen reads) ->
+2ef26ce (X3 semantic reads) -> 2e70874 (X4 field removal, PR #236). Semantic
+writes/reads go through setType/typeOf; codegen through a read-only
+LLVMCodegen::typeOfNode bound to the TypeTable. Verified 1144/1144 + LSP/REPL/
+gitdep/registry smokes; the ~850-ref migration is DONE.
 
 REKEY PITFALL (learned 2026-09-10): a
 regex rekey of `expressionTypes[K]` -> `expressionTypes[exprKey(K)]` BREAKS on
