@@ -1,0 +1,15 @@
+// @test: arithmetic operators reject non-numeric operands (semantic, not codegen crash)
+// @description: `String * Int` (and / % - on String) used to pass semantic analysis
+//   and crash codegen with invalid LLVM IR (`mul { ptr, i64 }`) + a double-free /
+//   segfault with output lost. It must now be a clean semantic error. `+` on String
+//   remains valid concatenation.
+// @category: expressions, semantic, diagnostics, codegen-safety
+// @expect: fail
+// @expect-error: Operator '*' is not defined for operands 'String' and 'Int'
+// @semantic-only: true
+
+main()<Int> -> {
+    t<String> = "00"
+    n<Int> = (t * 4).len()
+    return n
+}
