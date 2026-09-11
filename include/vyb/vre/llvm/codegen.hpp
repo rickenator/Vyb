@@ -11,6 +11,7 @@
 #include <llvm/Support/raw_ostream.h>
 #include <map>
 #include <memory>
+#include <functional>
 #include <set>
 #include <stack>
 #include <string>
@@ -92,9 +93,21 @@ public:
     llvm::Module* getModule() const { return module.get(); } // Add method to get module pointer without releasing
     // True when main()'s return argument is a lit(...) call (raw JSON passthrough).
     bool isMainReturnLitRaw() const { return m_mainReturnIsLitRaw; }
+    // #223 single type authority: resolve a node's AST type from the semantic
+    // TypeTable (bound from the Driver's SemanticAnalyzer in the constructor).
+    // Falls back to the legacy node->type while read-migration is in progress
+    // (they alias the same object after the X1 unification), so this is always
+    // consistent.
+    std::shared_ptr<vyb::ast::TypeNode> typeOfNode(const vyb::ast::Node* n) const {
+        if (nodeTypeOf_) return nodeTypeOf_(n);
+        return n ? n->type : std::shared_ptr<vyb::ast::TypeNode>();
+    }
 
 private:
     Driver& driver_; // Add a Driver reference
+    // Bound to the semantic analyzer's TypeTable query (#223). null when no
+    // analyzer is registered (fallback to node->type above keeps it working).
+    std::function<std::shared_ptr<vyb::ast::TypeNode>(const vyb::ast::Node*)> nodeTypeOf_;
     std::unique_ptr<llvm::LLVMContext> context;
     std::unique_ptr<llvm::Module> module;
     std::unique_ptr<llvm::IRBuilder<>> builder;
