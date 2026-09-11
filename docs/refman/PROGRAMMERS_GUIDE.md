@@ -2305,6 +2305,34 @@ Note: IPv6 bracket hosts (`[::1]:8080`) and URL fragments are not specially
 handled (a host containing `:` splits at the first colon; a fragment is
 captured as part of the path).
 
+### 4.28 `vllm` — the shared model-runtime engine (tokenizer, checkpoint 1)
+
+Module page: [`vllm.md`](vllm.md). The Vyb standard-library model-runtime
+engine, shared by BOTH VybOS and VybForge (one shared core, multiple
+consumers — the same relationship the stdlib `chain` module has). Checkpoint 1
+is the Qwen3/GPT-2 byte-level BPE **tokenizer**: `encode`/`encode_str` map text
+to token ids (and `decode_ids` maps ids back) using the model's
+`{vocab.json, merges.txt}`, which the module reads from the directory given by
+`VYB_LLM_DIR` — a shared stdlib module never embeds a consumer's model path.
+The algorithm is model-agnostic and exact against the transformer reference.
+
+```vyb
+import vllm::{encode, encode_str, decode_ids}
+ids<Vec<Int>> = encode("Hello world")          # [9707, 1879]
+s<String>     = encode_str("Hello world")      # "9707 1879"
+text<String>  = decode_ids(ids)                # back to text
+```
+
+```sh
+# a model's tokenizer artifacts come from its own directory:
+export VYB_LLM_DIR=artifacts/vybos-configurator-lora   # VybForge's admin LoRA
+```
+
+The rest of the engine (GPU kernels, GGUF loader, decode/sampler) folds into
+this module in later checkpoints; the tokenizer is the first, pure-Vyb,
+model-agnostic slice. See VybOS `doc/VYBLLM-ARCHITECTURE.md` for the full
+cross-repo design.
+
 ---
 
 ## 5. Concurrency and async model
@@ -2667,8 +2695,10 @@ key/seed material on the GPU. Crypto/ledger integration stays host-side.
 | Hash-chained ledger | [`chain`](chain.md) | [crypto](crypto.md) |
 | Filesystem | [`fs`](fs.md) | — |
 | URL parsing | [`url`](url.md) | — |
+| vllm | [`vllm`](vllm.md) | — |
 | Runtime intrinsics | [`runtime`](runtime.md) | — |
 <!-- refman:api-index end -->
+
 
 
 
