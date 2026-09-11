@@ -52,7 +52,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew update
-          brew install llvm@18 libclang catch2 cmake
+          brew install llvm@18 catch2 cmake  # libclang ships with the llvm@18 formula
 
       - name: Configure (Release -> build-release)
         run: |
