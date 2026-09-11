@@ -1,0 +1,12 @@
+# gpu
+#
+# Privileged fixture for the #204 P2 trust-flow conformance. Its co-located
+# vyb.toml declares boundary=["freedom"] + capabilities=[ffi, cuda-driver,
+# nvptx], so `vyb mod install path:<...>/gpu` must NOT install silently: it
+# requires a one-shot trust acceptance (--yes or VYB_MOD_ACCEPT=1) and must
+# record {source, sha256, capabilities} in vyb.lock, then never re-prompt.
+
+share(all)
+add(a<Int>, b<Int>)<Int> -> {
+    return a + b
+}

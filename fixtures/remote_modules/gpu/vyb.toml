@@ -1,0 +1,7 @@
+[package]
+name = "gpu"
+version = "0.1.0"
+
+[mod]
+boundary = ["freedom"]
+capabilities = ["ffi", "cuda-driver", "nvptx"]
