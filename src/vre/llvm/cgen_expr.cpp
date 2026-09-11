@@ -7097,6 +7097,28 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                 }
             }
         }
+        // #228: a fresh owned Vec passed by value as an argument (e.g. the
+        // `Vec<Record>` returned by `facts()` into `new_chain(origin, facts())`).
+        // The callee deep-copies the by-value param and reclaims its own copy at
+        // scope exit; the caller still owns the temp's ORIGINAL element buffer and
+        // must reclaim it or it leaks (chain module: 1x128 B per seal). Register
+        // the temp so cleanupVariable frees the buffer + owned elements at scope
+        // exit -- but ONLY for an expression that creates the Vec fresh here
+        // (a call/literal), never a named-variable or borrow arg (a sibling
+        // binding also owns it -> double-free).
+        bool freshOwnedVecArg =
+            (dynamic_cast<ast::CallExpression*>(node->arguments[i].get()) != nullptr ||
+             dynamic_cast<ast::ObjectLiteral*>(node->arguments[i].get()) != nullptr);
+        if (tempKind == 0 && freshOwnedVecArg && node->arguments[i]->type &&
+            dynamic_cast<const ast::VecType*>(node->arguments[i]->type.get()) != nullptr) {
+            if (auto* vt = llvm::dyn_cast<llvm::StructType>(argValue->getType())) {
+                llvm::Value* tmp = builder->CreateAlloca(vt, nullptr, "ownedvecarg.tmp");
+                builder->CreateStore(argValue, tmp);
+                valueTypeMap[tmp] = node->arguments[i]->type;
+                registerVariable("call.tmp.vec." + std::to_string(i), tmp, argValue,
+                                 ast::OwnershipKind::MY, vt, true);
+            }
+        }
         argValues.push_back(argValue);
     }
 
