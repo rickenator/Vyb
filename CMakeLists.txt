@@ -272,15 +272,21 @@ endif()
 
 # ncursesw: link the wide-char TUI library into the binary so the JIT's
 # process-symbol generator can resolve the stdlib `curses` module's runtime
-# shims. Optional: if ncursesw is absent the build still succeeds and modules
-# that use `curses` fail at JIT link-time with an unresolved-symbol error.
+# shims. Optional: if ncursesw (library AND its `ncursesw/curses.h` header) is
+# absent the build still succeeds and modules that use `curses` fail at JIT
+# link-time with an unresolved-symbol error. We require BOTH because on macOS
+# a system libncurses is find_library-visible while the ncursesw/curses.h
+# header is not on the default include path — defining VYB_HAVE_NCURSES under
+# that condition (as before) broke the macOS build with a fatal missing-header.
 find_library(NCURSESW_LIBRARY NAMES ncursesw ncurses)
-if(NCURSESW_LIBRARY)
+include(CheckIncludeFile)
+check_include_file("ncursesw/curses.h" VYB_HAVE_NCURSESW_HEADER)
+if(NCURSESW_LIBRARY AND VYB_HAVE_NCURSESW_HEADER)
     target_link_libraries(vyb PRIVATE ${NCURSESW_LIBRARY})
     target_compile_definitions(vyb PRIVATE VYB_HAVE_NCURSES)
     message(STATUS "ncursesw found: ${NCURSESW_LIBRARY}")
 else()
-    message(STATUS "ncursesw not found; stdlib `curses` module will be unavailable")
+    message(STATUS "ncursesw not found or header missing; stdlib `curses` module will be unavailable")
 endif()
 
 # Qt5: link the bridge's dependencies into the binary so the JIT's process-symbol
