@@ -535,20 +535,17 @@ private:
     std::string defaultOwner_;  // entry/root module key, used for unnamed top-level code
     std::vector<std::string> ownerStack_;
     std::vector<std::string> errors;
-    // Owning expression-type map (CHECKPOINT A: still Node* keyed, now shared values).
-    // Next step (CHECKPOINT B) rekeys this onto typeId and replaces it with setType().
-    std::unordered_map<ast::Node*, std::shared_ptr<ast::TypeNode>> expressionTypes;
-    // TypeTable (node-id -> owned type): the target of the immutable-AST migration.
-    // Analyzed types are recorded here by stable Node::typeId. As sites migrate
-    // off the Node* mirror above they land here; a future pass removes
-    // expressionTypes + _ownedTypes entirely.
-    std::unordered_map<unsigned, std::shared_ptr<ast::TypeNode>> typeTable_;
+    // TypeTable (node-id -> owned type): CHECKPOINT B. Keyed by the stable
+    // Node::typeId() (exprKey() in semantic.cpp; null -> sentinel key 0). Owning
+    // shared values; setType/typeOf are its accessors.
+    std::unordered_map<unsigned, std::shared_ptr<ast::TypeNode>> expressionTypes;
     std::shared_ptr<ast::TypeNode> typeOf(const ast::Node* n) const {
-        auto it = typeTable_.find(n->typeId());
-        return it == typeTable_.end() ? std::shared_ptr<ast::TypeNode>() : it->second;
+        if (!n) return std::shared_ptr<ast::TypeNode>();
+        auto it = expressionTypes.find(n->typeId());
+        return it == expressionTypes.end() ? std::shared_ptr<ast::TypeNode>() : it->second;
     }
     void setType(const ast::Node* n, std::shared_ptr<ast::TypeNode> t) {
-        typeTable_[n->typeId()] = std::move(t);
+        if (n) expressionTypes[n->typeId()] = std::move(t);
     }
     // Registry of types the analyzer synthesizes during analysis. Each entry is now
     // SHARED: retainType() creates the single shared owner, registers it here, and

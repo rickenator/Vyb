@@ -13,6 +13,12 @@
 #include <functional>
 #include <algorithm>
 
+// CHECKPOINT B: map an AST node (possibly null) to its stable TypeTable key.
+// Node::typeId() starts at 1, so 0 is a safe sentinel for a null node key
+// (a null key previously hit map.find(nullptr) -> end; now it maps to key 0).
+static unsigned exprKey(const vyb::ast::Node* n) { return n ? n->typeId() : 0; }
+
+
 namespace vyb {
 // Forward-declare g_debug_codegen so semantic.cpp can use VYB_CDBG without
 // depending on the LLVM codegen headers.
@@ -82,7 +88,7 @@ void SemanticAnalyzer::handleChanMethod(ast::CallExpression* node, ast::TypeNode
         }
         node->arguments[0]->accept(*this);
         auto intType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Int"));
-        expressionTypes[node] = retainType(intType);
+        expressionTypes[exprKey(node)] = retainType(intType);
         node->type = std::shared_ptr<ast::TypeNode>(intType->clone());
         return;
     }
@@ -95,14 +101,14 @@ void SemanticAnalyzer::handleChanMethod(ast::CallExpression* node, ast::TypeNode
         if (elemIsString) {
             // String payloads use the refcounted string-channel runtime; recv
             // returns the String (blocking).
-            expressionTypes[node] = retainType(elem->clone().release());
+            expressionTypes[exprKey(node)] = retainType(elem->clone().release());
             node->type = std::shared_ptr<ast::TypeNode>(elem->clone());
         } else {
             // Scalar payloads: blocking, lossless recv reports presence explicitly
             // (a genuine -1 payload is data; only "closed and drained" is absent),
             // returning the native `T?` like poll(). Consumed via `recv() else default`.
             auto* optTy = new ast::OptionalType(node->loc, elem->clone());
-            expressionTypes[node] = retainType(optTy);
+            expressionTypes[exprKey(node)] = retainType(optTy);
             node->type = std::shared_ptr<ast::TypeNode>(optTy->clone());
         }
         return;
@@ -115,14 +121,14 @@ void SemanticAnalyzer::handleChanMethod(ast::CallExpression* node, ast::TypeNode
         bool elemIsString = chanElementIsString(elem);
         if (elemIsString) {
             // String payloads keep the empty-string sentinel poll.
-            expressionTypes[node] = retainType(elem->clone().release());
+            expressionTypes[exprKey(node)] = retainType(elem->clone().release());
             node->type = std::shared_ptr<ast::TypeNode>(elem->clone());
         } else {
             // Scalar payloads: non-blocking poll reports readiness explicitly,
             // returning the native optional `T?` (absent on empty) so an empty
             // read is unambiguous and consumed via `poll() else default`.
             auto* optTy = new ast::OptionalType(node->loc, elem->clone());
-            expressionTypes[node] = retainType(optTy);
+            expressionTypes[exprKey(node)] = retainType(optTy);
             node->type = std::shared_ptr<ast::TypeNode>(optTy->clone());
         }
         return;
@@ -133,7 +139,7 @@ void SemanticAnalyzer::handleChanMethod(ast::CallExpression* node, ast::TypeNode
             return;
         }
         auto intType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Int"));
-        expressionTypes[node] = retainType(intType);
+        expressionTypes[exprKey(node)] = retainType(intType);
         node->type = std::shared_ptr<ast::TypeNode>(intType->clone());
         return;
     }
@@ -868,7 +874,7 @@ bool SemanticAnalyzer::isIntegerType(ast::TypeNode* type) {
     if (auto arrayType = dynamic_cast<ast::ArrayType*>(type)) {
         // If it has a size expression that's a literal, it might be integer type
         if (arrayType->sizeExpression) {
-            auto it = expressionTypes.find(arrayType->sizeExpression.get());
+            auto it = expressionTypes.find(exprKey(arrayType->sizeExpression.get()));
             if (it != expressionTypes.end() && it->second) {
                 return isIntegerType(it->second.get());
             }
@@ -1025,7 +1031,7 @@ bool SemanticAnalyzer::isMoved(const std::string& varName) const {
 
 
 bool SemanticAnalyzer::isRawLocationType(ast::Expression* expr) {
-    auto it = expressionTypes.find(expr);
+    auto it = expressionTypes.find(exprKey(expr));
     if (it == expressionTypes.end() || !it->second) return false;
     return true;
 }
@@ -1124,20 +1130,20 @@ void SemanticAnalyzer::visit(ast::Identifier* node) {
     SymbolInfo* symbol = currentScope->lookup(node->name);
     if (!symbol) {
         addError("Undefined identifier: " + node->name, node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
     // Reading an ownership-wrapped primitive (my<Int>, our<Int>, ...) yields the
     // underlying primitive type, matching the inline value representation in codegen.
     ast::TypeNode* readType = symbol->type ? unwrapPrimitiveOwnershipType(symbol->type) : nullptr;
-    expressionTypes[node] = readType ? std::shared_ptr<ast::TypeNode>(readType->clone()) : nullptr;
+    expressionTypes[exprKey(node)] = readType ? std::shared_ptr<ast::TypeNode>(readType->clone()) : nullptr;
 
     // Move tracking: reject use of MY-owned variables that have been moved from.
     // An assignment LHS is exempt: writing a fresh value to a moved `my`
     // variable revives it (the assignment visitor clears the moved flag).
     if (hasOwnershipKindMY(symbol) && isMoved(node->name) && !inAssignmentLHS) {
         addError("Use after move: '" + node->name + "' has been moved and is no longer valid.", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
     // Borrow-lifetime: a `their<T>` created from a borrow()/view() initializer is
@@ -1149,7 +1155,7 @@ void SemanticAnalyzer::visit(ast::Identifier* node) {
         if (static_cast<int>(borrowScopes.size()) < bdIt->second) {
             const std::string& root = theirVarRoot_[node->name];
             addError("Borrow of '" + (root.empty() ? node->name : root) + "' escapes its scope; the referred-to value may be dead.", node);
-            expressionTypes[node] = nullptr;
+            expressionTypes[exprKey(node)] = nullptr;
             return;
         }
     }
@@ -1166,31 +1172,31 @@ void SemanticAnalyzer::visit(ast::IntegerLiteral* node) {
     // width is UInt64, and assignment range-fitting narrows it where it fits.
     auto* type = new ast::TypeName(node->loc,
         std::make_unique<ast::Identifier>(node->loc, node->isUnsigned ? "UInt64" : "Int"));
-    expressionTypes[node] = retainType(type);
+    expressionTypes[exprKey(node)] = retainType(type);
     node->type = std::shared_ptr<ast::TypeNode>(type->clone());
 }
 
 void SemanticAnalyzer::visit(ast::FloatLiteral* node) {
     auto* type = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Float"));
-    expressionTypes[node] = retainType(type);
+    expressionTypes[exprKey(node)] = retainType(type);
     node->type = std::shared_ptr<ast::TypeNode>(type->clone());
 }
 
 void SemanticAnalyzer::visit(ast::StringLiteral* node) {
     auto* type = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "String"));
-    expressionTypes[node] = retainType(type);
+    expressionTypes[exprKey(node)] = retainType(type);
     node->type = std::shared_ptr<ast::TypeNode>(type->clone());
 }
 
 void SemanticAnalyzer::visit(ast::BooleanLiteral* node) {
     auto* type = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Bool"));
-    expressionTypes[node] = retainType(type);
+    expressionTypes[exprKey(node)] = retainType(type);
     node->type = std::shared_ptr<ast::TypeNode>(type->clone());
 }
 
 void SemanticAnalyzer::visit(ast::NilLiteral* node) {
     auto* type = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "nil"));
-    expressionTypes[node] = retainType(type);
+    expressionTypes[exprKey(node)] = retainType(type);
     node->type = std::shared_ptr<ast::TypeNode>(type->clone());
 }
 
@@ -1812,7 +1818,7 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
                 if (auto vecVarType = dynamic_cast<ast::VecType*>(varType)) {
                     if (vecVarType->elementType) {
                         auto vecType = std::make_unique<ast::VecType>(callExpr->loc, vecVarType->elementType->clone());
-                        expressionTypes[callExpr] = vecType ? std::shared_ptr<ast::TypeNode>(vecType->clone()) : nullptr;
+                        expressionTypes[exprKey(callExpr)] = vecType ? std::shared_ptr<ast::TypeNode>(vecType->clone()) : nullptr;
                         callExpr->type = std::shared_ptr<ast::TypeNode>(std::move(vecType));
                     }
                 }
@@ -1830,8 +1836,8 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
         node->init->accept(*this);
 
         // Type inference: if no annotation given, infer from initializer
-        if (needsTypeCheck && expressionTypes.count(node->init.get())) {
-            ast::TypeNode* initType = expressionTypes[node->init.get()].get();
+        if (needsTypeCheck && expressionTypes.count(exprKey(node->init.get()))) {
+            ast::TypeNode* initType = expressionTypes[exprKey(node->init.get())].get();
             if (initType) {
                 // Successfully inferred - no error needed
                 node->typeNode = std::unique_ptr<ast::TypeNode>(initType->clone());
@@ -1848,10 +1854,10 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
         }
 
         // Now check types match (for both explicit types and inferred types)
-        if (node->typeNode && expressionTypes.count(node->init.get())) {
+        if (node->typeNode && expressionTypes.count(exprKey(node->init.get()))) {
             // Use resolved type if available (e.g., TypeName with ->type set to VecType or TupleTypeNode)
             ast::TypeNode* varType = node->typeNode->type ? node->typeNode->type.get() : node->typeNode.get();
-            ast::TypeNode* initType = expressionTypes[node->init.get()].get();
+            ast::TypeNode* initType = expressionTypes[exprKey(node->init.get())].get();
             if (initType) {
                 IntAssignCheck chk = checkIntegerAssignment(varType, initType, node->init.get());
                 bool intRejected = chk.code == IntAssignCode::NeedExplicitCast ||
@@ -1916,9 +1922,9 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
         } else {
             symbolType = node->typeNode.get();
         }
-    } else if (node->init && expressionTypes.count(node->init.get())) {
+    } else if (node->init && expressionTypes.count(exprKey(node->init.get()))) {
         // For type inference without explicit type annotation
-        symbolType = expressionTypes[node->init.get()].get();
+        symbolType = expressionTypes[exprKey(node->init.get())].get();
     }
 
     SymbolInfo::Kind kind = SymbolInfo::Kind::Variable;
@@ -2007,10 +2013,10 @@ void SemanticAnalyzer::visit(ast::UnaryExpression* node) {
     node->operand->accept(*this);
     
     // The result type of a unary expression is the same as the operand type
-    if (expressionTypes.count(node->operand.get())) {
-        expressionTypes[node] = expressionTypes[node->operand.get()];
+    if (expressionTypes.count(exprKey(node->operand.get()))) {
+        expressionTypes[exprKey(node)] = expressionTypes[exprKey(node->operand.get())];
     } else if (node->operand->type) {
-        expressionTypes[node] = node->operand->type ? std::shared_ptr<ast::TypeNode>(node->operand->type->clone()) : nullptr;
+        expressionTypes[exprKey(node)] = node->operand->type ? std::shared_ptr<ast::TypeNode>(node->operand->type->clone()) : nullptr;
         node->type = std::shared_ptr<ast::TypeNode>(node->operand->type->clone());
     }
 }
@@ -2025,8 +2031,8 @@ void SemanticAnalyzer::visit(ast::BinaryExpression* node) {
     node->right->accept(*this);
 
     // Get the types of the operands
-    auto leftTypeIt = expressionTypes.find(node->left.get());
-    auto rightTypeIt = expressionTypes.find(node->right.get());
+    auto leftTypeIt = expressionTypes.find(exprKey(node->left.get()));
+    auto rightTypeIt = expressionTypes.find(exprKey(node->right.get()));
 
     ast::TypeNode* leftType = (leftTypeIt != expressionTypes.end()) ? leftTypeIt->second.get() : nullptr;
     ast::TypeNode* rightType = (rightTypeIt != expressionTypes.end()) ? rightTypeIt->second.get() : nullptr;
@@ -2202,7 +2208,7 @@ void SemanticAnalyzer::visit(ast::BinaryExpression* node) {
     }
 
     if (resultType) {
-        expressionTypes[node] = resultType ? std::shared_ptr<ast::TypeNode>(resultType->clone()) : nullptr;
+        expressionTypes[exprKey(node)] = resultType ? std::shared_ptr<ast::TypeNode>(resultType->clone()) : nullptr;
         node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
 
         VYB_CDBG << "DEBUG: Binary expression result type: " << resultType->toString() << std::endl;
@@ -2219,14 +2225,14 @@ void SemanticAnalyzer::handleVecConstructor(ast::CallExpression* node) {
     }
     // If a surrounding annotation (e.g. `v<Vec<String>> = Vec()`) already
     // propagated the concrete Vec<T> element type, use it.
-    if (expressionTypes.count(node) && expressionTypes[node]) {
+    if (expressionTypes.count(exprKey(node)) && expressionTypes[exprKey(node)]) {
         return;
     }
     // Fall back to Vec<Int> when no element type is inferable.
     auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
     auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
     auto vecType = std::make_unique<ast::VecType>(node->loc, std::move(intType));
-    expressionTypes[node] = vecType ? std::shared_ptr<ast::TypeNode>(vecType->clone()) : nullptr;
+    expressionTypes[exprKey(node)] = vecType ? std::shared_ptr<ast::TypeNode>(vecType->clone()) : nullptr;
     node->type = std::shared_ptr<ast::TypeNode>(std::move(vecType));
 }
 
@@ -2249,7 +2255,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                         return;
                     }
                     node->arguments[0]->accept(*this);
-                    expressionTypes[node] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
+                    expressionTypes[exprKey(node)] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
                     return;
                 }
             }
@@ -2463,7 +2469,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             const char* tname = kernelIntrinsicReturnType(name);
             node->type = std::make_unique<ast::TypeName>(
                 node->loc, std::make_unique<ast::Identifier>(node->loc, tname));
-            expressionTypes[node] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
+            expressionTypes[exprKey(node)] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
         }
     }
 
@@ -2510,7 +2516,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                 std::make_unique<ast::Identifier>(node->loc, baseId->name));
                             for (auto& a : gi->genericArguments) enumType->genericArgs.push_back(a->clone());
                             node->type = std::shared_ptr<ast::TypeNode>(enumType.release());
-                            expressionTypes[node] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
+                            expressionTypes[exprKey(node)] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
                             for (auto& arg : node->arguments) {
                                 if (arg) arg->accept(*this);
                             }
@@ -2539,7 +2545,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     auto enumType = std::make_unique<ast::TypeName>(
                         node->loc, std::make_unique<ast::Identifier>(node->loc, objId->name));
                     node->type = std::shared_ptr<ast::TypeNode>(enumType.release());
-                    expressionTypes[node] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
+                    expressionTypes[exprKey(node)] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
                     // Still visit args so side expressions and nested types are checked.
                     for (auto& arg : node->arguments) {
                         if (arg) arg->accept(*this);
@@ -2621,7 +2627,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 if (argExpr) {
                     argType = argExpr->type.get();
                     if (!argType) {
-                        auto it = expressionTypes.find(argExpr);
+                        auto it = expressionTypes.find(exprKey(argExpr));
                         if (it != expressionTypes.end()) argType = it->second.get();
                     }
                 }
@@ -2649,16 +2655,16 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 // This ensures the serialization system knows how to handle it
                 if (argExpr->type) {
                     node->type = std::shared_ptr<ast::TypeNode>(argExpr->type->clone().release());
-                    expressionTypes[node] = argExpr->type ? std::shared_ptr<ast::TypeNode>(argExpr->type->clone()) : nullptr;
-                } else if (auto argType = expressionTypes[argExpr]) {
+                    expressionTypes[exprKey(node)] = argExpr->type ? std::shared_ptr<ast::TypeNode>(argExpr->type->clone()) : nullptr;
+                } else if (auto argType = expressionTypes[exprKey(argExpr)]) {
                     node->type = std::shared_ptr<ast::TypeNode>(argType->clone().release());
-                    expressionTypes[node] = argType;
+                    expressionTypes[exprKey(node)] = argType;
                 } else {
                     // Fallback to String type if we can't determine the argument type
                     auto stringId = std::make_unique<ast::Identifier>(node->loc, "String");
                     ast::TypeNode* stringType = new ast::TypeName(node->loc, std::move(stringId), {});
                     node->type = std::shared_ptr<ast::TypeNode>(stringType);
-                    expressionTypes[node] = stringType ? std::shared_ptr<ast::TypeNode>(stringType->clone()) : nullptr;
+                    expressionTypes[exprKey(node)] = stringType ? std::shared_ptr<ast::TypeNode>(stringType->clone()) : nullptr;
                 }
             }
             return;
@@ -2675,7 +2681,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 addError(name + "() requires an lvalue argument.", node);
                 return;
             }
-            auto argTypeIt = expressionTypes.find(argExpr);
+            auto argTypeIt = expressionTypes.find(exprKey(argExpr));
             ast::TypeNode* argType = (argTypeIt != expressionTypes.end()) ? argTypeIt->second.get() : nullptr;
             if (!argType) {
                 addError("Cannot determine type of argument to " + name + "()", node);
@@ -2699,7 +2705,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             std::vector<ast::TypeNodePtr> theirArgs;
             theirArgs.push_back(std::move(innerType));
             ast::TypeNode* resultType = new ast::TypeName(node->loc, std::move(theirId), std::move(theirArgs));
-            expressionTypes[node] = retainType(resultType);
+            expressionTypes[exprKey(node)] = retainType(resultType);
             node->type = std::shared_ptr<ast::TypeNode>(resultType->clone().release());
             return;
         }
@@ -2722,7 +2728,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             if (argExpr->type) {
                 argType = argExpr->type.get();
             } else {
-                auto typeIt = expressionTypes.find(argExpr);
+                auto typeIt = expressionTypes.find(exprKey(argExpr));
                 if (typeIt != expressionTypes.end()) {
                     argType = typeIt->second.get();
                 }
@@ -2739,7 +2745,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             ownershipArgs.push_back(argType->clone());
 
             ast::TypeNode* resultType = new ast::TypeName(node->loc, std::move(ownershipId), std::move(ownershipArgs));
-            expressionTypes[node] = retainType(resultType);
+            expressionTypes[exprKey(node)] = retainType(resultType);
             node->type = std::shared_ptr<ast::TypeNode>(resultType->clone().release());
             return;
         }
@@ -2762,7 +2768,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             if (argExpr->type) {
                 argType = argExpr->type.get();
             } else {
-                auto typeIt = expressionTypes.find(argExpr);
+                auto typeIt = expressionTypes.find(exprKey(argExpr));
                 if (typeIt != expressionTypes.end()) {
                     argType = typeIt->second.get();
                 }
@@ -2794,7 +2800,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             mildArgs.push_back(innerType->clone());
 
             ast::TypeNode* resultType = new ast::TypeName(node->loc, std::move(mildId), std::move(mildArgs));
-            expressionTypes[node] = retainType(resultType);
+            expressionTypes[exprKey(node)] = retainType(resultType);
             node->type = std::shared_ptr<ast::TypeNode>(resultType->clone().release());
             return;
         }
@@ -2810,7 +2816,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             // Create Void return type
             auto voidId = std::make_unique<ast::Identifier>(node->loc, "Void");
             ast::TypeNode* voidType = new ast::TypeName(node->loc, std::move(voidId), std::vector<ast::TypeNodePtr>{});
-            expressionTypes[node] = retainType(voidType);
+            expressionTypes[exprKey(node)] = retainType(voidType);
             node->type = std::shared_ptr<ast::TypeNode>(voidType->clone().release());
             return;
         }
@@ -2823,7 +2829,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             }
             auto voidId = std::make_unique<ast::Identifier>(node->loc, "Void");
             ast::TypeNode* voidType = new ast::TypeName(node->loc, std::move(voidId), std::vector<ast::TypeNodePtr>{});
-            expressionTypes[node] = retainType(voidType);
+            expressionTypes[exprKey(node)] = retainType(voidType);
             node->type = std::shared_ptr<ast::TypeNode>(voidType->clone().release());
             return;
         }
@@ -2836,7 +2842,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             }
             auto voidId = std::make_unique<ast::Identifier>(node->loc, "Void");
             ast::TypeNode* voidType = new ast::TypeName(node->loc, std::move(voidId), std::vector<ast::TypeNodePtr>{});
-            expressionTypes[node] = retainType(voidType);
+            expressionTypes[exprKey(node)] = retainType(voidType);
             node->type = std::shared_ptr<ast::TypeNode>(voidType->clone().release());
             return;
         }
@@ -2858,7 +2864,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 }
                 for (auto& arg : node->arguments) if (arg) arg->accept(*this);
                 auto floatType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Float"));
-                expressionTypes[node] = retainType(floatType);
+                expressionTypes[exprKey(node)] = retainType(floatType);
                 node->type = std::shared_ptr<ast::TypeNode>(floatType->clone());
                 return;
             }
@@ -2869,13 +2875,13 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 }
                 for (auto& arg : node->arguments) if (arg) arg->accept(*this);
                 // Return type matches first argument - default to Int
-                auto firstArgTypeIt = (node->arguments.size() > 0) ? expressionTypes.find(node->arguments[0].get()) : expressionTypes.end();
+                auto firstArgTypeIt = (node->arguments.size() > 0) ? expressionTypes.find(exprKey(node->arguments[0].get())) : expressionTypes.end();
                 if (firstArgTypeIt != expressionTypes.end() && firstArgTypeIt->second) {
-                    expressionTypes[node] = firstArgTypeIt->second;
+                    expressionTypes[exprKey(node)] = firstArgTypeIt->second;
                     node->type = std::shared_ptr<ast::TypeNode>(firstArgTypeIt->second->clone());
                 } else {
                     auto intType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Int"));
-                    expressionTypes[node] = retainType(intType);
+                    expressionTypes[exprKey(node)] = retainType(intType);
                     node->type = std::shared_ptr<ast::TypeNode>(intType->clone());
                 }
                 return;
@@ -2893,7 +2899,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 std::make_unique<ast::Identifier>(node->loc, "Int"));
             auto* resTy = new ast::OptionalType(node->loc,
                 std::unique_ptr<ast::TypeNode>(inner));
-            expressionTypes[node] = retainType(resTy);
+            expressionTypes[exprKey(node)] = retainType(resTy);
             node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
             return;
         }
@@ -2914,7 +2920,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 auto* resTy = new ast::TypeName(node->loc,
                     std::make_unique<ast::Identifier>(node->loc,
                         fileIntFuncs.count(name) ? "Int" : "String"));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -2936,7 +2942,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 auto* resTy = new ast::TypeName(node->loc,
                     std::make_unique<ast::Identifier>(node->loc,
                         netIntFuncs.count(name) ? "Int" : "String"));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -2958,7 +2964,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 auto* resTy = new ast::TypeName(node->loc,
                     std::make_unique<ast::Identifier>(node->loc,
                         termIntFuncs.count(name) ? "Int" : "String"));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -2981,7 +2987,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             if (cursesIntFuncs.count(name)) {
                 auto* resTy = new ast::TypeName(node->loc,
                     std::make_unique<ast::Identifier>(node->loc, "Int"));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -3155,7 +3161,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 auto* resTy = new ast::TypeName(node->loc,
                     std::make_unique<ast::Identifier>(node->loc,
                         qtIntFuncs.count(name) ? "Int" : "String"));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -3185,7 +3191,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 auto* resTy = new ast::TypeName(node->loc,
                     std::make_unique<ast::Identifier>(node->loc,
                         xIntFuncs.count(name) ? "Int" : "String"));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -3207,7 +3213,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 auto* resTy = new ast::TypeName(node->loc,
                     std::make_unique<ast::Identifier>(node->loc,
                         tlsIntFuncs.count(name) ? "Int" : "String"));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -3220,7 +3226,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     std::make_unique<ast::Identifier>(node->loc, "Int"));
                 auto* resTy = new ast::OptionalType(node->loc,
                     std::unique_ptr<ast::TypeNode>(inner));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -3229,7 +3235,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     std::make_unique<ast::Identifier>(node->loc, "String"));
                 auto* resTy = new ast::OptionalType(node->loc,
                     std::unique_ptr<ast::TypeNode>(inner));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -3243,7 +3249,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     std::make_unique<ast::Identifier>(node->loc, "Int"));
                 auto* resTy = new ast::OptionalType(node->loc,
                     std::unique_ptr<ast::TypeNode>(inner));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -3256,7 +3262,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     std::make_unique<ast::Identifier>(node->loc, "String"));
                 auto* resTy = new ast::OptionalType(node->loc,
                     std::unique_ptr<ast::TypeNode>(inner));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -3270,7 +3276,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     std::make_unique<ast::Identifier>(node->loc, "String"));
                 auto* resTy = new ast::OptionalType(node->loc,
                     std::unique_ptr<ast::TypeNode>(inner));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -3284,7 +3290,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     std::make_unique<ast::Identifier>(node->loc, "String"));
                 auto* resTy = new ast::OptionalType(node->loc,
                     std::unique_ptr<ast::TypeNode>(inner));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -3297,7 +3303,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     std::make_unique<ast::Identifier>(node->loc, "String"));
                 auto* resTy = new ast::OptionalType(node->loc,
                     std::unique_ptr<ast::TypeNode>(inner));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -3309,7 +3315,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     std::make_unique<ast::Identifier>(node->loc, "String"));
                 auto* resTy = new ast::OptionalType(node->loc,
                     std::unique_ptr<ast::TypeNode>(inner));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -3324,7 +3330,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     std::unique_ptr<ast::TypeNode>(u8));
                 auto* resTy = new ast::OptionalType(node->loc,
                     std::unique_ptr<ast::TypeNode>(vec));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -3337,7 +3343,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     std::make_unique<ast::Identifier>(node->loc, "String"));
                 auto* resTy = new ast::OptionalType(node->loc,
                     std::unique_ptr<ast::TypeNode>(inner));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -3351,7 +3357,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     std::make_unique<ast::Identifier>(node->loc, "String"));
                 auto* resTy = new ast::OptionalType(node->loc,
                     std::unique_ptr<ast::TypeNode>(inner));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -3364,7 +3370,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     std::make_unique<ast::Identifier>(node->loc, "String"));
                 auto* resTy = new ast::OptionalType(node->loc,
                     std::unique_ptr<ast::TypeNode>(inner));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -3377,7 +3383,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     std::make_unique<ast::Identifier>(node->loc, "String"));
                 auto* resTy = new ast::OptionalType(node->loc,
                     std::unique_ptr<ast::TypeNode>(inner));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -3389,7 +3395,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             if (name == "vyb_strchan_recv" || name == "vyb_strchan_try") {
                 auto* resTy = new ast::TypeName(node->loc,
                     std::make_unique<ast::Identifier>(node->loc, "String"));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -3400,7 +3406,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 name == "vyb_time_sleep_ms") {
                 auto* resTy = new ast::TypeName(node->loc,
                     std::make_unique<ast::Identifier>(node->loc, "Int"));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -3433,7 +3439,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 name == "vyb_strchan_len" || name == "vyb_strchan_free") {
                 auto* resTy = new ast::TypeName(node->loc,
                     std::make_unique<ast::Identifier>(node->loc, "Int"));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -3447,7 +3453,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     std::make_unique<ast::Identifier>(node->loc, "Int"));
                 auto* resTy = new ast::OptionalType(node->loc,
                     std::unique_ptr<ast::TypeNode>(inner));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -3456,7 +3462,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     std::make_unique<ast::Identifier>(node->loc, "Int"));
                 auto* resTy = new ast::OptionalType(node->loc,
                     std::unique_ptr<ast::TypeNode>(inner));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -3466,7 +3472,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             if (name == "vyb_async_recv") {
                 auto* resTy = new ast::TypeName(node->loc,
                     std::make_unique<ast::Identifier>(node->loc, "String"));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -3479,7 +3485,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     std::make_unique<ast::Identifier>(node->loc, "String"));
                 auto* resTy = new ast::OptionalType(node->loc,
                     std::unique_ptr<ast::TypeNode>(inner));
-                expressionTypes[node] = retainType(resTy);
+                expressionTypes[exprKey(node)] = retainType(resTy);
                 node->type = std::shared_ptr<ast::TypeNode>(resTy->clone());
                 return;
             }
@@ -3613,7 +3619,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 }
             } else {
                 for (size_t i = 0; i < node->arguments.size() && i < funcDecl->params.size(); ++i) {
-                    auto argTypeIt = expressionTypes.find(node->arguments[i].get());
+                    auto argTypeIt = expressionTypes.find(exprKey(node->arguments[i].get()));
                     ast::TypeNode* argType = (argTypeIt != expressionTypes.end()) ? argTypeIt->second.get() : nullptr;
                     if (argType) {
                         unifyGenericType(funcDecl->params[i].typeNode.get(), argType,
@@ -3668,13 +3674,13 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                         ast::TypeNodePtr substituted = resolveGenericCallReturnType(registryIt->second);
                         if (substituted) {
                             node->type = std::shared_ptr<ast::TypeNode>(substituted.release());
-                            expressionTypes[node] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
+                            expressionTypes[exprKey(node)] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
                         }
                     } else {
                         ast::TypeNode* returnType = functionType->returnType->type
                             ? functionType->returnType->type.get()
                             : functionType->returnType.get();
-                        expressionTypes[node] = returnType ? std::shared_ptr<ast::TypeNode>(returnType->clone()) : nullptr;
+                        expressionTypes[exprKey(node)] = returnType ? std::shared_ptr<ast::TypeNode>(returnType->clone()) : nullptr;
                         node->type = std::shared_ptr<ast::TypeNode>(returnType->clone());
                     }
                 }
@@ -3703,7 +3709,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 declaredReturn->accept(*this);
             }
             ast::TypeNode* returnType = declaredReturn->type ? declaredReturn->type.get() : declaredReturn;
-            expressionTypes[node] = returnType ? std::shared_ptr<ast::TypeNode>(returnType->clone()) : nullptr;
+            expressionTypes[exprKey(node)] = returnType ? std::shared_ptr<ast::TypeNode>(returnType->clone()) : nullptr;
             node->type = std::shared_ptr<ast::TypeNode>(returnType->clone());
 
             // Move tracking: a MY-owned argument moves only into a MY-owned
@@ -3747,9 +3753,9 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     }
 
                     // Check if type was already set by VariableDeclaration (type propagation)
-                    if (expressionTypes.count(node) && expressionTypes[node]) {
+                    if (expressionTypes.count(exprKey(node)) && expressionTypes[exprKey(node)]) {
                         // Type already set - use it
-                        VYB_CDBG << "DEBUG: Vec::new() type already propagated: " << expressionTypes[node]->toString() << std::endl;
+                        VYB_CDBG << "DEBUG: Vec::new() type already propagated: " << expressionTypes[exprKey(node)]->toString() << std::endl;
                         return;
                     }
 
@@ -3760,7 +3766,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
                     auto vecType = std::make_unique<ast::VecType>(node->loc, std::move(intType));
 
-                    expressionTypes[node] = vecType ? std::shared_ptr<ast::TypeNode>(vecType->clone()) : nullptr;
+                    expressionTypes[exprKey(node)] = vecType ? std::shared_ptr<ast::TypeNode>(vecType->clone()) : nullptr;
                     node->type = std::shared_ptr<ast::TypeNode>(std::move(vecType));
                     return;
                 }
@@ -3780,7 +3786,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     node->arguments[0]->accept(*this);
 
                     // Validate argument is String type
-                    auto argTypeIt = expressionTypes.find(node->arguments[0].get());
+                    auto argTypeIt = expressionTypes.find(exprKey(node->arguments[0].get()));
                     if (argTypeIt != expressionTypes.end() && argTypeIt->second) {
                         if (auto argTypeName = dynamic_cast<ast::TypeName*>(argTypeIt->second.get())) {
                             if (!argTypeName->identifier || argTypeName->identifier->name != "String") {
@@ -3795,7 +3801,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     if (typeName == "Int" || typeName == "Float" || typeName == "Bool" || typeName == "String") {
                         auto resultType = new ast::TypeName(node->loc,
                             std::make_unique<ast::Identifier>(node->loc, typeName));
-                        expressionTypes[node] = retainType(resultType);
+                        expressionTypes[exprKey(node)] = retainType(resultType);
                         node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
                         VYB_CDBG << "DEBUG: " << typeName << "::from_string() returns " << typeName << std::endl;
                         return;
@@ -3806,7 +3812,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     if (structIt != structFieldTypes.end()) {
                         auto resultType = new ast::TypeName(node->loc,
                             std::make_unique<ast::Identifier>(node->loc, typeName));
-                        expressionTypes[node] = retainType(resultType);
+                        expressionTypes[exprKey(node)] = retainType(resultType);
                         node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
                         VYB_CDBG << "DEBUG: " << typeName << "::from_string() returns " << typeName << " (custom struct)" << std::endl;
                         return;
@@ -3824,7 +3830,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     }
                     for (auto& arg : node->arguments) arg->accept(*this);
                     auto strType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "String"));
-                    expressionTypes[node] = retainType(strType);
+                    expressionTypes[exprKey(node)] = retainType(strType);
                     node->type = std::shared_ptr<ast::TypeNode>(strType->clone());
                     return;
                 }
@@ -3837,7 +3843,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     }
                     for (auto& arg : node->arguments) arg->accept(*this);
                     auto strType2 = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "String"));
-                    expressionTypes[node] = retainType(strType2);
+                    expressionTypes[exprKey(node)] = retainType(strType2);
                     node->type = std::shared_ptr<ast::TypeNode>(strType2->clone());
                     return;
                 }
@@ -3883,7 +3889,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                             }
                             auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
                             auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
-                            expressionTypes[node] = intType ? std::shared_ptr<ast::TypeNode>(intType->clone()) : nullptr;
+                            expressionTypes[exprKey(node)] = intType ? std::shared_ptr<ast::TypeNode>(intType->clone()) : nullptr;
                             node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
                             return;
                         }
@@ -4111,10 +4117,10 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                             // dangle after the buffer goes out of scope.
                             if (candidates[0].synthesized) {
                                 ast::TypeNode* stableCopy = actualReturnType->clone().release();
-                                expressionTypes[node] = retainType(stableCopy);
+                                expressionTypes[exprKey(node)] = retainType(stableCopy);
                                 node->type = std::shared_ptr<ast::TypeNode>(stableCopy->clone());
                            } else {
-                                expressionTypes[node] = actualReturnType ? std::shared_ptr<ast::TypeNode>(actualReturnType->clone()) : nullptr;
+                                expressionTypes[exprKey(node)] = actualReturnType ? std::shared_ptr<ast::TypeNode>(actualReturnType->clone()) : nullptr;
                                node->type = std::shared_ptr<ast::TypeNode>(actualReturnType->clone());
                            }
                         }
@@ -4166,7 +4172,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                         // the target is live, absent (`?`) once released. Consumed via
                                         // `match (m.grab()) { o -> ...; ? -> ... }`.
                                         auto resultType = new ast::OptionalType(node->loc, std::move(ourType));
-                                        expressionTypes[node] = retainType(resultType);
+                                        expressionTypes[exprKey(node)] = retainType(resultType);
                                         node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
                                         VYB_CDBG << "DEBUG: mild<T>.grab() returns " << resultType->toString() << std::endl;
                                         return;
@@ -4176,7 +4182,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                     VYB_CDBG << "DEBUG: Setting return type for mild<T>.released() to Bool" << std::endl;
                                     auto boolType = new ast::TypeName(node->loc,
                                         std::make_unique<ast::Identifier>(node->loc, "Bool"));
-                                    expressionTypes[node] = retainType(boolType);
+                                    expressionTypes[exprKey(node)] = retainType(boolType);
                                     node->type = std::shared_ptr<ast::TypeNode>(boolType->clone());
                                     return;
                                 }
@@ -4226,7 +4232,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                             if (method->returnTypeNode) {
                                                 // Substitute Self with concrete type
                                                 ast::TypeNode* actualReturnType = substituteSelfType(method->returnTypeNode.get(), typeNameStr);
-                                                expressionTypes[node] = retainType(actualReturnType);
+                                                expressionTypes[exprKey(node)] = retainType(actualReturnType);
                                                 node->type = std::shared_ptr<ast::TypeNode>(actualReturnType->clone());
                                             }
 
@@ -4252,7 +4258,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                                     if (method->returnTypeNode) {
                                                         // Substitute Self with concrete type
                                                         ast::TypeNode* actualReturnType = substituteSelfType(method->returnTypeNode.get(), typeNameStr);
-                                                        expressionTypes[node] = retainType(actualReturnType);
+                                                        expressionTypes[exprKey(node)] = retainType(actualReturnType);
                                                         node->type = std::shared_ptr<ast::TypeNode>(actualReturnType->clone());
                                                     }
                                                     return;
@@ -4330,7 +4336,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                         if (method->returnType) {
                                             // Return type might be Self - substitute with type parameter
                                             ast::TypeNode* actualReturnType = substituteSelfType(method->returnType, typeStr);
-                                            expressionTypes[node] = retainType(actualReturnType);
+                                            expressionTypes[exprKey(node)] = retainType(actualReturnType);
                                             node->type = std::shared_ptr<ast::TypeNode>(actualReturnType->clone());
                                         }
                                         return;
@@ -4386,7 +4392,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                 // Return String type for .to_string() on primitives
                                 auto stringType = new ast::TypeName(node->loc,
                                     std::make_unique<ast::Identifier>(node->loc, "String"));
-                                expressionTypes[node] = retainType(stringType);
+                                expressionTypes[exprKey(node)] = retainType(stringType);
                                 node->type = std::shared_ptr<ast::TypeNode>(stringType->clone());
                                 VYB_CDBG << "DEBUG: Primitive method " << typeStr << ".to_string() returns String (early path)" << std::endl;
                                 return;
@@ -4399,7 +4405,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                     // Complex type .to_string() → JSON serialization
                                     auto stringType = new ast::TypeName(node->loc,
                                         std::make_unique<ast::Identifier>(node->loc, "String"));
-                                    expressionTypes[node] = retainType(stringType);
+                                    expressionTypes[exprKey(node)] = retainType(stringType);
                                     node->type = std::shared_ptr<ast::TypeNode>(stringType->clone());
                                     VYB_CDBG << "DEBUG: Complex type " << typeStr << ".to_string() returns JSON String (early path)" << std::endl;
                                     return;
@@ -4417,12 +4423,12 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                             // substring/to_upper/to_lower/concat -> String, char_at -> Int
                             if (methodName == "len" || methodName == "length") {
                                 auto intType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Int"));
-                                expressionTypes[node] = retainType(intType);
+                                expressionTypes[exprKey(node)] = retainType(intType);
                                 node->type = std::shared_ptr<ast::TypeNode>(intType->clone());
                                 return;
                             } else if (methodName == "contains" || methodName == "starts_with" || methodName == "ends_with") {
                                 auto boolType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Bool"));
-                                expressionTypes[node] = retainType(boolType);
+                                expressionTypes[exprKey(node)] = retainType(boolType);
                                 node->type = std::shared_ptr<ast::TypeNode>(boolType->clone());
                                 return;
                             } else if (methodName == "substring" || methodName == "substr" ||
@@ -4431,17 +4437,17 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                        methodName == "strip" || methodName == "replace" ||
                                        methodName == "format") {
                                 auto strType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "String"));
-                                expressionTypes[node] = retainType(strType);
+                                expressionTypes[exprKey(node)] = retainType(strType);
                                 node->type = std::shared_ptr<ast::TypeNode>(strType->clone());
                                 return;
                             } else if (methodName == "char_at") {
                                 auto intType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Int"));
-                                expressionTypes[node] = retainType(intType);
+                                expressionTypes[exprKey(node)] = retainType(intType);
                                 node->type = std::shared_ptr<ast::TypeNode>(intType->clone());
                                 return;
                             } else if (methodName == "to_bytes") {
                                 auto intPtrType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Int"));
-                                expressionTypes[node] = retainType(intPtrType);
+                                expressionTypes[exprKey(node)] = retainType(intPtrType);
                                 node->type = std::shared_ptr<ast::TypeNode>(intPtrType->clone());
                                 return;
                             }
@@ -4463,7 +4469,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             memberExpr->object->accept(*this);
 
             // Get the object's type
-            auto objTypeIt = expressionTypes.find(memberExpr->object.get());
+            auto objTypeIt = expressionTypes.find(exprKey(memberExpr->object.get()));
             if (objTypeIt != expressionTypes.end() && objTypeIt->second) {
 
                 // Handle mild<T>.grab() and mild<T>.released() method calls
@@ -4487,7 +4493,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                 // Native optional our<T>?: present (a retained our<T>) while the
                                 // target is live, absent (`?`) once released.
                                 auto resultType = new ast::OptionalType(node->loc, std::move(ourType));
-                                expressionTypes[node] = retainType(resultType);
+                                expressionTypes[exprKey(node)] = retainType(resultType);
                                 node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
                                 VYB_CDBG << "DEBUG: mild<T>.grab() returns " << resultType->toString() << std::endl;
                                 return;
@@ -4498,7 +4504,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                         VYB_CDBG << "DEBUG: Setting return type for mild<T>.released() to Bool" << std::endl;
                         auto boolType = new ast::TypeName(node->loc,
                             std::make_unique<ast::Identifier>(node->loc, "Bool"));
-                        expressionTypes[node] = retainType(boolType);
+                        expressionTypes[exprKey(node)] = retainType(boolType);
                         node->type = std::shared_ptr<ast::TypeNode>(boolType->clone());
                         return;
                     }
@@ -4605,12 +4611,12 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                         if (typeNameStr == "String") {
                             if (methodName == "len" || methodName == "length") {
                                 auto intType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Int"));
-                                expressionTypes[node] = retainType(intType);
+                                expressionTypes[exprKey(node)] = retainType(intType);
                                 node->type = std::shared_ptr<ast::TypeNode>(intType->clone());
                                 return;
                             } else if (methodName == "contains" || methodName == "starts_with" || methodName == "ends_with") {
                                 auto boolType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Bool"));
-                                expressionTypes[node] = retainType(boolType);
+                                expressionTypes[exprKey(node)] = retainType(boolType);
                                 node->type = std::shared_ptr<ast::TypeNode>(boolType->clone());
                                 return;
                             } else if (methodName == "substring" || methodName == "substr" ||
@@ -4619,17 +4625,17 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                        methodName == "strip" || methodName == "replace" ||
                                        methodName == "format") {
                                 auto strType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "String"));
-                                expressionTypes[node] = retainType(strType);
+                                expressionTypes[exprKey(node)] = retainType(strType);
                                 node->type = std::shared_ptr<ast::TypeNode>(strType->clone());
                                 return;
                             } else if (methodName == "char_at") {
                                 auto intType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Int"));
-                                expressionTypes[node] = retainType(intType);
+                                expressionTypes[exprKey(node)] = retainType(intType);
                                 node->type = std::shared_ptr<ast::TypeNode>(intType->clone());
                                 return;
                             } else if (methodName == "to_bytes") {
                                 auto intPtrType = new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, "Int"));
-                                expressionTypes[node] = retainType(intPtrType);
+                                expressionTypes[exprKey(node)] = retainType(intPtrType);
                                 node->type = std::shared_ptr<ast::TypeNode>(intPtrType->clone());
                                 return;
                             }
@@ -4648,7 +4654,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                     if (method && method->id && method->id->name == methodName) {
                                         // Found the method! Set the return type
                                         if (method->returnTypeNode) {
-                                            expressionTypes[node] = method->returnTypeNode ? std::shared_ptr<ast::TypeNode>(method->returnTypeNode->clone()) : nullptr;
+                                            expressionTypes[exprKey(node)] = method->returnTypeNode ? std::shared_ptr<ast::TypeNode>(method->returnTypeNode->clone()) : nullptr;
                                             node->type = std::shared_ptr<ast::TypeNode>(method->returnTypeNode->clone());
                                         }
 
@@ -4678,7 +4684,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                                               << " return type before substitution: " << method->returnTypeNode->toString() << std::endl;
                                                     ast::TypeNode* actualReturnType = substituteSelfType(method->returnTypeNode.get(), dispatchTypeStr);
                                                     VYB_CDBG << "DEBUG: After Self substitution: " << actualReturnType->toString() << std::endl;
-                                                    expressionTypes[node] = retainType(actualReturnType);
+                                                    expressionTypes[exprKey(node)] = retainType(actualReturnType);
                                                     node->type = std::shared_ptr<ast::TypeNode>(actualReturnType->clone());
                                                 }
                                                 return;
@@ -4759,7 +4765,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                                 VYB_CDBG << "DEBUG: Substituting Self return type with type parameter " << typeNameStr << std::endl;
                                             }
                                         }
-                                        expressionTypes[node] = actualReturnType ? std::shared_ptr<ast::TypeNode>(actualReturnType->clone()) : nullptr;
+                                        expressionTypes[exprKey(node)] = actualReturnType ? std::shared_ptr<ast::TypeNode>(actualReturnType->clone()) : nullptr;
                                         node->type = std::shared_ptr<ast::TypeNode>(actualReturnType->clone());
                                     }
                                     return;
@@ -4773,7 +4779,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                 // Return String type for .to_string() on primitives
                                 auto stringType = new ast::TypeName(node->loc,
                                     std::make_unique<ast::Identifier>(node->loc, "String"));
-                                expressionTypes[node] = retainType(stringType);
+                                expressionTypes[exprKey(node)] = retainType(stringType);
                                 node->type = std::shared_ptr<ast::TypeNode>(stringType->clone());
                                 VYB_CDBG << "DEBUG: Primitive method " << typeNameStr << ".to_string() returns String" << std::endl;
                                 return;
@@ -4785,7 +4791,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                 // Complex type .to_string() → JSON serialization
                                 auto stringType = new ast::TypeName(node->loc,
                                     std::make_unique<ast::Identifier>(node->loc, "String"));
-                                expressionTypes[node] = retainType(stringType);
+                                expressionTypes[exprKey(node)] = retainType(stringType);
                                 node->type = std::shared_ptr<ast::TypeNode>(stringType->clone());
                                 VYB_CDBG << "DEBUG: Complex type " << typeNameStr << ".to_string() returns JSON String" << std::endl;
                                 return;
@@ -4806,7 +4812,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
     if (auto ident = dynamic_cast<ast::Identifier*>(node->callee.get())) {
         auto it = functionRegistry.find(ident->name);
         if (it != functionRegistry.end() && it->second->returnTypeNode) {
-            expressionTypes[node] = it->second->returnTypeNode ? std::shared_ptr<ast::TypeNode>(it->second->returnTypeNode->clone()) : nullptr;
+            expressionTypes[exprKey(node)] = it->second->returnTypeNode ? std::shared_ptr<ast::TypeNode>(it->second->returnTypeNode->clone()) : nullptr;
             node->type = std::shared_ptr<ast::TypeNode>(it->second->returnTypeNode->clone());
         }
     }
@@ -4825,12 +4831,12 @@ void SemanticAnalyzer::visit(ast::ArrayElementExpression* node) {
     node->index->accept(*this);
 
     // Get the array's type to determine the element type
-    auto arrayTypeIt = expressionTypes.find(node->array.get());
+    auto arrayTypeIt = expressionTypes.find(exprKey(node->array.get()));
     if (arrayTypeIt != expressionTypes.end() && arrayTypeIt->second) {
         if (auto arrayType = dynamic_cast<ast::ArrayType*>(arrayTypeIt->second.get())) {
             // The element type is the array's element type
             if (arrayType->elementType) {
-                expressionTypes[node] = retainType(arrayType->elementType->clone().release());
+                expressionTypes[exprKey(node)] = retainType(arrayType->elementType->clone().release());
                 node->type = std::shared_ptr<ast::TypeNode>(arrayType->elementType->clone());
             }
         }
@@ -4839,7 +4845,7 @@ void SemanticAnalyzer::visit(ast::ArrayElementExpression* node) {
     // Tuple access: `t[0]`, `t[1]`, ... — resolve the member's type so that
     // type inference (`auto x = t[i]`) and downstream member lookups on the
     // element work. Only constant literal indices can be resolved statically.
-    if (expressionTypes.find(node) == expressionTypes.end() &&
+    if (expressionTypes.find(exprKey(node)) == expressionTypes.end() &&
         arrayTypeIt != expressionTypes.end() && arrayTypeIt->second) {
         ast::TypeNode* resolvedType = arrayTypeIt->second.get();
         if (auto typeName = dynamic_cast<ast::TypeName*>(resolvedType)) {
@@ -4862,7 +4868,7 @@ void SemanticAnalyzer::visit(ast::ArrayElementExpression* node) {
             }
             if (hasIndex) {
                 const ast::TypeNodePtr& member = tupleType->memberTypes[tupleIndex];
-                expressionTypes[node] = retainType(member->clone().release());
+                expressionTypes[exprKey(node)] = retainType(member->clone().release());
                 node->type = std::shared_ptr<ast::TypeNode>(member->clone());
             } else if (auto idxLit = dynamic_cast<ast::IntegerLiteral*>(node->index.get())) {
                 addError("Tuple index out of range.", node);
@@ -4871,7 +4877,7 @@ void SemanticAnalyzer::visit(ast::ArrayElementExpression* node) {
     }
 
     // Validate index type (should be integer)
-    auto indexTypeIt = expressionTypes.find(node->index.get());
+    auto indexTypeIt = expressionTypes.find(exprKey(node->index.get()));
     if (indexTypeIt != expressionTypes.end() && indexTypeIt->second) {
         if (auto indexTypeName = dynamic_cast<ast::TypeName*>(indexTypeIt->second.get())) {
             if (indexTypeName->identifier->name != "Int") {
@@ -4900,7 +4906,7 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
     if (auto gi = dynamic_cast<ast::GenericInstantiationExpression*>(node->object.get())) {
         auto* baseId = dynamic_cast<ast::Identifier*>(gi->baseExpression.get());
         if (baseId && enumGenericParamOrder.count(baseId->name)) {
-            auto typeIt = expressionTypes.find(gi);
+            auto typeIt = expressionTypes.find(exprKey(gi));
             const std::string concreteStr = (typeIt != expressionTypes.end() && typeIt->second)
                 ? typeIt->second->toString() : gi->toString();
             auto enumPayIt = enumVariantPayloadTypes.find(concreteStr);
@@ -4919,7 +4925,7 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
                     std::make_unique<ast::Identifier>(node->loc, baseId->name));
                 for (auto& a : gi->genericArguments) enumType->genericArgs.push_back(a->clone());
                 node->type = std::shared_ptr<ast::TypeNode>(enumType->clone());
-                expressionTypes[node] = retainType(enumType.release());
+                expressionTypes[exprKey(node)] = retainType(enumType.release());
                 return;
             }
         }
@@ -4938,7 +4944,7 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
                 auto* intTy = new ast::TypeName(node->loc,
                     std::make_unique<ast::Identifier>(node->loc, "Int"));
                 node->type = std::shared_ptr<ast::TypeNode>(intTy->clone());
-                expressionTypes[node] = retainType(intTy);
+                expressionTypes[exprKey(node)] = retainType(intTy);
                 return;
             }
             auto enumPayIt = enumVariantPayloadTypes.find(typeName);
@@ -4957,14 +4963,14 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
                 auto* enumVariantTy = new ast::TypeName(node->loc,
                     std::make_unique<ast::Identifier>(node->loc, typeName));
                 node->type = std::shared_ptr<ast::TypeNode>(enumVariantTy->clone());
-                expressionTypes[node] = retainType(enumVariantTy);
+                expressionTypes[exprKey(node)] = retainType(enumVariantTy);
                 return;
             }
             // C-like enums not otherwise registered: the variant carries the enum type.
             auto* enumVariantTy = new ast::TypeName(node->loc,
                 std::make_unique<ast::Identifier>(node->loc, typeName));
             node->type = std::shared_ptr<ast::TypeNode>(enumVariantTy->clone());
-            expressionTypes[node] = retainType(enumVariantTy);
+            expressionTypes[exprKey(node)] = retainType(enumVariantTy);
             return;
         }
 
@@ -5002,7 +5008,7 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
     }
 
     // Now get the object's type from expressionTypes map
-    auto it = expressionTypes.find(node->object.get());
+    auto it = expressionTypes.find(exprKey(node->object.get()));
     if (it == expressionTypes.end() || !it->second) {
         addError("Cannot determine type of object in member expression.", node);
         return;
@@ -5236,7 +5242,7 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
         (enumTypeNames.count(baseStructName) || enumGenericParamOrder.count(baseStructName))) {
         auto* tagTy = new ast::TypeName(node->loc,
             std::make_unique<ast::Identifier>(node->loc, "Int"));
-        expressionTypes[node] = retainType(tagTy);
+        expressionTypes[exprKey(node)] = retainType(tagTy);
         node->type = std::shared_ptr<ast::TypeNode>(tagTy->clone());
         return;
     }
@@ -5253,7 +5259,7 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
                 const std::string env = objEnumType->identifier->name;
                 if (env == "Result" && !objEnumType->genericArgs.empty()) {
                     ast::TypeNode* pal = objEnumType->genericArgs[0].get();
-                    expressionTypes[node] = pal ? std::shared_ptr<ast::TypeNode>(pal->clone()) : nullptr;
+                    expressionTypes[exprKey(node)] = pal ? std::shared_ptr<ast::TypeNode>(pal->clone()) : nullptr;
                     node->type = std::shared_ptr<ast::TypeNode>(pal->clone());
                     return;
                 }
@@ -5346,7 +5352,7 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
             }
         }
     }
-    expressionTypes[node] = fieldType ? std::shared_ptr<ast::TypeNode>(fieldType->clone()) : nullptr;
+    expressionTypes[exprKey(node)] = fieldType ? std::shared_ptr<ast::TypeNode>(fieldType->clone()) : nullptr;
     node->type = std::shared_ptr<ast::TypeNode>(fieldType->clone());
 
     VYB_CDBG << "DEBUG: Resolved member access " << structTypeName << "." << fieldName
@@ -5365,15 +5371,15 @@ void SemanticAnalyzer::visit(ast::AssignmentExpression* node) {
     if (derefLHS) {
         // Analyze the pointer expression to get its type
         derefLHS->pointer->accept(*this);
-        auto ptrTypeIt = expressionTypes.find(derefLHS->pointer.get());
+        auto ptrTypeIt = expressionTypes.find(exprKey(derefLHS->pointer.get()));
         if (ptrTypeIt != expressionTypes.end() && ptrTypeIt->second) {
             // Save the original type (pointee type)
-            auto origTypeIt = expressionTypes.find(derefLHS);
+            auto origTypeIt = expressionTypes.find(exprKey(derefLHS));
             if (origTypeIt != expressionTypes.end()) {
                 savedDerefType = origTypeIt->second.get();
             }
             // Set the deref node's type to the pointer type for assignment compatibility
-            expressionTypes[derefLHS] = ptrTypeIt->second;
+            expressionTypes[exprKey(derefLHS)] = ptrTypeIt->second;
             derefLHS->type = std::shared_ptr<ast::TypeNode>(ptrTypeIt->second->clone());
         }
     }
@@ -5424,26 +5430,26 @@ void SemanticAnalyzer::visit(ast::AssignmentExpression* node) {
     // Restore the original type for derefLHS after assignment analysis
     if (derefLHS) {
         if (savedDerefType) {
-            expressionTypes[derefLHS] = savedDerefType ? std::shared_ptr<ast::TypeNode>(savedDerefType->clone()) : nullptr;
+            expressionTypes[exprKey(derefLHS)] = savedDerefType ? std::shared_ptr<ast::TypeNode>(savedDerefType->clone()) : nullptr;
             derefLHS->type = std::shared_ptr<ast::TypeNode>(savedDerefType->clone());
         }
     }
 
     if (!isLValue(node->left.get())) {
         addError("LHS of assignment is not a valid L-value.", node->left.get());
-        expressionTypes[node] = nullptr; // Mark as error
+        expressionTypes[exprKey(node)] = nullptr; // Mark as error
         return;
     }
 
     std::string assignedRoot = borrowedRootName(node->left.get());
     if (!assignedRoot.empty() && hasActiveBorrow(assignedRoot)) {
         addError("Cannot assign to '" + assignedRoot + "' while it has an active borrow.", node->left.get());
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
 
-    auto leftTypeIt = expressionTypes.find(node->left.get());
-    auto rightTypeIt = expressionTypes.find(node->right.get());
+    auto leftTypeIt = expressionTypes.find(exprKey(node->left.get()));
+    auto rightTypeIt = expressionTypes.find(exprKey(node->right.get()));
 
     ast::TypeNode* leftType = (leftTypeIt != expressionTypes.end()) ? leftTypeIt->second.get() : nullptr;
     ast::TypeNode* rightType = (rightTypeIt != expressionTypes.end()) ? rightTypeIt->second.get() : nullptr;
@@ -5455,7 +5461,7 @@ void SemanticAnalyzer::visit(ast::AssignmentExpression* node) {
 
     if (!leftType || !rightType) {
         addError("Type error in assignment: could not determine type of LHS or RHS.", node);
-        expressionTypes[node] = nullptr; // Mark as error
+        expressionTypes[exprKey(node)] = nullptr; // Mark as error
         return;
     }
 
@@ -5477,7 +5483,7 @@ void SemanticAnalyzer::visit(ast::AssignmentExpression* node) {
                      "' operands have mismatched integer widths (" +
                      leftType->toString() + " vs " + rightType->toString() +
                      "); cast one operand explicitly to a common width.", node);
-            expressionTypes[node] = nullptr;
+            expressionTypes[exprKey(node)] = nullptr;
             return;
         }
     }
@@ -5489,7 +5495,7 @@ void SemanticAnalyzer::visit(ast::AssignmentExpression* node) {
     if (chk.code == IntAssignCode::NeedExplicitCast ||
         chk.code == IntAssignCode::ConstantOutOfRange) {
         addError(chk.message, node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
     if (chk.code == IntAssignCode::NotInteger &&
@@ -5497,10 +5503,10 @@ void SemanticAnalyzer::visit(ast::AssignmentExpression* node) {
         addError("Type error in assignment: incompatible types - cannot assign '" + rightType->toString() +
                 "' to '" + leftType->toString() + "'.", node);
         // Continue processing to avoid cascading errors, but mark this node as erroneous
-        expressionTypes[node] = leftType ? std::shared_ptr<ast::TypeNode>(leftType->clone()) : nullptr; // Still use left type for further analysis
+        expressionTypes[exprKey(node)] = leftType ? std::shared_ptr<ast::TypeNode>(leftType->clone()) : nullptr; // Still use left type for further analysis
     } else {
         // The type of the assignment expression is typically the type of the LHS (or RHS after conversion).
-        expressionTypes[node] = leftType ? std::shared_ptr<ast::TypeNode>(leftType->clone()) : nullptr; // Or rightType, depending on language rules for assignment expr type
+        expressionTypes[exprKey(node)] = leftType ? std::shared_ptr<ast::TypeNode>(leftType->clone()) : nullptr; // Or rightType, depending on language rules for assignment expr type
     }
 
     if (leftType) {
@@ -5535,7 +5541,7 @@ void SemanticAnalyzer::visit(ast::LogicalExpression* node) {
         node->left->accept(*this);
     } else {
         addError("Logical expression missing left operand.", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
 
@@ -5543,18 +5549,18 @@ void SemanticAnalyzer::visit(ast::LogicalExpression* node) {
         node->right->accept(*this);
     } else {
         addError("Logical expression missing right operand.", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
 
     // Get types of operands
-    auto leftTypeIt = expressionTypes.find(node->left.get());
-    auto rightTypeIt = expressionTypes.find(node->right.get());
+    auto leftTypeIt = expressionTypes.find(exprKey(node->left.get()));
+    auto rightTypeIt = expressionTypes.find(exprKey(node->right.get()));
 
     if (leftTypeIt == expressionTypes.end() || rightTypeIt == expressionTypes.end() ||
         !leftTypeIt->second || !rightTypeIt->second) {
         addError("Cannot determine types for logical expression operands.", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
 
@@ -5583,7 +5589,7 @@ void SemanticAnalyzer::visit(ast::LogicalExpression* node) {
     // Create a boolean TypeName
     auto identifier = std::make_unique<ast::Identifier>(node->loc, "bool");
     auto boolType = std::make_unique<ast::TypeName>(node->loc, std::move(identifier));
-    expressionTypes[node] = boolType ? std::shared_ptr<ast::TypeNode>(boolType->clone()) : nullptr;
+    expressionTypes[exprKey(node)] = boolType ? std::shared_ptr<ast::TypeNode>(boolType->clone()) : nullptr;
     node->type = std::move(boolType);
 }
 
@@ -5593,15 +5599,15 @@ void SemanticAnalyzer::visit(ast::ConditionalExpression* node) {
         node->condition->accept(*this);
     } else {
         addError("Conditional expression missing condition.", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
 
     // Check condition is boolean
-    auto conditionTypeIt = expressionTypes.find(node->condition.get());
+    auto conditionTypeIt = expressionTypes.find(exprKey(node->condition.get()));
     if (conditionTypeIt == expressionTypes.end() || !conditionTypeIt->second) {
         addError("Cannot determine type for conditional expression condition.", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
 
@@ -5619,7 +5625,7 @@ void SemanticAnalyzer::visit(ast::ConditionalExpression* node) {
         node->thenExpr->accept(*this);
     } else {
         addError("Conditional expression missing 'then' branch.", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
 
@@ -5628,18 +5634,18 @@ void SemanticAnalyzer::visit(ast::ConditionalExpression* node) {
         node->elseExpr->accept(*this);
     } else {
         addError("Conditional expression missing 'else' branch.", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
 
     // Get types of branches
-    auto thenTypeIt = expressionTypes.find(node->thenExpr.get());
-    auto elseTypeIt = expressionTypes.find(node->elseExpr.get());
+    auto thenTypeIt = expressionTypes.find(exprKey(node->thenExpr.get()));
+    auto elseTypeIt = expressionTypes.find(exprKey(node->elseExpr.get()));
 
     if (thenTypeIt == expressionTypes.end() || elseTypeIt == expressionTypes.end() ||
         !thenTypeIt->second || !elseTypeIt->second) {
         addError("Cannot determine types for conditional expression branches.", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
 
@@ -5650,7 +5656,7 @@ void SemanticAnalyzer::visit(ast::ConditionalExpression* node) {
                  thenTypeIt->second->toString() + "' and '" +
                  elseTypeIt->second->toString() + "'.", node);
         // Use then branch type to continue analysis
-        expressionTypes[node] = thenTypeIt->second;
+        expressionTypes[exprKey(node)] = thenTypeIt->second;
         if (thenTypeIt->second) {
             node->type = std::shared_ptr<ast::TypeNode>(thenTypeIt->second->clone());
         }
@@ -5659,7 +5665,7 @@ void SemanticAnalyzer::visit(ast::ConditionalExpression* node) {
 
     // The result type is the common type of both branches
     // For now, use the 'then' branch type as the result type
-    expressionTypes[node] = thenTypeIt->second;
+    expressionTypes[exprKey(node)] = thenTypeIt->second;
     if (thenTypeIt->second) {
         node->type = std::shared_ptr<ast::TypeNode>(thenTypeIt->second->clone());
     }
@@ -5670,7 +5676,7 @@ void SemanticAnalyzer::visit(ast::SequenceExpression* node) {
     if (node->expressions.empty()) {
         // Empty tuple - create empty TupleTypeNode
         auto emptyTupleType = std::make_unique<ast::TupleTypeNode>(node->loc, std::vector<ast::TypeNodePtr>{});
-        expressionTypes[node] = emptyTupleType ? std::shared_ptr<ast::TypeNode>(emptyTupleType->clone()) : nullptr;
+        expressionTypes[exprKey(node)] = emptyTupleType ? std::shared_ptr<ast::TypeNode>(emptyTupleType->clone()) : nullptr;
         node->type = std::shared_ptr<ast::TypeNode>(emptyTupleType.release());
         return;
     }
@@ -5680,31 +5686,31 @@ void SemanticAnalyzer::visit(ast::SequenceExpression* node) {
     for (auto& expr : node->expressions) {
         if (expr) {
             expr->accept(*this);
-            auto exprTypeIt = expressionTypes.find(expr.get());
+            auto exprTypeIt = expressionTypes.find(exprKey(expr.get()));
             if (exprTypeIt != expressionTypes.end() && exprTypeIt->second) {
                 elementTypes.push_back(exprTypeIt->second->clone());
             } else {
                 addError("Cannot determine type of expression in tuple literal.", node);
-                expressionTypes[node] = nullptr;
+                expressionTypes[exprKey(node)] = nullptr;
                 return;
             }
         } else {
             addError("Null expression in sequence.", node);
-            expressionTypes[node] = nullptr;
+            expressionTypes[exprKey(node)] = nullptr;
             return;
         }
     }
 
     // Create a TupleTypeNode with all element types
     auto tupleType = std::make_unique<ast::TupleTypeNode>(node->loc, std::move(elementTypes));
-    expressionTypes[node] = tupleType ? std::shared_ptr<ast::TypeNode>(tupleType->clone()) : nullptr;
+    expressionTypes[exprKey(node)] = tupleType ? std::shared_ptr<ast::TypeNode>(tupleType->clone()) : nullptr;
     node->type = std::shared_ptr<ast::TypeNode>(tupleType.release());
 }
 void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
     // Try to determine the type from the typePath field (e.g., Point in Point { ... })
     if (!node || !node->typePath) {
         addError("Object literal missing type path.", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
 
@@ -5712,7 +5718,7 @@ void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
     auto typeName = dynamic_cast<ast::TypeName*>(node->typePath.get());
     if (!typeName || !typeName->identifier) {
         addError("Object literal has invalid type path.", node);
-        expressionTypes[node] = retainType(node->typePath->clone().release());
+        expressionTypes[exprKey(node)] = retainType(node->typePath->clone().release());
         return;
     }
 
@@ -5733,7 +5739,7 @@ void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
         std::map<std::string, ast::TypeNode*> implicitFields;
         for (auto& prop : node->properties) {
             if (prop.key && prop.value) {
-                auto valueTypeIt = expressionTypes.find(prop.value.get());
+                auto valueTypeIt = expressionTypes.find(exprKey(prop.value.get()));
                 if (valueTypeIt != expressionTypes.end() && valueTypeIt->second) {
                     implicitFields[prop.key->name] = valueTypeIt->second.get();
                 }
@@ -5742,7 +5748,7 @@ void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
         if (!implicitFields.empty()) {
             structFieldTypes[structName] = implicitFields;
         }
-        expressionTypes[node] = retainType(node->typePath->clone().release());
+        expressionTypes[exprKey(node)] = retainType(node->typePath->clone().release());
         return;
     }
 
@@ -5766,7 +5772,7 @@ void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
                 addError("Field '" + prop.key->name + "' does not exist in struct '" + structName + "'", node);
                 continue;
             }
-            auto valueTypeIt = expressionTypes.find(prop.value.get());
+            auto valueTypeIt = expressionTypes.find(exprKey(prop.value.get()));
             if (valueTypeIt == expressionTypes.end() || !valueTypeIt->second) continue;
 
             auto expectedFieldType = substituteGenericArgsForValidation(fieldTypeIt->second, explicitTypeArgs);
@@ -5776,7 +5782,7 @@ void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
             }
         }
 
-        expressionTypes[node] = retainType(node->typePath->clone().release());
+        expressionTypes[exprKey(node)] = retainType(node->typePath->clone().release());
         node->type = std::shared_ptr<ast::TypeNode>(node->typePath->clone());
         return;
     }
@@ -5800,7 +5806,7 @@ void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
         ast::TypeNode* declaredFieldType = fieldTypeIt->second;
 
         // Get the actual type of the value
-        auto valueTypeIt = expressionTypes.find(prop.value.get());
+        auto valueTypeIt = expressionTypes.find(exprKey(prop.value.get()));
         if (valueTypeIt == expressionTypes.end() || !valueTypeIt->second) {
             continue; // Can't infer if value type unknown
         }
@@ -5863,11 +5869,11 @@ void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
             std::move(genericArgs)
         );
 
-        expressionTypes[node] = retainType(resultType);
+        expressionTypes[exprKey(node)] = retainType(resultType);
         node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
     } else {
         // No generic parameters or couldn't infer - use type as-is
-        expressionTypes[node] = retainType(node->typePath->clone().release());
+        expressionTypes[exprKey(node)] = retainType(node->typePath->clone().release());
         node->type = std::shared_ptr<ast::TypeNode>(node->typePath->clone());
     }
 }
@@ -5883,7 +5889,7 @@ void SemanticAnalyzer::visit(ast::ArrayLiteral* node) {
             element->accept(*this);
 
             // Get the element type
-            auto elemTypeIt = expressionTypes.find(element.get());
+            auto elemTypeIt = expressionTypes.find(exprKey(element.get()));
             if (elemTypeIt != expressionTypes.end() && elemTypeIt->second) {
                 if (!elementType) {
                     // First element sets the type
@@ -5909,8 +5915,8 @@ void SemanticAnalyzer::visit(ast::ArrayLiteral* node) {
             std::move(sizeExpr)
         );
 
-        expressionTypes[node] = retainType(arrayType.release());
-        node->type = std::shared_ptr<ast::TypeNode>(expressionTypes[node]->clone());
+        expressionTypes[exprKey(node)] = retainType(arrayType.release());
+        node->type = std::shared_ptr<ast::TypeNode>(expressionTypes[exprKey(node)]->clone());
     }
 }
 void SemanticAnalyzer::visit(ast::FunctionExpression* node) {
@@ -6016,7 +6022,7 @@ void SemanticAnalyzer::visit(ast::FunctionExpression* node) {
                     if (!stmt) continue;
                     if (auto* ret = dynamic_cast<ast::ReturnStatement*>(stmt)) {
                         if (ret->argument) {
-                            auto ait = expressionTypes.find(ret->argument.get());
+                            auto ait = expressionTypes.find(exprKey(ret->argument.get()));
                             if (ait != expressionTypes.end() && ait->second) {
                                 retTy = ait->second.get();
                             } else if (ret->argument->type) {
@@ -6072,7 +6078,7 @@ void SemanticAnalyzer::visit(ast::FunctionExpression* node) {
             }
         } else {
             ast::TypeNode* bodyTy = nullptr;
-            auto it = expressionTypes.find(node->body.get());
+            auto it = expressionTypes.find(exprKey(node->body.get()));
             if (it != expressionTypes.end()) bodyTy = it->second.get();
             else if (node->body->type) bodyTy = node->body->type.get();
             if (bodyTy && !bodyTy->toString().empty() && bodyTy->toString() != "void") {
@@ -6097,7 +6103,7 @@ void SemanticAnalyzer::visit(ast::FunctionExpression* node) {
         effectiveReturn = std::move(inferredReturn);
     }
     auto* funcType = new ast::FunctionType(node->loc, std::move(paramTypes), std::move(effectiveReturn));
-    expressionTypes[node] = retainType(funcType);
+    expressionTypes[exprKey(node)] = retainType(funcType);
     node->type = std::shared_ptr<ast::TypeNode>(funcType->clone());
 }
 void SemanticAnalyzer::visit(ast::ThisExpression* node) {}
@@ -6110,7 +6116,7 @@ void SemanticAnalyzer::visit(ast::AwaitExpression* node) {
     node->expr->accept(*this);
 
     ast::TypeNode* operandTy = nullptr;
-    auto it = expressionTypes.find(node->expr.get());
+    auto it = expressionTypes.find(exprKey(node->expr.get()));
     if (it != expressionTypes.end()) operandTy = it->second.get();
     else if (node->expr->type) operandTy = node->expr->type.get();
 
@@ -6123,9 +6129,9 @@ void SemanticAnalyzer::visit(ast::AwaitExpression* node) {
     }
     if (inner) {
         node->type = std::shared_ptr<ast::TypeNode>(inner->clone());
-        expressionTypes[node] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
+        expressionTypes[exprKey(node)] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
     } else {
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
     }
 }
 
@@ -6170,7 +6176,7 @@ void SemanticAnalyzer::visit(ast::BlockExpression* node) {
                 for (auto it = handlerBlock->body.rbegin(); it != handlerBlock->body.rend(); ++it) {
                     if (auto* exprStmt = dynamic_cast<ast::ExpressionStatement*>(it->get())) {
                         if (exprStmt->expression) {
-                            auto eIt = expressionTypes.find(exprStmt->expression.get());
+                            auto eIt = expressionTypes.find(exprKey(exprStmt->expression.get()));
                             if (eIt != expressionTypes.end() && eIt->second.get()) yielded = eIt->second.get();
                         }
                         break;
@@ -6183,7 +6189,7 @@ void SemanticAnalyzer::visit(ast::BlockExpression* node) {
         for (auto it = node->block->body.rbegin(); it != node->block->body.rend(); ++it) {
             if (auto* exprStmt = dynamic_cast<ast::ExpressionStatement*>(it->get())) {
                 if (exprStmt->expression) {
-                    auto eIt = expressionTypes.find(exprStmt->expression.get());
+                    auto eIt = expressionTypes.find(exprKey(exprStmt->expression.get()));
                     if (eIt != expressionTypes.end() && eIt->second.get()) yielded = eIt->second.get();
                 }
                 break;
@@ -6194,7 +6200,7 @@ void SemanticAnalyzer::visit(ast::BlockExpression* node) {
     // as a value, so don't stamp a void result type on it.
     if (yielded && yielded->toString() != "Void") {
         node->type = std::shared_ptr<ast::TypeNode>(yielded->clone());
-        expressionTypes[node] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
+        expressionTypes[exprKey(node)] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
     }
 }
 void SemanticAnalyzer::visit(ast::SelectExpression* node) {
@@ -6207,7 +6213,7 @@ void SemanticAnalyzer::visit(ast::SelectExpression* node) {
     // payload fields and to check exhaustiveness on tagged-union enums.
     std::string selectTypeStr;
     if (node->expr) {
-        if (auto it = expressionTypes.find(node->expr.get()); it != expressionTypes.end() && it->second) {
+        if (auto it = expressionTypes.find(exprKey(node->expr.get())); it != expressionTypes.end() && it->second) {
             selectTypeStr = it->second->toString();
         } else if (node->expr->type) {
             selectTypeStr = node->expr->type->toString();
@@ -6592,7 +6598,7 @@ void SemanticAnalyzer::visit(ast::MatchExpression* node) {
                     for (auto& stmt : be->block->body) {
                         if (auto* pass = dynamic_cast<ast::PassStatement*>(stmt.get())) {
                             if (pass->argument) {
-                                auto it = expressionTypes.find(pass->argument.get());
+                                auto it = expressionTypes.find(exprKey(pass->argument.get()));
                                 if (it != expressionTypes.end()) yielded = it->second.get();
                             }
                             break;
@@ -6600,7 +6606,7 @@ void SemanticAnalyzer::visit(ast::MatchExpression* node) {
                     }
                 }
             } else {
-                auto it = expressionTypes.find(body.get());
+                auto it = expressionTypes.find(exprKey(body.get()));
                 if (it != expressionTypes.end()) yielded = it->second.get();
             }
         }
@@ -6636,7 +6642,7 @@ void SemanticAnalyzer::visit(ast::GenericInstantiationExpression* node) {
             auto* tn = new ast::TypeName(node->loc,
                 std::make_unique<ast::Identifier>(node->loc, identifier->name));
             for (auto& a : node->genericArguments) tn->genericArgs.push_back(a->clone());
-            expressionTypes[node] = retainType(tn);
+            expressionTypes[exprKey(node)] = retainType(tn);
             node->type = std::shared_ptr<ast::TypeNode>(tn->clone());
             return;
         }
@@ -6652,20 +6658,20 @@ void SemanticAnalyzer::visit(ast::PointerDerefExpression* node) {
     // at() intrinsic only allowed inside an freedom block
     if (!isInFreedomBlock()) {
         addError("at() (pointer dereference) is only allowed inside an freedom block.", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
     if (!node || !node->pointer) {
         addError("Malformed pointer dereference expression.", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
     node->pointer->accept(*this);
-    auto pointerTypeIt = expressionTypes.find(node->pointer.get());
+    auto pointerTypeIt = expressionTypes.find(exprKey(node->pointer.get()));
 
     if (pointerTypeIt == expressionTypes.end() || !pointerTypeIt->second) {
         addError("Cannot dereference pointer with unknown type.", node->pointer.get());
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
 
@@ -6694,38 +6700,38 @@ void SemanticAnalyzer::visit(ast::PointerDerefExpression* node) {
 
     if (!pointeeType) {
         addError("Failed to determine pointee type for dereference.", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         if (node->type) node->type.reset();
         return;
     }
 
-    expressionTypes[node] = retainType(pointeeType); // raw pointer, ownership handled by clone().release()
+    expressionTypes[exprKey(node)] = retainType(pointeeType); // raw pointer, ownership handled by clone().release()
     node->type = std::shared_ptr<ast::TypeNode>(pointeeType->clone()); // node->type takes ownership of a new clone
 }
 void SemanticAnalyzer::visit(ast::AddrOfExpression* node) {
     // addr() intrinsic only allowed inside an freedom block
     if (!isInFreedomBlock()) {
         addError("addr() is only allowed inside an freedom block.", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
     if (!node || !node->getLocation()) {
          addError("Malformed addr_of expression.", node);
-         expressionTypes[node] = nullptr;
+         expressionTypes[exprKey(node)] = nullptr;
         return;
     }
     node->getLocation()->accept(*this); // Operand of addr()
 
     if (!isLValue(node->getLocation().get())) {
         addError("Cannot take address of non-lvalue with addr().", node->getLocation().get());
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
 
-    auto operandTypeIt = expressionTypes.find(node->getLocation().get());
+    auto operandTypeIt = expressionTypes.find(exprKey(node->getLocation().get()));
     if (operandTypeIt == expressionTypes.end() || !operandTypeIt->second) {
         addError("Cannot take address of expression with unknown type using addr().", node->getLocation().get());
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
 
@@ -6734,24 +6740,24 @@ void SemanticAnalyzer::visit(ast::AddrOfExpression* node) {
     // Vyb should have a dedicated address type (e.g., uintptr).
     auto addr_type_ident = std::make_unique<ast::Identifier>(node->loc, "i64");
     ast::TypeNode* addrAstType = new ast::TypeName(node->loc, std::move(addr_type_ident));
-    expressionTypes[node] = retainType(addrAstType);
+    expressionTypes[exprKey(node)] = retainType(addrAstType);
     node->type = std::shared_ptr<ast::TypeNode>(addrAstType->clone());
 }
 void SemanticAnalyzer::visit(ast::FromIntToLocExpression* node) {
     // from<T>() intrinsic only allowed inside an freedom block
     if (!isInFreedomBlock()) {
         addError("from<Type>(expr) is only allowed inside an freedom block.", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
     if (!node || !node->getAddressExpression() || !node->getTargetType()) {
         addError("Malformed from_int_to_loc expression.", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
 
     node->getAddressExpression()->accept(*this);
-    auto addrExprTypeIt = expressionTypes.find(node->getAddressExpression().get());
+    auto addrExprTypeIt = expressionTypes.find(exprKey(node->getAddressExpression().get()));
     ast::TypeNode* addrExprType = (addrExprTypeIt != expressionTypes.end()) ? addrExprTypeIt->second.get() : nullptr;
 
     // Assuming TypeNode has isIntegerTy() or similar. If not, this needs adjustment.
@@ -6767,7 +6773,7 @@ void SemanticAnalyzer::visit(ast::FromIntToLocExpression* node) {
 
     if (!isAddrExprInteger) {
         addError("Address expression in from<T>() must be an integer type. Got: " + (addrExprType ? addrExprType->toString() : "unknown"), node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
 
@@ -6785,35 +6791,35 @@ void SemanticAnalyzer::visit(ast::FromIntToLocExpression* node) {
 
     if (!isTargetLocOrPointer) {
         addError("Target type in from<T>() must be a location/pointer type (e.g., loc<ActualType>). Got: " + targetType->toString(), node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
 
-    expressionTypes[node] = retainType(targetType->clone().release());
+    expressionTypes[exprKey(node)] = retainType(targetType->clone().release());
     node->type = std::shared_ptr<ast::TypeNode>(targetType->clone());
 }
 void SemanticAnalyzer::visit(ast::LocationExpression* node) {
     // Check if we're in an freedom block
     if (!isInFreedomBlock()) {
         addError("loc() (location-of) is only allowed inside an freedom block.", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
 
     // Visit the expression to get its type
     if (!node->expression) {
         addError("Missing expression in loc().", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
 
     node->expression->accept(*this);
 
     // Create a pointer type for the expression
-    auto it = expressionTypes.find(node->expression.get());
+    auto it = expressionTypes.find(exprKey(node->expression.get()));
     if (it == expressionTypes.end() || !it->second) {
         addError("Cannot get location of expression with unknown type", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
 
@@ -6825,7 +6831,7 @@ void SemanticAnalyzer::visit(ast::LocationExpression* node) {
     auto typeName = new ast::TypeName(node->loc, std::move(locIdent));
     typeName->genericArgs.push_back(std::unique_ptr<ast::TypeNode>(pointeeType->clone()));
 
-    expressionTypes[node] = retainType(typeName);
+    expressionTypes[exprKey(node)] = retainType(typeName);
     node->type = std::shared_ptr<ast::TypeNode>(typeName->clone());
 }
 void SemanticAnalyzer::visit(ast::IfStatement* node) {
@@ -7004,7 +7010,7 @@ void SemanticAnalyzer::validateReturnArity(ast::ReturnStatement* node) {
     } else {
         // A single call/tuple expression may itself produce multiple values
         // (e.g. `return get_values()` where get_values returns `()<A, B>`).
-        auto it = expressionTypes.find(node->argument.get());
+        auto it = expressionTypes.find(exprKey(node->argument.get()));
         if (it != expressionTypes.end() && it->second) {
             if (auto tt = dynamic_cast<ast::TupleTypeNode*>(it->second.get())) {
                 actual = tt->memberTypes.size();
@@ -7088,7 +7094,7 @@ void SemanticAnalyzer::visit(ast::MatchStatement* node) {
     // destructuring patterns whose target type can never match.
     std::string matchTypeStr;
     if (node->expr) {
-        if (auto it = expressionTypes.find(node->expr.get()); it != expressionTypes.end() && it->second) {
+        if (auto it = expressionTypes.find(exprKey(node->expr.get())); it != expressionTypes.end() && it->second) {
             matchTypeStr = it->second->toString();
         } else if (node->expr->type) {
             matchTypeStr = node->expr->type->toString();
@@ -7107,7 +7113,7 @@ void SemanticAnalyzer::visit(ast::MatchStatement* node) {
         (node->expr && node->expr->type)
             ? dynamic_cast<ast::OptionalType*>(node->expr->type.get()) : nullptr;
     if (!matchedOptionalType && node->expr) {
-        auto eIt = expressionTypes.find(node->expr.get());
+        auto eIt = expressionTypes.find(exprKey(node->expr.get()));
         if (eIt != expressionTypes.end() && eIt->second) {
             matchedOptionalType = dynamic_cast<ast::OptionalType*>(eIt->second.get());
         }
@@ -8178,7 +8184,7 @@ void SemanticAnalyzer::visit(ast::FailStatement* node) {
     }
 
     // Get the type of the error expression
-    auto it = expressionTypes.find(node->error.get());
+    auto it = expressionTypes.find(exprKey(node->error.get()));
     if (it != expressionTypes.end() && it->second) {
         ast::TypeNode* errorType = it->second.get();
         if (explicitErrorType && !areTypesCompatible(explicitErrorType, errorType)) {
@@ -8378,7 +8384,7 @@ void SemanticAnalyzer::visit(ast::RefailStatement* node) {
         node->wrappedError->accept(*this);
 
         // Get the type of the transformed error
-        auto it = expressionTypes.find(node->wrappedError.get());
+        auto it = expressionTypes.find(exprKey(node->wrappedError.get()));
         if (it != expressionTypes.end() && it->second) {
             ast::TypeNode* newErrorType = it->second.get();
             VYB_CDBG << "DEBUG: refail with transformed error type: " << newErrorType->toString() << std::endl;
@@ -8405,7 +8411,7 @@ void SemanticAnalyzer::visit(ast::PanicStatement* node) {
     node->message->accept(*this);
 
     // Get the type of the message
-    auto it = expressionTypes.find(node->message.get());
+    auto it = expressionTypes.find(exprKey(node->message.get()));
     if (it != expressionTypes.end() && it->second) {
         ast::TypeNode* msgType = it->second.get();
 
@@ -8440,7 +8446,7 @@ void SemanticAnalyzer::visit(ast::ExitStatement* node) {
     node->code->accept(*this);
 
     // Verify the exit code expression resolves to an integer type
-    auto it = expressionTypes.find(node->code.get());
+    auto it = expressionTypes.find(exprKey(node->code.get()));
     if (it != expressionTypes.end() && it->second) {
         ast::TypeNode* codeType = it->second.get();
         if (auto typeName = dynamic_cast<ast::TypeName*>(codeType)) {
@@ -8488,7 +8494,7 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
         if (currentImplType) {
             // We're inside an impl block - resolve Self to the implementing type
             VYB_CDBG << "DEBUG: Resolving Self to " << currentImplType->toString() << std::endl;
-            expressionTypes[node] = currentImplType ? std::shared_ptr<ast::TypeNode>(currentImplType->clone()) : nullptr;
+            expressionTypes[exprKey(node)] = currentImplType ? std::shared_ptr<ast::TypeNode>(currentImplType->clone()) : nullptr;
             return;
         } else {
             // We're in an aspect declaration - treat Self as a valid placeholder type
@@ -8675,15 +8681,15 @@ void SemanticAnalyzer::visit(ast::TypeName* node) {
 void SemanticAnalyzer::visit(ast::ConstructionExpression* node) {
     if (!node || !node->constructedType) {
         addError("Construction expression is missing the type to construct.", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
     auto typeNameNode = dynamic_cast<ast::TypeName*>(node->constructedType.get());
     if (!typeNameNode || !typeNameNode->identifier) {
          node->constructedType->accept(*this);
-         expressionTypes[node] = retainType(node->constructedType->clone().release());
-         if (expressionTypes[node]) {
-            node->type = std::shared_ptr<ast::TypeNode>(expressionTypes[node]->clone());
+         expressionTypes[exprKey(node)] = retainType(node->constructedType->clone().release());
+         if (expressionTypes[exprKey(node)]) {
+            node->type = std::shared_ptr<ast::TypeNode>(expressionTypes[exprKey(node)]->clone());
          }
          for (auto& arg : node->arguments) {
              if (arg) arg->accept(*this);
@@ -8709,7 +8715,7 @@ void SemanticAnalyzer::visit(ast::ConstructionExpression* node) {
             this->visit(static_cast<ast::CallExpression*>(callExpr.get()));
             if (callExpr->type) {
                 node->type = callExpr->type;
-                expressionTypes[node] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
+                expressionTypes[exprKey(node)] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
             }
             // Restore the moved children so the AST is unchanged for codegen.
             node->arguments = std::move(callExpr->arguments);
@@ -8720,29 +8726,29 @@ void SemanticAnalyzer::visit(ast::ConstructionExpression* node) {
     if (constructedName == "addr") {
         // ... (addr handling logic as before, ensure it's correct) ...
         if (node->arguments.size() != 1 || !node->arguments[0]) {
-            addError("addr() intrinsic expects 1 argument.", node); expressionTypes[node] = nullptr; return;
+            addError("addr() intrinsic expects 1 argument.", node); expressionTypes[exprKey(node)] = nullptr; return;
         }
         node->arguments[0]->accept(*this);
         ast::Expression* argExpr = node->arguments[0].get();
         if (!isLValue(argExpr)) {
-            addError("Argument to addr() must be an L-value.", node); expressionTypes[node] = nullptr; return;
+            addError("Argument to addr() must be an L-value.", node); expressionTypes[exprKey(node)] = nullptr; return;
         }
-        auto argTypeIt = expressionTypes.find(argExpr);
+        auto argTypeIt = expressionTypes.find(exprKey(argExpr));
         if (argTypeIt == expressionTypes.end() || !argTypeIt->second) {
-            addError("Argument to addr() has an unknown type.", node); expressionTypes[node] = nullptr; return;
+            addError("Argument to addr() has an unknown type.", node); expressionTypes[exprKey(node)] = nullptr; return;
         }
         auto res_type_ident = std::make_unique<ast::Identifier>(node->loc, "i64");
         ast::TypeNode* resType = new ast::TypeName(node->loc, std::move(res_type_ident));
-        expressionTypes[node] = retainType(resType);
+        expressionTypes[exprKey(node)] = retainType(resType);
         node->type = std::shared_ptr<ast::TypeNode>(resType->clone());
 
     } else if (constructedName == "from") {
         // ... (from handling logic as before, ensure it's correct) ...
         if (typeNameNode->genericArgs.empty() || !typeNameNode->genericArgs[0]) {
-            addError("from<TargetType>() intrinsic requires TargetType as a generic argument.", node); expressionTypes[node] = nullptr; return;
+            addError("from<TargetType>() intrinsic requires TargetType as a generic argument.", node); expressionTypes[exprKey(node)] = nullptr; return;
         }
         if (node->arguments.size() != 1 || !node->arguments[0]) {
-            addError("from<T>() intrinsic expects 1 argument value.", node); expressionTypes[node] = nullptr; return;
+            addError("from<T>() intrinsic expects 1 argument value.", node); expressionTypes[exprKey(node)] = nullptr; return;
         }
         ast::TypeNode* targetTypeAst = typeNameNode->genericArgs[0].get();
         targetTypeAst->accept(*this);
@@ -8753,11 +8759,11 @@ void SemanticAnalyzer::visit(ast::ConstructionExpression* node) {
             isTargetLocOrPointer = true;
         }
         if (!isTargetLocOrPointer) {
-             addError("Target type in from<T>() must be a location/pointer type (e.g., loc<ActualType>).", node); expressionTypes[node] = nullptr; return;
+             addError("Target type in from<T>() must be a location/pointer type (e.g., loc<ActualType>).", node); expressionTypes[exprKey(node)] = nullptr; return;
         }
         node->arguments[0]->accept(*this);
         ast::Expression* addrValExpr = node->arguments[0].get();
-        auto addrValTypeIt = expressionTypes.find(addrValExpr);
+        auto addrValTypeIt = expressionTypes.find(exprKey(addrValExpr));
         ast::TypeNode* addrValType = (addrValTypeIt != expressionTypes.end()) ? addrValTypeIt->second.get() : nullptr;
 
         bool isAddrValInteger = false;
@@ -8768,21 +8774,21 @@ void SemanticAnalyzer::visit(ast::ConstructionExpression* node) {
         }
         if (!isAddrValInteger) {
             addError("Address argument to from<T>() must be an integer type. Got: " + (addrValType ? addrValType->toString() : "unknown"), node);
-            expressionTypes[node] = nullptr; return;
+            expressionTypes[exprKey(node)] = nullptr; return;
         }
-        expressionTypes[node] = retainType(targetTypeAst->clone().release());
+        expressionTypes[exprKey(node)] = retainType(targetTypeAst->clone().release());
         node->type = std::shared_ptr<ast::TypeNode>(targetTypeAst->clone());
 
     } else if (constructedName == "at") {
         // ... (at handling logic as before, ensure it's correct) ...
         if (node->arguments.size() != 1 || !node->arguments[0]) {
-            addError("at() intrinsic expects 1 argument (the pointer).", node); expressionTypes[node] = nullptr; return;
+            addError("at() intrinsic expects 1 argument (the pointer).", node); expressionTypes[exprKey(node)] = nullptr; return;
         }
         node->arguments[0]->accept(*this);
         ast::Expression* ptrExpr = node->arguments[0].get();
-        auto ptrTypeIt = expressionTypes.find(ptrExpr);
+        auto ptrTypeIt = expressionTypes.find(exprKey(ptrExpr));
         if (ptrTypeIt == expressionTypes.end() || !ptrTypeIt->second) {
-            addError("Cannot dereference pointer with unknown type using at().", node); expressionTypes[node] = nullptr; return;
+            addError("Cannot dereference pointer with unknown type using at().", node); expressionTypes[exprKey(node)] = nullptr; return;
         }
         ast::TypeNode* resolvedPointerType = ptrTypeIt->second.get();
         ast::TypeNode* pointeeType = nullptr;
@@ -8792,22 +8798,22 @@ void SemanticAnalyzer::visit(ast::ConstructionExpression* node) {
             if (locTn->identifier->name == "loc" && !locTn->genericArgs.empty() && locTn->genericArgs[0]) {
                 pointeeType = locTn->genericArgs[0]->clone().release();
             } else {
-                 addError("Type for at() is \'loc\' but missing type parameter (e.g. loc<T>).", node); expressionTypes[node] = nullptr; return;
+                 addError("Type for at() is \'loc\' but missing type parameter (e.g. loc<T>).", node); expressionTypes[exprKey(node)] = nullptr; return;
             }
         } else {
             addError("Argument to at() must be a pointer or loc<T> type. Got: " + resolvedPointerType->toString(), node);
-            expressionTypes[node] = nullptr; return;
+            expressionTypes[exprKey(node)] = nullptr; return;
         }
         if (!pointeeType) {
-             addError("Failed to determine pointee type for at() operation.", node); expressionTypes[node] = nullptr; return;
+             addError("Failed to determine pointee type for at() operation.", node); expressionTypes[exprKey(node)] = nullptr; return;
         }
-        expressionTypes[node] = retainType(pointeeType);
+        expressionTypes[exprKey(node)] = retainType(pointeeType);
         node->type = std::shared_ptr<ast::TypeNode>(pointeeType->clone());
     } else {
         node->constructedType->accept(*this);
-        expressionTypes[node] = retainType(node->constructedType->clone().release());
-        if (expressionTypes[node]) {
-           node->type = std::shared_ptr<ast::TypeNode>(expressionTypes[node]->clone());
+        expressionTypes[exprKey(node)] = retainType(node->constructedType->clone().release());
+        if (expressionTypes[exprKey(node)]) {
+           node->type = std::shared_ptr<ast::TypeNode>(expressionTypes[exprKey(node)]->clone());
         } else {
             addError("Constructed type " + constructedName + " could not be resolved.", node);
             return;
@@ -9249,15 +9255,15 @@ void SemanticAnalyzer::visit(ast::BorrowExpression* node) {
     // Ensure that the borrowed expression is valid for borrowing
     if (!isLValue(node->expression.get())) {
         addError("Cannot borrow non-lvalue expression", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
 
-    auto exprTypeIt = expressionTypes.find(node->expression.get());
+    auto exprTypeIt = expressionTypes.find(exprKey(node->expression.get()));
     ast::TypeNode* exprType = (exprTypeIt != expressionTypes.end()) ? exprTypeIt->second.get() : nullptr;
     if (!exprType) {
         addError("Cannot determine type of borrowed expression", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
 
@@ -9277,7 +9283,7 @@ void SemanticAnalyzer::visit(ast::BorrowExpression* node) {
     std::vector<ast::TypeNodePtr> args;
     args.push_back(std::move(innerType));
     ast::TypeNode* resultType = new ast::TypeName(node->loc, std::move(theirId), std::move(args));
-    expressionTypes[node] = retainType(resultType);
+    expressionTypes[exprKey(node)] = retainType(resultType);
     node->type = std::shared_ptr<ast::TypeNode>(resultType->clone().release());
 }
 
@@ -9397,7 +9403,7 @@ void SemanticAnalyzer::handleTemplateInstantiation(ast::Identifier* identifier,
     if (instantiated) {
         // Store the instantiated template for later use in codegen
         // For now, just mark that we successfully processed it
-        expressionTypes[node] = nullptr; // Will be properly typed later
+        expressionTypes[exprKey(node)] = nullptr; // Will be properly typed later
     }
 }
 
@@ -9581,7 +9587,7 @@ void SemanticAnalyzer::handleQualifiedAspectCall(ast::CallExpression* node,
 
     ast::TypeNode* receiverType = nullptr;
     if (receiver) {
-        auto it = expressionTypes.find(receiver);
+        auto it = expressionTypes.find(exprKey(receiver));
         if (it != expressionTypes.end() && it->second.get()) receiverType = it->second.get();
         if (!receiverType && receiver->type) receiverType = receiver->type.get();
     }
@@ -9683,7 +9689,7 @@ void SemanticAnalyzer::handleQualifiedAspectCall(ast::CallExpression* node,
     }
 
     ast::TypeNode* actualReturnType = substituteSelfType(returnTypeNode, typeStr);
-    expressionTypes[node] = retainType(actualReturnType);
+    expressionTypes[exprKey(node)] = retainType(actualReturnType);
     node->type = std::shared_ptr<ast::TypeNode>(actualReturnType->clone());
     VYB_CDBG << "DEBUG: Qualified aspect call " << aspectName << "::" << methodName
               << " on " << typeStr << " returns " << actualReturnType->toString()
@@ -9753,7 +9759,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
         auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
         auto vecType = std::make_unique<ast::VecType>(node->loc, std::move(intType));
-        expressionTypes[node] = vecType ? std::shared_ptr<ast::TypeNode>(vecType->clone()) : nullptr;
+        expressionTypes[exprKey(node)] = vecType ? std::shared_ptr<ast::TypeNode>(vecType->clone()) : nullptr;
         node->type = std::shared_ptr<ast::TypeNode>(std::move(vecType));
 
     } else if (methodName == "pop") {
@@ -9772,14 +9778,14 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
             if (auto* vty = dynamic_cast<ast::VecType*>(vecTypeNode)) {
                 if (vty->elementType) {
                     std::shared_ptr<ast::TypeNode> et = cloneTypeNode(vty->elementType.get());
-                    expressionTypes[node] = et ? std::shared_ptr<ast::TypeNode>(et->clone()) : nullptr;
+                    expressionTypes[exprKey(node)] = et ? std::shared_ptr<ast::TypeNode>(et->clone()) : nullptr;
                     node->type = et;
                     return;
                 }
             } else if (auto* tny = dynamic_cast<ast::TypeName*>(vecTypeNode)) {
                 if (tny->identifier && tny->identifier->name == "Vec" && !tny->genericArgs.empty()) {
                     std::shared_ptr<ast::TypeNode> et = tny->genericArgs[0]->clone();
-                    expressionTypes[node] = et ? std::shared_ptr<ast::TypeNode>(et->clone()) : nullptr;
+                    expressionTypes[exprKey(node)] = et ? std::shared_ptr<ast::TypeNode>(et->clone()) : nullptr;
                     node->type = et;
                     return;
                 }
@@ -9787,7 +9793,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         }
         auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
         auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
-        expressionTypes[node] = intType ? std::shared_ptr<ast::TypeNode>(intType->clone()) : nullptr;
+        expressionTypes[exprKey(node)] = intType ? std::shared_ptr<ast::TypeNode>(intType->clone()) : nullptr;
         node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
 
     } else if (methodName == "len") {
@@ -9798,7 +9804,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         }
         auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
         auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
-        expressionTypes[node] = intType ? std::shared_ptr<ast::TypeNode>(intType->clone()) : nullptr;
+        expressionTypes[exprKey(node)] = intType ? std::shared_ptr<ast::TypeNode>(intType->clone()) : nullptr;
         node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
 
     } else if (methodName == "get") {
@@ -9823,7 +9829,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
                 if (vecType->elementType) {
                     // Deep clone the element type node
                     std::shared_ptr<ast::TypeNode> clonedElementType = cloneTypeNode(vecType->elementType.get());
-                    expressionTypes[node] = clonedElementType ? std::shared_ptr<ast::TypeNode>(clonedElementType->clone()) : nullptr;
+                    expressionTypes[exprKey(node)] = clonedElementType ? std::shared_ptr<ast::TypeNode>(clonedElementType->clone()) : nullptr;
                     node->type = clonedElementType;
                     return;
                 }
@@ -9833,7 +9839,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
                 if (typeName->identifier && typeName->identifier->name == "Vec" && !typeName->genericArgs.empty()) {
                     if (typeName->genericArgs[0]) {
                         std::shared_ptr<ast::TypeNode> clonedElementType = typeName->genericArgs[0]->clone();
-                        expressionTypes[node] = clonedElementType ? std::shared_ptr<ast::TypeNode>(clonedElementType->clone()) : nullptr;
+                        expressionTypes[exprKey(node)] = clonedElementType ? std::shared_ptr<ast::TypeNode>(clonedElementType->clone()) : nullptr;
                         node->type = clonedElementType;
                         return;
                     }
@@ -9844,7 +9850,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         // Fallback to Int if we couldn't determine the element type
         auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
         auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
-        expressionTypes[node] = intType ? std::shared_ptr<ast::TypeNode>(intType->clone()) : nullptr;
+        expressionTypes[exprKey(node)] = intType ? std::shared_ptr<ast::TypeNode>(intType->clone()) : nullptr;
         node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
 
     } else if (methodName == "push_array") {
@@ -9863,7 +9869,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
         auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
         auto vecType = std::make_unique<ast::VecType>(node->loc, std::move(intType));
-        expressionTypes[node] = vecType ? std::shared_ptr<ast::TypeNode>(vecType->clone()) : nullptr;
+        expressionTypes[exprKey(node)] = vecType ? std::shared_ptr<ast::TypeNode>(vecType->clone()) : nullptr;
         node->type = std::shared_ptr<ast::TypeNode>(std::move(vecType));
 
     } else if (methodName == "to_array") {
@@ -9885,7 +9891,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
             elemType = std::make_unique<ast::TypeName>(
                 node->loc, std::make_unique<ast::Identifier>(node->loc, "Int"));
         auto arrayType = std::make_unique<ast::ArrayType>(node->loc, std::move(elemType));
-        expressionTypes[node] = arrayType ? std::shared_ptr<ast::TypeNode>(arrayType->clone()) : nullptr;
+        expressionTypes[exprKey(node)] = arrayType ? std::shared_ptr<ast::TypeNode>(arrayType->clone()) : nullptr;
         node->type = std::shared_ptr<ast::TypeNode>(std::move(arrayType));
 
     } else if (methodName == "clear") {
@@ -9910,7 +9916,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         }
         auto boolId = std::make_unique<ast::Identifier>(node->loc, "Bool");
         auto boolType = std::make_unique<ast::TypeName>(node->loc, std::move(boolId));
-        expressionTypes[node] = boolType ? std::shared_ptr<ast::TypeNode>(boolType->clone()) : nullptr;
+        expressionTypes[exprKey(node)] = boolType ? std::shared_ptr<ast::TypeNode>(boolType->clone()) : nullptr;
         node->type = std::shared_ptr<ast::TypeNode>(std::move(boolType));
 
     } else if (methodName == "capacity") {
@@ -9921,7 +9927,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         }
         auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
         auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
-        expressionTypes[node] = intType ? std::shared_ptr<ast::TypeNode>(intType->clone()) : nullptr;
+        expressionTypes[exprKey(node)] = intType ? std::shared_ptr<ast::TypeNode>(intType->clone()) : nullptr;
         node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
 
     } else if (methodName == "concat") {
@@ -9942,7 +9948,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
             elemType = std::make_unique<ast::TypeName>(
                 node->loc, std::make_unique<ast::Identifier>(node->loc, "Int"));
         auto vecType = std::make_unique<ast::VecType>(node->loc, std::move(elemType));
-        expressionTypes[node] = vecType ? std::shared_ptr<ast::TypeNode>(vecType->clone()) : nullptr;
+        expressionTypes[exprKey(node)] = vecType ? std::shared_ptr<ast::TypeNode>(vecType->clone()) : nullptr;
         node->type = std::shared_ptr<ast::TypeNode>(std::move(vecType));
 
     } else if (methodName == "contains") {
@@ -9954,7 +9960,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         // TODO: Validate argument is compatible with element type T
         auto boolId = std::make_unique<ast::Identifier>(node->loc, "Bool");
         auto boolType = std::make_unique<ast::TypeName>(node->loc, std::move(boolId));
-        expressionTypes[node] = boolType ? std::shared_ptr<ast::TypeNode>(boolType->clone()) : nullptr;
+        expressionTypes[exprKey(node)] = boolType ? std::shared_ptr<ast::TypeNode>(boolType->clone()) : nullptr;
         node->type = std::shared_ptr<ast::TypeNode>(std::move(boolType));
 
     } else if (methodName == "remove_at") {
@@ -9973,14 +9979,14 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
             if (auto* vty = dynamic_cast<ast::VecType*>(vecTypeNode)) {
                 if (vty->elementType) {
                     std::shared_ptr<ast::TypeNode> et = cloneTypeNode(vty->elementType.get());
-                    expressionTypes[node] = et ? std::shared_ptr<ast::TypeNode>(et->clone()) : nullptr;
+                    expressionTypes[exprKey(node)] = et ? std::shared_ptr<ast::TypeNode>(et->clone()) : nullptr;
                     node->type = et;
                     return;
                 }
             } else if (auto* tny = dynamic_cast<ast::TypeName*>(vecTypeNode)) {
                 if (tny->identifier && tny->identifier->name == "Vec" && !tny->genericArgs.empty()) {
                     std::shared_ptr<ast::TypeNode> et = tny->genericArgs[0]->clone();
-                    expressionTypes[node] = et ? std::shared_ptr<ast::TypeNode>(et->clone()) : nullptr;
+                    expressionTypes[exprKey(node)] = et ? std::shared_ptr<ast::TypeNode>(et->clone()) : nullptr;
                     node->type = et;
                     return;
                 }
@@ -9988,7 +9994,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         }
         auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
         auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
-        expressionTypes[node] = intType ? std::shared_ptr<ast::TypeNode>(intType->clone()) : nullptr;
+        expressionTypes[exprKey(node)] = intType ? std::shared_ptr<ast::TypeNode>(intType->clone()) : nullptr;
         node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
 
     } else if (methodName == "set") {
@@ -10016,7 +10022,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         // Return Int (number of elements copied for efficiency feedback)
         auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
         auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
-        expressionTypes[node] = intType ? std::shared_ptr<ast::TypeNode>(intType->clone()) : nullptr;
+        expressionTypes[exprKey(node)] = intType ? std::shared_ptr<ast::TypeNode>(intType->clone()) : nullptr;
         node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
 
     } else if (methodName == "get_vec") {
@@ -10032,7 +10038,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         // Return Int (number of elements copied)
         auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
         auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
-        expressionTypes[node] = intType ? std::shared_ptr<ast::TypeNode>(intType->clone()) : nullptr;
+        expressionTypes[exprKey(node)] = intType ? std::shared_ptr<ast::TypeNode>(intType->clone()) : nullptr;
         node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
 
     } else if (methodName == "last" || methodName == "peek") {
@@ -10045,14 +10051,14 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
             if (auto* vty = dynamic_cast<ast::VecType*>(vecTypeNode)) {
                 if (vty->elementType) {
                     std::shared_ptr<ast::TypeNode> et = cloneTypeNode(vty->elementType.get());
-                    expressionTypes[node] = et ? std::shared_ptr<ast::TypeNode>(et->clone()) : nullptr;
+                    expressionTypes[exprKey(node)] = et ? std::shared_ptr<ast::TypeNode>(et->clone()) : nullptr;
                     node->type = et;
                     return;
                 }
             } else if (auto* tny = dynamic_cast<ast::TypeName*>(vecTypeNode)) {
                 if (tny->identifier && tny->identifier->name == "Vec" && !tny->genericArgs.empty()) {
                     std::shared_ptr<ast::TypeNode> et = tny->genericArgs[0]->clone();
-                    expressionTypes[node] = et ? std::shared_ptr<ast::TypeNode>(et->clone()) : nullptr;
+                    expressionTypes[exprKey(node)] = et ? std::shared_ptr<ast::TypeNode>(et->clone()) : nullptr;
                     node->type = et;
                     return;
                 }
@@ -10060,7 +10066,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
         }
         auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
         auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
-        expressionTypes[node] = intType ? std::shared_ptr<ast::TypeNode>(intType->clone()) : nullptr;
+        expressionTypes[exprKey(node)] = intType ? std::shared_ptr<ast::TypeNode>(intType->clone()) : nullptr;
         node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
 
     } else {
@@ -10090,7 +10096,7 @@ void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, as
 
         // Clone type into node->type first, then store stable pointer
         node->type = std::shared_ptr<ast::TypeNode>(vecType->clone());
-        expressionTypes[node] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
+        expressionTypes[exprKey(node)] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
 
     } else if (methodName == "pop") {
         // pop() -> T (element type)
@@ -10101,7 +10107,7 @@ void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, as
         // Return element type
         if (elementType) {
             node->type = std::shared_ptr<ast::TypeNode>(elementType->clone());
-            expressionTypes[node] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
+            expressionTypes[exprKey(node)] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
         }
 
     } else if (methodName == "len") {
@@ -10112,7 +10118,7 @@ void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, as
         }
         auto intId = std::make_unique<ast::Identifier>(node->loc, "Int");
         auto intType = std::make_unique<ast::TypeName>(node->loc, std::move(intId));
-        expressionTypes[node] = intType ? std::shared_ptr<ast::TypeNode>(intType->clone()) : nullptr;
+        expressionTypes[exprKey(node)] = intType ? std::shared_ptr<ast::TypeNode>(intType->clone()) : nullptr;
         node->type = std::shared_ptr<ast::TypeNode>(std::move(intType));
 
     } else if (methodName == "get") {
@@ -10128,7 +10134,7 @@ void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, as
         // Return element type
         if (elementType) {
             node->type = std::shared_ptr<ast::TypeNode>(elementType->clone());
-            expressionTypes[node] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
+            expressionTypes[exprKey(node)] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
         }
 
     } else if (methodName == "last" || methodName == "peek") {
@@ -10139,7 +10145,7 @@ void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, as
         }
         if (elementType) {
             node->type = std::shared_ptr<ast::TypeNode>(elementType->clone());
-            expressionTypes[node] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
+            expressionTypes[exprKey(node)] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
         }
 
     } else if (methodName == "set") {
@@ -10168,7 +10174,7 @@ void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, as
         }
         auto boolId = std::make_unique<ast::Identifier>(node->loc, "Bool");
         auto boolType = std::make_unique<ast::TypeName>(node->loc, std::move(boolId));
-        expressionTypes[node] = boolType ? std::shared_ptr<ast::TypeNode>(boolType->clone()) : nullptr;
+        expressionTypes[exprKey(node)] = boolType ? std::shared_ptr<ast::TypeNode>(boolType->clone()) : nullptr;
         node->type = std::shared_ptr<ast::TypeNode>(std::move(boolType));
 
     } else if (methodName == "remove_at" || methodName == "remove") {
@@ -10180,7 +10186,7 @@ void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, as
         if (node->arguments[0]) node->arguments[0]->accept(*this);
         if (elementType) {
             node->type = std::shared_ptr<ast::TypeNode>(elementType->clone());
-            expressionTypes[node] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
+            expressionTypes[exprKey(node)] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
         }
 
     } else if (methodName == "capacity") {
@@ -10191,7 +10197,7 @@ void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, as
         }
         auto capId = std::make_unique<ast::Identifier>(node->loc, "Int");
         auto capType = std::make_unique<ast::TypeName>(node->loc, std::move(capId));
-        expressionTypes[node] = capType ? std::shared_ptr<ast::TypeNode>(capType->clone()) : nullptr;
+        expressionTypes[exprKey(node)] = capType ? std::shared_ptr<ast::TypeNode>(capType->clone()) : nullptr;
         node->type = std::shared_ptr<ast::TypeNode>(std::move(capType));
 
     } else if (methodName == "contains") {
@@ -10203,7 +10209,7 @@ void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, as
         if (node->arguments[0]) node->arguments[0]->accept(*this);
         auto containId = std::make_unique<ast::Identifier>(node->loc, "Bool");
         auto containType = std::make_unique<ast::TypeName>(node->loc, std::move(containId));
-        expressionTypes[node] = containType ? std::shared_ptr<ast::TypeNode>(containType->clone()) : nullptr;
+        expressionTypes[exprKey(node)] = containType ? std::shared_ptr<ast::TypeNode>(containType->clone()) : nullptr;
         node->type = std::shared_ptr<ast::TypeNode>(std::move(containType));
 
     } else {
@@ -10686,12 +10692,12 @@ bool SemanticAnalyzer::setResolvedTraitReturnType(ast::CallExpression* callNode,
     std::string resolvedAssocType = resolveAssociatedTypeReference(concreteTypeName, traitName, traitReturnType->toString());
     if (!resolvedAssocType.empty()) {
         auto resolvedType = new ast::TypeName(callNode->loc, std::make_unique<ast::Identifier>(callNode->loc, resolvedAssocType));
-        expressionTypes[callNode] = retainType(resolvedType);
+        expressionTypes[exprKey(callNode)] = retainType(resolvedType);
         callNode->type = std::shared_ptr<ast::TypeNode>(resolvedType->clone());
         return true;
     }
 
-    expressionTypes[callNode] = traitReturnType ? std::shared_ptr<ast::TypeNode>(traitReturnType->clone()) : nullptr;
+    expressionTypes[exprKey(callNode)] = traitReturnType ? std::shared_ptr<ast::TypeNode>(traitReturnType->clone()) : nullptr;
     callNode->type = std::shared_ptr<ast::TypeNode>(traitReturnType->clone());
     return true;
 }
@@ -10731,14 +10737,14 @@ bool SemanticAnalyzer::matchesPattern(const std::string& concreteType, const std
 void SemanticAnalyzer::visit(ast::TypeofExpression* node) {
     if (!node) {
         addError("typeof() requires an operand expression.", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
 
     // Result type is always "Type" (primitive introspection type)
     auto typeIdent = std::make_unique<ast::Identifier>(node->loc, "Type");
     ast::TypeNode* resultType = new ast::TypeName(node->loc, std::move(typeIdent));
-    expressionTypes[node] = retainType(resultType);
+    expressionTypes[exprKey(node)] = retainType(resultType);
     node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
 
     // Compile-time form: typeof<T>() just resolves the target type.
@@ -10749,7 +10755,7 @@ void SemanticAnalyzer::visit(ast::TypeofExpression* node) {
 
     if (!node->operand) {
         addError("typeof() requires an operand expression.", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
     node->operand->accept(*this);
@@ -10765,7 +10771,7 @@ void SemanticAnalyzer::visit(ast::TypeofExpression* node) {
 void SemanticAnalyzer::visit(ast::TypenameExpression* node) {
     if (!node || !node->operand) {
         addError("typename() requires an operand expression.", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
 
@@ -10775,7 +10781,7 @@ void SemanticAnalyzer::visit(ast::TypenameExpression* node) {
     // Result type is always "String" — Vyb's string type uses PascalCase
     auto stringIdent = std::make_unique<ast::Identifier>(node->loc, "String");
     ast::TypeNode* resultType = new ast::TypeName(node->loc, std::move(stringIdent));
-    expressionTypes[node] = retainType(resultType);
+    expressionTypes[exprKey(node)] = retainType(resultType);
     node->type = std::shared_ptr<ast::TypeNode>(resultType->clone());
 
     // A wildcard trap error (e<?>): load its runtime type name at codegen.
@@ -10806,19 +10812,19 @@ void SemanticAnalyzer::visit(ast::AsExpression* node) {
         ? node->targetType->type.get() : node->targetType.get();
     if (!targetType) {
         addError("Cannot resolve target type of 'as' cast.", node);
-        expressionTypes[node] = nullptr;
+        expressionTypes[exprKey(node)] = nullptr;
         return;
     }
 
     // Result type is the target type.
     node->type = std::shared_ptr<ast::TypeNode>(targetType->clone());
-    expressionTypes[node] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
+    expressionTypes[exprKey(node)] = node->type ? std::shared_ptr<ast::TypeNode>(node->type->clone()) : nullptr;
 
     // Determine the operand's static type, if any.
     ast::TypeNode* operandType = node->operand->type
         ? node->operand->type.get() : nullptr;
     if (!operandType) {
-        auto it = expressionTypes.find(node->operand.get());
+        auto it = expressionTypes.find(exprKey(node->operand.get()));
         if (it != expressionTypes.end()) operandType = it->second.get();
     }
 
@@ -10876,7 +10882,7 @@ void SemanticAnalyzer::visit(ast::TupleDestructureAssignment* node) {
     
     // Try expressionTypes first, then fall back to expression's own type field
     ast::TypeNode* rhsType = nullptr;
-    auto it = expressionTypes.find(node->expression.get());
+    auto it = expressionTypes.find(exprKey(node->expression.get()));
     if (it != expressionTypes.end() && it->second) {
         rhsType = it->second.get();
     } else if (node->expression->type) {
