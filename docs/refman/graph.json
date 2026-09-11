@@ -1,5 +1,5 @@
 {
-  "git_rev": "6d89575122cb0099358860178014478775a684b2",
+  "git_rev": "519b5134487af3736ad0a5dcfe5ce4363bafb928",
   "modules": [
     "agents",
     "archive",
@@ -63,7 +63,7 @@
         "files": [
           "stdlib/chain/mod.vyb"
         ],
-        "exported": 17,
+        "exported": 24,
         "fan_in": 1,
         "fan_out": 1
       },
@@ -365,7 +365,14 @@
           "to_text",
           "serialize",
           "parse_int",
-          "deserialize"
+          "deserialize",
+          "SignedChain",
+          "signed_genesis",
+          "signed_append",
+          "signed_verify",
+          "sign_checkpoint",
+          "verify_checkpoint",
+          "chain_checkpoint"
         ]
       },
       {
@@ -1434,6 +1441,15 @@
         "fan_in": 0
       },
       {
+        "name": "SignedChain",
+        "module": "chain",
+        "file": "stdlib/chain/mod.vyb",
+        "kind": "struct",
+        "signature": "struct SignedChain {",
+        "summary": "",
+        "fan_in": 0
+      },
+      {
         "name": "append",
         "module": "chain",
         "file": "stdlib/chain/mod.vyb",
@@ -1458,6 +1474,15 @@
         "kind": "fn",
         "signature": "block_root(records<Vec<Record>>)<String> ->",
         "summary": "Block digest over an ordered set of records: the Merkle\u2013Damg\u00e5rd fold",
+        "fan_in": 0
+      },
+      {
+        "name": "chain_checkpoint",
+        "module": "chain",
+        "file": "stdlib/chain/mod.vyb",
+        "kind": "fn",
+        "signature": "chain_checkpoint(sc<SignedChain>, seed<String>)<String> ->",
+        "summary": "Convenience: sign the current tip with the number of blocks as the sequence.",
         "fan_in": 0
       },
       {
@@ -1533,6 +1558,42 @@
         "fan_in": 0
       },
       {
+        "name": "sign_checkpoint",
+        "module": "chain",
+        "file": "stdlib/chain/mod.vyb",
+        "kind": "fn",
+        "signature": "sign_checkpoint(tip<String>, seq<Int>, seed<String>)<String> ->",
+        "summary": "Sign a checkpoint over (seq, tip): the registry attests the chain's tip at",
+        "fan_in": 0
+      },
+      {
+        "name": "signed_append",
+        "module": "chain",
+        "file": "stdlib/chain/mod.vyb",
+        "kind": "fn",
+        "signature": "signed_append(sc<SignedChain>, records<Vec<Record>>, seed<String>, old_seed<String>)<SignedChain> ->",
+        "summary": "Append a block sealing `records`, signed by `seed`. If the new block's signer",
+        "fan_in": 0
+      },
+      {
+        "name": "signed_genesis",
+        "module": "chain",
+        "file": "stdlib/chain/mod.vyb",
+        "kind": "fn",
+        "signature": "signed_genesis(origin<String>, records<Vec<Record>>, seed<String>)<SignedChain> ->",
+        "summary": "Seal the genesis block (index 0) and sign it with `seed`. The genesis signer",
+        "fan_in": 0
+      },
+      {
+        "name": "signed_verify",
+        "module": "chain",
+        "file": "stdlib/chain/mod.vyb",
+        "kind": "fn",
+        "signature": "signed_verify(sc<SignedChain>, registry_pub<String>)<Bool> ->",
+        "summary": "Full signature verification: block integrity (plain verify) AND each block's",
+        "fan_in": 0
+      },
+      {
         "name": "tip_hash",
         "module": "chain",
         "file": "stdlib/chain/mod.vyb",
@@ -1557,6 +1618,15 @@
         "kind": "fn",
         "signature": "verify(chain<Chain>)<Bool> ->",
         "summary": "Full integrity check: recompute every block's Merkle root, block hash and",
+        "fan_in": 0
+      },
+      {
+        "name": "verify_checkpoint",
+        "module": "chain",
+        "file": "stdlib/chain/mod.vyb",
+        "kind": "fn",
+        "signature": "verify_checkpoint(tip<String>, seq<Int>, registry_pub<String>, sig<String>)<Bool> ->",
+        "summary": "Validate a registry checkpoint signature over (seq, tip) with `registry_pub`.",
         "fan_in": 0
       },
       {
@@ -2322,7 +2392,7 @@
         "kind": "fn",
         "signature": "ed25519_publickey(seed<String>)<String> ->",
         "summary": "",
-        "fan_in": 0
+        "fan_in": 1
       },
       {
         "name": "ed25519_sign",
@@ -2331,7 +2401,7 @@
         "kind": "fn",
         "signature": "ed25519_sign(seed<String>, message<String>)<String> ->",
         "summary": "",
-        "fan_in": 0
+        "fan_in": 1
       },
       {
         "name": "ed25519_verify",
@@ -2340,7 +2410,7 @@
         "kind": "fn",
         "signature": "ed25519_verify(public_key<String>, message<String>, signature<String>)<Bool> ->",
         "summary": "",
-        "fan_in": 0
+        "fan_in": 1
       },
       {
         "name": "sha256",
@@ -5808,6 +5878,20 @@
     {
       "type": "call",
       "from_module": "chain",
+      "from_symbol": "chain_checkpoint",
+      "to_module": "chain",
+      "to_symbol": "sign_checkpoint"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
+      "from_symbol": "chain_checkpoint",
+      "to_module": "chain",
+      "to_symbol": "tip_hash"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
       "from_symbol": "deserialize",
       "to_module": "chain",
       "to_symbol": "parse_int"
@@ -5843,6 +5927,76 @@
     {
       "type": "call",
       "from_module": "chain",
+      "from_symbol": "sign_checkpoint",
+      "to_module": "crypto",
+      "to_symbol": "ed25519_sign"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
+      "from_symbol": "signed_append",
+      "to_module": "chain",
+      "to_symbol": "block_hash"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
+      "from_symbol": "signed_append",
+      "to_module": "chain",
+      "to_symbol": "block_root"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
+      "from_symbol": "signed_append",
+      "to_module": "crypto",
+      "to_symbol": "ed25519_publickey"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
+      "from_symbol": "signed_append",
+      "to_module": "crypto",
+      "to_symbol": "ed25519_sign"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
+      "from_symbol": "signed_genesis",
+      "to_module": "chain",
+      "to_symbol": "new_chain"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
+      "from_symbol": "signed_genesis",
+      "to_module": "crypto",
+      "to_symbol": "ed25519_publickey"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
+      "from_symbol": "signed_genesis",
+      "to_module": "crypto",
+      "to_symbol": "ed25519_sign"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
+      "from_symbol": "signed_verify",
+      "to_module": "chain",
+      "to_symbol": "verify"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
+      "from_symbol": "signed_verify",
+      "to_module": "crypto",
+      "to_symbol": "ed25519_verify"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
       "from_symbol": "to_text",
       "to_module": "chain",
       "to_symbol": "tip_hash"
@@ -5860,6 +6014,13 @@
       "from_symbol": "verify",
       "to_module": "chain",
       "to_symbol": "block_root"
+    },
+    {
+      "type": "call",
+      "from_module": "chain",
+      "from_symbol": "verify_checkpoint",
+      "to_module": "crypto",
+      "to_symbol": "ed25519_verify"
     },
     {
       "type": "call",
@@ -7169,6 +7330,33 @@
       "from_symbol": "TlsStreamOps->TlsStream",
       "to_module": "tls",
       "to_symbol": "TlsStream"
+    },
+    {
+      "type": "import",
+      "from_module": "chain",
+      "from_symbol": "",
+      "to_module": "crypto",
+      "to_symbol": "ed25519_publickey",
+      "reexport": false,
+      "resolved": true
+    },
+    {
+      "type": "import",
+      "from_module": "chain",
+      "from_symbol": "",
+      "to_module": "crypto",
+      "to_symbol": "ed25519_sign",
+      "reexport": false,
+      "resolved": true
+    },
+    {
+      "type": "import",
+      "from_module": "chain",
+      "from_symbol": "",
+      "to_module": "crypto",
+      "to_symbol": "ed25519_verify",
+      "reexport": false,
+      "resolved": true
     },
     {
       "type": "import",
@@ -10164,6 +10352,13 @@
     {
       "type": "usesType",
       "from_module": "chain",
+      "from_symbol": "chain_checkpoint",
+      "to_module": "chain",
+      "to_symbol": "SignedChain"
+    },
+    {
+      "type": "usesType",
+      "from_module": "chain",
       "from_symbol": "contains",
       "to_module": "chain",
       "to_symbol": "Chain"
@@ -10216,6 +10411,48 @@
       "from_symbol": "serialize",
       "to_module": "chain",
       "to_symbol": "Chain"
+    },
+    {
+      "type": "usesType",
+      "from_module": "chain",
+      "from_symbol": "signed_append",
+      "to_module": "chain",
+      "to_symbol": "Record"
+    },
+    {
+      "type": "usesType",
+      "from_module": "chain",
+      "from_symbol": "signed_append",
+      "to_module": "chain",
+      "to_symbol": "SignedChain"
+    },
+    {
+      "type": "usesType",
+      "from_module": "chain",
+      "from_symbol": "signed_append",
+      "to_module": "chain",
+      "to_symbol": "SignedChain"
+    },
+    {
+      "type": "usesType",
+      "from_module": "chain",
+      "from_symbol": "signed_genesis",
+      "to_module": "chain",
+      "to_symbol": "Record"
+    },
+    {
+      "type": "usesType",
+      "from_module": "chain",
+      "from_symbol": "signed_genesis",
+      "to_module": "chain",
+      "to_symbol": "SignedChain"
+    },
+    {
+      "type": "usesType",
+      "from_module": "chain",
+      "from_symbol": "signed_verify",
+      "to_module": "chain",
+      "to_symbol": "SignedChain"
     },
     {
       "type": "usesType",
