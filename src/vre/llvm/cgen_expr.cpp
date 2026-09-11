@@ -6062,6 +6062,33 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                 // Generate the to_string call
                 llvm::Value* result = generateToStringCall(objectValue, objectType, objectASTType, node->loc);
                 if (result) {
+                    // #216: enforce a canonical String result shape at expression
+                    // boundaries. `generateToStringCall` returns a raw char* for
+                    // scalar/String receivers, but a `.to_string()` expression must be
+                    // a full Vyb String struct {ptr, i64} so operand-position uses
+                    // (String ==/!=, concat, C-string params, println) all get the
+                    // same shape. Otherwise `x.to_string() == "22"` lowers to an
+                    // icmp of a ptr against a {ptr,i64} literal and module
+                    // verification aborts. (The JSON/enum paths already return the
+                    // struct; only a raw char* result needs wrapping.) Length is
+                    // computed with strlen exactly as the char*->String conversion
+                    // in the fromString/assignment paths does.
+                    if (result->getType()->isPointerTy() && result->getType() == int8PtrType) {
+                        llvm::StructType* strTy = llvm::StructType::get(*context, {
+                            int8PtrType, llvm::Type::getInt64Ty(*context)});
+                        llvm::FunctionType* strlenType = llvm::FunctionType::get(
+                            llvm::Type::getInt64Ty(*context), {int8PtrType}, false);
+                        llvm::Function* strlenFunc = module->getFunction("strlen");
+                        if (!strlenFunc) {
+                            strlenFunc = llvm::Function::Create(strlenType,
+                                llvm::Function::ExternalLinkage, "strlen", module.get());
+                        }
+                        llvm::Value* len = builder->CreateCall(strlenFunc, {result}, "tostring.len");
+                        llvm::Value* s = llvm::UndefValue::get(strTy);
+                        s = builder->CreateInsertValue(s, result, 0, "tostring.data");
+                        s = builder->CreateInsertValue(s, len, 1, "tostring.len");
+                        result = s;
+                    }
                     VYB_CDBG << "DEBUG: Successfully generated to_string call" << std::endl;
                     m_currentLLVMValue = result;
                     return;

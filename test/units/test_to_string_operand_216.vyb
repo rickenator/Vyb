@@ -1,0 +1,19 @@
+// @test: .to_string() in operand position is a canonical String (#216)
+// @description: `x.to_string() == "22"` previously lowered the scalar to_string
+//   result as a raw char* operand against a {ptr,i64} String literal and aborted
+//   LLVM module verification ("Both operands to ICmp ... not of the same type").
+//   A `.to_string()` expression must now always yield a full Vyb String struct
+//   {ptr,i64}, so == / != in operand position typecheck and run.
+// @category: ownership, codegen, string
+// @expect: pass
+// @expect-return: 0
+main()<Int> -> {
+    x<Int> = 22
+    if (x.to_string() != "22") { return 1 }
+    b<Bool> = true
+    if (b.to_string() != "true") { return 2 }
+    f<Float> = 2.5
+    if (f.to_string() != "2.5") { return 3 }
+    if (!(x.to_string() == "22")) { return 4 }
+    return 0
+}
