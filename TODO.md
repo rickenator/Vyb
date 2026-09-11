@@ -960,8 +960,10 @@ The semantic analyzer currently mutates AST nodes directly (sets `node->type`,
   CHECKPOINT B rekey onto node-id (`e05cc92`) + SymbolInfo.type owning flip + the
   `_ownedTypes`/`retainType` synthesis-registry removal (this commit). Every type
   is now owned (TypeTable / node->type / SymbolInfo.type) — no raw mirror, no
-  registry. Remaining = the immutable-AST half (make AST fields read-only after
-  parse; additive/stretch). Plan + pitfalls in `doc/TYPETABLE_MIGRATION.md`.
+  registry. Remaining = the immutable-AST half (remove `node->type` mutation:
+  route semantic + codegen through the node-id TypeTable, ~500 refs across
+  semantic+cgen — the project's largest item, turnkey plan in
+  `doc/TYPETABLE_MIGRATION.md`; `inferredTypeName` dead field removed 2026-09-10).
 - [x] Avoid raw pointer storage in `expressionTypes` (use stable IDs or `shared_ptr`)
   — AUDITED 2026-09-10: every `.get()` stored in `expressionTypes` is backed by a
   long-lived owner (`node->type`, a `retainType`/function-registry entry, or an

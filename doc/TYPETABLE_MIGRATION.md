@@ -200,3 +200,38 @@ The flip has no intermediate green, so if it can't reach a green all-suite state
 in the fresh session, revert cleanly: `git checkout -- src/vre/semantic.cpp
 include/vyb/semantic.hpp` (nothing else in the repo is touched by the flip) and
 keep increment #1 (`2944d69`) as the milestone. Do NOT commit a red tree.
+
+## IMMUTABLE-AST (full read-only) — the remaining stretch (NOT done; plan only)
+
+The TypeTable flip above made types OWNED and node-id-keyed, but the AST is not
+yet read-only after parse: `Node::type` (ast.hpp) is still a mutable
+`std::shared_ptr<TypeNode>` member that semantic writes during analysis and
+codegen reads during lowering. Survey 2026-09-10:
+
+- semantic.cpp: **182 writes** to `node->type`, ~341 `->type` refs total.
+- codegen reads `node->type` directly: cgen_expr.cpp 28, cgen_vec.cpp 22,
+  cgen_decl.cpp 35 (+ more in other cgen files) — ~85+ more.
+- `codegen.generate(astModule, filename)` (codegen.hpp:88) receives ONLY the AST;
+  LLVMCodegen has NO access to the analyzer's node-id TypeTable.
+- `Node::inferredTypeName` was DEAD (0 uses) and was removed 2026-09-10.
+
+For the AST to be genuinely immutable after parse, every `node->type`
+write/read must route through the node-id TypeTable, which must be threaded into
+codegen. Steps for a dedicated session:
+
+1. Remove `Node::type` (ast.hpp) OR keep it only as a build-time-only cache —
+   the target is to stop WRITING it during analysis.
+2. semantic.cpp: replace the 182 `node->type = X` writes with `setType(node, X)`
+   (TypeTable), and the ~159 pure semantic `node->type` READS with
+   `typeOf(node)` / `(it=typeOf(n); it ? ... : ...)`. (`node->type` is already
+   redundant with the TypeTable for semantic.)
+3. Thread the TypeTable into codegen: give LLVMCodegen a pointer to the analyzer
+   (or a `const TypeTable&` node-id->shared_ptr map + a `typeOf(Node*)` accessor)
+   and migrate the ~85 cgen `node->type` reads to it. `codegen.generate()` must
+   take the table (or an analyzer reference).
+4. Delete `Node::type` and any leftover semantic/codegen `node->type` access;
+   add a debug assertion that no AST field is written after parse completes.
+5. Rollback = clean checkout of semantic.cpp + codegen/*.cpp + codegen.hpp to the
+   last green commit. This is the single largest item in the migration and spans
+   semantic + ALL cgen files — do it in a fresh session with compile-driven fixes
+   (the 1141/1141 suite + lsp/repl/gitdep smokes are the gate).

@@ -406,7 +406,6 @@ public:
 class Node {
 public:
     SourceLocation loc;
-    std::string inferredTypeName;
     std::shared_ptr<TypeNode> type;  // Add type member
 
     Node(SourceLocation loc) : loc(loc) {}
