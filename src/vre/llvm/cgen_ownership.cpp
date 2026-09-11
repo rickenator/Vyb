@@ -50,6 +50,21 @@ static const vyb::ast::TypeNode* vecElementTypeNode(const vyb::ast::TypeNode* tn
     return nullptr;
 }
 
+// Is `tn` a primitive scalar TypeName (UInt8/Int/Float/Char/Bool/Bytes/...)?
+// Only scalar-element Vecs need a bare `free(data)` on reclaim; Vec<String> and
+// Vec<owning-struct> need per-element release (handled by their own paths).
+static bool isPrimitiveScalarElem(const vyb::ast::TypeNode* tn) {
+    if (auto* n = dynamic_cast<const vyb::ast::TypeName*>(tn)) {
+        if (!n->identifier) return false;
+        const std::string& nm = n->identifier->name;
+        return nm == "Bool" || nm == "Char" || nm == "Bytes" || nm == "Rune" ||
+               nm == "Float" || nm == "Float32" || nm == "Float64" ||
+               nm == "Int" || nm == "Int8" || nm == "Int16" || nm == "Int32" || nm == "Int64" ||
+               nm == "UInt" || nm == "UInt8" || nm == "UInt16" || nm == "UInt32" || nm == "UInt64";
+    }
+    return false;
+}
+
 // ============================================================================
 // CONTROL BLOCK STRUCTURE FOR our<T> AND mild<T>
 // ============================================================================
@@ -246,6 +261,59 @@ void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
                                 var.allocaInst, astIt->second.get(),
                                 llvm::cast<llvm::StructType>(var.type), /*retain=*/false);
                             return;
+                        }
+                    }
+                }
+            }
+            // A native `T?` optional whose payload is an owned, scalar-element Vec
+            // (e.g. `io::read_bytes` -> `Vec<UInt8>?`) owns the Vec's plain-malloc'd
+            // data buffer; free it when the optional is present and the buffer is
+            // non-null. Layout: { T value(0), i1 hasValue(1) }. (The our<T>? case
+            // above handles shared refcounts; this one handles owned-by-value
+            // payloads like the #213 byte-buffer surface.)
+            {
+                auto astIt = valueTypeMap.find(var.allocaInst);
+                if (var.allocaInst && astIt != valueTypeMap.end() && astIt->second) {
+                    if (auto* oo = dynamic_cast<const ast::OptionalType*>(astIt->second.get())) {
+                        const vyb::ast::TypeNode* payload = oo->containedType.get();
+                        if (payload && llvm::isa<llvm::StructType>(var.type) && vecElementTypeNode(payload)) {
+                            const vyb::ast::TypeNode* elem = vecElementTypeNode(payload);
+                            bool scalarElem = elem && isPrimitiveScalarElem(elem) &&
+                                !typeNodeIsVecOfString(payload);
+                            if (scalarElem) {
+                                VYB_CDBG << "DEBUG: Reclaiming owned Vec payload of optional: " << var.name << std::endl;
+                                llvm::Value* optVal = builder->CreateLoad(
+                                    var.type, var.allocaInst, var.name + "_opt_load");
+                                llvm::Value* has = builder->CreateExtractValue(
+                                    optVal, 1, var.name + "_opt_has");
+                                llvm::BasicBlock* reclaimBB =
+                                    llvm::BasicBlock::Create(*context, var.name + "_opt_reclaim", currentFunction);
+                                llvm::BasicBlock* contBB =
+                                    llvm::BasicBlock::Create(*context, var.name + "_opt_cont", currentFunction);
+                                builder->CreateCondBr(has, reclaimBB, contBB);
+                                builder->SetInsertPoint(reclaimBB);
+                                llvm::Value* payloadVec = builder->CreateExtractValue(
+                                    optVal, 0, var.name + "_opt_vec");
+                                llvm::Value* dataPtr = builder->CreateExtractValue(
+                                    payloadVec, 0, var.name + "_opt_data");
+                                llvm::Value* isNotNull = builder->CreateICmpNE(
+                                    dataPtr,
+                                    llvm::ConstantPointerNull::get(
+                                        llvm::PointerType::get(*context, 0)),
+                                    var.name + "_opt_null");
+                                llvm::BasicBlock* freedBB =
+                                    llvm::BasicBlock::Create(*context, var.name + "_opt_freed", currentFunction);
+                                llvm::BasicBlock* noFreeBB =
+                                    llvm::BasicBlock::Create(*context, var.name + "_opt_nofree", currentFunction);
+                                builder->CreateCondBr(isNotNull, freedBB, noFreeBB);
+                                builder->SetInsertPoint(freedBB);
+                                builder->CreateCall(getOrCreateFreeFunction(), {dataPtr});
+                                builder->CreateBr(contBB);
+                                builder->SetInsertPoint(noFreeBB);
+                                builder->CreateBr(contBB);
+                                builder->SetInsertPoint(contBB);
+                                return;
+                            }
                         }
                     }
                 }
