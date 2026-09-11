@@ -1,15 +1,15 @@
 # TypeTable migration — precise plan (turnkey for the dedicated session)
 
-Status: **increment #1 landed** (2026-09-10, commit `2944d69`) and **CHECKPOINT A
-(the core flip) landed + green** (2026-09-10): `expressionTypes` is now an owning
-`std::shared_ptr<TypeNode>` map (still `Node*`-keyed), `retainType()` returns a
-shared_ptr (registry `_ownedTypes` holds shared), `SymbolInfo.type` remains a raw
-view into the registry, and raw `resultType` locals stay raw with `.get()` at
-retain sites. This removed the raw-pointer-into-registry mirror that the UAF
-audit flagged as "fragile by coupling." What remains is CHECKPOINT B (below).
+Status: **COMPLETE as of 2026-09-10.** Increment #1 (`2944d69`), CHECKPOINT A
+(`f5c2366`), CHECKPOINT B step 1 (rekey onto node-id, `e05cc92`) and CHECKPOINT B
+step 2 (SymbolInfo.type owning flip + `_ownedTypes`/`retainType` registry removal,
+this commit) are all landed and green (1141/1141 + LSP/REPL/gitdep smokes). Every
+analyzed/synthesized type is now owned by `expressionTypes`/`typeOf` (the node-id
+TypeTable), `node->type`, or a `SymbolInfo.type` — no raw mirror, no synthesis
+registry. The only remaining item is the stretch: making the AST fields read-only
+after parse (the immutable-AST half, purely additive/optional).
 
-### CHECKPOINT B — what remains (the final cleanup)
-REKEY PITFALL (learned 2026-09-10, reverted cleanly to CHECKPOINT A= f5c2366): a
+REKEY PITFALL (learned 2026-09-10): a
 regex rekey of `expressionTypes[K]` -> `expressionTypes[exprKey(K)]` BREAKS on
 bracket keys containing a nested `]` — e.g. `expressionTypes[node->arguments[i].get()]`
 matches the FIRST `]` (of `[i]`), producing unbalanced parens that derail the
@@ -18,6 +18,18 @@ scanner, or per-site edits; never a naive `\[([^\]]*)\]` regex. Use
 `exprKey(n) = n ? n->typeId() : 0` (sentinel 0 for null — typeId starts at 1).
 Also: a file-scope helper MUST be `vyb::ast::Node` (file scope is outside
 `namespace vyb`) or the whole file cascades.
+
+## CHECKPOINT B — delivered (verified 2026-09-10)
+
+What was done (green; see the git commits):
+1. Rekey `expressionTypes` from `Node*` onto `node->typeId()` via `exprKey(n)`
+   (null -> 0 sentinel), with setType/typeOf backing the owning node-id TypeTable.
+2. Remove the `_ownedTypes` registry + `retainType` keep-alive: `SymbolInfo.type`
+   flipped to owning `std::shared_ptr<TypeNode>`; raw `resultType`/`actualReturnType`/
+   `fieldType` locals flipped to `shared_ptr` (raw assignments wrapped in
+   null-guarded clones); retain `.get()` producers dropped; `retainType()` is now a
+   thin raw->shared helper; `_ownedTypes` deleted.
+3. (Stretch, not done) Make the AST fields read-only after parse.
 
 1. Rekey `expressionTypes` from `Node*` onto `node->typeId()` via `setType(node,
    t)` / `typeOf(node)` (mechanical: `expressionTypes[n] = t` -> `setType(n,t)`,

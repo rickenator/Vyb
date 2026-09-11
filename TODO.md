@@ -954,17 +954,14 @@ These are architectural improvements that will pay dividends as the codebase gro
 The semantic analyzer currently mutates AST nodes directly (sets `node->type`,
 `expressionTypes[node]`, etc.), creating fragile cross-pass dependencies.
 
-- [~] Use an immutable AST + a separate `TypeTable` (map from node ID → type) — IN
-  PROGRESS (dedicated, multi-session migration, started 2026-09-10).
-  * CHECKPOINT A (core flip) LANDED + GREEN (1141/1141): `expressionTypes` is now an
-    owning `std::shared_ptr<TypeNode>` map (`Node*`-keyed); `retainType()` returns a
-    shared_ptr (`_ownedTypes` holds shared); `SymbolInfo.type`/raw `resultType`
-    locals stay raw views via `.get()`. The raw-pointer-into-registry mirror the
-    UAF audit flagged is gone.
-  * CHECKPOINT B (remaining, next session): rekey onto `node->typeId()` via
-    `setType`/`typeOf`, then remove `_ownedTypes`/`retainType` (requires flipping
-    `SymbolInfo.type` to owning shared_ptr — the last coupling) — full checklist
-    in `doc/TYPETABLE_MIGRATION.md`.
+- [~] Use an immutable AST + a separate `TypeTable` (map from node ID → type) — the
+  TypeTable half is DONE (2026-09-10, 1141/1141): increment #1 stable node-id +
+  scaffold (`2944d69`); CHECKPOINT A owning shared expressionTypes (`f5c2366`);
+  CHECKPOINT B rekey onto node-id (`e05cc92`) + SymbolInfo.type owning flip + the
+  `_ownedTypes`/`retainType` synthesis-registry removal (this commit). Every type
+  is now owned (TypeTable / node->type / SymbolInfo.type) — no raw mirror, no
+  registry. Remaining = the immutable-AST half (make AST fields read-only after
+  parse; additive/stretch). Plan + pitfalls in `doc/TYPETABLE_MIGRATION.md`.
 - [x] Avoid raw pointer storage in `expressionTypes` (use stable IDs or `shared_ptr`)
   — AUDITED 2026-09-10: every `.get()` stored in `expressionTypes` is backed by a
   long-lived owner (`node->type`, a `retainType`/function-registry entry, or an

@@ -602,7 +602,6 @@ SemanticAnalyzer::~SemanticAnalyzer() {
     // exclusively owned by the analyzer (nothing in the module AST holds them);
     // borrowed pointers into the module AST are not tracked here and are freed
     // with the module.
-    _ownedTypes.clear();
     // Free the scope chain. exitScope() pops nested scopes, but the global scope
     // created in the constructor is never popped and would otherwise leak its
     // SymbolTable + symbol entries. Walk the whole chain so an early global scope
@@ -723,7 +722,7 @@ void SemanticAnalyzer::injectBareEnumCtorArgTypes(ast::CallExpression* node) {
         if (objId && propId && propId->name == "push") {
             SymbolInfo* sym = currentScope->lookup(objId->name);
             if (sym && sym->type) {
-                if (auto* vt = dynamic_cast<ast::VecType*>(sym->type)) {
+                if (auto* vt = dynamic_cast<ast::VecType*>(sym->type.get())) {
                     if (vt->elementType && node->arguments.size() == 1) {
                         tryInject(node->arguments[0].get(), vt->elementType.get());
                     }
@@ -1135,7 +1134,7 @@ void SemanticAnalyzer::visit(ast::Identifier* node) {
     }
     // Reading an ownership-wrapped primitive (my<Int>, our<Int>, ...) yields the
     // underlying primitive type, matching the inline value representation in codegen.
-    ast::TypeNode* readType = symbol->type ? unwrapPrimitiveOwnershipType(symbol->type) : nullptr;
+    ast::TypeNode* readType = symbol->type ? unwrapPrimitiveOwnershipType(symbol->type.get()) : nullptr;
     expressionTypes[exprKey(node)] = readType ? std::shared_ptr<ast::TypeNode>(readType->clone()) : nullptr;
 
     // Move tracking: reject use of MY-owned variables that have been moved from.
@@ -1290,7 +1289,7 @@ void SemanticAnalyzer::visit(ast::Module* node) {
             }
             currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, sd->name->name, false,
                 ast::OwnershipKind::MY,
-                retainType(new ast::TypeName(sd->name->loc, std::make_unique<ast::Identifier>(sd->name->loc, sd->name->name))).get()});
+                retainType(new ast::TypeName(sd->name->loc, std::make_unique<ast::Identifier>(sd->name->loc, sd->name->name)))});
         } else if (auto* ed = dynamic_cast<ast::EnumDeclaration*>(item.get())) {
             if (!ed->name) continue;
             // Constant enums (every variant carries `= value`) register no Type
@@ -1302,7 +1301,7 @@ void SemanticAnalyzer::visit(ast::Module* node) {
             if (!forwardDeclaredTypes_.insert(ed->name->name).second) continue; // overwrite-tolerant like the enum visitor
             currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, ed->name->name, false,
                 ast::OwnershipKind::MY,
-                retainType(new ast::TypeName(ed->name->loc, std::make_unique<ast::Identifier>(ed->name->loc, ed->name->name))).get()});
+                retainType(new ast::TypeName(ed->name->loc, std::make_unique<ast::Identifier>(ed->name->loc, ed->name->name)))});
         } else if (auto* ta = dynamic_cast<ast::TypeAliasDeclaration*>(item.get())) {
             if (!ta->name) continue;
             if (!forwardDeclaredTypes_.insert(ta->name->name).second) {
@@ -1311,7 +1310,7 @@ void SemanticAnalyzer::visit(ast::Module* node) {
             }
             currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, ta->name->name, false,
                 ast::OwnershipKind::MY,
-                retainType(new ast::TypeName(ta->name->loc, std::make_unique<ast::Identifier>(ta->name->loc, ta->name->name))).get()});
+                retainType(new ast::TypeName(ta->name->loc, std::make_unique<ast::Identifier>(ta->name->loc, ta->name->name)))});
         }
     }
 
@@ -1660,7 +1659,7 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
                 resolvedType->accept(*this);
                 ast::TypeNode* effectiveType = resolvedType->type ? resolvedType->type.get() : resolvedType;
                 paramTypesVec.push_back(effectiveType->clone());
-                currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, param.name->name, false, ast::OwnershipKind::MY, retainType(effectiveType->clone().release()).get()});
+                currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, param.name->name, false, ast::OwnershipKind::MY, retainType(effectiveType->clone().release())});
             } else {
                 addError("Parameter \\\"" + param.name->name + "\\\" missing type.", param.name.get());
                 paramTypesVec.push_back(nullptr);
@@ -1684,7 +1683,7 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
     if (!processingTraitOrBindMethod) {
         SymbolInfo* funcSymFromTable = currentScope->getParent()->lookup(node->id->name);
         if (funcSymFromTable) {
-            funcSymFromTable->type = retainType(new ast::FunctionType(node->loc, std::move(paramTypesVec), std::unique_ptr<ast::TypeNode>(returnTypeAstNode))).get();
+            funcSymFromTable->type = retainType(new ast::FunctionType(node->loc, std::move(paramTypesVec), std::unique_ptr<ast::TypeNode>(returnTypeAstNode)));
             if (funcSymFromTable->type) {
                  node->type = std::shared_ptr<ast::TypeNode>(funcSymFromTable->type->clone().release());
             }
@@ -1928,7 +1927,7 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
     }
 
     SymbolInfo::Kind kind = SymbolInfo::Kind::Variable;
-    currentScope->add(SymbolInfo{kind, node->id->name, node->isConst, ast::OwnershipKind::MY, symbolType ? retainType(symbolType->clone().release()).get() : nullptr}); // Explicit SymbolInfo
+    currentScope->add(SymbolInfo{kind, node->id->name, node->isConst, ast::OwnershipKind::MY, symbolType ? retainType(symbolType->clone().release()) : nullptr}); // Explicit SymbolInfo
 }
 
 void SemanticAnalyzer::visit(ast::ClassDeclaration* node) {
@@ -1938,7 +1937,7 @@ void SemanticAnalyzer::visit(ast::ClassDeclaration* node) {
     if (currentScope->lookupDirect(node->name->name)) {
         addError("Redefinition of class \\\"" + node->name->name + "\\\" in the same scope.", node->name.get());
     }
-    currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, node->name->name, false, ast::OwnershipKind::MY, retainType(new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->name->loc, node->name->name))).get()});
+    currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, node->name->name, false, ast::OwnershipKind::MY, retainType(new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->name->loc, node->name->name)))});
 
 
     enterScope();
@@ -1996,7 +1995,7 @@ void SemanticAnalyzer::visit(ast::TypeAliasDeclaration* node) {
     }
 
     if (node->name && node->typeNode && node->typeNode->type) {
-        currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, node->name->name, false, ast::OwnershipKind::MY, retainType(node->typeNode->type->clone().release()).get()}); // Explicit SymbolInfo
+        currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, node->name->name, false, ast::OwnershipKind::MY, retainType(node->typeNode->type->clone().release())}); // Explicit SymbolInfo
     } else if (node->name) {
         addError("Type alias \\\"" + node->name->name + "\\\" has an unresolved target type.", node);
         currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, node->name->name, false, ast::OwnershipKind::MY, nullptr}); // Explicit SymbolInfo
@@ -2056,7 +2055,7 @@ void SemanticAnalyzer::visit(ast::BinaryExpression* node) {
     // For comparison operators (<, >, <=, >=, ==, !=), the result is Bool
     // For logical operators (&&, ||), the result is Bool
 
-    ast::TypeNode* resultType = nullptr;
+    std::shared_ptr<ast::TypeNode> resultType; // owning (CHECKPOINT B step 2)
 
     // Ordering operators are not defined for native optionals: `a < b` on `T?`
     // has no well-defined meaning and would crash codegen (a struct handed to an
@@ -2103,7 +2102,7 @@ void SemanticAnalyzer::visit(ast::BinaryExpression* node) {
         case TokenType::DIVIDE:
         case TokenType::MODULO:
             // Arithmetic operations: result type is the same as operands (assuming compatible types)
-            resultType = leftType;
+            resultType = leftType ? std::shared_ptr<ast::TypeNode>(leftType->clone()) : nullptr;
             break;
 
         case TokenType::LT:
@@ -2114,14 +2113,14 @@ void SemanticAnalyzer::visit(ast::BinaryExpression* node) {
         case TokenType::NOTEQ:
             // Comparison operations: result is Bool
             resultType = retainType(new ast::TypeName(node->loc,
-                std::make_unique<ast::Identifier>(node->loc, "Bool"))).get();
+                std::make_unique<ast::Identifier>(node->loc, "Bool")));
             break;
 
         case TokenType::AND:
         case TokenType::OR:
             // Logical operations: result is Bool
             resultType = retainType(new ast::TypeName(node->loc,
-                std::make_unique<ast::Identifier>(node->loc, "Bool"))).get();
+                std::make_unique<ast::Identifier>(node->loc, "Bool")));
             break;
 
         case TokenType::PIPE:
@@ -2156,7 +2155,9 @@ void SemanticAnalyzer::visit(ast::BinaryExpression* node) {
             }
             // Result type is usually the left operand's type; when the left
             // operand is a bare literal, adopt the typed right operand's width.
-            resultType = (leftIsLiteral && !rightIsLiteral) ? rightType : leftType;
+            resultType = (leftIsLiteral && !rightIsLiteral)
+                ? (rightType ? std::shared_ptr<ast::TypeNode>(rightType->clone()) : nullptr)
+                : (leftType ? std::shared_ptr<ast::TypeNode>(leftType->clone()) : nullptr);
             break;
             }
 
@@ -2194,10 +2195,10 @@ void SemanticAnalyzer::visit(ast::BinaryExpression* node) {
                 }
                 // Unresolved generic payload: accept and let the default's type
                 // carry through semantic propagation (codegen uses LLVM types).
-                resultType = rightType;
+                resultType = rightType ? std::shared_ptr<ast::TypeNode>(rightType->clone()) : nullptr;
                 break;
             }
-            resultType = contained;
+            resultType = contained ? std::shared_ptr<ast::TypeNode>(contained->clone()) : nullptr;
             break;
         }
 
@@ -3666,7 +3667,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
         // return type so `x = f(a, b)` infers correctly in generic bodies.
         SymbolInfo* functionSymbol = currentScope->lookup(name);
         if (functionSymbol && functionSymbol->type) {
-            if (auto functionType = dynamic_cast<ast::FunctionType*>(functionSymbol->type)) {
+            if (auto functionType = dynamic_cast<ast::FunctionType*>(functionSymbol->type.get())) {
                 if (functionType->returnType) {
                     bool isGenericCall = registryIt != functionRegistry.end() &&
                         registryIt->second && !registryIt->second->genericParams.empty();
@@ -3860,18 +3861,18 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 SymbolInfo* objSymbol = currentScope->lookup(objIdent->name);
                 if (objSymbol && objSymbol->type) {
                     // Check if it's a Vec type (directly or as TypeName "Vec<T>" from function params)
-                    if (dynamic_cast<ast::VecType*>(objSymbol->type) && (isBuiltinVecMethodName(methodName) || isVecTailMethodName(methodName))) {
+                    if (dynamic_cast<ast::VecType*>(objSymbol->type.get()) && (isBuiltinVecMethodName(methodName) || isVecTailMethodName(methodName))) {
                         handleVecMethodCall(node, objIdent->name, methodName);
                         return;
                     }
-                    if (auto tn = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
+                    if (auto tn = dynamic_cast<ast::TypeName*>(objSymbol->type.get())) {
                         if (tn->identifier && tn->identifier->name == "Vec" && (isBuiltinVecMethodName(methodName) || isVecTailMethodName(methodName))) {
                             handleVecMethodCall(node, objIdent->name, methodName);
                             return;
                         }
                     }
 
-                    if (auto chanTn = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
+                    if (auto chanTn = dynamic_cast<ast::TypeName*>(objSymbol->type.get())) {
                         if (chanTn->identifier && chanTn->identifier->name == "chan" &&
                             chanTn->genericArgs.size() == 1) {
                             handleChanMethod(node, chanTn->genericArgs[0].get(), methodName);
@@ -3880,7 +3881,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     }
 
                     // Check if it's a Tuple type
-                    if (auto tupleType = dynamic_cast<ast::TupleTypeNode*>(objSymbol->type)) {
+                    if (auto tupleType = dynamic_cast<ast::TupleTypeNode*>(objSymbol->type.get())) {
                         if (methodName == "len") {
                             // len() -> Int
                             if (node->arguments.size() != 0) {
@@ -4111,7 +4112,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                         }
 
                         if (candidates[0].returnType) {
-                            ast::TypeNode* actualReturnType = retainType(substituteSelfType(candidates[0].returnType, typeNameStr)).get();
+                            auto actualReturnType = retainType(substituteSelfType(candidates[0].returnType, typeNameStr));
                             // Synthesized nodes are owned by the temp buffer inside this
                             // lambda; keep a stable heap copy so later type checks don't
                             // dangle after the buffer goes out of scope.
@@ -4127,14 +4128,14 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                         return true;
                     };
 
-                    if (auto vecType = dynamic_cast<ast::VecType*>(objSymbol->type)) {
+                    if (auto vecType = dynamic_cast<ast::VecType*>(objSymbol->type.get())) {
                         if (resolveAspectMethodForTypeString(vecType->toString())) {
                             return;
                         }
                     }
 
                     // Otherwise check for trait methods
-                    if (auto typeName = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
+                    if (auto typeName = dynamic_cast<ast::TypeName*>(objSymbol->type.get())) {
                         if (typeName->identifier) {
                             std::string typeNameStr = typeName->toString(); // Use full type with generic args
 
@@ -4322,7 +4323,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
 
                 // Check if this is a method call on a type parameter
                 if (objSymbol && objSymbol->type) {
-                    if (auto typeName = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
+                    if (auto typeName = dynamic_cast<ast::TypeName*>(objSymbol->type.get())) {
                         if (typeName->identifier && typeName->genericArgs.empty()) {
                             std::string typeStr = typeName->identifier->name;
                             SymbolInfo* typeParamSym = currentScope->lookup(typeStr);
@@ -4350,13 +4351,13 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 // If we reach here and it's a Vec type, try Vec-specific methods
                 // Otherwise, it's an unknown method error
                 if (objSymbol && objSymbol->type) {
-                    if (dynamic_cast<ast::VecType*>(objSymbol->type) && (isBuiltinVecMethodName(methodName) || isVecTailMethodName(methodName))) {
+                    if (dynamic_cast<ast::VecType*>(objSymbol->type.get()) && (isBuiltinVecMethodName(methodName) || isVecTailMethodName(methodName))) {
                         handleVecMethodCall(node, objIdent->name, methodName);
                         return;
                     }
 
                     // Check for primitive type methods (Int.to_string(), etc.)
-                    if (auto objTypeName = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
+                    if (auto objTypeName = dynamic_cast<ast::TypeName*>(objSymbol->type.get())) {
                         if (objTypeName->identifier && objTypeName->identifier->name == "Vec" && (isBuiltinVecMethodName(methodName) || isVecTailMethodName(methodName))) {
                             handleVecMethodCall(node, objIdent->name, methodName);
                             return;
@@ -4417,7 +4418,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
 
                 // Check for String type methods
                 if (objSymbol && objSymbol->type) {
-                    if (auto objTypeName = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
+                    if (auto objTypeName = dynamic_cast<ast::TypeName*>(objSymbol->type.get())) {
                         if (objTypeName->identifier && objTypeName->identifier->name == "String") {
                             // String methods: len/length -> Int, contains/starts_with/ends_with -> Bool,
                             // substring/to_upper/to_lower/concat -> String, char_at -> Int
@@ -5063,7 +5064,7 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
     if (auto objIdent = dynamic_cast<ast::Identifier*>(node->object.get())) {
         SymbolInfo* varSym = currentScope->lookup(objIdent->name);
         if (varSym && varSym->type) {
-            if (auto varTypeName = dynamic_cast<ast::TypeName*>(varSym->type)) {
+            if (auto varTypeName = dynamic_cast<ast::TypeName*>(varSym->type.get())) {
                 if (varTypeName->identifier) {
                     std::string varTypeStr = varTypeName->identifier->name;
                     // Check if this type is a type parameter
@@ -5335,7 +5336,9 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
     // `self.keys` on a `Map<Int, Int>` receiver types as `Vec<Int>` rather than the
     // raw `Vec<K>` from the struct template (broken bare field access in generic
     // bind bodies, and in any code touching a field of a concretely-typed generic).
-    ast::TypeNode* fieldType = fieldIt->second;
+    ast::TypeNode* rawFieldType = fieldIt->second;
+    std::shared_ptr<ast::TypeNode> fieldType =
+        rawFieldType ? std::shared_ptr<ast::TypeNode>(rawFieldType->clone()) : nullptr;
     auto genericOrderIt = structGenericParamOrder.find(baseStructName);
     if (genericOrderIt != structGenericParamOrder.end()) {
         if (auto* objTn = dynamic_cast<ast::TypeName*>(it->second.get())) {
@@ -5345,9 +5348,9 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
                 for (size_t i = 0; i < genericOrderIt->second.size(); ++i) {
                     typeArgs[genericOrderIt->second[i]] = objTn->genericArgs[i].get();
                 }
-                ast::TypeNodePtr substituted = substituteGenericArgsForValidation(fieldType, typeArgs);
+                ast::TypeNodePtr substituted = substituteGenericArgsForValidation(fieldType.get(), typeArgs);
                 if (substituted) {
-                    fieldType = retainType(substituted.release()).get();
+                    fieldType = retainType(substituted.release());
                 }
             }
         }
@@ -5409,7 +5412,7 @@ void SemanticAnalyzer::visit(ast::AssignmentExpression* node) {
         }
         if (!rhsRoot.empty()) {
             SymbolInfo* lhsSym = currentScope->lookup(lhsIdent->name);
-            if (lhsSym && isTheirType(lhsSym->type))
+            if (lhsSym && isTheirType(lhsSym->type.get()))
                 recordTheirBorrowInto(lhsIdent->name, rhsRoot);
         }
     }
@@ -5956,7 +5959,7 @@ void SemanticAnalyzer::visit(ast::FunctionExpression* node) {
                 param.name->name,
                 /*isConst=*/false,
                 ast::OwnershipKind::MY,
-                paramTypeRaw ? retainType(paramTypeRaw->clone().release()).get() : nullptr
+                paramTypeRaw ? retainType(paramTypeRaw->clone().release()) : nullptr
             });
         }
     }
@@ -6367,7 +6370,7 @@ void SemanticAnalyzer::visit(ast::SelectExpression* node) {
                             }
                             ast::TypeNode* pt = (bi < payload.size()) ? payload[bi].get() : nullptr;
                             currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, bname, false,
-                                ast::OwnershipKind::MY, pt ? retainType(pt->clone().release()).get() : nullptr});
+                                ast::OwnershipKind::MY, pt ? retainType(pt->clone().release()) : nullptr});
                             // Record the payload field type on the bound identifier so
                             // codegen can resolve member access / field reads on it (needed
                             // for ownership-wrapped payloads like our<Node>, which are stored
@@ -7294,7 +7297,7 @@ void SemanticAnalyzer::visit(ast::MatchStatement* node) {
                         ast::TypeNode* fieldType = ftIt->second;
                         currentScope->add(SymbolInfo{
                             SymbolInfo::Kind::Variable, fname, false, ast::OwnershipKind::MY,
-                            fieldType ? retainType(fieldType->clone().release()).get() : nullptr});
+                            fieldType ? retainType(fieldType->clone().release()) : nullptr});
                         // Record the field type on the binding itself so codegen can
                         // populate valueTypeMap for the destructured variable.
                         binding->type = fieldType ? std::shared_ptr<ast::TypeNode>(fieldType->clone()) : nullptr;
@@ -7342,7 +7345,7 @@ void SemanticAnalyzer::visit(ast::MatchStatement* node) {
                             }
                             ast::TypeNode* pt = (bi < payload.size()) ? payload[bi].get() : nullptr;
                             currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, bname, false,
-                                ast::OwnershipKind::MY, pt ? retainType(pt->clone().release()).get() : nullptr});
+                                ast::OwnershipKind::MY, pt ? retainType(pt->clone().release()) : nullptr});
                             // Record the payload field type on the bound identifier so
                             // codegen can resolve member access / field reads on it (needed
                             // for ownership-wrapped payloads like our<Node>, which are stored
@@ -7371,7 +7374,7 @@ void SemanticAnalyzer::visit(ast::MatchStatement* node) {
                     ast::TypeNode* optPayload = matchedOptionalType->containedType.get();
                     currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, vid->name, false,
                         ast::OwnershipKind::MY,
-                        optPayload ? retainType(optPayload->clone().release()).get() : nullptr});
+                        optPayload ? retainType(optPayload->clone().release()) : nullptr});
                     vid->type = optPayload
                         ? std::shared_ptr<ast::TypeNode>(optPayload->clone().release()) : nullptr;
                 }
@@ -7585,9 +7588,9 @@ void SemanticAnalyzer::visit(ast::StructDeclaration* node) {
 
     // Register in parent scope (not the type parameter scope)
     if (hasGenericParams) {
-        currentScope->getParent()->add(SymbolInfo{SymbolInfo::Kind::Type, structName, false, ast::OwnershipKind::MY, structType.get()});
+        currentScope->getParent()->add(SymbolInfo{SymbolInfo::Kind::Type, structName, false, ast::OwnershipKind::MY, structType});
     } else {
-        currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, structName, false, ast::OwnershipKind::MY, structType.get()});
+        currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, structName, false, ast::OwnershipKind::MY, structType});
     }
 
     // Store struct field information for member access resolution
@@ -7683,7 +7686,7 @@ void SemanticAnalyzer::visit(ast::EnumDeclaration* node) {
             }
             currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, enumName, false,
                 ast::OwnershipKind::MY,
-                retainType(new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, enumName))).get()});
+                retainType(new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, enumName)))});
         }
         return;
     }
@@ -7708,7 +7711,7 @@ void SemanticAnalyzer::visit(ast::EnumDeclaration* node) {
         }
         currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, enumName, false,
             ast::OwnershipKind::MY,
-                retainType(new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, enumName))).get()});
+                retainType(new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, enumName)))});
         return;
     }
 
@@ -7726,7 +7729,7 @@ void SemanticAnalyzer::visit(ast::EnumDeclaration* node) {
     // and so `s = Shape::Circle(...)` infers the enum type.
     currentScope->add(SymbolInfo{SymbolInfo::Kind::Type, enumName, false,
         ast::OwnershipKind::MY,
-                retainType(new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, enumName))).get()});
+                retainType(new ast::TypeName(node->loc, std::make_unique<ast::Identifier>(node->loc, enumName)))});
 }
 
 void SemanticAnalyzer::registerGenericEnumConcrete(
@@ -7845,7 +7848,7 @@ void SemanticAnalyzer::visit(ast::TemplateDeclaration* node) {
             // Register it in the symbol table as a type parameter
             SymbolInfo sym;
             sym.name = paramName;
-            sym.type = genericType.get(); // Store raw pointer, managed separately
+            sym.type = std::shared_ptr<ast::TypeNode>(std::move(genericType));
             sym.kind = SymbolInfo::Kind::TYPE_PARAMETER; // Mark as generic type parameter
 
             currentScope->add(sym);
@@ -8298,7 +8301,7 @@ void SemanticAnalyzer::visit(ast::TrapClause* node) {
     if (node->isWildcard || node->isMultiType || singleIsAspect) {
         errorSymbol.type = nullptr;
     } else {
-        errorSymbol.type = node->errorType.get();
+        errorSymbol.type = node->errorType->clone();
     }
     errorSymbol.isConst = true;  // Error binding is immutable (const)
     errorSymbol.ownershipKind = ast::OwnershipKind::MY;  // Error value is owned
@@ -8916,7 +8919,7 @@ bool SemanticAnalyzer::areTypesCompatible(ast::TypeNode* targetType, ast::TypeNo
             if (tn->identifier && tn->genericArgs.empty()) {
                 auto* sym = currentScope->lookup(tn->identifier->name);
                 if (sym && sym->kind == SymbolInfo::Kind::Type && sym->type) {
-                    return sym->type;
+                    return sym->type.get();
                 }
             }
         }
@@ -9707,9 +9710,9 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
     // generic argument is a Vec). Record the ownership kind so mutating calls
     // are permitted, then treat `objSymbol->type` as that inner Vec throughout
     // the element-type / Vec-type return inference below.
-    ast::TypeNode* vecTypeNode = objSymbol ? objSymbol->type : nullptr;
+    ast::TypeNode* vecTypeNode = objSymbol ? objSymbol->type.get() : nullptr;
     if (objSymbol && objSymbol->type) {
-        if (auto wrap = dynamic_cast<ast::TypeName*>(objSymbol->type)) {
+        if (auto wrap = dynamic_cast<ast::TypeName*>(objSymbol->type.get())) {
             if (wrap->identifier &&
                 (wrap->identifier->name == "their" || wrap->identifier->name == "my" ||
                  wrap->identifier->name == "our" || wrap->identifier->name == "view" ||
@@ -10953,7 +10956,7 @@ void SemanticAnalyzer::visit(ast::TupleDestructureAssignment* node) {
         ast::TypeNode* elemType = elementTypes[i];
         currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, varName, false, 
                                       ast::OwnershipKind::MY, 
-                                      elemType ? retainType(elemType->clone().release()).get() : nullptr});
+                                      elemType ? retainType(elemType->clone().release()) : nullptr});
     }
 }
 

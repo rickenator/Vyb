@@ -109,7 +109,7 @@ struct SymbolInfo {
     std::string name;
     bool isConst = false;
     ast::OwnershipKind ownershipKind = ast::OwnershipKind::MY; // Default to unique ownership
-    ast::TypeNode* type = nullptr;
+    std::shared_ptr<ast::TypeNode> type; // Owning (CHECKPOINT B step 2); raw -> shared.
     std::vector<std::string> bounds; // For TYPE_PARAMETER: aspect bounds (e.g., ["Display", "Clone"])
 };
 
@@ -547,20 +547,12 @@ private:
     void setType(const ast::Node* n, std::shared_ptr<ast::TypeNode> t) {
         if (n) expressionTypes[n->typeId()] = std::move(t);
     }
-    // Registry of types the analyzer synthesizes during analysis. Each entry is now
-    // SHARED: retainType() creates the single shared owner, registers it here, and
-    // returns a copy that shares the refcount. Raw consumers (SymbolInfo.type,
-    // resultType locals) may hold a borrowed raw view because the registry keeps the
-    // object alive; owning consumers (expressionTypes) share the same shared_ptr.
-    // Retained until the mirror is removed so deallocations are deterministic.
-    std::vector<std::shared_ptr<ast::TypeNode>> _ownedTypes;
+    // CHECKPOINT B step 2: the synthesis registry is gone. Every synthesized type
+    // is owned by its consumer (expressionTypes/TypeTable, node->type, or a
+    // SymbolInfo.type). retainType() is a thin "wrap a raw new into an owning
+    // shared_ptr" helper (takes ownership of the raw; no global keep-alive).
     std::shared_ptr<ast::TypeNode> retainType(ast::TypeNode* raw) {
-        if (raw) {
-            auto sp = std::shared_ptr<ast::TypeNode>(raw);  // ONE owner created
-            _ownedTypes.push_back(sp);                       // registry shares the refcount
-            return sp;                                       // caller shares too
-        }
-        return std::shared_ptr<ast::TypeNode>();
+        return raw ? std::shared_ptr<ast::TypeNode>(raw) : std::shared_ptr<ast::TypeNode>();
     }
 
     std::vector<SymbolTable*> scopes;
