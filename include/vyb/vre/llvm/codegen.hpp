@@ -11,6 +11,8 @@
 #include <llvm/Support/raw_ostream.h>
 #include <map>
 #include <memory>
+#include <functional>
+#include <type_traits>
 #include <set>
 #include <stack>
 #include <string>
@@ -92,9 +94,38 @@ public:
     llvm::Module* getModule() const { return module.get(); } // Add method to get module pointer without releasing
     // True when main()'s return argument is a lit(...) call (raw JSON passthrough).
     bool isMainReturnLitRaw() const { return m_mainReturnIsLitRaw; }
+    // #223: resolve a node's AST type from the semantic TypeTable (bound from the
+    // Driver's SemanticAnalyzer in the constructor). The TypeTable is the single
+    // authority; the retired node->type field is no longer consulted.
+    std::shared_ptr<vyb::ast::TypeNode> typeOfNode(const vyb::ast::Node* n) const {
+        return nodeTypeOf_ ? nodeTypeOf_(n) : std::shared_ptr<vyb::ast::TypeNode>();
+    }
+    // #223: same query for smart-pointer receivers (unique_ptr/shared_ptr) so
+    // call sites like `node->id->type` become `typeOfNode(node->id)` unchanged
+    // in shape. SFINAE keeps it to objects whose get() yields a Node*; a raw
+    // or non-Node receiver (LLVM Value*, ScopeVariable*, ...) is intentionally
+    // NOT matched here so the raw-pointer overload above or a compile error
+    // (for truly non-Node receivers) surfaces at the call site.
+    template <class P>
+    std::enable_if_t<
+        !std::is_convertible<P, const vyb::ast::Node*>::value &&
+            std::is_convertible<decltype(std::declval<const P&>().get()),
+                                const vyb::ast::Node*>::value,
+        std::shared_ptr<vyb::ast::TypeNode>>
+    typeOfNode(const P& p) const {
+        const vyb::ast::Node* n = p.get();
+        return nodeTypeOf_ ? nodeTypeOf_(n) : std::shared_ptr<vyb::ast::TypeNode>();
+    }
+    // True when a call expression's type is `mild<...>` (a shared borrow with
+    // retained-on-stow semantics). Made a member (#223) so it resolves the type
+    // through typeOfNode instead of the node->type field.
+    bool isMildTransferExpr(ast::Expression* expr);
 
 private:
     Driver& driver_; // Add a Driver reference
+    // Bound to the semantic analyzer's TypeTable query (#223). null when no
+    // analyzer is registered (fallback to node->type above keeps it working).
+    std::function<std::shared_ptr<vyb::ast::TypeNode>(const vyb::ast::Node*)> nodeTypeOf_;
     std::unique_ptr<llvm::LLVMContext> context;
     std::unique_ptr<llvm::Module> module;
     std::unique_ptr<llvm::IRBuilder<>> builder;

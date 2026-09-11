@@ -100,6 +100,14 @@ LLVMCodegen::LLVMCodegen(Driver& driver)
     rttiStructType = getOrCreateRTTIStructType();
 
     currentLoopContext = {nullptr, nullptr, nullptr, nullptr};
+
+    // #223: bind the semantic TypeTable query so codegen resolves node types
+    // from the single authority instead of the (soon-removed) typeOfNode(node) field.
+    // Falls back to typeOfNode(node) when no analyzer is registered (test/JIT paths);
+    // the X1 unification keeps typeOfNode(node) aliasing the same object meanwhile.
+    if (auto* sa = driver_.getSemanticAnalyzer()) {
+        nodeTypeOf_ = [sa](const vyb::ast::Node* n) { return sa->typeOf(n); };
+    }
 }
 
 LLVMCodegen::~LLVMCodegen() = default;

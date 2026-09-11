@@ -242,15 +242,15 @@ void LLVMCodegen::handleVecPush(vyb::ast::CallExpression* node, llvm::Value* vec
         // slot owns data fully independent of the pushed value.
         bool structNeedsDeepCopy =
             elementType->isStructTy() &&
-            node->arguments[0]->type &&
-            isKnownStructTypeNode(node->arguments[0]->type.get()) &&
-            structTypeHasOwnedFields(node->arguments[0]->type.get());
+            typeOfNode(node->arguments[0]) &&
+            isKnownStructTypeNode(typeOfNode(node->arguments[0]).get()) &&
+            structTypeHasOwnedFields(typeOfNode(node->arguments[0]).get());
 
         if (structNeedsDeepCopy) {
             // Generate the deep copy of the source struct value.
             llvm::Value* deepCopy = generateStructDeepCopy(
                 builder->CreateLoad(elementType, srcPtr, "vec.push.struct_load"),
-                node->arguments[0]->type.get(),
+                typeOfNode(node->arguments[0]).get(),
                 llvm::cast<llvm::StructType>(elementType));
             builder->CreateStore(deepCopy, elementPtr);
         } else {
@@ -283,8 +283,8 @@ void LLVMCodegen::reclaimFreshStructArgTemp(vyb::ast::CallExpression* node, unsi
     // cleanup and must NOT be touched (mirrors pendingStructTempReclaims).
     bool fresh = dynamic_cast<ast::CallExpression*>(node->arguments[argIdx].get()) != nullptr ||
                  dynamic_cast<ast::ObjectLiteral*>(node->arguments[argIdx].get()) != nullptr;
-    if (!fresh || !node->arguments[argIdx]->type) return;
-    const vyb::ast::TypeNode* at = node->arguments[argIdx]->type.get();
+    if (!fresh || !typeOfNode(node->arguments[argIdx])) return;
+    const vyb::ast::TypeNode* at = typeOfNode(node->arguments[argIdx]).get();
     if (!isKnownStructTypeNode(at) || !structTypeHasOwnedFields(at)) return;
     auto* st = llvm::dyn_cast<llvm::StructType>(elementType);
     if (!st) return;
@@ -332,8 +332,8 @@ void LLVMCodegen::handleVecPop(vyb::ast::CallExpression* node, llvm::Value* vecP
     builder->CreateStore(safeNewSize, sizeFieldPtr);
 
     llvm::Type* elementType = nullptr;
-    if (node->type) {
-        elementType = codegenType(node->type.get());
+    if (typeOfNode(node)) {
+        elementType = codegenType(typeOfNode(node).get());
     }
     if (!elementType) {
         elementType = llvm::Type::getInt64Ty(*context);
@@ -408,9 +408,9 @@ void LLVMCodegen::handleVecGet(vyb::ast::CallExpression* node, llvm::Value* vecP
     llvm::Type* elementLLVMType = nullptr;
     uint64_t elementSizeBytes = 8; // Default to 8 bytes
 
-    if (node->type) {
+    if (typeOfNode(node)) {
         // Convert AST type to LLVM type
-        elementLLVMType = codegenType(node->type.get());
+        elementLLVMType = codegenType(typeOfNode(node).get());
         if (elementLLVMType) {
             llvm::DataLayout dataLayout(module.get());
             elementSizeBytes = dataLayout.getTypeAllocSize(elementLLVMType);
@@ -460,11 +460,11 @@ void LLVMCodegen::handleVecGet(vyb::ast::CallExpression* node, llvm::Value* vecP
         // that binding is reclaimed on scope exit it frees the same buffers the
         // slot (and any other get() caller) still owns -> double free. Deep-copy
         // owned fields so the returned value owns data independent of the slot.
-        if (node->type &&
-            isKnownStructTypeNode(node->type.get()) &&
-            structTypeHasOwnedFields(node->type.get())) {
+        if (typeOfNode(node) &&
+            isKnownStructTypeNode(typeOfNode(node).get()) &&
+            structTypeHasOwnedFields(typeOfNode(node).get())) {
             element = generateStructDeepCopy(
-                element, node->type.get(), llvm::cast<llvm::StructType>(elementLLVMType));
+                element, typeOfNode(node).get(), llvm::cast<llvm::StructType>(elementLLVMType));
             // generateStructDeepCopy may emit new blocks (e.g. a Vec-field clone
             // loop). The deep-copied value is defined in that last block, so the
             // merge PHI must treat it (not the original validBlock) as the
@@ -507,8 +507,8 @@ void LLVMCodegen::handleVecLast(vyb::ast::CallExpression* node, llvm::Value* vec
     // this to T from Vec<T>), mirroring Vec::get.
     llvm::Type* elementLLVMType = nullptr;
     uint64_t elementSizeBytes = 8;
-    if (node->type) {
-        elementLLVMType = codegenType(node->type.get());
+    if (typeOfNode(node)) {
+        elementLLVMType = codegenType(typeOfNode(node).get());
         if (elementLLVMType) {
             llvm::DataLayout dataLayout(module.get());
             elementSizeBytes = dataLayout.getTypeAllocSize(elementLLVMType);
@@ -548,11 +548,11 @@ void LLVMCodegen::handleVecLast(vyb::ast::CallExpression* node, llvm::Value* vec
         element = builder->CreateLoad(elementLLVMType, elementPtr, "vec.last.element_struct");
         // Deep-copy owned struct fields so the returned value owns data
         // independent of the Vec slot (avoids double free on slot/caller reclaim).
-        if (node->type &&
-            isKnownStructTypeNode(node->type.get()) &&
-            structTypeHasOwnedFields(node->type.get())) {
+        if (typeOfNode(node) &&
+            isKnownStructTypeNode(typeOfNode(node).get()) &&
+            structTypeHasOwnedFields(typeOfNode(node).get())) {
             element = generateStructDeepCopy(
-                element, node->type.get(), llvm::cast<llvm::StructType>(elementLLVMType));
+                element, typeOfNode(node).get(), llvm::cast<llvm::StructType>(elementLLVMType));
             validIncoming = builder->GetInsertBlock();
         }
     } else {
@@ -643,19 +643,19 @@ void LLVMCodegen::handleVecSet(vyb::ast::CallExpression* node, llvm::Value* vecP
             retainStringValue(value);
         }
     } else if (elementLLVMType && elementLLVMType->isStructTy() &&
-               node->arguments[1]->type &&
-               isKnownStructTypeNode(node->arguments[1]->type.get()) &&
-               structTypeHasOwnedFields(node->arguments[1]->type.get())) {
+               typeOfNode(node->arguments[1]) &&
+               isKnownStructTypeNode(typeOfNode(node->arguments[1]).get()) &&
+               structTypeHasOwnedFields(typeOfNode(node->arguments[1]).get())) {
         // Struct element owning heap data: release the overwritten slot's owned
         // fields (it is being dropped), then store a deep copy of the new value
         // so the slot owns data independent of the assigning source (shallow copy
         // would alias and double-free on scope exit).
         std::set<std::string> visited;
         reclaimStructOwnedFieldsAt(
-            elementPtr, node->arguments[1]->type.get(),
+            elementPtr, typeOfNode(node->arguments[1]).get(),
             llvm::cast<llvm::StructType>(elementLLVMType), visited);
         llvm::Value* deepCopy = generateStructDeepCopy(
-            value, node->arguments[1]->type.get(),
+            value, typeOfNode(node->arguments[1]).get(),
             llvm::cast<llvm::StructType>(elementLLVMType));
         // A fresh owned-struct TEMP new-value (e.g. `v.set(i, make_node(5))`)
         // was deep-copied above; reclaim its original buffers (#192). A named
@@ -731,7 +731,7 @@ void LLVMCodegen::handleVecToArray(vyb::ast::CallExpression* node, llvm::Value* 
     // size argument. Together they give a real `[N x T]` value instead of the
     // old placeholder scalar.
     llvm::ArrayType* arrayTy = nullptr;
-    ast::TypeNode* resultType = node->type.get();
+    ast::TypeNode* resultType = typeOfNode(node).get();
     if (ast::ArrayType* arrAst = dynamic_cast<ast::ArrayType*>(resultType)) {
         llvm::Type* elemTy = arrAst->elementType ? codegenType(arrAst->elementType.get()) : nullptr;
         if (elemTy) {
@@ -799,8 +799,8 @@ void LLVMCodegen::handleVecClear(vyb::ast::CallExpression* node, llvm::Value* ve
     // If the Vec holds String elements, each element's reference must be dropped
     // before the storage is logically emptied, or the buffers would leak.
     llvm::Type* elemType = nullptr;
-    if (node->type) {
-        elemType = codegenType(node->type.get());
+    if (typeOfNode(node)) {
+        elemType = codegenType(typeOfNode(node).get());
     }
     if (elemType && isVybStringStructType(elemType)) {
         llvm::Value* dataFieldPtr = builder->CreateStructGEP(vecStructType, vecPtr, 0, "vec.clear.data_ptr");
@@ -888,9 +888,9 @@ void LLVMCodegen::handleVecConcat(vyb::ast::CallExpression* node, llvm::Value* v
     // the combined buffer is laid out exactly like the source vectors.
     llvm::Type* elementLLVMType = nullptr;
     vyb::ast::TypeNode* elemNode = nullptr;
-    if (auto* vt = dynamic_cast<ast::VecType*>(node->type.get())) {
+    if (auto* vt = dynamic_cast<ast::VecType*>(typeOfNode(node).get())) {
         elemNode = vt->elementType.get();
-    } else if (auto* tn = dynamic_cast<ast::TypeName*>(node->type.get())) {
+    } else if (auto* tn = dynamic_cast<ast::TypeName*>(typeOfNode(node).get())) {
         if (!tn->genericArgs.empty()) elemNode = tn->genericArgs[0].get();
     }
     if (elemNode) elementLLVMType = codegenType(elemNode);
@@ -988,7 +988,7 @@ void LLVMCodegen::handleVecContains(vyb::ast::CallExpression* node, llvm::Value*
     // Get the element type size (default to 8 bytes for i64)
     llvm::Type* elementLLVMType = llvm::Type::getInt64Ty(*context);
     uint64_t elementSizeBytes = 8;
-    if (node->type) {
+    if (typeOfNode(node)) {
         // The contains() return type is Bool, not the element type
         // We need the element type from the Vec type context
     }
@@ -1094,8 +1094,8 @@ void LLVMCodegen::handleVecRemoveAt(vyb::ast::CallExpression* node, llvm::Value*
     llvm::Type* elementLLVMType = nullptr;
     uint64_t elementSizeBytes = 8; // Default
 
-    if (node->type) {
-        elementLLVMType = codegenType(node->type.get());
+    if (typeOfNode(node)) {
+        elementLLVMType = codegenType(typeOfNode(node).get());
         if (elementLLVMType) {
             llvm::DataLayout dataLayout(module.get());
             elementSizeBytes = dataLayout.getTypeAllocSize(elementLLVMType);

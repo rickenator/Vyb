@@ -446,8 +446,8 @@ void LLVMCodegen::bindStructPatternFields(const vyb::ast::StructPattern* node, l
         llvm::AllocaInst* alloca = createEntryBlockAlloca(fieldValue->getType(), fname);
         builder->CreateStore(fieldValue, alloca);
         namedValues[fname] = alloca;
-        if (binding->type) {
-            valueTypeMap[alloca] = std::shared_ptr<vyb::ast::TypeNode>(binding->type->clone());
+        if (typeOfNode(binding)) {
+            valueTypeMap[alloca] = std::shared_ptr<vyb::ast::TypeNode>(typeOfNode(binding)->clone());
         }
     }
 }

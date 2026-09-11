@@ -1008,9 +1008,9 @@ void LLVMCodegen::handleStringFormat(vyb::ast::CallExpression* node, llvm::Value
         llvm::Value* serialized = nullptr;
         bool owned = false;
         bool isString = false;
-        if (node->arguments[a]->type) {
-            std::string typeStr = resolveTypeAliasToBaseName(node->arguments[a]->type.get());
-            if (typeStr.empty()) typeStr = node->arguments[a]->type->toString();
+        if (typeOfNode(node->arguments[a])) {
+            std::string typeStr = resolveTypeAliasToBaseName(typeOfNode(node->arguments[a]).get());
+            if (typeStr.empty()) typeStr = typeOfNode(node->arguments[a])->toString();
             if (typeStr == "String" || typeStr == "string") isString = true;
         }
         if (isString) {
@@ -1024,8 +1024,8 @@ void LLVMCodegen::handleStringFormat(vyb::ast::CallExpression* node, llvm::Value
         } else if (arg->getType() && arg->getType()->isPointerTy() && arg->getType() == i8ptr) {
             serialized = arg;  // already a char* (CString)
         } else {
-            serialized = generateToStringCall(arg, arg->getType(), node->arguments[a]->type.get(), node->loc);
-            if (!serialized) serialized = generateGenericSerialization(arg, node->arguments[a]->type.get());
+            serialized = generateToStringCall(arg, arg->getType(), typeOfNode(node->arguments[a]).get(), node->loc);
+            if (!serialized) serialized = generateGenericSerialization(arg, typeOfNode(node->arguments[a]).get());
             owned = true;
         }
         if (!serialized) { logError(node->arguments[a]->loc, "format: could not serialize argument"); m_currentLLVMValue = nullptr; return; }

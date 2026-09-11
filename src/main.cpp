@@ -2503,9 +2503,11 @@ int run_type_command(int argc, char** argv) {
         vyb::ast::VariableDeclaration* vd = nullptr;
         if (typeFindVar(parsed.ast->body, varname, vd)) {
             vyb::ast::TypeNode* t = nullptr;
-            if (vd->init && vd->init->type) t = vd->init->type.get();
+            // #223: read the init/decl type from the semantic TypeTable (the
+            // node->type field is retired). init is a unique_ptr<Expression>.
+            if (vd->init) { auto ty = semanticAnalyzer.typeOf(vd->init.get()); if (ty) t = ty.get(); }
             else if (vd->typeNode) t = vd->typeNode.get();
-            if (!t && vd->type) t = vd->type.get();
+            if (!t) { auto ty = semanticAnalyzer.typeOf(vd); if (ty) t = ty.get(); }
             std::cout << (t ? t->toString() : "unknown") << std::endl;
             return 0;
         }
