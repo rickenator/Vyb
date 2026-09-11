@@ -180,6 +180,27 @@ The check is per-install-edge in the consuming build (see `ModuleRegistryOptions
 .privilegedModules` for the build-time smuggle-only enforcement from #204 P0); P2
 adds the *install-time* trust/acceptance gate on top of that.
 
+### Privileged-package pattern, dogfood (issue #204, P3)
+
+The official **CUDA binding** (`bindings/cuda/vyb.toml`) is the reference
+privileged package. It declares `boundary = ["freedom"]` +
+`capabilities = ["ffi", "cuda-driver", "nvptx"]`, because its implementation
+uses lexical `freedom { ... }` FFI (raw CUDA driver handles, `loc`/`from`/`addr`,
+`loc<CVoid>`) internally. The two #204 layers compose exactly as designed:
+
+- **Build / consume** (P0): the resolver rejects a plain `import cuda` of the
+  smuggled binding and demands `smuggle cuda as cuda` — privilege stays at the
+  explicit dependency edge, never contaminating importer modules.
+- **Install / trust** (P2): `vyb mod install github:...bindings/cuda/mod.vyb`
+  surfaces the declared capabilities in one-shot acceptance (the co-located
+  `vyb.toml` is fetched with the module); non-interactive installs need
+  `VYB_MOD_ACCEPT=1`/`--yes`, and acceptance is pinned into `vyb.lock`.
+
+The consumer's `main.vyb` stays ordinary typed Vyb (`cuda::cuda_device_count()`,
+`cuda::cuda_launch(...)`) — the privileged surface is sealed inside the package,
+exactly the #204 goal. New privileged bindings should mirror `bindings/cuda`:
+same `[mod]` stanza, capabilities named after the real capability surface.
+
 ---
 
 ## Signed packages & root authority — Phase 4 (specification)
