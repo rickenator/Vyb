@@ -1,5 +1,5 @@
 {
-  "git_rev": "74aaf8464c91da3a7602698db84b1c62d468399d",
+  "git_rev": "8e1a3f4748fbb99b55d8e7b8af515afce7c907fb",
   "modules": [
     "agents",
     "archive",
@@ -284,7 +284,7 @@
         "files": [
           "stdlib/vllm/mod.vyb"
         ],
-        "exported": 2,
+        "exported": 4,
         "fan_in": 0,
         "fan_out": 3
       }
@@ -1003,7 +1003,9 @@
         "module": "vllm",
         "symbols": [
           "ReadTok",
-          "ReadInt"
+          "ReadInt",
+          "Tok",
+          "SampleSet"
         ]
       }
     ],
@@ -5731,6 +5733,24 @@
         "kind": "struct",
         "signature": "struct ReadTok { token<String>, next<Int> }",
         "summary": "",
+        "fan_in": 0
+      },
+      {
+        "name": "SampleSet",
+        "module": "vllm",
+        "file": "stdlib/vllm/mod.vyb",
+        "kind": "struct",
+        "signature": "struct SampleSet { ids<Vec<Int>>, probs<Vec<Float>> }",
+        "summary": "",
+        "fan_in": 0
+      },
+      {
+        "name": "Tok",
+        "module": "vllm",
+        "file": "stdlib/vllm/mod.vyb",
+        "kind": "struct",
+        "signature": "struct Tok { id<Int>, p<Float> }",
+        "summary": "---------------- sampling (checkpoint 2) ----------------",
         "fan_in": 0
       }
     ]

@@ -2305,22 +2305,25 @@ Note: IPv6 bracket hosts (`[::1]:8080`) and URL fragments are not specially
 handled (a host containing `:` splits at the first colon; a fragment is
 captured as part of the path).
 
-### 4.28 `vllm` — the shared model-runtime engine (tokenizer, checkpoint 1)
+### 4.28 `vllm` — the shared model-runtime engine
 
 Module page: [`vllm.md`](vllm.md). The Vyb standard-library model-runtime
 engine, shared by BOTH VybOS and VybForge (one shared core, multiple
-consumers — the same relationship the stdlib `chain` module has). Checkpoint 1
-is the Qwen3/GPT-2 byte-level BPE **tokenizer**: `encode`/`encode_str` map text
-to token ids (and `decode_ids` maps ids back) using the model's
-`{vocab.json, merges.txt}`, which the module reads from the directory given by
-`VYB_LLM_DIR` — a shared stdlib module never embeds a consumer's model path.
-The algorithm is model-agnostic and exact against the transformer reference.
+consumers — the same relationship the stdlib `chain` module has). Contains the
+model-agnostic runtime core:
+
+- **Tokenizer** (checkpoint 1): the Qwen3/GPT-2 byte-level BPE `encode`/
+  `encode_str`/`decode_ids`, exact against the transformer reference. It reads
+  the model's `{vocab.json, merges.txt}` from `VYB_LLM_DIR` — a shared stdlib
+  module never embeds a consumer's model path.
+- **Sampler** (checkpoint 2): `filter_probs` temperature-softmax + top_k +
+  top_p -> kept (id, prob) pairs renormalized over the kept set, deterministic
+  (numpy-replicated); the caller applies the LCG draw to keep its own PRNG.
 
 ```vyb
-import vllm::{encode, encode_str, decode_ids}
+import vllm::{encode, encode_str, decode_ids, filter_probs, SampleSet}
 ids<Vec<Int>> = encode("Hello world")          # [9707, 1879]
-s<String>     = encode_str("Hello world")      # "9707 1879"
-text<String>  = decode_ids(ids)                # back to text
+ss<SampleSet> = filter_probs(logits)           # renormalized kept (id, prob)
 ```
 
 ```sh
@@ -2328,9 +2331,9 @@ text<String>  = decode_ids(ids)                # back to text
 export VYB_LLM_DIR=artifacts/vybos-configurator-lora   # VybForge's admin LoRA
 ```
 
-The rest of the engine (GPU kernels, GGUF loader, decode/sampler) folds into
-this module in later checkpoints; the tokenizer is the first, pure-Vyb,
-model-agnostic slice. See VybOS `doc/VYBLLM-ARCHITECTURE.md` for the full
+The rest of the engine (GPU kernels, GGUF loader) folds into this module in
+later checkpoints; the tokenizer + sampler are the first pure-Vyb,
+model-agnostic slices. See VybOS `doc/VYBLLM-ARCHITECTURE.md` for the full
 cross-repo design.
 
 ---
@@ -2698,6 +2701,7 @@ key/seed material on the GPU. Crypto/ledger integration stays host-side.
 | vllm | [`vllm`](vllm.md) | — |
 | Runtime intrinsics | [`runtime`](runtime.md) | — |
 <!-- refman:api-index end -->
+
 
 
 

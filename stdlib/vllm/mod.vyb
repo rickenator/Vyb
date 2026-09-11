@@ -574,3 +574,66 @@ share(all) decode_ids(ids<Vec<Int>>)<String> -> {
 share(all) decode(ids<Vec<Int>>)<String> -> {
     return decode_ids(ids)
 }
+
+// ---------------- sampling (checkpoint 2) ----------------
+// temperature-softmax + top_k + top_p, model-agnostic decode-runtime helper.
+// The draw (LCG PRNG) is applied by the caller so it keeps its own state.
+share(all) struct Tok { id<Int>, p<Float> }
+
+share(all) struct SampleSet { ids<Vec<Int>>, probs<Vec<Float>> }
+
+// temperature-softmax + top_k + top_p -> kept (id, prob) pairs in descending
+// prob order, renormalized over the kept set. Sorted via push+remove_at (no Vec
+// element writes). Deterministic; numpy replicates it exactly. (Relocated from
+// VybForge native/sampler, byte-identical.)
+share(all) filter_probs(lv<Vec<Float>>)<SampleSet> -> {
+    TV<Float> = 0.7
+    TK<Int> = 8
+    TP<Float> = 0.9
+    n<Int> = lv.len()
+    mx<Float> = -1000000000000000000000000000000.0
+    v<Int> = 0
+    for (v in 0..n - 1) {
+        tvx<Float> = lv.get(v) / TV
+        if (tvx > mx) { mx = tvx }
+    }
+    pr<Vec<Float>> = Vec()
+    ssum<Float> = 0.0
+    for (v in 0..n - 1) {
+        e<Float> = exp(lv.get(v) / TV - mx)
+        pr.push(e)
+        ssum = ssum + e
+    }
+    src<Vec<Tok>> = Vec()
+    for (v in 0..n - 1) { src.push(Tok { id = v, p = pr.get(v) / ssum }) }
+    srt<Vec<Tok>> = Vec()
+    while (src.len() > 0) {
+        bi<Int> = 0
+        j2<Int> = 1
+        while (j2 < src.len()) {
+            if (src.get(j2).p > src.get(bi).p) { bi = j2 }
+            j2 = j2 + 1
+        }
+        srt.push(src.get(bi))
+        src.remove_at(bi)
+    }
+    kept<Vec<Int>> = Vec()
+    kp<Vec<Float>> = Vec()
+    cum<Float> = 0.0
+    for (v in 0..n - 1) {
+        if (v < TK) {
+            if (cum < TP) {
+                kept.push(srt.get(v).id)
+                kp.push(srt.get(v).p)
+                cum = cum + srt.get(v).p
+            }
+        }
+    }
+    ksum<Float> = 0.0
+    z<Int> = 0
+    for (z in 0..kp.len() - 1) { ksum = ksum + kp.get(z) }
+    nrm<Vec<Float>> = Vec()
+    for (z in 0..kp.len() - 1) { nrm.push(kp.get(z) / ksum) }
+    return SampleSet { ids = kept, probs = nrm }
+}
+
