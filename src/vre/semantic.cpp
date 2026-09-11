@@ -61,6 +61,20 @@ static const char* kernelIntrinsicReturnType(const std::string& name) {
     return nullptr;
 }
 
+// True when a TypeNode denotes a Vyb String (either casing). Used by the
+// arithmetic-operator guard: `+` on a String is concatenation (valid), while
+// `*`/`/`/`%`/`-` on a String are codegen landmines (invalid LLVM IR -> crash).
+static bool isStringLikeType(const ast::TypeNode* tn) {
+    if (!tn) return false;
+    if (auto* nn = dynamic_cast<const ast::TypeName*>(tn)) {
+        if (nn->identifier) {
+            const std::string& n = nn->identifier->name;
+            if (n == "String" || n == "string") return true;
+        }
+    }
+    return false;
+}
+
 // True when a channel payload element type is a String. Scalar / Bool / Char /
 // Float payloads use the int-slot channel runtime; String uses the refcounted
 // string runtime. Mirrors the codegen helper of the same name.
@@ -2100,10 +2114,58 @@ void SemanticAnalyzer::visit(ast::BinaryExpression* node) {
         case TokenType::MINUS:
         case TokenType::MULTIPLY:
         case TokenType::DIVIDE:
-        case TokenType::MODULO:
-            // Arithmetic operations: result type is the same as operands (assuming compatible types)
+        case TokenType::MODULO: {
+            // Guard codegen arithmetic landmines: codegen lowers *, /, % to
+            // integer/float mul/div/rem with NO string or pointer path, and -
+            // / + only have specific ptr/string paths. If an operand is not a
+            // member of the set the operator can legally consume, reject here
+            // with a clean semantic error instead of reaching codegen, where
+            // it emitted invalid LLVM IR (e.g. `"00" * 4` -> `mul { ptr, i64 }`,
+            // "Module verification failed") and the executor double-freed/
+            // segfaulted with output lost.
+            bool ln = isIntegerType(leftType) || isFloatType(leftType);
+            bool rn = isIntegerType(rightType) || isFloatType(rightType);
+            bool lStr = isStringLikeType(leftType);
+            bool rStr = isStringLikeType(rightType);
+            bool lPtr = dynamic_cast<ast::PointerType*>(leftType) != nullptr;
+            bool rPtr = dynamic_cast<ast::PointerType*>(rightType) != nullptr;
+            // A `Void` operand marks internally-synthesized AST (e.g. a trap
+            // handler block's trailing value, `{ println(...); -1 }`) that
+            // codegen lowers specially and never sends to an arithmetic
+            // instruction. Its operand of type Void is not a user-writable
+            // crash path, so don't gate it.
+            bool lVoid = leftType->toString() == "Void";
+            bool rVoid = rightType->toString() == "Void";
+
+            bool ok = false;
+            switch (node->op.type) {
+                case TokenType::MULTIPLY:
+                case TokenType::DIVIDE:
+                case TokenType::MODULO:
+                    // strictly numeric operands only
+                    ok = (ln && rn) || lVoid || rVoid;
+                    break;
+                case TokenType::MINUS:
+                    // numeric-numeric, or pointer-pointer / pointer-int
+                    ok = (ln && rn) || (lPtr && rPtr) || (lPtr && rn) || lVoid || rVoid;
+                    break;
+                case TokenType::PLUS:
+                    // numeric-numeric, or string concatenation (either side),
+                    // or pointer + int
+                    ok = (ln && rn) || lStr || rStr || (lPtr && rn) || lVoid || rVoid;
+                    break;
+                default:
+                    break;
+            }
+            if (!ok) {
+                addError("Operator '" + node->op.lexeme + "' is not defined for operands '" +
+                         leftType->toString() + "' and '" + rightType->toString() + "'.", node);
+                return;
+            }
+            // Arithmetic operations: result type is the same as operands
             resultType = leftType ? std::shared_ptr<ast::TypeNode>(leftType->clone()) : nullptr;
             break;
+        }
 
         case TokenType::LT:
         case TokenType::LTEQ:
@@ -2131,10 +2193,21 @@ void SemanticAnalyzer::visit(ast::BinaryExpression* node) {
             {
             // Bitwise operations require integer operands; the result type is the
             // same integer type as the operands.
-            if (leftType->toString().find("Float") != std::string::npos ||
-                rightType->toString().find("Float") != std::string::npos) {
-                addError("Bitwise operator '" + node->op.lexeme +
-                         "' requires integer operands, got float.", node);
+            // Guard codegen bitwise landmines (same class as arithmetic): codegen
+            // lowers &,|,^,<<,>> straight to LLVM And/Or/Xor/Shl/AShr, so a
+            // non-integer operand (e.g. `String & Int` or `String | String`)
+            // emits invalid IR (`{ ptr, i64 } and i64`) and the executor
+            // crashed/segfaulted with output lost. Reject non-integer operands
+            // here with a clean semantic error.
+            if (!isIntegerType(leftType) || !isIntegerType(rightType)) {
+                if (leftType->toString().find("Float") != std::string::npos ||
+                    rightType->toString().find("Float") != std::string::npos) {
+                    addError("Bitwise operator '" + node->op.lexeme +
+                             "' requires integer operands, got float.", node);
+                } else {
+                    addError("Operator '" + node->op.lexeme + "' is not defined for operands '" +
+                             leftType->toString() + "' and '" + rightType->toString() + "'.", node);
+                }
                 return;
             }
             // Mixed-sized typed operands are rejected unless one side is a bare
