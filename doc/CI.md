@@ -5,6 +5,28 @@ re-enabled 2026-09-11 (fixing #220: `ci` and `refman-check` had been
 `disabled_manually` in the repository Actions settings, so only `gpu-kernel`
 attached to pushes).
 
+## Branch protection (ruleset `main-protection`, #222)
+
+A repository ruleset on `refs/heads/main` (enforcement: active) requires, for any
+merge/push to `main`:
+
+- **Required status checks** (a PR/commit cannot merge to `main` unless these
+  pass):
+  1. `Build + JIT suite + AOT/native-link` (hosted, ci.yml)
+  2. `refman` (refman-check.yml)
+  3. `Emit PTX + ptxas across arches + compile FFI runners` (hosted CPU-side GPU
+     validation, gpu-kernel.yml)
+- **No force pushes** (non-fast-forward blocked).
+- **No branch deletion**.
+
+Deliberately NOT required (non-blocking, so hardware availability / scheduled
+runs never deadlock `main`): the self-hosted `Execute + verify kernels +
+bindings on RTX 3090` job (gpu-kernel.yml) and the scheduled-only
+`Memory-safety (ASan full suite)` job. Both still run/report for visibility.
+
+Changes to `main` therefore go through a pull request: push a branch, open a PR,
+wait for the three required checks to pass, then merge.
+
 | Workflow file | Check names (for branch protection) | What it gates |
 |---|---|---|
 | `.github/workflows/ci.yml` | `ci` — "Build + JIT suite + AOT/native-link", plus the scheduled daily ASan/UBSan run (06:00 UTC) | canonical 1141-test JIT suite, AOT/native link, memory safety |
