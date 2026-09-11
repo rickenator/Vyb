@@ -1,0 +1,576 @@
+// vllm — Vyb standard-library model-runtime engine (module).
+//
+// Shared by BOTH VybOS and VybForge (one shared core, multiple consumers,
+// exactly like stdlib/chain). Checkpoint 1 contains the tokenizer; the rest of
+// the engine kernels/loaders fold in here behind the same module.
+//
+// Tokenizer (Qwen3 / GPT-2 byte-level BPE): reads the model's
+// {vocab.json, merges.txt} from VYB_LLM_DIR (a model's artifacts are passed in,
+// never hardcoded to a consumer's repo path) and implements
+//   encode(text) -> Vec<Int> of token ids
+// using the standard byte-level BPE algorithm:
+//   1. map each utf-8 BYTE of the input through the GPT-2/Qwen
+//      bytes_to_unicode table -> a string of "byte-chars",
+//   2. pre-tokenize (word/space split — see the simplification note below),
+//   3. greedily apply byte-pair merges by lowest rank (merges.txt order),
+//   4. map final byte-token strings to ids via vocab.json (exact, unescaped),
+//      with a per-byte fallback if a merged token is somehow missing.
+//
+// FAITHFUL algorithmic reproduction of the Qwen2 pre-tokenize regex, also
+// handling punctuation and standalone apostrophes (Vyb's regex module is POSIX
+// ERE only — no \p{L}/\p{N} classes — so instead of the regex this segments
+// letters / single-digits / punctuation per the `[^L/N]?L+` leading-punct and
+// space-before-punct rules). VERIFIED EXACT vs transformers on plain words,
+// contractions, leading/trailing apostrophes, punctuation, and whitespace runs.
+// Non-ASCII (Unicode-letter) words may still diverge (no Unicode regex).
+
+import io::{open_read, read_all, close}
+import env::{env_get}
+import collections
+
+// ---------------- model artifact directory ----------------
+// The tokenizer reads a model's {vocab.json, merges.txt} from a directory.
+// A shared stdlib module must NOT hardcode a consumer's repo path, so the dir
+// is configurable via VYB_LLM_DIR. The fallback keeps the historical relative
+// layout working for existing callers (VybForge runs from its repo root).
+share(all) model_dir()<String> -> {
+    return env_get("VYB_LLM_DIR") else "artifacts/vybos-configurator-lora"
+}
+
+// ---------------- byte + utf-8 helpers ----------------
+
+// codepoint -> utf-8 bytes as a String (only <2048 codepoints occur here:
+// self-mapped ASCII and the remapped 256..323 control chars are all 2-byte).
+share(all) cp2str(cp<Int>)<String> -> {
+    if (cp < 128) { return String::from_byte(cp) }
+    b1<Int> = 0xC0 | (cp >> 6)
+    b2<Int> = 0x80 | (cp & 63)
+    return String::from_byte(b1).concat(String::from_byte(b2))
+}
+
+// Is byte b in the bytes_to_unicode "self" set (33..126, 161..172, 174..255)?
+share(all) in_self(b<Int>)<Bool> -> {
+    if (b >= 33) { if (b <= 126) { return true } }
+    if (b >= 161) { if (b <= 172) { return true } }
+    if (b >= 174) { if (b <= 255) { return true } }
+    return false
+}
+
+// Number of bytes below b that are NOT in the self set (those get 256+n).
+share(all) remap_count(b<Int>)<Int> -> {
+    c<Int> = 0
+    i<Int> = 0
+    for (i in 0..b - 1) {
+        if (in_self(i)) { } else { c = c + 1 }
+    }
+    return c
+}
+
+// bytes_to_unicode for one byte -> its byte-char (utf-8 String).
+share(all) byte_char(b<Int>)<String> -> {
+    cp<Int> = 0
+    if (in_self(b)) { cp = b } else { cp = 256 + remap_count(b) }
+    return cp2str(cp)
+}
+
+// The byte-char for a raw ASCII space (byte 32 -> U+0120 'Ġ', utf-8 C4 A0).
+share(all) space_char()<String> -> { return byte_char(32) }
+
+// utf-8 lead byte -> codepoint width in bytes.
+share(all) lead_width(b<Int>)<Int> -> {
+    if (b >= 194) {
+        if (b <= 223) { return 2 }
+        if (b <= 239) { return 3 }
+        if (b <= 244) { return 4 }
+    }
+    return 1
+}
+
+// ---------------- file + map loading ----------------
+
+share(all) read_file_or_empty(p<String>)<String> -> {
+    match (open_read(p)) {
+        f -> {
+            match (read_all(f)) {
+                cont -> { close(f); return cont }
+                ? -> { close(f); return "" }
+            }
+        }
+        ? -> { return "" }
+    }
+}
+
+share(all) hexval(c<Int>)<Int> -> {
+    if (c >= 48) { if (c <= 57) { return c - 48 } }
+    if (c >= 65) { if (c <= 70) { return c - 55 } }
+    if (c >= 97) { if (c <= 102) { return c - 87 } }
+    return 0
+}
+
+share(all)
+struct ReadTok { token<String>, next<Int> }
+
+// Read a JSON quoted string starting at byte offset i (points at the opening
+// '"'). Unescapes \" \\ \n \t \r \b \f \/ and \uXXXX. Returns token + next offset.
+share(all) read_quoted(s<String>, i<Int>)<ReadTok> -> {
+    n<Int> = s.len()
+    tok<String> = ""
+    k<Int> = i + 1
+    done<Int> = 0
+    while (done == 0) {
+        if (k >= n) { done = 1 }
+        else {
+            c<Int> = (s.char_at(k) as Int) & 255
+            if (c == 34) { done = 1; k = k + 1 }
+            else {
+                if (c == 92) {
+                    k = k + 1
+                    e<Int> = (s.char_at(k) as Int) & 255
+                    if (e == 117) {
+                        h1<Int> = hexval((s.char_at(k + 1) as Int) & 255)
+                        h2<Int> = hexval((s.char_at(k + 2) as Int) & 255)
+                        h3<Int> = hexval((s.char_at(k + 3) as Int) & 255)
+                        h4<Int> = hexval((s.char_at(k + 4) as Int) & 255)
+                        cp<Int> = (h1 * 4096) + (h2 * 256) + (h3 * 16) + h4
+                        tok = tok.concat(cp2str(cp))
+                        k = k + 5
+                    }
+                    else {
+                        if (e == 110) { tok = tok.concat(String::from_byte(10)) }
+                        else {
+                            if (e == 116) { tok = tok.concat(String::from_byte(9)) }
+                            else {
+                                if (e == 114) { tok = tok.concat(String::from_byte(13)) }
+                                else {
+                                    if (e == 98) { tok = tok.concat(String::from_byte(8)) }
+                                    else {
+                                        if (e == 102) { tok = tok.concat(String::from_byte(12)) }
+                                        else { tok = tok.concat(String::from_byte(e)) }
+                                    }
+                                }
+                            }
+                        }
+                        k = k + 1
+                    }
+                }
+                else {
+                    tok = tok.concat(String::from_byte(c))
+                    k = k + 1
+                }
+            }
+        }
+    }
+    return ReadTok { token = tok, next = k }
+}
+
+share(all)
+struct ReadInt { v<Int>, next<Int> }
+
+share(all) read_int(s<String>, i<Int>)<ReadInt> -> {
+    n<Int> = s.len()
+    v<Int> = 0
+    k<Int> = i
+    while (true) {
+        if (k >= n) { break }
+        c<Int> = (s.char_at(k) as Int) & 255
+        if (c >= 48) {
+            if (c <= 57) {
+                v = v * 10 + (c - 48)
+                k = k + 1
+            } else { break }
+        } else { break }
+    }
+    return ReadInt { v = v, next = k }
+}
+
+// vocab.json: {"<token>":<id>, ...} -> token-string -> id map.
+share(all) build_vocab()<HashMap<String, Int>> -> {
+    m<HashMap<String, Int>> = HashMap<String, Int>()
+    s<String> = read_file_or_empty(model_dir() + "/vocab.json")
+    n<Int> = s.len()
+    i<Int> = 0
+    while (i < n) {
+        c<Int> = (s.char_at(i) as Int) & 255
+        if (c == 34) {
+            rt<ReadTok> = read_quoted(s, i)
+            key<String> = rt.token
+            j<Int> = rt.next
+            while (j < n) {
+                c2<Int> = (s.char_at(j) as Int) & 255
+                if (c2 == 58) { j = j + 1; break }
+                if (c2 == 44) { break }
+                j = j + 1
+            }
+            ri<ReadInt> = read_int(s, j)
+            m.put(key, ri.v)
+            i = ri.next
+        } else { i = i + 1 }
+    }
+    return m
+}
+
+// merges.txt ("<a> <b>" per line, rank = line index) -> "<a><b>" -> rank map.
+share(all) build_merges()<HashMap<String, Int>> -> {
+    m<HashMap<String, Int>> = HashMap<String, Int>()
+    s<String> = read_file_or_empty(model_dir() + "/merges.txt")
+    n<Int> = s.len()
+    rank<Int> = 0
+    i<Int> = 0
+    while (i < n) {
+        j<Int> = i
+        while (j < n) {
+            c<Int> = (s.char_at(j) as Int) & 255
+            if (c == 10) { break }
+            j = j + 1
+        }
+        if (j == i) {
+            i = j + 1
+        } else {
+            line<String> = s.substring(i, j)
+            first<Int> = (line.char_at(0) as Int) & 255
+            if (first == 35) {
+                i = j + 1
+            } else {
+                sp<Int> = -1
+                t<Int> = 0
+                while (t < line.len()) {
+                    cc<Int> = (line.char_at(t) as Int) & 255
+                    if (cc == 32) { sp = t; t = line.len() } else { t = t + 1 }
+                }
+                if (sp > 0) {
+                    a<String> = line.substring(0, sp)
+                    b<String> = line.substring(sp + 1, line.len())
+                    m.put(a.concat(b), rank)
+                }
+                rank = rank + 1
+                i = j + 1
+            }
+        }
+    }
+    return m
+}
+
+// ---------------- tokenization ----------------
+
+// Input utf-8 text -> Vec<String> of byte-chars (each byte mapped by
+// bytes_to_unicode; Vyb strings already hold raw utf-8 bytes, so the byte
+// stream is simply char_at over the string).
+share(all) text_to_chars(input<String>)<Vec<String>> -> {
+    chars<Vec<String>> = Vec()
+    n<Int> = input.len()
+    k<Int> = 0
+    for (k in 0..n - 1) {
+        b<Int> = (input.char_at(k) as Int) & 255
+        chars.push(byte_char(b))
+    }
+    return chars
+}
+
+// Split a byte-token string back into its byte-chars (utf-8 decode) —
+// defensive fallback; every single byte always has a vocab entry.
+share(all) split_chars2(s<String>)<Vec<String>> -> {
+    out<Vec<String>> = Vec()
+    n<Int> = s.len()
+    i<Int> = 0
+    while (i < n) {
+        b<Int> = (s.char_at(i) as Int) & 255
+        l<Int> = lead_width(b)
+        out.push(s.substring(i, i + l))
+        i = i + l
+    }
+    return out
+}
+
+// Greedy byte-pair merge for one word and map the final byte-tokens to ids.
+// `sw` is the joined byte-chars of the word; `st` is Vec<Int> of token START
+// offsets (token i == sw[st[i]..st[i+1]), N+1 entries). Merging two tokens
+// just REMOVES the intermediate boundary IN PLACE (Vyb Vec reassignment
+// `x = newy` double-frees / segfaults, so we mutate via remove_at instead).
+// Only Ints live in vectors here; ids (Ints) are returned as Vec<Int>.
+share(all) bpe_word_ids(vocab<HashMap<String, Int>>, merges<HashMap<String, Int>>, sw<String>, st<Vec<Int>>)<Vec<Int>> -> {
+    while (true) {
+        best_rank<Int> = 2147483647
+        best<Int> = -1
+        p<Int> = 0
+        for (p in 0..st.len() - 3) {
+            pr<String> = sw.substring(st.get(p), st.get(p + 2))
+            r<Int> = merges.get(pr) else -1
+            if (r >= 0) {
+                if (r < best_rank) { best_rank = r; best = p }
+            }
+        }
+        if (best < 0) { break }
+        st.remove_at(best + 1)
+    }
+    out<Vec<Int>> = Vec()
+    m<Int> = 0
+    for (m in 0..st.len() - 2) {
+        tk<String> = sw.substring(st.get(m), st.get(m + 1))
+        id2<Int> = vocab.get(tk) else -1
+        if (id2 >= 0) {
+            out.push(id2)
+        } else {
+            # per-byte fallback: map each input byte's byte-char id
+            x<Int> = 0
+            for (x in 0..tk.len() - 1) {
+                bb<Int> = (tk.char_at(x) as Int) & 255
+                out.push(vocab.get(byte_char(bb)) else -1)
+            }
+        }
+    }
+    return out
+}
+
+// Full encode. Walks the flat byte-char vector, splits into words (space
+// handling identical to the Qwen/GPT-2 regex for ASCII text — see header),
+// and byte-BPEs each word in place.
+
+// Class of a byte-char (by its codepoint/lead byte) for the Qwen2 pre-tokenizer
+// segmentation: 0 = \p{L}-ish letter (incl. the remapped space glyph 'Ġ'=0xC4
+// used as leading-space), 1 = \p{N} digit, 2 = punctuation/other.
+share(all) cls(b0<Int>)<Int> -> {
+    if (b0 >= 65) { if (b0 <= 90) { return 0 } }
+    if (b0 >= 97) { if (b0 <= 122) { return 0 } }
+    if (b0 >= 48) { if (b0 <= 57) { return 1 } }
+    if (b0 >= 194) { if (b0 <= 196) { return 0 } }
+    return 2
+}
+
+// Byte-BPE wc[a..b) (a contiguous slice of byte-chars) -> Vec of ids.
+share(all) bpe_chars(vocab<HashMap<String, Int>>, merges<HashMap<String, Int>>, wc<Vec<String>>, a<Int>, b<Int>)<Vec<Int>> -> {
+    sw<String> = ""
+    st<Vec<Int>> = Vec()
+    st.push(0)
+    acc<Int> = 0
+    t<Int> = a
+    for (t in a..b - 1) {
+        sw = sw.concat(wc.get(t))
+        acc = acc + wc.get(t).len()
+        st.push(acc)
+    }
+    return bpe_word_ids(vocab, merges, sw, st)
+}
+
+// Apply the Qwen2 pre-tokenize regex segmentation ([^L/N]?L+ | N | [^\sL/N]+)
+// inside one space-delimited word wc[0..n) and BPE each segment.
+share(all) segment_word(vocab<HashMap<String, Int>>, merges<HashMap<String, Int>>, wc<Vec<String>>, n<Int>)<Vec<Int>> -> {
+    res<Vec<Int>> = Vec()
+    i<Int> = 0
+    rr<Int> = 0
+    while (i < n) {
+        gx<String> = wc.get(i)
+        b0<Int> = (gx.char_at(0) as Int) & 255
+        c0<Int> = cls(b0)
+        if (c0 == 0) {
+            if (b0 == 196) {
+                nx<Int> = -1
+                if (i + 1 < n) {
+                    gN<String> = wc.get(i + 1)
+                    bN<Int> = (gN.char_at(0) as Int) & 255
+                    nx = cls(bN)
+                }
+                if (nx == 2) {
+                    rr = i + 1
+                    while (rr < n) {
+                        gP<String> = wc.get(rr)
+                        bP<Int> = (gP.char_at(0) as Int) & 255
+                        if (cls(bP) == 2) { rr = rr + 1 } else { break }
+                    }
+                } else {
+                    rr = i
+                    while (rr < n) {
+                        gA<String> = wc.get(rr)
+                        bA<Int> = (gA.char_at(0) as Int) & 255
+                        if (cls(bA) == 0) { rr = rr + 1 } else { break }
+                    }
+                }
+            } else {
+                rr = i
+                while (rr < n) {
+                    gA<String> = wc.get(rr)
+                    bA<Int> = (gA.char_at(0) as Int) & 255
+                    if (cls(bA) == 0) { rr = rr + 1 } else { break }
+                }
+            }
+        } else {
+            if (c0 == 1) {
+                rr = i + 1
+            } else {
+                if (i + 1 < n) {
+                    gB<String> = wc.get(i + 1)
+                    bB<Int> = (gB.char_at(0) as Int) & 255
+                    if (cls(bB) == 0) {
+                        rr = i + 1
+                        while (rr < n) {
+                            gC<String> = wc.get(rr)
+                            bC<Int> = (gC.char_at(0) as Int) & 255
+                            if (cls(bC) == 0) { rr = rr + 1 } else { break }
+                        }
+                    } else {
+                        rr = i
+                        while (rr < n) {
+                            gD<String> = wc.get(rr)
+                            bD<Int> = (gD.char_at(0) as Int) & 255
+                            if (cls(bD) == 2) { rr = rr + 1 } else { break }
+                        }
+                    }
+                } else {
+                    rr = i + 1
+                }
+            }
+        }
+        sub<Vec<Int>> = bpe_chars(vocab, merges, wc, i, rr)
+        a2<Int> = 0
+        for (a2 in 0..sub.len() - 1) { res.push(sub.get(a2)) }
+        i = rr
+    }
+    return res
+}
+
+share(all) encode_with(vocab<HashMap<String, Int>>, merges<HashMap<String, Int>>, sp<String>, input<String>)<Vec<Int>> -> {
+    ids<Vec<Int>> = Vec()
+    chars<Vec<String>> = text_to_chars(input)
+    n<Int> = chars.len()
+    i<Int> = 0
+    while (i < n) {
+        if (chars.get(i) == sp) {
+            j<Int> = i
+            while (j < n) {
+                if (chars.get(j) == sp) { j = j + 1 } else { break }
+            }
+            run<Int> = j - i
+            if (j >= n) {
+                wcS<Vec<String>> = Vec()
+                z<Int> = 0
+                for (z in 0..run - 1) { wcS.push(sp) }
+                subS<Vec<Int>> = segment_word(vocab, merges, wcS, wcS.len())
+                a2<Int> = 0
+                for (a2 in 0..subS.len() - 1) { ids.push(subS.get(a2)) }
+                i = j
+            } else {
+                standalone<Int> = run - 1
+                if (standalone > 0) {
+                    wcS<Vec<String>> = Vec()
+                    z<Int> = 0
+                    for (z in 0..standalone - 1) { wcS.push(sp) }
+                    subS<Vec<Int>> = segment_word(vocab, merges, wcS, wcS.len())
+                    a2<Int> = 0
+                    for (a2 in 0..subS.len() - 1) { ids.push(subS.get(a2)) }
+                }
+                hi<Int> = j
+                while (hi < n) {
+                    if (chars.get(hi) == sp) { break } else { hi = hi + 1 }
+                }
+                wc<Vec<String>> = Vec()
+                qq2<Int> = j - 1
+                for (qq2 in (j - 1)..hi - 1) { wc.push(chars.get(qq2)) }
+                subw<Vec<Int>> = segment_word(vocab, merges, wc, wc.len())
+                a2<Int> = 0
+                for (a2 in 0..subw.len() - 1) { ids.push(subw.get(a2)) }
+                i = hi
+            }
+        } else {
+            hi<Int> = i
+            while (hi < n) {
+                if (chars.get(hi) == sp) { break } else { hi = hi + 1 }
+            }
+            wc<Vec<String>> = Vec()
+            qq<Int> = i
+            for (qq in i..hi - 1) { wc.push(chars.get(qq)) }
+            subw<Vec<Int>> = segment_word(vocab, merges, wc, wc.len())
+            a2<Int> = 0
+            for (a2 in 0..subw.len() - 1) { ids.push(subw.get(a2)) }
+            i = hi
+        }
+    }
+    return ids
+}
+
+// Public API: encode(text) -> Vec<Int> token ids (self-contained; re-reads
+// the vocab/merges files each call).
+share(all) encode(s<String>)<Vec<Int>> -> {
+    vocab<HashMap<String, Int>> = build_vocab()
+    merges<HashMap<String, Int>> = build_merges()
+    return encode_with(vocab, merges, space_char(), s)
+}
+
+// Convenience: encode(text) -> space-separated id string.
+share(all) encode_str(s<String>)<String> -> {
+    ids<Vec<Int>> = encode(s)
+    out<String> = ""
+    k<Int> = 0
+    for (k in 0..ids.len() - 1) {
+        v<Int> = ids.get(k)
+        if (k > 0) { out = out + " " }
+        out = out + v.to_string()
+    }
+    return out
+}
+
+// ---------------- detokenization (decode) ----------------
+
+// Reverse vocab: id -> token string (rebuild from vocab.json).
+share(all) build_revvocab()<HashMap<Int, String>> -> {
+    m<HashMap<Int, String>> = HashMap<Int, String>()
+    s<String> = read_file_or_empty(model_dir() + "/vocab.json")
+    n<Int> = s.len()
+    i<Int> = 0
+    while (i < n) {
+        c<Int> = (s.char_at(i) as Int) & 255
+        if (c == 34) {
+            rt<ReadTok> = read_quoted(s, i)
+            key<String> = rt.token
+            j<Int> = rt.next
+            while (j < n) {
+                c2<Int> = (s.char_at(j) as Int) & 255
+                if (c2 == 58) { j = j + 1; break }
+                if (c2 == 44) { break }
+                j = j + 1
+            }
+            ri<ReadInt> = read_int(s, j)
+            m.put(ri.v, key)
+            i = ri.next
+        } else { i = i + 1 }
+    }
+    return m
+}
+
+// Inverse bytes_to_unicode: a byte-char glyph -> the original byte it encodes.
+share(all) glyph2byte(g<String>)<Int> -> {
+    b<Int> = 0
+    for (b in 0..255) {
+        if (byte_char(b) == g) { return b }
+    }
+    return 0
+}
+
+// decode(ids) -> text. RUNTIME SEGFAULT (compiler-bug repro): the identical
+// logic inline in main() works, but this share(all) function crashes even for a
+// single one-token input (e.g. decode_ids([0]) -> token "!").
+// NOTE (2026-08-27): the crash was the vyb-lang #205 compiler bug (native-stack
+// overflow mono'ing two generic HashMap types), FIXED at bf46304. This fn is
+// correct and now runs in-process alongside encode(). decode_ids = detokenizer.
+share(all) decode_ids(ids<Vec<Int>>)<String> -> {
+    rev<HashMap<Int, String>> = build_revvocab()
+    out<String> = ""
+    k<Int> = 0
+    for (k in 0..ids.len() - 1) {
+        tk<String> = rev.get(ids.get(k)) else ""
+        n2<Int> = tk.len()
+        ii<Int> = 0
+        while (ii < n2) {
+            lb<Int> = (tk.char_at(ii) as Int) & 255
+            lw<Int> = lead_width(lb)
+            g2<String> = tk.substring(ii, ii + lw)
+            ob<Int> = glyph2byte(g2)
+            out = out.concat(String::from_byte(ob))
+            ii = ii + lw
+        }
+    }
+    return out
+}
+
+// Public detokenizer (symmetric with encode): ids -> text.
+share(all) decode(ids<Vec<Int>>)<String> -> {
+    return decode_ids(ids)
+}
