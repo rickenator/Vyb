@@ -18,6 +18,8 @@
 #include <memory>
 #include <unordered_set>
 #include <map>
+#include <type_traits>
+#include <utility>
 
 namespace vyb {
 
@@ -545,6 +547,17 @@ public:
         if (!n) return std::shared_ptr<ast::TypeNode>();
         auto it = expressionTypes.find(n->typeId());
         return it == expressionTypes.end() ? std::shared_ptr<ast::TypeNode>() : it->second;
+    }
+    // #223: smart-pointer receivers (node->id is a unique_ptr) so `typeOf(X)`
+    // works for both raw and unique_ptr node receivers during the read migration.
+    template <class P>
+    std::enable_if_t<
+        !std::is_convertible<P, const ast::Node*>::value &&
+            std::is_convertible<decltype(std::declval<const P&>().get()),
+                                const ast::Node*>::value,
+        std::shared_ptr<ast::TypeNode>>
+    typeOf(const P& p) const {
+        return typeOf(p.get());
     }
     void setType(const ast::Node* n, std::shared_ptr<ast::TypeNode> t) {
         if (n) {
