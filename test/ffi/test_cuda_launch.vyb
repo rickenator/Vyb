@@ -1,3 +1,4 @@
+// @skip-if-missing-lib: libcuda.so.1  # CUDA-required; skipped by the harness on GPU-less runners
 // @test: cuda posted binding end-to-end launch (issue #198 P3)
 // @description: import bindings/cuda, init the CUDA driver, load fill_kernel.ptx,
 //   alloc device mem, launch `fill` via the cuda_launch wrapper, read back and

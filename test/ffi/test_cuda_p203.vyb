@@ -1,3 +1,4 @@
+// @skip-if-missing-lib: libcuda.so.1  # CUDA-required; skipped by the harness on GPU-less runners
 // @test: GPU value check of #203 device intrinsics (deq_q4_0 / fp16 / bf16)
 // @description: launches a Vyb kernel (fixtures/kernel/p203_verify.vyb built via
 //   --kernel) that dequants a known GGUF q4_0 block and loads fp16/bf16 weights

@@ -1,3 +1,4 @@
+// @skip-if-missing-lib: libcuda.so.1  # CUDA-required; skipped by the harness on GPU-less runners
 // @test: P4 tile matmul - Vyb-authored kernel launched on CUDA, verified vs CPU
 // @description: builds fixtures/kernel/matmul.vyb via --kernel, loads the PTX,
 //   launches the register-tiled `matmul` (C=A x B, 8x8) on the GPU, verifies vs

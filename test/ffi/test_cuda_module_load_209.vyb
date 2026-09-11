@@ -1,3 +1,4 @@
+// @skip-if-missing-lib: libcuda.so.1  # CUDA-required; skipped by the harness on GPU-less runners
 // @test: #209 - cuModuleLoadData of a Vyb-read PTX never fails over N loads
 // @description: The String->CString FFI coercion previously handed cuModuleLoadData
 //   the raw (non-NUL-terminated) buffer of a Vyb `String` read via io::read_all;

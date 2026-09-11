@@ -1,3 +1,4 @@
+// @skip-if-missing-lib: libcuda.so.1  # CUDA-required; skipped by the harness on GPU-less runners
 // @test: P4 axpy - Vyb-authored kernel launched on CUDA, verified vs CPU
 // @description: builds fixtures/kernel/axpy_buf.vyb via --kernel, loads the PTX,
 //   launches `axpy` (y=alpha*x+y) on the GPU, verifies all elements. SKIPs (ret 0)
