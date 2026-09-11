@@ -1,0 +1,13 @@
+[package]
+name = "cuda"
+version = "0.1.0"
+
+# P3 dogfood of the #204 package-level boundary: this binding is implemented
+# with lexical freedom { ... } FFI (raw CUDA driver API handles, loc/from/addr,
+# loc<CVoid>) and is therefore PRIVILEGED. It must be consumed through smuggle,
+# never ordinary import (P0 build-time gate), and `vyb mod install` requires an
+# explicit one-shot trust acceptance before materializing it (P2 install-time
+# gate) — the capabilities below are what the first-use prompt lists.
+[mod]
+boundary = ["freedom"]
+capabilities = ["ffi", "cuda-driver", "nvptx"]
