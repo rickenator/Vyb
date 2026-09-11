@@ -2319,22 +2319,30 @@ model-agnostic runtime core:
 - **Sampler** (checkpoint 2): `filter_probs` temperature-softmax + top_k +
   top_p -> kept (id, prob) pairs renormalized over the kept set, deterministic
   (numpy-replicated); the caller applies the LCG draw to keep its own PRNG.
+- **Model facade**: a `Model {name, dir}` owns its tokenizer-artifacts dir, so
+  per-deployment models (admin / os-builder LoRAs on one base) coexist with
+  per-model `model_load`/`model_encode`/`model_decode`/`model_sample`. The GPU
+  forward/weights are NOT here — that is the hardware/capability seam the OS
+  and Forge consume as a binding (`bindings/cuda`). The facade is the portable
+  CPU core plus a stable surface for a higher `llm::` layer to compose both
+  paths.
 
 ```vyb
-import vllm::{encode, encode_str, decode_ids, filter_probs, SampleSet}
-ids<Vec<Int>> = encode("Hello world")          # [9707, 1879]
-ss<SampleSet> = filter_probs(logits)           # renormalized kept (id, prob)
+import vllm::{Model, model_load, model_encode, model_encode_str, model_decode,
+             model_sample, filter_probs}
+m<Model> = model_load("admin", "/path/to/tokenizer-artifacts")
+ids<Vec<Int>> = model_encode(m, "Hello world")   # [9707, 1879]
+text<String>  = model_decode(m, ids)             # "Hello world"
+ss<SampleSet> = model_sample(logits)             # renormalized kept (id, prob)
 ```
 
 ```sh
-# a model's tokenizer artifacts come from its own directory:
-export VYB_LLM_DIR=artifacts/vybos-configurator-lora   # VybForge's admin LoRA
+export VYB_LLM_DIR=artifacts/vybos-configurator-lora   # legacy flat API default
 ```
 
-The rest of the engine (GPU kernels, GGUF loader) folds into this module in
-later checkpoints; the tokenizer + sampler are the first pure-Vyb,
-model-agnostic slices. See VybOS `doc/VYBLLM-ARCHITECTURE.md` for the full
-cross-repo design.
+The GPU kernels + GGUF loader stay as Vyb bindings / VybForge native (the
+hardware surface); `stdlib/vllm` is the portable, model-agnostic CPU core. See
+VybOS `doc/VYBLLM-ARCHITECTURE.md` for the full cross-repo design.
 
 ---
 
@@ -2701,6 +2709,7 @@ key/seed material on the GPU. Crypto/ledger integration stays host-side.
 | vllm | [`vllm`](vllm.md) | — |
 | Runtime intrinsics | [`runtime`](runtime.md) | — |
 <!-- refman:api-index end -->
+
 
 
 

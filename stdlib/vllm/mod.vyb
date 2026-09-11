@@ -184,9 +184,9 @@ share(all) read_int(s<String>, i<Int>)<ReadInt> -> {
 }
 
 // vocab.json: {"<token>":<id>, ...} -> token-string -> id map.
-share(all) build_vocab()<HashMap<String, Int>> -> {
+share(all) build_vocab_from(dir<String>)<HashMap<String, Int>> -> {
     m<HashMap<String, Int>> = HashMap<String, Int>()
-    s<String> = read_file_or_empty(model_dir() + "/vocab.json")
+    s<String> = read_file_or_empty(dir + "/vocab.json")
     n<Int> = s.len()
     i<Int> = 0
     while (i < n) {
@@ -208,11 +208,12 @@ share(all) build_vocab()<HashMap<String, Int>> -> {
     }
     return m
 }
+share(all) build_vocab()<HashMap<String, Int>> -> { return build_vocab_from(model_dir()) }
 
 // merges.txt ("<a> <b>" per line, rank = line index) -> "<a><b>" -> rank map.
-share(all) build_merges()<HashMap<String, Int>> -> {
+share(all) build_merges_from(dir<String>)<HashMap<String, Int>> -> {
     m<HashMap<String, Int>> = HashMap<String, Int>()
-    s<String> = read_file_or_empty(model_dir() + "/merges.txt")
+    s<String> = read_file_or_empty(dir + "/merges.txt")
     n<Int> = s.len()
     rank<Int> = 0
     i<Int> = 0
@@ -249,6 +250,7 @@ share(all) build_merges()<HashMap<String, Int>> -> {
     }
     return m
 }
+share(all) build_merges()<HashMap<String, Int>> -> { return build_merges_from(model_dir()) }
 
 // ---------------- tokenization ----------------
 
@@ -510,9 +512,9 @@ share(all) encode_str(s<String>)<String> -> {
 // ---------------- detokenization (decode) ----------------
 
 // Reverse vocab: id -> token string (rebuild from vocab.json).
-share(all) build_revvocab()<HashMap<Int, String>> -> {
+share(all) build_revvocab_from(dir<String>)<HashMap<Int, String>> -> {
     m<HashMap<Int, String>> = HashMap<Int, String>()
-    s<String> = read_file_or_empty(model_dir() + "/vocab.json")
+    s<String> = read_file_or_empty(dir + "/vocab.json")
     n<Int> = s.len()
     i<Int> = 0
     while (i < n) {
@@ -534,6 +536,7 @@ share(all) build_revvocab()<HashMap<Int, String>> -> {
     }
     return m
 }
+share(all) build_revvocab()<HashMap<Int, String>> -> { return build_revvocab_from(model_dir()) }
 
 // Inverse bytes_to_unicode: a byte-char glyph -> the original byte it encodes.
 share(all) glyph2byte(g<String>)<Int> -> {
@@ -636,4 +639,71 @@ share(all) filter_probs(lv<Vec<Float>>)<SampleSet> -> {
     for (z in 0..kp.len() - 1) { nrm.push(kp.get(z) / ksum) }
     return SampleSet { ids = kept, probs = nrm }
 }
+
+// ---------------- high-level Model facade ----------------
+// A Model owns its tokenizer artifacts dir (per-deployment, so admin and
+// os-builder LoRAs can coexist) and binds tokenize/decode/sample to it. The
+// GPU forward (weights, bindings/cuda, kernels) is NOT here — it is the
+// hardware/capability seam the OS/Forge consume as a binding (see
+// VybOS/doc/VYBLLM-ARCHITECTURE.md §3/§7); this facade is the portable,
+// model-agnostic CPU core plus a stable surface for a higher `llm::` layer to
+// compose both paths.
+share(all) struct Model {
+    name<String>,
+    dir<String>          // tokenizer artifacts dir ({vocab.json, merges.txt})
+}
+
+// Build a Model bound to a tokenizer dir. Cheap — vocab/merges are read
+// lazily per call (the underlying builders are stateless).
+share(all) model_load(name<String>, dir<String>)<Model> -> {
+    return Model { name = name, dir = dir }
+}
+
+// Model-bound encode: uses THIS model's tokenizer dir, not the process env.
+share(all) model_encode(m<Model>, s<String>)<Vec<Int>> -> {
+    vocab<HashMap<String, Int>> = build_vocab_from(m.dir)
+    merges<HashMap<String, Int>> = build_merges_from(m.dir)
+    return encode_with(vocab, merges, space_char(), s)
+}
+
+// Model-bound encode -> space-separated id string.
+share(all) model_encode_str(m<Model>, s<String>)<String> -> {
+    ids<Vec<Int>> = model_encode(m, s)
+    out<String> = ""
+    k<Int> = 0
+    for (k in 0..ids.len() - 1) {
+        v<Int> = ids.get(k)
+        if (k > 0) { out = out + " " }
+        out = out + v.to_string()
+    }
+    return out
+}
+
+// Model-bound decode (ids -> text) using THIS model's vocab.
+share(all) model_decode(m<Model>, ids<Vec<Int>>)<String> -> {
+    rev<HashMap<Int, String>> = build_revvocab_from(m.dir)
+    out<String> = ""
+    k<Int> = 0
+    for (k in 0..ids.len() - 1) {
+        tk<String> = rev.get(ids.get(k)) else ""
+        n2<Int> = tk.len()
+        ii<Int> = 0
+        while (ii < n2) {
+            lb<Int> = (tk.char_at(ii) as Int) & 255
+            lw<Int> = lead_width(lb)
+            g2<String> = tk.substring(ii, ii + lw)
+            ob<Int> = glyph2byte(g2)
+            out = out.concat(String::from_byte(ob))
+            ii = ii + lw
+        }
+    }
+    return out
+}
+
+// Model-bound sampling (temperature + top_k + top_p) — the portable sampling
+// step, exactly as `filter_probs`; stateless (caller keeps its own PRNG draw).
+share(all) model_sample(logits<Vec<Float>>)<SampleSet> -> {
+    return filter_probs(logits)
+}
+
 
