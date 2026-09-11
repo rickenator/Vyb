@@ -539,14 +539,24 @@ private:
     // Node::typeId() (exprKey() in semantic.cpp; null -> sentinel key 0). Owning
     // shared values; setType/typeOf are its accessors.
     std::unordered_map<unsigned, std::shared_ptr<ast::TypeNode>> expressionTypes;
+public:
+    // #223 single-authority public TypeTable API over the private map.
     std::shared_ptr<ast::TypeNode> typeOf(const ast::Node* n) const {
         if (!n) return std::shared_ptr<ast::TypeNode>();
         auto it = expressionTypes.find(n->typeId());
         return it == expressionTypes.end() ? std::shared_ptr<ast::TypeNode>() : it->second;
     }
     void setType(const ast::Node* n, std::shared_ptr<ast::TypeNode> t) {
-        if (n) expressionTypes[n->typeId()] = std::move(t);
+        if (n) {
+            expressionTypes[n->typeId()] = t;
+            // #223 single-authority: `node->type` aliases the TypeTable entry so
+            // the two are the SAME owned TypeNode object (no divergent clones).
+            // This is the transitional writer while codegen still reads node->type;
+            // we keep node->type populated so the two can never disagree.
+            const_cast<ast::Node*>(n)->type = t;
+        }
     }
+private:
     // CHECKPOINT B step 2: the synthesis registry is gone. Every synthesized type
     // is owned by its consumer (expressionTypes/TypeTable, node->type, or a
     // SymbolInfo.type). retainType() is a thin "wrap a raw new into an owning
