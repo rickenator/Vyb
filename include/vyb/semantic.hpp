@@ -560,14 +560,8 @@ public:
         return typeOf(p.get());
     }
     void setType(const ast::Node* n, std::shared_ptr<ast::TypeNode> t) {
-        if (n) {
-            expressionTypes[n->typeId()] = t;
-            // #223 single-authority: `node->type` aliases the TypeTable entry so
-            // the two are the SAME owned TypeNode object (no divergent clones).
-            // This is the transitional writer while codegen still reads node->type;
-            // we keep node->type populated so the two can never disagree.
-            const_cast<ast::Node*>(n)->type = t;
-        }
+        // #223 single authority: the node-id TypeTable is the only type writer.
+        if (n) expressionTypes[n->typeId()] = std::move(t);
     }
 private:
     // CHECKPOINT B step 2: the synthesis registry is gone. Every synthesized type

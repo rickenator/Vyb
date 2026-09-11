@@ -7610,7 +7610,7 @@ void SemanticAnalyzer::visit(ast::StructDeclaration* node) {
             field->typeNode->accept(*this);
 
             // Store the resolved field type for later member access resolution.
-            ast::TypeNode* effectiveFieldType = typeOf(field->typeNode) ? field->typeNode->type.get() : field->typeNode.get();
+            ast::TypeNode* effectiveFieldType = typeOf(field->typeNode) ? typeOf(field->typeNode).get() : field->typeNode.get();
             fieldTypes[field->name->name] = effectiveFieldType;
 
             if (auto* fieldTypeName = dynamic_cast<ast::TypeName*>(effectiveFieldType)) {

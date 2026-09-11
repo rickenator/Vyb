@@ -242,15 +242,15 @@ void LLVMCodegen::handleVecPush(vyb::ast::CallExpression* node, llvm::Value* vec
         // slot owns data fully independent of the pushed value.
         bool structNeedsDeepCopy =
             elementType->isStructTy() &&
-            node->arguments[0]->type &&
-            isKnownStructTypeNode(node->arguments[0]->type.get()) &&
-            structTypeHasOwnedFields(node->arguments[0]->type.get());
+            typeOfNode(node->arguments[0]) &&
+            isKnownStructTypeNode(typeOfNode(node->arguments[0]).get()) &&
+            structTypeHasOwnedFields(typeOfNode(node->arguments[0]).get());
 
         if (structNeedsDeepCopy) {
             // Generate the deep copy of the source struct value.
             llvm::Value* deepCopy = generateStructDeepCopy(
                 builder->CreateLoad(elementType, srcPtr, "vec.push.struct_load"),
-                node->arguments[0]->type.get(),
+                typeOfNode(node->arguments[0]).get(),
                 llvm::cast<llvm::StructType>(elementType));
             builder->CreateStore(deepCopy, elementPtr);
         } else {
@@ -283,8 +283,8 @@ void LLVMCodegen::reclaimFreshStructArgTemp(vyb::ast::CallExpression* node, unsi
     // cleanup and must NOT be touched (mirrors pendingStructTempReclaims).
     bool fresh = dynamic_cast<ast::CallExpression*>(node->arguments[argIdx].get()) != nullptr ||
                  dynamic_cast<ast::ObjectLiteral*>(node->arguments[argIdx].get()) != nullptr;
-    if (!fresh || !node->arguments[argIdx]->type) return;
-    const vyb::ast::TypeNode* at = node->arguments[argIdx]->type.get();
+    if (!fresh || !typeOfNode(node->arguments[argIdx])) return;
+    const vyb::ast::TypeNode* at = typeOfNode(node->arguments[argIdx]).get();
     if (!isKnownStructTypeNode(at) || !structTypeHasOwnedFields(at)) return;
     auto* st = llvm::dyn_cast<llvm::StructType>(elementType);
     if (!st) return;
@@ -643,19 +643,19 @@ void LLVMCodegen::handleVecSet(vyb::ast::CallExpression* node, llvm::Value* vecP
             retainStringValue(value);
         }
     } else if (elementLLVMType && elementLLVMType->isStructTy() &&
-               node->arguments[1]->type &&
-               isKnownStructTypeNode(node->arguments[1]->type.get()) &&
-               structTypeHasOwnedFields(node->arguments[1]->type.get())) {
+               typeOfNode(node->arguments[1]) &&
+               isKnownStructTypeNode(typeOfNode(node->arguments[1]).get()) &&
+               structTypeHasOwnedFields(typeOfNode(node->arguments[1]).get())) {
         // Struct element owning heap data: release the overwritten slot's owned
         // fields (it is being dropped), then store a deep copy of the new value
         // so the slot owns data independent of the assigning source (shallow copy
         // would alias and double-free on scope exit).
         std::set<std::string> visited;
         reclaimStructOwnedFieldsAt(
-            elementPtr, node->arguments[1]->type.get(),
+            elementPtr, typeOfNode(node->arguments[1]).get(),
             llvm::cast<llvm::StructType>(elementLLVMType), visited);
         llvm::Value* deepCopy = generateStructDeepCopy(
-            value, node->arguments[1]->type.get(),
+            value, typeOfNode(node->arguments[1]).get(),
             llvm::cast<llvm::StructType>(elementLLVMType));
         // A fresh owned-struct TEMP new-value (e.g. `v.set(i, make_node(5))`)
         // was deep-copied above; reclaim its original buffers (#192). A named

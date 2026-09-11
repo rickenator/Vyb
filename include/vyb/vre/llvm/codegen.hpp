@@ -94,14 +94,11 @@ public:
     llvm::Module* getModule() const { return module.get(); } // Add method to get module pointer without releasing
     // True when main()'s return argument is a lit(...) call (raw JSON passthrough).
     bool isMainReturnLitRaw() const { return m_mainReturnIsLitRaw; }
-    // #223 single type authority: resolve a node's AST type from the semantic
-    // TypeTable (bound from the Driver's SemanticAnalyzer in the constructor).
-    // Falls back to the legacy node->type while read-migration is in progress
-    // (they alias the same object after the X1 unification), so this is always
-    // consistent.
+    // #223: resolve a node's AST type from the semantic TypeTable (bound from the
+    // Driver's SemanticAnalyzer in the constructor). The TypeTable is the single
+    // authority; the retired node->type field is no longer consulted.
     std::shared_ptr<vyb::ast::TypeNode> typeOfNode(const vyb::ast::Node* n) const {
-        if (nodeTypeOf_) return nodeTypeOf_(n);
-        return n ? n->type : std::shared_ptr<vyb::ast::TypeNode>();
+        return nodeTypeOf_ ? nodeTypeOf_(n) : std::shared_ptr<vyb::ast::TypeNode>();
     }
     // #223: same query for smart-pointer receivers (unique_ptr/shared_ptr) so
     // call sites like `node->id->type` become `typeOfNode(node->id)` unchanged
@@ -117,8 +114,7 @@ public:
         std::shared_ptr<vyb::ast::TypeNode>>
     typeOfNode(const P& p) const {
         const vyb::ast::Node* n = p.get();
-        if (nodeTypeOf_) return nodeTypeOf_(n);
-        return n ? n->type : std::shared_ptr<vyb::ast::TypeNode>();
+        return nodeTypeOf_ ? nodeTypeOf_(n) : std::shared_ptr<vyb::ast::TypeNode>();
     }
     // True when a call expression's type is `mild<...>` (a shared borrow with
     // retained-on-stow semantics). Made a member (#223) so it resolves the type

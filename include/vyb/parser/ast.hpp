@@ -406,7 +406,6 @@ public:
 class Node {
 public:
     SourceLocation loc;
-    std::shared_ptr<TypeNode> type;  // Add type member
 
     Node(SourceLocation loc) : loc(loc), id_(++idCounter()) {}
     virtual ~Node() = default;
