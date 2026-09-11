@@ -64,7 +64,11 @@ Vyb is a statically typed, compiled systems language targeting native code via L
 ## Quick Start
 
 ```bash
-# Clone and build
+# Option A: official binary SDK (Linux x64 / macOS x64) — download the v0.7.5
+# tarball from the release page, unpack, and add it to your PATH:
+#   https://github.com/rickenator/Vyb/releases/tag/v0.7.5
+
+# Option B: build from source (requires LLVM 18 + CMake)
 git clone https://github.com/rickenator/Vyb.git
 cd Vyb
 mkdir -p build && cd build && LLVM_DIR=/usr/lib/llvm-18/cmake cmake .. && make -j$(nproc) && cd ..
