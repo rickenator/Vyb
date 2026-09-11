@@ -23,6 +23,10 @@ __pycache__/
 # IDE / editor config
 .settings/
 .vscode/
+# Qt Creator project residue (IDE-generated, not project code)
+Vyb.*
+/qtc_clangd/
+.qtc_clangd/
 demos/VybLynx/target-asan/
 
 # Hermes agent state (not project code)

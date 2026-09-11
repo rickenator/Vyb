@@ -9,6 +9,14 @@ TypeTable), `node->type`, or a `SymbolInfo.type` — no raw mirror, no synthesis
 registry. The only remaining item is the stretch: making the AST fields read-only
 after parse (the immutable-AST half, purely additive/optional).
 
+UPDATE 2026-09-11 (#223): the Node-ID data race is fixed — `Node::typeId()` is
+now assigned EAGERLY in Node's single constructor from a static atomic counter
+and stored in a `const unsigned`, so identity is immutable and race-free (the
+old lazy plain-`unsigned` write could assign different ids to one node under
+concurrent access). The open stretch remains retiring the mutable `Node::type`
+field so the node-id TypeTable is the ONE type authority for both semantic and
+codegen (~850 refs: semantic 440, codegen 410).
+
 REKEY PITFALL (learned 2026-09-10): a
 regex rekey of `expressionTypes[K]` -> `expressionTypes[exprKey(K)]` BREAKS on
 bracket keys containing a nested `]` — e.g. `expressionTypes[node->arguments[i].get()]`

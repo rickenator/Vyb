@@ -241,7 +241,7 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 - [x] **`println()`/`print()` with multiple arguments** — Space-separated output; all args formatted into a single call
 - [x] **Semantic type recognition** — `Int16`, `Int32`, `Int64`, `UInt8`–`UInt64`, `Float32`, `Float64`, `Char`, `Rune` now fully recognized in semantic analysis (were silently rejected)
 - [x] **Relaxed struct field syntax** — C-style `Type fieldName` accepted alongside canonical `fieldName<Type>`; helps parse legacy/interop fixtures
-- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite now runs **1132 tests, 1132 passing** via `test/run_tests.py --execute-jit` (re-anchored 2026-09-09)
+- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite now runs **1144 tests, 1144 passing** via `test/run_tests.py --execute-jit` (re-anchored 2026-09-09)
 - [x] **Vec parameter deep copy** — Vec parameters receive an independent copy of the data on function entry, eliminating double-free bugs (e.g. recursive quicksort base-case return)
 - [x] **Vec mutation through borrowed struct fields** — `s.items.push(val)` where `s<their<T>>` now correctly mutates in-place; member-expression Vec calls now get a field *pointer* (not a loaded copy)
 - [x] **`their<T>` nested-access audit** — verified multi-level member reads/writes through a `their<T>` borrow receiver (`r.mid.leaf.n`, 2-level writes), borrow-typed struct fields accessed through an outer borrow (`h.inner.n` where `Holder.inner<their<Leaf>>`), and member Vec reads through a borrow. All correct; locked in by `test/ownership/test_their_nested_access.vyb`. (Note: `Vec::get()` returns a copy, so in-place mutation of a nested `Vec<Vec<T>>` needs the inner Vec accessed by reference — not a `their` bug.)
@@ -1398,5 +1398,5 @@ Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `
 
 *Last Updated: 2026-09-09 (v0.7.5 release)*
 *Current Version: Vyb v0.7.5 (freedom-1.0 series)*
-*Overall Status: ~60-65% complete toward 1.0 — 1132 tests, 1132 passing (full --execute-jit directory sweep, re-anchored 2026-09-09)*
+*Overall Status: ~60-65% complete toward 1.0 — 1144 tests, 1144 passing (full --execute-jit directory sweep, re-anchored 2026-09-09)*
 *SUGGESTIONS.md merged into this document.*

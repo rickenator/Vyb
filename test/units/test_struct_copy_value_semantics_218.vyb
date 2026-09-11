@@ -1,0 +1,33 @@
+// @test: struct copy deep-copies nested Vec, no alias (#218)
+// @description: a struct copy must deep-copy its controlled Vec fields so that
+//   pushing into the COPY's nested Vec leaves the original untouched (value
+//   semantics — the VybChain Chain contract). Previously the write-back
+//   aborted LLVM module verification ("Instruction does not dominate all uses" /
+//   "PHI nodes not grouped"). Must now run and prove orig=1, copy=2.
+// @category: ownership, codegen, struct, value-semantics
+// @expect: pass
+// @expect-output: COPY1 OK
+// @expect-return: 0
+struct Tx { sender<String>, amount<Int> }
+struct Block { id<Int>, txs<Vec<Tx>> }
+struct Chain2 { blocks<Vec<Block>> }
+main()<Int> -> {
+    txs<Vec<Tx>> = Vec()
+    txs.push(Tx { sender = "a", amount = 5 })
+    b<Block> = Block { id = 1, txs = txs }
+    bs<Vec<Block>> = Vec()
+    bs.push(b)
+    orig<Chain2> = Chain2 { blocks = bs }
+    // copy-on-struct: push into the copy's nested Vec; original must be untouched
+    ch<Chain2> = orig
+    blk<Vec<Block>> = ch.blocks
+    bl<Block> = blk.get(0)
+    bl.txs.push(Tx { sender = "b", amount = 3 })
+    ch.blocks.set(0, bl)
+    o1<Int> = orig.blocks.get(0).txs.len()
+    n1<Int> = ch.blocks.get(0).txs.len()
+    ok1<Bool> = (o1 == 1 && n1 == 2)
+    if (ok1) { println("COPY1 OK") } else { println("COPY1 ALIAS o=" + o1.to_string() + " n=" + n1.to_string()) }
+    if (!ok1) { return 1 }
+    return 0
+}

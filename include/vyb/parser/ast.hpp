@@ -408,26 +408,28 @@ public:
     SourceLocation loc;
     std::shared_ptr<TypeNode> type;  // Add type member
 
-    Node(SourceLocation loc) : loc(loc) {}
+    Node(SourceLocation loc) : loc(loc), id_(++idCounter()) {}
     virtual ~Node() = default;
     virtual NodeType getType() const = 0;
     virtual std::string toString() const = 0;
     virtual void accept(Visitor& visitor) = 0;
 
     // Stable, process-unique id for this node, used as the key of the semantic
-    // TypeTable (node-id -> owned type). Assigned lazily on first access so it
-    // needs no constructor churn; every Node therefore has a stable identity even
-    // though the AST is still mutable during the incremental migration.
-    unsigned typeId() const {
-        if (!id_) {
-            static std::atomic<unsigned> counter{0};
-            id_ = ++counter;
-        }
-        return id_;
-    }
+    // TypeTable (node-id -> owned type). Assigned EAGERLY in the constructor so
+    // node identity is immutable and race-free (#223): the previous lazy scheme
+    // wrote a plain `mutable unsigned` on first access, so two threads could
+    // both observe id_==0 and increment the atomic counter to DIFFERENT ids for
+    // the same node. Construction is single-owned, so an eagerly-assigned
+    // const id cannot race.
+    unsigned typeId() const { return id_; }
 
 private:
-    mutable unsigned id_ = 0;
+    const unsigned id_;
+
+    static std::atomic<unsigned>& idCounter() {
+        static std::atomic<unsigned> counter{0};
+        return counter;
+    }
 };
 
 // Base Expression Node

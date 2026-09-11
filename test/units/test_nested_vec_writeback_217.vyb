@@ -1,0 +1,27 @@
+// @test: nested Vec.set write-back is heap-safe (#217)
+// @description: deep-copy a nested Record, write the COPY back through the
+//   Vec<ChainBlock> blocks level, then run chain::verify. Previously this
+//   corrupted the heap and aborted at exit (134, "free(): corrupted unsorted
+//   chunks"), even for an identity write-back. Must now exit 0 with verify=true
+//   and clean memory (no double-free / corruption).
+// @category: ownership, codegen, chain, heap-safety
+// @expect: pass
+// @expect-output: verify=true
+// @expect-return: 0
+import chain::{new_chain, verify, Record, ChainBlock}
+main()<Int> -> {
+    r<Vec<Record>> = Vec()
+    r.push(Record { label = "a", value = "x" })
+    c<Chain> = new_chain("origin", r)
+    // deep-copy the nested record, write the COPY back at both levels
+    rec<Record> = c.blocks.get(0).records.get(0)
+    rs<Vec<Record>> = c.blocks.get(0).records
+    rs.set(0, rec)
+    b<ChainBlock> = c.blocks.get(0)
+    b.records = rs
+    c.blocks.set(0, b)
+    v<Bool> = verify(c)
+    if (!v) { return 1 }
+    println("verify=" + v.to_string())
+    return 0
+}
