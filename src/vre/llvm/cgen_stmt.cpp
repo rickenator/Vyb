@@ -1419,6 +1419,18 @@ void LLVMCodegen::codegenMatch(vyb::ast::MatchStatement* node, llvm::AllocaInst*
         );
         builder->CreateStore(matchValue, matchTemp);
         matchValue = builder->CreateLoad(matchTemp->getAllocatedType(), matchTemp, "match.value.load");
+
+        // #227: when the scrutinee is a fresh call result (an owned temporary by
+        // value — e.g. `io::read_bytes(f)` -> `Vec<UInt8>?`), matchTemp is its
+        // only owner, so register it for cleanup and the owned payload (its
+        // malloc'd buffer) is freed on scope exit. A named-variable, member, or
+        // index scrutinee is an lvalue/borrow whose real owner frees it; matchTemp
+        // then only aliases it and MUST NOT be registered (double-free).
+        if (dynamic_cast<ast::CallExpression*>(node->expr.get()) && node->expr->type) {
+            valueTypeMap[matchTemp] = node->expr->type;
+            registerVariable("__match_tmp", matchTemp, matchValue,
+                             ast::OwnershipKind::MY, matchTemp->getAllocatedType(), true);
+        }
     }
 
     // Create basic blocks for each case and the end of match
