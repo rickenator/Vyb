@@ -64,6 +64,44 @@ for post in sqlite cuda; do
   fi
 done
 
+# ===== #204 P2: package-level freedom/trust boundary on install =====
+GPU="$ROOT/fixtures/remote_modules/gpu"   # vyb.toml: boundary=freedom + caps
+clean_gpu(){ rm -f "$WORK"/vyb.lock "$WORK"/.vybmod/gpu -r 2>/dev/null || true; }
+clean_gpu
+
+# 8. A privileged package (declares [mod] capabilities/freedom) must NOT install
+#    silently without a trust acceptance (non-interactive: no --yes, no env).
+if "$VYB" mod install "path:$GPU" >/dev/null 2>"$WORK/e8" && [ -f .vybmod/gpu/mod.vyb ]; then
+  bad "privileged install without acceptance (expected refusal)"
+elif grep -q "privileged" "$WORK/e8" && grep -q "cuda-driver" "$WORK/e8"; then
+  ok "privileged install refused without acceptance (lists capabilities)"
+else
+  bad "privileged refusal (wrong message)"
+fi
+
+# 9. --yes accepts: installs AND records {source, sha256, capabilities} in vyb.lock.
+clean_gpu
+if "$VYB" mod install "path:$GPU" --yes >/dev/null 2>"$WORK/e9" && [ -f .vybmod/gpu/mod.vyb ]; then
+  if grep -q "gpu = { source = \"path:$GPU\"" vyb.lock \
+     && grep -q "capabilities = \[ \"ffi\", \"cuda-driver\", \"nvptx\" \]" vyb.lock \
+     && grep -q "freedom = true" vyb.lock; then
+    ok "--yes installs privileged pkg + records source/sha256/capabilities (+ freedom)"
+  else
+    bad "--yes installed but vyb.lock misses trust record"
+  fi
+else
+  bad "--yes privileged install"
+fi
+
+# 10. Re-install after acceptance is silent (decision pinned in vyb.lock) — the
+#     repro/build is non-interactive and deterministic.
+if "$VYB" mod install "path:$GPU" >/dev/null 2>"$WORK/e10" && [ -f .vybmod/gpu/mod.vyb ]; then
+  grep -q "privileged" "$WORK/e10" && bad "re-install re-prompted (should be silent)" \
+    || ok "re-install of accepted privileged pkg is silent (pinned in vyb.lock)"
+else
+  bad "re-install after acceptance"
+fi
+
 echo
 echo "REMOTE-IMPORT $([ $fail -eq 0 ] && echo PASS || echo FAIL) ($([ $fail -eq 0 ] && echo all "$pass" || echo "$fail of $((pass+fail)) failed"))"
 exit $([ $fail -eq 0 ] && echo 0 || echo 1)

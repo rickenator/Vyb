@@ -146,6 +146,40 @@ Already-fetched modules are **reused rather than re-fetched**: if
 skips the network fetch for that module, so repeat installs (including
 pin re-verification against the cached bytes) work offline.
 
+### Package-level trust boundary on install (issue #204, P2)
+
+A package can declare privileged capabilities in its manifest:
+
+```toml
+[mod]
+boundary     = ["freedom"]               # privileged: smuggable only
+capabilities = ["ffi", "cuda-driver", "nvptx"]
+```
+
+When `vyb mod install` resolves such a package (its `.vybmod` copy carries a
+`vyb.toml` declaring `[mod] capabilities`/`freedom`), it treats the package as
+**privileged** and requires an explicit trust acceptance **before** materializing
+it into `.vybmod/`:
+
+1. **One-shot first-use prompt** — lists the declared capabilities and source,
+   asking `Accept? [y/N]`. Not accepting aborts the install (nothing is written).
+2. **CI policy switch** — non-interactive installs (no TTY) require the explicit
+   `VYB_MOD_ACCEPT=1` environment variable (or `--yes`), which is the per-run/cI
+   capability-policy gate for #204. Without it a privileged install fails loudly
+   rather than silently trusting foreign capabilities.
+3. **Pinned decision in `vyb.lock`** — on acceptance the entry records
+   `{ source, sha256, capabilities = [...], freedom = true }`. Re-installs of the
+   same pinned (source, sha256) package are then **silent and deterministic** —
+   the trust decision is bound to the exact resolved artifact, not re-prompted.
+4. **Not transitive, not lexical** — smuggling a privileged package never places
+   the caller into a lexical `freedom` context (package-level trust is a
+   manifest declaration; lexical `freedom { ... }` remains local to the
+   implementation code, per the #204 spec).
+
+The check is per-install-edge in the consuming build (see `ModuleRegistryOptions
+.privilegedModules` for the build-time smuggle-only enforcement from #204 P0); P2
+adds the *install-time* trust/acceptance gate on top of that.
+
 ---
 
 ## Signed packages & root authority — Phase 4 (specification)

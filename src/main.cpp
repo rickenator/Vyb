@@ -4040,9 +4040,11 @@ static bool mod_verify_index(const std::string& indexPath, const std::string& si
 
 // Fetch one URL from the github raw host into `outFile` via a generated Vyb
 // driver (verified TLS against the system CA). Returns the driver's exit code.
+// `quiet` suppresses the MODFETCH-ERR line on non-200 (used for a best-effort
+// optional fetch, e.g. a co-located vyb.toml that may not exist).
 static int mod_fetch_url(const std::string& rawPath, const std::string& outFile,
                          const std::string& capath, const std::string& exePath,
-                         const std::string& tmpRoot) {
+                         const std::string& tmpRoot, bool quiet = false) {
     std::string driver = tmpRoot + "/f.vyb";
     {
         std::ostringstream d;
@@ -4058,7 +4060,9 @@ static int mod_fetch_url(const std::string& rawPath, const std::string& outFile,
           << "        ? -> {}\n"
           << "    }\n"
           << "    r<HttpResponse> = https_get_full_verified(\"raw.githubusercontent.com\", 443, \"" << rawPath << "\", ca2)\n"
-          << "    if (r.status != 200) { println(\"MODFETCH-ERR status=\" + r.status.to_string()); return 1 }\n"
+          << "    if (r.status != 200) { "
+          << (quiet ? std::string("return 1") : std::string("println(\"MODFETCH-ERR status=\" + r.status.to_string()); return 1"))
+          << " }\n"
           << "    match (open_write(\"" << outFile << "\")) {\n"
           << "        of -> { wres<Int?> = write_str(of, r.body); cres<Bool?> = close(of) }\n"
           << "        ? -> { println(\"MODFETCH-ERR open_write\"); return 1 }\n"
@@ -4105,6 +4109,17 @@ static int mod_fetch_github(const std::string& ownerRepoPath, const std::string&
         return 1;
     }
     if (!fs::exists(outFile)) { std::cerr << "Error: github fetch produced no module.\n"; return 1; }
+
+    // #204 P2: best-effort fetch of the co-located vyb.toml so the package's
+    // `[mod] capabilities` (privileged trust data) is available for the
+    // first-use trust prompt. Optional — a package with no manifest is fine.
+    {
+        std::string modDir = fs::path(subpath).parent_path().string();
+        std::string tomlRel = (modDir.empty() ? "" : modDir + "/") + "vyb.toml";
+        std::string tomlOut = proj + "/vyb.toml";
+        // ignore result: a missing manifest means "not privileged"
+        mod_fetch_url("/" + owner + "/" + repo + "/main/" + tomlRel, tomlOut, capath, exePath, tmpRoot, /*quiet=*/true);
+    }
 
     // --require-signed (Phase 4): verify the module hash against the signed INDEX.
     if (requireSigned) {
@@ -4186,7 +4201,61 @@ static int mod_fetch_github(const std::string& ownerRepoPath, const std::string&
     return 0;
 }
 
-static int mod_install(const std::string& spec, const std::string& exePath, bool requireSigned) {
+// #204 P2: read the privileged/trust bits from an INSTALLED package's vyb.toml
+// (read from the resolved source dir — path: locally, github: from the
+// best-effort co-located fetch). Returns false if there's no manifest or it
+// declares nothing privileged. `caps`/`freedom` are filled when privileged.
+static bool mod_privileged_from(const std::string& dirPath,
+                                std::vector<std::string>& caps, bool& freedom) {
+    std::string merr;
+    auto man = vyb::load_manifest(dirPath, &merr);
+    if (!man) return false;
+    caps = man->mod.capabilities;
+    freedom = man->mod.freedomBoundary;
+    return freedom || !caps.empty();
+}
+
+// True if vyb.lock already records a `name = { ..., capabilities = [...] }`
+// entry — i.e. the privileged package's trust was accepted on a PRIOR install,
+// so the (source,sha256) decision is pinned and no prompt is needed again.
+static bool mod_lock_already_trusted(const std::string& lockPath, const std::string& name) {
+    std::string body;
+    { std::ifstream f(lockPath); std::ostringstream ss; ss << f.rdbuf(); body = ss.str(); }
+    size_t pos = body.find(name + " = {");
+    if (pos == std::string::npos) return false;
+    size_t end = body.find('\n', pos);
+    std::string entry = body.substr(pos, end == std::string::npos ? body.size() - pos : end - pos);
+    return entry.find("capabilities") != std::string::npos;
+}
+
+// One-shot first-use trust prompt (or non-interactive policy). Returns true iff
+// the privileged package is accepted. Non-interactive installs require the
+// explicit VYB_MOD_ACCEPT=1 gate (the #204 "can capability policy be configured
+// for CI/non-interactive builds" — yes: this env is the CI policy switch).
+static bool mod_confirm_privileged(const std::string& name, const std::string& src,
+                                   const std::string& sha,
+                                   const std::vector<std::string>& caps, bool freedom) {
+    std::cerr << "\nPackage '" << name << "' requests privileged capabilities:\n";
+    if (freedom) std::cerr << "  - freedom boundary\n";
+    for (const auto& c : caps) std::cerr << "  - " << c << "\n";
+    std::cerr << "  source: " << src << "\n  sha256: " << sha << "\n";
+    const char* accept = getenv("VYB_MOD_ACCEPT");
+    if (accept && std::string(accept) == "1") {
+        std::cerr << "  accepted (VYB_MOD_ACCEPT=1)\n";
+        return true;
+    }
+    if (isatty(fileno(stdin))) {
+        std::cerr << "Accept? [y/N] ";
+        std::string line;
+        if (!std::getline(std::cin, line)) return false;
+        return line == "y" || line == "Y" || line == "yes";
+    }
+    std::cerr << "Error: non-interactive install of a privileged package requires "
+                 "VYB_MOD_ACCEPT=1 (this is the CI capability-policy switch for #204).\n";
+    return false;
+}
+
+static int mod_install(const std::string& spec, const std::string& exePath, bool requireSigned, bool yesAll) {
     std::string src = spec;
     std::string pin;
     if (auto at = src.find('@'); at != std::string::npos) {
@@ -4243,6 +4312,33 @@ static int mod_install(const std::string& spec, const std::string& exePath, bool
         return 1;
     }
 
+    // #204 P2: package-level freedom/trust boundary. If the installed package's
+    // manifest declares privileged capabilities (or a freedom boundary), require
+    // an explicit one-shot trust acceptance BEFORE materializing it — unless it
+    // was already accepted on a prior install (pinned in vyb.lock by
+    // source/sha256/capabilities), or the CI policy switch VYB_MOD_ACCEPT=1 / --yes
+    // opts in non-interactively.
+    std::vector<std::string> privCaps;
+    bool privFreedom = false;
+    bool privileged = false;
+    {
+        std::error_code tec;
+        if (fs::exists(fs::path(dirPath) / "vyb.toml", tec)) {
+            privileged = mod_privileged_from(dirPath, privCaps, privFreedom);
+        }
+    }
+    if (privileged) {
+        std::string lockPath = (fs::current_path() / "vyb.lock").string();
+        bool already = mod_lock_already_trusted(lockPath, name);
+        if (!already && !yesAll) {
+            if (!mod_confirm_privileged(name, src, actualHex, privCaps, privFreedom)) {
+                std::cerr << "Refusing to install privileged package '" << name
+                          << "' (not accepted). Use --yes or VYB_MOD_ACCEPT=1 to accept.\n";
+                return 1;
+            }
+        }
+    }
+
     fs::path destDir = fs::current_path() / ".vybmod" / name;
     fs::create_directories(destDir, ec);
     for (auto& mf : modFiles) {
@@ -4259,7 +4355,17 @@ static int mod_install(const std::string& spec, const std::string& exePath, bool
         std::string line;
         while (std::getline(in, line))
             if (line.rfind(name + " = {", 0) != 0) out << line << "\n";
-        out << name << " = { source = \"" << src << "\", sha256 = \"" << actualHex << "\" }\n";
+        out << name << " = { source = \"" << src << "\", sha256 = \"" << actualHex << "\"";
+        if (privileged) {
+            out << ", capabilities = [";
+            for (size_t ci = 0; ci < privCaps.size(); ++ci) {
+                out << (ci ? ", " : " ") << "\"" << privCaps[ci] << "\"";
+            }
+            out << (privCaps.empty() ? "" : " ");
+            out << "]";
+            if (privFreedom) out << ", freedom = true";
+        }
+        out << " }\n";
         std::ofstream f(lockPath, std::ios::trunc); f << out.str();
     }
     {
@@ -4319,7 +4425,7 @@ static int run_mod_publish(const fs::path& pkgDir, const fs::path& reg) {
 static int run_mod_command(int argc, char** argv, const std::string& exePath) {
     if (argc >= 1 && (std::string(argv[0]) == "--help" || std::string(argv[0]) == "help")) {
         std::cout << "Usage:\n"
-                  << "  vyb mod install <path:DIR|github:owner/repo/path>[@sha256:HEX] [--require-signed]\n"
+                  << "  vyb mod install <path:DIR|github:owner/repo/path>[@sha256:HEX] [--require-signed] [--yes]\n"
                   << "  vyb mod verify-signed <INDEX.json> [<INDEX.sig>]\n"
                   << "  vyb mod publish <pkgdir>  # publish a package (dir with vyb.toml + mod.vyb)\n"
                   << "                              # into the registry (VYB_REGISTRY | ~/.vyb/registry)\n"
@@ -4328,6 +4434,10 @@ static int run_mod_command(int argc, char** argv, const std::string& exePath) {
                   << "  pin-verifies an optional @sha256:HEX, records vyb.lock, and registers a path\n"
                   << "  dependency in vyb.toml. --require-signed verifies the posted INDEX.json\n"
                   << "  signature against the pinned publisher key (official packages).\n"
+                  << "  A package whose vyb.toml declares [mod] capabilities/freedom is privileged:\n"
+                  << "  install asks a one-shot first-use trust prompt, records {source, sha256,\n"
+                  << "  capabilities} in vyb.lock, and never re-prompts for that pinned decision.\n"
+                  << "  --yes (or VYB_MOD_ACCEPT=1) accepts non-interactively for CI.\n"
                   << "  verify-signed validates an INDEX.json (+ sibling .sig) against the pinned key.\n"
                   << "  See doc/MANIFEST.md.\n";
         return 0;
@@ -4381,12 +4491,14 @@ static int run_mod_command(int argc, char** argv, const std::string& exePath) {
     }
     std::string spec;
     bool requireSigned = false;
+    bool yesAll = false;
     for (int i = 1; i < argc; ++i) {
         if (std::string(argv[i]) == "--require-signed") requireSigned = true;
+        else if (std::string(argv[i]) == "--yes") yesAll = true;
         else spec = argv[i];
     }
     if (spec.empty()) { std::cerr << "Error: vyb mod install <spec>\n"; return 1; }
-    return mod_install(spec, exePath, requireSigned);
+    return mod_install(spec, exePath, requireSigned, yesAll);
 }
 int main(int argc, char* argv[]) {
     Catch::Session session; // Catch2 entry point
