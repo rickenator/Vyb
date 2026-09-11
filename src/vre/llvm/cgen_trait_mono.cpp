@@ -164,14 +164,14 @@ std::string LLVMCodegen::getFullTypeName(vyb::ast::Expression* expr) {
     if (!expr) return "";
 
     // Try to get type from the expression itself
-    if (expr->type) {
-        return expr->type->toString();
+    if (typeOfNode(expr)) {
+        return typeOfNode(expr)->toString();
     }
 
     // For identifiers, check if we have type info
     if (auto ident = dynamic_cast<ast::Identifier*>(expr)) {
-        if (ident->type) {
-            return ident->type->toString();
+        if (typeOfNode(ident)) {
+            return typeOfNode(ident)->toString();
         }
     }
 

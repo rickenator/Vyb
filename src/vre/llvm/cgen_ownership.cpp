@@ -1696,7 +1696,7 @@ bool LLVMCodegen::isClosureStructType(llvm::Type* type) {
 bool LLVMCodegen::isFnTypeNode(const vyb::ast::TypeNode* tn) const {
     if (!tn) return false;
     if (dynamic_cast<const vyb::ast::FunctionType*>(tn)) return true;
-    if (tn->type && dynamic_cast<const vyb::ast::FunctionType*>(tn->type.get())) return true;
+    if (typeOfNode(tn) && dynamic_cast<const vyb::ast::FunctionType*>(typeOfNode(tn).get())) return true;
     return false;
 }
 

@@ -449,9 +449,9 @@ void LLVMCodegen::visit(vyb::ast::ReturnStatement *node) {
                 // leaked the returned Spec.packages Vec<String> buffer).
                 if (m_mainAutoSerializeOrigRetType &&
                     m_mainAutoSerializeOrigRetType->isStructTy() &&
-                    node->argument && node->argument->type &&
+                    node->argument && typeOfNode(node->argument) &&
                     returnValue) {
-                    const vyb::ast::TypeNode* retAst = node->argument->type.get();
+                    const vyb::ast::TypeNode* retAst = typeOfNode(node->argument).get();
                     if (isKnownStructTypeNode(retAst) && structTypeHasOwnedFields(retAst)) {
                         auto* st = llvm::dyn_cast<llvm::StructType>(
                             m_mainAutoSerializeOrigRetType);
@@ -1426,8 +1426,8 @@ void LLVMCodegen::codegenMatch(vyb::ast::MatchStatement* node, llvm::AllocaInst*
         // malloc'd buffer) is freed on scope exit. A named-variable, member, or
         // index scrutinee is an lvalue/borrow whose real owner frees it; matchTemp
         // then only aliases it and MUST NOT be registered (double-free).
-        if (dynamic_cast<ast::CallExpression*>(node->expr.get()) && node->expr->type) {
-            valueTypeMap[matchTemp] = node->expr->type;
+        if (dynamic_cast<ast::CallExpression*>(node->expr.get()) && typeOfNode(node->expr)) {
+            valueTypeMap[matchTemp] = typeOfNode(node->expr);
             registerVariable("__match_tmp", matchTemp, matchValue,
                              ast::OwnershipKind::MY, matchTemp->getAllocatedType(), true);
         }
@@ -1487,7 +1487,7 @@ void LLVMCodegen::codegenMatch(vyb::ast::MatchStatement* node, llvm::AllocaInst*
     // resolve by the AST type name (which is unambiguous) rather than requiring a
     // struct type; fall back to a structural lookup for data-carrying enums.
     const TaggedEnumInfo* matchedEnum =
-        (node->expr && node->expr->type) ? findTaggedEnum(node->expr->type.get()) : nullptr;
+        (node->expr && typeOfNode(node->expr)) ? findTaggedEnum(typeOfNode(node->expr).get()) : nullptr;
     if (!matchedEnum && matchValue && matchValue->getType()->isStructTy()) {
         matchedEnum = findTaggedEnum(matchValue->getType());
     }
@@ -1497,8 +1497,8 @@ void LLVMCodegen::codegenMatch(vyb::ast::MatchStatement* node, llvm::AllocaInst*
     // arm. Detect it from the scrutinee's AST type, or structurally from the
     // two-field struct whose second element is an i1 flag.
     bool matchedOptional =
-        (node->expr && node->expr->type) &&
-        dynamic_cast<ast::OptionalType*>(node->expr->type.get()) != nullptr;
+        (node->expr && typeOfNode(node->expr)) &&
+        dynamic_cast<ast::OptionalType*>(typeOfNode(node->expr).get()) != nullptr;
     if (!matchedOptional && matchValue && matchValue->getType()->isStructTy()) {
         auto* st = llvm::dyn_cast<llvm::StructType>(matchValue->getType());
         if (st && st->getNumElements() == 2 && st->getElementType(1)->isIntegerTy(1)) {
@@ -1568,8 +1568,8 @@ void LLVMCodegen::codegenMatch(vyb::ast::MatchStatement* node, llvm::AllocaInst*
                     isMatch = llvm::ConstantInt::getFalse(*context);
                 } else {
                     pendingOptionalPayload = pid->name;
-                    if (node->expr && node->expr->type) {
-                        if (auto* ot = dynamic_cast<ast::OptionalType*>(node->expr->type.get())) {
+                    if (node->expr && typeOfNode(node->expr)) {
+                        if (auto* ot = dynamic_cast<ast::OptionalType*>(typeOfNode(node->expr).get())) {
                             if (ot->containedType) {
                                 pendingOptionalPayloadType =
                                     std::shared_ptr<vyb::ast::TypeNode>(ot->containedType->clone());
@@ -1711,7 +1711,7 @@ void LLVMCodegen::codegenMatch(vyb::ast::MatchStatement* node, llvm::AllocaInst*
                                 if (auto* b = dynamic_cast<ast::Identifier*>(arg.get())) {
                                     pendingVariantBindings.push_back(b->name);
                                     pendingVariantBindTypes.push_back(
-                                        b->type ? std::shared_ptr<vyb::ast::TypeNode>(b->type->clone().release())
+                                        typeOfNode(b) ? std::shared_ptr<vyb::ast::TypeNode>(typeOfNode(b)->clone().release())
                                                 : std::shared_ptr<vyb::ast::TypeNode>());
                                 }
                             }
@@ -2339,8 +2339,8 @@ void LLVMCodegen::visit(vyb::ast::FailStatement* node) {
     std::string typeName;
     if (node->errorType) {
         typeName = node->errorType->toString();
-    } else if (node->error && node->error->type) {
-        typeName = node->error->type->toString();
+    } else if (node->error && typeOfNode(node->error)) {
+        typeName = typeOfNode(node->error)->toString();
     } else if (errorValue->getType()->isIntegerTy(1)) {
         typeName = "Bool";
     } else if (errorValue->getType()->isIntegerTy()) {
@@ -2416,8 +2416,8 @@ void LLVMCodegen::visit(vyb::ast::RefailStatement* node) {
         }
 
         std::string typeName;
-        if (node->wrappedError->type) {
-            typeName = node->wrappedError->type->toString();
+        if (typeOfNode(node->wrappedError)) {
+            typeName = typeOfNode(node->wrappedError)->toString();
         } else if (wrappedValue->getType()->isIntegerTy(1)) {
             typeName = "Bool";
         } else if (wrappedValue->getType()->isIntegerTy()) {

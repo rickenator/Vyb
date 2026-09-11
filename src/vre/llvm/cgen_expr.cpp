@@ -102,16 +102,16 @@ static const vyb::ast::TypeNode* objFieldVecElement(const vyb::ast::TypeNode* tn
 // already bumped the weak count) and any call returning `mild<T>`. A bare
 // identifier or field read of an existing `mild` value is shared and must be
 // retained on stow (mirrors exprIsOurTransfer).
-static bool isMildTransferExpr(ast::Expression* expr) {
+bool LLVMCodegen::isMildTransferExpr(ast::Expression* expr) {
     if (!expr) return false;
     auto* call = dynamic_cast<ast::CallExpression*>(expr);
     if (!call) return false;
     if (auto* id = dynamic_cast<ast::Identifier*>(call->callee.get())) {
         if (id->name == "soft") return true;
     }
-    if (call->type) {
-        std::string t = call->type->toString();
-        if (t.rfind("mild<", 0) == 0) return true;
+    if (auto t = typeOfNode(call)) {
+        std::string s = t->toString();
+        if (s.rfind("mild<", 0) == 0) return true;
     }
     return false;
 }
@@ -271,7 +271,7 @@ void LLVMCodegen::visit(vyb::ast::ObjectLiteral* node) {
 
     // Store the type info back in the expression's type field for MemberExpression to use
     // This is crucial for member access later when working with the object
-    if (!node->type) {
+    if (!typeOfNode(node)) {
         node->type = node->typePath->clone();
     }
 
@@ -433,9 +433,9 @@ void LLVMCodegen::visit(vyb::ast::ObjectLiteral* node) {
 void LLVMCodegen::visit(vyb::ast::ArrayLiteral* node) {
     if (node->elements.empty()) {
         // Handle empty array literal. Need its type.
-        // If node->type is set by semantic analysis:
-        if (node->type) {
-            llvm::Type* arrayLlvmType = codegenType(node->type.get());
+        // If typeOfNode(node) is set by semantic analysis:
+        if (typeOfNode(node)) {
+            llvm::Type* arrayLlvmType = codegenType(typeOfNode(node).get());
             if (auto at = llvm::dyn_cast<llvm::ArrayType>(arrayLlvmType)) {
                  m_currentLLVMValue = llvm::ConstantArray::get(at, {}); // Empty constant array
                  return;
@@ -622,11 +622,11 @@ void LLVMCodegen::visit(vyb::ast::BinaryExpression *node) {
 
     node->left->accept(*this);
     llvm::Value *L = m_currentLLVMValue;
-    vyb::ast::TypeNode* leftTypeNode = node->left->type.get(); // Get AST type of left operand
+    vyb::ast::TypeNode* leftTypeNode = typeOfNode(node->left).get(); // Get AST type of left operand
 
     node->right->accept(*this);
     llvm::Value *R = m_currentLLVMValue;
-    vyb::ast::TypeNode* rightTypeNode = node->right->type.get(); // Get AST type of right operand
+    vyb::ast::TypeNode* rightTypeNode = typeOfNode(node->right).get(); // Get AST type of right operand
 
     if (!L || !R) {
         logError(node->loc, "One or both operands of binary expression are null.");
@@ -690,12 +690,12 @@ void LLVMCodegen::visit(vyb::ast::BinaryExpression *node) {
     } else if (L->getType()->isPointerTy() && R->getType()->isIntegerTy()) {
         // Pointer arithmetic (e.g. ptr + int)
         // We need to extract the appropriate type information for CreateGEP
-        leftTypeNode = node->left->type.get();
+        leftTypeNode = typeOfNode(node->left).get();
         // No additional changes needed with leftTypeNode - already set above
     } else if (R->getType()->isPointerTy() && L->getType()->isIntegerTy()) {
         // Pointer arithmetic (e.g. int + ptr)
         std::swap(L,R); // Put pointer on the left
-        leftTypeNode = node->right->type.get(); // Pointer is now L, so use right's AST type
+        leftTypeNode = typeOfNode(node->right).get(); // Pointer is now L, so use right's AST type
     }
 
     // Native optional `T?` equality (`==` / `!=`, e.g. `a == Int?()`): compare
@@ -1367,8 +1367,8 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
     // corresponding tagged-union variant.
     if (auto calleeId = dynamic_cast<ast::Identifier*>(node->callee.get())) {
         const std::string& cn = calleeId->name;
-        if ((cn == "Ok" || cn == "Err") && node->type) {
-            auto* etn = dynamic_cast<ast::TypeName*>(node->type.get());
+        if ((cn == "Ok" || cn == "Err") && typeOfNode(node)) {
+            auto* etn = dynamic_cast<ast::TypeName*>(typeOfNode(node).get());
             if (etn && etn->identifier) {
                 const std::string& en = etn->identifier->name;
                 bool isResultCtor = (en == "Result" && (cn == "Ok" || cn == "Err"));
@@ -1817,8 +1817,8 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                 if (methodName == "grab" || methodName == "released") {
                     // Get the object's type to verify it's mild<T>
                     std::string objectType;
-                    if (objIdent->type) {
-                        objectType = objIdent->type->toString();
+                    if (typeOfNode(objIdent)) {
+                        objectType = typeOfNode(objIdent)->toString();
                     } else {
                         auto namedIt = namedValues.find(objIdent->name);
                         if (namedIt != namedValues.end()) {
@@ -1895,8 +1895,8 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                             // the control-block handle) and absent once released. Consumed via
                             // `match (m.grab()) { o -> ...; ? -> ... }` or `else`.
                             llvm::StructType* optStruct = nullptr;
-                            if (node->type) {
-                                optStruct = llvm::dyn_cast<llvm::StructType>(codegenType(node->type.get()));
+                            if (typeOfNode(node)) {
+                                optStruct = llvm::dyn_cast<llvm::StructType>(codegenType(typeOfNode(node).get()));
                             }
                             if (!optStruct || optStruct->getNumElements() != 2) {
                                 optStruct = llvm::StructType::get(
@@ -2039,8 +2039,8 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                         auto typeMapIt = valueTypeMap.find(receiverAlloca);
                         if (typeMapIt != valueTypeMap.end() && typeMapIt->second) {
                             concreteType = typeMapIt->second->toString();
-                        } else if (objIdent->type) {
-                            concreteType = objIdent->type->toString();
+                        } else if (typeOfNode(objIdent)) {
+                            concreteType = typeOfNode(objIdent)->toString();
                         }
                     }
                 } else {
@@ -2680,7 +2680,7 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
             if (outStringOwned) *outStringOwned = false;
             llvm::Value* arg = nullptr;
             // For array arguments, get pointer directly
-            if (argExpr->type && dynamic_cast<ast::ArrayType*>(argExpr->type.get())) {
+            if (typeOfNode(argExpr) && dynamic_cast<ast::ArrayType*>(typeOfNode(argExpr).get())) {
                 if (auto* identArg = dynamic_cast<ast::Identifier*>(argExpr.get())) {
                     auto it = namedValues.find(identArg->name);
                     if (it != namedValues.end()) arg = it->second;
@@ -2696,8 +2696,8 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
             }
             if (!arg) return nullptr;
             llvm::Value* serialized = nullptr;
-            if (argExpr->type) {
-                auto* argType = argExpr->type.get();
+            if (typeOfNode(argExpr)) {
+                auto* argType = typeOfNode(argExpr).get();
                 std::string typeStr = argType->toString();
                 if (typeStr == "string" || typeStr == "String") {
                     serialized = arg->getType()->isStructTy()
@@ -6249,8 +6249,8 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
             // { ptr, len } struct, then dispatch to either the built-in String
             // handlers or a String-bound aspect method (e.g. split).
             bool objectAstIsString = false;
-            if (memberExpr->object->type) {
-                if (auto objTn = dynamic_cast<ast::TypeName*>(memberExpr->object->type.get())) {
+            if (typeOfNode(memberExpr->object)) {
+                if (auto objTn = dynamic_cast<ast::TypeName*>(typeOfNode(memberExpr->object).get())) {
                     objectAstIsString = objTn->identifier && objTn->identifier->name == "String";
                 }
             }
@@ -6376,8 +6376,8 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
             // Int, so evaluating the receiver yields the handle directly; dispatch
             // by element type through emitChannelMethod exactly like the identifier
             // path above.
-            if (memberExpr->object->type) {
-                if (auto objTn = dynamic_cast<ast::TypeName*>(memberExpr->object->type.get())) {
+            if (typeOfNode(memberExpr->object)) {
+                if (auto objTn = dynamic_cast<ast::TypeName*>(typeOfNode(memberExpr->object).get())) {
                     if (objTn->identifier && objTn->identifier->name == "chan" &&
                         objTn->genericArgs.size() == 1) {
                         memberExpr->object->accept(*this);
@@ -6400,7 +6400,7 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
             // builtins route by name; last()/peek() (NOT Vec-exclusive, may collide
             // with a user bind method named peek/last) are routed to the Vec handler
             // only when the member's object type is genuinely a Vec.
-            ast::TypeNode* mcObjTy = memberExpr->object->type ? memberExpr->object->type.get() : nullptr;
+            ast::TypeNode* mcObjTy = typeOfNode(memberExpr->object) ? typeOfNode(memberExpr->object).get() : nullptr;
             bool mcObjIsVec = false;
             if (mcObjTy) {
                 if (dynamic_cast<ast::VecType*>(mcObjTy)) mcObjIsVec = true;
@@ -6434,7 +6434,7 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                 // to recover the `Vec*` before operating on it. A plain `Vec<T>` field
                 // is emitted directly as the Vec struct, so this only applies when the
                 // field's declared type is an ownership wrapper around a Vec.
-                if (auto objTn = dynamic_cast<ast::TypeName*>(memberExpr->object->type.get())) {
+                if (auto objTn = dynamic_cast<ast::TypeName*>(typeOfNode(memberExpr->object).get())) {
                     if (objTn->identifier &&
                         (objTn->identifier->name == "their" || objTn->identifier->name == "my" ||
                          objTn->identifier->name == "our" || objTn->identifier->name == "view" ||
@@ -6466,8 +6466,8 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
             {
                 SemanticAnalyzer* semantic = driver_.hasSemanticAnalyzer()
                     ? driver_.getSemanticAnalyzer() : nullptr;
-                ast::TypeNode* objTy2 = memberExpr->object->type
-                    ? memberExpr->object->type.get() : nullptr;
+                ast::TypeNode* objTy2 = typeOfNode(memberExpr->object)
+                    ? typeOfNode(memberExpr->object).get() : nullptr;
                 if (semantic && objTy2 && (dynamic_cast<ast::TypeName*>(objTy2) ||
                                            dynamic_cast<ast::VecType*>(objTy2))) {
                     std::string concreteType = objTy2->toString();
@@ -7382,8 +7382,8 @@ void LLVMCodegen::visit(vyb::ast::PointerDerefExpression *node) {
     } else {
         // For reading, load the value
         llvm::Type* pointeeType = nullptr;
-        if (node->type) {
-            pointeeType = codegenType(node->type.get());
+        if (typeOfNode(node)) {
+            pointeeType = codegenType(typeOfNode(node).get());
         } else {
             // Fallback to i64 for test cases
             pointeeType = int64Type;
@@ -7419,8 +7419,8 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
     }
 
     // Capture type information from AST if available
-    std::shared_ptr<vyb::ast::TypeNode> lhsTypeNode = node->left->type;
-    std::shared_ptr<vyb::ast::TypeNode> rhsTypeNode = node->right->type;
+    std::shared_ptr<vyb::ast::TypeNode> lhsTypeNode = typeOfNode(node->left);
+    std::shared_ptr<vyb::ast::TypeNode> rhsTypeNode = typeOfNode(node->right);
 
     // Store location for error reporting
     SourceLocation errorLoc = node->left->loc;
@@ -7433,10 +7433,10 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
 
         // For direct identifier assignments, register the RHS type with the identifier
         // This helps propagate type info for variables
-        if (identLeft->type && RHS) {
-            valueTypeMap[RHS] = identLeft->type;
+        if (typeOfNode(identLeft) && RHS) {
+            valueTypeMap[RHS] = typeOfNode(identLeft);
             VYB_CDBG << "DEBUG: In assignment, associated RHS value with identifier type: "
-                      << identLeft->type->toString() << std::endl;
+                      << typeOfNode(identLeft)->toString() << std::endl;
         }
     }
 
@@ -7529,15 +7529,15 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
         // Try to infer pointer element type from AST
         // For PointerDerefExpression, try to get the type info from pointer operand
         if (auto pointerDeref = dynamic_cast<ast::PointerDerefExpression*>(node->left.get())) {
-            if (pointerDeref->pointer && pointerDeref->pointer->type) {
+            if (pointerDeref->pointer && typeOfNode(pointerDeref->pointer)) {
                 // If it's a pointer type, get its pointee type
-                if (auto ptrType = dynamic_cast<ast::PointerType*>(pointerDeref->pointer->type.get())) {
+                if (auto ptrType = dynamic_cast<ast::PointerType*>(typeOfNode(pointerDeref->pointer).get())) {
                     if (ptrType->pointeeType) {
                         destPointeeType = codegenType(ptrType->pointeeType.get());
                     }
                 }
                 // If it's a loc<T> type, get T
-                else if (auto locType = dynamic_cast<ast::TypeName*>(pointerDeref->pointer->type.get())) {
+                else if (auto locType = dynamic_cast<ast::TypeName*>(typeOfNode(pointerDeref->pointer).get())) {
                     if (locType->identifier->name == "loc" && !locType->genericArgs.empty()) {
                         destPointeeType = codegenType(locType->genericArgs[0].get());
                     }
@@ -7683,7 +7683,7 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
     if (closureOverwrite) {
         // Only overwrite-handle assignments to a confirmed `fn` binding; a plain
         // {ptr, ptr} target (2-pointer tuple) must keep plain store semantics.
-        bool lhsFn = isFnTypeNode(node->left->type.get()) || isFnTypeNode(node->right->type.get());
+        bool lhsFn = isFnTypeNode(typeOfNode(node->left).get()) || isFnTypeNode(typeOfNode(node->right).get());
         if (!lhsFn) {
             auto vit = valueTypeMap.find(LHS);
             if (vit != valueTypeMap.end() && isFnTypeNode(vit->second.get())) lhsFn = true;
@@ -7954,15 +7954,15 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
 
     // If we're assigning to a member of a struct, we need to preserve type information
     if (auto memberExpr = dynamic_cast<ast::MemberExpression*>(node->left.get())) {
-        if (memberExpr->object->type) {
+        if (typeOfNode(memberExpr->object)) {
             // The object has a type, so we can use it to determine field types
             // In a full implementation, we would look up the field's type from the struct definition
             // For now, we will propagate the object's type to help with future member accesses
-            valueTypeMap[RHS] = memberExpr->object->type;
+            valueTypeMap[RHS] = typeOfNode(memberExpr->object);
 
             // If LHS is from a GEP instruction, associate the struct type with the GEP result
             if (auto gep = llvm::dyn_cast<llvm::GetElementPtrInst>(LHS)) {
-                valueTypeMap[gep] = memberExpr->object->type;
+                valueTypeMap[gep] = typeOfNode(memberExpr->object);
             }
         }
     }
@@ -7983,8 +7983,8 @@ void LLVMCodegen::visit(vyb::ast::ArrayElementExpression *node) {
 
     // Check if the base expression is a tuple type
     bool isTupleAccess = false;
-    if (node->array->type) {
-        if (auto* tupleType = dynamic_cast<vyb::ast::TupleTypeNode*>(node->array->type.get())) {
+    if (typeOfNode(node->array)) {
+        if (auto* tupleType = dynamic_cast<vyb::ast::TupleTypeNode*>(typeOfNode(node->array).get())) {
             isTupleAccess = true;
         }
     }
@@ -8010,7 +8010,7 @@ void LLVMCodegen::visit(vyb::ast::ArrayElementExpression *node) {
             uint64_t index = constIndex->getZExtValue();
 
             // Verify index is within bounds
-            auto* tupleType = dynamic_cast<vyb::ast::TupleTypeNode*>(node->array->type.get());
+            auto* tupleType = dynamic_cast<vyb::ast::TupleTypeNode*>(typeOfNode(node->array).get());
             if (index >= tupleType->memberTypes.size()) {
                 logError(node->loc, "Tuple index " + std::to_string(index) + " out of bounds (size: " +
                          std::to_string(tupleType->memberTypes.size()) + ")");
@@ -8079,8 +8079,8 @@ void LLVMCodegen::visit(vyb::ast::ArrayElementExpression *node) {
 
     // Determine element type for GEP and Load. This is the type GEP operates on.
     llvm::Type* elementType = nullptr;
-    if (node->array->type) { // AST type of the array expression itself
-        vyb::ast::TypeNode* arrAstTypeNode = node->array->type.get();
+    if (typeOfNode(node->array)) { // AST type of the array expression itself
+        vyb::ast::TypeNode* arrAstTypeNode = typeOfNode(node->array).get();
         if (auto arrayAstType = dynamic_cast<vyb::ast::ArrayType*>(arrAstTypeNode)) {
             // If the AST says it's an array T[N], then GEP on a T* needs element type T
             elementType = codegenType(arrayAstType->elementType.get());
@@ -8099,7 +8099,7 @@ void LLVMCodegen::visit(vyb::ast::ArrayElementExpression *node) {
     if (!elementType) {
         // This is a fallback/error if AST type information was insufficient or missing.
         // Relying on LLVM types directly is problematic with opaque pointers.
-        logError(node->loc, "Could not determine element type for array access (R-value) from AST. Array AST type: " + (node->array->type ? node->array->type->toString() : "null"));
+        logError(node->loc, "Could not determine element type for array access (R-value) from AST. Array AST type: " + (typeOfNode(node->array) ? typeOfNode(node->array)->toString() : "null"));
         m_currentLLVMValue = nullptr;
         return;
     }
@@ -8382,7 +8382,7 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
         bool keepPointerMode = m_isLHSOfAssignment &&
                                dynamic_cast<ast::MemberExpression*>(node->object.get()) != nullptr;
         if (keepPointerMode) {
-            if (auto* nm = dynamic_cast<ast::TypeName*>(node->object->type.get())) {
+            if (auto* nm = dynamic_cast<ast::TypeName*>(typeOfNode(node->object).get())) {
                 if (nm->identifier) {
                     const std::string t = nm->identifier->name;
                     if (t == "my" || t == "our" || t == "their" || t == "mild" ||
@@ -8423,12 +8423,12 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
         objectValue->getType()->isStructTy() && node->object &&
         (dynamic_cast<ast::CallExpression*>(node->object.get()) != nullptr ||
          dynamic_cast<ast::ObjectLiteral*>(node->object.get()) != nullptr) &&
-        node->object->type && isKnownStructTypeNode(node->object->type.get()) &&
-        structTypeHasOwnedFields(node->object->type.get())) {
+        typeOfNode(node->object) && isKnownStructTypeNode(typeOfNode(node->object).get()) &&
+        structTypeHasOwnedFields(typeOfNode(node->object).get())) {
         if (auto* st = llvm::dyn_cast<llvm::StructType>(objectValue->getType())) {
             llvm::Value* tmp = builder->CreateAlloca(st, nullptr, "recvstruct.tmp");
             builder->CreateStore(objectValue, tmp);
-            valueTypeMap[tmp] = std::shared_ptr<vyb::ast::TypeNode>(node->object->type->clone());
+            valueTypeMap[tmp] = std::shared_ptr<vyb::ast::TypeNode>(typeOfNode(node->object)->clone());
             std::string nm = "__recv_struct_tmp_" + std::to_string(m_recvStructTempCounter++);
             registerVariable(nm, tmp, objectValue, ast::OwnershipKind::MY, st, /*needsCleanup=*/true);
         }
@@ -8440,11 +8440,11 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
     if (!node->computed) {
         if (auto* tagPropIdent = dynamic_cast<ast::Identifier*>(node->property.get())) {
             if (tagPropIdent->name == "tag") {
-                if (const TaggedEnumInfo* tei = findTaggedEnum(node->object->type.get())) {
+                if (const TaggedEnumInfo* tei = findTaggedEnum(typeOfNode(node->object).get())) {
                     if (tei->isScalar) {
                         m_currentLLVMValue = objectValue;
                     } else if (objectValue->getType()->isPointerTy()) {
-                        llvm::Type* enumTy = codegenType(node->object->type.get());
+                        llvm::Type* enumTy = codegenType(typeOfNode(node->object).get());
                         llvm::Value* loaded = builder->CreateLoad(enumTy, objectValue, "enum.tag.load");
                         m_currentLLVMValue = builder->CreateExtractValue(loaded, 0, "enum.tag");
                     } else {
@@ -8464,11 +8464,11 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
     if (!node->computed) {
         if (auto* valPropIdent = dynamic_cast<ast::Identifier*>(node->property.get())) {
             if (valPropIdent->name == "value") {
-                if (auto* objTn = dynamic_cast<ast::TypeName*>(node->object->type.get())) {
+                if (auto* objTn = dynamic_cast<ast::TypeName*>(typeOfNode(node->object).get())) {
                     const std::string vb = objTn->identifier ? objTn->identifier->name : "";
                     const bool isResult = vb == "Result";
                     if (isResult && objTn->genericArgs.size() >= 1) {
-                        if (const TaggedEnumInfo* tei = findTaggedEnum(node->object->type.get())) {
+                        if (const TaggedEnumInfo* tei = findTaggedEnum(typeOfNode(node->object).get())) {
                             const std::string prim = "Ok";
                             auto payIt = tei->variantPayloadTypes.find(prim);
                             if (payIt != tei->variantPayloadTypes.end() && payIt->second &&
@@ -8477,7 +8477,7 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
                                 llvm::Type* eltTy = payloadTy->getElementType(0);
                                 llvm::Value* enumVal = objectValue;
                                 if (enumVal->getType()->isPointerTy()) {
-                                    llvm::Type* enumTy = codegenType(node->object->type.get());
+                                    llvm::Type* enumTy = codegenType(typeOfNode(node->object).get());
                                     enumVal = builder->CreateLoad(enumTy, enumVal, "enum.value.load");
                                 }
                                 auto tagIt = tei->variantTags.find(prim);
@@ -8680,8 +8680,8 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
             // Remember the field-pointer's AST type so a further member access on
             // it (a nested chain like `a.b.c = x`) can resolve the struct type of
             // the pointer object level by level without an alloca.
-            if (node->type) {
-                valueTypeMap[fieldPtr] = std::shared_ptr<vyb::ast::TypeNode>(node->type->clone());
+            if (typeOfNode(node)) {
+                valueTypeMap[fieldPtr] = std::shared_ptr<vyb::ast::TypeNode>(typeOfNode(node)->clone());
             }
         } else {
             // For reading, always load the value
@@ -8691,8 +8691,8 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
             // (e.g. `self.set.values` / `self.map.keys`) can determine the struct
             // type without an alloca. This is what lets iterators read fields
             // through a nested `their<Struct>` view field.
-            if (node->type) {
-                valueTypeMap[loaded] = std::shared_ptr<vyb::ast::TypeNode>(node->type->clone());
+            if (typeOfNode(node)) {
+                valueTypeMap[loaded] = std::shared_ptr<vyb::ast::TypeNode>(typeOfNode(node)->clone());
             }
             m_currentLLVMValue = loaded;
         }
@@ -9486,16 +9486,16 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
 
     // Infer return type from the semantic FunctionType the analyzer attached to
     // this lambda (its returnType reflects explicit `return` statements for block
-    // bodies). Prefer that over node->body->type, which is null when a block ends
+    // bodies). Prefer that over typeOfNode(node->body), which is null when a block ends
     // in a `return` statement (rather than a tail expression).
     llvm::Type* returnType = llvm::Type::getVoidTy(*context);
-    if (auto* ft = dynamic_cast<ast::FunctionType*>(node->type.get())) {
+    if (auto* ft = dynamic_cast<ast::FunctionType*>(typeOfNode(node).get())) {
         if (ft->returnType) {
             llvm::Type* t = codegenType(ft->returnType.get());
             if (t) returnType = t;
         }
-    } else if (node->body && node->body->type) {
-        llvm::Type* inferredType = codegenType(node->body->type.get());
+    } else if (node->body && typeOfNode(node->body)) {
+        llvm::Type* inferredType = codegenType(typeOfNode(node->body).get());
         if (inferredType && !inferredType->isVoidTy()) {
             returnType = inferredType;
         }
@@ -9991,7 +9991,7 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
     // stored/loaded with the correct type instead of a hardcoded i64. The alloca
     // is created before any branches so it dominates the merge point's load.
     llvm::Type* blockResultTy = nullptr;
-    if (node->type) blockResultTy = codegenType(node->type.get());
+    if (typeOfNode(node)) blockResultTy = codegenType(typeOfNode(node).get());
     // A block that yields no value (e.g. used as a statement with a void trap
     // handler) must not size the slot with a void/codegen-invalid type; fall back
     // to a neutral scalar so the (unused) merge load stays well-formed.
@@ -10630,7 +10630,7 @@ void LLVMCodegen::visit(ast::SelectExpression* node) {
     // resolve by the AST type name (unambiguous) rather than requiring a struct
     // type; fall back to a structural lookup for data-carrying enums.
     const TaggedEnumInfo* matchedEnum =
-        (node->expr && node->expr->type) ? findTaggedEnum(node->expr->type.get()) : nullptr;
+        (node->expr && typeOfNode(node->expr)) ? findTaggedEnum(typeOfNode(node->expr).get()) : nullptr;
     if (!matchedEnum && matchValue && matchValue->getType()->isStructTy()) {
         matchedEnum = findTaggedEnum(matchValue->getType());
     }
@@ -10663,8 +10663,8 @@ void LLVMCodegen::visit(ast::SelectExpression* node) {
             // the bound identifier). Reading the binding later propagates it to the
             // loaded value, so member access can resolve an ownership-wrapped
             // (control-block pointer) payload's fields like `Some(n) -> n.value`.
-            if (b->type) {
-                valueTypeMap[alloca] = std::shared_ptr<vyb::ast::TypeNode>(b->type->clone().release());
+            if (typeOfNode(b)) {
+                valueTypeMap[alloca] = std::shared_ptr<vyb::ast::TypeNode>(typeOfNode(b)->clone().release());
             }
         }
         return payloadTy;
@@ -11158,13 +11158,13 @@ void LLVMCodegen::visit(ast::AwaitExpression* node) {
                 llvm::Value* strVal = builder->CreateLoad(resultTy, slot, "await.string");
                 builder->CreateCall(getOrCreateFreeFunction(),
                                     {builder->CreateBitCast(slot, int8PtrType)});
-                if (node->type) node->type = nullptr;
+                if (typeOfNode(node)) node->type = nullptr;
                 node->type = std::make_shared<ast::TypeName>(node->loc,
                     std::make_unique<ast::Identifier>(node->loc, "String"));
                 m_currentLLVMValue = strVal;
             } else if (resultTy->isVoidTy()) {
                 // Void future: wait for the task's side effects only.
-                if (node->type) node->type = nullptr;
+                if (typeOfNode(node)) node->type = nullptr;
                 node->type = std::make_shared<ast::TypeName>(node->loc,
                     std::make_unique<ast::Identifier>(node->loc, "Void"));
                 m_currentLLVMValue = nullptr;
@@ -11359,9 +11359,9 @@ bool LLVMCodegen::exprProducesOwnedStringTemp(vyb::ast::Expression* expr) {
         auto strOperand = [this](vyb::ast::Expression* e) -> bool {
             if (!e) return false;
             if (dynamic_cast<vyb::ast::StringLiteral*>(e)) return true;
-            if (!e->type) return false;
-            std::string t = resolveTypeAliasToBaseName(e->type.get());
-            if (t.empty()) t = e->type->toString();
+            if (!typeOfNode(e)) return false;
+            std::string t = resolveTypeAliasToBaseName(typeOfNode(e).get());
+            if (t.empty()) t = typeOfNode(e)->toString();
             return t == "String" || t == "string";
         };
         return strOperand(bin->left.get()) || strOperand(bin->right.get());
@@ -11374,9 +11374,9 @@ bool LLVMCodegen::exprProducesOwnedStringTemp(vyb::ast::Expression* expr) {
         if (auto* member = dynamic_cast<vyb::ast::MemberExpression*>(call->callee.get())) {
             if (auto* mident = dynamic_cast<vyb::ast::Identifier*>(member->property.get())) {
                 if (mident->name == "to_string" || mident->name == "toString") {
-                    if (!member->object || !member->object->type) return false;
-                    std::string t = resolveTypeAliasToBaseName(member->object->type.get());
-                    if (t.empty()) t = member->object->type->toString();
+                    if (!member->object || !typeOfNode(member->object)) return false;
+                    std::string t = resolveTypeAliasToBaseName(typeOfNode(member->object).get());
+                    if (t.empty()) t = typeOfNode(member->object)->toString();
                     return t != "String" && t != "string";
                 }
             }
@@ -11393,8 +11393,8 @@ bool LLVMCodegen::exprProducesOwnedStringTemp(vyb::ast::Expression* expr) {
         // hand over a reference the source Vec still reclaims on scope exit,
         // leaving the destination dangling (a use-after-free).
         if (auto* member = dynamic_cast<vyb::ast::MemberExpression*>(call->callee.get())) {
-            if (member->object && member->object->type) {
-                const vyb::ast::TypeNode* ot = member->object->type.get();
+            if (member->object && typeOfNode(member->object)) {
+                const vyb::ast::TypeNode* ot = typeOfNode(member->object).get();
                 bool receiverIsVec = (dynamic_cast<const vyb::ast::VecType*>(ot) != nullptr);
                 if (!receiverIsVec) {
                     if (auto* nn = dynamic_cast<const vyb::ast::TypeName*>(ot)) {
@@ -11404,9 +11404,9 @@ bool LLVMCodegen::exprProducesOwnedStringTemp(vyb::ast::Expression* expr) {
                 if (receiverIsVec) return false;
             }
         }
-        if (call->type) {
-            std::string t = resolveTypeAliasToBaseName(call->type.get());
-            if (t.empty()) t = call->type->toString();
+        if (typeOfNode(call)) {
+            std::string t = resolveTypeAliasToBaseName(typeOfNode(call).get());
+            if (t.empty()) t = typeOfNode(call)->toString();
             return t == "String" || t == "string";
         }
     }
@@ -11415,9 +11415,9 @@ bool LLVMCodegen::exprProducesOwnedStringTemp(vyb::ast::Expression* expr) {
     // created a new buffer and the slot hand-off transfers it. visit(AwaitExpression)
     // records the String result type on this node so its consumer (a binding or a
     // print/scan temp) takes the single owned reference without an extra retain.
-    if (dynamic_cast<ast::AwaitExpression*>(expr) && expr->type) {
-        std::string t = resolveTypeAliasToBaseName(expr->type.get());
-        if (t.empty()) t = expr->type->toString();
+    if (dynamic_cast<ast::AwaitExpression*>(expr) && typeOfNode(expr)) {
+        std::string t = resolveTypeAliasToBaseName(typeOfNode(expr).get());
+        if (t.empty()) t = typeOfNode(expr)->toString();
         return t == "String" || t == "string";
     }
 
@@ -11450,8 +11450,8 @@ bool LLVMCodegen::exprIsOurTransfer(vyb::ast::Expression* expr) {
             if (prop->name == "grab") return true;
         }
     }
-    if (call->type) {
-        std::string t = call->type->toString();
+    if (typeOfNode(call)) {
+        std::string t = typeOfNode(call)->toString();
         if (t.rfind("our<", 0) == 0) return true;
     }
     return false;
@@ -11470,8 +11470,8 @@ bool LLVMCodegen::exprIsMildTransfer(vyb::ast::Expression* expr) {
     if (auto* id = dynamic_cast<vyb::ast::Identifier*>(call->callee.get())) {
         if (id->name == "soft") return true;
     }
-    if (call->type) {
-        std::string t = call->type->toString();
+    if (typeOfNode(call)) {
+        std::string t = typeOfNode(call)->toString();
         if (t.rfind("mild<", 0) == 0) return true;
     }
     return false;
@@ -11597,8 +11597,8 @@ void LLVMCodegen::visit(vyb::ast::TypeofExpression* node) {
 
     // typeof<T>() - compile-time hash of the resolved type name.
     if (node->typeArg) {
-        std::string typeName = node->typeArg->type
-            ? node->typeArg->type->toString() : node->typeArg->toString();
+        std::string typeName = typeOfNode(node->typeArg)
+            ? typeOfNode(node->typeArg)->toString() : node->typeArg->toString();
         uint64_t typeHash = std::hash<std::string>{}(typeName);
         m_currentLLVMValue = llvm::ConstantInt::get(builder->getInt64Ty(), typeHash);
         return;
@@ -11636,8 +11636,8 @@ void LLVMCodegen::visit(vyb::ast::TypeofExpression* node) {
         return;
     }
     std::string typeName = "Unknown";
-    if (node->operand->type) {
-        typeName = node->operand->type->toString();
+    if (typeOfNode(node->operand)) {
+        typeName = typeOfNode(node->operand)->toString();
     }
     uint64_t typeHash = std::hash<std::string>{}(typeName);
     m_currentLLVMValue = llvm::ConstantInt::get(builder->getInt64Ty(), typeHash);
@@ -11721,8 +11721,8 @@ void LLVMCodegen::visit(vyb::ast::TypenameExpression* node) {
 
     // Get the type name from the operand's type field (set by semantic analysis)
     std::string typeName = "Unknown";
-    if (node->operand->type) {
-        typeName = node->operand->type->toString();
+    if (typeOfNode(node->operand)) {
+        typeName = typeOfNode(node->operand)->toString();
     }
 
     // Create a string literal containing the type name
@@ -11798,14 +11798,14 @@ void LLVMCodegen::visit(vyb::ast::AsExpression* node) {
     // extends while `Int8 as Int64` sign-extends; narrowing truncates; equal
     // width is a bit-preserving move (signedness is only tracked at the type).
     std::string srcName;
-    if (node->operand->type) {
-        if (auto tn = dynamic_cast<ast::TypeName*>(node->operand->type.get())) {
+    if (typeOfNode(node->operand)) {
+        if (auto tn = dynamic_cast<ast::TypeName*>(typeOfNode(node->operand).get())) {
             if (tn->identifier) srcName = tn->identifier->name;
         }
     }
     std::string dstName;
-    ast::TypeNode* dstTypeNode = node->targetType->type
-        ? node->targetType->type.get() : node->targetType.get();
+    ast::TypeNode* dstTypeNode = typeOfNode(node->targetType)
+        ? typeOfNode(node->targetType).get() : node->targetType.get();
     if (dstTypeNode) {
         if (auto tn = dynamic_cast<ast::TypeName*>(dstTypeNode)) {
             if (tn->identifier) dstName = tn->identifier->name;

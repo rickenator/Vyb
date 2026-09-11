@@ -12,6 +12,7 @@
 #include <map>
 #include <memory>
 #include <functional>
+#include <type_traits>
 #include <set>
 #include <stack>
 #include <string>
@@ -102,6 +103,27 @@ public:
         if (nodeTypeOf_) return nodeTypeOf_(n);
         return n ? n->type : std::shared_ptr<vyb::ast::TypeNode>();
     }
+    // #223: same query for smart-pointer receivers (unique_ptr/shared_ptr) so
+    // call sites like `node->id->type` become `typeOfNode(node->id)` unchanged
+    // in shape. SFINAE keeps it to objects whose get() yields a Node*; a raw
+    // or non-Node receiver (LLVM Value*, ScopeVariable*, ...) is intentionally
+    // NOT matched here so the raw-pointer overload above or a compile error
+    // (for truly non-Node receivers) surfaces at the call site.
+    template <class P>
+    std::enable_if_t<
+        !std::is_convertible<P, const vyb::ast::Node*>::value &&
+            std::is_convertible<decltype(std::declval<const P&>().get()),
+                                const vyb::ast::Node*>::value,
+        std::shared_ptr<vyb::ast::TypeNode>>
+    typeOfNode(const P& p) const {
+        const vyb::ast::Node* n = p.get();
+        if (nodeTypeOf_) return nodeTypeOf_(n);
+        return n ? n->type : std::shared_ptr<vyb::ast::TypeNode>();
+    }
+    // True when a call expression's type is `mild<...>` (a shared borrow with
+    // retained-on-stow semantics). Made a member (#223) so it resolves the type
+    // through typeOfNode instead of the node->type field.
+    bool isMildTransferExpr(ast::Expression* expr);
 
 private:
     Driver& driver_; // Add a Driver reference

@@ -174,8 +174,8 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
 
     if (node->init && !globalNeedsRuntime) {
         // Make sure the initializer knows its intended type if available
-        if (node->typeNode && !node->init->type) {
-            node->init->type = node->typeNode->clone();
+        if (node->typeNode && !typeOfNode(node->init)) {
+            typeOfNode(node->init) = node->typeNode->clone();
         }
 
         node->init->accept(*this);
@@ -333,10 +333,10 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
         // Register the variable in namedValues
         namedValues[node->id->name] = alloca;
         // Store the type info for this variable (with type substitution if in monomorphization)
-        if (node->id->type) {
+        if (typeOfNode(node->id)) {
             // Check if we need to substitute type parameters
             if (!currentTypeSubstitutions.empty()) {
-                if (auto* typeName = dynamic_cast<ast::TypeName*>(node->id->type.get())) {
+                if (auto* typeName = dynamic_cast<ast::TypeName*>(typeOfNode(node->id).get())) {
                     if (typeName->identifier) {
                         std::string typeStr = typeName->identifier->name;
                         auto substIt = currentTypeSubstitutions.find(typeStr);
@@ -351,25 +351,25 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
                             VYB_CDBG << "DEBUG: Variable '" << node->id->name << "' type substituted in valueTypeMap: "
                                       << typeStr << " -> " << substIt->second << std::endl;
                         } else {
-                            valueTypeMap[alloca] = node->id->type;
+                            valueTypeMap[alloca] = typeOfNode(node->id);
                         }
                     } else {
-                        valueTypeMap[alloca] = node->id->type;
+                        valueTypeMap[alloca] = typeOfNode(node->id);
                     }
                 } else {
-                    valueTypeMap[alloca] = node->id->type;
+                    valueTypeMap[alloca] = typeOfNode(node->id);
                 }
             } else {
-                valueTypeMap[alloca] = node->id->type;
+                valueTypeMap[alloca] = typeOfNode(node->id);
             }
-        } else if (node->init && node->init->type) {
+        } else if (node->init && typeOfNode(node->init)) {
             // Type-less `var` (e.g. the for-in desugar's `__it_<item> = <iterable>
-            // .iter()`): node->id->type is unset, so record the initializer's resolved
+            // .iter()`): typeOfNode(node->id) is unset, so record the initializer's resolved
             // type. Without this, a type-less var holding an owned struct (BTreeMapIter
             // with Vec fields) had no valueTypeMap entry, so scope-exit reclaim
             // (scopeVarIsOwnedStruct) could not find its type and its owned Vec fields
             // leaked -- #192 generator tail.
-            valueTypeMap[alloca] = node->init->type;
+            valueTypeMap[alloca] = typeOfNode(node->init);
         }
 
         // Determine ownership kind from variable's type annotation
@@ -430,7 +430,7 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
         // Only a confirmed `fn` type is treated as a closure: a bare `{ptr, ptr}`
         // layout (e.g. a 2-pointer tuple) must not be reference-counted.
         bool astIsFn = isFnTypeNode(node->typeNode.get())
-            || (node->init != nullptr && isFnTypeNode(node->init->type.get()))
+            || (node->init != nullptr && isFnTypeNode(typeOfNode(node->init).get()))
             || dynamic_cast<ast::FunctionExpression*>(node->init.get()) != nullptr;
         bool closureVar = isClosureStructType(varType) && astIsFn;
         if (closureVar) {
@@ -459,7 +459,7 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
         if (!needsCleanup && ownership == ast::OwnershipKind::MY) {
             const vyb::ast::TypeNode* ownedTy =
                 node->typeNode ? node->typeNode.get()
-                               : (node->init && node->init->type ? node->init->type.get() : nullptr);
+                               : (node->init && typeOfNode(node->init) ? typeOfNode(node->init).get() : nullptr);
             if (ownedTy && structTypeHasOwnedFields(ownedTy)) {
                 needsCleanup = true;
                 VYB_CDBG << "DEBUG: Variable '" << node->id->name
@@ -629,8 +629,8 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
         m_currentLLVMValue = alloca;
         // Propagate type info for struct/class variables
         if (node->typeNode) {
-            // Use resolved type if available (e.g., TypeName->type contains resolved TupleTypeNode or VecType)
-            vyb::ast::TypeNode* typeToStore = node->typeNode->type ? node->typeNode->type.get() : node->typeNode.get();
+            // Use resolved type if available (e.g., typeOfNode(TypeName) contains resolved TupleTypeNode or VecType)
+            vyb::ast::TypeNode* typeToStore = typeOfNode(node->typeNode) ? typeOfNode(node->typeNode).get() : node->typeNode.get();
             valueTypeMap[alloca] = std::shared_ptr<vyb::ast::TypeNode>(typeToStore->clone());
         }
     }
@@ -2137,7 +2137,7 @@ void LLVMCodegen::codegenAsyncLambda(ast::FunctionExpression* node) {
 
     // Inner (non-Future) result type from the semantic FunctionType. After
     // semantic wrapping the lambda's public type is fn(...) -> Future<T>.
-    ast::FunctionType* ft = dynamic_cast<ast::FunctionType*>(node->type.get());
+    ast::FunctionType* ft = dynamic_cast<ast::FunctionType*>(typeOfNode(node).get());
     if (!ft || !ft->returnType) {
         logError(node->loc, "async lambda missing inferred function type");
         m_currentLLVMValue = nullptr; return;
