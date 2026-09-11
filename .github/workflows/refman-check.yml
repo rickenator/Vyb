@@ -14,3 +14,5 @@ jobs:
           python-version: "3.12"
       - name: Validate generated refman matches stdlib
         run: python3 tools/refman.py --check
+      - name: Validate documented suite count matches harness (#226)
+        run: python3 test/suite_count_check.py
