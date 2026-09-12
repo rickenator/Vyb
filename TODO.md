@@ -139,7 +139,7 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
   is a genuine blocking kernel: each 16×16 inner-product tile is staged in the
   `__vyb_kernel_shared` buffer (A-tile [0,256), B-tile [256,512)) with `kernel_barrier`
   between load and compute. `fixtures/cuda/matmul_verify.vyb` (a single-arg descriptor
-  launcher) ran it on an RTX 3090 (sm_86) and verified **all 256** elements of `C = A×B`
+  launcher) ran it on GPU (as tested on an RTX 3090, sm_86) and verified **all 256** elements of `C = A×B`
   against a host reference (`MATMUL PASS`, exit 0).
 - [x] **cuBLAS accelerator binding + cross-validation, verified on silicon** —
   `fixtures/cuda/cublas_verify.vyb` binds the cuBLAS v2 API (`cublasCreate_v2`/`cublasDgemm_v2`/
@@ -152,12 +152,12 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 - [x] **cuFFT accelerator binding, verified on silicon** — `fixtures/cuda/cufft_verify.vyb`
   binds `cufftPlan1d`/`cufftExecZ2Z`/`cufftDestroy` (complex-double plan, `CUFFT_Z2Z=105`,
   forward) and verifies the transform of a **unit impulse** is the exact flat unit
-  spectrum `(1,0)` in all 16 bins on an RTX 3090 — an exact, trig-free DFT reference
+  spectrum `(1,0)` in all 16 bins on GPU (as tested on an RTX 3090) — an exact, trig-free DFT reference
   (`CUFFT CROSS-VALIDATION`, exit 0).
 - [x] **cuDNN accelerator binding (softmax + convolution), verified on silicon** —
   `fixtures/cuda/cudnn_verify.vyb` binds `cudnnCreate`/`cudnnSetTensor4dDescriptor`/
-  `cudnnSoftmaxForward`/`cudnnDestroy` and verifies softmax invariants exp-free on an RTX
-  3090 (positive, sum=1, adjacent ratio=e). `fixtures/cuda/cudnn_conv_verify.vyb` binds the
+  `cudnnSoftmaxForward`/`cudnnDestroy` and verifies softmax invariants exp-free on GPU (as tested on an RTX
+  3090) (positive, sum=1, adjacent ratio=e). `fixtures/cuda/cudnn_conv_verify.vyb` binds the
   full convolution path (`cudnnSetConvolution2dDescriptor` + workspace query +
   `cudnnConvolutionForward`, double, cross-correlation) and verifies an 8×8×3×3 conv (stride
   1, pad 1, SAME) against a host reference on all 64 outputs (`CUDNN CONV CROSS-VALIDATION`,
@@ -208,7 +208,7 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 | Lambda/closure codegen | ~90% | Closure env structs, mutable/move/`our` capture, returned-closure env release shipped; rare receiver edge cases remain |
 | Module system (`import`/`smuggle`/`bundle`) | ~95% | Phases 1.1–1.6 shipped (`ModuleRegistry`, aliases, `share`/bundle visibility, path resolution, and the **stdlib-as-modules** push — every library is a `mod.vyb`); package manager (`vyb.toml`, `vyb build`, `vyb new`) ships separately |
 | FFI (`extern "C"`) | ~98% | Complete: extern blocks, ABI aliases, `#[repr(C)]`, native `--link`, variadics, OpenSSL binding, `vyb bindgen` (MVP + libclang `--full`) (`test/ffi/`, `test/bindgen/`); niche caveat: bindgen macros calling other macros unbound |
-| GPU / device kernels (CUDA/NVPTX) | ~80% | `--kernel` lowering + device intrinsics + acceptance gates + `--gpu` flag ship; shared-memory tiled matmul and cuBLAS (DGEMM), cuFFT (Z2Z), cuDNN (softmax **and convolution**) bindings all **verified on an RTX 3090**; on-silicon carried by a self-hosted GPU runner in CI (`gpu-silicon`); CPU-only gate + arch portability (sm_75→sm_90). Remaining: `bindings/cuda` f64 re-sign (helpers added, pending publisher signature), arch 1.0 baseline decided (sm_80–sm_90) |
+| GPU / device kernels (CUDA/NVPTX) | ~80% | `--kernel` lowering + device intrinsics + acceptance gates + `--gpu` flag ship; shared-memory tiled matmul and cuBLAS (DGEMM), cuFFT (Z2Z), cuDNN (softmax **and convolution**) bindings all **verified on GPU (as tested on an RTX 3090)**; on-silicon carried by a self-hosted GPU runner in CI (`gpu-silicon`); CPU-only gate + arch portability (sm_75→sm_90). Remaining: `bindings/cuda` f64 re-sign (helpers added, pending publisher signature), arch 1.0 baseline decided (sm_80–sm_90) |
 | Standard library | ~85% | Vec, String, HashMap/HashSet, BTreeMap, File I/O, Math, `threads`, `channels`, `tasks`, `asyncs`, `time`, `network` (TCP/UDP/`TcpStream`/`TcpListener`/`UdpSocket`), HTTP server + client, TLS, verified HTTPS client shipped |
 | Introspection (`typeof`/`typename`) | ~75% | Downcasting, type assertions |
 | Auto-serialization | ~80% | Edge cases remain |
