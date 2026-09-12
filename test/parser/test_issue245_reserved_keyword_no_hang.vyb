@@ -1,0 +1,18 @@
+// @test: issue #245 regression - no parser hang on reserved keyword ``use`` as variable name
+// @description: Declaring a variable with the reserved keyword ``use`` (KEYWORD_USE)
+//   previously wedged ModuleParser error recovery into an infinite loop: `use` is
+//   listed in isTopLevelStarter() but has no declaration/statement handler, so
+//   synchronizeToNextDeclaration() hit the depth-0 isTopLevelStarter() break without
+//   consuming, and the parse loop retried the same token forever (a hang). It must
+//   now terminate deterministically with a clean parse error instead of hanging.
+// @category: parser, recovery, regression
+// @expect: fail
+// @expect-error: Parse errors (
+// @parse-only: true
+
+f(s<String>)<String> -> {
+    qa<Int> = s.index_of("q=")
+    use<Int> = qa
+    return "x"
+}
+main()<Int> -> { return 0 }
