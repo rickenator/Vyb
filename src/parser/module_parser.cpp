@@ -36,6 +36,20 @@ bool ModuleParser::isTopLevelStarter(vyb::TokenType tt) {
 // keyword at brace depth 0) or EOF. Anything in an unclosed block in the failed
 // region is skipped too, so recovery never re-enters a half-parsed body.
 void ModuleParser::synchronizeToNextDeclaration() {
+    // Error recovery must ALWAYS make forward progress or the top-level parse
+    // loop can spin forever (issue #245). On entry, consume the token that
+    // failed to parse *before* scanning, so a token we cannot consume can never
+    // wedge the loop. This matters for top-level starter keywords (e.g. \`use\`,
+    // KEYWORD_USE) that appear in isTopLevelStarter() but have no declaration or
+    // statement handler anywhere in the grammar: otherwise the depth-0
+    // isTopLevelStarter() break below fires without consuming, and
+    // ModuleParser::parse() retries the same unparseable token indefinitely,
+    // hanging the compiler. This path is only reachable after a failed parse,
+    // so valid files are unaffected.
+    if (this->peek().type != vyb::TokenType::END_OF_FILE) {
+        this->consume();
+    }
+
     int depth = 0;
     while (this->peek().type != vyb::TokenType::END_OF_FILE) {
         vyb::TokenType tt = this->peek().type;
