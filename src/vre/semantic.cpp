@@ -10601,20 +10601,35 @@ bool SemanticAnalyzer::validateTraitImpl(const std::string& typeName,
         }
     }
 
-    // Check that all required trait methods are implemented
+    // Check every method the bind supplies against the aspect's declaration, and
+    // every aspect method with no implementation against the bind.
     for (const auto& traitMethod : traitInfo->methods) {
-        // Skip methods with default implementations
-        if (traitMethod.hasDefaultImpl) {
-            continue;
-        }
-
         bool found = false;
         for (const auto& implMethod : methods) {
             if (implMethod && implMethod->id &&
                 implMethod->id->name == traitMethod.name) {
 
-                // Validate signature matches
-                if (!traitMethodSignatureMatches(traitMethod, implMethod.get(), traitName, associatedTypeBindingNames)) {
+                // A bind that supplies the method must agree on arity with the
+                // aspect declaration. This is checked even when the aspect method
+                // carries a default implementation: the old `hasDefaultImpl`
+                // skip accepted a bind whose parameter list disagreed with the
+                // contract, and the call still ran with the aspect's extra
+                // parameters unbound (#249).
+                if (implMethod->params.size() != traitMethod.parameterNames.size()) {
+                    addError("Parameter count mismatch for method '" + implMethod->id->name + "': aspect '" +
+                             traitName + "' declares " + std::to_string(traitMethod.parameterNames.size()) +
+                             " parameter(s) (including 'self'), but the bind declares " +
+                             std::to_string(implMethod->params.size()) + ".", implMethod.get());
+                    return false;
+                }
+
+                // Full signature agreement (receiver name, return type) is still
+                // only enforced for required methods: the return-type comparison
+                // below is string-based and does not resolve every equivalent
+                // spelling yet (see the TODO on traitMethodSignatureMatches), so
+                // applying it to default-impl methods would reject valid binds.
+                if (!traitMethod.hasDefaultImpl &&
+                    !traitMethodSignatureMatches(traitMethod, implMethod.get(), traitName, associatedTypeBindingNames)) {
                     VYB_CDBG << "DEBUG: Method signature mismatch for: " << traitMethod.name << std::endl;
                     return false;
                 }
@@ -10625,6 +10640,11 @@ bool SemanticAnalyzer::validateTraitImpl(const std::string& typeName,
         }
 
         if (!found) {
+            // An unchecked method is only acceptable when the aspect supplies a
+            // default implementation; otherwise the bind is incomplete.
+            if (traitMethod.hasDefaultImpl) {
+                continue;
+            }
             VYB_CDBG << "DEBUG: Missing required trait method: " << traitMethod.name << std::endl;
             return false;
         }
