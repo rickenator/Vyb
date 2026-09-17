@@ -1,0 +1,37 @@
+// @test: parenthesized right operand of '*' resolves its operands
+// @description: issue #248 - `a * (b)` must parse as a multiplication, not as a
+//   pointer-type construction (`a*`) followed by a call `(b)`. The type parser
+//   consumes the '*' as a pointer suffix on the left operand and then reads the
+//   '(' as a constructor call, so the left operand is analysed as a type name
+//   and fails to resolve. Covers member reads, a local left operand, a constant
+//   parenthesized divisor, a naked parenthesized member, an expression divisor,
+//   and the paren-on-the-left / no-paren controls that always worked.
+// @category: parser, expression, type-resolution, bind
+// @expect: pass
+// @expect-return: 1342
+// @execute-jit: true
+
+struct T { name<String>, markup<String>, index<Int>, of<Int> }
+
+aspect Calc { go(self)<Int> }
+
+bind Calc -> T {
+    go(self)<Int> -> {
+        a<Int> = self.index * (360 / self.of)   // 240
+        b<Int> = self.index * (360 / 3)         // 240 (constant paren divisor)
+        c<Int> = self.index * (self.of)         // 6   (naked parenthesized member)
+        d<Int> = self.index * (self.of + 1)     // 8   (expression divisor)
+        k<Int> = self.index                     // 2   (local left operand)
+        e<Int> = k * (360 / 3)                  // 240
+        f<Int> = self.index * self.of           // 6   (no paren: always worked)
+        g<Int> = (360 / self.of) * self.index   // 240 (paren on the left)
+        h<Int> = (self.index * 360) / self.of   // 240
+        i<Int> = self.index + (360 / 3)         // 122 ('+' was unaffected)
+        return a + b + c + d + e + f + g + h + i
+    }
+}
+
+main()<Int> -> {
+    t<T> = T { name = "a", markup = "b", index = 2, of = 3 }
+    return t.go()
+}
