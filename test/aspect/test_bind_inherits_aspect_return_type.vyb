@@ -1,0 +1,31 @@
+// @test: a bind body that omits its return annotation inherits the aspect method's declared return type
+// @description: regression for #250. #212 made an omitted return signature
+//   canonical implicit Void, so a bind body that returned a value failed with
+//   "cannot return a value from Void function 'm'" even though the aspect it
+//   implements already declared <Int>. The bind body now inherits the aspect's
+//   declared return type. A bind that returns nothing is unaffected and keeps
+//   the implicit-Void rule.
+// @category: aspect, bind, semantic, regression
+// @expect: pass
+// @expect-return: 5
+// @execute-jit: true
+
+aspect X {
+    type T
+    m(self)<Int> -> { }
+}
+
+struct S {
+    v<Int>
+}
+
+bind X -> S {
+    type T = Int
+    // no return annotation on the bind method: it inherits `<Int>` from the aspect
+    m(self) -> { return 5 }
+}
+
+main()<Int> -> {
+    s<S> = S { v = 1 }
+    return s.m()
+}

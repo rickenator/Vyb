@@ -393,6 +393,11 @@ public:
     void validateReturnArity(ast::ReturnStatement* node);
     std::shared_ptr<ast::TypeNode> cloneTypeNode(ast::TypeNode* type); // Helper to clone type nodes
     ast::TypeNode* substituteSelfType(ast::TypeNode* returnType, const std::string& concreteType); // Substitute Self with concrete type
+    // #250: the return type a bind body inherits from the aspect method it
+    // implements when the bind omits its own annotation. Returns an owned node,
+    // or nullptr when the aspect has no such method / declares no return type
+    // (in which case the omitted-signature rule of #212 still applies).
+    ast::TypeNode* aspectMethodReturnTypeFor(const std::string& aspectName, const std::string& methodName);
     void handleVecMethodCall(ast::CallExpression* node, const std::string& objectName, const std::string& methodName);
     void handleVecMethodCallOnMember(ast::CallExpression* node, ast::VecType* vecType, const std::string& methodName);
     void handleQualifiedAspectCall(ast::CallExpression* node, const std::string& aspectName, const std::string& methodName);

@@ -1,0 +1,28 @@
+// @test: a bind whose return type contradicts the aspect declaration is rejected
+// @description: negative pair for #250. The aspect declares `m(self)<Int>` as a
+//   mandatory method (no arrow, so no default implementation) while the bind
+//   implements it as `<String>` and returns a String. The conformance check must
+//   reject the bind instead of compiling a method that returns the wrong type.
+// @category: aspect, bind, semantic, regression
+// @expect: fail
+// @expect-error: Incomplete implementation
+// @execute-jit: true
+
+aspect X {
+    type T
+    m(self)<Int>
+}
+
+struct S {
+    v<Int>
+}
+
+bind X -> S {
+    type T = Int
+    m(self)<String> -> { return "x" }
+}
+
+main()<Int> -> {
+    s<S> = S { v = 1 }
+    return s.m()
+}
