@@ -967,6 +967,12 @@ int compile_vyb_to_object(const std::string& source, const std::string& fileName
         codegen.generate(parsed.ast.get(), fileName + ".ll");
         std::cout << "LLVM IR generation completed" << std::endl;
 
+        // Never link a binary built through an unresolved enum payload (#251).
+        if (codegen.hasHardCodegenError()) {
+            throw std::runtime_error("Code generation failed for '" + fileName +
+                "'; refusing to link a binary with degraded resolution (an enum payload type never resolved).");
+        }
+
         // Get the LLVM module
         llvm::Module* module = codegen.getModule();
 
@@ -1140,6 +1146,12 @@ int compile_vyb_kernel(const std::string& source, const std::string& fileName, i
         vyb::LLVMCodegen codegen(driver);
         codegen.generate(parsed.ast.get(), fileName + ".ll");
         std::cout << "LLVM IR generation completed" << std::endl;
+
+        // Never emit a device binary built through an unresolved enum payload (#251).
+        if (codegen.hasHardCodegenError()) {
+            throw std::runtime_error("Code generation failed for '" + fileName +
+                "'; refusing to emit a kernel with degraded resolution (an enum payload type never resolved).");
+        }
 
         llvm::Module* module = codegen.getModule();
         if (module->getTargetTriple() != "nvptx64-nvidia-cuda") {
@@ -2615,6 +2627,13 @@ int run_vyb_code(const std::string& source, const std::string& fileName, bool ge
             codegen.getModule()->print(irFile, nullptr);
             irFile.flush();
             std::cout << "Generated LLVM IR to " << irFilename << std::endl;
+        }
+
+        // A module built through an unresolved enum payload still verifies and
+        // would run with degraded resolution: refuse instead (#251).
+        if (codegen.hasHardCodegenError()) {
+            throw std::runtime_error("Code generation failed for '" + fileName +
+                "'; refusing to run a module with degraded resolution (an enum payload type never resolved).");
         }
 
         // Get the LLVM module and context from the code generator

@@ -43,6 +43,7 @@ using namespace vyb;
 
 // Error Logging Utility
 void LLVMCodegen::logError(const SourceLocation& loc, const std::string& message) {
+    if (m_suppressLogging) return;
     std::cerr << "Error at " << (!loc.filePath.empty() ? loc.filePath.c_str() : "unknown_file") << ":" << loc.line << ":" << loc.column << ": " << message << std::endl;
 }
 
@@ -247,23 +248,11 @@ void LLVMCodegen::visit(vyb::ast::Module* node) {
     vyb::ast::Module* previousModule = m_currentVybModule;
     m_currentVybModule = node;
 
-    // TYPE PASS 0 (enums): Register enum declarations BEFORE structs. Struct
-    // field types may reference an enum (e.g. `struct Rec { kindP<KindP> }`),
-    // and struct-field LLVM types are resolved during the struct pass below, so
-    // the enum must already be in userTypeMap/taggedEnumInfo by then. Previously
-    // enums were processed after structs, so any struct field whose type was an
-    // enum failed to resolve ("Unknown type identifier") and, worse, cascaded
-    // into an unsized struct that crashed the compiler on the error path (#181).
-    // Enum payloads only carry scalars (Int/Float/String) in current usage, so
-    // this reorder cannot regress enum-payload -> struct references.
-    VYB_CDBG << "DEBUG: Type pass 0 - processing enum declarations" << std::endl;
-    for (size_t i = 0; i < node->body.size(); ++i) {
-        const auto& stmt = node->body[i];
-        if (stmt && stmt->getType() == vyb::ast::NodeType::ENUM_DECLARATION) {
-            VYB_CDBG << "DEBUG: Type pass 0 - processing enum declaration statement " << i << std::endl;
-            stmt->accept(*this);
-        }
-    }
+    // NOTE (#181/#251): enum DECLARATIONS are now processed after the struct-body
+    // pass below (see "TYPE PASS 0b (enums)"). Struct fields may reference an
+    // enum, so the enum type must be visible to the struct pass; that is handled
+    // by the opaque-enum pre-declaration in the FIRST-OPAQUE PASS instead of by
+    // running the whole enum pass first. See that pass for why (#251).
 
     // FIRST-OPAQUE PASS: pre-declare an opaque LLVM type for every top-level
     // non-generic struct BEFORE any struct body is processed, so a struct field
@@ -288,6 +277,41 @@ void LLVMCodegen::visit(vyb::ast::Module* node) {
         userTypeMap[ns] = ti;
     }
 
+    // TYPE PASS 0 (enums): register every enum that does NOT depend on a struct's
+    // size right now — constant / C-like enums (i64 scalars) and generic enum
+    // templates (monomorphized lazily at use sites) — so a struct field may be an
+    // enum (`struct Rec { kindP<KindP> }`, #181) during the struct pass below.
+    // A top-level non-generic DATA-carrying enum cannot be processed here: its
+    // variant payload may be a struct (`enum FaceSlot { Shell(ShellFace) }`) whose
+    // size is only known after the struct pass, and the payload extent sizes the
+    // tagged-union body. So only pre-declare its opaque LLVM type here (same trick
+    // as struct forward references above) and fill the body in TYPE PASS 0b (#251).
+    VYB_CDBG << "DEBUG: Type pass 0 - processing enum declarations" << std::endl;
+    for (size_t i = 0; i < node->body.size(); ++i) {
+        const auto& stmt = node->body[i];
+        auto* ed = dynamic_cast<vyb::ast::EnumDeclaration*>(stmt.get());
+        if (!ed || !ed->name) continue;
+        bool enumHasData = false, enumAnyValue = false;
+        for (const auto& v : ed->variants) {
+            if (!v) continue;
+            if (!v->associatedTypes.empty()) enumHasData = true;
+            if (v->hasValue) enumAnyValue = true;
+        }
+        // Deferred: non-generic tagged-union enum (struct payloads must be sized).
+        if (enumHasData && !enumAnyValue && ed->genericParams.empty()) {
+            const std::string& en = ed->name->name;
+            if (userTypeMap.find(en) != userTypeMap.end()) continue;
+            llvm::StructType* opaque = llvm::StructType::create(*context, en);
+            UserTypeInfo ti;
+            ti.llvmType = opaque;
+            ti.isStruct = true;
+            userTypeMap[en] = ti;
+            continue;
+        }
+        VYB_CDBG << "DEBUG: Type pass 0 - processing enum declaration statement " << i << std::endl;
+        stmt->accept(*this);
+    }
+
     // FIRST PASS: Process all struct declarations to establish type information
     VYB_CDBG << "DEBUG: First pass - processing struct declarations" << std::endl;
     for (size_t i = 0; i < node->body.size(); ++i) {
@@ -296,6 +320,71 @@ void LLVMCodegen::visit(vyb::ast::Module* node) {
             VYB_CDBG << "DEBUG: Processing struct declaration statement " << i << std::endl;
             stmt->accept(*this);
         }
+    }
+
+    // TYPE PASS 0b (enums): now that every struct body is set, fill the deferred
+    // tagged-union enum bodies. A variant payload may be a struct OR another
+    // tagged-union enum (`enum B { Y(A) }`), which is also filled here, so an enum
+    // can only be sized once every one of its payload types is a sized type:
+    // iterate to a fixpoint and let enums whose payload is not sized yet wait for
+    // a later round. Declaration order is therefore irrelevant (#251). An enum
+    // still unsized after the fixpoint has a circular/unresolvable payload and is
+    // handed to visit() so the normal error path reports it.
+    VYB_CDBG << "DEBUG: Type pass 0b - processing tagged-union enum declarations" << std::endl;
+    auto isDeferredEnum = [&](vyb::ast::EnumDeclaration* ed) -> bool {
+        if (!ed || !ed->name) return false;
+        bool enumHasData = false, enumAnyValue = false;
+        for (const auto& v : ed->variants) {
+            if (!v) continue;
+            if (!v->associatedTypes.empty()) enumHasData = true;
+            if (v->hasValue) enumAnyValue = true;
+        }
+        return enumHasData && !enumAnyValue && ed->genericParams.empty();
+    };
+    auto enumBodyFilled = [&](const std::string& en) -> bool {
+        auto it = userTypeMap.find(en);
+        if (it == userTypeMap.end() || !it->second.llvmType) return false;
+        auto* st = llvm::dyn_cast<llvm::StructType>(it->second.llvmType);
+        return st && !st->isOpaque();
+    };
+    auto enumPayloadsSized = [&](vyb::ast::EnumDeclaration* ed) -> bool {
+        // Speculative: a not-yet-sized payload is expected mid-fixpoint, so this
+        // probe must not emit diagnostics. The final round below runs visit()
+        // unsuppressed, so a genuine failure is still reported exactly once.
+        bool prevSuppress = m_suppressLogging;
+        m_suppressLogging = true;
+        bool sized = true;
+        for (const auto& v : ed->variants) {
+            if (!v) continue;
+            for (const auto& t : v->associatedTypes) {
+                if (!t) continue;
+                llvm::Type* ft = codegenType(t.get());
+                if (!ft || !ft->isSized()) { sized = false; break; }
+            }
+            if (!sized) break;
+        }
+        m_suppressLogging = prevSuppress;
+        return sized;
+    };
+    for (bool progressed = true; progressed; ) {
+        progressed = false;
+        for (size_t i = 0; i < node->body.size(); ++i) {
+            auto* ed = dynamic_cast<vyb::ast::EnumDeclaration*>(node->body[i].get());
+            if (!isDeferredEnum(ed)) continue;
+            if (enumBodyFilled(ed->name->name)) continue;
+            if (!enumPayloadsSized(ed)) continue;
+            VYB_CDBG << "DEBUG: Type pass 0b - processing enum declaration statement " << i << std::endl;
+            node->body[i]->accept(*this);
+            progressed = true;
+        }
+    }
+    // Final round: a payload type that is still unsized is circular or
+    // undeclared; visit() reports it rather than leaving the enum silently opaque.
+    for (size_t i = 0; i < node->body.size(); ++i) {
+        auto* ed = dynamic_cast<vyb::ast::EnumDeclaration*>(node->body[i].get());
+        if (!isDeferredEnum(ed)) continue;
+        if (enumBodyFilled(ed->name->name)) continue;
+        node->body[i]->accept(*this);
     }
 
     // Type metadata for every top-level struct is generated AFTER all struct
