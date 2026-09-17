@@ -1117,6 +1117,44 @@ ast::TypeNode* SemanticAnalyzer::substituteSelfType(ast::TypeNode* returnType, c
     return returnType->clone().release();
 }
 
+// #212 made an omitted return signature canonical implicit Void. For an aspect
+// implementation the signature is not absent — it is declared by the aspect — so
+// the canonical-Void rule must not override it (#250). This resolves the return
+// type a bind body inherits from the aspect method it implements.
+ast::TypeNode* SemanticAnalyzer::aspectMethodReturnTypeFor(const std::string& aspectName,
+                                                           const std::string& methodName) {
+    if (aspectName.empty() || methodName.empty()) return nullptr;
+
+    TraitInfo* info = findTrait(aspectName);
+    if (!info) return nullptr;
+
+    ast::TypeNode* declared = nullptr;
+    for (const TraitMethod& method : info->methods) {
+        if (method.name == methodName && method.returnType) {
+            declared = method.returnType;
+            break;
+        }
+    }
+    if (!declared) return nullptr;
+
+    // `type T = Int` in the bind supplies the aspect's associated type, so a
+    // signature that names it (`-> T`) means the bind's assignment.
+    if (auto* typeName = dynamic_cast<ast::TypeName*>(declared)) {
+        if (typeName->identifier && typeName->genericArgs.empty()) {
+            auto bindingIt = currentImplAssociatedTypeBindings.find(typeName->identifier->name);
+            if (bindingIt != currentImplAssociatedTypeBindings.end() && bindingIt->second) {
+                return bindingIt->second->clone().release();
+            }
+        }
+    }
+
+    // `Self` in the signature is the bind target (e.g. bind Display -> Box<Int>).
+    if (currentImplType) {
+        return substituteSelfType(declared, currentImplType->toString());
+    }
+    return declared->clone().release();
+}
+
 
 // Basic visit methods for expressions (Single definitions)
 void SemanticAnalyzer::visit(ast::Identifier* node) {
@@ -6980,18 +7018,38 @@ void SemanticAnalyzer::visit(ast::ReturnStatement* node) {
             }
             if (isVoidFn && lambdaStack.empty() &&
                     !(currentFunction->id && currentFunction->id->name == "main")) {
-                // `main` is the program entry and is exempt: a `main()` with an
-                // omitted signature may still `return` its program result, which
-                // is auto-serialized by codegen (a pervasive test/harness idiom).
-                //
-                // A non-empty `lambdaStack` means this `return` belongs to a
-                // nested closure (its own return type), not the enclosing Void
-                // function — e.g. `async_spawn(|| -> { ...; return 0 })` inside a
-                // Void procedure. Don't misattribute the closure's return to the
-                // surrounding function.
-                addError("cannot return a value from Void function '" +
-                         (currentFunction->id ? currentFunction->id->name : "<anon>") + "'", node);
-                return;
+                // #250: a bind body may omit its return annotation. The parser
+                // materializes that omission as a synthesized `Void` (the #212
+                // canonical implicit Void), but for an aspect implementation the
+                // signature is not absent — the aspect declared it. So a
+                // `return <value>` in a bind inherits the aspect method's declared
+                // return type instead of being rejected as a Void return. Only
+                // this error path changes: a bind that returns nothing keeps the
+                // Void rule exactly as before.
+                bool inheritedFromAspect = false;
+                if (processingTraitOrBindMethod && !currentImplTraitName.empty() && currentFunction->id) {
+                    ast::TypeNode* inherited = aspectMethodReturnTypeFor(currentImplTraitName,
+                                                                        currentFunction->id->name);
+                    if (inherited) {
+                        inherited->accept(*this);
+                        currentFunction->returnTypeNode.reset(inherited);
+                        inheritedFromAspect = true;
+                    }
+                }
+                if (!inheritedFromAspect) {
+                    // `main` is the program entry and is exempt: a `main()` with an
+                    // omitted signature may still `return` its program result, which
+                    // is auto-serialized by codegen (a pervasive test/harness idiom).
+                    //
+                    // A non-empty `lambdaStack` means this `return` belongs to a
+                    // nested closure (its own return type), not the enclosing Void
+                    // function — e.g. `async_spawn(|| -> { ...; return 0 })` inside a
+                    // Void procedure. Don't misattribute the closure's return to the
+                    // surrounding function.
+                    addError("cannot return a value from Void function '" +
+                             (currentFunction->id ? currentFunction->id->name : "<anon>") + "'", node);
+                    return;
+                }
             }
         }
         // Bare Option constructor injection for `return Some(x)` / `return None`

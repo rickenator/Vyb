@@ -167,7 +167,7 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 ### Running the test suite
 
 ```bash
-# 1151 .vyb tests exercised through compile + run + output/return checks
+# 1153 .vyb tests exercised through compile + run + output/return checks
 python3 test/run_tests.py --vyb ./build/vyb --test-dir test --execute-jit
 ```
 
@@ -932,6 +932,14 @@ bind Drawable -> Circle {
 - A bind's methods write against `self` (the bound type's fields) exactly like
   instance methods. Calling `account.transfer(...)` dispatches through the
   type's bound aspect.
+- A bind method's signature must agree with the aspect declaration it implements:
+  the same parameter count (including `self`), `self` as the first parameter, and
+  the aspect's declared return type. A bind whose parameter list disagrees is
+  rejected with `Parameter count mismatch for method '<name>': …`.
+- A bind body that **omits its return annotation inherits the aspect method's
+  declared return type**: `m(self) -> { return 5 }` implementing `m(self)<Int>`
+  is an `<Int>` method, not a `Void` one. Everywhere else, an omitted return
+  signature still means implicit `Void`.
 
 This "aspect + bind" pair is the language's answer to interfaces/traits: type
 safety and dispatch at compile time, with the freedom to bind multiple aspects
@@ -2481,7 +2489,7 @@ runtime points a single process at a list of tests if needed.
 
 Canonical suite runner (wired into CTest as `run-tests`):
 ```bash
-python3 test/run_tests.py --vyb ./build/vyb --test-dir test --execute-jit   # full suite (1151 tests)
+python3 test/run_tests.py --vyb ./build/vyb --test-dir test --execute-jit   # full suite (1153 tests)
 python3 test/run_tests.py --vyb ./build/vyb --test-dir test --category async    # filter by category
 ```
 The auxiliary parallel harness (`test_harness.py`, `triage_tool.py`) adds HTML
