@@ -6542,6 +6542,16 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                             llvm::Value* selfArg = recvPtr;
                             if (receiverIsByRef) {
                                 selfArg = builder->CreateLoad(llvm::PointerType::get(*context, 0), recvPtr, "byref.aspect.recv.load");
+                            } else if (!selfArg->getType()->isPointerTy()) {
+                                // A temporary receiver (e.g. `v.get(0)`, a method chain, or a
+                                // struct-returning call) yields the struct value itself and has
+                                // no address of its own. Materialize it in a stack slot so the
+                                // receiver load below has a pointer operand instead of
+                                // emitting `load %T, %T <value>` (#253).
+                                llvm::AllocaInst* recvSlot =
+                                    builder->CreateAlloca(selfArg->getType(), nullptr, "aspect.recv.temp");
+                                builder->CreateStore(selfArg, recvSlot, "aspect.recv.temp.store");
+                                selfArg = recvSlot;
                             }
                             bool selfIsByRef = implFunc->getArg(0)->getType()->isPointerTy();
                             std::vector<llvm::Value*> argValues;
