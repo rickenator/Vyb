@@ -1,0 +1,53 @@
+// @test: bind methods with arity 1, 2 and 3 resolve self fields and their own arguments
+// @description: regression for #249. A bind method with more than one parameter
+//   (self plus any argument) must resolve `self.<field>` and its own parameters.
+//   The reported symptom was a bind method whose body multiplied a parameter by
+//   a parenthesised operand (`k * (360 / n)`): the parser read the postfix `*`
+//   as a pointer type and the parenthesised operand as a constructor argument
+//   list, so the body compiled through an unresolvable `*k(...)` type and the
+//   binary still ran, printing 6 instead of 240. This test covers arity 1
+//   (self only), arity 2 (self + one argument) and arity 3 (self + two
+//   arguments), each reading a `self` field and its own arguments.
+// @category: aspect, bind, parser, regression
+// @expect: pass
+// @expect-return: 0
+// @execute-jit: true
+
+aspect Turn {
+    type Item
+    label(self)<String> -> { }
+    turn(self, n<Int>)<Int> -> { }
+    spin(self, n<Int>, k<Int>)<Int> -> { }
+    wind(self, n<Int>, k<Int>, m<Int>)<Int> -> { }
+}
+
+struct Rotor {
+    name<String>,
+    of<Int>
+}
+
+bind Turn -> Rotor {
+    type Item = String
+    // arity 1: self only, reads a field
+    label(self)<String> -> { return self.name }
+    // arity 2: self + one argument, reads a field and multiplies by a
+    // parenthesised operand (the #249 shape)
+    turn(self, n<Int>)<Int> -> { return self.of * (360 / n) }
+    // arity 3: self + two arguments, uses both its own arguments
+    spin(self, n<Int>, k<Int>)<Int> -> { return k * (360 / n) }
+    // arity 4: self + three arguments, mixes field and arguments
+    wind(self, n<Int>, k<Int>, m<Int>)<Int> -> { return (self.of + k) * (m / n) }
+}
+
+main()<Int> -> {
+    r<Rotor> = Rotor { name = "rotor", of = 4 }
+    ok<Int> = 0
+    if (r.label() != "rotor") { ok = 1 }
+    // 4 * (360 / 3) = 480
+    if (r.turn(3) != 480) { ok = 2 }
+    // 2 * (360 / 3) = 240 (the issue's expected value)
+    if (r.spin(3, 2) != 240) { ok = 3 }
+    // (4 + 6) * (9 / 3) = 30
+    if (r.wind(3, 6, 9) != 30) { ok = 4 }
+    return ok
+}

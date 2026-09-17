@@ -1,0 +1,26 @@
+// @test: bind method whose parameter count does not match the aspect is rejected
+// @description: negative pair for #249's arity coverage. An aspect declares
+//   `spin(self, n, k)` (arity 3) but the bind implements `spin(self, n)`
+//   (arity 2); the signature-match check must reject the bind instead of
+//   compiling a body whose arguments cannot be resolved - and it must fail
+//   loudly rather than emit a runnable binary.
+// @category: aspect, bind, parser, regression
+// @expect: fail
+// @expect-error: Parameter count mismatch
+// @execute-jit: true
+
+aspect Turn {
+    type Item
+    spin(self, n<Int>, k<Int>)<Int> -> { }
+}
+
+struct Rotor {
+    of<Int>
+}
+
+bind Turn -> Rotor {
+    type Item = Int
+    spin(self, n<Int>)<Int> -> { return self.of * (360 / n) }
+}
+
+main()<Int> -> { r<Rotor> = Rotor { of = 4 }  return r.spin(3) }
