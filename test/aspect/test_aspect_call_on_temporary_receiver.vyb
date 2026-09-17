@@ -1,0 +1,43 @@
+// @test: aspect methods called directly on temporary receivers (#253)
+// @description: the original repro — `v.get(0).title()` — plus the other shapes that
+//   yield the struct by value rather than by address: a field-access temporary
+//   (`c.faces.get(0)`), a call-return temporary (`make()`), and a nested element
+//   (`outer.get(0).get(0)`). The receiver has no address of its own, so the aspect
+//   receiver load must spill it to a stack slot; before this fix the module failed
+//   verification with `Load operand must be a pointer` and the compiler aborted.
+// @category: aspect, bind, vec, temporaries, codegen, regression
+// @expect: pass
+// @expect-output: field
+// @expect-return: 0
+
+aspect Face { title(self)<String> -> { } }
+
+struct F { name<String> }
+
+bind Face -> F {
+    title(self)<String> -> { return self.name }
+}
+
+struct Card { faces<Vec<F>> }
+
+make()<F> -> { return F { name = "chain" } }
+
+main()<Int> -> {
+    v<Vec<F>> = Vec()
+    v.push(F { name = "vector-temp" })
+    println(v.get(0).title())              // #253 repro: element temporary
+
+    c<Card> = Card { faces = Vec() }
+    c.faces.push(F { name = "field" })
+    println(c.faces.get(0).title())        // field-access temporary
+
+    println(make().title())                // call-return temporary
+
+    inner<Vec<F>> = Vec()
+    inner.push(F { name = "nested" })
+    outer<Vec<Vec<F>>> = Vec()
+    outer.push(inner)
+    println(outer.get(0).get(0).title())   // nested element temporary
+
+    return 0
+}
