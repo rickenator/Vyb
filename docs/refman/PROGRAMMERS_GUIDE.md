@@ -167,7 +167,7 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 ### Running the test suite
 
 ```bash
-# 1153 .vyb tests exercised through compile + run + output/return checks
+# 1155 .vyb tests exercised through compile + run + output/return checks
 python3 test/run_tests.py --vyb ./build/vyb --test-dir test --execute-jit
 ```
 
@@ -781,6 +781,15 @@ flag<Int> = FileFlag::READ | FileFlag::WRITE   # combine with |
 Constant members can be combined with the bitwise `|` — this is exactly how
 `Socket::AF_INET`, `SOCK_STREAM`, and `IPPROTO_TCP` and the `FileFlag` set are
 used in `network` and `io`.
+
+Data-carrying enums hold payloads (`Circle(Float)`, `FaceSlot(ShellFace)`) and
+are matched with `match` ([§3.9](#39-match-statements)). A payload type may be a
+primitive, a type parameter, or a **struct** — including a struct field of such
+an enum type, whose own fields resolve normally. A payload type that cannot be
+resolved, such as a struct that contains the very enum declaring it (no
+computable layout), is a **hard error**: the compiler reports it and refuses to
+run or link the module instead of executing with the payload degraded to an
+integer slot.
 
 ### 3.11 Operators
 
@@ -2489,7 +2498,7 @@ runtime points a single process at a list of tests if needed.
 
 Canonical suite runner (wired into CTest as `run-tests`):
 ```bash
-python3 test/run_tests.py --vyb ./build/vyb --test-dir test --execute-jit   # full suite (1153 tests)
+python3 test/run_tests.py --vyb ./build/vyb --test-dir test --execute-jit   # full suite (1155 tests)
 python3 test/run_tests.py --vyb ./build/vyb --test-dir test --category async    # filter by category
 ```
 The auxiliary parallel harness (`test_harness.py`, `triage_tool.py`) adds HTML

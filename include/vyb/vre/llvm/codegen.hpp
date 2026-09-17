@@ -121,6 +121,13 @@ public:
     // through typeOfNode instead of the node->type field.
     bool isMildTransferExpr(ast::Expression* expr);
 
+    // Hard codegen failures: the generated module must not be run or linked.
+    // Used for a defect that would otherwise let a binary execute with degraded
+    // resolution -- an enum variant whose payload type never resolved (#251),
+    // where the module still verifies and `main` still returns 0.
+    void flagHardCodegenError() { m_hardCodegenError = true; }
+    bool hasHardCodegenError() const { return m_hardCodegenError; }
+
 private:
     Driver& driver_; // Add a Driver reference
     // Bound to the semantic analyzer's TypeTable query (#223). null when no
@@ -129,6 +136,9 @@ private:
     std::unique_ptr<llvm::LLVMContext> context;
     std::unique_ptr<llvm::Module> module;
     std::unique_ptr<llvm::IRBuilder<>> builder;
+    // Set by flagHardCodegenError(): the module reached codegen through a
+    // failure that only the verifier would otherwise catch (#251).
+    bool m_hardCodegenError = false;
 
     // Debug information support
     std::unique_ptr<llvm::DIBuilder> debugBuilder;
@@ -341,6 +351,10 @@ private:
 
     // Error and warning reporting
     void logError(const SourceLocation& loc, const std::string& message);
+    // Speculative type probes (e.g. "is this enum's payload sized yet?") must not
+    // emit diagnostics; the enum is re-processed without suppression afterwards,
+    // so a genuine failure is still reported exactly once.
+    bool m_suppressLogging = false;
     void logWarning(const SourceLocation& loc, const std::string& message); // Added this line
     llvm::Value* createEntryBlockAlloca(llvm::Function* func, const std::string& varName, llvm::Type* type);
     llvm::AllocaInst* createEntryBlockAlloca(llvm::Type* type, const std::string& name);

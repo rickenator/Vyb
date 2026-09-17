@@ -1565,11 +1565,20 @@ void LLVMCodegen::visit(vyb::ast::EnumDeclaration* node) {
                 llvm::Type* ft = codegenType(t.get());
                 if (!ft) {
                     logError(variantNode->loc, "Could not resolve payload type for variant " + vname);
+                    flagHardCodegenError(); // do not run a module with an unresolved payload (#251)
                     ft = llvm::Type::getInt64Ty(*context);
                 }
                 fieldTypes.push_back(ft);
             }
             llvm::StructType* payloadTy = llvm::StructType::get(*context, fieldTypes, false);
+            if (!payloadTy->isSized()) {
+                // A circular payload (e.g. a struct that contains this very enum)
+                // has no computable size: keep the pre-existing i64 fallback and
+                // report it, instead of asking DataLayout to size an unsized type.
+                logError(variantNode->loc, "Could not resolve payload type for variant " + vname);
+                flagHardCodegenError(); // an unsized payload has no computable layout (#251)
+                payloadTy = llvm::StructType::get(*context, {llvm::Type::getInt64Ty(*context)}, false);
+            }
             info.variantPayloadTypes[vname] = payloadTy;
             const llvm::DataLayout& dl = module->getDataLayout();
             llvm::TypeSize sz = dl.getTypeAllocSize(payloadTy);
@@ -1583,7 +1592,20 @@ void LLVMCodegen::visit(vyb::ast::EnumDeclaration* node) {
 
     info.payloadBytes = payloadBytes;
     llvm::Type* dataArrayTy = llvm::ArrayType::get(llvm::Type::getInt8Ty(*context), payloadBytes);
-    llvm::StructType* enumStruct = llvm::StructType::get(*context, {llvm::Type::getInt64Ty(*context), dataArrayTy}, false);
+    // Reuse the opaque type pre-declared by visit(Module) (#251) so a struct
+    // field that already referenced this enum keeps the SAME LLVM type; filling
+    // its body here yields exactly the { i64 tag, [N x i8] data } layout the
+    // literal struct below would have produced.
+    llvm::StructType* enumStruct = nullptr;
+    auto existing = userTypeMap.find(enumName);
+    if (existing != userTypeMap.end() && existing->second.isStruct && existing->second.llvmType) {
+        enumStruct = llvm::dyn_cast<llvm::StructType>(existing->second.llvmType);
+    }
+    if (!enumStruct) {
+        enumStruct = llvm::StructType::get(*context, {llvm::Type::getInt64Ty(*context), dataArrayTy}, false);
+    } else if (enumStruct->isOpaque()) {
+        enumStruct->setBody({llvm::Type::getInt64Ty(*context), dataArrayTy}, false);
+    }
     info.llvmType = enumStruct;
 
     // Register the type so codegenType('Shape') resolves and variables can hold it.

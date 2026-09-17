@@ -1,0 +1,30 @@
+// @test: Struct payload variants resolve, including as a field of a struct (#251)
+// @description: an enum whose payloads are structs resolves every variant payload, and a
+//   struct that holds that enum keeps resolving its own later fields — the #251
+//   poisoning case, where `struct Card { app, faces<Vec<FaceSlot>>, target, tucked }`
+//   lost `self.target` once the enum's struct payloads failed to resolve.
+// @category: enums, payload, struct, resolution, regression
+// @expect: pass
+// @expect-return: 42
+
+import collections
+
+struct ShellFace { name<String> }
+struct MachineFace { pid<Int> }
+enum FaceSlot { Shell(ShellFace), Machine(MachineFace) }
+
+aspect CardOps { type B
+    tgt(self)<Int> -> { }
+}
+
+struct Card { app<Int>, faces<Vec<FaceSlot>>, target<Int>, tucked<Bool> }
+
+bind CardOps -> Card {
+    type B = Int
+    tgt(self)<Int> -> { return self.target }
+}
+
+main()<Int> -> {
+    c<Card> = Card { app = 1, faces = Vec(), target = 42, tucked = false }
+    return c.tgt()
+}

@@ -1,0 +1,13 @@
+// @test: An unresolvable enum payload is a hard error, not a degraded run (#251)
+// @description: a payload type that never resolves — a struct that contains the very enum
+//   declaring it — has no computable layout. The module still verifies at the LLVM level,
+//   so the compiler must refuse to run or link it instead of executing with the payload
+//   silently degraded to i64.
+// @category: enums, payload, error-handling, regression
+// @expect: fail
+// @expect-error: Could not resolve payload type for variant
+
+struct S { e<E> }
+enum E { V(S) }
+
+main()<Int> -> { return 0 }
