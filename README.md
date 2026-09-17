@@ -73,7 +73,7 @@ git clone https://github.com/rickenator/Vyb.git
 cd Vyb
 mkdir -p build && cd build && LLVM_DIR=/usr/lib/llvm-18/cmake cmake .. && make -j$(nproc) && cd ..
 
-# Run the full test suite (1148 .vyb tests) with the canonical harness
+# Run the full test suite (1149 .vyb tests) with the canonical harness
 python3 test/run_tests.py --vyb build/vyb --test-dir test --execute-jit
 
 # Run your first Vyb program
@@ -2876,7 +2876,7 @@ python3 test_harness.py --directory test/units --timeout 30
 - **Total Tests**: 1148 `.vyb` tests (full suite, all passing as of v0.7.5)
 - **Coverage Areas**: Language features, control flow, error handling, type system, math, strings, introspection
 - **Test Types**: Feature tests (with `@expect: pass`), future-feature docs (with `@expect: fail`), parser tests
-- **Success Rate**: 100% (1148/1148) on the current suite
+- **Success Rate**: 100% (1149/1149) on the current suite
 
 ### 🔧 **Syntax Migration Tools**
 

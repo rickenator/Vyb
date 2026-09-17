@@ -513,7 +513,14 @@ namespace vyb {
                 TypeParser type_parser(tokens_, pos_, current_file_path_, *this); // Pass *this for ExpressionParser reference
                 ast::TypeNodePtr type_node = type_parser.parse(); // Call parse() instead of parse_type_annotation()
 
-                if (type_node && match(TokenType::LPAREN)) { // Successfully parsed a type and found '('
+                // `a * (b)` in an expression position is a multiplication, but the type
+                // parser consumes the `*` as a pointer suffix on `a` and would then read
+                // the `(` as a constructor call on that pointer type (`a*`). Pointer
+                // types have no constructor form, so backtrack and let the expression
+                // parse the multiplication instead.
+                bool type_node_is_pointer =
+                    type_node && dynamic_cast<ast::PointerType*>(type_node.get()) != nullptr;
+                if (type_node && !type_node_is_pointer && match(TokenType::LPAREN)) { // Successfully parsed a type and found '('
                     std::vector<vyb::ast::ExprPtr> arguments;
                     SourceLocation call_loc = previous_token().location;
                     if (!match(TokenType::RPAREN)) {
