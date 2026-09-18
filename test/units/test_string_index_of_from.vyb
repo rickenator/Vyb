@@ -1,0 +1,19 @@
+// @test: String::index_of_from(needle, start) (#257)
+// @description: offset lookup returns the first occurrence at or after `start`,
+//   returns -1 when absent, and matches index_of(needle) for start = 0.
+// @category: string, units, regression
+// @expect: pass
+// @expect-output: a=1 b=4 c=-1 d=-1 e=1 f=3
+
+main()<Int> -> {
+    s<String> = "abcabc"
+    a<Int> = s.index_of_from("bc", 0)
+    b<Int> = s.index_of_from("bc", 2)
+    c<Int> = s.index_of_from("bc", 5)
+    d<Int> = s.index_of_from("zz", 0)
+    e<Int> = s.index_of("bc")
+    f<Int> = s.index_of_from("abc", 1)
+    println("a=" + a.to_string() + " b=" + b.to_string() + " c=" + c.to_string() +
+            " d=" + d.to_string() + " e=" + e.to_string() + " f=" + f.to_string())
+    return 0
+}

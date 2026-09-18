@@ -202,6 +202,11 @@ aspect StringOps {
     split(self<String>, sep<String>)<Vec<String>> -> { }
     # Index of the first occurrence of `needle`, or -1 when absent.
     index_of(self<String>, needle<String>)<Int> -> { }
+    # Index of the first occurrence of `needle` at or after `start`, or -1 when
+    # absent. No substring is allocated, so scanning a line for several keys stays
+    # linear instead of the copy-and-rescan suffix workaround. `start` is clamped
+    # to 0 from below, and `index_of_from(needle, 0)` matches `index_of(needle)`.
+    index_of_from(self<String>, needle<String>, start<Int>)<Int> -> { }
 }
 
 share(all)
@@ -242,6 +247,31 @@ bind StringOps -> String {
         if (sn == 0) { return 0 }
         if (sn > n) { return -1 }
         i<Int> = 0
+        while (i <= n - sn) {
+            j<Int> = 0
+            ok<Bool> = true
+            while (ok && j < sn) {
+                if (self.char_at(i + j) != needle.char_at(j)) {
+                    ok = false
+                }
+                j = j + 1
+            }
+            if (ok) { return i }
+            i = i + 1
+        }
+        return -1
+    }
+    index_of_from(self<String>, needle<String>, start<Int>)<Int> -> {
+        n<Int> = self.len()
+        sn<Int> = needle.len()
+        off<Int> = start
+        if (off < 0) { off = 0 }
+        if (sn == 0) {
+            if (off > n) { return -1 }
+            return off
+        }
+        if (sn > n || off > n - sn) { return -1 }
+        i<Int> = off
         while (i <= n - sn) {
             j<Int> = 0
             ok<Bool> = true
