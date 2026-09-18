@@ -10747,6 +10747,38 @@ void LLVMCodegen::visit(ast::SelectExpression* node) {
         matchedEnum = findTaggedEnum(matchValue->getType());
     }
 
+    // #292: a select over a native optional `T?` (a `{ value, hasValue }` struct)
+    // takes a `nil` arm for the absent state and a bare identifier arm for the
+    // present state. Detect it from the scrutinee's AST type, or structurally
+    // from the two-field struct whose second element is an i1 flag.
+    bool matchedOptional =
+        (node->expr && typeOfNode(node->expr)) &&
+        dynamic_cast<ast::OptionalType*>(typeOfNode(node->expr).get()) != nullptr;
+    if (!matchedOptional && matchValue && matchValue->getType()->isStructTy()) {
+        auto* st = llvm::dyn_cast<llvm::StructType>(matchValue->getType());
+        if (st && st->getNumElements() == 2 && st->getElementType(1)->isIntegerTy(1)) {
+            matchedOptional = true;
+        }
+    }
+
+    // #292: bind the payload (field 0) of an optional present arm pattern as a
+    // local named after the pattern identifier, recording its AST payload type so
+    // member access on the bound name resolves. Used by the result-type inference
+    // preview (the first arm's body sees its binding) and by the real case loop.
+    auto bindOptionalPattern = [&](const ast::ExprPtr& pattern) -> bool {
+        if (!matchedOptional || !pattern) return false;
+        auto* pid = dynamic_cast<ast::Identifier*>(pattern.get());
+        if (!pid) return false;
+        llvm::Value* payload = builder->CreateExtractValue(matchValue, 0, "select.opt.payload");
+        llvm::AllocaInst* alloca = createEntryBlockAlloca(payload->getType(), pid->name);
+        builder->CreateStore(payload, alloca);
+        namedValues[pid->name] = alloca;
+        if (typeOfNode(pid)) {
+            valueTypeMap[alloca] = std::shared_ptr<vyb::ast::TypeNode>(typeOfNode(pid)->clone().release());
+        }
+        return true;
+    };
+
     // Bind the payload fields of an enum-variant arm pattern (e.g. `Circle(r)`)
     // as locals in `namedValues`. Used both by the result-type inference preview
     // (so the first arm's body can resolve its bindings) and by the real case
@@ -10856,6 +10888,7 @@ void LLVMCodegen::visit(ast::SelectExpression* node) {
         // addition to the real arm's alloca, freeing the same buffer twice.
         auto savedInferScopeStack = scopeStack;
         bindVariantPattern(node->cases[0].first);
+        bindOptionalPattern(node->cases[0].first);
         node->cases[0].second->accept(*this);
         namedValues = std::move(savedInferNamedValues);
         scopeStack = std::move(savedInferScopeStack);
@@ -10973,7 +11006,20 @@ void LLVMCodegen::visit(ast::SelectExpression* node) {
         bool isComparisonPattern = (pattern->getType() == ast::NodeType::COMPARISON_PATTERN);
         llvm::Value* cond = nullptr;
 
-        if (isComparisonPattern) {
+        if (matchedOptional) {
+            // #292: branch on the optional's present flag (field 1). `nil` is the
+            // absent state; a bare identifier is the present state, and its payload
+            // (field 0) is bound in the matched arm's body below.
+            llvm::Value* hasVal = builder->CreateExtractValue(matchValue, 1, "select.opt.present");
+            if (dynamic_cast<ast::NilLiteral*>(pattern.get())) {
+                cond = builder->CreateNot(hasVal, "select.opt.absent");
+            } else if (dynamic_cast<ast::Identifier*>(pattern.get())) {
+                cond = hasVal;
+            } else {
+                logError(pattern->loc, "An optional select present arm must bind a bare value.");
+                cond = llvm::ConstantInt::getFalse(*context);
+            }
+        } else if (isComparisonPattern) {
             // Handle comparison pattern (e.g., >= 18, < 0)
             auto* compPattern = static_cast<ast::ComparisonPattern*>(pattern.get());
 
@@ -11099,6 +11145,7 @@ void LLVMCodegen::visit(ast::SelectExpression* node) {
             // leak into sibling arms or later statements.
             std::map<std::string, llvm::Value*> savedArmNamedValues = namedValues;
             bindVariantPattern(pattern);
+            bindOptionalPattern(pattern);
             if (result) {
                 // Check if result is a BlockExpression or naked expression
                 if (dynamic_cast<ast::BlockExpression*>(result.get())) {

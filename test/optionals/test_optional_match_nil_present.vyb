@@ -1,0 +1,51 @@
+// @test: `match` over a native `T?` takes `nil` and present payload-binding arms (#292)
+// @description: A match whose scrutinee is a native Vec<Int>? dispatches on the
+//   present flag: `nil` is the absent arm, a bare binding arm (`v`) receives the
+//   payload as Vec<Int> so `v.len()` resolves on the bound name, and the `?`
+//   wildcard keeps working as the absent arm with no binding.
+// @category: optionals, match, semantic, codegen, regression
+// @expect: pass
+// @expect-output: A23|
+
+import collections
+
+hit2()<Vec<Int>?> -> {
+    v<Vec<Int>> = Vec<Int>()
+    v.push(5)
+    v.push(7)
+    return v
+}
+
+hit3()<Vec<Int>?> -> {
+    v<Vec<Int>> = Vec<Int>()
+    v.push(5)
+    v.push(7)
+    v.push(9)
+    return v
+}
+
+miss()<Vec<Int>?> -> {
+    return nil
+}
+
+main()<Int> -> {
+    absent_r<Vec<Int>?> = miss()
+    match (absent_r) {
+        nil -> { print("A") }
+        v -> { print(v.len()) }
+    }
+
+    present_r<Vec<Int>?> = hit2()
+    match (present_r) {
+        nil -> { print("A") }
+        v -> { print(v.len()) }
+    }
+
+    wild_r<Vec<Int>?> = hit3()
+    match (wild_r) {
+        v -> { print(v.len()) }
+        ? -> { print("A") }
+    }
+    print("|")
+    return 0
+}

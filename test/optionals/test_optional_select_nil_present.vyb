@@ -1,0 +1,51 @@
+// @test: `select` over a native `T?` takes `nil` and present payload-binding arms (#292)
+// @description: A select whose scrutinee is a native Vec<Int>? branches on the
+//   present flag: the `nil` arm handles absence, and a bare binding arm (`v`)
+//   receives the payload as Vec<Int>, so `v.len()` resolves on the bound name.
+//   The `?` wildcard keeps working as the absent arm with no binding.
+// @category: optionals, select, semantic, codegen, regression
+// @expect: pass
+// @expect-output: nil:-1|present:3|wildcard:3
+
+import collections
+
+hit()<Vec<Int>?> -> {
+    v<Vec<Int>> = Vec<Int>()
+    v.push(5)
+    v.push(7)
+    v.push(9)
+    return v
+}
+
+miss()<Vec<Int>?> -> {
+    return nil
+}
+
+main()<Int> -> {
+    absent_r<Vec<Int>?> = miss()
+    n = select (absent_r) -> {
+        nil -> -1,
+        v -> v.len()
+    }
+    print("nil:")
+    print(n)
+    print("|")
+
+    present_r<Vec<Int>?> = hit()
+    m = select (present_r) -> {
+        nil -> -1,
+        v -> v.len()
+    }
+    print("present:")
+    print(m)
+    print("|")
+
+    wild_r<Vec<Int>?> = hit()
+    w = select (wild_r) -> {
+        v -> v.len(),
+        ? -> -1
+    }
+    print("wildcard:")
+    print(w)
+    return 0
+}
