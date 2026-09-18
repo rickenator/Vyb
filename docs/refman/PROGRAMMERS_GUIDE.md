@@ -167,7 +167,7 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 ### Running the test suite
 
 ```bash
-# 1162 .vyb tests exercised through compile + run + output/return checks
+# 1163 .vyb tests exercised through compile + run + output/return checks
 python3 test/run_tests.py --vyb ./build/vyb --test-dir test --execute-jit
 ```
 
@@ -2511,7 +2511,7 @@ runtime points a single process at a list of tests if needed.
 
 Canonical suite runner (wired into CTest as `run-tests`):
 ```bash
-python3 test/run_tests.py --vyb ./build/vyb --test-dir test --execute-jit   # full suite (1162 tests)
+python3 test/run_tests.py --vyb ./build/vyb --test-dir test --execute-jit   # full suite (1163 tests)
 python3 test/run_tests.py --vyb ./build/vyb --test-dir test --category async    # filter by category
 ```
 The auxiliary parallel harness (`test_harness.py`, `triage_tool.py`) adds HTML
