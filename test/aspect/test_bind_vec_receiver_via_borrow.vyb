@@ -1,0 +1,18 @@
+// @test: Bind with a their<Vec<T>> receiver dispatches in a borrowed param (#254)
+// @description: `count(v<their<Vec<Int>>>)` calling a bind method on the borrowed
+//   Vec used to emit `load ptr` where the callee signature wanted the Vec by
+//   value, failing LLVM verification and SIGSEGVing (139).
+// @category: aspect, ownership, vec
+// @expect: pass
+// @expect-return: 2
+
+import collections
+aspect Bag { size(self)<Int> -> { } }
+bind<T> Bag -> Vec<T> { size(self)<Int> -> { return self.len() } }
+count(v<their<Vec<Int>>>)<Int> -> { return v.size() }
+main()<Int> -> {
+    xs<Vec<Int>> = Vec()
+    xs.push(7)
+    xs.push(8)
+    return count(borrow(xs))
+}
