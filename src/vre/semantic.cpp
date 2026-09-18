@@ -4792,6 +4792,25 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                 // Look for the method in this trait's implementation
                                 for (ast::FunctionDeclaration* method : methods) {
                                     if (method && method->id && method->id->name == methodName) {
+                                        // #255: a wrong-arity call to an aspect/bind method
+                                        // used to reach codegen, emit a call with the wrong
+                                        // argument count and die on invalid IR. Diagnose it at
+                                        // the call site instead. The declaration's params
+                                        // include `self`; the receiver is not in arguments.
+                                        size_t declaredParams = method->params.size();
+                                        bool declaresSelf = !method->params.empty() &&
+                                            method->params[0].name && method->params[0].name->name == "self";
+                                        size_t expectedArgs = declaredParams - (declaresSelf ? 1 : 0);
+                                        if (node->arguments.size() != expectedArgs) {
+                                            if (expectedArgs == 0)
+                                                addError(dispatchTypeStr + "::" + methodName + " expects no arguments", node);
+                                            else
+                                                addError(dispatchTypeStr + "::" + methodName + " expects exactly " +
+                                                         std::to_string(expectedArgs) + " argument" +
+                                                         (expectedArgs == 1 ? "" : "s") + ", got " +
+                                                         std::to_string(node->arguments.size()), node);
+                                            return;
+                                        }
                                         // Found the method! Set the return type
                                         if (method->returnTypeNode) {
                                             setType(node,  method->returnTypeNode ? std::shared_ptr<ast::TypeNode>(method->returnTypeNode->clone()) : nullptr);
@@ -4818,6 +4837,22 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                                     if (implInfo && implInfo->declaration) {
                                         for (const auto& method : implInfo->declaration->methods) {
                                             if (method && method->id && method->id->name == methodName) {
+                                                // #255: same call-site arity check as the concrete
+                                                // impl path above (params include `self`).
+                                                size_t declaredParams = method->params.size();
+                                                bool declaresSelf = !method->params.empty() &&
+                                                    method->params[0].name && method->params[0].name->name == "self";
+                                                size_t expectedArgs = declaredParams - (declaresSelf ? 1 : 0);
+                                                if (node->arguments.size() != expectedArgs) {
+                                                    if (expectedArgs == 0)
+                                                        addError(dispatchTypeStr + "::" + methodName + " expects no arguments", node);
+                                                    else
+                                                        addError(dispatchTypeStr + "::" + methodName + " expects exactly " +
+                                                                 std::to_string(expectedArgs) + " argument" +
+                                                                 (expectedArgs == 1 ? "" : "s") + ", got " +
+                                                                 std::to_string(node->arguments.size()), node);
+                                                    return;
+                                                }
                                                 // Found the generic trait method! Substitute Self with concrete type
                                                 if (method->returnTypeNode) {
                                                     VYB_CDBG << "DEBUG: Generic trait method " << methodName
