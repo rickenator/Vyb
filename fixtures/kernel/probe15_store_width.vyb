@@ -1,0 +1,79 @@
+// #301 regression kernel: the width of a device store/atomic is the intrinsic's
+// element type, not the Vyb operand's type (Int/Float are i64/f64 in LLVM).
+// Controls first (st_f64 -> st.global.u64, atomic_add_f64 -> atom.global.add.f64),
+// then the three defects: st_f32 -> st.global.f32 (0x3FC00000 for 1.5),
+// atomic_add_i32 -> atom.global.add.u32 (array element and scalar cell alike),
+// st_i32 -> ONE st.global.u32. Seeded via descriptor pointers, read back by
+// fixtures/cuda/probe15_verify.vyb.
+
+# control: 8-byte f64 slot must stay st.global.u64 (value 2.5).
+st_f64_probe(dsc<Int>) -> {
+    out<Int> = ld_i64(dsc + 0) as Int
+    n<Int> = ld_i64(dsc + 8) as Int
+    stride<Int> = (dim_x() * grid_x()) as Int
+    gid<Int> = (blk_x() * dim_x() + tid_x()) as Int
+    while (gid < n) {
+        st_f64(out + gid * 8, 2.5)
+        gid = gid + stride
+    }
+}
+
+# control: 8-byte f64 atomic must stay atom.global.add.f64.
+atomic_f64_probe(dsc<Int>) -> {
+    acc<Int> = ld_i64(dsc + 0) as Int
+    n<Int> = ld_i64(dsc + 8) as Int
+    stride<Int> = (dim_x() * grid_x()) as Int
+    gid<Int> = (blk_x() * dim_x() + tid_x()) as Int
+    while (gid < n) {
+        atomic_add_f64(acc, 0.5)
+        gid = gid + stride
+    }
+}
+
+# defect: 4-byte f32 slots must be FOUR-byte stores of 1.5 (0x3FC00000), not a
+# 64-bit st.global.u64 of the Float operand's f64 bits. Both operand shapes are
+# exercised: a runtime Float (from the descriptor) emits st.global.f32, and the
+# constant 1.5 emits the equivalent 4-byte st.global.u32 immediate 0x3FC00000
+# (LLVM folds a constant f32 store to its integer bit pattern).
+st_f32_probe(dsc<Int>) -> {
+    out<Int> = ld_i64(dsc + 0) as Int
+    n<Int> = ld_i64(dsc + 8) as Int
+    one<Float> = ld_f64(dsc + 16)
+    out2<Int> = ld_i64(dsc + 24) as Int
+    stride<Int> = (dim_x() * grid_x()) as Int
+    gid<Int> = (blk_x() * dim_x() + tid_x()) as Int
+    while (gid < n) {
+        st_f32(out + gid * 4, one)
+        st_f32(out2 + gid * 4, 1.5)
+        gid = gid + stride
+    }
+}
+
+# defect: atomics on 4-byte Int32 slots must be atom.global.add.u32 -- the array
+# element (buf + idx*4) and the scalar counter cell (cnt).
+atomic_i32_array_probe(dsc<Int>) -> {
+    buf<Int> = ld_i64(dsc + 0) as Int
+    cnt<Int> = ld_i64(dsc + 8) as Int
+    n<Int> = ld_i64(dsc + 16) as Int
+    stride<Int> = (dim_x() * grid_x()) as Int
+    gid<Int> = (blk_x() * dim_x() + tid_x()) as Int
+    while (gid < n) {
+        idx<Int> = gid % 1024
+        atomic_add_i32(buf + idx * 4, 1)
+        atomic_add_i32(cnt, 1)
+        gid = gid + stride
+    }
+}
+
+# defect: a 4-byte Int32 slot must be ONE st.global.u32; storing the Int
+# operand's i64 width writes 8 bytes and clobbers the next element.
+st_i32_probe(dsc<Int>) -> {
+    out<Int> = ld_i64(dsc + 0) as Int
+    n<Int> = ld_i64(dsc + 8) as Int
+    stride<Int> = (dim_x() * grid_x()) as Int
+    gid<Int> = (blk_x() * dim_x() + tid_x()) as Int
+    while (gid < n) {
+        st_i32(out + gid * 4, 7)
+        gid = gid + stride
+    }
+}
