@@ -95,6 +95,27 @@ jobs:
           done
           echo "All kernel fixtures emitted + ptxas-validated for: $arches"
 
+      - name: Device math builtins are rejected in kernel mode (#256)
+        # An NVPTX module has no libm: exp/sin/cos/tan/log (and sqrt/floor/ceil/
+        # round/pow) used to be emitted as `.extern .func` calls with no definition,
+        # so the PTX carried undefined device symbols while the compiler reported
+        # success. The construct must now fail with a location-bearing diagnostic and
+        # must not write a PTX.
+        shell: bash
+        run: |
+          set -euo pipefail
+          export VYB_STDLIB="$PWD/stdlib"
+          rm -f /tmp/p14.ptx
+          if ./build/vyb --kernel fixtures/kernel/probe14_device_math_rejected.vyb \
+               --ptx /tmp/p14.ptx > /tmp/p14.log 2>&1; then
+            echo "FAIL: device math builtin was accepted (#256)"; cat /tmp/p14.log; exit 1
+          fi
+          grep -q "is not available in NVPTX device code" /tmp/p14.log \
+            || { echo "FAIL: no #256 diagnostic"; cat /tmp/p14.log; exit 1; }
+          test ! -e /tmp/p14.ptx \
+            || { echo "FAIL: PTX emitted despite the codegen error (#256)"; exit 1; }
+          echo "device math builtins rejected as expected (#256)"
+
       - name: Compile host-side binding runners (FFI surface, no GPU needed)
         # Compile-only: verifies the CUDA/cuBLAS extern surfaces type-check and
         # codegen without needing a GPU or the CUDA libs at run time. The cuda
