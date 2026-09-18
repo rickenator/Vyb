@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <stdexcept>
 #include <unordered_map>
 #include "token.hpp" // Provides vyb::token::Token and vyb::TokenType
 #include "source_location.hpp" // Provides vyb::SourceLocation
@@ -30,6 +31,26 @@ private:
   }
   bool is_letter(char c);
   bool is_digit(char c);
+  // Consumes an exponent suffix -- `e`/`E`, an optional sign, at least one digit
+  // (`1e-6`, `2.5E+9`) -- and returns it, or "" when the next character is not an
+  // exponent marker at all. A marker with no digits is an error rather than being
+  // silently handed back as an identifier (`1e` used to lex as `1` + `e`).
+  std::string consume_exponent() {
+    if (pos_ >= source_.size() || (source_[pos_] != 'e' && source_[pos_] != 'E')) return "";
+    size_t probe = pos_ + 1;
+    if (probe < source_.size() && (source_[probe] == '+' || source_[probe] == '-')) probe++;
+    if (probe >= source_.size() || !is_digit(source_[probe])) {
+      throw std::runtime_error("Invalid number format (scientific-notation exponent has no digits): "
+        + std::string(1, source_[pos_]) + " at line " + std::to_string(line_) + ", column "
+        + std::to_string(column_ + 1));
+    }
+    std::string result;
+    result += source_[pos_++];
+    if (pos_ < source_.size() && (source_[pos_] == '+' || source_[pos_] == '-'))
+      result += source_[pos_++];
+    while (pos_ < source_.size() && is_digit(source_[pos_])) result += source_[pos_++];
+    return result;
+  }
   vyb::TokenType get_keyword_type(const std::string& word); // Corrected namespace
   // Removed: std::string token_type_to_string(vyb::TokenType type); - Use vyb::token_type_to_string from token.hpp/token.cpp
   void handle_newline(std::vector<vyb::token::Token>& tokens); // Changed Token to vyb::token::Token

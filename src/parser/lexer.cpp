@@ -162,6 +162,9 @@ std::vector<vyb::token::Token> Lexer::tokenize() {
         });
         float_str += decimal_part_str;
 
+        // Scientific notation: `1.5e-6`, `2.5E+9`.
+        float_str += consume_exponent();
+
         // Check for another dot, which would be invalid (e.g., 1.2.3)
         // pos_ is now after the decimal part.
         if (pos_ < source_.size() && source_[pos_] == '.') {
@@ -177,6 +180,15 @@ std::vector<vyb::token::Token> Lexer::tokenize() {
           throw std::runtime_error("Invalid number format (trailing dot): " + int_part_str + "." + " at line " + std::to_string(line_) + ", column " + std::to_string(column_ + int_part_str.size()));
       }
       else {
+        // Scientific notation without a fractional part: `1e-6`, `1e6` -> a Float.
+        std::string exp_str = consume_exponent();
+        if (!exp_str.empty()) {
+          std::string sci_str = int_part_str + exp_str;
+          tokens.emplace_back(vyb::TokenType::FLOAT_LITERAL, sci_str, vyb::SourceLocation{current_file_path_, current_line_start_for_token, current_column_start_for_token});
+          maybe_print_token(tokens.back());
+          column_ += sci_str.size();
+          continue;
+        }
         tokens.emplace_back(vyb::TokenType::INT_LITERAL, int_part_str, vyb::SourceLocation{current_file_path_, current_line_start_for_token, current_column_start_for_token});
         maybe_print_token(tokens.back());
         column_ += int_part_str.size();
