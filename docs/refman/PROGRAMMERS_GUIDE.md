@@ -167,7 +167,7 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 ### Running the test suite
 
 ```bash
-# 1163 .vyb tests exercised through compile + run + output/return checks
+# 1165 .vyb tests exercised through compile + run + output/return checks
 python3 test/run_tests.py --vyb ./build/vyb --test-dir test --execute-jit
 ```
 
@@ -1192,6 +1192,21 @@ v.len()                      # element count
 v.isEmpty()                  # true when empty
 v.iter()                     # -> VecIter<T> (Iterator bind)
 ```
+
+`Vec::get(i)` returns the element **by value** — bounds-checked, but a copy. A
+write through the returned temporary (`v.get(i).field = x`, or
+`v.get(i).nested.push(y)`) cannot reach the stored element, so the compiler
+rejects it instead of dropping the write silently. Bind the element to a local,
+mutate it, and write it back with `v.set(i, e)`:
+
+```vyb
+e<T> = v.get(i)
+e.field = x
+v.set(i, e)
+```
+
+For in-place mutation of every element use the by-reference forms — `their<Vec<T>>`
+receivers such as `v.map_in_place(...)` / `v.retain(...)`.
 
 Higher-order forms (`VecHigherOps -> Vec<T>`):
 
@@ -2511,7 +2526,7 @@ runtime points a single process at a list of tests if needed.
 
 Canonical suite runner (wired into CTest as `run-tests`):
 ```bash
-python3 test/run_tests.py --vyb ./build/vyb --test-dir test --execute-jit   # full suite (1163 tests)
+python3 test/run_tests.py --vyb ./build/vyb --test-dir test --execute-jit   # full suite (1165 tests)
 python3 test/run_tests.py --vyb ./build/vyb --test-dir test --category async    # filter by category
 ```
 The auxiliary parallel harness (`test_harness.py`, `triage_tool.py`) adds HTML

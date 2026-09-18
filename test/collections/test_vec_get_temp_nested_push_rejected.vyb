@@ -1,0 +1,15 @@
+// @test: Vec::get temporary nested push is rejected (#260)
+// @expect: fail
+// @expect-error: cannot call 'push' on a by-value temporary
+// @category: collections
+
+import collections
+struct D { name<String> }
+struct P { deps<Vec<D>> }
+main()<Int> -> {
+    ds<Vec<D>> = Vec()
+    p<Vec<P>> = Vec()
+    p.push(P { deps = ds })
+    p.get(0).deps.push(D { name = "dep1" })
+    return 0
+}
