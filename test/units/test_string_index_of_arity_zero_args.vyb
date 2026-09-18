@@ -1,0 +1,13 @@
+// @test: Zero-argument String::index_of is diagnosed (#255)
+// @description: index_of() with no needle also reached codegen and SIGSEGV'd (139);
+//   it is now the same clean arity error.
+// @category: string, arity, error-handling, regression
+// @expect: fail
+// @expect-error: String::index_of expects exactly 1 argument, got 0.
+
+main()<Int> -> {
+    s<String> = "abcabc"
+    p<Int> = s.index_of()
+    println(p.to_string())
+    return 0
+}

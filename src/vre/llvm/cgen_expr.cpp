@@ -1338,31 +1338,7 @@ bool LLVMCodegen::emitKernelIntrinsic(vyb::ast::CallExpression* node) {
         if (name.rfind("st_", 0) == 0) {
             if (node->arguments.size() < 2) return true;
             node->arguments[1]->accept(*this);
-            // The intrinsic's element type governs the access width. Coerce the
-            // operand to it: storing the operand's own type makes e.g.
-            // st_i32(addr, <Int>) write 8 bytes into a 4-byte slot and clobber
-            // the neighbouring element.
-            llvm::Value* v = m_currentLLVMValue;
-            if (v && v->getType() != elemTy) {
-                llvm::Type* vt = v->getType();
-                if (vt->isIntegerTy() && elemTy->isIntegerTy())
-                    v = builder->CreateTruncOrBitCast(v, elemTy);
-                else if (vt->isFloatingPointTy() && elemTy->isFloatingPointTy())
-                    v = builder->CreateFPCast(v, elemTy);
-                else if (vt->isFloatingPointTy() && elemTy->isIntegerTy())
-                    v = builder->CreateFPToSI(v, elemTy);
-                else if (vt->isIntegerTy() && elemTy->isFloatingPointTy())
-                    v = builder->CreateSIToFP(v, elemTy);
-                else if (vt->isPointerTy() && elemTy->isIntegerTy())
-                    v = builder->CreatePtrToInt(v, elemTy);
-                else {
-                    logError(node->loc, "st_* intrinsic cannot store a value of this type.");
-                    flagHardCodegenError();
-                    m_currentLLVMValue = nullptr;
-                    return true;
-                }
-            }
-            builder->CreateStore(v, gp);
+            builder->CreateStore(m_currentLLVMValue, gp);
             m_currentLLVMValue = nullptr;
         } else {
             llvm::Value* loaded = builder->CreateLoad(elemTy, gp, "gld");
@@ -2277,6 +2253,20 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                                 }
                             }
                             argValues.push_back(argVal);
+                        }
+                        // #255: an aspect method called with the wrong number of
+                        // arguments must not reach the verifier -- an unmatched call
+                        // fails LLVM verification and the compiler died on the invalid
+                        // IR (SIGSEGV). Diagnose and halt instead. argValues includes
+                        // the receiver as parameter 0.
+                        if (argValues.size() != implFunc->getFunctionType()->getNumParams()) {
+                            const size_t want = implFunc->getFunctionType()->getNumParams() - 1;
+                            logError(node->loc, concreteType + "::" + methodName + " expects exactly " +
+                                     std::to_string(want) + " argument" + (want == 1 ? "" : "s") + ", got " +
+                                     std::to_string(argValues.size() - 1) + ".");
+                            flagHardCodegenError();
+                            m_currentLLVMValue = nullptr;
+                            return;
                         }
 
                         if (implFunc->getReturnType()->isVoidTy()) {
@@ -6372,6 +6362,20 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                                 }
                                 argValues.push_back(argVal);
                             }
+                            // #255: an aspect method called with the wrong number of
+                            // arguments must not reach the verifier -- an unmatched call
+                            // fails LLVM verification and the compiler died on the
+                            // invalid IR (SIGSEGV). Diagnose and halt instead. argValues
+                            // includes the receiver as parameter 0.
+                            if (argValues.size() != implFunc->getFunctionType()->getNumParams()) {
+                                const size_t want = implFunc->getFunctionType()->getNumParams() - 1;
+                                logError(node->loc, implFunc->getName().str() + " expects exactly " +
+                                         std::to_string(want) + " argument" + (want == 1 ? "" : "s") + ", got " +
+                                         std::to_string(argValues.size() - 1) + ".");
+                                flagHardCodegenError();
+                                m_currentLLVMValue = nullptr;
+                                return;
+                            }
                             if (implFunc->getReturnType()->isVoidTy()) {
                                 builder->CreateCall(implFunc, argValues);
                                 m_currentLLVMValue = nullptr;
@@ -6613,6 +6617,20 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                                     }
                                 }
                                 argValues.push_back(argVal);
+                            }
+                            // #255: an aspect method called with the wrong number of
+                            // arguments must not reach the verifier -- an unmatched call
+                            // fails LLVM verification and the compiler died on the
+                            // invalid IR (SIGSEGV). Diagnose and halt instead. argValues
+                            // includes the receiver as parameter 0.
+                            if (argValues.size() != implFunc->getFunctionType()->getNumParams()) {
+                                const size_t want = implFunc->getFunctionType()->getNumParams() - 1;
+                                logError(node->loc, implFunc->getName().str() + " expects exactly " +
+                                         std::to_string(want) + " argument" + (want == 1 ? "" : "s") + ", got " +
+                                         std::to_string(argValues.size() - 1) + ".");
+                                flagHardCodegenError();
+                                m_currentLLVMValue = nullptr;
+                                return;
                             }
                             if (implFunc->getReturnType()->isVoidTy()) {
                                 builder->CreateCall(implFunc, argValues);

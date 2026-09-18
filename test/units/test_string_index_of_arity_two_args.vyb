@@ -1,0 +1,13 @@
+// @test: Index.of with too many arguments is diagnosed (#255)
+// @description: A 2-argument String::index_of call used to reach codegen, emit a
+//   call with the wrong argument count, fail LLVM verification and SIGSEGV (139).
+// @category: string, arity, error-handling, regression
+// @expect: fail
+// @expect-error: String::index_of expects exactly 1 argument, got 2.
+
+main()<Int> -> {
+    s<String> = "abcabc"
+    p<Int> = s.index_of("bc", 2)
+    println(p.to_string())
+    return 0
+}
