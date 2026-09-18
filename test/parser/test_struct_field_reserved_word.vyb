@@ -1,0 +1,12 @@
+// @test: A reserved word as a struct field name names the offending token (#286)
+// @description: `ptr` is a reserved word; the parser used to say only "Expected
+//   field name in struct 'B'", giving no clue which token was refused. It now
+//   names the token and says it is reserved.
+// @category: parser, diagnostics, struct
+// @expect: fail
+// @expect-error: 'ptr' is a reserved word and cannot be used as a field name
+
+struct B {
+    ptr<Int>
+}
+main()<Int> -> { return 0 }

@@ -891,7 +891,21 @@ std::unique_ptr<vyb::ast::Declaration> DeclarationParser::parse_struct() {
         SourceLocation field_loc = this->current_location();
 
         if (this->peek().type != vyb::TokenType::IDENTIFIER) {
-            throw std::runtime_error("Expected field name in struct \'" + name->name + "\' at " + location_to_string(this->current_location()));
+            // #286: name the offending token, and say so when it is a reserved word.
+            // `ptr<Int>` is well-formed-looking text in the author's source, so
+            // "Expected field name" alone gives no hint about why it was refused.
+            const auto& badTok = this->peek();
+            const std::string lex = badTok.lexeme.empty() ? std::string("<token>") : badTok.lexeme;
+            // Keyword token types are contiguous (token.hpp: KEYWORD_LET .. KEYWORD_TYPENAME).
+            const bool reserved = badTok.type >= vyb::TokenType::KEYWORD_LET &&
+                                  badTok.type <= vyb::TokenType::KEYWORD_TYPENAME;
+            if (reserved) {
+                throw std::runtime_error("'" + lex + "' is a reserved word and cannot be used as a field "
+                                         "name in struct '" + name->name + "' at " +
+                                         location_to_string(this->current_location()));
+            }
+            throw std::runtime_error("Expected field name in struct '" + name->name + "' at " +
+                                     location_to_string(this->current_location()) + " (found '" + lex + "')");
         }
 
         // Support both Vyb syntax: fieldName<Type>
