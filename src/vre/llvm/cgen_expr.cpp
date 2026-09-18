@@ -2192,15 +2192,26 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                         if (isQualifiedAspectCall) {
                             argValues.push_back(receiverValue);
                         } else if (ownershipWrappedVec && receiverAlloca) {
-                            // The wrapper alloca holds a single Vec* view; load it and
-                            // pass that pointer, which is what a by-ref
-                            // `self<their<Vec<T>>>` parameter expects.
+                            // The wrapper alloca holds a single Vec* view. A by-ref
+                            // `self<their<Vec<T>>>` parameter expects that pointer, but a
+                            // by-value `self<Vec<T>>` bind (e.g. `bind<T> Bag -> Vec<T>`)
+                            // expects the pointee loaded by value -- passing the raw view
+                            // pointer made the call's parameter type disagree with the
+                            // callee signature (#254).
+                            llvm::Value* viewPtr = nullptr;
                             if (auto at = llvm::dyn_cast<llvm::AllocaInst>(receiverAlloca)) {
-                                argValues.push_back(builder->CreateLoad(
+                                viewPtr = builder->CreateLoad(
                                     at->getAllocatedType(), receiverAlloca,
-                                    objIdent->name + ".view.load"));
+                                    objIdent->name + ".view.load");
                             } else {
-                                argValues.push_back(receiverAlloca);
+                                viewPtr = receiverAlloca;
+                            }
+                            if (selfIsByRef) {
+                                argValues.push_back(viewPtr);
+                            } else {
+                                argValues.push_back(builder->CreateLoad(
+                                    implFunc->getArg(0)->getType(), viewPtr,
+                                    objIdent->name + ".self.load"));
                             }
                         } else if (selfIsByRef && receiverAlloca) {
                             argValues.push_back(receiverAlloca);
