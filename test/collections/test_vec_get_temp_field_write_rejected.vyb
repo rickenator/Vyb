@@ -1,0 +1,13 @@
+// @test: Vec::get temporary field store is rejected (#260)
+// @expect: fail
+// @expect-error: cannot assign through a by-value temporary
+// @category: collections
+
+import collections
+struct P { name<String> }
+main()<Int> -> {
+    p<Vec<P>> = Vec()
+    p.push(P { name = "z" })
+    p.get(0).name = "changed"
+    return 0
+}

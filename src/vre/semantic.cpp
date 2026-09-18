@@ -2376,7 +2376,44 @@ void SemanticAnalyzer::handleVecConstructor(ast::CallExpression* node) {
     setType(node,  std::shared_ptr<ast::TypeNode>(std::move(vecType)));
 }
 
+// #260: does this receiver chain bottom out in a `get(...)` accessor call? That
+// call hands back a *copy* of the element, so a store or a nested mutation
+// through it cannot reach stored state. Note that a bare call result is NOT
+// enough: Vyb's `push` returns the receiver, so `Vec().push(x).push(y)` and
+// chained `v.push(a).push(b)` are legitimate and must keep working.
+static bool rootsInGetAccessorCopy(const ast::Expression* expr) {
+    if (!expr) return false;
+    if (auto* call = dynamic_cast<const ast::CallExpression*>(expr)) {
+        if (auto* callee = dynamic_cast<const ast::MemberExpression*>(call->callee.get())) {
+            if (auto* prop = dynamic_cast<const ast::Identifier*>(callee->property.get()))
+                if (prop->name == "get") return true;   // v.get(i): a by-value copy
+            return rootsInGetAccessorCopy(callee->object.get());  // keep walking the chain
+        }
+        return false;
+    }
+    if (auto* mem = dynamic_cast<const ast::MemberExpression*>(expr))
+        return rootsInGetAccessorCopy(mem->object.get());
+    return false;
+}
+
 void SemanticAnalyzer::visit(ast::CallExpression* node) {
+    // #260: a mutating method called on a by-value temporary -- `v.get(0).deps.push(d)`
+    // -- writes into the copy that `get` returned, so the stored element keeps its
+    // old value and the program silently runs on stale data. Reject it instead.
+    if (auto* mutCallee = dynamic_cast<ast::MemberExpression*>(node->callee.get())) {
+        if (auto* mutProp = dynamic_cast<ast::Identifier*>(mutCallee->property.get())) {
+            static const std::set<std::string> kMutators = {"push", "set", "clear",
+                                                            "pop", "push_array"};
+            if (kMutators.count(mutProp->name) &&
+                rootsInGetAccessorCopy(mutCallee->object.get())) {
+                addError("cannot call '" + mutProp->name + "' on a by-value temporary: the "
+                         "receiver is a copy, so the write cannot reach stored state; bind "
+                         "it to a local and write it back with set(index, value).", node);
+                return;
+            }
+        }
+    }
+
     // Bare builtin enum constructor: `Ok(x)` / `Err(e)` for Result. A surrounding
     // annotation (variable declaration or return statement) injects the target enum
     // type into this node, so the constructor infers its payload without explicit
@@ -5569,6 +5606,18 @@ void SemanticAnalyzer::visit(ast::AssignmentExpression* node) {
         // Should not happen with a valid AST
         addError("Malformed assignment expression.", node);
         return;
+    }
+
+    // #260: a field store through a by-value temporary -- `v.get(0).name = "x"` --
+    // writes into the copy `get` returned; the stored element never changes and
+    // nothing is diagnosed. Reject it here, at the assignment.
+    if (auto* tempLHS = dynamic_cast<ast::MemberExpression*>(node->left.get())) {
+        if (rootsInGetAccessorCopy(tempLHS->object.get())) {
+            addError("cannot assign through a by-value temporary: the target is a copy, so "
+                     "the write cannot reach stored state; bind the element to a local and "
+                     "write it back with set(index, value).", node);
+            return;
+        }
     }
 
     // Special handling: If LHS is a pointer dereference, temporarily set its type to the pointer type for assignment
