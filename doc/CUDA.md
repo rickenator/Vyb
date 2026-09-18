@@ -115,6 +115,23 @@ atomic_add_f64(addr<Int>, v<Float>)<Float>
 atomic_add_i32(addr<Int>, v<CInt>)<CInt>
 ```
 
+### No host libm in device code (issue #256)
+
+The device module links no libm, so the host math builtins are **rejected** in
+`--kernel` mode instead of being emitted as unresolved `.extern .func` calls:
+
+```
+exp, sin, cos, tan, log, log2, log10, sqrt, floor, ceil, round, pow
+Float abs   # lowers to a fabs libm call
+```
+
+Each use is a location-bearing codegen error and the kernel is not emitted (the
+`--kernel` driver refuses to write a PTX whose codegen reported errors). Use
+pure-arithmetic device math instead — see VybForge `native/kernels/vmath.vyb`
+(`vexp`/`vsin`/`vcos` polynomial/Newton forms) — or supply your own device
+function. Integer `abs`, `min`/`max` and the arithmetic operators are unaffected
+(they lower to plain arithmetic / `select`).
+
 ## Kernel vs. helper functions
 
 How a function lowers determines whether it is launchable:
