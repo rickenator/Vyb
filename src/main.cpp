@@ -970,7 +970,7 @@ int compile_vyb_to_object(const std::string& source, const std::string& fileName
         // Never link a binary built through an unresolved enum payload (#251).
         if (codegen.hasHardCodegenError()) {
             throw std::runtime_error("Code generation failed for '" + fileName +
-                "'; refusing to link a binary with degraded resolution (an enum payload type never resolved).");
+                "'; refusing to link a binary whose code generation reported errors.");
         }
 
         // Get the LLVM module
@@ -1150,7 +1150,7 @@ int compile_vyb_kernel(const std::string& source, const std::string& fileName, i
         // Never emit a device binary built through an unresolved enum payload (#251).
         if (codegen.hasHardCodegenError()) {
             throw std::runtime_error("Code generation failed for '" + fileName +
-                "'; refusing to emit a kernel with degraded resolution (an enum payload type never resolved).");
+                "'; refusing to emit a kernel whose code generation reported errors.");
         }
 
         llvm::Module* module = codegen.getModule();
@@ -2633,7 +2633,7 @@ int run_vyb_code(const std::string& source, const std::string& fileName, bool ge
         // would run with degraded resolution: refuse instead (#251).
         if (codegen.hasHardCodegenError()) {
             throw std::runtime_error("Code generation failed for '" + fileName +
-                "'; refusing to run a module with degraded resolution (an enum payload type never resolved).");
+                "'; refusing to run a module whose code generation reported errors.");
         }
 
         // Get the LLVM module and context from the code generator

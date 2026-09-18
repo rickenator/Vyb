@@ -1,0 +1,15 @@
+// @test: an empty bind body on a non-void method halts with exit 1 (#264)
+// @description: the compiler reported "may not return on all paths" and then
+//   segfaulted (exit 139); it now halts with the diagnostic and refuses to run.
+// @category: aspect, bind, codegen, error-handling, regression
+// @expect: fail
+// @expect-error: may not return on all paths
+
+aspect X { type T
+    m(self)<Int>
+}
+struct S { v<Int> }
+bind X -> S { type T = Int
+    m(self)<Int> -> { }
+}
+main()<Int> -> { s<S> = S { v = 1 }  return s.m() }
