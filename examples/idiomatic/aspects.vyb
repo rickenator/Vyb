@@ -6,7 +6,7 @@
 // that's the "polymorphism without overhead" Vyb promise.
 
 aspect Named {
-    name(self)<String> -> { }      // contract only; no body
+    name(self)<String> -> { }      // empty body = optional, default is empty; a bind may override it
 }
 
 aspect Labeled : Named {           // aspects can extend other aspects
