@@ -474,6 +474,12 @@ private:
     void handleVecMethod(vyb::ast::CallExpression* node, const std::string& objectName, const std::string& methodName);
     void handleVecMethodOnValue(vyb::ast::CallExpression* node, llvm::Value* vecValue, const std::string& methodName, vyb::ast::Expression* objectExpr);
     void handleVecPush(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
+
+    // #281: the *declared* element type of the Vec a method is called on
+    // (`Vec<T>` -> T), so push/set lay elements out with the same stride that
+    // get/set read them with. Returns nullptr when the receiver's type is not
+    // known, letting callers fall back to the value's own type.
+    llvm::Type* vecElementTypeFromReceiver(vyb::ast::CallExpression* node);
     void handleVecPop(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecLen(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecGet(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
