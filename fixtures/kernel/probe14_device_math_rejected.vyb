@@ -1,0 +1,5 @@
+// #256 regression fixture: device math builtins must be REJECTED, not emitted as
+// unresolved `.extern .func` calls. This file is deliberately NOT in the
+// successful-emit list in .github/workflows/gpu-kernel.yml; that job asserts it
+// fails with a location-bearing diagnostic and writes no PTX.
+k(x<Float>)<Float> -> { return exp(x) + sin(x) + cos(x) + tan(x) + log(x) }

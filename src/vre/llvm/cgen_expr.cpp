@@ -3049,6 +3049,22 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
             node->arguments[i]->accept(*this);
             return m_currentLLVMValue;
         };
+        // #256: a kernel (NVPTX) module has no libm, so these builtins were emitted as
+        // `.extern .func` calls with no definition -- the PTX carried undefined device
+        // symbols and the CUDA toolchain rejected it, yet the compiler reported success.
+        // Reject the construct instead, naming the callable.
+        if (g_kernel_mode &&
+            (mathName == "sqrt" || mathName == "sin" || mathName == "cos" || mathName == "tan" ||
+             mathName == "exp" || mathName == "log" || mathName == "log2" || mathName == "log10" ||
+             mathName == "floor" || mathName == "ceil" || mathName == "round" || mathName == "pow")) {
+            logError(node->loc, "math builtin '" + mathName + "' is not available in NVPTX device code: "
+                     "the device module has no libm, so this would emit an unresolved extern call. Use a "
+                     "pure-arithmetic device implementation (see VybForge native/kernels/vmath.vyb) or "
+                     "supply your own device function.");
+            flagHardCodegenError();
+            m_currentLLVMValue = nullptr;
+            return;
+        }
         if (mathName == "sqrt" || mathName == "sin" || mathName == "cos" || mathName == "tan" ||
             mathName == "exp" || mathName == "log" || mathName == "log2" || mathName == "log10" ||
             mathName == "floor" || mathName == "ceil" || mathName == "round") {
@@ -3068,6 +3084,16 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                 m_currentLLVMValue = builder->CreateSelect(cmp, a, neg, "abs");
             } else {
                 llvm::Value* d = toDouble(a);
+                // #256: `abs` on a Float lowers to a `fabs` libm call, which device code
+                // cannot resolve either (integer abs stays pure arithmetic and is fine).
+                if (g_kernel_mode) {
+                    logError(node->loc, "math builtin 'fabs' (Float abs) is not available in NVPTX "
+                             "device code: the device module has no libm. Use `select`/comparison "
+                             "arithmetic instead.");
+                    flagHardCodegenError();
+                    m_currentLLVMValue = nullptr;
+                    return;
+                }
                 m_currentLLVMValue = builder->CreateCall(getLibmFunc1("fabs"), {d}, "fabs");
             }
             return;
