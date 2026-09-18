@@ -1,0 +1,11 @@
+// @test: Module with a private helper used by a shared function
+// @description: Helper module for #261 - `hidden` stays private, `expose` is shared
+// @category: modules
+// @expect: pass
+// @parse-only: true
+
+share(all)
+struct Thing { x<Int> }
+hidden(v<Thing>)<Int> -> { return v.x }
+share(all)
+expose(v<Thing>)<Int> -> { return hidden(v) }

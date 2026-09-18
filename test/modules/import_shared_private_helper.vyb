@@ -1,0 +1,15 @@
+// @test: A shared body resolves the origin's private helper (#261)
+// @description: `import m::{expose, Thing}` used to fail with
+//   `Undefined identifier: hidden`; the private helper is now carried with the
+//   shared function, and stays private.
+// @category: modules
+// @expect: pass
+// @expect-output: expose=7
+
+import origin_private_helper::{expose, Thing}
+
+main()<Int> -> {
+    t<Thing> = Thing { x = 7 }
+    println("expose=" + expose(t).to_string())
+    return 0
+}

@@ -1,0 +1,14 @@
+// @test: Module returning a Vec without exporting collections
+// @description: Helper module for #262 - builds and returns a Vec<Int>
+// @category: modules
+// @expect: pass
+// @parse-only: true
+
+import collections
+share(all)
+mk()<Vec<Int>> -> {
+    v<Vec<Int>> = Vec()
+    v.push(1)
+    v.push(2)
+    return v
+}

@@ -1850,6 +1850,35 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
                                 }
                             }
                         }
+                        // #262: a type that arrives from an imported declaration -- e.g.
+                        // `Vec<Int>` returned by an imported function -- must bring its
+                        // binds along. Without them the importer cannot call the type's
+                        // methods at all: `for (x in v)` fails with `Unknown method 'iter'
+                        // on type 'Vec<Int>'` unless the importer also did `import
+                        // collections`. Binds are carried, never exported, so admitting
+                        // every bind whose self type is reachable is safe.
+                        bool admittedByType = true;
+                        while (admittedByType) {
+                            admittedByType = false;
+                            for (const auto& entry : bindByKey) {
+                                const std::string& bkey = entry.first;
+                                if (carryBindKeys.count(bkey)) continue;
+                                auto sbIt = bindSelfBase.find(bkey);
+                                if (sbIt == bindSelfBase.end() ||
+                                    !reachableTypes.count(sbIt->second)) {
+                                    continue;
+                                }
+                                carryBindKeys.insert(bkey);
+                                auto tbIt = bindTypeBases.find(bkey);
+                                if (tbIt != bindTypeBases.end()) {
+                                    for (const auto& base : tbIt->second) {
+                                        reachableTypes.insert(base);
+                                    }
+                                }
+                                changed = true;
+                                admittedByType = true;
+                            }
+                        }
                     }
                     closureComputed = true;
                 }
@@ -2004,7 +2033,16 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
                         continue;
                     }
 
-                    if (!declarationVisible(name, importedRecord, metadata.bundles, importDecl)) {
+                    // #261: a name promoted by the dependency closure -- i.e. carried
+                    // because a shared declaration references it, not because the importer
+                    // asked for it -- may be private in the origin module. Its body is what
+                    // the shared function calls, so it must be spliced here even though it
+                    // is not exported; otherwise semantic analysis fails in the importer
+                    // with `Undefined identifier: <private helper>`. It is *carried*, not
+                    // exported: the module's public surface is unchanged.
+                    const bool closureCarry = isSubsetImport && !requestedNames.count(name);
+                    if (!closureCarry &&
+                        !declarationVisible(name, importedRecord, metadata.bundles, importDecl)) {
                         continue;
                     }
 
