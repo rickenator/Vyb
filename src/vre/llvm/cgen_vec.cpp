@@ -79,6 +79,21 @@ void LLVMCodegen::handleVecMethod(vyb::ast::CallExpression* node, const std::str
     }
 }
 
+// #281: the element stride must come from the Vec's *declared* element type.
+// A `Vec<UInt8>` stores 1-byte elements, but a pushed integer literal evaluates
+// as i64; taking the stride from the value laid elements 8 bytes apart while
+// get/set stride by the declared type -- right length, garbage contents.
+llvm::Type* LLVMCodegen::vecElementTypeFromReceiver(vyb::ast::CallExpression* node) {
+    if (!node) return nullptr;
+    auto* callee = dynamic_cast<vyb::ast::MemberExpression*>(node->callee.get());
+    if (!callee) return nullptr;
+    auto recvType = typeOfNode(callee->object.get());
+    if (!recvType) return nullptr;
+    auto* vecTy = dynamic_cast<vyb::ast::VecType*>(recvType.get());
+    if (!vecTy || !vecTy->elementType) return nullptr;
+    return codegenType(vecTy->elementType.get());
+}
+
 void LLVMCodegen::handleVecPush(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
     if (node->arguments.size() != 1) {
         logError(node->loc, "Vec::push expects exactly 1 argument");
@@ -100,8 +115,18 @@ void LLVMCodegen::handleVecPush(vyb::ast::CallExpression* node, llvm::Value* vec
     // shares the same layout (get/set/clear all stride by that struct).
     valueToAdd = normalizeVecStringElement(valueToAdd);
 
-    // Get element type from the value being pushed
-    llvm::Type* elementType = valueToAdd->getType();
+    // Get the element type: prefer the Vec's *declared* element type (#281), so
+    // a `Vec<UInt8>` strides by 1 byte and not by the pushed value's i64 width.
+    llvm::Type* elementType = vecElementTypeFromReceiver(node);
+    if (!elementType) elementType = valueToAdd->getType();
+
+    // Coerce an integer value to the element width (an Int literal is i64; a
+    // UInt8 slot is i8) so the store matches the slot the accessors read.
+    if (elementType && valueToAdd->getType() != elementType &&
+        elementType->isIntegerTy() && valueToAdd->getType()->isIntegerTy()) {
+        valueToAdd = builder->CreateIntCast(valueToAdd, elementType, /*isSigned=*/false,
+                                            "vec.push.coerce");
+    }
 
     // The Vec slot will hold its own reference to a pushed String binding. A
     // freshly-created String (concat / to_string / a String-returning call)
@@ -600,14 +625,20 @@ void LLVMCodegen::handleVecSet(vyb::ast::CallExpression* node, llvm::Value* vecP
     // live in the Vec as the canonical { ptr, i64 } struct.
     value = normalizeVecStringElement(value);
 
-    // Determine the element type from the value argument so element size is right.
-    llvm::Type* elementLLVMType = llvm::Type::getInt64Ty(*context);
+    // Determine the element type from the Vec's declared element type (#281); the
+    // value's own type is only a fallback, or a `Vec<UInt8>` would stride by 8.
+    llvm::Type* elementLLVMType = vecElementTypeFromReceiver(node);
+    if (!elementLLVMType) elementLLVMType = value->getType();
+    if (!elementLLVMType) elementLLVMType = llvm::Type::getInt64Ty(*context);
     uint64_t elementSizeBytes = 8;
-    llvm::Type* t = value->getType();
-    if (t) {
-        elementLLVMType = t;
+    {
         llvm::DataLayout dataLayout(module.get());
         elementSizeBytes = dataLayout.getTypeAllocSize(elementLLVMType);
+    }
+    if (value->getType() != elementLLVMType &&
+        elementLLVMType->isIntegerTy() && value->getType()->isIntegerTy()) {
+        value = builder->CreateIntCast(value, elementLLVMType, /*isSigned=*/false,
+                                       "vec.set.coerce");
     }
 
     llvm::Value* dataPtr = builder->CreateLoad(
