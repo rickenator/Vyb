@@ -369,6 +369,34 @@ static ast::TypeNode* unwrapPrimitiveOwnershipType(ast::TypeNode* type) {
     return type;
 }
 
+// Strip a leading ownership wrapper (`their<T>` / `my<T>` / `view<T>` / `our<T>` /
+// `borrow<T>` / `mild<T>`) from a rendered type string, returning the inner type.
+// Aspect/bind dispatch is keyed on the base struct, so a borrowed receiver must
+// resolve through the same trait-impl tables as an owned one. Bracket depth is
+// tracked so `their<Card<Int>>` unwraps to `Card<Int>` (not the truncated
+// `Card<Int`), and repeated wrappers (`their<their<T>>`) are peeled too.
+static std::string unwrapOwnershipTypeString(const std::string& type) {
+    std::string result = type;
+    while (true) {
+        size_t anglePos = result.find('<');
+        if (anglePos == std::string::npos) break;
+        if (!ownershipWrapperTypes.count(result.substr(0, anglePos))) break;
+        // Find the '>' matching the wrapper's opening '<'.
+        int depth = 0;
+        size_t closeAnglePos = std::string::npos;
+        for (size_t i = anglePos; i < result.size(); ++i) {
+            if (result[i] == '<') {
+                ++depth;
+            } else if (result[i] == '>') {
+                if (--depth == 0) { closeAnglePos = i; break; }
+            }
+        }
+        if (closeAnglePos == std::string::npos || closeAnglePos <= anglePos + 1) break;
+        result = result.substr(anglePos + 1, closeAnglePos - anglePos - 1);
+    }
+    return result;
+}
+
 // Result of the explicit integer-assignment check at assignment/init sites.
 enum class IntAssignCode { NotInteger, Ok, NeedExplicitCast, ConstantOutOfRange };
 struct IntAssignCheck {
@@ -5226,8 +5254,20 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
     // Before checking struct fields, check if this might be a trait method call
     // (MemberExpression can be part of CallExpression, where callee is the MemberExpression)
 
+    // Aspect/bind dispatch is keyed on the base struct type, so a borrowed
+    // receiver (`their<Card<Int>>`) must resolve through the same impl tables as an
+    // owned one. The ownership wrapper is stripped to build an *alternative lookup
+    // key* only: rewriting `structTypeName` itself would also change the
+    // type-parameter lookup above and the field-name extraction below, which
+    // perturbs resolution for stdlib `their<...>` receivers (#254).
+    const std::string dispatchTypeName = unwrapOwnershipTypeString(structTypeName);
+    const bool dispatchDiffers = dispatchTypeName != structTypeName;
+
     // First check concrete trait impls
     auto typeImplsIt = traitImpls.find(structTypeName);
+    if (typeImplsIt == traitImpls.end() && dispatchDiffers) {
+        typeImplsIt = traitImpls.find(dispatchTypeName);
+    }
     if (typeImplsIt != traitImpls.end()) {
         for (const auto& traitEntry : typeImplsIt->second) {
             const std::vector<ast::FunctionDeclaration*>& methods = traitEntry.second;
@@ -5243,18 +5283,42 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
         }
     }
 
+    // A generic impl is keyed on a pattern over the *bare* type (`Card<A>`), so a
+    // borrowed receiver (`their<Card<Int>>`) only matches it once the ownership
+    // wrapper is stripped. Stripping it wholesale is not safe, though: stdlib
+    // receivers such as `their<HashMap<K, V>>` also match `HashMap<K, V>`, and
+    // those structs have FIELDS whose names collide with the impl's method names
+    // (`keys`, `cap`, `head`). Those accesses must keep resolving as fields — that
+    // path sets the node's type, while the impl path returns without one. So the
+    // unwrapped match is taken only when the receiver's struct has no field of the
+    // requested name; `Card` has no `turn` field, `HashMap` does have `keys`.
+    auto structHasFieldNamed = [&](const std::string& typeName, const std::string& name) {
+        std::string base = unwrapOwnershipTypeString(typeName);
+        const size_t p = base.find('<');
+        if (p != std::string::npos) base = base.substr(0, p);
+        auto sIt = structFieldTypes.find(base);
+        return sIt != structFieldTypes.end() && sIt->second.find(name) != sIt->second.end();
+    };
+
     // Also check generic trait impls - check if structTypeName matches any pattern
     for (const auto& typeEntry : genericTraitImpls) {
         const std::string& pattern = typeEntry.first; // e.g., "Box<T>"
 
         // Simple pattern matching: check if structTypeName matches pattern
         // Box<Int> should match Box<T>
-        if (matchesPattern(structTypeName, pattern)) {
+        const bool rawMatches = matchesPattern(structTypeName, pattern);
+        if (rawMatches || (dispatchDiffers && matchesPattern(dispatchTypeName, pattern))) {
             for (const auto& traitEntry : typeEntry.second) {
                 const GenericImplInfo* implInfo = traitEntry.second.get();
                 if (implInfo && implInfo->declaration) {
                     for (const auto& method : implInfo->declaration->methods) {
                         if (method && method->id && method->id->name == fieldName) {
+                            // Reached only through the unwrapped key: leave a name
+                            // that is a real field of the receiver's struct to the
+                            // field path below.
+                            if (!rawMatches && structHasFieldNamed(dispatchTypeName, fieldName)) {
+                                break;
+                            }
                             // This is a generic trait method
                             return;
                         }
@@ -5266,6 +5330,11 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
                     if (traitIt != traitRegistry.end()) {
                         for (const auto& traitMethod : traitIt->second->methods) {
                             if (traitMethod.name == fieldName && traitMethod.hasDefaultImpl) {
+                                // Same rule as above: a real field of the receiver's
+                                // struct keeps the field path.
+                                if (!rawMatches && structHasFieldNamed(dispatchTypeName, fieldName)) {
+                                    break;
+                                }
                                 // Found default implementation in aspect
                                 return;
                             }
@@ -5278,6 +5347,9 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
 
     // Check concrete trait impls for default methods
     auto concreteImplsIt = traitImpls.find(structTypeName);
+    if (concreteImplsIt == traitImpls.end() && dispatchDiffers) {
+        concreteImplsIt = traitImpls.find(dispatchTypeName);
+    }
     if (concreteImplsIt != traitImpls.end()) {
         for (const auto& traitEntry : concreteImplsIt->second) {
             const std::string& traitName = traitEntry.first;
@@ -5318,31 +5390,16 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
         }
     }
 
-    // Extract base struct name for field lookup (Box<Int> -> Box)
-    // Special handling for ownership wrappers: their<Counter> -> Counter
+    // Extract base struct name for field lookup (Box<Int> -> Box). A leading
+    // ownership wrapper is stripped with bracket-depth awareness first, so
+    // `their<Card<Int>>` yields `Card<Int>` and then `Card` — the previous
+    // `find('>')` extraction truncated the type to `Card<Int`, which is what made
+    // a bind method on a borrowed receiver unresolvable (#254).
+    structTypeName = unwrapOwnershipTypeString(structTypeName);
     std::string baseStructName = structTypeName;
     size_t anglePos = structTypeName.find('<');
     if (anglePos != std::string::npos) {
         baseStructName = structTypeName.substr(0, anglePos);
-
-        // Check if this is an ownership keyword (their, my, view, our, etc.)
-        if (baseStructName == "their" || baseStructName == "my" || baseStructName == "view" ||
-            baseStructName == "our" || baseStructName == "borrow" || baseStructName == "mild") {
-            // Extract the inner type: their<Counter> -> Counter
-            size_t closeAnglePos = structTypeName.find('>');
-            if (closeAnglePos != std::string::npos && closeAnglePos > anglePos + 1) {
-                std::string innerType = structTypeName.substr(anglePos + 1, closeAnglePos - anglePos - 1);
-                // Recursively extract base name from inner type (handles their<Box<Int>> -> Box)
-                size_t innerAnglePos = innerType.find('<');
-                if (innerAnglePos != std::string::npos) {
-                    baseStructName = innerType.substr(0, innerAnglePos);
-                } else {
-                    baseStructName = innerType;
-                }
-                // Update structTypeName to be the inner type for subsequent operations
-                structTypeName = innerType;
-            }
-        }
     }
 
     // `.tag` accessor: an enum value exposes its raw positional i64 tag as an Int.

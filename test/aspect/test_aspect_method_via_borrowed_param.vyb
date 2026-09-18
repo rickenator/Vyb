@@ -1,0 +1,15 @@
+// @test: an aspect method dispatches through a borrowed (their<T>) parameter (#254)
+// @description: before the fix this failed with "Field 'turn' not found in struct 'Card<Int'".
+// @category: aspect, bind, ownership, their, receiver, regression
+// @expect: pass
+// @expect-return: 2
+
+aspect Arr { turn(self)<Int> -> { } }
+struct Card<A> { target<Int> }
+bind<A> Arr -> Card<A> { turn(self)<Int> -> { return self.target } }
+plain(c<their<Card<Int>>>)<Int> -> { return c.turn() }
+main()<Int> -> {
+    c<Card<Int>> = Card<Int> { target = 2 }
+    p<their<Card<Int>>> = borrow(c)
+    return plain(p)
+}

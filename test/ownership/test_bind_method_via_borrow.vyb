@@ -1,0 +1,15 @@
+// @test: a bind method reached through a generic borrowed receiver (#254)
+// @description: the same dispatch with the receiver typed by the enclosing type parameter.
+// @category: aspect, bind, ownership, their, generic, regression
+// @expect: pass
+// @expect-return: 2
+
+aspect Arr { turn(self)<Int> -> { } }
+struct Card<A> { target<Int> }
+bind<A> Arr -> Card<A> { turn(self)<Int> -> { return self.target } }
+geom<A>(c<their<Card<A>>>)<Int> -> { return c.turn() }
+main()<Int> -> {
+    c<Card<Int>> = Card<Int> { target = 2 }
+    p<their<Card<Int>>> = borrow(c)
+    return geom(p)
+}
