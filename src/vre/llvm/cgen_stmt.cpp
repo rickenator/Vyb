@@ -1506,6 +1506,22 @@ void LLVMCodegen::codegenMatch(vyb::ast::MatchStatement* node, llvm::AllocaInst*
         }
     }
 
+    // #292: the same holds for a native optional whose unguarded arms cover both
+    // states, so its no-match default is likewise unreachable.
+    if (matchedOptional && !hasWildcard) {
+        bool absentCovered = false, presentCovered = false;
+        for (size_t i = 0; i < node->cases.size(); ++i) {
+            if (i < node->guards.size() && node->guards[i]) continue; // guarded: partial
+            auto& pat = node->cases[i].first;
+            if (!pat) absentCovered = true;                  // `?` wildcard = absent arm
+            else if (dynamic_cast<ast::NilLiteral*>(pat.get())) absentCovered = true;
+            else if (dynamic_cast<ast::Identifier*>(pat.get())) presentCovered = true;
+        }
+        if (absentCovered && presentCovered) {
+            hasWildcard = true; // exhaustive: the no-match default is unreachable
+        }
+    }
+
     // Exhaustiveness: a match is exhaustive when it has an unguarded wildcard or,
     // for a tagged-union enum, arms that cover every variant. An exhaustive match
     // has an impossible default (no-match) path, so its default block is marked
@@ -1555,10 +1571,13 @@ void LLVMCodegen::codegenMatch(vyb::ast::MatchStatement* node, llvm::AllocaInst*
         std::shared_ptr<vyb::ast::TypeNode> pendingOptionalPayloadType;
         llvm::Value* isMatch = nullptr;
         if (matchedOptional) {
-            // Native `T?`: a bare binding pattern is the present arm (binds the
-            // payload), and the `?` wildcard is the absent arm.
+            // Native `T?`: branch on the present flag (field 1). `nil` is the
+            // absent arm, a bare binding pattern is the present arm (and binds
+            // payload field 0), and the `?` wildcard keeps its existing meaning
+            // here: the absent arm, unbound (#292).
             llvm::Value* hasVal = builder->CreateExtractValue(matchValue, 1, "opt.present");
-            if (!casePattern) {
+            auto* nilPat = casePattern ? dynamic_cast<ast::NilLiteral*>(casePattern.get()) : nullptr;
+            if (!casePattern || nilPat) {
                 isMatch = builder->CreateNot(hasVal, "opt.absent");
             } else {
                 isMatch = hasVal;

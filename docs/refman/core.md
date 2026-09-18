@@ -460,7 +460,8 @@ sequence is exhausted. The receiver is taken by reference
 the caller's object.
 
 A bound iterator is consumed by calling `.next()` in a loop with the native
-optional surface (present binds the bare value, `?` is the absent arm):
+optional surface (present binds the bare value as the payload type, and the
+absent arm is `?` or an explicit `nil`; the `?` wildcard binds nothing):
 
   import core::iter
 

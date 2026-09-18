@@ -6575,6 +6575,19 @@ void SemanticAnalyzer::visit(ast::SelectExpression* node) {
     }
     if (node->expr) materializeConcreteEnum(typeOf(node->expr).get());
 
+    // #292: a select over a native optional `T?` takes a `nil` arm for the
+    // absent state and a bare identifier arm for the present state, binding the
+    // payload in that arm's scope (mirroring the match-over-T? surface).
+    ast::OptionalType* selectOptionalType =
+        (node->expr && typeOf(node->expr))
+            ? dynamic_cast<ast::OptionalType*>(typeOf(node->expr).get()) : nullptr;
+    if (!selectOptionalType && node->expr) {
+        auto eIt = expressionTypes.find(exprKey(node->expr.get()));
+        if (eIt != expressionTypes.end() && eIt->second) {
+            selectOptionalType = dynamic_cast<ast::OptionalType*>(eIt->second.get());
+        }
+    }
+
     // Track comparison patterns for unreachable detection
     struct ComparisonInfo {
         vyb::TokenType op;
@@ -6583,6 +6596,10 @@ void SemanticAnalyzer::visit(ast::SelectExpression* node) {
     };
     std::vector<ComparisonInfo> comparisons;
     size_t wildcardIndex = SIZE_MAX;
+    // #292: absent/present coverage for an optional scrutinee (`nil` arms and
+    // payload-binding arms). Guarded arms are tracked separately below.
+    size_t nilIndex = SIZE_MAX;
+    size_t presentIndex = SIZE_MAX;
 
     // Visit all patterns and check for unreachable patterns
     for (size_t i = 0; i < node->cases.size(); i++) {
@@ -6734,21 +6751,70 @@ void SemanticAnalyzer::visit(ast::SelectExpression* node) {
             if (!handled) {
                 ctor->accept(*this);
             }
-        } else if (auto* vid = dynamic_cast<ast::Identifier*>(pattern.get())) {
-            // Enum unit-variant pattern: `Unit`.
-            if (wildcardIndex != SIZE_MAX) {
-                addError("Pattern after wildcard in case " +
-                        std::to_string(wildcardIndex + 1) + " is unreachable", pattern.get());
-            }
-            bool handled = false;
-            if (!selectTypeStr.empty()) {
-                auto variantsIt = enumVariantPayloadTypes.find(selectTypeStr);
-                if (variantsIt != enumVariantPayloadTypes.end() && variantsIt->second.count(vid->name)) {
-                    handled = true;
+        } else if (dynamic_cast<ast::NilLiteral*>(pattern.get())) {
+            // #292: `nil` is the absent arm when the select target is a native
+            // optional; for anything else it keeps today's behaviour (a nil
+            // literal value pattern).
+            if (selectOptionalType) {
+                if (wildcardIndex != SIZE_MAX) {
+                    addError("Pattern after wildcard in case " +
+                            std::to_string(wildcardIndex + 1) + " is unreachable", pattern.get());
+                } else if (nilIndex != SIZE_MAX) {
+                    addError("'nil' pattern already used in case " +
+                            std::to_string(nilIndex + 1) + ", this pattern is unreachable", pattern.get());
+                } else {
+                    nilIndex = i;
                 }
+            } else {
+                pattern->accept(*this);
             }
-            if (!handled) {
-                vid->accept(*this);
+        } else if (auto* vid = dynamic_cast<ast::Identifier*>(pattern.get())) {
+            if (selectOptionalType) {
+                // #292: present arm of a native optional. The identifier binds the
+                // payload (containedType) in this arm's scope, so the bound name
+                // supports the payload type's methods and fields.
+                if (wildcardIndex != SIZE_MAX) {
+                    addError("Pattern after wildcard in case " +
+                            std::to_string(wildcardIndex + 1) + " is unreachable", pattern.get());
+                } else if (presentIndex != SIZE_MAX) {
+                    addError("Present arm already used in case " +
+                            std::to_string(presentIndex + 1) + ", this pattern is unreachable", vid);
+                }
+                // Bind even when the arm is unreachable, so the arm's body is
+                // analyzed with its payload name in scope instead of cascading
+                // "Undefined identifier" errors for an arm that never runs.
+                {
+                    ast::TypeNode* optPayload = selectOptionalType->containedType.get();
+                    if (currentScope->lookupDirect(vid->name)) {
+                        addError("Redefinition of variable \"" + vid->name +
+                                 "\" in optional present pattern.", vid);
+                        setType(vid,  nullptr);
+                    } else if (!optPayload) {
+                        addError("Optional present arm has no payload type.", vid);
+                    } else {
+                        if (presentIndex == SIZE_MAX) presentIndex = i;
+                        currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, vid->name, false,
+                            ast::OwnershipKind::MY,
+                            retainType(optPayload->clone().release())});
+                        setType(vid,  std::shared_ptr<ast::TypeNode>(optPayload->clone().release()));
+                    }
+                }
+            } else {
+                // Enum unit-variant pattern: `Unit`.
+                if (wildcardIndex != SIZE_MAX) {
+                    addError("Pattern after wildcard in case " +
+                            std::to_string(wildcardIndex + 1) + " is unreachable", pattern.get());
+                }
+                bool handled = false;
+                if (!selectTypeStr.empty()) {
+                    auto variantsIt = enumVariantPayloadTypes.find(selectTypeStr);
+                    if (variantsIt != enumVariantPayloadTypes.end() && variantsIt->second.count(vid->name)) {
+                        handled = true;
+                    }
+                }
+                if (!handled) {
+                    vid->accept(*this);
+                }
             }
         } else if (auto* setp = dynamic_cast<ast::SetPattern*>(pattern.get())) {
             // Brace-delimited set pattern `{ v1, v2, ... }`.
@@ -6914,6 +6980,48 @@ void SemanticAnalyzer::visit(ast::SelectExpression* node) {
                 addError("Select on " + selectTypeStr + " is not exhaustive: variant(s) " +
                          uncovered + " are not covered (add the missing variant(s) or a wildcard '?')", node);
             }
+        }
+    }
+
+    // #292: a native optional has exactly two states: absent (a `nil` arm or the
+    // `?` wildcard) and present (a payload-binding arm). Without both, a value
+    // could reach the no-match default, so reject it here.
+    if (selectOptionalType) {
+        bool absentCovered = (wildcardIndex != SIZE_MAX) || (nilIndex != SIZE_MAX);
+        if (!absentCovered) {
+            addError("Select on optional " + selectTypeStr +
+                     " must include a 'nil' or '?' arm for the absent case.", node);
+        } else if (presentIndex == SIZE_MAX) {
+            addError("Select on optional " + selectTypeStr +
+                     " must include a present/value arm; a '?' arm alone is not exhaustive.", node);
+        }
+    }
+
+    // #292: stamp the arm result type so an unannotated declaration can infer it
+    // (`n = select (r) -> { ... }`), mirroring MatchExpression's result type.
+    if (!node->cases.empty()) {
+        ast::TypeNode* yielded = nullptr;
+        ast::ExprPtr& body = node->cases[0].second;
+        if (body) {
+            if (auto* be = dynamic_cast<ast::BlockExpression*>(body.get())) {
+                if (be->block) {
+                    for (auto& stmt : be->block->body) {
+                        if (auto* pass = dynamic_cast<ast::PassStatement*>(stmt.get())) {
+                            if (pass->argument) {
+                                auto it = expressionTypes.find(exprKey(pass->argument.get()));
+                                if (it != expressionTypes.end()) yielded = it->second.get();
+                            }
+                            break;
+                        }
+                    }
+                }
+            } else {
+                auto it = expressionTypes.find(exprKey(body.get()));
+                if (it != expressionTypes.end()) yielded = it->second.get();
+            }
+        }
+        if (yielded) {
+            setType(node,  std::shared_ptr<ast::TypeNode>(yielded->clone()));
         }
     }
 }
@@ -7513,8 +7621,8 @@ void SemanticAnalyzer::visit(ast::MatchStatement* node) {
     if (node->expr) materializeConcreteEnum(typeOf(node->expr).get());
 
     // A match over a native optional `T?`: the present arm binds the bare payload
-    // (`v ->`) and the `?` wildcard is the absent arm, so a bare identifier in a
-    // pattern is a payload binding rather than a plain value reference.
+    // (`v ->`) and the absent arm is `?` or, as of #292, `nil`, so a bare
+    // identifier in a pattern is a payload binding rather than a value reference.
     ast::OptionalType* matchedOptionalType =
         (node->expr && typeOf(node->expr))
             ? dynamic_cast<ast::OptionalType*>(typeOf(node->expr).get()) : nullptr;
@@ -7533,6 +7641,10 @@ void SemanticAnalyzer::visit(ast::MatchStatement* node) {
     };
     std::vector<ComparisonInfo> comparisons;
     size_t wildcardIndex = SIZE_MAX;
+    // #292: a `nil` arm covers the absent state and a payload-binding identifier
+    // arm covers the present state. Only unguarded arms establish coverage.
+    size_t nilIndex = SIZE_MAX;
+    size_t unguardedPresentIndex = SIZE_MAX;
 
     // Visit all patterns and check for unreachable patterns
     for (size_t i = 0; i < node->cases.size(); i++) {
@@ -7763,23 +7875,58 @@ void SemanticAnalyzer::visit(ast::MatchStatement* node) {
                 // construction expression.
                 ctor->accept(*this);
             }
+        } else if (dynamic_cast<ast::NilLiteral*>(pattern.get())) {
+            // #292: `nil` is the absent arm of a native optional; for anything
+            // else it keeps today's behaviour (a nil literal value pattern).
+            if (matchedOptionalType) {
+                bool nilGuard = (i < node->guards.size() && node->guards[i]);
+                if (wildcardIndex != SIZE_MAX) {
+                    addError("Pattern after wildcard in case " +
+                            std::to_string(wildcardIndex + 1) + " is unreachable", pattern.get());
+                } else if (nilGuard) {
+                    // A guarded nil arm covers only the guarded condition, so it
+                    // does not make a later nil arm unreachable.
+                } else if (nilIndex != SIZE_MAX) {
+                    addError("'nil' pattern already used in case " +
+                            std::to_string(nilIndex + 1) + ", this pattern is unreachable", pattern.get());
+                } else {
+                    nilIndex = i;
+                }
+            } else {
+                pattern->accept(*this);
+            }
         } else if (auto* vid = dynamic_cast<ast::Identifier*>(pattern.get())) {
             if (matchedOptionalType) {
                 // Native optional present arm: bind the payload as a variable in
-                // the case scope.
-                if (currentScope->lookupDirect(vid->name)) {
+                // the case scope. Only an unguarded arm establishes coverage, and
+                // a second unguarded binding arm matches the same (present) state,
+                // so it can never be reached. (#292)
+                bool presentGuard = (i < node->guards.size() && node->guards[i]);
+                bool bindable = true;
+                if (!presentGuard && unguardedPresentIndex != SIZE_MAX) {
+                    addError("Present arm already used in case " +
+                             std::to_string(unguardedPresentIndex + 1) + ", this pattern is unreachable", vid);
+                } else if (currentScope->lookupDirect(vid->name)) {
                     addError("Redefinition of variable \"" + vid->name +
                              "\" in optional present pattern.", vid);
                     setType(vid,  nullptr);
-                } else if (!matchedOptionalType->containedType) {
-                    addError("Optional present arm has no payload type.", vid);
-                } else {
-                    ast::TypeNode* optPayload = matchedOptionalType->containedType.get();
-                    currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, vid->name, false,
-                        ast::OwnershipKind::MY,
-                        optPayload ? retainType(optPayload->clone().release()) : nullptr});
-                    setType(vid,  optPayload
-                        ? std::shared_ptr<ast::TypeNode>(optPayload->clone().release()) : nullptr);
+                    bindable = false;
+                }
+                // Bind even when the arm is unreachable, so the arm's body is
+                // analyzed with its payload name in scope instead of cascading
+                // "Undefined identifier" errors for an arm that never runs.
+                if (bindable) {
+                    if (!matchedOptionalType->containedType) {
+                        addError("Optional present arm has no payload type.", vid);
+                    } else {
+                        if (!presentGuard && unguardedPresentIndex == SIZE_MAX) unguardedPresentIndex = i;
+                        ast::TypeNode* optPayload = matchedOptionalType->containedType.get();
+                        currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, vid->name, false,
+                            ast::OwnershipKind::MY,
+                            optPayload ? retainType(optPayload->clone().release()) : nullptr});
+                        setType(vid,  optPayload
+                            ? std::shared_ptr<ast::TypeNode>(optPayload->clone().release()) : nullptr);
+                    }
                 }
             } else {
                 // Enum unit-variant pattern: `Unit`. When matching a tagged
@@ -7857,17 +8004,14 @@ void SemanticAnalyzer::visit(ast::MatchStatement* node) {
     }
 
     // Exhaustiveness for the native optional: an optional has exactly two states,
-    // so a match must cover the present payload (a binding arm) and the absent
-    // case (the `?` wildcard).
-    if (matchedOptionalType && wildcardIndex == SIZE_MAX) {
-        addError("Match on optional " + matchTypeStr +
-                 " must include the '?' arm for the absent case.", node);
-    } else if (matchedOptionalType && wildcardIndex != SIZE_MAX) {
-        bool hasPresentArm = false;
-        for (size_t i = 0; i < node->cases.size(); ++i) {
-            if (node->cases[i].first) { hasPresentArm = true; break; }
-        }
-        if (!hasPresentArm) {
+    // so a match must cover the present payload (an unguarded binding arm) and the
+    // absent case (`nil` or the `?` wildcard). Diagnostic wording is unchanged.
+    if (matchedOptionalType) {
+        bool absentCovered = (wildcardIndex != SIZE_MAX) || (nilIndex != SIZE_MAX);
+        if (!absentCovered) {
+            addError("Match on optional " + matchTypeStr +
+                     " must include the '?' arm for the absent case.", node);
+        } else if (unguardedPresentIndex == SIZE_MAX) {
             addError("Match on optional " + matchTypeStr +
                      " must include a present/value arm; a '?' arm alone is not exhaustive.", node);
         }
