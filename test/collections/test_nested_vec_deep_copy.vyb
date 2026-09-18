@@ -1,0 +1,59 @@
+// @test: nested Vec elements are deep-copied by push/get/set (#284)
+// @description: Elements of a `Vec<Vec<T>>` were memcpy'd shallow, so the outer
+//   slot shared its inner buffer with the source binding. Once the source left
+//   scope the slot read freed memory (silent garbage) and the buffer could be
+//   freed twice. push/get/set now clone the inner payload so each slot owns it.
+// @category: collections
+// @expect: pass
+// @expect-output: pushed=1 10 11 copy=4 11 20 after_set=4 11 20 deep3=1 1 1 9
+
+import collections
+
+main()<Int> -> {
+    outer<Vec<Vec<Int>>> = Vec<Vec<Int>>()
+
+    inner<Vec<Int>> = Vec<Int>()
+    inner.push(10)
+    inner.push(11)
+    outer.push(inner)
+    print("pushed=")
+    print(outer.len())
+    print(" ")
+    print(outer.get(0).get(0))
+    print(" ")
+    print(outer.get(0).get(1))
+
+    copy<Vec<Int>> = outer.get(0)
+    copy.push(20)
+    copy.push(21)
+    print(" copy=")
+    print(copy.len())
+    print(" ")
+    print(copy.get(1))
+    print(" ")
+    print(copy.get(2))
+
+    outer.set(0, copy)
+    print(" after_set=")
+    print(outer.get(0).len())
+    print(" ")
+    print(outer.get(0).get(1))
+    print(" ")
+    print(outer.get(0).get(2))
+
+    three<Vec<Vec<Vec<Int>>>> = Vec<Vec<Vec<Int>>>()
+    mid<Vec<Vec<Int>>> = Vec<Vec<Int>>()
+    leaf<Vec<Int>> = Vec<Int>()
+    leaf.push(9)
+    mid.push(leaf)
+    three.push(mid)
+    print(" deep3=")
+    print(three.len())
+    print(" ")
+    print(three.get(0).len())
+    print(" ")
+    print(three.get(0).get(0).len())
+    print(" ")
+    print(three.get(0).get(0).get(0))
+    return 0
+}

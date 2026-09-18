@@ -480,6 +480,21 @@ private:
     // get/set read them with. Returns nullptr when the receiver's type is not
     // known, letting callers fall back to the value's own type.
     llvm::Type* vecElementTypeFromReceiver(vyb::ast::CallExpression* node);
+
+    // The AST element type of the Vec a method is called on (`Vec<T>` -> T node).
+    vyb::ast::TypeNode* vecElementNodeFromReceiver(vyb::ast::CallExpression* node);
+
+    // #284: deep-copy a `Vec` value used as an element of another Vec -- a fresh
+    // buffer holding a copy of the payload -- so the outer slot does not share the
+    // inner buffer with the source binding (dangling reads, double frees).
+    // innerSizeBytes is the stride of ONE element of the copied Vec.
+    llvm::Value* deepCopyVecElement(llvm::Value* vecVal, llvm::Type* vecStructTy,
+                                    uint64_t innerSizeBytes);
+
+    // #284: element stride for a type spelled as a name (the semantic layer hands
+    // back strings like "Vec<Int>" / "UInt8" for expression types), used where no
+    // VecType node is available.
+    uint64_t elementStrideForTypeName(const std::string& typeName);
     void handleVecPop(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecLen(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecGet(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);

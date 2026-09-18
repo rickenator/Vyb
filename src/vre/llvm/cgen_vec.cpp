@@ -84,6 +84,12 @@ void LLVMCodegen::handleVecMethod(vyb::ast::CallExpression* node, const std::str
 // as i64; taking the stride from the value laid elements 8 bytes apart while
 // get/set stride by the declared type -- right length, garbage contents.
 llvm::Type* LLVMCodegen::vecElementTypeFromReceiver(vyb::ast::CallExpression* node) {
+    auto* elemNode = vecElementNodeFromReceiver(node);
+    if (!elemNode) return nullptr;
+    return codegenType(elemNode);
+}
+
+vyb::ast::TypeNode* LLVMCodegen::vecElementNodeFromReceiver(vyb::ast::CallExpression* node) {
     if (!node) return nullptr;
     auto* callee = dynamic_cast<vyb::ast::MemberExpression*>(node->callee.get());
     if (!callee) return nullptr;
@@ -91,7 +97,91 @@ llvm::Type* LLVMCodegen::vecElementTypeFromReceiver(vyb::ast::CallExpression* no
     if (!recvType) return nullptr;
     auto* vecTy = dynamic_cast<vyb::ast::VecType*>(recvType.get());
     if (!vecTy || !vecTy->elementType) return nullptr;
-    return codegenType(vecTy->elementType.get());
+    return vecTy->elementType.get();
+}
+
+// #284: a `Vec` element stored into another Vec must own its own buffer. The old
+// code memcpy'd the struct, so the outer slot and the source binding shared one
+// inner buffer: when the source was reclaimed at scope exit the outer element
+// pointed at freed memory (silent garbage) and the buffer could be freed twice.
+// Clone the payload into a fresh allocation of capacity * inner element size.
+llvm::Value* LLVMCodegen::deepCopyVecElement(llvm::Value* vecVal, llvm::Type* vecStructTy,
+                                             uint64_t innerSizeBytes) {
+    if (!vecVal || !vecStructTy || innerSizeBytes == 0) return vecVal;
+    uint64_t innerSize = innerSizeBytes;
+
+    llvm::Value* data = builder->CreateExtractValue(vecVal, 0, "nestedvec.data");
+    llvm::Value* len = builder->CreateExtractValue(vecVal, 1, "nestedvec.len");
+    llvm::Value* cap = builder->CreateExtractValue(vecVal, 2, "nestedvec.cap");
+
+    llvm::Value* slotCount = builder->CreateSelect(
+        builder->CreateICmpUGT(cap, len), cap, len, "nestedvec.slots");
+    llvm::Value* bytes = builder->CreateMul(
+        slotCount, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), innerSize),
+        "nestedvec.bytes");
+
+    llvm::FunctionType* mallocType = llvm::FunctionType::get(
+        llvm::PointerType::get(*context, 0), {llvm::Type::getInt64Ty(*context)}, false);
+    llvm::Function* mallocFunc = module->getFunction("malloc");
+    if (!mallocFunc) {
+        mallocFunc = llvm::Function::Create(mallocType, llvm::Function::ExternalLinkage,
+                                            "malloc", module.get());
+    }
+    llvm::Value* fresh = builder->CreateCall(mallocFunc, {bytes}, "nestedvec.fresh");
+
+    llvm::FunctionType* memcpyType = llvm::FunctionType::get(
+        llvm::PointerType::get(*context, 0),
+        {llvm::PointerType::get(*context, 0), llvm::PointerType::get(*context, 0),
+         llvm::Type::getInt64Ty(*context)},
+        false);
+    llvm::Function* memcpyFunc = module->getFunction("memcpy");
+    if (!memcpyFunc) {
+        memcpyFunc = llvm::Function::Create(memcpyType, llvm::Function::ExternalLinkage,
+                                            "memcpy", module.get());
+    }
+    builder->CreateCall(memcpyFunc, {fresh, data, bytes});
+
+    llvm::Value* out = llvm::UndefValue::get(vecStructTy);
+    out = builder->CreateInsertValue(out, fresh, 0, "nestedvec.ptr");
+    out = builder->CreateInsertValue(out, len, 1, "nestedvec.slen");
+    out = builder->CreateInsertValue(out, slotCount, 2, "nestedvec.scap");
+    return out;
+}
+
+// #284: the byte stride of ONE element inside a Vec whose element type is named
+// `typeName`. Expression types reach codegen as names ("Vec<Int>", "UInt8",
+// "String") rather than as VecType nodes, so where no VecType is available the
+// stride has to come from the name. Widths follow the LLVM types in
+// cgen_types.cpp; a nested Vec is its { ptr, i64, i64 } header (24 bytes) and an
+// ownership wrapper is a single pointer (8). Unrecognised names fall back to 8.
+uint64_t LLVMCodegen::elementStrideForTypeName(const std::string& typeName) {
+    std::string inner = typeName;
+    size_t lt = typeName.find('<');
+    if (lt != std::string::npos) {
+        size_t gt = typeName.rfind('>');
+        if (gt != std::string::npos && gt > lt + 1) {
+            inner = typeName.substr(lt + 1, gt - lt - 1);
+        }
+    }
+    if (inner.rfind("Vec<", 0) == 0) return 24;   // further nesting: header struct
+    if (inner.rfind("my<", 0) == 0) return 8;     // owned pointer
+    if (inner.rfind("their<", 0) == 0) return 8;  // borrowed pointer
+    if (inner == "Int" || inner == "UInt64" || inner == "Float" ||
+        inner == "Type" || inner == "u64" || inner == "f64" || inner == "CDouble") {
+        return 8;
+    }
+    if (inner == "UInt32" || inner == "Float32" || inner == "Rune" ||
+        inner == "u32" || inner == "f32" || inner == "CFloat" ||
+        inner == "CInt" || inner == "CUInt") {
+        return 4;
+    }
+    if (inner == "UInt16" || inner == "u16" || inner == "CUShort") return 2;
+    if (inner == "UInt8" || inner == "u8" || inner == "Char" ||
+        inner == "Bool" || inner == "CUChar") {
+        return 1;
+    }
+    if (inner == "String") return 16;             // { ptr, i64 }
+    return 8;
 }
 
 void LLVMCodegen::handleVecPush(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
@@ -271,7 +361,28 @@ void LLVMCodegen::handleVecPush(vyb::ast::CallExpression* node, llvm::Value* vec
             isKnownStructTypeNode(typeOfNode(node->arguments[0]).get()) &&
             structTypeHasOwnedFields(typeOfNode(node->arguments[0]).get());
 
-        if (structNeedsDeepCopy) {
+        // #284: an element that is itself a Vec owns heap data the same way a
+        // struct with owned fields does -- and it is not a *named* struct, so the
+        // isKnownStructTypeNode() test below never fired for it and the element was
+        // memcpy'd shallow. Clone the inner payload so the outer slot owns it.
+        llvm::Type* nestedInnerTy = nullptr;
+        if (!node->arguments.empty()) {
+            // Use the ARGUMENT's type node: for `outer.push(inner)` that is the
+            // inner Vec's own VecType, whereas the receiver's element child can be a
+            // TypeName for nested generics and would never cast to VecType.
+            if (auto argTy = typeOfNode(node->arguments[0].get())) {
+                if (auto* argVec = dynamic_cast<vyb::ast::VecType*>(argTy.get())) {
+                    if (argVec->elementType) nestedInnerTy = codegenType(argVec->elementType.get());
+                }
+            }
+        }
+        if (nestedInnerTy && valueToAdd->getType() == elementType) {
+            llvm::DataLayout dl(module.get());
+            llvm::Value* srcStruct = builder->CreateLoad(elementType, srcPtr, "vec.push.nested_load");
+            llvm::Value* cloned = deepCopyVecElement(srcStruct, elementType,
+                                                     dl.getTypeAllocSize(nestedInnerTy));
+            builder->CreateStore(cloned, elementPtr);
+        } else if (structNeedsDeepCopy) {
             // Generate the deep copy of the source struct value.
             llvm::Value* deepCopy = generateStructDeepCopy(
                 builder->CreateLoad(elementType, srcPtr, "vec.push.struct_load"),
@@ -485,7 +596,16 @@ void LLVMCodegen::handleVecGet(vyb::ast::CallExpression* node, llvm::Value* vecP
         // that binding is reclaimed on scope exit it frees the same buffers the
         // slot (and any other get() caller) still owns -> double free. Deep-copy
         // owned fields so the returned value owns data independent of the slot.
-        if (typeOfNode(node) &&
+        // #284: a Vec element is that case too -- and it is not a *named* struct,
+        // so isKnownStructTypeNode() never fired for it. The semantic layer reports
+        // this expression's type as a name ("Vec<Int>"), so the inner stride comes
+        // from the name.
+        std::string nodeTypeName = typeOfNode(node) ? typeOfNode(node)->toString() : std::string();
+        if (nodeTypeName.rfind("Vec<", 0) == 0) {
+            uint64_t stride = elementStrideForTypeName(nodeTypeName);
+            element = deepCopyVecElement(element, elementLLVMType, stride);
+            validIncoming = builder->GetInsertBlock();
+        } else if (typeOfNode(node) &&
             isKnownStructTypeNode(typeOfNode(node).get()) &&
             structTypeHasOwnedFields(typeOfNode(node).get())) {
             element = generateStructDeepCopy(
@@ -667,7 +787,28 @@ void LLVMCodegen::handleVecSet(vyb::ast::CallExpression* node, llvm::Value* vecP
     // String elements: the overwritten slot's reference is dropped and the new
     // value is stored with its own reference (a fresh transfer already owns one;
     // a borrowed source must be retained).
-    if (elementLLVMType && isVybStringStructType(elementLLVMType)) {
+    // #284: a Vec element stored into another Vec must own its own buffer.
+    // Without this, `outer.set(i, inner)` aliased the source binding's buffer --
+    // the slot dangled once the source scope closed (silent garbage) and could be
+    // freed twice. Release the overwritten slot's buffer, then store a clone.
+    llvm::Type* nestedInnerTy = nullptr;
+    if (node->arguments.size() >= 2) {
+        // Same as push: the ARGUMENT's node is the inner Vec's VecType (#284).
+        if (auto argTy = typeOfNode(node->arguments[1].get())) {
+            if (auto* argVec = dynamic_cast<vyb::ast::VecType*>(argTy.get())) {
+                if (argVec->elementType) nestedInnerTy = codegenType(argVec->elementType.get());
+            }
+        }
+    }
+    if (nestedInnerTy && value->getType() == elementLLVMType) {
+        llvm::DataLayout dl(module.get());
+        llvm::Value* oldElem = builder->CreateLoad(elementLLVMType, elementPtr,
+                                                  "vec.set.old_nested");
+        llvm::Value* oldData = builder->CreateExtractValue(oldElem, 0,
+                                                          "vec.set.old_nested_data");
+        builder->CreateCall(getOrCreateFreeFunction(), {oldData});
+        value = deepCopyVecElement(value, elementLLVMType, dl.getTypeAllocSize(nestedInnerTy));
+    } else if (elementLLVMType && isVybStringStructType(elementLLVMType)) {
         llvm::Value* oldElem = builder->CreateLoad(elementLLVMType, elementPtr, "vec.set.old_elem");
         releaseStringValue(oldElem);
         if (!exprIsStringTransfer(node->arguments[1].get())) {
