@@ -495,6 +495,12 @@ private:
     // back strings like "Vec<Int>" / "UInt8" for expression types), used where no
     // VecType node is available.
     uint64_t elementStrideForTypeName(const std::string& typeName);
+
+    // #297: the inner `Vec<...>` TypeNode when `tn` is a bare borrow of a Vec
+    // (`their<Vec<T>>`), else nullptr. `get` on a `Vec<Vec<T>>` slot is typed as
+    // such a borrow, and the value in flight is the address of the slot's
+    // { ptr, i64, i64 } header rather than a struct copy.
+    vyb::ast::TypeNode* borrowedVecInnerNode(const vyb::ast::TypeNode* tn);
     void handleVecPop(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecLen(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecGet(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);

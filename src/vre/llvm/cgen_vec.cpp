@@ -184,6 +184,25 @@ uint64_t LLVMCodegen::elementStrideForTypeName(const std::string& typeName) {
     return 8;
 }
 
+// #297: a borrow of a Vec (`their<Vec<T>>`) lowers to a bare pointer, so the inner
+// Vec type has to be read off the AST wrapper -- the LLVM type alone cannot say
+// what is borrowed. `get` on a `Vec<Vec<T>>` slot carries such a type (semantic.cpp
+// vecGetResultType), and the value in flight is the address of the slot's
+// { ptr, i64, i64 } header. Returns the inner Vec TypeNode, else nullptr.
+vyb::ast::TypeNode* LLVMCodegen::borrowedVecInnerNode(const vyb::ast::TypeNode* tn) {
+    if (!tn) return nullptr;
+    auto* name = dynamic_cast<const vyb::ast::TypeName*>(tn);
+    if (!name || !name->identifier || name->identifier->name != "their") return nullptr;
+    if (name->genericArgs.size() != 1) return nullptr;
+    vyb::ast::TypeNode* inner = name->genericArgs[0].get();
+    if (!inner) return nullptr;
+    if (dynamic_cast<vyb::ast::VecType*>(inner)) return inner;
+    if (auto* innerName = dynamic_cast<vyb::ast::TypeName*>(inner)) {
+        if (innerName->identifier && innerName->identifier->name == "Vec") return inner;
+    }
+    return nullptr;
+}
+
 void LLVMCodegen::handleVecPush(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
     if (node->arguments.size() != 1) {
         logError(node->loc, "Vec::push expects exactly 1 argument");
@@ -541,10 +560,24 @@ void LLVMCodegen::handleVecGet(vyb::ast::CallExpression* node, llvm::Value* vecP
 
     // Get the element type from the CallExpression's type (return type)
     // The semantic analyzer should have set this to the element type (T from Vec<T>)
+    // #297: `get` on a `Vec<Vec<T>>` slot is typed `their<Vec<T>>` (semantic.cpp),
+    // so the call yields the ADDRESS of the slot's { ptr, i64, i64 } header -- a
+    // borrow -- and allocates nothing. Reads through the borrow (a chained `get`,
+    // `len()`, or an aspect call) operate on the slot in place, and #260 already
+    // rejects mutation through a `get` temporary. The stride is the header size,
+    // read from the borrowed Vec's own type; the wrapper itself lowers to a bare
+    // pointer and cannot supply it.
+    vyb::ast::TypeNode* borrowedVec = borrowedVecInnerNode(typeOfNode(node).get());
     llvm::Type* elementLLVMType = nullptr;
     uint64_t elementSizeBytes = 8; // Default to 8 bytes
 
-    if (typeOfNode(node)) {
+    if (borrowedVec) {
+        elementLLVMType = codegenType(borrowedVec);
+        if (elementLLVMType) {
+            llvm::DataLayout dataLayout(module.get());
+            elementSizeBytes = dataLayout.getTypeAllocSize(elementLLVMType);
+        }
+    } else if (typeOfNode(node)) {
         // Convert AST type to LLVM type
         elementLLVMType = codegenType(typeOfNode(node).get());
         if (elementLLVMType) {
@@ -576,6 +609,14 @@ void LLVMCodegen::handleVecGet(vyb::ast::CallExpression* node, llvm::Value* vecP
         *context, "vec.get.valid", boundsCheckBlock->getParent());
     llvm::BasicBlock* mergeBlock = llvm::BasicBlock::Create(
         *context, "vec.get.merge", boundsCheckBlock->getParent());
+    // #297: a borrow result keeps the existing default-element behaviour for an
+    // out-of-bounds index by pointing at a zeroed header local, so no address past
+    // the buffer is ever formed.
+    llvm::Value* zeroHeaderSlot = nullptr;
+    if (borrowedVec && elementLLVMType) {
+        zeroHeaderSlot = builder->CreateAlloca(elementLLVMType, nullptr, "vec.get.zero_header");
+        builder->CreateStore(llvm::ConstantAggregateZero::get(elementLLVMType), zeroHeaderSlot);
+    }
     builder->CreateCondBr(indexInBounds, validBlock, mergeBlock);
 
     builder->SetInsertPoint(validBlock);
@@ -589,22 +630,20 @@ void LLVMCodegen::handleVecGet(vyb::ast::CallExpression* node, llvm::Value* vecP
     // out-of-bounds default below so no invalid address is ever dereferenced.
     llvm::Value* element;
     llvm::BasicBlock* validIncoming = validBlock;
-    if (elementLLVMType->isStructTy()) {
+    if (borrowedVec && elementLLVMType) {
+        // #297: the borrow IS the slot address -- nothing is loaded and nothing is
+        // allocated, so no temporary produced by this call can leak.
+        element = elementPtr;
+    } else if (elementLLVMType->isStructTy()) {
         element = builder->CreateLoad(elementLLVMType, elementPtr, "vec.element_struct");
         // A struct element that owns heap data is returned by shallow load, which
         // aliases the slot's inner buffers into the caller's fresh binding. When
         // that binding is reclaimed on scope exit it frees the same buffers the
         // slot (and any other get() caller) still owns -> double free. Deep-copy
         // owned fields so the returned value owns data independent of the slot.
-        // #284: a Vec element is that case too -- and it is not a *named* struct,
-        // so isKnownStructTypeNode() never fired for it. The semantic layer reports
-        // this expression's type as a name ("Vec<Int>"), so the inner stride comes
-        // from the name.
-        // #284: a Vec element is deliberately NOT deep-copied here. `get` yields a
-        // *view* into the slot -- mutating through it is rejected at compile time
-        // (#260) -- so the call allocates nothing and no temporary can leak. A
-        // binding that takes ownership of such a view deep-copies it at the binding
-        // site instead (cgen_decl.cpp), where escape is certain.
+        // #284/#297: a Vec element never reaches this branch -- `get` on a
+        // `Vec<Vec<T>>` slot is typed as a borrow and returns the slot address above,
+        // so there is no struct copy to deepen.
         std::string nodeTypeName = typeOfNode(node) ? typeOfNode(node)->toString() : std::string();
         if (typeOfNode(node) &&
             isKnownStructTypeNode(typeOfNode(node).get()) &&
@@ -624,6 +663,18 @@ void LLVMCodegen::handleVecGet(vyb::ast::CallExpression* node, llvm::Value* vecP
     builder->CreateBr(mergeBlock);
 
     builder->SetInsertPoint(mergeBlock);
+    if (borrowedVec && elementLLVMType) {
+        // #297: the result is the borrow -- the slot address, or the zeroed header
+        // local for an out-of-bounds index.
+        llvm::PHINode* borrowResult = builder->CreatePHI(
+            llvm::PointerType::get(*context, 0), 2, "vec.get.borrow");
+        borrowResult->addIncoming(element, validIncoming);
+        borrowResult->addIncoming(zeroHeaderSlot, boundsCheckBlock);
+        m_currentLLVMValue = borrowResult;
+
+        VYB_CDBG << "DEBUG: Vec::get() yields a borrow of the element slot" << std::endl;
+        return;
+    }
     llvm::Value* defaultValue;
     if (elementLLVMType->isIntegerTy()) {
         defaultValue = llvm::ConstantInt::get(elementLLVMType, 0);

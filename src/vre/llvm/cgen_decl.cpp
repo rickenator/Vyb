@@ -203,6 +203,29 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
             }
         }
 
+        // #297: `get` on a `Vec<Vec<T>>` slot is typed `their<Vec<T>>` (semantic.cpp),
+        // so a plain `Vec<T>` binding initialized from one receives a *borrow* -- the
+        // address of the container's element slot. An owning binding must not alias
+        // container storage: load the borrowed header and deep-copy its inner buffer,
+        // so this binding owns its allocation and its scope-exit free cannot collide
+        // with the container's reclaim of the same slot. The borrow itself allocates
+        // nothing, so the temporaries that merely read a view (`v.get(0).title()`)
+        // cannot leak.
+        if (node->init && node->typeNode && isVecStructType(varType) &&
+            node->typeNode->toString().rfind("their<", 0) != 0 &&
+            initialVal && initialVal->getType()->isPointerTy()) {
+            if (ast::TypeNode* borrowedVec = borrowedVecInnerNode(typeOfNode(node->init).get())) {
+                if (auto* st = llvm::dyn_cast<llvm::StructType>(varType)) {
+                    // initialVal is the address of the borrowed Vec's header.
+                    llvm::Value* header = builder->CreateLoad(st, initialVal, "init.vecborrow.header");
+                    uint64_t stride = elementStrideForTypeName(borrowedVec->toString());
+                    initialVal = deepCopyVecElement(header, st, stride);
+                    VYB_CDBG << "DEBUG: borrowed Vec element bound to '" << node->id->name
+                              << "': deep-copied the inner buffer" << std::endl;
+                }
+            }
+        }
+
         if (!varType) {
             varType = initialVal->getType();
         } else {
@@ -536,29 +559,9 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
             }
         }
 
-        // #284: binding a `get(i)` view of a `Vec<Vec<T>>` slot. The view aliases the
-        // slot's inner buffer, so an owning binding must take its own copy --
-        // otherwise the binding's scope-exit free and the outer Vec's reclaim free
-        // the same allocation. `get` itself stays allocation-free, so the temporaries
-        // that consume these views (e.g. `v.get(0).title()`) cannot leak.
-        if (node->init && node->typeNode && isVecStructType(varType)) {
-            if (auto* call = dynamic_cast<ast::CallExpression*>(node->init.get())) {
-                if (auto* mem = dynamic_cast<ast::MemberExpression*>(call->callee.get())) {
-                    auto* prop = dynamic_cast<ast::Identifier*>(mem->property.get());
-                    auto recvTy = typeOfNode(mem->object.get());
-                    if (prop && prop->name == "get" && recvTy &&
-                        recvTy->toString().rfind("Vec<Vec<", 0) == 0) {
-                        if (auto* st = llvm::dyn_cast<llvm::StructType>(varType)) {
-                            uint64_t stride = elementStrideForTypeName(node->typeNode->toString());
-                            initialVal = deepCopyVecElement(initialVal, st, stride);
-                            builder->CreateStore(initialVal, alloca, "init.veccopy");
-                            VYB_CDBG << "DEBUG: Vec element view bound to '" << node->id->name
-                                      << "': deep-copied the inner buffer" << std::endl;
-                        }
-                    }
-                }
-            }
-        }
+        // #284/#297: the binding-site deep copy moved to the initializer conversion
+        // above, where the *type* of the initializer (`their<Vec<T>>`) says the value
+        // is a borrow -- no AST shape has to be re-derived here.
 
         // Register variable for scope-based cleanup
         registerVariable(node->id->name, alloca, initialVal, ownership, varType, needsCleanup);
