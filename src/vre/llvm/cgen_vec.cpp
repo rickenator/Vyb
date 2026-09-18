@@ -600,12 +600,13 @@ void LLVMCodegen::handleVecGet(vyb::ast::CallExpression* node, llvm::Value* vecP
         // so isKnownStructTypeNode() never fired for it. The semantic layer reports
         // this expression's type as a name ("Vec<Int>"), so the inner stride comes
         // from the name.
+        // #284: a Vec element is deliberately NOT deep-copied here. `get` yields a
+        // *view* into the slot -- mutating through it is rejected at compile time
+        // (#260) -- so the call allocates nothing and no temporary can leak. A
+        // binding that takes ownership of such a view deep-copies it at the binding
+        // site instead (cgen_decl.cpp), where escape is certain.
         std::string nodeTypeName = typeOfNode(node) ? typeOfNode(node)->toString() : std::string();
-        if (nodeTypeName.rfind("Vec<", 0) == 0) {
-            uint64_t stride = elementStrideForTypeName(nodeTypeName);
-            element = deepCopyVecElement(element, elementLLVMType, stride);
-            validIncoming = builder->GetInsertBlock();
-        } else if (typeOfNode(node) &&
+        if (typeOfNode(node) &&
             isKnownStructTypeNode(typeOfNode(node).get()) &&
             structTypeHasOwnedFields(typeOfNode(node).get())) {
             element = generateStructDeepCopy(
