@@ -207,6 +207,13 @@ aspect StringOps {
     # linear instead of the copy-and-rescan suffix workaround. `start` is clamped
     # to 0 from below, and `index_of_from(needle, 0)` matches `index_of(needle)`.
     index_of_from(self<String>, needle<String>, start<Int>)<Int> -> { }
+
+    # #287: documented in the reference manual (language.md `to_int`/`to_float`,
+    # PROGRAMMERS_GUIDE `s.to_int()`/`s.to_float()`). Parse a leading decimal
+    # number: an optional sign, then digits; `to_float` also accepts a fraction
+    # and an `e`/`E` exponent. A string with no digits yields 0 / 0.0.
+    to_int(self<String>)<Int> -> { }
+    to_float(self<String>)<Float> -> { }
 }
 
 share(all)
@@ -285,5 +292,97 @@ bind StringOps -> String {
             i = i + 1
         }
         return -1
+    }
+
+    # #287: leading decimal integer; a sign is honoured, scanning stops at the
+    # first non-digit, and a string with no digits yields 0.
+    to_int(self<String>)<Int> -> {
+        n<Int> = self.len()
+        i<Int> = 0
+        neg<Bool> = false
+        while (i < n && self.char_at(i) == 32) { i = i + 1 }
+        if (i < n && (self.char_at(i) == 45 || self.char_at(i) == 43)) {
+            if (self.char_at(i) == 45) { neg = true }
+            i = i + 1
+        }
+        v<Int> = 0
+        ok<Bool> = true
+        while (ok && i < n) {
+            c<Int> = self.char_at(i)
+            if (c >= 48 && c <= 57) {
+                v = v * 10 + (c - 48)
+                i = i + 1
+            } else {
+                ok = false
+            }
+        }
+        if (neg) { return 0 - v }
+        return v
+    }
+
+    # #287: `[+-]d[.d][eE[+-]d]`; the same scanning rule as `to_int`.
+    to_float(self<String>)<Float> -> {
+        n<Int> = self.len()
+        i<Int> = 0
+        neg<Bool> = false
+        while (i < n && self.char_at(i) == 32) { i = i + 1 }
+        if (i < n && (self.char_at(i) == 45 || self.char_at(i) == 43)) {
+            if (self.char_at(i) == 45) { neg = true }
+            i = i + 1
+        }
+        whole<Float> = 0.0
+        ok<Bool> = true
+        while (ok && i < n) {
+            c<Int> = self.char_at(i)
+            if (c >= 48 && c <= 57) {
+                whole = whole * 10.0 + (c - 48)
+                i = i + 1
+            } else {
+                ok = false
+            }
+        }
+        frac<Float> = 0.0
+        scale<Float> = 1.0
+        if (i < n && self.char_at(i) == 46) {
+            i = i + 1
+            ok = true
+            while (ok && i < n) {
+                c<Int> = self.char_at(i)
+                if (c >= 48 && c <= 57) {
+                    frac = frac * 10.0 + (c - 48)
+                    scale = scale * 10.0
+                    i = i + 1
+                } else {
+                    ok = false
+                }
+            }
+        }
+        val<Float> = whole + frac / scale
+        if (i < n && (self.char_at(i) == 101 || self.char_at(i) == 69)) {
+            i = i + 1
+            eneg<Bool> = false
+            if (i < n && (self.char_at(i) == 45 || self.char_at(i) == 43)) {
+                if (self.char_at(i) == 45) { eneg = true }
+                i = i + 1
+            }
+            e<Int> = 0
+            ok = true
+            while (ok && i < n) {
+                c<Int> = self.char_at(i)
+                if (c >= 48 && c <= 57) {
+                    e = e * 10 + (c - 48)
+                    i = i + 1
+                } else {
+                    ok = false
+                }
+            }
+            k<Int> = 0
+            while (k < e) {
+                if (eneg) { val = val / 10.0 } else { val = val * 10.0 }
+                k = k + 1
+            }
+        }
+        if (neg) { return 0.0 - val }
+        return val
     }
 }

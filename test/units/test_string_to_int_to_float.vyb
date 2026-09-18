@@ -1,0 +1,26 @@
+// @test: String.to_int / String.to_float parse leading decimal numbers (#287)
+// @description: The reference manual documented `to_int`/`to_float` but neither
+//   existed, so guide-following code failed with "Method 'to_int' not found for
+//   type 'String'". Both are implemented in stdlib/core/aspects.vyb.
+// @category: units, string, stdlib
+// @expect: pass
+// @expect-output: 42|-7|0|1234|3.5|-125|2000|0
+
+main()<Int> -> {
+    print("42".to_int())
+    print("|")
+    print("  -7".to_int())
+    print("|")
+    print("abc".to_int())
+    print("|")
+    print("1234xyz".to_int())
+    print("|")
+    print("3.5".to_float())
+    print("|")
+    print("-1.25e2".to_float())
+    print("|")
+    print("2e3".to_float())
+    print("|")
+    print("x".to_float())
+    return 0
+}
