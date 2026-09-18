@@ -1,0 +1,26 @@
+// @test: Re-borrowing an existing their<T> is rejected instead of crashing (#285)
+// @description: `fill(borrow(v), x)` where `v` is already a `their<T>` parameter used
+//   to reach codegen and die with a core dump (exit 139). The supported rule is
+//   "borrow once at the owner, then propagate", so the second borrow is a clear
+//   compile-time error.
+// @category: ownership, aspects
+// @expect: fail
+// @expect-error: is already a borrow
+
+import collections
+
+fill(v<their<Vec<Int>>>, x<Int>)<Int> -> {
+    v.push(x)
+    return v.len()
+}
+
+outer(v<their<Vec<Int>>>)<Int> -> {
+    return fill(borrow(v), 1)
+}
+
+main()<Int> -> {
+    xs<Vec<Int>> = Vec<Int>()
+    xs.push(0)
+    print(outer(borrow(xs)))
+    return 0
+}

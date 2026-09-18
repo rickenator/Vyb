@@ -9584,6 +9584,20 @@ void SemanticAnalyzer::visit(ast::BorrowExpression* node) {
         return;
     }
 
+    // #285: borrowing something that is *already* a borrow -- `fill(borrow(v), x)` where
+    // `v` is a `their<T>` parameter -- used to reach codegen and die with a core dump
+    // (exit 139). The supported rule is "borrow once at the owner, then propagate", so
+    // reject the second borrow and name what to pass through instead.
+    if (isTheirType(exprType)) {
+        std::string root = borrowedRootName(node->expression.get());
+        std::string what = root.empty() ? std::string("this expression") : "'" + root + "'";
+        addError(what + " is already a borrow: borrowing it again would borrow a borrow. "
+                 "Borrow once at the owner and propagate -- pass " + what + " directly instead.",
+                 node);
+        setType(node, nullptr);
+        return;
+    }
+
     ast::TypeNodePtr innerType;
     if (auto* typeName = dynamic_cast<ast::TypeName*>(exprType)) {
         if (typeName->identifier &&
