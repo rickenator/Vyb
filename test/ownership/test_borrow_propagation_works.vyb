@@ -1,0 +1,27 @@
+// @test: Propagating an existing their<T> works and reaches the caller (#285)
+// @description: The supported form -- borrow once at the owner, then pass the borrow
+//   straight through -- must keep working, so the new diagnostic cannot be satisfied
+//   only by rejecting re-borrows. Both Vec and struct-field mutation reach the caller.
+// @category: ownership, aspects
+// @expect: pass
+// @expect-output: 2 30
+
+import collections
+
+push_one(v<their<Vec<Int>>>, x<Int>)<Int> -> {
+    v.push(x)
+    return v.len()
+}
+
+outer(v<their<Vec<Int>>>)<Int> -> {
+    return push_one(v, 30)
+}
+
+main()<Int> -> {
+    xs<Vec<Int>> = Vec<Int>()
+    xs.push(10)
+    print(outer(borrow(xs)))
+    print(" ")
+    print(xs.get(1))
+    return 0
+}
