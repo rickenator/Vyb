@@ -1,0 +1,38 @@
+// @test: Vec<T>? returns wrap/unwrap without an invalid cast or crash (#282)
+// @description: Returning a plain `Vec<Int>` from a function declared `Vec<Int>?`
+//   used to fail with "Unsupported or invalid cast from type { ptr, i64, i64 } to
+//   { { ptr, i64, i64 }, i1 }" and then core-dump. The payload is now wrapped with
+//   the present flag set, and `return nil` produces a well-formed absent value.
+//   Presence is observable with `== nil`; unwrapping the payload itself is a
+//   separate gap (see the follow-up issue referenced from #282).
+// @category: collections, types, optional
+// @expect: pass
+// @expect-output: present absent
+
+import collections
+
+present()<Vec<Int>?> -> {
+    v<Vec<Int>> = Vec<Int>()
+    v.push(5)
+    return v
+}
+
+absent()<Vec<Int>?> -> {
+    return nil
+}
+
+main()<Int> -> {
+    r<Vec<Int>?> = present()
+    if (r == nil) {
+        print("bad")
+    } else {
+        print("present")
+    }
+    s<Vec<Int>?> = absent()
+    if (s == nil) {
+        print(" absent")
+    } else {
+        print("bad")
+    }
+    return 0
+}
