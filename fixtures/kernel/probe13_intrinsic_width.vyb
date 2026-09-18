@@ -1,0 +1,24 @@
+# #270 regression kernel: a long (13-word) descriptor plus a value derived from
+# its later words, stored through st_i32. st_i32 must store exactly 4 bytes --
+# storing the Int operand's own width (8 bytes) clobbers the next element.
+probe13(dsc<Int>) -> {
+    out_a<Int> = ld_i64(dsc + 0) as Int
+    out_b<Int> = ld_i64(dsc + 8) as Int
+    out_lane<Int> = ld_i64(dsc + 16) as Int
+    n<Int> = ld_i64(dsc + 24) as Int
+    wa<Int> = ld_i64(dsc + 32) as Int
+    x6<Int> = ld_i64(dsc + 48) as Int
+    x7<Int> = ld_i64(dsc + 56) as Int
+    x8<Int> = ld_i64(dsc + 64) as Int
+    x9<Int> = ld_i64(dsc + 72) as Int
+    x10<Int> = ld_i64(dsc + 80) as Int
+    x11<Int> = ld_i64(dsc + 88) as Int
+    x12<Int> = ld_i64(dsc + 96) as Int
+    tail<Int> = x6 + x7 * 0 + x8 * 0 + x9 * 0 + x10 * 0 + x11 * 0 + x12
+    gid<Int> = (blk_x() * dim_x() + tid_x()) as Int
+    if (gid < n) {
+        st_i32(out_a + gid * 4, tail)
+        st_i32(out_b + gid * 4, wa)
+        st_i32(out_lane + gid * 4, gid)
+    }
+}
