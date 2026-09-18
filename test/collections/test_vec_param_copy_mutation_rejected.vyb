@@ -1,0 +1,18 @@
+// @test: Mutating a by-value Vec parameter is rejected, not silent (#283)
+// @description: `v.push(x)` on a plain `Vec<Int>` parameter mutates a copy and
+//   leaves the caller's vector untouched. Now a semantic error naming the param.
+// @category: collections, ownership, diagnostics
+// @expect: fail
+// @expect-error: cannot call 'push' on parameter 'v' of type 'Vec<Int>'
+
+import collections
+
+fill(v<Vec<Int>>)<Int> -> {
+    v.push(1)
+    return v.len()
+}
+
+main()<Int> -> {
+    xs<Vec<Int>> = Vec<Int>()
+    return fill(xs)
+}
