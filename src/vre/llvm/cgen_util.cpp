@@ -154,6 +154,40 @@ llvm::Value* LLVMCodegen::tryCast(llvm::Value* value, llvm::Type* targetType, co
             return strStruct;
         }
     }
+    // #282: a plain payload value stored into a Vyb optional `{ T, i1 }` -- i.e.
+    // returning a `Vec<T>` from a function declared `Vec<T>?`. The payload may
+    // itself be a struct ({ ptr, i64, i64 } for a Vec), so match on the exact
+    // payload type rather than excluding struct sources. Wrap the payload and mark
+    // it present, instead of reporting an invalid cast and leaving the module in a
+    // state that core-dumps when the program is run.
+    if (targetType->isStructTy()) {
+        llvm::StructType* optSt = llvm::dyn_cast<llvm::StructType>(targetType);
+        if (optSt && optSt->getNumElements() == 2 &&
+            optSt->getElementType(1)->isIntegerTy(1)) {
+            // `return nil` in an optional-returning function: the absent case.
+            // `nil` is a bare pointer while a payload-carrying optional slot (e.g.
+            // `Vec<T>?`) holds a struct, so a pointer arriving where a non-pointer
+            // payload is expected means "absent". Build `{ <undef payload>, i0 }`
+            // so the module stays well-formed; consumers test presence first.
+            if (value->getType()->isPointerTy() &&
+                !optSt->getElementType(0)->isPointerTy()) {
+                llvm::Value* absent = llvm::UndefValue::get(targetType);
+                absent = builder->CreateInsertValue(
+                    absent, llvm::ConstantInt::get(llvm::Type::getInt1Ty(*context), 0),
+                    1, "opt.wrap.absent");
+                return absent;
+            }
+            if (optSt->getElementType(0) == value->getType()) {
+                llvm::Value* opt = llvm::UndefValue::get(targetType);
+                opt = builder->CreateInsertValue(opt, value, 0, "opt.wrap.payload");
+                opt = builder->CreateInsertValue(
+                    opt, llvm::ConstantInt::get(llvm::Type::getInt1Ty(*context), 1),
+                    1, "opt.wrap.present");
+                return opt;
+            }
+        }
+    }
+
     // Example: Integer to Integer (trunc or sext/zext)
     if (targetType->isIntegerTy() && value->getType()->isIntegerTy()) {
         llvm::IntegerType* targetIntTy = llvm::dyn_cast<llvm::IntegerType>(targetType);
