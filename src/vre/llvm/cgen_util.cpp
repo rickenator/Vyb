@@ -225,6 +225,15 @@ llvm::Value* LLVMCodegen::tryCast(llvm::Value* value, llvm::Type* targetType, co
         return builder->CreateFPToSI(value, targetType, "fp_to_int");
     }
 
+    // #292: consuming a narrowed `T?` as its `T` payload. A native optional is
+    // `{ T, i1 }` (present flag at index 1); the enclosing `if (r != nil)` proved
+    // presence, so the payload at index 0 is the value.
+    if (targetType->isStructTy() && value->getType()->isStructTy() &&
+        llvm::cast<llvm::StructType>(value->getType())->getNumElements() == 2 &&
+        llvm::cast<llvm::StructType>(targetType)->getNumElements() != 2) {
+        return builder->CreateExtractValue(value, 0, "optional.payload");
+    }
+
     logError(loc, "Unsupported or invalid cast from type " + getTypeName(value->getType()) + " to " + getTypeName(targetType));
     return nullptr;
 }

@@ -1,0 +1,33 @@
+// @test: A narrowed `T?` can be consumed as its payload inside `if (r != nil)` (#292)
+// @description: The guard proves presence, so consuming the optional as its payload
+//   used to be rejected ("Expected Vec<Int> but got Vec<Int>?"). Now `r` is usable as
+//   `T` inside the consequent, and the payload is stored rather than the wrapper.
+// @category: optionals, flow, semantic, regression
+// @expect: pass
+// @expect-output: 1absent0
+
+import collections
+
+present()<Vec<Int>?> -> {
+    v<Vec<Int>> = Vec<Int>()
+    v.push(5)
+    return v
+}
+
+main()<Int> -> {
+    r<Vec<Int>?> = present()
+    if (r != nil) {
+        w<Vec<Int>> = r
+        print(w.len())
+    } else {
+        print(-1)
+    }
+
+    n<Int?> = nil
+    if (n != nil) {
+        print(n)
+    } else {
+        print("absent")
+    }
+    return 0
+}

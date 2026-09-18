@@ -1,0 +1,23 @@
+// @test: `print` on a native `T?` renders nil or the payload, not internals (#292)
+// @description: toString had no rule for a native optional, so `print(n)` on an
+//   `Int?` logged "Unsupported type for toString conversion: Int?" and dumped
+//   `{ "type": ..., "address": ... }`. Absence renders as "nil"; presence renders
+//   the payload through the payload's own toString.
+// @category: optionals, strings, regression
+// @expect: pass
+// @expect-output: nil 42
+
+pick()<Int?> -> {
+    return 42
+}
+
+miss()<Int?> -> {
+    return nil
+}
+
+main()<Int> -> {
+    print(miss())
+    print(" ")
+    print(pick())
+    return 0
+}
