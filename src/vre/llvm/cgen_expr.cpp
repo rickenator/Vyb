@@ -72,6 +72,15 @@ static bool objFieldTypeIsVec(const vyb::ast::TypeNode* tn) {
     return false;
 }
 
+// #297: a `their<Vec<T>>` receiver that is a CALL result (e.g. `get` on a
+// `Vec<Vec<T>>` slot) already carries the borrowed Vec* -- the borrow is the value
+// in flight. A storage location instead (an identifier or a field slot) evaluates
+// in LHS mode to its slot address (a `Vec**`) and needs one load to recover the
+// pointer. Distinguish the two by the receiver's shape.
+static bool receiverIsBorrowValue(const vyb::ast::Expression* e) {
+    return dynamic_cast<const vyb::ast::CallExpression*>(e) != nullptr;
+}
+
 // True when a channel's payload element type is a Vyb String. Numeric /
 // Bool / Char / Float payloads use the int-slot channel runtime; String payloads
 // use the refcounted string channel runtime.
@@ -6496,22 +6505,27 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                 // to recover the `Vec*` before operating on it. A plain `Vec<T>` field
                 // is emitted directly as the Vec struct, so this only applies when the
                 // field's declared type is an ownership wrapper around a Vec.
-                if (auto objTn = dynamic_cast<ast::TypeName*>(typeOfNode(memberExpr->object).get())) {
-                    if (objTn->identifier &&
-                        (objTn->identifier->name == "their" || objTn->identifier->name == "my" ||
-                         objTn->identifier->name == "our" || objTn->identifier->name == "view" ||
-                         objTn->identifier->name == "borrow") &&
-                        objTn->genericArgs.size() == 1) {
-                        ast::TypeNode* inner = objTn->genericArgs[0].get();
-                        bool innerIsVec = dynamic_cast<ast::VecType*>(inner) != nullptr;
-                        if (!innerIsVec) {
-                            if (auto innerTN = dynamic_cast<ast::TypeName*>(inner)) {
-                                innerIsVec = innerTN->identifier && innerTN->identifier->name == "Vec";
+                // #297: a receiver that is itself a call (a `get` borrow in flight,
+                // e.g. `outer.get(0).get(0)`) is ALREADY that `Vec*`, so it is not
+                // loaded again.
+                if (!receiverIsBorrowValue(memberExpr->object.get())) {
+                    if (auto objTn = dynamic_cast<ast::TypeName*>(typeOfNode(memberExpr->object).get())) {
+                        if (objTn->identifier &&
+                            (objTn->identifier->name == "their" || objTn->identifier->name == "my" ||
+                             objTn->identifier->name == "our" || objTn->identifier->name == "view" ||
+                             objTn->identifier->name == "borrow") &&
+                            objTn->genericArgs.size() == 1) {
+                            ast::TypeNode* inner = objTn->genericArgs[0].get();
+                            bool innerIsVec = dynamic_cast<ast::VecType*>(inner) != nullptr;
+                            if (!innerIsVec) {
+                                if (auto innerTN = dynamic_cast<ast::TypeName*>(inner)) {
+                                    innerIsVec = innerTN->identifier && innerTN->identifier->name == "Vec";
+                                }
                             }
-                        }
-                        if (innerIsVec) {
-                            llvm::Type* vecPtrTy = llvm::PointerType::get(*context, 0);
-                            vecValue = builder->CreateLoad(vecPtrTy, vecValue, "byref.vec.field.load");
+                            if (innerIsVec) {
+                                llvm::Type* vecPtrTy = llvm::PointerType::get(*context, 0);
+                                vecValue = builder->CreateLoad(vecPtrTy, vecValue, "byref.vec.field.load");
+                            }
                         }
                     }
                 }
@@ -6603,9 +6617,11 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                             }
                             // Ownership-wrapped field: recvPtr is the slot address (a
                             // pointer-to-pointer for a by-ref borrow); load once to recover
-                            // the pointee pointer the by-ref self expects.
+                            // the pointee pointer the by-ref self expects. #297: a
+                            // call receiver already IS the borrowed pointer (a `get`
+                            // borrow in flight), so it is not loaded again.
                             llvm::Value* selfArg = recvPtr;
-                            if (receiverIsByRef) {
+                            if (receiverIsByRef && !receiverIsBorrowValue(memberExpr->object.get())) {
                                 selfArg = builder->CreateLoad(llvm::PointerType::get(*context, 0), recvPtr, "byref.aspect.recv.load");
                             } else if (!selfArg->getType()->isPointerTy()) {
                                 // A temporary receiver (e.g. `v.get(0)`, a method chain, or a
@@ -7142,6 +7158,16 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                         st->getElementType(1)->isIntegerTy(64)) {
                         llvm::Value* wrapped = tryCast(argValue, expectedArgType, node->arguments[i]->loc);
                         if (wrapped) argValue = wrapped;
+                    } else if (st && st->getNumElements() == 3 &&
+                               st->getElementType(0)->isPointerTy() &&
+                               st->getElementType(1)->isIntegerTy(64) &&
+                               st->getElementType(2)->isIntegerTy(64)) {
+                        // #297: a `their<Vec<T>>` argument (a nested `get` borrow in
+                        // flight) reaching a by-value `Vec<T>` parameter is passed as
+                        // the borrowed header. The callee deep-copies by-value Vec
+                        // parameters on entry, so the parameter owns its own buffer
+                        // and nothing aliases the container's element.
+                        argValue = builder->CreateLoad(expectedArgType, argValue, "callarg.vecborrow");
                     }
                 }
                 // Add more sophisticated casting rules as needed

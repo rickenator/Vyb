@@ -1046,6 +1046,33 @@ static bool isTheirType(const ast::TypeNode* type) {
     return type->toString().rfind("their<", 0) == 0;
 }
 
+// #297: does `t` denote a Vec (i.e. an element of a `Vec<Vec<...>>` slot)?
+static bool isVecTypeNodeAst(const ast::TypeNode* t) {
+    if (!t) return false;
+    if (dynamic_cast<const ast::VecType*>(t)) return true;
+    if (auto* tn = dynamic_cast<const ast::TypeName*>(t))
+        return tn->identifier && tn->identifier->name == "Vec";
+    return false;
+}
+
+// #297: the result type of a Vec element accessor (`get`). An element that is
+// itself a Vec lives inside the container's data buffer, so `get` hands back a
+// *borrow* of it (`their<Vec<T>>`) rather than a value -- the compiler then states
+// the aliasing instead of codegen emulating a view. Scalars and structs keep the
+// existing by-value result. Returns a fresh TypeNode.
+static std::shared_ptr<ast::TypeNode> vecGetResultType(const SourceLocation& loc,
+                                                       ast::TypeNode* element) {
+    if (!element) return nullptr;
+    if (isVecTypeNodeAst(element)) {
+        std::vector<ast::TypeNodePtr> args;
+        args.push_back(ast::TypeNodePtr(element->clone()));
+        auto theirName = std::make_unique<ast::TypeName>(
+            loc, std::make_unique<ast::Identifier>(loc, "their"), std::move(args));
+        return std::shared_ptr<ast::TypeNode>(std::move(theirName));
+    }
+    return std::shared_ptr<ast::TypeNode>(element->clone());
+}
+
 void SemanticAnalyzer::recordMove(const std::string& varName) {
     if (!moveScopes.empty()) {
         moveScopes.back()[varName].isMoved = true;
@@ -1959,7 +1986,21 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
                             }
                         }
                     }
-                    if (!narrowed) {
+                    // #297: a Vec element accessor types its result as a borrow
+                    // (`their<Vec<T>>`). A plain `Vec<T>` binding takes its own copy
+                    // of the borrowed value at the binding site (cgen_decl.cpp), so
+                    // accept the borrowed initializer as the owning Vec form -- it
+                    // aliases nothing and is reclaimed like any other owning Vec.
+                    bool borrowedVecInit = false;
+                    if (isTheirType(initType) && !isTheirType(varType)) {
+                        if (auto* borrowTy = dynamic_cast<ast::TypeName*>(initType)) {
+                            borrowedVecInit = borrowTy->genericArgs.size() == 1 &&
+                                borrowTy->genericArgs[0] &&
+                                isVecTypeNodeAst(borrowTy->genericArgs[0].get()) &&
+                                borrowTy->genericArgs[0]->toString() == varType->toString();
+                        }
+                    }
+                    if (!narrowed && !borrowedVecInit) {
                         addError("Initializer type does not match variable type for '" + node->id->name + "'. Expected " + varType->toString() + " but got " + initType->toString(), node);
                     }
                 }
@@ -10206,8 +10247,9 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
             if (auto* vecType = dynamic_cast<ast::VecType*>(vecTypeNode)) {
                 // Clone the element type for the return type
                 if (vecType->elementType) {
-                    // Deep clone the element type node
-                    std::shared_ptr<ast::TypeNode> clonedElementType = cloneTypeNode(vecType->elementType.get());
+                    // #297: a Vec element accessor yields a borrow when the
+                    // element is itself a Vec (see vecGetResultType).
+                    std::shared_ptr<ast::TypeNode> clonedElementType = vecGetResultType(node->loc, vecType->elementType.get());
                     setType(node,  clonedElementType ? std::shared_ptr<ast::TypeNode>(clonedElementType->clone()) : nullptr);
                     setType(node,  clonedElementType);
                     return;
@@ -10217,7 +10259,7 @@ void SemanticAnalyzer::handleVecMethodCall(ast::CallExpression* node, const std:
             if (auto* typeName = dynamic_cast<ast::TypeName*>(vecTypeNode)) {
                 if (typeName->identifier && typeName->identifier->name == "Vec" && !typeName->genericArgs.empty()) {
                     if (typeName->genericArgs[0]) {
-                        std::shared_ptr<ast::TypeNode> clonedElementType = typeName->genericArgs[0]->clone();
+                        std::shared_ptr<ast::TypeNode> clonedElementType = vecGetResultType(node->loc, typeName->genericArgs[0].get());
                         setType(node,  clonedElementType ? std::shared_ptr<ast::TypeNode>(clonedElementType->clone()) : nullptr);
                         setType(node,  clonedElementType);
                         return;
@@ -10512,7 +10554,9 @@ void SemanticAnalyzer::handleVecMethodCallOnMember(ast::CallExpression* node, as
         }
         // Return element type
         if (elementType) {
-            setType(node,  std::shared_ptr<ast::TypeNode>(elementType->clone()));
+            // #297: a Vec element accessor yields a borrow when the element is
+            // itself a Vec (see vecGetResultType).
+            setType(node,  vecGetResultType(node->loc, elementType));
             setType(node,  typeOf(node) ? std::shared_ptr<ast::TypeNode>(typeOf(node)->clone()) : nullptr);
         }
 
