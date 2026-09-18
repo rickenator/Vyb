@@ -536,17 +536,27 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
             }
         }
 
-        // #292: consuming a narrowed `T?` as its `T` payload. The enclosing
-        // `if (r != nil)` proved presence, so store the payload value rather than
-        // the `{ T, i1 }` wrapper.
-        if (node->init && node->typeNode && !dynamic_cast<ast::OptionalType*>(node->typeNode.get())) {
-            auto initAstTy = typeOfNode(node->init.get());
-            if (initAstTy && dynamic_cast<const ast::OptionalType*>(initAstTy.get()) &&
-                initialVal && llvm::isa<llvm::StructType>(initialVal->getType())) {
-                initialVal = builder->CreateExtractValue(initialVal, 0, "narrowed.payload");
-                builder->CreateStore(initialVal, alloca, "init.narrowed");
-                VYB_CDBG << "DEBUG: Narrowed optional '" << node->id->name
-                          << "': stored the payload" << std::endl;
+        // #284: binding a `get(i)` view of a `Vec<Vec<T>>` slot. The view aliases the
+        // slot's inner buffer, so an owning binding must take its own copy --
+        // otherwise the binding's scope-exit free and the outer Vec's reclaim free
+        // the same allocation. `get` itself stays allocation-free, so the temporaries
+        // that consume these views (e.g. `v.get(0).title()`) cannot leak.
+        if (node->init && node->typeNode && isVecStructType(varType)) {
+            if (auto* call = dynamic_cast<ast::CallExpression*>(node->init.get())) {
+                if (auto* mem = dynamic_cast<ast::MemberExpression*>(call->callee.get())) {
+                    auto* prop = dynamic_cast<ast::Identifier*>(mem->property.get());
+                    auto recvTy = typeOfNode(mem->object.get());
+                    if (prop && prop->name == "get" && recvTy &&
+                        recvTy->toString().rfind("Vec<Vec<", 0) == 0) {
+                        if (auto* st = llvm::dyn_cast<llvm::StructType>(varType)) {
+                            uint64_t stride = elementStrideForTypeName(node->typeNode->toString());
+                            initialVal = deepCopyVecElement(initialVal, st, stride);
+                            builder->CreateStore(initialVal, alloca, "init.veccopy");
+                            VYB_CDBG << "DEBUG: Vec element view bound to '" << node->id->name
+                                      << "': deep-copied the inner buffer" << std::endl;
+                        }
+                    }
+                }
             }
         }
 

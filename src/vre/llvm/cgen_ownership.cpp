@@ -472,6 +472,46 @@ void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
                     builder->CreateBr(rbHeader);
                     builder->SetInsertPoint(rbExit);
                 }
+                // #284: a Vec<Vec<T>> element owns its own inner buffer (each push/set
+                // deep-copied it). Release those inner buffers before the outer storage
+                // is freed; otherwise every copied inner buffer leaks under ASan.
+                const vyb::ast::TypeNode* nestedVecElemAst = nullptr;
+                if (astIt != valueTypeMap.end()) {
+                    const vyb::ast::TypeNode* e = vecElementTypeNode(astIt->second.get());
+                    if (e && !isKnownStructTypeNode(e) && e->toString().rfind("Vec<", 0) == 0) {
+                        nestedVecElemAst = e;
+                    }
+                }
+                if (nestedVecElemAst) {
+                    llvm::Value* elemCount = builder->CreateExtractValue(vecPtr, 1, var.name + "_elem_count");
+                    llvm::Value* innerBytes = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 24);
+                    llvm::BasicBlock* nvHeader = llvm::BasicBlock::Create(*context, var.name + "_nvec_header", currentFunction);
+                    llvm::BasicBlock* nvBody = llvm::BasicBlock::Create(*context, var.name + "_nvec_body", currentFunction);
+                    llvm::BasicBlock* nvExit = llvm::BasicBlock::Create(*context, var.name + "_nvec_exit", currentFunction);
+                    llvm::Value* nvZero = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0);
+                    llvm::Value* nvIdxA = builder->CreateAlloca(llvm::Type::getInt64Ty(*context), nullptr, var.name + "_nvec_idx");
+                    builder->CreateStore(nvZero, nvIdxA);
+                    builder->CreateBr(nvHeader);
+                    builder->SetInsertPoint(nvHeader);
+                    llvm::Value* nvIx = builder->CreateLoad(llvm::Type::getInt64Ty(*context), nvIdxA);
+                    builder->CreateCondBr(builder->CreateICmpULT(nvIx, elemCount, var.name + "_nvec_cmp"), nvBody, nvExit);
+                    builder->SetInsertPoint(nvBody);
+                    llvm::Value* nvOff = builder->CreateMul(nvIx, innerBytes, var.name + "_nvec_off");
+                    llvm::Value* nvElemP = builder->CreateGEP(llvm::Type::getInt8Ty(*context), dataPtr, nvOff, var.name + "_nvec_elem");
+                    llvm::Value* nvInner = builder->CreateLoad(llvm::PointerType::get(*context, 0), nvElemP, var.name + "_nvec_data");
+                    llvm::BasicBlock* nvFree = llvm::BasicBlock::Create(*context, var.name + "_nvec_free", currentFunction);
+                    llvm::BasicBlock* nvSkip = llvm::BasicBlock::Create(*context, var.name + "_nvec_skip", currentFunction);
+                    builder->CreateCondBr(
+                        builder->CreateICmpNE(nvInner, llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0)), var.name + "_nvec_nonnull"),
+                        nvFree, nvSkip);
+                    builder->SetInsertPoint(nvFree);
+                    builder->CreateCall(getOrCreateFreeFunction(), {nvInner});
+                    builder->CreateBr(nvSkip);
+                    builder->SetInsertPoint(nvSkip);
+                    builder->CreateStore(builder->CreateAdd(nvIx, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1)), nvIdxA);
+                    builder->CreateBr(nvHeader);
+                    builder->SetInsertPoint(nvExit);
+                }
                 llvm::Function* freeFunc = getOrCreateFreeFunction();
                 builder->CreateCall(freeFunc, {dataPtr});
                 VYB_CDBG << "DEBUG: Generated free() call for " << var.name << std::endl;
