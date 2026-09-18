@@ -1,0 +1,88 @@
+# Host runner for #270: 13-word descriptor + a value derived from its later words,
+# stored with st_i32. Every lane must read back its own value (no neighbour clobber).
+# Run: build/vyb --module-path bindings --module-path bindings/cuda fixtures/cuda/probe13_verify.vyb
+import io::{open_read, read_all}
+import cuda::{cuda_init, cuda_device_count, cuda_device, cuda_ctx_retain,
+              cuda_module_load, cuda_module_func, cuda_mem_alloc, cuda_mem_free,
+              cuda_launch, cuda_sync}
+import cuda_binding::{cuMemcpyHtoD_v2, cuMemcpyDtoH_v2}
+
+main()<Int> -> {
+    lanes<Int> = 8
+    if (cuda_init() != 0) { return 7 }
+    if (cuda_device_count() < 1) { return 8 }
+    dev<CInt> = cuda_device(0)
+    if (dev < 0) { return 14 }
+    if (cuda_ctx_retain(dev) != 0) { return 14 }
+
+    ptx<String> = ""
+    match (open_read("fixtures/cuda/probe13.ptx")) {
+        f -> {
+            match (read_all(f)) {
+                s -> { ptx = s }
+                ? -> { return 13 }
+            }
+        }
+        ? -> { return 13 }
+    }
+
+    hmod<Int> = cuda_module_load(ptx)
+    if (hmod == 0) { return 9 }
+    hf<Int> = cuda_module_func(hmod, "probe13")
+    if (hf == 0) { return 10 }
+    da<Int> = cuda_mem_alloc(lanes * 8)
+    db<Int> = cuda_mem_alloc(lanes * 8)
+    dl<Int> = cuda_mem_alloc(lanes * 8)
+    dd<Int> = cuda_mem_alloc(128)
+    if (da == 0 || db == 0 || dl == 0 || dd == 0) { return 11 }
+    # 13-word descriptor: [out_a, out_b, out_lane, n, wa, _, x6, x7, x8, x9, x10, x11, x12]
+    freedom {
+        av<Int> = da; bv<Int> = db; lv<Int> = dl; nv<Int> = lanes
+        wav<Int> = 111; x6v<Int> = 606; z<Int> = 0; x12v<Int> = 1212
+        if (cuMemcpyHtoD_v2(dd + 0, loc(av), 8) != 0) { return 15 }
+        if (cuMemcpyHtoD_v2(dd + 8, loc(bv), 8) != 0) { return 15 }
+        if (cuMemcpyHtoD_v2(dd + 16, loc(lv), 8) != 0) { return 15 }
+        if (cuMemcpyHtoD_v2(dd + 24, loc(nv), 8) != 0) { return 15 }
+        if (cuMemcpyHtoD_v2(dd + 32, loc(wav), 8) != 0) { return 15 }
+        if (cuMemcpyHtoD_v2(dd + 40, loc(z), 8) != 0) { return 15 }
+        if (cuMemcpyHtoD_v2(dd + 48, loc(x6v), 8) != 0) { return 15 }
+        if (cuMemcpyHtoD_v2(dd + 56, loc(z), 8) != 0) { return 15 }
+        if (cuMemcpyHtoD_v2(dd + 64, loc(z), 8) != 0) { return 15 }
+        if (cuMemcpyHtoD_v2(dd + 72, loc(z), 8) != 0) { return 15 }
+        if (cuMemcpyHtoD_v2(dd + 80, loc(z), 8) != 0) { return 15 }
+        if (cuMemcpyHtoD_v2(dd + 88, loc(z), 8) != 0) { return 15 }
+        if (cuMemcpyHtoD_v2(dd + 96, loc(x12v), 8) != 0) { return 15 }
+    }
+
+    rc<CInt> = cuda_launch(hf, 1 as CInt, 1 as CInt, 1 as CInt, lanes as CInt, 1 as CInt, 1 as CInt, dd)
+    if (rc != 0) { return 12 }
+    cuda_sync()
+
+    bad<Int> = -1
+    saw<Int> = 0
+    freedom {
+        i<Int> = 0
+        for (i in 0..(lanes - 1)) {
+            ta<CInt> = 0 as CInt
+            tb<CInt> = 0 as CInt
+            tl<CInt> = 0 as CInt
+            if (cuMemcpyDtoH_v2(loc(ta), da + i * 4, 4) != 0) { return 16 }
+            if (cuMemcpyDtoH_v2(loc(tb), db + i * 4, 4) != 0) { return 16 }
+            if (cuMemcpyDtoH_v2(loc(tl), dl + i * 4, 4) != 0) { return 16 }
+            if (i == 1) { saw = ta as Int }
+            if ((ta as Int) != 1818 || (tb as Int) != 111 || (tl as Int) != i) { bad = i }
+        }
+    }
+    cuda_mem_free(da); cuda_mem_free(db); cuda_mem_free(dl); cuda_mem_free(dd)
+
+    if (bad >= 0) {
+        println("PROBE13 FAIL at lane ")
+        println_int(bad)
+        println(" (lane 1 tail = ")
+        println_int(saw)
+        println(")")
+        return 1
+    }
+    println("PROBE13 PASS: all 8 lanes tail=1818 wa=111 gid=self")
+    return 0
+}

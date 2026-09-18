@@ -141,6 +141,12 @@ jobs:
       - name: Emit kernel PTX (--gpu sm_86)
         run: VYB_STDLIB="$PWD/stdlib" ./build-ci/vyb --kernel fixtures/kernel/matmul_smem.vyb --gpu sm_86 --ptx fixtures/cuda/matmul_smem.ptx
 
+      - name: Emit st_i32 access-width probe PTX (#270)
+        run: VYB_STDLIB="$PWD/stdlib" ./build-ci/vyb --kernel fixtures/kernel/probe13_intrinsic_width.vyb --gpu sm_86 --ptx fixtures/cuda/probe13.ptx
+
+      - name: st_i32 access-width probe on silicon (#270)
+        run: VYB_STDLIB="$PWD/stdlib" ./build-ci/vyb --module-path bindings --module-path bindings/cuda fixtures/cuda/probe13_verify.vyb
+
       - name: cuBLAS cross-validation (on silicon)
         run: |
           ./build-ci/vyb fixtures/cuda/cublas_verify.vyb --module-path bindings --build /tmp/x_cublas --link -lcublas --link -lcuda
