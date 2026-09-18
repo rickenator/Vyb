@@ -1109,6 +1109,10 @@ void LLVMCodegen::visit(vyb::ast::FunctionDeclaration* node) {
             // A simple check: if the last block in a non-empty function doesn't have a terminator, it's an error.
             if (fallthroughBlock && !fallthroughBlock->getTerminator()) {
                 logError(node->loc, "Function '" + node->id->name + "' has a non-void return type but may not return on all paths (missing return at end of body).");
+                // This is fatal, not recoverable: the generated function has no
+                // usable body, and a call through it crashed the pipeline
+                // (SIGSEGV, exit 139) instead of halting with the diagnostic (#264).
+                flagHardCodegenError();
                 // Keep the IR verifier happy: terminate the fall-through block with
                 // `unreachable`. This happens when a function falls out of its last
                 // statement (e.g. a `match` whose arms all `return`) without a final
