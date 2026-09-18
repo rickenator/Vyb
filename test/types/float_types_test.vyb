@@ -1,7 +1,8 @@
 // @test: Float types test
 // @description: Float types test
 // @category: types
-// @expect: fail
+// @expect: pass
+// @expect-return: 96
 # Test floating point types: Float32, Float64 (Float)
 
 test_float32()<Int> -> {

@@ -1,0 +1,14 @@
+// @test: Float literals in scientific notation (#258)
+// @description: `1e-6` / `2.5E+9` used to lex as `1` plus an identifier `e`,
+//   producing two misleading semantic errors; they are now Float literals.
+// @category: expressions, literals, float
+// @expect: pass
+// @expect-output: eps=1e-06 two5=2.5e+06 big=1e+09
+
+main()<Int> -> {
+    eps<Float> = 1e-6
+    two5<Float> = 2.5e6
+    big<Float> = 1E+9
+    println("eps=" + eps.to_string() + " two5=" + two5.to_string() + " big=" + big.to_string())
+    return 0
+}
