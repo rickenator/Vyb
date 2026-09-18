@@ -1,0 +1,23 @@
+// @test: their<Vec<Int>> parameters still mutate the caller's vector (#283)
+// @description: The supported in-place form must keep working (and be visible to
+//   the caller), so the new by-value diagnostic does not over-reach.
+// @category: collections, ownership
+// @expect: pass
+// @expect-output: 2
+// @expect-output: 2
+
+import collections
+
+fill(v<their<Vec<Int>>>)<Int> -> {
+    v.push(1)
+    v.push(2)
+    return v.len()
+}
+
+main()<Int> -> {
+    xs<Vec<Int>> = Vec<Int>()
+    n<Int> = fill(borrow(xs))
+    print(n)
+    print(xs.len())
+    return 0
+}

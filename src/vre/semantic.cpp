@@ -2396,6 +2396,34 @@ static bool rootsInGetAccessorCopy(const ast::Expression* expr) {
     return false;
 }
 
+// #283: a plain (by-value) `Vec` parameter is a copy, so a `push`/`set` through
+// it is a silent no-op for the caller -- the callee mutates its own copy and the
+// caller's vector is untouched. Recognise the receiver shapes that reach such a
+// parameter (`v.push(x)`, `v.field.push(x)`, `v.set(i, x)`) and describe the
+// parameter, so the diagnostic can name it. `their<Vec<T>>` parameters are the
+// supported in-place form and are deliberately not matched; `self` belongs to
+// the bind-receiver rules and is left alone here too.
+static bool describeByValueVecParameter(const ast::FunctionDeclaration* fn,
+                                        const ast::Expression* expr,
+                                        std::string* desc) {
+    if (!fn || !expr || !desc) return false;
+    const ast::Expression* e = expr;
+    while (auto* m = dynamic_cast<const ast::MemberExpression*>(e)) e = m->object.get();
+    auto* id = dynamic_cast<const ast::Identifier*>(e);
+    if (!id || id->name == "self") return false;
+    for (const auto& p : fn->params) {
+        if (!p.name || p.name->name != id->name) continue;
+        ast::TypeNode* t = p.typeNode.get();
+        if (!t || isTheirType(t)) return false;        // their<Vec<T>>: allowed
+        const bool isVec = dynamic_cast<ast::VecType*>(t) != nullptr ||
+                           t->toString().rfind("Vec<", 0) == 0;
+        if (!isVec) return false;                      // only Vec parameters do this
+        *desc = "'" + p.name->name + "' of type '" + t->toString() + "'";
+        return true;
+    }
+    return false;
+}
+
 void SemanticAnalyzer::visit(ast::CallExpression* node) {
     // #260: a mutating method called on a by-value temporary -- `v.get(0).deps.push(d)`
     // -- writes into the copy that `get` returned, so the stored element keeps its
@@ -2409,6 +2437,20 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 addError("cannot call '" + mutProp->name + "' on a by-value temporary: the "
                          "receiver is a copy, so the write cannot reach stored state; bind "
                          "it to a local and write it back with set(index, value).", node);
+                return;
+            }
+
+            // #283: same class, one level out -- a plain by-value `Vec` parameter is
+            // a copy too, so `push`/`set` through it never reaches the caller's
+            // vector. Reject it and name the parameter.
+            std::string byValueParamDesc;
+            if (kMutators.count(mutProp->name) &&
+                describeByValueVecParameter(currentFunction, mutCallee->object.get(),
+                                            &byValueParamDesc)) {
+                addError("cannot call '" + mutProp->name + "' on parameter " + byValueParamDesc +
+                         ": a plain by-value parameter is a copy, so the mutation cannot reach "
+                         "the caller; declare it as 'their<Vec<...>>' to mutate in place, or "
+                         "return the mutated value.", node);
                 return;
             }
         }
