@@ -932,6 +932,19 @@ bind Drawable -> Circle {
 ```
 
 - An aspect can refine another: `aspect Comparable : Equatable { … }`.
+- A method declaration comes in **three forms**, and the difference is what a bind
+  may leave out:
+  - `m(self)<Int>` (**no arrow**) — **mandatory**: every bind for the aspect must
+    implement it, or the bind is rejected with an incomplete-implementation error.
+    This is the form to use when the aspect is a requirement on the binder.
+  - `m(self)<Int> -> { }` — **optional, empty body**: the empty body is a default
+    implementation, so a bind for a concrete type may omit the method entirely.
+    Contract-only aspects spell their methods this way.
+  - `m(self)<Int> -> { return 1 }` — **optional, with that body as the default**: a
+    bind may still override it.
+- A bare `m(self)<Int>` is therefore *not* a contract-only declaration — write
+  `m(self)<Int> -> { }` for that — and an aspect whose bind implements none of its
+  mandatory methods fails to compile.
 - A generic bind maps an aspect onto every instantiation:
   `<K<Hashable, Equatable>, V>`, `<T>`, etc. (`Iterator -> VecIter<T>`,
   `MapOps -> HashMap<K, V>`).
