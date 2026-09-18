@@ -1,0 +1,17 @@
+// @test: Iterating a Vec from an imported function needs no importer import (#262)
+// @description: The importer used to fail with `Unknown method 'iter' on type
+//   'Vec<Int>'` unless it also did `import collections`; the Vec's binds now
+//   travel with the imported declaration.
+// @category: modules
+// @expect: pass
+// @expect-output: c=3
+
+import vec_returning_module::{mk}
+
+main()<Int> -> {
+    v<Vec<Int>> = mk()
+    c<Int> = 0
+    for (x in v) { c = c + x }
+    println("c=" + c.to_string())
+    return 0
+}
