@@ -187,7 +187,15 @@ jobs:
           grep -q "atom\.global\.add\.f64" fixtures/cuda/probe15.ptx || { echo "FAIL: atomic_add_f64 control lost its f64 atomic (#301)"; exit 1; }
 
       - name: 32-bit store/atomic access-width probe on silicon (#301)
-        run: VYB_STDLIB="$PWD/stdlib" ./build-ci/vyb --module-path bindings --module-path bindings/cuda fixtures/cuda/probe15_verify.vyb
+        # The runner escalates a failed check as a ProbeError carrying that check's
+        # own exit status; the runtime's untrapped-error handler exits with it, so
+        # bash -e fails the job. A main() Int return is only printed, never the
+        # process status -- `return n` alone cannot fail CI.
+        shell: bash
+        run: |
+          set -euo pipefail
+          export VYB_STDLIB="$PWD/stdlib"
+          ./build-ci/vyb --module-path bindings --module-path bindings/cuda fixtures/cuda/probe15_verify.vyb
 
       - name: cuBLAS cross-validation (on silicon)
         run: |

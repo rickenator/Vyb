@@ -4,6 +4,31 @@
 # and the f64 controls stay 8 bytes. The word after each array is pre-filled with
 # the guard pattern `fill` precisely so an over-wide access shows up as a changed
 # guard word.
+#
+# Descriptor words each probe reads, in order (the runner writes exactly these):
+#   st_f64_probe           +0 out, +8 n                             (2 words)
+#   atomic_f64_probe       +0 acc, +8 n                             (2 words)
+#   st_f32_probe           +0 out, +8 n, +16 one<f64>, +24 out2     (4 words)
+#   atomic_i32_array_probe +0 buf, +8 cnt, +16 n                    (3 words)
+#   st_i32_probe           +0 out, +8 n                             (2 words)
+#
+# Every failing check escalates a ProbeError whose `message` names the check and
+# whose `exitCode` is that check's own status: the runtime's untrapped-error
+# handler exits with it, so the GPU job's bash -e step fails the job. A main()
+# Int return is only printed -- it is never the process exit status, so `return n`
+# cannot fail CI. Codes stay below 256 (a process status is 8 bits) and every
+# check gets its own:
+#   7 cuda_init  8 no device  14 ordinal  19 ctx retain
+#   13 ptx open  21 ptx read  9 module load  11 device alloc
+#   10/20/22/23/24 kernel lookup (st_f64/atomic_f64/st_f32/atomic_i32/st_i32)
+#   16 guard pre-fill  25 descriptor write  12 kernel launch  17 sync  18 readback
+#   100/102  st_f64 guard words      110..117 st_f64 lane
+#   101      atomic_add_f64 total
+#   120..127 st_f32 lane (Float operand)   128 st_f32 guard
+#   130..137 st_f32 lane (constant 1.5)    138 st_f32 constant guard
+#   140..147 atomic_add_i32 array lane     148 array guard
+#   149/150  atomic_add_i32 scalar low/high word
+#   160..167 st_i32 lane                  168 st_i32 guard
 # Run: build/vyb --module-path bindings --module-path bindings/cuda fixtures/cuda/probe15_verify.vyb
 import io::{open_read, read_all}
 import cuda::{cuda_init, cuda_device_count, cuda_device, cuda_ctx_retain,
@@ -11,83 +36,170 @@ import cuda::{cuda_init, cuda_device_count, cuda_device, cuda_ctx_retain,
               cuda_launch, cuda_sync}
 import cuda_binding::{cuMemcpyHtoD_v2, cuMemcpyDtoH_v2}
 
+# A failed probe check. `message` names it; `exitCode` is the process status the
+# untrapped-error handler reports (it reads the field literally named `exitCode`
+# of type Int). Distinct per check and never 0.
+struct ProbeError {
+    message<String>,
+    exitCode<Int>
+}
+
+# Record the FIRST failing check: `first` is absent while every check passes and
+# present once one has failed -- a present/absent state, not a sentinel code --
+# so a later check cannot overwrite the root cause.
+note(first<ProbeError?>, label<String>, code<Int>)<ProbeError?> -> {
+    match (first) {
+        e -> { return first }
+        ? -> { return ProbeError?(ProbeError { message = label, exitCode = code }) }
+    }
+}
+
+# Pre-fill `words` 4-byte words of `dst` with `pattern`; each array's last word is
+# the guard that a wider-than-element access would change. An FFI-level failure
+# here escalates rather than leaving the guard word uninitialised (an uninitialised
+# guard reads back as a failure against a correct compiler).
+guard_fill(dst<Int>, words<Int>, pattern<Int>, where<String>) -> {
+    rc<Int> = 0
+    freedom {
+        g<Int> = pattern
+        i<Int> = 0
+        for (i in 0..(words - 1)) {
+            if (cuMemcpyHtoD_v2(dst + i * 4, loc(g), 4) != 0) { rc = 16 }
+        }
+    }
+    if (rc != 0) {
+        fail<ProbeError>(ProbeError { message = "guard pre-fill: " + where, exitCode = 16 })
+    }
+}
+
+# Read `bytes` from device address `src` into a zeroed Int, so a 4-byte read lands
+# in the LOW word and a failed copy escalates instead of yielding a bogus value.
+ldev(src<Int>, bytes<Int>, where<String>)<Int> -> {
+    out<Int> = 0
+    rc<Int> = 0
+    freedom {
+        h<Int> = 0
+        if (cuMemcpyDtoH_v2(loc(h), src, bytes) != 0) { rc = 18 }
+        out = h
+    }
+    if (rc != 0) {
+        fail<ProbeError>(ProbeError { message = "device readback: " + where, exitCode = 18 })
+    }
+    return out
+}
+
+# Write `h` (8 bytes) to device address `dst`; escalate on an FFI-level failure.
+host_write(dst<Int>, h<Int>, where<String>) -> {
+    rc<Int> = 0
+    freedom {
+        hv<Int> = h
+        if (cuMemcpyHtoD_v2(dst, loc(hv), 8) != 0) { rc = 25 }
+    }
+    if (rc != 0) {
+        fail<ProbeError>(ProbeError { message = "descriptor write: " + where, exitCode = 25 })
+    }
+}
+
 # Write the two-word descriptor [a, b] into ds, then launch `hf` as ONE block of
 # `lanes` lanes (the kernels take the descriptor pointer as their only argument).
-dlaunch2(hf<Int>, ds<Int>, a<Int>, b<Int>)<Int> -> {
-    freedom {
-        av<Int> = a; bv<Int> = b
-        if (cuMemcpyHtoD_v2(ds + 0, loc(av), 8) != 0) { return 15 }
-        if (cuMemcpyHtoD_v2(ds + 8, loc(bv), 8) != 0) { return 15 }
-    }
-    if (cuda_launch(hf, 1 as CInt, 1 as CInt, 1 as CInt, 8 as CInt, 1 as CInt, 1 as CInt, ds) != 0) { return 12 }
-    if (cuda_sync() != 0) { return 17 }
-    return 0
+dlaunch2(hf<Int>, ds<Int>, a<Int>, b<Int>, where<String>) -> {
+    host_write(ds + 0, a, where)
+    host_write(ds + 8, b, where)
+    launch(hf, ds, where)
 }
 
-# Same, for the three-word descriptor [a, b, c] of the array-atomic probe.
-dlaunch3(hf<Int>, ds<Int>, a<Int>, b<Int>, c<Int>)<Int> -> {
-    freedom {
-        av<Int> = a; bv<Int> = b; cv<Int> = c
-        if (cuMemcpyHtoD_v2(ds + 0, loc(av), 8) != 0) { return 15 }
-        if (cuMemcpyHtoD_v2(ds + 8, loc(bv), 8) != 0) { return 15 }
-        if (cuMemcpyHtoD_v2(ds + 16, loc(cv), 8) != 0) { return 15 }
-    }
-    if (cuda_launch(hf, 1 as CInt, 1 as CInt, 1 as CInt, 8 as CInt, 1 as CInt, 1 as CInt, ds) != 0) { return 12 }
-    if (cuda_sync() != 0) { return 17 }
-    return 0
+# The three-word descriptor [a, b, c] of the array-atomic probe.
+dlaunch3(hf<Int>, ds<Int>, a<Int>, b<Int>, c<Int>, where<String>) -> {
+    host_write(ds + 0, a, where)
+    host_write(ds + 8, b, where)
+    host_write(ds + 16, c, where)
+    launch(hf, ds, where)
 }
 
-# Same, for the four-word descriptor [a, b, c, d] of the f32 probe (two arrays).
-dlaunch4(hf<Int>, ds<Int>, a<Int>, b<Int>, c<Int>, d<Int>)<Int> -> {
-    freedom {
-        av<Int> = a; bv<Int> = b; cv<Int> = c; dv<Int> = d
-        if (cuMemcpyHtoD_v2(ds + 0, loc(av), 8) != 0) { return 15 }
-        if (cuMemcpyHtoD_v2(ds + 8, loc(bv), 8) != 0) { return 15 }
-        if (cuMemcpyHtoD_v2(ds + 16, loc(cv), 8) != 0) { return 15 }
-        if (cuMemcpyHtoD_v2(ds + 24, loc(dv), 8) != 0) { return 15 }
+# The four-word descriptor [a, b, c, d] of the f32 probe (two arrays).
+dlaunch4(hf<Int>, ds<Int>, a<Int>, b<Int>, c<Int>, d<Int>, where<String>) -> {
+    host_write(ds + 0, a, where)
+    host_write(ds + 8, b, where)
+    host_write(ds + 16, c, where)
+    host_write(ds + 24, d, where)
+    launch(hf, ds, where)
+}
+
+# Launch one block of 8 lanes and wait; any driver-level refusal escalates.
+launch(hf<Int>, ds<Int>, where<String>) -> {
+    if (cuda_launch(hf, 1 as CInt, 1 as CInt, 1 as CInt, 8 as CInt, 1 as CInt, 1 as CInt, ds) != 0) {
+        fail<ProbeError>(ProbeError { message = "cuLaunchKernel: " + where, exitCode = 12 })
     }
-    if (cuda_launch(hf, 1 as CInt, 1 as CInt, 1 as CInt, 8 as CInt, 1 as CInt, 1 as CInt, ds) != 0) { return 12 }
-    if (cuda_sync() != 0) { return 17 }
-    return 0
+    if (cuda_sync() != 0) {
+        fail<ProbeError>(ProbeError { message = "cuCtxSynchronize: " + where, exitCode = 17 })
+    }
 }
 
 main()<Int> -> {
     lanes<Int> = 8
     fill<Int> = 286331153                      # 0x11111111 guard word
+    wrap<Int> = 4294967295                     # 0xFFFFFFFF: +1 carries out
     d25<Int> = 4612811918334230528             # f64 2.5
     d15<Int> = 4609434218613702656             # f64 1.5 (st_f32 probe operand)
     d40<Int> = 4616189618054758400             # f64 4.0 == 8 lanes * 0.5
     f15<Int> = 1069547520                      # f32 1.5 == 0x3FC00000
 
-    if (cuda_init() != 0) { return 7 }
-    if (cuda_device_count() < 1) { return 8 }
+    if (cuda_init() != 0) {
+        fail<ProbeError>(ProbeError { message = "cuda_init", exitCode = 7 })
+    }
+    if (cuda_device_count() < 1) {
+        fail<ProbeError>(ProbeError { message = "no CUDA device", exitCode = 8 })
+    }
     dev<CInt> = cuda_device(0)
-    if (dev < 0) { return 14 }
-    if (cuda_ctx_retain(dev) != 0) { return 14 }
+    if (dev < 0) {
+        fail<ProbeError>(ProbeError { message = "cuDeviceGet ordinal", exitCode = 14 })
+    }
+    if (cuda_ctx_retain(dev) != 0) {
+        fail<ProbeError>(ProbeError { message = "primary context retain", exitCode = 19 })
+    }
 
     ptx<String> = ""
     match (open_read("fixtures/cuda/probe15.ptx")) {
         f -> {
             match (read_all(f)) {
                 s -> { ptx = s }
-                ? -> { return 13 }
+                ? -> { fail<ProbeError>(ProbeError { message = "read fixtures/cuda/probe15.ptx", exitCode = 21 }) }
             }
         }
-        ? -> { return 13 }
+        ? -> { fail<ProbeError>(ProbeError { message = "open fixtures/cuda/probe15.ptx", exitCode = 13 }) }
     }
     hmod<Int> = cuda_module_load(ptx)
-    if (hmod == 0) { return 9 }
+    if (hmod == 0) {
+        fail<ProbeError>(ProbeError { message = "cuModuleLoadData(probe15.ptx)", exitCode = 9 })
+    }
     hf64<Int> = cuda_module_func(hmod, "st_f64_probe")
     hf64a<Int> = cuda_module_func(hmod, "atomic_f64_probe")
     hf32<Int> = cuda_module_func(hmod, "st_f32_probe")
     ha32<Int> = cuda_module_func(hmod, "atomic_i32_array_probe")
     hi32<Int> = cuda_module_func(hmod, "st_i32_probe")
-    if (hf64 == 0 || hf64a == 0 || hf32 == 0 || ha32 == 0 || hi32 == 0) { return 10 }
+    if (hf64 == 0) {
+        fail<ProbeError>(ProbeError { message = "kernel lookup st_f64_probe", exitCode = 10 })
+    }
+    if (hf64a == 0) {
+        fail<ProbeError>(ProbeError { message = "kernel lookup atomic_f64_probe", exitCode = 20 })
+    }
+    if (hf32 == 0) {
+        fail<ProbeError>(ProbeError { message = "kernel lookup st_f32_probe", exitCode = 22 })
+    }
+    if (ha32 == 0) {
+        fail<ProbeError>(ProbeError { message = "kernel lookup atomic_i32_array_probe", exitCode = 23 })
+    }
+    if (hi32 == 0) {
+        fail<ProbeError>(ProbeError { message = "kernel lookup st_i32_probe", exitCode = 24 })
+    }
 
-    # da: st_f64 array (8x8 + guard word), db: atomic f64 accumulator,
-    # dc: st_f32 array for the runtime Float operand (8x4 + guard), dcr: st_f32
-    # array for the constant 1.5 operand, dd: atomic i32 array (8x4 + guard),
-    # dcn: scalar i32 atomic cell (8 bytes -> two 4-byte words observed),
+    # da: st_f64 array (8x8 + 8-byte guard word = 18 words),
+    # db: atomic f64 accumulator,
+    # dc: st_f32 array for the runtime Float operand (8x4 + guard),
+    # dcr: st_f32 array for the constant 1.5 operand (8x4 + guard),
+    # dd: atomic i32 array (8x4 + guard) and dcn: scalar i32 atomic cell
+    # (8 bytes -> two 4-byte words observed) are seeded 0xFFFFFFFF so the +1
+    # carries: that is what makes an over-wide atomic visible in the next word.
     # de: st_i32 array (8x4 + guard), ds: descriptor.
     da<Int> = cuda_mem_alloc(72)
     db<Int> = cuda_mem_alloc(8)
@@ -97,113 +209,118 @@ main()<Int> -> {
     dcn<Int> = cuda_mem_alloc(8)
     de<Int> = cuda_mem_alloc(40)
     ds<Int> = cuda_mem_alloc(32)
-    if (da == 0 || db == 0 || dc == 0 || dcr == 0 || dd == 0 || dcn == 0 || de == 0 || ds == 0) { return 11 }
-
-    freedom {
-        g<Int> = fill
-        i<Int> = 0
-        for (i in 0..8) { if (cuMemcpyHtoD_v2(da + i * 4, loc(g), 4) != 0) { return 16 } }
-        for (i in 0..9) { if (cuMemcpyHtoD_v2(dc + i * 4, loc(g), 4) != 0) { return 16 } }
-        for (i in 0..9) { if (cuMemcpyHtoD_v2(dcr + i * 4, loc(g), 4) != 0) { return 16 } }
-        for (i in 0..9) { if (cuMemcpyHtoD_v2(dd + i * 4, loc(g), 4) != 0) { return 16 } }
-        for (i in 0..1) { if (cuMemcpyHtoD_v2(dcn + i * 4, loc(g), 4) != 0) { return 16 } }
-        for (i in 0..9) { if (cuMemcpyHtoD_v2(de + i * 4, loc(g), 4) != 0) { return 16 } }
-        zero<Float> = 0.0
-        if (cuMemcpyHtoD_v2(db, loc(zero), 8) != 0) { return 16 }
+    if (da == 0 || db == 0 || dc == 0 || dcr == 0 || dd == 0 || dcn == 0 || de == 0 || ds == 0) {
+        fail<ProbeError>(ProbeError { message = "cuMemAlloc_v2 device buffers", exitCode = 11 })
     }
 
-    rc<Int> = dlaunch2(hf64, ds, da, lanes)
-    if (rc != 0) { return rc }
-    rc = dlaunch2(hf64a, ds, db, lanes)
-    if (rc != 0) { return rc }
-    rc = dlaunch4(hf32, ds, dc, lanes, d15, dcr)
-    if (rc != 0) { return rc }
-    rc = dlaunch3(ha32, ds, dd, dcn, lanes)
-    if (rc != 0) { return rc }
-    rc = dlaunch2(hi32, ds, de, lanes)
-    if (rc != 0) { return rc }
+    # Pre-fill EVERY word of each array, guards included: an un-filled guard word
+    # would read back as a bogus failure on a correct compiler.
+    guard_fill(da, 18, fill, "st_f64 array (da)")
+    guard_fill(dc, 10, fill, "st_f32 array (dc)")
+    guard_fill(dcr, 10, fill, "st_f32 constant array (dcr)")
+    guard_fill(dd, 10, wrap, "atomic i32 array (dd)")
+    guard_fill(dcn, 2, wrap, "atomic i32 scalar cell (dcn)")
+    guard_fill(de, 10, fill, "st_i32 array (de)")
+    host_write(db, 0, "atomic_f64 accumulator (db)")   # f64 0.0
 
-    bad<Int> = -1
+    dlaunch2(hf64, ds, da, lanes, "st_f64_probe")
+    dlaunch2(hf64a, ds, db, lanes, "atomic_f64_probe")
+    dlaunch4(hf32, ds, dc, lanes, d15, dcr, "st_f32_probe")
+    dlaunch3(ha32, ds, dd, dcn, lanes, "atomic_i32_array_probe")
+    dlaunch2(hi32, ds, de, lanes, "st_i32_probe")
+
+    bad<ProbeError?> = ProbeError?()
     s64<Int> = 0
     s32<Int> = 0
     scnt<Int> = 0
-    freedom {
-        i<Int> = 0
-        t<Int> = 0
-        u<Int> = 0
-        # control: st_f64 -> 8-byte 2.5 per lane; guard word (64) survives.
-        for (i in 0..(lanes - 1)) {
-            if (cuMemcpyDtoH_v2(loc(u), da + i * 8, 8) != 0) { return 18 }
-            if (u != d25) { bad = i }
+
+    # control: st_f64 -> 8-byte 2.5 in every lane; both guard words survive.
+    i<Int> = 0
+    for (i in 0..(lanes - 1)) {
+        u<Int> = ldev(da + i * 8, 8, "st_f64 lane")
+        if (i == 0) { s64 = u }
+        if (u != d25) {
+            bad = note(bad, "st_f64 lane " + i.to_string() + " != 2.5", 110 + i)
         }
-        if (cuMemcpyDtoH_v2(loc(u), da, 8) != 0) { return 18 }
-        s64 = u
-        # 4-byte reads land in the LOW word of an Int zeroed just before the copy.
-        t = 0
-        if (cuMemcpyDtoH_v2(loc(t), da + 64, 4) != 0) { return 18 }
-        if (t != fill) { bad = 100 }
-        # control: atomic_add_f64 -> 4.0 after 8 lanes x 0.5.
-        if (cuMemcpyDtoH_v2(loc(u), db, 8) != 0) { return 18 }
-        if (u != d40) { bad = 101 }
-        # defect: st_f32 -> f32 1.5 in EACH 4-byte slot; guard word (32) survives.
-        for (i in 0..(lanes - 1)) {
-            t = 0
-            if (cuMemcpyDtoH_v2(loc(t), dc + i * 4, 4) != 0) { return 18 }
-            if (t != f15) { bad = 200 + i }
-        }
-        t = 0
-        if (cuMemcpyDtoH_v2(loc(t), dc, 4) != 0) { return 18 }
-        s32 = t
-        t = 0
-        if (cuMemcpyDtoH_v2(loc(t), dc + 32, 4) != 0) { return 18 }
-        if (t != fill) { bad = 300 }
-        # defect: the constant-1.5 f32 store must also be FOUR bytes wide.
-        for (i in 0..(lanes - 1)) {
-            t = 0
-            if (cuMemcpyDtoH_v2(loc(t), dcr + i * 4, 4) != 0) { return 18 }
-            if (t != f15) { bad = 350 + i }
-        }
-        t = 0
-        if (cuMemcpyDtoH_v2(loc(t), dcr + 32, 4) != 0) { return 18 }
-        if (t != fill) { bad = 390 }
-        # defect: atomic_add_i32 on array slots -> fill+1 each; guard word (32) survives.
-        for (i in 0..(lanes - 1)) {
-            t = 0
-            if (cuMemcpyDtoH_v2(loc(t), dd + i * 4, 4) != 0) { return 18 }
-            if (t != fill + 1) { bad = 400 + i }
-        }
-        t = 0
-        if (cuMemcpyDtoH_v2(loc(t), dd + 32, 4) != 0) { return 18 }
-        if (t != fill) { bad = 500 }
-        # defect: the scalar atomic cell is ONE 4-byte Int32 word: low word gets
-        # fill+8 (8 increments), the second word stays fill -- a .u64 atomic would
-        # have moved both words.
-        t = 0
-        if (cuMemcpyDtoH_v2(loc(t), dcn, 4) != 0) { return 18 }
-        if (t != fill + lanes) { bad = 501 }
-        scnt = t
-        t = 0
-        if (cuMemcpyDtoH_v2(loc(t), dcn + 4, 4) != 0) { return 18 }
-        if (t != fill) { bad = 502 }
-        # defect: st_i32 -> 7 in EACH 4-byte slot; guard word (32) survives.
-        for (i in 0..(lanes - 1)) {
-            t = 0
-            if (cuMemcpyDtoH_v2(loc(t), de + i * 4, 4) != 0) { return 18 }
-            if (t != 7) { bad = 600 + i }
-        }
-        t = 0
-        if (cuMemcpyDtoH_v2(loc(t), de + 32, 4) != 0) { return 18 }
-        if (t != fill) { bad = 700 }
     }
+    if (ldev(da + 64, 4, "st_f64 guard") != fill) {
+        bad = note(bad, "st_f64 guard word da+64 changed", 100)
+    }
+    if (ldev(da + 68, 4, "st_f64 guard") != fill) {
+        bad = note(bad, "st_f64 guard word da+68 changed", 102)
+    }
+    # control: atomic_add_f64 -> 4.0 after 8 lanes x 0.5.
+    if (ldev(db, 8, "atomic_f64 total") != d40) {
+        bad = note(bad, "atomic_add_f64 total != 4.0", 101)
+    }
+    # defect: st_f32 -> f32 1.5 in EACH 4-byte slot; guard word (32) survives.
+    for (i in 0..(lanes - 1)) {
+        t<Int> = ldev(dc + i * 4, 4, "st_f32 lane")
+        if (i == 0) { s32 = t }
+        if (t != f15) {
+            bad = note(bad, "st_f32 lane " + i.to_string() + " != 0x3FC00000", 120 + i)
+        }
+    }
+    if (ldev(dc + 32, 4, "st_f32 guard") != fill) {
+        bad = note(bad, "st_f32 guard word dc+32 changed", 128)
+    }
+    # defect: the constant-1.5 f32 store must also be FOUR bytes wide.
+    for (i in 0..(lanes - 1)) {
+        if (ldev(dcr + i * 4, 4, "st_f32 constant lane") != f15) {
+            bad = note(bad, "st_f32 constant lane " + i.to_string() + " != 0x3FC00000", 130 + i)
+        }
+    }
+    if (ldev(dcr + 32, 4, "st_f32 constant guard") != fill) {
+        bad = note(bad, "st_f32 constant guard word dcr+32 changed", 138)
+    }
+    # defect: atomic_add_i32 array slots -> 0xFFFFFFFF+1 = 0 (32-bit wrap) in each
+    # 4-byte slot; guard word (32) survives. Seeded 0xFFFFFFFF so the +1 carries:
+    # a .u64 atomic's 8-byte window also adds into the NEXT word, so the slots no
+    # longer all read back as the 32-bit wrap result. With a non-carrying seed
+    # (0x11111111) the .u64 result would be indistinguishable from the .u32 one
+    # and these checks would be dead.
+    dslot<Int> = wrap + 1 - 4294967296         # 0xFFFFFFFF + 1 wraps at 32 bits
+    for (i in 0..(lanes - 1)) {
+        if (ldev(dd + i * 4, 4, "atomic_i32 array lane") != dslot) {
+            bad = note(bad, "atomic_add_i32 array lane " + i.to_string() + " != 0xFFFFFFFF+1", 140 + i)
+        }
+    }
+    if (ldev(dd + 32, 4, "atomic_i32 array guard") != wrap) {
+        bad = note(bad, "atomic_add_i32 array guard word dd+32 changed", 148)
+    }
+    # defect: the scalar cell is ONE 4-byte Int32 word -- the 8 increments wrap the
+    # low word to 0xFFFFFFFF+8, and the second word stays 0xFFFFFFFF. An 8-byte
+    # atomic carries out of the low word and leaves that second word 0, so this
+    # check discriminates the width whatever order the lanes run in.
+    scnt = ldev(dcn, 4, "atomic_i32 scalar low word")
+    if (scnt != wrap + lanes - 4294967296) {
+        bad = note(bad, "atomic_add_i32 scalar low word != 0xFFFFFFFF+lanes", 149)
+    }
+    if (ldev(dcn + 4, 4, "atomic_i32 scalar high word") != wrap) {
+        bad = note(bad, "atomic_add_i32 scalar high word changed (8-byte atomic)", 150)
+    }
+    # defect: st_i32 -> 7 in EACH 4-byte slot; guard word (32) survives.
+    for (i in 0..(lanes - 1)) {
+        if (ldev(de + i * 4, 4, "st_i32 lane") != 7) {
+            bad = note(bad, "st_i32 lane " + i.to_string() + " != 7 (widened store)", 160 + i)
+        }
+    }
+    if (ldev(de + 32, 4, "st_i32 guard") != fill) {
+        bad = note(bad, "st_i32 guard word de+32 changed", 168)
+    }
+
     cuda_mem_free(da); cuda_mem_free(db); cuda_mem_free(dc); cuda_mem_free(dcr)
     cuda_mem_free(dd); cuda_mem_free(dcn); cuda_mem_free(de); cuda_mem_free(ds)
 
-    if (bad >= 0) {
-        println("PROBE15 FAIL at check ")
-        println_int(bad)
-        return 1
+    match (bad) {
+        e -> {
+            println("PROBE15 FAIL at check: " + e.message)
+            println_int(e.exitCode)
+            fail<ProbeError>(e)
+        }
+        ? -> { }
     }
-    println("PROBE15 PASS")
+    println("PROBE15 PASS: all 5 intrinsics touch only their own element")
     println("  st_f64 lane0 bits = ")
     println_int(s64)
     println(" (2.5)")
@@ -211,8 +328,8 @@ main()<Int> -> {
     println("  st_f32[0] bits = ")
     println_int(s32)
     println(" (0x3FC00000 = 1.5f)")
-    println("  atomic_i32 array = fill+1 per slot; cnt = fill+8 = ")
+    println("  atomic_i32 scalar cell = 0xFFFFFFFF+8 = ")
     println_int(scnt)
-    println("; st_i32 = 7 per slot; all guard words intact")
+    println("; st_i32 = 7 per slot; every guard word intact")
     return 0
 }
