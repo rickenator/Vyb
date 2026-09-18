@@ -1309,12 +1309,38 @@ bool LLVMCodegen::emitKernelIntrinsic(vyb::ast::CallExpression* node) {
         return true;
     }
 
+    // The intrinsic's element type governs the access width, not the operand's
+    // Vyb type (Int/Float are i64/f64 in LLVM). Coerce the operand to the element
+    // type: st_i32/st_f32 then emit ONE 4-byte st.global.u32/f32 instead of an
+    // 8-byte store that clobbers the neighbouring slot, and atomic_add_i32 reads
+    // and writes the 4-byte cell with atom.global.add.u32 (#270, #301). An
+    // uncoercible value is a hard codegen error.
+    auto coerceToElem = [&](llvm::Value* v, llvm::Type* et) -> llvm::Value* {
+        if (!v || v->getType() == et) return v;
+        llvm::Type* vt = v->getType();
+        if (vt->isIntegerTy() && et->isIntegerTy())
+            return builder->CreateTruncOrBitCast(v, et, "el.cast");
+        if (vt->isFloatingPointTy() && et->isFloatingPointTy())
+            return builder->CreateFPCast(v, et, "el.cast");
+        if (vt->isFloatingPointTy() && et->isIntegerTy())
+            return builder->CreateFPToSI(v, et, "el.cast");
+        if (vt->isIntegerTy() && et->isFloatingPointTy())
+            return builder->CreateSIToFP(v, et, "el.cast");
+        if (vt->isPointerTy() && et->isIntegerTy())
+            return builder->CreatePtrToInt(v, et, "el.cast");
+        logError(node->loc, name + " cannot use a value of this type.");
+        flagHardCodegenError();
+        return nullptr;
+    };
+
     // Global atomics (monotonic) — KV-cache writes / reductions.
     if (name == "atomic_add_f64" || name == "atomic_add_i32") {
         bool isI32 = (name == "atomic_add_i32");
         llvm::Type* el = isI32 ? int32Type : doubleType;
         llvm::Value* a = argv(0);
         llvm::Value* v = argv(1);
+        v = coerceToElem(v, el);
+        if (!v) { m_currentLLVMValue = nullptr; return true; }
         llvm::AtomicRMWInst::BinOp op = isI32 ? llvm::AtomicRMWInst::Add : llvm::AtomicRMWInst::FAdd;
         llvm::Value* r = builder->CreateAtomicRMW(op, gptr(a), v,
             llvm::MaybeAlign(), llvm::AtomicOrdering::Monotonic, llvm::SyncScope::System);
@@ -1347,7 +1373,10 @@ bool LLVMCodegen::emitKernelIntrinsic(vyb::ast::CallExpression* node) {
         if (name.rfind("st_", 0) == 0) {
             if (node->arguments.size() < 2) return true;
             node->arguments[1]->accept(*this);
-            builder->CreateStore(m_currentLLVMValue, gp);
+            // Store at the intrinsic's element width (see coerceToElem above).
+            llvm::Value* v = coerceToElem(m_currentLLVMValue, elemTy);
+            if (!v) { m_currentLLVMValue = nullptr; return true; }
+            builder->CreateStore(v, gp);
             m_currentLLVMValue = nullptr;
         } else {
             llvm::Value* loaded = builder->CreateLoad(elemTy, gp, "gld");
