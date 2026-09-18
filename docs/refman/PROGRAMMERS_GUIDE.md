@@ -1011,6 +1011,15 @@ Fallible openers (e.g. `stdlib/io`'s `open_read`) return a native optional
 `fd == -1` to test — a `File` is only ever constructed valid, so failure flows
 from taking the `?` seriously rather than comparing descriptors. Unwrap with
 `else` for a local default, or `match` the absent arm to escalate.
+
+Two consumption rules cover the present-value case (#292):
+
+- **Narrowing**: inside `if (r != nil)` the optional is usable as its payload, so
+  `w<Vec<Int>> = r` compiles there and stores the payload, not the `{ T, i1 }`
+  wrapper. The guard is what makes it safe; without it the assignment is still a
+  compile error. `if (r == nil)` narrows the `else` branch the same way.
+- **Rendering**: `print(r)` on a `T?` writes `nil` for absence and the payload's own
+  toString for presence, instead of dumping `{ type, address }` internals.
 The operations on the opened value follow the same shape: text `read_all`/
 `read_at` return `String?`, binary `read_bytes`/`read_bytes_at` return
 `Vec<UInt8>?`, `write_str`/`write_bytes`/`write_at` return `Int?` (bytes

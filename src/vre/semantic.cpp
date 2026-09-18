@@ -1945,7 +1945,23 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
                     addError(chk.message, node);
                 } else if (chk.code == IntAssignCode::NotInteger &&
                            !areTypesCompatible(varType, initType)) {
-                    addError("Initializer type does not match variable type for '" + node->id->name + "'. Expected " + varType->toString() + " but got " + initType->toString(), node);
+                    // #292: inside `if (r != nil)`, consuming the optional as its
+                    // payload is exactly what the guard is for -- accept it there.
+                    bool narrowed = false;
+                    if (dynamic_cast<const ast::OptionalType*>(initType) &&
+                        !dynamic_cast<const ast::OptionalType*>(varType)) {
+                        if (auto* ot = dynamic_cast<const ast::OptionalType*>(initType)) {
+                            if (ot->containedType &&
+                                ot->containedType->toString() == varType->toString()) {
+                                if (auto* id = dynamic_cast<ast::Identifier*>(node->init.get())) {
+                                    narrowed = narrowedNonNil.count(id->name) > 0;
+                                }
+                            }
+                        }
+                    }
+                    if (!narrowed) {
+                        addError("Initializer type does not match variable type for '" + node->id->name + "'. Expected " + varType->toString() + " but got " + initType->toString(), node);
+                    }
                 }
             }
         }
@@ -7135,13 +7151,45 @@ void SemanticAnalyzer::visit(ast::IfStatement* node) {
     // Visit the test condition
     node->test->accept(*this);
 
+    // #292: `if (r != nil)` proves `r` is present inside the consequent, so a `T?`
+    // can be consumed as its `T` payload there. `if (r == nil)` proves the opposite,
+    // so the narrowing applies to the alternate branch instead.
+    std::string guardName;
+    bool narrowsThen = false;
+    bool narrowsElse = false;
+    if (auto* bin = dynamic_cast<ast::BinaryExpression*>(node->test.get())) {
+        bool nilRight = dynamic_cast<ast::NilLiteral*>(bin->right.get()) != nullptr;
+        bool nilLeft = dynamic_cast<ast::NilLiteral*>(bin->left.get()) != nullptr;
+        ast::Expression* valueSide = nilRight ? bin->left.get()
+                                             : (nilLeft ? bin->right.get() : nullptr);
+        if (valueSide) {
+            if (auto* id = dynamic_cast<ast::Identifier*>(valueSide)) {
+                guardName = id->name;
+                narrowsThen = (bin->op.lexeme == "!=");
+                narrowsElse = (bin->op.lexeme == "==");
+            }
+        }
+    }
+
+    std::unordered_set<std::string> savedNarrow = narrowedNonNil;
+    if (!guardName.empty() && narrowsThen) {
+        narrowedNonNil.insert(guardName);
+    }
+
     // Visit the consequent block
     node->consequent->accept(*this);
+
+    narrowedNonNil = savedNarrow;
+    if (!guardName.empty() && narrowsElse) {
+        narrowedNonNil.insert(guardName);
+    }
 
     // Visit the alternate block if it exists
     if (node->alternate) {
         node->alternate->accept(*this);
     }
+
+    narrowedNonNil = savedNarrow;
 }
 void SemanticAnalyzer::visit(ast::ForStatement* node) {
     // Enter a new scope for the loop

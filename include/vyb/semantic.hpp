@@ -358,6 +358,10 @@ public:
         const std::unordered_map<std::string, std::string>& ownerByName,
         const std::unordered_map<std::string, std::unordered_set<std::string>>& effectiveScope);
 
+    // #292: names proven present by an enclosing `if (x != nil)` guard, so a `T?`
+    // can be consumed as its `T` payload inside that branch.
+    std::unordered_set<std::string> narrowedNonNil;
+
     // Access to generic trait implementations for monomorphization
     const std::unordered_map<std::string, std::unordered_map<std::string, std::unique_ptr<GenericImplInfo>>>&
     getGenericTraitImpls() const { return genericTraitImpls; }

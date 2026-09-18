@@ -369,6 +369,24 @@ llvm::Value* LLVMCodegen::generateToStringCall(llvm::Value* value, llvm::Type* v
         typeName = astType->toString();
     }
 
+    // #292: a native `T?` has no inherited toString. Render absence as "nil" and
+    // presence as the payload's own toString, so an optional never dumps its
+    // `{ type, address }` internals.
+    if (auto* ot = dynamic_cast<vyb::ast::OptionalType*>(astType)) {
+        if (value && value->getType()->isStructTy() && ot->containedType) {
+            llvm::Value* optHas = builder->CreateExtractValue(value, 1, "opt_has");
+            llvm::Value* optPayload = builder->CreateExtractValue(value, 0, "opt_payload");
+            llvm::Value* payloadStr = generateToStringCall(
+                optPayload,
+                codegenType(const_cast<vyb::ast::TypeNode*>(ot->containedType.get())),
+                const_cast<vyb::ast::TypeNode*>(ot->containedType.get()), loc);
+            if (payloadStr) {
+                llvm::Value* nilStr = builder->CreateGlobalStringPtr("nil", "opt_nil");
+                return builder->CreateSelect(optHas, payloadStr, nilStr, "opt_to_string");
+            }
+        }
+    }
+
     // Determine appropriate toString function based on LLVM type and AST type
     std::string toStringFuncName;
     llvm::FunctionType* toStringFuncType = nullptr;

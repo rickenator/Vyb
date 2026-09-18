@@ -536,6 +536,20 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
             }
         }
 
+        // #292: consuming a narrowed `T?` as its `T` payload. The enclosing
+        // `if (r != nil)` proved presence, so store the payload value rather than
+        // the `{ T, i1 }` wrapper.
+        if (node->init && node->typeNode && !dynamic_cast<ast::OptionalType*>(node->typeNode.get())) {
+            auto initAstTy = typeOfNode(node->init.get());
+            if (initAstTy && dynamic_cast<const ast::OptionalType*>(initAstTy.get()) &&
+                initialVal && llvm::isa<llvm::StructType>(initialVal->getType())) {
+                initialVal = builder->CreateExtractValue(initialVal, 0, "narrowed.payload");
+                builder->CreateStore(initialVal, alloca, "init.narrowed");
+                VYB_CDBG << "DEBUG: Narrowed optional '" << node->id->name
+                          << "': stored the payload" << std::endl;
+            }
+        }
+
         // Register variable for scope-based cleanup
         registerVariable(node->id->name, alloca, initialVal, ownership, varType, needsCleanup);
 
