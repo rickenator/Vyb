@@ -22,9 +22,9 @@ and the compatibility policy.
 
 [dependencies]            # at most one
   <name> = { path = "../dir" }          # local path dependency (RESOLVED)
-  <name> = { git = "https://…" }        # parsed, but REJECTED (#165)
-  <name> = { version = "x.y.z" }        # parsed, but REJECTED (#165)
-  <name> = "x.y.z"                      # shorthand → version → REJECTED (#165)
+  <name> = { git = "https://…" }        # RESOLVED — shallow-cloned into .vybmod/<name>/ on build
+  <name> = { version = "x.y.z" }        # RESOLVED — matched against a package registry (VYB_REGISTRY / ~/.vyb/registry)
+  <name> = "x.y.z"                      # shorthand → version
 
 [mod]                     # #204: package-level boundary/capabilities (optional)
   boundary    = ["freedom"]             # privileged: smuggle-only (or "freedom")
@@ -68,9 +68,14 @@ mis-parsing:
 - Writing full TOML (arrays, nested tables, dotted keys) is **not** supported and
   is treated as an error, not silently accepted — so a manifest can never
   accidentally rely on semantics the parser ignores.
-- Local `path` dependencies are the only **resolved** source today; `git` and
-  `version` sources parse but are rejected at build with `#165` (see
-  `doc/DEVELOPER_TOOLING.md` for the staged resolver).
+- Local `path`, `git`, `github` and `version` dependency sources all resolve
+  (`#165`, `#175`). `path` deps are used as-is; `git` deps are shallow-cloned into
+  `.vybmod/<name>/` on build; `github:` deps are materialized by
+  `vyb mod install github:...` and consumed from `.vybmod/<name>/`; `version`
+  deps resolve against the package registry (`VYB_REGISTRY`, else
+  `~/.vyb/registry`), taking the highest version matching the spec (`""` or
+  `latest` = any; an exact `x.y.z`; `1` = highest `1.x.y`; `1.2` = highest
+  `1.2.y`). See `doc/DEVELOPER_TOOLING.md` for the resolver details.
 
 ## Remote module import (`vyb mod install`)
 
