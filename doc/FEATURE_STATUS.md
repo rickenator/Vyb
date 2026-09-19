@@ -1,4 +1,4 @@
-# Vyb Feature Status (v0.7.5)
+# Vyb Feature Status (v0.7.6)
 
 This document tracks the implementation status of Vyb language features.
 
@@ -34,7 +34,7 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 | `bundle(...)` visibility | ✅ | Source-level directives are enforced by the local resolver |
 | `share(...)` exports | ✅ | `share(all)` and bundle-scoped shares export declarations/imports |
 | `smuggle` visibility bypass | ✅ | Smuggled imports bypass share/bundle checks |
-| URL/Git fetching (`from "github.com/..."`) | 📋 | v0.6.x |
+| URL/Git dependency fetching (`path`, `git:`, `github:`, `version:` deps in `vyb.toml`) | ✅ | All four dependency sources resolve (`#165`, `#175`): `path` deps are used as-is; `git:` deps are auto shallow-cloned into `.vybmod/<name>/` on build; `github:` deps are materialized by `vyb mod install github:owner/repo/path` and consumed from `.vybmod/<name>/`; `version:` deps resolve against the package registry (`VYB_REGISTRY`, else `~/.vyb/registry`) picking the highest version matching the spec. `doc/MANIFEST.md` documents the contract. |
 | Module cycle detection | ✅ | Circular imports are rejected with dependency-chain diagnostics |
 | Symbol re-export | ✅ | `share(...)` before an import re-exports selected imported declarations |
 
@@ -182,4 +182,4 @@ is staged. See `doc/CUDA.md` (design) and `PROGRAMMERS_GUIDE.md` §9 (authoritat
 
 **Runtime behavior (SIGPIPE):** the runtime installs `SIGPIPE = SIG_IGN` process-wide (a constructor in `runtime/vyb_runtime.c`) so a TLS `send` after a peer RST returns `EPIPE` instead of killing the process. This is global: any program that links the runtime gets the non-default `SIGPIPE` behavior, so a write to a closed pipe/peer reports an error rather than raising `SIGPIPE`. Applications that need the default `SIGPIPE` kill-semantics can re-install the handler at startup (`signal(SIGPIPE, SIG_DFL)`).
 
-*Last updated: 2026-09-09 (added GPU / Device Kernels (CUDA/NVPTX) section — issue #198/#199/#203)*
+*Last updated: 2026-09-19 (v0.7.6 version sync; URL/Git dependency fetching row marked implemented)*
