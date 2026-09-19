@@ -7,6 +7,151 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.7.6] - 2026-09-19
+
+### Added
+- **Optional narrowing with `nil`/`present` arms (#292, `faab91e`)** — a narrowed
+  `T?` can be consumed and its payload bound, and optionals render through the
+  ordinary display path (`90bfc9c`); refman `core.md` regenerated to match
+  (`9da1d2c`).
+- **Nested `Vec` accessed by reference (#297, `c652fcd`)** — `Vec<Vec<T>>::get`
+  is typed `their<Vec<T>>`, so inner vectors are reached without copying.
+- **`String.to_int` / `String.to_float` (#287, `7019b84`)** — both were documented
+  but missing from the stdlib; now implemented, with refman regeneration
+  (`e4a53d8`).
+- **`StringOps::index_of_from(needle, start)` (#257, `69d2438`)** — search with an
+  explicit start offset.
+- **`vllm` stdlib module** — a model-runtime engine (tokenizer, `74aaf84`;
+  sampler, `d946a4d`) plus a high-level `Model` facade that carries per-model
+  tokenizer state (`4efaeae`); curated refman digest in §4.28 (`c99e286`).
+- **Package trust and acceptance (#204, P2/P3)** — `vyb mod install` now gates a
+  remote package through its declared trust/capability boundary (`f43c7b4`), and
+  the boundary is dogfooded on `bindings/cuda` with the sqlite INDEX re-signed
+  (`842aa22`).
+- **VybChain signature layer (#219 follow-on, `652eb01`)** — authenticity, key
+  rotation, and checkpoints; backed by Ed25519 RFC 8032 vectors plus tamper
+  rejection tests (#219, `70facbb`).
+- **Lexer** — `Float` literals accept scientific notation (#258, `53ea375`).
+- **Build** — the `curses` module now requires the `ncursesw` header, not just the
+  library, before it is enabled (#224, `e0ceea6`).
+
+### Changed
+- **One type authority (#223)** — `Node::type` is deleted (`2e70874`) after
+  migrating semantic reads to the TypeTable query (`2ef26ce`), threading that
+  read-query into codegen (`c51031c`, `7bdd80c`), and unifying type writes on the
+  single TypeTable object (`db4057e`); the migration is marked complete in
+  `doc/` (`bdf3c60`).
+- **Docs and release plumbing** — README + landing page point at the official
+  v0.7.5 SDK (#224, `fc257f8`); GPU test-hardware references are generalized to
+  "on GPU" / "as tested on RTX 3090" (`1b97110`); the documented suite count is
+  re-synced as regression tests land (1146 → 1172 across `c5feb0e`, `1ab8747`,
+  `348647e`, `85df3f9`, `de2da31`, `c2cc5ad`, `c94649e`, `c076a86`).
+- **Version bump to 0.7.6 (`3aeb847`)** — `CMakeLists.txt` plus README, TODO,
+  `doc/BUILD.md`, `doc/FEATURE_STATUS.md`, the landing page and the refman guide.
+  That commit also restored five documented suite counts that a release-notes
+  substitution had blanked (`c076a86` wrote `1171 → ` instead of `1171 → 1172`,
+  leaving `( .vyb tests)` and `100% (/)` behind) and marked dependency fetching
+  as implemented in `doc/FEATURE_STATUS.md` / `doc/MANIFEST.md`.
+
+### Fixed
+- **Device code (CUDA/NVPTX)** — 32-bit device stores and atomics honor the
+  intrinsic width (#301, `efc8cfe`), with the probe harness naming the failing
+  check instead of passing silently (#301, `517f327`); `st_*` stores honor the
+  intrinsic element width (#270, `d2e1c4b`); host libm math builtins are
+  rejected in device code (#256, `ad42580`).
+- **`Vec` copy and stride semantics** — nested `Vec` elements are deep-copied on
+  push/get/set (#284, `8d680c5`); push/set stride by the declared element type
+  rather than the pushed value's width (#281, `6f67c77`); optional `Vec` returns
+  wrap/unwrap without an invalid cast or crash (#282, `19364b1`); writes through
+  a by-value `Vec::get` temporary are rejected (#260, `0bd78f7`); mutating a
+  by-value `Vec` parameter is rejected instead of silently no-opping for the
+  caller (#283, `eceefff`).
+- **Aspect/bind dispatch** — an aspect method dispatches through a borrowed
+  (`their<T>`) receiver (#254, `64f47d3`) and the pointee is loaded when a
+  by-value `Vec<T>` bind receiver is reached through a borrow (#254, `05b7ac2`);
+  a temporary aspect receiver is materialized so its load has a pointer (#253,
+  `06fd027`); borrowed-receiver dispatch tests added (#254, `c2cc5ad`).
+- **Semantic diagnostics** — wrong-arity aspect/bind calls (#255, `8ea19f3`); a
+  bind whose parameter count disagrees with its aspect (#249, `ea63022`); an
+  omitted return annotation on a bind body inherits the aspect's declared return
+  type (#250, `e78ab94`); enum struct payloads resolve, and an unresolvable
+  payload is a hard error (#251, `0b3ce52`); re-borrowing an existing `their<T>`
+  is rejected instead of crashing (#285, `c4353a4`); arithmetic/bitwise ops on
+  invalid operand types are rejected (`ae1201d`).
+- **Modules** — subset imports carry closure deps and binds across the boundary
+  (#261, #262, `488f667`).
+- **Parser and codegen** — `a * (b)` parses as multiplication rather than
+  pointer-type construction (`b7ccdf7`); the parser no longer loops forever
+  during module error recovery (#245, `dde3787`); a struct field named after a
+  reserved word reports the offending token (#286, `b8ffe7c`); codegen halts
+  instead of running a module whose code generation reported errors (#264,
+  `e121dd4`).
+
+## [0.7.5] - 2026-09-10
+
+### Added
+- **CLI tooling suite (#154)** — `vyb lsp`, a Language Server Protocol server
+  (`46e0430`) that completes struct-field and aspect-method names on dot-access
+  (`fa9289b`); `vyb repl`, a JIT-backed read-eval-print loop with readline-style
+  editing and a `:type` command (`cc1e466`, `78ba5f0`); `vyb doc`, an HTML
+  documentation generator (`6ab42e8`); `vyb check`, an AST linter reporting
+  warnings beyond errors (`71eaf8a`); `vyb test`, the fixture runner (`bc97734`);
+  and the idempotent `vyb --format` / `--check` formatter (`c607f27`).
+- **Dependency sources resolve (#165)** — `git:` dependencies in `vyb.toml` are
+  shallow-cloned into `.vybmod/<name>/` on build (`4d15623`); a package registry
+  plus `version:`-spec resolution lands in build (`e3c912c`); `github:`
+  resolution is wired through (`bc97734`).
+- **CUDA/NVPTX device backend** — a documented device-backend section (`27e8c35`,
+  `cbeb3ec`), the `--gpu <arch>` NVPTX override with a `sm_86` default
+  (`e356258`), and bindings verified on silicon: shared-memory tiled matmul
+  (`28eb5e8`), cuBLAS DGEMM cross-validated against a Vyb tiled kernel
+  (`949a1d1`), cuFFT/cuDNN (`dca8f75`), and cuDNN convolution 8x8x3x3 at 64/64
+  (`d108cb5`). A self-hosted GPU runner drives the on-silicon `gpu-silicon` job
+  (`332a1b2`).
+- **stdlib** — `Vec::last()` / `Vec::peek()` read-only tail accessors
+  (`30c8920`); the raw-binary byte-buffer `io` surface (#213, `f527d04`); and
+  recursive `Vec<Self>` reclaim in serialization/deserialization plus the
+  fn/Self ser-deser exclusion (`c607f27`).
+- **Language** — an omitted return signature is now the canonical implicit
+  `Void` (#212, `d6e6c38`), swept tree-wide (`d8f9478`); the package-level
+  `freedom` boundary for remote `smuggle` (#204, P0, `2842f70`); and the SDL3
+  posted FFI binding exercised headlessly through the JIT (#174, `77d0d76`).
+- **Docs** — a refman language quick-reference (`134ff0f`) and the CUDA/NVPTX
+  section in the Programmer's Guide, alongside `io` binary-surface and
+  stdlib-as-modules (97/97) syncs.
+- **Parser** — multi-error recovery (`5e86802`).
+
+### Changed
+- **AST/TypeTable migration** — checkpoint A makes `expressionTypes` an owning
+  `shared_ptr` (`f5c2366`); checkpoint B rekeys the TypeTable onto stable node
+  IDs (`e05cc92`, `e377c97`). The plan, the nested-`]` rekey pitfall, and the
+  clean revert are recorded in `TODO.md` (`4d8776d`, `db48c52`).
+- **Release** — version bumped to 0.7.5 across CMake and docs, with the README
+  suite count synced (`a4a23a3`); stdlib-as-modules finished at 97/97 with the
+  count re-anchored (`260f30d`).
+- **CI** — the main-protection ruleset and the active required-check list are
+  documented (#222, `cec48ac`, `d76bdee`); CUDA tests carry
+  `@skip-if-missing-lib: libcuda.so.1` so GPU-less runners skip rather than fail
+  (`0e768de`).
+- **Hygiene** — the documented suite count is synchronized to the harness
+  (#226, `6577166`) and tracked residue is removed (#225).
+
+### Fixed
+- **Ownership and reclamation** — a fresh `Vec` temporary passed by value as a
+  call argument (`eb2f755`), the optional-of-scalar-`Vec` buffer of a matched
+  owned temporary (`9ac6540`), and the owned scalar-`Vec` payload of a native
+  `T?` at scope exit (`e26e045`) are all reclaimed now; `Vec`-assignment
+  ownership, if-expression string unification, and Ed25519 (#217, #218, #219,
+  `77b7c5d`).
+- **Codegen** — canonical String shape for `.to_string()` in operand position
+  (#216, `844eb67`); the host `DataLayout` is set before codegen so baked field
+  offsets match the real layout (#215, `6d89575`).
+- **Data race** — eager immutable AST node IDs remove the TypeTable-key race
+  (#223, `e25f8ab`).
+- **SDK and applications** — `env.sh` resolves the SDK root in the packaged
+  layout (#175, `f22bb33`); VybLynx HTTP fetch uses the present-`HttpResponse`
+  error model (#214, `a3dc5c6`).
+
 ## [0.7.4] - 2026-08-28
 
 ### Added
