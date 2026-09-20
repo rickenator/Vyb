@@ -8264,6 +8264,12 @@ void LLVMCodegen::visit(vyb::ast::ArrayElementExpression *node) {
             } else {
                 elementType = codegenType(ptrAstType->pointeeType.get()); // Corrected member access // Pointer to element
             }
+        } else if (auto vecAstType = dynamic_cast<vyb::ast::VecType*>(arrAstTypeNode)) {
+            // A Vec<T> is a heap-backed container whose element type lives in the
+            // same place as an array's. Without this branch, subscripting
+            // Vec<String> fell through to the null-elementType error even though
+            // the AST type ("Vec<String>") was known -- see issue #317.
+            elementType = codegenType(vecAstType->elementType.get());
         }
     }
 
@@ -8281,7 +8287,41 @@ void LLVMCodegen::visit(vyb::ast::ArrayElementExpression *node) {
 
     llvm::Value *elementAddress = nullptr;
 
-    if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(arrayPtr)) {
+    // A Vec<T> is a struct { void* data; i64 size; i64 cap } (VecSlot in
+    // runtime/vyb_type_metadata.c). Subscripting it must go through the data
+    // pointer (field 0), so the GEP needs [0, 0, index] -- a single index cannot
+    // walk into a struct. See issue #317.
+    bool isVecAccess = false;
+    if (auto* vecTn = typeOfNode(node->array)
+            ? dynamic_cast<vyb::ast::VecType*>(typeOfNode(node->array).get()) : nullptr) {
+        isVecAccess = vecTn != nullptr;
+    }
+
+    if (isVecAccess) {
+        // Mirror the sequence the working `get` path emits:
+        //   data_ptr  = gep {ptr,i64,i64}, %v, 0, 0     (field 0 = void* data)
+        //   data      = load ptr, data_ptr
+        //   elem_addr = gep i8, data, byteOffset        (byte-offset, untyped)
+        llvm::Type* vecStructTy = llvm::StructType::get(*context,
+            {llvm::PointerType::get(*context, 0),
+             llvm::Type::getInt64Ty(*context),
+             llvm::Type::getInt64Ty(*context)});
+
+        llvm::Value* zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0);
+        std::vector<llvm::Value*> fieldIdx = {zero, zero};
+        llvm::Value* dataFieldPtr = builder->CreateGEP(vecStructTy, arrayPtr, fieldIdx,
+                                                      "vec.data_ptr");
+        llvm::Value* dataPtr = builder->CreateLoad(llvm::PointerType::get(*context, 0),
+                                                   dataFieldPtr, "vec.data");
+        // Elements are addressed by byte offset: index * sizeof(element).
+        llvm::Value* elemSize = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context),
+            module->getDataLayout().getTypeAllocSize(elementType));
+        llvm::Value* idx64 = builder->CreateSExtOrTrunc(indexVal,
+                                  llvm::Type::getInt64Ty(*context), "vec.idx64");
+        llvm::Value* byteOffset = builder->CreateMul(idx64, elemSize, "vec.offset");
+        elementAddress = builder->CreateGEP(llvm::Type::getInt8Ty(*context), dataPtr,
+                                            byteOffset, "vecelemaddr_rval");
+    } else if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(arrayPtr)) {
         // arrayPtr is an alloca of array type, so we need [0, index] to get to the element
         llvm::Value* zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0);
         std::vector<llvm::Value*> indices = {zero, indexVal};
