@@ -1,0 +1,50 @@
+// @test: to_string() resolves on every scalar spelling, not just Int/Float/Bool (#309)
+// @description: `x<UInt8>.to_string()` failed with "Unknown struct type: UInt8" -- a
+//   diagnostic that sends the reader hunting for a struct that does not exist. Two separate
+//   hardcoded allowlists were involved: the member-access path accepted only
+//   Int/Float/Bool/String, and the two to_string resolution paths accepted only
+//   Int/Float/Bool. Both now use the canonical scalars set, so sized spellings
+//   (UInt8, UInt16, UInt32, UInt64, Int8..Int64, Float32, Float64, Char, Rune and their
+//   aliases) resolve. Unsigned values must print unsigned: UInt8 250 is "250", not "-6".
+//   String.to_string() (a struct, not a scalar) must keep resolving as identity.
+// @category: to-string, scalar-types, unsigned, method-resolution, 309
+// @expect: pass
+// @expect-return: 0
+// @execute-jit: true
+
+main()<Int> -> {
+    u8<UInt8> = 7
+    assert(u8.to_string() == "7")
+
+    // A high-bit unsigned value must not sign-extend: 250, not -6.
+    big<UInt8> = 250
+    assert(big.to_string() == "250")
+
+    i32<Int32> = -5
+    assert(i32.to_string() == "-5")
+
+    i16<Int16> = 12
+    assert(i16.to_string() == "12")
+
+    i64<Int64> = 99
+    assert(i64.to_string() == "99")
+
+    u16<UInt16> = 4096
+    assert(u16.to_string() == "4096")
+
+    u32<UInt32> = 70000
+    assert(u32.to_string() == "70000")
+
+    u64<UInt64> = 123
+    assert(u64.to_string() == "123")
+
+    // The canonical names must keep working.
+    i<Int> = 42
+    assert(i.to_string() == "42")
+
+    // String.to_string() is identity and must still resolve.
+    s<String> = "hi"
+    assert(s.to_string() == "hi")
+
+    return 0
+}

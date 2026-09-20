@@ -586,7 +586,15 @@ llvm::Type* LLVMCodegen::codegenType(vyb::ast::TypeNode* typeNode) {
                 llvmType = llvm::Type::getInt8Ty(*context);   // Same as i8 at LLVM level
 
             // Floating point types
-            } else if (typeNameStr == "Float" || typeNameStr == "f64" || typeNameStr == "CDouble") {
+            // #310: `Float64` is a canonical spelling that must be listed
+            // explicitly. Only `Float`, `f64` and `CDouble` mapped to double, so
+            // `x<Float64> = 2.5` fell through this chain to the generic
+            // "Unknown type identifier: Float64" error even though the semantic
+            // analyzer, `normalizeTypeName` and the type-compatibility rules all
+            // treat Float64 as a valid float type. `Float32` was already listed,
+            // which is why only the 64-bit spelling failed.
+            } else if (typeNameStr == "Float" || typeNameStr == "Float64" ||
+                       typeNameStr == "f64" || typeNameStr == "CDouble") {
                 llvmType = doubleType;
             } else if (typeNameStr == "Float32" || typeNameStr == "f32" || typeNameStr == "CFloat") {
                 llvmType = floatType;

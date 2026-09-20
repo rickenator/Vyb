@@ -1,0 +1,50 @@
+// @test: Float32 values compared against float literals stop emitting invalid IR
+// @description: An unannotated float literal lowers as an LLVM `double`, so any
+//   comparison between a Float32 value and a bare literal (`a == 2.5`, `a < 3.5`)
+//   used to emit `fcmp oeq float %a, double 2.5` -- invalid IR that failed module
+//   verification while the compiler still exited 0. The binary-expression operand
+//   coercion now retypes a float literal to the width of the value it is compared
+//   against, and promotes when neither side is a literal (#312).
+// @category: float, comparison, codegen, regression
+// @expect: pass
+// @expect-return: 0
+// @execute-jit: true
+
+main()<Int> -> {
+    a<Float32> = 2.5
+
+    // all six comparison operators against an unannotated float literal
+    assert(a == 2.5)
+    assert(a != 3.5)
+    assert(a < 3.5)
+    assert(a <= 2.5)
+    assert(a > 1.5)
+    assert(a >= 2.5)
+
+    // literal on the left-hand side
+    assert(2.5 == a)
+    assert(3.5 > a)
+    assert(1.5 < a)
+
+    // a Float32 value against a Float64 value (no literal involved): the narrower
+    // value is promoted, never the wider one truncated
+    b<Float64> = 2.5
+    assert(a == b)
+    assert(b == a)
+
+    // Float64 against a literal keeps working
+    c<Float64> = 2.5
+    assert(c == 2.5)
+
+    // arithmetic that mixes a Float32 value with a float literal
+    d<Float32> = a + 1.5
+    assert(d == 4.0)
+    e<Float32> = a * 2.0
+    assert(e == 5.0)
+
+    // aliases for the 32-bit width resolve the same way
+    f<f32> = 1.5
+    assert(f < 2.0)
+
+    return 0
+}

@@ -4663,8 +4663,18 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                         }
                         if (objTypeName->identifier) {
                             std::string typeStr = objTypeName->identifier->name;
+                            // #309: every scalar has to_string(), not just the three
+                            // canonical names. primitiveValueTypes is the canonical
+                            // scalars set, so sized spellings (UInt8, Int32, Float64,
+                            // Char, ...) resolve here too instead of falling through
+                            // to "Unknown method 'to_string' on type 'UInt8'".
+                            //
+                            // String is included explicitly: it is a { ptr, i64 }
+                            // struct rather than a scalar, so it is not in
+                            // primitiveValueTypes, but String.to_string() is a valid
+                            // identity conversion and must keep resolving.
                             if (methodName == "to_string" &&
-                                (typeStr == "Int" || typeStr == "Float" || typeStr == "Bool")) {
+                                (typeStr == "String" || primitiveValueTypes.count(typeStr) > 0)) {
                                 // Return String type for .to_string() on primitives
                                 auto stringType = new ast::TypeName(node->loc,
                                     std::make_unique<ast::Identifier>(node->loc, "String"));
@@ -5086,7 +5096,10 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
 
                         // Check for primitive type methods (Int.to_string(), Float.to_string(), Bool.to_string())
                         if (methodName == "to_string") {
-                            if (typeNameStr == "Int" || typeNameStr == "Float" || typeNameStr == "Bool") {
+                            // #309: same canonical scalars set as the early path above,
+                            // plus String (a struct, not a scalar) for identity
+                            // String.to_string().
+                            if (typeNameStr == "String" || primitiveValueTypes.count(typeNameStr) > 0) {
                                 // Return String type for .to_string() on primitives
                                 auto stringType = new ast::TypeName(node->loc,
                                     std::make_unique<ast::Identifier>(node->loc, "String"));
@@ -5617,7 +5630,18 @@ void SemanticAnalyzer::visit(ast::MemberExpression* node) {
     }
 
     // Special handling for primitive types with methods (Int.to_string(), etc.)
-    if (baseStructName == "Int" || baseStructName == "Float" || baseStructName == "Bool" || baseStructName == "String") {
+    // #309: the primitive allowlist must cover every scalar, not just Int/Float/
+    // Bool/String. `UInt8`, `Int32`, `Float64`, `Char`, ... all reach this member
+    // access path and previously fell through to "Unknown struct type: UInt8",
+    // a diagnostic that sends the reader hunting for a struct that does not exist.
+    // primitiveValueTypes (defined near the top of this file) is the canonical
+    // set of scalar type names, including their alias spellings.
+    //
+    // String is deliberately kept separate: it is NOT in primitiveValueTypes
+    // because it is a { ptr, i64 } struct with its own layout, but it still owns
+    // methods like to_string()/len() and reaches this path as a member access.
+    // Dropping it here reintroduces "Unknown struct type: String" for every use.
+    if (baseStructName == "String" || primitiveValueTypes.count(baseStructName) > 0) {
         // Primitive types can have methods like to_string()
         // The actual method resolution will happen in CallExpression visitor
         return;
