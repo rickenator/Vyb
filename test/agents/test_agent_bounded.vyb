@@ -59,18 +59,29 @@ main()<Int> -> {
     agent_close(a)
     agent_free(a)
 
-    # A bounded String agent exercises the strchan mailbox path: cap 2 buffers 2,
-    # plus whatever the worker holds in-flight at that instant, so the box can
-    # accept 2..3 before a full send returns 0 (timing-dependent).
+    # A bounded String agent exercises the strchan mailbox path. The mailbox
+    # accepts at most `cap` messages AHEAD of the worker, and "ahead" counts the
+    # message the worker is currently handling too, so how many sends succeed
+    # before one is refused depends on how far the worker has progressed -- racy
+    # by nature. What holds regardless of timing:
+    #   (a) the mailbox never buffers more than cap;
+    #   (b) once the worker drains, sends are accepted again -- nothing is lost.
+    # This section used to assert "a retry right after the refusal must still
+    # fail", which raced the worker's consume and flaked (~1 run in 6 returned
+    # 13). It now asserts only timing-independent invariants and waits on the
+    # worker's actual progress via blocking `chan_recv` (never a spin budget).
     sgate<Int> = chan_new() else 0
+    sout<Int> = chan_new() else 0
     sa<Int> = agent_start_string(|message<String?>| -> {
         match (message) {
-            sv -> { chan_recv(sgate) }
+            sv -> { chan_recv(sgate); chan_send(sout, 1) }
             ? -> { }
         }
     }, 2) else 0
     if (!(agent_send_string(sa, "a") else false)) { return 10 }
     if (!(agent_send_string(sa, "b") else false)) { return 11 }
+    # Fill until refused. `ssends` is cap plus whatever the worker had already
+    # taken, so it is only lower-bounded by cap.
     ssends<Int> = 2
     while (true) {
         r<Bool> = agent_send_string(sa, "x") else false
@@ -78,17 +89,31 @@ main()<Int> -> {
         ssends = ssends + 1
         if (ssends > 100) { return 12 }
     }
-    # 2 buffered + 0..1 in-flight -> a full send returns 0 (non-blocking).
-    if (ssends < 2 || ssends > 3) { return 12 }
-    if (agent_send_string(sa, "e") else false) { return 13 }   # full -> absent
-    c2<Int> = 0
-    while (c2 < ssends) {
+    # (a) the mailbox never buffers more than its cap.
+    if (ssends < 2) { return 12 }
+    if (agent_len(sa) > 2) { return 13 }
+    # (b) Release the worker one message at a time and confirm each slot frees.
+    # `chan_recv` BLOCKS until the worker has handled the message, so this waits
+    # for real progress instead of racing the worker's scheduler.
+    chan_send(sgate, 1)
+    if ((chan_recv(sout) else -1) != 1) { return 14 }   # worker handled one
+    if (agent_len(sa) > 2) { return 14 }                # still never over cap
+    # With a slot proven free, a send must now be accepted (positive direction).
+    if (!(agent_send_string(sa, "c") else false)) { return 15 }
+    # Drain the remainder: one token per outstanding message, each confirmed by a
+    # blocking reply. Every message that was accepted must be handled exactly
+    # once, so the total replies equal the number accepted (`ssends` plus "c").
+    got<Int> = 1
+    while (got < ssends + 1) {
         chan_send(sgate, 1)
-        c2 = c2 + 1
+        if ((chan_recv(sout) else -1) != 1) { return 16 }
+        got = got + 1
     }
+    if (agent_len(sa) != 0) { return 16 }
     agent_close(sa)
     agent_free(sa)
     chan_free(sgate)
+    chan_free(sout)
 
     # Unbounded (0 / omitted): every send is accepted.
     u<Int> = agent_start(|v<Int?>| -> { }, 0) else 0

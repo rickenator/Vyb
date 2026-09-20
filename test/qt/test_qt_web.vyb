@@ -94,13 +94,26 @@ main()<Int> -> {
     if (!(qt_web_reload(web) else false)) { return 38 }
     if (wait_title(web, "VybB") != 1) { return 39 }
 
-    // Real network load: google.com renders a page offscreen.
-    if (!(qt_web_load(web, "https://www.google.com/") else false)) { return 40 }
-    active<Int> = saw_web_event(web, QtEvent::titleChanged, 400)
-    if (active == 0) { active = saw_web_event(web, QtEvent::loadProgress, 400) }
-    if (active == 0) { return 41 }
-    if (qt_web_url(web) == "") { return 42 }
-    if (qt_web_title(web) == "") { return 43 }
+    // Real network load: an https page renders offscreen. This leg depends on
+    // outbound network + a Chromium renderer start, which is slow (multi-second)
+    // and can exceed a single wait window when the suite loads the machine. The
+    // deterministic navigation above is the real coverage, so this leg retries
+    // the load and waits for ANY page-progress event across several windows
+    // instead of failing on one 400-iteration timeout. A genuinely unreachable
+    // network still fails, just after a bounded number of attempts.
+    netOk<Int> = 0
+    attempt<Int> = 0
+    while (attempt < 3 && netOk == 0) {
+        attempt = attempt + 1
+        if (!(qt_web_load(web, "https://www.google.com/") else false)) { continue }
+        active<Int> = saw_web_event(web, QtEvent::titleChanged, 400)
+        if (active == 0) { active = saw_web_event(web, QtEvent::loadProgress, 400) }
+        if (active == 0) { continue }
+        if (qt_web_url(web) == "") { continue }
+        if (qt_web_title(web) == "") { continue }
+        netOk = 1
+    }
+    if (netOk == 0) { return 41 }
 
     qt_quit()
     println("qt-web-ok")
