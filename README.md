@@ -59,6 +59,8 @@ Vyb is a statically typed, compiled systems language targeting native code via L
 * **Concurrency**: `async`/`await` and `Future<T>`.
 * **Native Compilation**: Full JIT (LLVM ORC), AOT (object files), and executable generation pipeline.
 
+**Who's using it.** [FlyScale](https://github.com/rickenator/VybFly) is a neuroinformatics project that redraws a whole fruit-fly brain bigger — up to **1.4 million neurons and 27.8 million connections** — and treats that scale-up as an honest test of whether "bigger" still behaves like a brain. It runs the workload twice, a Python reference and a Vyb-native path that has to agree with it tick for tick, and the second one turned out to be the most informative part of the work: it surfaced **twelve compiler defects**, including a blocking one where a kernel-mode store wrote eight bytes into a four-byte slot and silently zeroed a neighbor. [Read the paper](https://vybfly-paper-relay.aniviza.workers.dev/paper.pdf), with the Vyb port as the real test of the compiler.
+
 **Parameter passing is explicit.** A plain `x<T>` parameter is a *value copy* — the callee works on its own copy and the caller's variable is untouched (a `Vec` or an owning struct is deep-copied; a `String` shares its buffer; an `our<T>` bumps its refcount). To read or mutate *in place without copying*, take a `their<T>` borrow, supplied as `borrow(x)` (mutable) or `view(x)` (read-only `their<T const>`). Ownership is separate from reference-passing: `my<T>` is unique ownership (a named `my` passed to a `my` parameter *moves* — use-after-move is rejected), and `our<T>` is shared, ref-counted ownership; neither is another spelling of `ref`. The full, tested rules are in the “Parameter passing” section of the Programmer’s Guide.
 
 ## Quick Start
