@@ -1,0 +1,44 @@
+// @test: #317 - Vec<T> subscript (v[i]) resolves element type in codegen
+// @description: Subscript access on a Vec<T> left the element type unresolved,
+//   so codegen bailed with "Could not determine element type for array access
+//   (R-value)" even though the AST type ("Vec<String>") was known. Even once
+//   the type resolved, the GEP was malformed ("Invalid indices for GEP pointer
+//   type!") because a Vec is `struct { void* data; i64 size; i64 cap }` and
+//   elements live behind field 0. This covers reads for both String and Int
+//   elements, plus subscripting a Vec passed as a function parameter.
+
+join_strings(xs<Vec<String>>)<String> -> {
+    out<String> = ""
+    i<Int> = 0
+    while (i < xs.len()) {
+        out = out.concat(xs.get(i))
+        i = i + 1
+    }
+    return out
+}
+
+main()<Int> -> {
+    // Vec<String> read
+    v<Vec<String>> = Vec<String>()
+    v.push("a")
+    v.push("b")
+    first<String> = v[0]
+    if (first != "a") { return 1 }
+    second<String> = v[1]
+    if (second != "b") { return 2 }
+
+    // Vec<Int> read
+    n<Vec<Int>> = Vec<Int>()
+    i<Int> = 0
+    while (i < 5) {
+        n.push(i * 10)
+        i = i + 1
+    }
+    if (n[0] != 0) { return 3 }
+    if (n[4] != 40) { return 4 }
+
+    // subscript on a Vec parameter
+    if (join_strings(v) != "ab") { return 5 }
+
+    return 0
+}

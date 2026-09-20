@@ -7693,7 +7693,25 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
     if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(LHS)) {
         destPointeeType = allocaInst->getAllocatedType();
     } else if (auto gep = llvm::dyn_cast<llvm::GetElementPtrInst>(LHS)) {
-        destPointeeType = gep->getResultElementType();
+        // A Vec<T> subscript stores through a *byte-offset* GEP, whose
+        // getResultElementType() is i8 -- not the element type. Prefer the
+        // AST-declared element type when the subscript's base is a Vec, so the
+        // store uses T and the assignment does not warn "Storing i64 into
+        // location of type i8". See issue #318.
+        bool usedAstElemType = false;
+        if (auto* aee = dynamic_cast<ast::ArrayElementExpression*>(node->left.get())) {
+            if (typeOfNode(aee->array)) {
+                if (auto* vecTn = dynamic_cast<ast::VecType*>(typeOfNode(aee->array).get())) {
+                    if (vecTn->elementType) {
+                        destPointeeType = codegenType(vecTn->elementType.get());
+                        usedAstElemType = destPointeeType != nullptr;
+                    }
+                }
+            }
+        }
+        if (!usedAstElemType) {
+            destPointeeType = gep->getResultElementType();
+        }
     } else if (lhsTypeNode) {
         destPointeeType = codegenType(lhsTypeNode.get());
     } else {
