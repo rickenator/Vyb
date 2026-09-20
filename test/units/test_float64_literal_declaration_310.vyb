@@ -1,0 +1,38 @@
+// @test: Float64 declaration initialized from a float literal resolves (#310)
+// @description: `x<Float64> = 2.5` errored with "Unknown type identifier: Float64" and then
+//   ran the module anyway with a null-typed variable (exit 0, no output). The codegen type
+//   chain mapped Float/f64/CDouble to double and Float32/f32/CFloat to float but never listed
+//   the canonical spelling `Float64`, so it fell through to the generic "unknown type"
+//   branch. Float64 is now mapped to double, and 2.0 / next-line literal forms resolve too.
+//   An Int literal assigned to a Float64 is still a reported type mismatch, not a silent pass.
+// @category: float64, type-resolution, literals, declaration, 310
+// @expect: pass
+// @expect-return: 0
+// @execute-jit: true
+
+main()<Int> -> {
+    a<Float64> = 2.5
+    assert(a == 2.5)
+
+    b<Float64> = 2.0
+    assert(b == 2.0)
+
+    // Literal on the next line
+    c<Float64> =
+        2.5
+    assert(c == 2.5)
+
+    // Float32 must keep working
+    d<Float32> = 2.5
+    assert(d == 2.5)
+
+    // Unannotated float literal must keep working
+    e = 2.5
+    assert(e == 2.5)
+
+    // Arithmetic on Float64 values
+    f<Float64> = a + b
+    assert(f == 4.5)
+
+    return 0
+}

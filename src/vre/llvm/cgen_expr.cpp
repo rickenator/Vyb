@@ -693,6 +693,36 @@ void LLVMCodegen::visit(vyb::ast::BinaryExpression *node) {
             // Right is smaller, truncate left to match right
             L = builder->CreateTrunc(L, R->getType(), "inttrunctmp");
         }
+    } else if (L->getType()->isFloatingPointTy() && R->getType()->isFloatingPointTy() &&
+               L->getType() != R->getType()) {
+        // #312: two floating-point operands of different widths. An unannotated
+        // float literal always lowers as an LLVM `double` (see
+        // visit(ast::FloatLiteral)), so `x<Float32> == 2.5` reached `CreateFCmpOEQ`
+        // as `fcmp oeq float %x, double 2.5` -- invalid IR that fails module
+        // verification while the compiler still exits 0. `Float64` was unaffected
+        // because it already lowers to `double`.
+        //
+        // Width rule: a float LITERAL is retyped to the width of the value it is
+        // compared against, which keeps the declared width of the variable (`2.5`
+        // is exactly representable in `float`). When NEITHER operand is a literal
+        // both sides are live stored values, so promote to the WIDER width --
+        // silently truncating a stored value would change the comparison's result.
+        bool leftIsLiteral = dynamic_cast<vyb::ast::FloatLiteral*>(node->left.get()) != nullptr;
+        bool rightIsLiteral = dynamic_cast<vyb::ast::FloatLiteral*>(node->right.get()) != nullptr;
+
+        if (leftIsLiteral != rightIsLiteral) {
+            llvm::Value* literal = leftIsLiteral ? L : R;
+            llvm::Type* target = leftIsLiteral ? R->getType() : L->getType();
+            llvm::Value* retyped = (literal->getType()->getScalarSizeInBits() >
+                                    target->getScalarSizeInBits())
+                                       ? builder->CreateFPTrunc(literal, target, "fptrunctmp")
+                                       : builder->CreateFPExt(literal, target, "fpexttmp");
+            if (leftIsLiteral) L = retyped; else R = retyped;
+        } else if (L->getType()->getScalarSizeInBits() >= R->getType()->getScalarSizeInBits()) {
+            R = builder->CreateFPExt(R, L->getType(), "fpexttmp");
+        } else {
+            L = builder->CreateFPExt(L, R->getType(), "fpexttmp");
+        }
     } else if (L->getType()->isPointerTy() && R->getType()->isIntegerTy()) {
         // Pointer arithmetic (e.g. ptr + int)
         // We need to extract the appropriate type information for CreateGEP

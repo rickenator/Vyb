@@ -543,6 +543,39 @@ void LLVMCodegen::handleVecLen(vyb::ast::CallExpression* node, llvm::Value* vecP
     VYB_CDBG << "DEBUG: Vec::len() called" << std::endl;
 }
 
+// #308: reduce an index operand to the value the bounds compare and the offset
+// multiply need. Two things can be wrong with the operand as lowered:
+//
+//  1. It is a POINTER. `visit(Identifier)` returns the alloca itself (rather than
+//     loading it) whenever m_isLHSOfAssignment is set. A chained receiver such as
+//     `outer.get(k).len()` is the trigger: the OUTER call evaluates its receiver in
+//     pointer mode (see the `savedLHS` blocks in cgen_expr.cpp) and the inner
+//     `get(k)` -- including the evaluation of `k` -- happens inside that window.
+//     The alloca's allocated type is the declared index type, so a single load
+//     recovers the intended value.
+//  2. It is an INTEGER of a different width than the receiver indexes by. Indexing
+//     is i64 throughout, so a narrow index (e.g. a UInt8 loop counter) is widened.
+//
+// Anything else (a float, an aggregate) is a genuine type error and is reported
+// rather than coerced: silently reinterpreting it would trade a loud failure for a
+// wrong address.
+llvm::Value* LLVMCodegen::coerceVecIndexToI64(llvm::Value* index) {
+    llvm::Type* i64Type = llvm::Type::getInt64Ty(*context);
+    if (index->getType() == i64Type) return index;
+    if (index->getType()->isPointerTy()) {
+        if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(index)) {
+            return builder->CreateLoad(alloca->getAllocatedType(), index, "vec.index.load");
+        }
+        // A pointer that is not an alloca cannot be an index: loading it would read
+        // whatever it points at, which is not the index value.
+        return nullptr;
+    }
+    if (index->getType()->isIntegerTy()) {
+        return builder->CreateIntCast(index, i64Type, /*isSigned=*/true, "vec.index.wide");
+    }
+    return nullptr;
+}
+
 void LLVMCodegen::handleVecGet(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType) {
     if (node->arguments.size() != 1) {
         logError(node->loc, "Vec::get expects exactly 1 argument (index)");
@@ -599,6 +632,16 @@ void LLVMCodegen::handleVecGet(vyb::ast::CallExpression* node, llvm::Value* vecP
     // Load the data pointer and size
     llvm::Value* dataPtr = builder->CreateLoad(llvm::PointerType::get(*context, 0), dataFieldPtr, "vec.data");
     llvm::Value* size = builder->CreateLoad(llvm::Type::getInt64Ty(*context), sizeFieldPtr, "vec.size");
+
+    // #308: normalize the index operand before it reaches the compare and the
+    // offset multiply below. See coerceVecIndexToI64 for why a chained receiver
+    // (`bufs.get(k).len()`) hands us the alloca (a `ptr`) rather than a loaded i64.
+    index = coerceVecIndexToI64(index);
+    if (!index) {
+        logError(node->loc, "Vec::get index must be an integer");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
 
     // Indexes are signed Int values at the language level. An unsigned compare
     // rejects both negative indexes (which become large unsigned values) and
@@ -789,6 +832,15 @@ void LLVMCodegen::handleVecSet(vyb::ast::CallExpression* node, llvm::Value* vecP
     llvm::Value* value = m_currentLLVMValue;
     if (!index || !value) {
         logError(node->loc, "Failed to evaluate index/value for Vec::set");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    // #308: same index normalization as Vec::get -- a chained receiver leaves the
+    // index as a `ptr` here too, which would fail the bounds compare below.
+    index = coerceVecIndexToI64(index);
+    if (!index) {
+        logError(node->loc, "Vec::set index must be an integer");
         m_currentLLVMValue = nullptr;
         return;
     }
@@ -1311,6 +1363,15 @@ void LLVMCodegen::handleVecRemoveAt(vyb::ast::CallExpression* node, llvm::Value*
     llvm::Value* indexToRemove = m_currentLLVMValue;
     if (!indexToRemove) {
         logError(node->loc, "Failed to evaluate index for Vec::remove_at");
+        return;
+    }
+
+    // #308: same index normalization -- a chained receiver leaves a `ptr` here,
+    // which would fail the bounds compare and the offset multiply below.
+    indexToRemove = coerceVecIndexToI64(indexToRemove);
+    if (!indexToRemove) {
+        logError(node->loc, "Vec::remove_at index must be an integer");
+        m_currentLLVMValue = nullptr;
         return;
     }
 

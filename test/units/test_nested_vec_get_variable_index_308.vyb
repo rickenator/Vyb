@@ -1,0 +1,48 @@
+// @test: chained Vec receiver with a variable index resolves the index as a load, not an alloca (#308)
+// @description: `bufs.get(k).len()` crashed the compiler with an invalid-IR abort. The outer
+//   call evaluates its receiver in pointer mode, and the inner get(k) -- including the
+//   evaluation of `k` -- runs inside that window, so an Identifier index yielded its alloca
+//   (a `ptr`) instead of a load (`i64`). The bounds compare then lowers to
+//   `icmp ult ptr %k, i64 %vec.size`, which fails module verification. Index operands are
+//   now normalized to i64 before the compare and the offset multiply, so a chained receiver
+//   indexes correctly. A constant index and an unchained variable index must keep working.
+// @category: vec, nested, chained-receiver, index-normalization, 308
+// @expect: pass
+// @expect-return: 0
+// @execute-jit: true
+
+main()<Int> -> {
+    // Chained receiver: outer.get(k) immediately .len()
+    bufs<Vec<Vec<Int>>> = Vec()
+    b<Vec<Int>> = Vec()
+    bufs.push(b)
+    k<Int> = 0
+    chained<Int> = bufs.get(k).len()
+    assert(chained == 0)
+
+    // Chained twice: outer.get(k).get(j) must fetch the inner element
+    outer<Vec<Vec<Int>>> = Vec()
+    inner<Vec<Int>> = Vec()
+    inner.push(42)
+    inner.push(7)
+    outer.push(inner)
+    j<Int> = 1
+    v<Int> = outer.get(k).get(j)
+    assert(v == 7)
+
+    // Chained receiver used in an expression position
+    total<Int> = 0
+    total = total + bufs.get(k).len()
+    assert(total == 0)
+
+    // Unchained variable index still works (the previously-working shape)
+    flat<Vec<Int>> = Vec()
+    flat.push(3)
+    flat.push(4)
+    assert(flat.get(j) == 4)
+
+    // Constant index still works
+    assert(bufs.get(0).len() == 0)
+
+    return 0
+}

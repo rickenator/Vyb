@@ -504,6 +504,15 @@ private:
     void handleVecPop(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecLen(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecGet(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
+    // #308: a Vec index operand must reach the bounds compare and the offset
+    // multiply as the receiver's index type (`i64`). A chained receiver
+    // (`outer.get(k).len()`) evaluates the inner call's arguments while
+    // m_isLHSOfAssignment is still set by the OUTER call's pointer-mode receiver
+    // evaluation, so an Identifier index yields its alloca (a `ptr`) instead of a
+    // load -- the IR then fails verification ("icmp ult ptr ..., i64 ...") and the
+    // process dies. Coerce here so every index site is correct regardless of how
+    // the operand was lowered.
+    llvm::Value* coerceVecIndexToI64(llvm::Value* index);
     void handleVecLast(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecSet(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
     void handleVecPushArray(vyb::ast::CallExpression* node, llvm::Value* vecPtr, llvm::Type* vecStructType);
