@@ -1,0 +1,34 @@
+// @test: #318 - Vec<T> subscript usable inside a larger expression and as an
+//   assignment target
+// @description: The semantic pass resolved a Vec<T> subscript's element type
+//   only for ast::ArrayType, with no VecType branch, so `v[i]` carried no type.
+//   That made `t = t + v[i]` fail with "could not determine type of LHS or RHS"
+//   and rejected `v[i] = x` as an assignment target. Both forms must work, and
+//   a write through a subscript must read back the stored value.
+
+main()<Int> -> {
+    v<Vec<Int>> = Vec<Int>()
+    v.push(3)
+    v.push(4)
+
+    // subscript inside a binary expression (the accumulator pattern)
+    t<Int> = 0
+    t = t + v[0]
+    if (t != 3) { return 1 }
+    t = t + v[1]
+    if (t != 7) { return 2 }
+
+    // subscript as an assignment target
+    v[0] = 999
+    if (v[0] != 999) { return 3 }
+    if (v[1] != 4) { return 4 }
+
+    // String elements too
+    s<Vec<String>> = Vec<String>()
+    s.push("x")
+    s.push("y")
+    joined<String> = s[0] + s[1]
+    if (joined != "xy") { return 5 }
+
+    return 0
+}

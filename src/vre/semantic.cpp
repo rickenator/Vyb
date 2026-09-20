@@ -5157,6 +5157,18 @@ void SemanticAnalyzer::visit(ast::ArrayElementExpression* node) {
     // Get the array's type to determine the element type
     auto arrayTypeIt = expressionTypes.find(exprKey(node->array.get()));
     if (arrayTypeIt != expressionTypes.end() && arrayTypeIt->second) {
+        // A Vec<T> subscript yields T. Without this branch, `v[0]` carried no
+        // type at all in the semantic pass, so any use of it beyond a bare
+        // initialization failed to infer -- e.g. `t = t + v[i]` reported
+        // "could not determine type of LHS or RHS", and `v[i]` as an assignment
+        // target was rejected too. See issue #318.
+        if (auto vecType = dynamic_cast<ast::VecType*>(arrayTypeIt->second.get())) {
+            if (vecType->elementType) {
+                setType(node, std::shared_ptr<ast::TypeNode>(vecType->elementType->clone()));
+            }
+        }
+    }
+    if (arrayTypeIt != expressionTypes.end() && arrayTypeIt->second) {
         if (auto arrayType = dynamic_cast<ast::ArrayType*>(arrayTypeIt->second.get())) {
             // The element type is the array's element type
             if (arrayType->elementType) {
