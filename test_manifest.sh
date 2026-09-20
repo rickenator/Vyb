@@ -1,9 +1,10 @@
 #!/bin/bash
 # Conformance tests for the vyb.toml manifest + dependency contract (#164/#165).
 #
-# Covers: scaffold + plain build; local PATH dependency accepted; git/version
-# dependency REJECTED with the #165 diagnostic; array value REJECTED with the
-# #164 line-numbered diagnostic. Exit 0 when all pass, 1 otherwise.
+# Covers: scaffold + plain build; local PATH dependency accepted; git dependency
+# shallow-cloned into .vybmod/ and importable (with a clear failure diagnostic
+# for an unreachable URL); array value REJECTED with the #164 line-numbered
+# diagnostic. Exit 0 when all pass, 1 otherwise.
 set -u
 cd "$(dirname "$0")" || exit 2
 ROOT=$(pwd)
@@ -39,14 +40,46 @@ else
     bad "local path dependency"
 fi
 
-# --- 3. git dependency REJECTED with #165 diagnostic ---
-( cd "$WORK" && "$VYB" new gitapp >/dev/null 2>&1 )
-printf '\n[dependencies]\ng = { git = "https://example.com/repo.git" }\n' >> "$WORK/gitapp/vyb.toml"
-gitout="$(cd "$WORK/gitapp" && "$VYB" build 2>&1)"
-if [ $? -ne 0 ] && grep -q "not supported yet (#165)" <<<"$gitout"; then
-    ok "git dependency rejected with #165 diagnostic"
+# --- 3. git dependency RESOLVED: shallow-cloned into .vybmod/<name> on build ---
+# `git:` deps are auto-fetched by `vyb build` (shallow clone into
+# .vybmod/<name>/, consumed as <name>/mod.vyb). A local file:// URL keeps this
+# check network-free and deterministic.
+if ! command -v git >/dev/null 2>&1; then
+    bad "git dependency resolution (git is not on PATH)"
 else
-    bad "git dependency rejection (output: $gitout)"
+    mkdir -p "$WORK/gitrepo"
+    printf 'share(all)\ngit_lib_value()<Int> -> { return 7 }\n' > "$WORK/gitrepo/mod.vyb"
+    ( cd "$WORK/gitrepo" && git init -q \
+        && git config user.email "conformance@example.com" \
+        && git config user.name "conformance" \
+        && git add mod.vyb \
+        && git commit -qm "initial" ) >/dev/null 2>&1
+    ( cd "$WORK" && "$VYB" new gitapp >/dev/null 2>&1 )
+    printf '\n[dependencies]\ng = { git = "file://%s/gitrepo" }\n' "$WORK" >> "$WORK/gitapp/vyb.toml"
+    printf 'import g::{git_lib_value}\nmain()<Int> -> { println(git_lib_value()); return 0 }\n' \
+        > "$WORK/gitapp/src/main.vyb"
+    exe="$WORK/gitapp/target/gitapp"
+    if gitout="$(cd "$WORK/gitapp" && "$VYB" build 2>&1)" \
+        && [ -f "$WORK/gitapp/.vybmod/g/mod.vyb" ] && [ -x "$exe" ]; then
+        got="$( "$exe" )"
+        if grep -q "^7$" <<<"$got"; then
+            ok "git dependency cloned into .vybmod/g and imported (got '$got')"
+        else
+            bad "git dependency import output (got '$got')"
+        fi
+    else
+        bad "git dependency resolution (output: $gitout)"
+    fi
+
+    # --- 3b. unreachable git dependency FAILS with a clear diagnostic ---
+    ( cd "$WORK" && "$VYB" new badgitapp >/dev/null 2>&1 )
+    printf '\n[dependencies]\nbg = { git = "file://%s/no-such-repo" }\n' "$WORK" >> "$WORK/badgitapp/vyb.toml"
+    badout="$(cd "$WORK/badgitapp" && "$VYB" build 2>&1)"
+    if [ $? -ne 0 ] && grep -q "failed to git-clone dependency 'bg'" <<<"$badout"; then
+        ok "unreachable git dependency rejected with clone diagnostic"
+    else
+        bad "unreachable git dependency (output: $badout)"
+    fi
 fi
 
 # --- 4. unsupported array value REJECTED with #164 line diagnostic ---
