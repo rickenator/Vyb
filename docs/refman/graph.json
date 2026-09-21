@@ -1,5 +1,5 @@
 {
-  "git_rev": "21ff8066976d88100300d5bde79bc995fcfd1779",
+  "git_rev": "b758b686329f1007ccd9fe490b15153acdedd77f",
   "modules": [
     "agents",
     "archive",
@@ -140,7 +140,7 @@
         "files": [
           "stdlib/http/mod.vyb"
         ],
-        "exported": 36,
+        "exported": 42,
         "fan_in": 1,
         "fan_out": 3
       },
@@ -583,7 +583,13 @@
           "http_request_path",
           "http_send_all",
           "http_close",
+          "http_read_head_stream",
+          "http_send_all_stream",
+          "http_close_stream",
+          "http_respond_and_close",
           "http_response",
+          "http_response_typed",
+          "http_reason",
           "http_request",
           "http_read_rest",
           "http_serve_conn",
@@ -2785,6 +2791,15 @@
         "fan_in": 0
       },
       {
+        "name": "http_close_stream",
+        "module": "http",
+        "file": "stdlib/http/mod.vyb",
+        "kind": "fn",
+        "signature": "http_close_stream(conn<TcpStream>)<Int> ->",
+        "summary": "Close an accepted connection. Returns 0 on success, -1 on failure.",
+        "fan_in": 0
+      },
+      {
         "name": "http_err",
         "module": "http",
         "file": "stdlib/http/mod.vyb",
@@ -2956,6 +2971,15 @@
         "fan_in": 0
       },
       {
+        "name": "http_read_head_stream",
+        "module": "http",
+        "file": "stdlib/http/mod.vyb",
+        "kind": "fn",
+        "signature": "http_read_head_stream(conn<TcpStream>, max<Int>)<String> ->",
+        "summary": "Read an HTTP head from an accepted connection.",
+        "fan_in": 0
+      },
+      {
         "name": "http_read_line",
         "module": "http",
         "file": "stdlib/http/mod.vyb",
@@ -2971,6 +2995,15 @@
         "kind": "fn",
         "signature": "http_read_rest(conn<Int>, max<Int>)<String> ->",
         "summary": "Read everything available on a connection until the peer closes (or `max`",
+        "fan_in": 0
+      },
+      {
+        "name": "http_reason",
+        "module": "http",
+        "file": "stdlib/http/mod.vyb",
+        "kind": "fn",
+        "signature": "http_reason(status<Int>)<String> ->",
+        "summary": "Reason phrase for a status code; unknown codes fall back to a generic phrase",
         "fan_in": 0
       },
       {
@@ -3010,12 +3043,30 @@
         "fan_in": 1
       },
       {
+        "name": "http_respond_and_close",
+        "module": "http",
+        "file": "stdlib/http/mod.vyb",
+        "kind": "fn",
+        "signature": "http_respond_and_close(conn<TcpStream>, resp<String>)<Int> ->",
+        "summary": "Answer a request in one call: send `resp` and close the connection.",
+        "fan_in": 0
+      },
+      {
         "name": "http_response",
         "module": "http",
         "file": "stdlib/http/mod.vyb",
         "kind": "fn",
         "signature": "http_response(status<Int>, body<String>)<String> ->",
         "summary": "A well-formed HTTP/1.1 text/plain response with a Content-Length. A handful of",
+        "fan_in": 0
+      },
+      {
+        "name": "http_response_typed",
+        "module": "http",
+        "file": "stdlib/http/mod.vyb",
+        "kind": "fn",
+        "signature": "http_response_typed(status<Int>, ctype<String>, body<String>)<String> ->",
+        "summary": "A well-formed HTTP/1.1 response with a caller-chosen `Content-Type` and a",
         "fan_in": 0
       },
       {
@@ -3034,6 +3085,15 @@
         "kind": "fn",
         "signature": "http_send_all(fd<Int>, data<String>)<Int> ->",
         "summary": "Send the whole of `data` on `fd` (loops over partial sends); returns bytes sent.",
+        "fan_in": 0
+      },
+      {
+        "name": "http_send_all_stream",
+        "module": "http",
+        "file": "stdlib/http/mod.vyb",
+        "kind": "fn",
+        "signature": "http_send_all_stream(conn<TcpStream>, data<String>)<Int> ->",
+        "summary": "Send the whole of `data` on an accepted connection; returns bytes sent.",
         "fan_in": 0
       },
       {
@@ -6105,6 +6165,13 @@
     {
       "type": "call",
       "from_module": "http",
+      "from_symbol": "http_close_stream",
+      "to_module": "http",
+      "to_symbol": "http_close"
+    },
+    {
+      "type": "call",
+      "from_module": "http",
       "from_symbol": "http_get",
       "to_module": "http",
       "to_symbol": "http_get_full"
@@ -6364,6 +6431,13 @@
     {
       "type": "call",
       "from_module": "http",
+      "from_symbol": "http_read_head_stream",
+      "to_module": "http",
+      "to_symbol": "http_read_head"
+    },
+    {
+      "type": "call",
+      "from_module": "http",
       "from_symbol": "http_read_line",
       "to_module": "network",
       "to_symbol": "socket_recv"
@@ -6392,9 +6466,44 @@
     {
       "type": "call",
       "from_module": "http",
+      "from_symbol": "http_respond_and_close",
+      "to_module": "http",
+      "to_symbol": "http_close"
+    },
+    {
+      "type": "call",
+      "from_module": "http",
+      "from_symbol": "http_respond_and_close",
+      "to_module": "http",
+      "to_symbol": "http_send_all"
+    },
+    {
+      "type": "call",
+      "from_module": "http",
+      "from_symbol": "http_response",
+      "to_module": "http",
+      "to_symbol": "http_response_typed"
+    },
+    {
+      "type": "call",
+      "from_module": "http",
+      "from_symbol": "http_response_typed",
+      "to_module": "http",
+      "to_symbol": "http_reason"
+    },
+    {
+      "type": "call",
+      "from_module": "http",
       "from_symbol": "http_send_all",
       "to_module": "network",
       "to_symbol": "socket_send"
+    },
+    {
+      "type": "call",
+      "from_module": "http",
+      "from_symbol": "http_send_all_stream",
+      "to_module": "http",
+      "to_symbol": "http_send_all"
     },
     {
       "type": "call",
@@ -10603,6 +10712,13 @@
     {
       "type": "usesType",
       "from_module": "http",
+      "from_symbol": "http_close_stream",
+      "to_module": "network",
+      "to_symbol": "TcpStream"
+    },
+    {
+      "type": "usesType",
+      "from_module": "http",
       "from_symbol": "http_err",
       "to_module": "http",
       "to_symbol": "HttpResponse"
@@ -10659,9 +10775,30 @@
     {
       "type": "usesType",
       "from_module": "http",
+      "from_symbol": "http_read_head_stream",
+      "to_module": "network",
+      "to_symbol": "TcpStream"
+    },
+    {
+      "type": "usesType",
+      "from_module": "http",
       "from_symbol": "http_resolve_location",
       "to_module": "http",
       "to_symbol": "HttpTarget"
+    },
+    {
+      "type": "usesType",
+      "from_module": "http",
+      "from_symbol": "http_respond_and_close",
+      "to_module": "network",
+      "to_symbol": "TcpStream"
+    },
+    {
+      "type": "usesType",
+      "from_module": "http",
+      "from_symbol": "http_send_all_stream",
+      "to_module": "network",
+      "to_symbol": "TcpStream"
     },
     {
       "type": "usesType",
