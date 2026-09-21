@@ -1,0 +1,61 @@
+// @test: #322 - stream-taking http helpers; TcpStreamOps.fd() accessor
+// @description: http_accept returns a TcpStream, but http_read_head/http_send_all/
+//   http_close took a raw Int fd, so the natural composition failed to type-check.
+//   The companions take the stream itself. Also verifies the fd() accessor added to
+//   TcpStreamOps alongside field access.
+// @category: modules, http, network, stdlib
+// @expect: pass
+// @expect-output: ok
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+
+import http::{http_listen, http_local_port, http_accept, http_read_head_stream,
+              http_send_all_stream, http_close_stream, http_respond_and_close,
+              http_response_typed}
+import network::{socket_open, socket_connect, socket_send, socket_recv,
+                 socket_close, TcpStreamOps, Socket}
+import threads::{thread_spawn}
+import time::{sleep_ms}
+
+main()<Int> -> {
+    match (http_listen(0, 8)) {
+        listener -> {
+            port<Int> = http_local_port(listener)
+
+            // A detached client so the accept returns.
+            thread_spawn(|| -> {
+                sleep_ms(250)
+                c<Int> = socket_open(Socket::AF_INET, Socket::SOCK_STREAM, 0) else -1
+                socket_connect(c, "127.0.0.1", port)
+                socket_send(c, "GET / HTTP/1.1\r\nHost: t\r\n\r\n")
+                sleep_ms(400)
+                r<String> = socket_recv(c, 512) else ""
+                if (r.index_of("Content-Type: text/html") >= 0) {
+                    println("ok")
+                } else {
+                    println("bad: " + r)
+                }
+                socket_close(c)
+                return 0
+            })
+
+            match (http_accept(listener)) {
+                conn -> {
+                    // The stream-taking helpers, with no manual fd extraction.
+                    head<String> = http_read_head_stream(conn, 4096)
+                    if (head.index_of("GET /") < 0) { return 2 }
+
+                    // The accessor, and field access, agree.
+                    if (conn.fd() != conn.fd) { return 3 }
+
+                    http_respond_and_close(conn, http_response_typed(200, "text/html", "<h1>hi</h1>"))
+                }
+                ? -> { return 4 }
+            }
+        }
+        ? -> { return 5 }
+    }
+
+    sleep_ms(800)
+    return 0
+}

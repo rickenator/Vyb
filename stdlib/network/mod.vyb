@@ -217,6 +217,7 @@ aspect TcpStreamOps {
     close(self<Self>)<Bool?> -> { }
     peer_ip(self<Self>)<String> -> { }
     peer_port(self<Self>)<Int> -> { }
+    fd(self<Self>)<Int> -> { }
 }
 
 share(all)
@@ -239,6 +240,12 @@ bind TcpStreamOps -> TcpStream {
     }
     peer_port(self<Self>)<Int> -> {
         return self.peer_port
+    }
+    # The raw descriptor, so low-level functions that take an `Int` fd (the
+    # `http_*` connection helpers, socket_* calls) can be reached from a stream
+    # without relying on field access. `stream.fd` and `stream.fd()` both work.
+    fd(self<Self>)<Int> -> {
+        return self.fd
     }
 }
 
