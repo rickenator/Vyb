@@ -1674,6 +1674,15 @@ VYB_WEAK int64_t __vyb_net_close(int64_t fd) {
 VYB_WEAK int64_t __vyb_net_bind(int64_t fd, const char* ip, int64_t port) {
     struct sockaddr_storage addr; socklen_t alen;
     if (vyb_net_fill_addr(ip, port, &addr, &alen) < 0) { vyb_net_err = EINVAL; return -1; }
+    // SO_REUSEADDR, so a server can rebind its own port immediately after a
+    // restart. Without it `bind` refuses while the previous run's sockets are
+    // still in TIME_WAIT (~60 s), which breaks a server's normal restart
+    // lifecycle: the process dies with "could not bind port" on a port no one
+    // is listening on. Best-effort: a platform that rejects the option must not
+    // turn a bindable port into a failure, so the result is deliberately ignored
+    // and `vyb_net_err` still reports what `bind` did.
+    int reuse = 1;
+    (void)setsockopt((int)fd, SOL_SOCKET, SO_REUSEADDR, &reuse, (socklen_t)sizeof(reuse));
     int r = bind((int)fd, (struct sockaddr*)&addr, alen);
     vyb_net_err = (r < 0) ? errno : 0;
     return (int64_t)r;
