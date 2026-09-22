@@ -1,0 +1,38 @@
+// @test: #321 - http_response_typed serves a caller-chosen Content-Type
+// @description: http_response hardcoded Content-Type: text/plain, so a Vyb server
+//   could not serve HTML (a browser displayed the markup source). The 2-argument
+//   form must stay byte-identical for existing callers, and the new typed form
+//   must emit the caller's type verbatim.
+// @category: modules, http, stdlib
+// @expect: pass
+// @expect-output: ok
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+
+import http::{http_response, http_response_typed}
+
+head_of(r<String>)<String> -> {
+    return r.substring(0, r.index_of("\r\n\r\n"))
+}
+
+main()<Int> -> {
+    // Unchanged: the old 2-argument form is still text/plain.
+    old<String> = http_response(200, "<h1>hi</h1>")
+    if (old.index_of("Content-Type: text/plain") < 0) { return 2 }
+
+    // New: a caller-chosen type is emitted verbatim.
+    html<String> = http_response_typed(200, "text/html; charset=utf-8", "<h1>hi</h1>")
+    if (html.index_of("Content-Type: text/html; charset=utf-8") < 0) { return 3 }
+    if (html.index_of("Content-Length: 11") < 0) { return 4 }
+
+    json<String> = http_response_typed(404, "application/json", "{}")
+    if (json.index_of("Content-Type: application/json") < 0) { return 5 }
+    if (json.index_of("404 Not Found") < 0) { return 6 }
+
+    // Unknown status codes get a generic reason rather than an empty one.
+    odd<String> = http_response_typed(418, "text/plain", "x")
+    if (odd.index_of("418 Unknown") < 0) { return 7 }
+
+    println("ok")
+    return 0
+}

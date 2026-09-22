@@ -1,5 +1,5 @@
 {
-  "git_rev": "7ed8cb1f9edffa3043446f0a19abc5adb3b248ac",
+  "git_rev": "4a2d5ef2f0ff179d7b7878dee2122822a710d1f4",
   "modules": [
     "agents",
     "archive",
@@ -28,7 +28,8 @@
     "tls",
     "url",
     "utf8",
-    "vllm"
+    "vllm",
+    "websocket"
   ],
   "nodes": {
     "modules": [
@@ -65,7 +66,7 @@
           "stdlib/chain/mod.vyb"
         ],
         "exported": 24,
-        "fan_in": 1,
+        "fan_in": 2,
         "fan_out": 1
       },
       {
@@ -140,7 +141,7 @@
         "files": [
           "stdlib/http/mod.vyb"
         ],
-        "exported": 36,
+        "exported": 42,
         "fan_in": 1,
         "fan_out": 3
       },
@@ -150,7 +151,7 @@
           "stdlib/https/mod.vyb"
         ],
         "exported": 12,
-        "fan_in": 1,
+        "fan_in": 2,
         "fan_out": 4
       },
       {
@@ -168,7 +169,7 @@
           "stdlib/network/mod.vyb"
         ],
         "exported": 40,
-        "fan_in": 2,
+        "fan_in": 3,
         "fan_out": 0
       },
       {
@@ -204,7 +205,7 @@
           "stdlib/rand/mod.vyb"
         ],
         "exported": 3,
-        "fan_in": 0,
+        "fan_in": 1,
         "fan_out": 0
       },
       {
@@ -287,6 +288,15 @@
         "exported": 5,
         "fan_in": 0,
         "fan_out": 3
+      },
+      {
+        "name": "websocket",
+        "files": [
+          "stdlib/websocket/mod.vyb"
+        ],
+        "exported": 29,
+        "fan_in": 0,
+        "fan_out": 4
       }
     ],
     "files": [
@@ -583,7 +593,13 @@
           "http_request_path",
           "http_send_all",
           "http_close",
+          "http_read_head_stream",
+          "http_send_all_stream",
+          "http_close_stream",
+          "http_respond_and_close",
           "http_response",
+          "http_response_typed",
+          "http_reason",
           "http_request",
           "http_read_rest",
           "http_serve_conn",
@@ -1007,6 +1023,41 @@
           "Tok",
           "SampleSet",
           "Model"
+        ]
+      },
+      {
+        "path": "stdlib/websocket/mod.vyb",
+        "module": "websocket",
+        "symbols": [
+          "ws_base64",
+          "WsOpcode",
+          "WsStatus",
+          "WsFrame",
+          "WsSocket",
+          "ws_error_code",
+          "ws_error_message",
+          "ws_error",
+          "ws_client_key",
+          "ws_expected_accept",
+          "header_value",
+          "ws_upgrade_ok",
+          "ws_parse_status",
+          "read_until_double_crlf",
+          "WsConn",
+          "ws_connect",
+          "ws_handshake_request",
+          "ws_handshake_response",
+          "ws_send_handshake",
+          "ws_finish_handshake",
+          "ws_encode_frame",
+          "WsNeed",
+          "WsRead",
+          "ws_send_text",
+          "ws_send_binary",
+          "ws_ping",
+          "ws_close",
+          "ws_recv_frame",
+          "ws_recv_text"
         ]
       }
     ],
@@ -1513,7 +1564,7 @@
         "kind": "fn",
         "signature": "contains(chain<Chain>, label<String>, value<String>)<Bool> ->",
         "summary": "True iff some sealed block contains a record with exactly (label, value).",
-        "fan_in": 1
+        "fan_in": 2
       },
       {
         "name": "deserialize",
@@ -2785,6 +2836,15 @@
         "fan_in": 0
       },
       {
+        "name": "http_close_stream",
+        "module": "http",
+        "file": "stdlib/http/mod.vyb",
+        "kind": "fn",
+        "signature": "http_close_stream(conn<TcpStream>)<Int> ->",
+        "summary": "Close an accepted connection. Returns 0 on success, -1 on failure.",
+        "fan_in": 0
+      },
+      {
         "name": "http_err",
         "module": "http",
         "file": "stdlib/http/mod.vyb",
@@ -2956,6 +3016,15 @@
         "fan_in": 0
       },
       {
+        "name": "http_read_head_stream",
+        "module": "http",
+        "file": "stdlib/http/mod.vyb",
+        "kind": "fn",
+        "signature": "http_read_head_stream(conn<TcpStream>, max<Int>)<String> ->",
+        "summary": "Read an HTTP head from an accepted connection.",
+        "fan_in": 0
+      },
+      {
         "name": "http_read_line",
         "module": "http",
         "file": "stdlib/http/mod.vyb",
@@ -2971,6 +3040,15 @@
         "kind": "fn",
         "signature": "http_read_rest(conn<Int>, max<Int>)<String> ->",
         "summary": "Read everything available on a connection until the peer closes (or `max`",
+        "fan_in": 0
+      },
+      {
+        "name": "http_reason",
+        "module": "http",
+        "file": "stdlib/http/mod.vyb",
+        "kind": "fn",
+        "signature": "http_reason(status<Int>)<String> ->",
+        "summary": "Reason phrase for a status code; unknown codes fall back to a generic phrase",
         "fan_in": 0
       },
       {
@@ -3010,12 +3088,30 @@
         "fan_in": 1
       },
       {
+        "name": "http_respond_and_close",
+        "module": "http",
+        "file": "stdlib/http/mod.vyb",
+        "kind": "fn",
+        "signature": "http_respond_and_close(conn<TcpStream>, resp<String>)<Int> ->",
+        "summary": "Answer a request in one call: send `resp` and close the connection.",
+        "fan_in": 0
+      },
+      {
         "name": "http_response",
         "module": "http",
         "file": "stdlib/http/mod.vyb",
         "kind": "fn",
         "signature": "http_response(status<Int>, body<String>)<String> ->",
         "summary": "A well-formed HTTP/1.1 text/plain response with a Content-Length. A handful of",
+        "fan_in": 0
+      },
+      {
+        "name": "http_response_typed",
+        "module": "http",
+        "file": "stdlib/http/mod.vyb",
+        "kind": "fn",
+        "signature": "http_response_typed(status<Int>, ctype<String>, body<String>)<String> ->",
+        "summary": "A well-formed HTTP/1.1 response with a caller-chosen `Content-Type` and a",
         "fan_in": 0
       },
       {
@@ -3034,6 +3130,15 @@
         "kind": "fn",
         "signature": "http_send_all(fd<Int>, data<String>)<Int> ->",
         "summary": "Send the whole of `data` on `fd` (loops over partial sends); returns bytes sent.",
+        "fan_in": 0
+      },
+      {
+        "name": "http_send_all_stream",
+        "module": "http",
+        "file": "stdlib/http/mod.vyb",
+        "kind": "fn",
+        "signature": "http_send_all_stream(conn<TcpStream>, data<String>)<Int> ->",
+        "summary": "Send the whole of `data` on an accepted connection; returns bytes sent.",
         "fan_in": 0
       },
       {
@@ -3133,7 +3238,7 @@
         "kind": "fn",
         "signature": "fd<Int> = socket_open(2, 1, 6) else -1",
         "summary": "Full HTTPS/1.1 GET round-trip. Returns an HttpResponse with the parsed status,",
-        "fan_in": 1
+        "fan_in": 2
       },
       {
         "name": "tls_read_all",
@@ -3349,7 +3454,7 @@
         "kind": "struct",
         "signature": "struct NetError {",
         "summary": "A shared error value for escalating a failed network operation into the",
-        "fan_in": 0
+        "fan_in": 1
       },
       {
         "name": "Socket",
@@ -3358,7 +3463,7 @@
         "kind": "enum",
         "signature": "enum Socket {",
         "summary": "Domain / socket-type constants. A constant enum: each member is a compile-time",
-        "fan_in": 1
+        "fan_in": 2
       },
       {
         "name": "TcpListener",
@@ -3529,7 +3634,7 @@
         "kind": "fn",
         "signature": "socket_close(fd<Int>)<Bool?> ->",
         "summary": "Close a socket descriptor. Returns `Bool?` -- present on success, absent on",
-        "fan_in": 2
+        "fan_in": 3
       },
       {
         "name": "socket_connect",
@@ -3538,7 +3643,7 @@
         "kind": "fn",
         "signature": "socket_connect(fd<Int>, ip<String>, port<Int>)<Bool?> ->",
         "summary": "Connect `fd` to `ip:port`. Returns `Bool?` -- present on success, absent on",
-        "fan_in": 2
+        "fan_in": 3
       },
       {
         "name": "socket_error_code",
@@ -3583,7 +3688,7 @@
         "kind": "fn",
         "signature": "socket_open(domain<Int>, st<Int>, pr<Int>)<Int?> ->",
         "summary": "Create a socket in the given domain/type/protocol. Returns `Int?` -- present",
-        "fan_in": 2
+        "fan_in": 3
       },
       {
         "name": "socket_recv",
@@ -3592,7 +3697,7 @@
         "kind": "fn",
         "signature": "socket_recv(fd<Int>, maxlen<Int>)<String?> ->",
         "summary": "Receive up to `maxlen` bytes from `fd` as a fresh `String?` -- present holding",
-        "fan_in": 1
+        "fan_in": 2
       },
       {
         "name": "socket_resolve",
@@ -3610,7 +3715,7 @@
         "kind": "fn",
         "signature": "socket_send(fd<Int>, data<String>)<Int?> ->",
         "summary": "Send the whole of `data` on `fd`. Returns `Int?` -- present holding the number",
-        "fan_in": 1
+        "fan_in": 2
       },
       {
         "name": "socket_set_timeout",
@@ -3619,7 +3724,7 @@
         "kind": "fn",
         "signature": "socket_set_timeout(fd<Int>, ms<Int>)<Bool?> ->",
         "summary": "Put a read + write timeout on a socket so a hung peer can't block the process",
-        "fan_in": 0
+        "fan_in": 1
       },
       {
         "name": "tcp_accept",
@@ -5014,7 +5119,7 @@
         "kind": "fn",
         "signature": "rand_range(lo<Int>, hi<Int>)<Int> ->",
         "summary": "",
-        "fan_in": 0
+        "fan_in": 1
       },
       {
         "name": "rand_seed",
@@ -5762,6 +5867,267 @@
         "signature": "struct Tok { id<Int>, p<Float> }",
         "summary": "---------------- sampling (checkpoint 2) ----------------",
         "fan_in": 0
+      },
+      {
+        "name": "WsConn",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "struct",
+        "signature": "struct WsConn {",
+        "summary": "Bytes received past the handshake head (a server may co-send a frame).",
+        "fan_in": 0
+      },
+      {
+        "name": "WsFrame",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "struct",
+        "signature": "struct WsFrame {",
+        "summary": "One decoded frame: `opcode` (a `WsOpcode` value), the bytes as a String, and",
+        "fan_in": 0
+      },
+      {
+        "name": "WsNeed",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "struct",
+        "signature": "struct WsNeed {",
+        "summary": "Bytes still needed to finish a frame header / payload. A pure state struct so",
+        "fan_in": 0
+      },
+      {
+        "name": "WsOpcode",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "enum",
+        "signature": "enum WsOpcode {",
+        "summary": "Opcodes (RFC 6455 \u00a75.2). A constant enum: compile-time Ints scoped under",
+        "fan_in": 0
+      },
+      {
+        "name": "WsRead",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "struct",
+        "signature": "struct WsRead {",
+        "summary": "Parse one frame from the stream, returning the frame plus whatever bytes were",
+        "fan_in": 0
+      },
+      {
+        "name": "WsSocket",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "struct",
+        "signature": "struct WsSocket {",
+        "summary": "A live WebSocket: the socket descriptor plus the target (used in diagnostics",
+        "fan_in": 0
+      },
+      {
+        "name": "WsStatus",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "enum",
+        "signature": "enum WsStatus {",
+        "summary": "Close status codes (RFC 6455 \u00a77.4.1) a caller can hand to `ws_close`.",
+        "fan_in": 0
+      },
+      {
+        "name": "header_value",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "fn",
+        "signature": "header_value(head<String>, name<String>)<String> ->",
+        "summary": "Find the value of a header (case-insensitive name match) in a raw response",
+        "fan_in": 0
+      },
+      {
+        "name": "read_until_double_crlf",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "fn",
+        "signature": "read_until_double_crlf(fd<Int>)<String> ->",
+        "summary": "Read the response head (through the blank line that ends it). \"\" when the",
+        "fan_in": 0
+      },
+      {
+        "name": "ws_base64",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "fn",
+        "signature": "ws_base64(data<String>)<String> ->",
+        "summary": "Runtime bridges. `vyb_base64_encode` / `vyb_ws_accept_key` live in",
+        "fan_in": 0
+      },
+      {
+        "name": "ws_client_key",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "fn",
+        "signature": "ws_client_key()<String> ->",
+        "summary": "16 random bytes, base64-encoded, as the `Sec-WebSocket-Key`.",
+        "fan_in": 0
+      },
+      {
+        "name": "ws_close",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "fn",
+        "signature": "ws_close(ws<WsSocket>, code<Int>, reason<String>)<Bool?> ->",
+        "summary": "Send a close frame with `code` and an optional reason, then close the socket.",
+        "fan_in": 0
+      },
+      {
+        "name": "ws_connect",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "fn",
+        "signature": "ws_connect(host<String>, port<Int>, path<String>, timeout_ms<Int>)<WsConn?> ->",
+        "summary": "Open a TCP connection to `host`:`port`, perform the RFC 6455 client",
+        "fan_in": 0
+      },
+      {
+        "name": "ws_encode_frame",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "fn",
+        "signature": "ws_encode_frame(opcode<Int>, payload<String>, fin<Bool>, mask_seed<Int>)<String> ->",
+        "summary": "Encode `payload` as one masked frame with the given opcode and FIN bit.",
+        "fan_in": 0
+      },
+      {
+        "name": "ws_error",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "fn",
+        "signature": "ws_error(op<String>, target<String>)<String> ->",
+        "summary": "Name a failed operation on a target in the same shape as `network`'s",
+        "fan_in": 0
+      },
+      {
+        "name": "ws_error_code",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "fn",
+        "signature": "ws_error_code()<Int> ->",
+        "summary": "",
+        "fan_in": 0
+      },
+      {
+        "name": "ws_error_message",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "fn",
+        "signature": "ws_error_message()<String> ->",
+        "summary": "The last transport failure as a sentence; \"\" when nothing has failed.",
+        "fan_in": 0
+      },
+      {
+        "name": "ws_expected_accept",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "fn",
+        "signature": "ws_expected_accept(key<String>)<String> ->",
+        "summary": "The accept value the server must echo for `key`: base64(SHA1(key + GUID)).",
+        "fan_in": 0
+      },
+      {
+        "name": "ws_finish_handshake",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "fn",
+        "signature": "ws_finish_handshake(fd<Int>, host<String>, port<Int>, path<String>, key<String>)<WsConn?> ->",
+        "summary": "Read the response to `key` and confirm the upgrade. Present on a valid 101",
+        "fan_in": 0
+      },
+      {
+        "name": "ws_handshake_request",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "fn",
+        "signature": "ws_handshake_request(host<String>, port<Int>, path<String>, key<String>)<String> ->",
+        "summary": "The RFC 6455 \u00a74.1 upgrade request text for `path` with nonce `key`.",
+        "fan_in": 0
+      },
+      {
+        "name": "ws_handshake_response",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "fn",
+        "signature": "ws_handshake_response(key<String>)<String> ->",
+        "summary": "What the server must answer for nonce `key` \u2014 the same value `ws_upgrade_ok`",
+        "fan_in": 0
+      },
+      {
+        "name": "ws_parse_status",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "fn",
+        "signature": "ws_parse_status(head<String>)<Int> ->",
+        "summary": "Status code from an HTTP status line; 0 when the head does not start with one.",
+        "fan_in": 0
+      },
+      {
+        "name": "ws_ping",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "fn",
+        "signature": "ws_ping(ws<WsSocket>, payload<String>)<Bool?> ->",
+        "summary": "Send a ping (masked). The peer's pong is absorbed by `ws_recv`, so a caller",
+        "fan_in": 0
+      },
+      {
+        "name": "ws_recv_frame",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "fn",
+        "signature": "ws_recv_frame(ws<WsSocket>, pending<String>)<WsRead?> ->",
+        "summary": "Receive the next DATA frame, absorbing control frames: a ping is answered",
+        "fan_in": 0
+      },
+      {
+        "name": "ws_recv_text",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "fn",
+        "signature": "ws_recv_text(ws<WsSocket>, pending<String>)<String?> ->",
+        "summary": "Convenience: the payload of the next data frame as a String, or \"\" when the",
+        "fan_in": 0
+      },
+      {
+        "name": "ws_send_binary",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "fn",
+        "signature": "ws_send_binary(ws<WsSocket>, data<String>)<Bool?> ->",
+        "summary": "Send one binary frame (masked, FIN set).",
+        "fan_in": 0
+      },
+      {
+        "name": "ws_send_handshake",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "fn",
+        "signature": "ws_send_handshake(fd<Int>, host<String>, port<Int>, path<String>)<String?> ->",
+        "summary": "Send the upgrade request on an already-connected fd and return the nonce the",
+        "fan_in": 0
+      },
+      {
+        "name": "ws_send_text",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "fn",
+        "signature": "ws_send_text(ws<WsSocket>, text<String>)<Bool?> ->",
+        "summary": "Send one text frame (masked, FIN set).",
+        "fan_in": 0
+      },
+      {
+        "name": "ws_upgrade_ok",
+        "module": "websocket",
+        "file": "stdlib/websocket/mod.vyb",
+        "kind": "fn",
+        "signature": "ws_upgrade_ok(head<String>, key<String>)<Bool> ->",
+        "summary": "True when `head` is a `101 Switching Protocols` response whose accept value",
+        "fan_in": 0
       }
     ]
   },
@@ -6105,6 +6471,13 @@
     {
       "type": "call",
       "from_module": "http",
+      "from_symbol": "http_close_stream",
+      "to_module": "http",
+      "to_symbol": "http_close"
+    },
+    {
+      "type": "call",
+      "from_module": "http",
       "from_symbol": "http_get",
       "to_module": "http",
       "to_symbol": "http_get_full"
@@ -6364,6 +6737,13 @@
     {
       "type": "call",
       "from_module": "http",
+      "from_symbol": "http_read_head_stream",
+      "to_module": "http",
+      "to_symbol": "http_read_head"
+    },
+    {
+      "type": "call",
+      "from_module": "http",
       "from_symbol": "http_read_line",
       "to_module": "network",
       "to_symbol": "socket_recv"
@@ -6392,9 +6772,44 @@
     {
       "type": "call",
       "from_module": "http",
+      "from_symbol": "http_respond_and_close",
+      "to_module": "http",
+      "to_symbol": "http_close"
+    },
+    {
+      "type": "call",
+      "from_module": "http",
+      "from_symbol": "http_respond_and_close",
+      "to_module": "http",
+      "to_symbol": "http_send_all"
+    },
+    {
+      "type": "call",
+      "from_module": "http",
+      "from_symbol": "http_response",
+      "to_module": "http",
+      "to_symbol": "http_response_typed"
+    },
+    {
+      "type": "call",
+      "from_module": "http",
+      "from_symbol": "http_response_typed",
+      "to_module": "http",
+      "to_symbol": "http_reason"
+    },
+    {
+      "type": "call",
+      "from_module": "http",
       "from_symbol": "http_send_all",
       "to_module": "network",
       "to_symbol": "socket_send"
+    },
+    {
+      "type": "call",
+      "from_module": "http",
+      "from_symbol": "http_send_all_stream",
+      "to_module": "http",
+      "to_symbol": "http_send_all"
     },
     {
       "type": "call",
@@ -6906,6 +7321,286 @@
       "from_symbol": "url_split",
       "to_module": "url",
       "to_symbol": "str_to_int"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "read_until_double_crlf",
+      "to_module": "chain",
+      "to_symbol": "contains"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "read_until_double_crlf",
+      "to_module": "network",
+      "to_symbol": "socket_recv"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_client_key",
+      "to_module": "rand",
+      "to_symbol": "rand_range"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_client_key",
+      "to_module": "websocket",
+      "to_symbol": "ws_base64"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_close",
+      "to_module": "network",
+      "to_symbol": "socket_close"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_close",
+      "to_module": "network",
+      "to_symbol": "socket_send"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_close",
+      "to_module": "rand",
+      "to_symbol": "rand_range"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_close",
+      "to_module": "websocket",
+      "to_symbol": "ws_encode_frame"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_connect",
+      "to_module": "https",
+      "to_symbol": "socket_open"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_connect",
+      "to_module": "network",
+      "to_symbol": "socket_close"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_connect",
+      "to_module": "network",
+      "to_symbol": "socket_connect"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_connect",
+      "to_module": "network",
+      "to_symbol": "socket_open"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_connect",
+      "to_module": "network",
+      "to_symbol": "socket_send"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_connect",
+      "to_module": "network",
+      "to_symbol": "socket_set_timeout"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_connect",
+      "to_module": "websocket",
+      "to_symbol": "read_until_double_crlf"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_connect",
+      "to_module": "websocket",
+      "to_symbol": "ws_client_key"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_connect",
+      "to_module": "websocket",
+      "to_symbol": "ws_handshake_request"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_connect",
+      "to_module": "websocket",
+      "to_symbol": "ws_parse_status"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_connect",
+      "to_module": "websocket",
+      "to_symbol": "ws_upgrade_ok"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_error",
+      "to_module": "websocket",
+      "to_symbol": "ws_error_message"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_finish_handshake",
+      "to_module": "websocket",
+      "to_symbol": "read_until_double_crlf"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_finish_handshake",
+      "to_module": "websocket",
+      "to_symbol": "ws_parse_status"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_finish_handshake",
+      "to_module": "websocket",
+      "to_symbol": "ws_upgrade_ok"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_handshake_response",
+      "to_module": "websocket",
+      "to_symbol": "ws_expected_accept"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_ping",
+      "to_module": "network",
+      "to_symbol": "socket_send"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_ping",
+      "to_module": "rand",
+      "to_symbol": "rand_range"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_ping",
+      "to_module": "websocket",
+      "to_symbol": "ws_encode_frame"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_recv_text",
+      "to_module": "websocket",
+      "to_symbol": "ws_recv_frame"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_send_binary",
+      "to_module": "network",
+      "to_symbol": "socket_send"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_send_binary",
+      "to_module": "rand",
+      "to_symbol": "rand_range"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_send_binary",
+      "to_module": "websocket",
+      "to_symbol": "ws_encode_frame"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_send_handshake",
+      "to_module": "network",
+      "to_symbol": "socket_send"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_send_handshake",
+      "to_module": "websocket",
+      "to_symbol": "ws_client_key"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_send_handshake",
+      "to_module": "websocket",
+      "to_symbol": "ws_handshake_request"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_send_text",
+      "to_module": "network",
+      "to_symbol": "socket_send"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_send_text",
+      "to_module": "rand",
+      "to_symbol": "rand_range"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_send_text",
+      "to_module": "websocket",
+      "to_symbol": "ws_encode_frame"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_upgrade_ok",
+      "to_module": "websocket",
+      "to_symbol": "header_value"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_upgrade_ok",
+      "to_module": "websocket",
+      "to_symbol": "ws_expected_accept"
+    },
+    {
+      "type": "call",
+      "from_module": "websocket",
+      "from_symbol": "ws_upgrade_ok",
+      "to_module": "websocket",
+      "to_symbol": "ws_parse_status"
     },
     {
       "type": "implement",
@@ -8064,6 +8759,78 @@
       "resolved": true
     },
     {
+      "type": "import",
+      "from_module": "websocket",
+      "from_symbol": "",
+      "to_module": "network",
+      "to_symbol": "Socket",
+      "reexport": false,
+      "resolved": true
+    },
+    {
+      "type": "import",
+      "from_module": "websocket",
+      "from_symbol": "",
+      "to_module": "network",
+      "to_symbol": "socket_close",
+      "reexport": false,
+      "resolved": true
+    },
+    {
+      "type": "import",
+      "from_module": "websocket",
+      "from_symbol": "",
+      "to_module": "network",
+      "to_symbol": "socket_connect",
+      "reexport": false,
+      "resolved": true
+    },
+    {
+      "type": "import",
+      "from_module": "websocket",
+      "from_symbol": "",
+      "to_module": "network",
+      "to_symbol": "socket_open",
+      "reexport": false,
+      "resolved": true
+    },
+    {
+      "type": "import",
+      "from_module": "websocket",
+      "from_symbol": "",
+      "to_module": "network",
+      "to_symbol": "socket_recv",
+      "reexport": false,
+      "resolved": true
+    },
+    {
+      "type": "import",
+      "from_module": "websocket",
+      "from_symbol": "",
+      "to_module": "network",
+      "to_symbol": "socket_send",
+      "reexport": false,
+      "resolved": true
+    },
+    {
+      "type": "import",
+      "from_module": "websocket",
+      "from_symbol": "",
+      "to_module": "network",
+      "to_symbol": "socket_set_timeout",
+      "reexport": false,
+      "resolved": true
+    },
+    {
+      "type": "import",
+      "from_module": "websocket",
+      "from_symbol": "",
+      "to_module": "rand",
+      "to_symbol": "rand_range",
+      "reexport": false,
+      "resolved": true
+    },
+    {
       "type": "proseRef",
       "from_module": "chain",
       "from_symbol": "deserialize",
@@ -8391,6 +9158,41 @@
       "from_symbol": "tls_error",
       "to_module": "tls",
       "to_symbol": "tls_error_message"
+    },
+    {
+      "type": "proseRef",
+      "from_module": "websocket",
+      "from_symbol": "WsFrame",
+      "to_module": "websocket",
+      "to_symbol": "WsOpcode"
+    },
+    {
+      "type": "proseRef",
+      "from_module": "websocket",
+      "from_symbol": "WsStatus",
+      "to_module": "websocket",
+      "to_symbol": "ws_close"
+    },
+    {
+      "type": "proseRef",
+      "from_module": "websocket",
+      "from_symbol": "ws_connect",
+      "to_module": "websocket",
+      "to_symbol": "ws_error_message"
+    },
+    {
+      "type": "proseRef",
+      "from_module": "websocket",
+      "from_symbol": "ws_error",
+      "to_module": "network",
+      "to_symbol": "NetError"
+    },
+    {
+      "type": "proseRef",
+      "from_module": "websocket",
+      "from_symbol": "ws_handshake_response",
+      "to_module": "websocket",
+      "to_symbol": "ws_upgrade_ok"
     },
     {
       "type": "runtimeRef",
@@ -10391,6 +11193,12 @@
       "to_symbol": "vyb_utf8_valid"
     },
     {
+      "type": "runtimeRef",
+      "from_module": "websocket",
+      "from_symbol": "ws_base64",
+      "to_symbol": "vyb_base64_encode"
+    },
+    {
       "type": "usesType",
       "from_module": "archive",
       "from_symbol": "build_huff",
@@ -10603,6 +11411,13 @@
     {
       "type": "usesType",
       "from_module": "http",
+      "from_symbol": "http_close_stream",
+      "to_module": "network",
+      "to_symbol": "TcpStream"
+    },
+    {
+      "type": "usesType",
+      "from_module": "http",
       "from_symbol": "http_err",
       "to_module": "http",
       "to_symbol": "HttpResponse"
@@ -10659,9 +11474,30 @@
     {
       "type": "usesType",
       "from_module": "http",
+      "from_symbol": "http_read_head_stream",
+      "to_module": "network",
+      "to_symbol": "TcpStream"
+    },
+    {
+      "type": "usesType",
+      "from_module": "http",
       "from_symbol": "http_resolve_location",
       "to_module": "http",
       "to_symbol": "HttpTarget"
+    },
+    {
+      "type": "usesType",
+      "from_module": "http",
+      "from_symbol": "http_respond_and_close",
+      "to_module": "network",
+      "to_symbol": "TcpStream"
+    },
+    {
+      "type": "usesType",
+      "from_module": "http",
+      "from_symbol": "http_send_all_stream",
+      "to_module": "network",
+      "to_symbol": "TcpStream"
     },
     {
       "type": "usesType",
@@ -11040,6 +11876,69 @@
       "from_symbol": "url_split",
       "to_module": "url",
       "to_symbol": "UrlSplit"
+    },
+    {
+      "type": "usesType",
+      "from_module": "websocket",
+      "from_symbol": "ws_close",
+      "to_module": "websocket",
+      "to_symbol": "WsSocket"
+    },
+    {
+      "type": "usesType",
+      "from_module": "websocket",
+      "from_symbol": "ws_connect",
+      "to_module": "websocket",
+      "to_symbol": "WsConn"
+    },
+    {
+      "type": "usesType",
+      "from_module": "websocket",
+      "from_symbol": "ws_finish_handshake",
+      "to_module": "websocket",
+      "to_symbol": "WsConn"
+    },
+    {
+      "type": "usesType",
+      "from_module": "websocket",
+      "from_symbol": "ws_ping",
+      "to_module": "websocket",
+      "to_symbol": "WsSocket"
+    },
+    {
+      "type": "usesType",
+      "from_module": "websocket",
+      "from_symbol": "ws_recv_frame",
+      "to_module": "websocket",
+      "to_symbol": "WsRead"
+    },
+    {
+      "type": "usesType",
+      "from_module": "websocket",
+      "from_symbol": "ws_recv_frame",
+      "to_module": "websocket",
+      "to_symbol": "WsSocket"
+    },
+    {
+      "type": "usesType",
+      "from_module": "websocket",
+      "from_symbol": "ws_recv_text",
+      "to_module": "websocket",
+      "to_symbol": "WsSocket"
+    },
+    {
+      "type": "usesType",
+      "from_module": "websocket",
+      "from_symbol": "ws_send_binary",
+      "to_module": "websocket",
+      "to_symbol": "WsSocket"
+    },
+    {
+      "type": "usesType",
+      "from_module": "websocket",
+      "from_symbol": "ws_send_text",
+      "to_module": "websocket",
+      "to_symbol": "WsSocket"
     }
   ]
 }

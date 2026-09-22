@@ -1,0 +1,153 @@
+// @test: websocket stdlib module - RFC 6455 client against a loopback peer
+// @description: a real WebSocket exchange driven in one process. A raw network
+//   server accepts the client; the client sends the upgrade request; the server
+//   answers 101 using the module's own accept helper; then frames round-trip
+//   both ways (masked text out, unmasked text back), a peer-initiated ping
+//   surfaces with its payload, a pong answers it, and the CLOSE handshake lands.
+//   The RFC 6455 §1.3 handshake vector is asserted, so a regression in the
+//   SHA-1/base64 accept derivation cannot pass silently. The handshake is split
+//   (send, then finish) because ws_connect alone blocks on the response, which a
+//   single-threaded program cannot serve.
+import network::{socket_open, socket_bind, socket_listen, socket_accept,
+                 socket_connect, socket_send, socket_recv, socket_set_timeout,
+                 socket_local_port, socket_close, Socket}
+import websocket::{ws_expected_accept, ws_handshake_request, ws_handshake_response,
+                   ws_client_key, ws_encode_frame, ws_send_text,
+                   ws_recv_frame, ws_recv_text, ws_ping, ws_close,
+                   ws_error_message, ws_finish_handshake,
+                   WsFrame, WsOpcode, WsRead, WsConn, WsSocket}
+
+read_head(fd<Int>)<String> -> {
+    acc<String> = ""
+    guard<Int> = 0
+    while (guard < 64) {
+        chunk<String> = socket_recv(fd, 4096) else ""
+        if (chunk.len() == 0) { return acc }
+        acc = acc.concat(chunk)
+        if (acc.contains("\r\n\r\n")) { return acc }
+        guard = guard + 1
+    }
+    return acc
+}
+
+main()<Int> -> {
+    // RFC 6455 §1.3 vector: the spec's nonce must yield the spec's accept value.
+    // That single assertion covers SHA-1 + base64 + the GUID suffix.
+    if (ws_expected_accept("dGhlIHNhbXBsZSBub25jZQ==") != "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=") {
+        println("FAIL: RFC 6455 accept vector")
+        return 1
+    }
+
+    srv<Int> = socket_open(Socket::AF_INET, Socket::SOCK_STREAM, 0) else -1
+    if (srv < 0) { return 2 }
+    if (!(socket_bind(srv, "127.0.0.1", 0) else false)) { return 3 }
+    if (!(socket_listen(srv, 1) else false)) { return 4 }
+    port<Int> = socket_local_port(srv) else -1
+    if (port <= 0) { return 5 }
+
+    // The client connects and IMMEDIATELY sends the upgrade request, so those
+    // bytes are already queued when the server accepts.
+    cli<Int> = socket_open(Socket::AF_INET, Socket::SOCK_STREAM, 0) else -1
+    if (cli < 0) { return 6 }
+    if (!(socket_connect(cli, "127.0.0.1", port) else false)) { return 7 }
+    socket_set_timeout(cli, 4000)
+    key<String> = ws_client_key()
+    socket_send(cli, ws_handshake_request("127.0.0.1", port, "/chat", key))
+
+    peer<Int> = socket_accept(srv) else -1
+    if (peer < 0) { return 8 }
+    socket_set_timeout(peer, 4000)
+    peer_ws<WsSocket> = WsSocket { fd = peer, host = "127.0.0.1", port = port, path = "/chat" }
+
+    // Server side: the nonce must have arrived, then answer 101.
+    req<String> = read_head(peer)
+    if (!req.contains("Sec-WebSocket-Key: " + key)) {
+        println("FAIL: nonce missing from request")
+        return 9
+    }
+    socket_send(peer, ws_handshake_response(key))
+
+    // Client side: confirm the upgrade. Absence is the failed handshake; the
+    // module records which phase failed, so the sentinel only distinguishes the
+    // two branches (it never leaves this test).
+    conn<WsConn> = ws_finish_handshake(cli, "127.0.0.1", port, "/chat", key) else WsConn { ws = peer_ws, pending = "HANDSHAKE-FAILED" }
+    if (conn.pending == "HANDSHAKE-FAILED") {
+        println("FAIL: handshake: " + ws_error_message())
+        return 10
+    }
+
+    // Client -> server: one masked text frame.
+    if (!(ws_send_text(conn.ws, "hello-vyb-ws") else false)) {
+        println("FAIL: send text: " + ws_error_message())
+        return 11
+    }
+    got<WsRead> = ws_recv_frame(peer_ws, "") else WsRead { frame = WsFrame { opcode = WsOpcode::CLOSE, data = "SERVER-READ-FAILED", fin = true } }
+    if (got.frame.data == "SERVER-READ-FAILED") {
+        println("FAIL: server read: " + ws_error_message())
+        return 12
+    }
+    if (got.frame.opcode != WsOpcode::TEXT) {
+        println("FAIL: opcode " + got.frame.opcode.to_string())
+        return 13
+    }
+    if (got.frame.data != "hello-vyb-ws") {
+        println("FAIL: unmasked payload [" + got.frame.data + "]")
+        return 14
+    }
+
+    // Masking: the same payload encodes differently for two seeds, which is what
+    // a client mask guarantees. The peer's clean decode above already proves the
+    // encode/parse pair agrees.
+    mask_a<String> = ws_encode_frame(WsOpcode::TEXT, "mask-me", true, 11)
+    mask_b<String> = ws_encode_frame(WsOpcode::TEXT, "mask-me", true, 22)
+    if (mask_a == mask_b) {
+        println("FAIL: mask seed did not change the frame")
+        return 15
+    }
+
+    // Server -> client: unmasked reply through the same public API.
+    if (!(ws_send_text(peer_ws, "echo:" + got.frame.data) else false)) { return 16 }
+    reply<String> = ws_recv_text(conn.ws, "") else "CLIENT-READ-FAILED"
+    if (reply == "CLIENT-READ-FAILED") {
+        println("FAIL: client read: " + ws_error_message())
+        return 17
+    }
+    if (reply != "echo:hello-vyb-ws") {
+        println("FAIL: reply [" + reply + "]")
+        return 18
+    }
+
+    // A peer-initiated ping must surface as a PING frame with its payload.
+    socket_send(peer, ws_encode_frame(WsOpcode::PING, "hi", true, 7))
+    ping<WsRead> = ws_recv_frame(conn.ws, "") else WsRead { frame = WsFrame { opcode = WsOpcode::CLOSE, data = "PING-FAILED", fin = true } }
+    if (ping.frame.data == "PING-FAILED") {
+        println("FAIL: ping read: " + ws_error_message())
+        return 19
+    }
+    if (ping.frame.opcode != WsOpcode::PING || ping.frame.data != "hi") {
+        println("FAIL: ping surfaced as " + ping.frame.opcode.to_string())
+        return 20
+    }
+
+    // The client's own ping reaches the peer.
+    if (!(ws_ping(conn.ws, "client-ping") else false)) { return 21 }
+    to_server<WsRead> = ws_recv_frame(peer_ws, "") else WsRead { frame = WsFrame { opcode = WsOpcode::CLOSE, data = "NO-PING", fin = true } }
+    if (to_server.frame.opcode != WsOpcode::PING || to_server.frame.data != "client-ping") {
+        println("FAIL: client ping not seen by peer")
+        return 22
+    }
+
+    // Close handshake: the client's CLOSE arrives at the peer.
+    if (!(ws_close(conn.ws, 1000, "done") else false)) { return 23 }
+    fin<WsRead> = ws_recv_frame(peer_ws, "") else WsRead { frame = WsFrame { opcode = WsOpcode::CLOSE, data = "NO-CLOSE", fin = true } }
+    if (fin.frame.opcode != WsOpcode::CLOSE) {
+        println("FAIL: no close frame (opcode " + fin.frame.opcode.to_string() + ")")
+        return 24
+    }
+
+    socket_close(cli)
+    socket_close(peer)
+    socket_close(srv)
+    println("websocket-client: ok")
+    return 0
+}

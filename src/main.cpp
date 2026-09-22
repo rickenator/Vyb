@@ -137,6 +137,10 @@ extern "C" {
     int64_t __vyb_ed25519_verify(const char* pub, int64_t pub_len,
                                  const char* msg, int64_t msg_len,
                                  const char* sig, int64_t sig_len);
+    // RFC 6455 handshake helpers (websocket stdlib module): base64 of a byte
+    // buffer, and base64(SHA1(key + GUID)) for the accept key.
+    vyb_file_str __vyb_base64_encode(const char* data, int64_t len);
+    vyb_file_str __vyb_ws_accept_key(const char* key, int64_t key_len);
 
     // Network I/O runtime helpers (network stdlib module)
     int64_t __vyb_net_open(int64_t domain, int64_t t, int64_t protocol);
@@ -3007,6 +3011,11 @@ int run_vyb_code(const std::string& source, const std::string& fileName, bool ge
             llvm::orc::ExecutorAddr::fromPtr(&__vyb_mkdir), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyb_sha256_hex")] = llvm::orc::ExecutorSymbolDef(
             llvm::orc::ExecutorAddr::fromPtr(&__vyb_sha256_hex), llvm::JITSymbolFlags::Exported);
+        // RFC 6455 handshake helpers (websocket stdlib module).
+        runtimeSymbols[mangle("__vyb_base64_encode")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_base64_encode), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_ws_accept_key")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_ws_accept_key), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyb_ed25519_publickey")] = llvm::orc::ExecutorSymbolDef(
             llvm::orc::ExecutorAddr::fromPtr(&__vyb_ed25519_publickey), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyb_ed25519_sign")] = llvm::orc::ExecutorSymbolDef(

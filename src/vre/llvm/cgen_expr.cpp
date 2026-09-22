@@ -4338,6 +4338,8 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
         else if (fname == "vyb_net_last_peer_ip_opt") rtName = "__vyb_net_last_peer_ip_opt";
         else if (fname == "vyb_net_last_peer_port_opt") rtName = "__vyb_net_last_peer_port_opt";
         else if (fname == "vyb_net_resolve") rtName = "__vyb_net_resolve";
+        else if (fname == "vyb_base64_encode") rtName = "__vyb_base64_encode";
+        else if (fname == "vyb_ws_accept_key") rtName = "__vyb_ws_accept_key";
         if (!rtName.empty()) {
             auto getNetFn = [&](llvm::FunctionType* ft) -> llvm::Function* {
                 llvm::Function* f = module->getFunction(rtName);
@@ -4515,6 +4517,26 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                 llvm::Value* host = needArg(0); if (!host) return;
                 llvm::FunctionType* ft = llvm::FunctionType::get(strStructType(), {int8PtrType}, false);
                 m_currentLLVMValue = builder->CreateCall(getNetFn(ft), {toStrPtr(host)}, "net.resolved");
+                return;
+            } else if (fname == "vyb_base64_encode") {
+                if (!checkArity(1)) return;
+                llvm::Value* data = needArg(0); if (!data) return;
+                llvm::Value* dataPtr = toStrPtr(data);
+                llvm::Value* dataLen = llvm::ConstantInt::get(int64Type, 0);
+                if (data->getType()->isStructTy())
+                    dataLen = builder->CreateExtractValue(data, 1, "b64.len");
+                llvm::FunctionType* ft = llvm::FunctionType::get(strStructType(), {int8PtrType, int64Type}, false);
+                m_currentLLVMValue = builder->CreateCall(getNetFn(ft), {dataPtr, dataLen}, "b64.encoded");
+                return;
+            } else if (fname == "vyb_ws_accept_key") {
+                if (!checkArity(1)) return;
+                llvm::Value* key = needArg(0); if (!key) return;
+                llvm::Value* keyPtr = toStrPtr(key);
+                llvm::Value* keyLen = llvm::ConstantInt::get(int64Type, 0);
+                if (key->getType()->isStructTy())
+                    keyLen = builder->CreateExtractValue(key, 1, "ws.keylen");
+                llvm::FunctionType* ft = llvm::FunctionType::get(strStructType(), {int8PtrType, int64Type}, false);
+                m_currentLLVMValue = builder->CreateCall(getNetFn(ft), {keyPtr, keyLen}, "ws.accept");
                 return;
             } else { // vyb_net_error_message
                 if (!checkArity(0)) return;
@@ -7693,7 +7715,25 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
     if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(LHS)) {
         destPointeeType = allocaInst->getAllocatedType();
     } else if (auto gep = llvm::dyn_cast<llvm::GetElementPtrInst>(LHS)) {
-        destPointeeType = gep->getResultElementType();
+        // A Vec<T> subscript stores through a *byte-offset* GEP, whose
+        // getResultElementType() is i8 -- not the element type. Prefer the
+        // AST-declared element type when the subscript's base is a Vec, so the
+        // store uses T and the assignment does not warn "Storing i64 into
+        // location of type i8". See issue #318.
+        bool usedAstElemType = false;
+        if (auto* aee = dynamic_cast<ast::ArrayElementExpression*>(node->left.get())) {
+            if (typeOfNode(aee->array)) {
+                if (auto* vecTn = dynamic_cast<ast::VecType*>(typeOfNode(aee->array).get())) {
+                    if (vecTn->elementType) {
+                        destPointeeType = codegenType(vecTn->elementType.get());
+                        usedAstElemType = destPointeeType != nullptr;
+                    }
+                }
+            }
+        }
+        if (!usedAstElemType) {
+            destPointeeType = gep->getResultElementType();
+        }
     } else if (lhsTypeNode) {
         destPointeeType = codegenType(lhsTypeNode.get());
     } else {
@@ -8264,6 +8304,12 @@ void LLVMCodegen::visit(vyb::ast::ArrayElementExpression *node) {
             } else {
                 elementType = codegenType(ptrAstType->pointeeType.get()); // Corrected member access // Pointer to element
             }
+        } else if (auto vecAstType = dynamic_cast<vyb::ast::VecType*>(arrAstTypeNode)) {
+            // A Vec<T> is a heap-backed container whose element type lives in the
+            // same place as an array's. Without this branch, subscripting
+            // Vec<String> fell through to the null-elementType error even though
+            // the AST type ("Vec<String>") was known -- see issue #317.
+            elementType = codegenType(vecAstType->elementType.get());
         }
     }
 
@@ -8281,7 +8327,41 @@ void LLVMCodegen::visit(vyb::ast::ArrayElementExpression *node) {
 
     llvm::Value *elementAddress = nullptr;
 
-    if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(arrayPtr)) {
+    // A Vec<T> is a struct { void* data; i64 size; i64 cap } (VecSlot in
+    // runtime/vyb_type_metadata.c). Subscripting it must go through the data
+    // pointer (field 0), so the GEP needs [0, 0, index] -- a single index cannot
+    // walk into a struct. See issue #317.
+    bool isVecAccess = false;
+    if (auto* vecTn = typeOfNode(node->array)
+            ? dynamic_cast<vyb::ast::VecType*>(typeOfNode(node->array).get()) : nullptr) {
+        isVecAccess = vecTn != nullptr;
+    }
+
+    if (isVecAccess) {
+        // Mirror the sequence the working `get` path emits:
+        //   data_ptr  = gep {ptr,i64,i64}, %v, 0, 0     (field 0 = void* data)
+        //   data      = load ptr, data_ptr
+        //   elem_addr = gep i8, data, byteOffset        (byte-offset, untyped)
+        llvm::Type* vecStructTy = llvm::StructType::get(*context,
+            {llvm::PointerType::get(*context, 0),
+             llvm::Type::getInt64Ty(*context),
+             llvm::Type::getInt64Ty(*context)});
+
+        llvm::Value* zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0);
+        std::vector<llvm::Value*> fieldIdx = {zero, zero};
+        llvm::Value* dataFieldPtr = builder->CreateGEP(vecStructTy, arrayPtr, fieldIdx,
+                                                      "vec.data_ptr");
+        llvm::Value* dataPtr = builder->CreateLoad(llvm::PointerType::get(*context, 0),
+                                                   dataFieldPtr, "vec.data");
+        // Elements are addressed by byte offset: index * sizeof(element).
+        llvm::Value* elemSize = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context),
+            module->getDataLayout().getTypeAllocSize(elementType));
+        llvm::Value* idx64 = builder->CreateSExtOrTrunc(indexVal,
+                                  llvm::Type::getInt64Ty(*context), "vec.idx64");
+        llvm::Value* byteOffset = builder->CreateMul(idx64, elemSize, "vec.offset");
+        elementAddress = builder->CreateGEP(llvm::Type::getInt8Ty(*context), dataPtr,
+                                            byteOffset, "vecelemaddr_rval");
+    } else if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(arrayPtr)) {
         // arrayPtr is an alloca of array type, so we need [0, index] to get to the element
         llvm::Value* zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0);
         std::vector<llvm::Value*> indices = {zero, indexVal};
