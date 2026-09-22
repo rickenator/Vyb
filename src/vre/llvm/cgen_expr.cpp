@@ -4338,6 +4338,8 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
         else if (fname == "vyb_net_last_peer_ip_opt") rtName = "__vyb_net_last_peer_ip_opt";
         else if (fname == "vyb_net_last_peer_port_opt") rtName = "__vyb_net_last_peer_port_opt";
         else if (fname == "vyb_net_resolve") rtName = "__vyb_net_resolve";
+        else if (fname == "vyb_base64_encode") rtName = "__vyb_base64_encode";
+        else if (fname == "vyb_ws_accept_key") rtName = "__vyb_ws_accept_key";
         if (!rtName.empty()) {
             auto getNetFn = [&](llvm::FunctionType* ft) -> llvm::Function* {
                 llvm::Function* f = module->getFunction(rtName);
@@ -4515,6 +4517,26 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                 llvm::Value* host = needArg(0); if (!host) return;
                 llvm::FunctionType* ft = llvm::FunctionType::get(strStructType(), {int8PtrType}, false);
                 m_currentLLVMValue = builder->CreateCall(getNetFn(ft), {toStrPtr(host)}, "net.resolved");
+                return;
+            } else if (fname == "vyb_base64_encode") {
+                if (!checkArity(1)) return;
+                llvm::Value* data = needArg(0); if (!data) return;
+                llvm::Value* dataPtr = toStrPtr(data);
+                llvm::Value* dataLen = llvm::ConstantInt::get(int64Type, 0);
+                if (data->getType()->isStructTy())
+                    dataLen = builder->CreateExtractValue(data, 1, "b64.len");
+                llvm::FunctionType* ft = llvm::FunctionType::get(strStructType(), {int8PtrType, int64Type}, false);
+                m_currentLLVMValue = builder->CreateCall(getNetFn(ft), {dataPtr, dataLen}, "b64.encoded");
+                return;
+            } else if (fname == "vyb_ws_accept_key") {
+                if (!checkArity(1)) return;
+                llvm::Value* key = needArg(0); if (!key) return;
+                llvm::Value* keyPtr = toStrPtr(key);
+                llvm::Value* keyLen = llvm::ConstantInt::get(int64Type, 0);
+                if (key->getType()->isStructTy())
+                    keyLen = builder->CreateExtractValue(key, 1, "ws.keylen");
+                llvm::FunctionType* ft = llvm::FunctionType::get(strStructType(), {int8PtrType, int64Type}, false);
+                m_currentLLVMValue = builder->CreateCall(getNetFn(ft), {keyPtr, keyLen}, "ws.accept");
                 return;
             } else { // vyb_net_error_message
                 if (!checkArity(0)) return;

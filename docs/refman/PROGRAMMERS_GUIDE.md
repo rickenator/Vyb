@@ -2761,6 +2761,7 @@ key/seed material on the GPU. Crypto/ledger integration stays host-side.
 | Filesystem | [`fs`](fs.md) | — |
 | URL parsing | [`url`](url.md) | — |
 | vllm | [`vllm`](vllm.md) | — |
+| websocket | [`websocket`](websocket.md) | — |
 | Runtime intrinsics | [`runtime`](runtime.md) | — |
 <!-- refman:api-index end -->
 
