@@ -59,8 +59,6 @@ Vyb is a statically typed, compiled systems language targeting native code via L
 * **Concurrency**: `async`/`await` and `Future<T>`.
 * **Native Compilation**: Full JIT (LLVM ORC), AOT (object files), and executable generation pipeline.
 
-**Who's using it.** [FlyScale](https://github.com/rickenator/VybFly) is a neuroinformatics project that redraws a whole fruit-fly brain bigger — up to **1.4 million neurons and 27.8 million connections** — and treats that scale-up as an honest test of whether "bigger" still behaves like a brain. It runs the workload twice, a Python reference and a Vyb-native path that has to agree with it tick for tick, and the second one turned out to be the most informative part of the work: it surfaced **twelve compiler defects**, including a blocking one where a kernel-mode store wrote eight bytes into a four-byte slot and silently zeroed a neighbor. [Read the paper](https://vybfly-paper-relay.aniviza.workers.dev/paper.pdf), with the Vyb port as the real test of the compiler.
-
 **Parameter passing is explicit.** A plain `x<T>` parameter is a *value copy* — the callee works on its own copy and the caller's variable is untouched (a `Vec` or an owning struct is deep-copied; a `String` shares its buffer; an `our<T>` bumps its refcount). To read or mutate *in place without copying*, take a `their<T>` borrow, supplied as `borrow(x)` (mutable) or `view(x)` (read-only `their<T const>`). Ownership is separate from reference-passing: `my<T>` is unique ownership (a named `my` passed to a `my` parameter *moves* — use-after-move is rejected), and `our<T>` is shared, ref-counted ownership; neither is another spelling of `ref`. The full, tested rules are in the “Parameter passing” section of the Programmer’s Guide.
 
 ## Quick Start
@@ -75,7 +73,7 @@ git clone https://github.com/rickenator/Vyb.git
 cd Vyb
 mkdir -p build && cd build && LLVM_DIR=/usr/lib/llvm-18/cmake cmake .. && make -j$(nproc) && cd ..
 
-# Run the full test suite (1192 .vyb tests) with the canonical harness
+# Run the full test suite (1193 .vyb tests) with the canonical harness
 python3 test/run_tests.py --vyb build/vyb --test-dir test --execute-jit
 
 # Run your first Vyb program
@@ -2634,7 +2632,7 @@ cmake --build build --target run-milestone
 
 Vyb's canonical test runner is `test/run_tests.py`, the same suite wired into
 CTest as the `run-tests` target and used for the full regression gate (currently
-**1192 `.vyb` tests, all passing**):
+**1193 `.vyb` tests, all passing**):
 
 ### Quick Testing
 ```bash
@@ -2665,7 +2663,7 @@ authoritative pass/fail count is always the `run-tests` CTest target output.
 ```
 
 ### Test Features
-- **1192 Tests, All Passing**: The full `run_tests.py` suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area
+- **1193 Tests, All Passing**: The full `run_tests.py` suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area
 - **Parallel Execution**: Multi-threaded test runner for fast feedback
 - **Rich Reporting**: HTML, JSON, and console output with detailed metrics
 - **Smart Categorization**: Automatic test categorization and filtering
@@ -2875,10 +2873,10 @@ python3 test_harness.py --directory test/units --timeout 30
 - **Error Context**: Detailed failure information with context and suggestions
 
 #### **Test Statistics**
-- **Total Tests**: 1192 `.vyb` tests (full suite, all passing as of v0.7.6)
+- **Total Tests**: 1193 `.vyb` tests (full suite, all passing as of v0.7.6)
 - **Coverage Areas**: Language features, control flow, error handling, type system, math, strings, introspection
 - **Test Types**: Feature tests (with `@expect: pass`), future-feature docs (with `@expect: fail`), parser tests
-- **Success Rate**: 100% (1192/1192) on the current suite
+- **Success Rate**: 100% (1193/1193) on the current suite
 
 ### 🔧 **Syntax Migration Tools**
 
@@ -2992,7 +2990,7 @@ See `doc/` directory for detailed design documents and RFCs.
   - **Type inference**: First case determines result type for entire select
   - **Pattern matching**: Exact equality patterns with wildcard `?` support
 - ✅ **Canonical Syntax Unification**: Complete migration to unified `my()`/`our()` constructors and `view`/`borrow` operators
-- ✅ **Modern Test Harness**: `test/run_tests.py` running the full suite — 1192 `.vyb` tests all passing — with an auxiliary parallel/HTML/triage harness
+- ✅ **Modern Test Harness**: `test/run_tests.py` running the full suite — 1193 `.vyb` tests all passing — with an auxiliary parallel/HTML/triage harness
 - ✅ **Syntax Migration Tools**: Automated migration from legacy to canonical syntax with comprehensive reporting
 - ✅ **Match Statements**: Complete pattern matching with `->` arrow syntax and `?` wildcard; no-match results in NOP
 - ✅ **Break/Continue**: Loop control flow statements working in all loop types
