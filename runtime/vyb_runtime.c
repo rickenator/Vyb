@@ -923,6 +923,110 @@ VYB_WEAK vyb_file_str __vyb_sha256_hex(const char* data, int64_t len) {
     return r;
 }
 
+// SHA-1 (FIPS 180-4) of a byte buffer as a lowercase hex String. SHA-1 is
+// obsolete for signatures but REQUIRED by RFC 6455 (WebSocket): the handshake
+// response is base64(SHA1(Sec-WebSocket-Key + GUID)). Kept internal to the
+// WebSocket accept-key helper below rather than exposed as a general crypto
+// primitive, so nothing in the stdlib advertises SHA-1 as a security tool.
+static void vyb_sha1(const unsigned char* data, size_t len, unsigned char out[20]) {
+    uint32_t h[5] = { 0x67452301u, 0xEFCDAB89u, 0x98BADCFEu, 0x10325476u, 0xC3D2E1F0u };
+    // SHA-1's length field is the message length in BITS (FIPS 180-4 §5.1.1),
+    // big-endian in the final 8 bytes. Writing the byte count here is the
+    // classic SHA-1 bug: single-block inputs still hash correctly only when the
+    // bit count happens to fit the low byte, so it survives casual testing.
+    uint64_t bits = (uint64_t)len * 8u;
+    size_t msg_len = len + 1;
+    while ((msg_len % 64) != 56) msg_len++;
+    unsigned char* m = (unsigned char*)calloc(msg_len + 8, 1);
+    if (!m) {
+        // Allocation failure: no digest can be produced at all.
+        memset(out, 0, 20);
+        return;
+    }
+    if (len > 0 && data) memcpy(m, data, len);
+    m[len] = 0x80;
+    for (int i = 0; i < 8; ++i) m[msg_len + i] = (unsigned char)(bits >> (56 - i * 8));
+    const unsigned char* block = m;
+    size_t blocks = (msg_len + 8) / 64;
+    for (size_t b = 0; b < blocks; ++b) {
+        uint32_t w[80];
+        for (int i = 0; i < 16; ++i) {
+            const unsigned char* p = block + b * 64 + i * 4;
+            w[i] = ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
+                   ((uint32_t)p[2] << 8)  | (uint32_t)p[3];
+        }
+        for (int i = 16; i < 80; ++i)
+            w[i] = ((w[i-3] ^ w[i-8] ^ w[i-14] ^ w[i-16]) << 1) |
+                   ((w[i-3] ^ w[i-8] ^ w[i-14] ^ w[i-16]) >> 31);
+        uint32_t a = h[0], bb = h[1], c = h[2], d = h[3], e = h[4];
+        for (int i = 0; i < 80; ++i) {
+            uint32_t f, k;
+            if (i < 20)      { f = (bb & c) | ((~bb) & d);            k = 0x5A827999u; }
+            else if (i < 40) { f = bb ^ c ^ d;                        k = 0x6ED9EBA1u; }
+            else if (i < 60) { f = (bb & c) | (bb & d) | (c & d);     k = 0x8F1BBCDCu; }
+            else             { f = bb ^ c ^ d;                        k = 0xCA62C1D6u; }
+            uint32_t tmp = ((a << 5) | (a >> 27)) + f + e + k + w[i];
+            e = d; d = c; c = (bb << 30) | (bb >> 2); bb = a; a = tmp;
+        }
+        h[0] += a; h[1] += bb; h[2] += c; h[3] += d; h[4] += e;
+    }
+    free(m);
+    for (int i = 0; i < 5; ++i) {
+        out[i*4]   = (unsigned char)(h[i] >> 24);
+        out[i*4+1] = (unsigned char)(h[i] >> 16);
+        out[i*4+2] = (unsigned char)(h[i] >> 8);
+        out[i*4+3] = (unsigned char)h[i];
+    }
+}
+
+// base64 (RFC 4648 §4, standard alphabet, padded) of a byte buffer. Returns a
+// registry-registered owned String, or { NULL, 0 } on allocation failure.
+VYB_WEAK vyb_file_str __vyb_base64_encode(const char* data, int64_t len) {
+    vyb_file_str r = { NULL, 0 };
+    if (len < 0) { errno = EINVAL; return r; }
+    static const char* B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const unsigned char* in = (const unsigned char*)(data ? data : "");
+    size_t n = (size_t)len;
+    size_t out_len = ((n + 2) / 3) * 4;
+    char* buf = (char*)malloc(out_len + 1);
+    if (!buf) { errno = ENOMEM; return r; }
+    size_t o = 0;
+    for (size_t i = 0; i < n; i += 3) {
+        uint32_t chunk = (uint32_t)in[i] << 16;
+        if (i + 1 < n) chunk |= (uint32_t)in[i+1] << 8;
+        if (i + 2 < n) chunk |= (uint32_t)in[i+2];
+        buf[o++] = B64[(chunk >> 18) & 0x3F];
+        buf[o++] = B64[(chunk >> 12) & 0x3F];
+        buf[o++] = (i + 1 < n) ? B64[(chunk >> 6) & 0x3F] : '=';
+        buf[o++] = (i + 2 < n) ? B64[chunk & 0x3F] : '=';
+    }
+    buf[out_len] = '\0';
+    __vyb_string_register(buf);
+    r.ptr = buf;
+    r.len = (int64_t)out_len;
+    return r;
+}
+
+// RFC 6455 §4.2.2 handshake response value: base64(SHA1(key + GUID)). One call
+// gives a Vyb WebSocket client a standards-correct accept key without the
+// stdlib having to ship base64 + SHA-1 as separate, more abusable primitives.
+VYB_WEAK vyb_file_str __vyb_ws_accept_key(const char* key, int64_t key_len) {
+    static const char* WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+    vyb_file_str r = { NULL, 0 };
+    if (key_len < 0) { errno = EINVAL; return r; }
+    size_t glen = strlen(WS_GUID);
+    size_t total = (size_t)key_len + glen;
+    char* joined = (char*)malloc(total + 1);
+    if (!joined) { errno = ENOMEM; return r; }
+    memcpy(joined, key ? key : "", (size_t)key_len);
+    memcpy(joined + key_len, WS_GUID, glen);
+    joined[total] = '\0';
+    unsigned char digest[20];
+    vyb_sha1((const unsigned char*)joined, total, digest);
+    free(joined);
+    return __vyb_base64_encode((const char*)digest, 20);
+}
+
 // ============================================================================
 // Ed25519 signature primitives (crypto stdlib module, issue #8 / VybChain
 // signature layer). Hosted on OpenSSL EVP (`EVP_PKEY_ED25519`); OpenSSL is an

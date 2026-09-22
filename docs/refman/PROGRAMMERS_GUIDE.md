@@ -167,7 +167,7 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 ### Running the test suite
 
 ```bash
-# 1192 .vyb tests exercised through compile + run + output/return checks
+# 1193 .vyb tests exercised through compile + run + output/return checks
 python3 test/run_tests.py --vyb ./build/vyb --test-dir test --execute-jit
 ```
 
@@ -2400,6 +2400,61 @@ VybOS `doc/VYBLLM-ARCHITECTURE.md` for the full cross-repo design.
 
 ---
 
+### 4.29 `websocket` — an RFC 6455 client over TCP
+
+Module page: [`websocket.md`](websocket.md). The **client** half of the
+WebSocket protocol, built on `network` sockets: the opening handshake, masked
+frame emission, and frame parsing for text / binary / ping / pong / close. The
+server half is deliberately absent — accepting an upgrade needs the HTTP
+surface's request parsing plus a per-connection lifetime policy, which belong to
+[`http`](#413-http-pure-vyb-http11-client-and-server).
+
+Why it exists: any JSON-RPC control plane worth talking to (a dashboard's
+`/api/ws`, a browser-facing service) speaks WebSocket and nothing else. Without
+a client, a Vyb program cannot drive those services at all, however good its
+HTTP story is.
+
+```vyb
+import websocket::{ws_connect, ws_send_text, ws_recv_text, ws_close,
+                   ws_error_message, WsConn}
+
+conn<WsConn> = ws_connect("127.0.0.1", 9119, "/api/ws?token=...", 15000) else WsConn { ... }
+ws_send_text(conn.ws, "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"session.create\",\"params\":{}}")
+reply<String> = ws_recv_text(conn.ws, conn.pending) else ""
+```
+
+Handshake: RFC 6455 §4.1 — `GET` with `Upgrade: websocket`, a 16-byte base64
+`Sec-WebSocket-Key`, and `Sec-WebSocket-Version: 13`. The response must be
+`101 Switching Protocols` carrying `Sec-WebSocket-Accept` =
+`base64(SHA1(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"))`. Both halves cross
+the runtime boundary as narrow builtins beside `__vyb_sha256_hex`:
+
+| builtin | purpose |
+|---|---|
+| `vyb_base64_encode` | RFC 4648 encoding, otherwise absent from the stdlib |
+| `vyb_ws_accept_key` | the accept derivation, so SHA-1 never becomes a general stdlib primitive |
+
+Framing: RFC 6455 §5. A client MUST mask every frame (§5.3): 4 random bytes from
+`rand` XORed positionally over the payload. Masking is unconditional — a masked
+client frame is always legal, an unmasked one is a protocol-error close. No
+reserved bits are set, so no extensions are negotiated.
+
+Two shapes matter when using it:
+
+- **`ws_connect` blocks on the response.** A program that must answer the peer
+  in the same thread cannot use it — that is what the split form is for:
+  `ws_send_handshake` then `ws_finish_handshake`, with the caller's own work in
+  between.
+- **Control frames are visible.** A peer PING is auto-answered with a pong *and*
+  surfaced to the caller; a PONG is absorbed. CLOSE ends the stream as absence,
+  so a caller loop stops naturally.
+
+Fallibility follows the stdlib convention: every transport op is `T?` — absence
+*is* the failed call, named by `ws_error_code()` / `ws_error_message()`. No
+`-1` / `""` sentinel is ever handed back as data.
+
+---
+
 ## 5. Concurrency and async model
 
 Vyb is fully multithreaded (pthreads underneath) with a clean, layered story:
@@ -2535,7 +2590,7 @@ runtime points a single process at a list of tests if needed.
 
 Canonical suite runner (wired into CTest as `run-tests`):
 ```bash
-python3 test/run_tests.py --vyb ./build/vyb --test-dir test --execute-jit   # full suite (1192 tests)
+python3 test/run_tests.py --vyb ./build/vyb --test-dir test --execute-jit   # full suite (1193 tests)
 python3 test/run_tests.py --vyb ./build/vyb --test-dir test --category async    # filter by category
 ```
 The auxiliary parallel harness (`test_harness.py`, `triage_tool.py`) adds HTML
@@ -2761,8 +2816,10 @@ key/seed material on the GPU. Crypto/ledger integration stays host-side.
 | Filesystem | [`fs`](fs.md) | — |
 | URL parsing | [`url`](url.md) | — |
 | vllm | [`vllm`](vllm.md) | — |
+| websocket | [`websocket`](websocket.md) | — |
 | Runtime intrinsics | [`runtime`](runtime.md) | — |
 <!-- refman:api-index end -->
+
 
 
 

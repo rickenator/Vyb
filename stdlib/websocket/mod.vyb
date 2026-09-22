@@ -1,0 +1,606 @@
+# websocket - an RFC 6455 WebSocket CLIENT over TCP sockets.
+#
+# The client half of the protocol: the opening handshake, masked frame
+# emission, and frame parsing for text / binary / ping / pong / close. The
+# server half (accepting an upgrade on an inbound connection) is deliberately
+# NOT here — a WebSocket server needs the HTTP surface's request parsing and a
+# per-connection lifetime policy, which belong to `http`; this module stays the
+# client a program uses to talk to somebody else's WS endpoint.
+#
+# Why this exists: every JSON-RPC control plane worth talking to (Hermes'
+# dashboard `/api/ws` among them) speaks WebSocket and nothing else. Without a
+# client, a Vyb program cannot drive those services at all, no matter how good
+# its HTTP story is.
+#
+# Usage (connect and exchange one text message):
+#   import websocket::{ws_connect, ws_send_text, ws_recv_text, ws_close, WsConn}
+#   conn<WsConn> = ws_connect("127.0.0.1", 9119, "/api/ws?token=...", 15000) else WsConn { ... }
+#   ws_send_text(conn.ws, "hello")
+#   reply<String> = ws_recv_text(conn.ws, conn.pending) else ""
+#
+# `ws_connect` is the one-call path. It blocks on the response, so a program
+# that must answer the peer inside the same thread should use the split form:
+# `ws_send_handshake(fd, ...)` then `ws_finish_handshake(fd, ...)`.
+#
+# Handshake: RFC 6455 §4.1 — GET with `Upgrade: websocket`, a 16-byte base64
+# `Sec-WebSocket-Key`, and `Sec-WebSocket-Version: 13`. The response must be
+# `101 Switching Protocols` carrying `Sec-WebSocket-Accept`, which is
+# base64(SHA1(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")). Both halves cross
+# the runtime: `vyb_ws_accept_key` computes the expected accept value and
+# `vyb_base64_encode` encodes the nonce, so the stdlib neither ships SHA-1 as a
+# general primitive nor re-implements base64 in Vyb.
+#
+# Framing: RFC 6455 §5. Clients MUST mask every frame (§5.3); the mask key is
+# 4 random bytes (`rand`), and the payload is XORed with it positionally. We
+# mask unconditionally — a masked client frame is always legal, an unmasked one
+# is a protocol-error close. Reserved bits are never set, so no extensions are
+# negotiated.
+#
+# Fallibility: every transport operation is `T?` — absence IS the failed
+# operation. `ws_connect` / `ws_finish_handshake` return `WsConn?`, `ws_send_text`
+# / `ws_send_binary` / `ws_ping` / `ws_close` return `Bool?`, `ws_recv_frame` /
+# `ws_recv_text` return `WsRead?` / `String?`, with `ws_error_code()` /
+# `ws_error_message()` naming why. No `-1`/`""` sentinel is ever smuggled out as
+# data.
+
+import network::{socket_open, socket_connect, socket_send, socket_recv,
+                socket_close, socket_set_timeout, Socket}
+import rand::{rand_range}
+
+# Runtime bridges. `vyb_base64_encode` / `vyb_ws_accept_key` live in
+# `runtime/vyb_runtime.c` beside `__vyb_sha256_hex`; they are the only two
+# primitives this module borrows from outside `network`, both scoped to the
+# handshake so the stdlib never advertises SHA-1 as a general primitive.
+# `ws_base64` is exported because the accept formula is worth testing directly.
+share(all)
+ws_base64(data<String>)<String> -> {
+    return vyb_base64_encode(data)
+}
+
+ws_accept_key(key<String>)<String> -> {
+    return vyb_ws_accept_key(key)
+}
+
+# Opcodes (RFC 6455 §5.2). A constant enum: compile-time Ints scoped under
+# `WsOpcode`, so they flow straight into the Int parameters of the framing
+# helpers without a call.
+share(all)
+enum WsOpcode {
+    CONT = 0
+    TEXT = 1
+    BINARY = 2
+    CLOSE = 8
+    PING = 9
+    PONG = 10
+}
+
+# Close status codes (RFC 6455 §7.4.1) a caller can hand to `ws_close`.
+share(all)
+enum WsStatus {
+    NORMAL = 1000
+    GOING_AWAY = 1001
+    PROTOCOL_ERROR = 1002
+    UNSUPPORTED_DATA = 1003
+    POLICY_VIOLATION = 1008
+    MESSAGE_TOO_BIG = 1009
+    INTERNAL_ERROR = 1011
+}
+
+# One decoded frame: `opcode` (a `WsOpcode` value), the bytes as a String, and
+# `fin` (false only for a non-final fragment).
+share(all)
+struct WsFrame {
+    opcode<Int>,
+    data<String>,
+    fin<Bool>
+}
+
+# A live WebSocket: the socket descriptor plus the target (used in diagnostics
+# only, so a failure names the peer instead of a bare fd).
+share(all)
+struct WsSocket {
+    fd<Int>,
+    host<String>,
+    port<Int>,
+    path<String>
+}
+
+# --- diagnostics --------------------------------------------------------------
+
+# Last transport-level failure description. A module-level String kept in step
+# with every failing transport call, so a caller that only got `Bool?` / `T?`
+# absence can still explain itself.
+last_error<String> = ""
+
+share(all)
+ws_error_code()<Int> -> {
+    return network_error_code()
+}
+
+# The last transport failure as a sentence; "" when nothing has failed.
+share(all)
+ws_error_message()<String> -> {
+    if (last_error.len() > 0) { return last_error }
+    return ""
+}
+
+# Name a failed operation on a target in the same shape as `network`'s
+# `NetError` users expect: "<op> failed: <host>" plus the io reason when there
+# is one.
+share(all)
+ws_error(op<String>, target<String>)<String> -> {
+    detail<String> = ws_error_message()
+    if (detail.len() > 0) { return op + " failed for " + target + ": " + detail }
+    return op + " failed for " + target
+}
+
+# Diagnostics: the runtime's `__vyb_net_error_code` for transport failures, and
+# "" when the last failure was ours (a refused upgrade is not an io error).
+ws_net_error_code()<Int> -> {
+    return vyb_net_error_code()
+}
+
+network_error_code()<Int> -> {
+    return ws_net_error_code()
+}
+
+# --- nonce / accept key -------------------------------------------------------
+
+# 16 random bytes, base64-encoded, as the `Sec-WebSocket-Key`.
+share(all)
+ws_client_key()<String> -> {
+    raw<String> = ""
+    i<Int> = 0
+    while (i < 16) {
+        b<Int> = rand_range(0, 256)
+        raw = raw.concat(String::from_byte(b))
+        i = i + 1
+    }
+    return ws_base64(raw)
+}
+
+# The accept value the server must echo for `key`: base64(SHA1(key + GUID)).
+share(all)
+ws_expected_accept(key<String>)<String> -> {
+    return ws_accept_key(key)
+}
+
+# --- handshake ----------------------------------------------------------------
+
+# Find the value of a header (case-insensitive name match) in a raw response
+# head, or "" when absent. Only the first match is returned.
+share(all)
+header_value(head<String>, name<String>)<String> -> {
+    target<String> = name.to_lower()
+    lines<Vec<String>> = head.split("\r\n")
+    i<Int> = 1
+    while (i < lines.len()) {
+        line<String> = lines.get(i)
+        colon<Int> = line.index_of(":")
+        if (colon > 0) {
+            k<String> = line.substring(0, colon).trim().to_lower()
+            if (k == target) {
+                return line.substring(colon + 1, line.len()).trim()
+            }
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+# True when `head` is a `101 Switching Protocols` response whose accept value
+# matches the nonce we sent.
+share(all)
+ws_upgrade_ok(head<String>, key<String>)<Bool> -> {
+    status<Int> = ws_parse_status(head)
+    if (status != 101) { return false }
+    got<String> = header_value(head, "sec-websocket-accept")
+    if (got.len() == 0) { return false }
+    return got == ws_expected_accept(key)
+}
+
+# Status code from an HTTP status line; 0 when the head does not start with one.
+share(all)
+ws_parse_status(head<String>)<Int> -> {
+    prefix<String> = "HTTP/1."
+    if (head.len() < 12) { return 0 }
+    if (head.substring(0, prefix.len()) != prefix) { return 0 }
+    digits<String> = head.substring(9, 12)
+    return network_str_to_int(digits)
+}
+
+network_str_to_int(s<String>)<Int> -> {
+    n<Int> = 0
+    i<Int> = 0
+    while (i < s.len()) {
+        c<Int> = s.char_at(i) & 255
+        if (c >= 48 && c <= 57) { n = n * 10 + (c - 48) }
+        i = i + 1
+    }
+    return n
+}
+
+# Read the response head (through the blank line that ends it). "" when the
+# peer closed before sending one.
+share(all)
+read_until_double_crlf(fd<Int>)<String> -> {
+    acc<String> = ""
+    guard<Int> = 0
+    while (guard < 64) {
+        chunk<String> = socket_recv(fd, 4096) else ""
+        if (chunk.len() == 0) { return acc }
+        acc = acc.concat(chunk)
+        if (acc.contains("\r\n\r\n")) { return acc }
+        guard = guard + 1
+    }
+    return acc
+}
+
+# Bytes received past the handshake head (a server may co-send a frame).
+share(all)
+struct WsConn {
+    ws<WsSocket>,
+    pending<String>
+}
+
+# Open a TCP connection to `host`:`port`, perform the RFC 6455 client
+# handshake for `path` (include the query string, e.g. "/api/ws?token=..."),
+# and return the live socket with any bytes that arrived after the head.
+#
+# Absent on: connect failure, a non-101 response, or a mismatched accept value
+# — `ws_error_message()` then names which. `timeout_ms` (default 15000 when 0)
+# bounds every subsequent read so a silent peer cannot hang the caller.
+share(all)
+ws_connect(host<String>, port<Int>, path<String>, timeout_ms<Int>)<WsConn?> -> {
+    fd<Int> = socket_open(Socket::AF_INET, Socket::SOCK_STREAM, 0) else -1
+    if (fd < 0) {
+        last_error = "socket_open failed"
+        return WsConn?()
+    }
+    ms<Int> = timeout_ms
+    if (ms <= 0) { ms = 15000 }
+    socket_set_timeout(fd, ms)
+    ok<Bool> = socket_connect(fd, host, port) else false
+    if (!ok) {
+        last_error = "socket_connect failed for " + host
+        socket_close(fd)
+        return WsConn?()
+    }
+    key<String> = ws_client_key()
+    req<String> = ws_handshake_request(host, port, path, key)
+    sent<Int> = socket_send(fd, req) else -1
+    if (sent < 0) {
+        last_error = "handshake request send failed"
+        socket_close(fd)
+        return WsConn?()
+    }
+    head<String> = read_until_double_crlf(fd)
+    if (!ws_upgrade_ok(head, key)) {
+        last_error = "upgrade refused (status " + ws_parse_status(head).to_string() + ")"
+        socket_close(fd)
+        return WsConn?()
+    }
+    split<Int> = head.index_of("\r\n\r\n") + 4
+    leftover<String> = ""
+    if (split >= 0 && split < head.len()) { leftover = head.substring(split, head.len()) }
+    sock<WsSocket> = WsSocket { fd = fd, host = host, port = port, path = path }
+    return WsConn?(WsConn { ws = sock, pending = leftover })
+}
+
+# --- handshake, split --------------------------------------------------------
+#
+# `ws_connect` is the one-call convenience, but it BLOCKS on the response, which
+# a single-threaded program cannot serve: a peer that only answers after the
+# caller returns (a test's own acceptor, an event loop with other work queued)
+# deadlocks against it. These two pieces let a caller send the request, do
+# whatever the peer needs, then collect the response — the same ordering the
+# raw-socket tests in `http` use.
+
+# The RFC 6455 §4.1 upgrade request text for `path` with nonce `key`.
+share(all)
+ws_handshake_request(host<String>, port<Int>, path<String>, key<String>)<String> -> {
+    return "GET " + path + " HTTP/1.1\r\n" +
+           "Host: " + host + ":" + port.to_string() + "\r\n" +
+           "Upgrade: websocket\r\n" +
+           "Connection: Upgrade\r\n" +
+           "Sec-WebSocket-Key: " + key + "\r\n" +
+           "Sec-WebSocket-Version: 13\r\n\r\n"
+}
+
+# What the server must answer for nonce `key` — the same value `ws_upgrade_ok`
+# checks, exposed so a peer (or a test's acceptor) can reply correctly without
+# reimplementing RFC 6455's formula.
+share(all)
+ws_handshake_response(key<String>)<String> -> {
+    return "HTTP/1.1 101 Switching Protocols\r\n" +
+           "Upgrade: websocket\r\n" +
+           "Connection: Upgrade\r\n" +
+           "Sec-WebSocket-Accept: " + ws_expected_accept(key) + "\r\n\r\n"
+}
+
+# Send the upgrade request on an already-connected fd and return the nonce the
+# caller must later verify against. Absent when the request could not be sent.
+share(all)
+ws_send_handshake(fd<Int>, host<String>, port<Int>, path<String>)<String?> -> {
+    key<String> = ws_client_key()
+    sent<Int> = socket_send(fd, ws_handshake_request(host, port, path, key)) else -1
+    if (sent < 0) {
+        last_error = "handshake request send failed"
+        return String?()
+    }
+    return String?(key)
+}
+
+# Read the response to `key` and confirm the upgrade. Present on a valid 101
+# with the matching accept value (with any extra bytes the peer co-sent),
+# absent otherwise.
+share(all)
+ws_finish_handshake(fd<Int>, host<String>, port<Int>, path<String>, key<String>)<WsConn?> -> {
+    head<String> = read_until_double_crlf(fd)
+    if (!ws_upgrade_ok(head, key)) {
+        last_error = "upgrade refused (status " + ws_parse_status(head).to_string() + ")"
+        return WsConn?()
+    }
+    split<Int> = head.index_of("\r\n\r\n") + 4
+    leftover<String> = ""
+    if (split >= 0 && split < head.len()) { leftover = head.substring(split, head.len()) }
+    sock<WsSocket> = WsSocket { fd = fd, host = host, port = port, path = path }
+    return WsConn?(WsConn { ws = sock, pending = leftover })
+}
+
+# --- framing ------------------------------------------------------------------
+
+# 4 mask bytes from `seed` (a random Int), as a String.
+mask_bytes(seed<Int>)<String> -> {
+    s<Int> = seed
+    out<String> = ""
+    i<Int> = 0
+    while (i < 4) {
+        s = (s * 1103515245 + 12345) % 2147483648
+        b<Int> = (s / 65536) % 256
+        out = out.concat(String::from_byte(b))
+        i = i + 1
+    }
+    return out
+}
+
+# XOR `data` with the 4-byte key, positionally from index 0.
+apply_mask(data<String>, key<String>)<String> -> {
+    out<String> = ""
+    i<Int> = 0
+    while (i < data.len()) {
+        c<Int> = data.char_at(i) & 255
+        k<Int> = key.char_at(i % 4) & 255
+        out = out.concat(String::from_byte(c ^ k))
+        i = i + 1
+    }
+    return out
+}
+
+# Encode `payload` as one masked frame with the given opcode and FIN bit.
+share(all)
+ws_encode_frame(opcode<Int>, payload<String>, fin<Bool>, mask_seed<Int>)<String> -> {
+    b0<Int> = opcode
+    if (fin) { b0 = b0 + 128 }
+    frame<String> = String::from_byte(b0)
+    n<Int> = payload.len()
+    key<String> = mask_bytes(mask_seed)
+    if (n < 126) {
+        frame = frame.concat(String::from_byte(128 + n))
+    } else {
+        if (n < 65536) {
+            frame = frame.concat(String::from_byte(128 + 126))
+            high<Int> = (n / 256) % 256
+            low<Int> = n % 256
+            frame = frame.concat(String::from_byte(high))
+            frame = frame.concat(String::from_byte(low))
+        } else {
+            frame = frame.concat(String::from_byte(128 + 127))
+            frame = frame.concat(String::from_byte(0))
+            frame = frame.concat(String::from_byte(0))
+            frame = frame.concat(String::from_byte(0))
+            frame = frame.concat(String::from_byte(0))
+            frame = frame.concat(String::from_byte((n / 16777216) % 256))
+            frame = frame.concat(String::from_byte((n / 65536) % 256))
+            frame = frame.concat(String::from_byte((n / 256) % 256))
+            frame = frame.concat(String::from_byte(n % 256))
+        }
+    }
+    frame = frame.concat(key)
+    frame = frame.concat(apply_mask(payload, key))
+    return frame
+}
+
+# Bytes still needed to finish a frame header / payload. A pure state struct so
+# the reader stays functional: each step takes what it has and returns the
+# remainder it still wants.
+share(all)
+struct WsNeed {
+    need<Bool>,
+    want<Int>
+}
+
+# How many bytes are still needed to reach `total` given `have`.
+ws_need(have<Int>, total<Int>)<WsNeed> -> {
+    if (have >= total) { return WsNeed { need = false, want = 0 } }
+    return WsNeed { need = true, want = total - have }
+}
+
+# --- reading ------------------------------------------------------------------
+
+# Read at least `n` bytes from `fd`, starting from whatever `pending` already
+# holds. Returns ALL bytes read (never trimmed to `n`) so the caller can recover
+# the overflow as `rest` — a frame parser needs those bytes, and discarding them
+# here would silently break the next frame. Absent when the peer closed or the
+# read failed before `n` bytes arrived.
+read_exact(fd<Int>, n<Int>, pending<String>)<String?> -> {
+    acc<String> = pending
+    while (acc.len() < n) {
+        chunk<String> = socket_recv(fd, 8192) else ""
+        if (chunk.len() == 0) { return String?() }
+        acc = acc.concat(chunk)
+    }
+    return String?(acc)
+}
+
+# Parse one frame from the stream, returning the frame plus whatever bytes were
+# read past it (so a caller can keep the excess without a second read).
+share(all)
+struct WsRead {
+    frame<WsFrame>,
+    rest<String>
+}
+
+ws_read_frame(fd<Int>, pending<String>)<WsRead?> -> {
+    head<String> = read_exact(fd, 2, pending) else ""
+    if (head.len() < 2) { return WsRead?() }
+    b0<Int> = head.char_at(0) & 255
+    b1<Int> = head.char_at(1) & 255
+    fin<Bool> = (b0 & 128) != 0
+    opcode<Int> = b0 % 16
+    masked<Bool> = (b1 & 128) != 0
+    len7<Int> = b1 % 128
+    consumed<Int> = 2
+    extra<String> = ""
+    if (head.len() > 2) { extra = head.substring(2, head.len()) }
+    n<Int> = len7
+    if (len7 == 126) {
+        two<String> = read_exact(fd, 2, extra) else ""
+        if (two.len() < 2) { return WsRead?() }
+        n = (two.char_at(0) & 255) * 256 + (two.char_at(1) & 255)
+        extra = ""
+        if (two.len() > 2) { extra = two.substring(2, two.len()) }
+    } else {
+        if (len7 == 127) {
+            eight<String> = read_exact(fd, 8, extra) else ""
+            if (eight.len() < 8) { return WsRead?() }
+            n = (eight.char_at(4) & 255) * 16777216 + (eight.char_at(5) & 255) * 65536 +
+                (eight.char_at(6) & 255) * 256 + (eight.char_at(7) & 255)
+            extra = ""
+            if (eight.len() > 8) { extra = eight.substring(8, eight.len()) }
+        }
+    }
+    key<String> = ""
+    if (masked) {
+        key = read_exact(fd, 4, extra) else ""
+        if (key.len() < 4) { return WsRead?() }
+        extra = ""
+        if (key.len() > 4) { extra = key.substring(4, key.len()) }
+    }
+    body<String> = read_exact(fd, n, extra) else ""
+    if (body.len() < n) { return WsRead?() }
+    rest<String> = ""
+    if (body.len() > n) { rest = body.substring(n, body.len()) }
+    payload<String> = body.substring(0, n)
+    if (masked) { payload = apply_mask(payload, key) }
+    return WsRead?(WsRead { frame = WsFrame { opcode = opcode, data = payload, fin = fin }, rest = rest })
+}
+
+# --- the socket surface -------------------------------------------------------
+
+# Send one text frame (masked, FIN set).
+share(all)
+ws_send_text(ws<WsSocket>, text<String>)<Bool?> -> {
+    seed<Int> = rand_range(0, 2147483647)
+    frame<String> = ws_encode_frame(WsOpcode::TEXT, text, true, seed)
+    n<Int> = socket_send(ws.fd, frame) else -1
+    if (n < 0) {
+        last_error = "frame send failed"
+        return Bool?()
+    }
+    return Bool?(true)
+}
+
+# Send one binary frame (masked, FIN set).
+share(all)
+ws_send_binary(ws<WsSocket>, data<String>)<Bool?> -> {
+    seed<Int> = rand_range(0, 2147483647)
+    frame<String> = ws_encode_frame(WsOpcode::BINARY, data, true, seed)
+    n<Int> = socket_send(ws.fd, frame) else -1
+    if (n < 0) { return Bool?() }
+    return Bool?(true)
+}
+
+# Send a ping (masked). The peer's pong is absorbed by `ws_recv`, so a caller
+# never has to poll for it explicitly.
+share(all)
+ws_ping(ws<WsSocket>, payload<String>)<Bool?> -> {
+    seed<Int> = rand_range(0, 2147483647)
+    frame<String> = ws_encode_frame(WsOpcode::PING, payload, true, seed)
+    n<Int> = socket_send(ws.fd, frame) else -1
+    if (n < 0) { return Bool?() }
+    return Bool?(true)
+}
+
+# Send a close frame with `code` and an optional reason, then close the socket.
+# Idempotent enough for teardown: a send failure still closes locally.
+share(all)
+ws_close(ws<WsSocket>, code<Int>, reason<String>)<Bool?> -> {
+    body<String> = String::from_byte((code / 256) % 256)
+    body = body.concat(String::from_byte(code % 256))
+    body = body.concat(reason)
+    seed<Int> = rand_range(0, 2147483647)
+    frame<String> = ws_encode_frame(WsOpcode::CLOSE, body, true, seed)
+    socket_send(ws.fd, frame)
+    socket_close(ws.fd)
+    return Bool?(true)
+}
+
+# Receive the next DATA frame, absorbing control frames: a ping is answered
+# with a pong, a pong is dropped, and a close ends the stream (absent). Returns
+# `WsFrame?` — the data frame, or absent on close / transport failure.
+#
+# Continuation frames are NOT reassembled here: each fragment is returned with
+# `fin` set, so a caller that sends fragmented messages can drive assembly
+# itself rather than inheriting a policy.
+share(all)
+ws_recv_frame(ws<WsSocket>, pending<String>)<WsRead?> -> {
+    guard<Int> = 0
+    carry<String> = pending
+    while (guard < 32) {
+        // Absent here means the stream is over (peer close / transport failure):
+        // absence IS the end, so the loop declines to continue.
+        got<WsRead> = ws_read_frame(ws.fd, carry) else WsRead { frame = WsFrame {
+            opcode = WsOpcode::CLOSE, data = "", fin = true }, rest = "" }
+        frame<WsFrame> = got.frame
+        if (frame.opcode == WsOpcode::CLOSE) {
+            // The peer's close ends the stream: absent, so the caller's `else`
+            // fires and it stops reading.
+            last_error = "peer sent close"
+            return WsRead?()
+        }
+        if (frame.opcode == WsOpcode::PONG) {
+            // A pong is purely a reply to our own ping: consume it silently and
+            // keep reading, so the caller's next frame is real data.
+            carry = got.rest
+            guard = guard + 1
+            continue
+        }
+        // Answer a peer ping automatically, then hand it to the caller anyway:
+        // a control frame the caller never sees would hide the peer's liveness
+        // check, and surfacing it lets the caller observe or ignore it.
+        if (frame.opcode == WsOpcode::PING) {
+            ws_pong(ws, frame.data)
+        }
+        return WsRead?(WsRead { frame = frame, rest = got.rest })
+    }
+    return WsRead?()
+}
+
+ws_pong(ws<WsSocket>, payload<String>)<Bool?> -> {
+    seed<Int> = rand_range(0, 2147483647)
+    frame<String> = ws_encode_frame(WsOpcode::PONG, payload, true, seed)
+    n<Int> = socket_send(ws.fd, frame) else -1
+    if (n < 0) { return Bool?() }
+    return Bool?(true)
+}
+
+# Convenience: the payload of the next data frame as a String, or "" when the
+# stream ended. For callers that do not care about opcode/fin.
+share(all)
+ws_recv_text(ws<WsSocket>, pending<String>)<String?> -> {
+    got<WsRead> = ws_recv_frame(ws, pending) else WsRead { frame = WsFrame {
+        opcode = WsOpcode::CLOSE, data = "", fin = true }, rest = "" }
+    if (got.frame.opcode == WsOpcode::CLOSE) { return String?() }
+    return String?(got.frame.data)
+}
