@@ -59,6 +59,19 @@ jobs:
         # what test/run_tests.vyb actually runs.
         run: ./build/vyb test/suite_count_check.vyb
 
+      - name: Validate generated refman matches stdlib (#226)
+        # tools/refman.vyb is the Vyb generator that replaced tools/refman.py.
+        # VYB_REFMAN_CHECK=1 is its check mode (the compiler claims bare --check
+        # for its own formatter check). It runs here because this job builds the
+        # compiler; refman-check.yml only guards the wiring.
+        run: |
+          VYB_REFMAN_CHECK=1 ./build/vyb tools/refman.vyb
+          git diff --quiet -- docs/refman || {
+            echo "::error::docs/refman is stale; run: build/vyb tools/refman.vyb"
+            git diff --stat -- docs/refman
+            exit 1
+          }
+
       - name: AOT / native-link coverage
         run: |
           ./test_compilation.sh --json /tmp/aot-evidence.json

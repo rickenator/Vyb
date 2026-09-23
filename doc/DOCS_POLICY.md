@@ -17,7 +17,7 @@ behaviour:
 
 1. **Refman** — if the change is user-facing (new syntax, stdlib symbol,
    intrinsic, changed error shape), regenerate the refman
-   (`tools/refman.py`) and update any guide section that describes the feature.
+   (`tools/refman.vyb`) and update any guide section that describes the feature.
 2. **Contradictions** — grep the tree for stale wording about the feature
    (`stub`, `placeholder`, `not implemented`, `planned`, `not yet`) and delete or
    replace it. Do not leave a "stub" claim in one doc for something that now

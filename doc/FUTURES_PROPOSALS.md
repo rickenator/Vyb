@@ -37,7 +37,7 @@ can land in any order.
 - `proposed` **`vyb fmt`** — canonical code formatter (AST printer). One
   canonical style for the whole ecosystem.
 - `proposed` **`vyb doc`** — HTML documentation generator from `///` doc
-  comments; builds on the existing `tools/refman.py` refman generator.
+  comments; builds on the existing `tools/refman.vyb` refman generator.
 - `proposed` **`vyb test`** — integrated runner for `*.test.vyb` files placed
   alongside source; wraps the existing `test/run_tests.vyb` harness.
 - `proposed` **Parser error recovery** — report multiple errors per file

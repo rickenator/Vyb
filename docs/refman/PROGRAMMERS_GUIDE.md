@@ -2679,18 +2679,21 @@ build/vyb migrate_syntax.vyb --apply        # apply canonical forms (backs up)
 build/vyb triage_tool.vyb results.json        # analyse failures
 ```
 
-### Reference manual generator (`tools/refman.py`)
+### Reference manual generator (`tools/refman.vyb`)
 
 ```bash
-python3 tools/refman.py --emit-dir docs/refman     # (re)generate
-python3 tools/refman.py --check                    # drift/unresolved CI gate
+build/vyb tools/refman.vyb --emit-dir docs/refman     # (re)generate
+VYB_REFMAN_CHECK=1 build/vyb tools/refman.vyb         # drift/unresolved CI gate
 ```
 
-`--check` (also wired into `.github/workflows/refman-check.yml`) fails if:
-an imported symbol is not a `share(all)` export of its provider, a
-prose-ref/uses-type target is unresolved, or a regenerate diffs from the
-committed `docs/refman/`. The generator is deterministic, so a clean tree
-regenerates byte-identical output.
+`--check` (spelled `VYB_REFMAN_CHECK=1` here, because the compiler claims a bare
+`--check` for its own formatter check) fails if: an imported symbol is not a
+`share(all)` export of its provider, a prose-ref/uses-type target is unresolved,
+or a regenerate diffs from the committed `docs/refman/`. The generator is
+deterministic, so a clean tree regenerates byte-identical output. The gate runs
+in the `ci` workflow's build job, where the compiler exists;
+`.github/workflows/refman-check.yml` keeps the wiring and the guide markers
+honest.
 
 ---
 
@@ -2892,6 +2895,7 @@ key/seed material on the GPU. Crypto/ledger integration stays host-side.
 | websocket | [`websocket`](websocket.md) | — |
 | Runtime intrinsics | [`runtime`](runtime.md) | — |
 <!-- refman:api-index end -->
+
 
 
 
