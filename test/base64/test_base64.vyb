@@ -1,0 +1,109 @@
+// @test: base64 - RFC 4648 §4 encode/decode over byte Strings
+// @description: #328 the stdlib base64 module. Proves the encoder against the
+//   RFC's §10 test vectors (empty, 1- and 2-byte tails, unpadded-length
+//   boundaries), proves decode round-trips them, rejects malformed group streams
+//   (bad length, out-of-alphabet character, misplaced `=`), and round-trips
+//   binary bytes (NUL and high-bit) losslessly in both directions.
+// @category: stdlib, base64, encoding, regression
+// @expect: pass
+// @expect-output: base64-ok
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+
+import base64::{b64_encode, b64_decode}
+
+// Encode vector: codes are failure codes so the first break names its case.
+check_enc(raw<String>, want<String>, code<Int>)<Int> -> {
+    got<String> = b64_encode(raw)
+    if (got == want) { return 0 }
+    println("encode mismatch for [" + raw + "]: got [" + got + "] want [" + want + "]")
+    return code
+}
+
+// Decode vector: a present String must equal `want`, an absent one must be
+// expected (`want_absent`).
+check_dec(enc<String>, want<String>, want_absent<Bool>, code<Int>)<Int> -> {
+    match (b64_decode(enc)) {
+        got -> {
+            if (want_absent) { println("expected absent for [" + enc + "], got [" + got + "]"); return code }
+            if (got == want) { return 0 }
+            println("decode mismatch for [" + enc + "]: got [" + got + "] want [" + want + "]")
+            return code
+        }
+        ? -> {
+            if (want_absent) { return 0 }
+            println("expected [" + want + "] for [" + enc + "], got absent")
+            return code
+        }
+    }
+}
+
+main()<Int> -> {
+    bad<Int> = 0
+
+    # 1. RFC 4648 §10 test vectors (encode)
+    bad = bad + check_enc("", "", 1)
+    bad = bad + check_enc("f", "Zg==", 2)
+    bad = bad + check_enc("fo", "Zm8=", 3)
+    bad = bad + check_enc("foo", "Zm9v", 4)
+    bad = bad + check_enc("foob", "Zm9vYg==", 5)
+    bad = bad + check_enc("fooba", "Zm9vYmE=", 6)
+    bad = bad + check_enc("foobar", "Zm9vYmFy", 7)
+    if (bad != 0) { return bad }
+
+    # 2. The same vectors decode back to the original text.
+    bad = bad + check_dec("", "", false, 10)
+    bad = bad + check_dec("Zg==", "f", false, 11)
+    bad = bad + check_dec("Zm8=", "fo", false, 12)
+    bad = bad + check_dec("Zm9v", "foo", false, 13)
+    bad = bad + check_dec("Zm9vYg==", "foob", false, 14)
+    bad = bad + check_dec("Zm9vYmE=", "fooba", false, 15)
+    bad = bad + check_dec("Zm9vYmFy", "foobar", false, 16)
+    if (bad != 0) { return bad }
+
+    # 3. Alphabet coverage: the three table ranges, `+` and `/` included, and the
+    #    padded tail for a length that is not a multiple of 3.
+    bad = bad + check_enc("<<?>>", "PDw/Pj4=", 20)
+    bad = bad + check_enc("\xfb\xef\xbe", "++++", 21)
+    bad = bad + check_enc("\xff\xff\xff", "////", 22)
+
+    # 4. Binary round-trip: NUL and high-bit bytes survive both directions.
+    bin<String> = ""
+    bin = bin.concat(String::from_byte(0))
+    bin = bin.concat(String::from_byte(255))
+    bin = bin.concat(String::from_byte(1))
+    bin = bin.concat(String::from_byte(66))
+    enc<String> = b64_encode(bin)
+    bad = bad + check_enc(bin, "AP8BQg==", 30)
+    match (b64_decode(enc)) {
+        back -> {
+            if (back.len() != 4) { println("binary round-trip length " + back.len().to_string()); return 31 }
+            if (((back.char_at(0) as Int) & 0xFF) != 0) { return 32 }
+            if (((back.char_at(1) as Int) & 0xFF) != 255) { return 33 }
+            if (((back.char_at(2) as Int) & 0xFF) != 1) { return 34 }
+            if (((back.char_at(3) as Int) & 0xFF) != 66) { return 35 }
+        }
+        ? -> { return 36 }
+    }
+
+    # 5. Malformed input is rejected, never silently truncated.
+    bad = bad + check_dec("Zm9vY", "", true, 40)      # length not a multiple of 4
+    bad = bad + check_dec("Zm9v*", "", true, 41)      # out-of-alphabet character
+    bad = bad + check_dec("Z=9v", "", true, 42)       # '=' in the middle
+    bad = bad + check_dec("Zm=v", "", true, 43)       # '=' in the middle, other slot
+    bad = bad + check_dec("Zg==Zg==", "", true, 44)   # padding in a non-final group
+    bad = bad + check_dec("====", "", true, 45)       # padding only
+    if (bad != 0) { return bad }
+
+    # 6. A long input (multi-group, no padding) round-trips unchanged.
+    long<String> = ""
+    i<Int> = 0
+    for (i in 0..999) { long = long.concat(String::from_byte(65 + (i % 26))) }
+    match (b64_decode(b64_encode(long))) {
+        rt -> { if (rt != long) { println("long round-trip mismatch"); return 50 } }
+        ? -> { return 51 }
+    }
+
+    println("base64-ok")
+    return 0
+}

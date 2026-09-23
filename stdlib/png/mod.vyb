@@ -1,0 +1,231 @@
+# png - a minimal PNG encoder, in pure Vyb.
+#
+# Turns a flat 8-bit RGB pixel buffer into a standards-valid PNG: signature,
+# `IHDR` (bit depth 8, colour type 2), one `IDAT` holding a zlib stream with
+# STORED (uncompressed) DEFLATE blocks, and `IEND`. No compression, no filter
+# heuristics, no runtime/C dependency -- the container itself, with correct
+# chunk CRCs and an adler32 stream checksum, is what this module produces.
+#
+# Stored blocks are deliberate: they keep the encoder pure Vyb and deterministic
+# (the DEFLATE stream is byte-identical for identical pixels), at the cost of
+# file size. A fit-for-purpose choice for fixtures, screenshots and test images;
+# a compressed encoder would need a matching DEFLATE writer in `archive`.
+#
+# Pixel buffer convention: one byte per channel, row-major, three bytes per
+# pixel -- `Vec<UInt8>` of length `w * h * 3`, exactly the flat RGB buffer
+# `io::write_bytes` and the #213 binary surface already speak.
+#
+#   import png::{png_rgb_fill, png_rgb_set, png_encode, png_write}
+#   buf<Vec<UInt8>> = png_rgb_fill(64, 64, 0xFFFFFF)     # white canvas
+#   png_rgb_set(borrow(buf), 64, 10, 10, 0xD31E1E)       # red pixel at (10,10)
+#   png_write("/tmp/out.png", 64, 64, buf)               # persist
+#
+# CRC32 and adler32 are computed in-module (RANGE-checked CRC32 for a chunk's
+# type+data, unlike `archive::crc32`, which covers a whole buffer), so `png`
+# depends only on `io` for the write path.
+
+import io::{close, open_write, write_bytes, File}
+
+# --- checksums --------------------------------------------------------------
+
+# CRC32 (IEEE 802.3, reflected, polynomial 0xEDB88320) over bytes [a, b) of `v`.
+# The range matters: a PNG chunk CRC covers the 4 type bytes AND the payload, so
+# the caller passes `[chunkStart + 4, chunkStart + 4 + 4 + payloadLen)`.
+share(all)
+png_crc32(v<Vec<UInt8>>, a<Int>, b<Int>)<Int> -> {
+    crc<Int> = 0xFFFFFFFF
+    i<Int> = a
+    while (i < b) {
+        crc = crc ^ ((v.get(i) as Int) & 0xFF)
+        k<Int> = 0
+        for (k in 0..7) {
+            if ((crc & 1) != 0) { crc = (crc >> 1) ^ 0xEDB88320 }
+            else { crc = crc >> 1 }
+        }
+        i = i + 1
+    }
+    return crc ^ 0xFFFFFFFF
+}
+
+# --- pixel buffer helpers ---------------------------------------------------
+
+# A new white-unless-`color` canvas of `w * h * 3` bytes. `color` is packed
+# 0xRRGGBB.
+share(all)
+png_rgb_fill(w<Int>, h<Int>, color<Int>)<Vec<UInt8>> -> {
+    out<Vec<UInt8>> = Vec<UInt8>()
+    r<Int> = (color >> 16) & 0xFF
+    g<Int> = (color >> 8) & 0xFF
+    b<Int> = color & 0xFF
+    n<Int> = w * h
+    if (w <= 0 || h <= 0 || n <= 0) { return out }
+    i<Int> = 0
+    for (i in 0..n-1) {
+        out.push(r as UInt8)
+        out.push(g as UInt8)
+        out.push(b as UInt8)
+    }
+    return out
+}
+
+# Set the pixel at (x, y) in a `w`-wide buffer to packed 0xRRGGBB `color`.
+# Mutates in place, so the caller passes `borrow(buf)`. Returns 0 on success,
+# 1 when the coordinates are outside the buffer.
+share(all)
+png_rgb_set(buf<their<Vec<UInt8>>>, w<Int>, x<Int>, y<Int>, color<Int>)<Int> -> {
+    if (x < 0 || y < 0 || x >= w) { return 1 }
+    base<Int> = (y * w + x) * 3
+    if (base + 2 >= buf.len()) { return 1 }
+    buf.set(base, (((color >> 16) & 0xFF) as UInt8))
+    buf.set(base + 1, (((color >> 8) & 0xFF) as UInt8))
+    buf.set(base + 2, ((color & 0xFF) as UInt8))
+    return 0
+}
+
+# The packed 0xRRGGBB colour of the pixel at (x, y) in a `w`-wide buffer.
+share(all)
+png_rgb_get(buf<Vec<UInt8>>, w<Int>, x<Int>, y<Int>)<Int> -> {
+    base<Int> = (y * w + x) * 3
+    if (base + 2 >= buf.len() || base < 0) { return -1 }
+    return ((buf.get(base) as Int) & 0xFF) * 65536 + ((buf.get(base + 1) as Int) & 0xFF) * 256 + ((buf.get(base + 2) as Int) & 0xFF)
+}
+
+# --- encoder ----------------------------------------------------------------
+
+# Append `x` big-endian as 4 bytes (PNG's integer wire form).
+share(all)
+png_push_be32(v<their<Vec<UInt8>>>, x<Int>)<Int> -> {
+    v.push((((x >> 24) & 0xFF) as UInt8))
+    v.push((((x >> 16) & 0xFF) as UInt8))
+    v.push((((x >> 8) & 0xFF) as UInt8))
+    v.push(((x & 0xFF) as UInt8))
+    return 0
+}
+
+# Append the ASCII bytes of `s` (chunk type tags such as "IHDR").
+share(all)
+png_push_ascii(v<their<Vec<UInt8>>>, s<String>)<Int> -> {
+    n<Int> = s.len()
+    i<Int> = 0
+    for (i in 0..n-1) {
+        v.push((((s.char_at(i) as Int) & 0xFF) as UInt8))
+    }
+    return 0
+}
+
+# Encode `rgb` (w * h * 3 bytes, row-major RGB) as a PNG byte buffer. Returns an
+# empty buffer when the geometry or the pixel-buffer length is invalid, so a
+# caller can check `.len() == 0` instead of trusting a malformed file.
+#
+# The whole byte buffer is built inside this function: a `Vec<UInt8>` must not
+# cross a function boundary on this build (see io's binary surface notes).
+share(all)
+png_encode(w<Int>, h<Int>, rgb<Vec<UInt8>>)<Vec<UInt8>> -> {
+    out<Vec<UInt8>> = Vec<UInt8>()
+    if (w <= 0 || h <= 0) { return out }
+    need<Int> = w * h * 3
+    if (rgb.len() < need) { return out }
+    if (need + h > 65535) { return out }   # one stored DEFLATE block holds 65535 bytes
+
+    # raw scanlines: a 0 filter byte per row, then the RGB triples
+    raw<Vec<UInt8>> = Vec<UInt8>()
+    ad_a<Int> = 1
+    ad_b<Int> = 0
+    y<Int> = 0
+    for (y in 0..h-1) {
+        raw.push(0 as UInt8)
+        ad_a = (ad_a + 0) % 65521
+        ad_b = (ad_b + ad_a) % 65521
+        x<Int> = 0
+        for (x in 0..w-1) {
+            p<Int> = (y * w + x) * 3
+            r<Int> = (rgb.get(p) as Int) & 0xFF
+            g<Int> = (rgb.get(p + 1) as Int) & 0xFF
+            b<Int> = (rgb.get(p + 2) as Int) & 0xFF
+            raw.push(r as UInt8)
+            raw.push(g as UInt8)
+            raw.push(b as UInt8)
+            ad_a = (ad_a + r) % 65521
+            ad_b = (ad_b + ad_a) % 65521
+            ad_a = (ad_a + g) % 65521
+            ad_b = (ad_b + ad_a) % 65521
+            ad_a = (ad_a + b) % 65521
+            ad_b = (ad_b + ad_a) % 65521
+        }
+    }
+
+    # zlib container: header 78 01 + one stored block + adler32
+    zl<Vec<UInt8>> = Vec<UInt8>()
+    zl.push(0x78 as UInt8)
+    zl.push(0x01 as UInt8)
+    zl.push(0x01 as UInt8)
+    rl<Int> = raw.len()
+    zl.push((rl & 0xFF) as UInt8)
+    zl.push(((rl >> 8) & 0xFF) as UInt8)
+    zl.push(((rl ^ 0xFFFF) & 0xFF) as UInt8)
+    zl.push((((rl ^ 0xFFFF) >> 8) & 0xFF) as UInt8)
+    i<Int> = 0
+    for (i in 0..rl-1) { zl.push(raw.get(i)) }
+    ad<Int> = ad_b * 65536 + ad_a
+    zl.push(((ad >> 24) & 0xFF) as UInt8)
+    zl.push(((ad >> 16) & 0xFF) as UInt8)
+    zl.push(((ad >> 8) & 0xFF) as UInt8)
+    zl.push((ad & 0xFF) as UInt8)
+
+    # signature
+    out.push(137 as UInt8)
+    out.push(80 as UInt8)
+    out.push(78 as UInt8)
+    out.push(71 as UInt8)
+    out.push(13 as UInt8)
+    out.push(10 as UInt8)
+    out.push(26 as UInt8)
+    out.push(10 as UInt8)
+
+    # IHDR
+    h0<Int> = out.len()
+    png_push_be32(borrow(out), 13)
+    png_push_ascii(borrow(out), "IHDR")
+    png_push_be32(borrow(out), w)
+    png_push_be32(borrow(out), h)
+    out.push(8 as UInt8)    # bit depth
+    out.push(2 as UInt8)    # colour type: truecolour RGB
+    out.push(0 as UInt8)    # compression: deflate
+    out.push(0 as UInt8)    # filter method: adaptive
+    out.push(0 as UInt8)    # interlace: none
+    png_push_be32(borrow(out), png_crc32(out, h0 + 4, h0 + 4 + 4 + 13))
+
+    # IDAT
+    d0<Int> = out.len()
+    zlen<Int> = zl.len()
+    png_push_be32(borrow(out), zlen)
+    png_push_ascii(borrow(out), "IDAT")
+    j<Int> = 0
+    for (j in 0..zlen-1) { out.push(zl.get(j)) }
+    png_push_be32(borrow(out), png_crc32(out, d0 + 4, d0 + 4 + 4 + zlen))
+
+    # IEND
+    e0<Int> = out.len()
+    png_push_be32(borrow(out), 0)
+    png_push_ascii(borrow(out), "IEND")
+    png_push_be32(borrow(out), png_crc32(out, e0 + 4, e0 + 8))
+
+    return out
+}
+
+# Write the PNG for `rgb` to `path`. Present on success; absent when the PNG
+# could not be built or the file could not be opened/written.
+share(all)
+png_write(path<String>, w<Int>, h<Int>, rgb<Vec<UInt8>>)<Bool?> -> {
+    bytes<Vec<UInt8>> = png_encode(w, h, rgb)
+    if (bytes.len() == 0) { return Bool?() }
+    match (open_write(path)) {
+        f -> {
+            n<Int> = write_bytes(f, bytes) else -1
+            close(f)
+            if (n == bytes.len()) { return Bool?(true) }
+            return Bool?()
+        }
+        ? -> { return Bool?() }
+    }
+}

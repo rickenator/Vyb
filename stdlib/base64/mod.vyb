@@ -1,0 +1,122 @@
+# base64 - RFC 4648 §4 encoding/decoding, in pure Vyb.
+#
+# Standard alphabet (`A-Za-z0-9+/`), `=` padding, byte-for-byte over a String.
+# The runtime already ships `vyb_base64_encode` for the WebSocket handshake
+# (stdlib/websocket), but that intrinsic is one-way and handshake-scoped; this
+# module is the general, portable surface a program reaches for when it needs
+# base64 for a data URL, a receipt field, or an artifact envelope.
+#
+#   import base64::{b64_encode, b64_decode}
+#   b64_encode("foobar")            -> "Zm9vYmFy"
+#   b64_encode("f")                 -> "Zg=="
+#   b64_decode("Zm9vYmFy")          -> "foobar"
+#   b64_decode("Zm9vY")             -> absent (not a whole number of groups)
+#
+# Encoding is byte-oriented: `char_at(i) & 0xFF` for every input byte, so binary
+# Strings (embedded NULs, high-bit bytes) round-trip unchanged. Decoding is
+# strict on purpose -- it rejects a non-multiple-of-4 length, characters outside
+# the alphabet, and `=` anywhere but the final one or two positions, rather than
+# silently returning a truncated value.
+
+# --- alphabet ---------------------------------------------------------------
+
+# The alphabet character for a 6-bit group value `k` (0..63), as a 1-byte String.
+share(all)
+b64_char(k<Int>)<String> -> {
+    if (k < 26) { return String::from_byte(65 + k) }
+    if (k < 52) { return String::from_byte(97 + k - 26) }
+    if (k < 62) { return String::from_byte(48 + k - 52) }
+    if (k == 62) { return "+" }
+    return "/"
+}
+
+# The 6-bit value of alphabet character `c` (a byte code), or -1 if `c` is not in
+# the alphabet (`=` included -- padding is handled by the caller).
+share(all)
+b64_val(c<Int>)<Int> -> {
+    if (c >= 65 && c <= 90) { return c - 65 }
+    if (c >= 97 && c <= 122) { return c - 97 + 26 }
+    if (c >= 48 && c <= 57) { return c - 48 + 52 }
+    if (c == 43) { return 62 }
+    if (c == 47) { return 63 }
+    return -1
+}
+
+# --- encode -----------------------------------------------------------------
+
+# RFC 4648 §4 base64 of `data`, padded. Every input byte is consumed; the tail
+# group is padded with `=` as the spec requires.
+share(all)
+b64_encode(data<String>)<String> -> {
+    out<String> = ""
+    n<Int> = data.len()
+    i<Int> = 0
+    while (i < n) {
+        b0<Int> = (data.char_at(i) as Int) & 0xFF
+        b1<Int> = 0
+        b2<Int> = 0
+        have1<Bool> = false
+        have2<Bool> = false
+        if (i + 1 < n) { b1 = (data.char_at(i + 1) as Int) & 0xFF; have1 = true }
+        if (i + 2 < n) { b2 = (data.char_at(i + 2) as Int) & 0xFF; have2 = true }
+        trip<Int> = (b0 << 16) | (b1 << 8) | b2
+        out = out.concat(b64_char((trip >> 18) & 63))
+        out = out.concat(b64_char((trip >> 12) & 63))
+        if (have1) { out = out.concat(b64_char((trip >> 6) & 63)) } else { out = out.concat("=") }
+        if (have2) { out = out.concat(b64_char(trip & 63)) } else { out = out.concat("=") }
+        i = i + 3
+    }
+    return out
+}
+
+# --- decode -----------------------------------------------------------------
+
+# RFC 4648 §4 decode of `s`. Absent (`String?()`) when `s` is not a well-formed
+# base64 group stream: length not a multiple of 4, a character outside the
+# alphabet, or `=` in a position other than the last one or two. Valid input
+# round-trips with `b64_encode`.
+share(all)
+b64_decode(s<String>)<String?> -> {
+    n<Int> = s.len()
+    if ((n % 4) != 0) { return String?() }
+    out<String> = ""
+    i<Int> = 0
+    while (i < n) {
+        c0<Int> = (s.char_at(i) as Int) & 0xFF
+        c1<Int> = (s.char_at(i + 1) as Int) & 0xFF
+        c2<Int> = (s.char_at(i + 2) as Int) & 0xFF
+        c3<Int> = (s.char_at(i + 3) as Int) & 0xFF
+
+        v0<Int> = b64_val(c0)
+        v1<Int> = b64_val(c1)
+        if (v0 < 0 || v1 < 0) { return String?() }
+
+        # how many real bytes this group carries: 2 when the data ends in "==",
+        # 3 when it ends in "=", 4 otherwise
+        bytes<Int> = 4
+        v2<Int> = 0
+        v3<Int> = 0
+        last<Bool> = (i + 4 >= n)
+        if (c2 == 61) {
+            # "==" tail -- only legal in the last group
+            if (!last || c3 != 61) { return String?() }
+            bytes = 2
+        } else if (c3 == 61) {
+            if (!last) { return String?() }
+            v2 = b64_val(c2)
+            if (v2 < 0) { return String?() }
+            bytes = 3
+        } else {
+            v2 = b64_val(c2)
+            v3 = b64_val(c3)
+            if (v2 < 0 || v3 < 0) { return String?() }
+        }
+
+        trip<Int> = (v0 << 18) | (v1 << 12) | (v2 << 6) | v3
+        out = out.concat(String::from_byte((trip >> 16) & 0xFF))
+        if (bytes >= 3) { out = out.concat(String::from_byte((trip >> 8) & 0xFF)) }
+        if (bytes == 4) { out = out.concat(String::from_byte(trip & 0xFF)) }
+        i = i + 4
+    }
+    return String?(out)
+}

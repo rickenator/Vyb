@@ -167,7 +167,7 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 ### Running the test suite
 
 ```bash
-# 1193 .vyb tests exercised through compile + run + output/return checks
+# 1195 .vyb tests exercised through compile + run + output/return checks
 python3 test/run_tests.py --vyb ./build/vyb --test-dir test --execute-jit
 ```
 
@@ -2453,7 +2453,72 @@ Fallibility follows the stdlib convention: every transport op is `T?` — absenc
 *is* the failed call, named by `ws_error_code()` / `ws_error_message()`. No
 `-1` / `""` sentinel is ever handed back as data.
 
+### 4.30 `base64` — RFC 4648 encoding and decoding
+
+Module page: [`base64.md`](base64.md). Standard-alphabet base64 (`A-Za-z0-9+/`)
+with `=` padding, in pure Vyb over byte Strings, in both directions — so a
+program can build a `data:` URL or read a base64 receipt field without an
+external encoder.
+
+Why it exists: the WebSocket handshake needs `base64(SHA1(...))`, which the
+runtime supplies as the narrow builtin
+[`vyb_base64_encode`](#429-websocket-an-rfc-6455-client-over-tcp). That
+intrinsic is one-way, handshake-scoped, and absent from a build whose binary
+predates its semantic whitelist — this module is the general, portable surface,
+and none of it depends on the compiler.
+
+```vyb
+import base64::{b64_encode, b64_decode}
+
+url<String> = "data:image/png;base64," + b64_encode(png_bytes)
+match (b64_decode(field)) {
+    text -> { println(text) }
+    ?    -> { println("not well-formed base64") }
+}
+```
+
+Encoding is byte-oriented (`char_at(i) & 0xFF`), so embedded NULs and high-bit
+bytes round-trip — binary payloads ride a String unchanged. Decoding is strict
+on purpose: a length that is not a multiple of 4, a character outside the
+alphabet, or `=` anywhere but the final one or two positions is absence, never a
+silently truncated value.
+
+### 4.31 `png` — a pure-Vyb PNG encoder
+
+Module page: [`png.md`](png.md). Turns a flat RGB byte buffer into a
+standards-valid PNG: signature, `IHDR` (8-bit, colour type 2), one `IDAT` holding
+a zlib stream of STORED DEFLATE blocks, and `IEND` — every chunk CRC and the
+stream's adler32 computed in-module.
+
+Why it exists: a rendered artifact — a chart, a test fixture, a screenshot from a
+headless check — usually has to leave a Vyb program as a real image file, and no
+stdlib module could write one. Stored blocks keep the encoder pure Vyb and
+deterministic (identical pixels give a byte-identical file) at the cost of file
+size; a compressed encoder would need a DEFLATE writer to sit beside
+[`archive`](#423-archive-gzipdeflate-decompression-and-tar-extraction)'s
+inflate.
+
+```vyb
+import png::{png_rgb_fill, png_rgb_set, png_encode, png_write}
+
+buf<Vec<UInt8>> = png_rgb_fill(64, 64, 0xFFFFFF)   # white canvas, packed 0xRRGGBB
+png_rgb_set(borrow(buf), 64, 10, 10, 0xD31E1E)     # red pixel at (10, 10)
+png_write("/tmp/out.png", 64, 64, buf)
+```
+
+The pixel buffer is `Vec<UInt8>`, row-major, three bytes per pixel
+(`w * h * 3`) — the same flat byte buffer [`io`](#42-io-files)'s #213 binary
+surface speaks, so `read_bytes` / `write_bytes` carry it with no conversion.
+Limits are explicit rather than silent: one stored block holds at most 65535 raw
+bytes (so `w * h * 3 + h` must fit), and an invalid geometry or a short pixel
+buffer comes back as an empty buffer instead of a malformed file. `png_encode`
+builds the whole byte buffer inside a single function because a `Vec<UInt8>`
+must not cross a function boundary on this build; `png_write` persists it, and
+the result loads in non-Vyb readers (Pillow, `stb_image`) — the chunk CRCs are
+what a validating decoder checks.
+
 ---
+
 
 ## 5. Concurrency and async model
 
@@ -2590,7 +2655,7 @@ runtime points a single process at a list of tests if needed.
 
 Canonical suite runner (wired into CTest as `run-tests`):
 ```bash
-python3 test/run_tests.py --vyb ./build/vyb --test-dir test --execute-jit   # full suite (1193 tests)
+python3 test/run_tests.py --vyb ./build/vyb --test-dir test --execute-jit   # full suite (1195 tests)
 python3 test/run_tests.py --vyb ./build/vyb --test-dir test --category async    # filter by category
 ```
 The auxiliary parallel harness (`test_harness.py`, `triage_tool.py`) adds HTML
@@ -2815,10 +2880,13 @@ key/seed material on the GPU. Crypto/ledger integration stays host-side.
 | Hash-chained ledger | [`chain`](chain.md) | [crypto](crypto.md) |
 | Filesystem | [`fs`](fs.md) | — |
 | URL parsing | [`url`](url.md) | — |
+| base64 | [`base64`](base64.md) | — |
+| png | [`png`](png.md) | — |
 | vllm | [`vllm`](vllm.md) | — |
 | websocket | [`websocket`](websocket.md) | — |
 | Runtime intrinsics | [`runtime`](runtime.md) | — |
 <!-- refman:api-index end -->
+
 
 
 
