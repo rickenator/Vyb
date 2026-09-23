@@ -871,7 +871,7 @@ with `pass` for multi-statement case bodies. Needs polishing:
 - [x] **`git:`-clone deps** — `vyb build` accepts a `git:` dependency (`git = "<clone-url>"`),
   AUTO-CLONES it into `.vybmod/<name>/` on build (shallow clone; the repo root's `mod.vyb`
   is the module), wires `import <name>` to `.vybmod/<name>/mod.vyb`, and records
-  `source="git", resolved=...` in `vyb.lock`. Regression: `test/gitdep_smoke.py` in hosted CI.
+  `source="git", resolved=...` in `vyb.lock`. Regression: `test/gitdep_smoke.vyb` in hosted CI.
 - [x] **Package registry + `version:`-spec deps** — a package registry transport and
   `vyb build` resolution for `name = { version = "..." }` deps. v1 is a DIRECTORY
   registry (no service): `vyb mod publish <dir>` copies a package's module files into
@@ -880,20 +880,20 @@ with `pass` for multi-statement case bodies. Needs polishing:
   into `.vybmod/<name>/`, and records `source="version", resolved=...` in `vyb.lock`.
   Registry root = `VYB_REGISTRY` (env, `file://` ok) else `~/.vyb/registry`. A central/
   remote registry is the same layout served over HTTP. Regression:
-  `test/registry_smoke.py` (publish, prefix->highest, exact, lockfile, run) in hosted CI.
+  `test/registry_smoke.vyb` (publish, prefix->highest, exact, lockfile, run) in hosted CI.
 
 ### Language Server Protocol (LSP)
-- [x] **`vyb lsp`** — Launch LSP server mode (JSON-RPC 2.0 over stdio, Content-Length framing). Shipped as `vyb lsp`; protocol smoke test `test/lsp_smoke.py` runs in hosted CI.
+- [x] **`vyb lsp`** — Launch LSP server mode (JSON-RPC 2.0 over stdio, Content-Length framing). Shipped as `vyb lsp`; protocol smoke test `test/lsp_smoke.vyb` runs in hosted CI.
 - [x] **Go-to-definition** — `textDocument/definition` resolves an identifier to its declaration (top-level functions, structs, enums, aliases, aspects, imports of the open document).
 - [x] **Hover documentation** — `textDocument/hover` returns the declaration's kind + signature. Doc-comment (`///`) text in hover is a follow-on.
-- [x] **Completion** — `textDocument/completion` proposes the open document's declaration names, and after `obj.` (dot-completion) offers struct fields + bind/aspect methods. Regression: `test/lsp_smoke.py` (decl + dot checks).
+- [x] **Completion** — `textDocument/completion` proposes the open document's declaration names, and after `obj.` (dot-completion) offers struct fields + bind/aspect methods. Regression: `test/lsp_smoke.vyb` (decl + dot checks).
 - [x] **Diagnostics** — `textDocument/publishDiagnostics` after open/change: parse/syntax errors (severity 1) + `vyb check`-style AST lint warnings (severity 2).
 
 ### REPL
 - [x] **Interactive mode** — `vyb repl` launches a read-eval-print loop (statement/declaration-oriented; bare expressions auto-display their value). Subprocess-per-eval: each submitted entry reuses the standard `vyb file.vyb` ORC-JIT path on a temp file (clean I/O capture + crash isolation).
 - [x] **JIT-backed** — Reuses the existing ORC JIT infrastructure via the normal run path; declarations (fn/struct/enum/...) and variable assignments persist across entries (re-run per eval); bare-expression auto-display is `println(expr)`.
 - [x] **History + multiline** — Bracket-balanced multiline input works; interactive TTY line editing shipped: raw-mode editor with up/down history recall, left/right/home/end, backspace, Ctrl-D/U/W, and `:quit` etc. (falls back to plain `getline` when not a TTY, so piped/CI sessions are unaffected)
-- [x] **`:type` command** — `:type <expr>` prints the inferred type of an expression in the accumulated session context, backed by a new `vyb type <file.vyb> <binding>` compiler subcommand (parses + semantic-analyzes, reports the binding's expression type). Regression: `test/repl_smoke.py` asserts `:type v = Int`.
+- [x] **`:type` command** — `:type <expr>` prints the inferred type of an expression in the accumulated session context, backed by a new `vyb type <file.vyb> <binding>` compiler subcommand (parses + semantic-analyzes, reports the binding's expression type). Regression: `test/repl_smoke.vyb` asserts `:type v = Int`.
 
 ### Documentation Tools
 - [x] **Doc comments + `vyb doc`** — `/// comment` lines above a declaration are doc comments; `vyb doc <file.vyb> [files/dirs...] [-o outdir]` generates a self-contained HTML reference page per module (signature + doc text per declaration, TOC, HTML-escaped). Regression: `test/units/test_doc_generation.vyb`.
@@ -1256,8 +1256,8 @@ For Vyb to be considered production-ready at 1.0, **all of the following must be
 - [ ] All open contradictions resolved (see section above)
 
 ### Should-Have for 1.0
-- [x] REPL (`vyb repl`) — JIT-backed eval loop (persistent declarations + variables, bare-expression auto-display, multiline via bracket balance, error recovery); protocol smoke test in hosted CI (`test/repl_smoke.py`). readline history/editing + `:type` are follow-ons
-- [x] Language server (LSP) — `vyb lsp` shipped (v0.1): diagnostics (parse + lint), go-to-definition, hover (kind + signature), declaration completion; protocol smoke test in hosted CI (`test/lsp_smoke.py`)
+- [x] REPL (`vyb repl`) — JIT-backed eval loop (persistent declarations + variables, bare-expression auto-display, multiline via bracket balance, error recovery); protocol smoke test in hosted CI (`test/repl_smoke.vyb`). readline history/editing + `:type` are follow-ons
+- [x] Language server (LSP) — `vyb lsp` shipped (v0.1): diagnostics (parse + lint), go-to-definition, hover (kind + signature), declaration completion; protocol smoke test in hosted CI (`test/lsp_smoke.vyb`)
 - [x] `vyb fmt` code formatter (`--format`/`--check`; idempotent core, see Testing & Tooling)
 - [x] `vyb doc` documentation generator (`vyb doc <file> [-o outdir]`, see Testing & Tooling)
 - [x] Comprehensive language reference manual — the authoritative surface is the

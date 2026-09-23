@@ -1,0 +1,274 @@
+// @not-a-test: true
+# repl_smoke.vyb -- end-to-end smoke test for `vyb repl` (#154 / Testing &
+# Tooling). Vyb port of test/repl_smoke.py; part of the #226 "no Python in the
+# test path" work.
+#
+# Spawns `vyb repl` with a scripted stdin session and asserts the program-output
+# stdout lines: bare-expression auto-display, persistent declarations (including
+# a multi-line function), persistent variables, error recovery (a bad line is
+# reported and does not kill the session), and `:clear`.
+#
+# The REPL writes prompts to stderr when stdin is not a TTY, so stdout carries
+# only evaluated program output -- the assertions stay deterministic and the
+# gate works in hosted CI.
+#
+# Usage: vyb test/repl_smoke.vyb [path-to-vyb]
+#        (defaults to build/vyb, then build-ci/vyb)
+#
+# Porting notes: argv comes from `/proc/self/cmdline`; the session is fed through
+# a temp file because the language surface has no pipe-write primitive.
+import io::{close, File, open_read, open_write, read_all, write_str}
+import process::{exec_output}
+
+# ---------------------------------------------------------------- small helpers
+
+# Index of the last '/' in `p`, or -1.
+last_slash(p<String>)<Int> -> {
+    i<Int> = p.len() - 1
+    while (i >= 0) {
+        if (((p.char_at(i) as Int) & 0xFF) == 47) { return i }
+        i = i - 1
+    }
+    return -1
+}
+
+# Directory part of `p` ("" when there is no slash).
+dirname_of(p<String>)<String> -> {
+    i<Int> = last_slash(p)
+    if (i < 0) { return "" }
+    return p.substring(0, i)
+}
+
+# Strip leading/trailing whitespace (spaces, tabs, CR, LF) from `s`.
+trim(s<String>)<String> -> {
+    a<Int> = 0
+    n<Int> = s.len()
+    while (a < n) {
+        c<Int> = (s.char_at(a) as Int) & 0xFF
+        if (c == 32 || c == 9 || c == 13 || c == 10) { a = a + 1 } else { break }
+    }
+    b<Int> = n
+    while (b > a) {
+        c<Int> = (s.char_at(b - 1) as Int) & 0xFF
+        if (c == 32 || c == 9 || c == 13 || c == 10) { b = b - 1 } else { break }
+    }
+    if (b <= a) { return "" }
+    return s.substring(a, b)
+}
+
+# Strip every space/tab from `s` (used by the LSP smoke test's JSON checks).
+strip_ws(s<String>)<String> -> {
+    out<String> = ""
+    i<Int> = 0
+    while (i < s.len()) {
+        c<Int> = (s.char_at(i) as Int) & 0xFF
+        if (c != 32 && c != 9) { out = out + String::from_byte(c) }
+        i = i + 1
+    }
+    return out
+}
+
+# Run `cmd` through the shell and return its stdout ("" when it could not run).
+run_sh(cmd<String>)<String> -> {
+    out<String> = ""
+    freedom {
+        match (exec_output(cmd)) {
+            s -> { out = s }
+            ? -> { out = "" }
+        }
+    }
+    return out
+}
+
+# Read a whole file as a String ("" when it cannot be read).
+slurp(path<String>)<String> -> {
+    text<String> = ""
+    match (open_read(path)) {
+        f -> {
+            match (read_all(f)) { s -> { text = s } ? -> { } }
+            close(f)
+        }
+        ? -> { }
+    }
+    return text
+}
+
+# Write `text` to `path`; true when the whole string was written.
+spill(path<String>, text<String>)<Bool> -> {
+    match (open_write(path)) {
+        f -> {
+            match (write_str(f, text)) { n -> { close(f); return (n == text.len()) } ? -> { close(f); return false } }
+        }
+        ? -> { return false }
+    }
+    return false
+}
+
+# True when `p` exists (file or directory).
+exists(p<String>)<Bool> -> {
+    return (trim(run_sh("test -e '" + p + "' && echo yes || echo no")) == "yes")
+}
+
+# Absolute form of `p`: relative paths resolve against `base`. The compiler is
+# invoked from the repo root, and `VYB_STDLIB` must survive that.
+absolute(p<String>, base<String>)<String> -> {
+    if (p.len() > 0 && (((p.char_at(0) as Int) & 0xFF) == 47)) { return p }
+    return trim(run_sh("cd '" + base + "' && pwd")) + "/" + p
+}
+
+# ------------------------------------------------------- command line (/proc)
+
+# The program's argv, parsed from `/proc/self/cmdline` (NUL separated).
+argv_of()<Vec<String>> -> {
+    raw<String> = slurp("/proc/self/cmdline")
+    out<Vec<String>> = Vec<String>()
+    cur<String> = ""
+    i<Int> = 0
+    while (i < raw.len()) {
+        c<Int> = (raw.char_at(i) as Int) & 0xFF
+        if (c == 0) {
+            if (cur.len() > 0) { out.push(cur) }
+            cur = ""
+        } else {
+            cur = cur + String::from_byte(c)
+        }
+        i = i + 1
+    }
+    if (cur.len() > 0) { out.push(cur) }
+    return out
+}
+
+# ------------------------------------------------------------- scripted session
+
+# The scripted REPL session, one entry per stdin line.
+session_lines()<Vec<String>> -> {
+    lines<Vec<String>> = Vec<String>()
+    lines.push("6 + 6")                            # bare expression -> 12
+    lines.push("f(x<Int>, y<Int>)<Int> -> {")      # multi-line declaration
+    lines.push("    return x * y")
+    lines.push("}")
+    lines.push("f(6, 7)")                          # 42
+    lines.push("v = 5")                            # variable assignment
+    lines.push("v + 2")                            # 7
+    lines.push(":type v")                          # ":type v = Int"
+    lines.push("broken_expr_zz")                   # error, session continues
+    lines.push("9 - 4")                            # 5
+    lines.push(":clear")
+    lines.push("9 - 4")                            # 5 (fresh session)
+    lines.push(":quit")
+    return lines
+}
+
+# The expected program-output lines (same list as the Python smoke test).
+expected_stdout()<Vec<String>> -> {
+    want<Vec<String>> = Vec<String>()
+    want.push("12")
+    want.push("42")
+    want.push("7")
+    want.push(":type v = Int")
+    want.push("5")
+    want.push("5")
+    return want
+}
+
+# ------------------------------------------------------------------- the check
+
+main()<Int> -> {
+    argv<Vec<String>> = argv_of()
+
+    # argv[0] is the compiler, argv[1] is this program: derive the repo root.
+    runner<String> = ""
+    if (argv.len() > 1) { runner = argv.get(1) }
+    repoRoot<String> = dirname_of(dirname_of(runner))
+    if (repoRoot.len() == 0 || !exists(repoRoot + "/test")) { repoRoot = "." }
+
+    # A path argument overrides the default binary locations.
+    exe<String> = ""
+    if (argv.len() > 2 && exists(argv.get(2))) { exe = argv.get(2) }
+    if (exe.len() == 0) { exe = repoRoot + "/build/vyb" }
+    if (!exists(exe)) { exe = repoRoot + "/build-ci/vyb" }
+    if (!exists(exe)) {
+        println("REPL smoke FAILED: no built `vyb` binary found (build/vyb or build-ci/vyb); pass a path")
+        exit(1)
+    }
+
+    exe = absolute(exe, repoRoot)
+    stdlib<String> = absolute(repoRoot + "/stdlib", repoRoot)
+    sessionPath<String> = "/tmp/vyb_repl_session.txt"
+    outPath<String> = "/tmp/vyb_repl_out.txt"
+    errPath<String> = "/tmp/vyb_repl_err.txt"
+
+    # Join the session lines with newlines (the trailing ":quit" plus EOF ends it).
+    session<String> = ""
+    lines<Vec<String>> = session_lines()
+    i<Int> = 0
+    while (i < lines.len()) {
+        session = session + lines.get(i) + "\n"
+        i = i + 1
+    }
+    if (!spill(sessionPath, session)) {
+        println("REPL smoke FAILED: cannot write the session file")
+        exit(1)
+    }
+
+    cmd<String> = "cd " + repoRoot + " && VYB_STDLIB='" + stdlib + "' timeout 300 " + exe + " repl < " + sessionPath
+    cmd = cmd + " > " + outPath + " 2> " + errPath + "; echo $?"
+    run_sh(cmd)
+
+    out<String> = slurp(outPath)
+    err<String> = slurp(errPath)
+
+    # Python does `stdout.decode().strip().splitlines()`: drop the outer blank
+    # lines, then compare line by line.
+    rawLines<Vec<String>> = trim(out).split("\n")
+    got<Vec<String>> = Vec<String>()
+    j<Int> = 0
+    while (j < rawLines.len()) {
+        got.push(trim(rawLines.get(j)))
+        j = j + 1
+    }
+    want<Vec<String>> = expected_stdout()
+
+    same<Bool> = (got.len() == want.len())
+    if (same) {
+        j = 0
+        while (j < want.len()) {
+            if (got.get(j) != want.get(j)) { same = false }
+            j = j + 1
+        }
+    }
+
+    if (!same) {
+        println("REPL smoke FAILED")
+        println("  expected stdout: " + join_lines(want))
+        println("  actual stdout:   " + join_lines(got))
+        if (err.len() > 0) { println("  stderr: " + first_chars(err, 2000)) }
+        exit(1)
+    }
+
+    # Error recovery: the broken line must have produced an error report.
+    if (!(err.index_of("broken_expr_zz") >= 0) && !(err.index_of("rror") >= 0)) {
+        println("REPL smoke FAILED: expected an error report for the broken line")
+        exit(1)
+    }
+
+    println("REPL smoke: 6/6 checks passed")
+    return 0
+}
+
+# `want` rendered one item per line, then trimmed (for the failure report).
+join_lines(items<Vec<String>>)<String> -> {
+    out<String> = ""
+    i<Int> = 0
+    while (i < items.len()) {
+        out = out + items.get(i) + "\n"
+        i = i + 1
+    }
+    return trim(out)
+}
+
+# First `n` characters of `s`.
+first_chars(s<String>, n<Int>)<String> -> {
+    if (s.len() <= n) { return s }
+    return s.substring(0, n)
+}

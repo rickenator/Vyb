@@ -56,17 +56,17 @@ jobs:
       - name: Language Server Protocol smoke test
         # Spawns `vyb lsp` and drives the JSON-RPC protocol (initialize, didOpen
         # diagnostics, hover, definition, completion, lint diagnostics, exit).
-        run: python3 test/lsp_smoke.py
+        run: ./build/vyb test/lsp_smoke.vyb
 
       - name: REPL smoke test
         # Spawns `vyb repl` and pipes a scripted session, asserting the evaluated
         # stdout lines (auto-display, persistent decls/vars, error recovery, :clear).
-        run: python3 test/repl_smoke.py
+        run: ./build/vyb test/repl_smoke.vyb
 
       - name: git dependency smoke test
         # Creates a local git repo + consumer with a `git:` dependency; asserts
         # clone-on-build into .vybmod, vyb.lock source="git", and a runnable binary.
-        run: python3 test/gitdep_smoke.py
+        run: ./build/vyb test/gitdep_smoke.vyb
 
       - name: registry + version dependency smoke test
         # Publishes a package via `vyb mod publish` into a temp VYB_REGISTRY dir,

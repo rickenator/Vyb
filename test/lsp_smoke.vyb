@@ -1,0 +1,355 @@
+// @not-a-test: true
+# lsp_smoke.vyb -- end-to-end smoke test for `vyb lsp` (#154 / Testing & Tooling).
+# Vyb port of test/lsp_smoke.py; part of the #226 "no Python in the test path"
+# work.
+#
+# Drives the Language Server Protocol over stdio (JSON-RPC 2.0 + Content-Length
+# framing) and asserts the core features:
+#
+#   * initialize  -> capabilities (hoverProvider, definitionProvider, completion)
+#   * didOpen     -> publishDiagnostics (0 for a clean document)
+#   * hover       -> kind + signature for a declaration
+#   * definition  -> location of a declaration from a use site
+#   * completion  -> candidate declaration names
+#   * didChange   -> publishDiagnostics carries lint warnings (severity 2)
+#   * shutdown/exit -> clean termination
+#
+# Exits non-zero on any failure so it can gate hosted CI. Unlike the Python
+# smoke test (which uses a pipe and reads each response as it arrives), this port
+# writes the whole scripted message stream to a temp file, runs `vyb lsp < file`,
+# and then parses the framed responses -- the language surface has no
+# interactive-pipe primitive yet, and the server answers in the order it reads.
+#
+# Usage: vyb test/lsp_smoke.vyb [path-to-vyb]
+#        (defaults to build/vyb, then build-ci/vyb)
+import io::{close, File, open_read, open_write, read_all, write_str}
+import process::{exec_output}
+
+# ---------------------------------------------------------------- small helpers
+
+# Index of the last '/' in `p`, or -1.
+last_slash(p<String>)<Int> -> {
+    i<Int> = p.len() - 1
+    while (i >= 0) {
+        if (((p.char_at(i) as Int) & 0xFF) == 47) { return i }
+        i = i - 1
+    }
+    return -1
+}
+
+# Directory part of `p` ("" when there is no slash).
+dirname_of(p<String>)<String> -> {
+    i<Int> = last_slash(p)
+    if (i < 0) { return "" }
+    return p.substring(0, i)
+}
+
+# Strip leading/trailing whitespace (spaces, tabs, CR, LF) from `s`.
+trim(s<String>)<String> -> {
+    a<Int> = 0
+    n<Int> = s.len()
+    while (a < n) {
+        c<Int> = (s.char_at(a) as Int) & 0xFF
+        if (c == 32 || c == 9 || c == 13 || c == 10) { a = a + 1 } else { break }
+    }
+    b<Int> = n
+    while (b > a) {
+        c<Int> = (s.char_at(b - 1) as Int) & 0xFF
+        if (c == 32 || c == 9 || c == 13 || c == 10) { b = b - 1 } else { break }
+    }
+    if (b <= a) { return "" }
+    return s.substring(a, b)
+}
+
+# Strip spaces/tabs from `s`, so JSON assertions do not depend on formatting.
+squash(s<String>)<String> -> {
+    out<String> = ""
+    i<Int> = 0
+    while (i < s.len()) {
+        c<Int> = (s.char_at(i) as Int) & 0xFF
+        if (c != 32 && c != 9) { out = out + String::from_byte(c) }
+        i = i + 1
+    }
+    return out
+}
+
+# Decimal value of a digit string (stops at the first non-digit).
+digits_to_int(s<String>)<Int> -> {
+    t<String> = trim(s)
+    n<Int> = 0
+    i<Int> = 0
+    while (i < t.len()) {
+        c<Int> = (t.char_at(i) as Int) & 0xFF
+        if (c < 48 || c > 57) { break }
+        n = n * 10 + (c - 48)
+        i = i + 1
+    }
+    return n
+}
+
+# First index of `needle` in `s` at or after `start`; -1 when absent.
+index_from(s<String>, needle<String>, start<Int>)<Int> -> {
+    if (needle.len() == 0 || s.len() < needle.len()) { return -1 }
+    i<Int> = start
+    while (i + needle.len() <= s.len()) {
+        if (s.substring(i, i + needle.len()) == needle) { return i }
+        i = i + 1
+    }
+    return -1
+}
+
+# Escape `s` for a JSON string literal.
+json_escape(s<String>)<String> -> {
+    out<String> = ""
+    i<Int> = 0
+    while (i < s.len()) {
+        c<Int> = (s.char_at(i) as Int) & 0xFF
+        if (c == 34) { out = out + "\\\"" }
+        else if (c == 92) { out = out + "\\\\" }
+        else if (c == 10) { out = out + "\\n" }
+        else if (c == 13) { out = out + "\\r" }
+        else if (c == 9) { out = out + "\\t" }
+        else { out = out + String::from_byte(c) }
+        i = i + 1
+    }
+    return out
+}
+
+# Run `cmd` through the shell and return its stdout ("" when it could not run).
+run_sh(cmd<String>)<String> -> {
+    out<String> = ""
+    freedom {
+        match (exec_output(cmd)) {
+            s -> { out = s }
+            ? -> { out = "" }
+        }
+    }
+    return out
+}
+
+# Read a whole file as a String ("" when it cannot be read).
+slurp(path<String>)<String> -> {
+    text<String> = ""
+    match (open_read(path)) {
+        f -> {
+            match (read_all(f)) { s -> { text = s } ? -> { } }
+            close(f)
+        }
+        ? -> { }
+    }
+    return text
+}
+
+# Write `text` to `path`; true when the whole string was written.
+spill(path<String>, text<String>)<Bool> -> {
+    match (open_write(path)) {
+        f -> {
+            match (write_str(f, text)) { n -> { close(f); return (n == text.len()) } ? -> { close(f); return false } }
+        }
+        ? -> { return false }
+    }
+    return false
+}
+
+# True when `p` exists (file or directory).
+exists(p<String>)<Bool> -> {
+    return (trim(run_sh("test -e '" + p + "' && echo yes || echo no")) == "yes")
+}
+
+# Absolute form of `p`: relative paths resolve against `base`.
+absolute(p<String>, base<String>)<String> -> {
+    if (p.len() > 0 && (((p.char_at(0) as Int) & 0xFF) == 47)) { return p }
+    return trim(run_sh("cd '" + base + "' && pwd")) + "/" + p
+}
+
+# ------------------------------------------------------- command line (/proc)
+
+# The program's argv, parsed from `/proc/self/cmdline` (NUL separated).
+argv_of()<Vec<String>> -> {
+    raw<String> = slurp("/proc/self/cmdline")
+    out<Vec<String>> = Vec<String>()
+    cur<String> = ""
+    i<Int> = 0
+    while (i < raw.len()) {
+        c<Int> = (raw.char_at(i) as Int) & 0xFF
+        if (c == 0) {
+            if (cur.len() > 0) { out.push(cur) }
+            cur = ""
+        } else {
+            cur = cur + String::from_byte(c)
+        }
+        i = i + 1
+    }
+    if (cur.len() > 0) { out.push(cur) }
+    return out
+}
+
+# --------------------------------------------------------------- LSP framing
+
+# One framed message: `Content-Length: N\r\n\r\n<body>`. Returns the LSP body.
+frame(body<String>)<String> -> {
+    return "Content-Length: " + body.len().to_string() + "\r\n\r\n" + body
+}
+
+# The `uri` the smoke test declares the document under.
+doc_uri()<String> -> { return "file:///tmp/lsp_demo.vyb" }
+
+# The clean document (a documented function and a documented struct).
+clean_doc()<String> -> {
+    return "/// Adds two integers.\nadd(a<Int>, b<Int>)<Int> -> {\n    return a + b\n}\n\n/// A point.\nstruct Point {\n    x<Int>,\n    y<Int>\n}\n"
+}
+
+# The whole scripted session, already framed.
+session_stream()<String> -> {
+    out<String> = ""
+    uri<String> = doc_uri()
+    doc<String> = json_escape(clean_doc())
+    compDoc<String> = json_escape(clean_doc() + "// p.\n")
+    dirty<String> = json_escape(clean_doc() + "\nself_check(a<Int>)<Int> -> {\n    if (a == a) {\n        return 1\n    }\n    return 0\n}\n")
+    docPos<String> = "\"textDocument\":{\"uri\":\"" + uri + "\"}"
+
+    out = out + frame("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}")
+    out = out + frame("{\"jsonrpc\":\"2.0\",\"method\":\"initialized\",\"params\":{}}")
+    out = out + frame("{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{\"textDocument\":{\"uri\":\"" + uri + "\",\"languageId\":\"vyb\",\"version\":1,\"text\":\"" + doc + "\"}}}")
+    out = out + frame("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"textDocument/hover\",\"params\":{" + docPos + ",\"position\":{\"line\":1,\"character\":0}}}")
+    out = out + frame("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"textDocument/definition\",\"params\":{" + docPos + ",\"position\":{\"line\":6,\"character\":7}}}")
+    out = out + frame("{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"textDocument/completion\",\"params\":{" + docPos + ",\"position\":{\"line\":10,\"character\":0}}}")
+    out = out + frame("{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didChange\",\"params\":{\"textDocument\":{\"uri\":\"" + uri + "\",\"version\":2},\"contentChanges\":[{\"text\":\"" + compDoc + "\"}]}}")
+    out = out + frame("{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"textDocument/completion\",\"params\":{" + docPos + ",\"position\":{\"line\":10,\"character\":5}}}")
+    out = out + frame("{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didChange\",\"params\":{\"textDocument\":{\"uri\":\"" + uri + "\",\"version\":2},\"contentChanges\":[{\"text\":\"" + dirty + "\"}]}}")
+    out = out + frame("{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"shutdown\",\"params\":{}}")
+    out = out + frame("{\"jsonrpc\":\"2.0\",\"method\":\"exit\",\"params\":{}}")
+    return out
+}
+
+# Split a raw `vyb lsp` stdout stream into LSP bodies using the Content-Length
+# headers. The server writes one-line JSON bodies, so `Content-Length` is the
+# only framing that matters.
+parse_frames(raw<String>)<Vec<String>> -> {
+    frames<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < raw.len()) {
+        h<Int> = index_from(raw, "Content-Length:", i)
+        if (h < 0) { break }
+        sep<Int> = index_from(raw, "\r\n\r\n", h)
+        if (sep < 0) { break }
+        n<Int> = digits_to_int(raw.substring(h + 15, sep))
+        start<Int> = sep + 4
+        if (n <= 0 || start + n > raw.len()) { break }
+        frames.push(raw.substring(start, start + n))
+        i = start + n
+    }
+    return frames
+}
+
+# True when any frame contains `needle` (whitespace-insensitive).
+any_frame(frames<Vec<String>>, needle<String>)<Bool> -> {
+    i<Int> = 0
+    while (i < frames.len()) {
+        if (squash(frames.get(i)).index_of(needle) >= 0) { return true }
+        i = i + 1
+    }
+    return false
+}
+
+# ------------------------------------------------------------------- the check
+
+main()<Int> -> {
+    argv<Vec<String>> = argv_of()
+
+    # argv[0] is the compiler, argv[1] is this program: derive the repo root.
+    runner<String> = ""
+    if (argv.len() > 1) { runner = argv.get(1) }
+    repoRoot<String> = dirname_of(dirname_of(runner))
+    if (repoRoot.len() == 0 || !exists(repoRoot + "/test")) { repoRoot = "." }
+
+    exe<String> = ""
+    if (argv.len() > 2 && exists(argv.get(2))) { exe = argv.get(2) }
+    if (exe.len() == 0) { exe = repoRoot + "/build/vyb" }
+    if (!exists(exe)) { exe = repoRoot + "/build-ci/vyb" }
+    if (!exists(exe)) {
+        println("LSP smoke FAILED: no built `vyb` binary found (build/vyb or build-ci/vyb); pass a path")
+        exit(1)
+    }
+    exe = absolute(exe, repoRoot)
+    stdlib<String> = absolute(repoRoot + "/stdlib", repoRoot)
+
+    msgPath<String> = "/tmp/vyb_lsp_messages.bin"
+    outPath<String> = "/tmp/vyb_lsp_out.bin"
+    errPath<String> = "/tmp/vyb_lsp_err.txt"
+
+    if (!spill(msgPath, session_stream())) {
+        println("LSP smoke FAILED: cannot write the message stream")
+        exit(1)
+    }
+
+    cmd<String> = "cd " + repoRoot + " && VYB_STDLIB='" + stdlib + "' timeout 300 " + exe + " lsp < " + msgPath
+    cmd = cmd + " > " + outPath + " 2> " + errPath + "; echo $?"
+    rcText<String> = trim(run_sh(cmd))
+    exitCode<Int> = digits_to_int(rcText)
+
+    raw<String> = slurp(outPath)
+    frames<Vec<String>> = parse_frames(raw)
+
+    # Each check name with its verdict, mirroring the Python smoke test's table.
+    names<Vec<String>> = Vec<String>()
+    names.push("initialize/capabilities")
+    names.push("didOpen diagnostics(clean=0)")
+    names.push("hover(signature)")
+    names.push("definition(struct Point)")
+    names.push("completion(add,Point)")
+    names.push("dot-completion(Point fields)")
+    names.push("didChange lint warning(sev2)")
+    names.push("shutdown")
+
+    results<Vec<Bool>> = Vec<Bool>()
+    results.push(any_frame(frames, "\"hoverProvider\":true"))
+    results.push(any_frame(frames, "\"diagnostics\":[]"))
+    results.push(any_frame(frames, "add(a<Int>"))
+    results.push(any_frame(frames, "\"line\":5"))
+    results.push(any_frame(frames, "\"label\":\"add\"") && any_frame(frames, "\"label\":\"Point\""))
+    results.push(any_frame(frames, "\"label\":\"x\"") && any_frame(frames, "\"label\":\"y\""))
+    results.push(any_frame(frames, "\"severity\":2"))
+    results.push(any_frame(frames, "\"result\":null"))
+
+    passed<Int> = 0
+    failed<Int> = 0
+    i<Int> = 0
+    while (i < names.len()) {
+        if (results.get(i)) {
+            println(pad_right(names.get(i), 22) + " ok")
+            passed = passed + 1
+        } else {
+            println(pad_right(names.get(i), 22) + " FAIL")
+            failed = failed + 1
+        }
+        i = i + 1
+    }
+
+    # The server must also terminate cleanly after `exit`.
+    total<Int> = names.len() + 1
+    if (exitCode == 0) {
+        println(pad_right("server exit 0", 22) + " ok")
+        passed = passed + 1
+    } else {
+        println(pad_right("server exit 0", 22) + " FAIL (exit " + exitCode.to_string() + ")")
+        failed = failed + 1
+    }
+
+    if (failed > 0) {
+        println("LSP smoke FAILED: " + passed.to_string() + "/" + total.to_string() + " passed")
+        err<String> = slurp(errPath)
+        if (err.len() > 0) { println(err) }
+        exit(1)
+    }
+
+    println("LSP smoke: " + passed.to_string() + "/" + total.to_string() + " checks passed")
+    return 0
+}
+
+# `s` padded on the right to width `w` (for the check table).
+pad_right(s<String>, w<Int>)<String> -> {
+    out<String> = s
+    while (out.len() < w) { out = out + " " }
+    return out
+}

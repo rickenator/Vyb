@@ -1,0 +1,245 @@
+// @not-a-test: true
+# gitdep_smoke.vyb -- end-to-end smoke test for `git:`-clone dependencies in
+# `vyb build` (#165). Vyb port of test/gitdep_smoke.py; part of the #226 "no
+# Python in the test path" work.
+#
+# Sets up a scratch directory:
+#   * a local git repo whose root is a Vyb module (share(all) + one function)
+#   * a consumer project whose vyb.toml declares a `git:` dependency pointing at it
+#
+# Then runs `vyb build` and asserts: the dep is auto-cloned into .vybmod/<name>/,
+# vyb.lock records `source = "git"` + the resolved path, the build succeeds, and
+# the linked binary prints the module function's output -- the auto-fetch-on-build
+# path for git deps (no `vyb mod install` step needed).
+#
+# Requires `git` on PATH. Usage: vyb test/gitdep_smoke.vyb [path-to-vyb]
+#        (defaults to build/vyb, then build-ci/vyb)
+import io::{close, File, open_read, open_write, read_all, write_str}
+import process::{exec_output}
+
+# ---------------------------------------------------------------- small helpers
+
+# Index of the last '/' in `p`, or -1.
+last_slash(p<String>)<Int> -> {
+    i<Int> = p.len() - 1
+    while (i >= 0) {
+        if (((p.char_at(i) as Int) & 0xFF) == 47) { return i }
+        i = i - 1
+    }
+    return -1
+}
+
+# Directory part of `p` ("" when there is no slash).
+dirname_of(p<String>)<String> -> {
+    i<Int> = last_slash(p)
+    if (i < 0) { return "" }
+    return p.substring(0, i)
+}
+
+# Strip leading/trailing whitespace (spaces, tabs, CR, LF) from `s`.
+trim(s<String>)<String> -> {
+    a<Int> = 0
+    n<Int> = s.len()
+    while (a < n) {
+        c<Int> = (s.char_at(a) as Int) & 0xFF
+        if (c == 32 || c == 9 || c == 13 || c == 10) { a = a + 1 } else { break }
+    }
+    b<Int> = n
+    while (b > a) {
+        c<Int> = (s.char_at(b - 1) as Int) & 0xFF
+        if (c == 32 || c == 9 || c == 13 || c == 10) { b = b - 1 } else { break }
+    }
+    if (b <= a) { return "" }
+    return s.substring(a, b)
+}
+
+# Decimal value of a digit string (stops at the first non-digit).
+digits_to_int(s<String>)<Int> -> {
+    t<String> = trim(s)
+    n<Int> = 0
+    i<Int> = 0
+    while (i < t.len()) {
+        c<Int> = (t.char_at(i) as Int) & 0xFF
+        if (c < 48 || c > 57) { break }
+        n = n * 10 + (c - 48)
+        i = i + 1
+    }
+    return n
+}
+
+# Run `cmd` through the shell and return its stdout ("" when it could not run).
+run_sh(cmd<String>)<String> -> {
+    out<String> = ""
+    freedom {
+        match (exec_output(cmd)) {
+            s -> { out = s }
+            ? -> { out = "" }
+        }
+    }
+    return out
+}
+
+# Read a whole file as a String ("" when it cannot be read).
+slurp(path<String>)<String> -> {
+    text<String> = ""
+    match (open_read(path)) {
+        f -> {
+            match (read_all(f)) { s -> { text = s } ? -> { } }
+            close(f)
+        }
+        ? -> { }
+    }
+    return text
+}
+
+# Write `text` to `path`; true when the whole string was written.
+spill(path<String>, text<String>)<Bool> -> {
+    match (open_write(path)) {
+        f -> {
+            match (write_str(f, text)) { n -> { close(f); return (n == text.len()) } ? -> { close(f); return false } }
+        }
+        ? -> { return false }
+    }
+    return false
+}
+
+# True when `p` exists (file or directory).
+exists(p<String>)<Bool> -> {
+    return (trim(run_sh("test -e '" + p + "' && echo yes || echo no")) == "yes")
+}
+
+# Absolute form of `p`: relative paths resolve against `base`. Needed because the
+# smoke tests `cd` into their scratch directories before invoking the compiler.
+absolute(p<String>, base<String>)<String> -> {
+    if (p.len() > 0 && (((p.char_at(0) as Int) & 0xFF) == 47)) { return p }
+    return trim(run_sh("cd '" + base + "' && pwd")) + "/" + p
+}
+
+# ------------------------------------------------------- command line (/proc)
+
+# The program's argv, parsed from `/proc/self/cmdline` (NUL separated).
+argv_of()<Vec<String>> -> {
+    raw<String> = slurp("/proc/self/cmdline")
+    out<Vec<String>> = Vec<String>()
+    cur<String> = ""
+    i<Int> = 0
+    while (i < raw.len()) {
+        c<Int> = (raw.char_at(i) as Int) & 0xFF
+        if (c == 0) {
+            if (cur.len() > 0) { out.push(cur) }
+            cur = ""
+        } else {
+            cur = cur + String::from_byte(c)
+        }
+        i = i + 1
+    }
+    if (cur.len() > 0) { out.push(cur) }
+    return out
+}
+
+# ------------------------------------------------------------------- the check
+
+main()<Int> -> {
+    argv<Vec<String>> = argv_of()
+
+    # argv[0] is the compiler, argv[1] is this program: derive the repo root.
+    runner<String> = ""
+    if (argv.len() > 1) { runner = argv.get(1) }
+    repoRoot<String> = dirname_of(dirname_of(runner))
+    if (repoRoot.len() == 0 || !exists(repoRoot + "/test")) { repoRoot = "." }
+
+    # A path argument overrides the default binary locations.
+    exe<String> = ""
+    if (argv.len() > 2 && exists(argv.get(2))) { exe = argv.get(2) }
+    if (exe.len() == 0) { exe = repoRoot + "/build/vyb" }
+    if (!exists(exe)) { exe = repoRoot + "/build-ci/vyb" }
+    if (!exists(exe)) {
+        println("gitdep smoke FAILED: no built `vyb` binary found (build/vyb or build-ci/vyb); pass a path")
+        exit(1)
+    }
+    exe = absolute(exe, repoRoot)
+
+    hasGit<Bool> = (trim(run_sh("command -v git >/dev/null 2>&1 && echo yes || echo no")) == "yes")
+    if (!hasGit) {
+        println("SKIP: git not available")
+        return 0
+    }
+
+    stdlib<String> = absolute(repoRoot + "/stdlib", repoRoot)
+    tmp<String> = "/tmp/vyb_gitdep_smoke"
+    repo<String> = tmp + "/grepmod"
+    consumer<String> = tmp + "/consumer"
+    outPath<String> = "/tmp/vyb_gitdep_out.txt"
+    errPath<String> = "/tmp/vyb_gitdep_err.txt"
+
+    run_sh("rm -rf '" + tmp + "'")
+    run_sh("mkdir -p '" + repo + "' '" + consumer + "/src'")
+
+    # 1. git repo whose root is a Vyb module.
+    spill(repo + "/mod.vyb", "share(all)\nexclaim(s<String>)<String> -> {\n    return s + \"!\"\n}\n")
+    rc1<String> = trim(run_sh("cd '" + tmp + "' && git -C grepmod init -q && git -C grepmod config user.email t@t && git -C grepmod config user.name t && git -C grepmod add . && git -C grepmod commit -qm init && echo ok || echo bad"))
+    if (rc1 != "ok") {
+        println("gitdep smoke FAILED: could not create the module repo (git not usable?)")
+        run_sh("rm -rf '" + tmp + "'")
+        exit(1)
+    }
+
+    # 2. consumer with a git: dependency.
+    toml<String> = "[package]\nname = \"grepcon\"\nversion = \"0.1.0\"\n\n[[bin]]\nname = \"grepcon\"\npath = \"src/main.vyb\"\n\n[dependencies]\ngreeter = { git = \"file://" + repo + "\" }\n"
+    spill(consumer + "/vyb.toml", toml)
+    spill(consumer + "/src/main.vyb", "import greeter::{exclaim}\nmain()<Int> -> {\n    println(exclaim(\"ab\"))\n    return 0\n}\n")
+
+    # 3. build (auto-clones the dep), run inside the consumer dir.
+    envPrefix<String> = "env -u VYB_MODULE_PATH VYB_STDLIB='" + stdlib + "' "
+    cmd<String> = "cd '" + consumer + "' && " + envPrefix + exe + " build > " + outPath + " 2> " + errPath + "; echo $?"
+    rcText<String> = trim(run_sh(cmd))
+    code<Int> = digits_to_int(rcText)
+
+    bad<Bool> = false
+    detail<String> = ""
+
+    if (code != 0) {
+        println("FAIL: vyb build failed")
+        println(slurp(outPath))
+        println(slurp(errPath))
+        bad = true
+    }
+
+    mod<String> = consumer + "/.vybmod/greeter/mod.vyb"
+    if (!bad && !exists(mod)) {
+        println("FAIL: git dep not materialized at " + mod)
+        bad = true
+    }
+
+    lock<String> = slurp(consumer + "/vyb.lock")
+    if (!bad && !(lock.index_of("source = \"git\"") >= 0) ) {
+        println("FAIL: vyb.lock missing git:")
+        println(lock)
+        bad = true
+    }
+    if (!bad && !(lock.index_of("greeter") >= 0)) {
+        println("FAIL: vyb.lock missing the dependency name:")
+        println(lock)
+        bad = true
+    }
+
+    binPath<String> = consumer + "/target/grepcon"
+    if (!bad && !exists(binPath)) {
+        println("FAIL: binary not built: " + binPath)
+        bad = true
+    }
+
+    if (!bad) {
+        runSh_out<String> = trim(run_sh("cd '" + consumer + "' && " + envPrefix + binPath + " 2>/dev/null"))
+        if (!(runSh_out.index_of("ab!") >= 0)) {
+            println("FAIL: git dep binary bad: stdout=" + runSh_out)
+            bad = true
+        }
+    }
+
+    run_sh("rm -rf '" + tmp + "'")
+
+    if (bad) { exit(1) }
+    println("gitdep smoke: 4/4 checks passed (clone-on-build, lockfile, build, run)")
+    return 0
+}
