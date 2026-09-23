@@ -837,10 +837,10 @@ All legacy `make_my()`, `make_our()`, and prefix `view expr` / `borrow expr` syn
 
 ```bash
 # Scan for legacy syntax
-python3 migrate_syntax.py --scan --directory .
+build/vyb migrate_syntax.vyb --scan --directory .
 
 # Apply migrations with backup
-python3 migrate_syntax.py --migrate --directory . --backup --report
+build/vyb migrate_syntax.vyb --migrate --directory . --backup --report
 ```
 
 **Migration Results:** ✅ 346 syntax updates applied across 22 files, ensuring consistent canonical syntax throughout the entire codebase.
@@ -918,7 +918,7 @@ access_parent(node<our<TreeNode>>)<Int> -> {
 - **Advanced Test Harness**: Modern parallel test runner with HTML/JSON reporting and triage analysis
 - **Debug Information**: Complete DWARF debug metadata for source-level debugging in gdb/lldb
 - **Git integration**: Regular commits track development progress
-- **Migration Tool**: `python3 migrate_syntax.py` for automated syntax upgrades
+- **Migration Tool**: `build/vyb migrate_syntax.vyb` for automated syntax upgrades
 
 ### ✅ **Native Bridge / FFI**
 Vyb's native bridge to C libraries is shipped and production-usable:
@@ -2888,10 +2888,10 @@ Automated tools ensure codebase consistency and syntax standardization:
 
 ```bash
 # Scan for legacy syntax patterns
-python3 migrate_syntax.py --scan --directory . --report
+build/vyb migrate_syntax.vyb --scan --directory . --report
 
 # Apply canonical syntax migrations with backup
-python3 migrate_syntax.py --migrate --directory . --backup
+build/vyb migrate_syntax.vyb --migrate --directory . --backup
 ```
 
 #### **Migration Capabilities**
@@ -2923,7 +2923,7 @@ The integrated toolchain supports efficient development:
 
 1. **Write Code**: Use canonical syntax with ownership types
 2. **Run Tests**: `python3 test_harness.py --parallel --triage`
-3. **Check Syntax**: `python3 migrate_syntax.py --scan`
+3. **Check Syntax**: `build/vyb migrate_syntax.vyb --scan`
 4. **Debug Issues**: Use triage reports for prioritized debugging
 5. **Commit Changes**: Regular Git commits with test validation
 
