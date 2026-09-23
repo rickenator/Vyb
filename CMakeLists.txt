@@ -400,7 +400,7 @@ add_custom_target(run-examples
 )
 
 add_custom_target(run-milestone
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/test/run_milestone_tests.py --vyb $<TARGET_FILE:vyb>
+    COMMAND $<TARGET_FILE:vyb> ${CMAKE_SOURCE_DIR}/test/run_milestone.vyb --vyb $<TARGET_FILE:vyb>
     DEPENDS vyb
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     COMMENT "Running Vyb milestone gate"

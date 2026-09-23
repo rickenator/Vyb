@@ -208,9 +208,17 @@ discover_cases(repoRoot<String>, runEntrypoints<Bool>)<Vec<Case>> -> {
 
 # --------------------------------------------------------------------- running
 
-# Run one case; true when the compiler exited 0. `out`/`err` receive the
-# captured streams so the caller can print them on failure.
-run_case(repoRoot<String>, vyb<String>, c<Case>, timeoutS<Int>, out<String>, err<String>)<Bool> -> {
+# One case's outcome: `ok` is the verdict, `out`/`err` the captured streams.
+# Returned as a struct because by-value `String` parameters cannot hand values
+# back to the caller.
+struct CaseRun {
+    ok<Bool>,
+    out<String>,
+    err<String>
+}
+
+# Run one case; `ok` is true when the compiler exited 0.
+run_case(repoRoot<String>, vyb<String>, c<Case>, timeoutS<Int>)<CaseRun> -> {
     outPath<String> = "/tmp/vyb_example_" + timeoutS.to_string() + "_out.txt"
     errPath<String> = outPath + ".err"
 
@@ -223,9 +231,7 @@ run_case(repoRoot<String>, vyb<String>, c<Case>, timeoutS<Int>, out<String>, err
     rcText<String> = trim(run_sh(cmd))
     code<Int> = digits_to_int(rcText)
 
-    out = slurp(outPath)
-    err = slurp(errPath)
-    return (code == 0)
+    return CaseRun { ok = (code == 0), out = slurp(outPath), err = slurp(errPath) }
 }
 
 main()<Int> -> {
@@ -261,9 +267,10 @@ main()<Int> -> {
     i<Int> = 0
     while (i < cases.len()) {
         c<Case> = cases.get(i)
-        out<String> = ""
-        err<String> = ""
-        ok<Bool> = run_case(repoRoot, vyb, c, timeoutS, out, err)
+        r<CaseRun> = run_case(repoRoot, vyb, c, timeoutS)
+        out<String> = r.out
+        err<String> = r.err
+        ok<Bool> = r.ok
         if (ok) {
             println("PASS " + c.mode + ": " + c.path)
             if (verbose && out.len() > 0) { println(rstrip_nl(out)) }
