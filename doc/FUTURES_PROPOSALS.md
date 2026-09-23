@@ -39,7 +39,7 @@ can land in any order.
 - `proposed` **`vyb doc`** — HTML documentation generator from `///` doc
   comments; builds on the existing `tools/refman.py` refman generator.
 - `proposed` **`vyb test`** — integrated runner for `*.test.vyb` files placed
-  alongside source; wraps the existing `test/run_tests.py` harness.
+  alongside source; wraps the existing `test/run_tests.vyb` harness.
 - `proposed` **Parser error recovery** — report multiple errors per file
   instead of throwing on the first (synchronize to the next statement/declaration
   boundary, collect all errors before aborting). Improves LSP diagnostics and
