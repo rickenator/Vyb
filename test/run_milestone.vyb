@@ -1,0 +1,289 @@
+// @not-a-test: true
+# run_milestone.vyb -- the Vyb milestone gate (Vyb port of
+# test/run_milestone_tests.py; part of the #226 "no Python in the test path"
+# work). Aggregates the stable suites through the Vyb suite runner
+# (test/run_tests.vyb) and fails when the total passing count drops below the
+# milestone floor.
+#
+# Usage (from the repo root):
+#   VYB_STDLIB=$PWD/stdlib build/vyb test/run_milestone.vyb --vyb build/vyb
+#   ... -v                  # show the runner's output for each suite
+#   ... --minimum 156       # override the milestone floor
+#
+# Options: --vyb PATH  --minimum N  -v|-vv  --help
+#
+# Porting notes (same as the other Vyb runners): argv comes from
+# `/proc/self/cmdline`; the per-suite numbers are read from the suite runner's
+# own summary lines (`Ran N` / `Passed: P` / `Failed: F`) because the language
+# surface this build targets has no JSON parser in the stdlib.
+import io::{close, File, open_read, open_write, read_all, write_str}
+import process::{exec_output}
+
+MILESTONE_MINIMUM<Int> = 156
+
+# ---------------------------------------------------------------- small helpers
+
+# Index of the last '/' in `p`, or -1.
+last_slash(p<String>)<Int> -> {
+    i<Int> = p.len() - 1
+    while (i >= 0) {
+        if (((p.char_at(i) as Int) & 0xFF) == 47) { return i }
+        i = i - 1
+    }
+    return -1
+}
+
+# Directory part of `p` ("" when there is no slash).
+dirname_of(p<String>)<String> -> {
+    i<Int> = last_slash(p)
+    if (i < 0) { return "" }
+    return p.substring(0, i)
+}
+
+# Strip leading/trailing whitespace (spaces, tabs, CR, LF) from `s`.
+trim(s<String>)<String> -> {
+    a<Int> = 0
+    n<Int> = s.len()
+    while (a < n) {
+        c<Int> = (s.char_at(a) as Int) & 0xFF
+        if (c == 32 || c == 9 || c == 13 || c == 10) { a = a + 1 } else { break }
+    }
+    b<Int> = n
+    while (b > a) {
+        c<Int> = (s.char_at(b - 1) as Int) & 0xFF
+        if (c == 32 || c == 9 || c == 13 || c == 10) { b = b - 1 } else { break }
+    }
+    if (b <= a) { return "" }
+    return s.substring(a, b)
+}
+
+# Decimal value of a digit string (stops at the first non-digit).
+digits_to_int(s<String>)<Int> -> {
+    t<String> = trim(s)
+    n<Int> = 0
+    i<Int> = 0
+    while (i < t.len()) {
+        c<Int> = (t.char_at(i) as Int) & 0xFF
+        if (c < 48 || c > 57) { break }
+        n = n * 10 + (c - 48)
+        i = i + 1
+    }
+    return n
+}
+
+# Run `cmd` through the shell and return its stdout ("" when it could not run).
+run_sh(cmd<String>)<String> -> {
+    out<String> = ""
+    freedom {
+        match (exec_output(cmd)) {
+            s -> { out = s }
+            ? -> { out = "" }
+        }
+    }
+    return out
+}
+
+# Read a whole file as a String ("" when it cannot be read).
+slurp(path<String>)<String> -> {
+    text<String> = ""
+    match (open_read(path)) {
+        f -> {
+            match (read_all(f)) { s -> { text = s } ? -> { } }
+            close(f)
+        }
+        ? -> { }
+    }
+    return text
+}
+
+# True when `p` is an existing directory.
+dir_exists(p<String>)<Bool> -> {
+    return (trim(run_sh("test -d '" + p + "' && echo yes || echo no")) == "yes")
+}
+
+# ------------------------------------------------------- command line (/proc)
+
+# The program's argv, parsed from `/proc/self/cmdline` (NUL separated).
+argv_of()<Vec<String>> -> {
+    raw<String> = slurp("/proc/self/cmdline")
+    out<Vec<String>> = Vec<String>()
+    cur<String> = ""
+    i<Int> = 0
+    while (i < raw.len()) {
+        c<Int> = (raw.char_at(i) as Int) & 0xFF
+        if (c == 0) {
+            if (cur.len() > 0) { out.push(cur) }
+            cur = ""
+        } else {
+            cur = cur + String::from_byte(c)
+        }
+        i = i + 1
+    }
+    if (cur.len() > 0) { out.push(cur) }
+    return out
+}
+
+# Value following `flag` in `argv`, or "" when it is absent.
+opt(argv<Vec<String>>, flag<String>)<String> -> {
+    i<Int> = 0
+    while (i < argv.len()) {
+        if (argv.get(i) == flag && i + 1 < argv.len()) { return argv.get(i + 1) }
+        i = i + 1
+    }
+    return ""
+}
+
+# True when `flag` appears in `argv`.
+has(argv<Vec<String>>, flag<String>)<Bool> -> {
+    i<Int> = 0
+    while (i < argv.len()) {
+        if (argv.get(i) == flag) { return true }
+        i = i + 1
+    }
+    return false
+}
+
+# ------------------------------------------------------------- summary parsing
+
+# The integer following `label`'s last occurrence in `text`; -1 when absent.
+# `text` is the suite runner's stdout, e.g.
+#     "\nRan 114 tests\nPassed: 113\nFailed: 1\n".
+count_after(text<String>, label<String>)<Int> -> {
+    lines<Vec<String>> = text.split("\n")
+    i<Int> = 0
+    hit<Int> = -1
+    while (i < lines.len()) {
+        line<String> = trim(lines.get(i))
+        if (line.len() >= label.len() && line.substring(0, label.len()) == label) {
+            hit = digits_to_int(line.substring(label.len(), line.len()))
+        }
+        i = i + 1
+    }
+    return hit
+}
+
+# ------------------------------------------------------------------ suite list
+
+# One aggregated suite: `name` for reporting, `dir` relative to the repo root,
+# `pattern` as passed to the suite runner.
+struct Suite {
+    name<String>,
+    dir<String>,
+    pattern<String>
+}
+
+# The stable suites the milestone gate aggregates (same set as the Python gate).
+milestone_suites()<Vec<Suite>> -> {
+    all<String> = "*.vyb"
+    suites<Vec<Suite>> = Vec<Suite>()
+    suites.push(Suite { name = "new_features", dir = "test/new_features", pattern = all })
+    suites.push(Suite { name = "agents", dir = "test/agents", pattern = all })
+    suites.push(Suite { name = "modules", dir = "test/modules", pattern = all })
+    suites.push(Suite { name = "ffi", dir = "test/ffi", pattern = all })
+    suites.push(Suite { name = "ownership", dir = "test/ownership", pattern = all })
+    suites.push(Suite { name = "error_trap_phase2", dir = "test/error_trap/phase2", pattern = all })
+    suites.push(Suite { name = "trap_propagation", dir = "test/trap", pattern = "propagation_no_trap.vyb" })
+    suites.push(Suite { name = "trap_untrapped_main", dir = "test/trap", pattern = "propagation_to_main.vyb" })
+    suites.push(Suite { name = "trap_defer_fail", dir = "test/trap", pattern = "defer_runs_on_fail.vyb" })
+    suites.push(Suite { name = "trap_non_failable_reject", dir = "test/trap", pattern = "non_failable_caller_rejected.vyb" })
+    suites.push(Suite { name = "basic", dir = "test/basic", pattern = all })
+    suites.push(Suite { name = "string", dir = "test/string", pattern = all })
+    suites.push(Suite { name = "math", dir = "test/math", pattern = all })
+    suites.push(Suite { name = "introspection", dir = "test/introspection", pattern = all })
+    suites.push(Suite { name = "types", dir = "test/types", pattern = all })
+    suites.push(Suite { name = "range_for", dir = "test/range_for", pattern = all })
+    suites.push(Suite { name = "vec_for", dir = "test/vec_for", pattern = all })
+    suites.push(Suite { name = "stdlib", dir = "test/stdlib", pattern = all })
+    return suites
+}
+
+# ------------------------------------------------------------------ one suite
+
+# One suite's outcome: `code` is the suite runner's exit status, `out` its
+# stdout. Returned as a struct because a by-value `String` parameter cannot hand
+# a value back to the caller.
+struct SuiteRun {
+    code<Int>,
+    out<String>
+}
+
+# Run one suite through the Vyb suite runner.
+run_suite(repoRoot<String>, vyb<String>, s<Suite>)<SuiteRun> -> {
+    outPath<String> = "/tmp/vyb_milestone_" + s.name + ".out"
+    errPath<String> = outPath + ".err"
+
+    cmd<String> = "cd " + repoRoot + " && " + vyb + " test/run_tests.vyb --vyb " + vyb
+    cmd = cmd + " --test-dir " + s.dir + " --pattern '" + s.pattern + "'"
+    cmd = cmd + " > " + outPath + " 2> " + errPath + "; echo $?"
+
+    rcText<String> = trim(run_sh(cmd))
+    code<Int> = digits_to_int(rcText)
+    if (rcText.len() == 0) { code = -1 }
+    return SuiteRun { code = code, out = slurp(outPath) }
+}
+
+main()<Int> -> {
+    argv<Vec<String>> = argv_of()
+    if (has(argv, "--help") || has(argv, "-h")) {
+        println("usage: vyb test/run_milestone.vyb [--vyb PATH] [--minimum N] [-v|-vv]")
+        return 0
+    }
+
+    # argv[0] is the compiler, argv[1] is this program.
+    runner<String> = ""
+    if (argv.len() > 1) { runner = argv.get(1) }
+    repoRoot<String> = dirname_of(dirname_of(runner))
+    if (repoRoot.len() == 0 || !dir_exists(repoRoot + "/test")) { repoRoot = "." }
+
+    vyb<String> = opt(argv, "--vyb")
+    if (vyb.len() == 0) { vyb = repoRoot + "/build/vyb" }
+
+    verbose<Bool> = has(argv, "-v") || has(argv, "-vv")
+
+    minimum<Int> = MILESTONE_MINIMUM
+    m<String> = opt(argv, "--minimum")
+    if (m.len() > 0) { minimum = digits_to_int(m) }
+
+    suites<Vec<Suite>> = milestone_suites()
+
+    totalRan<Int> = 0
+    totalPassed<Int> = 0
+    bad<Bool> = false
+
+    i<Int> = 0
+    while (i < suites.len()) {
+        s<Suite> = suites.get(i)
+        r<SuiteRun> = run_suite(repoRoot, vyb, s)
+        code<Int> = r.code
+        out<String> = r.out
+
+        ran<Int> = count_after(out, "Ran ")
+        passed<Int> = count_after(out, "Passed: ")
+        failed<Int> = count_after(out, "Failed: ")
+
+        if (verbose || code != 0) { println(out) }
+        println(s.name + ": " + passed.to_string() + "/" + ran.to_string() + " passed")
+
+        if (code != 0) {
+            println("Error: " + s.name + " failed " + failed.to_string() + " test(s)")
+            bad = true
+            i = suites.len()
+        } else {
+            totalRan = totalRan + ran
+            totalPassed = totalPassed + passed
+            i = i + 1
+        }
+    }
+
+    if (bad) { exit(1) }
+
+    println("")
+    println("Milestone total: " + totalPassed.to_string() + "/" + totalRan.to_string() + " passed")
+    println("Milestone minimum: " + minimum.to_string() + " passing tests")
+
+    if (totalRan < minimum || totalPassed < minimum) {
+        println("Error: milestone test count is below the required minimum")
+        exit(1)
+    }
+    return 0
+}

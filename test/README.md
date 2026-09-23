@@ -44,7 +44,7 @@ assert runtime output.
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test/new_features
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test/ffi
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test/parser
-python3 test/run_milestone_tests.py --vyb build/vyb
+build/vyb test/run_milestone.vyb --vyb build/vyb
 ```
 
 The Vyb runner executes each test through the compiler (JIT) by default;

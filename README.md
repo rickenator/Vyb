@@ -2624,7 +2624,7 @@ build/vyb test/run_examples.vyb --vyb build/vyb
 cmake --build build --target run-examples
 
 # Run the milestone gate
-python3 test/run_milestone_tests.py --vyb build/vyb
+build/vyb test/run_milestone.vyb --vyb build/vyb
 cmake --build build --target run-milestone
 ```
 
