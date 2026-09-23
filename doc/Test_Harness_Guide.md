@@ -1,8 +1,11 @@
 # Vyb Test Harness and Analysis System
 
 Vyb's canonical test runner is `test/run_tests.vyb` (a Vyb program, wired into
-CTest as `run-tests`). This guide documents the auxiliary parallel harness
-(`test_harness.py`) and its richer reporting/triage workflow.
+CTest as `run-tests`). This guide documents the auxiliary harness
+(`test_harness.vyb`, also a Vyb program) and its richer reporting/triage
+workflow. The harness runs the selected files sequentially: `--workers` is
+accepted for compatibility but does not change execution order, and per-test
+verdicts match the retired Python harness exactly.
 
 ## Overview
 
@@ -92,58 +95,58 @@ async test_function()<Future<Int>> -> {
 
 ```bash
 # Run all tests with default settings
-./test_harness.py
+build/vyb test_harness.vyb
 
 # Run with increased parallelism
-./test_harness.py --workers 16
+build/vyb test_harness.vyb --workers 16
 
 # Run with verbose output
-./test_harness.py --verbose
+build/vyb test_harness.vyb -v
 ```
 
 ### Filtering and Selection
 
 ```bash
 # Run specific categories
-./test_harness.py --category parser,semantic
+build/vyb test_harness.vyb --category parser,semantic
 
 # Run by priority
-./test_harness.py --priority critical,high
+build/vyb test_harness.vyb --priority critical,high
 
 # Run by tags
-./test_harness.py --tags async,memory
+build/vyb test_harness.vyb --tags async,memory
 
 # Exclude slow/flaky tests
-./test_harness.py --exclude-slow --exclude-flaky
+build/vyb test_harness.vyb --exclude-slow --exclude-flaky
 
 # Pattern matching
-./test_harness.py --pattern "test_async_*.vyb"
+build/vyb test_harness.vyb --pattern "test_async_*.vyb"
 ```
 
 ### Report Generation
 
 ```bash
 # Generate HTML report
-./test_harness.py --html-report test_report.html
+build/vyb test_harness.vyb --html-report test_report.html
 
 # Generate JSON results
-./test_harness.py --json-report results.json
+build/vyb test_harness.vyb --json-report results.json
 
 # Combined execution with reports
-./test_harness.py --html-report report.html --json-report results.json --workers 8
+build/vyb test_harness.vyb --html-report report.html --json-report results.json --workers 8
 ```
 
 ### Advanced Usage
 
 ```bash
 # Custom test directories
-./test_harness.py --test-dirs test/async test/debug --pattern "*.vyb"
+build/vyb test_harness.vyb --test-dirs test/async test/debug --pattern "*.vyb"
 
 # Custom executable
-./test_harness.py --vyb /path/to/custom/vyb
+build/vyb test_harness.vyb --vyb /path/to/custom/vyb
 
-# Timeout override
-./test_harness.py --timeout 60
+# Worker-count flag (accepted for compatibility; the harness executes sequentially)
+build/vyb test_harness.vyb --workers 8
 ```
 
 ## Failure Analysis and Triage
@@ -154,13 +157,13 @@ The triage tool analyzes test failures and creates actionable plans:
 
 ```bash
 # Basic triage analysis
-./triage_tool.py results.json
+build/vyb triage_tool.vyb results.json
 
 # Generate markdown report
-./triage_tool.py results.json --format markdown --output triage.md
+build/vyb triage_tool.vyb results.json --output-format markdown --output triage.md
 
 # Focus on high-priority failures
-./triage_tool.py results.json --priority critical,high
+build/vyb triage_tool.vyb results.json --priority critical,high
 ```
 
 ### Failure Pattern Recognition
@@ -321,33 +324,33 @@ Performance analysis reveals:
 
 ```bash
 # CI-friendly test execution
-./test_harness.py --workers 4 --json-report ci-results.json --exclude-flaky
+build/vyb test_harness.vyb --workers 4 --json-report ci-results.json --exclude-flaky
 
 # Failure analysis for CI
-./triage_tool.py ci-results.json --priority critical,high --output ci-triage.md
+build/vyb triage_tool.vyb ci-results.json --priority critical,high --output ci-triage.md
 ```
 
 ### Development Testing
 
 ```bash
 # Quick smoke test during development
-./test_harness.py --category basic --exclude-slow
+build/vyb test_harness.vyb --category basic --exclude-slow
 
 # Feature-specific testing
-./test_harness.py --category async --tags debug --verbose
+build/vyb test_harness.vyb --category async --tags debug -v
 
 # Performance regression check
-./test_harness.py --category performance --html-report perf-report.html
+build/vyb test_harness.vyb --category performance --html-report perf-report.html
 ```
 
 ### Release Validation
 
 ```bash
 # Comprehensive release testing
-./test_harness.py --workers 8 --html-report release-report.html --json-report release-results.json
+build/vyb test_harness.vyb --workers 8 --html-report release-report.html --json-report release-results.json
 
 # Release triage analysis
-./triage_tool.py release-results.json --format markdown --output release-triage.md
+build/vyb triage_tool.vyb release-results.json --output-format markdown --output release-triage.md
 ```
 
 ## Advanced Features

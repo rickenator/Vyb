@@ -20,10 +20,10 @@ Vyb is one of the most beautiful things we've worked on. Now we strive for **qua
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
 
 # Or the auxiliary parallel harness with reporting/triage
-python3 test_harness.py --parallel
+build/vyb test_harness.vyb
 
 # Generate comprehensive report
-python3 test_harness.py --parallel --html-report test_report.html --json-report test_results.json
+build/vyb test_harness.vyb --html-report test_report.html --json-report test_results.json
 ```
 
 ### Full Quality Assessment
@@ -33,10 +33,10 @@ mkdir -p build && cd build && cmake .. && make clean && make -j
 cd ..
 
 # 2. Run comprehensive test suite
-python3 test_harness.py --parallel --html-report reports/test_report_$(date +%Y%m%d_%H%M%S).html --json-report reports/test_results_$(date +%Y%m%d_%H%M%S).json --triage --performance
+build/vyb test_harness.vyb --html-report reports/test_report_$(date +%Y%m%d_%H%M%S).html --json-report reports/test_results_$(date +%Y%m%d_%H%M%S).json
 
 # 3. Analyze failures
-python3 triage_tool.py reports/test_results_*.json --output reports/triage_report.md
+build/vyb triage_tool.vyb reports/test_results_*.json --output reports/triage_report.md
 
 # 4. Review reports and update this document
 ```
@@ -44,10 +44,10 @@ python3 triage_tool.py reports/test_results_*.json --output reports/triage_repor
 ### Continuous Testing During Development
 ```bash
 # Test specific category
-python3 test_harness.py --category parser --verbose
+build/vyb test_harness.vyb --category parser -v
 
 # Test specific pattern
-python3 test_harness.py --filter "async" --verbose
+build/vyb test_harness.vyb --pattern "test_async_*.vyb" -v
 
 # Test single file
 build/vyb test/path/to/test.vyb
@@ -104,7 +104,7 @@ build/vyb test/path/to/test.vyb
 ### Baseline Assessment (PENDING)
 **Date:** TBD
 **Commit:** TBD
-**Command:** `python3 test_harness.py --parallel --html-report --json-report`
+**Command:** `build/vyb test_harness.vyb --html-report --json-report`
 
 **Results:**
 - Total Tests:
@@ -245,7 +245,7 @@ test/
 ### Pre-Commit Checklist
 Before committing changes that affect language features:
 
-1. [ ] Run relevant test category: `python3 test_harness.py --category [category]`
+1. [ ] Run relevant test category: `build/vyb test_harness.vyb --category [category]`
 2. [ ] Verify no new failures introduced
 3. [ ] Add test for new feature or bug fix
 4. [ ] Update this TEST_PLAN.md if new test gaps identified

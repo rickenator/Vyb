@@ -2664,9 +2664,8 @@ as `run-tests`:
 ```
 `vyb --repo` (or `vyb test` with no explicit paths inside the compiler repo) runs
 the same Vyb runner, so the compiler's own test path needs no Python. The
-auxiliary parallel harness (`test_harness.py`, `triage_tool.py`) adds HTML
-reporting and failure triage on top of that suite; both are still Python and are
-slated for porting.
+auxiliary harness (`test_harness.vyb`, `triage_tool.vyb`) adds HTML
+reporting and failure triage on top of that suite; both are Vyb programs now.
 
 Tests carry metadata headers (`@test:`, `@description:`, `@category:`,
 `@expect:`, `@expect-output:`, `@expect-return:`) that drive pass/fail
@@ -2677,7 +2676,7 @@ automatically.
 ```bash
 build/vyb migrate_syntax.vyb --scan         # find legacy syntax
 build/vyb migrate_syntax.vyb --apply        # apply canonical forms (backs up)
-python3 triage_tool.py --pattern 'failed*'  # analyse failures
+build/vyb triage_tool.vyb results.json        # analyse failures
 ```
 
 ### Reference manual generator (`tools/refman.py`)

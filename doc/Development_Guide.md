@@ -55,8 +55,8 @@ Vyb/
 ├── test/                # 1077 Vyb test files
 ├── doc/                 # Comprehensive documentation
 ├── examples/            # Example programs
-├── test_harness.py      # Auxiliary parallel test runner (canonical suite: test/run_tests.vyb)
-├── triage_tool.py       # Failure analysis tool
+├── test_harness.vyb     # Auxiliary test harness (canonical suite: test/run_tests.vyb)
+├── triage_tool.vyb      # Failure analysis tool
 └── build/               # Build output directory
 ```
 
@@ -243,34 +243,34 @@ Vyb's canonical suite runner (`test/run_tests.vyb`) manages 1077+ test files; th
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
 
 # Run all tests with the auxiliary parallel harness
-./test_harness.py
+build/vyb test_harness.vyb
 
 # Run with parallel execution
-./test_harness.py --workers 8
+build/vyb test_harness.vyb --workers 8
 
 # Generate comprehensive reports
-./test_harness.py --html-report report.html --json-report results.json
+build/vyb test_harness.vyb --html-report report.html --json-report results.json
 ```
 
 #### Advanced Filtering
 ```bash
 # Run specific categories
-./test_harness.py --category async,debug
+build/vyb test_harness.vyb --category async,debug
 
 # Filter by priority and exclude slow tests
-./test_harness.py --priority high --exclude-slow
+build/vyb test_harness.vyb --priority high --exclude-slow
 
 # Pattern matching
-./test_harness.py --pattern "*async*.vyb"
+build/vyb test_harness.vyb --pattern "*async*.vyb"
 ```
 
 #### Test Analysis and Triage
 ```bash
 # Analyze failures and create triage plan
-./triage_tool.py results.json
+build/vyb triage_tool.vyb results.json
 
 # Generate actionable markdown report
-./triage_tool.py results.json --format markdown --output triage.md
+build/vyb triage_tool.vyb results.json --output-format markdown --output triage.md
 ```
 
 ### Test Writing Guidelines
@@ -319,16 +319,16 @@ vim src/vre/llvm/cgen_expr.cpp
 make -C build -j
 
 # Test specific functionality
-./test_harness.py --category async --pattern "*debug*"
+build/vyb test_harness.vyb --category async --pattern "*debug*"
 ```
 
 #### 2. Feature Development
 ```bash
 # Run comprehensive tests
-./test_harness.py --workers 8 --json-report results.json
+build/vyb test_harness.vyb --workers 8 --json-report results.json
 
 # Analyze any failures
-./triage_tool.py results.json --priority critical,high
+build/vyb triage_tool.vyb results.json --priority critical,high
 
 # Commit changes with descriptive messages
 git add .
@@ -345,7 +345,7 @@ git commit -m "Implement async state machine debugging
 build/vyb test/debug_async_test.vyb
 
 # Run related test suite
-./test_harness.py --category async --verbose
+build/vyb test_harness.vyb --category async -v
 ```
 
 ### Release Preparation
@@ -353,19 +353,19 @@ build/vyb test/debug_async_test.vyb
 #### 1. Comprehensive Testing
 ```bash
 # Full test suite with reporting
-./test_harness.py --workers 8 --html-report release-report.html --json-report release-results.json
+build/vyb test_harness.vyb --workers 8 --html-report release-report.html --json-report release-results.json
 
 # Generate triage analysis
-./triage_tool.py release-results.json --format markdown --output release-triage.md
+build/vyb triage_tool.vyb release-results.json --output-format markdown --output release-triage.md
 ```
 
 #### 2. Performance Analysis
 ```bash
 # Performance-focused testing
-./test_harness.py --category performance --exclude-flaky
+build/vyb test_harness.vyb --category performance --exclude-flaky
 
 # Check for regressions
-./test_harness.py --category runtime --verbose
+build/vyb test_harness.vyb --category runtime -v
 ```
 
 #### 3. Documentation Updates
@@ -394,7 +394,7 @@ git checkout -b feature/new-async-debugging
 mkdir -p build && cd build
 cmake .. && make -j
 cd ..
-./test_harness.py --category basic
+build/vyb test_harness.vyb --category basic
 ```
 
 #### 2. Making Changes
@@ -405,10 +405,10 @@ cd ..
 # - Create tests in test/
 
 # Test your changes
-./test_harness.py --category relevant-category --verbose
+build/vyb test_harness.vyb --category relevant-category -v
 
 # Ensure all tests pass
-./test_harness.py --exclude-flaky
+build/vyb test_harness.vyb --exclude-flaky
 ```
 
 #### 3. Submission Process
@@ -546,10 +546,10 @@ valgrind --tool=memcheck build/vyb test.vyb
 #### Test Debugging
 ```bash
 # Debug specific test failures
-./test_harness.py --pattern "failing_test.vyb" --verbose
+build/vyb test_harness.vyb --pattern "failing_test.vyb" -v
 
 # Analyze test patterns
-./triage_tool.py results.json --priority critical
+build/vyb triage_tool.vyb results.json --priority critical
 ```
 
 ## Conclusion

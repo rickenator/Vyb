@@ -1,0 +1,1287 @@
+// @not-a-test: true
+# triage_tool.vyb -- Vyb Test Triage Tool, the Vyb port of the repository-root
+# `triage_tool.py`. Part of the #226 "no Python in the test path" work.
+#
+# It reads a JSON test-report (the shape written by test_harness.vyb /
+# test_harness.py --json-report; test/run_tests.vyb --json is also accepted,
+# in which case the metadata block is derived from the result list), clusters
+# failures by normalized error text, assigns a priority/action/effort from the
+# error pattern table, builds a phased triage plan and prints a console or
+# Markdown report.
+#
+# Usage:
+#   VYB_STDLIB=$PWD/stdlib build/vyb triage_tool.vyb results.json
+#   ... --output-format markdown --output triage.md
+#   ... --priority high,critical
+#
+# Options: --output-format console|markdown  --output|-o FILE  --priority p,p  --help
+#
+# `--format` is NOT used for the report format: the compiler itself consumes
+# `--format` (it runs the source formatter), so the port spells it
+# `--output-format`.
+#
+# Implementation notes for this build:
+#   * No `stdlib/json` and no regex, so the report is read with a small
+#     recursive-descent JSON scanner and the regex pattern table is expressed as
+#     literal substrings (every alternative in triage_tool.py's patterns is a
+#     literal phrase, so first-match order is preserved exactly).
+#   * `full_error` is lowercased once and matched case-insensitively, as re.IGNORECASE
+#     did. `_normalize_error`'s three `\d+` passes collapse into one digit-run pass.
+#   * Related-test lists are computed from the error clusters instead of being
+#     written back into each item (this build has no in-place field assignment).
+#   * Exit status comes from `exit()`: no results file -> 2 (Python's argparse),
+#     missing file -> 1, success -> 0. Console stdout keeps Python's extra
+#     trailing blank line, byte-for-byte.
+#   * test/run_tests.vyb's `--json` (a bare array with no `metadata`) is accepted;
+#     triage_tool.py raises TypeError on it. Harness-shaped reports are unchanged.
+import io::{close, open_read, open_write, read_all, write_str}
+import process::{exec_output}
+import fs::{mkdir}
+
+# ---------------------------------------------------------------- small helpers
+
+# Strip leading/trailing whitespace (spaces, tabs, CR, LF) from `s`.
+trim(s<String>)<String> -> {
+    a<Int> = 0
+    n<Int> = s.len()
+    while (a < n) {
+        c<Int> = (s.char_at(a) as Int) & 0xFF
+        if (c == 32 || c == 9 || c == 13 || c == 10) { a = a + 1 } else { break }
+    }
+    b<Int> = n
+    while (b > a) {
+        c<Int> = (s.char_at(b - 1) as Int) & 0xFF
+        if (c == 32 || c == 9 || c == 13 || c == 10) { b = b - 1 } else { break }
+    }
+    if (b <= a) { return "" }
+    return s.substring(a, b)
+}
+
+# ASCII lowercase of `s`.
+to_lower(s<String>)<String> -> {
+    out<String> = ""
+    i<Int> = 0
+    while (i < s.len()) {
+        c<Int> = (s.char_at(i) as Int) & 0xFF
+        if (c >= 65 && c <= 90) { c = c + 32 }
+        out = out + String::from_byte(c)
+        i = i + 1
+    }
+    return out
+}
+
+# Decimal value of a digit string (stops at the first non-digit). `String::to_int`
+# is not available on this build.
+digits_to_int(s<String>)<Int> -> {
+    t<String> = trim(s)
+    n<Int> = 0
+    neg<Bool> = false
+    i<Int> = 0
+    if (t.len() > 0 && (((t.char_at(0) as Int) & 0xFF) == 45)) { neg = true; i = 1 }
+    while (i < t.len()) {
+        c<Int> = (t.char_at(i) as Int) & 0xFF
+        if (c < 48 || c > 57) { break }
+        n = n * 10 + (c - 48)
+        i = i + 1
+    }
+    if (neg) { return 0 - n }
+    return n
+}
+
+# True when `needle` occurs in `hay`.
+contains(hay<String>, needle<String>)<Bool> -> {
+    return (hay.index_of(needle) >= 0)
+}
+
+# "100" of "100" -> "100.0%" (one decimal, integer arithmetic).
+pct1(np<Int>, tot<Int>)<String> -> {
+    if (tot <= 0) { return "0.0%" }
+    # round-half-up to one decimal, e.g. 8/21 -> 381 tenths -> "38.1%"
+    scaled<Int> = (np * 1000 + tot / 2) / tot
+    whole<Int> = scaled / 10
+    frac<Int> = scaled % 10
+    return whole.to_string() + "." + frac.to_string() + "%"
+}
+
+# Index of the last '/' in `p`, or -1.
+last_slash(p<String>)<Int> -> {
+    i<Int> = p.len() - 1
+    while (i >= 0) {
+        if (((p.char_at(i) as Int) & 0xFF) == 47) { return i }
+        i = i - 1
+    }
+    return -1
+}
+
+dirname_of(p<String>)<String> -> {
+    i<Int> = last_slash(p)
+    if (i < 0) { return "" }
+    return p.substring(0, i)
+}
+
+# Run `cmd` through the shell and return its stdout.
+run_sh(cmd<String>)<String> -> {
+    out<String> = ""
+    freedom {
+        match (exec_output(cmd)) {
+            s -> { out = s }
+            ? -> { out = "" }
+        }
+    }
+    return out
+}
+
+# Read a whole file as a String ("" when it cannot be read).
+slurp(path<String>)<String> -> {
+    text<String> = ""
+    match (open_read(path)) {
+        f -> {
+            match (read_all(f)) { s -> { text = s } ? -> { } }
+            close(f)
+        }
+        ? -> { }
+    }
+    return text
+}
+
+# Write `text` to `path`; true when the whole string was written.
+spill(path<String>, text<String>)<Bool> -> {
+    match (open_write(path)) {
+        f -> {
+            match (write_str(f, text)) { n -> { close(f); return (n == text.len()) } ? -> { close(f); return false } }
+        }
+        ? -> { return false }
+    }
+    return false
+}
+
+# True when `p` is an existing regular file.
+file_exists(p<String>)<Bool> -> {
+    return (trim(run_sh("test -f '" + p + "' && echo yes || echo no")) == "yes")
+}
+
+# The program's argv, parsed from `/proc/self/cmdline` (NUL separated).
+argv_of()<Vec<String>> -> {
+    raw<String> = slurp("/proc/self/cmdline")
+    out<Vec<String>> = Vec<String>()
+    cur<String> = ""
+    i<Int> = 0
+    while (i < raw.len()) {
+        c<Int> = (raw.char_at(i) as Int) & 0xFF
+        if (c == 0) {
+            if (cur.len() > 0) { out.push(cur) }
+            cur = ""
+        } else {
+            cur = cur + String::from_byte(c)
+        }
+        i = i + 1
+    }
+    if (cur.len() > 0) { out.push(cur) }
+    return out
+}
+
+flag_index(argv<Vec<String>>, flag<String>)<Int> -> {
+    i<Int> = 0
+    while (i < argv.len()) {
+        if (argv.get(i) == flag) { return i }
+        i = i + 1
+    }
+    return -1
+}
+
+has(argv<Vec<String>>, flag<String>)<Bool> -> {
+    return (flag_index(argv, flag) >= 0)
+}
+
+opt(argv<Vec<String>>, flag<String>)<String> -> {
+    i<Int> = flag_index(argv, flag)
+    if (i >= 0 && i + 1 < argv.len()) { return argv.get(i + 1) }
+    return ""
+}
+
+# ------------------------------------------------------------- json scanner
+#
+# No `stdlib/json` on this build, so the report is read into a flat list of
+# leaves: every scalar becomes one Leaf whose `path` is its location in the
+# document ("$", "$.metadata.total_tests", "$.results[3].result.stderr"). Arrays
+# of objects are addressed by index, which is all the triage logic needs.
+
+struct Leaf {
+    path<String>,
+    kind<String>,   # "str" | "num" | "bool" | "null"
+    val<String>
+}
+
+# Position + value, returned together because by-value params cannot write back.
+struct PRes {
+    pos<Int>,
+    val<String>
+}
+
+struct StrRes {
+    pos<Int>,
+    val<String>
+}
+
+push_leaf(v<their<Vec<Leaf>>>, path<String>, kind<String>, val<String>) -> {
+    v.push(Leaf { path = path, kind = kind, val = val })
+}
+
+skip_ws(t<String>, p<Int>)<Int> -> {
+    i<Int> = p
+    while (i < t.len()) {
+        c<Int> = (t.char_at(i) as Int) & 0xFF
+        if (c == 32 || c == 9 || c == 10 || c == 13) { i = i + 1 } else { break }
+    }
+    return i
+}
+
+hex_val(c<Int>)<Int> -> {
+    if (c >= 48 && c <= 57) { return c - 48 }
+    if (c >= 97 && c <= 102) { return c - 87 }
+    if (c >= 65 && c <= 70) { return c - 55 }
+    return 0
+}
+
+# The 4 hex digits at `p` as an Int.
+hex4(t<String>, p<Int>)<Int> -> {
+    n<Int> = 0
+    i<Int> = p
+    while (i < p + 4 && i < t.len()) {
+        n = n * 16 + hex_val((t.char_at(i) as Int) & 0xFF)
+        i = i + 1
+    }
+    return n
+}
+
+# UTF-8 bytes for a code point.
+cp_to_utf8(cp<Int>)<String> -> {
+    if (cp < 0x80) { return String::from_byte(cp) }
+    if (cp < 0x800) {
+        return String::from_byte(0xC0 | (cp >> 6)) + String::from_byte(0x80 | (cp & 0x3F))
+    }
+    return String::from_byte(0xE0 | (cp >> 12)) + String::from_byte(0x80 | ((cp >> 6) & 0x3F)) + String::from_byte(0x80 | (cp & 0x3F))
+}
+
+# A JSON string starting at `p` (which must hold '"'); unescapes as it goes,
+# including \uXXXX (with surrogate-pair joining).
+parse_string(t<String>, p<Int>)<StrRes> -> {
+    out<String> = ""
+    i<Int> = p + 1
+    while (i < t.len()) {
+        c<Int> = (t.char_at(i) as Int) & 0xFF
+        if (c == 34) { return StrRes { pos = i + 1, val = out } }
+        if (c == 92) {
+            i = i + 1
+            if (i >= t.len()) { break }
+            e<Int> = (t.char_at(i) as Int) & 0xFF
+            if (e == 110) { out = out + "\n" }
+            else if (e == 116) { out = out + "\t" }
+            else if (e == 114) { out = out + "\r" }
+            else if (e == 98) { out = out + String::from_byte(8) }
+            else if (e == 102) { out = out + String::from_byte(12) }
+            else if (e == 47) { out = out + "/" }
+            else if (e == 92) { out = out + "\\" }
+            else if (e == 34) { out = out + "\"" }
+            else if (e == 117) {
+                cp<Int> = hex4(t, i + 1)
+                i = i + 4
+                if (cp >= 0xD800 && cp <= 0xDBFF && i + 6 < t.len()) {
+                    if (((t.char_at(i + 1) as Int) & 0xFF) == 92 && ((t.char_at(i + 2) as Int) & 0xFF) == 117) {
+                        lo<Int> = hex4(t, i + 3)
+                        if (lo >= 0xDC00 && lo <= 0xDFFF) {
+                            cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00)
+                            i = i + 6
+                        }
+                    }
+                }
+                out = out + cp_to_utf8(cp)
+            }
+            else { out = out + String::from_byte(e) }
+        } else {
+            out = out + String::from_byte(c)
+        }
+        i = i + 1
+    }
+    return StrRes { pos = i, val = out }
+}
+
+parse_value(t<String>, p<Int>, path<String>, out<their<Vec<Leaf>>>)<Int> -> {
+    q<Int> = skip_ws(t, p)
+    if (q >= t.len()) { return q }
+    c<Int> = (t.char_at(q) as Int) & 0xFF
+    if (c == 123) { return parse_object(t, q, path, out) }
+    if (c == 91) { return parse_array(t, q, path, out) }
+    if (c == 34) {
+        r<StrRes> = parse_string(t, q)
+        push_leaf(out, path, "str", r.val)
+        return r.pos
+    }
+    if (c == 116) { push_leaf(out, path, "bool", "true"); return q + 4 }
+    if (c == 102) { push_leaf(out, path, "bool", "false"); return q + 5 }
+    if (c == 110) { push_leaf(out, path, "null", ""); return q + 4 }
+    e<Int> = q
+    while (e < t.len()) {
+        d<Int> = (t.char_at(e) as Int) & 0xFF
+        if ((d >= 48 && d <= 57) || d == 45 || d == 43 || d == 46 || d == 101 || d == 69) { e = e + 1 } else { break }
+    }
+    push_leaf(out, path, "num", t.substring(q, e))
+    return e
+}
+
+parse_object(t<String>, p<Int>, path<String>, out<their<Vec<Leaf>>>)<Int> -> {
+    i<Int> = skip_ws(t, p + 1)
+    c<Int> = -1
+    if (i < t.len()) { c = (t.char_at(i) as Int) & 0xFF }
+    if (c == 125) { return i + 1 }
+    done<Bool> = false
+    while (!done && i < t.len()) {
+        i = skip_ws(t, i)
+        if (i >= t.len()) { done = true }
+        else {
+            kr<StrRes> = parse_string(t, i)
+            i = skip_ws(t, kr.pos)
+            if (i < t.len() && (((t.char_at(i) as Int) & 0xFF) == 58)) { i = i + 1 }
+            i = parse_value(t, i, path + "." + kr.val, out)
+            i = skip_ws(t, i)
+            if (i >= t.len()) { done = true }
+            else {
+                c2<Int> = (t.char_at(i) as Int) & 0xFF
+                if (c2 == 44) { i = i + 1 }
+                else if (c2 == 125) { i = i + 1; done = true }
+                else { done = true }
+            }
+        }
+    }
+    return i
+}
+
+parse_array(t<String>, p<Int>, path<String>, out<their<Vec<Leaf>>>)<Int> -> {
+    i<Int> = skip_ws(t, p + 1)
+    c<Int> = -1
+    if (i < t.len()) { c = (t.char_at(i) as Int) & 0xFF }
+    if (c == 93) { return i + 1 }
+    idx<Int> = 0
+    done<Bool> = false
+    while (!done && i < t.len()) {
+        i = parse_value(t, i, path + "[" + idx.to_string() + "]", out)
+        idx = idx + 1
+        i = skip_ws(t, i)
+        if (i >= t.len()) { done = true }
+        else {
+            c2<Int> = (t.char_at(i) as Int) & 0xFF
+            if (c2 == 44) { i = i + 1 }
+            else if (c2 == 93) { i = i + 1; done = true }
+            else { done = true }
+        }
+    }
+    return i
+}
+
+# Every scalar leaf of `text`.
+parse_json(text<String>)<Vec<Leaf>> -> {
+    leaves<Vec<Leaf>> = Vec<Leaf>()
+    pos<Int> = parse_value(text, 0, "$", borrow(leaves))
+    return leaves
+}
+
+# --------------------------------------------------------------- json queries
+
+# Index of the leaf at `path`, or -1.
+leaf_index(leaves<Vec<Leaf>>, path<String>)<Int> -> {
+    i<Int> = 0
+    while (i < leaves.len()) {
+        if (leaves.get(i).path == path) { return i }
+        i = i + 1
+    }
+    return -1
+}
+
+# Scalar text at `path` ("" when absent).
+leaf_text(leaves<Vec<Leaf>>, path<String>)<String> -> {
+    i<Int> = leaf_index(leaves, path)
+    if (i < 0) { return "" }
+    return leaves.get(i).val
+}
+
+# Int at `path` (0 when absent).
+leaf_int(leaves<Vec<Leaf>>, path<String>)<Int> -> {
+    return digits_to_int(leaf_text(leaves, path))
+}
+
+# Bool at `path` (false when absent).
+leaf_bool(leaves<Vec<Leaf>>, path<String>)<Bool> -> {
+    return (to_lower(leaf_text(leaves, path)) == "true")
+}
+
+# The JSON path prefix of the report's result array: "$.results" for
+# test_harness.vyb's {"metadata":..., "results":[...]} shape, "$" for
+# test/run_tests.vyb's bare array. Without this, both shapes could not be read.
+results_prefix(leaves<Vec<Leaf>>)<String> -> {
+    i<Int> = 0
+    while (i < leaves.len()) {
+        p<String> = leaves.get(i).path
+        if (p.len() > 9 && p.substring(0, 9) == "$.results[") { return "$.results" }
+        if (p.len() > 2 && p.substring(0, 2) == "$[") { return "$" }
+        i = i + 1
+    }
+    return "$.results"
+}
+
+# Number of entries in the result array: the largest [i] index seen, +1.
+result_count(leaves<Vec<Leaf>>, prefix<String>)<Int> -> {
+    prefix = prefix + "["
+    maxIdx<Int> = -1
+    i<Int> = 0
+    while (i < leaves.len()) {
+        p<String> = leaves.get(i).path
+        if (p.len() > prefix.len() && p.substring(0, prefix.len()) == prefix) {
+            j<Int> = prefix.len()
+            n<Int> = 0
+            seen<Bool> = false
+            while (j < p.len()) {
+                c<Int> = (p.char_at(j) as Int) & 0xFF
+                if (c >= 48 && c <= 57) { n = n * 10 + (c - 48); seen = true; j = j + 1 }
+                else { break }
+            }
+            if (seen && n > maxIdx) { maxIdx = n }
+        }
+        i = i + 1
+    }
+    return maxIdx + 1
+}
+
+# Category list for result `i`: an array (`category[0]`, `category[1]`, ...) or,
+# for test/run_tests.vyb's report shape, one comma-separated string.
+cats_of(leaves<Vec<Leaf>>, i<Int>, prefix<String>)<Vec<String>> -> {
+    base<String> = prefix + "[" + i.to_string() + "].test.category"
+    out<Vec<String>> = Vec<String>()
+    j<Int> = 0
+    while (true) {
+        v<String> = leaf_text(leaves, base + "[" + j.to_string() + "]")
+        if (leaf_index(leaves, base + "[" + j.to_string() + "]") < 0) { break }
+        out.push(v)
+        j = j + 1
+    }
+    if (out.len() == 0) {
+        s<String> = leaf_text(leaves, base)
+        if (s.len() > 0) {
+            parts<Vec<String>> = s.split(",")
+            k<Int> = 0
+            while (k < parts.len()) { out.push(trim(parts.get(k))); k = k + 1 }
+        }
+    }
+    return out
+}
+
+# ------------------------------------------------------------- error patterns
+
+# One entry of the pattern table (the literal alternatives of the Python regex).
+struct Pattern {
+    cat<String>,
+    prio<String>,
+    action<String>,
+    effort<String>,
+    subs<Vec<String>>
+}
+
+# triage_tool.py's `self.error_patterns`, in the same order (first match wins).
+pattern_table()<Vec<Pattern>> -> {
+    out<Vec<Pattern>> = Vec<Pattern>()
+
+    s1<Vec<String>> = Vec<String>()
+    s1.push("parse error"); s1.push("syntax error"); s1.push("unexpected token")
+    out.push(Pattern { cat = "parser", prio = "high", action = "Fix parser grammar or syntax handling", effort = "medium", subs = s1 })
+
+    s2<Vec<String>> = Vec<String>()
+    s2.push("type mismatch"); s2.push("type error"); s2.push("cannot convert")
+    out.push(Pattern { cat = "semantic", prio = "high", action = "Review type system and type checking", effort = "medium", subs = s2 })
+
+    s3<Vec<String>> = Vec<String>()
+    s3.push("segmentation fault"); s3.push("segfault"); s3.push("signal 11")
+    out.push(Pattern { cat = "runtime", prio = "critical", action = "Debug memory safety issue - use valgrind/asan", effort = "high", subs = s3 })
+
+    s4<Vec<String>> = Vec<String>()
+    s4.push("assertion failed"); s4.push("assert")
+    out.push(Pattern { cat = "runtime", prio = "high", action = "Review assertion and fix underlying issue", effort = "medium", subs = s4 })
+
+    s5<Vec<String>> = Vec<String>()
+    s5.push("timeout"); s5.push("timed out")
+    out.push(Pattern { cat = "performance", prio = "medium", action = "Optimize performance or increase timeout", effort = "medium", subs = s5 })
+
+    s6<Vec<String>> = Vec<String>()
+    s6.push("undefined symbol"); s6.push("undefined reference")
+    out.push(Pattern { cat = "linker", prio = "high", action = "Fix symbol resolution or add missing implementation", effort = "low", subs = s6 })
+
+    s7<Vec<String>> = Vec<String>()
+    s7.push("out of memory"); s7.push("memory allocation")
+    out.push(Pattern { cat = "memory", prio = "high", action = "Review memory management and allocation", effort = "high", subs = s7 })
+
+    s8<Vec<String>> = Vec<String>()
+    s8.push("file not found"); s8.push("cannot open")
+    out.push(Pattern { cat = "io", prio = "low", action = "Check file paths and permissions", effort = "low", subs = s8 })
+
+    return out
+}
+
+# The first pattern with any alternative present in `full_error` (already lowercased).
+match_pattern(patterns<Vec<Pattern>>, full_error<String>)<Pattern> -> {
+    i<Int> = 0
+    while (i < patterns.len()) {
+        p<Pattern> = patterns.get(i)
+        j<Int> = 0
+        while (j < p.subs.len()) {
+            if (contains(full_error, p.subs.get(j))) { return p }
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return Pattern {
+        cat = "unknown",
+        prio = "medium",
+        action = "Investigate test failure",
+        effort = "medium",
+        subs = Vec<String>()
+    }
+}
+
+# `_normalize_error`: replace every /path run with <path> and every digit run with
+# <num>, then truncate to 100 characters. (The Python original's three digit
+# passes collapse to this one, because the earlier passes leave no digits behind.)
+normalize_error(text<String>)<String> -> {
+    step1<String> = ""
+    i<Int> = 0
+    while (i < text.len()) {
+        c<Int> = (text.char_at(i) as Int) & 0xFF
+        if (c == 47) {
+            j<Int> = i + 1
+            while (j < text.len()) {
+                d<Int> = (text.char_at(j) as Int) & 0xFF
+                if (d == 32 || d == 9 || d == 10 || d == 13) { break }
+                j = j + 1
+            }
+            step1 = step1 + "<path>"
+            i = j
+        } else {
+            step1 = step1 + String::from_byte(c)
+            i = i + 1
+        }
+    }
+    step2<String> = ""
+    i2<Int> = 0
+    while (i2 < step1.len()) {
+        c2<Int> = (step1.char_at(i2) as Int) & 0xFF
+        if (c2 >= 48 && c2 <= 57) {
+            j2<Int> = i2
+            while (j2 < step1.len()) {
+                d2<Int> = (step1.char_at(j2) as Int) & 0xFF
+                if (d2 >= 48 && d2 <= 57) { j2 = j2 + 1 } else { break }
+            }
+            step2 = step2 + "<num>"
+            i2 = j2
+        } else {
+            step2 = step2 + String::from_byte(c2)
+            i2 = i2 + 1
+        }
+    }
+    if (step2.len() > 100) { return step2.substring(0, 100) }
+    return step2
+}
+
+# --------------------------------------------------------------- triage model
+
+struct Item {
+    name<String>,
+    file<String>,
+    cats<Vec<String>>,
+    error<String>,
+    prio<String>,
+    action<String>,
+    effort<String>
+}
+
+struct Count {
+    k<String>,
+    n<Int>
+}
+
+# One error cluster: normalized key plus the indices of the items it groups.
+struct Cluster {
+    key<String>,
+    members<Vec<Int>>
+}
+
+struct Phase {
+    name<String>,
+    indices<Vec<Int>>,
+    effort<String>
+}
+
+# Index of the cluster with `key`, or -1.
+cluster_index(clusters<Vec<Cluster>>, key<String>)<Int> -> {
+    i<Int> = 0
+    while (i < clusters.len()) {
+        if (clusters.get(i).key == key) { return i }
+        i = i + 1
+    }
+    return -1
+}
+
+# Indices of every other item that shares `idx`'s error cluster (the Python
+# `_find_related_failures` list of names).
+related_names(items<Vec<Item>>, clusters<Vec<Cluster>>, idx<Int>)<Vec<String>> -> {
+    out<Vec<String>> = Vec<String>()
+    c<Int> = 0
+    while (c < clusters.len()) {
+        cl<Cluster> = clusters.get(c)
+        mine<Bool> = false
+        m<Int> = 0
+        while (m < cl.members.len()) {
+            if (cl.members.get(m) == idx) { mine = true; break }
+            m = m + 1
+        }
+        if (mine) {
+            if (cl.members.len() > 1) {
+                k<Int> = 0
+                while (k < cl.members.len()) {
+                    mi<Int> = cl.members.get(k)
+                    if (mi != idx) { out.push(items.get(mi).name) }
+                    k = k + 1
+                }
+            }
+            return out
+        }
+        c = c + 1
+    }
+    return out
+}
+
+# The priority/effort ranks used to order the triage plan.
+prio_rank(p<String>)<Int> -> {
+    if (p == "critical") { return 0 }
+    if (p == "high") { return 1 }
+    if (p == "medium") { return 2 }
+    return 3
+}
+
+effort_rank(e<String>)<Int> -> {
+    if (e == "low") { return 0 }
+    if (e == "medium") { return 1 }
+    return 2
+}
+
+picked_before(picked<Vec<Int>>, i<Int>)<Bool> -> {
+    j<Int> = 0
+    while (j < picked.len()) {
+        if (picked.get(j) == i) { return true }
+        j = j + 1
+    }
+    return false
+}
+
+# Item indices sorted by (priority rank, effort rank), stable (Python's
+# `sorted(..., key=...)`).
+plan_order(items<Vec<Item>>)<Vec<Int>> -> {
+    out<Vec<Int>> = Vec<Int>()
+    picked<Vec<Int>> = Vec<Int>()
+    n<Int> = items.len()
+    round<Int> = 0
+    while (round < n) {
+        best<Int> = -1
+        i<Int> = 0
+        while (i < n) {
+            if (!picked_before(picked, i)) {
+                if (best < 0) { best = i }
+                else {
+                    bi<Item> = items.get(i)
+                    bb<Item> = items.get(best)
+                    if (prio_rank(bi.prio) < prio_rank(bb.prio)) { best = i }
+                    else if (prio_rank(bi.prio) == prio_rank(bb.prio) && effort_rank(bi.effort) < effort_rank(bb.effort)) { best = i }
+                }
+            }
+            i = i + 1
+        }
+        if (best >= 0) { out.push(best); picked.push(best) }
+        round = round + 1
+    }
+    return out
+}
+
+# `_estimate_phase_effort` (low<=5, medium<=15, else high).
+estimate_phase_effort(items<Vec<Item>>, indices<Vec<Int>>)<String> -> {
+    total<Int> = 0
+    i<Int> = 0
+    while (i < indices.len()) {
+        it<Item> = items.get(indices.get(i))
+        if (it.effort == "low") { total = total + 1 }
+        else if (it.effort == "medium") { total = total + 3 }
+        else if (it.effort == "high") { total = total + 5 }
+        else { total = total + 3 }
+        i = i + 1
+    }
+    if (total <= 5) { return "low" }
+    if (total <= 15) { return "medium" }
+    return "high"
+}
+
+# The phases of the triage plan, in order (empty phases omitted).
+build_phases(items<Vec<Item>>)<Vec<Phase>> -> {
+    order<Vec<Int>> = plan_order(items)
+    out<Vec<Phase>> = Vec<Phase>()
+
+    names<Vec<String>> = Vec<String>()
+    names.push("Phase 1 - Critical Issues")
+    names.push("Phase 2 - High Priority")
+    names.push("Phase 3 - Medium Priority")
+    names.push("Phase 4 - Low Priority")
+
+    keys<Vec<String>> = Vec<String>()
+    keys.push("critical"); keys.push("high"); keys.push("medium"); keys.push("low")
+
+    p<Int> = 0
+    while (p < keys.len()) {
+        idxs<Vec<Int>> = Vec<Int>()
+        i<Int> = 0
+        while (i < order.len()) {
+            oi<Int> = order.get(i)
+            it<Item> = items.get(oi)
+            hit<Bool> = false
+            if (keys.get(p) == "low") { hit = (it.prio != "critical" && it.prio != "high" && it.prio != "medium") }
+            else { hit = (it.prio == keys.get(p)) }
+            if (hit) { idxs.push(oi) }
+            i = i + 1
+        }
+        if (idxs.len() > 0) {
+            out.push(Phase { name = names.get(p), indices = idxs, effort = estimate_phase_effort(items, idxs) })
+        }
+        p = p + 1
+    }
+    return out
+}
+
+# The recommendation list, exactly as `_generate_recommendations` built it.
+recommendations(items<Vec<Item>>, passRate10<Int>, catFails<Vec<Count>>)<Vec<String>> -> {
+    out<Vec<String>> = Vec<String>()
+
+    # passRate10 is passed*1000/total (tenths of a percent), the integer stand-in
+    # for the Python float comparison.
+    if (passRate10 < 500) {
+        out.push("🚨 URGENT: Pass rate is critically low. Consider focusing on core functionality first.")
+    } else if (passRate10 < 750) {
+        out.push("⚠️  Pass rate needs improvement. Prioritize high-impact fixes.")
+    } else if (passRate10 < 900) {
+        out.push("✅ Good progress. Focus on remaining edge cases and optimizations.")
+    }
+
+    i<Int> = 0
+    while (i < catFails.len()) {
+        cf<Count> = catFails.get(i)
+        if (cf.n > 10) {
+            out.push("🔧 High failure rate in '" + cf.k + "' category (" + cf.n.to_string() + " failures). Consider reviewing this subsystem.")
+        }
+        i = i + 1
+    }
+
+    crit<Int> = 0
+    i2<Int> = 0
+    while (i2 < items.len()) {
+        if (items.get(i2).prio == "critical") { crit = crit + 1 }
+        i2 = i2 + 1
+    }
+    if (crit > 0) {
+        out.push("🚨 " + crit.to_string() + " critical issues found. These should be addressed immediately.")
+    }
+
+    mem<Int> = 0
+    i3<Int> = 0
+    while (i3 < items.len()) {
+        em<String> = to_lower(items.get(i3).error)
+        if (contains(em, "memory") || contains(em, "segfault")) { mem = mem + 1 }
+        i3 = i3 + 1
+    }
+    if (mem > 5) {
+        out.push("🧠 Multiple memory-related issues detected. Consider running tests with AddressSanitizer or Valgrind.")
+    }
+
+    parse<Int> = 0
+    i4<Int> = 0
+    while (i4 < items.len()) {
+        it4<Item> = items.get(i4)
+        joined<String> = ""
+        j<Int> = 0
+        while (j < it4.cats.len()) {
+            if (j > 0) { joined = joined + " " }
+            joined = joined + it4.cats.get(j)
+            j = j + 1
+        }
+        if (contains(joined, "parser")) { parse = parse + 1 }
+        i4 = i4 + 1
+    }
+    if (parse > 10) {
+        out.push("📝 Many parser-related failures. Consider reviewing grammar rules and parser implementation.")
+    }
+
+    return out
+}
+
+# --------------------------------------------------------------- analysis
+
+struct Analysis {
+    total<Int>,
+    failed<Int>,
+    passed<Int>,
+    passRate10<Int>,
+    catsAffected<Vec<String>>,
+    prioDist<Vec<Count>>,
+    catFails<Vec<Count>>,
+    items<Vec<Item>>,
+    clusters<Vec<Cluster>>,
+    phases<Vec<Phase>>,
+    recs<Vec<String>>
+}
+
+# Analyze a report's text and build the triage plan.
+analyze(text<String>)<Analysis> -> {
+    leaves<Vec<Leaf>> = parse_json(text)
+    patterns<Vec<Pattern>> = pattern_table()
+
+    rp<String> = results_prefix(leaves)
+    nRes<Int> = result_count(leaves, rp)
+
+    # The harness writes a `metadata` block; test/run_tests.vyb's --json does not,
+    # so the totals are derived from the result list in that case.
+    total<Int> = leaf_int(leaves, "$.metadata.total_tests")
+    if (leaf_index(leaves, "$.metadata.total_tests") < 0) { total = nRes }
+    passed<Int> = leaf_int(leaves, "$.metadata.passed")
+    hasPassed<Bool> = (leaf_index(leaves, "$.metadata.passed") >= 0)
+    if (!hasPassed) {
+        p<Int> = 0
+        i<Int> = 0
+        while (i < nRes) {
+            if (leaf_bool(leaves, rp + "[" + i.to_string() + "].result.success")) { p = p + 1 }
+            i = i + 1
+        }
+        passed = p
+    }
+
+    items<Vec<Item>> = Vec<Item>()
+    clusters<Vec<Cluster>> = Vec<Cluster>()
+    catsAffected<Vec<String>> = Vec<String>()
+    catFails<Vec<Count>> = Vec<Count>()
+    prioDist<Vec<Count>> = Vec<Count>()
+    failed<Int> = 0
+
+    i2<Int> = 0
+    while (i2 < nRes) {
+        base<String> = rp + "[" + i2.to_string() + "]"
+        if (!leaf_bool(leaves, base + ".result.success")) {
+            failed = failed + 1
+
+            errMsg<String> = leaf_text(leaves, base + ".result.error_message")
+            stderrS<String> = leaf_text(leaves, base + ".result.stderr")
+            fullError<String> = to_lower(errMsg + " " + stderrS)
+
+            pat<Pattern> = match_pattern(patterns, fullError)
+
+            name<String> = leaf_text(leaves, base + ".test.name")
+            fileS<String> = leaf_text(leaves, base + ".test.filename")
+            cats<Vec<String>> = cats_of(leaves, i2, rp)
+
+            # error_message or the first 200 chars of stderr
+            itemErr<String> = errMsg
+            if (itemErr.len() == 0) {
+                if (stderrS.len() > 200) { itemErr = stderrS.substring(0, 200) } else { itemErr = stderrS }
+            }
+
+            items.push(Item {
+                name = name,
+                file = fileS,
+                cats = cats,
+                error = itemErr,
+                prio = pat.prio,
+                action = pat.action,
+                effort = pat.effort
+            })
+            itemIdx<Int> = items.len() - 1
+
+            j<Int> = 0
+            while (j < cats.len()) {
+                cn<String> = cats.get(j)
+                if (!has_str(catsAffected, cn)) { catsAffected.push(cn) }
+                bump(borrow(catFails), cn)
+                j = j + 1
+            }
+
+            bump(borrow(prioDist), pat.prio)
+
+            key<String> = normalize_error(fullError)
+            ci<Int> = cluster_index(clusters, key)
+            if (ci < 0) {
+                members<Vec<Int>> = Vec<Int>()
+                members.push(itemIdx)
+                clusters.push(Cluster { key = key, members = members })
+            } else {
+                # `clusters.get(i)` is a copy: grow the member list locally and
+                # write the whole cluster back with `set` (fields of a Vec
+                # element cannot be assigned in place on this build).
+                cl<Cluster> = clusters.get(ci)
+                members2<Vec<Int>> = cl.members
+                members2.push(itemIdx)
+                clusters.set(ci, Cluster { key = key, members = members2 })
+            }
+        }
+        i2 = i2 + 1
+    }
+
+    phases<Vec<Phase>> = build_phases(items)
+    passRate10<Int> = 0
+    if (total > 0) { passRate10 = (passed * 1000) / total }
+    recs<Vec<String>> = recommendations(items, passRate10, catFails)
+
+    return Analysis {
+        total = total,
+        failed = failed,
+        passed = passed,
+        passRate10 = passRate10,
+        catsAffected = catsAffected,
+        prioDist = prioDist,
+        catFails = catFails,
+        items = items,
+        clusters = clusters,
+        phases = phases,
+        recs = recs
+    }
+}
+
+# True when `v` already holds the string `s`. A separate helper is needed: this
+# build accepts a Vec<String> where a Vec<Count> is expected and then compares
+# garbage, so `has_key` below only ever sees Vec<Count>.
+has_str(v<Vec<String>>, s<String>)<Bool> -> {
+    i<Int> = 0
+    while (i < v.len()) {
+        if (v.get(i) == s) { return true }
+        i = i + 1
+    }
+    return false
+}
+
+# True when a Vec<Count> already holds key `k`.
+has_key(counts<Vec<Count>>, k<String>)<Bool> -> {
+    i<Int> = 0
+    while (i < counts.len()) {
+        if (counts.get(i).k == k) { return true }
+        i = i + 1
+    }
+    return false
+}
+
+# Increment the counter for `k` in `counts` (inserting it in first-seen order).
+bump(counts<their<Vec<Count>>>, k<String>) -> {
+    i<Int> = 0
+    while (i < counts.len()) {
+        if (counts.get(i).k == k) {
+            c<Count> = counts.get(i)
+            c.n = c.n + 1
+            counts.set(i, c)
+            return
+        }
+        i = i + 1
+    }
+    counts.push(Count { k = k, n = 1 })
+}
+
+# --------------------------------------------------------------- reports
+
+# Console report, mirroring `_generate_console_report`.
+console_text(a<Analysis>)<String> -> {
+    out<String> = ""
+    rule<String> = ""
+    k<Int> = 0
+    while (k < 80) { rule = rule + "="; k = k + 1 }
+
+    out = out + "" + "\n"
+    out = out + rule + "\n"
+    out = out + "Vyb Test Triage Report" + "\n"
+    out = out + rule + "\n"
+    out = out + "" + "\n"
+    out = out + "📊 OVERALL STATISTICS" + "\n"
+    out = out + "• Total Tests: " + a.total.to_string() + "\n"
+    out = out + "• Failed Tests: " + a.failed.to_string() + "\n"
+    out = out + "• Pass Rate: " + pct1(a.passed, a.total) + "\n"
+    out = out + "• Categories Affected: " + a.catsAffected.len().to_string() + "\n"
+    out = out + "" + "\n"
+    out = out + "📈 FAILURE BREAKDOWN BY CATEGORY" + "\n"
+
+    i<Int> = 0
+    while (i < a.catFails.len()) {
+        cf<Count> = a.catFails.get(i)
+        out = out + "• " + cf.k + ": " + cf.n.to_string() + " failures (" + pct1(cf.n, a.failed) + ")" + "\n"
+        i = i + 1
+    }
+
+    out = out + "" + "\n"
+    out = out + "🎯 PRIORITY DISTRIBUTION" + "\n"
+    i2<Int> = 0
+    while (i2 < a.prioDist.len()) {
+        pd<Count> = a.prioDist.get(i2)
+        out = out + "• " + to_upper(pd.k) + ": " + pd.n.to_string() + " items" + "\n"
+        i2 = i2 + 1
+    }
+
+    out = out + "" + "\n"
+    out = out + "📋 TRIAGE PLAN" + "\n"
+    p<Int> = 0
+    while (p < a.phases.len()) {
+        ph<Phase> = a.phases.get(p)
+        out = out + "" + "\n"
+        out = out + ph.name + " (" + ph.indices.len().to_string() + " items, " + ph.effort + " effort)" + "\n"
+        dash<String> = ""
+        d<Int> = 0
+        while (d < 60) { dash = dash + "-"; d = d + 1 }
+        out = out + dash + "\n"
+
+        shown<Int> = 0
+        i3<Int> = 0
+        while (i3 < ph.indices.len() && shown < 5) {
+            it<Item> = a.items.get(ph.indices.get(i3))
+            out = out + "• " + it.name + "\n"
+            out = out + "  Priority: " + to_upper(it.prio) + " | Effort: " + it.effort + "\n"
+            out = out + "  Action: " + it.action + "\n"
+            rel<Vec<String>> = related_names(a.items, a.clusters, ph.indices.get(i3))
+            if (rel.len() > 0) {
+                rl<String> = ""
+                rr<Int> = 0
+                while (rr < rel.len() && rr < 3) {
+                    if (rr > 0) { rl = rl + ", " }
+                    rl = rl + rel.get(rr)
+                    rr = rr + 1
+                }
+                out = out + "  Related: " + rl + "\n"
+            }
+            out = out + "" + "\n"
+            shown = shown + 1
+            i3 = i3 + 1
+        }
+        if (ph.indices.len() > 5) {
+            out = out + "  ... and " + (ph.indices.len() - 5).to_string() + " more items" + "\n"
+            out = out + "" + "\n"
+        }
+        p = p + 1
+    }
+
+    out = out + "💡 RECOMMENDATIONS" + "\n"
+    i4<Int> = 0
+    while (i4 < a.recs.len()) {
+        out = out + (i4 + 1).to_string() + ". " + a.recs.get(i4) + "\n"
+        i4 = i4 + 1
+    }
+    return out
+}
+
+# Console report on stdout (Python's `print(report)`).
+console_report(a<Analysis>) -> {
+    # The Python original prints a report string that already ends in "\n", so
+    # stdout gains one extra blank line; the file it writes does not.
+    print(console_text(a) + "\n")
+}
+
+# Markdown report, mirroring `_generate_markdown_report`.
+markdown_report(a<Analysis>)<String> -> {
+    stamp<String> = trim(run_sh("date +%Y-%m-%d' '%H:%M:%S"))
+
+    out<String> = "# Vyb Test Triage Report\n\n"
+    out = out + "*Generated: " + stamp + "*\n\n"
+    out = out + "## 📊 Overall Statistics\n\n"
+    out = out + "| Metric | Value |\n"
+    out = out + "|--------|--------|\n"
+    out = out + "| Total Tests | " + a.total.to_string() + " |\n"
+    out = out + "| Failed Tests | " + a.failed.to_string() + " |\n"
+    out = out + "| Pass Rate | " + pct1(a.passed, a.total) + " |\n"
+    out = out + "| Categories Affected | " + a.catsAffected.len().to_string() + " |\n\n"
+
+    out = out + "## 📈 Failure Breakdown by Category\n\n"
+    out = out + "| Category | Failures | Percentage |\n"
+    out = out + "|----------|----------|------------|\n"
+    i<Int> = 0
+    while (i < a.catFails.len()) {
+        cf<Count> = a.catFails.get(i)
+        out = out + "| " + cf.k + " | " + cf.n.to_string() + " | " + pct1(cf.n, a.failed) + " |\n"
+        i = i + 1
+    }
+
+    out = out + "\n## 🎯 Priority Distribution\n\n"
+    i2<Int> = 0
+    while (i2 < a.prioDist.len()) {
+        pd<Count> = a.prioDist.get(i2)
+        out = out + "- **" + to_upper(pd.k) + "**: " + pd.n.to_string() + " items\n"
+        i2 = i2 + 1
+    }
+
+    out = out + "\n## 📋 Triage Plan\n"
+    p<Int> = 0
+    while (p < a.phases.len()) {
+        ph<Phase> = a.phases.get(p)
+        out = out + "\n### " + ph.name + "\n"
+        out = out + "*" + ph.indices.len().to_string() + " items, " + ph.effort + " effort*\n\n"
+        i3<Int> = 0
+        while (i3 < ph.indices.len()) {
+            it<Item> = a.items.get(ph.indices.get(i3))
+            out = out + "#### " + it.name + "\n"
+            out = out + "- **Priority**: " + to_upper(it.prio) + "\n"
+            out = out + "- **Effort**: " + it.effort + "\n"
+            out = out + "- **Action**: " + it.action + "\n"
+            out = out + "- **File**: `" + it.file + "`\n"
+            if (it.error.len() > 0) { out = out + "- **Error**: `" + it.error + "`\n" }
+            rel<Vec<String>> = related_names(a.items, a.clusters, ph.indices.get(i3))
+            if (rel.len() > 0) {
+                rl<String> = ""
+                rr<Int> = 0
+                while (rr < rel.len()) {
+                    if (rr > 0) { rl = rl + ", " }
+                    rl = rl + rel.get(rr)
+                    rr = rr + 1
+                }
+                out = out + "- **Related Tests**: " + rl + "\n"
+            }
+            out = out + "\n"
+            i3 = i3 + 1
+        }
+        p = p + 1
+    }
+
+    out = out + "## 💡 Recommendations\n\n"
+    i4<Int> = 0
+    while (i4 < a.recs.len()) {
+        out = out + (i4 + 1).to_string() + ". " + a.recs.get(i4) + "\n"
+        i4 = i4 + 1
+    }
+    return out
+}
+
+# ASCII uppercase of `s` (the report prints priorities upper-cased).
+to_upper(s<String>)<String> -> {
+    out<String> = ""
+    i<Int> = 0
+    while (i < s.len()) {
+        c<Int> = (s.char_at(i) as Int) & 0xFF
+        if (c >= 97 && c <= 122) { c = c - 32 }
+        out = out + String::from_byte(c)
+        i = i + 1
+    }
+    return out
+}
+
+# Keep only the phases/items whose priority is in `want` (the --priority filter).
+filter_by_priority(a<Analysis>, want<Vec<String>>)<Analysis> -> {
+    keptPhases<Vec<Phase>> = Vec<Phase>()
+    p<Int> = 0
+    while (p < a.phases.len()) {
+        ph<Phase> = a.phases.get(p)
+        idxs<Vec<Int>> = Vec<Int>()
+        i<Int> = 0
+        while (i < ph.indices.len()) {
+            oi<Int> = ph.indices.get(i)
+            it<Item> = a.items.get(oi)
+            j<Int> = 0
+            hit<Bool> = false
+            while (j < want.len()) {
+                if (it.prio == want.get(j)) { hit = true; break }
+                j = j + 1
+            }
+            if (hit) { idxs.push(oi) }
+            i = i + 1
+        }
+        if (idxs.len() > 0) {
+            keptPhases.push(Phase { name = ph.name, indices = idxs, effort = ph.effort })
+        }
+        p = p + 1
+    }
+    return Analysis {
+        total = a.total,
+        failed = a.failed,
+        passed = a.passed,
+        passRate10 = a.passRate10,
+        catsAffected = a.catsAffected,
+        prioDist = a.prioDist,
+        catFails = a.catFails,
+        items = a.items,
+        clusters = a.clusters,
+        phases = keptPhases,
+        recs = a.recs
+    }
+}
+
+# ------------------------------------------------------------------------- main
+
+main()<Int> -> {
+    argv<Vec<String>> = argv_of()
+    if (has(argv, "--help") || has(argv, "-h") || argv.len() < 3) {
+        println("triage_tool.vyb - Vyb Test Triage Tool (Vyb implementation)")
+        println("usage: vyb triage_tool.vyb <results.json> [--output-format console|markdown]")
+        println("       [--output|-o FILE] [--priority high,critical] [--help]")
+        # argparse exits 2 on a missing required positional; `return` in a Vyb main
+        # prints the value and exits 0, so use exit() to match the Python status.
+        if (!has(argv, "--help") && !has(argv, "-h")) { exit(2) }
+        exit(0)
+    }
+
+    resultsFile<String> = argv.get(2)
+    if (!file_exists(resultsFile)) {
+        println("Error: Results file " + resultsFile + " not found")
+        exit(1)
+    }
+
+    # `--format` is reserved by the vyb driver (it pretty-prints the file instead of
+    # running it), so the Python tool's `--format` spelling is not reachable from a
+    # script; the port spells it `--output-format`. Python's default is console.
+    fmt<String> = opt(argv, "--output-format")
+    if (fmt.len() == 0) { fmt = "console" }
+    if (fmt != "console" && fmt != "markdown") {
+        println("Error: Unknown output format: " + fmt)
+        exit(1)
+    }
+
+    outFile<String> = opt(argv, "--output")
+    if (outFile.len() == 0) { outFile = opt(argv, "-o") }
+
+    a<Analysis> = analyze(slurp(resultsFile))
+
+    prioArg<String> = opt(argv, "--priority")
+    if (prioArg.len() > 0) {
+        want<Vec<String>> = Vec<String>()
+        parts<Vec<String>> = prioArg.split(",")
+        i<Int> = 0
+        while (i < parts.len()) {
+            t<String> = to_lower(trim(parts.get(i)))
+            if (t.len() > 0) { want.push(t) }
+            i = i + 1
+        }
+        a = filter_by_priority(a, want)
+    }
+
+    if (fmt == "markdown") {
+        rep<String> = markdown_report(a)
+        if (outFile.len() > 0) {
+            d<String> = dirname_of(outFile)
+            if (d.len() > 0) { match (mkdir(d)) { ok -> { } ? -> { } } }
+            w<Bool> = spill(outFile, rep)
+            if (w) { println("Triage report saved to: " + outFile) }
+            else { println("could not write " + outFile) }
+        } else {
+            print(rep)
+        }
+    } else {
+        if (outFile.len() > 0) {
+            # Capture the console report into a file the same way Python did.
+            d2<String> = dirname_of(outFile)
+            if (d2.len() > 0) { match (mkdir(d2)) { ok -> { } ? -> { } } }
+            rep2<String> = console_text(a)
+            w2<Bool> = spill(outFile, rep2)
+            if (w2) { println("Triage report saved to: " + outFile) }
+            else { println("could not write " + outFile) }
+        } else {
+            console_report(a)
+        }
+    }
+    exit(0)
+}

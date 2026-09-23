@@ -253,10 +253,10 @@ The async debugging system integrates with Vyb's test harness:
 
 ```bash
 # Run async tests with debugging
-./test_harness.py --category async --verbose
+build/vyb test_harness.vyb --category async -v
 
 # Generate debug reports
-./test_harness.py --category async --html-report async_debug.html
+build/vyb test_harness.vyb --category async --html-report async_debug.html
 ```
 
 ## Future Enhancements
