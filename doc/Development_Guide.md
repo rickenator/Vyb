@@ -55,7 +55,7 @@ Vyb/
 ├── test/                # 1077 Vyb test files
 ├── doc/                 # Comprehensive documentation
 ├── examples/            # Example programs
-├── test_harness.py      # Auxiliary parallel test runner (canonical suite: test/run_tests.py)
+├── test_harness.py      # Auxiliary parallel test runner (canonical suite: test/run_tests.vyb)
 ├── triage_tool.py       # Failure analysis tool
 └── build/               # Build output directory
 ```
@@ -235,12 +235,12 @@ build/vyb --emit-llvm --debug-info test.vyb
 
 ### Modern Parallel Test Runner
 
-Vyb's canonical suite runner (`test/run_tests.py`) manages 1077+ test files; this section describes the auxiliary parallel harness:
+Vyb's canonical suite runner (`test/run_tests.vyb`) manages 1077+ test files; this section describes the auxiliary parallel harness:
 
 #### Basic Usage
 ```bash
 # Run the canonical suite (authoritative pass/fail count)
-python3 test/run_tests.py --vyb build/vyb --test-dir test --execute-jit
+build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
 
 # Run all tests with the auxiliary parallel harness
 ./test_harness.py
@@ -554,7 +554,7 @@ valgrind --tool=memcheck build/vyb test.vyb
 
 ## Conclusion
 
-Vyb v0.4.0 represents a complete, production-ready systems programming language with advanced async programming capabilities and comprehensive debugging support. The canonical `test/run_tests.py` suite (1077 tests, all passing) ensures code quality, with auxiliary parallel/triage tooling for analysis.
+Vyb v0.4.0 represents a complete, production-ready systems programming language with advanced async programming capabilities and comprehensive debugging support. The canonical `test/run_tests.vyb` suite (1077 tests, all passing) ensures code quality, with auxiliary parallel/triage tooling for analysis.
 
 The combination of clean syntax, powerful async/await support, comprehensive debug infrastructure, and modern development tools makes Vyb an excellent choice for systems programming where debugging, maintainability, and performance are critical.
 

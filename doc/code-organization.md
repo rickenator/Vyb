@@ -25,8 +25,8 @@ data-layout change; the class is unchanged.
    already-extractable helpers (e.g. `cgen_cast.cpp` for `visit(CastExpression)` +
    `as`/`String(char_at)` conversions). Big functions can be moved wholesale; only
    file-static state (if any) needs care.
-2. **Run the gate after EACH extraction**: `python3 test/run_tests.py --vyb build/vyb
-   --test-dir test --execute-jit` must be 1098/1098 (or whatever the current count
+2. **Run the gate after EACH extraction**: `build/vyb test/run_tests.vyb --vyb build/vyb
+   --test-dir test` must be 1098/1098 (or whatever the current count
    is) with exactly 0 new failures, and `build-asan/vyb --version` + an ASan sweep
    of the touched area.
 3. **Only then** extract a slice that calls into another not-yet-extracted file — the

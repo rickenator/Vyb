@@ -341,25 +341,27 @@ set_source_files_properties(src/tests.cpp PROPERTIES COMPILE_FLAGS "-DDEBUG_TEST
 
 # Add a custom target for running tests
 find_package(Python3 REQUIRED)
+# The language suite is a Vyb program now (test/run_tests.vyb) -- no Python on
+# this path. Python3 remains required for the auxiliary targets below
+# (run-examples / run-milestone), which are still being ported.
 add_custom_target(run-tests
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/test/run_tests.py --vyb $<TARGET_FILE:vyb> --test-dir ${CMAKE_SOURCE_DIR}/test
+    COMMAND $<TARGET_FILE:vyb> ${CMAKE_SOURCE_DIR}/test/run_tests.vyb --vyb $<TARGET_FILE:vyb> --test-dir ${CMAKE_SOURCE_DIR}/test
     DEPENDS vyb
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    COMMENT "Running Vyb test suite"
+    COMMENT "Running Vyb test suite (Vyb runner)"
 )
 
 # CTest registration (#158): the canonical language suite (JIT) and the AOT/native
 # build test are registered so `ctest` runs them reproducibly and their results are
 # machine-readable (JSON + release evidence under the build dir). Focused category
-# runs stay available via `run_tests.py --category <name>` / `ctest -L lang`.
+# runs stay available via `test/run_tests.vyb --category <name>` / `ctest -L lang`.
 include(CTest)
 if(BUILD_TESTING)
     file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/test-results)
     add_test(NAME lang-jit
-        COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/test/run_tests.py
+        COMMAND $<TARGET_FILE:vyb> ${CMAKE_SOURCE_DIR}/test/run_tests.vyb
                 --vyb $<TARGET_FILE:vyb>
                 --test-dir ${CMAKE_SOURCE_DIR}/test
-                --execute-jit
                 --json ${CMAKE_BINARY_DIR}/test-results/jit.json
                 --evidence ${CMAKE_BINARY_DIR}/test-results/jit-evidence.json)
     set_tests_properties(lang-jit PROPERTIES

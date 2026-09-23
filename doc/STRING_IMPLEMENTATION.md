@@ -256,7 +256,7 @@ String tests completed
 ### Running Tests
 ```bash
 # Run all String tests
-python3 test/run_tests.py --vyb build/vyb --test-dir test/string --execute-jit
+build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test/string
 
 # Run specific test
 build/vyb test/string/string_literal_test.vyb

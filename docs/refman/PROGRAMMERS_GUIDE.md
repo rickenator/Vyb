@@ -168,7 +168,7 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 
 ```bash
 # 1195 .vyb tests exercised through compile + run + output/return checks
-python3 test/run_tests.py --vyb ./build/vyb --test-dir test --execute-jit
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test
 ```
 
 Key test knobs (see also [§8](#8-testing-and-tooling)): `--pattern`, `--category`, `--report`,
@@ -2653,13 +2653,18 @@ runtime points a single process at a list of tests if needed.
 
 ### Test harness
 
-Canonical suite runner (wired into CTest as `run-tests`):
+Canonical suite runner — a Vyb program (`test/run_tests.vyb`), wired into CTest
+as `run-tests`:
 ```bash
-python3 test/run_tests.py --vyb ./build/vyb --test-dir test --execute-jit   # full suite (1195 tests)
-python3 test/run_tests.py --vyb ./build/vyb --test-dir test --category async    # filter by category
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1195 tests)
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --category async  # filter by category
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --json results.json --evidence evidence.json
 ```
-The auxiliary parallel harness (`test_harness.py`, `triage_tool.py`) adds HTML
-reporting and failure triage on top of that suite.
+`vyb --repo` (or `vyb test` with no explicit paths inside the compiler repo) runs
+the same Vyb runner, so the compiler's own test path needs no Python. The
+auxiliary parallel harness (`test_harness.py`, `triage_tool.py`) adds HTML
+reporting and failure triage on top of that suite; both are still Python and are
+slated for porting.
 
 Tests carry metadata headers (`@test:`, `@description:`, `@category:`,
 `@expect:`, `@expect-output:`, `@expect-return:`) that drive pass/fail

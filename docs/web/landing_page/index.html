@@ -363,7 +363,7 @@ cd Vyb
 mkdir -p build &amp;&amp; cd build &amp;&amp; LLVM_DIR=/usr/lib/llvm-18/cmake cmake .. &amp;&amp; make -j$(nproc) &amp;&amp; cd ..
 
 # Run the full test suite (1184 .vyb tests) with the canonical harness
-python3 test/run_tests.py --vyb build/vyb --test-dir test --execute-jit
+build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
 
 # Run your first Vyb program
 echo 'main()&lt;Int&gt; -&gt; { return 42 }' &gt; hello.vyb
@@ -3101,18 +3101,18 @@ python3 test/run_milestone_tests.py --vyb build/vyb
 cmake --build build --target run-milestone
 </code></pre>
 <h2 id="test-harness">Test Harness<a aria-label="Link to Test Harness" class="heading-anchor" href="#test-harness">#</a></h2>
-<p>Vyb's canonical test runner is <code>test/run_tests.py</code>, the same suite wired into
+<p>Vyb's canonical test runner is <code>test/run_tests.vyb</code>, the same suite wired into
 CTest as the <code>run-tests</code> target and used for the full regression gate (currently
 <strong>1184 <code>.vyb</code> tests, all passing</strong>):</p>
 <h3 id="quick-testing">Quick Testing<a aria-label="Link to Quick Testing" class="heading-anchor" href="#quick-testing">#</a></h3>
 <pre><code class="language-bash"># Full suite (JIT execution), from the repo root
-python3 test/run_tests.py --vyb build/vyb --test-dir test --execute-jit
+build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
 
 # Run a single category (parse, semantic, async, tls, ...)
-python3 test/run_tests.py --vyb build/vyb --test-dir test --category async
+build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test --category async
 
 # Save results as JSON
-python3 test/run_tests.py --vyb build/vyb --test-dir test --json results.json
+build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test --json results.json
 </code></pre>
 <p>A secondary parallel harness (<code>test_harness.py</code>) plus <code>triage_tool.py</code> add HTML
 reporting, failure-triage, and performance analysis on top of that suite; the
@@ -3409,7 +3409,7 @@ the interface stays responsive.</li>
 </ul>
 </li>
 <li>✅ <strong>Canonical Syntax Unification</strong>: Complete migration to unified <code>my()</code>/<code>our()</code> constructors and <code>view</code>/<code>borrow</code> operators</li>
-<li>✅ <strong>Modern Test Harness</strong>: <code>test/run_tests.py</code> running the full suite — 1184 <code>.vyb</code> tests all passing — with an auxiliary parallel/HTML/triage harness</li>
+<li>✅ <strong>Modern Test Harness</strong>: <code>test/run_tests.vyb</code> running the full suite — 1184 <code>.vyb</code> tests all passing — with an auxiliary parallel/HTML/triage harness</li>
 <li>✅ <strong>Syntax Migration Tools</strong>: Automated migration from legacy to canonical syntax with comprehensive reporting</li>
 <li>✅ <strong>Match Statements</strong>: Complete pattern matching with <code>-&gt;</code> arrow syntax and <code>?</code> wildcard; no-match results in NOP</li>
 <li>✅ <strong>Break/Continue</strong>: Loop control flow statements working in all loop types</li>

@@ -2,7 +2,7 @@
 # Test AOT compilation of Vyb examples (`--build`) -- #158 (+ #166 aspect suite).
 #
 # The compiled executable must exit 0 and write the program's main-return value
-# (JSON-serialized) to stdout, matching the JIT contract enforced by run_tests.py,
+# (JSON-serialized) to stdout, matching the JIT contract enforced by test/run_tests.vyb,
 # OR (for the native/aspect conformance set) simply exit 0. Pass `--json <file>`
 # for machine-readable per-test results + totals (reproducible release evidence);
 # the exit code is 0 only when every test passes.

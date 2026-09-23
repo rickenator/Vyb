@@ -2,7 +2,7 @@
 """
 Run the Vyb milestone gate.
 
-The gate intentionally aggregates multiple stable suites through run_tests.py
+This gate intentionally aggregates multiple stable suites through the Vyb runner
 and fails if the total number of passing tests drops below the milestone floor.
 """
 
@@ -62,8 +62,8 @@ def run_suite(root: Path, suite: Suite, vyb: str, verbose: bool) -> tuple[int, i
     with tempfile.TemporaryDirectory(prefix=f"vyb-{suite.name}-") as temp_dir:
         json_path = Path(temp_dir) / "results.json"
         cmd = [
-            sys.executable,
-            str(root / "test" / "run_tests.py"),
+            vyb,
+            str(root / "test" / "run_tests.vyb"),
             "--vyb",
             vyb,
             "--test-dir",

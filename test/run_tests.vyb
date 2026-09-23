@@ -1,0 +1,620 @@
+# run_tests.vyb - the Vyb test-suite runner, written in Vyb itself.
+#
+// @not-a-test: true — this file is the runner, not a fixture: the discovery below
+// skips any `.vyb` carrying this marker, so the suite stays at the documented
+// count instead of running the harness recursively.
+#
+# The canonical suite runner for the compiler repo, ported from
+# `test/run_tests.py` so the repo's testing path needs no Python: it discovers
+# every `.vyb` file under a test directory, parses the `// @test` / `// @expect*`
+# directives at the top of each file, runs each one through the compiler in its
+# own subprocess, and checks exit code / stdout / main-return / stderr against
+# those directives.
+#
+# Run:
+#   VYB_STDLIB=$PWD/stdlib build/vyb test/run_tests.vyb
+#   VYB_STDLIB=$PWD/stdlib build/vyb test/run_tests.vyb --test-dir test/base64
+#   VYB_STDLIB=$PWD/stdlib build/vyb test/run_tests.vyb --category async
+#   VYB_STDLIB=$PWD/stdlib build/vyb test/run_tests.vyb --json /tmp/results.json
+#
+# Options: --test-dir DIR  --pattern GLOB  --category C  --vyb PATH  --no-execute
+#          --verbose | -v | -vv  --json FILE  --evidence FILE  --help
+#
+# Directives honored (same set as run_tests.py):
+#   @test, @description, @category (comma separated), @expect (pass/fail),
+#   @expect-output, @expect-return, @expect-error, @parse-only, @semantic-only,
+#   @skip-asan (skipped when VYB_ASAN=1), @skip-if-missing-lib, @execute-jit,
+#   @vyb-args, @env (K=V; K=V)
+#
+# JIT execution is the default, exactly as before: a test is only compiled
+# without running when `--no-execute` is given or when it is @parse-only /
+# @semantic-only. `@vyb-args` carries extra compiler flags; `@env` sets
+# environment variables for the child.
+#
+# Discovery uses `find`, argument parsing reads `/proc/self/cmdline`, and each
+# child's stdout/stderr/exit status is captured through temp files -- all so the
+# runner works on the current language surface, which has no argv or directory
+# listing primitive yet. Adding `args()` and `fs.listdir` to the language later
+# lets these three helpers be replaced with real primitives.
+import io::{close, File, open_read, open_write, read_all, write_str}
+import process::{exec_output, exec_status}
+import env::{env_get}
+import fs::{mkdir}
+
+# ---------------------------------------------------------------- small helpers
+
+# Index of the last '/' in `p`, or -1.
+last_slash(p<String>)<Int> -> {
+    i<Int> = p.len() - 1
+    while (i >= 0) {
+        if (((p.char_at(i) as Int) & 0xFF) == 47) { return i }
+        i = i - 1
+    }
+    return -1
+}
+
+# Directory part of `p` ("" when there is no slash).
+dirname_of(p<String>)<String> -> {
+    i<Int> = last_slash(p)
+    if (i < 0) { return "" }
+    return p.substring(0, i)
+}
+
+# File-name part of `p` (the whole string when there is no slash).
+basename_of(p<String>)<String> -> {
+    i<Int> = last_slash(p)
+    if (i < 0) { return p }
+    return p.substring(i + 1, p.len())
+}
+
+# Strip leading/trailing whitespace (spaces, tabs, CR, LF) from `s`.
+trim(s<String>)<String> -> {
+    a<Int> = 0
+    n<Int> = s.len()
+    while (a < n) {
+        c<Int> = (s.char_at(a) as Int) & 0xFF
+        if (c == 32 || c == 9 || c == 13 || c == 10) { a = a + 1 } else { break }
+    }
+    b<Int> = n
+    while (b > a) {
+        c<Int> = (s.char_at(b - 1) as Int) & 0xFF
+        if (c == 32 || c == 9 || c == 13 || c == 10) { b = b - 1 } else { break }
+    }
+    if (b <= a) { return "" }
+    return s.substring(a, b)
+}
+
+# First space/tab-separated token of `s`.
+first_token(s<String>)<String> -> {
+    t<String> = trim(s)
+    i<Int> = 0
+    while (i < t.len()) {
+        c<Int> = (t.char_at(i) as Int) & 0xFF
+        if (c == 32 || c == 9) { return t.substring(0, i) }
+        i = i + 1
+    }
+    return t
+}
+
+# "true"/"false" for a Bool (JSON literals).
+bool_str(b<Bool>)<String> -> {
+    if (b) { return "true" }
+    return "false"
+}
+
+# Decimal value of a digit string (stops at the first non-digit; handles a
+# leading '-'). `StringOps::to_int` is not available on this build, and
+# `exec_output`'s child status arrives as text, so the runner converts itself.
+digits_to_int(s<String>)<Int> -> {
+    t<String> = trim(s)
+    n<Int> = 0
+    neg<Bool> = false
+    i<Int> = 0
+    if (t.len() > 0 && (((t.char_at(0) as Int) & 0xFF) == 45)) { neg = true; i = 1 }
+    while (i < t.len()) {
+        c<Int> = (t.char_at(i) as Int) & 0xFF
+        if (c < 48 || c > 57) { break }
+        n = n * 10 + (c - 48)
+        i = i + 1
+    }
+    if (neg) { return 0 - n }
+    return n
+}
+
+# True when `p` is an existing directory.
+dir_exists(p<String>)<Bool> -> {
+    return (trim(run_sh("test -d '" + p + "' && echo yes || echo no")) == "yes")
+}
+
+# Run `cmd` through the shell and return its stdout ("" when it could not run).
+run_sh(cmd<String>)<String> -> {
+    out<String> = ""
+    freedom {
+        match (exec_output(cmd)) {
+            s -> { out = s }
+            ? -> { out = "" }
+        }
+    }
+    return out
+}
+
+# Read a whole file as a String ("" when it cannot be read).
+slurp(path<String>)<String> -> {
+    text<String> = ""
+    match (open_read(path)) {
+        f -> {
+            match (read_all(f)) { s -> { text = s } ? -> { } }
+            close(f)
+        }
+        ? -> { }
+    }
+    return text
+}
+
+# Write `text` to `path`; true when the whole string was written.
+spill(path<String>, text<String>)<Bool> -> {
+    match (open_write(path)) {
+        f -> {
+            match (write_str(f, text)) { n -> { close(f); return (n == text.len()) } ? -> { close(f); return false } }
+        }
+        ? -> { return false }
+    }
+    return false
+}
+
+# ------------------------------------------------------- command line (/proc)
+
+# The program's argv, parsed from `/proc/self/cmdline` (NUL separated). The
+# language has no argv primitive yet, so this is how a Vyb tool reads its flags.
+argv_of()<Vec<String>> -> {
+    raw<String> = slurp("/proc/self/cmdline")
+    out<Vec<String>> = Vec<String>()
+    cur<String> = ""
+    i<Int> = 0
+    while (i < raw.len()) {
+        c<Int> = (raw.char_at(i) as Int) & 0xFF
+        if (c == 0) {
+            if (cur.len() > 0) { out.push(cur) }
+            cur = ""
+        } else {
+            cur = cur + String::from_byte(c)
+        }
+        i = i + 1
+    }
+    if (cur.len() > 0) { out.push(cur) }
+    return out
+}
+
+# ------------------------------------------------------------- directive parse
+
+# Value of `// @<name>: value` in `content`, trimmed; "" when absent. The marker
+# is matched exactly (": " included), so `@expect` never matches `@expect-output`.
+directive(content<String>, name<String>)<String> -> {
+    marker<String> = "// @" + name + ":"
+    lines<Vec<String>> = content.split("\n")
+    i<Int> = 0
+    while (i < lines.len()) {
+        line<String> = lines.get(i)
+        p<Int> = line.index_of(marker)
+        if (p >= 0) {
+            return trim(line.substring(p + marker.len(), line.len()))
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+# True when `// @<name>:` is set to true/yes/1 (only the first token is checked,
+# so an inline trailing comment does not defeat the match).
+directive_true(content<String>, name<String>)<Bool> -> {
+    v<String> = first_token(directive(content, name))
+    if (v == "true" || v == "yes" || v == "1") { return true }
+    return false
+}
+
+# True when the comma-separated `// @category:` list contains `want`.
+category_has(content<String>, want<String>)<Bool> -> {
+    cats<String> = directive(content, "category")
+    if (cats.len() == 0) { return false }
+    parts<Vec<String>> = cats.split(",")
+    i<Int> = 0
+    while (i < parts.len()) {
+        if (trim(parts.get(i)) == want) { return true }
+        i = i + 1
+    }
+    return false
+}
+
+# ------------------------------------------------------------- test discovery
+
+# Every file under `dir` matching `pattern`, sorted, one per line -> Vec<String>.
+discover(dir<String>, pattern<String>)<Vec<String>> -> {
+    raw<String> = run_sh("find " + dir + " -type f -name '" + pattern + "' | LC_ALL=C sort")
+    out<Vec<String>> = Vec<String>()
+    if (raw.len() == 0) { return out }
+    lines<Vec<String>> = raw.split("\n")
+    i<Int> = 0
+    while (i < lines.len()) {
+        line<String> = trim(lines.get(i))
+        if (line.len() > 0) { out.push(line) }
+        i = i + 1
+    }
+    return out
+}
+
+# True when `libname` can be loaded: present in the loader cache, or found in an
+# `@env`-supplied `LD_LIBRARY_PATH` directory (the way the Python harness's
+# dlopen probe saw it -- a bare `ldconfig -p` misses vendored libs).
+lib_available(libname<String>, envPrefix<String>)<Bool> -> {
+    inner<String> = "ldconfig -p 2>/dev/null | grep -q \"" + libname + "\" && exit 0; IFS=:; for d in $LD_LIBRARY_PATH; do [ -n \"$d\" ] && [ -e \"$d/" + libname + "\" ] && exit 0; done; exit 1"
+    run_sh(envPrefix + "sh -c '" + inner + "'")
+    return (exec_status() == 0)
+}
+
+# "export K='V'; ..." for a test's `@env:` directive ("" when absent): the child
+# compiler and the missing-lib probe both need the same environment. The value is
+# single-quoted because values may contain spaces (e.g.
+# QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu); unquoted, /bin/sh exits
+# with "bad variable name" before the test ever runs.
+env_prefix_of(content<String>)<String> -> {
+    prefix<String> = ""
+    pairs<String> = directive(content, "env")
+    if (pairs.len() > 0) {
+        parts<Vec<String>> = pairs.split(";")
+        i<Int> = 0
+        while (i < parts.len()) {
+            kv<String> = trim(parts.get(i))
+            eq<Int> = kv.index_of("=")
+            if (eq > 0) {
+                key<String> = kv.substring(0, eq)
+                val<String> = kv.substring(eq + 1, kv.len())
+                prefix = prefix + "export " + key + "='" + val + "'; "
+            }
+            i = i + 1
+        }
+    }
+    return prefix
+}
+
+# --------------------------------------------------------------------- running
+
+# The last non-empty stdout line: Vyb prints the main return value last, which is
+# what `@expect-return` compares against.
+last_line(out<String>)<String> -> {
+    lines<Vec<String>> = out.split("\n")
+    last<String> = ""
+    i<Int> = 0
+    while (i < lines.len()) {
+        t<String> = trim(lines.get(i))
+        if (t.len() > 0) { last = t }
+        i = i + 1
+    }
+    return last
+}
+
+# One run's captured result. `ok` is the verdict; `reasons` names every failed
+# check (newline separated).
+struct RunResult {
+    ok<Bool>,
+    code<Int>,
+    stdout<String>,
+    stderr<String>,
+    reasons<String>
+}
+
+# Run test file `file` and compare against its directives.
+run_one(file<String>, vyb<String>, repoRoot<String>, tmpDir<String>, idx<Int>, jit<Bool>, verbose<Bool>)<RunResult> -> {
+    content<String> = slurp(file)
+
+    flags<String> = directive(content, "vyb-args")
+    if (directive_true(content, "parse-only")) { flags = flags + " --parse-only" }
+    else if (directive_true(content, "semantic-only")) { flags = flags + " --semantic-only" }
+    else if (!jit) { flags = flags + " --no-execute" }
+    if (verbose) { flags = flags + " --emit-llvm" }
+
+    envPrefix<String> = env_prefix_of(content)
+
+    outPath<String> = tmpDir + "/" + idx.to_string() + ".out"
+    errPath<String> = tmpDir + "/" + idx.to_string() + ".err"
+
+    cmd<String> = "cd " + repoRoot + " && " + envPrefix + vyb + " " + flags + " " + file
+    cmd = cmd + " > " + outPath + " 2> " + errPath + "; echo $?"
+    rcText<String> = trim(run_sh(cmd))
+
+    code<Int> = -1
+    if (rcText.len() > 0) {
+        code = digits_to_int(rcText)
+    }
+
+    out<String> = slurp(outPath)
+    err<String> = slurp(errPath)
+
+    expect<String> = directive(content, "expect")
+    if (expect.len() == 0) { expect = "pass" }
+    expectOut<String> = directive(content, "expect-output")
+    expectRet<String> = directive(content, "expect-return")
+    expectErr<String> = directive(content, "expect-error")
+    parseOnly<Bool> = directive_true(content, "parse-only")
+    semanticOnly<Bool> = directive_true(content, "semantic-only")
+    willExecute<Bool> = (!parseOnly && !semanticOnly && jit)
+
+    expected<Int> = 0
+    if (expect == "fail") { expected = 1 }
+    if (expect == "fail" && expectRet.len() > 0 && expectRet != "n/a") {
+        expected = digits_to_int(expectRet)
+    }
+
+    reasons<String> = ""
+    if (code != expected) {
+        reasons = reasons + "expected compiler exit " + expected.to_string() + ", got " + code.to_string() + "\n"
+    }
+    if (expectOut.len() > 0 && expectOut != "n/a") {
+        if (out.index_of(expectOut) < 0) { reasons = reasons + "expected stdout to contain: " + expectOut + "\n" }
+    }
+    if (willExecute && expect == "pass" && expectRet.len() > 0 && expectRet != "n/a") {
+        got<String> = last_line(out)
+        if (got != expectRet) { reasons = reasons + "expected main return " + expectRet + ", got " + got + "\n" }
+    }
+    if (expect == "fail" && expectErr.len() > 0 && expectErr != "n/a") {
+        if (err.index_of(expectErr) < 0) { reasons = reasons + "expected stderr to contain: " + expectErr + "\n" }
+    }
+
+    return RunResult { ok = (reasons.len() == 0), code = code, stdout = out, stderr = err, reasons = reasons }
+}
+
+# ------------------------------------------------------------------------ json
+
+# Escape `s` for a JSON string literal.
+json_escape(s<String>)<String> -> {
+    out<String> = ""
+    i<Int> = 0
+    while (i < s.len()) {
+        c<Int> = (s.char_at(i) as Int) & 0xFF
+        if (c == 34) { out = out + "\\\"" }
+        else if (c == 92) { out = out + "\\\\" }
+        else if (c == 10) { out = out + "\\n" }
+        else if (c == 13) { out = out + "\\r" }
+        else if (c == 9) { out = out + "\\t" }
+        else if (c < 32) { out = out + "?" }
+        else { out = out + String::from_byte(c) }
+        i = i + 1
+    }
+    return out
+}
+
+# JSON array of a newline-separated reasons string -- the same shape as
+# run_tests.py's `failure_reasons` list, so downstream consumers (the milestone
+# gate, HTML/triage tooling) can read either runner's JSON.
+json_reasons(reasons<String>)<String> -> {
+    out<String> = "["
+    lines<Vec<String>> = reasons.split("\n")
+    i<Int> = 0
+    first<Bool> = true
+    while (i < lines.len()) {
+        line<String> = trim(lines.get(i))
+        if (line.len() > 0) {
+            if (!first) { out = out + ", " }
+            out = out + "\"" + json_escape(line) + "\""
+            first = false
+        }
+        i = i + 1
+    }
+    return out + "]"
+}
+
+# --------------------------------------------------------------- option parsing
+
+# Value following `flag` in `argv`, or "" when it is absent.
+opt(argv<Vec<String>>, flag<String>)<String> -> {
+    i<Int> = 0
+    while (i < argv.len()) {
+        if (argv.get(i) == flag && i + 1 < argv.len()) { return argv.get(i + 1) }
+        i = i + 1
+    }
+    return ""
+}
+
+has(argv<Vec<String>>, flag<String>)<Bool> -> {
+    i<Int> = 0
+    while (i < argv.len()) {
+        if (argv.get(i) == flag) { return true }
+        i = i + 1
+    }
+    return false
+}
+
+# Count of -v / --verbose tokens.
+verbosity(argv<Vec<String>>)<Int> -> {
+    n<Int> = 0
+    i<Int> = 0
+    while (i < argv.len()) {
+        t<String> = argv.get(i)
+        if (t == "-v" || t == "--verbose") { n = n + 1 }
+        else if (t == "-vv") { n = n + 3 }
+        i = i + 1
+    }
+    return n
+}
+
+# ------------------------------------------------------------------------- main
+
+main()<Int> -> {
+    argv<Vec<String>> = argv_of()
+
+    if (has(argv, "--help") || has(argv, "-h")) {
+        println("run_tests.vyb - Vyb test-suite runner (Vyb implementation)")
+        println("usage: vyb test/run_tests.vyb [--test-dir DIR] [--pattern GLOB]")
+        println("       [--category C] [--vyb PATH] [--no-execute] [-v|-vv]")
+        println("       [--json FILE] [--evidence FILE] [--help]")
+        return 0
+    }
+
+    # argv[0] is the compiler, argv[1] is this program: derive the repo root from
+    # the runner's own path so `find` and the child compiler resolve the same tree.
+    runner<String> = ""
+    if (argv.len() > 1) { runner = argv.get(1) }
+    if (runner.len() == 0) { runner = "test/run_tests.vyb" }
+    repoRoot<String> = dirname_of(dirname_of(runner))
+    if (repoRoot.len() == 0 || !dir_exists(repoRoot + "/test")) { repoRoot = "." }
+
+    vyb<String> = opt(argv, "--vyb")
+    if (vyb.len() == 0) { vyb = repoRoot + "/build/vyb" }
+
+    testDir<String> = opt(argv, "--test-dir")
+    if (testDir.len() == 0) { testDir = repoRoot + "/test" }
+
+    pattern<String> = opt(argv, "--pattern")
+    if (pattern.len() == 0) { pattern = "*.vyb" }
+
+    category<String> = opt(argv, "--category")
+    jsonOut<String> = opt(argv, "--json")
+    evidenceOut<String> = opt(argv, "--evidence")
+    verbose<Int> = verbosity(argv)
+    jit<Bool> = !has(argv, "--no-execute")
+
+    if (verbose > 0) {
+        println("Vyb repository root: " + repoRoot)
+        println("Using Vyb executable: " + vyb)
+        println("Using test directory: " + testDir)
+        if (jit) { println("JIT execution enabled: code will be executed, not just parsed") }
+    }
+
+    files<Vec<String>> = discover(testDir, pattern)
+    if (verbose > 0) { println("Found " + files.len().to_string() + " test files in " + testDir) }
+
+    tmpDir<String> = "/tmp/vyb-run-tests-" + trim(run_sh("date +%s%N"))
+    match (mkdir(tmpDir)) { ok -> { } ? -> { } }
+
+    asan<Bool> = ((env_get("VYB_ASAN") else "") == "1")
+
+    nPass<Int> = 0
+    nBad<Int> = 0
+    nSkip<Int> = 0
+    ran<Int> = 0
+    jsonBody<String> = ""
+    failureJson<String> = ""
+    nFail<Int> = 0
+
+    i<Int> = 0
+    while (i < files.len()) {
+        file<String> = files.get(i)
+        content<String> = slurp(file)
+
+        skip<Bool> = false
+        countSkip<Bool> = false
+        skipNote<String> = ""
+
+        if (directive_true(content, "not-a-test")) { skip = true }
+        else if (category.len() > 0 && !category_has(content, category)) { skip = true }
+        else if (directive_true(content, "skip-asan") && asan) { skip = true; countSkip = true; skipNote = "SKIP (asan): " }
+        else {
+            lib<String> = first_token(directive(content, "skip-if-missing-lib"))
+            if (lib.len() > 0 && !lib_available(lib, env_prefix_of(content))) { skip = true; countSkip = true; skipNote = "SKIP (missing lib " + lib + "): " }
+        }
+
+        if (skip) {
+            if (countSkip) { nSkip = nSkip + 1 }
+            if (verbose > 0 && skipNote.len() > 0) { println(skipNote + file) }
+            i = i + 1
+            continue
+        }
+
+        name<String> = directive(content, "test")
+        if (name.len() == 0) { name = basename_of(file) }
+
+        r<RunResult> = run_one(file, vyb, repoRoot, tmpDir, ran, jit, (verbose > 1))
+        ran = ran + 1
+
+        if (r.ok) {
+            nPass = nPass + 1
+            println("PASS: " + name)
+        } else {
+            nBad = nBad + 1
+            nFail = nFail + 1
+            println("FAIL: " + name + " (" + file + ")")
+            if (verbose > 0) {
+                println("  checks:")
+                println("  - " + trim(r.reasons))
+            }
+        }
+
+        if (jsonOut.len() > 0) {
+            if (jsonBody.len() > 0) { jsonBody = jsonBody + ",\n" }
+            jsonBody = jsonBody + "  {\n"
+            jsonBody = jsonBody + "    \"test\": {\n"
+            jsonBody = jsonBody + "      \"filename\": \"" + json_escape(file) + "\",\n"
+            jsonBody = jsonBody + "      \"name\": \"" + json_escape(name) + "\",\n"
+            jsonBody = jsonBody + "      \"description\": \"" + json_escape(directive(content, "description")) + "\",\n"
+            jsonBody = jsonBody + "      \"category\": \"" + json_escape(directive(content, "category")) + "\",\n"
+            jsonBody = jsonBody + "      \"expect\": \"" + json_escape(directive(content, "expect")) + "\",\n"
+            jsonBody = jsonBody + "      \"parse_only\": " + bool_str(directive_true(content, "parse-only")) + ",\n"
+            jsonBody = jsonBody + "      \"semantic_only\": " + bool_str(directive_true(content, "semantic-only")) + "\n"
+            jsonBody = jsonBody + "    },\n"
+            jsonBody = jsonBody + "    \"result\": {\n"
+            jsonBody = jsonBody + "      \"success\": " + bool_str(r.ok) + ",\n"
+            jsonBody = jsonBody + "      \"stdout\": \"" + json_escape(r.stdout) + "\",\n"
+            jsonBody = jsonBody + "      \"stderr\": \"" + json_escape(r.stderr) + "\",\n"
+            jsonBody = jsonBody + "      \"return_code\": " + r.code.to_string() + ",\n"
+            jsonBody = jsonBody + "      \"execution_time\": 0.0,\n"
+            jsonBody = jsonBody + "      \"failure_reasons\": " + json_reasons(r.reasons) + "\n"
+            jsonBody = jsonBody + "    }\n"
+            jsonBody = jsonBody + "  }"
+        }
+
+        if (evidenceOut.len() > 0 && !r.ok) {
+            if (failureJson.len() > 0) { failureJson = failureJson + ",\n" }
+            failureJson = failureJson + "    {\n"
+            failureJson = failureJson + "      \"filename\": \"" + json_escape(file) + "\",\n"
+            failureJson = failureJson + "      \"category\": \"" + json_escape(directive(content, "category")) + "\",\n"
+            failureJson = failureJson + "      \"reasons\": \"" + json_escape(trim(r.reasons)) + "\",\n"
+            failureJson = failureJson + "      \"stderr\": \"" + json_escape(r.stderr) + "\",\n"
+            failureJson = failureJson + "      \"execution_time\": 0.0\n"
+            failureJson = failureJson + "    }"
+        }
+
+        i = i + 1
+    }
+
+    println("")
+    println("Ran " + ran.to_string() + " tests")
+    println("Passed: " + nPass.to_string())
+    println("Failed: " + nBad.to_string())
+    if (nSkip > 0) { println("Skipped: " + nSkip.to_string()) }
+
+    if (jsonOut.len() > 0) {
+        wrote<Bool> = spill(jsonOut, "[\n" + jsonBody + "\n]\n")
+        if (verbose > 0) {
+            if (wrote) { println("Results saved to " + jsonOut) } else { println("could not write " + jsonOut) }
+        }
+    }
+
+    if (evidenceOut.len() > 0) {
+        rev<String> = trim(run_sh("git -C " + repoRoot + " rev-parse HEAD"))
+        ver<String> = trim(run_sh(vyb + " --version"))
+        ev<String> = "{\n"
+        ev = ev + "  \"revision\": \"" + json_escape(rev) + "\",\n"
+        ev = ev + "  \"version\": \"" + json_escape(ver) + "\",\n"
+        ev = ev + "  \"runner\": \"test/run_tests.vyb\",\n"
+        ev = ev + "  \"test_dir\": \"" + json_escape(testDir) + "\",\n"
+        ev = ev + "  \"pattern\": \"" + json_escape(pattern) + "\",\n"
+        ev = ev + "  \"category\": \"" + json_escape(category) + "\",\n"
+        ev = ev + "  \"execute_jit\": " + bool_str(jit) + ",\n"
+        ev = ev + "  \"total\": " + ran.to_string() + ",\n"
+        ev = ev + "  \"passed\": " + nPass.to_string() + ",\n"
+        ev = ev + "  \"failed\": " + nBad.to_string() + ",\n"
+        ev = ev + "  \"skipped\": " + nSkip.to_string() + ",\n"
+        ev = ev + "  \"failures\": [\n" + failureJson + "\n  ]\n"
+        ev = ev + "}\n"
+        wrote2<Bool> = spill(evidenceOut, ev)
+        if (verbose > 0) {
+            if (wrote2) { println("Run evidence saved to " + evidenceOut) } else { println("could not write " + evidenceOut) }
+        }
+    }
+
+    run_sh("rm -rf " + tmpDir)
+
+    # JIT mode prints main's return value and exits 0, so the harness must exit
+    # explicitly: CI/CTest and the milestone gate read this process's status.
+    if (nBad > 0) { exit(1) }
+    return 0
+}

@@ -73,8 +73,8 @@ git clone https://github.com/rickenator/Vyb.git
 cd Vyb
 mkdir -p build && cd build && LLVM_DIR=/usr/lib/llvm-18/cmake cmake .. && make -j$(nproc) && cd ..
 
-# Run the full test suite (1195 .vyb tests) with the canonical harness
-python3 test/run_tests.py --vyb build/vyb --test-dir test --execute-jit
+# Run the full test suite (1195 .vyb tests) with the canonical Vyb runner
+build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
 
 # Run your first Vyb program
 echo 'main()<Int> -> { return 42 }' > hello.vyb
@@ -2630,25 +2630,29 @@ cmake --build build --target run-milestone
 
 ## Test Harness
 
-Vyb's canonical test runner is `test/run_tests.py`, the same suite wired into
-CTest as the `run-tests` target and used for the full regression gate (currently
-**1195 `.vyb` tests, all passing**):
+Vyb's canonical test runner is `test/run_tests.vyb` — a Vyb program, the same
+suite wired into CTest as the `run-tests` target and used for the full regression
+gate (currently **1195 `.vyb` tests, all passing**):
 
 ### Quick Testing
 ```bash
 # Full suite (JIT execution), from the repo root
-python3 test/run_tests.py --vyb build/vyb --test-dir test --execute-jit
+build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
 
 # Run a single category (parse, semantic, async, tls, ...)
-python3 test/run_tests.py --vyb build/vyb --test-dir test --category async
+build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test --category async
 
-# Save results as JSON
-python3 test/run_tests.py --vyb build/vyb --test-dir test --json results.json
+# Save results as JSON, or full run evidence
+build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test --json results.json
+build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test --evidence evidence.json
 ```
 
-A secondary parallel harness (`test_harness.py`) plus `triage_tool.py` add HTML
-reporting, failure-triage, and performance analysis on top of that suite; the
-authoritative pass/fail count is always the `run-tests` CTest target output.
+`vyb --repo` (or `vyb test` with no explicit paths inside the compiler repo) runs
+the same Vyb runner, so the compiler's own test path needs no Python. A secondary
+parallel harness (`test_harness.py`) plus `triage_tool.py` add HTML reporting,
+failure-triage, and performance analysis on top of that suite — both are still
+Python, slated for porting; the authoritative pass/fail count is always the
+`run-tests` CTest target output.
 
 ### Test Analysis and Triage
 ```bash

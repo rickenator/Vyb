@@ -1,11 +1,13 @@
 # Vyb Test Harness and Analysis System
 
-Vyb's canonical test runner is `test/run_tests.py` (wired into CTest as `run-tests`; currently **1077 `.vyb` tests, all passing**). This guide documents the auxiliary parallel harness (`test_harness.py`) and its richer reporting/triage workflow.
+Vyb's canonical test runner is `test/run_tests.vyb` (a Vyb program, wired into
+CTest as `run-tests`). This guide documents the auxiliary parallel harness
+(`test_harness.py`) and its richer reporting/triage workflow.
 
 ## Overview
 
 The Vyb test system consists of:
-- **1077 Tests, All Passing**: The canonical `test/run_tests.py` suite covers all language features
+- **1195 Tests, All Passing**: The canonical `test/run_tests.vyb` suite covers all language features
 - **Modern Test Harness**: Parallel execution with intelligent categorization
 - **Rich Reporting**: HTML, JSON, and console output formats
 - **Failure Triage**: Automated analysis and actionable recommendations
