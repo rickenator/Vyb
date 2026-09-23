@@ -2679,6 +2679,19 @@ build/vyb migrate_syntax.vyb --apply        # apply canonical forms (backs up)
 build/vyb triage_tool.vyb results.json        # analyse failures
 ```
 
+### Splash (`tools/vybsplash.vyb`)
+
+The wordmark, rendered by Vyb itself — truecolor ANSI, a PNG through
+`stdlib/png`, or a `data:` URL through `stdlib/base64`. No image asset, no
+Python:
+```bash
+build/vyb tools/vybsplash.vyb                  # terminal splash (gradient)
+build/vyb tools/vybsplash.vyb --plain          # no escapes (pipes, CI logs)
+build/vyb tools/vybsplash.vyb --png vyb.png    # 180x100 PNG logo
+build/vyb tools/vybsplash.vyb --data-url       # data:image/png;base64,...
+```
+The README banner is this program's `--plain` output.
+
 ### Reference manual generator (`tools/refman.vyb`)
 
 ```bash
