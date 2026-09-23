@@ -2620,7 +2620,7 @@ make -C build -j
 build/vyb test/string/string_test.vyb
 
 # Run demos and examples
-python3 test/run_examples.py --vyb build/vyb
+build/vyb test/run_examples.vyb --vyb build/vyb
 cmake --build build --target run-examples
 
 # Run the milestone gate
