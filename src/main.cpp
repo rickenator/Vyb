@@ -2106,7 +2106,7 @@ static bool has_test_markers(const std::string& c) {
 }
 
 // Run a subprocess with stdout+stderr captured into \p out / \p err; returns its
-// exit status (mirrors run_tests.py's per-test isolation).
+// exit status (mirrors test/run_tests.vyb's per-test isolation).
 static int run_test_capture(const std::vector<std::string>& args,
                             const std::vector<std::pair<std::string,std::string>>& envPairs,
                             std::string& out, std::string& err) {
@@ -2196,25 +2196,26 @@ int run_test_command(int argc, char** argv, const std::string& exeArg) {
         else positional.push_back(a);
     }
 
-    // Repo-harness delegation (backwards compatible with the existing `vyb test`).
+    // Repo-harness delegation: the canonical suite runner is a Vyb program now
+    // (`test/run_tests.vyb`), so `vyb --repo` no longer shells out to Python.
     {
         std::error_code ec;
         fs::path exePath = fs::path(exeArg);
         if (exePath.is_relative()) exePath = fs::absolute(exePath, ec);
         fs::path repoRoot = exePath.parent_path().parent_path();
-        fs::path harness = repoRoot / "test" / "run_tests.py";
+        fs::path harness = repoRoot / "test" / "run_tests.vyb";
         if (repoMode || (positional.empty() && fs::exists(harness))) {
             if (!fs::exists(harness)) {
                 std::cerr << "Error: --repo test harness not found at " << harness.string() << std::endl;
                 return 1;
             }
-            std::vector<std::string> args = {"python3", harness.string(), "--vyb", exeArg, "--execute-jit"};
+            std::vector<std::string> args = {exeArg, harness.string()};
             if (testDir.empty() && !positional.empty()) testDir = positional.front();
             if (!testDir.empty()) { args.push_back("--test-dir"); args.push_back(testDir); }
             if (!category.empty()) { args.push_back("--category"); args.push_back(category); }
             if (!pattern.empty()) { args.push_back("--pattern"); args.push_back(pattern); }
             if (noExecute) args.push_back("--no-execute");
-            if (verbose) { args.push_back("--verbose"); }
+            if (verbose) { args.push_back("-v"); }
             return run_exec(args);
         }
     }

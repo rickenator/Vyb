@@ -80,7 +80,7 @@ jobs:
         run: bash test/docs_gate.sh
 
       - name: Full JIT test suite (against build-release/vyb)
-        run: python3 test/run_tests.py --vyb build-release/vyb --test-dir test --execute-jit --json /tmp/suite.json --evidence /tmp/release-evidence.json
+        run: ./build-release/vyb test/run_tests.vyb --vyb build-release/vyb --test-dir test --json /tmp/suite.json --evidence /tmp/release-evidence.json
 
       - name: AOT / native-link coverage (against build-release/vyb)
         # test_compilation.sh resolves the binary at build/vyb; alias build ->

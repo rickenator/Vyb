@@ -187,7 +187,7 @@ const/read-only-after-parse as a follow-on. Not required for green.
 
 ## Verification (must all pass before commit)
 1. `cmake --build build --target vyb` clean.
-2. Full suite: `python3 test/run_tests.py --vyb build/vyb --test-dir test --execute-jit`
+2. Full suite: `build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test`
    -> **1141/1141** (currently). No new failures, no new sanitizer/UAF surfaced.
 3. The three CLI smokes, since they exercise the compiler end-to-end:
    `test/lsp_smoke.py`, `test/repl_smoke.py`, `test/gitdep_smoke.py`.

@@ -41,14 +41,14 @@ assert runtime output.
 ## Running Tests
 
 ```bash
-python3 test/run_tests.py --vyb build/vyb --test-dir test/new_features --execute-jit
-python3 test/run_tests.py --vyb build/vyb --test-dir test/ffi --execute-jit
-python3 test/run_tests.py --vyb build/vyb --test-dir test/parser
+build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test/new_features
+build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test/ffi
+build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test/parser
 python3 test/run_milestone_tests.py --vyb build/vyb
 ```
 
-The harness defaults to `test/units` and `--no-execute`. Pass `--execute-jit`
-for runtime/output tests. The milestone runner aggregates the stable runtime,
+The Vyb runner executes each test through the compiler (JIT) by default;
+`--no-execute` compiles only. The milestone runner aggregates the stable runtime,
 module, FFI, introspection, primitive type, range, Vec iteration, and stdlib
 suites and enforces at least 126 passing tests before the next milestone.
 

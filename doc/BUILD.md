@@ -40,7 +40,7 @@ The full test suite is ASan/LSan-clean end to end:
 
     cmake --preset asan
     cmake --build --preset asan
-    VYB_ASAN=1 python3 test/run_tests.py --vyb build-asan/vyb --test-dir test --execute-jit
+    VYB_ASAN=1 ./build-asan/vyb test/run_tests.vyb --vyb build-asan/vyb --test-dir test
 
 ## Build identity (#160)
 
@@ -75,7 +75,7 @@ The canonical language suite is registered with **CTest**:
 Both registered tests write machine-readable JSON **and** a reproducible
 `*-evidence.json` under `<build>/test-results/`:
 
-- `jit.json` / `jit-evidence.json` — per-test + summary from `test/run_tests.py`.
+- `jit.json` / `jit-evidence.json` — per-test + summary from `test/run_tests.vyb`.
 - `aot-evidence.json` — per-test + summary from `test_compilation.sh --json`.
 
 The evidence JSON records the exact compiler **revision** (`git rev-parse HEAD`),
@@ -86,7 +86,7 @@ these as upload artifacts.
 
 Focused local runs stay available on the harness directly:
 
-    python3 test/run_tests.py --test-dir test --execute-jit          # all
-    python3 test/run_tests.py --test-dir test/units --category parser # one category
-    python3 test/run_tests.py --test-dir test --pattern "test_http*"  # pattern
+    build/vyb test/run_tests.vyb --test-dir test                            # all
+    build/vyb test/run_tests.vyb --test-dir test/units --category parser    # one category
+    build/vyb test/run_tests.vyb --test-dir test --pattern "test_http*"     # pattern
 

@@ -52,7 +52,12 @@ jobs:
         run: test "$(./build/vyb --version)" = "Vyb $(grep '^project' CMakeLists.txt | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+') (build=Release, sanitize=none)"
 
       - name: Full JIT test suite
-        run: python3 test/run_tests.py --vyb build/vyb --test-dir test --execute-jit --json /tmp/suite.json --evidence /tmp/release-evidence.json
+        run: ./build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test --json /tmp/suite.json --evidence /tmp/release-evidence.json
+
+      - name: Validate documented suite count matches runner (#226)
+        # Vyb implementation of the old suite_count_check.py: the count must match
+        # what test/run_tests.vyb actually runs.
+        run: ./build/vyb test/suite_count_check.vyb
 
       - name: AOT / native-link coverage
         run: |
@@ -122,7 +127,7 @@ jobs:
         env:
           ASAN_OPTIONS: "halt_on_error=1:detect_leaks=1"
           VYB_ASAN: "1"
-        run: python3 test/run_tests.py --vyb build/vyb --test-dir test --execute-jit --json /tmp/asan-suite.json --evidence /tmp/asan-evidence.json
+        run: ./build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test --json /tmp/asan-suite.json --evidence /tmp/asan-evidence.json
 
       - name: Upload ASan release evidence (#158)
         if: always()

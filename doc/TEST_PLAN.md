@@ -17,7 +17,7 @@ Vyb is one of the most beautiful things we've worked on. Now we strive for **qua
 ### Quick Test Run
 ```bash
 # Run the canonical suite (authoritative pass/fail count)
-python3 test/run_tests.py --vyb build/vyb --test-dir test --execute-jit
+build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
 
 # Or the auxiliary parallel harness with reporting/triage
 python3 test_harness.py --parallel

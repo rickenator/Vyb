@@ -1,0 +1,196 @@
+# suite_count_check.vyb - #226 suite-count drift check, in Vyb.
+#
+// @not-a-test: true — tooling, not a fixture.
+#
+# Verifies that every suite-size number documented in README.md and the refman
+# PROGRAMMERS_GUIDE.md equals the number of `.vyb` files under `test/` (what the
+# canonical runner discovers). Wired into CI so adding or removing a fixture can
+# no longer silently desync the docs from the real suite size.
+#
+# Exit 0 = every documented count matches; exit 1 = drift (mismatches listed).
+#
+#   VYB_STDLIB=$PWD/stdlib build/vyb test/suite_count_check.vyb
+#
+# Two documentation shapes are recognised, matching the Python original:
+#   - "<N> tests"  / "<N> .vyb tests"  / "full suite (<N> tests)"
+#   - "100% (<N>/<N>)"  -- an equal success ratio
+import io::{close, open_read, read_all, File}
+import process::{exec_output}
+
+# Value of a digit-only string (0 when it holds no digits).
+digits_to_int(s<String>)<Int> -> {
+    n<Int> = 0
+    i<Int> = 0
+    while (i < s.len()) {
+        c<Int> = (s.char_at(i) as Int) & 0xFF
+        if (c < 48 || c > 57) { break }
+        n = n * 10 + (c - 48)
+        i = i + 1
+    }
+    return n
+}
+
+# True when `c` (a byte value) is an ASCII digit.
+is_digit(c<Int>)<Bool> -> {
+    return (c >= 48 && c <= 57)
+}
+
+# ASCII space / tab / CR / LF?
+is_space(c<Int>)<Bool> -> {
+    return (c == 32 || c == 9 || c == 13 || c == 10)
+}
+
+byte_at(s<String>, i<Int>)<Int> -> {
+    return (s.char_at(i) as Int) & 0xFF
+}
+
+# Read `path` as a whole String ("" when unreadable).
+slurp(path<String>)<String> -> {
+    text<String> = ""
+    match (open_read(path)) {
+        f -> {
+            match (read_all(f)) { s -> { text = s } ? -> { } }
+            close(f)
+        }
+        ? -> { }
+    }
+    return text
+}
+
+# Run `cmd` and return its stdout ("" when it could not run).
+run_sh(cmd<String>)<String> -> {
+    out<String> = ""
+    freedom {
+        match (exec_output(cmd)) {
+            s -> { out = s }
+            ? -> { out = "" }
+        }
+    }
+    return out
+}
+
+# True when `v` already holds `n` (the language has no set type yet).
+has_num(v<Vec<Int>>, n<Int>)<Bool> -> {
+    i<Int> = 0
+    while (i < v.len()) {
+        if (v.get(i) == n) { return true }
+        i = i + 1
+    }
+    return false
+}
+
+# Every integer that reads as a suite total: digits (with spaces, and an optional
+# ".vyb") immediately before the word "tests".
+counts_before_tests(text<String>)<Vec<Int>> -> {
+    found<Vec<Int>> = Vec<Int>()
+    pos<Int> = 0
+    while (pos < text.len()) {
+        rest<String> = text.substring(pos, text.len())
+        k<Int> = rest.index_of("tests")
+        if (k < 0) { break }
+        hitPos<Int> = pos + k
+        i<Int> = hitPos - 1
+        while (i >= 0 && is_space(byte_at(text, i))) { i = i - 1 }
+        # optional ".vyb" right before "tests"
+        if (i >= 3 && byte_at(text, i) == 98 && byte_at(text, i - 1) == 118 && byte_at(text, i - 2) == 121 && byte_at(text, i - 3) == 46) {
+            i = i - 4
+            while (i >= 0 && is_space(byte_at(text, i))) { i = i - 1 }
+        }
+        j<Int> = i
+        while (j >= 0 && is_digit(byte_at(text, j))) { j = j - 1 }
+        if (j < i) {
+            num<Int> = digits_to_int(text.substring(j + 1, i + 1))
+            if (!has_num(found, num)) { found.push(num) }
+        }
+        pos = hitPos + 5
+    }
+    return found
+}
+
+# Every "N/N" success ratio whose two halves are equal (e.g. 100% (1195/1195)).
+equal_ratio_counts(text<String>)<Vec<Int>> -> {
+    found<Vec<Int>> = Vec<Int>()
+    i<Int> = 1
+    while (i < text.len() - 1) {
+        if (byte_at(text, i) == 47 && is_digit(byte_at(text, i - 1)) && is_digit(byte_at(text, i + 1))) {
+            a<Int> = i - 1
+            while (a >= 0 && is_digit(byte_at(text, a))) { a = a - 1 }
+            b<Int> = i + 1
+            while (b < text.len() && is_digit(byte_at(text, b))) { b = b + 1 }
+            left<String> = text.substring(a + 1, i)
+            right<String> = text.substring(i + 1, b)
+            if (left == right) {
+                num<Int> = digits_to_int(left)
+                if (!has_num(found, num)) { found.push(num) }
+            }
+            i = b
+        } else {
+            i = i + 1
+        }
+    }
+    return found
+}
+
+main()<Int> -> {
+    # argv[1] is this program: the repo root is two directories up.
+    self<String> = ""
+    raw<String> = slurp("/proc/self/cmdline")
+    parts<Vec<String>> = raw.split(String::from_byte(0))
+    if (parts.len() > 1) { self = parts.get(1) }
+    root<String> = ""
+    if (self.len() > 0) {
+        # strip the file name, then the "test" directory
+        k<Int> = self.index_of("/test/suite_count_check.vyb")
+        if (k >= 0) { root = self.substring(0, k) }
+    }
+    if (root.len() == 0) { root = "." }
+
+    allFiles<String> = run_sh("find " + root + "/test -type f -name '*.vyb' | wc -l")
+    # the marker is assembled at run time so this file's own source does not match it
+    tooling<String> = run_sh("grep -rl '" + "// @not-a-" + "test:' " + root + "/test --include='*.vyb' | wc -l")
+    actual<Int> = digits_to_int(allFiles) - digits_to_int(tooling)
+
+    docs<Vec<String>> = Vec<String>()
+    docs.push(root + "/README.md")
+    docs.push(root + "/docs/refman/PROGRAMMERS_GUIDE.md")
+
+    problems<Vec<String>> = Vec<String>()
+    d<Int> = 0
+    while (d < docs.len()) {
+        path<String> = docs.get(d)
+        text<String> = slurp(path)
+        if (text.len() > 0) {
+            nums<Vec<Int>> = counts_before_tests(text)
+            others<Vec<Int>> = equal_ratio_counts(text)
+            i<Int> = 0
+            while (i < others.len()) {
+                n<Int> = others.get(i)
+                if (!has_num(nums, n)) { nums.push(n) }
+                i = i + 1
+            }
+            j<Int> = 0
+            while (j < nums.len()) {
+                n2<Int> = nums.get(j)
+                if (n2 != actual) {
+                    problems.push(path + ": documents " + n2.to_string() + " .vyb tests, runner discovers " + actual.to_string())
+                }
+                j = j + 1
+            }
+        }
+        d = d + 1
+    }
+
+    if (problems.len() > 0) {
+        println("suite-count drift (#226):")
+        i<Int> = 0
+        while (i < problems.len()) {
+            println("  - " + problems.get(i))
+            i = i + 1
+        }
+        println("  canonical = " + actual.to_string() + " (.vyb files under test/)")
+        return 1
+    }
+
+    println("suite-count --check OK (" + actual.to_string() + " .vyb tests in docs match the runner)")
+    return 0
+}
