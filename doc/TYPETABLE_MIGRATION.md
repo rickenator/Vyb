@@ -191,7 +191,7 @@ const/read-only-after-parse as a follow-on. Not required for green.
    -> **1141/1141** (currently). No new failures, no new sanitizer/UAF surfaced.
 3. The three CLI smokes, since they exercise the compiler end-to-end:
    `test/lsp_smoke.vyb`, `test/repl_smoke.vyb`, `test/gitdep_smoke.vyb`.
-4. `tools/refman.py --check` unaffected (no doc regen unless stdlib touched —
+4. `tools/refman.vyb` (via `VYB_REFMAN_CHECK=1`) unaffected (no doc regen unless stdlib touched —
    it isn't).
 5. A UAF/double-free watch: rebuild once with `-fsanitize=address,undefined` if
    the project's sanitize build is configured (the `_ownedTypes` re-retain path

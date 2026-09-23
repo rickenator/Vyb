@@ -9,10 +9,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Validate generated refman matches stdlib
-        run: python3 tools/refman.py --check
-      # The suite-count drift check (#226) moved to the ci job, where the compiler
-      # is built: it is a Vyb program now (test/suite_count_check.vyb).
+      - name: Validate refman tooling is wired to Vyb
+        # The generator is tools/refman.vyb -- a Vyb program -- so the real drift
+        # check runs in the `ci` workflow's build job, where the compiler exists
+        # (#226). This fast gate keeps the wiring honest: the Python generator is
+        # gone, the ci job still runs the check, and the guide markers the
+        # generator patches are intact.
+        run: |
+          set -euo pipefail
+          test -f tools/refman.vyb
+          test ! -f tools/refman.py
+          grep -q 'VYB_REFMAN_CHECK=1' .github/workflows/ci.yml
+          grep -q '<!-- refman:api-index begin -->' docs/refman/PROGRAMMERS_GUIDE.md
+          grep -q '<!-- refman:api-index end -->' docs/refman/PROGRAMMERS_GUIDE.md

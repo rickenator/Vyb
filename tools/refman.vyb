@@ -1,0 +1,3484 @@
+// @not-a-test: true
+# refman.vyb -- hyperlinked reference manual generator for the Vyb stdlib.
+#
+# Vyb port of tools/refman.py (part of the "no Python in the tool path" work,
+# #226). Scans stdlib/**/*.vyb and emits a Markdown refman under --emit-dir whose
+# core value is the *inter-relationship graph*: modules, files, exported symbols
+# and the import / implement / uses-type / runtime / call / prose-reference edges
+# between them. Prose is reused from existing '#'/'//' doc comments.
+#
+# Deterministic: a clean tree regenerates byte-identical output.
+#
+# Usage (from the repo root):
+#   VYB_STDLIB=$PWD/stdlib build/vyb tools/refman.vyb                # write docs/refman
+#   VYB_STDLIB=$PWD/stdlib build/vyb tools/refman.vyb --check        # validate + drift
+#   VYB_STDLIB=$PWD/stdlib build/vyb tools/refman.vyb --emit-dir X --check
+#
+# Flags: --emit-dir DIR  --stdlib DIR  --runtime C_FILE  --check
+#
+# NOTE: the compiler itself consumes a bare `--check` (its canonical-format
+# check) before this program runs, so the working spellings are
+# `--check=1` / `--check=true` / bare `check`, or VYB_REFMAN_CHECK=1.
+#
+# Porting notes: this language has no regex (the Python tool's patterns are
+# hand-written scanners here), no json module (graph.json is escaped by hand),
+# no argv primitive (flags come from /proc/self/cmdline) and no String::to_int in
+# this build (hence digits_to_int).
+import env::{env_get}
+import io::{close, open_read, open_write, read_all, write_str}
+import process::{exec_output}
+
+# ------------------------------------------------------------------ data model
+
+# One `name<Type>` parameter/field pair inside a declaration.
+struct ArgPair {
+    name<String>,
+    ty<String>
+}
+
+# One parsed declaration member: a struct field, an enum variant, or an
+# aspect/bind method (methods carry `args` and `ret`).
+struct Member {
+    kind<String>,
+    name<String>,
+    ty<String>,
+    ret<String>,
+    args<Vec<ArgPair>>
+}
+
+# One declaration found by the file parser.
+struct Symbol {
+    name<String>,
+    kind<String>,
+    signature<String>,
+    tvar<String>,
+    asp<String>,
+    target<String>,
+    ret<String>,
+    doc<String>,
+    body<String>,
+    exported<Bool>,
+    rel<String>,
+    params<Vec<Member>>,
+    fparams<Vec<ArgPair>>
+}
+
+# One `import ...` / `share(all) import ...` statement.
+struct ImportDecl {
+    target<String>,
+    names<Vec<String>>,
+    reexport<Bool>,
+    doc<String>
+}
+
+# One parsed source file.
+struct FileRec {
+    rel<String>,
+    symbols<Vec<Symbol>>,
+    imports<Vec<ImportDecl>>,
+    header<String>
+}
+
+# One relationship edge. `has_to_module` is false for runtimeRef edges (the
+# Python dict omits the key there), `has_flags` is true only for import edges
+# (they carry `reexport` / `resolved`).
+struct Edge {
+    etype<String>,
+    from_module<String>,
+    from_symbol<String>,
+    to_module<String>,
+    to_symbol<String>,
+    has_to_module<Bool>,
+    has_flags<Bool>,
+    reexport<Bool>,
+    resolved<Bool>
+}
+
+# Exported symbol location, used for the name index (the omnisearch).
+struct OmniRef {
+    m<String>,
+    n<String>
+}
+
+# A cross-module struct/enum definition (last definition of a name wins).
+struct StructEnt {
+    tm<String>,
+    name<String>,
+    kind<String>,
+    doc<String>
+}
+
+# A consumer record: key (tm, ts) plus (fm, fsym, etype, reexport).
+struct Rec {
+    tm<String>,
+    ts<String>,
+    fm<String>,
+    fsym<String>,
+    etype<String>,
+    reex<Bool>
+}
+
+# An `import` triple kept for the module page's Imports section.
+struct ImpTriple {
+    target<String>,
+    nm<String>,
+    reex<Bool>
+}
+
+# A `name` + rendered link pair (cross-index enumeration).
+struct NameLink {
+    name<String>,
+    link<String>
+}
+
+# A module/name key pair.
+struct PairKey {
+    a<String>,
+    b<String>
+}
+
+# Fan-in / fan-out module lists.
+struct Fans {
+    inm<Vec<String>>,
+    outm<Vec<String>>
+}
+
+# Result of extract_call.
+struct ParseCall {
+    ok<Bool>,
+    name<String>,
+    params<Vec<ArgPair>>,
+    ret<String>
+}
+
+# Result of a bracket scan.
+struct Span {
+    a<Int>,
+    b<Int>
+}
+
+# Result of matching a generic `name<Type>` part.
+struct MemberParse {
+    ok<Bool>,
+    name<String>,
+    ty<String>
+}
+
+# Result of parse_import's target/name split.
+struct ImportParse {
+    ok<Bool>,
+    target<String>,
+    names<Vec<String>>
+}
+
+# The relationship graph.
+struct Graph {
+    module_order<Vec<String>>,
+    files<Vec<FileRec>>,
+    edges<Vec<Edge>>,
+    omni<Vec<OmniRef>>,
+    rt_keys<Vec<String>>,
+    rt_lines<Vec<Int>>,
+    git_rev<String>
+}
+
+# ------------------------------------------------------- small string helpers
+
+# Byte at index `i` of `s` (0 when out of range).
+byte_at(s<String>, i<Int>)<Int> -> {
+    if (i < 0 || i >= s.len()) { return 0 }
+    return (s.char_at(i) as Int) & 0xFF
+}
+
+chr(c<Int>)<String> -> { return String::from_byte(c) }
+lit_quote()<String> -> { return "\"" }
+lit_bs()<String> -> { return "\\" }
+lit_nl()<String> -> { return "\n" }
+
+is_ws(c<Int>)<Bool> -> {
+    return (c == 32 || c == 9 || c == 10 || c == 13 || c == 12 || c == 11)
+}
+
+is_digit(c<Int>)<Bool> -> { return (c >= 48 && c <= 57) }
+
+is_word(c<Int>)<Bool> -> {
+    return ((c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95)
+}
+
+is_alpha_start(c<Int>)<Bool> -> {
+    return ((c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95)
+}
+
+is_hex(c<Int>)<Bool> -> {
+    return ((c >= 48 && c <= 57) || (c >= 97 && c <= 102))
+}
+
+is_seg_char(c<Int>)<Bool> -> {
+    return !(is_ws(c) || c == 123 || c == 125 || c == 58)
+}
+
+# Strip leading/trailing whitespace (spaces, tabs, CR, LF, VT, FF) from `s`.
+trim(s<String>)<String> -> {
+    a<Int> = 0
+    n<Int> = s.len()
+    while (a < n) {
+        c<Int> = byte_at(s, a)
+        if (is_ws(c)) { a = a + 1 } else { break }
+    }
+    b<Int> = n
+    while (b > a) {
+        c<Int> = byte_at(s, b - 1)
+        if (is_ws(c)) { b = b - 1 } else { break }
+    }
+    if (b <= a) { return "" }
+    return s.substring(a, b)
+}
+
+# Drop trailing whitespace only (Python str.rstrip()).
+rstrip_ws(s<String>)<String> -> {
+    b<Int> = s.len()
+    while (b > 0) {
+        c<Int> = byte_at(s, b - 1)
+        if (is_ws(c)) { b = b - 1 } else { break }
+    }
+    if (b <= 0) { return "" }
+    return s.substring(0, b)
+}
+
+# Drop trailing occurrences of `ch`.
+rstrip_char(s<String>, ch<Int>)<String> -> {
+    b<Int> = s.len()
+    while (b > 0) {
+        if (byte_at(s, b - 1) == ch) { b = b - 1 } else { break }
+    }
+    if (b <= 0) { return "" }
+    return s.substring(0, b)
+}
+
+spaces(n<Int>)<String> -> {
+    out<String> = ""
+    i<Int> = 0
+    while (i < n) {
+        out = out + " "
+        i = i + 1
+    }
+    return out
+}
+
+bool_str(b<Bool>)<String> -> {
+    if (b) { return "true" }
+    return "false"
+}
+
+# Decimal value of a digit string (stops at the first non-digit).
+digits_to_int(s<String>)<Int> -> {
+    t<String> = trim(s)
+    n<Int> = 0
+    i<Int> = 0
+    while (i < t.len()) {
+        c<Int> = byte_at(t, i)
+        if (c < 48 || c > 57) { break }
+        n = n * 10 + (c - 48)
+        i = i + 1
+    }
+    return n
+}
+
+starts_with(s<String>, p<String>)<Bool> -> {
+    if (p.len() > s.len()) { return false }
+    i<Int> = 0
+    while (i < p.len()) {
+        if (byte_at(s, i) != byte_at(p, i)) { return false }
+        i = i + 1
+    }
+    return true
+}
+
+ends_with(s<String>, p<String>)<Bool> -> {
+    if (p.len() > s.len()) { return false }
+    off<Int> = s.len() - p.len()
+    i<Int> = 0
+    while (i < p.len()) {
+        if (byte_at(s, off + i) != byte_at(p, i)) { return false }
+        i = i + 1
+    }
+    return true
+}
+
+has_sub(s<String>, p<String>)<Bool> -> {
+    return s.index_of_from(p, 0) >= 0
+}
+
+count_of(s<String>, ch<Int>)<Int> -> {
+    n<Int> = 0
+    i<Int> = 0
+    while (i < s.len()) {
+        if (byte_at(s, i) == ch) { n = n + 1 }
+        i = i + 1
+    }
+    return n
+}
+
+join_strs(v<Vec<String>>, sep<String>)<String> -> {
+    out<String> = ""
+    i<Int> = 0
+    while (i < v.len()) {
+        if (i > 0) { out = out + sep }
+        out = out + v.get(i)
+        i = i + 1
+    }
+    return out
+}
+
+# Python str.splitlines() for the boundary bytes this tree uses.
+splitlines(s<String>)<Vec<String>> -> {
+    out<Vec<String>> = Vec<String>()
+    start<Int> = 0
+    i<Int> = 0
+    n<Int> = s.len()
+    while (i < n) {
+        c<Int> = byte_at(s, i)
+        if (c == 10 || c == 13 || c == 11 || c == 12 || c == 28 || c == 29 || c == 30) {
+            out.push(s.substring(start, i))
+            if (c == 13 && i + 1 < n && byte_at(s, i + 1) == 10) { i = i + 1 }
+            i = i + 1
+            start = i
+        } else {
+            i = i + 1
+        }
+    }
+    if (start < n) { out.push(s.substring(start, n)) }
+    return out
+}
+
+# Whitespace-separated tokens (Python str.split()).
+split_ws(s<String>)<Vec<String>> -> {
+    out<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    n<Int> = s.len()
+    while (i < n) {
+        while (i < n && is_ws(byte_at(s, i))) { i = i + 1 }
+        if (i >= n) { break }
+        j<Int> = i
+        while (j < n && !is_ws(byte_at(s, j))) { j = j + 1 }
+        out.push(s.substring(i, j))
+        i = j
+    }
+    return out
+}
+
+# Replace every literal occurrence of `from` with `to`.
+replace_all(s<String>, pat<String>, to<String>)<String> -> {
+    pl<Int> = pat.len()
+    if (pl == 0) { return s }
+    out<String> = ""
+    i<Int> = 0
+    while (i < s.len()) {
+        if (i + pl <= s.len() && s.substring(i, i + pl) == pat) {
+            out = out + to
+            i = i + pl
+        } else {
+            out = out + chr(byte_at(s, i))
+            i = i + 1
+        }
+    }
+    return out
+}
+
+# The part of `l` before its first '{'.
+head_before_brace(l<String>)<String> -> {
+    k<Int> = l.index_of("{")
+    if (k < 0) { return l }
+    return l.substring(0, k)
+}
+
+# Index of the LAST "->" in `h`, or -1.
+rfind_arrow(h<String>)<Int> -> {
+    k<Int> = h.len() - 2
+    while (k >= 0) {
+        if (byte_at(h, k) == 45 && byte_at(h, k + 1) == 62) { return k }
+        k = k - 1
+    }
+    return -1
+}
+
+# Maximal identifier at the start of `s` ("" when there is none).
+leading_ident(s<String>)<String> -> {
+    if (s.len() == 0 || !is_alpha_start(byte_at(s, 0))) { return "" }
+    i<Int> = 1
+    while (i < s.len() && is_word(byte_at(s, i))) { i = i + 1 }
+    return s.substring(0, i)
+}
+
+# True when `t` is a run of three or more dashes (a horizontal rule).
+all_dashes(t<String>)<Bool> -> {
+    if (t.len() < 3) { return false }
+    i<Int> = 0
+    while (i < t.len()) {
+        if (byte_at(t, i) != 45) { return false }
+        i = i + 1
+    }
+    return true
+}
+
+hex_digit(d<Int>)<String> -> {
+    if (d < 10) { return chr(48 + d) }
+    return chr(97 + (d - 10))
+}
+
+# Four lowercase hex digits of a codepoint (JSON \\uXXXX escape).
+hex4(c<Int>)<String> -> {
+    v<Int> = c
+    d3<Int> = v % 16
+    v = v / 16
+    d2<Int> = v % 16
+    v = v / 16
+    d1<Int> = v % 16
+    v = v / 16
+    d0<Int> = v % 16
+    return hex_digit(d0) + hex_digit(d1) + hex_digit(d2) + hex_digit(d3)
+}
+
+# ------------------------------------------------------- filesystem / shell
+
+# Read a whole file as a String ("" when it cannot be read).
+slurp(path<String>)<String> -> {
+    text<String> = ""
+    match (open_read(path)) {
+        f -> {
+            match (read_all(f)) { s -> { text = s } ? -> { } }
+            close(f)
+        }
+        ? -> { }
+    }
+    return text
+}
+
+# Run `cmd` through the shell and return its stdout ("" when it could not run).
+run_sh(cmd<String>)<String> -> {
+    out<String> = ""
+    freedom {
+        match (exec_output(cmd)) {
+            s -> { out = s }
+            ? -> { out = "" }
+        }
+    }
+    return out
+}
+
+# True when `p` exists (file or directory).
+path_exists(p<String>)<Bool> -> {
+    return (trim(run_sh("test -e '" + p + "' && echo yes || echo no")) == "yes")
+}
+
+# True when `p` is an existing directory.
+dir_exists(p<String>)<Bool> -> {
+    return (trim(run_sh("test -d '" + p + "' && echo yes || echo no")) == "yes")
+}
+
+# Write `text` to `path` (parents must exist). True on success.
+write_text(path<String>, text<String>)<Bool> -> {
+    ok<Bool> = false
+    match (open_write(path)) {
+        f -> {
+            match (write_str(f, text)) { n -> { ok = true } ? -> { } }
+            close(f)
+        }
+        ? -> { }
+    }
+    return ok
+}
+
+join_path(a<String>, b<String>)<String> -> {
+    if (a.len() == 0) { return b }
+    if (b.len() == 0) { return a }
+    if (ends_with(a, "/")) { return a + b }
+    return a + "/" + b
+}
+
+# Index of the last '/' in `p`, or -1.
+last_slash(p<String>)<Int> -> {
+    i<Int> = p.len() - 1
+    while (i >= 0) {
+        if (byte_at(p, i) == 47) { return i }
+        i = i - 1
+    }
+    return -1
+}
+
+# Directory part of `p` ("" when there is no slash).
+dirname_of(p<String>)<String> -> {
+    i<Int> = last_slash(p)
+    if (i < 0) { return "" }
+    return p.substring(0, i)
+}
+
+# Entry names directly inside `dir` (non-hidden, Python glob('*') semantics).
+list_dir_names(dir<String>)<Vec<String>> -> {
+    out<Vec<String>> = Vec<String>()
+    lines<Vec<String>> = splitlines(run_sh("ls -1 '" + dir + "' 2>/dev/null"))
+    i<Int> = 0
+    while (i < lines.len()) {
+        p<String> = trim(lines.get(i))
+        if (p.len() > 0) { out.push(p) }
+        i = i + 1
+    }
+    return out
+}
+
+# Every `*.vyb` under `dir`, as absolute-ish paths sorted byte-wise.
+list_vyb(dir<String>)<Vec<String>> -> {
+    out<Vec<String>> = Vec<String>()
+    lines<Vec<String>> = splitlines(run_sh("find '" + dir + "' -name '*.vyb' 2>/dev/null | LC_ALL=C sort"))
+    i<Int> = 0
+    while (i < lines.len()) {
+        p<String> = trim(lines.get(i))
+        if (p.len() > 0) { out.push(p) }
+        i = i + 1
+    }
+    return out
+}
+
+# ------------------------------------------------------------- lexer helpers
+
+# Drop a trailing '// ...' (not inside a string literal) from a line.
+strip_inline_comment(line<String>)<String> -> {
+    out<String> = ""
+    in_str<Bool> = false
+    i<Int> = 0
+    n<Int> = line.len()
+    while (i < n) {
+        c<Int> = byte_at(line, i)
+        if (c == 34) { in_str = !in_str }
+        else if (c == 47 && i + 1 < n && byte_at(line, i + 1) == 47 && !in_str) { break }
+        out = out + chr(c)
+        i = i + 1
+    }
+    return out
+}
+
+# Split on a top-level single-character separator, dropping empty parts.
+split_top(s<String>, sep<Int>)<Vec<String>> -> {
+    parts<Vec<String>> = Vec<String>()
+    cur<String> = ""
+    stack<Vec<Int>> = Vec<Int>()
+    i<Int> = 0
+    while (i < s.len()) {
+        ch<Int> = byte_at(s, i)
+        if (ch == 60 || ch == 40 || ch == 91) {
+            stack.push(ch)
+        } else if (ch == 62 || ch == 41 || ch == 93) {
+            if (stack.len() > 0 && matches_bracket(stack.get(stack.len() - 1), ch)) { stack.pop() }
+        }
+        if (ch == sep && stack.len() == 0) {
+            t<String> = trim(cur)
+            if (t.len() > 0) { parts.push(t) }
+            cur = ""
+        } else {
+            cur = cur + chr(ch)
+        }
+        i = i + 1
+    }
+    t<String> = trim(cur)
+    if (t.len() > 0) { parts.push(t) }
+    return parts
+}
+
+# True when closing bracket `c` matches opening bracket `o`.
+matches_bracket(o<Int>, c<Int>)<Bool> -> {
+    if (o == 60) { return c == 62 }
+    if (o == 40) { return c == 41 }
+    return c == 93
+}
+
+# Index of the ')' matching the '(' at `start`, or -1.
+match_paren(s<String>, start<Int>, o<Int>, c<Int>)<Int> -> {
+    d<Int> = 0
+    i<Int> = start
+    while (i < s.len()) {
+        ch<Int> = byte_at(s, i)
+        if (ch == o) {
+            d = d + 1
+        } else if (ch == c) {
+            d = d - 1
+            if (d == 0) { return i }
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+# Given s[start]=='<', the (open, close) span honouring nesting.
+bracket_span(s<String>, start<Int>)<Span> -> {
+    d<Int> = 0
+    i<Int> = start
+    while (i < s.len()) {
+        ch<Int> = byte_at(s, i)
+        if (ch == 60) {
+            d = d + 1
+        } else if (ch == 62) {
+            d = d - 1
+            if (d == 0) { return Span { a = start, b = i } }
+        }
+        i = i + 1
+    }
+    return Span { a = start, b = s.len() - 1 }
+}
+
+# First '->' that is not inside <...>(...)[...], or -1.
+find_arrow(s<String>)<Int> -> {
+    stack<Vec<Int>> = Vec<Int>()
+    i<Int> = 0
+    while (i < s.len() - 1) {
+        ch<Int> = byte_at(s, i)
+        if (ch == 60 || ch == 40 || ch == 91) {
+            stack.push(ch)
+        } else if (ch == 62 || ch == 41 || ch == 93) {
+            if (stack.len() > 0 && matches_bracket(stack.get(stack.len() - 1), ch)) { stack.pop() }
+        } else if (ch == 45 && byte_at(s, i + 1) == 62 && stack.len() == 0) {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+# Match `^([A-Za-z_]\w*)\s*<(.+)>$` against one generic part.
+match_gen_field(part<String>)<MemberParse> -> {
+    if (part.len() == 0 || !is_alpha_start(byte_at(part, 0))) {
+        return MemberParse { ok = false, name = "", ty = "" }
+    }
+    i<Int> = 1
+    while (i < part.len() && is_word(byte_at(part, i))) { i = i + 1 }
+    nm<String> = part.substring(0, i)
+    while (i < part.len() && is_ws(byte_at(part, i))) { i = i + 1 }
+    if (i >= part.len() || byte_at(part, i) != 60) {
+        return MemberParse { ok = false, name = "", ty = "" }
+    }
+    if (byte_at(part, part.len() - 1) != 62) {
+        return MemberParse { ok = false, name = "", ty = "" }
+    }
+    if (part.len() - 1 <= i + 1) {
+        return MemberParse { ok = false, name = "", ty = "" }
+    }
+    inner<String> = part.substring(i + 1, part.len() - 1)
+    if (has_sub(inner, "\n")) {
+        return MemberParse { ok = false, name = "", ty = "" }
+    }
+    return MemberParse { ok = true, name = nm, ty = inner }
+}
+
+# Parse `name(a<T>, b<U>)<Ret>` -> (name, params, ret).
+extract_call(sig<String>)<ParseCall> -> {
+    op<Int> = sig.index_of("(")
+    if (op == -1) { return ParseCall { ok = false, name = "", params = Vec<ArgPair>(), ret = "" } }
+    cp<Int> = match_paren(sig, op, 40, 41)
+    if (cp == -1) { return ParseCall { ok = false, name = "", params = Vec<ArgPair>(), ret = "" } }
+    toks<Vec<String>> = split_ws(sig.substring(0, op))
+    nm<String> = ""
+    if (toks.len() > 0) { nm = toks.get(toks.len() - 1) }
+    if (nm.len() == 0 || starts_with(nm, "(")) {
+        return ParseCall { ok = false, name = "", params = Vec<ArgPair>(), ret = "" }
+    }
+    params<Vec<ArgPair>> = Vec<ArgPair>()
+    parts<Vec<String>> = split_top(sig.substring(op + 1, cp), 44)
+    i<Int> = 0
+    while (i < parts.len()) {
+        pv<String> = parts.get(i)
+        mf<MemberParse> = match_gen_field(pv)
+        if (mf.ok) {
+            params.push(ArgPair { name = mf.name, ty = mf.ty })
+        } else {
+            params.push(ArgPair { name = pv, ty = "" })
+        }
+        i = i + 1
+    }
+    ret<String> = ""
+    tail<String> = trim(sig.substring(cp + 1, sig.len()))
+    if (starts_with(tail, "<")) {
+        sp<Span> = bracket_span(tail, 0)
+        ret = tail.substring(sp.a + 1, sp.b)
+    }
+    return ParseCall { ok = true, name = nm, params = params, ret = ret }
+}
+
+# Peel a leading `#`/`//` comment marker, keeping relative indentation.
+strip_comment(ln<String>)<String> -> {
+    s<String> = trim(ln)
+    i<Int> = 0
+    while (i < s.len() && (byte_at(s, i) == 35 || byte_at(s, i) == 47)) { i = i + 1 }
+    if (i < s.len() && byte_at(s, i) == 32) { i = i + 1 }
+    return s.substring(i, s.len())
+}
+
+# First meaningful doc line (skips leading horizontal-rule separators).
+doc_summary(doc<String>)<String> -> {
+    lines<Vec<String>> = splitlines(doc)
+    i<Int> = 0
+    while (i < lines.len()) {
+        t<String> = trim(lines.get(i))
+        if (t.len() > 0 && !all_dashes(t)) { return t }
+        i = i + 1
+    }
+    return ""
+}
+
+# ------------------------------------------------------------- stable sorts
+
+# Stable insertion sort of Vec<String> (ascending byte order).
+sort_strs(v<their<Vec<String>>>) -> {
+    n<Int> = v.len()
+    if (n <= 1) { return }
+    ord<Vec<Int>> = ord_sort_strs(v)
+    src<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < n) { src.push(v.get(i)); i = i + 1 }
+    v.clear()
+    i = 0
+    while (i < n) { v.push(src.get(ord.get(i))); i = i + 1 }
+}
+
+ord_sort_strs(v<Vec<String>>)<Vec<Int>> -> {
+    n<Int> = v.len()
+    keys<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < n) {
+        el<String> = v.get(i)
+        keys.push(el + "")
+        i = i + 1
+    }
+    ord<Vec<Int>> = Vec<Int>()
+    i = 0
+    while (i < n) { ord.push(i); i = i + 1 }
+    k<Int> = 1
+    while (k < n) {
+        ck<Int> = ord.get(k)
+        key<String> = keys.get(ck)
+        j<Int> = k - 1
+        while (j >= 0) {
+            if (keys.get(ord.get(j)).compare(key) <= 0) { break }
+            ord.set(j + 1, ord.get(j))
+            j = j - 1
+        }
+        ord.set(j + 1, ck)
+        k = k + 1
+    }
+    return ord
+}
+
+# Drop adjacent duplicates from a sorted Vec<String>.
+dedupe_strs(v<their<Vec<String>>>) -> {
+    out<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < v.len()) {
+        if (i == 0 || v.get(i) != v.get(i - 1)) { out.push(v.get(i)) }
+        i = i + 1
+    }
+    v.clear()
+    i = 0
+    while (i < out.len()) {
+        v.push(out.get(i))
+        i = i + 1
+    }
+}
+
+# Stable insertion sort of OmniRef by exported-symbol name.
+sort_omni(v<their<Vec<OmniRef>>>) -> {
+    n<Int> = v.len()
+    if (n <= 1) { return }
+    ord<Vec<Int>> = ord_sort_omni(v)
+    src<Vec<OmniRef>> = Vec<OmniRef>()
+    i<Int> = 0
+    while (i < n) { src.push(v.get(i)); i = i + 1 }
+    v.clear()
+    i = 0
+    while (i < n) { v.push(src.get(ord.get(i))); i = i + 1 }
+}
+
+ord_sort_omni(v<Vec<OmniRef>>)<Vec<Int>> -> {
+    n<Int> = v.len()
+    keys<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < n) {
+        el<OmniRef> = v.get(i)
+        keys.push(el.n + "")
+        i = i + 1
+    }
+    ord<Vec<Int>> = Vec<Int>()
+    i = 0
+    while (i < n) { ord.push(i); i = i + 1 }
+    k<Int> = 1
+    while (k < n) {
+        ck<Int> = ord.get(k)
+        key<String> = keys.get(ck)
+        j<Int> = k - 1
+        while (j >= 0) {
+            if (keys.get(ord.get(j)).compare(key) <= 0) { break }
+            ord.set(j + 1, ord.get(j))
+            j = j - 1
+        }
+        ord.set(j + 1, ck)
+        k = k + 1
+    }
+    return ord
+}
+
+cmp_edges(a<Edge>, b<Edge>)<Int> -> {
+    c<Int> = a.etype.compare(b.etype)
+    if (c != 0) { return c }
+    c = a.from_module.compare(b.from_module)
+    if (c != 0) { return c }
+    c = a.from_symbol.compare(b.from_symbol)
+    if (c != 0) { return c }
+    c = a.to_module.compare(b.to_module)
+    if (c != 0) { return c }
+    return a.to_symbol.compare(b.to_symbol)
+}
+
+# Stable insertion sort of the relationship edges by the Python sort key.
+sort_edges(v<their<Vec<Edge>>>) -> {
+    n<Int> = v.len()
+    if (n <= 1) { return }
+    ord<Vec<Int>> = ord_sort_edges(v)
+    src<Vec<Edge>> = Vec<Edge>()
+    i<Int> = 0
+    while (i < n) { src.push(v.get(i)); i = i + 1 }
+    v.clear()
+    i = 0
+    while (i < n) { v.push(src.get(ord.get(i))); i = i + 1 }
+}
+
+ord_sort_edges(v<Vec<Edge>>)<Vec<Int>> -> {
+    n<Int> = v.len()
+    keys<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < n) {
+        el<Edge> = v.get(i)
+        keys.push(el.etype + chr(1) + el.from_module + chr(1) + el.from_symbol + chr(1) + el.to_module + chr(1) + el.to_symbol)
+        i = i + 1
+    }
+    ord<Vec<Int>> = Vec<Int>()
+    i = 0
+    while (i < n) { ord.push(i); i = i + 1 }
+    k<Int> = 1
+    while (k < n) {
+        ck<Int> = ord.get(k)
+        key<String> = keys.get(ck)
+        j<Int> = k - 1
+        while (j >= 0) {
+            if (keys.get(ord.get(j)).compare(key) <= 0) { break }
+            ord.set(j + 1, ord.get(j))
+            j = j - 1
+        }
+        ord.set(j + 1, ck)
+        k = k + 1
+    }
+    return ord
+}
+
+cmp_syms(a<Symbol>, b<Symbol>)<Int> -> {
+    c<Int> = a.rel.compare(b.rel)
+    if (c != 0) { return c }
+    c = a.kind.compare(b.kind)
+    if (c != 0) { return c }
+    return a.name.compare(b.name)
+}
+
+sort_syms(v<their<Vec<Symbol>>>) -> {
+    n<Int> = v.len()
+    if (n <= 1) { return }
+    ord<Vec<Int>> = ord_sort_syms(v)
+    src<Vec<Symbol>> = Vec<Symbol>()
+    i<Int> = 0
+    while (i < n) { src.push(v.get(i)); i = i + 1 }
+    v.clear()
+    i = 0
+    while (i < n) { v.push(src.get(ord.get(i))); i = i + 1 }
+}
+
+ord_sort_syms(v<Vec<Symbol>>)<Vec<Int>> -> {
+    n<Int> = v.len()
+    keys<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < n) {
+        el<Symbol> = v.get(i)
+        keys.push(el.rel + chr(1) + el.kind + chr(1) + el.name)
+        i = i + 1
+    }
+    ord<Vec<Int>> = Vec<Int>()
+    i = 0
+    while (i < n) { ord.push(i); i = i + 1 }
+    k<Int> = 1
+    while (k < n) {
+        ck<Int> = ord.get(k)
+        key<String> = keys.get(ck)
+        j<Int> = k - 1
+        while (j >= 0) {
+            if (keys.get(ord.get(j)).compare(key) <= 0) { break }
+            ord.set(j + 1, ord.get(j))
+            j = j - 1
+        }
+        ord.set(j + 1, ck)
+        k = k + 1
+    }
+    return ord
+}
+
+cmp_triples(a<ImpTriple>, b<ImpTriple>)<Int> -> {
+    c<Int> = a.target.compare(b.target)
+    if (c != 0) { return c }
+    c = a.nm.compare(b.nm)
+    if (c != 0) { return c }
+    if (a.reex == b.reex) { return 0 }
+    if (a.reex) { return 1 }
+    return -1
+}
+
+sort_triples(v<their<Vec<ImpTriple>>>) -> {
+    n<Int> = v.len()
+    if (n <= 1) { return }
+    ord<Vec<Int>> = ord_sort_triples(v)
+    src<Vec<ImpTriple>> = Vec<ImpTriple>()
+    i<Int> = 0
+    while (i < n) { src.push(v.get(i)); i = i + 1 }
+    v.clear()
+    i = 0
+    while (i < n) { v.push(src.get(ord.get(i))); i = i + 1 }
+}
+
+ord_sort_triples(v<Vec<ImpTriple>>)<Vec<Int>> -> {
+    n<Int> = v.len()
+    keys<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < n) {
+        el<ImpTriple> = v.get(i)
+        keys.push(el.target + chr(1) + el.nm + chr(1) + bool_str(el.reex))
+        i = i + 1
+    }
+    ord<Vec<Int>> = Vec<Int>()
+    i = 0
+    while (i < n) { ord.push(i); i = i + 1 }
+    k<Int> = 1
+    while (k < n) {
+        ck<Int> = ord.get(k)
+        key<String> = keys.get(ck)
+        j<Int> = k - 1
+        while (j >= 0) {
+            if (keys.get(ord.get(j)).compare(key) <= 0) { break }
+            ord.set(j + 1, ord.get(j))
+            j = j - 1
+        }
+        ord.set(j + 1, ck)
+        k = k + 1
+    }
+    return ord
+}
+
+dedupe_triples(v<their<Vec<ImpTriple>>>) -> {
+    out<Vec<ImpTriple>> = Vec<ImpTriple>()
+    i<Int> = 0
+    while (i < v.len()) {
+        if (i == 0 || cmp_triples(v.get(i - 1), v.get(i)) != 0) { out.push(v.get(i)) }
+        i = i + 1
+    }
+    v.clear()
+    i = 0
+    while (i < out.len()) {
+        v.push(out.get(i))
+        i = i + 1
+    }
+}
+
+cmp_namelinks(a<NameLink>, b<NameLink>)<Int> -> {
+    c<Int> = a.name.compare(b.name)
+    if (c != 0) { return c }
+    return a.link.compare(b.link)
+}
+
+sort_namelinks(v<their<Vec<NameLink>>>) -> {
+    n<Int> = v.len()
+    if (n <= 1) { return }
+    ord<Vec<Int>> = ord_sort_namelinks(v)
+    src<Vec<NameLink>> = Vec<NameLink>()
+    i<Int> = 0
+    while (i < n) { src.push(v.get(i)); i = i + 1 }
+    v.clear()
+    i = 0
+    while (i < n) { v.push(src.get(ord.get(i))); i = i + 1 }
+}
+
+ord_sort_namelinks(v<Vec<NameLink>>)<Vec<Int>> -> {
+    n<Int> = v.len()
+    keys<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < n) {
+        el<NameLink> = v.get(i)
+        keys.push(el.name + chr(1) + el.link)
+        i = i + 1
+    }
+    ord<Vec<Int>> = Vec<Int>()
+    i = 0
+    while (i < n) { ord.push(i); i = i + 1 }
+    k<Int> = 1
+    while (k < n) {
+        ck<Int> = ord.get(k)
+        key<String> = keys.get(ck)
+        j<Int> = k - 1
+        while (j >= 0) {
+            if (keys.get(ord.get(j)).compare(key) <= 0) { break }
+            ord.set(j + 1, ord.get(j))
+            j = j - 1
+        }
+        ord.set(j + 1, ck)
+        k = k + 1
+    }
+    return ord
+}
+
+cmp_recs(a<Rec>, b<Rec>)<Int> -> {
+    c<Int> = a.tm.compare(b.tm)
+    if (c != 0) { return c }
+    c = a.ts.compare(b.ts)
+    if (c != 0) { return c }
+    c = a.fm.compare(b.fm)
+    if (c != 0) { return c }
+    c = a.fsym.compare(b.fsym)
+    if (c != 0) { return c }
+    c = a.etype.compare(b.etype)
+    if (c != 0) { return c }
+    if (a.reex == b.reex) { return 0 }
+    if (a.reex) { return 1 }
+    return -1
+}
+
+sort_recs(v<their<Vec<Rec>>>) -> {
+    n<Int> = v.len()
+    if (n <= 1) { return }
+    ord<Vec<Int>> = ord_sort_recs(v)
+    src<Vec<Rec>> = Vec<Rec>()
+    i<Int> = 0
+    while (i < n) { src.push(v.get(i)); i = i + 1 }
+    v.clear()
+    i = 0
+    while (i < n) { v.push(src.get(ord.get(i))); i = i + 1 }
+}
+
+ord_sort_recs(v<Vec<Rec>>)<Vec<Int>> -> {
+    n<Int> = v.len()
+    keys<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < n) {
+        el<Rec> = v.get(i)
+        keys.push(el.tm + chr(1) + el.ts + chr(1) + el.fm + chr(1) + el.fsym + chr(1) + el.etype + chr(1) + bool_str(el.reex))
+        i = i + 1
+    }
+    ord<Vec<Int>> = Vec<Int>()
+    i = 0
+    while (i < n) { ord.push(i); i = i + 1 }
+    k<Int> = 1
+    while (k < n) {
+        ck<Int> = ord.get(k)
+        key<String> = keys.get(ck)
+        j<Int> = k - 1
+        while (j >= 0) {
+            if (keys.get(ord.get(j)).compare(key) <= 0) { break }
+            ord.set(j + 1, ord.get(j))
+            j = j - 1
+        }
+        ord.set(j + 1, ck)
+        k = k + 1
+    }
+    return ord
+}
+
+dedupe_recs(v<their<Vec<Rec>>>) -> {
+    out<Vec<Rec>> = Vec<Rec>()
+    i<Int> = 0
+    while (i < v.len()) {
+        if (i == 0 || cmp_recs(v.get(i - 1), v.get(i)) != 0) { out.push(v.get(i)) }
+        i = i + 1
+    }
+    v.clear()
+    i = 0
+    while (i < out.len()) {
+        v.push(out.get(i))
+        i = i + 1
+    }
+}
+
+cmp_keys(a<PairKey>, b<PairKey>)<Int> -> {
+    c<Int> = a.a.compare(b.a)
+    if (c != 0) { return c }
+    return a.b.compare(b.b)
+}
+
+sort_keys(v<their<Vec<PairKey>>>) -> {
+    n<Int> = v.len()
+    if (n <= 1) { return }
+    ord<Vec<Int>> = ord_sort_keys(v)
+    src<Vec<PairKey>> = Vec<PairKey>()
+    i<Int> = 0
+    while (i < n) { src.push(v.get(i)); i = i + 1 }
+    v.clear()
+    i = 0
+    while (i < n) { v.push(src.get(ord.get(i))); i = i + 1 }
+}
+
+ord_sort_keys(v<Vec<PairKey>>)<Vec<Int>> -> {
+    n<Int> = v.len()
+    keys<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < n) {
+        el<PairKey> = v.get(i)
+        keys.push(el.a + chr(1) + el.b)
+        i = i + 1
+    }
+    ord<Vec<Int>> = Vec<Int>()
+    i = 0
+    while (i < n) { ord.push(i); i = i + 1 }
+    k<Int> = 1
+    while (k < n) {
+        ck<Int> = ord.get(k)
+        key<String> = keys.get(ck)
+        j<Int> = k - 1
+        while (j >= 0) {
+            if (keys.get(ord.get(j)).compare(key) <= 0) { break }
+            ord.set(j + 1, ord.get(j))
+            j = j - 1
+        }
+        ord.set(j + 1, ck)
+        k = k + 1
+    }
+    return ord
+}
+
+dedupe_keys(v<their<Vec<PairKey>>>) -> {
+    out<Vec<PairKey>> = Vec<PairKey>()
+    i<Int> = 0
+    while (i < v.len()) {
+        if (i == 0 || cmp_keys(v.get(i - 1), v.get(i)) != 0) { out.push(v.get(i)) }
+        i = i + 1
+    }
+    v.clear()
+    i = 0
+    while (i < out.len()) {
+        v.push(out.get(i))
+        i = i + 1
+    }
+}
+
+# ------------------------------------------------------------ list helpers
+
+in_list(v<Vec<String>>, s<String>)<Bool> -> {
+    i<Int> = 0
+    while (i < v.len()) {
+        if (v.get(i) == s) { return true }
+        i = i + 1
+    }
+    return false
+}
+
+# Deduplicate a Vec<String> preserving first-occurrence order.
+unique_in_order(v<Vec<String>>)<Vec<String>> -> {
+    out<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < v.len()) {
+        if (!in_list(out, v.get(i))) { out.push(v.get(i)) }
+        i = i + 1
+    }
+    return out
+}
+
+# ------------------------------------------------------------ import parsing
+
+# Split `core::iter::{A, B}` into target "core::iter" and names ["A", "B"].
+parse_import_name(text<String>)<ImportParse> -> {
+    t<String> = trim(text)
+    n<Int> = t.len()
+    i<Int> = 0
+    if (i >= n || !is_seg_char(byte_at(t, 0))) {
+        return ImportParse { ok = false, target = t, names = Vec<String>() }
+    }
+    while (i < n && is_seg_char(byte_at(t, i))) { i = i + 1 }
+    while (i + 1 < n && byte_at(t, i) == 58 && byte_at(t, i + 1) == 58) {
+        k<Int> = i + 2
+        j<Int> = k
+        while (j < n && is_seg_char(byte_at(t, j))) { j = j + 1 }
+        if (j == k) { break }
+        i = j
+    }
+    target<String> = t.substring(0, i)
+    rest<String> = t.substring(i, n)
+    m<Int> = rest.len()
+    r<Int> = 0
+    while (r < m && is_ws(byte_at(rest, r))) { r = r + 1 }
+    colons<Int> = 0
+    if (r < m && byte_at(rest, r) == 58) {
+        colons = 1
+        r = r + 1
+        if (r < m && byte_at(rest, r) == 58) { colons = 2; r = r + 1 }
+    }
+    if (colons == 0) {
+        if (r < m) { return ImportParse { ok = false, target = t, names = Vec<String>() } }
+        return ImportParse { ok = true, target = target, names = Vec<String>() }
+    }
+    while (r < m && is_ws(byte_at(rest, r))) { r = r + 1 }
+    if (r >= m || byte_at(rest, r) != 123) {
+        return ImportParse { ok = false, target = t, names = Vec<String>() }
+    }
+    openb<Int> = r
+    closeb<Int> = -1
+    k<Int> = openb + 1
+    while (k < m) {
+        if (byte_at(rest, k) == 125) { closeb = k; break }
+        k = k + 1
+    }
+    if (closeb == -1 || closeb != m - 1) {
+        return ImportParse { ok = false, target = t, names = Vec<String>() }
+    }
+    names<Vec<String>> = split_top(rest.substring(openb + 1, closeb), 44)
+    return ImportParse { ok = true, target = target, names = names }
+}
+
+# `core::aspects` -> "core".
+import_target_module(target<String>)<String> -> {
+    k<Int> = target.index_of("::")
+    if (k < 0) { return target }
+    return target.substring(0, k)
+}
+
+# ------------------------------------------------------- declaration parsing
+
+# Parse a `bind ...` header into an aspect/target pair or a fallback name.
+parse_bind(header<String>)<Symbol> -> {
+    body<String> = trim(replace_all(header, "share(all)", ""))
+    rest<String> = body
+    if (starts_with(body, "bind")) { rest = trim(body.substring(4, body.len())) }
+    tvar<String> = ""
+    if (starts_with(rest, "<")) {
+        sp<Span> = bracket_span(rest, 0)
+        tvar = rest.substring(sp.a, sp.b + 1)
+        rest = trim(rest.substring(sp.b + 1, rest.len()))
+    }
+    asp<String> = ""
+    target<String> = ""
+    good<Bool> = false
+    id1<String> = leading_ident(rest)
+    if (id1.len() > 0) {
+        i<Int> = id1.len()
+        while (i < rest.len() && is_ws(byte_at(rest, i))) { i = i + 1 }
+        if (i + 1 < rest.len() && byte_at(rest, i) == 45 && byte_at(rest, i + 1) == 62) {
+            i = i + 2
+            while (i < rest.len() && is_ws(byte_at(rest, i))) { i = i + 1 }
+            id2<String> = leading_ident(rest.substring(i, rest.len()))
+            if (id2.len() > 0) { asp = id1; target = id2; good = true }
+        }
+    }
+    nm<String> = ""
+    if (good) {
+        nm = asp + "->" + target
+    } else {
+        k<Int> = header.index_of("->")
+        if (k >= 0) { nm = trim(header.substring(k + 2, header.len())) }
+        if (nm.len() == 0) { nm = trim(header) }
+    }
+    return Symbol { name = nm, kind = "bind", signature = trim(header), tvar = tvar,
+        asp = asp, target = target, ret = "", doc = "", body = "", exported = true,
+        rel = "", params = Vec<Member>(), fparams = Vec<ArgPair>() }
+}
+
+# Parse `struct BTreeMap<K, V> {` / `enum X {` / `aspect X {` headers.
+parse_simple_header(header<String>, kind<String>)<Symbol> -> {
+    body<String> = trim(replace_all(header, "share(all)", ""))
+    decl<String> = body
+    k<Int> = body.index_of("{")
+    if (k >= 0) { decl = trim(body.substring(0, k)) }
+    nm<String> = ""
+    tvar<String> = ""
+    if (starts_with(decl, kind)) {
+        rest<String> = trim(decl.substring(kind.len(), decl.len()))
+        id<String> = leading_ident(rest)
+        if (id.len() > 0) {
+            nm = id
+            tail<String> = trim(rest.substring(id.len(), rest.len()))
+            if (starts_with(tail, "<")) {
+                sp<Span> = bracket_span(tail, 0)
+                if (sp.b > sp.a) { tvar = tail.substring(sp.a, sp.b + 1) }
+            }
+        }
+    }
+    if (nm.len() == 0) {
+        toks<Vec<String>> = split_ws(body)
+        if (toks.len() > 1) { nm = toks.get(1) } else { nm = trim(body) }
+    }
+    full<String> = nm
+    if (tvar.len() > 0) { full = nm + tvar }
+    return Symbol { name = full, kind = kind, signature = trim(header), tvar = tvar,
+        asp = "", target = "", ret = "", doc = "", body = "", exported = true,
+        rel = "", params = Vec<Member>(), fparams = Vec<ArgPair>() }
+}
+
+# Match `^([A-Za-z_]\w*)\s*=\s*(.+)$` for an enum variant line.
+match_enum_member(base<String>)<MemberParse> -> {
+    id<String> = leading_ident(base)
+    if (id.len() == 0) { return MemberParse { ok = false, name = "", ty = "" } }
+    i<Int> = id.len()
+    while (i < base.len() && is_ws(byte_at(base, i))) { i = i + 1 }
+    if (i >= base.len() || byte_at(base, i) != 61) {
+        return MemberParse { ok = false, name = "", ty = "" }
+    }
+    i = i + 1
+    if (i >= base.len()) { return MemberParse { ok = false, name = "", ty = "" } }
+    return MemberParse { ok = true, name = id, ty = trim(base.substring(i, base.len())) }
+}
+
+# True when `id` is one of the statement keywords parse_members must skip.
+is_method_keyword(id<String>)<Bool> -> {
+    return (id == "return" || id == "if" || id == "else" || id == "while" ||
+            id == "for" || id == "let" || id == "var")
+}
+
+# Parse the members of a struct / enum / aspect / bind block.
+parse_members(kind<String>, block<String>)<Vec<Member>> -> {
+    members<Vec<Member>> = Vec<Member>()
+    raw<Vec<String>> = splitlines(block)
+    i<Int> = 0
+    while (i < raw.len()) {
+        l<String> = trim(strip_inline_comment(raw.get(i)))
+        if (l.len() > 0 && l != "}") {
+            if (kind == "struct") {
+                parts<Vec<String>> = split_top(rstrip_char(l, 44), 44)
+                j<Int> = 0
+                while (j < parts.len()) {
+                    mf<MemberParse> = match_gen_field(parts.get(j))
+                    if (mf.ok) {
+                        members.push(Member { kind = "field", name = mf.name, ty = mf.ty,
+                            ret = "", args = Vec<ArgPair>() })
+                    }
+                    j = j + 1
+                }
+            } else if (kind == "enum") {
+                base<String> = rstrip_char(l, 44)
+                mp<MemberParse> = match_enum_member(base)
+                if (mp.ok) {
+                    members.push(Member { kind = "member", name = mp.name, ty = mp.ty,
+                        ret = "", args = Vec<ArgPair>() })
+                } else {
+                    members.push(Member { kind = "member", name = base, ty = "",
+                        ret = "", args = Vec<ArgPair>() })
+                }
+            } else {
+                id<String> = leading_ident(l)
+                if (id.len() > 0 && !is_method_keyword(id)) {
+                    j<Int> = id.len()
+                    while (j < l.len() && is_ws(byte_at(l, j))) { j = j + 1 }
+                    if (j < l.len() && byte_at(l, j) == 40) {
+                        head<String> = head_before_brace(l)
+                        sig<String> = head
+                        if (kind != "aspect") {
+                            ar<Int> = rfind_arrow(head)
+                            if (ar != -1) { sig = trim(head.substring(0, ar)) } else { sig = "" }
+                        }
+                        if (sig.len() > 0) {
+                            pc<ParseCall> = extract_call(sig)
+                            if (pc.ok) {
+                                members.push(Member { kind = "method", name = pc.name, ty = "",
+                                    ret = pc.ret, args = pc.params })
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        i = i + 1
+    }
+    return members
+}
+
+# Consume the pending doc-comment lines (clearing them).
+attach_doc(pend<their<Vec<String>>>)<String> -> {
+    doc<String> = ""
+    i<Int> = 0
+    while (i < pend.len()) {
+        if (i > 0) { doc = doc + "\n" }
+        doc = doc + strip_comment(pend.get(i))
+        i = i + 1
+    }
+    pend.clear()
+    return doc
+}
+
+# True when keyword `kw` is followed by a non-word char (regex `\b`).
+kw_end(s<String>, kw<String>)<Bool> -> {
+    if (!starts_with(s, kw)) { return false }
+    if (s.len() == kw.len()) { return true }
+    return !is_word(byte_at(s, kw.len()))
+}
+
+# Parse one source file.
+parse_file(text<String>, rel<String>)<FileRec> -> {
+    symbols<Vec<Symbol>> = Vec<Symbol>()
+    imports<Vec<ImportDecl>> = Vec<ImportDecl>()
+    header<Vec<String>> = Vec<String>()
+    pending<Vec<String>> = Vec<String>()
+    header_done<Bool> = false
+    share_pending<Bool> = false
+    lines<Vec<String>> = splitlines(text)
+    n<Int> = lines.len()
+    i<Int> = 0
+    while (i < n) {
+        stripped<String> = trim(lines.get(i))
+
+        if (stripped.len() == 0) {
+            pending.clear()
+            header_done = true
+            i = i + 1
+            continue
+        }
+        if (starts_with(stripped, "#") || starts_with(stripped, "//")) {
+            if (!header_done) { header.push(stripped) } else { pending.push(stripped) }
+            i = i + 1
+            continue
+        }
+        header_done = true
+
+        if (stripped == "share(all)") {
+            share_pending = true
+            i = i + 1
+            continue
+        }
+
+        # `[share(all) ]import ...`
+        pre<Bool> = false
+        b0<Int> = 0
+        if (starts_with(stripped, "share(all)")) {
+            j0<Int> = 10
+            k0<Int> = j0
+            while (k0 < stripped.len() && is_ws(byte_at(stripped, k0))) { k0 = k0 + 1 }
+            if (k0 > j0) { pre = true; b0 = k0 } else { b0 = 0 }
+        }
+        after<String> = stripped.substring(b0, stripped.len())
+        if (starts_with(after, "import")) {
+            j1<Int> = b0 + 6
+            k1<Int> = j1
+            while (k1 < stripped.len() && is_ws(byte_at(stripped, k1))) { k1 = k1 + 1 }
+            if (k1 > j1) {
+                acc<Vec<String>> = Vec<String>()
+                first<String> = trim(strip_inline_comment(stripped.substring(k1, stripped.len())))
+                acc.push(first)
+                bal<Int> = count_of(first, 123) - count_of(first, 125)
+                while (bal > 0 && i + 1 < n) {
+                    i = i + 1
+                    ln<String> = trim(strip_inline_comment(lines.get(i)))
+                    acc.push(ln)
+                    bal = bal + count_of(ln, 123) - count_of(ln, 125)
+                }
+                pimp<ImportParse> = parse_import_name(join_strs(acc, " "))
+                imports.push(ImportDecl { target = pimp.target, names = pimp.names,
+                    reexport = (share_pending || pre), doc = attach_doc(borrow(pending)) })
+                share_pending = false
+                i = i + 1
+                continue
+            }
+        }
+
+        # declaration kind
+        kind<String> = ""
+        head_txt<String> = after
+        if (kw_end(head_txt, "struct")) { kind = "struct" }
+        else if (kw_end(head_txt, "enum")) { kind = "enum" }
+        else if (kw_end(head_txt, "aspect")) { kind = "aspect" }
+        else if (kw_end(head_txt, "bind")) { kind = "bind" }
+
+        if (kind.len() > 0) {
+            doc<String> = attach_doc(borrow(pending))
+            parsed<Symbol> = parse_simple_header(head_txt, kind)
+            if (kind == "bind") { parsed = parse_bind(head_txt) }
+            depth<Int> = count_of(stripped, 123) - count_of(stripped, 125)
+            block_lines<Vec<String>> = Vec<String>()
+            j<Int> = i + 1
+            while (j < n && depth > 0) {
+                block_lines.push(lines.get(j))
+                depth = depth + count_of(lines.get(j), 123) - count_of(lines.get(j), 125)
+                j = j + 1
+            }
+            parsed.params = parse_members(kind, join_strs(block_lines, "\n"))
+            parsed.doc = doc
+            parsed.rel = rel
+            symbols.push(parsed)
+            i = j
+            share_pending = false
+            continue
+        }
+
+        # function declaration
+        op<Int> = stripped.index_of("(")
+        if (op > 0 && !ends_with(stripped, ",")) {
+            cp<Int> = match_paren(stripped, op, 40, 41)
+            if (cp > op) {
+                sig<ParseCall> = extract_call(stripped)
+                if (sig.ok) {
+                    body<String> = ""
+                    end<Int> = i + 1
+                    openb<Int> = find_arrow(stripped)
+                    if (openb != -1) {
+                        bo<Int> = stripped.index_of_from("{", openb)
+                        if (bo != -1) {
+                            depth<Int> = 1
+                            seg<String> = stripped.substring(bo + 1, stripped.len())
+                            body_parts<Vec<String>> = Vec<String>()
+                            body_parts.push(seg)
+                            while (depth > 0) {
+                                depth = depth + count_of(seg, 123) - count_of(seg, 125)
+                                if (depth > 0) {
+                                    i = i + 1
+                                    seg = lines.get(i)
+                                    body_parts.push(seg)
+                                    depth = depth + count_of(seg, 123) - count_of(seg, 125)
+                                }
+                            }
+                            body = join_strs(body_parts, "\n")
+                            end = i + 1
+                        }
+                    }
+                    sigtext<String> = stripped
+                    bb<Int> = stripped.index_of("{")
+                    if (bb >= 0) { sigtext = stripped.substring(0, bb) }
+                    sym<Symbol> = Symbol { name = sig.name, kind = "fn", signature = trim(sigtext),
+                        tvar = "", asp = "", target = "", ret = sig.ret, doc = "",
+                        body = body, exported = share_pending, rel = rel,
+                        params = Vec<Member>(), fparams = sig.params }
+                    sym.doc = attach_doc(borrow(pending))
+                    symbols.push(sym)
+                    share_pending = false
+                    i = end
+                    continue
+                }
+            }
+        }
+
+        i = i + 1
+    }
+    hdr<Vec<String>> = Vec<String>()
+    i = 0
+    while (i < header.len()) {
+        hdr.push(strip_comment(header.get(i)))
+        i = i + 1
+    }
+    return FileRec { rel = rel, symbols = symbols, imports = imports,
+        header = join_strs(hdr, "\n") }
+}
+
+# ------------------------------------------------------------------ modules
+
+module_of(rel<String>)<String> -> {
+    if (!starts_with(rel, "stdlib/")) {
+        k<Int> = rel.index_of("/")
+        if (k < 0) { return rel }
+        return rel.substring(0, k)
+    }
+    seg<Vec<String>> = split_top(rel.substring(7, rel.len()), 47)
+    if (seg.len() == 1) { return "prelude" }
+    return seg.get(0)
+}
+
+# ------------------------------------------------------------------ runtime
+
+struct RuntimeMap {
+    keys<Vec<String>>,
+    lines<Vec<Int>>
+}
+
+# Find the first `__vyb_<name>(` (VYB_WEAK lines only) in `ln`, as `vyb_<name>`.
+find_vyb_name(ln<String>)<String> -> {
+    i<Int> = 0
+    while (i < ln.len()) {
+        if (i + 7 <= ln.len() && ln.substring(i, i + 7) == "__vyb_" &&
+            (i == 0 || !is_word(byte_at(ln, i - 1)))) {
+            j<Int> = i + 7
+            k<Int> = j
+            while (k < ln.len() && is_word(byte_at(ln, k))) { k = k + 1 }
+            if (k > j) {
+                m<Int> = k
+                while (m < ln.len() && is_ws(byte_at(ln, m))) { m = m + 1 }
+                if (m < ln.len() && byte_at(ln, m) == 40) {
+                    return "vyb_" + ln.substring(j, k)
+                }
+            }
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+# Map `vyb_x` -> 1-based C line for every VYB_WEAK `__vyb_x(` in the runtime.
+runtime_map(text<String>)<RuntimeMap> -> {
+    keys<Vec<String>> = Vec<String>()
+    rows<Vec<Int>> = Vec<Int>()
+    ls<Vec<String>> = splitlines(text)
+    idx<Int> = 1
+    while (idx <= ls.len()) {
+        ln<String> = ls.get(idx - 1)
+        if (has_sub(ln, "VYB_WEAK")) {
+            nm<String> = find_vyb_name(ln)
+            if (nm.len() > 0) {
+                keys.push(nm)
+                rows.push(idx)
+            }
+        }
+        idx = idx + 1
+    }
+    return RuntimeMap { keys = keys, lines = rows }
+}
+
+rt_line(g<their<Graph>>, nm<String>)<Int> -> {
+    i<Int> = 0
+    while (i < g.rt_keys.len()) {
+        if (g.rt_keys.get(i) == nm) { return g.rt_lines.get(i) }
+        i = i + 1
+    }
+    return 0
+}
+
+# ------------------------------------------------------------------ scanners
+
+# `\b([A-Za-z_]\w*)\b` findall over a type string.
+find_idents(ty<String>)<Vec<String>> -> {
+    out<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < ty.len()) {
+        if (is_alpha_start(byte_at(ty, i)) && (i == 0 || !is_word(byte_at(ty, i - 1)))) {
+            j<Int> = i + 1
+            while (j < ty.len() && is_word(byte_at(ty, j))) { j = j + 1 }
+            out.push(ty.substring(i, j))
+            i = j
+        } else {
+            i = i + 1
+        }
+    }
+    return out
+}
+
+# `\b(vyb_[a-z0-9_]+)\b` findall over a function body.
+find_vyb_refs(body<String>)<Vec<String>> -> {
+    out<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < body.len()) {
+        if (i + 4 <= body.len() && body.substring(i, i + 4) == "vyb_" &&
+            (i == 0 || !is_word(byte_at(body, i - 1)))) {
+            j<Int> = i + 4
+            k<Int> = j
+            while (k < body.len() && is_vyb_tail(byte_at(body, k))) { k = k + 1 }
+            if (k > j && (k >= body.len() || !is_word(byte_at(body, k)))) {
+                out.push(body.substring(i, k))
+                i = k
+            } else {
+                i = i + 1
+            }
+        } else {
+            i = i + 1
+        }
+    }
+    return out
+}
+
+# [a-z0-9_] -- the runtimeRef name alphabet (no uppercase).
+is_vyb_tail(c<Int>)<Bool> -> {
+    return ((c >= 97 && c <= 122) || (c >= 48 && c <= 57) || c == 95)
+}
+
+# `\b([A-Za-z_]\w*)\s*\(` findall over a function body.
+find_call_names(body<String>)<Vec<String>> -> {
+    out<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < body.len()) {
+        if (is_alpha_start(byte_at(body, i)) && (i == 0 || !is_word(byte_at(body, i - 1)))) {
+            j<Int> = i + 1
+            while (j < body.len() && is_word(byte_at(body, j))) { j = j + 1 }
+            k<Int> = j
+            while (k < body.len() && is_ws(byte_at(body, k))) { k = k + 1 }
+            if (k < body.len() && byte_at(body, k) == 40) {
+                out.push(body.substring(i, j))
+                i = k
+            } else {
+                i = j
+            }
+        } else {
+            i = i + 1
+        }
+    }
+    return out
+}
+
+# `` `([A-Za-z_]\w*)(?:\(\))?` `` findall over a doc comment.
+find_backtick_refs(doc<String>)<Vec<String>> -> {
+    out<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < doc.len()) {
+        if (byte_at(doc, i) == 96) {
+            j<Int> = i + 1
+            if (j < doc.len() && is_alpha_start(byte_at(doc, j))) {
+                k<Int> = j + 1
+                while (k < doc.len() && is_word(byte_at(doc, k))) { k = k + 1 }
+                p<Int> = k
+                if (p + 1 < doc.len() && byte_at(doc, p) == 40 && byte_at(doc, p + 1) == 41) {
+                    p = p + 2
+                }
+                if (p < doc.len() && byte_at(doc, p) == 96) {
+                    out.push(doc.substring(j, k))
+                    i = p + 1
+                } else {
+                    i = i + 1
+                }
+            } else {
+                i = i + 1
+            }
+        } else {
+            i = i + 1
+        }
+    }
+    return out
+}
+
+# ------------------------------------------------------------------- graph
+
+mk_edge(t<String>, fm<String>, fs<String>, tm<String>, ts<String>, has_tm<Bool>)<Edge> -> {
+    return Edge { etype = t, from_module = fm, from_symbol = fs, to_module = tm,
+        to_symbol = ts, has_to_module = has_tm, has_flags = false, reexport = false,
+        resolved = false }
+}
+
+mk_import_edge(fm<String>, tm<String>, ts<String>, reex<Bool>, res<Bool>)<Edge> -> {
+    return Edge { etype = "import", from_module = fm, from_symbol = "", to_module = tm,
+        to_symbol = ts, has_to_module = true, has_flags = true, reexport = reex,
+        resolved = res }
+}
+
+# Is (m, n) an exported symbol?
+export_has(g<their<Graph>>, m<String>, n<String>)<Bool> -> {
+    i<Int> = 0
+    while (i < g.omni.len()) {
+        if (g.omni.get(i).m == m && g.omni.get(i).n == n) { return true }
+        i = i + 1
+    }
+    return false
+}
+
+# Every exported (module, name) whose name is `n`, in insertion order.
+omni_by_name(g<their<Graph>>, n<String>)<Vec<OmniRef>> -> {
+    out<Vec<OmniRef>> = Vec<OmniRef>()
+    i<Int> = 0
+    while (i < g.omni.len()) {
+        if (g.omni.get(i).n == n) { out.push(g.omni.get(i)) }
+        i = i + 1
+    }
+    return out
+}
+
+module_order_has(g<their<Graph>>, m<String>)<Bool> -> {
+    i<Int> = 0
+    while (i < g.module_order.len()) {
+        if (g.module_order.get(i) == m) { return true }
+        i = i + 1
+    }
+    return false
+}
+
+# Build module order, the export/name index, and every relationship edge.
+build_graph(g<their<Graph>>) -> {
+    # module order (first appearance in sorted-file order)
+    i<Int> = 0
+    while (i < g.files.len()) {
+        md<String> = module_of(g.files.get(i).rel)
+        if (!module_order_has(g, md)) { g.module_order.push(md) }
+        i = i + 1
+    }
+
+    # export index + omnisearch (insertion order = file order, then symbol order)
+    i = 0
+    while (i < g.files.len()) {
+        fr<FileRec> = g.files.get(i)
+        md<String> = module_of(fr.rel)
+        j<Int> = 0
+        while (j < fr.symbols.len()) {
+            sy<Symbol> = fr.symbols.get(j)
+            if (sy.exported) { g.omni.push(OmniRef { m = md, n = sy.name }) }
+            j = j + 1
+        }
+        i = i + 1
+    }
+
+    # edges
+    i = 0
+    while (i < g.files.len()) {
+        fr<FileRec> = g.files.get(i)
+        md<String> = module_of(fr.rel)
+
+        j<Int> = 0
+        while (j < fr.imports.len()) {
+            imp<ImportDecl> = fr.imports.get(j)
+            tm<String> = import_target_module(imp.target)
+            names<Vec<String>> = imp.names
+            if (names.len() == 0) { names.push("") }
+            k<Int> = 0
+            while (k < names.len()) {
+                nm<String> = names.get(k)
+                res<Bool> = false
+                if (nm.len() == 0) { res = module_order_has(g, tm) } else { res = export_has(g, tm, nm) }
+                g.edges.push(mk_import_edge(md, tm, nm, imp.reexport, res))
+                k = k + 1
+            }
+            j = j + 1
+        }
+
+        j = 0
+        while (j < fr.symbols.len()) {
+            sy<Symbol> = fr.symbols.get(j)
+            q<Int> = 0
+            r<Int> = 0
+            if (sy.exported) {
+                sm<String> = md
+                sn<String> = sy.name
+                if (sy.kind == "bind" && sy.asp.len() > 0 && sy.target.len() > 0) {
+                    g.edges.push(mk_edge("implement", sm, sn, sm, sy.asp, true))
+                    g.edges.push(mk_edge("implementOn", sm, sn, sm, sy.target, true))
+                }
+                if (sy.kind == "fn") {
+                    npar<Int> = sy.fparams.len()
+                    pk<Int> = 0
+                    while (pk <= npar) {
+                        ty<String> = sy.ret
+                        if (pk < npar) { ty = sy.fparams.get(pk).ty }
+                        ids<Vec<String>> = find_idents(ty)
+                        q = 0
+                        while (q < ids.len()) {
+                            tid<String> = ids.get(q)
+                            if (export_has(g, sm, tid) && tid != sn) {
+                                g.edges.push(mk_edge("usesType", sm, sn, sm, tid, true))
+                            } else {
+                                oms_u<Vec<OmniRef>> = omni_by_name(g, tid)
+                                r = 0
+                                while (r < oms_u.len()) {
+                                    om_u<OmniRef> = oms_u.get(r)
+                                    if (!(om_u.m == sm && om_u.n == sn)) {
+                                        g.edges.push(mk_edge("usesType", sm, sn, om_u.m, om_u.n, true))
+                                    }
+                                    r = r + 1
+                                }
+                            }
+                            q = q + 1
+                        }
+                        pk = pk + 1
+                    }
+                    rns<Vec<String>> = unique_in_order(find_vyb_refs(sy.body))
+                    q = 0
+                    while (q < rns.len()) {
+                        g.edges.push(mk_edge("runtimeRef", sm, sn, "", rns.get(q), false))
+                        q = q + 1
+                    }
+                    cns<Vec<String>> = unique_in_order(find_call_names(sy.body))
+                    q = 0
+                    while (q < cns.len()) {
+                        rn<String> = cns.get(q)
+                        if (rn != sn) {
+                            if (export_has(g, sm, rn)) {
+                                g.edges.push(mk_edge("call", sm, sn, sm, rn, true))
+                            } else {
+                                oms_c<Vec<OmniRef>> = omni_by_name(g, rn)
+                                r = 0
+                                while (r < oms_c.len()) {
+                                    om_c<OmniRef> = oms_c.get(r)
+                                    if (!(om_c.m == sm && om_c.n == sn)) {
+                                        g.edges.push(mk_edge("call", sm, sn, om_c.m, om_c.n, true))
+                                    }
+                                    r = r + 1
+                                }
+                            }
+                        }
+                        q = q + 1
+                    }
+                }
+                refs<Vec<String>> = unique_in_order(find_backtick_refs(sy.doc))
+                q = 0
+                while (q < refs.len()) {
+                    rf<String> = refs.get(q)
+                    if (export_has(g, sm, rf) && rf != sn) {
+                        g.edges.push(mk_edge("proseRef", sm, sn, sm, rf, true))
+                    } else {
+                        oms_p<Vec<OmniRef>> = omni_by_name(g, rf)
+                        r = 0
+                        while (r < oms_p.len()) {
+                            om_p<OmniRef> = oms_p.get(r)
+                            if (!(om_p.m == sm && om_p.n == sn)) {
+                                g.edges.push(mk_edge("proseRef", sm, sn, om_p.m, om_p.n, true))
+                            }
+                            r = r + 1
+                        }
+                    }
+                    q = q + 1
+                }
+            }
+            j = j + 1
+        }
+        i = i + 1
+    }
+
+    sort_edges(borrow(g.edges))
+}
+
+# ------------------------------------------------------------ render helpers
+
+# "<!-- generated by tools/refman.vyb; do not edit -->" + provenance line.
+prov_line(rev<String>)<String> -> {
+    return "<!-- generated by tools/refman.vyb; do not edit -->\n" +
+           "<!-- source: stdlib/ ; runtime: runtime/vyb_runtime.c ; commit: " + rev + " -->\n"
+}
+
+# Module page file name.
+page_of(mod<String>)<String> -> { return mod + ".md" }
+
+allowed_slug(c<Int>)<Bool> -> {
+    return ((c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c == 95 || c == 45)
+}
+
+lower_ascii(s<String>)<String> -> {
+    out<String> = ""
+    i<Int> = 0
+    while (i < s.len()) {
+        c<Int> = byte_at(s, i)
+        if (c >= 65 && c <= 90) { out = out + chr(c + 32) } else { out = out + chr(c) }
+        i = i + 1
+    }
+    return out
+}
+
+# Anchor slug for a symbol name.
+slug(name<String>)<String> -> {
+    out<String> = "sym-"
+    i<Int> = 0
+    while (i < name.len()) {
+        c<Int> = byte_at(name, i)
+        if (allowed_slug(c)) { out = out + chr(c) } else { out = out + "-" }
+        i = i + 1
+    }
+    return lower_ascii(out)
+}
+
+# Anchor slug for a file path.
+file_slug(rel<String>)<String> -> {
+    out<String> = "file-"
+    i<Int> = 0
+    while (i < rel.len()) {
+        c<Int> = byte_at(rel, i)
+        if (allowed_slug(c)) { out = out + chr(c) } else { out = out + "-" }
+        i = i + 1
+    }
+    return lower_ascii(out)
+}
+
+module_link(mod<String>)<String> -> { return "[`" + mod + "`](" + page_of(mod) + ")" }
+
+# A symbol link: same-module refs are in-page anchors.
+symlink(g<their<Graph>>, mod<String>, nm<String>, text<String>, from_mod<String>)<String> -> {
+    disp<String> = nm
+    if (text.len() > 0) { disp = text }
+    if (from_mod.len() > 0 && from_mod == mod) {
+        return "[`" + disp + "`](#" + slug(nm) + ")"
+    }
+    return "[`" + disp + "`](" + page_of(mod) + "#" + slug(nm) + ")"
+}
+
+is_ref_type(t<String>)<Bool> -> {
+    return (t == "import" || t == "call" || t == "usesType" || t == "proseRef")
+}
+
+kind_in_csv(csv<String>, k<String>)<Bool> -> { return in_list(split_top(csv, 44), k) }
+
+# Files of `mod`, in graph file order.
+module_rels(g<their<Graph>>, mod<String>)<Vec<String>> -> {
+    out<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < g.files.len()) {
+        rel<String> = g.files.get(i).rel
+        if (module_of(rel) == mod) { out.push(rel) }
+        i = i + 1
+    }
+    return out
+}
+
+file_by_rel(g<their<Graph>>, rel<String>)<FileRec> -> {
+    i<Int> = 0
+    while (i < g.files.len()) {
+        if (g.files.get(i).rel == rel) { return g.files.get(i) }
+        i = i + 1
+    }
+    return FileRec { rel = rel, symbols = Vec<Symbol>(), imports = Vec<ImportDecl>(), header = "" }
+}
+
+module_exported_count(g<their<Graph>>, mod<String>)<Int> -> {
+    n<Int> = 0
+    i<Int> = 0
+    while (i < g.files.len()) {
+        fr<FileRec> = g.files.get(i)
+        if (module_of(fr.rel) == mod) {
+            j<Int> = 0
+            while (j < fr.symbols.len()) {
+                if (fr.symbols.get(j).exported) { n = n + 1 }
+                j = j + 1
+            }
+        }
+        i = i + 1
+    }
+    return n
+}
+
+# Distinct external modules referencing / referenced by `mod` (REF_TYPES only).
+module_fans(g<their<Graph>>, mod<String>)<Fans> -> {
+    inm<Vec<String>> = Vec<String>()
+    outm<Vec<String>> = Vec<String>()
+    e<Int> = 0
+    while (e < g.edges.len()) {
+        ed<Edge> = g.edges.get(e)
+        if (is_ref_type(ed.etype) && ed.to_module.len() > 0) {
+            if (ed.from_module == mod && ed.to_module != mod) { outm.push(ed.to_module) }
+            if (ed.to_module == mod && ed.from_module.len() > 0 && ed.from_module != mod) {
+                inm.push(ed.from_module)
+            }
+        }
+        e = e + 1
+    }
+    sort_strs(borrow(inm))
+    dedupe_strs(borrow(inm))
+    sort_strs(borrow(outm))
+    dedupe_strs(borrow(outm))
+    return Fans { inm = inm, outm = outm }
+}
+
+# Distinct external modules that reference exported symbol `nm` of `mod`.
+symbol_fan_in(g<their<Graph>>, mod<String>, nm<String>)<Vec<String>> -> {
+    mods<Vec<String>> = Vec<String>()
+    e<Int> = 0
+    while (e < g.edges.len()) {
+        ed<Edge> = g.edges.get(e)
+        if (is_ref_type(ed.etype) && ed.to_module == mod && ed.to_symbol == nm &&
+            ed.from_module.len() > 0 && ed.from_module != mod) {
+            mods.push(ed.from_module)
+        }
+        e = e + 1
+    }
+    sort_strs(borrow(mods))
+    dedupe_strs(borrow(mods))
+    return mods
+}
+
+# Import edges pointing at `mod`, as (from_module, imported symbol) pairs, in
+# graph edge order.  Standalone for the same stack-frame reason as
+# `edge_counts_for`: `render_module` must not run per-edge struct-copy loops in
+# its own activation.
+imported_by_pairs(g<their<Graph>>, mod<String>)<Vec<PairKey>> -> {
+    pairs<Vec<PairKey>> = Vec<PairKey>()
+    e<Int> = 0
+    while (e < g.edges.len()) {
+        ed<Edge> = g.edges.get(e)
+        if (ed.etype == "import" && ed.to_module == mod && ed.from_module != mod) {
+            pairs.push(PairKey { a = ed.from_module, b = ed.to_symbol })
+        }
+        e = e + 1
+    }
+    return pairs
+}
+
+# Relationship bullets for exported symbol `nm` of `mod`, in graph edge order.
+# Standalone so `render_module`'s per-symbol loop does not accumulate stack.
+symbol_rel_out(g<their<Graph>>, mod<String>, nm<String>)<Vec<String>> -> {
+    rel_out<Vec<String>> = Vec<String>()
+    e<Int> = 0
+    while (e < g.edges.len()) {
+        ed<Edge> = g.edges.get(e)
+        if (ed.from_module == mod && ed.from_symbol == nm &&
+            (ed.etype == "implement" || ed.etype == "implementOn" ||
+             ed.etype == "usesType" || ed.etype == "call" || ed.etype == "proseRef")) {
+            if (ed.etype == "usesType") {
+                rel_out.push("- uses type " + symlink(g, ed.to_module, ed.to_symbol, "", mod))
+            } else if (ed.etype == "call") {
+                rel_out.push("- calls " + symlink(g, ed.to_module, ed.to_symbol, "", mod))
+            } else if (ed.etype == "proseRef") {
+                rel_out.push("- mentions " + symlink(g, ed.to_module, ed.to_symbol, "", mod))
+            } else if (ed.etype == "implement") {
+                rel_out.push("- implements aspect " + symlink(g, ed.to_module, ed.to_symbol, "", mod))
+            }
+        }
+        e = e + 1
+    }
+    return rel_out
+}
+
+# Rendered module links for a list of module names (already sorted).
+render_module_links(mods<Vec<String>>)<String> -> {
+    parts<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < mods.len()) {
+        parts.push(module_link(mods.get(i)))
+        i = i + 1
+    }
+    return join_strs(parts, ", ")
+}
+
+# Python's `"\n".join(L).rstrip() + "\n"`.
+rstrip_join(L<Vec<String>>)<String> -> {
+    return rstrip_ws(join_strs(L, "\n")) + "\n"
+}
+
+# ArgPair list -> "a, b<Int>".
+render_args(args<Vec<ArgPair>>)<String> -> {
+    parts<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < args.len()) {
+        ap<ArgPair> = args.get(i)
+        if (ap.ty.len() == 0) { parts.push(ap.name) } else { parts.push(ap.name + "<" + ap.ty + ">") }
+        i = i + 1
+    }
+    return join_strs(parts, ", ")
+}
+
+# Struct/enum kind counts as sorted `kind -> count` pairs.
+kind_counts(g<their<Graph>>)<Vec<PairKey>> -> {
+    names<Vec<String>> = Vec<String>()
+    counts<Vec<Int>> = Vec<Int>()
+    i<Int> = 0
+    while (i < g.files.len()) {
+        fr<FileRec> = g.files.get(i)
+        j<Int> = 0
+        while (j < fr.symbols.len()) {
+            sy<Symbol> = fr.symbols.get(j)
+            if (sy.exported) {
+                idx<Int> = in_list_idx(names, sy.kind)
+                if (idx < 0) { names.push(sy.kind); counts.push(1) } else { counts.set(idx, counts.get(idx) + 1) }
+            }
+            j = j + 1
+        }
+        i = i + 1
+    }
+    out<Vec<PairKey>> = Vec<PairKey>()
+    i = 0
+    while (i < names.len()) {
+        out.push(PairKey { a = names.get(i), b = counts.get(i).to_string() })
+        i = i + 1
+    }
+    sort_keys(borrow(out))
+    return out
+}
+
+in_list_idx(v<Vec<String>>, s<String>)<Int> -> {
+    i<Int> = 0
+    while (i < v.len()) {
+        if (v.get(i) == s) { return i }
+        i = i + 1
+    }
+    return -1
+}
+
+# Edge-type counts as sorted `type -> count` pairs.
+edge_counts(g<their<Graph>>)<Vec<PairKey>> -> {
+    names<Vec<String>> = Vec<String>()
+    counts<Vec<Int>> = Vec<Int>()
+    i<Int> = 0
+    while (i < g.edges.len()) {
+        t<String> = g.edges.get(i).etype
+        idx<Int> = in_list_idx(names, t)
+        if (idx < 0) { names.push(t); counts.push(1) } else { counts.set(idx, counts.get(idx) + 1) }
+        i = i + 1
+    }
+    out<Vec<PairKey>> = Vec<PairKey>()
+    i = 0
+    while (i < names.len()) {
+        out.push(PairKey { a = names.get(i), b = counts.get(i).to_string() })
+        i = i + 1
+    }
+    sort_keys(borrow(out))
+    return out
+}
+
+# Import/edge counts for `mod` over the graph's edge list, as [imports, total].
+# Kept as a standalone function: a per-edge struct copy loop nested inside
+# render_index's module loop exhausts the call stack in this build (the
+# generated stack allocas are never popped), so the loop lives in its own
+# activation where the frame is released on return.
+edge_counts_for(g<their<Graph>>, mod<String>)<Vec<Int>> -> {
+    nimp<Int> = 0
+    nedge<Int> = 0
+    e<Int> = 0
+    while (e < g.edges.len()) {
+        ed<Edge> = g.edges.get(e)
+        if (ed.etype == "import" && ed.from_module == mod) { nimp = nimp + 1 }
+        if (ed.from_module == mod || (ed.has_to_module && ed.to_module == mod)) { nedge = nedge + 1 }
+        e = e + 1
+    }
+    out<Vec<Int>> = Vec<Int>()
+    out.push(nimp)
+    out.push(nedge)
+    return out
+}
+
+# -------------------------------------------------------------- index page
+
+render_index(g<their<Graph>>)<String> -> {
+    L<Vec<String>> = Vec<String>()
+    L.push(prov_line(g.git_rev))
+    L.push("# Vyb Standard Library Reference")
+    L.push("")
+    L.push("Auto-generated. Each module page links every exported symbol and the edges between modules: imports, imports-by, implements/binds, uses-type, runtime calls, and prose references.")
+    L.push("")
+    L.push("Cross-indexes: [functions](functions.md) · [types](types.md) · [aspects & binds](aspects.md) · [shared types & consumers](interfaces.md) · [runtime intrinsics](runtime.md). Start with the [Programmer's Guide](PROGRAMMERS_GUIDE.md).")
+    L.push("")
+    L.push("## Modules")
+    L.push("")
+    L.push("| Module | Files | Exported | Imports | Fan-in | Fan-out | Edges |")
+    L.push("|---|---|---|---|---|---|---|")
+
+    m<Int> = 0
+    while (m < g.module_order.len()) {
+        mod<String> = g.module_order.get(m)
+        rels<Vec<String>> = module_rels(g, mod)
+        fans<Fans> = module_fans(g, mod)
+        ec<Vec<Int>> = edge_counts_for(g, mod)
+        nimp<Int> = ec.get(0)
+        nedge<Int> = ec.get(1)
+        L.push("| " + module_link(mod) + " | " + rels.len().to_string() + " | " +
+               module_exported_count(g, mod).to_string() + " | " + nimp.to_string() + " | " +
+               fans.inm.len().to_string() + " | " + fans.outm.len().to_string() + " | " +
+               nedge.to_string() + " |")
+        m = m + 1
+    }
+
+    L.push("")
+    L.push("## Exports by kind")
+    L.push("")
+    ks<Vec<PairKey>> = kind_counts(g)
+    m = 0
+    while (m < ks.len()) {
+        L.push("- `" + ks.get(m).a + "`: " + ks.get(m).b)
+        m = m + 1
+    }
+
+    L.push("")
+    L.push("## Relationships")
+    L.push("")
+    ts<Vec<PairKey>> = edge_counts(g)
+    m = 0
+    while (m < ts.len()) {
+        L.push("- `" + ts.get(m).a + "`: " + ts.get(m).b)
+        m = m + 1
+    }
+
+    L.push("")
+    L.push("See [`PLAN.md`](PLAN.md) for the generator design.")
+    L.push("")
+    return rstrip_join(L)
+}
+
+# ------------------------------------------------------------- module page
+
+render_module(mod<String>, g<their<Graph>>)<String> -> {
+    rels<Vec<String>> = module_rels(g, mod)
+    sort_strs(borrow(rels))
+    prim<FileRec> = file_by_rel(g, rels.get(0))
+
+    L<Vec<String>> = Vec<String>()
+    L.push(prov_line(g.git_rev))
+    L.push("# Module `" + mod + "`")
+    L.push("")
+    if (prim.header.len() > 0) {
+        L.push(prim.header)
+        L.push("")
+    }
+
+    # imports / re-exports
+    trips<Vec<ImpTriple>> = Vec<ImpTriple>()
+    i<Int> = 0
+    while (i < rels.len()) {
+        fr<FileRec> = file_by_rel(g, rels.get(i))
+        j<Int> = 0
+        while (j < fr.imports.len()) {
+            imp<ImportDecl> = fr.imports.get(j)
+            nms<Vec<String>> = imp.names
+            if (nms.len() == 0) { nms.push("") }
+            k<Int> = 0
+            while (k < nms.len()) {
+                trips.push(ImpTriple { target = imp.target, nm = nms.get(k), reex = imp.reexport })
+                k = k + 1
+            }
+            j = j + 1
+        }
+        i = i + 1
+    }
+    sort_triples(borrow(trips))
+    dedupe_triples(borrow(trips))
+    if (trips.len() > 0) {
+        L.push("## Imports")
+        L.push("")
+        i = 0
+        while (i < trips.len()) {
+            tr<ImpTriple> = trips.get(i)
+            tm<String> = import_target_module(tr.target)
+            if (tr.nm.len() > 0) {
+                link<String> = "`" + tr.nm + "`"
+                if (export_has(g, tm, tr.nm)) { link = symlink(g, tm, tr.nm, "", mod) }
+                verb<String> = "imports"
+                if (tr.reex) { verb = "re-exports" }
+                L.push("- " + verb + " `" + tr.target + "::" + link + "`")
+            } else {
+                verb2<String> = "imports module"
+                if (tr.reex) { verb2 = "re-exports module" }
+                L.push("- " + verb2 + " " + module_link(tm))
+            }
+            i = i + 1
+        }
+        L.push("")
+    }
+
+    # imported by
+    pairs<Vec<PairKey>> = imported_by_pairs(g, mod)
+    sort_keys(borrow(pairs))
+    dedupe_keys(borrow(pairs))
+    if (pairs.len() > 0) {
+        L.push("## Imported by")
+        L.push("")
+        i = 0
+        while (i < pairs.len()) {
+            fm<String> = pairs.get(i).a
+            syms<Vec<String>> = Vec<String>()
+            j<Int> = i
+            while (j < pairs.len() && pairs.get(j).a == fm) {
+                s<String> = pairs.get(j).b
+                if (s.len() == 0) { syms.push("module") } else { syms.push(symlink(g, mod, s, "", mod)) }
+                j = j + 1
+            }
+            L.push("- " + module_link(fm) + " imports " + join_strs(syms, ", "))
+            i = j
+        }
+        L.push("")
+    }
+
+    fans<Fans> = module_fans(g, mod)
+    L.push("## Fan-in / Fan-out")
+    L.push("")
+    in_txt<String> = "—"
+    if (fans.inm.len() > 0) { in_txt = render_module_links(fans.inm) }
+    out_txt<String> = "—"
+    if (fans.outm.len() > 0) { out_txt = render_module_links(fans.outm) }
+    L.push("- **Referenced by** (" + fans.inm.len().to_string() + "): " + in_txt)
+    L.push("- **References** (" + fans.outm.len().to_string() + "): " + out_txt)
+    L.push("")
+
+    # exported symbols table
+    exps<Vec<Symbol>> = Vec<Symbol>()
+    i = 0
+    while (i < rels.len()) {
+        fr<FileRec> = file_by_rel(g, rels.get(i))
+        j<Int> = 0
+        while (j < fr.symbols.len()) {
+            sy<Symbol> = fr.symbols.get(j)
+            if (sy.exported) { exps.push(sy) }
+            j = j + 1
+        }
+        i = i + 1
+    }
+    sort_syms(borrow(exps))
+    multi<Bool> = rels.len() > 1
+
+    L.push("## Exported symbols")
+    L.push("")
+    if (multi) {
+        L.push("| Symbol | File | Kind | Fan-in | Summary |")
+        L.push("|---|---|---|---|---|")
+    } else {
+        L.push("| Symbol | Kind | Fan-in | Summary |")
+        L.push("|---|---|---|---|")
+    }
+    i = 0
+    while (i < exps.len()) {
+        sy<Symbol> = exps.get(i)
+        one<String> = doc_summary(sy.doc)
+        fin<Vec<String>> = symbol_fan_in(g, mod, sy.name)
+        fincell<String> = ""
+        if (fin.len() > 0) { fincell = fin.len().to_string() }
+        fcell<String> = ""
+        if (multi) { fcell = "[`" + sy.rel + "`](#" + file_slug(sy.rel) + ")" }
+        if (multi) {
+            L.push("| [`" + sy.name + "`](#" + slug(sy.name) + ") | " + fcell + " | " + sy.kind +
+                   " | " + fincell + " | " + one + " |")
+        } else {
+            L.push("| [`" + sy.name + "`](#" + slug(sy.name) + ") | " + sy.kind + " | " +
+                   fincell + " | " + one + " |")
+        }
+        i = i + 1
+    }
+    L.push("")
+
+    # per-symbol detail
+    prev<String> = ""
+    has_prev<Bool> = false
+    i = 0
+    while (i < exps.len()) {
+        sy<Symbol> = exps.get(i)
+        if (multi && (!has_prev || sy.rel != prev)) {
+            L.push("<a id=\"" + file_slug(sy.rel) + "\"></a>")
+            L.push("**File: `" + sy.rel + "`**")
+            hdr<String> = file_by_rel(g, sy.rel).header
+            if (hdr.len() > 0) {
+                L.push("")
+                L.push(hdr)
+            }
+            L.push("")
+            prev = sy.rel
+            has_prev = true
+        }
+        L.push("<a id=\"" + slug(sy.name) + "\"></a>")
+        L.push("### `" + sy.name + "` · " + sy.kind)
+        L.push("")
+        if (sy.kind == "aspect") {
+            L.push("```")
+            L.push("aspect " + sy.name + " {")
+            j<Int> = 0
+            while (j < sy.params.len()) {
+                mm<Member> = sy.params.get(j)
+                sig<String> = mm.name + "(" + render_args(mm.args) + ")"
+                if (mm.ret.len() > 0) { sig = sig + "<" + mm.ret + ">" }
+                L.push("    " + sig)
+                j = j + 1
+            }
+            L.push("}")
+            L.push("```")
+            L.push("")
+        } else if (sy.kind == "bind" && (sy.asp.len() > 0 || sy.target.len() > 0)) {
+            tv<String> = ""
+            if (sy.tvar.len() > 0) { tv = " (" + sy.tvar + ")" }
+            L.push("`" + sy.name + "` implements aspect `" + sy.asp + "` on type `" + sy.target + "`" + tv)
+            L.push("")
+        } else if (sy.signature.len() > 0) {
+            L.push("```")
+            L.push(sy.signature)
+            L.push("```")
+            L.push("")
+        }
+
+        plain<Vec<String>> = Vec<String>()
+        label<String> = ""
+        if ((sy.kind == "struct" || sy.kind == "enum") && sy.params.len() > 0) {
+            if (sy.kind == "struct") { label = "Fields:" } else { label = "Variants:" }
+            j<Int> = 0
+            while (j < sy.params.len()) {
+                mm<Member> = sy.params.get(j)
+                if (mm.kind == "field") {
+                    plain.push("`" + mm.name + "<" + mm.ty + ">`")
+                } else {
+                    plain.push("`" + mm.name + " = " + mm.ty + "`")
+                }
+                j = j + 1
+            }
+        } else if (sy.kind == "bind" && sy.params.len() > 0) {
+            label = "Methods:"
+            j<Int> = 0
+            while (j < sy.params.len()) {
+                mm<Member> = sy.params.get(j)
+                rets<String> = ""
+                if (mm.ret.len() > 0) { rets = "<" + mm.ret + ">" }
+                plain.push("`" + mm.name + "(" + render_args(mm.args) + ")" + rets + "`")
+                j = j + 1
+            }
+        }
+        if (plain.len() > 0) {
+            L.push(label)
+            L.push("")
+            j<Int> = 0
+            while (j < plain.len()) {
+                L.push("- " + plain.get(j))
+                j = j + 1
+            }
+            L.push("")
+        }
+        if (sy.doc.len() > 0) {
+            L.push(sy.doc)
+            L.push("")
+        }
+
+        rel_out<Vec<String>> = symbol_rel_out(g, mod, sy.name)
+        fin<Vec<String>> = symbol_fan_in(g, mod, sy.name)
+        if (fin.len() > 0) {
+            rel_out.push("- referenced by " + fin.len().to_string() + ": " + render_module_links(fin))
+        }
+        if (rel_out.len() > 0) {
+            uniq<Vec<String>> = unique_in_order(rel_out)
+            L.push("**Relationships**")
+            L.push("")
+            j<Int> = 0
+            while (j < uniq.len()) {
+                L.push(uniq.get(j))
+                j = j + 1
+            }
+            L.push("")
+        }
+        i = i + 1
+    }
+    return rstrip_join(L)
+}
+
+# -------------------------------------------------------------- cross pages
+
+cross_page(g<their<Graph>>, title<String>, want<String>)<String> -> {
+    L<Vec<String>> = Vec<String>()
+    L.push(prov_line(g.git_rev))
+    L.push("# " + title)
+    L.push("")
+    m<Int> = 0
+    while (m < g.module_order.len()) {
+        mod<String> = g.module_order.get(m)
+        nls<Vec<NameLink>> = Vec<NameLink>()
+        i<Int> = 0
+        while (i < g.files.len()) {
+            fr<FileRec> = g.files.get(i)
+            if (module_of(fr.rel) == mod) {
+                j<Int> = 0
+                while (j < fr.symbols.len()) {
+                    sy<Symbol> = fr.symbols.get(j)
+                    if (sy.exported && kind_in_csv(want, sy.kind)) {
+                        nls.push(NameLink { name = sy.name, link = symlink(g, mod, sy.name, "", mod) })
+                    }
+                    j = j + 1
+                }
+            }
+            i = i + 1
+        }
+        if (nls.len() > 0) {
+            sort_namelinks(borrow(nls))
+            parts<Vec<String>> = Vec<String>()
+            j<Int> = 0
+            while (j < nls.len()) {
+                parts.push(nls.get(j).link)
+                j = j + 1
+            }
+            L.push("## `" + mod + "`")
+            L.push("")
+            L.push(join_strs(parts, ", "))
+            L.push("")
+        }
+        m = m + 1
+    }
+    return rstrip_join(L)
+}
+
+runtime_page(g<their<Graph>>)<String> -> {
+    L<Vec<String>> = Vec<String>()
+    L.push(prov_line(g.git_rev))
+    L.push("# Runtime intrinsics used by the stdlib")
+    L.push("")
+    used<Vec<String>> = Vec<String>()
+    e<Int> = 0
+    while (e < g.edges.len()) {
+        if (g.edges.get(e).etype == "runtimeRef") { used.push(g.edges.get(e).to_symbol) }
+        e = e + 1
+    }
+    sort_strs(borrow(used))
+    dedupe_strs(borrow(used))
+    parts<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < used.len()) {
+        parts.push("`" + used.get(i) + "`")
+        i = i + 1
+    }
+    L.push(join_strs(parts, ", "))
+    L.push("")
+    return rstrip_join(L)
+}
+
+# ----------------------------------------------------------- shared types
+
+# Exported structs/enums, in file order (last definition of a name wins).
+struct_ents(g<their<Graph>>)<Vec<StructEnt>> -> {
+    out<Vec<StructEnt>> = Vec<StructEnt>()
+    i<Int> = 0
+    while (i < g.files.len()) {
+        fr<FileRec> = g.files.get(i)
+        md<String> = module_of(fr.rel)
+        j<Int> = 0
+        while (j < fr.symbols.len()) {
+            sy<Symbol> = fr.symbols.get(j)
+            if (sy.exported && (sy.kind == "struct" || sy.kind == "enum")) {
+                out.push(StructEnt { tm = md, name = sy.name, kind = sy.kind, doc = sy.doc })
+            }
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return out
+}
+
+# Index of the last StructEnt matching (tm, name), or -1.
+struct_idx(ents<Vec<StructEnt>>, tm<String>, nm<String>)<Int> -> {
+    i<Int> = ents.len() - 1
+    while (i >= 0) {
+        if (ents.get(i).tm == tm && ents.get(i).name == nm) { return i }
+        i = i - 1
+    }
+    return -1
+}
+
+# Consumer records (sorted + deduplicated): who imports / uses each shared type.
+consumers(g<their<Graph>>)<Vec<Rec>> -> {
+    ents<Vec<StructEnt>> = struct_ents(g)
+    recs<Vec<Rec>> = Vec<Rec>()
+    e<Int> = 0
+    while (e < g.edges.len()) {
+        ed<Edge> = g.edges.get(e)
+        if (ed.etype == "usesType" || ed.etype == "import") {
+            tm<String> = ed.to_module
+            ts<String> = ed.to_symbol
+            fm<String> = ed.from_module
+            if (fm.len() > 0 && tm.len() > 0 && fm != tm && struct_idx(ents, tm, ts) >= 0) {
+                reex<Bool> = false
+                if (ed.etype == "import") { reex = ed.reexport }
+                fsym<String> = ed.from_symbol
+                if (fsym.len() == 0) { fsym = "module" }
+                recs.push(Rec { tm = tm, ts = ts, fm = fm, fsym = fsym, etype = ed.etype, reex = reex })
+            }
+        }
+        e = e + 1
+    }
+    sort_recs(borrow(recs))
+    dedupe_recs(borrow(recs))
+    return recs
+}
+
+render_interfaces(g<their<Graph>>)<String> -> {
+    recs<Vec<Rec>> = consumers(g)
+    L<Vec<String>> = Vec<String>()
+    L.push(prov_line(g.git_rev))
+    L.push("# Shared types & consumers")
+    L.push("")
+    L.push("Cross-module structs and enums — types defined in one module but imported, built, or handled by another. For each shared type: who imports/re-exports it and which functions use it in a signature.")
+    L.push("")
+    if (recs.len() == 0) {
+        L.push("_No cross-module types._")
+        return rstrip_join(L)
+    }
+    ents<Vec<StructEnt>> = struct_ents(g)
+
+    L.push("| Type | Module | Consumers | Consumer modules |")
+    L.push("|---|---|---|---|")
+    i<Int> = 0
+    while (i < recs.len()) {
+        tm<String> = recs.get(i).tm
+        ts<String> = recs.get(i).ts
+        j<Int> = i
+        cmods<Vec<String>> = Vec<String>()
+        while (j < recs.len() && recs.get(j).tm == tm && recs.get(j).ts == ts) {
+            if (!in_list(cmods, recs.get(j).fm)) { cmods.push(recs.get(j).fm) }
+            j = j + 1
+        }
+        L.push("| [`" + ts + "`](" + page_of(tm) + "#" + slug(ts) + ") | " + module_link(tm) +
+               " | " + cmods.len().to_string() + " | " + render_module_links(cmods) + " |")
+        i = j
+    }
+    L.push("")
+
+    i = 0
+    while (i < recs.len()) {
+        tm<String> = recs.get(i).tm
+        ts<String> = recs.get(i).ts
+        j<Int> = i
+        while (j < recs.len() && recs.get(j).tm == tm && recs.get(j).ts == ts) { j = j + 1 }
+        se<StructEnt> = ents.get(struct_idx(ents, tm, ts))
+        L.push("<a id=\"" + slug(tm + "-" + ts) + "\"></a>")
+        L.push("## `" + ts + "` · " + se.kind)
+        L.push("")
+        one<String> = doc_summary(se.doc)
+        if (one.len() > 0) {
+            L.push(one)
+            L.push("")
+        }
+        L.push("- **Defined in** " + module_link(tm))
+        L.push("")
+
+        # group by consumer module, ascending
+        gmods<Vec<String>> = Vec<String>()
+        k<Int> = i
+        while (k < j) {
+            if (!in_list(gmods, recs.get(k).fm)) { gmods.push(recs.get(k).fm) }
+            k = k + 1
+        }
+        L.push("**Consumed by " + gmods.len().to_string() + " module(s)**")
+        L.push("")
+        gi<Int> = 0
+        while (gi < gmods.len()) {
+            fm<String> = gmods.get(gi)
+            detail<Vec<String>> = Vec<String>()
+            k = i
+            while (k < j) {
+                rc<Rec> = recs.get(k)
+                if (rc.fm == fm) {
+                    if (rc.etype == "usesType") {
+                        detail.push("`" + rc.fsym + "` uses it")
+                    } else {
+                        rex<String> = ""
+                        if (rc.reex) { rex = " (re-export)" }
+                        detail.push("`" + rc.fsym + "` imports it" + rex)
+                    }
+                }
+                k = k + 1
+            }
+            L.push("- " + module_link(fm) + " — " + join_strs(detail, ", "))
+            gi = gi + 1
+        }
+        i = j
+    }
+    L.push("")
+    return rstrip_join(L)
+}
+
+# ------------------------------------------------------------ guide region
+
+guide_order()<Vec<String>> -> {
+    v<Vec<String>> = Vec<String>()
+    v.push("core"); v.push("error"); v.push("io"); v.push("term"); v.push("curses"); v.push("qt")
+    v.push("time"); v.push("collections"); v.push("channels"); v.push("threads"); v.push("tasks")
+    v.push("asyncs"); v.push("agents"); v.push("network"); v.push("tls"); v.push("http")
+    v.push("https"); v.push("prelude"); v.push("utf8"); v.push("env"); v.push("rand")
+    v.push("process"); v.push("regex"); v.push("archive"); v.push("crypto"); v.push("chain")
+    v.push("fs"); v.push("url")
+    return v
+}
+
+guide_area(m<String>)<String> -> {
+    if (m == "core") { return "Contracts & math" }
+    if (m == "error") { return "Domain errors" }
+    if (m == "io") { return "Files" }
+    if (m == "term") { return "Terminal & stdin" }
+    if (m == "curses") { return "Terminal & GUI" }
+    if (m == "qt") { return "Native GUI" }
+    if (m == "time") { return "Clocks" }
+    if (m == "collections") { return "Vec/Map/Set/BTree" }
+    if (m == "channels") { return "Channels" }
+    if (m == "threads") { return "Threads & atomics" }
+    if (m == "tasks") { return "Fire-and-forget" }
+    if (m == "asyncs") { return "Async executor" }
+    if (m == "agents") { return "Message-passing units" }
+    if (m == "network") { return "Sockets/TCP/UDP" }
+    if (m == "tls") { return "TLS" }
+    if (m == "http") { return "HTTP" }
+    if (m == "https") { return "HTTPS client" }
+    if (m == "prelude") { return "Auto-imported facade" }
+    if (m == "utf8") { return "UTF-8 codepoints" }
+    if (m == "env") { return "Environment" }
+    if (m == "rand") { return "Pseudo-random" }
+    if (m == "process") { return "External commands" }
+    if (m == "regex") { return "Regex" }
+    if (m == "archive") { return "gzip/tar extraction" }
+    if (m == "crypto") { return "Hashing" }
+    if (m == "chain") { return "Hash-chained ledger" }
+    if (m == "fs") { return "Filesystem" }
+    if (m == "url") { return "URL parsing" }
+    return m
+}
+
+guide_cross(m<String>)<String> -> {
+    if (m == "core") { return "[aspects & binds](aspects.md)" }
+    if (m == "io") { return "[types](types.md)" }
+    if (m == "chain") { return "[crypto](crypto.md)" }
+    if (m == "collections") { return "[functions](functions.md)" }
+    if (m == "channels") { return "[functions](functions.md)" }
+    if (m == "threads") { return "[functions](functions.md)" }
+    if (m == "network") { return "[shared types](interfaces.md)" }
+    if (m == "tls") { return "[shared types](interfaces.md)" }
+    if (m == "http") { return "[shared types](interfaces.md)" }
+    if (m == "https") { return "[shared types](interfaces.md)" }
+    if (m == "curses") { return "—" }
+    if (m == "qt") { return "—" }
+    return "—"
+}
+
+guide_begin()<String> -> { return "<!-- refman:api-index begin -->" }
+guide_end()<String> -> { return "<!-- refman:api-index end -->" }
+
+# The regenerated §9 API-index region (markers included, trailing newline).
+api_index_region(g<their<Graph>>)<String> -> {
+    rows<Vec<String>> = Vec<String>()
+    order<Vec<String>> = guide_order()
+    i<Int> = 0
+    while (i < order.len()) {
+        m<String> = order.get(i)
+        if (module_order_has(g, m)) {
+            rows.push("| " + guide_area(m) + " | [`" + m + "`](" + m + ".md) | " + guide_cross(m) + " |")
+        }
+        i = i + 1
+    }
+    unc<Vec<String>> = Vec<String>()
+    i = 0
+    while (i < g.module_order.len()) {
+        m<String> = g.module_order.get(i)
+        if (!in_list(order, m)) { unc.push(m) }
+        i = i + 1
+    }
+    sort_strs(borrow(unc))
+    i = 0
+    while (i < unc.len()) {
+        m<String> = unc.get(i)
+        rows.push("| " + guide_area(m) + " | [`" + m + "`](" + m + ".md) | " + guide_cross(m) + " |")
+        i = i + 1
+    }
+    rows.push("| Runtime intrinsics | [`runtime`](runtime.md) | — |")
+
+    L<Vec<String>> = Vec<String>()
+    L.push(guide_begin())
+    L.push("| Area | Module page | Cross-index |")
+    L.push("|---|---|---|")
+    i = 0
+    while (i < rows.len()) {
+        L.push(rows.get(i))
+        i = i + 1
+    }
+    L.push(guide_end())
+    return join_strs(L, "\n") + "\n"
+}
+
+# Regenerate the marked region of PROGRAMMERS_GUIDE.md in place.
+patch_guide(outdir<String>, g<their<Graph>>) -> {
+    guide<String> = join_path(outdir, "PROGRAMMERS_GUIDE.md")
+    if (!path_exists(guide)) { return }
+    txt<String> = slurp(guide)
+    b<Int> = txt.index_of(guide_begin())
+    e0<Int> = txt.index_of(guide_end())
+    if (b < 0 || e0 < 0) { return }
+    e<Int> = e0 + guide_end().len()
+    newtxt<String> = txt.substring(0, b) + api_index_region(g) + txt.substring(e, txt.len())
+    write_text(guide, newtxt)
+}
+
+# Drift guards for the maintained guide.
+guide_structure_problems(outdir<String>, g<their<Graph>>)<Vec<String>> -> {
+    problems<Vec<String>> = Vec<String>()
+    guide<String> = join_path(outdir, "PROGRAMMERS_GUIDE.md")
+    if (!path_exists(guide)) { return problems }
+    txt<String> = slurp(guide)
+    b<Int> = txt.index_of(guide_begin())
+    e0<Int> = txt.index_of(guide_end())
+    if (b < 0 || e0 < 0) {
+        problems.push("PROGRAMMERS_GUIDE.md: missing API-index markers (run tools/refman.vyb)")
+    } else {
+        e<Int> = e0 + guide_end().len()
+        got<String> = txt.substring(b, e)
+        want<String> = rstrip_ws(api_index_region(g))
+        if (got != want) { problems.push("PROGRAMMERS_GUIDE.md: §9 API index is stale (run tools/refman.vyb)") }
+    }
+    sections<Vec<String>> = Vec<String>()
+    lines<Vec<String>> = splitlines(txt)
+    i<Int> = 0
+    while (i < lines.len()) {
+        if (starts_with(lines.get(i), "### 4.")) { sections.push(lines.get(i)) }
+        i = i + 1
+    }
+    i = 0
+    while (i < g.module_order.len()) {
+        m<String> = g.module_order.get(i)
+        found<Bool> = false
+        j<Int> = 0
+        while (j < sections.len()) {
+            if (has_sub(sections.get(j), "`" + m + "`")) { found = true }
+            j = j + 1
+        }
+        if (!found) {
+            problems.push("PROGRAMMERS_GUIDE.md: no §4 digest section for stdlib module '" + m +
+                          "' (new module? add a curated digest)")
+        }
+        i = i + 1
+    }
+    return problems
+}
+
+# Validate PROGRAMMERS_GUIDE.md: local links resolve, code fences balance.
+check_guide(root<String>, outdir<String>)<Vec<String>> -> {
+    problems<Vec<String>> = Vec<String>()
+    guide<String> = join_path(outdir, "PROGRAMMERS_GUIDE.md")
+    if (!path_exists(guide)) { return problems }
+    txt<String> = slurp(guide)
+
+    infence<Int> = 0
+    lines<Vec<String>> = splitlines(txt)
+    i<Int> = 0
+    while (i < lines.len()) {
+        if (starts_with(trim(lines.get(i)), "```")) { infence = infence + 1 }
+        i = i + 1
+    }
+    if (infence % 2 == 1) { problems.push("PROGRAMMERS_GUIDE.md: unbalanced code fence") }
+
+    i = 0
+    while (i < txt.len()) {
+        if (byte_at(txt, i) == 93 && i + 1 < txt.len() && byte_at(txt, i + 1) == 40) {
+            j<Int> = i + 2
+            while (j < txt.len() && byte_at(txt, j) != 41) { j = j + 1 }
+            if (j >= txt.len() || j == i + 2) {
+                i = i + 1
+            } else {
+                target<String> = txt.substring(i + 2, j)
+                i = j + 1
+                if (!(starts_with(target, "http://") || starts_with(target, "https://") ||
+                      starts_with(target, "mailto:"))) {
+                    filepart<String> = target
+                    h<Int> = target.index_of("#")
+                    if (h >= 0) { filepart = target.substring(0, h) }
+                    filepart = trim(filepart)
+                    if (filepart.len() > 0) {
+                        p<String> = ""
+                        if (starts_with(filepart, "/")) {
+                            p = filepart
+                        } else if (starts_with(filepart, "../")) {
+                            p = join_path(root, filepart)
+                        } else {
+                            p = join_path(outdir, filepart)
+                        }
+                        if (!path_exists(p)) {
+                            problems.push("PROGRAMMERS_GUIDE.md: broken link -> " + target)
+                        }
+                    }
+                }
+            }
+        } else {
+            i = i + 1
+        }
+    }
+    return problems
+}
+
+# --------------------------------------------------------------- JSON output
+
+# JSON string literal with Python json.dumps' ensure_ascii=True escapes.
+json_q(s<String>)<String> -> {
+    out<String> = lit_quote()
+    i<Int> = 0
+    while (i < s.len()) {
+        c<Int> = byte_at(s, i)
+        if (c == 34) { out = out + lit_bs() + lit_quote(); i = i + 1 }
+        else if (c == 92) { out = out + lit_bs() + lit_bs(); i = i + 1 }
+        else if (c == 8) { out = out + lit_bs() + "b"; i = i + 1 }
+        else if (c == 12) { out = out + lit_bs() + "f"; i = i + 1 }
+        else if (c == 10) { out = out + lit_bs() + "n"; i = i + 1 }
+        else if (c == 13) { out = out + lit_bs() + "r"; i = i + 1 }
+        else if (c == 9) { out = out + lit_bs() + "t"; i = i + 1 }
+        else if (c < 32) { out = out + lit_bs() + "u" + hex4(c); i = i + 1 }
+        else if (c < 128) { out = out + chr(c); i = i + 1 }
+        else {
+            n<Int> = utf8_len(c)
+            cp<Int> = utf8_cp(s, i)
+            if (cp > 65535) {
+                v<Int> = cp - 65536
+                out = out + lit_bs() + "u" + hex4(55296 + (v / 1024))
+                out = out + lit_bs() + "u" + hex4(56320 + (v % 1024))
+            } else {
+                out = out + lit_bs() + "u" + hex4(cp)
+            }
+            i = i + n
+        }
+    }
+    return out + lit_quote()
+}
+
+utf8_len(c0<Int>)<Int> -> {
+    if (c0 < 128) { return 1 }
+    if (c0 >= 192 && c0 < 224) { return 2 }
+    if (c0 >= 224 && c0 < 240) { return 3 }
+    return 4
+}
+
+utf8_cp(s<String>, i<Int>)<Int> -> {
+    c0<Int> = byte_at(s, i)
+    if (c0 < 128) { return c0 }
+    if (c0 < 224) { return (c0 - 192) * 64 + (byte_at(s, i + 1) - 128) }
+    if (c0 < 240) {
+        return (c0 - 224) * 4096 + (byte_at(s, i + 1) - 128) * 64 + (byte_at(s, i + 2) - 128)
+    }
+    return (c0 - 240) * 262144 + (byte_at(s, i + 1) - 128) * 4096 +
+           (byte_at(s, i + 2) - 128) * 64 + (byte_at(s, i + 3) - 128)
+}
+
+# A JSON list of strings at indentation level `lvl` (2 spaces per level).
+json_str_list(v<Vec<String>>, lvl<Int>)<String> -> {
+    if (v.len() == 0) { return "[]" }
+    ind<Int> = (lvl + 1) * 2
+    out<String> = "[\n"
+    i<Int> = 0
+    while (i < v.len()) {
+        out = out + spaces(ind) + json_q(v.get(i))
+        if (i + 1 < v.len()) { out = out + "," }
+        out = out + "\n"
+        i = i + 1
+    }
+    return out + spaces(lvl * 2) + "]"
+}
+
+json_mods(g<their<Graph>>)<String> -> {
+    names<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < g.module_order.len()) {
+        names.push(g.module_order.get(i))
+        i = i + 1
+    }
+    sort_strs(borrow(names))
+    if (names.len() == 0) { return "[]" }
+    out<String> = "["
+    i = 0
+    while (i < names.len()) {
+        mod<String> = names.get(i)
+        rels<Vec<String>> = module_rels(g, mod)
+        sort_strs(borrow(rels))
+        fans<Fans> = module_fans(g, mod)
+        out = out + "\n" + spaces(6) + "{\n"
+        out = out + spaces(8) + "\"name\": " + json_q(mod) + ",\n"
+        out = out + spaces(8) + "\"files\": " + json_str_list(rels, 4) + ",\n"
+        out = out + spaces(8) + "\"exported\": " + module_exported_count(g, mod).to_string() + ",\n"
+        out = out + spaces(8) + "\"fan_in\": " + fans.inm.len().to_string() + ",\n"
+        out = out + spaces(8) + "\"fan_out\": " + fans.outm.len().to_string() + "\n"
+        out = out + spaces(6) + "}"
+        if (i + 1 < names.len()) { out = out + "," }
+        i = i + 1
+    }
+    return out + "\n" + spaces(4) + "]"
+}
+
+json_files(g<their<Graph>>)<String> -> {
+    pairs<Vec<PairKey>> = Vec<PairKey>()
+    i<Int> = 0
+    while (i < g.files.len()) {
+        pairs.push(PairKey { a = g.files.get(i).rel, b = module_of(g.files.get(i).rel) })
+        i = i + 1
+    }
+    sort_keys(borrow(pairs))
+    if (pairs.len() == 0) { return "[]" }
+    out<String> = "["
+    i = 0
+    while (i < pairs.len()) {
+        fr<FileRec> = file_by_rel(g, pairs.get(i).a)
+        nms<Vec<String>> = Vec<String>()
+        j<Int> = 0
+        while (j < fr.symbols.len()) {
+            if (fr.symbols.get(j).exported) { nms.push(fr.symbols.get(j).name) }
+            j = j + 1
+        }
+        out = out + "\n" + spaces(6) + "{\n"
+        out = out + spaces(8) + "\"path\": " + json_q(fr.rel) + ",\n"
+        out = out + spaces(8) + "\"module\": " + json_q(pairs.get(i).b) + ",\n"
+        out = out + spaces(8) + "\"symbols\": " + json_str_list(nms, 4) + "\n"
+        out = out + spaces(6) + "}"
+        if (i + 1 < pairs.len()) { out = out + "," }
+        i = i + 1
+    }
+    return out + "\n" + spaces(4) + "]"
+}
+
+# A symbol row for graph.json.
+struct SymRow {
+    mod<String>,
+    name<String>,
+    rel<String>,
+    kind<String>,
+    signature<String>,
+    summary<String>
+}
+
+cmp_symrows(a<SymRow>, b<SymRow>)<Int> -> {
+    c<Int> = a.mod.compare(b.mod)
+    if (c != 0) { return c }
+    return a.name.compare(b.name)
+}
+
+sort_symrows(v<their<Vec<SymRow>>>) -> {
+    n<Int> = v.len()
+    if (n <= 1) { return }
+    ord<Vec<Int>> = ord_sort_symrows(v)
+    src<Vec<SymRow>> = Vec<SymRow>()
+    i<Int> = 0
+    while (i < n) { src.push(v.get(i)); i = i + 1 }
+    v.clear()
+    i = 0
+    while (i < n) { v.push(src.get(ord.get(i))); i = i + 1 }
+}
+
+ord_sort_symrows(v<Vec<SymRow>>)<Vec<Int>> -> {
+    n<Int> = v.len()
+    keys<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < n) {
+        el<SymRow> = v.get(i)
+        keys.push(el.mod + chr(1) + el.name)
+        i = i + 1
+    }
+    ord<Vec<Int>> = Vec<Int>()
+    i = 0
+    while (i < n) { ord.push(i); i = i + 1 }
+    k<Int> = 1
+    while (k < n) {
+        ck<Int> = ord.get(k)
+        key<String> = keys.get(ck)
+        j<Int> = k - 1
+        while (j >= 0) {
+            if (keys.get(ord.get(j)).compare(key) <= 0) { break }
+            ord.set(j + 1, ord.get(j))
+            j = j - 1
+        }
+        ord.set(j + 1, ck)
+        k = k + 1
+    }
+    return ord
+}
+
+json_syms(g<their<Graph>>)<String> -> {
+    rows<Vec<SymRow>> = Vec<SymRow>()
+    i<Int> = 0
+    while (i < g.files.len()) {
+        fr<FileRec> = g.files.get(i)
+        md<String> = module_of(fr.rel)
+        j<Int> = 0
+        while (j < fr.symbols.len()) {
+            sy<Symbol> = fr.symbols.get(j)
+            if (sy.exported) {
+                rows.push(SymRow { mod = md, name = sy.name, rel = fr.rel, kind = sy.kind,
+                    signature = sy.signature, summary = doc_summary(sy.doc) })
+            }
+            j = j + 1
+        }
+        i = i + 1
+    }
+    sort_symrows(borrow(rows))
+    if (rows.len() == 0) { return "[]" }
+    out<String> = "["
+    i = 0
+    while (i < rows.len()) {
+        r<SymRow> = rows.get(i)
+        out = out + "\n" + spaces(6) + "{\n"
+        out = out + spaces(8) + "\"name\": " + json_q(r.name) + ",\n"
+        out = out + spaces(8) + "\"module\": " + json_q(r.mod) + ",\n"
+        out = out + spaces(8) + "\"file\": " + json_q(r.rel) + ",\n"
+        out = out + spaces(8) + "\"kind\": " + json_q(r.kind) + ",\n"
+        out = out + spaces(8) + "\"signature\": " + json_q(r.signature) + ",\n"
+        out = out + spaces(8) + "\"summary\": " + json_q(r.summary) + ",\n"
+        finv<Vec<String>> = symbol_fan_in(g, r.mod, r.name)
+        out = out + spaces(8) + "\"fan_in\": " + finv.len().to_string() + "\n"
+        out = out + spaces(6) + "}"
+        if (i + 1 < rows.len()) { out = out + "," }
+        i = i + 1
+    }
+    return out + "\n" + spaces(4) + "]"
+}
+
+json_edges(g<their<Graph>>)<String> -> {
+    if (g.edges.len() == 0) { return "[]" }
+    out<String> = "["
+    i<Int> = 0
+    while (i < g.edges.len()) {
+        ed<Edge> = g.edges.get(i)
+        out = out + "\n" + spaces(4) + "{\n"
+        out = out + spaces(6) + "\"type\": " + json_q(ed.etype) + ",\n"
+        out = out + spaces(6) + "\"from_module\": " + json_q(ed.from_module) + ",\n"
+        out = out + spaces(6) + "\"from_symbol\": " + json_q(ed.from_symbol) + ",\n"
+        if (ed.has_to_module) {
+            out = out + spaces(6) + "\"to_module\": " + json_q(ed.to_module) + ",\n"
+        }
+        out = out + spaces(6) + "\"to_symbol\": " + json_q(ed.to_symbol)
+        if (ed.has_flags) {
+            out = out + ",\n" + spaces(6) + "\"reexport\": " + bool_str(ed.reexport)
+            out = out + ",\n" + spaces(6) + "\"resolved\": " + bool_str(ed.resolved)
+        }
+        out = out + "\n" + spaces(4) + "}"
+        if (i + 1 < g.edges.len()) { out = out + "," }
+        i = i + 1
+    }
+    return out + "\n" + spaces(2) + "]"
+}
+
+json_graph(g<their<Graph>>)<String> -> {
+    out<String> = "{\n"
+    out = out + spaces(2) + "\"git_rev\": " + json_q(g.git_rev) + ",\n"
+    out = out + spaces(2) + "\"modules\": " + json_str_list(g.module_order, 1) + ",\n"
+    out = out + spaces(2) + "\"nodes\": {\n"
+    out = out + spaces(4) + "\"modules\": " + json_mods(g) + ",\n"
+    out = out + spaces(4) + "\"files\": " + json_files(g) + ",\n"
+    out = out + spaces(4) + "\"symbols\": " + json_syms(g) + "\n"
+    out = out + spaces(2) + "},\n"
+    out = out + spaces(2) + "\"edges\": " + json_edges(g) + "\n"
+    return out + "}"
+}
+
+# ----------------------------------------------------------- drift checker
+
+# Normalize embedded git revs so a later commit does not false-positive.
+norm_commit(text<String>)<String> -> {
+    t1<String> = norm_md_commit(text)
+    return norm_json_rev(t1)
+}
+
+norm_md_commit(text<String>)<String> -> {
+    out<String> = ""
+    i<Int> = 0
+    while (i < text.len()) {
+        p<Int> = text.index_of_from("commit: ", i)
+        if (p < 0) {
+            out = out + text.substring(i, text.len())
+            break
+        }
+        out = out + text.substring(i, p)
+        q<Int> = p + 8
+        r<Int> = 0
+        while (q + r < text.len() && is_hex(byte_at(text, q + r))) { r = r + 1 }
+        if (r >= 4) {
+            k<Int> = r
+            if (k > 40) { k = 40 }
+            out = out + "commit: X"
+            i = q + k
+        } else {
+            out = out + "commit: "
+            i = q
+        }
+    }
+    return out
+}
+
+norm_json_rev(text<String>)<String> -> {
+    pre<String> = lit_quote() + "git_rev" + lit_quote() + ":"
+    repl<String> = lit_quote() + "git_rev" + lit_quote() + ": " + lit_quote() + "X" + lit_quote()
+    out<String> = ""
+    i<Int> = 0
+    while (i < text.len()) {
+        p<Int> = text.index_of_from(pre, i)
+        if (p < 0) {
+            out = out + text.substring(i, text.len())
+            break
+        }
+        out = out + text.substring(i, p)
+        q<Int> = p + pre.len()
+        m<Int> = q
+        while (m < text.len() && is_ws(byte_at(text, m))) { m = m + 1 }
+        good<Bool> = false
+        endpos<Int> = q
+        if (m < text.len() && byte_at(text, m) == 34) {
+            h<Int> = m + 1
+            r<Int> = 0
+            while (h + r < text.len() && is_hex(byte_at(text, h + r))) { r = r + 1 }
+            k<Int> = r
+            if (k > 40) { k = 40 }
+            if (k >= 4 && h + k < text.len() && byte_at(text, h + k) == 34) {
+                good = true
+                endpos = h + k + 1
+            }
+        }
+        if (good) {
+            out = out + repl
+            i = endpos
+        } else {
+            out = out + pre
+            i = q
+        }
+    }
+    return out
+}
+
+# ---------------------------------------------------------------- emitting
+
+tmp_check_dir()<String> -> { return "/tmp/vyb_refman_check" }
+
+# Write every refman artifact into `outdir`; returns the names written.
+emit_all(root<String>, outdir<String>, g<their<Graph>>)<Vec<String>> -> {
+    run_sh("mkdir -p '" + outdir + "'")
+    names<Vec<String>> = Vec<String>()
+    write_text(join_path(outdir, "index.md"), render_index(g))
+    names.push("index.md")
+    i<Int> = 0
+    while (i < g.module_order.len()) {
+        mod<String> = g.module_order.get(i)
+        write_text(join_path(outdir, page_of(mod)), render_module(mod, g))
+        names.push(page_of(mod))
+        i = i + 1
+    }
+    write_text(join_path(outdir, "functions.md"), cross_page(g, "Functions", "fn"))
+    names.push("functions.md")
+    write_text(join_path(outdir, "types.md"), cross_page(g, "Types (struct / enum)", "struct,enum"))
+    names.push("types.md")
+    write_text(join_path(outdir, "aspects.md"), cross_page(g, "Aspects / binds", "aspect,bind"))
+    names.push("aspects.md")
+    write_text(join_path(outdir, "runtime.md"), runtime_page(g))
+    names.push("runtime.md")
+    write_text(join_path(outdir, "interfaces.md"), render_interfaces(g))
+    names.push("interfaces.md")
+    write_text(join_path(outdir, "graph.json"), json_graph(g))
+    names.push("graph.json")
+    write_text(join_path(outdir, "PLAN.md"), slurp(join_path(root, "docs/refman/PLAN.md")))
+    names.push("PLAN.md")
+    patch_guide(outdir, g)
+    return names
+}
+
+# ------------------------------------------------------------------- driver
+
+# The program's argv, parsed from /proc/self/cmdline (NUL separated).
+argv_of()<Vec<String>> -> {
+    raw<String> = slurp("/proc/self/cmdline")
+    out<Vec<String>> = Vec<String>()
+    cur<String> = ""
+    i<Int> = 0
+    while (i < raw.len()) {
+        c<Int> = byte_at(raw, i)
+        if (c == 0) {
+            if (cur.len() > 0) { out.push(cur) }
+            cur = ""
+        } else {
+            cur = cur + chr(c)
+        }
+        i = i + 1
+    }
+    if (cur.len() > 0) { out.push(cur) }
+    return out
+}
+
+# Value following `flag` in `argv` ("" when absent); accepts --flag=value too.
+opt(argv<Vec<String>>, flag<String>)<String> -> {
+    i<Int> = 0
+    while (i < argv.len()) {
+        if (argv.get(i) == flag && i + 1 < argv.len()) { return argv.get(i + 1) }
+        if (starts_with(argv.get(i), flag + "=")) {
+            return argv.get(i).substring(flag.len() + 1, argv.get(i).len())
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+has(argv<Vec<String>>, flag<String>)<Bool> -> { return in_list(argv, flag) }
+
+git_rev(root<String>)<String> -> {
+    out<String> = trim(run_sh("git -C '" + root + "' rev-parse HEAD 2>/dev/null"))
+    if (out.len() == 0) { return "unknown" }
+    return out
+}
+
+# --check via env var (the compiler consumes a bare --check for itself).
+check_env()<Bool> -> {
+    v<String> = env_get("VYB_REFMAN_CHECK") else ""
+    if (v == "1" || v == "true" || v == "yes" || v == "on") { return true }
+    return false
+}
+
+main()<Int> -> {
+    argv<Vec<String>> = argv_of()
+
+    # the script path is the first argv entry ending in ".vyb"
+    runner<String> = ""
+    sk<Int> = 0
+    while (sk < argv.len()) {
+        if (ends_with(argv.get(sk), ".vyb")) { runner = argv.get(sk); sk = argv.len() } else { sk = sk + 1 }
+    }
+    repo_root_global<String> = ""
+    if (runner.len() > 0) { repo_root_global = dirname_of(dirname_of(runner)) }
+    if (repo_root_global.len() == 0 || !dir_exists(join_path(repo_root_global, "stdlib"))) {
+        repo_root_global = "."
+    }
+
+    stdlib<String> = opt(argv, "--stdlib")
+    if (stdlib.len() == 0) { stdlib = join_path(repo_root_global, "stdlib") }
+    rpath<String> = opt(argv, "--runtime")
+    if (rpath.len() == 0) { rpath = join_path(repo_root_global, "runtime/vyb_runtime.c") }
+    outdir<String> = opt(argv, "--emit-dir")
+    if (outdir.len() == 0) { outdir = join_path(repo_root_global, "docs/refman") }
+
+    checking<Bool> = false
+    if (has(argv, "--check")) { checking = true }
+    ckflag<String> = opt(argv, "--check")
+    if (ckflag.len() > 0) { checking = true }
+    if (has(argv, "check")) { checking = true }
+    if (check_env()) { checking = true }
+
+    # discover + parse every *.vyb under stdlib (sorted string order)
+    found<Vec<String>> = list_vyb(stdlib)
+    rels<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < found.len()) {
+        p<String> = found.get(i)
+        if (repo_root_global.len() > 0 && starts_with(p, repo_root_global + "/")) {
+            p = p.substring(repo_root_global.len() + 1, p.len())
+        }
+        rels.push(p)
+        i = i + 1
+    }
+    sort_strs(borrow(rels))
+
+    g<Graph> = Graph { module_order = Vec<String>(), files = Vec<FileRec>(), edges = Vec<Edge>(),
+        omni = Vec<OmniRef>(), rt_keys = Vec<String>(), rt_lines = Vec<Int>(), git_rev = "" }
+    i = 0
+    while (i < rels.len()) {
+        rel<String> = rels.get(i)
+        g.files.push(parse_file(slurp(join_path(repo_root_global, rel)), rel))
+        i = i + 1
+    }
+    rm<RuntimeMap> = runtime_map(slurp(rpath))
+    g.rt_keys = rm.keys
+    g.rt_lines = rm.lines
+    build_graph(borrow(g))
+    g.git_rev = git_rev(repo_root_global)
+
+    problems<Vec<String>> = Vec<String>()
+    e<Int> = 0
+    while (e < g.edges.len()) {
+        ed<Edge> = g.edges.get(e)
+        if (ed.etype == "import" && !ed.resolved) {
+            problems.push("unresolved import " + ed.to_module + "::" + ed.to_symbol +
+                          " (by " + ed.from_module + ")")
+        }
+        e = e + 1
+    }
+
+    if (checking) {
+        td<String> = tmp_check_dir()
+        run_sh("rm -rf '" + td + "' && mkdir -p '" + td + "'")
+        emit_all(repo_root_global, td, borrow(g))
+        names<Vec<String>> = list_dir_names(td)
+        sort_strs(borrow(names))
+        i = 0
+        while (i < names.len()) {
+            nm<String> = names.get(i)
+            cur<String> = join_path(outdir, nm)
+            if (!path_exists(cur)) {
+                problems.push("missing: " + nm)
+            } else {
+                a<String> = slurp(cur)
+                b<String> = slurp(join_path(td, nm))
+                if (norm_commit(a) != norm_commit(b)) { problems.push("drift: " + nm) }
+            }
+            i = i + 1
+        }
+        cg<Vec<String>> = check_guide(repo_root_global, outdir)
+        i = 0
+        while (i < cg.len()) { problems.push(cg.get(i)); i = i + 1 }
+        gp<Vec<String>> = guide_structure_problems(outdir, borrow(g))
+        i = 0
+        while (i < gp.len()) { problems.push(gp.get(i)); i = i + 1 }
+
+        if (problems.len() > 0) {
+            np<Int> = problems.len()
+            sort_strs(borrow(problems))
+            dedupe_strs(borrow(problems))
+            println("refman --check: " + np.to_string() + " problem(s)")
+            i = 0
+            while (i < problems.len()) {
+                println("  - " + problems.get(i))
+                i = i + 1
+            }
+            exit(1)
+        }
+        println("refman --check OK (" + rels.len().to_string() + " files, " +
+                g.module_order.len().to_string() + " modules, " + g.edges.len().to_string() + " edges)")
+        exit(0)
+    }
+
+    emit_all(repo_root_global, outdir, borrow(g))
+    wrote<Vec<String>> = list_dir_names(outdir)
+    println("refman: wrote " + wrote.len().to_string() + " files to " + outdir)
+    exit(0)
+    return 0
+}
