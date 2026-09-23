@@ -1,0 +1,166 @@
+// @test: png - pure-Vyb PNG encoder (stored-deflate container, chunk CRCs, adler32)
+// @description: #329 the stdlib png module. Encodes a 2x2 RGB image and walks the
+//   resulting container byte-by-byte: signature, IHDR geometry/bit-depth/colour
+//   type, IDAT zlib framing (header, stored-block LEN/NLEN, adler32), and the CRC
+//   of every chunk recomputed with `png_crc32` and compared to the stored value.
+//   The zlib stream is decompressed INDEPENDENTLY with `archive::inflate_def` and
+//   compared against the expected filtered scanlines, and the encoder output is
+//   written + read back through `io` to prove the byte buffer survives a file
+//   round-trip. Malformed geometry and pixel buffers are rejected, not encoded.
+// @category: stdlib, png, image, encoding, regression
+// @expect: pass
+// @expect-output: png-ok
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+
+import png::{png_crc32, png_encode, png_rgb_fill, png_rgb_get, png_rgb_set, png_write}
+import archive::{inflate_def}
+import io::{close, open_read, read_bytes}
+
+// Big-endian 4-byte integer at `off` in a byte buffer.
+be32(v<Vec<UInt8>>, off<Int>)<Int> -> {
+    return ((v.get(off) as Int) & 0xFF) * 16777216 + ((v.get(off + 1) as Int) & 0xFF) * 65536 + ((v.get(off + 2) as Int) & 0xFF) * 256 + ((v.get(off + 3) as Int) & 0xFF)
+}
+
+// ASCII tag (4 bytes) at `off`, as a String.
+tag_at(v<Vec<UInt8>>, off<Int>)<String> -> {
+    s<String> = ""
+    i<Int> = 0
+    for (i in 0..3) { s = s.concat(String::from_byte((v.get(off + i) as Int) & 0xFF)) }
+    return s
+}
+
+// The bytes [a, b) of a byte buffer as a String (for the inflate cross-check).
+slice_str(v<Vec<UInt8>>, a<Int>, b<Int>)<String> -> {
+    s<String> = ""
+    i<Int> = a
+    while (i < b) {
+        s = s.concat(String::from_byte((v.get(i) as Int) & 0xFF))
+        i = i + 1
+    }
+    return s
+}
+
+main()<Int> -> {
+    red<Int> = 0xD31E1E
+    green<Int> = 0x1E8C32
+    blue<Int> = 0x1E3CD3
+    white<Int> = 0xFFFFFF
+
+    # 1. Build a 2x2 canvas through the module's own buffer helpers.
+    buf<Vec<UInt8>> = png_rgb_fill(2, 2, 0x000000)
+    if (buf.len() != 12) { println("fill buffer length " + buf.len().to_string()); return 1 }
+    if (png_rgb_set(borrow(buf), 2, 0, 0, red) != 0) { return 2 }
+    if (png_rgb_set(borrow(buf), 2, 1, 0, green) != 0) { return 3 }
+    if (png_rgb_set(borrow(buf), 2, 0, 1, blue) != 0) { return 4 }
+    if (png_rgb_set(borrow(buf), 2, 1, 1, white) != 0) { return 5 }
+    if (png_rgb_get(buf, 2, 0, 0) != red) { return 6 }
+    if (png_rgb_get(buf, 2, 1, 0) != green) { return 7 }
+    if (png_rgb_get(buf, 2, 0, 1) != blue) { return 8 }
+    if (png_rgb_get(buf, 2, 1, 1) != white) { return 9 }
+    if (png_rgb_set(borrow(buf), 2, 2, 0, red) != 1) { return 10 }   # x out of range
+
+    # 2. Encode: 8 (sig) + 25 (IHDR) + 37 (IDAT incl. 25-byte zlib stream) + 12 (IEND)
+    p<Vec<UInt8>> = png_encode(2, 2, buf)
+    if (p.len() != 82) { println("png length " + p.len().to_string()); return 11 }
+
+    # 3. Signature.
+    if (((p.get(0) as Int) & 0xFF) != 137) { return 12 }
+    if (((p.get(1) as Int) & 0xFF) != 80) { return 13 }
+    if (((p.get(2) as Int) & 0xFF) != 78) { return 14 }
+    if (((p.get(3) as Int) & 0xFF) != 71) { return 15 }
+    if (((p.get(4) as Int) & 0xFF) != 13) { return 16 }
+    if (((p.get(5) as Int) & 0xFF) != 10) { return 17 }
+    if (((p.get(6) as Int) & 0xFF) != 26) { return 18 }
+    if (((p.get(7) as Int) & 0xFF) != 10) { return 19 }
+
+    # 4. IHDR: length, tag, geometry, format bytes, and its CRC (over type + data).
+    if (be32(p, 8) != 13) { return 20 }
+    if (tag_at(p, 12) != "IHDR") { return 21 }
+    if (be32(p, 16) != 2) { return 22 }
+    if (be32(p, 20) != 2) { return 23 }
+    if (((p.get(24) as Int) & 0xFF) != 8) { return 24 }    # bit depth
+    if (((p.get(25) as Int) & 0xFF) != 2) { return 25 }    # colour type: RGB
+    if (((p.get(26) as Int) & 0xFF) != 0) { return 26 }    # compression
+    if (((p.get(27) as Int) & 0xFF) != 0) { return 27 }    # filter
+    if (((p.get(28) as Int) & 0xFF) != 0) { return 28 }    # interlace
+    if (be32(p, 29) != png_crc32(p, 12, 29)) { println("IHDR CRC mismatch"); return 29 }
+
+    # 5. IDAT: 25-byte zlib stream (7-byte framing + 14 raw + 4 adler32).
+    if (be32(p, 33) != 25) { return 30 }
+    if (tag_at(p, 37) != "IDAT") { return 31 }
+    if (((p.get(41) as Int) & 0xFF) != 0x78) { return 32 }   # zlib CMF
+    if (((p.get(42) as Int) & 0xFF) != 0x01) { return 33 }   # zlib FLG
+    if (((p.get(43) as Int) & 0xFF) != 0x01) { return 34 }   # BFINAL + stored block
+    if (((p.get(44) as Int) & 0xFF) != 14) { return 35 }     # LEN low byte
+    if (((p.get(45) as Int) & 0xFF) != 0) { return 36 }      # LEN high byte
+    if (((p.get(46) as Int) & 0xFF) != 241) { return 37 }    # NLEN low byte of ~14
+    if (((p.get(47) as Int) & 0xFF) != 255) { return 38 }    # NLEN high byte
+    if (be32(p, 66) != png_crc32(p, 37, 66)) { println("IDAT CRC mismatch"); return 39 }
+
+    # 6. The stored-block payload must be the expected filtered scanlines.
+    #    row 0: filter 0 + red(D31E1E) + green(1E8C32)
+    #    row 1: filter 0 + blue(1E3CD3) + white(FFFFFF)
+    if (((p.get(48) as Int) & 0xFF) != 0) { return 40 }
+    if (((p.get(49) as Int) & 0xFF) != 211) { return 41 }    # 0xD3
+    if (((p.get(52) as Int) & 0xFF) != 30) { return 42 }     # 0x1E
+    if (((p.get(55) as Int) & 0xFF) != 0) { return 43 }      # second row filter byte
+    if (((p.get(56) as Int) & 0xFF) != 30) { return 44 }     # 0x1E
+    if (((p.get(59) as Int) & 0xFF) != 255) { return 45 }    # white R
+
+    # 7. adler32 of the raw scanlines, computed here independently.
+    a<Int> = 1
+    b<Int> = 0
+    i<Int> = 48
+    while (i < 62) {
+        a = (a + ((p.get(i) as Int) & 0xFF)) % 65521
+        b = (b + a) % 65521
+        i = i + 1
+    }
+    ad<Int> = be32(p, 62)
+    if (ad != b * 65536 + a) { println("adler32 mismatch"); return 46 }
+
+    # 8. IEND: empty, tag correct, CRC over the tag alone.
+    if (be32(p, 70) != 0) { return 47 }
+    if (tag_at(p, 74) != "IEND") { return 48 }
+    if (be32(p, 78) != png_crc32(p, 74, 78)) { println("IEND CRC mismatch"); return 49 }
+
+    # 9. Independent decompression: feed the raw DEFLATE stream (skipping the
+    #    2-byte zlib header) to the archive module's inflate and compare bytes.
+    raw<Vec<Int>> = inflate_def(slice_str(p, 43, 62))
+    if (raw.len() != 14) { println("inflate produced " + raw.len().to_string()); return 50 }
+    if (raw.get(0) != 0 || raw.get(1) != 211 || raw.get(2) != 30 || raw.get(3) != 30) { return 51 }
+    if (raw.get(4) != 30 || raw.get(5) != 140 || raw.get(6) != 50 || raw.get(7) != 0) { return 52 }
+    if (raw.get(8) != 30 || raw.get(9) != 60 || raw.get(10) != 211) { return 53 }
+    if (raw.get(11) != 255 || raw.get(12) != 255 || raw.get(13) != 255) { return 54 }
+
+    # 10. File round-trip: write through the module, read back through io.
+    path<String> = "/tmp/vyb_png_test.png"
+    match (png_write(path, 2, 2, buf)) {
+        ok -> {
+            match (open_read(path)) {
+                f -> {
+                    back<Vec<UInt8>> = Vec()
+                    match (read_bytes(f)) { data -> { back = data } ? -> { close(f); return 56 } }
+                    close(f)
+                    if (back.len() != p.len()) { println("file length " + back.len().to_string()); return 57 }
+                    k<Int> = 0
+                    for (k in 0..p.len()-1) {
+                        if (((back.get(k) as Int) & 0xFF) != ((p.get(k) as Int) & 0xFF)) { return 58 }
+                    }
+                }
+                ? -> { return 55 }
+            }
+        }
+        ? -> { return 59 }
+    }
+
+    # 11. Invalid input is rejected with an empty buffer, never a malformed file.
+    if (png_encode(0, 2, buf).len() != 0) { return 60 }
+    if (png_encode(2, 0, buf).len() != 0) { return 61 }
+    short<Vec<UInt8>> = png_rgb_fill(1, 1, white)
+    if (png_encode(2, 2, short).len() != 0) { return 62 }
+
+    println("png-ok")
+    return 0
+}

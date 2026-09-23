@@ -1,9 +1,10 @@
 {
-  "git_rev": "4a2d5ef2f0ff179d7b7878dee2122822a710d1f4",
+  "git_rev": "2713abf741cdfefdb336f8d08b280812b86205f9",
   "modules": [
     "agents",
     "archive",
     "asyncs",
+    "base64",
     "chain",
     "channels",
     "collections",
@@ -16,6 +17,7 @@
     "https",
     "io",
     "network",
+    "png",
     "prelude",
     "process",
     "qt",
@@ -57,6 +59,15 @@
           "stdlib/asyncs/mod.vyb"
         ],
         "exported": 11,
+        "fan_in": 0,
+        "fan_out": 0
+      },
+      {
+        "name": "base64",
+        "files": [
+          "stdlib/base64/mod.vyb"
+        ],
+        "exported": 4,
         "fan_in": 0,
         "fan_out": 0
       },
@@ -160,7 +171,7 @@
           "stdlib/io/mod.vyb"
         ],
         "exported": 19,
-        "fan_in": 1,
+        "fan_in": 2,
         "fan_out": 0
       },
       {
@@ -171,6 +182,15 @@
         "exported": 40,
         "fan_in": 3,
         "fan_out": 0
+      },
+      {
+        "name": "png",
+        "files": [
+          "stdlib/png/mod.vyb"
+        ],
+        "exported": 8,
+        "fan_in": 0,
+        "fan_out": 1
       },
       {
         "name": "prelude",
@@ -363,6 +383,16 @@
           "async_connect",
           "async_send",
           "async_recv"
+        ]
+      },
+      {
+        "path": "stdlib/base64/mod.vyb",
+        "module": "base64",
+        "symbols": [
+          "b64_char",
+          "b64_val",
+          "b64_encode",
+          "b64_decode"
         ]
       },
       {
@@ -717,6 +747,20 @@
           "async_tcp_read",
           "async_udp_send_to",
           "async_udp_recv_from"
+        ]
+      },
+      {
+        "path": "stdlib/png/mod.vyb",
+        "module": "png",
+        "symbols": [
+          "png_crc32",
+          "png_rgb_fill",
+          "png_rgb_set",
+          "png_rgb_get",
+          "png_push_be32",
+          "png_push_ascii",
+          "png_encode",
+          "png_write"
         ]
       },
       {
@@ -1483,6 +1527,42 @@
         "kind": "fn",
         "signature": "async_yield()<Int> ->",
         "summary": "Cooperative yield: suspend the current fiber and reschedule it (a no-op if",
+        "fan_in": 0
+      },
+      {
+        "name": "b64_char",
+        "module": "base64",
+        "file": "stdlib/base64/mod.vyb",
+        "kind": "fn",
+        "signature": "b64_char(k<Int>)<String> ->",
+        "summary": "The alphabet character for a 6-bit group value `k` (0..63), as a 1-byte String.",
+        "fan_in": 0
+      },
+      {
+        "name": "b64_decode",
+        "module": "base64",
+        "file": "stdlib/base64/mod.vyb",
+        "kind": "fn",
+        "signature": "b64_decode(s<String>)<String?> ->",
+        "summary": "RFC 4648 \u00a74 decode of `s`. Absent (`String?()`) when `s` is not a well-formed",
+        "fan_in": 0
+      },
+      {
+        "name": "b64_encode",
+        "module": "base64",
+        "file": "stdlib/base64/mod.vyb",
+        "kind": "fn",
+        "signature": "b64_encode(data<String>)<String> ->",
+        "summary": "RFC 4648 \u00a74 base64 of `data`, padded. Every input byte is consumed; the tail",
+        "fan_in": 0
+      },
+      {
+        "name": "b64_val",
+        "module": "base64",
+        "file": "stdlib/base64/mod.vyb",
+        "kind": "fn",
+        "signature": "b64_val(c<Int>)<Int> ->",
+        "summary": "The 6-bit value of alphabet character `c` (a byte code), or -1 if `c` is not in",
         "fan_in": 0
       },
       {
@@ -3283,7 +3363,7 @@
         "kind": "struct",
         "signature": "struct File {",
         "summary": "An open file. Only ever constructed valid; `path` records the target. The open",
-        "fan_in": 0
+        "fan_in": 1
       },
       {
         "name": "FileFlag",
@@ -3310,7 +3390,7 @@
         "kind": "fn",
         "signature": "close(f<File>)<Bool?> ->",
         "summary": "Close an open file. Returns `Bool?` -- present on success, absent on failure.",
-        "fan_in": 1
+        "fan_in": 2
       },
       {
         "name": "error_code",
@@ -3382,7 +3462,7 @@
         "kind": "fn",
         "signature": "open_write(path<String>)<File?> ->",
         "summary": "Convenience: create/truncate a file for writing (`File?`, absent on failure).",
-        "fan_in": 0
+        "fan_in": 1
       },
       {
         "name": "read_all",
@@ -3436,7 +3516,7 @@
         "kind": "fn",
         "signature": "write_bytes(f<File>, data<Vec<UInt8>>)<Int?> ->",
         "summary": "Write the raw bytes of `data` to the file. This is the explicit binary-write",
-        "fan_in": 0
+        "fan_in": 1
       },
       {
         "name": "write_str",
@@ -3805,6 +3885,78 @@
         "kind": "fn",
         "signature": "udp_send_to(s<UdpSocket>, ip<String>, port<Int>, data<String>)<Int?> ->",
         "summary": "Send one datagram to `ip:port` (the socket need not be connected). Returns",
+        "fan_in": 0
+      },
+      {
+        "name": "png_crc32",
+        "module": "png",
+        "file": "stdlib/png/mod.vyb",
+        "kind": "fn",
+        "signature": "png_crc32(v<Vec<UInt8>>, a<Int>, b<Int>)<Int> ->",
+        "summary": "CRC32 (IEEE 802.3, reflected, polynomial 0xEDB88320) over bytes [a, b) of `v`.",
+        "fan_in": 0
+      },
+      {
+        "name": "png_encode",
+        "module": "png",
+        "file": "stdlib/png/mod.vyb",
+        "kind": "fn",
+        "signature": "png_encode(w<Int>, h<Int>, rgb<Vec<UInt8>>)<Vec<UInt8>> ->",
+        "summary": "Encode `rgb` (w * h * 3 bytes, row-major RGB) as a PNG byte buffer. Returns an",
+        "fan_in": 0
+      },
+      {
+        "name": "png_push_ascii",
+        "module": "png",
+        "file": "stdlib/png/mod.vyb",
+        "kind": "fn",
+        "signature": "png_push_ascii(v<their<Vec<UInt8>>>, s<String>)<Int> ->",
+        "summary": "Append the ASCII bytes of `s` (chunk type tags such as \"IHDR\").",
+        "fan_in": 0
+      },
+      {
+        "name": "png_push_be32",
+        "module": "png",
+        "file": "stdlib/png/mod.vyb",
+        "kind": "fn",
+        "signature": "png_push_be32(v<their<Vec<UInt8>>>, x<Int>)<Int> ->",
+        "summary": "Append `x` big-endian as 4 bytes (PNG's integer wire form).",
+        "fan_in": 0
+      },
+      {
+        "name": "png_rgb_fill",
+        "module": "png",
+        "file": "stdlib/png/mod.vyb",
+        "kind": "fn",
+        "signature": "png_rgb_fill(w<Int>, h<Int>, color<Int>)<Vec<UInt8>> ->",
+        "summary": "A new white-unless-`color` canvas of `w * h * 3` bytes. `color` is packed",
+        "fan_in": 0
+      },
+      {
+        "name": "png_rgb_get",
+        "module": "png",
+        "file": "stdlib/png/mod.vyb",
+        "kind": "fn",
+        "signature": "png_rgb_get(buf<Vec<UInt8>>, w<Int>, x<Int>, y<Int>)<Int> ->",
+        "summary": "The packed 0xRRGGBB colour of the pixel at (x, y) in a `w`-wide buffer.",
+        "fan_in": 0
+      },
+      {
+        "name": "png_rgb_set",
+        "module": "png",
+        "file": "stdlib/png/mod.vyb",
+        "kind": "fn",
+        "signature": "png_rgb_set(buf<their<Vec<UInt8>>>, w<Int>, x<Int>, y<Int>, color<Int>)<Int> ->",
+        "summary": "Set the pixel at (x, y) in a `w`-wide buffer to packed 0xRRGGBB `color`.",
+        "fan_in": 0
+      },
+      {
+        "name": "png_write",
+        "module": "png",
+        "file": "stdlib/png/mod.vyb",
+        "kind": "fn",
+        "signature": "png_write(path<String>, w<Int>, h<Int>, rgb<Vec<UInt8>>)<Bool?> ->",
+        "summary": "Write the PNG for `rgb` to `path`. Present on success; absent when the PNG",
         "fan_in": 0
       },
       {
@@ -6274,6 +6426,20 @@
     },
     {
       "type": "call",
+      "from_module": "base64",
+      "from_symbol": "b64_decode",
+      "to_module": "base64",
+      "to_symbol": "b64_val"
+    },
+    {
+      "type": "call",
+      "from_module": "base64",
+      "from_symbol": "b64_encode",
+      "to_module": "base64",
+      "to_symbol": "b64_char"
+    },
+    {
+      "type": "call",
       "from_module": "chain",
       "from_symbol": "append",
       "to_module": "chain",
@@ -7300,6 +7466,55 @@
       "from_symbol": "net_error",
       "to_module": "network",
       "to_symbol": "socket_error_message"
+    },
+    {
+      "type": "call",
+      "from_module": "png",
+      "from_symbol": "png_encode",
+      "to_module": "png",
+      "to_symbol": "png_crc32"
+    },
+    {
+      "type": "call",
+      "from_module": "png",
+      "from_symbol": "png_encode",
+      "to_module": "png",
+      "to_symbol": "png_push_ascii"
+    },
+    {
+      "type": "call",
+      "from_module": "png",
+      "from_symbol": "png_encode",
+      "to_module": "png",
+      "to_symbol": "png_push_be32"
+    },
+    {
+      "type": "call",
+      "from_module": "png",
+      "from_symbol": "png_write",
+      "to_module": "io",
+      "to_symbol": "close"
+    },
+    {
+      "type": "call",
+      "from_module": "png",
+      "from_symbol": "png_write",
+      "to_module": "io",
+      "to_symbol": "open_write"
+    },
+    {
+      "type": "call",
+      "from_module": "png",
+      "from_symbol": "png_write",
+      "to_module": "io",
+      "to_symbol": "write_bytes"
+    },
+    {
+      "type": "call",
+      "from_module": "png",
+      "from_symbol": "png_write",
+      "to_module": "png",
+      "to_symbol": "png_encode"
     },
     {
       "type": "call",
@@ -8643,6 +8858,42 @@
     },
     {
       "type": "import",
+      "from_module": "png",
+      "from_symbol": "",
+      "to_module": "io",
+      "to_symbol": "File",
+      "reexport": false,
+      "resolved": true
+    },
+    {
+      "type": "import",
+      "from_module": "png",
+      "from_symbol": "",
+      "to_module": "io",
+      "to_symbol": "close",
+      "reexport": false,
+      "resolved": true
+    },
+    {
+      "type": "import",
+      "from_module": "png",
+      "from_symbol": "",
+      "to_module": "io",
+      "to_symbol": "open_write",
+      "reexport": false,
+      "resolved": true
+    },
+    {
+      "type": "import",
+      "from_module": "png",
+      "from_symbol": "",
+      "to_module": "io",
+      "to_symbol": "write_bytes",
+      "reexport": false,
+      "resolved": true
+    },
+    {
+      "type": "import",
       "from_module": "prelude",
       "from_symbol": "",
       "to_module": "core",
@@ -8829,6 +9080,13 @@
       "to_symbol": "rand_range",
       "reexport": false,
       "resolved": true
+    },
+    {
+      "type": "proseRef",
+      "from_module": "base64",
+      "from_symbol": "b64_decode",
+      "to_module": "base64",
+      "to_symbol": "b64_encode"
     },
     {
       "type": "proseRef",
