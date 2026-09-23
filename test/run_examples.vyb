@@ -1,0 +1,289 @@
+// @not-a-test: true
+# run_examples.vyb -- run Vyb demo and example programs (Vyb port of
+# test/run_examples.py; part of the #226 "no Python in the test path" work).
+#
+# The runner treats top-level demos/examples as executable entrypoints and
+# checks example support modules with semantic-only validation:
+#
+#   demos/*.vyb                        run (or compile with --no-run)
+#   examples/*.vyb                     run
+#   examples/stdlib_demo/main.vyb      run
+#   examples/module_path_demo/main.vyb run, with --module-path <its modules dir>
+#   examples/modules/**/*.vyb          semantic-only
+#   examples/module_path_demo/modules/**/*.vyb   semantic-only
+#
+# Usage (from the repo root):
+#   VYB_STDLIB=$PWD/stdlib build/vyb test/run_examples.vyb --vyb build/vyb
+#   ... --no-run            # compile entrypoints with --no-execute
+#   ... --timeout 10        # per-entry timeout in seconds
+#   ... -v                  # show stdout for passing examples
+#
+# Options: --vyb PATH  --no-run  --timeout N  -v|-vv  --help
+#
+# Porting notes (the same ones as test/run_tests.vyb): the language still has no
+# argv or directory-listing primitive, so flags are read from
+# `/proc/self/cmdline` and discovery uses `find | sort`. The compiler build this
+# was written against lacks `String::to_int`, hence `digits_to_int`.
+import io::{close, File, open_read, open_write, read_all, write_str}
+import process::{exec_output}
+import fs::{mkdir}
+
+# ---------------------------------------------------------------- small helpers
+
+# Index of the last '/' in `p`, or -1.
+last_slash(p<String>)<Int> -> {
+    i<Int> = p.len() - 1
+    while (i >= 0) {
+        if (((p.char_at(i) as Int) & 0xFF) == 47) { return i }
+        i = i - 1
+    }
+    return -1
+}
+
+# Directory part of `p` ("" when there is no slash).
+dirname_of(p<String>)<String> -> {
+    i<Int> = last_slash(p)
+    if (i < 0) { return "" }
+    return p.substring(0, i)
+}
+
+# Strip leading/trailing whitespace (spaces, tabs, CR, LF) from `s`.
+trim(s<String>)<String> -> {
+    a<Int> = 0
+    n<Int> = s.len()
+    while (a < n) {
+        c<Int> = (s.char_at(a) as Int) & 0xFF
+        if (c == 32 || c == 9 || c == 13 || c == 10) { a = a + 1 } else { break }
+    }
+    b<Int> = n
+    while (b > a) {
+        c<Int> = (s.char_at(b - 1) as Int) & 0xFF
+        if (c == 32 || c == 9 || c == 13 || c == 10) { b = b - 1 } else { break }
+    }
+    if (b <= a) { return "" }
+    return s.substring(a, b)
+}
+
+# Decimal value of a digit string (stops at the first non-digit).
+digits_to_int(s<String>)<Int> -> {
+    t<String> = trim(s)
+    n<Int> = 0
+    i<Int> = 0
+    while (i < t.len()) {
+        c<Int> = (t.char_at(i) as Int) & 0xFF
+        if (c < 48 || c > 57) { break }
+        n = n * 10 + (c - 48)
+        i = i + 1
+    }
+    return n
+}
+
+# Run `cmd` through the shell and return its stdout ("" when it could not run).
+run_sh(cmd<String>)<String> -> {
+    out<String> = ""
+    freedom {
+        match (exec_output(cmd)) {
+            s -> { out = s }
+            ? -> { out = "" }
+        }
+    }
+    return out
+}
+
+# Read a whole file as a String ("" when it cannot be read).
+slurp(path<String>)<String> -> {
+    text<String> = ""
+    match (open_read(path)) {
+        f -> {
+            match (read_all(f)) { s -> { text = s } ? -> { } }
+            close(f)
+        }
+        ? -> { }
+    }
+    return text
+}
+
+# Drop one trailing newline (Python prints captured stdout verbatim; `println`
+# adds a newline of its own).
+rstrip_nl(s<String>)<String> -> {
+    if (s.len() > 0 && (((s.char_at(s.len() - 1) as Int) & 0xFF) == 10)) { return s.substring(0, s.len() - 1) }
+    return s
+}
+
+# True when `p` is an existing directory.
+dir_exists(p<String>)<Bool> -> {
+    return (trim(run_sh("test -d '" + p + "' && echo yes || echo no")) == "yes")
+}
+
+# ------------------------------------------------------- command line (/proc)
+
+# The program's argv, parsed from `/proc/self/cmdline` (NUL separated).
+argv_of()<Vec<String>> -> {
+    raw<String> = slurp("/proc/self/cmdline")
+    out<Vec<String>> = Vec<String>()
+    cur<String> = ""
+    i<Int> = 0
+    while (i < raw.len()) {
+        c<Int> = (raw.char_at(i) as Int) & 0xFF
+        if (c == 0) {
+            if (cur.len() > 0) { out.push(cur) }
+            cur = ""
+        } else {
+            cur = cur + String::from_byte(c)
+        }
+        i = i + 1
+    }
+    if (cur.len() > 0) { out.push(cur) }
+    return out
+}
+
+# Value following `flag` in `argv`, or "" when it is absent.
+opt(argv<Vec<String>>, flag<String>)<String> -> {
+    i<Int> = 0
+    while (i < argv.len()) {
+        if (argv.get(i) == flag && i + 1 < argv.len()) { return argv.get(i + 1) }
+        i = i + 1
+    }
+    return ""
+}
+
+# True when `flag` appears in `argv`.
+has(argv<Vec<String>>, flag<String>)<Bool> -> {
+    i<Int> = 0
+    while (i < argv.len()) {
+        if (argv.get(i) == flag) { return true }
+        i = i + 1
+    }
+    return false
+}
+
+# ---------------------------------------------------------------- case listing
+
+# One demo/example check: `path` relative to the repo root, `mode` is
+# run|compile|semantic, `extra` are extra compiler flags for that case.
+struct Case {
+    path<String>,
+    mode<String>,
+    extra<String>
+}
+
+# Append every `*.vyb` under `dir` (depth-first, sorted) in `m` to `cases`.
+# `find | sort` stands in for the missing directory-listing primitive; paths come
+# back relative to the repo root because the shell runs there.
+append_found(cases<their<Vec<Case>>>, repoRoot<String>, dir<String>, m<String>, maxDepth<Int>)<Int> -> {
+    depth<String> = ""
+    if (maxDepth > 0) { depth = " -maxdepth " + maxDepth.to_string() }
+    listing<String> = run_sh("cd " + repoRoot + " && find " + dir + depth + " -name '*.vyb' 2>/dev/null | sort")
+    lines<Vec<String>> = listing.split("\n")
+    i<Int> = 0
+    added<Int> = 0
+    while (i < lines.len()) {
+        p<String> = trim(lines.get(i))
+        if (p.len() > 0) {
+            cases.push(Case { path = p, mode = m, extra = "" })
+            added = added + 1
+        }
+        i = i + 1
+    }
+    return added
+}
+
+# Build the case list the same way the Python runner did (same order).
+discover_cases(repoRoot<String>, runEntrypoints<Bool>)<Vec<Case>> -> {
+    m<String> = "compile"
+    if (runEntrypoints) { m = "run" }
+
+    cases<Vec<Case>> = Vec<Case>()
+    append_found(borrow(cases), repoRoot, "demos", m, 1)        # demos/*.vyb
+    append_found(borrow(cases), repoRoot, "examples", m, 1)     # examples/*.vyb
+
+    cases.push(Case { path = "examples/stdlib_demo/main.vyb", mode = m, extra = "" })
+    cases.push(Case { path = "examples/module_path_demo/main.vyb", mode = m, extra = "--module-path examples/module_path_demo/modules" })
+
+    # Support modules: semantic-only validation.
+    append_found(borrow(cases), repoRoot, "examples/modules", "semantic", 0)
+    append_found(borrow(cases), repoRoot, "examples/module_path_demo/modules", "semantic", 0)
+    return cases
+}
+
+# --------------------------------------------------------------------- running
+
+# Run one case; true when the compiler exited 0. `out`/`err` receive the
+# captured streams so the caller can print them on failure.
+run_case(repoRoot<String>, vyb<String>, c<Case>, timeoutS<Int>, out<String>, err<String>)<Bool> -> {
+    outPath<String> = "/tmp/vyb_example_" + timeoutS.to_string() + "_out.txt"
+    errPath<String> = outPath + ".err"
+
+    flags<String> = c.extra
+    if (c.mode == "compile") { flags = flags + " --no-execute" }
+    else if (c.mode == "semantic") { flags = flags + " --semantic-only" }
+
+    cmd<String> = "cd " + repoRoot + " && timeout " + timeoutS.to_string() + " " + vyb + " " + c.path + " " + flags
+    cmd = cmd + " > " + outPath + " 2> " + errPath + "; echo $?"
+    rcText<String> = trim(run_sh(cmd))
+    code<Int> = digits_to_int(rcText)
+
+    out = slurp(outPath)
+    err = slurp(errPath)
+    return (code == 0)
+}
+
+main()<Int> -> {
+    argv<Vec<String>> = argv_of()
+    if (has(argv, "--help") || has(argv, "-h")) {
+        println("usage: vyb test/run_examples.vyb [--vyb PATH] [--no-run] [--timeout N] [-v|-vv]")
+        return 0
+    }
+
+    # argv[0] is the compiler, argv[1] is this program: derive the repo root from
+    # this file's location (`test/run_examples.vyb` -> repo root).
+    runner<String> = ""
+    if (argv.len() > 1) { runner = argv.get(1) }
+    repoRoot<String> = dirname_of(dirname_of(runner))
+    if (repoRoot.len() == 0 || !dir_exists(repoRoot + "/test")) { repoRoot = "." }
+
+    vyb<String> = opt(argv, "--vyb")
+    if (vyb.len() == 0) { vyb = repoRoot + "/build/vyb" }
+    if (!dir_exists(dirname_of(vyb)) && dir_exists(repoRoot + "/build")) { vyb = repoRoot + "/build/vyb" }
+
+    verbose<Bool> = has(argv, "-v") || has(argv, "-vv")
+    runEntrypoints<Bool> = !has(argv, "--no-run")
+
+    timeoutS<Int> = 10
+    t<String> = opt(argv, "--timeout")
+    if (t.len() > 0) { timeoutS = digits_to_int(t) }
+    if (timeoutS < 1) { timeoutS = 1 }
+
+    cases<Vec<Case>> = discover_cases(repoRoot, runEntrypoints)
+
+    passed<Int> = 0
+    failed<Int> = 0
+    i<Int> = 0
+    while (i < cases.len()) {
+        c<Case> = cases.get(i)
+        out<String> = ""
+        err<String> = ""
+        ok<Bool> = run_case(repoRoot, vyb, c, timeoutS, out, err)
+        if (ok) {
+            println("PASS " + c.mode + ": " + c.path)
+            if (verbose && out.len() > 0) { println(rstrip_nl(out)) }
+            passed = passed + 1
+        } else {
+            println("FAIL " + c.mode + ": " + c.path)
+            if (out.len() > 0) { println(rstrip_nl(out)) }
+            if (err.len() > 0) { println(rstrip_nl(err)) }
+            failed = failed + 1
+        }
+        i = i + 1
+    }
+
+    println("")
+    println("Ran " + cases.len().to_string() + " demo/example checks")
+    println("Passed: " + passed.to_string())
+    println("Failed: " + failed.to_string())
+
+    # JIT mode prints main's return value and exits 0, so exit explicitly: the
+    # CMake `run-examples` target and CI read this process's status.
+    if (failed > 0) { exit(1) }
+    return 0
+}

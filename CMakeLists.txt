@@ -393,7 +393,7 @@ if(BUILD_TESTING)
 endif()
 
 add_custom_target(run-examples
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/test/run_examples.py --vyb $<TARGET_FILE:vyb>
+    COMMAND $<TARGET_FILE:vyb> ${CMAKE_SOURCE_DIR}/test/run_examples.vyb --vyb $<TARGET_FILE:vyb>
     DEPENDS vyb
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     COMMENT "Running Vyb demos and examples"
