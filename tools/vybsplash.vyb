@@ -1,0 +1,267 @@
+// @not-a-test: true
+# vybsplash.vyb -- the Vyb splash, rendered in pure Vyb.
+#
+# The opposite of a shell script with a checked-in banner image: this program
+# carries the wordmark as 5x7 bitmaps and renders it three ways -- truecolor
+# ANSI in the terminal, a PNG through stdlib/png, and a `data:` URL through
+# stdlib/base64. No Python, no image asset, no external tool.
+#
+#   build/vyb tools/vybsplash.vyb                    # terminal splash
+#   build/vyb tools/vybsplash.vyb --plain            # terminal splash, no escapes
+#   build/vyb tools/vybsplash.vyb --png vyb.png      # write the PNG logo
+#   build/vyb tools/vybsplash.vyb --data-url         # data:image/png;base64,...
+
+import io::{close, open_read, read_all}
+import term::{eprintln}
+import png::{png_rgb_fill, png_rgb_set, png_write}
+import base64::{b64_encode}
+
+# ------------------------------------------------------------- small helpers
+
+# Read a whole file as a String ("" when it cannot be opened).
+slurp(path<String>)<String> -> {
+    text<String> = ""
+    match (open_read(path)) {
+        f -> {
+            match (read_all(f)) { s -> { text = s } ? -> { } }
+            close(f)
+        }
+        ? -> { }
+    }
+    return text
+}
+
+# The program's argv, from /proc/self/cmdline (NUL separated). There is no argv
+# primitive in this build.
+argv_of()<Vec<String>> -> {
+    raw<String> = slurp("/proc/self/cmdline")
+    out<Vec<String>> = Vec<String>()
+    cur<String> = ""
+    i<Int> = 0
+    while (i < raw.len()) {
+        c<Int> = ((raw.char_at(i) as Int) & 0xFF)
+        if (c == 0) {
+            if (cur.len() > 0) { out.push(cur) }
+            cur = ""
+        } else {
+            cur = cur + String::from_byte(c)
+        }
+        i = i + 1
+    }
+    if (cur.len() > 0) { out.push(cur) }
+    return out
+}
+
+# ------------------------------------------------------------- the wordmark
+
+# The 5x7 bitmap rows of one letter, '#' on, '.' off. V, Y and B only: the
+# splash is three letters wide by design.
+glyph(letter<String>)<Vec<String>> -> {
+    rows<Vec<String>> = Vec<String>()
+    if (letter == "V") {
+        rows.push("#...#")
+        rows.push("#...#")
+        rows.push("#...#")
+        rows.push("#...#")
+        rows.push(".#.#.")
+        rows.push(".#.#.")
+        rows.push("..#..")
+    } else {
+        if (letter == "Y") {
+            rows.push("#...#")
+            rows.push("#...#")
+            rows.push(".#.#.")
+            rows.push("..#..")
+            rows.push("..#..")
+            rows.push("..#..")
+            rows.push("..#..")
+        } else {
+            rows.push(".###.")
+            rows.push("#...#")
+            rows.push("#...#")
+            rows.push(".###.")
+            rows.push("#...#")
+            rows.push("#...#")
+            rows.push(".###.")
+        }
+    }
+    return rows
+}
+
+# The bit at (col, row) of the whole wordmark, or 0 for the 1-column gaps and
+# anything past it. `col` is a cell index in a 17-cell-wide layout: V(0..4),
+# gap(5), Y(6..10), gap(11), B(12..16).
+mark_at(col<Int>, row<Int>)<Bool> -> {
+    if (row < 0 || row > 6) { return false }
+    letter<String> = ""
+    inner<Int> = 0
+    if (col >= 0 && col <= 4) { letter = "V"; inner = col }
+    else {
+        if (col >= 6 && col <= 10) { letter = "Y"; inner = col - 6 }
+        else {
+            if (col >= 12 && col <= 16) { letter = "B"; inner = col - 12 }
+            else { return false }
+        }
+    }
+    r<String> = ""
+    g<Vec<String>> = glyph(letter)
+    r = g.get(row)
+    return ((r.char_at(inner) as Int) & 0xFF) == 35    # '#'
+}
+
+# ------------------------------------------------------------- the gradient
+
+# Magenta (255,110,199) -> cyan (110,225,255) across `span` cells, as a packed
+# 0xRRGGBB colour. Integer-only interpolation: this build has no float format.
+color_at(t<Int>, span<Int>)<Int> -> {
+    if (span <= 1) { return 0xFF6EC7 }
+    step<Int> = t
+    if (step < 0) { step = 0 }
+    if (step > span - 1) { step = span - 1 }
+    red<Int> = 255 - (145 * step) / (span - 1)
+    grn<Int> = 110 + (115 * step) / (span - 1)
+    blu<Int> = 199 + (56 * step) / (span - 1)
+    return red * 65536 + grn * 256 + blu
+}
+
+# An ANSI truecolor foreground escape for a packed 0xRRGGBB colour.
+ink(color<Int>)<String> -> {
+    return "\x1b[38;2;" + ((color >> 16) & 0xFF).to_string() + ";" +
+           ((color >> 8) & 0xFF).to_string() + ";" + (color & 0xFF).to_string() + "m"
+}
+
+# ---------------------------------------------------- render: the terminal
+
+# The wordmark as a terminal banner: each bitmap cell becomes two full blocks,
+# and every row is printed twice, so the letters read solid. `plain` drops the
+# escapes for pipes and CI logs.
+term_splash(plain<Bool>)<Int> -> {
+    cells<Int> = 17
+    rows<Int> = 0
+    for (rows in 0..6) {
+        rep<Int> = 0
+        for (rep in 0..1) {
+            line<String> = ""
+            col<Int> = 0
+            for (col in 0..cells-1) {
+                if (mark_at(col, rows)) {
+                    cell<String> = "██"
+                    if (plain) { line = line + cell }
+                    else { line = line + ink(color_at(col, cells)) + cell + "\x1b[0m" }
+                } else {
+                    line = line + "  "
+                }
+            }
+            println(line)
+        }
+    }
+    if (plain) {
+        println("")
+        println("vyb -- pure vyb, no python")
+        println("")
+    } else {
+        println("")
+        println("\x1b[2mvyb -- \x1b[0m" + ink(0xFF6EC7) + "pure vyb" +
+                "\x1b[0m\x1b[2m, no python\x1b[0m")
+        println("")
+    }
+    return 0
+}
+
+# ---------------------------------------------------- render: the PNG logo
+
+# The same wordmark as a PNG: a 180x100 dark canvas with the letters drawn at
+# 8 px per bitmap cell, a gradient rule above and below, and the whole thing
+# centred. 180*100*3 + 100 bytes of scanline is under the encoder's 65535-byte
+# single-block budget, so the file is written via one stored DEFLATE block.
+png_logo(path<String>)<Int> -> {
+    w<Int> = 180
+    h<Int> = 100
+    back<Int> = 0x0E0E14
+    buf<Vec<UInt8>> = png_rgb_fill(w, h, back)
+
+    scale<Int> = 8
+    cells<Int> = 17
+    mark_w<Int> = cells * scale          # 136
+    mark_h<Int> = 7 * scale              # 56
+    x0<Int> = (w - mark_w) / 2           # 22
+    y0<Int> = (h - mark_h) / 2           # 22
+
+    # the letters
+    row<Int> = 0
+    for (row in 0..6) {
+        col<Int> = 0
+        for (col in 0..cells-1) {
+            if (mark_at(col, row)) {
+                c<Int> = color_at(col, cells)
+                dy<Int> = 0
+                for (dy in 0..scale-1) {
+                    dx<Int> = 0
+                    for (dx in 0..scale-1) {
+                        png_rgb_set(borrow(buf), w, x0 + col * scale + dx, y0 + row * scale + dy, c)
+                    }
+                }
+            }
+        }
+    }
+
+    # gradient rules: 2 px above the mark, 1 px below, inset so the mark breathes
+    inset<Int> = 6
+    rx<Int> = x0 + inset
+    for (rx in 0..x0+mark_w-inset-1) {
+        t<Int> = rx - (x0 + inset)
+        span<Int> = mark_w - 2 * inset
+        c<Int> = color_at(t, span)
+        png_rgb_set(borrow(buf), w, rx, y0 - 8, c)
+        png_rgb_set(borrow(buf), w, rx, y0 - 7, c)
+        png_rgb_set(borrow(buf), w, rx, y0 + mark_h + 7, c)
+    }
+
+    match (png_write(path, w, h, buf)) {
+        ok -> { return 0 }
+        ? -> { return 1 }
+    }
+}
+
+# ------------------------------------------------------------- entry point
+
+main()<Int> -> {
+    args<Vec<String>> = argv_of()
+    plain<Bool> = false
+    want_png<Bool> = false
+    want_url<Bool> = false
+    png_path<String> = "vybsplash.png"
+
+    i<Int> = 1
+    while (i < args.len()) {
+        a<String> = args.get(i)
+        if (a == "--plain") { plain = true }
+        else {
+            if (a == "--png") {
+                want_png = true
+                if (i + 1 < args.len()) { png_path = args.get(i + 1); i = i + 1 }
+            } else {
+                if (a == "--data-url") { want_url = true; want_png = true }
+            }
+        }
+        i = i + 1
+    }
+
+    term_splash(plain)
+
+    if (want_png) {
+        rc<Int> = png_logo(png_path)
+        if (rc != 0) {
+            eprintln("vybsplash: could not write " + png_path)
+            exit(1)
+        }
+        got<String> = slurp(png_path)
+        println("wrote " + png_path + " (180x100, " + got.len().to_string() + " bytes)")
+    }
+
+    if (want_url) {
+        println("data:image/png;base64," + b64_encode(slurp(png_path)))
+    }
+
+    exit(0)
+}
