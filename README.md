@@ -2649,26 +2649,26 @@ build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test --evidence evidence
 
 `vyb --repo` (or `vyb test` with no explicit paths inside the compiler repo) runs
 the same Vyb runner, so the compiler's own test path needs no Python. A secondary
-parallel harness (`test_harness.py`) plus `triage_tool.py` add HTML reporting,
-failure-triage, and performance analysis on top of that suite — both are still
-Python, slated for porting; the authoritative pass/fail count is always the
-`run-tests` CTest target output.
+harness (`test_harness.vyb`) plus `triage_tool.vyb` — both Vyb programs — add
+JSON/HTML reporting, failure-triage, and performance analysis on top of that
+suite; the authoritative pass/fail count is always the `run-tests` CTest target
+output.
 
 ### Test Analysis and Triage
 ```bash
 # Analyze test failures and create triage plan
-./triage_tool.py results.json
+build/vyb triage_tool.vyb results.json
 
 # Generate markdown triage report
-./triage_tool.py results.json --format markdown --output triage.md
+build/vyb triage_tool.vyb results.json --output-format markdown --output triage.md
 
 # Focus on critical issues only
-./triage_tool.py results.json --priority critical,high
+build/vyb triage_tool.vyb results.json --priority critical,high
 ```
 
 ### Test Features
 - **1195 Tests, All Passing**: The full `run_tests.vyb` suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area
-- **Parallel Execution**: Multi-threaded test runner for fast feedback
+- **Harness Reporting**: `test_harness.vyb` adds JSON/HTML reports and failure triage on top of the runner (sequential execution; `--workers` is accepted for compatibility)
 - **Rich Reporting**: HTML, JSON, and console output with detailed metrics
 - **Smart Categorization**: Automatic test categorization and filtering
 - **Failure Analysis**: Pattern recognition and triage plan generation
@@ -2852,22 +2852,25 @@ Vyb includes a **modern, comprehensive testing infrastructure** designed for eff
 
 ### 🧪 **Modern Test Harness**
 
-The new Python-based test harness provides enterprise-grade testing capabilities:
+The Vyb test harness (`test_harness.vyb`) layers reporting and triage on top of the canonical runner:
 
 ```bash
-# Basic test run with parallel execution
-python3 test_harness.py --parallel
+# Basic harness run over a directory
+build/vyb test_harness.vyb --test-dirs test/units
 
-# Full test suite with HTML reporting and triage analysis
-python3 test_harness.py --parallel --html-report --triage --performance
+# JSON + HTML reporting
+build/vyb test_harness.vyb --test-dirs test/units --json-report results.json --html-report report.html
 
-# Test specific patterns or directories
-python3 test_harness.py --filter "async" --verbose
-python3 test_harness.py --directory test/units --timeout 30
+# Filter by pattern, category, tags, or priority
+build/vyb test_harness.vyb --test-dirs test/units --pattern "test_async_*.vyb"
+build/vyb test_harness.vyb --test-dirs test/units --category parser,semantic --priority high -v
 ```
 
+The harness runs the selected files sequentially (`--workers` is accepted for
+compatibility) and reports the same per-test verdicts as the canonical runner.
+
 #### **Test Harness Features**
-- **Parallel Execution**: Multi-threaded test running for faster feedback
+- **Sequential Execution**: runs the selected files in order (`--workers` accepted for compatibility)
 - **Rich Reporting**: HTML reports with test results, timing, and failure analysis
 - **JSON Export**: Machine-readable test data for CI/CD integration
 - **Triage Analysis**: Automatic failure pattern recognition and prioritization
@@ -2906,8 +2909,8 @@ build/vyb migrate_syntax.vyb --migrate --directory . --backup
 Automated failure analysis and development prioritization:
 
 ```bash
-# Generate triage report from test results
-python3 triage_tool.py test_results.json --output triage_report.html
+# Generate a triage report from test results
+build/vyb triage_tool.vyb test_results.json --output-format markdown --output triage_report.md
 ```
 
 #### **Triage Features**
@@ -2922,7 +2925,7 @@ python3 triage_tool.py test_results.json --output triage_report.html
 The integrated toolchain supports efficient development:
 
 1. **Write Code**: Use canonical syntax with ownership types
-2. **Run Tests**: `python3 test_harness.py --parallel --triage`
+2. **Run Tests**: `build/vyb test_harness.vyb --test-dirs test/units --json-report results.json`
 3. **Check Syntax**: `build/vyb migrate_syntax.vyb --scan`
 4. **Debug Issues**: Use triage reports for prioritized debugging
 5. **Commit Changes**: Regular Git commits with test validation

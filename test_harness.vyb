@@ -1,0 +1,1279 @@
+// @not-a-test: true
+# test_harness.vyb -- Vyb Modern Test Harness v2.0, the Vyb port of the
+# repository-root `test_harness.py`. Part of the #226 "no Python in the test
+# path" work.
+#
+# Like test/run_tests.vyb, this is the test_harness.py feature set expressed on
+# the current language surface: discovery with `find`, flags read from
+# `/proc/self/cmdline`, each test run in its own subprocess with captured
+# stdout/stderr, category/tags/priority filters, a console summary and JSON /
+# HTML reports.
+#
+# Usage (from the repo root):
+#   VYB_STDLIB=$PWD/stdlib build/vyb test_harness.vyb
+#   ... --test-dirs test/units --pattern 'test*.vyb'
+#   ... --category parser,semantic   --tags async --priority high
+#   ... --json-report results.json   --html-report report.html
+#   ... --exclude-slow --exclude-flaky -v
+#
+# Options: --vyb PATH  --test-dirs D [D ...]  --pattern P [P ...]
+#          --category C,C  --tags T,T  --priority P  --workers N (accepted,
+#          ignored: this port runs sequentially)  --verbose|-v
+#          --json-report FILE  --html-report FILE  --exclude-slow
+#          --exclude-flaky  --help
+#
+# Deliberate differences from test_harness.py (each one is noted in the code):
+#   * No threads, so `--workers` is accepted and ignored: tests run one at a
+#     time in discovery order. Both runners judge each test on its own, so the
+#     PASS/FAIL verdict for any given test is identical.
+#   * Files carrying `// @not-a-test: true` (the runners/tooling themselves) are
+#     skipped. test_harness.py discovered them as tests and would recurse into
+#     test/run_tests.vyb -- the port follows the convention test/run_tests.vyb
+#     already uses instead.
+#   * Times are measured with `date +%s%N` and printed to 3 decimals from
+#     integer milliseconds.
+#   * A missing parent directory for --json-report / --html-report is created.
+#   * Exit status comes from `exit()`: `return` in a Vyb main prints the value and
+#     exits 0, so the port exits 1 on any failing test like Python's sys.exit(1).
+import io::{close, open_read, open_write, read_all, write_str}
+import process::{exec_output}
+import fs::{mkdir}
+
+# ---------------------------------------------------------------- small helpers
+
+# Index of the last '/' in `p`, or -1.
+last_slash(p<String>)<Int> -> {
+    i<Int> = p.len() - 1
+    while (i >= 0) {
+        if (((p.char_at(i) as Int) & 0xFF) == 47) { return i }
+        i = i - 1
+    }
+    return -1
+}
+
+# Directory part of `p` ("" when there is no slash).
+dirname_of(p<String>)<String> -> {
+    i<Int> = last_slash(p)
+    if (i < 0) { return "" }
+    return p.substring(0, i)
+}
+
+# File-name part of `p`.
+basename_of(p<String>)<String> -> {
+    i<Int> = last_slash(p)
+    if (i < 0) { return p }
+    return p.substring(i + 1, p.len())
+}
+
+# Strip leading/trailing whitespace (spaces, tabs, CR, LF) from `s`.
+trim(s<String>)<String> -> {
+    a<Int> = 0
+    n<Int> = s.len()
+    while (a < n) {
+        c<Int> = (s.char_at(a) as Int) & 0xFF
+        if (c == 32 || c == 9 || c == 13 || c == 10) { a = a + 1 } else { break }
+    }
+    b<Int> = n
+    while (b > a) {
+        c<Int> = (s.char_at(b - 1) as Int) & 0xFF
+        if (c == 32 || c == 9 || c == 13 || c == 10) { b = b - 1 } else { break }
+    }
+    if (b <= a) { return "" }
+    return s.substring(a, b)
+}
+
+# ASCII lowercase of `s` (the Python harness matched directives with re.IGNORECASE).
+to_lower(s<String>)<String> -> {
+    out<String> = ""
+    i<Int> = 0
+    while (i < s.len()) {
+        c<Int> = (s.char_at(i) as Int) & 0xFF
+        if (c >= 65 && c <= 90) { c = c + 32 }
+        out = out + String::from_byte(c)
+        i = i + 1
+    }
+    return out
+}
+
+# First space/tab-separated token of `s`.
+first_token(s<String>)<String> -> {
+    t<String> = trim(s)
+    i<Int> = 0
+    while (i < t.len()) {
+        c<Int> = (t.char_at(i) as Int) & 0xFF
+        if (c == 32 || c == 9) { return t.substring(0, i) }
+        i = i + 1
+    }
+    return t
+}
+
+# "true"/"false" for a Bool (JSON literals).
+bool_str(b<Bool>)<String> -> {
+    if (b) { return "true" }
+    return "false"
+}
+
+# Decimal value of a digit string (stops at the first non-digit; handles a
+# leading '-'). String::to_int is not available on this build.
+digits_to_int(s<String>)<Int> -> {
+    t<String> = trim(s)
+    n<Int> = 0
+    neg<Bool> = false
+    i<Int> = 0
+    if (t.len() > 0 && (((t.char_at(0) as Int) & 0xFF) == 45)) { neg = true; i = 1 }
+    while (i < t.len()) {
+        c<Int> = (t.char_at(i) as Int) & 0xFF
+        if (c < 48 || c > 57) { break }
+        n = n * 10 + (c - 48)
+        i = i + 1
+    }
+    if (neg) { return 0 - n }
+    return n
+}
+
+# -1/0/1 for a<b / a==b / a>b.
+str_cmp(a<String>, b<String>)<Int> -> {
+    n<Int> = a.len()
+    if (b.len() < n) { n = b.len() }
+    i<Int> = 0
+    while (i < n) {
+        ca<Int> = (a.char_at(i) as Int) & 0xFF
+        cb<Int> = (b.char_at(i) as Int) & 0xFF
+        if (ca < cb) { return -1 }
+        if (ca > cb) { return 1 }
+        i = i + 1
+    }
+    if (a.len() < b.len()) { return -1 }
+    if (a.len() > b.len()) { return 1 }
+    return 0
+}
+
+# True when `needle` occurs in `hay` (Python's `in`).
+contains(hay<String>, needle<String>)<Bool> -> {
+    return (hay.index_of(needle) >= 0)
+}
+
+# True when `s` starts with `prefix` (Python's str.startswith).
+starts_with(s<String>, prefix<String>)<Bool> -> {
+    if (prefix.len() > s.len()) { return false }
+    return (s.substring(0, prefix.len()) == prefix)
+}
+
+# Run `cmd` through the shell and return its stdout ("" when it could not run).
+run_sh(cmd<String>)<String> -> {
+    out<String> = ""
+    freedom {
+        match (exec_output(cmd)) {
+            s -> { out = s }
+            ? -> { out = "" }
+        }
+    }
+    return out
+}
+
+# Read a whole file as a String ("" when it cannot be read).
+slurp(path<String>)<String> -> {
+    text<String> = ""
+    match (open_read(path)) {
+        f -> {
+            match (read_all(f)) { s -> { text = s } ? -> { } }
+            close(f)
+        }
+        ? -> { }
+    }
+    return text
+}
+
+# Write `text` to `path`; true when the whole string was written.
+spill(path<String>, text<String>)<Bool> -> {
+    match (open_write(path)) {
+        f -> {
+            match (write_str(f, text)) { n -> { close(f); return (n == text.len()) } ? -> { close(f); return false } }
+        }
+        ? -> { return false }
+    }
+    return false
+}
+
+# True when `p` is an existing directory.
+dir_exists(p<String>)<Bool> -> {
+    return (trim(run_sh("test -d '" + p + "' && echo yes || echo no")) == "yes")
+}
+
+# True when `p` is an existing regular file.
+file_exists(p<String>)<Bool> -> {
+    return (trim(run_sh("test -f '" + p + "' && echo yes || echo no")) == "yes")
+}
+
+# Milliseconds since the epoch, as reported by `date +%s%N`.
+now_ms()<Int> -> {
+    return (digits_to_int(trim(run_sh("date +%s%N"))) / 1000000)
+}
+
+# Milliseconds rendered as seconds with 3 decimals ("1234" -> "1.234").
+sec_str(ms<Int>)<String> -> {
+    whole<Int> = ms / 1000
+    frac<Int> = ms % 1000
+    f<String> = frac.to_string()
+    while (f.len() < 3) { f = "0" + f }
+    return whole.to_string() + "." + f
+}
+
+# Two decimals ("1234" ms -> "1.23").
+sec_str2(ms<Int>)<String> -> {
+    whole<Int> = ms / 1000
+    frac<Int> = (ms % 1000) / 10
+    f<String> = frac.to_string()
+    while (f.len() < 2) { f = "0" + f }
+    return whole.to_string() + "." + f
+}
+
+# ------------------------------------------------------- command line (/proc)
+
+# The program's argv, parsed from `/proc/self/cmdline` (NUL separated). The
+# language has no argv primitive yet, so this is how a Vyb tool reads its flags.
+argv_of()<Vec<String>> -> {
+    raw<String> = slurp("/proc/self/cmdline")
+    out<Vec<String>> = Vec<String>()
+    cur<String> = ""
+    i<Int> = 0
+    while (i < raw.len()) {
+        c<Int> = (raw.char_at(i) as Int) & 0xFF
+        if (c == 0) {
+            if (cur.len() > 0) { out.push(cur) }
+            cur = ""
+        } else {
+            cur = cur + String::from_byte(c)
+        }
+        i = i + 1
+    }
+    if (cur.len() > 0) { out.push(cur) }
+    return out
+}
+
+# Index of `flag` in `argv`, or -1.
+flag_index(argv<Vec<String>>, flag<String>)<Int> -> {
+    i<Int> = 0
+    while (i < argv.len()) {
+        if (argv.get(i) == flag) { return i }
+        i = i + 1
+    }
+    return -1
+}
+
+# True when `flag` appears in `argv`.
+has(argv<Vec<String>>, flag<String>)<Bool> -> {
+    return (flag_index(argv, flag) >= 0)
+}
+
+# Value following `flag`, or "".
+opt(argv<Vec<String>>, flag<String>)<String> -> {
+    i<Int> = flag_index(argv, flag)
+    if (i >= 0 && i + 1 < argv.len()) { return argv.get(i + 1) }
+    return ""
+}
+
+# Up to `n` values following `flag` (misses short lists, which is all this CLI needs).
+many_opt(argv<Vec<String>>, flag<String>, n<Int>)<Vec<String>> -> {
+    out<Vec<String>> = Vec<String>()
+    i<Int> = flag_index(argv, flag)
+    if (i < 0) { return out }
+    j<Int> = i + 1
+    while (j < argv.len() && out.len() < n) {
+        t<String> = argv.get(j)
+        if (t.len() > 0 && (((t.char_at(0) as Int) & 0xFF) == 45)) { break }
+        out.push(t)
+        j = j + 1
+    }
+    return out
+}
+
+# ------------------------------------------------------------- directive parse
+
+# Value of `// @<name>: value` in `content` (case-insensitive marker), trimmed;
+# "" when absent. The marker is matched with the ':' included so `@expect` can
+# never match `@expect-output`.
+directive(content<String>, nm<String>)<String> -> {
+    marker<String> = "// @" + nm + ":"
+    lines<Vec<String>> = content.split("\n")
+    i<Int> = 0
+    while (i < lines.len()) {
+        line<String> = lines.get(i)
+        p<Int> = to_lower(line).index_of(marker)
+        if (p >= 0) { return trim(line.substring(p + marker.len(), line.len())) }
+        i = i + 1
+    }
+    return ""
+}
+
+# True when `// @<name>:` is set to true/yes/1 (the Python harness's
+# `(true|yes|1)$` patterns, i.e. the whole trimmed value).
+directive_true(content<String>, nm<String>)<Bool> -> {
+    v<String> = to_lower(directive(content, nm))
+    if (v == "true" || v == "yes" || v == "1") { return true }
+    return false
+}
+
+# True when `// @<name>:` starts with true/yes/1. Used only for the tooling
+# marker, which test/run_tests.vyb writes as `// @not-a-test: true — ...`, so the
+# trailing description must not defeat the match (the harness's own directives
+# keep the whole-value semantics of `directive_true` above).
+directive_starts_true(content<String>, nm<String>)<Bool> -> {
+    v<String> = to_lower(first_token(directive(content, nm)))
+    if (v == "true" || v == "yes" || v == "1") { return true }
+    return false
+}
+
+# One `// @env:` pair.
+struct KV {
+    k<String>,
+    v<String>
+}
+
+# `@env` pairs (the harness split the value on whitespace and required '=').
+env_vars_of(content<String>)<Vec<KV>> -> {
+    out<Vec<KV>> = Vec<KV>()
+    val<String> = directive(content, "env")
+    if (val.len() == 0) { return out }
+    parts<Vec<String>> = val.split(" ")
+    i<Int> = 0
+    while (i < parts.len()) {
+        piece<String> = trim(parts.get(i))
+        eq<Int> = piece.index_of("=")
+        if (piece.len() > 0 && eq > 0) {
+            out.push(KV { k = piece.substring(0, eq), v = piece.substring(eq + 1, piece.len()) })
+        }
+        i = i + 1
+    }
+    return out
+}
+
+# ------------------------------------------------------------------ test model
+
+# One discovered test file and its directives.
+struct TestCase {
+    filename<String>,
+    name<String>,
+    description<String>,
+    category<Vec<String>>,
+    tags<Vec<String>>,
+    expect<String>,
+    expect_error<String>,
+    expect_output<String>,
+    expect_return<String>,
+    timeout<Int>,
+    parse_only<Bool>,
+    semantic_only<Bool>,
+    slow<Bool>,
+    flaky<Bool>,
+    priority<String>,
+    author<String>,
+    created<String>,
+    vyb_args<String>,
+    env_vars<Vec<KV>>,
+    last_modified<String>
+}
+
+# One run's captured result. `tc` is the whole TestCase (so the JSON report can
+# emit the same "test" object test_harness.py's asdict() did); the flattened
+# fields below are a convenience for the reports.
+struct TestResult {
+    tc<TestCase>,
+    name<String>,
+    filename<String>,
+    description<String>,
+    category<Vec<String>>,
+    success<Bool>,
+    stdout<String>,
+    stderr<String>,
+    code<Int>,
+    ms<Int>,
+    error_message<String>
+}
+
+# Parse one test file into a TestCase ("" name stays "Unnamed test").
+parse_test_file(file<String>, root<String>)<TestCase> -> {
+    content<String> = slurp(file)
+
+    name<String> = directive(content, "test")
+    if (name.len() == 0) { name = "Unnamed test" }
+    description<String> = directive(content, "description")
+    expect<String> = to_lower(directive(content, "expect"))
+    if (expect.len() == 0) { expect = "pass" }
+
+    cats<Vec<String>> = Vec<String>()
+    catVal<String> = directive(content, "category")
+    if (catVal.len() > 0) {
+        parts<Vec<String>> = catVal.split(",")
+        i<Int> = 0
+        while (i < parts.len()) { cats.push(trim(parts.get(i))); i = i + 1 }
+    }
+
+    tags<Vec<String>> = Vec<String>()
+    tagVal<String> = directive(content, "tags")
+    if (tagVal.len() > 0) {
+        parts2<Vec<String>> = tagVal.split(",")
+        i2<Int> = 0
+        while (i2 < parts2.len()) { tags.push(trim(parts2.get(i2))); i2 = i2 + 1 }
+    }
+
+    # Python's __post_init__ defaulted the category to ["uncategorized"].
+    if (cats.len() == 0) { cats.push("uncategorized") }
+
+    err<String> = directive(content, "expect-error")
+    if (to_lower(err) == "n/a") { err = "" }
+    outp<String> = directive(content, "expect-output")
+    if (to_lower(outp) == "n/a") { outp = "" }
+    ret<String> = directive(content, "expect-return")
+    if (to_lower(ret) == "n/a") { ret = "" }
+
+    timeoutS<Int> = 30
+    tv<String> = first_token(directive(content, "timeout"))
+    if (tv.len() > 0) { timeoutS = digits_to_int(tv) }
+
+    prio<String> = to_lower(first_token(directive(content, "priority")))
+    if (prio.len() == 0) { prio = "normal" }
+
+    # Auto-categorize from the path when there is no explicit category, exactly
+    # as the harness did (it scanned the *absolute* path's parts).
+    if (cats.len() == 1 && cats.get(0) == "uncategorized") {
+        autoSegs<Vec<String>> = Vec<String>()
+        autoSegs.push("basic")
+        autoSegs.push("parser")
+        autoSegs.push("semantic")
+        autoSegs.push("runtime")
+        autoSegs.push("debug")
+        autoSegs.push("async")
+        autoSegs.push("vectors")
+        autoSegs.push("arrays")
+        parts3<Vec<String>> = file.split("/")
+        i3<Int> = 0
+        found<Bool> = false
+        while (i3 < parts3.len() && !found) {
+            seg<String> = parts3.get(i3)
+            j<Int> = 0
+            while (j < autoSegs.len()) {
+                if (autoSegs.get(j) == seg) { cats = Vec<String>(); cats.push(seg); found = true; break }
+                j = j + 1
+            }
+            i3 = i3 + 1
+        }
+    }
+
+    mod<String> = trim(run_sh("date -r '" + file + "' +%Y-%m-%dT%H:%M:%S 2>/dev/null"))
+    return TestCase {
+        filename = file,
+        name = name,
+        description = description,
+        category = cats,
+        tags = tags,
+        expect = expect,
+        expect_error = err,
+        expect_output = outp,
+        expect_return = ret,
+        timeout = timeoutS,
+        parse_only = directive_true(content, "parse-only"),
+        semantic_only = directive_true(content, "semantic-only"),
+        slow = directive_true(content, "slow"),
+        flaky = directive_true(content, "flaky"),
+        priority = prio,
+        author = directive(content, "author"),
+        created = directive(content, "created"),
+        vyb_args = directive(content, "vyb-args"),
+        env_vars = env_vars_of(content),
+        last_modified = mod
+    }
+}
+
+# ------------------------------------------------------------- test discovery
+
+# Repository root: walk up from `start` until a directory holds CMakeLists.txt
+# and src/ (what the Python harness looked for). Returns an absolute path so the
+# "Using executable" line and the child `cd` match the Python harness.
+find_root(start<String>)<String> -> {
+    cur<String> = start
+    if (cur.len() == 0) { cur = "." }
+    n<Int> = 0
+    while (n < 64) {
+        if (file_exists(cur + "/CMakeLists.txt") && dir_exists(cur + "/src")) {
+            return trim(run_sh("cd '" + cur + "' && pwd"))
+        }
+        parent<String> = dirname_of(cur)
+        if (parent.len() == 0) {
+            if (cur == ".") { return "" }
+            cur = "."
+        } else {
+            cur = parent
+        }
+        n = n + 1
+    }
+    return ""
+}
+
+# Every file under `dir` matching `pattern`, sorted.
+discover_pattern(dir<String>, pattern<String>)<Vec<String>> -> {
+    raw<String> = run_sh("find " + dir + " -type f -name '" + pattern + "' 2>/dev/null | LC_ALL=C sort")
+    out<Vec<String>> = Vec<String>()
+    if (raw.len() == 0) { return out }
+    lines<Vec<String>> = raw.split("\n")
+    i<Int> = 0
+    while (i < lines.len()) {
+        line<String> = trim(lines.get(i))
+        if (line.len() > 0) { out.push(line) }
+        i = i + 1
+    }
+    return out
+}
+
+# `path` relative to `root` (the harness recorded filenames relative to the repo
+# root, and runs the compiler with cwd=root).
+rel_to(path<String>, root<String>)<String> -> {
+    prefix<String> = root + "/"
+    if (path.len() > prefix.len() && path.substring(0, prefix.len()) == prefix) {
+        return path.substring(prefix.len(), path.len())
+    }
+    return path
+}
+
+# Discover every test under every dir/pattern and skip the tooling files.
+discover_tests(root<String>, dirs<Vec<String>>, patterns<Vec<String>>)<Vec<TestCase>> -> {
+    out<Vec<TestCase>> = Vec<TestCase>()
+    i<Int> = 0
+    while (i < dirs.len()) {
+        d<String> = dirs.get(i)
+        dirPath<String> = d
+        if (((d.char_at(0) as Int) & 0xFF) != 47) { dirPath = root + "/" + d }
+        if (dir_exists(dirPath)) {
+            j<Int> = 0
+            while (j < patterns.len()) {
+                files<Vec<String>> = discover_pattern(dirPath, patterns.get(j))
+                k<Int> = 0
+                while (k < files.len()) {
+                    f<String> = files.get(k)
+                    if (!directive_starts_true(slurp(f), "not-a-test")) {
+                        out.push(parse_test_file(rel_to(f, root), root))
+                    }
+                    k = k + 1
+                }
+                j = j + 1
+            }
+        }
+        i = i + 1
+    }
+    return out
+}
+
+# --------------------------------------------------------------- ordering
+
+# Python sorted tests by (priority string, first category, name).
+t_cmp(a<TestCase>, b<TestCase>)<Int> -> {
+    c1<Int> = str_cmp(a.priority, b.priority)
+    if (c1 != 0) { return c1 }
+    c2<Int> = str_cmp(a.category.get(0), b.category.get(0))
+    if (c2 != 0) { return c2 }
+    return str_cmp(a.name, b.name)
+}
+
+picked_before(picked<Vec<Int>>, i<Int>)<Bool> -> {
+    j<Int> = 0
+    while (j < picked.len()) {
+        if (picked.get(j) == i) { return true }
+        j = j + 1
+    }
+    return false
+}
+
+# Stable selection sort by t_cmp (no Vec::set or index assignment on this build).
+sort_tests(items<Vec<TestCase>>)<Vec<TestCase>> -> {
+    out<Vec<TestCase>> = Vec<TestCase>()
+    picked<Vec<Int>> = Vec<Int>()
+    n<Int> = items.len()
+    round<Int> = 0
+    while (round < n) {
+        best<Int> = -1
+        i<Int> = 0
+        while (i < n) {
+            if (!picked_before(picked, i)) {
+                if (best < 0) { best = i }
+                else if (t_cmp(items.get(i), items.get(best)) < 0) { best = i }
+            }
+            i = i + 1
+        }
+        if (best >= 0) {
+            out.push(items.get(best))
+            picked.push(best)
+        }
+        round = round + 1
+    }
+    return out
+}
+
+# --------------------------------------------------------------- filtering
+
+# True when a requested category matches one of the test's categories.
+category_matches(t<TestCase>, want<Vec<String>>)<Bool> -> {
+    i<Int> = 0
+    while (i < want.len()) {
+        j<Int> = 0
+        while (j < t.category.len()) {
+            if (t.category.get(j) == want.get(i)) { return true }
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return false
+}
+
+# True when a requested tag matches one of the test's tags.
+tag_matches(t<TestCase>, want<Vec<String>>)<Bool> -> {
+    i<Int> = 0
+    while (i < want.len()) {
+        j<Int> = 0
+        while (j < t.tags.len()) {
+            if (t.tags.get(j) == want.get(i)) { return true }
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return false
+}
+
+split_commas(s<String>)<Vec<String>> -> {
+    out<Vec<String>> = Vec<String>()
+    if (s.len() == 0) { return out }
+    parts<Vec<String>> = s.split(",")
+    i<Int> = 0
+    while (i < parts.len()) { out.push(trim(parts.get(i))); i = i + 1 }
+    return out
+}
+
+# --------------------------------------------------------------- running
+
+# Run one test; the verdict follows test_harness.py's _evaluate_test_result.
+run_test(t<TestCase>, root<String>, vyb<String>)<TestResult> -> {
+    flags<String> = ""
+    if (t.parse_only) { flags = flags + " --parse-only" }
+    if (t.vyb_args.len() > 0) { flags = flags + " " + t.vyb_args }
+
+    envPrefix<String> = ""
+    i<Int> = 0
+    while (i < t.env_vars.len()) {
+        kv<KV> = t.env_vars.get(i)
+        envPrefix = envPrefix + "export " + kv.k + "='" + kv.v + "'; "
+        i = i + 1
+    }
+
+    outPath<String> = "/tmp/vyb_harness_out.txt"
+    errPath<String> = "/tmp/vyb_harness_err.txt"
+
+    startMs<Int> = now_ms()
+    cmd<String> = "cd " + root + " && " + envPrefix + "timeout " + t.timeout.to_string()
+    cmd = cmd + " " + vyb + flags + " " + t.filename + " > " + outPath + " 2> " + errPath + "; echo $?"
+    code<Int> = digits_to_int(trim(run_sh(cmd)))
+    ms<Int> = now_ms() - startMs
+
+    out<String> = slurp(outPath)
+    err<String> = slurp(errPath)
+
+    ok<Bool> = true
+    if (t.expect == "pass" && code != 0) { ok = false }
+    if (t.expect == "fail" && code == 0) { ok = false }
+
+    # @expect-return: only for tests that actually execute.
+    if (!t.parse_only && t.expect_return.len() > 0) {
+        exp<String> = to_lower(t.expect_return)
+        lines<Vec<String>> = out.split("\n")
+        last<String> = ""
+        j<Int> = 0
+        while (j < lines.len()) {
+            s<String> = trim(lines.get(j))
+            if (s.len() > 0) { last = s }
+            j = j + 1
+        }
+        if (exp == "true" || exp == "false") {
+            if (last.len() == 0) { ok = false }
+            else if (to_lower(last) != exp) { ok = false }
+        } else {
+            expVal<Int> = digits_to_int(exp)
+            if (last.len() == 0) { ok = false }
+            else {
+                numeric<Bool> = true
+                d<Int> = 0
+                while (d < last.len()) {
+                    c<Int> = (last.char_at(d) as Int) & 0xFF
+                    if (c < 48 || c > 57) { numeric = false; break }
+                    d = d + 1
+                }
+                if (numeric && digits_to_int(last) != expVal) { ok = false }
+                else if (!numeric && last != expVal.to_string()) { ok = false }
+            }
+        }
+    }
+
+    if (t.expect_output.len() > 0 && !contains(out, t.expect_output)) { ok = false }
+    if (t.expect == "fail" && t.expect_error.len() > 0 && !contains(err, t.expect_error)) { ok = false }
+
+    # _extract_error_message: the first stderr line that is non-blank and does not
+    # begin with "DEBUG:"; otherwise the exit code, otherwise "Unknown error".
+    msg<String> = ""
+    if (!ok) {
+        if (err.len() > 0) {
+            lines2<Vec<String>> = err.split("\n")
+            j2<Int> = 0
+            while (j2 < lines2.len()) {
+                ln<String> = lines2.get(j2)
+                if (trim(ln).len() > 0 && !starts_with(ln, "DEBUG:")) { msg = trim(ln); break }
+                j2 = j2 + 1
+            }
+        }
+        if (msg.len() == 0) {
+            if (code != 0) { msg = "Process exited with code " + code.to_string() }
+            else { msg = "Unknown error" }
+        }
+    }
+
+    return TestResult {
+        tc = t,
+        name = t.name,
+        filename = t.filename,
+        description = t.description,
+        category = t.category,
+        success = ok,
+        stdout = out,
+        stderr = err,
+        code = code,
+        ms = ms,
+        error_message = msg
+    }
+}
+
+# ------------------------------------------------------------------------ json
+
+# Escape `s` for a JSON string literal.
+json_escape(s<String>)<String> -> {
+    out<String> = ""
+    i<Int> = 0
+    while (i < s.len()) {
+        c<Int> = (s.char_at(i) as Int) & 0xFF
+        if (c == 34) { out = out + "\\\"" }
+        else if (c == 92) { out = out + "\\\\" }
+        else if (c == 10) { out = out + "\\n" }
+        else if (c == 13) { out = out + "\\r" }
+        else if (c == 9) { out = out + "\\t" }
+        else if (c < 32) { out = out + "?" }
+        else { out = out + String::from_byte(c) }
+        i = i + 1
+    }
+    return out
+}
+
+# JSON array literal from a Vec<String>.
+json_str_array(v<Vec<String>>)<String> -> {
+    out<String> = "["
+    i<Int> = 0
+    while (i < v.len()) {
+        if (i > 0) { out = out + ", " }
+        out = out + "\"" + json_escape(v.get(i)) + "\""
+        i = i + 1
+    }
+    return out + "]"
+}
+
+# JSON object literal for a test's @env pairs.
+json_env_object(v<Vec<KV>>)<String> -> {
+    out<String> = "{"
+    i<Int> = 0
+    while (i < v.len()) {
+        if (i > 0) { out = out + ", " }
+        out = out + "\"" + json_escape(v.get(i).k) + "\": \"" + json_escape(v.get(i).v) + "\""
+        i = i + 1
+    }
+    return out + "}"
+}
+
+# ---------------------------------------------------------------------- reports
+
+# "100" of "100" -> "100.0%" ... one decimal, integer arithmetic (String cannot
+# format floats on this build).
+pct1(np<Int>, tot<Int>)<String> -> {
+    if (tot <= 0) { return "0.0%" }
+    scaled<Int> = (np * 1000) / tot
+    whole<Int> = scaled / 10
+    frac<Int> = scaled % 10
+    return whole.to_string() + "." + frac.to_string() + "%"
+}
+
+# ANSI escapes built from bytes (a literal ESC in source is fragile).
+esc()<String> -> {
+    return String::from_byte(27)
+}
+
+# Console summary, mirroring test_harness.py's generate_console_report.
+console_report(results<Vec<TestResult>>, elapsedMs<Int>, verbose<Bool>) -> {
+    e<String> = esc()
+    reset<String> = e + "[0m"
+    bold<String> = e + "[1m"
+    green<String> = e + "[92m"
+    red<String> = e + "[91m"
+    yellow<String> = e + "[93m"
+
+    nPass<Int> = 0
+    i<Int> = 0
+    while (i < results.len()) {
+        if (results.get(i).success) { nPass = nPass + 1 }
+        i = i + 1
+    }
+    nBad<Int> = results.len() - nPass
+
+    rule<String> = ""
+    k<Int> = 0
+    while (k < 80) { rule = rule + "="; k = k + 1 }
+
+    println("")
+    println(bold + rule + reset)
+    println(bold + "Test Results Summary" + reset)
+    println(bold + rule + reset)
+    println("")
+    println("Total tests: " + results.len().to_string())
+    println(green + "Passed: " + nPass.to_string() + reset)
+    println(red + "Failed: " + nBad.to_string() + reset)
+    println("Total time: " + sec_str2(elapsedMs) + "s")
+    if (results.len() > 0) {
+        println("Average test time: " + sec_str(elapsedMs / results.len()) + "s")
+    }
+
+    # Category breakdown: collect the distinct names first, sort them by name
+    # like Python's `sorted(category_stats.items())`, then count per category.
+    catNames<Vec<String>> = Vec<String>()
+    i2<Int> = 0
+    while (i2 < results.len()) {
+        r<TestResult> = results.get(i2)
+        j<Int> = 0
+        while (j < r.category.len()) {
+            cn<String> = r.category.get(j)
+            idx<Int> = -1
+            s<Int> = 0
+            while (s < catNames.len()) {
+                if (catNames.get(s) == cn) { idx = s; break }
+                s = s + 1
+            }
+            if (idx < 0) { catNames.push(cn) }
+            j = j + 1
+        }
+        i2 = i2 + 1
+    }
+
+    if (catNames.len() > 0) {
+        println("")
+        println(bold + "Results by Category:" + reset)
+        # selection sort the names
+        picked<Vec<Int>> = Vec<Int>()
+        round<Int> = 0
+        while (round < catNames.len()) {
+            best<Int> = -1
+            b2<Int> = 0
+            while (b2 < catNames.len()) {
+                if (!picked_before(picked, b2)) {
+                    if (best < 0) { best = b2 }
+                    else if (str_cmp(catNames.get(b2), catNames.get(best)) < 0) { best = b2 }
+                }
+                b2 = b2 + 1
+            }
+            if (best >= 0) {
+                nm<String> = catNames.get(best)
+                np<Int> = 0
+                nf<Int> = 0
+                c<Int> = 0
+                while (c < results.len()) {
+                    rr<TestResult> = results.get(c)
+                    hit<Bool> = false
+                    jj<Int> = 0
+                    while (jj < rr.category.len()) {
+                        if (rr.category.get(jj) == nm) { hit = true; break }
+                        jj = jj + 1
+                    }
+                    if (hit) {
+                        if (rr.success) { np = np + 1 } else { nf = nf + 1 }
+                    }
+                    c = c + 1
+                }
+                tot<Int> = np + nf
+                println("  " + nm + ": " + np.to_string() + "/" + tot.to_string() + " (" + pct1(np, tot) + ")")
+                picked.push(best)
+            }
+            round = round + 1
+        }
+    }
+
+    if (nBad > 0) {
+        println("")
+        println(bold + red + "Failed Tests:" + reset)
+        i3<Int> = 0
+        while (i3 < results.len()) {
+            r3<TestResult> = results.get(i3)
+            if (!r3.success) {
+                println("  x " + r3.name)
+                if (verbose) {
+                    println("    File: " + r3.filename)
+                    println("    Error: " + r3.error_message)
+                    if (r3.stderr.len() > 0) {
+                        st<String> = r3.stderr
+                        if (st.len() > 200) { st = st.substring(0, 200) + "..." }
+                        println("    Stderr: " + st)
+                    }
+                }
+            }
+            i3 = i3 + 1
+        }
+    }
+
+    if (results.len() > 0) {
+        println("")
+        println(bold + "Slowest Tests:" + reset)
+        # Times are pre-collected as Ints: comparing two `results.get(x).ms` inside
+        # nested loops hits a codegen gap in this build.
+        nR<Int> = results.len()
+        vals<Vec<Int>> = Vec<Int>()
+        i4<Int> = 0
+        while (i4 < nR) { vals.push(results.get(i4).ms); i4 = i4 + 1 }
+        picked2<Vec<Int>> = Vec<Int>()
+        round2<Int> = 0
+        shown<Int> = 0
+        while (round2 < nR && shown < 5) {
+            best<Int> = -1
+            b3<Int> = 0
+            while (b3 < nR) {
+                if (!picked_before(picked2, b3)) {
+                    if (best < 0) { best = b3 }
+                    else if (vals.get(b3) > vals.get(best)) { best = b3 }
+                }
+                b3 = b3 + 1
+            }
+            if (best >= 0) {
+                println("  " + sec_str(vals.get(best)) + "s - " + results.get(best).name)
+                picked2.push(best)
+                shown = shown + 1
+            }
+            round2 = round2 + 1
+        }
+    }
+
+    if (results.len() > 0) {
+        println("")
+        if (nPass == results.len()) { println(green + bold + "🎉 All tests passed! (" + pct1(nPass, results.len()) + ")" + reset) }
+        else if ((nPass * 100) / results.len() >= 90) { println(yellow + bold + "⚠️  " + pct1(nPass, results.len()) + " tests passed" + reset) }
+        else { println(red + bold + "❌ " + pct1(nPass, results.len()) + " tests passed" + reset) }
+    }
+}
+
+# JSON report: {metadata:{...}, results:[{test:{...}, result:{...}}]}. The shape
+# is the one test_harness.py wrote, so triage_tool.vyb can consume either.
+json_report(results<Vec<TestResult>>, elapsedMs<Int>)<String> -> {
+    nPass<Int> = 0
+    i<Int> = 0
+    while (i < results.len()) {
+        if (results.get(i).success) { nPass = nPass + 1 }
+        i = i + 1
+    }
+    stamp<String> = trim(run_sh("date +%Y-%m-%dT%H:%M:%S"))
+
+    out<String> = "{\n"
+    out = out + "  \"metadata\": {\n"
+    out = out + "    \"timestamp\": \"" + json_escape(stamp) + "\",\n"
+    out = out + "    \"total_tests\": " + results.len().to_string() + ",\n"
+    out = out + "    \"passed\": " + nPass.to_string() + ",\n"
+    out = out + "    \"failed\": " + (results.len() - nPass).to_string() + ",\n"
+    out = out + "    \"total_execution_time\": " + sec_str(elapsedMs) + "\n"
+    out = out + "  },\n"
+    out = out + "  \"results\": [\n"
+    i2<Int> = 0
+    while (i2 < results.len()) {
+        r<TestResult> = results.get(i2)
+        if (i2 > 0) { out = out + ",\n" }
+        out = out + "    {\n"
+        out = out + "      \"test\": {\n"
+        out = out + "        \"filename\": \"" + json_escape(r.tc.filename) + "\",\n"
+        out = out + "        \"name\": \"" + json_escape(r.tc.name) + "\",\n"
+        out = out + "        \"description\": \"" + json_escape(r.tc.description) + "\",\n"
+        out = out + "        \"category\": " + json_str_array(r.tc.category) + ",\n"
+        out = out + "        \"tags\": " + json_str_array(r.tc.tags) + ",\n"
+        out = out + "        \"expect\": \"" + json_escape(r.tc.expect) + "\",\n"
+        out = out + "        \"expect_error\": \"" + json_escape(r.tc.expect_error) + "\",\n"
+        out = out + "        \"expect_output\": \"" + json_escape(r.tc.expect_output) + "\",\n"
+        out = out + "        \"expect_return\": \"" + json_escape(r.tc.expect_return) + "\",\n"
+        out = out + "        \"timeout\": " + r.tc.timeout.to_string() + ",\n"
+        out = out + "        \"parse_only\": " + bool_str(r.tc.parse_only) + ",\n"
+        out = out + "        \"semantic_only\": " + bool_str(r.tc.semantic_only) + ",\n"
+        out = out + "        \"slow\": " + bool_str(r.tc.slow) + ",\n"
+        out = out + "        \"flaky\": " + bool_str(r.tc.flaky) + ",\n"
+        out = out + "        \"priority\": \"" + json_escape(r.tc.priority) + "\",\n"
+        out = out + "        \"author\": \"" + json_escape(r.tc.author) + "\",\n"
+        out = out + "        \"created\": \"" + json_escape(r.tc.created) + "\",\n"
+        out = out + "        \"vyb_args\": \"" + json_escape(r.tc.vyb_args) + "\",\n"
+        out = out + "        \"last_modified\": \"" + json_escape(r.tc.last_modified) + "\",\n"
+        out = out + "        \"env_vars\": " + json_env_object(r.tc.env_vars) + "\n"
+        out = out + "      },\n"
+        out = out + "      \"result\": {\n"
+        out = out + "        \"success\": " + bool_str(r.success) + ",\n"
+        out = out + "        \"execution_time\": " + sec_str(r.ms) + ",\n"
+        out = out + "        \"return_code\": " + r.code.to_string() + ",\n"
+        out = out + "        \"error_message\": \"" + json_escape(r.error_message) + "\",\n"
+        out = out + "        \"stdout\": \"" + json_escape(r.stdout) + "\",\n"
+        out = out + "        \"stderr\": \"" + json_escape(r.stderr) + "\"\n"
+        out = out + "      }\n"
+        out = out + "    }"
+        i2 = i2 + 1
+    }
+    out = out + "\n  ]\n"
+    return out + "}\n"
+}
+
+# Rich HTML report, same structure as test_harness.py's generate_html_report.
+html_report(results<Vec<TestResult>>)<String> -> {
+    nPass<Int> = 0
+    i<Int> = 0
+    while (i < results.len()) {
+        if (results.get(i).success) { nPass = nPass + 1 }
+        i = i + 1
+    }
+    nBad<Int> = results.len() - nPass
+    stamp<String> = trim(run_sh("date +%Y-%m-%d' '%H:%M:%S"))
+
+    out<String> = "<!DOCTYPE html>\n<html>\n<head>\n"
+    out = out + "    <title>Vyb Test Report</title>\n"
+    out = out + "    <style>\n"
+    out = out + "        body { font-family: Arial, sans-serif; margin: 20px; }\n"
+    out = out + "        .header { background: #f0f0f0; padding: 20px; border-radius: 5px; }\n"
+    out = out + "        .stats { display: flex; gap: 20px; margin: 20px 0; }\n"
+    out = out + "        .stat { background: #e9e9e9; padding: 10px; border-radius: 5px; text-align: center; }\n"
+    out = out + "        .passed { color: #28a745; }\n"
+    out = out + "        .failed { color: #dc3545; }\n"
+    out = out + "        .test-result { margin: 10px 0; padding: 10px; border-left: 4px solid #ccc; }\n"
+    out = out + "        .test-result.passed { border-left-color: #28a745; background: #f8f9fa; }\n"
+    out = out + "        .test-result.failed { border-left-color: #dc3545; background: #fff5f5; }\n"
+    out = out + "        .details { font-family: monospace; font-size: 12px; background: #f8f9fa; padding: 10px; margin-top: 10px; }\n"
+    out = out + "        .toggle { cursor: pointer; color: #007bff; }\n"
+    out = out + "    </style>\n"
+    out = out + "    <script>\n"
+    out = out + "        function toggleDetails(id) {\n"
+    out = out + "            var elem = document.getElementById(id);\n"
+    out = out + "            elem.style.display = elem.style.display === 'none' ? 'block' : 'none';\n"
+    out = out + "        }\n"
+    out = out + "    </script>\n"
+    out = out + "</head>\n<body>\n"
+    out = out + "    <div class=\"header\">\n"
+    out = out + "        <h1>Vyb Test Report</h1>\n"
+    out = out + "        <p>Generated: " + stamp + "</p>\n"
+    out = out + "    </div>\n\n"
+    out = out + "    <div class=\"stats\">\n"
+    out = out + "        <div class=\"stat\">\n            <h3>Total Tests</h3>\n            <p>" + results.len().to_string() + "</p>\n        </div>\n"
+    out = out + "        <div class=\"stat passed\">\n            <h3>Passed</h3>\n            <p>" + nPass.to_string() + "</p>\n        </div>\n"
+    out = out + "        <div class=\"stat failed\">\n            <h3>Failed</h3>\n            <p>" + nBad.to_string() + "</p>\n        </div>\n"
+    out = out + "        <div class=\"stat\">\n            <h3>Success Rate</h3>\n            <p>" + pct1(nPass, results.len()) + "</p>\n        </div>\n"
+    out = out + "    </div>\n\n    <h2>Test Results</h2>\n"
+
+    i2<Int> = 0
+    while (i2 < results.len()) {
+        r<TestResult> = results.get(i2)
+        cls<String> = "failed"
+        status<String> = "FAILED"
+        if (r.success) { cls = "passed"; status = "PASSED" }
+        out = out + "    <div class=\"test-result " + cls + "\">\n"
+        out = out + "        <h4>" + r.name + " - " + status + " (" + sec_str(r.ms) + "s)</h4>\n"
+        out = out + "        <p><strong>File:</strong> " + r.filename + "</p>\n"
+        cats<String> = ""
+        j<Int> = 0
+        while (j < r.category.len()) {
+            if (j > 0) { cats = cats + ", " }
+            cats = cats + r.category.get(j)
+            j = j + 1
+        }
+        out = out + "        <p><strong>Category:</strong> " + cats + "</p>\n"
+        out = out + "        <span class=\"toggle\" onclick=\"toggleDetails('details-" + i2.to_string() + "')\">Show Details</span>\n"
+        out = out + "        <div id=\"details-" + i2.to_string() + "\" class=\"details\" style=\"display: none;\">\n"
+        out = out + "            <p><strong>Description:</strong> " + r.description + "</p>\n"
+        out = out + "            <p><strong>Return Code:</strong> " + r.code.to_string() + "</p>\n"
+        if (r.error_message.len() > 0) {
+            out = out + "            <p><strong>Error:</strong> " + r.error_message + "</p>\n"
+        }
+        if (r.stdout.len() > 0) {
+            out = out + "            <p><strong>Stdout:</strong><br><pre>" + r.stdout + "</pre></p>\n"
+        }
+        if (r.stderr.len() > 0) {
+            out = out + "            <p><strong>Stderr:</strong><br><pre>" + r.stderr + "</pre></p>\n"
+        }
+        out = out + "        </div>\n    </div>\n"
+        i2 = i2 + 1
+    }
+    out = out + "</body>\n</html>\n"
+    return out
+}
+
+# ------------------------------------------------------------------------- main
+
+main()<Int> -> {
+    argv<Vec<String>> = argv_of()
+    if (has(argv, "--help") || has(argv, "-h")) {
+        println("test_harness.vyb - Vyb Modern Test Harness v2.0 (Vyb implementation)")
+        println("usage: vyb test_harness.vyb [--vyb PATH] [--test-dirs D ...]")
+        println("       [--pattern P ...] [--category C,C] [--tags T,T] [--priority P]")
+        println("       [--workers N] [-v] [--json-report FILE] [--html-report FILE]")
+        println("       [--exclude-slow] [--exclude-flaky] [--help]")
+        exit(0)
+    }
+
+    runner<String> = ""
+    if (argv.len() > 1) { runner = argv.get(1) }
+    root<String> = find_root(dirname_of(runner))
+    if (root.len() == 0) { root = find_root(dirname_of("test_harness.vyb")) }
+    if (root.len() == 0) { root = "." }
+
+    vyb<String> = opt(argv, "--vyb")
+    if (vyb.len() == 0) { vyb = root + "/build/vyb" }
+    if (!file_exists(vyb)) {
+        println(esc() + "[91mError: Cannot find Vyb executable at " + vyb + esc() + "[0m")
+        println("Build Vyb or specify executable with --vyb option")
+        exit(1)
+    }
+
+    dirs<Vec<String>> = many_opt(argv, "--test-dirs", 4)
+    if (dirs.len() == 0) { dirs.push("test") }
+    patterns<Vec<String>> = many_opt(argv, "--pattern", 4)
+    if (patterns.len() == 0) { patterns.push("*.vyb") }
+
+    verbose<Bool> = has(argv, "--verbose") || has(argv, "-v")
+
+    println(esc() + "[94mVyb Test Harness v2.0" + esc() + "[0m")
+    println("Using executable: " + vyb)
+    line<String> = ""
+    i<Int> = 0
+    while (i < dirs.len()) {
+        if (i > 0) { line = line + ", " }
+        line = line + dirs.get(i)
+        i = i + 1
+    }
+    println("Test directories: " + line)
+    println(esc() + "[96mDiscovering tests..." + esc() + "[0m")
+
+    tests<Vec<TestCase>> = sort_tests(discover_tests(root, dirs, patterns))
+    println("Found " + tests.len().to_string() + " test files")
+
+    catFilter<Vec<String>> = split_commas(opt(argv, "--category"))
+    if (catFilter.len() > 0) {
+        kept<Vec<TestCase>> = Vec<TestCase>()
+        i2<Int> = 0
+        while (i2 < tests.len()) {
+            if (category_matches(tests.get(i2), catFilter)) { kept.push(tests.get(i2)) }
+            i2 = i2 + 1
+        }
+        tests = kept
+        println("Filtered to " + tests.len().to_string() + " tests by category")
+    }
+
+    tagFilter<Vec<String>> = split_commas(opt(argv, "--tags"))
+    if (tagFilter.len() > 0) {
+        kept2<Vec<TestCase>> = Vec<TestCase>()
+        i3<Int> = 0
+        while (i3 < tests.len()) {
+            if (tag_matches(tests.get(i3), tagFilter)) { kept2.push(tests.get(i3)) }
+            i3 = i3 + 1
+        }
+        tests = kept2
+        println("Filtered to " + tests.len().to_string() + " tests by tags")
+    }
+
+    prioFilter<String> = to_lower(opt(argv, "--priority"))
+    if (prioFilter.len() > 0) {
+        kept3<Vec<TestCase>> = Vec<TestCase>()
+        i4<Int> = 0
+        while (i4 < tests.len()) {
+            if (tests.get(i4).priority == prioFilter) { kept3.push(tests.get(i4)) }
+            i4 = i4 + 1
+        }
+        tests = kept3
+        println("Filtered to " + tests.len().to_string() + " tests by priority")
+    }
+
+    if (has(argv, "--exclude-slow")) {
+        kept4<Vec<TestCase>> = Vec<TestCase>()
+        i5<Int> = 0
+        while (i5 < tests.len()) {
+            if (!tests.get(i5).slow) { kept4.push(tests.get(i5)) }
+            i5 = i5 + 1
+        }
+        tests = kept4
+        println("Excluded slow tests, " + tests.len().to_string() + " remaining")
+    }
+
+    if (has(argv, "--exclude-flaky")) {
+        kept5<Vec<TestCase>> = Vec<TestCase>()
+        i6<Int> = 0
+        while (i6 < tests.len()) {
+            if (!tests.get(i6).flaky) { kept5.push(tests.get(i6)) }
+            i6 = i6 + 1
+        }
+        tests = kept5
+        println("Excluded flaky tests, " + tests.len().to_string() + " remaining")
+    }
+
+    if (tests.len() == 0) {
+        println(esc() + "[93mNo tests found matching criteria" + esc() + "[0m")
+        exit(0)
+    }
+
+    workers<String> = opt(argv, "--workers")
+    if (workers.len() == 0) { workers = "sequential" }
+    println(esc() + "[94mRunning " + tests.len().to_string() + " tests (workers: " + workers + " requested; this port runs sequentially)..." + esc() + "[0m")
+
+    results<Vec<TestResult>> = Vec<TestResult>()
+    runStart<Int> = now_ms()
+    i7<Int> = 0
+    while (i7 < tests.len()) {
+        r<TestResult> = run_test(tests.get(i7), root, vyb)
+        results.push(r)
+        if (verbose) {
+            if (r.success) { println("PASS: " + r.name) }
+            else {
+                println("FAIL: " + r.name + " (" + r.filename + ")")
+                println("    Error: " + r.error_message)
+            }
+        }
+        i7 = i7 + 1
+        if ((i7 % 10 == 0 || i7 == tests.len()) && tests.len() > 0) {
+            pct<Int> = (i7 * 100) / tests.len()
+            println(esc() + "[96mProgress: " + i7.to_string() + "/" + tests.len().to_string() + " (" + pct.to_string() + ".0%)" + esc() + "[0m")
+        }
+    }
+    elapsedMs<Int> = now_ms() - runStart
+
+    console_report(results, elapsedMs, verbose)
+
+    jsonOut<String> = opt(argv, "--json-report")
+    if (jsonOut.len() > 0) {
+        d<String> = dirname_of(jsonOut)
+        if (d.len() > 0) { match (mkdir(d)) { ok -> { } ? -> { } } }
+        wrote<Bool> = spill(jsonOut, json_report(results, elapsedMs))
+        if (wrote) { println("JSON report saved to: " + jsonOut) }
+        else { println("could not write " + jsonOut) }
+    }
+
+    htmlOut<String> = opt(argv, "--html-report")
+    if (htmlOut.len() > 0) {
+        d2<String> = dirname_of(htmlOut)
+        if (d2.len() > 0) { match (mkdir(d2)) { ok -> { } ? -> { } } }
+        wrote2<Bool> = spill(htmlOut, html_report(results))
+        if (wrote2) { println("HTML report saved to: " + htmlOut) }
+        else { println("could not write " + htmlOut) }
+    }
+
+    nBad<Int> = 0
+    i8<Int> = 0
+    while (i8 < results.len()) {
+        if (!results.get(i8).success) { nBad = nBad + 1 }
+        i8 = i8 + 1
+    }
+    # `return` in a Vyb main prints the value and exits 0; `exit` sets the status
+    # without printing, which is what a shell caller (and Python) expects.
+    if (nBad > 0) { exit(1) }
+    exit(0)
+}
