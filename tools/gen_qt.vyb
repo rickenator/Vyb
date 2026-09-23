@@ -1,0 +1,1196 @@
+// @not-a-test: true
+# gen_qt.vyb - table-driven generator for the stdlib `qt` module's mechanical layers.
+#
+# Vyb port of `tools/gen_qt.py`. The hand-written C++ logic lives in
+# runtime/vyb_qt_bridge.cpp; everything else -- the stub fallback, the codegen
+# dispatch, the semantic allow-list and Int/String classification, the JIT symbol
+# registration, and the Vyb wrappers + enums -- is owned by this tool and driven
+# by the QT_FUNCS / QT_EVENTS / QT_WIDGETS table (embedded below, generated from
+# the Python source of truth). Each owned region is delimited by sentinel
+# comments (`gen_qt[<key>]: begin` / `end`) whose body this tool rewrites in
+# place. `--check` verifies no owned region drifted.
+#
+# Usage:
+#   VYB_STDLIB=$PWD/stdlib build/vyb tools/gen_qt.vyb            # regenerate in place
+#   VYB_STDLIB=$PWD/stdlib build/vyb tools/gen_qt.vyb --check    # exit 1 if any region is stale
+#
+# The repo root is derived from this program's own path (argv[1]); run it from
+# anywhere with an absolute path, or as `tools/gen_qt.vyb` from the repo root.
+// @not-a-test: true
+import io::{close, open_read, open_write, read_all, write_str}
+import process::{exec_output}
+
+# ---------------------------------------------------------------- small helpers
+
+# Index of the last '/' in `p`, or -1.
+last_slash(p<String>)<Int> -> {
+    i<Int> = p.len() - 1
+    while (i >= 0) {
+        if (((p.char_at(i) as Int) & 0xFF) == 47) { return i }
+        i = i - 1
+    }
+    return -1
+}
+
+# Directory part of `p` ("" when there is no slash).
+dirname_of(p<String>)<String> -> {
+    i<Int> = last_slash(p)
+    if (i < 0) { return "" }
+    return p.substring(0, i)
+}
+
+# Strip leading/trailing whitespace (space, tab, CR, LF) from `s`.
+trim(s<String>)<String> -> {
+    a<Int> = 0
+    n<Int> = s.len()
+    while (a < n) {
+        c<Int> = (s.char_at(a) as Int) & 0xFF
+        if (c == 32 || c == 9 || c == 13 || c == 10) { a = a + 1 } else { break }
+    }
+    b<Int> = n
+    while (b > a) {
+        c<Int> = (s.char_at(b - 1) as Int) & 0xFF
+        if (c == 32 || c == 9 || c == 13 || c == 10) { b = b - 1 } else { break }
+    }
+    if (b <= a) { return "" }
+    return s.substring(a, b)
+}
+
+# Strip trailing whitespace only (Python's str.rstrip() with no args).
+rstrip_ws(s<String>)<String> -> {
+    b<Int> = s.len()
+    while (b > 0) {
+        c<Int> = (s.char_at(b - 1) as Int) & 0xFF
+        if (c == 32 || c == 9 || c == 13 || c == 10) { b = b - 1 } else { break }
+    }
+    return s.substring(0, b)
+}
+
+# Strip trailing newlines only (Python's str.rstrip("\n")).
+rstrip_nl(s<String>)<String> -> {
+    b<Int> = s.len()
+    while (b > 0) {
+        if (((s.char_at(b - 1) as Int) & 0xFF) == 10) { b = b - 1 } else { break }
+    }
+    return s.substring(0, b)
+}
+
+# Decimal value of a digit string (stops at the first non-digit; handles a
+# leading '-'). This build has no String::to_int.
+digits_to_int(s<String>)<Int> -> {
+    t<String> = trim(s)
+    n<Int> = 0
+    neg<Bool> = false
+    i<Int> = 0
+    if (t.len() > 0 && (((t.char_at(0) as Int) & 0xFF) == 45)) { neg = true; i = 1 }
+    while (i < t.len()) {
+        c<Int> = (t.char_at(i) as Int) & 0xFF
+        if (c < 48 || c > 57) { break }
+        n = n * 10 + (c - 48)
+        i = i + 1
+    }
+    if (neg) { return 0 - n }
+    return n
+}
+
+# True when `s` is an optional-minus integer literal.
+stub_is_num(s<String>)<Bool> -> {
+    t<String> = s
+    if (t.len() > 0 && (((t.char_at(0) as Int) & 0xFF) == 45)) { t = t.substring(1, t.len()) }
+    if (t.len() == 0) { return false }
+    i<Int> = 0
+    while (i < t.len()) {
+        c<Int> = (t.char_at(i) as Int) & 0xFF
+        if (c < 48 || c > 57) { return false }
+        i = i + 1
+    }
+    return true
+}
+
+# Index at/after `start` where `needle` first occurs in `text`, or -1.
+find_from(text<String>, needle<String>, start<Int>)<Int> -> {
+    if (start >= text.len()) { return -1 }
+    if (needle.len() == 0) { return start }
+    sub<String> = text.substring(start, text.len())
+    p<Int> = sub.index_of(needle)
+    if (p < 0) { return -1 }
+    return start + p
+}
+
+# Index of the first LF at/after `start`, or -1.
+next_lf(text<String>, start<Int>)<Int> -> {
+    i<Int> = start
+    while (i < text.len()) {
+        if (((text.char_at(i) as Int) & 0xFF) == 10) { return i }
+        i = i + 1
+    }
+    return -1
+}
+
+# True when `flag` appears in `argv`.
+has(argv<Vec<String>>, flag<String>)<Bool> -> {
+    i<Int> = 0
+    while (i < argv.len()) {
+        if (argv.get(i) == flag) { return true }
+        i = i + 1
+    }
+    return false
+}
+
+# The program's argv, parsed from `/proc/self/cmdline` (NUL separated).
+argv_of()<Vec<String>> -> {
+    raw<String> = slurp("/proc/self/cmdline")
+    out<Vec<String>> = Vec<String>()
+    cur<String> = ""
+    i<Int> = 0
+    while (i < raw.len()) {
+        c<Int> = (raw.char_at(i) as Int) & 0xFF
+        if (c == 0) {
+            if (cur.len() > 0) { out.push(cur) }
+            cur = ""
+        } else {
+            cur = cur + String::from_byte(c)
+        }
+        i = i + 1
+    }
+    if (cur.len() > 0) { out.push(cur) }
+    return out
+}
+
+# Read a whole file as a String ("" when it cannot be read).
+slurp(path<String>)<String> -> {
+    text<String> = ""
+    match (open_read(path)) {
+        f -> {
+            match (read_all(f)) { s -> { text = s } ? -> { } }
+            close(f)
+        }
+        ? -> { }
+    }
+    return text
+}
+
+# Write `text` to `path`; true when the whole string was written.
+spill(path<String>, text<String>)<Bool> -> {
+    match (open_write(path)) {
+        f -> {
+            match (write_str(f, text)) { n -> { close(f); return (n == text.len()) } ? -> { close(f); return false } }
+        }
+        ? -> { return false }
+    }
+    return false
+}
+
+# Repo root derived from this program's own path: dirname(dirname(argv[1])).
+repo_root(argv<Vec<String>>)<String> -> {
+    prog<String> = ""
+    if (argv.len() > 1) { prog = argv.get(1) }
+    if (prog.len() == 0) { return "." }
+    root<String> = dirname_of(dirname_of(prog))
+    if (root.len() == 0) { root = "." }
+    return root
+}
+
+# ------------------------------------------------------- table-field accessors
+
+# Field `k` of a `|`-separated table row.
+fld(row<String>, k<Int>)<String> -> {
+    parts<Vec<String>> = row.split("|")
+    if (k >= 0 && k < parts.len()) { return parts.get(k) }
+    return ""
+}
+
+# Argument names of a "name:Type, name:Type" arg string.
+arg_names(argstr<String>)<Vec<String>> -> {
+    out<Vec<String>> = Vec<String>()
+    if (argstr.len() > 0) {
+        pairs<Vec<String>> = argstr.split(",")
+        i<Int> = 0
+        while (i < pairs.len()) {
+            p<String> = trim(pairs.get(i))
+            c<Int> = p.index_of(":")
+            if (c >= 0) { out.push(p.substring(0, c)) }
+            i = i + 1
+        }
+    }
+    return out
+}
+
+# Argument Vyb types of a "name:Type, name:Type" arg string.
+arg_types(argstr<String>)<Vec<String>> -> {
+    out<Vec<String>> = Vec<String>()
+    if (argstr.len() > 0) {
+        pairs<Vec<String>> = argstr.split(",")
+        i<Int> = 0
+        while (i < pairs.len()) {
+            p<String> = trim(pairs.get(i))
+            c<Int> = p.index_of(":")
+            if (c >= 0) { out.push(p.substring(c + 1, p.len())) }
+            i = i + 1
+        }
+    }
+    return out
+}
+
+# Names joined with ", ".
+join_names(argstr<String>)<String> -> {
+    names<Vec<String>> = arg_names(argstr)
+    out<String> = ""
+    i<Int> = 0
+    while (i < names.len()) {
+        if (i > 0) { out = out + ", " }
+        out = out + names.get(i)
+        i = i + 1
+    }
+    return out
+}
+
+# "name<Type>, name<Type>" for the default wrapper signature.
+join_sig(argstr<String>)<String> -> {
+    names<Vec<String>> = arg_names(argstr)
+    types<Vec<String>> = arg_types(argstr)
+    out<String> = ""
+    i<Int> = 0
+    while (i < names.len()) {
+        if (i > 0) { out = out + ", " }
+        out = out + names.get(i) + "<" + types.get(i) + ">"
+        i = i + 1
+    }
+    return out
+}
+
+# First Bool-typed argument name, or "".
+first_bool(argstr<String>)<String> -> {
+    names<Vec<String>> = arg_names(argstr)
+    types<Vec<String>> = arg_types(argstr)
+    i<Int> = 0
+    while (i < names.len()) {
+        if (types.get(i) == "Bool") { return names.get(i) }
+        i = i + 1
+    }
+    return ""
+}
+
+# C argument list; `outtype` (when non-empty) appends `<outtype>* out`.
+cpp_args_impl(argstr<String>, outtype<String>)<String> -> {
+    names<Vec<String>> = arg_names(argstr)
+    types<Vec<String>> = arg_types(argstr)
+    out<String> = ""
+    lens<Int> = 0
+    i<Int> = 0
+    while (i < names.len()) {
+        t<String> = types.get(i)
+        piece<String> = ""
+        if (t == "String") {
+            ln<String> = "len"
+            if (lens > 0) { ln = "len" + (lens + 1).to_string() }
+            lens = lens + 1
+            piece = "const char* " + names.get(i) + ", int64_t " + ln
+        } else if (t == "Ptr") {
+            piece = "void* " + names.get(i)
+        } else {
+            piece = "int64_t " + names.get(i)
+        }
+        if (i > 0) { out = out + ", " }
+        out = out + piece
+        i = i + 1
+    }
+    if (outtype.len() > 0) {
+        if (out.len() > 0) { out = out + ", " }
+        out = out + outtype + "* out"
+    }
+    return out
+}
+
+cpp_args(argstr<String>)<String> -> {
+    return cpp_args_impl(argstr, "")
+}
+
+cpp_opt_args(argstr<String>, outtype<String>)<String> -> {
+    return cpp_args_impl(argstr, outtype)
+}
+
+# "(void)a; (void)b" -- the cast statements that silence unused-parameter warnings.
+void_casts(argstr<String>)<String> -> {
+    names<Vec<String>> = arg_names(argstr)
+    out<String> = ""
+    i<Int> = 0
+    while (i < names.len()) {
+        if (i > 0) { out = out + " " }
+        out = out + "(void)" + names.get(i) + ";"
+        i = i + 1
+    }
+    return out
+}
+
+# One stub function body for a QT table row.
+stub_body(argstr<String>, cn<String>, ret<String>, stub<String>)<String> -> {
+    retty<String> = "int64_t"
+    if (ret == "String") { retty = "vyb_qt_str" }
+    sig<String> = "VYB_WEAK " + retty + " " + cn + "(" + cpp_args(argstr) + ")"
+    expr<String> = "return qt_stub_str();"
+    if (stub_is_num(stub)) { expr = "return " + stub + ";" }
+    casts<String> = void_casts(argstr)
+    inner<String> = expr
+    if (casts.len() > 0) { inner = casts + " " + expr }
+    nargs<Vec<String>> = arg_names(argstr)
+    if (nargs.len() > 1 || retty == "vyb_qt_str") {
+        return sig + "\n    { " + inner + " }"
+    }
+    return sig + " { " + inner + " }"
+}
+
+# One lossless opt-shim stub body (`vyb_qt_str* out` out-param, returns 0).
+stub_opt_body(cn<String>, argstr<String>)<String> -> {
+    names<Vec<String>> = arg_names(argstr)
+    casts<String> = ""
+    i<Int> = 0
+    while (i < names.len()) {
+        casts = casts + "(void)" + names.get(i) + "; "
+        i = i + 1
+    }
+    casts = casts + "(void)out; "
+    sig<String> = "VYB_WEAK int64_t " + cn + "(" + cpp_opt_args(argstr, "vyb_qt_str") + ")"
+    return sig + "\n    { " + casts + "return 0; }"
+}
+
+# The `fname == "a"` disjunction for a shape group, wrapped like the Python tool
+# (indent 16, break to a new line when indent+line+add would exceed 100 columns).
+cond_lines(names<Vec<String>>)<String> -> {
+    if (names.len() == 0) { return "" }
+    line<String> = "fname == \"" + names.get(0) + "\""
+    i<Int> = 1
+    while (i < names.len()) {
+        add<String> = " || fname == \"" + names.get(i) + "\""
+        if (("                " + line + add).len() > 100) {
+            line = line + " ||\n                fname == \"" + names.get(i) + "\""
+        } else {
+            line = line + add
+        }
+        i = i + 1
+    }
+    return line
+}
+
+# Body text for a branch key, or "".
+br_get(key<String>, keys<Vec<String>>, vals<Vec<String>>)<String> -> {
+    i<Int> = 0
+    while (i < keys.len()) {
+        if (keys.get(i) == key) { return vals.get(i) }
+        i = i + 1
+    }
+    return ""
+}
+
+# MIGRATION target (e.g. "Int?@-1") for a wrapper name, or "".
+mig_target(mod<String>, mrows<Vec<String>>)<String> -> {
+    i<Int> = 0
+    while (i < mrows.len()) {
+        parts<Vec<String>> = mrows.get(i).split("|")
+        if (parts.len() >= 2 && parts.get(0) == mod) { return parts.get(1) }
+        i = i + 1
+    }
+    return ""
+}
+
+# The base return type of a MIGRATION target ("Int?@-1" -> "Int?").
+base_of(target<String>)<String> -> {
+    idx<Int> = target.index_of("@")
+    if (idx >= 0) { return target.substring(0, idx) }
+    return target
+}
+
+# Render an intrinsic call, coercing Bool args to 1/0 (intrinsics take Int).
+qt_call(argstr<String>, vn<String>, truthy<Bool>)<String> -> {
+    names<Vec<String>> = arg_names(argstr)
+    types<Vec<String>> = arg_types(argstr)
+    out<String> = ""
+    i<Int> = 0
+    while (i < names.len()) {
+        if (i > 0) { out = out + ", " }
+        if (types.get(i) == "Bool") {
+            if (truthy) { out = out + "1" } else { out = out + "0" }
+        } else {
+            out = out + names.get(i)
+        }
+        i = i + 1
+    }
+    return vn + "(" + out + ")"
+}
+
+# Public-wrapper body for a migrated (T?) function.
+migrate_body(argstr<String>, vn<String>, target<String>)<String> -> {
+    base<String> = base_of(target)
+    sent<String> = "0"
+    idx<Int> = target.index_of("@")
+    if (idx >= 0) { sent = target.substring(idx + 1, target.len()) }
+    if (base == "Int?") {
+        if (sent.len() == 0) { sent = "0" }
+        return "v = " + qt_call(argstr, vn, false) + "\n    if (v == " + sent + ") { return Int?() }\n    return Int?(v)"
+    }
+    bn<String> = first_bool(argstr)
+    if (bn.len() == 0) {
+        return "if (" + qt_call(argstr, vn, false) + " != 0) { return Bool?() }\n    return Bool?(true)"
+    }
+    return "if (" + bn + ") {\n        if (" + qt_call(argstr, vn, true) + " != 0) { return Bool?() }\n        return Bool?(true)\n    }\n    if (" + qt_call(argstr, vn, false) + " != 0) { return Bool?() }\n    return Bool?(true)"
+}
+
+# ------------------------------------------------------------- marker/region IO
+
+marker(lang<String>, key<String>, which<String>)<String> -> {
+    if (lang == "cpp") { return "// gen_qt[" + key + "]: " + which }
+    return "# gen_qt[" + key + "]: " + which
+}
+
+# Rewrite one owned region in `rel`; returns 1 when it drifted, else 0. In
+# --check mode the file is never written.
+do_region(root<String>, rel<String>, lang<String>, key<String>, body<String>, check<Bool>)<Int> -> {
+    path<String> = root + "/" + rel
+    text<String> = slurp(path)
+    bm<String> = marker(lang, key, "begin")
+    em<String> = marker(lang, key, "end")
+    b<Int> = find_from(text, bm, 0)
+    if (b < 0) {
+        println("gen_qt: missing begin marker \"" + bm + "\"")
+        exit(1)
+    }
+    e<Int> = find_from(text, em, b)
+    if (e < 0) {
+        println("gen_qt: missing end marker \"" + em + "\"")
+        exit(1)
+    }
+    nl<Int> = next_lf(text, b)
+    if (nl < 0) {
+        println("gen_qt: missing begin marker \"" + bm + "\"")
+        exit(1)
+    }
+    bstart<Int> = nl + 1
+    body2<String> = rstrip_nl(body) + "\n"
+    if (text.substring(bstart, e) == body2) { return 0 }
+    if (check) { return 1 }
+    newtext<String> = text.substring(0, bstart) + body2 + text.substring(e, text.len())
+    spill(path, newtext)
+    println("gen_qt: regenerated " + rel + " [" + key + "]")
+    return 1
+}
+# ----- generated data (source of truth: tools/gen_qt.py) -----
+t_rows()<Vec<String>> -> {
+    v<Vec<String>> = Vec<String>()
+    v.push("qt_web_create|vyb_qt_web_create|__vyb_qt_web_create|parent:Int|Int|int1|0|Create a QWebEngineView under `parent`. Returns `Int?` -- present with the live handle, absent if QtWebEngine is unavailable or creation failed.|||||||w")
+    v.push("qt_web_load|vyb_qt_web_load|__vyb_qt_web_load|web:Int, url:String|Int|text|-1|Begin loading `url` in the web view (async). Returns `Bool?` -- present on success, absent on a bad handle.|||||||w")
+    v.push("qt_web_url|vyb_qt_web_url|__vyb_qt_web_url|web:Int|String|str1|qt_stub_str()|Current page URL (String); \"\" on a bad handle.|||||||w")
+    v.push("qt_web_title|vyb_qt_web_title|__vyb_qt_web_title|web:Int|String|str1|qt_stub_str()|Current page title (String); \"\" on a bad handle.|||||||w")
+    v.push("qt_web_loading|vyb_qt_web_loading|__vyb_qt_web_loading|web:Int|Bool|int1|0|true while the page is still loading.|||||||w")
+    v.push("qt_web_back|vyb_qt_web_back|__vyb_qt_web_back|web:Int|Int|int1|-1|Go back in history. Returns `Bool?` -- present on success, absent on a bad handle.|||||||w")
+    v.push("qt_web_forward|vyb_qt_web_forward|__vyb_qt_web_forward|web:Int|Int|int1|-1|Go forward in history. Returns `Bool?` -- present on success, absent on a bad handle.|||||||w")
+    v.push("qt_web_reload|vyb_qt_web_reload|__vyb_qt_web_reload|web:Int|Int|int1|-1|Reload the page. Returns `Bool?` -- present on success, absent on a bad handle.|||||||w")
+    v.push("qt_web_zoom_in|vyb_qt_web_zoom_in|__vyb_qt_web_zoom_in|web:Int|Int|int1|-1|Zoom the web view in (larger text). Returns `Bool?` -- present on success, absent on a bad handle.|||||||w")
+    v.push("qt_web_zoom_out|vyb_qt_web_zoom_out|__vyb_qt_web_zoom_out|web:Int|Int|int1|-1|Zoom the web view out (smaller text). Returns `Bool?` -- present on success, absent on a bad handle.|||||||w")
+    v.push("qt_init|vyb_qt_init|__vyb_qt_init||Bool|int0|0|Initialize the QApplication (once); true if the GUI is available.|||||||f")
+    v.push("qt_quit|vyb_qt_quit|__vyb_qt_quit||Int|int0|0|Shut the GUI down (terminal - do not use Qt handles afterwards). Returns `Bool?` -- present once the GUI has quit.|||||||f")
+    v.push("qt_active|vyb_qt_active|__vyb_qt_active||Bool|int0|0|true while the GUI is initialized.|||||||f")
+    v.push("qt_process_events|vyb_qt_process_events|__vyb_qt_process_events||Int|int0|-1|Pump the Qt event loop once. Returns `Bool?` -- present on success, absent if the GUI is not running.|||||||f")
+    v.push("qt_set_timer|vyb_qt_set_timer|__vyb_qt_set_timer|ms:Int|Int|int1|-1|Arm a repeating timer every `ms` ms; poll qt_timer_fired(). Returns `Bool?` -- present on success, absent on failure.|||||||f")
+    v.push("qt_timer_fired|vyb_qt_timer_fired|__vyb_qt_timer_fired||Bool|int0|0|true once the armed timer has fired since the last check (read clears).|||||||f")
+    v.push("qt_window_create|vyb_qt_window_create|__vyb_qt_window_create||Int|int0|0|Create a top-level window. Returns `Int?` -- present with the live handle, absent if creation failed.|||||||f")
+    v.push("qt_window_close|vyb_qt_window_close|__vyb_qt_window_close|w:Int|Int|int1|-1|Destroy window `w` (children go with it). Returns `Bool?` -- present on success, absent on a bad handle.|||||||f")
+    v.push("qt_window_set_title|vyb_qt_window_set_title|__vyb_qt_window_set_title|w:Int, title:String|Int|text|-1|Set titlebar text. Returns `Bool?` -- present on success, absent on a bad handle.|||||||f")
+    v.push("qt_window_title|vyb_qt_window_title|__vyb_qt_window_title|w:Int|String|str1|qt_stub_str()|Current titlebar text (String); \"\" on a bad handle.|||||||f")
+    v.push("qt_window_resize|vyb_qt_window_resize|__vyb_qt_window_resize|w:Int, width:Int, height:Int|Int|3int|-1|Resize to (width, height) pixels. Returns `Bool?` -- present on success, absent on a bad handle.|||||||f")
+    v.push("qt_window_width|vyb_qt_window_width|__vyb_qt_window_width|w:Int|Int|int1|-1|Content width in pixels. Returns `Int?` -- present holding the width, absent on a bad handle.|||||||f")
+    v.push("qt_window_height|vyb_qt_window_height|__vyb_qt_window_height|w:Int|Int|int1|-1|Content height in pixels. Returns `Int?` -- present holding the height, absent on a bad handle.|||||||f")
+    v.push("qt_window_show|vyb_qt_window_show|__vyb_qt_window_show|w:Int|Int|int1|-1|Show (map) the window. Returns `Bool?` -- present on success, absent on a bad handle.|||||||f")
+    v.push("qt_window_hide|vyb_qt_window_hide|__vyb_qt_window_hide|w:Int|Int|int1|-1|Hide (unmap) the window. Returns `Bool?` -- present on success, absent on a bad handle.|||||||f")
+    v.push("qt_window_visible|vyb_qt_window_visible|__vyb_qt_window_visible|w:Int|Bool|int1|0|true while window `w` is visible, else false.|||||||f")
+    v.push("qt_screen_width|vyb_qt_screen_width|__vyb_qt_screen_width||Int|int0|-1|Primary screen width in logical pixels. Returns `Int?` -- present holding the width, absent if no screen is available.|||||||f")
+    v.push("qt_screen_height|vyb_qt_screen_height|__vyb_qt_screen_height||Int|int0|-1|Primary screen height in logical pixels. Returns `Int?` -- present holding the height, absent if no screen is available.|||||||f")
+    v.push("qt_screen_dpi|vyb_qt_screen_dpi|__vyb_qt_screen_dpi||Int|int0|-1|Primary screen device-pixel-ratio scaled to 96dpi (100 = 1.0x). Returns `Int?` -- present holding the DPI, absent if no screen is available.|||||||f")
+    v.push("qt_label_create|vyb_qt_label_create|__vyb_qt_label_create|parent:Int, text:String|Int|text|0|Create a label with `text` under `parent` (0 = none). Returns `Int?` -- present with the live handle, absent if creation failed.|||||||f")
+    v.push("qt_label_set_text|vyb_qt_label_set_text|__vyb_qt_label_set_text|label:Int, text:String|Int|text|-1|Replace label text. Returns `Bool?` -- present on success, absent on a non-label handle.|||||||f")
+    v.push("qt_label_text|vyb_qt_label_text|__vyb_qt_label_text|label:Int|String|str1|qt_stub_str()|Current label text (String); \"\" on a non-label handle.|||||||f")
+    v.push("qt_button_create|vyb_qt_button_create|__vyb_qt_button_create|parent:Int, text:String|Int|text|0|Create a push button under `parent`; a click enqueues QtEvent::Click. Returns `Int?` -- present with the live handle, absent if creation failed.|||||||f")
+    v.push("qt_button_set_text|vyb_qt_button_set_text|__vyb_qt_button_set_text|button:Int, text:String|Int|text|-1|Replace button label. Returns `Bool?` -- present on success, absent on a non-button handle.|||||||f")
+    v.push("qt_button_text|vyb_qt_button_text|__vyb_qt_button_text|button:Int|String|str1|qt_stub_str()|Current button label (String); \"\" on a non-button handle.|||||||f")
+    v.push("qt_button_set_enabled|vyb_qt_button_set_enabled|__vyb_qt_button_set_enabled|button:Int, enabled:Bool|Int|value|-1|Enable (true) / disable (false) the button. Returns `Bool?` -- present on success, absent on a non-button handle.|if (enabled) {\n        return vyb_qt_button_set_enabled(button, 1)\n    }\n    return vyb_qt_button_set_enabled(button, 0)||||||f")
+    v.push("qt_edit_create|vyb_qt_edit_create|__vyb_qt_edit_create|parent:Int, text:String|Int|text|0|Create a single-line text edit under `parent`; text changes enqueue QtEvent::TextChanged. Returns `Int?` -- present with the live handle, absent if creation failed.|||||||f")
+    v.push("qt_edit_text|vyb_qt_edit_text|__vyb_qt_edit_text|edit:Int|String|str1|qt_stub_str()|Current edit text (String); \"\" on a non-edit handle.|||||||f")
+    v.push("qt_edit_set_text|vyb_qt_edit_set_text|__vyb_qt_edit_set_text|edit:Int, text:String|Int|text|-1|Replace edit text. Returns `Bool?` -- present on success, absent on a non-edit handle.|||||||f")
+    v.push("qt_edit_set_placeholder|vyb_qt_edit_set_placeholder|__vyb_qt_edit_set_placeholder|edit:Int, text:String|Int|text|-1|Set placeholder (ghost) text. Returns `Bool?` -- present on success, absent on a non-edit handle.|||||||f")
+    v.push("qt_checkbox_create|vyb_qt_checkbox_create|__vyb_qt_checkbox_create|parent:Int, text:String|Int|text|0|Create a checkbox under `parent`; toggles enqueue QtEvent::Toggled. Returns `Int?` -- present with the live handle, absent if creation failed.|||||||f")
+    v.push("qt_checkbox_checked|vyb_qt_checkbox_checked|__vyb_qt_checkbox_checked|box:Int|Bool|int1|-1|true if the checkbox is checked, else false.|||||||f")
+    v.push("qt_checkbox_set_checked|vyb_qt_checkbox_set_checked|__vyb_qt_checkbox_set_checked|box:Int, on:Bool|Int|value|-1|Check (true) / uncheck (false) the box (enqueues QtEvent::Toggled). Returns `Bool?` -- present on success, absent on a non-checkbox handle.|if (on) {\n        return vyb_qt_checkbox_set_checked(box, 1)\n    }\n    return vyb_qt_checkbox_set_checked(box, 0)||||||f")
+    v.push("qt_progress_create|vyb_qt_progress_create|__vyb_qt_progress_create|parent:Int, max:Int|Int|value|0|Create a progress bar with range 0..max under `parent`. Returns `Int?` -- present with the live handle, absent if creation failed.|||||||f")
+    v.push("qt_progress_set_value|vyb_qt_progress_set_value|__vyb_qt_progress_set_value|bar:Int, value:Int|Int|value|-1|Set the progress value (clamped). Returns `Bool?` -- present on success, absent on a bad handle.|||||||f")
+    v.push("qt_vbox|vyb_qt_vbox|__vyb_qt_vbox|parent:Int|Int|int1|0|Create a vertical box layout on window `parent`. Returns `Int?` -- present with the live layout handle, absent if creation failed.|||||||f")
+    v.push("qt_hbox|vyb_qt_hbox|__vyb_qt_hbox|parent:Int|Int|int1|0|Create a horizontal box layout on window `parent`. Returns `Int?` -- present with the live layout handle, absent if creation failed.|||||||f")
+    v.push("qt_layout_add|vyb_qt_layout_add|__vyb_qt_layout_add|layout:Int, child:Int|Int|value|-1|Add widget `child` to box-layout `layout`. Returns `Bool?` -- present on success, absent on a bad handle.|||||||f")
+    v.push("qt_layout_add_layout|vyb_qt_layout_add_layout|__vyb_qt_layout_add_layout|layout:Int, sub:Int|Int|value|-1|Nest sub-layout `sub` inside box-layout `layout` (adds it as the next item). Returns `Bool?` -- present on success, absent on a bad handle.|||||||f")
+    v.push("qt_layout_set_stretch|vyb_qt_layout_set_stretch|__vyb_qt_layout_set_stretch|layout:Int, index:Int, stretch:Int|Int|3int|-1|Set the stretch factor of the item at `index` (add order, 0-based) to `stretch`. Returns `Bool?` -- present on success, absent on a bad handle.|||||||f")
+    v.push("qt_kind|vyb_qt_kind|__vyb_qt_kind|h:Int|Int|int1|0|Static widget kind (QtWidgetKind) of handle `h`, or 0 if not a widget.|||||||f")
+    v.push("qt_event_count|vyb_qt_event_count|__vyb_qt_event_count||Int|int0|0|Number of pending control events queued since the last drains.|||||||f")
+    v.push("qt_event_handle|vyb_qt_event_handle|__vyb_qt_event_handle||Int|int0|0|Handle of the oldest queued event's widget (0 if empty).|||||||f")
+    v.push("qt_event_kind|vyb_qt_event_kind|__vyb_qt_event_kind||Int|int0|0|Kind of the oldest queued event (QtEvent); 0 if empty.|||||||f")
+    v.push("qt_event_pop|vyb_qt_event_pop|__vyb_qt_event_pop||Int|int0|-1|Remove the oldest queued event. Returns 0, or -1 if empty.|||||||f")
+    v.push("qt_wait_event|vyb_qt_wait_event|__vyb_qt_wait_event|timeout:Int|Bool|int1|-1|Pump Qt until a control event (true) or `timeout` ms lapses (false); negative waits.|||||||f")
+    v.push("qt_run|vyb_qt_run|__vyb_qt_run||Int|int0|-1|Run the Qt native event loop, dispatching queued control events to the qt_on_event handler, until qt_run_stop()/qt_quit(). Returns exit code.|||||||f")
+    v.push("qt_run_stop|vyb_qt_run_stop|__vyb_qt_run_stop||Int|int0|-1|Stop a running qt_run() loop (graceful; GUI stays up). Returns `Bool?` -- present if a loop was stopped; absent if none was running.|||||||f")
+    v.push("qt_on_event|vyb_qt_on_event|__vyb_qt_on_event|env:Ptr, fn:Ptr|Int|cb|0|Register fn(handle, kind) called for each control event queued while qt_run() runs. Returns 0.||handler<fn(Int, Int) -> Void>|return vyb_qt_on_event(handler)||||f")
+    v.push("qt_post_event|vyb_qt_post_event|__vyb_qt_post_event|h:Int, kind:Int|Int|value|0|Enqueue a synthetic control event for handle `h` (thread-safe: a background async can signal the UI loop without touching widgets off-thread). Returns `Bool?` -- present on success, absent on failure.|||||||f")
+    v.push("qt_combo_create|vyb_qt_combo_create|__vyb_qt_combo_create|parent:Int|Int|int1|0|Create a combo box under `parent`; index changes enqueue QtEvent::IndexChanged. Returns `Int?` -- present with the live handle, absent if creation failed.|||||||f")
+    v.push("qt_combo_add_item|vyb_qt_combo_add_item|__vyb_qt_combo_add_item|combo:Int, text:String|Int|text|-1|Append `text` as the last combo item. Returns `Bool?` -- present on success, absent on a bad handle.|||||||f")
+    v.push("qt_combo_count|vyb_qt_combo_count|__vyb_qt_combo_count|combo:Int|Int|int1|-1|Combo item count, or -1 on a bad handle.|||||||f")
+    v.push("qt_combo_current_index|vyb_qt_combo_current_index|__vyb_qt_combo_current_index|combo:Int|Int|int1|-1|Currently selected combo index (0-based), or -1 on a bad handle.|||||||f")
+    v.push("qt_combo_set_current_index|vyb_qt_combo_set_current_index|__vyb_qt_combo_set_current_index|combo:Int, idx:Int|Int|value|-1|Select combo item `idx`. Returns `Bool?` -- present on success, absent on a bad handle.|||||||f")
+    v.push("qt_combo_item_text|vyb_qt_combo_item_text|__vyb_qt_combo_item_text|combo:Int, idx:Int|String|str2|qt_stub_str()|Text of combo item `idx` (String); \"\" on a bad handle/index.|||||||f")
+    v.push("qt_spin_create|vyb_qt_spin_create|__vyb_qt_spin_create|parent:Int, min:Int, max:Int|Int|3int|0|Create an integer spin box with range [min, max]; value changes enqueue QtEvent::ValueChanged. Returns `Int?` -- present with the live handle, absent if creation failed.|||||||f")
+    v.push("qt_spin_value|vyb_qt_spin_value|__vyb_qt_spin_value|spin:Int|Int|int1|0|Current spin box value, or 0 on a bad handle.|||||||f")
+    v.push("qt_spin_set_value|vyb_qt_spin_set_value|__vyb_qt_spin_set_value|spin:Int, value:Int|Int|value|-1|Set the spin box value (clamped). Returns `Bool?` -- present on success, absent on a bad handle.|||||||f")
+    v.push("qt_slider_create|vyb_qt_slider_create|__vyb_qt_slider_create|parent:Int, min:Int, max:Int|Int|3int|0|Create a horizontal slider with range [min, max]; value changes enqueue QtEvent::ValueChanged. Returns `Int?` -- present with the live handle, absent if creation failed.|||||||f")
+    v.push("qt_slider_value|vyb_qt_slider_value|__vyb_qt_slider_value|slider:Int|Int|int1|0|Current slider value, or 0 on a bad handle.|||||||f")
+    v.push("qt_slider_set_value|vyb_qt_slider_set_value|__vyb_qt_slider_set_value|slider:Int, value:Int|Int|value|-1|Set the slider value (clamped). Returns `Bool?` -- present on success, absent on a bad handle.|||||||f")
+    v.push("qt_dial_create|vyb_qt_dial_create|__vyb_qt_dial_create|parent:Int, min:Int, max:Int|Int|3int|0|Create a dial with range [min, max]; value changes enqueue QtEvent::ValueChanged. Returns `Int?` -- present with the live handle, absent if creation failed.|||||||f")
+    v.push("qt_dial_value|vyb_qt_dial_value|__vyb_qt_dial_value|dial:Int|Int|int1|0|Current dial value, or 0 on a bad handle.|||||||f")
+    v.push("qt_dial_set_value|vyb_qt_dial_set_value|__vyb_qt_dial_set_value|dial:Int, value:Int|Int|value|-1|Set the dial value (clamped). Returns `Bool?` -- present on success, absent on a bad handle.|||||||f")
+    v.push("qt_group_create|vyb_qt_group_create|__vyb_qt_group_create|parent:Int, title:String|Int|text|0|Create a titled group-box container under `parent`; put a layout on it. Returns `Int?` -- present with the live handle, absent if creation failed.|||||||f")
+    v.push("qt_text_edit_create|vyb_qt_text_edit_create|__vyb_qt_text_edit_create|parent:Int|Int|int1|0|Create a multi-line plain-text editor under `parent`; edits enqueue QtEvent::TextChanged. Returns `Int?` -- present with the live handle, absent if creation failed.|||||||f")
+    v.push("qt_text_edit_text|vyb_qt_text_edit_text|__vyb_qt_text_edit_text|ed:Int|String|str1|qt_stub_str()|Current editor text (String); \"\" on a bad handle.|||||||f")
+    v.push("qt_text_edit_set_text|vyb_qt_text_edit_set_text|__vyb_qt_text_edit_set_text|ed:Int, text:String|Int|text|-1|Replace editor text. Returns `Bool?` -- present on success, absent on a non-editor handle.|||||||f")
+    v.push("qt_radio_create|vyb_qt_radio_create|__vyb_qt_radio_create|parent:Int, text:String|Int|text|0|Create a radio button under `parent`; toggles enqueue QtEvent::Toggled. Returns `Int?` -- present with the live handle, absent if creation failed.|||||||f")
+    v.push("qt_radio_checked|vyb_qt_radio_checked|__vyb_qt_radio_checked|radio:Int|Bool|int1|-1|true if the radio button is checked, else false.|||||||f")
+    v.push("qt_radio_set_checked|vyb_qt_radio_set_checked|__vyb_qt_radio_set_checked|radio:Int, on:Bool|Int|value|-1|Check (true) / uncheck (false) the radio (enqueues QtEvent::Toggled). Returns `Bool?` -- present on success, absent on a non-radio handle.|if (on) {\n        return vyb_qt_radio_set_checked(radio, 1)\n    }\n    return vyb_qt_radio_set_checked(radio, 0)||||||f")
+    v.push("qt_widget_set_enabled|vyb_qt_widget_set_enabled|__vyb_qt_widget_set_enabled|h:Int, on:Bool|Int|value|-1|Enable (true) / disable (false) any widget. Returns `Bool?` -- present on success, absent on a non-widget handle.|if (on) {\n        return vyb_qt_widget_set_enabled(h, 1)\n    }\n    return vyb_qt_widget_set_enabled(h, 0)||||||f")
+    v.push("qt_widget_enabled|vyb_qt_widget_enabled|__vyb_qt_widget_enabled|h:Int|Bool|int1|0|true while widget `h` is enabled, else false.|||||||f")
+    v.push("qt_grid|vyb_qt_grid|__vyb_qt_grid|parent:Int|Int|int1|0|Create a grid layout on window `parent`. Returns `Int?` -- present with the live layout handle, absent if creation failed.|||||||f")
+    v.push("qt_grid_add|vyb_qt_grid_add|__vyb_qt_grid_add|layout:Int, child:Int, row:Int, col:Int|Int|4int|-1|Add widget `child` to grid-layout `layout` at (row, col). Returns `Bool?` -- present on success, absent on a bad handle.|||||||f")
+    v.push("qt_widget_set_visible|vyb_qt_widget_set_visible|__vyb_qt_widget_set_visible|h:Int, on:Bool|Int|value|-1|Show (true) / hide (false) any widget. Returns `Bool?` -- present on success, absent on a non-widget handle.|if (on) {\n        return vyb_qt_widget_set_visible(h, 1)\n    }\n    return vyb_qt_widget_set_visible(h, 0)||||||f")
+    v.push("qt_widget_visible|vyb_qt_widget_visible|__vyb_qt_widget_visible|h:Int|Bool|int1|0|true while widget `h` is visible, else false.|||||||f")
+    v.push("qt_tabs_create|vyb_qt_tabs_create|__vyb_qt_tabs_create|parent:Int|Int|int1|0|Create a tab container under `parent`. Returns `Int?` -- present with the live handle, absent if creation failed.|||||||f")
+    v.push("qt_tabs_add|vyb_qt_tabs_add|__vyb_qt_tabs_add|tabs:Int, text:String|Int|text|0|Append a tab titled `text`. Returns `Int?` -- present with the page's widget handle (put a layout on it), absent if the tab could not be added.|||||||f")
+    v.push("qt_tabs_count|vyb_qt_tabs_count|__vyb_qt_tabs_count|tabs:Int|Int|int1|-1|Tab count, or -1 on a bad handle.|||||||f")
+    v.push("qt_tabs_current|vyb_qt_tabs_current|__vyb_qt_tabs_current|tabs:Int|Int|int1|-1|Current (0-based) tab index, or -1 on a bad handle.|||||||f")
+    v.push("qt_tabs_set_current|vyb_qt_tabs_set_current|__vyb_qt_tabs_set_current|tabs:Int, idx:Int|Int|value|-1|Select tab `idx` (enqueues QtEvent::CurrentChanged). Returns `Bool?` -- present on success, absent on a bad handle.|||||||f")
+    v.push("qt_list_create|vyb_qt_list_create|__vyb_qt_list_create|parent:Int|Int|int1|0|Create an item list under `parent`; selection changes enqueue QtEvent::CurrentChanged. Returns `Int?` -- present with the live handle, absent if creation failed.|||||||f")
+    v.push("qt_list_add|vyb_qt_list_add|__vyb_qt_list_add|list:Int, text:String|Int|text|-1|Append `text` as the last list item. Returns `Bool?` -- present on success, absent on a bad handle.|||||||f")
+    v.push("qt_list_count|vyb_qt_list_count|__vyb_qt_list_count|list:Int|Int|int1|-1|List item count, or -1 on a bad handle.|||||||f")
+    v.push("qt_list_current|vyb_qt_list_current|__vyb_qt_list_current|list:Int|Int|int1|-1|Current (0-based) list index, or -1 when none / bad handle.|||||||f")
+    v.push("qt_list_set_current|vyb_qt_list_set_current|__vyb_qt_list_set_current|list:Int, idx:Int|Int|value|-1|Select list item `idx`. Returns `Bool?` -- present on success, absent on a bad handle.|||||||f")
+    v.push("qt_list_item_text|vyb_qt_list_item_text|__vyb_qt_list_item_text|list:Int, idx:Int|String|str2|qt_stub_str()|Text of list item `idx` (String); \"\" on a bad handle/index.|||||||f")
+    v.push("qt_main_window_create|vyb_qt_main_window_create|__vyb_qt_main_window_create||Int|int0|0|Create a top-level QMainWindow (kind Window) with menubar/statusbar/toolbar support. Returns `Int?` -- present with the live handle, absent if creation failed.|||||||f")
+    v.push("qt_menubar|vyb_qt_menubar|__vyb_qt_menubar|mw:Int|Int|int1|0|Obtain the main window's menu bar handle (created on demand). Returns `Int?` -- present with the live handle, absent if unavailable.|||||||f")
+    v.push("qt_menu_add|vyb_qt_menu_add|__vyb_qt_menu_add|mw:Int, title:String|Int|text|0|Add a top-level menu titled `title` to the menu bar. Returns `Int?` -- present with the live menu handle, absent if creation failed.|||||||f")
+    v.push("qt_action_add|vyb_qt_action_add|__vyb_qt_action_add|menu:Int, text:String|Int|text|0|Add an action to `menu`; its trigger enqueues QtEvent::Click. Returns `Int?` -- present with the live action handle, absent if creation failed.|||||||f")
+    v.push("qt_action_count|vyb_qt_action_count|__vyb_qt_action_count|menu:Int|Int|int1|-1|Number of actions in `menu`, or -1 on a bad handle.|||||||f")
+    v.push("qt_statusbar_message|vyb_qt_statusbar_message|__vyb_qt_statusbar_message|mw:Int, text:String|Int|text|-1|Show `text` in the main window's status bar. Returns `Bool?` -- present on success, absent on a bad handle.|||||||f")
+    v.push("qt_statusbar_text|vyb_qt_statusbar_text|__vyb_qt_statusbar_text|mw:Int|String|str1|qt_stub_str()|Current status-bar message (String); \"\" on a bad handle.|||||||f")
+    v.push("qt_toolbar_create|vyb_qt_toolbar_create|__vyb_qt_toolbar_create|mw:Int, title:String|Int|text|0|Add a toolbar titled `title` to the main window. Returns `Int?` -- present with the live handle, absent if creation failed.|||||||f")
+    v.push("qt_msg_info|vyb_qt_msg_info|__vyb_qt_msg_info|parent:Int, title:String, text:String|Int|text2|-1|Show a modal informational message box (blocks until dismissed). Returns `Bool?` -- present once the box was shown and dismissed.|||||||f")
+    v.push("qt_msg_warn|vyb_qt_msg_warn|__vyb_qt_msg_warn|parent:Int, title:String, text:String|Int|text2|-1|Show a modal warning message box (blocks until dismissed). Returns `Bool?` -- present once the box was shown and dismissed.|||||||f")
+    v.push("qt_msg_error|vyb_qt_msg_error|__vyb_qt_msg_error|parent:Int, title:String, text:String|Int|text2|-1|Show a modal critical-error message box (blocks until dismissed). Returns `Bool?` -- present once the box was shown and dismissed.|||||||f")
+    v.push("qt_msg_about|vyb_qt_msg_about|__vyb_qt_msg_about|parent:Int, title:String, text:String|Int|text2|-1|Show a modal 'about' box (blocks until dismissed). Returns `Bool?` -- present once the box was shown and dismissed.|||||||f")
+    v.push("qt_msg_question|vyb_qt_msg_question|__vyb_qt_msg_question|parent:Int, title:String, text:String|Int|text2|-1|Show a modal Yes/No question. Returns `Int?` -- present holding 1 for Yes / 0 for No, absent when the GUI is not running.|||||||f")
+    v.push("qt_file_open|vyb_qt_file_open|__vyb_qt_file_open|parent:Int, title:String, filter:String|String|str3|qt_stub_str()|Modal 'open file' picker. Returns `String?` -- present holding the chosen path (or the present \"\" on user cancel), absent when the GUI is not running.||||vyb_qt_file_open_opt|__vyb_qt_file_open_opt|optstr3|f")
+    v.push("qt_file_save|vyb_qt_file_save|__vyb_qt_file_save|parent:Int, title:String, filter:String|String|str3|qt_stub_str()|Modal 'save file' picker. Returns `String?` -- present holding the chosen path (or the present \"\" on user cancel), absent when the GUI is not running.||||vyb_qt_file_save_opt|__vyb_qt_file_save_opt|optstr3|f")
+    v.push("qt_dir_select|vyb_qt_dir_select|__vyb_qt_dir_select|parent:Int, title:String|String|strtext|qt_stub_str()|Modal directory picker. Returns `String?` -- present holding the chosen path (or the present \"\" on user cancel), absent when the GUI is not running.||||vyb_qt_dir_select_opt|__vyb_qt_dir_select_opt|optstr2|f")
+    v.push("qt_dlg_info|vyb_qt_dlg_info|__vyb_qt_dlg_info|parent:Int, title:String, text:String|Int|text2|0|Open a non-blocking information box. Returns `Int?` -- present with the dialog handle, absent if creation failed.|||||||f")
+    v.push("qt_dlg_warn|vyb_qt_dlg_warn|__vyb_qt_dlg_warn|parent:Int, title:String, text:String|Int|text2|0|Open a non-blocking warning box. Returns `Int?` -- present with the dialog handle, absent if creation failed.|||||||f")
+    v.push("qt_dlg_error|vyb_qt_dlg_error|__vyb_qt_dlg_error|parent:Int, title:String, text:String|Int|text2|0|Open a non-blocking error box. Returns `Int?` -- present with the dialog handle, absent if creation failed.|||||||f")
+    v.push("qt_dlg_about|vyb_qt_dlg_about|__vyb_qt_dlg_about|parent:Int, title:String, text:String|Int|text2|0|Open a non-blocking about box. Returns `Int?` -- present with the dialog handle, absent if creation failed.|||||||f")
+    v.push("qt_dlg_question|vyb_qt_dlg_question|__vyb_qt_dlg_question|parent:Int, title:String, text:String|Int|text2|0|Open a non-blocking Yes/No box; finishes with result 1 for Yes, 0 otherwise. Returns `Int?` -- present with the dialog handle, absent if creation failed.|||||||f")
+    v.push("qt_dlg_open|vyb_qt_dlg_open|__vyb_qt_dlg_open|parent:Int, title:String, filter:String|Int|text2|0|Open a non-blocking file-open picker; finishes with result 1 (Accepted) + qt_dlg_selected. Returns `Int?` -- present with the dialog handle, absent if creation failed.|||||||f")
+    v.push("qt_dlg_save|vyb_qt_dlg_save|__vyb_qt_dlg_save|parent:Int, title:String, filter:String|Int|text2|0|Open a non-blocking file-save picker; finishes with result 1 (Accepted) + qt_dlg_selected. Returns `Int?` -- present with the dialog handle, absent if creation failed.|||||||f")
+    v.push("qt_dlg_dir|vyb_qt_dlg_dir|__vyb_qt_dlg_dir|parent:Int, title:String|Int|text|0|Open a non-blocking directory picker; finishes with result 1 (Accepted) + qt_dlg_selected. Returns `Int?` -- present with the dialog handle, absent if creation failed.|||||||f")
+    v.push("qt_dlg_close|vyb_qt_dlg_close|__vyb_qt_dlg_close|h:Int|Int|int1|-1|Finish dialog `h` as rejected (enqueues QtEvent::dialog with result 0). Returns `Bool?` -- present on success, absent on a non-dialog or bad handle.|||||||f")
+    v.push("qt_dlg_selected|vyb_qt_dlg_selected|__vyb_qt_dlg_selected|h:Int|String|str1|qt_stub_str()|Path chosen by a finished file/dir dialog `h`. Returns `String?` -- present holding the recorded path, absent when no result is available yet (bad / non-picker / unfinished dialog).||||vyb_qt_dlg_selected_opt|__vyb_qt_dlg_selected_opt|optstr1|f")
+    v.push("qt_event_result|vyb_qt_event_result|__vyb_qt_event_result||Int|int0|0|Result payload of the oldest queued dialog event, or of the event being dispatched by qt_run (1 = Yes/Accepted, else 0).|||||||f")
+    v.push("qt_rich_create|vyb_qt_rich_create|__vyb_qt_rich_create|parent:Int|Int|int1|0|Create a rich-text editor (QTextEdit) under `parent`; edits enqueue QtEvent::TextChanged. Returns `Int?` -- present with the live handle, absent if creation failed.|||||||f")
+    v.push("qt_rich_set_html|vyb_qt_rich_set_html|__vyb_qt_rich_set_html|ed:Int, html:String|Int|text|-1|Set the rich-text editor body from `html` (supports <b>/<i>/<font color> etc). Returns `Bool?` -- present on success, absent on a non-editor handle.|||||||f")
+    v.push("qt_rich_html|vyb_qt_rich_html|__vyb_qt_rich_html|ed:Int|String|str1|qt_stub_str()|Current rich-text body as HTML (String); \"\" on a bad handle.|||||||f")
+    v.push("qt_rich_set_plain|vyb_qt_rich_set_plain|__vyb_qt_rich_set_plain|ed:Int, text:String|Int|text|-1|Set the rich-text editor's plain text (clears formatting). Returns `Bool?` -- present on success, absent on a non-editor handle.|||||||f")
+    v.push("qt_rich_plain|vyb_qt_rich_plain|__vyb_qt_rich_plain|ed:Int|String|str1|qt_stub_str()|Current plain text (String); \"\" on a bad handle.|||||||f")
+    v.push("qt_rich_append|vyb_qt_rich_append|__vyb_qt_rich_append|ed:Int, text:String|Int|text|-1|Append `text` at the end (keeps the current character format). Returns `Bool?` -- present on success, absent on a non-editor handle.|||||||f")
+    v.push("qt_rich_clear|vyb_qt_rich_clear|__vyb_qt_rich_clear|ed:Int|Int|int1|-1|Clear all rich-text content. Returns `Bool?` -- present on success, absent on a non-editor handle.|||||||f")
+    v.push("qt_rich_set_text_color|vyb_qt_rich_set_text_color|__vyb_qt_rich_set_text_color|ed:Int, r:Int, g:Int, b:Int|Int|4int|-1|Set the editor's text color to (r,g,b) each 0-255. Returns `Bool?` -- present on success, absent on a non-editor handle.|||||||f")
+    v.push("qt_widget_set_font_size|vyb_qt_widget_set_font_size|__vyb_qt_widget_set_font_size|h:Int, pt:Int|Int|value|-1|Set a widget's font point size. Returns `Bool?` -- present on success, absent on a bad handle.|||||||f")
+    v.push("qt_widget_set_font_bold|vyb_qt_widget_set_font_bold|__vyb_qt_widget_set_font_bold|h:Int, on:Int|Int|value|-1|Toggle a widget's font bold (on != 0). Returns `Bool?` -- present on success, absent on a bad handle.|||||||f")
+    v.push("qt_widget_set_text_color|vyb_qt_widget_set_text_color|__vyb_qt_widget_set_text_color|h:Int, r:Int, g:Int, b:Int|Int|4int|-1|Set a widget's foreground text color via palette (r,g,b each 0-255). Returns `Bool?` -- present on success, absent on a bad handle.|||||||f")
+    return v
+}
+mig_rows()<Vec<String>> -> {
+    v<Vec<String>> = Vec<String>()
+    v.push("qt_web_create|Int?")
+    v.push("qt_window_create|Int?")
+    v.push("qt_label_create|Int?")
+    v.push("qt_button_create|Int?")
+    v.push("qt_edit_create|Int?")
+    v.push("qt_checkbox_create|Int?")
+    v.push("qt_progress_create|Int?")
+    v.push("qt_vbox|Int?")
+    v.push("qt_hbox|Int?")
+    v.push("qt_grid|Int?")
+    v.push("qt_combo_create|Int?")
+    v.push("qt_spin_create|Int?")
+    v.push("qt_slider_create|Int?")
+    v.push("qt_dial_create|Int?")
+    v.push("qt_group_create|Int?")
+    v.push("qt_text_edit_create|Int?")
+    v.push("qt_radio_create|Int?")
+    v.push("qt_tabs_create|Int?")
+    v.push("qt_tabs_add|Int?")
+    v.push("qt_list_create|Int?")
+    v.push("qt_main_window_create|Int?")
+    v.push("qt_menubar|Int?")
+    v.push("qt_menu_add|Int?")
+    v.push("qt_action_add|Int?")
+    v.push("qt_toolbar_create|Int?")
+    v.push("qt_rich_create|Int?")
+    v.push("qt_dlg_info|Int?")
+    v.push("qt_dlg_warn|Int?")
+    v.push("qt_dlg_error|Int?")
+    v.push("qt_dlg_about|Int?")
+    v.push("qt_dlg_question|Int?")
+    v.push("qt_dlg_open|Int?")
+    v.push("qt_dlg_save|Int?")
+    v.push("qt_dlg_dir|Int?")
+    v.push("qt_quit|Bool?")
+    v.push("qt_process_events|Bool?")
+    v.push("qt_set_timer|Bool?")
+    v.push("qt_run_stop|Bool?")
+    v.push("qt_post_event|Bool?")
+    v.push("qt_window_close|Bool?")
+    v.push("qt_window_set_title|Bool?")
+    v.push("qt_window_resize|Bool?")
+    v.push("qt_window_show|Bool?")
+    v.push("qt_window_hide|Bool?")
+    v.push("qt_label_set_text|Bool?")
+    v.push("qt_button_set_text|Bool?")
+    v.push("qt_button_set_enabled|Bool?")
+    v.push("qt_edit_set_text|Bool?")
+    v.push("qt_edit_set_placeholder|Bool?")
+    v.push("qt_checkbox_set_checked|Bool?")
+    v.push("qt_progress_set_value|Bool?")
+    v.push("qt_layout_add|Bool?")
+    v.push("qt_layout_add_layout|Bool?")
+    v.push("qt_layout_set_stretch|Bool?")
+    v.push("qt_combo_add_item|Bool?")
+    v.push("qt_combo_set_current_index|Bool?")
+    v.push("qt_spin_set_value|Bool?")
+    v.push("qt_slider_set_value|Bool?")
+    v.push("qt_dial_set_value|Bool?")
+    v.push("qt_text_edit_set_text|Bool?")
+    v.push("qt_radio_set_checked|Bool?")
+    v.push("qt_widget_set_enabled|Bool?")
+    v.push("qt_widget_set_visible|Bool?")
+    v.push("qt_grid_add|Bool?")
+    v.push("qt_tabs_set_current|Bool?")
+    v.push("qt_list_add|Bool?")
+    v.push("qt_list_set_current|Bool?")
+    v.push("qt_statusbar_message|Bool?")
+    v.push("qt_msg_info|Bool?")
+    v.push("qt_msg_warn|Bool?")
+    v.push("qt_msg_error|Bool?")
+    v.push("qt_msg_about|Bool?")
+    v.push("qt_dlg_close|Bool?")
+    v.push("qt_rich_set_html|Bool?")
+    v.push("qt_rich_set_plain|Bool?")
+    v.push("qt_rich_append|Bool?")
+    v.push("qt_rich_clear|Bool?")
+    v.push("qt_rich_set_text_color|Bool?")
+    v.push("qt_widget_set_font_size|Bool?")
+    v.push("qt_widget_set_font_bold|Bool?")
+    v.push("qt_widget_set_text_color|Bool?")
+    v.push("qt_web_load|Bool?")
+    v.push("qt_web_back|Bool?")
+    v.push("qt_web_forward|Bool?")
+    v.push("qt_web_reload|Bool?")
+    v.push("qt_web_zoom_in|Bool?")
+    v.push("qt_web_zoom_out|Bool?")
+    v.push("qt_screen_width|Int?@-1")
+    v.push("qt_screen_height|Int?@-1")
+    v.push("qt_screen_dpi|Int?@-1")
+    v.push("qt_window_width|Int?@-1")
+    v.push("qt_window_height|Int?@-1")
+    v.push("qt_msg_question|Int?@-1")
+    return v
+}
+ev_rows()<Vec<String>> -> {
+    v<Vec<String>> = Vec<String>()
+    v.push("none|0")
+    v.push("click|1")
+    v.push("textChanged|2")
+    v.push("toggled|3")
+    v.push("indexChanged|4")
+    v.push("valueChanged|5")
+    v.push("loadFinished|6")
+    v.push("titleChanged|7")
+    v.push("loadProgress|8")
+    v.push("currentChanged|9")
+    v.push("dialog|10")
+    v.push("editReturn|11")
+    v.push("zoomIn|12")
+    v.push("zoomOut|13")
+    return v
+}
+ws_rows()<Vec<String>> -> {
+    v<Vec<String>> = Vec<String>()
+    v.push("none|0")
+    v.push("window|1")
+    v.push("label|2")
+    v.push("button|3")
+    v.push("edit|4")
+    v.push("checkbox|5")
+    v.push("progress|6")
+    v.push("combo|7")
+    v.push("spin|8")
+    v.push("slider|9")
+    v.push("dial|10")
+    v.push("group|11")
+    v.push("textEdit|12")
+    v.push("radio|13")
+    v.push("web|14")
+    v.push("tabs|15")
+    v.push("list|16")
+    v.push("menuBar|17")
+    v.push("menu|18")
+    v.push("toolbar|19")
+    v.push("rich|20")
+    return v
+}
+shape_rows()<Vec<String>> -> {
+    v<Vec<String>> = Vec<String>()
+    v.push("int0")
+    v.push("int1")
+    v.push("str1")
+    v.push("str2")
+    v.push("str3")
+    v.push("text")
+    v.push("text2")
+    v.push("strtext")
+    v.push("value")
+    v.push("3int")
+    v.push("4int")
+    v.push("cb")
+    return v
+}
+branch_keys()<Vec<String>> -> {
+    v<Vec<String>> = Vec<String>()
+    v.push("int0")
+    v.push("int1")
+    v.push("str1")
+    v.push("str2")
+    v.push("str3")
+    v.push("text")
+    v.push("text2")
+    v.push("strtext")
+    v.push("value")
+    v.push("3int")
+    v.push("4int")
+    v.push("cb")
+    return v
+}
+branch_vals()<Vec<String>> -> {
+    v<Vec<String>> = Vec<String>()
+    v.push("if (!checkArity(0)) return;\nllvm::FunctionType* ft0 = llvm::FunctionType::get(int64Type, {}, false);\nm_currentLLVMValue = builder->CreateCall(getQtFn(ft0), {}, \"qt.ret\");")
+    v.push("if (!checkArity(1)) return;\nllvm::Value* a = needArg(0); if (!a) return;\nllvm::FunctionType* ft = llvm::FunctionType::get(int64Type, {int64Type}, false);\nm_currentLLVMValue = builder->CreateCall(getQtFn(ft), {toI64(a)}, \"qt.i1\");")
+    v.push("if (!checkArity(1)) return;\nllvm::Value* a = needArg(0); if (!a) return;\nllvm::FunctionType* ft = llvm::FunctionType::get(qtStrRet(), {int64Type}, false);\nm_currentLLVMValue = builder->CreateCall(getQtFn(ft), {toI64(a)}, \"qt.s1\");")
+    v.push("if (!checkArity(2)) return;\nllvm::Value* a = needArg(0); llvm::Value* b = needArg(1);\nif (!a || !b) return;\nllvm::FunctionType* ft = llvm::FunctionType::get(qtStrRet(), {int64Type, int64Type}, false);\nm_currentLLVMValue = builder->CreateCall(getQtFn(ft), {toI64(a), toI64(b)}, \"qt.s2\");")
+    v.push("if (!checkArity(3)) return;\nllvm::Value* a = needArg(0); llvm::Value* s = needArg(1); llvm::Value* t = needArg(2);\nif (!a || !s || !t) return;\nllvm::FunctionType* ft = llvm::FunctionType::get(qtStrRet(), {int64Type, int8PtrType, int64Type, int8PtrType, int64Type}, false);\nm_currentLLVMValue = builder->CreateCall(getQtFn(ft), {toI64(a), toStrPtr(s), strLenOf(s), toStrPtr(t), strLenOf(t)}, \"qt.s3\");")
+    v.push("if (!checkArity(2)) return;\nllvm::Value* a = needArg(0); llvm::Value* s = needArg(1);\nif (!a || !s) return;\nllvm::FunctionType* ft = llvm::FunctionType::get(int64Type, {int64Type, int8PtrType, int64Type}, false);\nm_currentLLVMValue = builder->CreateCall(getQtFn(ft), {toI64(a), toStrPtr(s), strLenOf(s)}, \"qt.text\");")
+    v.push("if (!checkArity(3)) return;\nllvm::Value* a = needArg(0); llvm::Value* s = needArg(1); llvm::Value* t = needArg(2);\nif (!a || !s || !t) return;\nllvm::FunctionType* ft = llvm::FunctionType::get(int64Type, {int64Type, int8PtrType, int64Type, int8PtrType, int64Type}, false);\nm_currentLLVMValue = builder->CreateCall(getQtFn(ft), {toI64(a), toStrPtr(s), strLenOf(s), toStrPtr(t), strLenOf(t)}, \"qt.t2\");")
+    v.push("if (!checkArity(2)) return;\nllvm::Value* a = needArg(0); llvm::Value* s = needArg(1);\nif (!a || !s) return;\nllvm::FunctionType* ft = llvm::FunctionType::get(qtStrRet(), {int64Type, int8PtrType, int64Type}, false);\nm_currentLLVMValue = builder->CreateCall(getQtFn(ft), {toI64(a), toStrPtr(s), strLenOf(s)}, \"qt.st\");")
+    v.push("if (!checkArity(2)) return;\nllvm::Value* a = needArg(0); llvm::Value* b = needArg(1);\nif (!a || !b) return;\nllvm::FunctionType* ft = llvm::FunctionType::get(int64Type, {int64Type, int64Type}, false);\nm_currentLLVMValue = builder->CreateCall(getQtFn(ft), {toI64(a), toI64(b)}, \"qt.v2\");")
+    v.push("if (!checkArity(3)) return;\nllvm::Value* a = needArg(0); llvm::Value* b = needArg(1); llvm::Value* c = needArg(2);\nif (!a || !b || !c) return;\nllvm::FunctionType* ft = llvm::FunctionType::get(int64Type, {int64Type, int64Type, int64Type}, false);\nm_currentLLVMValue = builder->CreateCall(getQtFn(ft), {toI64(a), toI64(b), toI64(c)}, \"qt.i3\");")
+    v.push("if (!checkArity(4)) return;\nllvm::Value* a=needArg(0); llvm::Value* b=needArg(1); llvm::Value* c=needArg(2); llvm::Value* d=needArg(3);\nif (!a || !b || !c || !d) return;\nllvm::FunctionType* ft = llvm::FunctionType::get(int64Type, {int64Type, int64Type, int64Type, int64Type}, false);\nm_currentLLVMValue = builder->CreateCall(getQtFn(ft), {toI64(a), toI64(b), toI64(c), toI64(d)}, \"qt.i4\");")
+    v.push("if (!checkArity(1)) return;\nnode->arguments[0]->accept(*this);\nllvm::Value* cl = m_currentLLVMValue; if (!cl) return;\nllvm::StructType* closureTy = getClosureStructType();\nllvm::Value* envPtr = nullptr; llvm::Value* fnPtr = nullptr;\nif (cl->getType()->isStructTy()) {\n    envPtr = builder->CreateExtractValue(cl, 0, \"qt.env\");\n    fnPtr = builder->CreateExtractValue(cl, 1, \"qt.fn\");\n} else if (cl->getType()->isPointerTy()) {\n    llvm::Value* closureVal = builder->CreateLoad(closureTy, cl, \"qt.closure\");\n    envPtr = builder->CreateExtractValue(closureVal, 0, \"qt.env\");\n    fnPtr = builder->CreateExtractValue(closureVal, 1, \"qt.fn\");\n} else {\n    logError(node->loc, \"vyb_qt_on_event argument is not a fn() closure\");\n    m_currentLLVMValue = nullptr; return;\n}\nllvm::FunctionType* ft = llvm::FunctionType::get(int64Type, {int8PtrType, int8PtrType}, false);\nm_currentLLVMValue = builder->CreateCall(getQtFn(ft), {envPtr, fnPtr}, \"qt.cb\");")
+    return v
+}
+optbranch_keys()<Vec<String>> -> {
+    v<Vec<String>> = Vec<String>()
+    v.push("optstr3")
+    v.push("optstr2")
+    v.push("optstr1")
+    return v
+}
+optbranch_vals()<Vec<String>> -> {
+    v<Vec<String>> = Vec<String>()
+    v.push("if (!checkArity(3)) return;\nllvm::Value* a = needArg(0); llvm::Value* s = needArg(1); llvm::Value* t = needArg(2);\nif (!a || !s || !t) return;\nllvm::StructType* strTy = qtStrRet();\nllvm::StructType* optTy = llvm::StructType::get(*context, {strTy, llvm::Type::getInt1Ty(*context)}, false);\nllvm::Value* slotA = builder->CreateAlloca(strTy, nullptr, \"qt.opt.slot\");\nbuilder->CreateStore(llvm::Constant::getNullValue(strTy), slotA, \"qt.opt.zero\");\nllvm::FunctionType* ft = llvm::FunctionType::get(int64Type, {int64Type, int8PtrType, int64Type, int8PtrType, int64Type, llvm::PointerType::get(*context, 0)}, false);\nllvm::Value* has = builder->CreateCall(getQtFn(ft), {toI64(a), toStrPtr(s), strLenOf(s), toStrPtr(t), strLenOf(t), slotA}, \"qt.opt.has\");\nllvm::Value* val = builder->CreateLoad(strTy, slotA, \"qt.opt.val\");\nllvm::Value* opts = llvm::UndefValue::get(optTy);\nopts = builder->CreateInsertValue(opts, val, 0, \"qt.opt.v\");\nopts = builder->CreateInsertValue(opts, builder->CreateTrunc(has, llvm::Type::getInt1Ty(*context), \"qt.opt.h\"), 1);\nm_currentLLVMValue = opts;\n")
+    v.push("if (!checkArity(2)) return;\nllvm::Value* a = needArg(0); llvm::Value* s = needArg(1);\nif (!a || !s) return;\nllvm::StructType* strTy = qtStrRet();\nllvm::StructType* optTy = llvm::StructType::get(*context, {strTy, llvm::Type::getInt1Ty(*context)}, false);\nllvm::Value* slotA = builder->CreateAlloca(strTy, nullptr, \"qt.opt.slot\");\nbuilder->CreateStore(llvm::Constant::getNullValue(strTy), slotA, \"qt.opt.zero\");\nllvm::FunctionType* ft = llvm::FunctionType::get(int64Type, {int64Type, int8PtrType, int64Type, llvm::PointerType::get(*context, 0)}, false);\nllvm::Value* has = builder->CreateCall(getQtFn(ft), {toI64(a), toStrPtr(s), strLenOf(s), slotA}, \"qt.opt.has\");\nllvm::Value* val = builder->CreateLoad(strTy, slotA, \"qt.opt.val\");\nllvm::Value* opts = llvm::UndefValue::get(optTy);\nopts = builder->CreateInsertValue(opts, val, 0, \"qt.opt.v\");\nopts = builder->CreateInsertValue(opts, builder->CreateTrunc(has, llvm::Type::getInt1Ty(*context), \"qt.opt.h\"), 1);\nm_currentLLVMValue = opts;\n")
+    v.push("if (!checkArity(1)) return;\nllvm::Value* a = needArg(0); if (!a) return;\nllvm::StructType* strTy = qtStrRet();\nllvm::StructType* optTy = llvm::StructType::get(*context, {strTy, llvm::Type::getInt1Ty(*context)}, false);\nllvm::Value* slotA = builder->CreateAlloca(strTy, nullptr, \"qt.opt.slot\");\nbuilder->CreateStore(llvm::Constant::getNullValue(strTy), slotA, \"qt.opt.zero\");\nllvm::FunctionType* ft = llvm::FunctionType::get(int64Type, {int64Type, llvm::PointerType::get(*context, 0)}, false);\nllvm::Value* has = builder->CreateCall(getQtFn(ft), {toI64(a), slotA}, \"qt.opt.has\");\nllvm::Value* val = builder->CreateLoad(strTy, slotA, \"qt.opt.val\");\nllvm::Value* opts = llvm::UndefValue::get(optTy);\nopts = builder->CreateInsertValue(opts, val, 0, \"qt.opt.v\");\nopts = builder->CreateInsertValue(opts, builder->CreateTrunc(has, llvm::Type::getInt1Ty(*context), \"qt.opt.h\"), 1);\nm_currentLLVMValue = opts;\n")
+    return v
+}
+cgen_prologue()<String> -> {
+    return "        if (!rtName.empty()) {\n            auto getQtFn = [&](llvm::FunctionType* ft) -> llvm::Function* {\n                llvm::Function* f2 = module->getFunction(rtName);\n                if (!f2) f2 = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, rtName, module.get());\n                return f2;\n            };\n            auto toI64 = [&](llvm::Value* v) -> llvm::Value* {\n                if (!v) return v;\n                if (v->getType()->isIntegerTy(64)) return v;\n                if (v->getType()->isIntegerTy())\n                    return builder->CreateSExt(v, int64Type, \"qt.toi64\");\n                return v;\n            };\n            auto toStrPtr = [&](llvm::Value* v) -> llvm::Value* {\n                if (v && v->getType()->isStructTy())\n                    return builder->CreateExtractValue(v, 0, \"qt.strptr\");\n                return v;\n            };\n            auto strLenOf = [&](llvm::Value* v) -> llvm::Value* {\n                if (v && v->getType()->isStructTy())\n                    return builder->CreateExtractValue(v, 1, \"qt.strlen\");\n                return llvm::ConstantInt::get(int64Type, 0);\n            };\n            auto qtStrRet = [&]() -> llvm::StructType* {\n                std::vector<llvm::Type*> f = {int8PtrType, int64Type};\n                return llvm::StructType::get(*context, f, false);\n            };\n            auto needArg = [&](size_t idx) -> llvm::Value* {\n                if (idx >= node->arguments.size()) { m_currentLLVMValue = nullptr; return nullptr; }\n                node->arguments[idx]->accept(*this);\n                return m_currentLLVMValue;\n            };\n            auto checkArity = [&](size_t n) -> bool {\n                if (node->arguments.size() != n) {\n                    logError(node->loc, rtName + \" expects \" + std::to_string(n) + \" argument(s)\");\n                    m_currentLLVMValue = nullptr;\n                    return false;\n                }\n                return true;\n            };\n"
+}
+# --------------------------------------------------------------- emit: regions
+
+# Stub bodies for the core QT_FUNCS table (group "f").
+emit_stub_funcs(rows<Vec<String>>)<String> -> {
+    out<String> = ""
+    i<Int> = 0
+    while (i < rows.len()) {
+        row<String> = rows.get(i)
+        if (fld(row, 14) == "f") {
+            out = out + stub_body(fld(row, 3), fld(row, 2), fld(row, 4), fld(row, 6)) + "\n"
+        }
+        i = i + 1
+    }
+    return out
+}
+
+# Stub bodies for the optional QtWebEngine table (group "w").
+emit_web_stub_funcs(rows<Vec<String>>)<String> -> {
+    out<String> = ""
+    i<Int> = 0
+    while (i < rows.len()) {
+        row<String> = rows.get(i)
+        if (fld(row, 14) == "w") {
+            out = out + stub_body(fld(row, 3), fld(row, 2), fld(row, 4), fld(row, 6)) + "\n"
+        }
+        i = i + 1
+    }
+    return out
+}
+
+# Opt-shim stub bodies.
+emit_opt_stub_funcs(rows<Vec<String>>)<String> -> {
+    out<String> = ""
+    i<Int> = 0
+    while (i < rows.len()) {
+        row<String> = rows.get(i)
+        if (fld(row, 11).len() > 0) {
+            out = out + stub_opt_body(fld(row, 12), fld(row, 3)) + "\n"
+        }
+        i = i + 1
+    }
+    return out
+}
+
+# The codegen dispatch block.
+emit_cgen(rows<Vec<String>>, shaperows<Vec<String>>, bkeys<Vec<String>>, bvals<Vec<String>>, okeys<Vec<String>>, ovals<Vec<String>>)<String> -> {
+    out<String> = ""
+    out = out + "        const std::string& fname = identCallee->name;\n"
+    out = out + "        std::string rtName;\n"
+    i<Int> = 0
+    while (i < rows.len()) {
+        row<String> = rows.get(i)
+        kw<String> = "else if"
+        if (i == 0) { kw = "if" }
+        out = out + "        " + kw + " (fname == \"" + fld(row, 1) + "\") rtName = \"" + fld(row, 2) + "\";\n"
+        i = i + 1
+    }
+    i = 0
+    while (i < rows.len()) {
+        row<String> = rows.get(i)
+        ov<String> = fld(row, 11)
+        if (ov.len() > 0) {
+            out = out + "        else if (fname == \"" + ov + "\") rtName = \"" + fld(row, 12) + "\";\n"
+        }
+        i = i + 1
+    }
+    out = out + cgen_prologue() + "\n"
+
+    first<Bool> = true
+    s<Int> = 0
+    while (s < shaperows.len()) {
+        shape<String> = shaperows.get(s)
+        names<Vec<String>> = Vec<String>()
+        i = 0
+        while (i < rows.len()) {
+            row<String> = rows.get(i)
+            if (fld(row, 5) == shape) { names.push(fld(row, 1)) }
+            i = i + 1
+        }
+        if (names.len() > 0) {
+            cl<String> = cond_lines(names)
+            if (first) {
+                out = out + "            if (" + cl + ") {\n"
+            } else {
+                out = out + "            } else if (" + cl + ") {\n"
+            }
+            first = false
+            body<String> = br_get(shape, bkeys, bvals)
+            lines<Vec<String>> = body.split("\n")
+            lim<Int> = lines.len()
+            if (lim > 0 && lines.get(lim - 1).len() == 0) { lim = lim - 1 }
+            j<Int> = 0
+            while (j < lim) {
+                out = out + "                " + lines.get(j) + "\n"
+                j = j + 1
+            }
+            out = out + "                return;\n"
+        }
+        s = s + 1
+    }
+    if (first == false) { out = out + "            }\n" }
+
+    oshapes<Vec<String>> = Vec<String>()
+    i = 0
+    while (i < rows.len()) {
+        row<String> = rows.get(i)
+        if (fld(row, 11).len() > 0) {
+            os<String> = fld(row, 13)
+            seen<Bool> = false
+            k<Int> = 0
+            while (k < oshapes.len()) {
+                if (oshapes.get(k) == os) { seen = true }
+                k = k + 1
+            }
+            if (!seen) { oshapes.push(os) }
+        }
+        i = i + 1
+    }
+    ofirst<Bool> = true
+    s = 0
+    while (s < oshapes.len()) {
+        oshape<String> = oshapes.get(s)
+        names<Vec<String>> = Vec<String>()
+        i = 0
+        while (i < rows.len()) {
+            row<String> = rows.get(i)
+            if (fld(row, 11).len() > 0 && fld(row, 13) == oshape) { names.push(fld(row, 11)) }
+            i = i + 1
+        }
+        if (names.len() > 0) {
+            cl<String> = cond_lines(names)
+            if (ofirst) {
+                out = out + "            if (" + cl + ") {\n"
+            } else {
+                out = out + "            } else if (" + cl + ") {\n"
+            }
+            ofirst = false
+            body<String> = br_get(oshape, okeys, ovals)
+            lines<Vec<String>> = body.split("\n")
+            lim<Int> = lines.len()
+            if (lim > 0 && lines.get(lim - 1).len() == 0) { lim = lim - 1 }
+            j<Int> = 0
+            while (j < lim) {
+                out = out + "                " + lines.get(j) + "\n"
+                j = j + 1
+            }
+            out = out + "                return;\n"
+        }
+        s = s + 1
+    }
+    if (ofirst == false) { out = out + "            }\n" }
+    out = out + "        }\n"
+    return out
+}
+
+# Semantic allow-list (`name == "..." || ...) {`).
+emit_sem_allow(rows<Vec<String>>)<String> -> {
+    names<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < rows.len()) {
+        names.push(fld(rows.get(i), 1))
+        i = i + 1
+    }
+    i = 0
+    while (i < rows.len()) {
+        ov<String> = fld(rows.get(i), 11)
+        if (ov.len() > 0) { names.push(ov) }
+        i = i + 1
+    }
+    out<String> = ""
+    i = 0
+    while (i < names.len()) {
+        joined<String> = "name == \"" + names.get(i) + "\""
+        if (i + 1 < names.len()) { joined = joined + " || name == \"" + names.get(i + 1) + "\"" }
+        if (i + 2 < names.len()) {
+            out = out + "            " + joined + " ||\n"
+        } else {
+            out = out + "            " + joined + ") {\n"
+        }
+        i = i + 2
+    }
+    return out
+}
+
+# Int-classification name list.
+emit_sem_int(rows<Vec<String>>)<String> -> {
+    out<String> = ""
+    i<Int> = 0
+    while (i < rows.len()) {
+        out = out + "                \"" + fld(rows.get(i), 1) + "\",\n"
+        i = i + 1
+    }
+    return out
+}
+
+# String-classification name list.
+emit_sem_str(rows<Vec<String>>)<String> -> {
+    out<String> = ""
+    i<Int> = 0
+    while (i < rows.len()) {
+        row<String> = rows.get(i)
+        if (fld(row, 4) == "String") {
+            out = out + "                \"" + fld(row, 1) + "\",\n"
+        }
+        i = i + 1
+    }
+    return out
+}
+
+# main.cpp extern declarations.
+emit_main_decl(rows<Vec<String>>)<String> -> {
+    out<String> = ""
+    i<Int> = 0
+    while (i < rows.len()) {
+        row<String> = rows.get(i)
+        retty<String> = "int64_t"
+        if (fld(row, 4) == "String") { retty = "vyb_file_str" }
+        out = out + "    " + retty + " " + fld(row, 2) + "(" + cpp_args(fld(row, 3)) + ");\n"
+        i = i + 1
+    }
+    i = 0
+    while (i < rows.len()) {
+        row<String> = rows.get(i)
+        if (fld(row, 11).len() > 0) {
+            out = out + "    int64_t " + fld(row, 12) + "(" + cpp_opt_args(fld(row, 3), "vyb_file_str") + ");\n"
+        }
+        i = i + 1
+    }
+    return out
+}
+
+# main.cpp JIT symbol registration.
+emit_main_reg(rows<Vec<String>>)<String> -> {
+    out<String> = ""
+    i<Int> = 0
+    while (i < rows.len()) {
+        cn<String> = fld(rows.get(i), 2)
+        out = out + "        runtimeSymbols[mangle(\"" + cn + "\")] = llvm::orc::ExecutorSymbolDef(\n"
+        out = out + "            llvm::orc::ExecutorAddr::fromPtr(&" + cn + "), llvm::JITSymbolFlags::Exported);\n"
+        i = i + 1
+    }
+    i = 0
+    while (i < rows.len()) {
+        row<String> = rows.get(i)
+        if (fld(row, 11).len() > 0) {
+            ocn<String> = fld(row, 12)
+            out = out + "        runtimeSymbols[mangle(\"" + ocn + "\")] = llvm::orc::ExecutorSymbolDef(\n"
+            out = out + "            llvm::orc::ExecutorAddr::fromPtr(&" + ocn + "), llvm::JITSymbolFlags::Exported);\n"
+        }
+        i = i + 1
+    }
+    return out
+}
+
+# stdlib/qt/mod.vyb enums.
+emit_mod_enums(evrows<Vec<String>>, wsrows<Vec<String>>)<String> -> {
+    out<String> = "share(all)\nenum QtEvent {\n"
+    i<Int> = 0
+    while (i < evrows.len()) {
+        parts<Vec<String>> = evrows.get(i).split("|")
+        out = out + "    " + parts.get(0) + " = " + parts.get(1) + "\n"
+        i = i + 1
+    }
+    out = out + "}"
+    out = out + "\n\n"
+    out = out + "share(all)\nenum QtWidgetKind {\n"
+    i = 0
+    while (i < wsrows.len()) {
+        parts<Vec<String>> = wsrows.get(i).split("|")
+        out = out + "    " + parts.get(0) + " = " + parts.get(1) + "\n"
+        i = i + 1
+    }
+    out = out + "}"
+    return out
+}
+
+# stdlib/qt/mod.vyb public wrappers (+ documents).
+emit_mod_wrappers(rows<Vec<String>>, mrows<Vec<String>>)<String> -> {
+    out<String> = ""
+    i<Int> = 0
+    while (i < rows.len()) {
+        row<String> = rows.get(i)
+        out = out + "# " + fld(row, 7) + "\n"
+        out = out + "share(all)\n"
+        sig<String> = fld(row, 9)
+        if (sig.len() == 0) { sig = join_sig(fld(row, 3)) }
+        retty<String> = fld(row, 4)
+        ov<String> = fld(row, 11)
+        mt<String> = ""
+        if (ov.len() > 0) {
+            retty = "String?"
+        } else {
+            mt = mig_target(fld(row, 0), mrows)
+            if (mt.len() > 0) { retty = base_of(mt) }
+        }
+        out = out + fld(row, 0) + "(" + sig + ")<" + retty + "> -> {\n"
+        bl<String> = ""
+        if (ov.len() > 0) {
+            bl = "    return " + ov + "(" + join_names(fld(row, 3)) + ")"
+        } else if (mt.len() > 0) {
+            bl = "    " + migrate_body(fld(row, 3), fld(row, 1), mt)
+        } else if (fld(row, 10).len() > 0) {
+            bl = "    " + fld(row, 10)
+        } else if (fld(row, 8).len() > 0) {
+            bl = "    " + fld(row, 8)
+        } else {
+            bl = "    return " + fld(row, 1) + "(" + join_names(fld(row, 3)) + ")"
+            if (fld(row, 4) == "Bool") { bl = bl + " == 1" }
+        }
+        out = out + bl + "\n"
+        out = out + "}\n\n"
+        i = i + 1
+    }
+    return out
+}
+
+# ------------------------------------------------------------------------ main
+
+main()<Void> -> {
+    argv<Vec<String>> = argv_of()
+    # `--check` is the canonical drift flag (same as tools/gen_qt.py). This
+    # compiler reserves a bare `--check` for its own `vyb --format --check`
+    # formatter gate and consumes it before any program runs, so the aliases
+    # `--check-regions` / `--check-drift` are accepted for the same read-only
+    # drift report when invoked through build/vyb.
+    check<Bool> = (has(argv, "--check") || has(argv, "--check-regions") || has(argv, "--check-drift"))
+    root<String> = repo_root(argv)
+
+    rows<Vec<String>> = t_rows()
+    mrows<Vec<String>> = mig_rows()
+    shaperows<Vec<String>> = shape_rows()
+    bkeys<Vec<String>> = branch_keys()
+    bvals<Vec<String>> = branch_vals()
+    okeys<Vec<String>> = optbranch_keys()
+    ovals<Vec<String>> = optbranch_vals()
+    evrows<Vec<String>> = ev_rows()
+    wsrows<Vec<String>> = ws_rows()
+
+    drift<Bool> = false
+
+    r<Int> = do_region(root, "runtime/vyb_qt_stub.cpp", "cpp", "stub", emit_stub_funcs(rows), check)
+    if (r == 1) { drift = true }
+    r = do_region(root, "runtime/vyb_qt_stub.cpp", "cpp", "web_stub", emit_web_stub_funcs(rows), check)
+    if (r == 1) { drift = true }
+    r = do_region(root, "runtime/vyb_qt_stub.cpp", "cpp", "opt_stub", emit_opt_stub_funcs(rows), check)
+    if (r == 1) { drift = true }
+    r = do_region(root, "src/vre/llvm/cgen_expr.cpp", "cpp", "cgen", emit_cgen(rows, shaperows, bkeys, bvals, okeys, ovals), check)
+    if (r == 1) { drift = true }
+    r = do_region(root, "src/vre/semantic.cpp", "cpp", "sem_allow", emit_sem_allow(rows), check)
+    if (r == 1) { drift = true }
+    r = do_region(root, "src/vre/semantic.cpp", "cpp", "sem_int", emit_sem_int(rows), check)
+    if (r == 1) { drift = true }
+    r = do_region(root, "src/vre/semantic.cpp", "cpp", "sem_str", emit_sem_str(rows), check)
+    if (r == 1) { drift = true }
+    r = do_region(root, "src/main.cpp", "cpp", "main_decl", emit_main_decl(rows), check)
+    if (r == 1) { drift = true }
+    r = do_region(root, "src/main.cpp", "cpp", "main_reg", emit_main_reg(rows), check)
+    if (r == 1) { drift = true }
+    r = do_region(root, "stdlib/qt/mod.vyb", "vyb", "mod_enums", emit_mod_enums(evrows, wsrows), check)
+    if (r == 1) { drift = true }
+    r = do_region(root, "stdlib/qt/mod.vyb", "vyb", "mod_wrappers", emit_mod_wrappers(rows, mrows), check)
+    if (r == 1) { drift = true }
+
+    if (check) {
+        if (drift) {
+            println("gen_qt: DRIFT - run `python3 tools/gen_qt.py` to regenerate")
+            exit(1)
+        }
+        println("gen_qt: OK (state matches the table)")
+        exit(0)
+    }
+    if (!drift) { println("gen_qt: no changes (state matches the table)") }
+    exit(0)
+}

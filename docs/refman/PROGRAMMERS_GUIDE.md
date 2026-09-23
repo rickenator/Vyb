@@ -2157,10 +2157,12 @@ qt_on_event(handler<fn(Int, Int) -> Void>)<Int>
 
 #### How the Qt surface is maintained
 
-`tools/gen_qt.py` generates the public declarations and stubs, codegen dispatch,
+`tools/gen_qt.vyb` generates the public declarations and stubs, codegen dispatch,
 semantic and JIT registrations, and the wrapper enums from one function table.
 To add a widget, add its table entry, implement the bridge, then run
-`python3 tools/gen_qt.py`; use `--check` in CI to detect drift.
+`build/vyb tools/gen_qt.vyb`; use `--check-regions` to detect drift (the compiler
+claims bare `--check` for its own formatter check, so the drift mode is spelled
+`--check-regions`).
 
 #### Windows, widgets, and layouts
 
@@ -2673,8 +2675,8 @@ automatically.
 ### Syntax migration & triage tools
 
 ```bash
-python3 migrate_syntax.py --scan            # find legacy syntax
-python3 migrate_syntax.py --apply           # apply canonical forms (backs up)
+build/vyb migrate_syntax.vyb --scan         # find legacy syntax
+build/vyb migrate_syntax.vyb --apply        # apply canonical forms (backs up)
 python3 triage_tool.py --pattern 'failed*'  # analyse failures
 ```
 

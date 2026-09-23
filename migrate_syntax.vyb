@@ -1,0 +1,739 @@
+// @not-a-test: true
+# migrate_syntax.vyb - Vyb syntax migration tool (Vyb port of migrate_syntax.py).
+#
+# Scans/migrates legacy ownership spelling to the canonical forms:
+#   make_my(x)   -> my(x)        make_our(x)  -> our(x)
+#   make_their(x)-> view(x)      `view x`     -> view(x)
+#   `borrow x`   -> borrow(x)    `make_my borrow view` -> prose note
+#   comments containing make_my( / make_our( are rewritten in place
+#
+# Options (same surface as the Python tool):
+#   --scan            show what would be changed (dry run)
+#   --migrate         apply changes to files
+#   --file PATH       process a single file
+#   --directory PATH  process a directory recursively (default: ".")
+#   --backup          create .backup files before changes
+#   --report          write migration_report_<timestamp>.md
+#
+# Usage:
+#   VYB_STDLIB=$PWD/stdlib build/vyb tools/migrate_syntax.vyb --scan --directory tools
+#   VYB_STDLIB=$PWD/stdlib build/vyb tools/migrate_syntax.vyb --migrate --file examples/main.vyb --backup
+#
+# The language has no regex module and no argv primitive, so the eight migration
+# rules are hand-rolled matchers over a single line and argv is read from
+# /proc/self/cmdline. Directory matches come from `find` + `sort`.
+// @not-a-test: true
+import io::{close, File, open_read, open_write, read_all, write_str}
+import process::{exec_output}
+
+# ---------------------------------------------------------------- char helpers
+
+# [A-Za-z0-9_] ?
+is_word(c<Int>)<Bool> -> {
+    if (c >= 48 && c <= 57) { return true }
+    if (c >= 65 && c <= 90) { return true }
+    if (c >= 97 && c <= 122) { return true }
+    if (c == 95) { return true }
+    return false
+}
+
+# [A-Za-z_] ?
+is_ident_start(c<Int>)<Bool> -> {
+    if (c >= 65 && c <= 90) { return true }
+    if (c >= 97 && c <= 122) { return true }
+    if (c == 95) { return true }
+    return false
+}
+
+# Python `\s` (space, tab, CR, LF, VT, FF)?
+is_ws(c<Int>)<Bool> -> {
+    if (c == 32 || c == 9 || c == 10 || c == 13 || c == 11 || c == 12) { return true }
+    return false
+}
+
+# ---------------------------------------------------------------- small helpers
+
+# Index of the last '/' in `p`, or -1.
+last_slash(p<String>)<Int> -> {
+    i<Int> = p.len() - 1
+    while (i >= 0) {
+        if (((p.char_at(i) as Int) & 0xFF) == 47) { return i }
+        i = i - 1
+    }
+    return -1
+}
+
+# Directory part of `p` ("" when there is no slash).
+dirname_of(p<String>)<String> -> {
+    i<Int> = last_slash(p)
+    if (i < 0) { return "" }
+    return p.substring(0, i)
+}
+
+# File-name part of `p`.
+basename_of(p<String>)<String> -> {
+    i<Int> = last_slash(p)
+    if (i < 0) { return p }
+    return p.substring(i + 1, p.len())
+}
+
+# Strip leading/trailing whitespace.
+trim(s<String>)<String> -> {
+    a<Int> = 0
+    n<Int> = s.len()
+    while (a < n) {
+        c<Int> = (s.char_at(a) as Int) & 0xFF
+        if (is_ws(c)) { a = a + 1 } else { break }
+    }
+    b<Int> = n
+    while (b > a) {
+        c<Int> = (s.char_at(b - 1) as Int) & 0xFF
+        if (is_ws(c)) { b = b - 1 } else { break }
+    }
+    if (b <= a) { return "" }
+    return s.substring(a, b)
+}
+
+# Python str.rstrip() with no args: strip trailing whitespace.
+rstrip_ws(s<String>)<String> -> {
+    b<Int> = s.len()
+    while (b > 0) {
+        c<Int> = (s.char_at(b - 1) as Int) & 0xFF
+        if (is_ws(c)) { b = b - 1 } else { break }
+    }
+    return s.substring(0, b)
+}
+
+# Index after skipping whitespace from `j`.
+skip_ws(line<String>, j<Int>)<Int> -> {
+    k<Int> = j
+    while (k < line.len() && is_ws((line.char_at(k) as Int) & 0xFF)) { k = k + 1 }
+    return k
+}
+
+# Replace the first occurrence of `old` in `s` with `new` ("" unchanged if absent).
+replace_first(s<String>, old<String>, new<String>)<String> -> {
+    if (old.len() == 0) { return s }
+    p<Int> = s.index_of(old)
+    if (p < 0) { return s }
+    return s.substring(0, p) + new + s.substring(p + old.len(), s.len())
+}
+
+# Replace every occurrence of `old` in `s` with `new` (Python str.replace).
+replace_all(s<String>, old<String>, new<String>)<String> -> {
+    if (old.len() == 0) { return s }
+    out<String> = s
+    while (true) {
+        p<Int> = out.index_of(old)
+        if (p < 0) { break }
+        out = out.substring(0, p) + new + out.substring(p + old.len(), out.len())
+    }
+    return out
+}
+
+# Decimal value of a digit string (hand-rolled: no String::to_int here).
+digits_to_int(s<String>)<Int> -> {
+    t<String> = trim(s)
+    n<Int> = 0
+    neg<Bool> = false
+    i<Int> = 0
+    if (t.len() > 0 && (((t.char_at(0) as Int) & 0xFF) == 45)) { neg = true; i = 1 }
+    while (i < t.len()) {
+        c<Int> = (t.char_at(i) as Int) & 0xFF
+        if (c < 48 || c > 57) { break }
+        n = n * 10 + (c - 48)
+        i = i + 1
+    }
+    if (neg) { return 0 - n }
+    return n
+}
+
+# -------------------------------------------------------- process / file / argv
+
+# Run `cmd` through the shell and return stdout ("" when it could not run).
+run_sh(cmd<String>)<String> -> {
+    out<String> = ""
+    freedom {
+        match (exec_output(cmd)) {
+            s -> { out = s }
+            ? -> { out = "" }
+        }
+    }
+    return out
+}
+
+# Every file under `dir` matching `pattern`, sorted, with a leading "./" removed
+# (matching pathlib's relative spellings).
+discover(dir<String>, pattern<String>)<Vec<String>> -> {
+    raw<String> = run_sh("find '" + dir + "' -type f -name '" + pattern + "' | LC_ALL=C sort")
+    out<Vec<String>> = Vec<String>()
+    lines<Vec<String>> = raw.split("\n")
+    i<Int> = 0
+    while (i < lines.len()) {
+        line<String> = trim(lines.get(i))
+        if (line.len() > 2 && line.substring(0, 2) == "./") { line = line.substring(2, line.len()) }
+        if (line.len() > 0) { out.push(line) }
+        i = i + 1
+    }
+    return out
+}
+
+# Read a whole file as a String ("" when it cannot be read).
+slurp(path<String>)<String> -> {
+    text<String> = ""
+    match (open_read(path)) {
+        f -> {
+            match (read_all(f)) { s -> { text = s } ? -> { } }
+            close(f)
+        }
+        ? -> { }
+    }
+    return text
+}
+
+# Write `text` to `path`; true when the whole string was written.
+spill(path<String>, text<String>)<Bool> -> {
+    match (open_write(path)) {
+        f -> {
+            match (write_str(f, text)) { n -> { close(f); return (n == text.len()) } ? -> { close(f); return false } }
+        }
+        ? -> { return false }
+    }
+    return false
+}
+
+# The program's argv, parsed from `/proc/self/cmdline` (NUL separated).
+argv_of()<Vec<String>> -> {
+    raw<String> = slurp("/proc/self/cmdline")
+    out<Vec<String>> = Vec<String>()
+    cur<String> = ""
+    i<Int> = 0
+    while (i < raw.len()) {
+        c<Int> = (raw.char_at(i) as Int) & 0xFF
+        if (c == 0) {
+            if (cur.len() > 0) { out.push(cur) }
+            cur = ""
+        } else {
+            cur = cur + String::from_byte(c)
+        }
+        i = i + 1
+    }
+    if (cur.len() > 0) { out.push(cur) }
+    return out
+}
+
+# Value after `flag` in argv, or "".
+opt(argv<Vec<String>>, flag<String>)<String> -> {
+    i<Int> = 0
+    while (i < argv.len()) {
+        if (argv.get(i) == flag && i + 1 < argv.len()) { return argv.get(i + 1) }
+        i = i + 1
+    }
+    return ""
+}
+
+# True when `flag` is present in argv.
+has(argv<Vec<String>>, flag<String>)<Bool> -> {
+    i<Int> = 0
+    while (i < argv.len()) {
+        if (argv.get(i) == flag) { return true }
+        i = i + 1
+    }
+    return false
+}
+
+# -------------------------------------------------------------- migration rules
+#
+# rule ids (same order as migrate_syntax.py's table):
+#   0 make_my(x) -> my(x)            1 make_our(x) -> our(x)
+#   2 make_their(x) -> view(x)       3 `view x` -> view(x)
+#   4 `borrow x` -> borrow(x)        5 `make_my borrow view` -> prose note
+#   6 comment make_my( -> my(        7 comment make_our( -> our(
+
+# Byte-wise lexicographic a < b (Python string ordering for ASCII paths).
+str_less(a<String>, b<String>)<Bool> -> {
+    n<Int> = a.len()
+    if (b.len() < n) { n = b.len() }
+    i<Int> = 0
+    while (i < n) {
+        ca<Int> = (a.char_at(i) as Int) & 0xFF
+        cb<Int> = (b.char_at(i) as Int) & 0xFF
+        if (ca != cb) { return (ca < cb) }
+        i = i + 1
+    }
+    return (a.len() < b.len())
+}
+
+rule_name(rid<Int>)<String> -> {
+    if (rid == 0) { return "make_my_to_my" }
+    if (rid == 1) { return "make_our_to_our" }
+    if (rid == 2) { return "make_their_to_view" }
+    if (rid == 3) { return "view_prefix_to_call" }
+    if (rid == 4) { return "borrow_prefix_to_call" }
+    if (rid == 5) { return "doc_syntax_update" }
+    if (rid == 6) { return "comment_make_my_fix" }
+    return "comment_make_our_fix"
+}
+
+# One match of rule `rid` at/after `pos` in `line`. start == -1 when none.
+# `text` is the replacement for `line[start..end)`.
+struct Match {
+    start<Int>,
+    end<Int>,
+    text<String>
+}
+
+rule_match(line<String>, rid<Int>, pos<Int>)<Match> -> {
+    n<Int> = line.len()
+
+    # rules 0/1/2: \bmake_(my|our|their)\s*\(\s*([^)]+)\s*\)
+    if (rid == 0 || rid == 1 || rid == 2) {
+        kw<String> = "make_my"
+        rep<String> = "my"
+        if (rid == 1) { kw = "make_our"; rep = "our" }
+        if (rid == 2) { kw = "make_their"; rep = "view" }
+        i<Int> = pos
+        while (i + kw.len() <= n) {
+            if (line.substring(i, i + kw.len()) == kw) {
+                ok<Bool> = (i == 0)
+                if (i > 0) { ok = !is_word((line.char_at(i - 1) as Int) & 0xFF) }
+                if (ok) {
+                    j<Int> = skip_ws(line, i + kw.len())
+                    if (j < n && (((line.char_at(j) as Int) & 0xFF) == 40)) {
+                        a0<Int> = j + 1
+                        k<Int> = a0
+                        while (k < n && is_ws((line.char_at(k) as Int) & 0xFF)) { k = k + 1 }
+                        close<Int> = k
+                        while (close < n && (((line.char_at(close) as Int) & 0xFF) != 41)) { close = close + 1 }
+                        ok2<Bool> = (close < n)
+                        inner<String> = ""
+                        if (ok2) {
+                            if (k == close) {
+                                # the leading \s* swallowed everything: backtrack one
+                                # whitespace char so [^)]+ still matches the regex.
+                                if (k > a0) { k = k - 1; inner = line.substring(k, close) } else { ok2 = false }
+                            } else {
+                                inner = line.substring(k, close)
+                            }
+                        }
+                        if (ok2) {
+                            return Match { start = i, end = close + 1, text = rep + "(" + inner + ")" }
+                        }
+                    }
+                }
+            }
+            i = i + 1
+        }
+        return Match { start = -1, end = -1, text = "" }
+    }
+
+    # rules 3/4: \b(view|borrow)\s+(IDENT)\b(?=\s*[,.;)\]}]|$)
+    if (rid == 3 || rid == 4) {
+        kw<String> = "view"
+        if (rid == 4) { kw = "borrow" }
+        i<Int> = pos
+        while (i + kw.len() <= n) {
+            if (line.substring(i, i + kw.len()) == kw) {
+                ok<Bool> = (i == 0)
+                if (i > 0) { ok = !is_word((line.char_at(i - 1) as Int) & 0xFF) }
+                if (ok) {
+                    j<Int> = i + kw.len()
+                    if (j < n && is_ws((line.char_at(j) as Int) & 0xFF)) {
+                        j = skip_ws(line, j)
+                        if (j < n && is_ident_start((line.char_at(j) as Int) & 0xFF)) {
+                            k<Int> = j + 1
+                            while (k < n && is_word((line.char_at(k) as Int) & 0xFF)) { k = k + 1 }
+                            la<Bool> = false
+                            if (k == n) {
+                                la = true
+                            } else if ((((line.char_at(k) as Int) & 0xFF) == 10) && k == n - 1) {
+                                la = true
+                            } else {
+                                t<Int> = skip_ws(line, k)
+                                if (t < n) {
+                                    c<Int> = (line.char_at(t) as Int) & 0xFF
+                                    if (c == 44 || c == 46 || c == 59 || c == 41 || c == 93 || c == 125) { la = true }
+                                }
+                            }
+                            if (la) {
+                                return Match { start = i, end = k, text = kw + "(" + line.substring(j, k) + ")" }
+                            }
+                        }
+                    }
+                }
+            }
+            i = i + 1
+        }
+        return Match { start = -1, end = -1, text = "" }
+    }
+
+    # rule 5: \bmake_my\s+borrow\s+view
+    if (rid == 5) {
+        i<Int> = pos
+        while (i + 7 <= n) {
+            if (line.substring(i, i + 7) == "make_my") {
+                ok<Bool> = (i == 0)
+                if (i > 0) { ok = !is_word((line.char_at(i - 1) as Int) & 0xFF) }
+                if (ok) {
+                    j<Int> = i + 7
+                    if (j < n && is_ws((line.char_at(j) as Int) & 0xFF)) {
+                        j = skip_ws(line, j)
+                        if (j + 6 <= n && line.substring(j, j + 6) == "borrow") {
+                            k<Int> = j + 6
+                            if (k < n && is_ws((line.char_at(k) as Int) & 0xFF)) {
+                                k = skip_ws(line, k)
+                                if (k + 4 <= n && line.substring(k, k + 4) == "view") {
+                                    return Match { start = i, end = k + 4, text = "my() constructor with view/borrow operators" }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            i = i + 1
+        }
+        return Match { start = -1, end = -1, text = "" }
+    }
+
+    # rules 6/7: //.*make_(my|our)\s*\(  (greedy .* -> the LAST such call)
+    kw<String> = "make_my"
+    if (rid == 7) { kw = "make_our" }
+    rep<String> = "my"
+    if (rid == 7) { rep = "our" }
+    s<Int> = pos
+    while (s + 2 <= n) {
+        if (line.substring(s, s + 2) == "//") {
+            last<Int> = -1
+            t<Int> = s + 2
+            while (t + kw.len() <= n) {
+                if (line.substring(t, t + kw.len()) == kw) {
+                    j<Int> = skip_ws(line, t + kw.len())
+                    if (j < n && (((line.char_at(j) as Int) & 0xFF) == 40)) { last = j + 1 }
+                }
+                t = t + 1
+            }
+            if (last >= 0) {
+                oldstr<String> = line.substring(s, last)
+                return Match { start = s, end = last, text = replace_all(oldstr, kw + "(", rep + "(") }
+            }
+        }
+        s = s + 1
+    }
+    return Match { start = -1, end = -1, text = "" }
+}
+
+# ------------------------------------------------------------------ scan a file
+
+# Scan `path` and append every migration to the shared parallel vectors.
+scan_one(path<String>, mfile<their<Vec<String>>>, mline<their<Vec<Int>>>,
+         mrule<their<Vec<String>>>, mold<their<Vec<String>>>,
+         mnew<their<Vec<String>>>, mctx<their<Vec<String>>>) -> {
+    content<String> = slurp(path)
+    raw<Vec<String>> = content.split("\n")
+    # mirror Python readlines: drop the single trailing "" left by a final newline.
+    cnt<Int> = raw.len()
+    if (cnt > 0 && raw.get(cnt - 1).len() == 0) { cnt = cnt - 1 }
+    lines<Vec<String>> = Vec<String>()
+    q<Int> = 0
+    while (q < cnt) { lines.push(raw.get(q)); q = q + 1 }
+    i<Int> = 0
+    while (i < lines.len()) {
+        line<String> = lines.get(i)
+        ln<Int> = i + 1
+        rid<Int> = 0
+        while (rid < 8) {
+            pos<Int> = 0
+            while (pos <= line.len()) {
+                m<Match> = rule_match(line, rid, pos)
+                if (m.start < 0) { break }
+                ctx<String> = ""
+                if (ln > 1) { ctx = (ln - 1).to_string() + ": " + rstrip_ws(lines.get(i - 1)) + "\n" }
+                ctx = ctx + ln.to_string() + ": " + rstrip_ws(line)
+                if (ln < lines.len()) { ctx = ctx + "\n" + (ln + 1).to_string() + ": " + rstrip_ws(lines.get(i + 1)) }
+                mfile.push(path)
+                mline.push(ln)
+                mrule.push(rule_name(rid))
+                mold.push(line.substring(m.start, m.end))
+                mnew.push(m.text)
+                mctx.push(ctx)
+                pos = m.end
+                if (m.end <= m.start) { pos = m.start + 1 }
+            }
+            rid = rid + 1
+        }
+        i = i + 1
+    }
+}
+
+# ------------------------------------------------------------- apply to one file
+
+# Apply the migration slice [start, start+count) to `path` (descending line
+# order, stable within a line), optionally backing up first.
+apply_one(path<String>, start<Int>, count<Int>, backup<Bool>,
+          mline<Vec<Int>>, mold<Vec<String>>, mnew<Vec<String>>)<Bool> -> {
+    content<String> = slurp(path)
+    lines<Vec<String>> = content.split("\n")
+    mn<Int> = mline.get(start)
+    mx<Int> = mline.get(start)
+    q<Int> = 0
+    while (q < count) {
+        L<Int> = mline.get(start + q)
+        if (L < mn) { mn = L }
+        if (L > mx) { mx = L }
+        q = q + 1
+    }
+    if (backup) {
+        run_sh("cp -p '" + path + "' '" + path + ".backup'")
+        println("Created backup: " + path + ".backup")
+    }
+    ln<Int> = mx
+    while (ln >= mn) {
+        q = 0
+        while (q < count) {
+            idx<Int> = start + q
+            if (mline.get(idx) == ln) {
+                li<Int> = ln - 1
+                if (li < lines.len()) {
+                    lines.set(li, replace_first(lines.get(li), mold.get(idx), mnew.get(idx)))
+                }
+            }
+            q = q + 1
+        }
+        ln = ln - 1
+    }
+    out<String> = ""
+    q = 0
+    while (q < lines.len()) {
+        if (q > 0) { out = out + "\n" }
+        out = out + lines.get(q)
+        q = q + 1
+    }
+    return spill(path, out)
+}
+
+# ------------------------------------------------------------------------- main
+
+main()<Void> -> {
+    argv<Vec<String>> = argv_of()
+    do_scan<Bool> = has(argv, "--scan")
+    do_migrate<Bool> = has(argv, "--migrate")
+
+    if (!do_scan && !do_migrate) {
+        println("Error: Must specify either --scan or --migrate")
+        exit(1)
+    }
+
+    one<String> = opt(argv, "--file")
+    dirp<String> = opt(argv, "--directory")
+    if (one.len() == 0 && dirp.len() == 0) { dirp = "." }
+    backup<Bool> = has(argv, "--backup")
+    want_report<Bool> = has(argv, "--report")
+
+    mfile<Vec<String>> = Vec<String>()
+    mline<Vec<Int>> = Vec<Int>()
+    mrule<Vec<String>> = Vec<String>()
+    mold<Vec<String>> = Vec<String>()
+    mnew<Vec<String>> = Vec<String>()
+    mctx<Vec<String>> = Vec<String>()
+    fpaths<Vec<String>> = Vec<String>()
+    fstarts<Vec<Int>> = Vec<Int>()
+    fcounts<Vec<Int>> = Vec<Int>()
+    files_scanned<Int> = 0
+
+    # loop counters and temporaries, declared once so every nested scope sees them.
+    before<Int> = 0
+    added<Int> = 0
+    fi<Int> = 0
+    k<Int> = 0
+    qi<Int> = 0
+    ti<Int> = 0
+    ai<Int> = 0
+    pi<Int> = 0
+    fj<Int> = 0
+    oi<Int> = 0
+    idx<Int> = 0
+    rv<String> = ""
+    rep<String> = ""
+    ts<String> = ""
+
+    if (one.len() > 0) {
+        println("Processing file: " + one)
+        files_scanned = 1
+        before = mfile.len()
+        scan_one(one, borrow(mfile), borrow(mline), borrow(mrule), borrow(mold), borrow(mnew), borrow(mctx))
+        added = mfile.len() - before
+        if (added > 0) { fpaths.push(one); fstarts.push(before); fcounts.push(added) }
+    } else {
+        println("Processing directory: " + dirp)
+        patterns<Vec<String>> = Vec<String>()
+        patterns.push("*.vyb")
+        patterns.push("*.md")
+        patterns.push("*.txt")
+        patterns.push("*.cpp")
+        patterns.push("*.hpp")
+        pi = 0
+        while (pi < patterns.len()) {
+            files<Vec<String>> = discover(dirp, patterns.get(pi))
+            fj = 0
+            while (fj < files.len()) {
+                p<String> = files.get(fj)
+                files_scanned = files_scanned + 1
+                before = mfile.len()
+                scan_one(p, borrow(mfile), borrow(mline), borrow(mrule), borrow(mold), borrow(mnew), borrow(mctx))
+                added = mfile.len() - before
+                if (added > 0) { fpaths.push(p); fstarts.push(before); fcounts.push(added) }
+                fj = fj + 1
+            }
+            pi = pi + 1
+        }
+    }
+
+    total<Int> = mfile.len()
+
+    if (total == 0) {
+        println("✅ No legacy syntax found - all files use canonical syntax!")
+        exit(0)
+    }
+
+    println("")
+    println("📊 Scan Results:")
+    println("   Files scanned: " + files_scanned.to_string())
+    println("   Files with legacy syntax: " + fpaths.len().to_string())
+    println("   Total changes needed: " + total.to_string())
+
+    fi = 0
+    while (fi < fpaths.len()) {
+        println("")
+        println("📝 " + fpaths.get(fi) + " (" + fcounts.get(fi).to_string() + " changes):")
+        k = 0
+        while (k < fcounts.get(fi)) {
+            idx = fstarts.get(fi) + k
+            println("   Line " + mline.get(idx).to_string() + ": " + mold.get(idx) + " → " + mnew.get(idx))
+            k = k + 1
+        }
+        fi = fi + 1
+    }
+
+    if (do_migrate) {
+        println("")
+        println("🔧 Applying migrations...")
+        modified<Int> = 0
+        applied<Int> = 0
+        fi = 0
+        while (fi < fpaths.len()) {
+            ok<Bool> = apply_one(fpaths.get(fi), fstarts.get(fi), fcounts.get(fi), backup, mline, mold, mnew)
+            if (ok) {
+                println("   ✅ Updated " + fpaths.get(fi))
+                modified = modified + 1
+                applied = applied + fcounts.get(fi)
+            } else {
+                println("   ❌ Failed to update " + fpaths.get(fi))
+            }
+            fi = fi + 1
+        }
+        println("")
+        println("✅ Migration complete:")
+        println("   Files modified: " + modified.to_string())
+        println("   Total changes applied: " + applied.to_string())
+    }
+
+    if (want_report) {
+        ts = trim(run_sh("date '+%Y-%m-%d %H:%M:%S'"))
+        rep = ""
+        rep = rep + "# Vyb Syntax Migration Report\n"
+        rep = rep + "Generated: " + ts + "\n"
+        rep = rep + "\n"
+        rep = rep + "## Summary\n"
+        rep = rep + "- Files scanned: " + files_scanned.to_string() + "\n"
+        rep = rep + "- Files with legacy syntax: " + fpaths.len().to_string() + "\n"
+        rep = rep + "- Total migrations needed: " + total.to_string() + "\n"
+        rep = rep + "\n"
+
+        rulekey<Vec<String>> = Vec<String>()
+        rulecnt<Vec<Int>> = Vec<Int>()
+        qi = 0
+        while (qi < total) {
+            rv = mrule.get(qi)
+            found<Bool> = false
+            ti = 0
+            while (ti < rulekey.len()) {
+                if (rulekey.get(ti) == rv) { found = true; rulecnt.set(ti, rulecnt.get(ti) + 1) }
+                ti = ti + 1
+            }
+            if (!found) { rulekey.push(rv); rulecnt.push(1) }
+            qi = qi + 1
+        }
+
+        if (rulekey.len() > 0) {
+            rep = rep + "## Migration Details\n"
+            rep = rep + "\n"
+            ti = 0
+            while (ti < rulekey.len()) {
+                rv = rulekey.get(ti)
+                rep = rep + "### " + rv + " (" + rulecnt.get(ti).to_string() + " instances)\n"
+                rep = rep + "\n"
+                qi = 0
+                while (qi < total) {
+                    if (mrule.get(qi) == rv) {
+                        rep = rep + "**" + mfile.get(qi) + ":" + mline.get(qi).to_string() + "**\n"
+                        rep = rep + "```vyb\n"
+                        rep = rep + "// OLD:\n"
+                        rep = rep + mold.get(qi) + "\n"
+                        rep = rep + "// NEW:\n"
+                        rep = rep + mnew.get(qi) + "\n"
+                        rep = rep + "```\n"
+                        rep = rep + "\n"
+                    }
+                    qi = qi + 1
+                }
+                ti = ti + 1
+            }
+        }
+
+        # file sections in sorted path order (Python sorts all_migrations.items()).
+        order<Vec<Int>> = Vec<Int>()
+        fi = 0
+        while (fi < fpaths.len()) {
+            ai = order.len() - 1
+            order.push(fi)
+            while (ai >= 0 && str_less(fpaths.get(fi), fpaths.get(order.get(ai)))) {
+                order.set(ai + 1, order.get(ai))
+                ai = ai - 1
+            }
+            order.set(ai + 1, fi)
+            fi = fi + 1
+        }
+
+        rep = rep + "## Files Requiring Migration\n"
+        rep = rep + "\n"
+        oi = 0
+        while (oi < order.len()) {
+            fi = order.get(oi)
+            rep = rep + "### " + fpaths.get(fi) + " (" + fcounts.get(fi).to_string() + " changes)\n"
+            rep = rep + "\n"
+            k = 0
+            while (k < fcounts.get(fi)) {
+                idx = fstarts.get(fi) + k
+                rep = rep + "**Line " + mline.get(idx).to_string() + ":** " + mrule.get(idx) + "\n"
+                rep = rep + "```\n"
+                rep = rep + mctx.get(idx) + "\n"
+                rep = rep + "```\n"
+                rep = rep + "**Change:** `" + mold.get(idx) + "` → `" + mnew.get(idx) + "`\n"
+                rep = rep + "\n"
+                k = k + 1
+            }
+            oi = oi + 1
+        }
+
+        # Python joins report_lines with "\n", so the body ends with exactly one
+        # newline after the last change line; drop our extra blank separator.
+        if (rep.len() > 1 && (((rep.char_at(rep.len() - 1) as Int) & 0xFF) == 10)) {
+            rep = rep.substring(0, rep.len() - 1)
+        }
+
+        fname<String> = "migration_report_" + trim(run_sh("date +%Y%m%d_%H%M%S")) + ".md"
+        if (spill(fname, rep)) { println("Report saved to: " + fname) }
+    }
+
+    exit(0)
+}
