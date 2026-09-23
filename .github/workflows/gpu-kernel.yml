@@ -72,7 +72,7 @@ jobs:
         # Publishes a package via `vyb mod publish` into a temp VYB_REGISTRY dir,
         # resolves a `{ version = "..." }` dep on build (prefix->highest + exact),
         # asserts vyb.lock source="version", and runs the built binary.
-        run: python3 test/registry_smoke.py
+        run: ./build/vyb test/registry_smoke.vyb
 
       - name: Emit + ptxas-validate kernel PTX across arches
         # The --kernel path runs ptxas automatically and FAILS the build if it

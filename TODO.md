@@ -920,7 +920,7 @@ with `pass` for multi-statement case bodies. Needs polishing:
   header.
 
 ### Testing & Tooling
-- [x] **`vyb test`** — integrated test runner: `vyb test [paths...] [--test-dir] [--category] [--pattern] [--no-execute] [--verbose] [--repo]`. Runs test files (`.vyb` carrying `@test`/`@expect*` directives, or `*.test.vyb`) via self-contained per-file subprocess isolation, checking exit code / `@expect-output` / main-return (`@expect-return`) / `@expect-error` and honoring `@vyb-args`/`@env`/`@parse-only`/`@semantic-only`. No Python dependency; `--repo` (or no paths inside the compiler repo) delegates to `test/run_tests.py`. Validated: `vyb test test/units` → 301/301 natively.
+- [x] **`vyb test`** — integrated test runner: `vyb test [paths...] [--test-dir] [--category] [--pattern] [--no-execute] [--verbose] [--repo]`. Runs test files (`.vyb` carrying `@test`/`@expect*` directives, or `*.test.vyb`) via self-contained per-file subprocess isolation, checking exit code / `@expect-output` / main-return (`@expect-return`) / `@expect-error` and honoring `@vyb-args`/`@env`/`@parse-only`/`@semantic-only`. No Python dependency; `--repo` (or no paths inside the compiler repo) delegates to `test/run_tests.vyb`. Validated: `vyb test test/units` → 301/301 natively.
 - [x] **Code formatter — `--format`/`--check`** — `vyb --format <file>` parses to the AST and re-emits
   canonical, idempotent source (4-space indent, comma-joined fields/arms, precedence-aware
   parenthesization); `vyb --check` exits 1 when a file isn't already canonical. Covered: declarations
