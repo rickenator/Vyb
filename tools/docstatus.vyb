@@ -1,0 +1,269 @@
+# tools/docstatus.vyb — documentation status conformance check, in Vyb.
+#
+// @not-a-test: true — tooling, not a fixture.
+#
+# The tracking docs (TODO.md, doc/FEATURE_STATUS.md) are the release gate: the
+# 1.0 checklist reads "All open contradictions resolved". That gate is only
+# meaningful if the checklist cannot silently disagree with the status table,
+# so this tool mechanically cross-checks the two.
+#
+# Three checks:
+#   1. cited-path evidence — every repo path cited in doc/FEATURE_STATUS.md
+#      (e.g. `test/modules/test_vec_iter.vyb`) must exist on disk. A ✅ row that
+#      cites a renamed/deleted test is drift.
+#   2. open-item coverage — every unchecked item in the "Must-Have for 1.0" and
+#      "Should-Have for 1.0" blocks must carry an `<!-- open: LABEL -->` marker,
+#      where LABEL is the FEATURE_STATUS row that tracks it, or the literal
+#      `(none)` when no row covers that item. No unchecked 1.0 claim can be made
+#      without saying what tracks it.
+#   3. claim agreement — for any unchecked TODO.md item marked `<!-- open: LABEL
+#      -->` with a real LABEL, the FEATURE_STATUS row LABEL must exist and must
+#      NOT be ✅. This is the direction that catches the regression: marking a
+#      feature ✅ without closing the roadmap item that still calls it open.
+#
+# Exit 0 = docs agree; exit 1 = drift (with file:line for both sides).
+#
+#   build/vyb tools/docstatus.vyb
+#
+# Repo root is derived from /proc/self/cmdline (argv[0]), same as
+# test/suite_count_check.vyb.
+import io::{close, open_read, read_all, File}
+import process::{exec_output}
+
+# Read `path` as a whole String ("" when unreadable).
+slurp(path<String>)<String> -> {
+    text<String> = ""
+    match (open_read(path)) {
+        f -> {
+            match (read_all(f)) { s -> { text = s } ? -> { } }
+            close(f)
+        }
+        ? -> { }
+    }
+    return text
+}
+
+# Run `cmd` and return its stdout ("" when it could not run).
+run_sh(cmd<String>)<String> -> {
+    out<String> = ""
+    freedom {
+        match (exec_output(cmd)) {
+            s -> { out = s }
+            ? -> { out = "" }
+        }
+    }
+    return out
+}
+
+byte_at(s<String>, i<Int>)<Int> -> {
+    return (s.char_at(i) as Int) & 0xFF
+}
+
+is_space(c<Int>)<Bool> -> {
+    return (c == 32 || c == 9 || c == 13 || c == 10)
+}
+
+# True when `path` exists on disk (file or directory).
+exists(path<String>)<Bool> -> {
+    probe<String> = run_sh("if [ -e '" + path + "' ]; then echo Y; fi")
+    return probe.index_of("Y") >= 0
+}
+
+# `s` with leading/trailing ASCII whitespace removed.
+trim(s<String>)<String> -> {
+    a<Int> = 0
+    while (a < s.len() && is_space(byte_at(s, a))) { a = a + 1 }
+    b<Int> = s.len()
+    while (b > a && is_space(byte_at(s, b - 1))) { b = b - 1 }
+    return s.substring(a, b)
+}
+
+# Does `s` begin with `prefix`?
+starts_with(s<String>, prefix<String>)<Bool> -> {
+    if (prefix.len() > s.len()) { return false }
+    return s.substring(0, prefix.len()) == prefix
+}
+
+# Does `s` contain `needle`?
+has_sub(s<String>, needle<String>)<Bool> -> {
+    return s.index_of(needle) >= 0
+}
+
+lines_of(text<String>)<Vec<String>> -> {
+    return text.split("\n")
+}
+
+#------------------------------------------------------------------------------
+# Check 1 — cited paths in doc/FEATURE_STATUS.md must exist.
+#
+# Backtick spans that look like repo-relative paths (a known top-level prefix,
+# a "/", and a real source/doc extension) are treated as evidence citations.
+#------------------------------------------------------------------------------
+# True when `p` is a repo-relative path we should verify on disk: a known
+# top-level source/doc prefix, a directory component, and a real file extension
+# (so prose like `~/.vyb/registry` or `.vybmod/<name>/` is ignored).
+looks_like_path(p<String>)<Bool> -> {
+    if (!has_sub(p, "/")) { return false }
+    if (!(has_sub(p, ".vyb") || has_sub(p, ".md") || has_sub(p, ".html") || has_sub(p, ".cpp"))) { return false }
+    return starts_with(p, "test/") || starts_with(p, "examples/") || starts_with(p, "stdlib/") ||
+           starts_with(p, "doc/") || starts_with(p, "docs/") || starts_with(p, "tools/") ||
+           starts_with(p, "src/") || starts_with(p, "include/")
+}
+
+# True when citation `p` resolves on disk. A `*` in `p` is a shell glob, which
+# is legitimate evidence ("`test/modules/namespace_*.vyb`") when it matches at
+# least one real file.
+path_ok(root<String>, p<String>)<Bool> -> {
+    if (has_sub(p, "*")) {
+        hits<String> = run_sh("ls -1 " + root + "/" + p + " 2>/dev/null | wc -l")
+        return trim(hits) != "0"
+    }
+    return exists(root + "/" + p)
+}
+
+# Every backtick-delimited span in `text`.
+backtick_spans(text<String>)<Vec<String>> -> {
+    spans<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < text.len()) {
+        if (byte_at(text, i) == 96) {
+            j<Int> = i + 1
+            while (j < text.len() && byte_at(text, j) != 96) { j = j + 1 }
+            if (j < text.len()) { spans.push(text.substring(i + 1, j)) }
+            i = j + 1
+        } else {
+            i = i + 1
+        }
+    }
+    return spans
+}
+
+#------------------------------------------------------------------------------
+# Check 2/3 — the `<!-- open: LABEL -->` marker.
+#------------------------------------------------------------------------------
+marker_open<String> = "<!--" + " open:"
+
+# The LABEL from `<!-- open: LABEL -->` in `line`, or "" when absent.
+open_marker(line<String>)<String> -> {
+    k<Int> = line.index_of(marker_open)
+    if (k < 0) { return "" }
+    start<Int> = k + marker_open.len()
+    end<Int> = line.index_of("-->")
+    if (end < 0 || end <= start) { return "" }
+    return trim(line.substring(start, end))
+}
+
+# FEATURE_STATUS row lookup: the status cell of row `label`, or "" when the
+# table has no such row.
+row_status(status_text<String>, label<String>)<String> -> {
+    ls<Vec<String>> = lines_of(status_text)
+    i<Int> = 0
+    while (i < ls.len()) {
+        line<String> = ls.get(i)
+        if (starts_with(line, "| ")) {
+            cells<Vec<String>> = line.split("|")
+            if (cells.len() >= 3) {
+                if (trim(cells.get(1)) == label) {
+                    return trim(cells.get(2))
+                }
+            }
+        }
+        i = i + 1
+    }
+    return ""
+}
+
+main()<Int> -> {
+    # argv[1] is this program: the repo root is two directories up.
+    self<String> = ""
+    raw<String> = slurp("/proc/self/cmdline")
+    parts<Vec<String>> = raw.split(String::from_byte(0))
+    if (parts.len() > 1) { self = parts.get(1) }
+    root<String> = ""
+    if (self.len() > 0) {
+        k<Int> = self.index_of("/tools/docstatus.vyb")
+        if (k >= 0) { root = self.substring(0, k) }
+    }
+    if (root.len() == 0) { root = "." }
+
+    problems<Vec<String>> = Vec<String>()
+    checked<Int> = 0
+
+    status_path<String> = root + "/doc/FEATURE_STATUS.md"
+    todo_path<String> = root + "/TODO.md"
+    status_text<String> = slurp(status_path)
+    todo_text<String> = slurp(todo_path)
+
+    if (status_text.len() == 0) {
+        problems.push("cannot read " + status_path)
+    }
+    if (todo_text.len() == 0) {
+        problems.push("cannot read " + todo_path)
+    }
+
+    # -- Check 1: cited-path evidence -------------------------------------
+    if (status_text.len() > 0) {
+        spans<Vec<String>> = backtick_spans(status_text)
+        i<Int> = 0
+        while (i < spans.len()) {
+            p<String> = spans.get(i)
+            if (looks_like_path(p)) {
+                checked = checked + 1
+                if (!path_ok(root, p)) {
+                    problems.push(status_path + ": cites `" + p + "` — no such path in the tree")
+                }
+            }
+            i = i + 1
+        }
+    }
+
+    # -- Check 2/3: TODO.md open items vs FEATURE_STATUS -------------------
+    must_have<String> = "### Must-Have for 1.0"
+    should_have<String> = "### Should-Have for 1.0"
+    section<String> = ""
+    ls<Vec<String>> = lines_of(todo_text)
+    marked<Int> = 0
+    i<Int> = 0
+    while (i < ls.len()) {
+        line<String> = ls.get(i)
+        if (starts_with(line, "### ") || starts_with(line, "## ")) {
+            if (has_sub(line, "Must-Have for 1.0")) { section = must_have }
+            else if (has_sub(line, "Should-Have for 1.0")) { section = should_have }
+            else { section = "" }
+        } else if (starts_with(line, "- [ ]") || starts_with(line, "- [~]")) {
+            gating<Bool> = (section != "")
+            label<String> = open_marker(line)
+            if (label.len() > 0) {
+                marked = marked + 1
+                if (label != "(none)") {
+                    st<String> = row_status(status_text, label)
+                    if (st.len() == 0) {
+                        problems.push("TODO.md:" + (i + 1).to_string() + ": open item names status row `" + label + "`, which doc/FEATURE_STATUS.md does not have")
+                    } else if (st == "✅") {
+                        problems.push("TODO.md:" + (i + 1).to_string() + ": lists `" + label + "` as OPEN, but doc/FEATURE_STATUS.md marks it ✅ — close the item or fix the row")
+                    }
+                }
+            } else if (gating) {
+                problems.push("TODO.md:" + (i + 1).to_string() + ": unchecked 1.0 item has no <!-- open: LABEL --> marker (see the note under '1.0 Release Criteria')")
+            }
+        }
+        i = i + 1
+    }
+
+    if (problems.len() > 0) {
+        println("docstatus drift:")
+        j<Int> = 0
+        while (j < problems.len()) {
+            println("  - " + problems.get(j))
+            j = j + 1
+        }
+        println("  (" + problems.len().to_string() + " problem(s), " + checked.to_string() + " cited path(s) checked)")
+        # exit() sets the process status; `return 1` from main() would only
+        # print "1" and still exit 0, which a CI step cannot see.
+        exit(1)
+    }
+
+    println("docstatus --check OK (" + checked.to_string() + " cited path(s) resolve; " +
+            marked.to_string() + " open item(s) marked)")
+    exit(0)
+}
