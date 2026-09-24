@@ -241,7 +241,7 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 - [x] **`println()`/`print()` with multiple arguments** — Space-separated output; all args formatted into a single call
 - [x] **Semantic type recognition** — `Int16`, `Int32`, `Int64`, `UInt8`–`UInt64`, `Float32`, `Float64`, `Char`, `Rune` now fully recognized in semantic analysis (were silently rejected)
 - [x] **Relaxed struct field syntax** — C-style `Type fieldName` accepted alongside canonical `fieldName<Type>`; helps parse legacy/interop fixtures
-- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite now runs **1184 tests, 1184 passing** via `test/run_tests.vyb` (re-anchored 2026-09-19)
+- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite runs **1195 tests** via `test/run_tests.vyb`, and that documented size is enforced against the runner by `test/suite_count_check.vyb` in CI
 - [x] **Vec parameter deep copy** — Vec parameters receive an independent copy of the data on function entry, eliminating double-free bugs (e.g. recursive quicksort base-case return)
 - [x] **Vec mutation through borrowed struct fields** — `s.items.push(val)` where `s<their<T>>` now correctly mutates in-place; member-expression Vec calls now get a field *pointer* (not a loaded copy)
 - [x] **`their<T>` nested-access audit** — verified multi-level member reads/writes through a `their<T>` borrow receiver (`r.mid.leaf.n`, 2-level writes), borrow-typed struct fields accessed through an outer borrow (`h.inner.n` where `Holder.inner<their<Leaf>>`), and member Vec reads through a borrow. All correct; locked in by `test/ownership/test_their_nested_access.vyb`. (Note: `Vec::get()` returns a copy, so in-place mutation of a nested `Vec<Vec<T>>` needs the inner Vec accessed by reference — not a `their` bug.)
@@ -1231,6 +1231,11 @@ map `.get()`, iterator `next()`, and `mild.grab()`, superseding the `Option<T>` 
 
 For Vyb to be considered production-ready at 1.0, **all of the following must be true**:
 
+<!-- Open-item convention: every unchecked item under the 1.0 headings carries an HTML
+     comment of the form `open: LABEL`, naming the doc/FEATURE_STATUS.md row that tracks
+     it, or `(none)` when no row does. tools/docstatus.vyb enforces this in CI and flags
+     any marker naming a row already marked ✅. -->
+
 ### Must-Have for 1.0
 - [x] Module system core working (`import`, `smuggle`, `bundle`, `share`, module paths, stdlib discovery)
 - [x] Lambda/closure codegen complete (env structs, mutable/move/`our` capture, returned-closure release)
@@ -1253,7 +1258,7 @@ For Vyb to be considered production-ready at 1.0, **all of the following must be
 - [x] FFI (`extern "C"`) working — extern blocks, ABI aliases, `#[repr(C)]`, native `--link`, variadics, `vyb bindgen` (MVP + libclang `--full`)
 - [x] `vyb.toml` and `vyb build` project system (foundation shipped: manifest, multi-file/path-dep build, `vyb new`, `vyb.lock`; remote git/version dependency fetching is a staged follow-up)
 - [x] Wildcard trap handler (`trap (e<?>)`) with `typeof` discrimination
-- [ ] All open contradictions resolved (see section above)
+- [ ] All open contradictions resolved (see section above) <!-- open: (none) -->
 
 ### Should-Have for 1.0
 - [x] REPL (`vyb repl`) — JIT-backed eval loop (persistent declarations + variables, bare-expression auto-display, multiline via bracket balance, error recovery); protocol smoke test in hosted CI (`test/repl_smoke.vyb`). readline history/editing + `:type` are follow-ons
@@ -1265,9 +1270,9 @@ For Vyb to be considered production-ready at 1.0, **all of the following must be
   `docs/refman/language.md` (keywords/operators/types/forms with cross-links), and
   the EBNF grammar in `PROGRAMMERS_GUIDE.md` Appendix D; all validated by
   `refman --check` in CI.
-- [ ] Test suite covering all 1.0 features
+- [ ] Test suite covering all 1.0 features <!-- open: (none) -->
 - [x] `vyb test` integrated test runner (`vyb test [paths...]`, see Testing & Tooling)
-- [ ] Debugger integration validated end-to-end with `gdb`/`lldb`
+- [ ] Debugger integration validated end-to-end with `gdb`/`lldb` <!-- open: (none) -->
 
 ### Post-1.0 Roadmap
 - [x] Agents (lightweight isolated message-passing units) — design doc `doc/AGENTS_DESIGN.md`; Stages 1–5 shipped (see the Agents section above).
@@ -1279,7 +1284,7 @@ For Vyb to be considered production-ready at 1.0, **all of the following must be
 - [ ] Self-hosting compiler (Vyb written in Vyb)
 - [ ] Macros / metaprogramming
 - [ ] Package registry
-- [ ] `vyb bindgen` for C header automation
+- [x] `vyb bindgen` for C header automation (MVP + libclang `--full`; `test/bindgen/*.vyb`)
 - [ ] Higher-kinded types
 - [ ] Compile-time function evaluation (CTFE)
 - [ ] `pipe` operator (`|>`)
@@ -1320,8 +1325,8 @@ async tcp_connect(host<String>, port<Int>)<TcpStream> -> {
 
 ### Networking Roadmap
 
-- [ ] **v0.5 — FFI foundation** (`extern "C"` blocks, C type mapping)
-- [ ] **v0.5 — Raw socket FFI bindings** — `stdlib/net/raw.vyb` wrapping POSIX socket API
+- [x] **v0.5 — FFI foundation** (`extern "C"` blocks, C type mapping) — shipped; `test/ffi/*.vyb`
+- [x] **v0.5 — Raw socket FFI bindings** — shipped as `stdlib/network/mod.vyb` over the runtime's `__vyb_net_*` intrinsics (`test/modules/test_network_socket.vyb`); the originally sketched `stdlib/net/raw.vyb` was never created
 - [x] **v0.6 — `TcpStream` / `UdpSocket`** — method-bound wrappers in `network`
   (`tcp_connect`/`tcp_listen`/`tcp_accept`/`udp_bind` + `.write`/`.read`/
   `.send_to`/`.recv_from`/`.close`); errors via the module's `error_code()`
@@ -1385,7 +1390,7 @@ Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `
 
 ### Implementation Consistency
 - [x] **`borrow` prefix vs `borrow()` function call** — canonical is `borrow(expr)`; the `borrow expr` prefix is legacy/non-canonical (`view(expr)` likewise). Pinned in `doc/Canonical_Reference_Syntax.md`.
-- [ ] **`their<T>` nested member access** — The semantic analyzer sometimes fails to dereference through `their<T>` for nested member access. Audit all transitive field access paths.
+- [x] **`their<T>` nested member access** — resolved: nested by-ref fields dereference for both reads and in-place mutation, pinned by `test/ownership/test_their_nested_access.vyb` and `test/modules/test_nested_their_vec_field.vyb`
 - [x] **Vec cleanup on return** — Transfer-on-return now walks whole-value reads (bare identifiers and `select` arms), so owning values (Vec with malloc'd data, `our<T>`, `mild<T>`) returned via expressions transfer to the caller instead of being freed first.
 
 ### Action Items
@@ -1398,5 +1403,5 @@ Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `
 
 *Last Updated: 2026-09-19 (v0.7.6 release)*
 *Current Version: Vyb v0.7.6 (freedom-1.0 series)*
-*Overall Status: ~60-65% complete toward 1.0 — 1184 tests, 1184 passing (full --execute-jit directory sweep, re-anchored 2026-09-19)*
+*Overall Status: ~60-65% complete toward 1.0 — 1195 tests (documented size enforced against the runner by `test/suite_count_check.vyb`; the full `--execute-jit` sweep runs in `ci.yml`)*
 *SUGGESTIONS.md merged into this document.*
