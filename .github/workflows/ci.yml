@@ -59,6 +59,13 @@ jobs:
         # what test/run_tests.vyb actually runs.
         run: ./build/vyb test/suite_count_check.vyb
 
+      - name: Validate tracking docs agree with the tree (TODO.md / FEATURE_STATUS.md)
+        # tools/docstatus.vyb enforces two invariants: every repo path cited in the
+        # tracking docs resolves on disk, and every unchecked 1.0 criterion carries an
+        # `open: LABEL` marker (naming a ✅ FEATURE_STATUS row is a contradiction).
+        # It calls exit(1) on drift, so the step fails for real.
+        run: ./build/vyb tools/docstatus.vyb
+
       - name: Validate generated refman matches stdlib (#226)
         # tools/refman.vyb is the Vyb generator that replaced tools/refman.py.
         # VYB_REFMAN_CHECK=1 is its check mode (the compiler claims bare --check

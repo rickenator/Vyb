@@ -31,3 +31,6 @@ demos/VybLynx/target-asan/
 
 # Hermes agent state (not project code)
 .hermes/
+
+# Browser tooling artifacts (agent session state, not project code)
+.playwright-mcp/

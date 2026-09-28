@@ -131,6 +131,11 @@ equal_ratio_counts(text<String>)<Vec<Int>> -> {
     return found
 }
 
+# True when `s` contains `needle`.
+has_sub(s<String>, needle<String>)<Bool> -> {
+    return (s.index_of(needle) >= 0)
+}
+
 main()<Int> -> {
     # argv[1] is this program: the repo root is two directories up.
     self<String> = ""
@@ -153,6 +158,9 @@ main()<Int> -> {
     docs<Vec<String>> = Vec<String>()
     docs.push(root + "/README.md")
     docs.push(root + "/docs/refman/PROGRAMMERS_GUIDE.md")
+    # TODO.md's "<N> tests" claims are checked too; its hit/miss ratios are not
+    # (see the guard around equal_ratio_counts below).
+    docs.push(root + "/TODO.md")
 
     problems<Vec<String>> = Vec<String>()
     d<Int> = 0
@@ -161,12 +169,17 @@ main()<Int> -> {
         text<String> = slurp(path)
         if (text.len() > 0) {
             nums<Vec<Int>> = counts_before_tests(text)
-            others<Vec<Int>> = equal_ratio_counts(text)
-            i<Int> = 0
-            while (i < others.len()) {
-                n<Int> = others.get(i)
-                if (!has_num(nums, n)) { nums.push(n) }
-                i = i + 1
+            # The "N/N" ratio form is only a suite-size claim in README.md and the
+            # refman guide; TODO.md's ratios (e.g. 1141/1141 codegen hits) are
+            # unrelated, so they are not treated as suite counts there.
+            if (has_sub(path, "README.md") || has_sub(path, "PROGRAMMERS_GUIDE.md")) {
+                others<Vec<Int>> = equal_ratio_counts(text)
+                i<Int> = 0
+                while (i < others.len()) {
+                    n<Int> = others.get(i)
+                    if (!has_num(nums, n)) { nums.push(n) }
+                    i = i + 1
+                }
             }
             j<Int> = 0
             while (j < nums.len()) {
@@ -188,7 +201,9 @@ main()<Int> -> {
             i = i + 1
         }
         println("  canonical = " + actual.to_string() + " (.vyb files under test/)")
-        return 1
+        # exit() sets the process status; `return 1` from main() would only print "1"
+        # and still exit 0, which a CI step cannot see.
+        exit(1)
     }
 
     println("suite-count --check OK (" + actual.to_string() + " .vyb tests in docs match the runner)")
