@@ -85,7 +85,7 @@ Vyb is a statically typed, compiled systems language targeting native code via L
 ## Quick Start
 
 ```bash
-# Option A: official binary SDK (Linux x64 / macOS x64) — download the v0.7.5
+# Option A: official binary SDK (Linux x64 / macOS x64) — download the v0.7.6
 # tarball from the release page, unpack, and add it to your PATH:
 #   https://github.com/rickenator/Vyb/releases/tag/v0.7.5
 
@@ -100,6 +100,9 @@ build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
 # Run your first Vyb program
 echo 'main()<Int> -> { return 42 }' > hello.vyb
 build/vyb hello.vyb  # Prints 42 and exits 0
+
+# Emit CUDA kernels: pure NVPTX device code, validated by ptxas as it is emitted
+build/vyb --kernel fixtures/kernel/axpy.vyb --ptx axpy.ptx
 
 # Try select expressions with pattern matching
 cat > example.vyb << 'EOF'
@@ -334,6 +337,29 @@ This unique `import`/`smuggle` distinction makes Vyb's module system both secure
 ## In This Release
 
 Vyb **v0.7.6** (freedom-1.0 series) is a mature systems programming language with **native executable generation** and a broad core feature set.
+
+### ✅ **Toolchain now builds and tests itself in Vyb**
+
+The last cycle moved the remaining tooling off Python and C++, so the compiler's own pipeline is
+written in the language it compiles:
+
+- **Test runner and harness in Vyb** — `test/run_tests.vyb` with the suite-count check, plus the
+  milestone gate, the examples gate and the CLI smokes (lsp / repl / gitdep / registry).
+- **Reference manual generator** and the syntax-migration tools ported to Vyb.
+- **New stdlib modules** — `base64` and `png`, pure Vyb with no runtime changes.
+- **Language and codegen** — `nil`/present arms with payload binding for optionals, `Vec<Vec<T>>`
+  element typing, sized scalars, and float-literal comparison width.
+
+### 🔬 **Found by real workloads**
+
+Two of the defects fixed this cycle came from a downstream project's GPU workload — millions of
+elements, 60-380 MB device buffers — rather than from the unit suite: **32-bit device stores and
+atomics were lowered as 64-bit** (`st_f32` emitting `st.global.u64`, an array `atomic_add_i32`
+emitting `atom.global.add.u64`, `st_i32` emitted as two halves of one 8-byte store). The first two
+faulted the device; the third corrupted data silently, which is worse. Fixed in `efc8cfe` for
+[#301](https://github.com/rickenator/Vyb/issues/301), with a regression fixture at
+`fixtures/kernel/probe15_store_width.vyb` and an on-silicon verifier at
+`fixtures/cuda/probe15_verify.vyb`.
 
 ### ✅ **Recent Milestones**
 These features were completed in the current release cycle and are fully tested:
@@ -2694,6 +2720,64 @@ build/vyb triage_tool.vyb results.json --priority critical,high
 - **Smart Categorization**: Automatic test categorization and filtering
 - **Failure Analysis**: Pattern recognition and triage plan generation
 - **Performance Tracking**: Execution time analysis and slow test detection
+
+## GPU Kernels (CUDA / NVPTX)
+
+Vyb lowers a module to **pure NVPTX device code** with `--kernel`, emits PTX, and validates it with
+`ptxas` in the same step (a rejection is a hard error). Kernel mode has no host runtime: the string
+registry, heap allocator and call-stack runtime do not exist on the device, so kernels use the device
+intrinsics — `tid_x`, `blk_x`, `dim_x`, `grid_x`, `ld_f32/ld_f64/ld_i32/ld_i64`,
+`st_f32/st_f64/st_i32`, `atomic_add_i32/atomic_add_f64`, `kernel_barrier`, `ld_shared_f64`.
+
+### Emit and validate
+
+```bash
+# a value/data-parallel kernel with no host references
+build/vyb --kernel fixtures/kernel/axpy.vyb --ptx axpy.ptx            # default sm_86
+build/vyb --kernel fixtures/kernel/axpy.vyb --ptx axpy.ptx --gpu sm_90
+# -> PTX validated by ptxas (sm_86): axpy.ptx.cubin
+```
+
+```vyb
+// y = alpha * x + y — fixtures/kernel/axpy.vyb
+axpy(alpha<Float>, x<Float>, y<Float>)<Float> -> {
+    return alpha * x + y
+}
+```
+
+### Run a kernel on the GPU
+
+The signed `cuda` binding wraps the driver API. A kernel takes **one** argument — a device pointer to
+an array of i64 descriptor words, read in-kernel with `ld_i64`. The smallest complete example fills a
+device buffer:
+
+```bash
+build/vyb fixtures/cuda/launch_fill.vyb --module-path bindings --module-path bindings/cuda
+# -> 42
+```
+
+Bigger worked examples: `fixtures/kernel/matmul_smem.vyb` (shared-memory tiled matmul) with
+`fixtures/cuda/matmul_verify.vyb`, and vendor cross-validation against cuBLAS, cuFFT and cuDNN in
+`fixtures/cuda/`.
+
+### Rules that save a bad afternoon
+
+- **One descriptor argument, not many.** Multi-argument `kernelParams` packing is unreliable (issue
+  #199); pass a pointer to descriptor words and read them with `ld_i64`. Float parameters travel as
+  integer micro-units.
+- **Bulk transfers.** Upload whole arrays with one `cuMemcpyHtoD_v2` from a buffer read with C stdio.
+  A per-element `cuda_write_i32` loop is fine for a 512-element fixture and fatal for a 60 MB array.
+- **Width discipline.** The width of a store or atomic is the *intrinsic's* element type, not the
+  width of the Vyb operand: `st_f32` writes four bytes even though a Vyb `Float` is f64 in LLVM.
+  `fixtures/kernel/probe15_store_width.vyb` is the regression fixture for exactly that, checked on
+  silicon by `fixtures/cuda/probe15_verify.vyb`.
+- **Readback.** A 4-byte scalar copied into an 8-byte host slot leaves garbage in the upper half —
+  allocate device counters as 8 bytes and copy 8 bytes back.
+- **Testing.** `test/ffi/test_cuda_*.vyb` run against the checked-in golden `.ptx`
+  (`fixtures/cuda/README.md`); `.github/workflows/gpu-kernel.yml` re-emits every kernel across
+  `sm_75..sm_90a` on CPU and runs the on-silicon cross-validations on a self-hosted GPU runner.
+
+Full reference: [doc/CUDA.md](doc/CUDA.md).
 
 ## Project Structure
 
