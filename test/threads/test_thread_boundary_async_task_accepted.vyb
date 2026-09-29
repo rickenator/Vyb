@@ -1,0 +1,34 @@
+// @test: thread boundary accepts handoff-capable captures on async and task spawn
+// @description: The counterpart of the async/task rejections: shared ownership
+//   (our<T>) and by-value scalars are handoff-capable, so the closures run on a
+//   worker thread and on a pthread respectively, and both results come back.
+// @category: threads, async, tasks, thread-boundary, ownership
+// @expect: pass
+// @expect-output: ok
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+
+import asyncs::{async_spawn, async_await}
+import tasks::{task_spawn, task_await}
+
+main()<Int> -> {
+    shared<our<Int>> = our(4)
+    local<Int> = 3
+
+    a<Int> = async_spawn(|| -> {
+        return shared + local
+    }) else -1
+    if (a < 0) { return 1 }
+    gotA<Int> = async_await(a)
+    if (gotA != 7) { return 2 }
+
+    t<Int> = task_spawn(|| -> {
+        return shared + local
+    }) else -3
+    if (t < 0) { return 3 }
+    gotT<Int> = task_await(t)
+    if (gotT != 7) { return 4 }
+
+    println("ok")
+    return 0
+}

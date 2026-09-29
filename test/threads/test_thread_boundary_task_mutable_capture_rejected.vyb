@@ -1,0 +1,21 @@
+// @test: thread boundary rejects a mutable capture handed to task_spawn
+// @description: __vyb_task_spawn runs its closure on a pthread
+//   (runtime/vyb_runtime.c), so a mutable capture -- which holds the defining
+//   frame's address -- cannot cross. The gate now covers task_spawn as well as
+//   thread_spawn.
+// @category: threads, tasks, ownership, diagnostics, thread-boundary
+// @expect: fail
+// @expect-error: mutably
+// @semantic-only: true
+// @env: VYB_STDLIB=stdlib
+
+import tasks::{task_spawn}
+
+main()<Int> -> {
+    n<Int> = 0
+    t<Int> = task_spawn(|| -> {
+        n = n + 1
+        return n
+    }) else -1
+    return t
+}
