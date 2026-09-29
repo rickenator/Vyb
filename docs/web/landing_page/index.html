@@ -261,7 +261,7 @@ per-symbol signatures live in the auto-generated pages under <code>docs/refman/<
 <ul>
 <li>A compact, expressive syntax for both low-level control and high-level abstractions.</li>
 <li>Scoped ownership types (<code>my</code>/<code>our</code>/<code>their</code>/<code>mild</code>) and reference counting for explicit, safe memory handling, with system-level C interoperability via the FFI.</li>
-<li>Zero-cost monomorphized generics and aspect/bind polymorphism — native compiled performance or JIT, portable across 20+ target architectures.</li>
+<li>Zero-cost monomorphized generics and aspect/bind polymorphism — native compiled performance or JIT, emitting through LLVM's target set (x86-64/Linux is release-tested; NVPTX is validated <code>sm_75</code> → <code>sm_90a</code>).</li>
 <li>Built-in concurrency primitives and customizable threading templates.</li>
 <li>A foundation for a self-hosted compiler and hybrid VM/JIT architecture for rapid iteration and performance tuning.</li>
 </ul>
@@ -467,29 +467,15 @@ objdump -t hello.o | grep main
 # Output: 0000000000000000 g     F .text  000000000000005c main
 </code></pre>
 <h4>Cross-Compilation Support</h4>
-<p>Supports 20+ architectures out of the box:</p>
-<ul>
-<li><strong>x86-64</strong> (default for most systems)</li>
-<li><strong>ARM/AArch64</strong> (ARM64, Raspberry Pi, mobile)</li>
-<li><strong>RISC-V</strong> (open ISA, embedded systems)</li>
-<li><strong>PowerPC</strong> (servers, embedded)</li>
-<li><strong>MIPS</strong> (routers, embedded)</li>
-<li><strong>SPARC</strong> (Sun/Oracle systems)</li>
-<li><strong>WebAssembly</strong> (browsers, serverless)</li>
-<li><strong>SystemZ</strong> (IBM mainframe)</li>
-<li><strong>Hexagon</strong> (Qualcomm DSP)</li>
-<li><strong>LoongArch</strong> (Chinese CPUs)</li>
-<li><strong>M68k</strong> (retro computing)</li>
-<li><strong>Xtensa</strong> (ESP32 microcontrollers)</li>
-<li><strong>AVR</strong> (Arduino)</li>
-<li><strong>MSP430</strong> (ultra-low-power MCU)</li>
-<li><strong>BPF</strong> (Linux kernel filtering)</li>
-<li><strong>NVPTX</strong> (NVIDIA GPUs)</li>
-<li><strong>AMDGPU</strong> (AMD GPUs)</li>
-<li><strong>VE</strong> (NEC Vector Engine)</li>
-<li><strong>Lanai</strong> (research processor)</li>
-<li><strong>XCore</strong> (XMOS processors)</li>
-</ul>
+<p>Supports LLVM's target set. What is actually <strong>exercised today</strong> (the rest is backend-available but not covered by any gate):</p>
+<table>
+<thead><tr><th>Target</th><th>How it is exercised</th></tr></thead>
+<tbody>
+<tr><td><strong>x86-64 / Linux</strong></td><td><strong>Release-tested</strong> — the canonical JIT suite and the AOT/native-link pass run on every CI build, and the SDK tarball ships this target</td></tr>
+<tr><td><strong>NVPTX</strong> (NVIDIA GPUs)</td><td>Device code emitted and validated with <code>ptxas</code> across <code>sm_75</code> → <code>sm_90a</code> in CI; silicon-verified on <code>sm_86</code> (RTX 3090)</td></tr>
+<tr><td>AArch64, RISC-V, PowerPC, MIPS, SPARC, WebAssembly, SystemZ, Hexagon, LoongArch, M68k, Xtensa, AVR, MSP430, BPF, AMDGPU, VE, Lanai, XCore</td><td>Emitted through the same LLVM backend, but <strong>not CI-covered</strong> — no cross-target fixture or toolchain gate exercises them. Treat these as untested in this tree</td></tr>
+</tbody>
+</table>
 <p><strong>Complete Compilation Features:</strong></p>
 <ul>
 <li>✅ <strong>Executable Generation</strong>: Full build pipeline with <code>--build</code> flag</li>
@@ -499,7 +485,7 @@ objdump -t hello.o | grep main
 <li>✅ <strong>Static Linking</strong>: Optional <code>--static</code> flag for standalone binaries</li>
 <li>✅ <strong>Object File Emission</strong>: AOT compilation to .o files</li>
 <li>✅ <strong>Optimization Levels</strong>: -O0 through -O3 with LLVM optimizations</li>
-<li>✅ <strong>Cross-Compilation</strong>: 20+ target architectures</li>
+<li>✅ <strong>Cross-Compilation</strong>: emits through LLVM's target set — x86-64/Linux is release-tested, NVPTX is validated <code>sm_75</code> → <code>sm_90a</code>; other targets are backend-available but not CI-covered</li>
 <li>✅ <strong>Debug Information</strong>: Full DWARF debug metadata</li>
 </ul>
 <p><strong>See:</strong> <code>doc/MODULE_FFI_BINARY_ROADMAP.md</code> for the compilation pipeline</p>
@@ -671,7 +657,7 @@ name&lt;String&gt; = typename(x)                  // "Int"
 <ul>
 <li><strong>Object File Emission</strong>: Compile to .o files with <code>--compile/-c</code> flag</li>
 <li><strong>Optimization Levels</strong>: -O0 (none), -O1 (basic), -O2 (default), -O3 (aggressive)</li>
-<li><strong>Cross-Compilation</strong>: Supports 20+ target architectures out of the box</li>
+<li><strong>Cross-Compilation</strong>: emits through LLVM's target set (x86-64/Linux release-tested, NVPTX validated <code>sm_75</code> → <code>sm_90a</code>; other targets not CI-covered)</li>
 <li><strong>Debug Information</strong>: Full DWARF metadata for debugging compiled code</li>
 <li><strong>Standard Toolchain</strong>: Compatible with system linkers (ld, lld, gold)</li>
 <li><strong>ELF Format</strong>: Standard relocatable object files for linking</li>

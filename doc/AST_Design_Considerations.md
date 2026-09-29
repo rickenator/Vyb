@@ -202,7 +202,15 @@ This was partially addressed in `AST_Types.md`. The core issue is how the single
 > "The EBNF implies pattern matching (e.g., in `let` or `match`). While `PatternNode` is mentioned as conceptual, if/when these are added, they will also need `accept()` methods for visitors. It might be good to sketch what a few pattern nodes might look like (e.g., `IdentifierPattern`, `TuplePattern`, `StructPattern`) and how they'd fit into the Visitor pattern."
 
 **Current Status:**
-Pattern nodes are planned but not yet implemented as concrete AST nodes with visitor support. `AST_Patterns.md` is a placeholder.
+Pattern nodes **are** implemented as concrete AST nodes with visitor support —
+`ComparisonPattern`, `StructPattern` and `SetPattern` are `Expression` subclasses in
+`include/vyb/parser/ast.hpp`, each carrying an `accept()`/`visit()` hook (see
+`visit(ast::StructPattern*)` in `include/vyb/semantic.hpp` and
+`include/vyb/format.hpp`). They back the shipped `match`/`select` surface
+(literal, wildcard, comparison/range, struct-destructuring and set patterns;
+`test/units/` + `doc/FEATURE_STATUS.md` "`match` / `select` expressions"). The
+earlier note that they were "planned but not yet implemented" is obsolete; the
+sketches below are retained as the design rationale.
 
 **Conceptual Pattern Nodes:**
 -   `IdentifierPattern`: Matches a value and binds it to an identifier (e.g., `x` in `let x = ...`). May include `isMutable`.

@@ -1,0 +1,32 @@
+// @test: bind verb calls a sibling verb declared later (#344)
+// @description: inside one `bind`, a verb whose body calls a sibling verb of the
+//   same bind declared LATER in the file ("forward reference"). The callee has to
+//   be generated on demand, and must not be reported as a redefinition when the
+//   eager bind pass reaches it afterwards. Before the fix this compiled with
+//   "Function self.inner not found.", let the call evaluate to undef and still
+//   exited 0 with a garbage value.
+// @category: aspect, bind, forward-ref
+// @expect: pass
+// @expect-output: inner() = 3
+// @expect-output: outer() = 30
+
+aspect AB {
+    outer(self)<Int> -> { }
+    inner(self)<Int> -> { }
+}
+
+struct Vec2 { x<Int>, y<Int> }
+
+bind AB -> Vec2 {
+    // forward reference: `inner` is declared after this verb
+    outer(self)<Int> -> { return self.inner() * 10 }
+
+    inner(self)<Int> -> { return self.x + self.y }
+}
+
+main()<Int> -> {
+    v<Vec2> = Vec2 { x = 1, y = 2 }
+    println("inner() = " + v.inner().to_string())
+    println("outer() = " + v.outer().to_string())
+    return 0
+}

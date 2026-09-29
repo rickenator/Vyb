@@ -1,0 +1,24 @@
+// @test: generic struct + bind + generic function declared in a module (#343)
+// @description: helper module with a `share(all)` generic struct `Box<T>`, a
+//   non-generic `bind Arr -> Box<Int>` and a generic function `unbox` over
+//   `Box<T>`. Consumed by test_module_generic_bind.vyb; exercises the module
+//   splice for generic structs/binds and the parameter-type-pattern inference.
+// @category: modules
+// @expect: pass
+// @parse-only: true
+
+share(all)
+aspect Arr { turn(self)<Int> -> { } }
+
+share(all)
+struct Box<T> { value<T> }
+
+bind Arr -> Box<Int> {
+    turn(self)<Int> -> { return self.value + 1 }
+}
+
+share(all)
+unbox<T>(b<Box<T>>)<T> -> { return b.value }
+
+share(all)
+wrapper(box<Box<Int>>)<Int> -> { return unbox(box) }

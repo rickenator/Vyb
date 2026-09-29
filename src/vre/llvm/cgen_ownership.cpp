@@ -1966,6 +1966,45 @@ void LLVMCodegen::releaseStringValue(llvm::Value* strVal) {
     builder->CreateCall(getOrCreateVybStringFreeFunction(), {data});
 }
 
+// Make a copy of `value` that OWNS its heap data, for bindings that establish a
+// new owner (a match pattern binding an enum payload: `Machine(m) -> m`).
+//
+// The payload extracted from an enum is a plain struct value copied out of the
+// union's byte array, so its String/Vec fields alias the data the ENUM owns. The
+// generated code subsequently reclaims such a binding wherever it flows (a struct
+// call result used as a member base is registered for scope-exit reclaim, for
+// example), and that reclaim calls release on fields the copy never retained --
+// dropping a buffer another owner still points at (#345: `c.truth().audit` reads
+// a freed buffer whenever the source card is a live local rather than a
+// temporary). Taking a reference at the binding restores the one-owner-one-
+// reference invariant: every later release of that copy drops exactly what this
+// call added.
+llvm::Value* LLVMCodegen::copyOwnedValueForBinding(llvm::Value* value,
+                                                   const vyb::ast::TypeNode* astType,
+                                                   llvm::Type* ty) {
+    if (!value || !astType || !ty) return value;
+    // String: `{ ptr, i64 }` is reference counted, so a copy just takes a reference.
+    if (isVybStringStructType(ty)) {
+        retainStringValue(value);
+        return value;
+    }
+    // Vec<T>: the buffer pointer is shared verbatim, and each holder frees it on
+    // scope exit, so the copy needs its own buffer (elements retained by the clone).
+    if (isVecTypeNode(astType) && llvm::isa<llvm::StructType>(ty)) {
+        if (const vyb::ast::TypeNode* elem = vecElementTypeNode(astType)) {
+            llvm::Type* elemTy = codegenType(const_cast<vyb::ast::TypeNode*>(elem));
+            if (elemTy) return generateVecDeepCopy(value, elemTy, ty, elem);
+        }
+        return value;
+    }
+    // Struct that owns heap data: per-field String retain / Vec clone / recursion.
+    if (llvm::isa<llvm::StructType>(ty) && isKnownStructTypeNode(astType) &&
+        structTypeHasOwnedFields(astType)) {
+        return generateStructDeepCopy(value, astType, llvm::cast<llvm::StructType>(ty));
+    }
+    return value;
+}
+
 void LLVMCodegen::releaseStringAlloca(llvm::Value* allocaInst) {
     if (!allocaInst) return;
     llvm::Type* allocTy = nullptr;

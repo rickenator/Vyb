@@ -29,11 +29,13 @@ wait for the three required checks to pass, then merge.
 
 | Workflow file | Check names (for branch protection) | What it gates |
 |---|---|---|
-| `.github/workflows/ci.yml` | `ci` — "Build + JIT suite + AOT/native-link", plus the scheduled daily ASan/UBSan run (06:00 UTC) | canonical 1141-test JIT suite, AOT/native link, memory safety |
+| `.github/workflows/ci.yml` | `ci` — "Build + JIT suite + AOT/native-link", plus the scheduled daily ASan/UBSan run (06:00 UTC) | canonical **1201-test** JIT suite, AOT/native link, memory safety |
 | `.github/workflows/gpu-kernel.yml` | `gpu-kernel` — "Emit PTX + ptxas across arches + compile FFI runners", "Execute + verify kernels + bindings on RTX 3090" (self-hosted), plus the LSP/REPL/git-dep/registry smoke tests | GPU/NVPTX + CLI protocol smokes |
 | `.github/workflows/refman-check.yml` | `refman-check` — "Validate generated refman matches stdlib" | doc/refman drift + link integrity |
 
 Notes
+- The suite size in this table is the *documented* number, and `test/suite_count_check.vyb` — run in the `ci` job — is the authority: it compares every "<N> tests" claim in `README.md`, `docs/refman/PROGRAMMERS_GUIDE.md` and `TODO.md` against `find test -name '*.vyb'` **minus** the files marked `// @not-a-test` (tooling, not fixtures). Today that is 1,209 `.vyb` files − 8 tooling = **1,201** fixtures, which is why the naive file count and the suite count differ by 8.
+- `tools/docstatus.vyb` (also run in the `ci` job) enforces the tracking-doc invariants: cited paths in `doc/FEATURE_STATUS.md` resolve, every unchecked 1.0 item carries an `<!-- open: LABEL -->` marker, no open item names a row already marked ✅, no shipped item's row still reads 📋/🚧, and the README's release link matches the version `CMakeLists.txt` builds.
 - Re-enabling a manually-disabled workflow is `PUT /repos/{owner}/{repo}/actions/workflows/{id}/enable` (the API uses **PUT**; POST 404s) — `gh api -X PUT`.
 - The daily scheduled ASan/UBSan run in `ci.yml` runs on the default branch only (GitHub scheduled-workflow rule), so it is independent of push frequency.
 - `release-sdk.yml` builds/publishes the SDK and is intentionally trigger-scoped (tags/release), not on every push.

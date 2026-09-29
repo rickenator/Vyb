@@ -32,6 +32,7 @@ language. Superseded documents are folded into the repository history.
 | [`VEC_ITERATION.md`](VEC_ITERATION.md) | `Vec<T>` and `for (item in vec)` |
 | [`Memory_Operations.md`](Memory_Operations.md) | `freedom` blocks and raw pointer operations |
 | [`OWNERSHIP_MILD.md`](OWNERSHIP_MILD.md) | `mild<T>` weak references |
+| [`OWNERSHIP_VS_RUST.md`](OWNERSHIP_VS_RUST.md) | Ownership comparison vs Rust: what matches, four tracked gaps, and how the claims are enforced |
 | [`STRING_IMPLEMENTATION.md`](STRING_IMPLEMENTATION.md) | `String` representation and methods |
 | [`Intrinsics.md`](Intrinsics.md) | Intrinsic functions and core syntax |
 

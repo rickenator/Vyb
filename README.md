@@ -27,7 +27,7 @@ This guide is intended for systems programmers, language designers, and develope
 
 * A compact, expressive syntax for both low-level control and high-level abstractions.
 * Scoped ownership types (`my`/`our`/`their`/`mild`) and reference counting for explicit, safe memory handling, with system-level C interoperability via the FFI.
-* Zero-cost monomorphized generics and aspect/bind polymorphism — native compiled performance or JIT, portable across 20+ target architectures.
+* Zero-cost monomorphized generics and aspect/bind polymorphism — native compiled performance or JIT, emitting through LLVM's target set (x86-64/Linux is release-tested; NVPTX is validated `sm_75` → `sm_90a`).
 * Built-in concurrency primitives and customizable threading templates.
 * A foundation for a self-hosted compiler and hybrid VM/JIT architecture for rapid iteration and performance tuning.
 
@@ -66,16 +66,18 @@ Vyb is a statically typed, compiled systems language targeting native code via L
 ## Quick Start
 
 ```bash
-# Option A: official binary SDK (Linux x64 / macOS x64) — download the v0.7.6
-# tarball from the release page, unpack, and add it to your PATH:
-#   https://github.com/rickenator/Vyb/releases/tag/v0.7.5
+# Option A: official binary SDK (Linux x86_64) — download the v0.7.6 tarball
+# from the release page, unpack, and add it to your PATH:
+#   https://github.com/rickenator/Vyb/releases/tag/v0.7.6
+# There is no macOS SDK yet: the runtime's async/fibre layer is Linux-only
+# (ucontext/pipe2), so the release workflow cannot build it. See docs/sdk/INSTALL.md.
 
 # Option B: build from source (requires LLVM 18 + CMake)
 git clone https://github.com/rickenator/Vyb.git
 cd Vyb
 mkdir -p build && cd build && LLVM_DIR=/usr/lib/llvm-18/cmake cmake .. && make -j$(nproc) && cd ..
 
-# Run the full test suite (1195 .vyb tests) with the canonical Vyb runner
+# Run the full test suite (1201 .vyb tests) with the canonical Vyb runner
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
 
 # Run your first Vyb program
@@ -199,27 +201,14 @@ objdump -t hello.o | grep main
 
 #### Cross-Compilation Support
 
-Supports 20+ architectures out of the box:
-- **x86-64** (default for most systems)
-- **ARM/AArch64** (ARM64, Raspberry Pi, mobile)
-- **RISC-V** (open ISA, embedded systems)
-- **PowerPC** (servers, embedded)
-- **MIPS** (routers, embedded)
-- **SPARC** (Sun/Oracle systems)
-- **WebAssembly** (browsers, serverless)
-- **SystemZ** (IBM mainframe)
-- **Hexagon** (Qualcomm DSP)
-- **LoongArch** (Chinese CPUs)
-- **M68k** (retro computing)
-- **Xtensa** (ESP32 microcontrollers)
-- **AVR** (Arduino)
-- **MSP430** (ultra-low-power MCU)
-- **BPF** (Linux kernel filtering)
-- **NVPTX** (NVIDIA GPUs)
-- **AMDGPU** (AMD GPUs)
-- **VE** (NEC Vector Engine)
-- **Lanai** (research processor)
-- **XCore** (XMOS processors)
+Supports LLVM's target set. What is actually **exercised today** (the rest is
+backend-available but not covered by any gate):
+
+| Target | How it is exercised |
+| --- | --- |
+| **x86-64 / Linux** | **Release-tested** — the canonical JIT suite and the AOT/native-link pass run on every CI build, and the SDK tarball ships this target (`docs/sdk/INSTALL.md`) |
+| **NVPTX** (NVIDIA GPUs) | Device code emitted and validated with `ptxas` across `sm_75` → `sm_90a` in CI; silicon-verified on `sm_86` (RTX 3090) |
+| AArch64, RISC-V, PowerPC, MIPS, SPARC, WebAssembly, SystemZ, Hexagon, LoongArch, M68k, Xtensa, AVR, MSP430, BPF, AMDGPU, VE, Lanai, XCore | Emitted through the same LLVM backend, but **not CI-covered** — no cross-target fixture or toolchain gate exercises them. Treat these as untested in this tree |
 
 **Complete Compilation Features:**
 - ✅ **Executable Generation**: Full build pipeline with `--build` flag
@@ -229,16 +218,31 @@ Supports 20+ architectures out of the box:
 - ✅ **Static Linking**: Optional `--static` flag for standalone binaries
 - ✅ **Object File Emission**: AOT compilation to .o files
 - ✅ **Optimization Levels**: -O0 through -O3 with LLVM optimizations
-- ✅ **Cross-Compilation**: 20+ target architectures
+- ✅ **Cross-Compilation**: emits through LLVM's target set — x86-64/Linux is release-tested, NVPTX is validated `sm_75` → `sm_90a`; other targets are backend-available but not CI-covered
 - ✅ **Debug Information**: Full DWARF debug metadata
 - 🚧 **NVPTX Kernel Mode** (#198): `--kernel` lowers a `main`-less, host-runtime-free
   Vyb module as pure device code through the in-process NVPTX backend to PTX
   (`nvptx64-nvidia-cuda`, default `sm_86`; override via `VYB_KERNEL_GPU`, or pick the
   artifact path with `--ptx <path>`). Kernels are value/data-parallel Vyb functions
   with no `__vyb_*` host references; the emitted PTX is validated in-process with
-  `ptxas` when present (hard-fail on reject, graceful skip when absent). A host
-  launch shim + BLAS-composable tensors are the follow-on milestone. See
-  `test/kernel/`, `fixtures/kernel/axpy.vyb`.
+  `ptxas` when present (hard-fail on reject, graceful skip when absent). The host
+  launch path landed with #199 (launch-arg packing through the CUDA driver API,
+  `fixtures/cuda/launch_fill.vyb`), and cuBLAS/cuFFT/cuDNN bindings are verified on
+  an RTX 3090 (`sm_86`); BLAS-composable tensors are the follow-on milestone. See
+  `test/kernel/`, `fixtures/kernel/axpy.vyb`, and `TODO.md` §GPU for the full list.
+
+  **Comparison (2026-09).** Emitting device code from the *same source language* is
+  not unique to Vyb: Zig ships an LLVM NVPTX backend (`zig build-lib -target
+  nvptx64-cuda-none -mcpu <gpu>`), and Rust has NVIDIA's `cuda-oxide` codegen backend
+  compiling `#[kernel]` functions straight to PTX. Vyb's narrower, real difference is
+  that device lowering, the device intrinsic surface (`tid_*`/`blk_*`/`dim_*`/`grid_*`,
+  `ld_*`/`st_*`, `deq_q4_0`, shared memory, atomics), the in-process NVPTX emitter and
+  its **compile-time acceptance gates** (host-runtime-free check, PTX symbol-presence
+  check, in-process `ptxas` validation) all live in the single toolchain — no package
+  dependency, plugin, pinned nightly or second build system. As with the rest of this
+  section, it is a **P0 feasibility probe**: only `sm_86` has real silicon behind it,
+  and the verified workload is the shared-memory tiled matmul (all 256 elements of
+  `C = A×B` checked against a host reference) plus the cuBLAS/cuFFT/cuDNN cross-validations.
 
 **See:** `doc/MODULE_FFI_BINARY_ROADMAP.md` for the compilation pipeline
 
@@ -444,7 +448,7 @@ These features were completed in the current release cycle and are fully tested:
 ### ✅ **Native Code Compilation**
 - **Object File Emission**: Compile to .o files with `--compile/-c` flag
 - **Optimization Levels**: -O0 (none), -O1 (basic), -O2 (default), -O3 (aggressive)
-- **Cross-Compilation**: Supports 20+ target architectures out of the box
+- **Cross-Compilation**: emits through LLVM's target set (x86-64/Linux release-tested, NVPTX validated `sm_75` → `sm_90a`; other targets not CI-covered)
 - **Debug Information**: Full DWARF metadata for debugging compiled code
 - **Standard Toolchain**: Compatible with system linkers (ld, lld, gold)
 - **ELF Format**: Standard relocatable object files for linking
@@ -2660,7 +2664,7 @@ cmake --build build --target run-milestone
 
 Vyb's canonical test runner is `test/run_tests.vyb` — a Vyb program, the same
 suite wired into CTest as the `run-tests` target and used for the full regression
-gate (currently **1195 `.vyb` tests, all passing**):
+gate (currently **1201 `.vyb` tests, all passing**):
 
 ### Quick Testing
 ```bash
@@ -2695,7 +2699,7 @@ build/vyb triage_tool.vyb results.json --priority critical,high
 ```
 
 ### Test Features
-- **1195 Tests, All Passing**: The full `run_tests.vyb` suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area
+- **1201 Tests, All Passing**: The full `run_tests.vyb` suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area
 - **Harness Reporting**: `test_harness.vyb` adds JSON/HTML reports and failure triage on top of the runner (sequential execution; `--workers` is accepted for compatibility)
 - **Rich Reporting**: HTML, JSON, and console output with detailed metrics
 - **Smart Categorization**: Automatic test categorization and filtering
@@ -2966,10 +2970,10 @@ compatibility) and reports the same per-test verdicts as the canonical runner.
 - **Error Context**: Detailed failure information with context and suggestions
 
 #### **Test Statistics**
-- **Total Tests**: 1195 `.vyb` tests (full suite, all passing as of v0.7.6)
+- **Total Tests**: 1201 `.vyb` tests (full suite, all passing as of v0.7.6)
 - **Coverage Areas**: Language features, control flow, error handling, type system, math, strings, introspection
 - **Test Types**: Feature tests (with `@expect: pass`), future-feature docs (with `@expect: fail`), parser tests
-- **Success Rate**: 100% (1195/1195) on the current suite
+- **Success Rate**: 100% (1201/1201) on the current suite
 
 ### 🔧 **Syntax Migration Tools**
 
@@ -3083,7 +3087,7 @@ See `doc/` directory for detailed design documents and RFCs.
   - **Type inference**: First case determines result type for entire select
   - **Pattern matching**: Exact equality patterns with wildcard `?` support
 - ✅ **Canonical Syntax Unification**: Complete migration to unified `my()`/`our()` constructors and `view`/`borrow` operators
-- ✅ **Modern Test Harness**: `test/run_tests.vyb` running the full suite — 1195 `.vyb` tests all passing — with an auxiliary parallel/HTML/triage harness
+- ✅ **Modern Test Harness**: `test/run_tests.vyb` running the full suite — 1201 `.vyb` tests all passing — with an auxiliary parallel/HTML/triage harness
 - ✅ **Syntax Migration Tools**: Automated migration from legacy to canonical syntax with comprehensive reporting
 - ✅ **Match Statements**: Complete pattern matching with `->` arrow syntax and `?` wildcard; no-match results in NOP
 - ✅ **Break/Continue**: Loop control flow statements working in all loop types

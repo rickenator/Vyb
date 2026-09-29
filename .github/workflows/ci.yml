@@ -60,9 +60,12 @@ jobs:
         run: ./build/vyb test/suite_count_check.vyb
 
       - name: Validate tracking docs agree with the tree (TODO.md / FEATURE_STATUS.md)
-        # tools/docstatus.vyb enforces two invariants: every repo path cited in the
-        # tracking docs resolves on disk, and every unchecked 1.0 criterion carries an
-        # `open: LABEL` marker (naming a ✅ FEATURE_STATUS row is a contradiction).
+        # tools/docstatus.vyb enforces five invariants: every repo path cited in the
+        # tracking docs resolves on disk; every unchecked 1.0 criterion carries an
+        # `open: LABEL` marker (naming a ✅ FEATURE_STATUS row is a contradiction);
+        # no shipped TODO.md item's row still reads 📋/🚧 (curated pair table); and
+        # the README's release link names the version CMakeLists.txt builds, which
+        # CHANGELOG.md must also have a section for.
         # It calls exit(1) on drift, so the step fails for real.
         run: ./build/vyb tools/docstatus.vyb
 

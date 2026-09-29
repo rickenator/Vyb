@@ -1,0 +1,20 @@
+// @test: generic bind + generic function over a generic struct in a module (#343)
+// @description: a generic `Box<T>` struct, a `bind Arr -> Box<Int>` and a generic
+//   `unbox(b<Box<T>>)` declared in an imported module must all resolve in the
+//   consumer. Covers both halves of #343: concrete type arguments inferred from
+//   the declared parameter type pattern (`Box<T>` from `Box<Int>`) rather than
+//   from argument position, and the bind carried across the module splice.
+// @category: modules, template, aspect
+// @expect: pass
+// @expect-output: wrapper 0
+// @expect-output: direct 1
+// @vyb-args: --module-path test/modules
+
+import genbindmod::{unbox, wrapper}
+
+main()<Int> -> {
+    box<Box<Int>> = Box<Int> { value = 0 }
+    println("wrapper " + wrapper(box).to_string())
+    println("direct " + box.turn().to_string())
+    return 0
+}

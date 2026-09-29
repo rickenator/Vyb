@@ -1,33 +1,31 @@
 # Developer tooling: dependencies, formatter, LSP, REPL (#154)
 
-## Dependency resolution — current scope and staging
+## Dependency resolution — shipped scope
 
-**Shipped:** local **path** dependencies. A `[dependencies]` entry with
-`name = { path = "relative/dir" }` is resolved by `vyb build`
-(`project_module_paths`): the directory is added to the module search path and
-its modules are importable in the project.
+**Shipped:** all four dependency source kinds resolve (tracked by
+`doc/FEATURE_STATUS.md` "URL/Git dependency fetching", #165 / #175, and documented
+in full in `doc/MANIFEST.md`):
 
-The manifest struct (`include/vyb/manifest.hpp`) already models all three source
-kinds -- `path`, `git`, and `version` -- but **only `path` is resolved by the
-current build** (the `git` and `version` variants parse but are not fetched).
+- **`path`** — `name = { path = "relative/dir" }` is resolved by `vyb build`
+  (`project_module_paths`): the directory joins the module search path and its
+  modules are importable in the project.
+- **`git:`** — `name = { git = "url" }` with a `rev`/`tag`/`branch` is shallow-cloned
+  into `.vybmod/<name>/` on build and consumed from there.
+- **`github:`** — `vyb mod install github:owner/repo/path` materializes the module
+  into `.vybmod/<name>/`; the build then consumes it like a git dep.
+- **`version:`** — matched against the package registry (`VYB_REGISTRY`, else
+  `~/.vyb/registry`), picking the highest version satisfying the spec (`""` or
+  `*` matches any); `vyb mod publish` populates it.
+- **Lockfile** — `vyb.lock` records the resolved pins, so a build is reproducible.
 
-**Staged (not implemented):** remote git / version resolution. When tackled,
-the design is:
+The design notes that used to be "staged" are now the implemented behaviour, and
+the acceptance case is a fixture rather than a promise: `test/gitdep_smoke.vyb`
+drives clone-on-build, lockfile, build and run end to end
+(`gitdep smoke: 4/4 checks passed`), and the smoke is wired into CI
+(`.github/workflows/gpu-kernel.yml`, see `doc/CI.md`).
 
-- `git` deps: resolve `url` + a `rev`/`tag`/`branch` by fetching the repo into a
-  content-addressed cache directory (e.g. `~/.local/share/vyb/deps/` or a
-  per-project `.vyb/deps`), checking out the pinned ref, and adding it as a
-  module path. The cache is keyed by commit so identical pins are never fetched
-  twice.
-- `version` deps: resolve against the published **release** of the project
-  (git tags/`vX.Y.Z`) -- there is no separate package registry yet; "version"
-  means a tagged git commit.
-- Lockfile: record the resolved commit hash so builds are reproducible.
-- Acceptance: `vyb build` fetches a git dep, uses it, and is reproducible across
-  machines; a missing/invalid ref fails with a clear error and no partial state.
-
-Until the resolver lands, remote deps should be pinned by the project owner as
-vendored path deps (clone once, reference by path), which already works.
+**Remaining:** broader ecosystem polish (registry publishing UX, transitive
+version conflict reporting) — tracked in `TODO.md` under the project system.
 
 ## Post-release tooling roadmap (in order)
 
