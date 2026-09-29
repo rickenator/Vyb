@@ -703,6 +703,25 @@ private:
                                      const vyb::ast::TypeNode* operandType,
                                      const std::string& kw);
 
+    // Step (c) of #365. The semantic pass judges a spawn-site closure's captures
+    // from their *declared* types, so a capture typed as a generic function's
+    // type parameter (`T`) stays permissive there -- that pass holds no
+    // monomorphization data. Codegen does hold it (`currentTypeSubstitutions`),
+    // so at the spawn call sites it re-runs the SAME structural predicate on the
+    // substituted concrete type (vyb/vre/thread_boundary.hpp), which is what
+    // makes the verdict real for generic code.
+    void checkSpawnHandoffWithSubstitutions(vyb::ast::FunctionExpression* fe,
+                                           vyb::ast::Node* site,
+                                           const std::string& siteName);
+    // The substituted type of a capture at this point in codegen, or null when
+    // codegen has no recorded type for it. `substituted` is set true only when a
+    // type parameter was actually replaced: a capture whose declared type carries
+    // no parameter was already judged by the semantic pass, which owns rule (b)
+    // and the registries, so codegen must not re-judge it with less information.
+    vyb::ast::TypeNodePtr substitutedCaptureType(const std::string& name,
+                                                const vyb::SourceLocation& loc,
+                                                bool* substituted = nullptr);
+
     // Retain an `our`/`mild` refcount control block: bump the strong (our) or
     // weak (mild) count on the shared block so a new storage location that will
     // release on scope exit holds its own reference. `controlBlockPtr` may be null.

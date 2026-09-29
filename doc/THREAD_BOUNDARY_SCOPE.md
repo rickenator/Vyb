@@ -5,8 +5,10 @@ thread boundary when the closure also captures the owner, so the payload stays
 alive — and **(c)** — make the resolution explicit by running the capability
 check where monomorphization has already happened.
 
-Status: **step 0 and (b) are landed** (branch `feat/365-viewable-and-write-detection`,
-PR #368). (c) is not started; the design choice below is settled.
+Status: **step 0, (b) and (c) are landed** (PR #368 for step 0 + (b); the (c)
+slice follows in its own PR off main). The tracked remainder is sharing the
+struct/enum registries with codegen, and the wording question, which #365 keeps
+open.
 
 ## Why the simple reading of `viewable` fails
 
@@ -93,52 +95,98 @@ Fixtures: `test/threads/test_thread_boundary_view_retained_owner_accepted.vyb`
 checks the joined value — 14), `..._view_owner_not_captured_rejected.vyb` (condition
 3) and `..._view_written_rejected.vyb` (condition 2).
 
-## (c) — explicit resolution where the substitutions exist
+## (c) — landed: the predicate runs where the substitutions live
+
+Design preference taken: **(b) from the options below — one predicate, two callers,
+no duplicated structural logic.** `handoffCapable` / `viewable` now live in
+`vyb::thread_boundary` (`include/vyb/vre/thread_boundary.hpp`,
+`src/vre/semantic_thread_boundary.cpp`) and take the two registries as parameters.
+`SemanticAnalyzer::handoffCapable` / `::viewable` are thin wrappers that pass the
+registries the semantic pass owns, so nothing about that pass changed in
+behaviour.
+
+Codegen calls the same predicate at the spawn call sites — one hook at the top of
+the `CallExpression` visitor, keyed on `thread_spawn`/`task_spawn`/`async_spawn`/
+`agent_start` (and their `vyb_`-prefixed spellings, which are what the intrinsic
+branches match). For each captured variable it recovers the recorded AST type from
+`valueTypeMap`, applies `currentTypeSubstitutions`, and re-runs the predicate on the
+concrete type. A refusal is a **hard** codegen error (`flagHardCodegenError()`):
+codegen's `logError` only prints, so without that the IR would still be linked and
+run (the driver already gates on `hasHardCodegenError()`, the #251 mechanism).
+
+**Only captures whose declared type actually names a substituted parameter are
+judged there.** Everything else was already decided by the semantic pass — which
+also owns rule (b) and the struct/enum registries — and re-judging it at codegen
+would refuse the very case rule (b) admits (a plain `their<T>` capture), because
+codegen has neither the borrow-root data nor the registries. So codegen's
+contribution is exactly its new information: a resolved type parameter. This was
+caught by the suite, not by reading the code: the first cut of the hook refused
+`test/threads/test_thread_boundary_view_retained_owner_accepted.vyb` (the rule-(b)
+fixture merged in PR #368) because it re-ran the predicate on a borrow capture the
+semantic pass had deliberately admitted.
+
+Two facts learned while wiring it, both load-bearing:
+
+* **Type inference unwraps ownership at the call boundary.** Passing a `my<Int>`
+  or a `their<Int>` to a parameter declared `x<T>` instantiates `T = Int`, so a
+  bare parameter capture can never be the (c) case. What can is a wrapper built
+  around the parameter — `our<T>` is the fixture: the semantic pass sees `our<T>`
+  with an unresolved payload and stays permissive, while codegen sees
+  `our<my<Int>>`, a shared owner *of* a unique owner, and refuses. That is the
+  honest demonstration that (c) closes a real hole, not a hypothetical one.
+* **Registries are null at codegen.** Codegen has no AST-level struct/enum
+  registry (`structFieldTypes` / `enumVariantPayloadTypes` exist only on
+  `SemanticAnalyzer`), so a substituted type that *names* a struct or enum is
+  treated as unresolved and stays permissive there — exactly as an unresolved type
+  parameter does. Sharing the registries is the tracked remainder.
+
+Fixtures: `test/threads/test_thread_boundary_generic_capture_rejected.vyb`
+(same generic function instantiated at `our<my<Int>>` — refused at codegen, and
+deliberately NOT `@semantic-only`, since the verdict only exists after
+monomorphization) and `..._generic_capture_accepted.vyb` (the same function at
+`our<Int>` — accepted, spawns a real thread, checks the joined value). The pair is
+what pins the step: same source, different instantiation, opposite verdicts.
+
+## (c) — the design question that was settled
 
 The semantic pass has **no** monomorphization data: `include/vyb/semantic.hpp`
 carries no substitution map (checked: no `substitutions`, `typeParamNames`,
 `concreteTypeArgs`, `genericBindings` members), so a capture typed `T` inside a
-generic function cannot be resolved and the gate stays permissive. That permissive
-default is the current fallback — verified, not assumed.
+generic function cannot be resolved there. That permissive default is the fallback
+— verified, not assumed. Monomorphization lives in codegen:
+`currentTypeSubstitutions` is already used to resolve bare type parameters at
+`src/vre/llvm/cgen_decl.cpp` (lines 361-366) and `src/vre/llvm/cgen_expr.cpp`
+(lines 1237-1244).
 
-Monomorphization lives in codegen: `currentTypeSubstitutions` is already used to
-resolve bare type parameters at `src/vre/llvm/cgen_decl.cpp:361-366` and
-`src/vre/llvm/cgen_expr.cpp:1237-1244`. The explicit fix is to run the capability
-check **there**, at the spawn call sites, against the substituted concrete types.
-
-Open design question to settle before implementing (c): codegen has no
-struct-field/enum-payload registry of its own (`structFieldTypes` /
-`enumVariantPayloadTypes` exist only on `SemanticAnalyzer`), so the check at
-codegen needs one of:
+Options considered for codegen's structural view:
 
 * a: give codegen a structural view of the type graph (share the semantic
   registries, or thread them through);
-* b: run the predicate in a small helper that takes the registries as parameters,
-  so both passes use one implementation;
+* b: run the predicate in a helper that takes the registries as parameters, so
+  both passes use one implementation;
 * c: re-run the semantic capability query post-monomorphization through an
   interface the driver owns.
 
-Preference: (b) — one predicate, two callers, no duplicated structural logic.
+Taken: **(b)**. (a) remains the follow-up for named struct/enum payloads.
 
 ## Step plan
 
 1. ~~**(b) in the semantic pass**~~ — **done**: `mayCrossBoundaryWithRetainedOwner`
    with the five conditions above, plus the three fixtures.
 2. ~~**step 0 — borrow addressing**~~ — **done**: `borrowTargetPointer`, three
-   ownership fixtures. Suite: `Ran 1214 / Passed 1214 / Failed 0` (the CUDA reds
-   pass with the GPU card free).
-3. **(c) shared predicate** — lift `handoffCapable` into a form that takes the two
-   registries as parameters; keep the member function as a thin wrapper. Pure
-   refactor, no behaviour change.
-4. **(c) codegen call site** — at the spawn intrinsics in `src/vre/llvm/cgen_expr.cpp`,
-   resolve each capture's type through `currentTypeSubstitutions`, run the shared
-   predicate, and report a codegen error with the same wording. Fixture: a generic
-   function that spawns with a capture typed `T`, instantiated at a
-   non-handoff-capable type — must be rejected; instantiated at a handoff-capable
-   type — must compile.
-5. **Docs** — `docs/refman/PROGRAMMERS_GUIDE.md` §5 thread-boundary subsection (still
+   ownership fixtures.
+3. ~~**(c) shared predicate**~~ — **done**: `vyb::thread_boundary` in
+   `include/vyb/vre/thread_boundary.hpp` + `src/vre/semantic_thread_boundary.cpp`;
+   the member functions are thin wrappers, so the semantic pass is unchanged.
+4. ~~**(c) codegen call site**~~ — **done**: `checkSpawnHandoffWithSubstitutions`
+   in `src/vre/llvm/cgen_expr.cpp`, invoked from the `CallExpression` visitor for
+   the four spawn intrinsics, with the accepted/rejected generic pair as fixtures.
+   A refusal is flagged as a hard codegen error so the driver refuses to run.
+5. **Remaining** — share the struct/enum registries with codegen so a substituted
+   type parameter standing for a *named* struct or enum is judged too (option (a));
+   `docs/refman/PROGRAMMERS_GUIDE.md` §5 thread-boundary subsection (still
    outstanding from the issue body); suite count bump.
-6. **Issue hygiene** — post the landed scope on #365; close only when (c) is merged
+6. **Issue hygiene** — post the landed scope on #365; close only when 5 is done
    *and* the wording question is settled by the drop-semantics row.
 
 ## Risks / notes

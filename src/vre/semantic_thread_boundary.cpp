@@ -14,25 +14,32 @@
 //   * nothing at all was said about the closure's own captures when the same
 //     closure was handed to a spawn site other than `thread_spawn`.
 //
-// This translation unit derives the capability structurally from the type
-// graph (scalars are capable; shared ownership is capable iff its payload is;
+// This translation unit derives the capability structurally from the type graph
+// (scalars are capable; shared ownership is capable iff its payload is;
 // composites are capable iff every payload is; unique owners, borrows and raw
-// pointers are never capable) and enforces it at the spawn site. It also
-// borrows its vocabulary from the ownership rules the language already has --
-// a value is `handoff`-capable when it can be handed to another thread, and
-// `viewable` when a second thread may read it -- rather than from another
-// language's trait names.
+// pointers are never capable). The predicate itself lives in
+// `vyb::thread_boundary` and is registry-parameterized, so codegen can run the
+// SAME implementation at the spawn call sites once a generic function's type
+// parameters have been substituted -- step (c) of #365; see
+// vyb/vre/thread_boundary.hpp. This file adds the semantic-pass gate on top:
+// every capture of a closure handed to a site whose closure leaves the spawner's
+// OS thread is checked, and the rule-(b) case (a read-only borrow whose owner the
+// closure also captures) is admitted.
 //
-// Behaviour of the fix mirrors the docs gate the maintainer landed for it:
-// renames only, no new syntax. The gate is error-only for now; the provisional
-// wording ("not handoff-capable") is deliberate while the drop-semantics row
-// for propagation paths is still open.
+// Vocabulary is borrowed from the ownership rules the language already has -- a
+// value is `handoff`-capable when it can be handed to another thread, and
+// `viewable` when a second thread may read it -- rather than from another
+// language's trait names. The gate is error-only; the provisional wording
+// ("not handoff-capable") is deliberate while the drop-semantics row for
+// propagation paths is still open.
 
 #include "vyb/semantic.hpp"
 #include "vyb/parser/ast.hpp"
+#include "vyb/vre/thread_boundary.hpp"
 
 #include <set>
 #include <string>
+#include <vector>
 
 namespace vyb {
 
@@ -67,7 +74,9 @@ std::vector<const ast::TypeNode*> namedTypeArgs(const ast::TypeNode* type) {
 
 } // namespace
 
-// May a value of this type cross a thread boundary as a handoff?
+namespace thread_boundary {
+
+// The structural capability predicate (see the header for the contract).
 //
 // Rules, in order:
 //   * no type / raw pointer            -> no
@@ -80,11 +89,12 @@ std::vector<const ast::TypeNode*> namedTypeArgs(const ast::TypeNode* type) {
 //   * a known enum                     -> yes iff every variant payload is
 //   * a known struct                   -> yes iff every field is
 //   * a plain value type               -> yes
-//   * anything unresolved (a type parameter `T`, an opaque handle) -> yes,
-//       conservatively: the gate is error-only and must not reject programs
-//       it cannot reason about (resolution of type parameters through a
-//       monomorphized bind is a tracked follow-up).
-bool SemanticAnalyzer::handoffCapable(const ast::TypeNode* type) const {
+//   * anything unresolved (a type parameter `T`, an opaque handle, or a named
+//       struct/enum when no registry was supplied) -> yes, conservatively: the
+//       gate is error-only and must not reject programs it cannot reason about.
+bool handoffCapable(const ast::TypeNode* type,
+                    const StructFieldRegistry* structs,
+                    const EnumPayloadRegistry* enums) {
     if (!type) return false;
     if (dynamic_cast<const ast::PointerType*>(type)) return false;
 
@@ -96,23 +106,23 @@ bool SemanticAnalyzer::handoffCapable(const ast::TypeNode* type) const {
         const auto args = namedTypeArgs(type);
         if (args.empty()) return false;
         for (const auto* a : args) {
-            if (!handoffCapable(a)) return false;
+            if (!handoffCapable(a, structs, enums)) return false;
         }
         return true;
     }
 
     if (auto* v = dynamic_cast<const ast::VecType*>(type)) {
-        return handoffCapable(v->elementType.get());
+        return handoffCapable(v->elementType.get(), structs, enums);
     }
     if (auto* a = dynamic_cast<const ast::ArrayType*>(type)) {
-        return handoffCapable(a->elementType.get());
+        return handoffCapable(a->elementType.get(), structs, enums);
     }
     if (auto* f = dynamic_cast<const ast::FutureType*>(type)) {
-        return handoffCapable(f->resultType.get());
+        return handoffCapable(f->resultType.get(), structs, enums);
     }
     if (auto* t = dynamic_cast<const ast::TupleTypeNode*>(type)) {
         for (const auto& m : t->memberTypes) {
-            if (!handoffCapable(m.get())) return false;
+            if (!handoffCapable(m.get(), structs, enums)) return false;
         }
         return true;
     }
@@ -120,7 +130,7 @@ bool SemanticAnalyzer::handoffCapable(const ast::TypeNode* type) const {
     // Optional is usually parsed as a TypeName carrying one generic argument
     // (`Int?`), but both spellings are handled.
     if (auto* o = dynamic_cast<const ast::OptionalType*>(type)) {
-        return handoffCapable(o->containedType.get());
+        return handoffCapable(o->containedType.get(), structs, enums);
     }
 
     {
@@ -129,36 +139,41 @@ bool SemanticAnalyzer::handoffCapable(const ast::TypeNode* type) const {
             // Any other generic named type (Result<T, E>, Pair<A, B>, a user
             // generic struct/enum): structural over its arguments.
             for (const auto* a : args) {
-                if (!handoffCapable(a)) return false;
+                if (!handoffCapable(a, structs, enums)) return false;
             }
         }
     }
 
     // Enums: keyed by the concrete type string (`Box<Int>`) or the bare name.
-    auto eit = enumVariantPayloadTypes.find(ts);
-    if (eit == enumVariantPayloadTypes.end()) eit = enumVariantPayloadTypes.find(base);
-    if (eit != enumVariantPayloadTypes.end()) {
-        for (const auto& variant : eit->second) {
-            for (const auto& payload : variant.second) {
-                if (!handoffCapable(payload.get())) return false;
+    if (enums) {
+        auto eit = enums->find(ts);
+        if (eit == enums->end()) eit = enums->find(base);
+        if (eit != enums->end()) {
+            for (const auto& variant : eit->second) {
+                for (const auto& payload : variant.second) {
+                    if (!handoffCapable(payload.get(), structs, enums)) return false;
+                }
             }
+            return true;
         }
-        return true;
     }
 
     // Structs: keyed by name; fields are inspected structurally.
-    auto sit = structFieldTypes.find(ts);
-    if (sit == structFieldTypes.end()) sit = structFieldTypes.find(base);
-    if (sit != structFieldTypes.end()) {
-        for (const auto& field : sit->second) {
-            if (!handoffCapable(field.second)) return false;
+    if (structs) {
+        auto sit = structs->find(ts);
+        if (sit == structs->end()) sit = structs->find(base);
+        if (sit != structs->end()) {
+            for (const auto& field : sit->second) {
+                if (!handoffCapable(field.second, structs, enums)) return false;
+            }
+            return true;
         }
-        return true;
     }
 
     if (isPlainValueType(base)) return true;
 
-    // Unresolved named type (type parameter, opaque handle): stay permissive.
+    // Unresolved named type (type parameter, opaque handle, or a named struct or
+    // enum while no registry was supplied): stay permissive.
     return true;
 }
 
@@ -166,15 +181,29 @@ bool SemanticAnalyzer::handoffCapable(const ast::TypeNode* type) const {
 // The weaker relation: a handoff-capable value is also viewable, and a borrow
 // (`their<T>` / `loc<T>`) of a handoff-capable payload is viewable because a
 // reader only needs the address, not the owner.
-bool SemanticAnalyzer::viewable(const ast::TypeNode* type) const {
+bool viewable(const ast::TypeNode* type,
+              const StructFieldRegistry* structs,
+              const EnumPayloadRegistry* enums) {
     if (!type) return false;
     const std::string base = baseNameOf(type->toString());
     if (base == "their" || base == "loc") {
         const auto args = namedTypeArgs(type);
         if (args.empty()) return false;
-        return handoffCapable(args.front());
+        return handoffCapable(args.front(), structs, enums);
     }
-    return handoffCapable(type);
+    return handoffCapable(type, structs, enums);
+}
+
+} // namespace thread_boundary
+
+// Semantic-pass entry points: thin wrappers that hand the predicate the
+// registries this pass built while walking the AST.
+bool SemanticAnalyzer::handoffCapable(const ast::TypeNode* type) const {
+    return thread_boundary::handoffCapable(type, &structFieldTypes, &enumVariantPayloadTypes);
+}
+
+bool SemanticAnalyzer::viewable(const ast::TypeNode* type) const {
+    return thread_boundary::viewable(type, &structFieldTypes, &enumVariantPayloadTypes);
 }
 
 // Rule (b): a read-only borrow may cross the thread boundary when the closure

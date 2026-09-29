@@ -2,6 +2,7 @@
 
 #include "vyb/vre/llvm/codegen.hpp"
 #include "vyb/parser/ast.hpp"
+#include "vyb/vre/thread_boundary.hpp"
 #include "vyb/parser/token.hpp" // For TokenType in BinaryExpression
 
 #include <llvm/IR/Constants.h>
@@ -1218,6 +1219,30 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
     // Kernel-mode device intrinsics (#198 P4): lowered directly, no symbol lookup.
     if (vyb::g_kernel_mode && emitKernelIntrinsic(node)) {
         return;
+    }
+
+    // Step (c) of #365: judge a spawn-site closure's captures at their *concrete*
+    // types. The semantic pass ran the same structural predicate earlier, but it
+    // can only see a generic function's declared type parameter (`T`) and stays
+    // permissive there; here `currentTypeSubstitutions` maps each active
+    // parameter to its real argument, so the verdict becomes real for generic
+    // code (doc/THREAD_BOUNDARY_SCOPE.md).
+    if (auto* spawnCallee = dynamic_cast<ast::Identifier*>(node->callee.get())) {
+        static const std::set<std::string> spawnSites = {
+            "thread_spawn", "task_spawn", "async_spawn", "agent_start",
+            "vyb_thread_spawn", "vyb_task_spawn", "vyb_async_spawn",
+            "agent_start_bool", "agent_start_float", "agent_start_string",
+            "vyb_agent_start", "vyb_agent_start_bool", "vyb_agent_start_float",
+            "vyb_agent_start_string",
+        };
+        if (spawnSites.count(spawnCallee->name) && !node->arguments.empty()) {
+            if (auto* fe = dynamic_cast<ast::FunctionExpression*>(node->arguments[0].get())) {
+                std::string siteName = spawnCallee->name;
+                if (siteName.rfind("vyb_", 0) == 0) siteName = siteName.substr(4);
+                if (siteName.rfind("agent_start", 0) == 0) siteName = "agent_start";
+                checkSpawnHandoffWithSubstitutions(fe, node->arguments[0].get(), siteName);
+            }
+        }
     }
 
     // Bare builtin enum constructor: `Ok(x)` / `Err(e)` for Result. The semantic
@@ -8803,6 +8828,82 @@ llvm::Value* LLVMCodegen::borrowTargetPointer(llvm::Value* operandValue,
         return builder->CreateLoad(ptrTy, operandValue, kw + ".ptr.load");
     }
     return operandValue;
+}
+
+// Step (c) of #365 (see codegen.hpp). At the spawn call sites, judge the
+// closure's captures at their *substituted* concrete types, because the semantic
+// pass -- which runs before monomorphization -- can only see the declared type
+// parameter `T` and stays permissive there.
+//
+// The registries are passed as null: codegen has no AST-level struct/enum
+// registry of its own, so a substituted type that names a struct or enum is
+// treated as unresolved and stays permissive here, exactly as an unresolved type
+// parameter does. Sharing the registries is the tracked follow-up
+// (doc/THREAD_BOUNDARY_SCOPE.md). Everything structural -- `my<T>`, `their<T>`,
+// `loc<T>`, `ptr<T>`, `Vec<...>`, arrays, `T?`, futures, tuples, `our<T>`,
+// `mild<T>` -- is resolved exactly as in the semantic pass, which is the case
+// this step exists for.
+vyb::ast::TypeNodePtr LLVMCodegen::substitutedCaptureType(const std::string& name,
+                                                         const vyb::SourceLocation& loc,
+                                                         bool* substituted) {
+    if (substituted) *substituted = false;
+    auto nv = namedValues.find(name);
+    if (nv == namedValues.end()) return nullptr;
+    auto vt = valueTypeMap.find(nv->second);
+    if (vt == valueTypeMap.end() || !vt->second) return nullptr;
+
+    const std::string original = vt->second->toString();
+    std::string resolved = original;
+    if (!currentTypeSubstitutions.empty()) {
+        for (const auto& kv : currentTypeSubstitutions) {
+            resolved = replaceTypeTokens(resolved, kv.first, kv.second);
+        }
+    }
+    if (resolved == original) {
+        return vyb::ast::TypeNodePtr(vt->second->clone().release());
+    }
+    if (substituted) *substituted = true;
+    return typePatternToTypeNode(TypePattern::parse(resolved), loc);
+}
+
+void LLVMCodegen::checkSpawnHandoffWithSubstitutions(ast::FunctionExpression* fe,
+                                                     ast::Node* site,
+                                                     const std::string& siteName) {
+    if (!fe || !site) return;
+
+    std::set<std::string> checked;
+    for (const std::string& cap : fe->capturedVariables) {
+        if (!checked.insert(cap).second) continue;
+
+        // A *written* capture is refused by the semantic pass, and that verdict
+        // does not depend on the resolved type, so compilation never reaches
+        // codegen with one. Only reads are judged here.
+        bool written = false;
+        for (const std::string& mut : fe->mutableCapturedVariables) {
+            if (mut == cap) written = true;
+        }
+        if (written) continue;
+
+        // Only captures whose type actually mentions a substituted parameter are
+        // judged here. Everything else was already decided by the semantic pass,
+        // which also owns rule (b) and the struct/enum registries -- re-judging a
+        // plain `their<T>` capture here would refuse the very case rule (b)
+        // admits, because codegen has neither the root-owner data nor the
+        // registries.
+        bool substitutedType = false;
+        vyb::ast::TypeNodePtr ty = substitutedCaptureType(cap, site->loc, &substitutedType);
+        if (!ty || !substitutedType) continue;
+        if (thread_boundary::handoffCapable(ty.get(), nullptr, nullptr)) continue;
+
+        // This is a hard codegen error, like the #251 enum-payload check: the IR
+        // this program would produce must never be linked or run, so flag it for
+        // the driver rather than only printing (codegen's logError is not
+        // otherwise fatal -- a bare print would let the program execute).
+        flagHardCodegenError();
+        logError(site->loc, siteName + ": '" + cap + "' is " + ty->toString() +
+                     " -- it cannot cross a thread boundary (not handoff-capable). "
+                     "Hand it off as shared ownership (our(" + cap + ")) or pass a copy.");
+    }
 }
 
 void LLVMCodegen::visit(ast::BorrowExpression* node) {
