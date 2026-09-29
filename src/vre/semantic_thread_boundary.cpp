@@ -202,9 +202,19 @@ void SemanticAnalyzer::checkThreadBoundaryCaptures(ast::FunctionExpression* fe,
 
         SymbolInfo* csym = currentScope ? currentScope->lookup(cap) : nullptr;
         if (!csym || !csym->type) continue;
-        if (handoffCapable(csym->type.get())) continue;
+        const ast::TypeNode* ty = csym->type.get();
+        if (handoffCapable(ty)) continue;
+        // `viewable` deliberately does NOT relax this site. A borrow
+        // (`their<T>` / `loc<T>`) addresses the *spawner's frame*: the borrow
+        // model is lexical, so nothing proves the frame outlives a detached
+        // thread's read, and letting a read-only borrow through would reopen the
+        // dangling read that `test/ownership/thread_send_their.vyb` pins (#149).
+        // `viewable` answers a narrower question -- "may a second thread read
+        // this value?" -- and is the relation a `view(x)` site elsewhere should
+        // ask; at a spawn site ownership must transfer (handoff), so a borrow is
+        // rejected whether or not it is read-only.
 
-        const std::string ts = csym->type->toString();
+        const std::string ts = ty->toString();
         addError(siteName + ": '" + cap + "' is " + ts +
                      " -- it cannot cross a thread boundary (not handoff-capable). "
                      "Hand it off as shared ownership (our(" + cap + ")) or pass a copy.",

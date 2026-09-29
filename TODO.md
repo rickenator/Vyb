@@ -241,7 +241,7 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 - [x] **`println()`/`print()` with multiple arguments** — Space-separated output; all args formatted into a single call
 - [x] **Semantic type recognition** — `Int16`, `Int32`, `Int64`, `UInt8`–`UInt64`, `Float32`, `Float64`, `Char`, `Rune` now fully recognized in semantic analysis (were silently rejected)
 - [x] **Relaxed struct field syntax** — C-style `Type fieldName` accepted alongside canonical `fieldName<Type>`; helps parse legacy/interop fixtures
-- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite runs **1207 tests** via `test/run_tests.vyb`, and that documented size is enforced against the runner by `test/suite_count_check.vyb` in CI
+- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite runs **1209 tests** via `test/run_tests.vyb`, and that documented size is enforced against the runner by `test/suite_count_check.vyb` in CI
 - [x] **Vec parameter deep copy** — Vec parameters receive an independent copy of the data on function entry, eliminating double-free bugs (e.g. recursive quicksort base-case return)
 - [x] **Vec mutation through borrowed struct fields** — `s.items.push(val)` where `s<their<T>>` now correctly mutates in-place; member-expression Vec calls now get a field *pointer* (not a loaded copy)
 - [x] **`their<T>` nested-access audit** — verified multi-level member reads/writes through a `their<T>` borrow receiver (`r.mid.leaf.n`, 2-level writes), borrow-typed struct fields accessed through an outer borrow (`h.inner.n` where `Holder.inner<their<Leaf>>`), and member Vec reads through a borrow. All correct; locked in by `test/ownership/test_their_nested_access.vyb`. (Note: `Vec::get()` returns a copy, so in-place mutation of a nested `Vec<Vec<T>>` needs the inner Vec accessed by reference — not a `their` bug.)
@@ -578,10 +578,21 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
   mutable captures (which hold the defining frame's address). Fixtures:
   `test/threads/test_thread_boundary_unique_owner_rejected.vyb`,
   `..._mutable_capture_rejected.vyb`, `..._async_unique_owner_rejected.vyb`,
-  `..._task_mutable_capture_rejected.vyb`, `..._handoff_accepted.vyb` and
-  `..._async_task_accepted.vyb`. Still open: the gate is error-only — no
-  `view(x)` / `viewable` enforcement yet, no resolution of type parameters
-  through a monomorphized bind — and the provisional wording stands until the
+  `..._task_mutable_capture_rejected.vyb`, `..._view_read_rejected.vyb`,
+  `..._view_write_rejected.vyb`, `..._handoff_accepted.vyb` and
+  `..._async_task_accepted.vyb`.
+  Two rules settled while wiring it: (1) a write through a field now counts as a
+  mutation — capture analysis previously recorded only `v = ...` as a write, so a
+  closure holding a borrow of a composite looked read-only while mutating the
+  payload; (2) `viewable` does **not** relax the spawn site — a borrow addresses
+  the spawner's frame and the lexical borrow model proves nothing about a
+  detached thread outliving it, so even a read-only `view(x)` is refused
+  (`..._view_read_rejected.vyb`, the `view` counterpart of the `borrow` pin in
+  `test/ownership/thread_send_their.vyb`).
+  Still open: the semantic pass holds no monomorphization substitutions (they
+  live in codegen), so an unresolved type parameter stays permissive — that
+  permissive default *is* the fallback; resolving it for real means running the
+  check where the substitutions exist. Wording stays provisional until the
   drop-semantics-on-propagation row closes (#365).
 - [ ] **Lifetime inference beyond lexical scope** <!-- open: Lifetime inference beyond lexical scope -->
   — `borrow`/`view` are lexical-phase by design (documented in #149): no lifetime
@@ -1462,5 +1473,5 @@ Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `
 
 *Last Updated: 2026-09-19 (v0.7.6 release)*
 *Current Version: Vyb v0.7.6 (freedom-1.0 series)*
-*Overall Status: ~60-65% complete toward 1.0 — 1207 tests (documented size enforced against the runner by `test/suite_count_check.vyb`; the full `--execute-jit` sweep runs in `ci.yml`)*
+*Overall Status: ~60-65% complete toward 1.0 — 1209 tests (documented size enforced against the runner by `test/suite_count_check.vyb`; the full `--execute-jit` sweep runs in `ci.yml`)*
 *SUGGESTIONS.md merged into this document.*

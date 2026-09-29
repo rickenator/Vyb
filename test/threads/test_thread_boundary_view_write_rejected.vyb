@@ -1,0 +1,29 @@
+// @test: thread boundary rejects a view that the closure writes through
+// @description: The companion of the accepted view fixture: a borrow of a
+//   handoff-capable payload is only `viewable`. A closure that writes through
+//   it (`ro.n = ...`, or `ro = ...`) is a mutating capture, and the analyzer's
+//   write detection covers writes through a field as well as to the name, so
+//   the gate refuses it.
+// @category: threads, ownership, diagnostics, thread-boundary, viewable
+// @expect: fail
+// @expect-error: mutably
+// @semantic-only: true
+// @env: VYB_STDLIB=stdlib
+
+import threads::{thread_spawn}
+
+struct Reading {
+    n: Int,
+    label: String
+}
+
+main()<Int> -> {
+    source<Reading> = Reading { n = 7, label = "held" }
+    ro<their<Reading>> = view(source)
+
+    th<Int> = thread_spawn(|| -> {
+        ro.n = 8
+        return ro.n
+    }) else -1
+    return th
+}
