@@ -50,6 +50,26 @@ bool handoffCapable(const ast::TypeNode* type,
                     const StructFieldRegistry* structs,
                     const EnumPayloadRegistry* enums);
 
+// The same question, but able to say "I cannot decide": the semantic pass runs
+// before monomorphization, so a type that still mentions a type parameter is not
+// decidable *there*, while codegen -- which holds the substitutions -- can decide
+// it. `Undecidable` therefore also covers a named type that is neither a known
+// struct/enum nor a plain value type, because a later pass with the same
+// registries cannot resolve it either.
+//
+// Callers use this to *defer* rather than to guess: the semantic pass records the
+// capture for codegen to judge on the substituted type, instead of reporting an
+// error it cannot justify or admitting something it cannot check.
+enum class Capability {
+    Capable,
+    NotCapable,
+    Undecidable,
+};
+
+Capability capability(const ast::TypeNode* type,
+                      const StructFieldRegistry* structs,
+                      const EnumPayloadRegistry* enums);
+
 // The weaker relation: may a second thread *read* a value of this type without
 // taking ownership? A handoff-capable value is viewable, and a borrow of a
 // handoff-capable payload is viewable because a reader only needs the address.

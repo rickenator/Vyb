@@ -11,7 +11,11 @@
  * The implementation for this header is in src/vre/semantic.cpp
  */
 
-#include "vyb/parser/ast.hpp" // Ensure ast.hpp is included
+#include "vyb/parser/ast.hpp"
+// The thread-boundary capability predicate (#365): `Capability` is named by the
+// declarations below, and this early include keeps the struct/enum registries and
+// the predicate in one place.
+#include "vyb/vre/thread_boundary.hpp"
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -397,8 +401,19 @@ public:
     // structs and enums) are handoff-capable iff every payload is. `viewable`
     // is the weaker "may a second thread read it?" relation, derived
     // structurally in the same pass (see semantic_thread_boundary.cpp).
-    bool handoffCapable(const ast::TypeNode* type) const;
-    bool viewable(const ast::TypeNode* type) const;
+    //
+    // A curated `bind Handoff -> T` (or `bind Viewable -> T`) short-circuits the
+    // structural derivation: the explicit bind is the escape hatch for shapes the
+    // compiler cannot see through (FFI `ptr<T>`-holding structs, opaque handles,
+    // reviewed bindings) and wins over the computed verdict, which registration
+    // reports as a warning when the two disagree (#365).
+    bool handoffCapable(const ast::TypeNode* type);
+    // The tri-state form: the semantic pass cannot decide a type that still
+    // mentions a monomorphization type parameter, and DEFERS such captures to
+    // codegen (deferredBoundaryCapturesFor) instead of guessing. A curated
+    // `bind Handoff -> T` answers Capable outright.
+    vyb::thread_boundary::Capability handoffCapability(const ast::TypeNode* type);
+    bool viewable(const ast::TypeNode* type);
     // Enforce the thread boundary for the closure argument at a spawn site:
     // reports every capture that is not handoff-capable, and every mutable
     // capture (which holds the defining frame's address). A read-only borrow is
@@ -407,13 +422,23 @@ public:
     // itself keeps the payload alive for the thread's whole run.
     void checkThreadBoundaryCaptures(ast::FunctionExpression* fe, ast::Node* site,
                                      const std::string& siteName);
+
     // Rule (b) behind that admission: is `captureName` a read-only borrow whose
     // owner the closure also captures, with the owner held through `our`/`my`
     // (not `mild`, which is weak and does not keep the payload alive) and a
     // handoff-capable payload?
-    bool mayCrossBoundaryWithRetainedOwner(const std::string& captureName,
-                                           const ast::TypeNode* captureType,
-                                           const ast::FunctionExpression* fe) const;
+    // Capable when admitted, NotCapable when not, and Undecidable when the
+    // payload or the owner still mentions a type parameter (then the capture is
+    // deferred to codegen like any other undecidable one).
+    vyb::thread_boundary::Capability
+    mayCrossBoundaryWithRetainedOwner(const std::string& captureName,
+                                      const ast::TypeNode* captureType,
+                                      const ast::FunctionExpression* fe);
+    // Captures this pass could not decide, keyed by the closure node handed to a
+    // spawn site. Codegen looks them up by that same node pointer (the semantic
+    // pass and codegen see one shared AST) and judges the substituted type with
+    // the registries this pass owns. Null when the closure was never checked.
+    const std::vector<std::string>* deferredBoundaryCapturesFor(const ast::FunctionExpression* fe) const;
     bool areTypesCompatible(ast::TypeNode* typeA, ast::TypeNode* typeB); // Added
     // Rejects `return v;` where `v` supplies a different number of values than the
     // enclosing function's declared return arity (e.g. a single value returned from
@@ -571,6 +596,12 @@ private:
     std::string defaultOwner_;  // entry/root module key, used for unnamed top-level code
     std::vector<std::string> ownerStack_;
     std::vector<std::string> errors;
+    // Non-fatal diagnostics (see addWarning): the curated thread-boundary binds.
+    std::vector<std::string> warnings;
+    // Thread-boundary captures the semantic pass could not decide (#365 step (c)):
+    // closure node -> capture names whose declared type still mentions a type
+    // parameter. Codegen judges exactly these on the substituted type.
+    std::unordered_map<const ast::FunctionExpression*, std::vector<std::string>> deferredBoundaryCaptures_;
     // TypeTable (node-id -> owned type): CHECKPOINT B. Keyed by the stable
     // Node::typeId() (exprKey() in semantic.cpp; null -> sentinel key 0). Owning
     // shared values; setType/typeOf are its accessors.
@@ -743,6 +774,10 @@ private:
     void enterScope();
     void exitScope();
     void addError(const std::string& message, const ast::Node* node);
+    // A non-fatal diagnostic (#365). Curated thread-boundary binds deliberately
+    // override the structural verdict, so a contradiction is reported here and
+    // printed, but does not fail the compile: the escape hatch is the point.
+    void addWarning(const std::string& message, const ast::Node* node);
     // bool isLValue(ast::Expression* expr); // Duplicate declaration removed
     bool isRawLocationType(ast::Expression* expr);
     BorrowState aggregateBorrowState(const std::string& rootName) const;

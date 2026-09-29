@@ -1,14 +1,14 @@
-# Scope — #365: `viewable` handoff under a retained owner (b), and explicit resolution at codegen (c)
+# Scope — #365: the thread-boundary capability, landed
 
 Decided with Rick on 2026-09-29: take **(b)** — allow a read-only borrow across a
 thread boundary when the closure also captures the owner, so the payload stays
-alive — and **(c)** — make the resolution explicit by running the capability
-check where monomorphization has already happened.
+alive — and **(c)** — make the resolution explicit by running the capability check
+where monomorphization has already happened.
 
-Status: **step 0, (b) and (c) are landed** (PR #368 for step 0 + (b); the (c)
-slice follows in its own PR off main). The tracked remainder is sharing the
-struct/enum registries with codegen, and the wording question, which #365 keeps
-open.
+Status: **step 0, (b) and (c) are landed, and the curated escape hatch is in**
+(PR #368 for step 0 + (b); PR #369 for the first cut of (c); the deferral rework,
+the registries and the curated binds follow on main). What remains is one refman
+subsection and the wording question, which is settled by the drop-semantics row.
 
 ## Why the simple reading of `viewable` fails
 
@@ -18,7 +18,7 @@ outlives a detached thread's read. Permitting a read-only `view(x)` across a
 spawn site flipped `test/ownership/thread_send_their.vyb` (the #149 pin) from
 rejected to accepted — a reopened dangling read. Measured: `Ran 1209 / Passed
 1203 / Failed 6` with that cut; reverted, back to `Passed 1204 / Failed 5` (the
-5 CUDA VRAM-only reds).
+5 CUDA VRAM-only reds). `viewable` is a *relation*, not a licence at a spawn site.
 
 ## Step 0 — a borrow addressed the variable slot, not the object (LANDED)
 
@@ -95,79 +95,111 @@ Fixtures: `test/threads/test_thread_boundary_view_retained_owner_accepted.vyb`
 checks the joined value — 14), `..._view_owner_not_captured_rejected.vyb` (condition
 3) and `..._view_written_rejected.vyb` (condition 2).
 
-## (c) — landed: the predicate runs where the substitutions live
+## (c) — decide where the evidence is, defer where it is not (LANDED)
 
-Design preference taken: **(b) from the options below — one predicate, two callers,
-no duplicated structural logic.** `handoffCapable` / `viewable` now live in
-`vyb::thread_boundary` (`include/vyb/vre/thread_boundary.hpp`,
-`src/vre/semantic_thread_boundary.cpp`) and take the two registries as parameters.
-`SemanticAnalyzer::handoffCapable` / `::viewable` are thin wrappers that pass the
-registries the semantic pass owns, so nothing about that pass changed in
-behaviour.
+The semantic pass runs before monomorphization and holds no substitutions
+(verified: `include/vyb/semantic.hpp` carries no substitution map), so a capture
+whose declared type still names a type parameter cannot be judged there. Codegen
+holds the substitutions, so (c) is the resolution point.
 
-Codegen calls the same predicate at the spawn call sites — one hook at the top of
-the `CallExpression` visitor, keyed on `thread_spawn`/`task_spawn`/`async_spawn`/
-`agent_start` (and their `vyb_`-prefixed spellings, which are what the intrinsic
-branches match). For each captured variable it recovers the recorded AST type from
-`valueTypeMap`, applies `currentTypeSubstitutions`, and re-runs the predicate on the
-concrete type. A refusal is a **hard** codegen error (`flagHardCodegenError()`):
-codegen's `logError` only prints, so without that the IR would still be linked and
-run (the driver already gates on `hasHardCodegenError()`, the #251 mechanism).
+The predicate moved to `vyb::thread_boundary`
+(`include/vyb/vre/thread_boundary.hpp`, `src/vre/semantic_thread_boundary.cpp`),
+with the struct/enum registries as **parameters**, and it now answers a tri-state:
 
-**Only captures whose declared type actually names a substituted parameter are
-judged there.** Everything else was already decided by the semantic pass — which
-also owns rule (b) and the struct/enum registries — and re-judging it at codegen
-would refuse the very case rule (b) admits (a plain `their<T>` capture), because
-codegen has neither the borrow-root data nor the registries. So codegen's
-contribution is exactly its new information: a resolved type parameter. This was
-caught by the suite, not by reading the code: the first cut of the hook refused
-`test/threads/test_thread_boundary_view_retained_owner_accepted.vyb` (the rule-(b)
-fixture merged in PR #368) because it re-ran the predicate on a borrow capture the
-semantic pass had deliberately admitted.
+```cpp
+enum class Capability { Capable, NotCapable, Undecidable };
+```
 
-Two facts learned while wiring it, both load-bearing:
+That tri-state is what makes the two passes agree instead of second-guessing each
+other:
 
-* **Type inference unwraps ownership at the call boundary.** Passing a `my<Int>`
-  or a `their<Int>` to a parameter declared `x<T>` instantiates `T = Int`, so a
-  bare parameter capture can never be the (c) case. What can is a wrapper built
-  around the parameter — `our<T>` is the fixture: the semantic pass sees `our<T>`
-  with an unresolved payload and stays permissive, while codegen sees
-  `our<my<Int>>`, a shared owner *of* a unique owner, and refuses. That is the
-  honest demonstration that (c) closes a real hole, not a hypothetical one.
-* **Registries are null at codegen.** Codegen has no AST-level struct/enum
-  registry (`structFieldTypes` / `enumVariantPayloadTypes` exist only on
-  `SemanticAnalyzer`), so a substituted type that *names* a struct or enum is
-  treated as unresolved and stays permissive there — exactly as an unresolved type
-  parameter does. Sharing the registries is the tracked remainder.
+* **The semantic pass decides what it can.** A type naming a type parameter — or
+  any name neither registry knows — is `Undecidable` there. The pass records the
+  capture against the closure node (`deferredBoundaryCaptures_`) and reports
+  nothing. Everything else, *including the rule-(b) admission*, is decided for
+  good and codegen never revisits it.
+* **Codegen judges exactly the deferred captures.** The semantic pass and codegen
+  walk one shared AST, so the closure pointer matches (measured `saw=1` for the
+  deferred, rule-(b) and plain cases alike). Codegen resolves each deferred capture
+  with `currentTypeSubstitutions`, then asks the **semantic analyzer's own
+  predicate** — `boundaryCapable_`, bound in the `LLVMCodegen` constructor next to
+  `nodeTypeOf_` — and refuses a non-capable capture as a **hard** codegen error
+  (`flagHardCodegenError()`; codegen's `logError` alone only prints, so the IR would
+  otherwise still be linked and run).
 
-Fixtures: `test/threads/test_thread_boundary_generic_capture_rejected.vyb`
-(same generic function instantiated at `our<my<Int>>` — refused at codegen, and
+Because the question goes back to the analyzer, the registries reach codegen too,
+which closes the named-struct hole: `T` instantiating to `Holder` is judged by
+`Holder`'s fields, so a field holding `my<Int>` is refused — fixture
+`test/threads/test_thread_boundary_generic_named_struct_rejected.vyb`.
+
+**Two heuristics were tried first and both were rejected by measurement**, which is
+why the deferral list is the design:
+
+* "judge every capture at codegen" refused
+  `test/threads/test_thread_boundary_view_retained_owner_accepted.vyb` — the
+  rule-(b) fixture merged in PR #368 — because codegen has no borrow-root data.
+* "judge captures whose type string changed under substitution" missed the
+  named-struct case entirely: the parameter's type was already resolved when the
+  capture was recorded, so the string reads `Holder` unchanged (`subst=0`) and the
+  program printed `0` and ran.
+
+Other facts learned wiring it, both load-bearing:
+
+* **Type inference unwraps ownership at the call boundary.** Passing a `my<Int>` or
+  a `their<Int>` to a parameter declared `x<T>` instantiates `T = Int`, so a bare
+  parameter capture can never be the (c) case. What can is a wrapper built around
+  the parameter — `our<T>` in the accepted/rejected pair: the semantic pass sees
+  `our<T>` with an unresolved payload, while codegen sees `our<my<Int>>`, a shared
+  owner *of* a unique owner, and refuses.
+* **Capture kind already reaches the semantic pass.** `ast::FunctionExpression`
+  carries `mutableCapturedVariables`, filled by the semantic pass itself
+  (`src/vre/semantic.cpp`, the capture analysis for `FunctionExpression`), so the
+  mutable-address case is decided at semantic time and needs no deferral. The
+  issue's "capture mode must reach semantic analysis" item is satisfied by that
+  field — it is what the gate reads, not a re-derivation from writes.
+
+Fixtures: `test/threads/test_thread_boundary_generic_capture_rejected.vyb` (the
+generic function instantiated at `our<my<Int>>` — refused at codegen, and
 deliberately NOT `@semantic-only`, since the verdict only exists after
-monomorphization) and `..._generic_capture_accepted.vyb` (the same function at
-`our<Int>` — accepted, spawns a real thread, checks the joined value). The pair is
-what pins the step: same source, different instantiation, opposite verdicts.
+monomorphization), `..._generic_capture_accepted.vyb` (the same function at
+`our<Int>` — accepted, spawns a real thread, checks the joined value), and
+`..._generic_named_struct_rejected.vyb` (the named-struct case above).
 
-## (c) — the design question that was settled
+## Curated escape hatch — `bind Handoff -> T` (LANDED)
 
-The semantic pass has **no** monomorphization data: `include/vyb/semantic.hpp`
-carries no substitution map (checked: no `substitutions`, `typeParamNames`,
-`concreteTypeArgs`, `genericBindings` members), so a capture typed `T` inside a
-generic function cannot be resolved there. That permissive default is the fallback
-— verified, not assumed. Monomorphization lives in codegen:
-`currentTypeSubstitutions` is already used to resolve bare type parameters at
-`src/vre/llvm/cgen_decl.cpp` (lines 361-366) and `src/vre/llvm/cgen_expr.cpp`
-(lines 1237-1244).
+`stdlib/core/aspects.vyb` declares two marker aspects, re-exported by
+`core::prelude` alongside `Display`/`Clone`/`Equatable`:
 
-Options considered for codegen's structural view:
+```
+aspect Handoff  { handoff(self)<Bool>  -> { return true } }
+aspect Viewable { viewable(self)<Bool> -> { return true } }
+```
 
-* a: give codegen a structural view of the type graph (share the semantic
-  registries, or thread them through);
-* b: run the predicate in a helper that takes the registries as parameters, so
-  both passes use one implementation;
-* c: re-run the semantic capability query post-monomorphization through an
-  interface the driver owns.
+No bind is needed for ordinary types — both properties are derived structurally.
+The bind exists for what the derivation cannot see through: an FFI struct holding a
+`ptr<T>`, an opaque C handle, a `loc<T>` carrier.
 
-Taken: **(b)**. (a) remains the follow-up for named struct/enum payloads.
+```
+share(all)
+bind Handoff -> FfiHandle {
+    handoff(self<FfiHandle>)<Bool> -> { return true }
+}
+```
+
+`SemanticAnalyzer::handoffCapability` consults the bind **first**, so the explicit
+claim wins over the computed verdict; `Handoff` implies `Viewable`, and a
+`bind Viewable -> T` is honoured independently. Registration
+(`registerTraitImpl`) computes the structural verdict for the bind's target type
+and, when the curated claim contradicts it, reports a **warning** — a new
+non-fatal diagnostic (`SemanticAnalyzer::addWarning`: printed to stderr, kept in
+`warnings`, no effect on the exit code), because overriding is exactly the point.
+The payload then carries the programmer's guarantee.
+
+Fixtures: `test/threads/test_thread_boundary_curated_bind_accepted.vyb`
+(`@semantic-only`, asserting the compile-time acceptance of a bind for a struct
+holding a `my<Int>`) and `..._curated_bind_absent_rejected.vyb` (the same shape and
+the same site with no bind — the structural verdict, refused). The pair isolates the
+bind as the thing that changes the verdict.
 
 ## Step plan
 
@@ -175,19 +207,19 @@ Taken: **(b)**. (a) remains the follow-up for named struct/enum payloads.
    with the five conditions above, plus the three fixtures.
 2. ~~**step 0 — borrow addressing**~~ — **done**: `borrowTargetPointer`, three
    ownership fixtures.
-3. ~~**(c) shared predicate**~~ — **done**: `vyb::thread_boundary` in
-   `include/vyb/vre/thread_boundary.hpp` + `src/vre/semantic_thread_boundary.cpp`;
-   the member functions are thin wrappers, so the semantic pass is unchanged.
+3. ~~**(c) shared predicate**~~ — **done**: `vyb::thread_boundary` +
+   `Capability`, the member functions thin wrappers.
 4. ~~**(c) codegen call site**~~ — **done**: `checkSpawnHandoffWithSubstitutions`
-   in `src/vre/llvm/cgen_expr.cpp`, invoked from the `CallExpression` visitor for
-   the four spawn intrinsics, with the accepted/rejected generic pair as fixtures.
-   A refusal is flagged as a hard codegen error so the driver refuses to run.
-5. **Remaining** — share the struct/enum registries with codegen so a substituted
-   type parameter standing for a *named* struct or enum is judged too (option (a));
-   `docs/refman/PROGRAMMERS_GUIDE.md` §5 thread-boundary subsection (still
-   outstanding from the issue body); suite count bump.
-6. **Issue hygiene** — post the landed scope on #365; close only when 5 is done
-   *and* the wording question is settled by the drop-semantics row.
+   invoked from the `CallExpression` visitor for the four spawn intrinsics.
+5. ~~**(c) deferral + registries**~~ — **done**: `deferredBoundaryCaptures_` on the
+   analyzer, `deferredBoundaryCapturesFor(fe)` for codegen, `boundaryCapable_` bound
+   from the analyzer in the `LLVMCodegen` constructor.
+6. ~~**curated escape hatch**~~ — **done**: the two marker aspects, the
+   bind-first lookup, the contradiction warning, two fixtures.
+7. **Remaining** — the `docs/refman/PROGRAMMERS_GUIDE.md` thread-boundary
+   subsection (from the issue body), and the wording question, which waits on the
+   drop-semantics-on-propagation row: until a moved value is reliably reclaimed on
+   its new thread, the docs say "accepted for handoff", never "guaranteed safe".
 
 ## Risks / notes
 
@@ -198,9 +230,16 @@ Taken: **(b)**. (a) remains the follow-up for named struct/enum payloads.
   by `recordTheirBorrowInto`, so in practice (b) applies to `their<X>`; `loc<X>`
   stays refused until it has a recorded owner. Stated in the rows rather than
   implied as covered.
-* Codegen-time failures land later in the pipeline than semantic ones, so (c) should
-  report with the same `siteName: …` shape and be fixture-tested both ways.
+* A curated bind is a *claim*, not a proof. The warning is the only check, and it
+  is deliberately non-fatal — the escape hatch is for reviewed bindings, and the
+  responsibility travels with the bind author.
+* Codegen-time failures land later in the pipeline than semantic ones, so (c)
+  reports with the same `siteName: …` shape and is fixture-tested both ways.
 * Lesson recorded for the future: a diagnosis from a *threaded* probe concluded the
   closure capture lowering was at fault; a thread-free, closure-free probe found the
   real defect in `borrow()`/`view()`. Isolate the smallest failing construct before
   writing a scope around an inferred cause.
+* Second lesson, same shape: both codegen-side heuristics for "which captures does
+  codegen own" looked right and were wrong. Ask the pass that has the evidence to
+  *record what it could not decide*, rather than inferring the boundary from type
+  strings.

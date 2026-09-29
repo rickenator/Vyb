@@ -8844,9 +8844,7 @@ llvm::Value* LLVMCodegen::borrowTargetPointer(llvm::Value* operandValue,
 // `mild<T>` -- is resolved exactly as in the semantic pass, which is the case
 // this step exists for.
 vyb::ast::TypeNodePtr LLVMCodegen::substitutedCaptureType(const std::string& name,
-                                                         const vyb::SourceLocation& loc,
-                                                         bool* substituted) {
-    if (substituted) *substituted = false;
+                                                         const vyb::SourceLocation& loc) {
     auto nv = namedValues.find(name);
     if (nv == namedValues.end()) return nullptr;
     auto vt = valueTypeMap.find(nv->second);
@@ -8862,7 +8860,8 @@ vyb::ast::TypeNodePtr LLVMCodegen::substitutedCaptureType(const std::string& nam
     if (resolved == original) {
         return vyb::ast::TypeNodePtr(vt->second->clone().release());
     }
-    if (substituted) *substituted = true;
+    // The type parameter is gone here: judge the concrete type of the
+    // instantiation, which is exactly what the semantic pass could not see.
     return typePatternToTypeNode(TypePattern::parse(resolved), loc);
 }
 
@@ -8871,29 +8870,32 @@ void LLVMCodegen::checkSpawnHandoffWithSubstitutions(ast::FunctionExpression* fe
                                                      const std::string& siteName) {
     if (!fe || !site) return;
 
+    // The semantic pass decided every capture it could and *recorded* the ones it
+    // could not -- a declared type that still mentioned a monomorphization type
+    // parameter (a bare `T`, `our<T>`, `Vec<T>`, ...). Those are this function's
+    // whole job. Re-judging the rest here would be wrong twice over: this pass has
+    // no borrow-root data for rule (b), and the semantic pass already admitted them
+    // on the concrete evidence it had (registries + curated binds).
+    //
+    // The registries come back with the question: boundaryCapable_ is the semantic
+    // analyzer's own predicate, so a substituted type that resolves to a *named*
+    // struct or enum is judged by its fields/variant payloads instead of staying
+    // permissive.
+    auto* sa = driver_.getSemanticAnalyzer();
+    if (!sa) return;
+    const std::vector<std::string>* deferred = sa->deferredBoundaryCapturesFor(fe);
+    if (!deferred || deferred->empty()) return;
+
     std::set<std::string> checked;
-    for (const std::string& cap : fe->capturedVariables) {
+    for (const std::string& cap : *deferred) {
         if (!checked.insert(cap).second) continue;
 
-        // A *written* capture is refused by the semantic pass, and that verdict
-        // does not depend on the resolved type, so compilation never reaches
-        // codegen with one. Only reads are judged here.
-        bool written = false;
-        for (const std::string& mut : fe->mutableCapturedVariables) {
-            if (mut == cap) written = true;
-        }
-        if (written) continue;
-
-        // Only captures whose type actually mentions a substituted parameter are
-        // judged here. Everything else was already decided by the semantic pass,
-        // which also owns rule (b) and the struct/enum registries -- re-judging a
-        // plain `their<T>` capture here would refuse the very case rule (b)
-        // admits, because codegen has neither the root-owner data nor the
-        // registries.
-        bool substitutedType = false;
-        vyb::ast::TypeNodePtr ty = substitutedCaptureType(cap, site->loc, &substitutedType);
-        if (!ty || !substitutedType) continue;
-        if (thread_boundary::handoffCapable(ty.get(), nullptr, nullptr)) continue;
+        vyb::ast::TypeNodePtr ty = substitutedCaptureType(cap, site->loc);
+        if (!ty) continue;  // no recorded type for the capture: stay permissive
+        const bool capable = boundaryCapable_
+                                 ? boundaryCapable_(ty.get())
+                                 : thread_boundary::handoffCapable(ty.get(), nullptr, nullptr);
+        if (capable) continue;
 
         // This is a hard codegen error, like the #251 enum-payload check: the IR
         // this program would produce must never be linked or run, so flag it for

@@ -79,69 +79,81 @@ namespace thread_boundary {
 // The structural capability predicate (see the header for the contract).
 //
 // Rules, in order:
-//   * no type / raw pointer            -> no
-//   * my<T>, their<T>, loc<T>, ptr<T>  -> no (unique owner or borrowed address,
-//       and for `loc<T>` the address belongs to the defining frame)
-//   * our<T>, mild<T>                  -> yes iff T is (shared ownership is
+//   * no type / raw pointer            -> NotCapable
+//   * my<T>, their<T>, loc<T>, ptr<T>  -> NotCapable (unique owner or borrowed
+//       address, and for `loc<T>` the address belongs to the defining frame)
+//   * our<T>, mild<T>                  -> Capable iff T is (shared ownership is
 //       safe to hand over, but a shared owner of a unique owner is not)
-//   * Vec<T>, [T], T?, future<T>, tuple -> yes iff every payload is
-//   * Result<T, E>, Pair<A, B>, ...    -> yes iff every generic argument is
-//   * a known enum                     -> yes iff every variant payload is
-//   * a known struct                   -> yes iff every field is
-//   * a plain value type               -> yes
-//   * anything unresolved (a type parameter `T`, an opaque handle, or a named
-//       struct/enum when no registry was supplied) -> yes, conservatively: the
-//       gate is error-only and must not reject programs it cannot reason about.
-bool handoffCapable(const ast::TypeNode* type,
-                    const StructFieldRegistry* structs,
-                    const EnumPayloadRegistry* enums) {
-    if (!type) return false;
-    if (dynamic_cast<const ast::PointerType*>(type)) return false;
+//   * Vec<T>, [T], T?, future<T>, tuple -> iff every payload is
+//   * Result<T, E>, Pair<A, B>, ...    -> iff every generic argument is
+//   * a known enum                     -> iff every variant payload is
+//   * a known struct                   -> iff every field is
+//   * a plain value type               -> Capable
+//   * anything neither registry knows  -> Undecidable (a type parameter before
+//       monomorphization, or an opaque handle in either pass). The semantic pass
+//       DEFERS those captures to codegen rather than admitting them silently;
+//       codegen judges the substituted type with the same registries and stays
+//       permissive only if it is still undecidable. The gate is error-only and
+//       must never reject a program it cannot reason about.
+Capability capability(const ast::TypeNode* type,
+                      const StructFieldRegistry* structs,
+                      const EnumPayloadRegistry* enums) {
+    using C = Capability;
+
+    if (!type) return C::NotCapable;
+    if (dynamic_cast<const ast::PointerType*>(type)) return C::NotCapable;
 
     const std::string ts = type->toString();
     const std::string base = baseNameOf(ts);
 
-    if (base == "my" || base == "their" || base == "loc" || base == "ptr") return false;
+    if (base == "my" || base == "their" || base == "loc" || base == "ptr") return C::NotCapable;
     if (base == "our" || base == "mild") {
         const auto args = namedTypeArgs(type);
-        if (args.empty()) return false;
+        if (args.empty()) return C::Undecidable;
+        bool undecidable = false;
         for (const auto* a : args) {
-            if (!handoffCapable(a, structs, enums)) return false;
+            const C c = capability(a, structs, enums);
+            if (c == C::NotCapable) return C::NotCapable;
+            if (c == C::Undecidable) undecidable = true;
         }
-        return true;
+        return undecidable ? C::Undecidable : C::Capable;
     }
+
+    // A list of payload types is capable iff every payload is, and undecidable as
+    // soon as one payload is -- the aggregate never guesses.
+    auto aggregate = [&](const std::vector<const ast::TypeNode*>& payloads) -> C {
+        bool undecidable = false;
+        for (const auto* p : payloads) {
+            const C c = capability(p, structs, enums);
+            if (c == C::NotCapable) return C::NotCapable;
+            if (c == C::Undecidable) undecidable = true;
+        }
+        return undecidable ? C::Undecidable : C::Capable;
+    };
 
     if (auto* v = dynamic_cast<const ast::VecType*>(type)) {
-        return handoffCapable(v->elementType.get(), structs, enums);
+        return capability(v->elementType.get(), structs, enums);
     }
     if (auto* a = dynamic_cast<const ast::ArrayType*>(type)) {
-        return handoffCapable(a->elementType.get(), structs, enums);
+        return capability(a->elementType.get(), structs, enums);
     }
     if (auto* f = dynamic_cast<const ast::FutureType*>(type)) {
-        return handoffCapable(f->resultType.get(), structs, enums);
+        return capability(f->resultType.get(), structs, enums);
     }
     if (auto* t = dynamic_cast<const ast::TupleTypeNode*>(type)) {
-        for (const auto& m : t->memberTypes) {
-            if (!handoffCapable(m.get(), structs, enums)) return false;
-        }
-        return true;
+        std::vector<const ast::TypeNode*> members;
+        for (const auto& m : t->memberTypes) members.push_back(m.get());
+        return aggregate(members);
     }
-
-    // Optional is usually parsed as a TypeName carrying one generic argument
-    // (`Int?`), but both spellings are handled.
     if (auto* o = dynamic_cast<const ast::OptionalType*>(type)) {
-        return handoffCapable(o->containedType.get(), structs, enums);
+        return capability(o->containedType.get(), structs, enums);
     }
 
+    // Any other generic named type (`Result<T, E>`, `Pair<A, B>`, a user generic
+    // struct/enum): structural over its arguments.
     {
         const auto args = namedTypeArgs(type);
-        if (!args.empty()) {
-            // Any other generic named type (Result<T, E>, Pair<A, B>, a user
-            // generic struct/enum): structural over its arguments.
-            for (const auto* a : args) {
-                if (!handoffCapable(a, structs, enums)) return false;
-            }
-        }
+        if (!args.empty()) return aggregate(args);
     }
 
     // Enums: keyed by the concrete type string (`Box<Int>`) or the bare name.
@@ -149,12 +161,11 @@ bool handoffCapable(const ast::TypeNode* type,
         auto eit = enums->find(ts);
         if (eit == enums->end()) eit = enums->find(base);
         if (eit != enums->end()) {
+            std::vector<const ast::TypeNode*> payloads;
             for (const auto& variant : eit->second) {
-                for (const auto& payload : variant.second) {
-                    if (!handoffCapable(payload.get(), structs, enums)) return false;
-                }
+                for (const auto& payload : variant.second) payloads.push_back(payload.get());
             }
-            return true;
+            return aggregate(payloads);
         }
     }
 
@@ -163,18 +174,24 @@ bool handoffCapable(const ast::TypeNode* type,
         auto sit = structs->find(ts);
         if (sit == structs->end()) sit = structs->find(base);
         if (sit != structs->end()) {
-            for (const auto& field : sit->second) {
-                if (!handoffCapable(field.second, structs, enums)) return false;
-            }
-            return true;
+            std::vector<const ast::TypeNode*> fields;
+            for (const auto& field : sit->second) fields.push_back(field.second);
+            return aggregate(fields);
         }
     }
 
-    if (isPlainValueType(base)) return true;
+    if (isPlainValueType(base)) return C::Capable;
 
-    // Unresolved named type (type parameter, opaque handle, or a named struct or
-    // enum while no registry was supplied): stay permissive.
-    return true;
+    // A named type neither registry knows: a type parameter before
+    // monomorphization, or an opaque handle in either pass. Undecidable -- the
+    // semantic pass defers it to codegen, and codegen stays permissive.
+    return C::Undecidable;
+}
+
+bool handoffCapable(const ast::TypeNode* type,
+                    const StructFieldRegistry* structs,
+                    const EnumPayloadRegistry* enums) {
+    return capability(type, structs, enums) == Capability::Capable;
 }
 
 // May a second thread read a value of this type without taking ownership?
@@ -198,11 +215,30 @@ bool viewable(const ast::TypeNode* type,
 
 // Semantic-pass entry points: thin wrappers that hand the predicate the
 // registries this pass built while walking the AST.
-bool SemanticAnalyzer::handoffCapable(const ast::TypeNode* type) const {
-    return thread_boundary::handoffCapable(type, &structFieldTypes, &enumVariantPayloadTypes);
+//
+// A curated bind short-circuits both: `bind Handoff -> T` is the reviewed escape
+// hatch for a shape the structural derivation rejects (an FFI struct holding a
+// `ptr<T>`, an opaque handle), so the explicit claim wins. Registration reports
+// the contradiction as a warning (registerTraitImpl), which keeps the override
+// honest without making it impossible.
+thread_boundary::Capability SemanticAnalyzer::handoffCapability(const ast::TypeNode* type) {
+    if (!type) return thread_boundary::Capability::NotCapable;
+    // The curated claim is a decision, not a deferral: the bind author has
+    // spoken for the type regardless of what the derivation can see.
+    if (hasAspectBinding(type->toString(), "Handoff")) return thread_boundary::Capability::Capable;
+    return thread_boundary::capability(type, &structFieldTypes, &enumVariantPayloadTypes);
 }
 
-bool SemanticAnalyzer::viewable(const ast::TypeNode* type) const {
+bool SemanticAnalyzer::handoffCapable(const ast::TypeNode* type) {
+    return handoffCapability(type) == thread_boundary::Capability::Capable;
+}
+
+bool SemanticAnalyzer::viewable(const ast::TypeNode* type) {
+    if (!type) return false;
+    const std::string ts = type->toString();
+    // `Handoff` implies `Viewable`: a value that may be handed over may also be
+    // read by another thread.
+    if (hasAspectBinding(ts, "Viewable") || hasAspectBinding(ts, "Handoff")) return true;
     return thread_boundary::viewable(type, &structFieldTypes, &enumVariantPayloadTypes);
 }
 
@@ -214,25 +250,27 @@ bool SemanticAnalyzer::viewable(const ast::TypeNode* type) const {
 // `my<X>` moves the heap object into it). A `mild<X>` (weak) capture does not
 // keep the payload alive on its own, and a plain by-value owner hands the
 // closure a copy -- neither qualifies.
-bool SemanticAnalyzer::mayCrossBoundaryWithRetainedOwner(const std::string& captureName,
-                                                        const ast::TypeNode* captureType,
-                                                        const ast::FunctionExpression* fe) const {
-    if (!captureType || !fe) return false;
+thread_boundary::Capability
+SemanticAnalyzer::mayCrossBoundaryWithRetainedOwner(const std::string& captureName,
+                                                    const ast::TypeNode* captureType,
+                                                    const ast::FunctionExpression* fe) {
+    using C = thread_boundary::Capability;
+    if (!captureType || !fe) return C::NotCapable;
 
     // 1. The capture is a borrow (`their<X>` / `view<X>` / `borrow<X>`).
     const std::string base = baseNameOf(captureType->toString());
-    if (base != "their" && base != "view" && base != "borrow") return false;
+    if (base != "their" && base != "view" && base != "borrow") return C::NotCapable;
 
     // 2. The closure does not write it. A written borrow reaches this function
     //    only through the mutable-capture list, which is reported separately;
     //    be explicit here so the rule stands on its own.
     for (const std::string& cap : fe->mutableCapturedVariables) {
-        if (cap == captureName) return false;
+        if (cap == captureName) return C::NotCapable;
     }
 
     // 3. The closure also captures the owner the borrow came from.
     auto rootIt = theirVarRoot_.find(captureName);
-    if (rootIt == theirVarRoot_.end() || rootIt->second.empty()) return false;
+    if (rootIt == theirVarRoot_.end() || rootIt->second.empty()) return C::NotCapable;
     const std::string& ownerName = rootIt->second;
     bool capturesOwner = false;
     for (const std::string& cap : fe->capturedVariables) {
@@ -241,23 +279,28 @@ bool SemanticAnalyzer::mayCrossBoundaryWithRetainedOwner(const std::string& capt
     for (const std::string& cap : fe->mutableCapturedVariables) {
         if (cap == ownerName) capturesOwner = true;
     }
-    if (!capturesOwner) return false;
+    if (!capturesOwner) return C::NotCapable;
 
     // 4. That owner carries strong ownership, so the closure keeps it alive.
     SymbolInfo* ownerSym = currentScope ? currentScope->lookup(ownerName) : nullptr;
-    if (!ownerSym || !ownerSym->type) return false;
+    if (!ownerSym || !ownerSym->type) return C::NotCapable;
     const std::string ownerBase = baseNameOf(ownerSym->type->toString());
-    if (ownerBase != "our" && ownerBase != "my") return false;
-    if (!handoffCapable(ownerSym->type.get())) return false;
+    if (ownerBase != "our" && ownerBase != "my") return C::NotCapable;
+    const C ownerCap = handoffCapability(ownerSym->type.get());
+    if (ownerCap == C::NotCapable) return C::NotCapable;
+    if (ownerCap == C::Undecidable) return C::Undecidable;
 
     // 5. The borrowed payload is itself handoff-capable, so concurrent reads of
     //    it are race-free by construction.
     const auto args = namedTypeArgs(captureType);
-    if (args.empty()) return false;
+    if (args.empty()) return C::NotCapable;
+    bool undecidable = false;
     for (const auto* a : args) {
-        if (!handoffCapable(a)) return false;
+        const C c = handoffCapability(a);
+        if (c == C::NotCapable) return C::NotCapable;
+        if (c == C::Undecidable) undecidable = true;
     }
-    return true;
+    return undecidable ? C::Undecidable : C::Capable;
 }
 
 // Reject a closure handed to another thread that captures anything it may not.
@@ -286,7 +329,8 @@ void SemanticAnalyzer::checkThreadBoundaryCaptures(ast::FunctionExpression* fe,
         SymbolInfo* csym = currentScope ? currentScope->lookup(cap) : nullptr;
         if (!csym || !csym->type) continue;
         const ast::TypeNode* ty = csym->type.get();
-        if (handoffCapable(ty)) continue;
+        const thread_boundary::Capability capC = handoffCapability(ty);
+        if (capC == thread_boundary::Capability::Capable) continue;
 
         // Rule (b): a read-only borrow may cross when the closure also captures
         // the owner it borrows from, so the closure environment keeps the
@@ -296,7 +340,21 @@ void SemanticAnalyzer::checkThreadBoundaryCaptures(ast::FunctionExpression* fe,
         // letting a read-only borrow through unconditionally reopened the
         // dangling read pinned by `test/ownership/thread_send_their.vyb` (#149).
         // See doc/THREAD_BOUNDARY_SCOPE.md.
-        if (mayCrossBoundaryWithRetainedOwner(cap, ty, fe)) continue;
+        const thread_boundary::Capability retained = mayCrossBoundaryWithRetainedOwner(cap, ty, fe);
+        if (retained == thread_boundary::Capability::Capable) continue;
+
+        // Nothing to decide here: the type still mentions a monomorphization type
+        // parameter (or the owner/payload does), so the verdict belongs to codegen,
+        // which holds the substitutions. Record the capture against the closure
+        // node -- codegen sees the same node -- and report nothing now. This is
+        // what keeps the two passes from disagreeing: a capture the semantic pass
+        // *can* decide (including the rule-(b) admission above) is never re-judged
+        // at codegen, and one it cannot is never silently admitted.
+        if (capC == thread_boundary::Capability::Undecidable ||
+            retained == thread_boundary::Capability::Undecidable) {
+            deferredBoundaryCaptures_[fe].push_back(cap);
+            continue;
+        }
 
         const std::string ts = ty->toString();
         addError(siteName + ": '" + cap + "' is " + ts +
@@ -304,6 +362,17 @@ void SemanticAnalyzer::checkThreadBoundaryCaptures(ast::FunctionExpression* fe,
                      "Hand it off as shared ownership (our(" + cap + ")) or pass a copy.",
                  site);
     }
+}
+
+// Codegen asks by the closure node it is lowering. The semantic pass and codegen
+// walk one shared AST, so the pointer matches; a closure that was never checked
+// returns null and codegen judges nothing (permissive), which is the same shape
+// as a build that stops before codegen (`--semantic-only`, doc generation).
+const std::vector<std::string>*
+SemanticAnalyzer::deferredBoundaryCapturesFor(const ast::FunctionExpression* fe) const {
+    if (!fe) return nullptr;
+    auto it = deferredBoundaryCaptures_.find(fe);
+    return it == deferredBoundaryCaptures_.end() ? nullptr : &it->second;
 }
 
 } // namespace vyb

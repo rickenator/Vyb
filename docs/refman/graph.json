@@ -1,5 +1,5 @@
 {
-  "git_rev": "e83270fa71364b49f1af0c9b95369d58733358ab",
+  "git_rev": "4c532adf52c846d15978f68501cfd1dd54b34cd5",
   "modules": [
     "agents",
     "archive",
@@ -107,7 +107,7 @@
           "stdlib/core/prelude.vyb",
           "stdlib/core/result.vyb"
         ],
-        "exported": 32,
+        "exported": 34,
         "fan_in": 2,
         "fan_out": 0
       },
@@ -499,6 +499,8 @@
           "Equatable",
           "Hashable",
           "Comparable",
+          "Handoff",
+          "Viewable",
           "Display->Int",
           "Display->Float",
           "Display->Bool",
@@ -2421,6 +2423,15 @@
         "fan_in": 0
       },
       {
+        "name": "Handoff",
+        "module": "core",
+        "file": "stdlib/core/aspects.vyb",
+        "kind": "aspect",
+        "signature": "aspect Handoff {",
+        "summary": "",
+        "fan_in": 0
+      },
+      {
         "name": "Hashable",
         "module": "core",
         "file": "stdlib/core/aspects.vyb",
@@ -2489,6 +2500,15 @@
         "file": "stdlib/core/aspects.vyb",
         "kind": "bind",
         "signature": "bind StringOps -> String {",
+        "summary": "",
+        "fan_in": 0
+      },
+      {
+        "name": "Viewable",
+        "module": "core",
+        "file": "stdlib/core/aspects.vyb",
+        "kind": "aspect",
+        "signature": "aspect Viewable {",
         "summary": "",
         "fan_in": 0
       },
@@ -8411,7 +8431,25 @@
       "from_module": "core",
       "from_symbol": "",
       "to_module": "core",
+      "to_symbol": "Handoff",
+      "reexport": true,
+      "resolved": true
+    },
+    {
+      "type": "import",
+      "from_module": "core",
+      "from_symbol": "",
+      "to_module": "core",
       "to_symbol": "Hashable",
+      "reexport": true,
+      "resolved": true
+    },
+    {
+      "type": "import",
+      "from_module": "core",
+      "from_symbol": "",
+      "to_module": "core",
+      "to_symbol": "Viewable",
       "reexport": true,
       "resolved": true
     },

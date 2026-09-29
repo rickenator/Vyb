@@ -1,0 +1,32 @@
+// @test: without a curated bind, a struct holding a unique owner is refused
+// @description: The negative control for test_thread_boundary_curated_bind_accepted.vyb:
+//   the same shape, the same spawn site, and no `bind Handoff` -- so the structural
+//   derivation has the last word (`Held` holds a `my<Int>`) and the capture is
+//   refused before any thread is created. Together the pair isolates the curated
+//   bind as the thing that changes the verdict, not the shape or the site.
+// @category: threads, thread-boundary, ownership, diagnostics
+// @expect: fail
+// @expect-error: not handoff-capable
+// @env: VYB_STDLIB=stdlib
+
+import threads::{thread_spawn, thread_join}
+
+struct Held {
+    n: my<Int>
+}
+
+with_handle(h<Held>)<Int> -> {
+    th<Int> = thread_spawn(|| -> {
+        seen<Held> = h
+        return 0
+    }) else -1
+    if (th < 0) { return 2 }
+
+    joined<Int> = thread_join(th) else -3
+    return joined
+}
+
+main()<Int> -> {
+    inner<my<Int>> = my(3)
+    return with_handle(Held { n = inner })
+}

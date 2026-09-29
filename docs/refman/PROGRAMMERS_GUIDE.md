@@ -167,7 +167,7 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 ### Running the test suite
 
 ```bash
-# 1218 .vyb tests exercised through compile + run + output/return checks
+# 1221 .vyb tests exercised through compile + run + output/return checks
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test
 ```
 
@@ -876,9 +876,13 @@ lexical and scope-based, not a general lifetime/region model:
 - **No mutation while borrowed.** Assigning to a value with an active borrow is
   rejected, as are overlapping mutable borrows.
 - **`my<T>` moves; use-after-move is rejected.**
-- **Thread boundary.** A `thread_spawn` closure must not capture `my<T>` or
-  `their<T>` state; only ref-counted `our<T>` or by-value copies may cross a
-  thread boundary.
+- **Thread boundary.** A closure handed to `thread_spawn`/`task_spawn`/
+  `async_spawn`/`agent_start` must not capture state that cannot cross an OS
+  thread boundary — a unique owner (`my<T>`), a borrow (`their<T>`/`loc<T>`),
+  a raw pointer, or a composite holding one. Only shared ownership (`our<T>`/
+  `mild<T>`), plain values, and composites of those may cross. The rule is
+  structural and applies to every field and variant payload, not just the
+  top-level type name; §5 spells out the whole capability.
 
 `mild<T>` exists to break reference cycles (tree parents, observer
 registries, caches) without preventing cleanup — see
@@ -2560,6 +2564,85 @@ be explicit: channels (`chan_free`), mutexes/condvars/atomics
 release automatically at last drop; leaked handles are a bug in user code, not
 the runtime.
 
+### Thread-boundary capability (`handoff` / `viewable`)
+
+Handing a closure to `thread_spawn`, `task_spawn`, `async_spawn` or
+`agent_start` moves its environment off the spawner's OS thread, so every
+capture has to be capable of crossing that boundary. Vyb derives the capability
+**structurally** from the type graph; there is no trait to implement for
+ordinary types.
+
+| Shape | `handoff` | Notes |
+|---|---|---|
+| `Int`, `Float`, `Bool`, `Char`, `String` | ✅ | `String`'s heap registry uses atomic refcounts |
+| `Vec<T>`, `[T]`, `T?`, `future<T>`, tuples, `Result<T,E>` | iff every payload | |
+| `our<T>`, `mild<T>` | iff `T` is | shared ownership retains through the handoff |
+| struct / enum | iff every field / variant payload | |
+| `my<T>` | ❌ | a unique owner must not be in two threads' ownership at once |
+| `their<T>`, `loc<T>` | ❌ | a borrow addresses the spawner's frame |
+| raw pointer (`ptr<T>`, `#[repr(C)]` FFI, `loc<T>` carriers) | ❌ | |
+| closure | iff every capture is, and no capture is mutable | a mutable capture stores the *address* of the outer variable |
+
+Because the rule is structural, a `Vec<my<Int>>`, a struct with a `my<T>` field,
+or a `T?` over a borrow are all refused — the check walks fields and variant
+payloads, not just the declared type name. A *mutable* capture is refused
+regardless of the variable's type, because it holds the defining frame's
+address; capture by value, or share it as `our(x)`.
+
+Two Vyb-specific refinements over Rust's `Send`/`Sync`:
+
+* **`viewable` is the read-only relation.** `view(x)` (a read-only borrow) may
+  be held by several threads; a mutable `borrow(x)` never crosses a boundary
+  automatically — mutation across threads goes through `mutex_*`/`atomic_*`
+  handles explicitly.
+* **A retained owner keeps a borrow alive.** A closure may capture a read-only
+  borrow `their<X>` when it *also* captures the owner it borrows from through
+  **strong** ownership (`our<X>` or `my<X>`): the closure environment then holds
+  the payload for its whole run. `mild<X>` is weak and does not qualify, and
+  `view(x)` alone does not relax a spawn site — a borrow still addresses the
+  spawner's frame.
+
+**Generics resolve where the evidence is.** The semantic pass runs before
+monomorphization, so a capture whose type still names a type parameter cannot be
+judged there; the compiler *records* it and judges it at code generation, once
+the type is concrete. That is why a generic function can be accepted at one
+instantiation and refused at another:
+
+```vyb
+spawn_shared<T>(s<our<T>>)<Int> -> {
+    h = thread_spawn(|| -> { held = s; return 0 }) else -1
+    ...
+}
+spawn_shared(our(9))          # our<Int>        -- accepted
+spawn_shared(our(my(3)))      # our<my<Int>>    -- refused
+```
+
+**Curated escape hatch.** For shapes the derivation cannot see through — an FFI
+struct holding a `ptr<T>`, an opaque C handle, a `loc<T>` carrier — a reviewed
+bind can state the claim explicitly:
+
+```vyb
+import core::aspects
+
+bind Handoff -> FfiHandle {
+    handoff(self<FfiHandle>)<Bool> -> { return true }
+}
+```
+
+The explicit bind wins over the computed verdict, and the compiler reports the
+contradiction as a **warning** rather than an error, because overriding is the
+point; `Handoff` implies `Viewable`. The payload is then the bind author's
+guarantee, and that is the reviewable artefact to point at.
+
+**Wording.** The gate is an error-only check and says "not handoff-capable" —
+*accepted for handoff*, not "guaranteed safe". A moved value's reclamation on
+`fail`/`trap` propagation paths is still tracked separately, so the compiler is
+declining to accept something it cannot keep alive, not promising that everything
+it accepts is leak-free.
+
+Scope and measurements: `doc/THREAD_BOUNDARY_SCOPE.md`. Fixtures:
+`test/threads/test_thread_boundary_*.vyb`.
+
 ---
 
 ## 6. Networking cookbook
@@ -2658,7 +2741,7 @@ runtime points a single process at a list of tests if needed.
 Canonical suite runner — a Vyb program (`test/run_tests.vyb`), wired into CTest
 as `run-tests`:
 ```bash
-./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1218 tests)
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1221 tests)
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --category async  # filter by category
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --json results.json --evidence evidence.json
 ```
@@ -2908,6 +2991,7 @@ key/seed material on the GPU. Crypto/ledger integration stays host-side.
 | websocket | [`websocket`](websocket.md) | — |
 | Runtime intrinsics | [`runtime`](runtime.md) | — |
 <!-- refman:api-index end -->
+
 
 
 

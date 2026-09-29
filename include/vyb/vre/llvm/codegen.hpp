@@ -138,6 +138,15 @@ private:
     // Bound to the semantic analyzer's TypeTable query (#223). null when no
     // analyzer is registered (fallback to node->type above keeps it working).
     std::function<std::shared_ptr<vyb::ast::TypeNode>(const vyb::ast::Node*)> nodeTypeOf_;
+
+    // Thread-boundary capability (#365 step (c)): bound to the semantic analyzer,
+    // so codegen asks the question with the registries the semantic pass owns
+    // (struct fields, enum variant payloads) and its curated `bind Handoff -> T`
+    // overrides -- the predicate itself is the same implementation in
+    // vyb/vre/thread_boundary.hpp. Null in test/JIT paths with no analyzer, where
+    // codegen falls back to the registry-free predicate (permissive for named
+    // types).
+    std::function<bool(const vyb::ast::TypeNode*)> boundaryCapable_;
     std::unique_ptr<llvm::LLVMContext> context;
     std::unique_ptr<llvm::Module> module;
     std::unique_ptr<llvm::IRBuilder<>> builder;
@@ -714,13 +723,11 @@ private:
                                            vyb::ast::Node* site,
                                            const std::string& siteName);
     // The substituted type of a capture at this point in codegen, or null when
-    // codegen has no recorded type for it. `substituted` is set true only when a
-    // type parameter was actually replaced: a capture whose declared type carries
-    // no parameter was already judged by the semantic pass, which owns rule (b)
-    // and the registries, so codegen must not re-judge it with less information.
+    // codegen has no recorded type for it. Used by the deferred thread-boundary
+    // check: the semantic pass recorded which captures it could not decide, and
+    // this resolves each of those to the concrete type of the instantiation.
     vyb::ast::TypeNodePtr substitutedCaptureType(const std::string& name,
-                                                const vyb::SourceLocation& loc,
-                                                bool* substituted = nullptr);
+                                                const vyb::SourceLocation& loc);
 
     // Retain an `our`/`mild` refcount control block: bump the strong (our) or
     // weak (mild) count on the shared block so a new storage location that will

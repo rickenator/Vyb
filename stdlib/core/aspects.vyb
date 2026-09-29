@@ -39,6 +39,36 @@ aspect Comparable : Equatable {
 }
 
 # ---------------------------------------------------------------------------
+# Thread-boundary capability aspects (#365).
+#
+# Both properties are derived *structurally* by the compiler (see
+# doc/THREAD_BOUNDARY_SCOPE.md), so no bind is needed for ordinary types: shared
+# ownership, value types and composites of those are handoff-capable, unique
+# owners and borrows are not. These aspects exist so a type the derivation cannot
+# see through -- an FFI struct holding a `ptr<T>`, an opaque C handle, a `loc<T>`
+# carrier -- can make an explicit, reviewable claim:
+#
+#     share(all)
+#     bind Handoff -> FfiHandle {
+#         handoff(self<FfiHandle>)<Bool> -> { return true }
+#     }
+#
+# The explicit bind wins over the computed verdict (the curated escape hatch), and
+# registration reports a contradiction as a warning rather than an error, because
+# overriding is the point. `Handoff` implies `Viewable`.
+# ---------------------------------------------------------------------------
+
+share(all)
+aspect Handoff {
+    handoff(self)<Bool> -> { return true }
+}
+
+share(all)
+aspect Viewable {
+    viewable(self)<Bool> -> { return true }
+}
+
+# ---------------------------------------------------------------------------
 # Standard implementations for built-in scalar types.
 #
 # These pre-wired binds let the core contracts work out of the box for the
