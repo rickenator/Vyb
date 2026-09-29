@@ -401,7 +401,10 @@ public:
     bool viewable(const ast::TypeNode* type) const;
     // Enforce the thread boundary for the closure argument at a spawn site:
     // reports every capture that is not handoff-capable, and every mutable
-    // capture (which holds the defining frame's address).
+    // capture (which holds the defining frame's address). A read-only borrow is
+    // not admitted even when its owner is retained: rule (b) is scoped in
+    // doc/THREAD_BOUNDARY_SCOPE.md but blocked on the
+    // closure-capture lowering, which mis-reads a captured `their<T>`.
     void checkThreadBoundaryCaptures(ast::FunctionExpression* fe, ast::Node* site,
                                      const std::string& siteName);
     bool areTypesCompatible(ast::TypeNode* typeA, ast::TypeNode* typeB); // Added

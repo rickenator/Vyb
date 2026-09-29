@@ -204,15 +204,21 @@ void SemanticAnalyzer::checkThreadBoundaryCaptures(ast::FunctionExpression* fe,
         if (!csym || !csym->type) continue;
         const ast::TypeNode* ty = csym->type.get();
         if (handoffCapable(ty)) continue;
-        // `viewable` deliberately does NOT relax this site. A borrow
+        // `viewable` deliberately does NOT relax this site on its own. A borrow
         // (`their<T>` / `loc<T>`) addresses the *spawner's frame*: the borrow
         // model is lexical, so nothing proves the frame outlives a detached
-        // thread's read, and letting a read-only borrow through would reopen the
-        // dangling read that `test/ownership/thread_send_their.vyb` pins (#149).
-        // `viewable` answers a narrower question -- "may a second thread read
-        // this value?" -- and is the relation a `view(x)` site elsewhere should
-        // ask; at a spawn site ownership must transfer (handoff), so a borrow is
-        // rejected whether or not it is read-only.
+        // thread's read, and letting a read-only borrow through unconditionally
+        // would reopen the dangling read that
+        // `test/ownership/thread_send_their.vyb` pins (#149).
+        //
+        // Rule (b) -- admitting a read-only borrow whose owner the closure also
+        // captures -- is *scoped but not landed*: with the owner retained the
+        // lifetime argument holds, but the closure-capture lowering reads a
+        // captured `their<T>` as the address rather than through it, so the
+        // borrow still produces garbage in the thread (probe:
+        // `thread: ro.n=99157966951504` while `hold.n=7`). Landing (b) requires
+        // fixing that capture lowering first; see
+        // doc/THREAD_BOUNDARY_SCOPE.md.
 
         const std::string ts = ty->toString();
         addError(siteName + ": '" + cap + "' is " + ts +

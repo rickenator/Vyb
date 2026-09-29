@@ -1,0 +1,35 @@
+// @test: thread boundary rejects a read-only view even with the owner retained
+// @description: Rule (b) -- admitting a read-only borrow whose owner the closure
+//   also captures -- is scoped (.hermes/plans/365-viewable-handoff-scope.md) but
+//   NOT landed: with the owner retained the lifetime argument holds, yet the
+//   closure-capture lowering reads a captured `their<T>` as the address rather
+//   than through it, so the borrow still yields garbage in the thread (probe:
+//   `thread: ro.n=99157966951504` while `hold.n=7`). Until that lowering is
+//   fixed, this capture stays refused; when it is fixed this fixture flips to
+//   accepted.
+// @category: threads, ownership, diagnostics, thread-boundary, viewable
+// @expect: fail
+// @expect-error: not handoff-capable
+// @semantic-only: true
+// @env: VYB_STDLIB=stdlib
+
+import threads::{thread_spawn, thread_join}
+
+struct Reading {
+    n: Int,
+    label: String
+}
+
+main()<Int> -> {
+    owner<our<Reading>> = our(Reading { n = 7, label = "held" })
+    ro<their<Reading>> = view(owner)
+
+    th<Int> = thread_spawn(|| -> {
+        # The owner is retained, but the borrow capture itself is still refused.
+        hold<our<Reading>> = owner
+        return ro.n + hold.n
+    }) else -1
+    if (th < 0) { return 2 }
+    j<Int> = thread_join(th) else -1
+    return 0
+}
