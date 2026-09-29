@@ -9,7 +9,7 @@
 // @env: VYB_STDLIB=stdlib
 
 import asyncs::{async_spawn, async_await}
-import tasks::{task_spawn, task_await}
+import tasks::{task_spawn, task_await, task_free}
 
 main()<Int> -> {
     shared<our<Int>> = our(4)
@@ -28,6 +28,10 @@ main()<Int> -> {
     if (t < 0) { return 3 }
     gotT<Int> = task_await(t)
     if (gotT != 7) { return 4 }
+    # The documented contract: reclaim the task handle once the value is in
+    # (otherwise the result channel is retained and the ASan/LeakSanitizer leg
+    # reports it, as it did for the first cut of this fixture).
+    task_free(t)
 
     println("ok")
     return 0
