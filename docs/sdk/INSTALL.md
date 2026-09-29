@@ -3,32 +3,32 @@
 The SDK ships as a per-platform tarball: `vyb-sdk-<version>-<os>-<arch>.tar.gz`.
 The supported matrix is:
 
-| Target | Artifact suffix |
-| --- | --- |
-| Linux / x86_64 | `linux-x86_64` |
-| macOS / arm64 | `macos-aarch64` |
+| Target | Artifact suffix | Shipped? |
+| --- | --- | --- |
+| Linux / x86_64 | `linux-x86_64` | ✅ shipped on every release |
+| macOS | `macos-x86_64` / `macos-aarch64` | ❌ **not shipped** — the runtime's async/fibre layer uses Linux-only `ucontext` context-switch routines and the `pipe2` syscall, so the release workflow cannot build the runtime on macOS. No macOS artifact exists on any release; a macOS port is a separate runtime effort, not a packaging gap |
 
 ## Steps
 
-1. **Download** the tarball matching your OS/arch from the release, plus its
-   `.manifest.json` and `.sha256` (attached to the same release).
+1. **Download** the tarball matching your OS/arch from the release page. The
+   release attaches the tarball; the `manifest.json` describing its contents
+   (per-file sha256 digests included) is **inside** the tarball.
 
-2. **Verify integrity**:
-
-   ```bash
-   # compare against the recorded digest (per-file sha256 in the manifest)
-   sha256sum vyb-sdk-<version>-<os>-<arch>.tar.gz
-   # and, once extracted, re-check the manifest's per-file digests:
-   python3 -c "import json; m=json.load(open('manifest.json')); import hashlib,os; \
-   [print(('OK ' if hashlib.sha256(open(f,'rb').read()).hexdigest()==d else 'BAD ')+f) \
-   for f in map(lambda e:e['path'],m['files'])]" 2>/dev/null | grep BAD || echo "all files match manifest"
-   ```
-
-3. **Extract** to a location of your choice:
+2. **Extract** to a location of your choice:
 
    ```bash
    tar -xzf vyb-sdk-<version>-<os>-<arch>.tar.gz
    cd vyb-sdk-<version>
+   ```
+
+3. **Verify integrity** — the tarball digest, then every file against the
+   `manifest.json` shipped inside the tarball (it records a sha256 per file):
+
+   ```bash
+   sha256sum ../vyb-sdk-<version>-<os>-<arch>.tar.gz
+   python3 -c "import json,hashlib; m=json.load(open('manifest.json')); \
+   [print(('BAD ' if hashlib.sha256(open(e['path'],'rb').read()).hexdigest()!=e['sha256'] else 'OK ')+e['path']) \
+   for e in m['files']]" | grep BAD || echo "all files match manifest"
    ```
 
 4. **Set up the environment** by sourcing `env.sh` (adds `bin/` to `PATH` and
