@@ -1,0 +1,36 @@
+// @test: codegen refuses a generic capture instantiated at a struct holding a unique owner
+// @description: The named-struct half of #365 step (c). The semantic pass sees only
+//   the type parameter `T` in this generic function and cannot decide: `T` is an
+//   unresolved name, so the descriptor is undecidable and the capture is recorded
+//   for codegen instead of being reported or silently admitted. Codegen resolves
+//   `T` to `Holder`, asks the semantic analyzer's own predicate (so the struct's
+//   fields are visible), sees a `my<Int>` field, and refuses -- as a *hard* codegen
+//   error, because codegen's logError alone would let the program run. No
+//   @semantic-only: the verdict only exists after monomorphization.
+// @category: threads, thread-boundary, ownership, diagnostics, generics
+// @expect: fail
+// @expect-error: not handoff-capable
+// @env: VYB_STDLIB=stdlib
+
+import threads::{thread_spawn, thread_join}
+
+struct Holder {
+    n: my<Int>
+}
+
+spawn_holder<T>(x<T>)<Int> -> {
+    th<Int> = thread_spawn(|| -> {
+        held<T> = x
+        return 0
+    }) else -1
+    if (th < 0) { return 2 }
+
+    joined<Int> = thread_join(th) else -3
+    return joined
+}
+
+main()<Int> -> {
+    inner<my<Int>> = my(3)
+    h<Holder> = Holder { n = inner }
+    return spawn_holder(h)
+}

@@ -5,6 +5,7 @@
 #include "vyb/parser/ast.hpp"
 #include "vyb/driver.hpp"
 #include "vyb/vre/semantic_internal.hpp"
+#include "vyb/vre/thread_boundary.hpp"
 #include <stdexcept>
 #include <memory>
 #include <unordered_set>
@@ -678,6 +679,16 @@ SemanticAnalyzer::SemanticAnalyzer(Driver& driver) : driver_(driver), currentSco
 // Helper methods (Single definitions)
 void SemanticAnalyzer::addError(const std::string& message, const ast::Node* node) {
     errors.push_back(message);
+}
+
+// Non-fatal diagnostic (#365): the curated `bind Handoff -> T` / `bind Viewable ->
+// T` escape hatch deliberately overrides the structural verdict, so a
+// contradiction is said out loud here (and kept for callers that want to list
+// them) without failing the compile. `node` is accepted for symmetry with
+// addError so the message can grow a location prefix later.
+void SemanticAnalyzer::addWarning(const std::string& message, const ast::Node* node) {
+    warnings.push_back(message);
+    std::cerr << "warning: " << message << "\n";
 }
 
 // If `expr` is a bare constructor of the built-in generic data enum Result
@@ -10740,6 +10751,31 @@ void SemanticAnalyzer::registerTraitImpl(ast::BindDeclaration* implDecl) {
         }
 
         traitImpls[typeName][traitName] = implMethods;
+
+        // #365 curated escape hatch. An explicit `bind Handoff -> T` (or
+        // `bind Viewable -> T`) states that a value of `T` may cross a thread
+        // boundary even though the structural derivation says otherwise -- the
+        // reviewed path for shapes the compiler cannot see through (FFI
+        // `ptr<T>`-holding structs, opaque C handles, `loc<T>` carriers). The bind
+        // wins; a contradiction is a warning, not an error, precisely because
+        // overriding is the point. The claim is then the programmer's to keep.
+        if (traitName == "Handoff" || traitName == "Viewable") {
+            const bool structural =
+                traitName == "Handoff"
+                    ? thread_boundary::handoffCapable(implDecl->selfType.get(),
+                                                      &structFieldTypes, &enumVariantPayloadTypes)
+                    : thread_boundary::viewable(implDecl->selfType.get(),
+                                                &structFieldTypes, &enumVariantPayloadTypes);
+            if (!structural) {
+                addWarning("curated thread-boundary bind: `bind " + traitName + " -> " + typeName +
+                           "` claims the type may cross a thread boundary, but its structural shape "
+                           "is not " +
+                           (traitName == "Handoff" ? "handoff-capable" : "viewable") +
+                           " -- the explicit bind wins, so the program is accepted; the payload then "
+                           "carries the programmer's guarantee (doc/THREAD_BOUNDARY_SCOPE.md).",
+                           implDecl);
+            }
+        }
 
         auto& associatedMap = traitAssociatedTypeImpls[typeName][traitName];
         associatedMap.clear();

@@ -108,6 +108,12 @@ LLVMCodegen::LLVMCodegen(Driver& driver)
     // the X1 unification keeps typeOfNode(node) aliasing the same object meanwhile.
     if (auto* sa = driver_.getSemanticAnalyzer()) {
         nodeTypeOf_ = [sa](const vyb::ast::Node* n) { return sa->typeOf(n); };
+        // #365 step (c): ask the semantic pass, which holds the structural
+        // registries (struct fields / enum payloads) and the curated
+        // `bind Handoff -> T` overrides. This is what lets codegen judge a
+        // *substituted* concrete type -- e.g. a generic instantiated at a struct
+        // whose fields contain a `my<T>` -- instead of staying permissive.
+        boundaryCapable_ = [sa](const vyb::ast::TypeNode* t) { return sa->handoffCapable(t); };
     }
 }
 

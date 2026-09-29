@@ -1,0 +1,41 @@
+// @test: a curated `bind Handoff` admits a type the structural derivation refuses
+// @description: The curated escape hatch of #365. `Held` holds a `my<Int>`, so the
+//   structural derivation says it is not handoff-capable and the capture below is
+//   refused -- that is what the negative control (the same program without the
+//   bind) pins. An explicit `bind Handoff -> Held` states the claim for a shape the
+//   compiler cannot see through, the way an FFI struct holding a `ptr<T>` would, and
+//   the bind wins over the computed verdict; registration reports the contradiction
+//   as a warning rather than an error, because overriding is the point. The claim is
+//   then the programmer's to keep. Semantic-only: this asserts the *compile-time*
+//   acceptance of the curated claim, not that the payload is safe to run.
+// @category: threads, thread-boundary, ownership, aspects
+// @expect: pass
+// @semantic-only: true
+// @env: VYB_STDLIB=stdlib
+
+import core::aspects
+import threads::{thread_spawn, thread_join}
+
+struct Held {
+    n: my<Int>
+}
+
+bind Handoff -> Held {
+    handoff(self<Held>)<Bool> -> { return true }
+}
+
+with_handle(h<Held>)<Int> -> {
+    th<Int> = thread_spawn(|| -> {
+        seen<Held> = h
+        return 0
+    }) else -1
+    if (th < 0) { return 2 }
+
+    joined<Int> = thread_join(th) else -3
+    return joined
+}
+
+main()<Int> -> {
+    inner<my<Int>> = my(3)
+    return with_handle(Held { n = inner })
+}

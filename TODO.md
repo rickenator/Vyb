@@ -241,7 +241,7 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 - [x] **`println()`/`print()` with multiple arguments** — Space-separated output; all args formatted into a single call
 - [x] **Semantic type recognition** — `Int16`, `Int32`, `Int64`, `UInt8`–`UInt64`, `Float32`, `Float64`, `Char`, `Rune` now fully recognized in semantic analysis (were silently rejected)
 - [x] **Relaxed struct field syntax** — C-style `Type fieldName` accepted alongside canonical `fieldName<Type>`; helps parse legacy/interop fixtures
-- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite runs **1218 tests** via `test/run_tests.vyb`, and that documented size is enforced against the runner by `test/suite_count_check.vyb` in CI
+- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite runs **1221 tests** via `test/run_tests.vyb`, and that documented size is enforced against the runner by `test/suite_count_check.vyb` in CI
 - [x] **Vec parameter deep copy** — Vec parameters receive an independent copy of the data on function entry, eliminating double-free bugs (e.g. recursive quicksort base-case return)
 - [x] **Vec mutation through borrowed struct fields** — `s.items.push(val)` where `s<their<T>>` now correctly mutates in-place; member-expression Vec calls now get a field *pointer* (not a loaded copy)
 - [x] **`their<T>` nested-access audit** — verified multi-level member reads/writes through a `their<T>` borrow receiver (`r.mid.leaf.n`, 2-level writes), borrow-typed struct fields accessed through an outer borrow (`h.inner.n` where `Holder.inner<their<Leaf>>`), and member Vec reads through a borrow. All correct; locked in by `test/ownership/test_their_nested_access.vyb`. (Note: `Vec::get()` returns a copy, so in-place mutation of a nested `Vec<Vec<T>>` needs the inner Vec accessed by reference — not a `their` bug.)
@@ -606,28 +606,37 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
   `test/ownership/borrow_pointer_owner_field_read.vyb`,
   `test/ownership/view_pointer_owner_field_read.vyb` and
   `test/ownership/borrow_pointer_owner_write.vyb`.
-  (c), landed: a capture whose declared type names a type parameter is judged at its
-  concrete type. The predicate was lifted into `vyb::thread_boundary`
+  (c), landed: the capability check runs where the evidence is, and is *deferred*
+  where it is not. The predicate moved into `vyb::thread_boundary`
   (`include/vyb/vre/thread_boundary.hpp`, `src/vre/semantic_thread_boundary.cpp`)
-  with the struct/enum registries passed in, so the semantic pass and codegen share
-  ONE implementation; codegen re-runs it at the four spawn intrinsics
-  (`thread_spawn`, `task_spawn`, `async_spawn`, `agent_start`) after applying
-  `currentTypeSubstitutions`, and a refusal is a hard codegen error, so the driver
-  refuses to link or run the program. Codegen judges only captures whose declared
-  type actually names a substituted parameter -- everything else was already decided
-  by the semantic pass, which owns rule (b) and the registries, so re-judging it
-  there would refuse the plain-borrow case rule (b) admits (the suite caught exactly
-  that against `..._view_retained_owner_accepted.vyb`). Fixtures:
-  `..._generic_capture_rejected.vyb` (instantiated at `our<my<Int>>` -- refused) and
-  `..._generic_capture_accepted.vyb` (`our<Int>` -- accepted, thread joined and its
-  value checked). Type inference unwraps ownership at a call boundary, so
-  `my<Int>`/`their<Int>` passed to an `x<T>` parameter instantiates T = Int; the case
-  that matters is a wrapper built around the parameter, e.g. `our<T>`.
-  Still open (#365): codegen has no AST-level struct/enum registry of its own, so a
-  substituted parameter standing for a *named* struct or enum stays permissive there
-  -- sharing those registries is the tracked remainder. The step record lives in
-  `doc/THREAD_BOUNDARY_SCOPE.md`; wording stays provisional until the
-  drop-semantics-on-propagation row closes (#365).
+  with the struct/enum registries as parameters and a tri-state answer
+  (`Capability::{Capable, NotCapable, Undecidable}`). The semantic pass decides what
+  it can -- a type still naming a type parameter is undecidable there, so the pass
+  records the capture against the closure node in `deferredBoundaryCaptures_` and
+  reports nothing; everything else, including the rule-(b) admission, is final.
+  Codegen judges exactly those deferred captures: it resolves them with
+  `currentTypeSubstitutions` and asks the *semantic analyzer's own* predicate
+  (`boundaryCapable_`, bound in the `LLVMCodegen` constructor next to `nodeTypeOf_`),
+  so the registries reach codegen and a substituted type that names a struct is
+  judged by its fields. A refusal is a hard codegen error (`flagHardCodegenError()`),
+  because codegen's `logError` only prints and the program would otherwise run.
+  Fixtures: `..._generic_capture_rejected.vyb` (at `our<my<Int>>` -- refused),
+  `..._generic_capture_accepted.vyb` (`our<Int>` -- accepted, thread joined) and
+  `..._generic_named_struct_rejected.vyb` (`T` = a struct with a `my<Int>` field --
+  the named-struct hole).
+  Both codegen-side heuristics tried first were wrong and caught by the suite:
+  judging *every* capture refuses the rule-(b) fixture (codegen has no borrow-root
+  data), and judging only captures whose type *string changed* misses the case where
+  the parameter was resolved eagerly (`subst=0`, the program printed `0` and ran).
+  Curated escape hatch, landed: `stdlib/core/aspects.vyb` declares marker aspects
+  `Handoff` / `Viewable` (re-exported by `core::prelude`); a reviewed
+  `bind Handoff -> T` wins over the computed verdict, and `registerTraitImpl` reports
+  a contradiction through the new non-fatal `addWarning`. Fixtures:
+  `..._curated_bind_accepted.vyb` (semantic-only) and
+  `..._curated_bind_absent_rejected.vyb` (the same shape with no bind).
+  Still open (#365): the diagnostic wording stays provisional ("accepted for
+  handoff") until the drop-semantics-on-propagation row closes, and the step record
+  lives in `doc/THREAD_BOUNDARY_SCOPE.md`.
 - [ ] **Lifetime inference beyond lexical scope** <!-- open: Lifetime inference beyond lexical scope -->
   — `borrow`/`view` are lexical-phase by design (documented in #149): no lifetime
   inference across signatures, and a borrow runs to end of scope rather than last
@@ -1507,5 +1516,5 @@ Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `
 
 *Last Updated: 2026-09-19 (v0.7.6 release)*
 *Current Version: Vyb v0.7.6 (freedom-1.0 series)*
-*Overall Status: ~60-65% complete toward 1.0 — 1218 tests (documented size enforced against the runner by `test/suite_count_check.vyb`; the full `--execute-jit` sweep runs in `ci.yml`)*
+*Overall Status: ~60-65% complete toward 1.0 — 1221 tests (documented size enforced against the runner by `test/suite_count_check.vyb`; the full `--execute-jit` sweep runs in `ci.yml`)*
 *SUGGESTIONS.md merged into this document.*

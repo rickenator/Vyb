@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Thread-boundary capability as a structural property (`handoff`) (#365)** —
+  a closure handed to `thread_spawn`/`task_spawn`/`async_spawn`/`agent_start`
+  is now checked structurally: every capture must be able to cross an OS thread
+  boundary, which the compiler derives from the type graph (shared ownership
+  qualifies iff its payload does; a named struct/enum iff every field / variant
+  payload does; unique owners, borrows and raw pointers never do). The check runs
+  at every such site, not only `thread_spawn`, and a *mutable* capture is refused
+  whatever its type. For a capture whose type still names a monomorphization type
+  parameter, the semantic pass records it and codegen judges the concrete type, so
+  the same generic function can be accepted at one instantiation and refused at
+  another.
+- **Curated thread-boundary binds (#365)** — `core::aspects` now declares marker
+  aspects `Handoff` / `Viewable` (re-exported by `core::prelude`). A reviewed
+  `bind Handoff -> T` states the claim for a shape the structural derivation cannot
+  see through (an FFI struct holding a `ptr<T>`, an opaque C handle); it wins over
+  the computed verdict, and a contradiction is reported as a non-fatal warning.
+
+### Changed
+- **Source compatibility: more spawn-site closures are now rejected (#365)** — the
+  previous rule was a shallow test on the captured variable's type string
+  (`my<`/`their<` prefix only). Going structural rejects composites holding a
+  unique owner or raw pointer (`Vec<my<T>>`, `my<T>?`, a struct with such a field),
+  mutable captures of any type, and the same shapes at `task_spawn`, `async_spawn`
+  and `agent_start`. Programs that compile today and trip this were relying on a
+  hole, not on a documented allowance. A read-only borrow is still accepted when
+  the closure also captures its owner through strong ownership (`our<X>`/`my<X>`).
+- Thread-boundary diagnostics use Vyb's own vocabulary (`handoff` / `viewable`)
+  instead of another language's trait names, and say "can not cross a thread
+  boundary" rather than naming a foreign `Send` boundary.
+
+### Fixed
+- **`borrow(x)` / `view(x)` addressed the variable slot, not the object** —
+  `borrow` of a pointer-backed owner (`my<T>`, `their<T>`, `ptr<T>`, and `our<T>`/
+  `mild<T>` control blocks) returned the address of the operand's *slot*, so a
+  field read through such a borrow read the pointer as data, and a write through
+  it clobbered the owner's pointer instead of the object. The borrow path now
+  unwraps the pointee the way member access already did
+  (`test/ownership/borrow_pointer_owner_field_read.vyb`,
+  `..._view_pointer_owner_field_read.vyb`, `..._borrow_pointer_owner_write.vyb`).
+
+---
+
 ## [0.7.6] - 2026-09-19
 
 ### Added

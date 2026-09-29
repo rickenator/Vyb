@@ -1,5 +1,5 @@
 share(all)
-import core::aspects::{Display, Debug, Clone, Equatable, Hashable, Comparable, hash_chars}
+import core::aspects::{Display, Debug, Clone, Equatable, Hashable, Comparable, Handoff, Viewable, hash_chars}
 
 share(all)
 prelude_ok()<Int> -> {
