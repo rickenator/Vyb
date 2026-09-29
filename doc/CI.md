@@ -29,7 +29,7 @@ wait for the three required checks to pass, then merge.
 
 | Workflow file | Check names (for branch protection) | What it gates |
 |---|---|---|
-| `.github/workflows/ci.yml` | `ci` — "Build + JIT suite + AOT/native-link", plus the scheduled daily ASan/UBSan run (06:00 UTC) | canonical **1207-test** JIT suite, AOT/native link, memory safety |
+| `.github/workflows/ci.yml` | `ci` — "Build + JIT suite + AOT/native-link", plus the scheduled daily ASan/UBSan run (06:00 UTC) | canonical **1216-test** JIT suite, AOT/native link, memory safety |
 | `.github/workflows/gpu-kernel.yml` | `gpu-kernel` — "Emit PTX + ptxas across arches + compile FFI runners", "Execute + verify kernels + bindings on RTX 3090" (self-hosted), plus the LSP/REPL/git-dep/registry smoke tests | GPU/NVPTX + CLI protocol smokes |
 | `.github/workflows/refman-check.yml` | `refman-check` — "Validate generated refman matches stdlib" | doc/refman drift + link integrity |
 

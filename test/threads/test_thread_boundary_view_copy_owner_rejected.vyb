@@ -1,0 +1,30 @@
+// @test: thread boundary rejects a view whose captured owner is only a copy
+// @description: Rule (b) requires the closure to capture the owner in an
+//   ownership-carrying form. Capturing a plain by-value owner gives the closure
+//   a *copy*, and a copy is not the object the borrow points at, so the borrowed
+//   payload can still die with the spawner's frame. The capture stays refused.
+// @category: threads, ownership, diagnostics, thread-boundary, viewable
+// @expect: fail
+// @expect-error: not handoff-capable
+// @semantic-only: true
+// @env: VYB_STDLIB=stdlib
+
+import threads::{thread_spawn}
+
+struct Reading {
+    n: Int,
+    label: String
+}
+
+main()<Int> -> {
+    source<Reading> = Reading { n = 7, label = "held" }
+    ro<their<Reading>> = view(source)
+
+    th<Int> = thread_spawn(|| -> {
+        # captures `source`, but only as a by-value copy -- not the object `ro`
+        # points at.
+        copy<Reading> = source
+        return ro.n + copy.n
+    }) else -1
+    return th
+}

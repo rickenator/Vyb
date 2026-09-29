@@ -5659,6 +5659,17 @@ void SemanticAnalyzer::visit(ast::AssignmentExpression* node) {
             if (!lctx.locals.count(lhsIdent->name)) {
                 lctx.written.insert(lhsIdent->name);
             }
+        } else if (dynamic_cast<ast::MemberExpression*>(node->left.get())) {
+            // A write through a field (`box.value = 1`) mutates the captured
+            // variable just as surely as `box = ...` does, so the root of the
+            // member chain is written too. Without this, a closure holding a
+            // borrow of a composite looked read-only while mutating the payload --
+            // and the thread-boundary gate would pass such a capture.
+            LambdaCaptureCtx& lctx = lambdaCaptureStack.back();
+            const std::string root = borrowedRootName(node->left.get());
+            if (!root.empty() && !lctx.locals.count(root)) {
+                lctx.written.insert(root);
+            }
         }
     }
 

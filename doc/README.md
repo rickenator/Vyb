@@ -33,6 +33,7 @@ language. Superseded documents are folded into the repository history.
 | [`Memory_Operations.md`](Memory_Operations.md) | `freedom` blocks and raw pointer operations |
 | [`OWNERSHIP_MILD.md`](OWNERSHIP_MILD.md) | `mild<T>` weak references |
 | [`OWNERSHIP_VS_RUST.md`](OWNERSHIP_VS_RUST.md) | Ownership comparison vs Rust: what matches, four tracked gaps, and how the claims are enforced |
+| [`THREAD_BOUNDARY_SCOPE.md`](THREAD_BOUNDARY_SCOPE.md) | Thread-boundary capability (`handoff`/`viewable`): what ships, what rule (b) needs, and where the substitutions live for (c) |
 | [`STRING_IMPLEMENTATION.md`](STRING_IMPLEMENTATION.md) | `String` representation and methods |
 | [`Intrinsics.md`](Intrinsics.md) | Intrinsic functions and core syntax |
 

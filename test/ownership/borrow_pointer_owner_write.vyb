@@ -1,0 +1,38 @@
+// @test: writes through a borrow of a pointer-backed owner hit the object
+// @description: A mutable borrow must be the pointer to the object, so writing
+//   `c.count = ...` through a `their<Counter>` parameter mutates the owner's
+//   object. With the pre-fix lowering the borrow was the owner's variable slot,
+//   so the write overwrote the heap pointer instead of the field (#365 step 0).
+// @category: ownership, borrow, structs
+// @expect: pass
+// @expect-output: ok
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+
+struct Counter {
+    count<Int>
+}
+
+add(c<their<Counter>>, n<Int>)<Int> -> {
+    c.count = c.count + n
+    return c.count
+}
+
+main()<Int> -> {
+    owned<my<Counter>> = my(Counter { count: 5 })
+    b<their<Counter>> = borrow(owned)
+
+    if (add(b, 3) != 8) { return 1 }
+
+    // The owner observes the mutation, and its slot still holds the object
+    // pointer (a slot-addressed borrow would have clobbered it).
+    if (owned.count != 8) { return 2 }
+    if (b.count != 8) { return 3 }
+
+    // A second write through the same borrow accumulates on the object.
+    if (add(b, 2) != 10) { return 4 }
+    if (owned.count != 10) { return 5 }
+
+    println("ok")
+    return 0
+}

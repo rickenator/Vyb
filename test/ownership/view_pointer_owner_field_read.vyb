@@ -1,0 +1,30 @@
+// @test: view() of a shared owner reads the object's fields
+// @description: The immutable counterpart of borrow(): `view(x)` must yield the
+//   pointer to the object rather than the variable slot holding it. Shared owners
+//   (`our<T>`) keep the payload behind a control block, so an unwrapped read is
+//   the only one that reaches the object's fields (#365 step 0).
+// @category: ownership, view, structs
+// @expect: pass
+// @expect-output: ok
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+
+struct Node {
+    value<Int>
+}
+
+// A view passed as a parameter: the callee's slot holds the payload pointer.
+read_view(v<their<Node>>)<Int> -> {
+    return v.value
+}
+
+main()<Int> -> {
+    shared<our<Node>> = our(Node { value: 42 })
+    vv<their<Node>> = view(shared)
+    if (shared.value != 42) { return 1 }
+    if (vv.value != 42) { return 2 }
+    if (read_view(vv) != 42) { return 3 }
+
+    println("ok")
+    return 0
+}

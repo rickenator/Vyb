@@ -692,6 +692,17 @@ private:
     const vyb::ast::TypeNode* ourPointeeOf(const vyb::ast::TypeNode* tn) const;
     const vyb::ast::TypeNode* mildPointeeOf(const vyb::ast::TypeNode* tn) const;
 
+    // The pointer a `borrow(x)` / `view(x)` must yield for its operand. A borrow
+    // addresses the OBJECT, not the slot that holds it: for a plain stack struct
+    // the object *is* the slot, so the slot address is the borrow; for an
+    // ownership-wrapped operand the slot holds the pointee (`my`/`their`/
+    // `borrow`/`view`/`ptr`) or a control-block pointer whose payload pointer
+    // (field 3) is the object (`our`/`mild`). Returning the raw slot made
+    // `borrow(x).field` read the pointer itself (#365 step 0).
+    llvm::Value* borrowTargetPointer(llvm::Value* operandValue,
+                                     const vyb::ast::TypeNode* operandType,
+                                     const std::string& kw);
+
     // Retain an `our`/`mild` refcount control block: bump the strong (our) or
     // weak (mild) count on the shared block so a new storage location that will
     // release on scope exit holds its own reference. `controlBlockPtr` may be null.

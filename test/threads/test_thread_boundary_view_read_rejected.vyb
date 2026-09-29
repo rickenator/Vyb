@@ -1,0 +1,31 @@
+// @test: thread boundary rejects even a read-only view of a frame value
+// @description: `viewable` does not relax the spawn site. A `view(x)` borrow
+//   addresses the spawner's frame, and the borrow model is lexical -- nothing
+//   proves the frame outlives a detached thread's read -- so a read-only borrow
+//   cannot cross either. This is the `view(...)` counterpart of the `borrow(...)`
+//   pin in test/ownership/thread_send_their.vyb (#149).
+// @category: ownership, threads, borrow, viewable, diagnostics
+// @expect: fail
+// @expect-error: not handoff-capable
+// @semantic-only: true
+// @env: VYB_STDLIB=stdlib
+
+import threads::{thread_spawn, thread_join}
+
+struct Reading {
+    n: Int,
+    label: String
+}
+
+main()<Int> -> {
+    source<Reading> = Reading { n = 7, label = "held" }
+    ro<their<Reading>> = view(source)
+
+    th<Int> = thread_spawn(|| -> {
+        # read-only: the payload is handoff-capable, but the borrow is not.
+        return ro.n
+    }) else -1
+    if (th < 0) { return 2 }
+    j<Int> = thread_join(th) else -1
+    return 0
+}

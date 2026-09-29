@@ -177,6 +177,60 @@ bool SemanticAnalyzer::viewable(const ast::TypeNode* type) const {
     return handoffCapable(type);
 }
 
+// Rule (b): a read-only borrow may cross the thread boundary when the closure
+// also captures the owner it borrows from, so the closure environment itself
+// keeps the payload alive for as long as the thread runs. The five conditions
+// are spelled out in doc/THREAD_BOUNDARY_SCOPE.md; the load-bearing one is the
+// owner carrying *strong* ownership (`our<X>` retains a reference in the env,
+// `my<X>` moves the heap object into it). A `mild<X>` (weak) capture does not
+// keep the payload alive on its own, and a plain by-value owner hands the
+// closure a copy -- neither qualifies.
+bool SemanticAnalyzer::mayCrossBoundaryWithRetainedOwner(const std::string& captureName,
+                                                        const ast::TypeNode* captureType,
+                                                        const ast::FunctionExpression* fe) const {
+    if (!captureType || !fe) return false;
+
+    // 1. The capture is a borrow (`their<X>` / `view<X>` / `borrow<X>`).
+    const std::string base = baseNameOf(captureType->toString());
+    if (base != "their" && base != "view" && base != "borrow") return false;
+
+    // 2. The closure does not write it. A written borrow reaches this function
+    //    only through the mutable-capture list, which is reported separately;
+    //    be explicit here so the rule stands on its own.
+    for (const std::string& cap : fe->mutableCapturedVariables) {
+        if (cap == captureName) return false;
+    }
+
+    // 3. The closure also captures the owner the borrow came from.
+    auto rootIt = theirVarRoot_.find(captureName);
+    if (rootIt == theirVarRoot_.end() || rootIt->second.empty()) return false;
+    const std::string& ownerName = rootIt->second;
+    bool capturesOwner = false;
+    for (const std::string& cap : fe->capturedVariables) {
+        if (cap == ownerName) capturesOwner = true;
+    }
+    for (const std::string& cap : fe->mutableCapturedVariables) {
+        if (cap == ownerName) capturesOwner = true;
+    }
+    if (!capturesOwner) return false;
+
+    // 4. That owner carries strong ownership, so the closure keeps it alive.
+    SymbolInfo* ownerSym = currentScope ? currentScope->lookup(ownerName) : nullptr;
+    if (!ownerSym || !ownerSym->type) return false;
+    const std::string ownerBase = baseNameOf(ownerSym->type->toString());
+    if (ownerBase != "our" && ownerBase != "my") return false;
+    if (!handoffCapable(ownerSym->type.get())) return false;
+
+    // 5. The borrowed payload is itself handoff-capable, so concurrent reads of
+    //    it are race-free by construction.
+    const auto args = namedTypeArgs(captureType);
+    if (args.empty()) return false;
+    for (const auto* a : args) {
+        if (!handoffCapable(a)) return false;
+    }
+    return true;
+}
+
 // Reject a closure handed to another thread that captures anything it may not.
 void SemanticAnalyzer::checkThreadBoundaryCaptures(ast::FunctionExpression* fe,
                                                    ast::Node* site,
@@ -202,9 +256,20 @@ void SemanticAnalyzer::checkThreadBoundaryCaptures(ast::FunctionExpression* fe,
 
         SymbolInfo* csym = currentScope ? currentScope->lookup(cap) : nullptr;
         if (!csym || !csym->type) continue;
-        if (handoffCapable(csym->type.get())) continue;
+        const ast::TypeNode* ty = csym->type.get();
+        if (handoffCapable(ty)) continue;
 
-        const std::string ts = csym->type->toString();
+        // Rule (b): a read-only borrow may cross when the closure also captures
+        // the owner it borrows from, so the closure environment keeps the
+        // payload alive. `viewable` alone deliberately does NOT relax this site:
+        // a borrow addresses the *spawner's frame*, the borrow model is lexical,
+        // and nothing proves that frame outlives a detached thread's read --
+        // letting a read-only borrow through unconditionally reopened the
+        // dangling read pinned by `test/ownership/thread_send_their.vyb` (#149).
+        // See doc/THREAD_BOUNDARY_SCOPE.md.
+        if (mayCrossBoundaryWithRetainedOwner(cap, ty, fe)) continue;
+
+        const std::string ts = ty->toString();
         addError(siteName + ": '" + cap + "' is " + ts +
                      " -- it cannot cross a thread boundary (not handoff-capable). "
                      "Hand it off as shared ownership (our(" + cap + ")) or pass a copy.",

@@ -1,0 +1,40 @@
+// @test: thread boundary accepts a read-only view whose owner the closure keeps
+// @description: Rule (b) of #365 (doc/THREAD_BOUNDARY_SCOPE.md): a read-only
+//   borrow may cross a thread boundary when the closure also captures the owner
+//   it borrows from, held through `our`/`my`, so the closure environment itself
+//   keeps the payload alive for the thread's whole run. The thread reads through
+//   both the borrow and the retained owner and the joined value is checked, so
+//   this pins runtime behaviour, not just the compile-time verdict. Step 0 made
+//   this sound: before it, `borrow(x)`/`view(x)` yielded the address of the
+//   owner's *variable slot*, so reading a field through the borrow produced the
+//   pointer value instead of the field.
+// @category: threads, ownership, diagnostics, thread-boundary, viewable
+// @expect: pass
+// @expect-output: ok
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+
+import threads::{thread_spawn, thread_join}
+
+struct Reading {
+    n<Int>,
+    label<String>
+}
+
+main()<Int> -> {
+    owner<our<Reading>> = our(Reading { n = 7, label = "held" })
+    ro<their<Reading>> = view(owner)
+
+    th<Int> = thread_spawn(|| -> {
+        # Both the retained owner and the borrow read the object's fields.
+        hold<our<Reading>> = owner
+        return ro.n + hold.n
+    }) else -1
+    if (th < 0) { return 2 }
+
+    joined<Int> = thread_join(th) else -3
+    if (joined != 14) { return 4 }
+
+    println("ok")
+    return 0
+}

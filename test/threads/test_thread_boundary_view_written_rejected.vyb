@@ -1,0 +1,30 @@
+// @test: thread boundary rejects a mutable borrow even with the owner retained
+// @description: Rule (b) admits only a *read-only* borrow. A closure that writes
+//   through the borrow is a mutable capture -- it holds the defining frame's
+//   address -- so retaining the owner does not make it admissible.
+// @category: threads, ownership, diagnostics, thread-boundary, viewable
+// @expect: fail
+// @expect-error: mutably
+// @semantic-only: true
+// @env: VYB_STDLIB=stdlib
+
+import threads::{thread_spawn, thread_join}
+
+struct Counter {
+    count<Int>
+}
+
+main()<Int> -> {
+    owner<our<Counter>> = our(Counter { count: 5 })
+    b<their<Counter>> = borrow(owner)
+
+    th<Int> = thread_spawn(|| -> {
+        hold<our<Counter>> = owner
+        b.count = hold.count + 1
+        return b.count
+    }) else -1
+    if (th < 0) { return 2 }
+
+    joined<Int> = thread_join(th) else -3
+    return 0
+}

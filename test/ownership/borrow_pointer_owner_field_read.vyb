@@ -1,0 +1,40 @@
+// @test: borrow() of a pointer-backed owner reads the object's fields
+// @description: `borrow(x)` must yield the pointer to the object, not the address
+//   of the variable slot that holds it. For a plain stack struct the object lives
+//   in the slot, so the slot address is correct; for `my<T>` the slot holds the
+//   heap pointer, and for `our<T>` it holds a control-block pointer whose payload
+//   (field 3) is the object. Returning the raw slot made `b.field` read the
+//   pointer itself (garbage) instead of the field -- a miscompile with no threads
+//   or closures involved (#365 step 0).
+// @category: ownership, borrow, view, structs
+// @expect: pass
+// @expect-output: ok
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+
+struct Node {
+    value<Int>,
+    tag<String>
+}
+
+main()<Int> -> {
+    // Heap owner: the slot holds the heap pointer to the Node.
+    mut_h<my<Node>> = my(Node { value: 11, tag: "heap" })
+    hb<their<Node>> = borrow(mut_h)
+    if (mut_h.value != 11) { return 1 }
+    if (hb.value != 11) { return 2 }
+
+    // Shared owner: the slot holds a control block; the borrow must unwrap to
+    // the payload pointer.
+    shared<our<Node>> = our(Node { value: 7, tag: "held" })
+    ob<their<Node>> = borrow(shared)
+    if (shared.value != 7) { return 3 }
+    if (ob.value != 7) { return 4 }
+
+    // A heap borrow of a struct with an owned String field reads through too.
+    if (hb.tag.len() != 4) { return 5 }
+    if (ob.tag.len() != 4) { return 6 }
+
+    println("ok")
+    return 0
+}
