@@ -1,0 +1,12 @@
+// @test: module-private helper consumed through an imported module (#342)
+// @description: helper module with a `share(all)` entry point that calls a
+//   private sibling function (no `share` marker). Splice must carry the private
+//   helper along with the shared entry point, so the caller resolves it.
+// @category: modules
+// @expect: pass
+// @parse-only: true
+
+share(all)
+public_thing()<Int> -> { return private_thing() + 1 }
+
+private_thing()<Int> -> { return 6 }

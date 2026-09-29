@@ -1,0 +1,18 @@
+// @test: shared entry point calls a module-private sibling (#342)
+// @description: importing a module whose `share(all)` function calls a private
+//   (non-shared) sibling must splice the private helper along with the shared
+//   function -- the private function is part of the closure of the requested
+//   surface even though it is not itself shared. Before the fix the whole-module
+//   import failed with "Undefined identifier: helper"; the identical pair in the
+//   root file always worked.
+// @category: modules
+// @expect: pass
+// @expect-output: 7
+// @vyb-args: --module-path test/modules
+
+import privhelper::mod
+
+main()<Int> -> {
+    println_int(public_thing())
+    return 0
+}

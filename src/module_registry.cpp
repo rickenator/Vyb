@@ -1708,16 +1708,33 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
                 // origin itself imported, so imports-of-imports are carried too.
                 bool closureComputed = false;
                 std::unordered_set<std::string> carryNames = requestedNames;
+                if (carryNames.empty()) {
+                    // Whole-module import: seed the dependency closure with the
+                    // origin's exports (exactly the names a plain `import` may see)
+                    // so the reachability walk below can pull in the module-private
+                    // helpers those declarations call (#342). Before this, the
+                    // closure ran only for subset imports, so a shared function
+                    // whose body called an unshared sibling was spliced WITHOUT that
+                    // sibling and semantic analysis failed in the importer with
+                    // `Undefined identifier: <private helper>`.
+                    auto exportsIt = exports_.find(importedKey);
+                    if (exportsIt != exports_.end()) {
+                        carryNames.insert(exportsIt->second.begin(), exportsIt->second.end());
+                    }
+                }
                 // Binds (keyed `bind:SelfType:Aspect`) that a carried declaration
                 // refers to through its method calls. Tracked separately because a
                 // bind has no user-facing symbol to alias; the `bind:`-prefixed keys
                 // never collide with ordinary declaration names.
                 std::unordered_set<std::string> carryBindKeys;
-                // Recompute the dependency closure on every subset import of this
-                // module: the origin body is now deep-cloned per importer (rather
-                // than moved into the first importer), so a repeat subset import of
-                // the same module must be spliced independently again.
-                if (!requestedNames.empty() && importedRecord.module) {
+                // Recompute the dependency closure on every import of this module:
+                // the origin body is now deep-cloned per importer (rather than moved
+                // into the first importer), so a repeat import of the same module
+                // must be spliced independently again. Namespace imports are
+                // excluded: they mangle every carried declaration and re-map its
+                // bare cross-references through namespaceMangled, which a private
+                // closure name is not part of.
+                if (!isNamespaceImport && importedRecord.module) {
                     // Module-level declarations this import may depend on, plus a
                     // bind side-table. Binds are keyed by `bind:SelfType:Aspect` and
                     // also indexed by the method names they provide, so the closure
@@ -1996,11 +2013,17 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
 
                         const bool bindRequested = requestedForBinds.empty() ||
                             (!bindTrait.empty() && requestedForBinds.find(bindTrait) != requestedForBinds.end());
-                        const bool bindClosureCarried = isSubsetImport && carryBindKeys.count(bindKey);
+                        const bool bindClosureCarried = closureComputed && carryBindKeys.count(bindKey);
                         if (!bindRequested && !bindClosureCarried) {
                             continue;
                         }
-                        if (!declarationVisible(bindKey, importedRecord, metadata.bundles, importDecl)) {
+                        // A bind has no user-facing symbol, so it is *carried*, never
+                        // exported (#261). When the dependency closure proved that a
+                        // carried declaration dispatches through this bind, it must
+                        // cross the boundary even without a `share` on it; otherwise
+                        // it still has to be visible to the importer.
+                        if (!bindClosureCarried &&
+                            !declarationVisible(bindKey, importedRecord, metadata.bundles, importDecl)) {
                             continue;
                         }
                         if (seenNames.find(bindKey) != seenNames.end()) {
@@ -2029,7 +2052,7 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
                     }
                     const std::string originName = name;
 
-                    if (isSubsetImport && carryNames.find(name) == carryNames.end()) {
+                    if (closureComputed && carryNames.find(name) == carryNames.end()) {
                         continue;
                     }
 
@@ -2040,7 +2063,7 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
                     // is not exported; otherwise semantic analysis fails in the importer
                     // with `Undefined identifier: <private helper>`. It is *carried*, not
                     // exported: the module's public surface is unchanged.
-                    const bool closureCarry = isSubsetImport && !requestedNames.count(name);
+                    const bool closureCarry = closureComputed && !requestedNames.count(name);
                     if (!closureCarry &&
                         !declarationVisible(name, importedRecord, metadata.bundles, importDecl)) {
                         continue;

@@ -1,0 +1,109 @@
+// @test: cross-type card copy keeps enum payload Strings alive (#345)
+// @description: reducing Card<MediaApp> into Card<ShellFace> through a generic
+//   frame copies the slot Vec verbatim (`faces = c.faces`). A slot is an enum
+//   whose Machine payload owns a heap String, so the copied card shares that
+//   buffer with the source; the later reclaim of a match-bound payload copy must
+//   not drop a reference it never took. At 0.7.6 the "(b)" line -- where the app
+//   argument is a live LOCAL rather than a temporary -- printed freed bytes while
+//   "(a)" printed correctly. Reduced from VybWin's arena-card audit self-check.
+// @category: enum, ownership, match, aspect, generic
+// @expect: pass
+// @expect-output: source  audit=[summoned by helm · 14:02]
+// @expect-output: (a) temporary app: pid=4243 audit=[summoned by helm · 14:02]
+// @expect-output: (b) local app:     pid=4243 audit=[summoned by helm · 14:02]
+
+aspect Face {
+    type Body
+    title(self)<String> -> { }
+    body(self)<Face::Body> -> { }
+}
+
+aspect Shell : Face {
+    summon_hint(self)<String> -> { }
+}
+
+struct ShellFace { name<String>, markup<String> }
+struct MachineFace { pid<Int>, audit<String> }
+struct MediaApp { name<String>, source_detail<String> }
+
+enum Slot { Shell(ShellFace), Machine(MachineFace), Empty }
+
+struct Card<A> { app<A>, faces<Vec<Slot>> }
+
+bind Face -> ShellFace {
+    type Body = String
+    title(self)<String> -> { return self.name }
+    body(self)<Self::Body> -> { return self.markup }
+}
+
+bind Shell -> ShellFace {
+    summon_hint(self)<String> -> { return "summon " + self.name }
+}
+
+bind Face -> MediaApp {
+    type Body = String
+    title(self)<String> -> { return self.name }
+    body(self)<Self::Body> -> { return self.source_detail }
+}
+
+bind Shell -> MediaApp {
+    summon_hint(self)<String> -> { return "summon " + self.name }
+}
+
+aspect MachineT {
+    type Truth
+    truth(self)<MachineT::Truth> -> { }
+}
+
+bind<A<Shell>> MachineT -> Card<A> {
+    type Truth = MachineFace
+    truth(self)<Self::Truth> -> {
+        slot<Slot> = self.faces.get(1)
+        return match (slot) {
+            Machine(m) -> m
+            ? -> MachineFace { pid = 0, audit = "corrupt" }
+        }
+    }
+}
+
+summon<A<Shell>>(app<A>, truth<MachineFace>)<Card<A>> -> {
+    faces<Vec<Slot>> = Vec()
+    faces.push(Slot::Shell(ShellFace { name = app.title(), markup = app.body() }))
+    faces.push(Slot::Machine(MachineFace { pid = truth.pid, audit = truth.audit }))
+    return Card<A> { app = app, faces = faces }
+}
+
+// the cross-type reduction: Card<A> -> Card<ShellFace>
+into_arena<A<Shell>>(app<A>, c<Card<A>>)<Card<ShellFace>> -> {
+    slot<Slot> = c.faces.get(0)
+    shell<ShellFace> = match (slot) {
+        Shell(s) -> s
+        ? -> ShellFace { name = app.title(), markup = app.body() }
+    }
+    return Card<ShellFace> { app = shell, faces = c.faces }
+}
+
+media_app()<MediaApp> -> {
+    return MediaApp { name = "media", source_detail = "deck A/B, mic, browser tab" }
+}
+
+mk(audit<String>)<Card<MediaApp>> -> {
+    truth<MachineFace> = MachineFace { pid = 4243, audit = audit }
+    return summon(media_app(), truth)
+}
+
+show(tag<String>, c<Card<ShellFace>>) -> {
+    t<MachineFace> = c.truth()
+    println(tag + " pid=" + t.pid.to_string() + " audit=[" + t.audit + "]")
+}
+
+main()<Int> -> {
+    m<Card<MediaApp>> = mk("summoned by " + "helm" + " · " + "14:02")
+    println("source  audit=[" + m.truth().audit + "]")
+    r1<Card<ShellFace>> = into_arena(media_app(), m)
+    show("(a) temporary app:", r1)
+    app2<MediaApp> = media_app()
+    r2<Card<ShellFace>> = into_arena(app2, m)
+    show("(b) local app:    ", r2)
+    return 0
+}

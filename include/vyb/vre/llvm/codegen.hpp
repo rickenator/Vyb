@@ -87,7 +87,12 @@ public:
     explicit LLVMCodegen(Driver& driver); // Constructor expects a Driver reference
     virtual ~LLVMCodegen(); // Add virtual destructor declaration
 
-    void generate(vyb::ast::Module* astModule, const std::string& outputFilename); // Add declaration
+    // issue #348: the IR dump is opt-in. `writeIR` defaults to false so an ordinary
+    // compile/run never litters `<source>.vyb.ll` beside the program; the --emit-llvm
+    // path and --debug-codegen pass true explicitly. `outputFilename` still names the
+    // DWARF compile unit, so it is always supplied.
+    void generate(vyb::ast::Module* astModule, const std::string& outputFilename,
+                  bool writeIR = false); // Add declaration
     void dumpIR() const; // Add declaration
     std::unique_ptr<llvm::Module> releaseModule(); // Add declaration
     std::unique_ptr<llvm::LLVMContext> releaseContext(); // Add declaration for context release
@@ -391,6 +396,19 @@ private:
     llvm::Function* monomorphizeTraitMethod(const std::string& concreteType,
                                            const std::string& traitName,
                                            const std::string& methodName);
+    // Bind methods whose bodies were generated ON DEMAND from a forward reference
+    // inside another verb of the same bind (#344). The eager bind pass visits the
+    // same AST node afterwards and must not report it as a redefinition.
+    std::set<std::string> onDemandGeneratedMethods;
+    // #344: generate a CONCRETE (non-generic) bind method on demand. Bind methods
+    // are emitted in declaration order, so a verb whose body calls a SIBLING verb
+    // declared later ("forward reference") has no LLVM function to look up yet --
+    // codegen reported "Function self.<verb> not found.", returned undef, and the
+    // program still ran with exit 0 and a garbage value. Generating the sibling
+    // here makes the call resolve independently of declaration order.
+    llvm::Function* generateConcreteBindMethodOnDemand(const std::string& concreteType,
+                                                      const std::string& traitName,
+                                                      const std::string& methodName);
     std::string extractBasePattern(const std::string& concreteType);
     std::string getFullTypeName(vyb::ast::Expression* expr);
     vyb::ast::TypeNodePtr typePatternToTypeNode(const TypePattern& pattern,
@@ -598,6 +616,11 @@ private:
         const std::vector<AsyncEnvField>& fields);
     void retainStringValue(llvm::Value* strVal);          // +1 on a copied String value
     void releaseStringValue(llvm::Value* strVal);         // -1 on a String value
+    // Take a reference / clone the heap data of `value` so a binding that
+    // establishes a new owner (a match pattern binding an enum payload) reclaims
+    // exactly what it holds (#345).
+    llvm::Value* copyOwnedValueForBinding(llvm::Value* value, const vyb::ast::TypeNode* astType,
+                                          llvm::Type* ty);
     void releaseStringAlloca(llvm::Value* allocaInst);    // load a String from an alloca, then -1
     void releaseStringElements(llvm::Value* dataPtr, llvm::Value* count); // -1 per String element in a Vec buffer
     void retainStringElements(llvm::Value* dataPtr, llvm::Value* count);  // +1 per String element in a Vec buffer
