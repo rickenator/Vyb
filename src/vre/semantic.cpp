@@ -2693,10 +2693,20 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
     // the same problem for a different reason: it holds the defining frame's
     // address. Shared ownership (`our<T>` / `mild<T>`) and by-value copies are
     // fine (mutation on them is the caller's concern).
+    //
+    // Every site where the closure leaves the spawner's OS thread is covered --
+    // the runtime decides that, not the name: `__vyb_thread_spawn`,
+    // `__vyb_task_spawn` and `__vyb_agent_loop` each `pthread_create`
+    // (runtime/vyb_runtime.c), and `__vyb_async_spawn` pins the task's ucontext
+    // fibre to a worker pthread, so an async closure runs off the spawner's
+    // thread too.
     if (auto calleeIdent = dynamic_cast<ast::Identifier*>(node->callee.get())) {
-        if (calleeIdent->name == "thread_spawn" && !node->arguments.empty()) {
+        static const std::set<std::string> threadBoundarySites = {
+            "thread_spawn", "task_spawn", "async_spawn", "agent_start",
+        };
+        if (threadBoundarySites.count(calleeIdent->name) && !node->arguments.empty()) {
             if (auto* fe = dynamic_cast<ast::FunctionExpression*>(node->arguments[0].get())) {
-                checkThreadBoundaryCaptures(fe, node->arguments[0].get(), "thread_spawn");
+                checkThreadBoundaryCaptures(fe, node->arguments[0].get(), calleeIdent->name);
             }
         }
     }

@@ -1,0 +1,20 @@
+// @test: thread boundary rejects a unique owner handed to async_spawn
+// @description: The gate now covers every site whose closure leaves the
+//   spawner's OS thread -- not just thread_spawn. The runtime decides that:
+//   __vyb_async_spawn pins the task's ucontext fibre to a worker pthread
+//   (runtime/vyb_runtime.c), so an async closure's captures cross threads.
+// @category: threads, async, ownership, diagnostics, thread-boundary
+// @expect: fail
+// @expect-error: not handoff-capable
+// @semantic-only: true
+// @env: VYB_STDLIB=stdlib
+
+import asyncs::{async_spawn}
+
+main()<Int> -> {
+    owned<my<Int>> = my(5)
+    t<Int> = async_spawn(|| -> {
+        return owned
+    }) else -1
+    return t
+}
