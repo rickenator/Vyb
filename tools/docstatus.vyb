@@ -7,7 +7,7 @@
 # meaningful if the checklist cannot silently disagree with the status table,
 # so this tool mechanically cross-checks the two.
 #
-# Three checks:
+# Five checks:
 #   1. cited-path evidence — every repo path cited in doc/FEATURE_STATUS.md
 #      (e.g. `test/modules/test_vec_iter.vyb`) must exist on disk. A ✅ row that
 #      cites a renamed/deleted test is drift.
@@ -20,6 +20,18 @@
 #      -->` with a real LABEL, the FEATURE_STATUS row LABEL must exist and must
 #      NOT be ✅. This is the direction that catches the regression: marking a
 #      feature ✅ without closing the roadmap item that still calls it open.
+#   4. shipped-vs-open contradiction — a curated table pairs shipped TODO.md
+#      items (`- [x]`) with the FEATURE_STATUS row for the same feature; if such
+#      a row still reads 📋 or 🚧, the two docs contradict each other (a shipped
+#      feature is still advertised as planned). The table is explicit on
+#      purpose — the tool never guesses which row an item belongs to — and the
+#      table itself is verified: both the row label and the item text must still
+#      exist, so a rename on either side fails loudly instead of passing silently.
+#   5. user-facing version claims — the README's `releases/tag/vX.Y.Z` links must
+#      name the version `CMakeLists.txt` builds, and `CHANGELOG.md` must carry a
+#      `## [X.Y.Z]` section for it. README prose is compared against the tree by
+#      nothing else, so pointing at a tag that was never cut used to survive
+#      until a human noticed.
 #
 # Exit 0 = docs agree; exit 1 = drift (with file:line for both sides).
 #
@@ -173,6 +185,83 @@ row_status(status_text<String>, label<String>)<String> -> {
     return ""
 }
 
+#------------------------------------------------------------------------------
+# Check 4 — shipped TODO.md item vs a still-open FEATURE_STATUS row.
+#
+# The row↔item pairing is a curated table (explicit beats guessing here): every
+# shipped item has to name the row that tracks the same feature, and a row that
+# still reads 📋/🚧 while its item says `[x]` is a contradiction.
+#------------------------------------------------------------------------------
+# One curated contradiction pair: a TODO.md item and the FEATURE_STATUS row that
+# must therefore not still be planned.
+struct ContradictionPair {
+    item<String>,
+    row<String>
+}
+
+# True when status cell `st` is still open (📋 planned or 🚧 partial).
+row_open(st<String>)<Bool> -> {
+    if (st.len() == 0) { return false }
+    return has_sub(st, "📋") || has_sub(st, "🚧")
+}
+
+# True when TODO.md `line` is a shipped item (`- [x] ...`).
+item_shipped(line<String>)<Bool> -> {
+    return starts_with(line, "- [x]")
+}
+
+# Index of the first TODO.md line containing `frag`, or -1 when absent.
+find_item_line(ls<Vec<String>>, frag<String>)<Int> -> {
+    i<Int> = 0
+    while (i < ls.len()) {
+        if (has_sub(ls.get(i), frag)) { return i }
+        i = i + 1
+    }
+    return -1
+}
+
+#------------------------------------------------------------------------------
+# Check 5 — user-facing version claims: the README's release link and the
+# CHANGELOG section must name the version CMakeLists.txt actually builds.
+#
+# This is the prose-drift class that nothing else covers: README prose is not
+# compared against the tree by the suite-count or refman gates, so a README
+# pointing at a tag that was never cut survived until it was found by hand.
+#------------------------------------------------------------------------------
+# True when `c` is an ASCII digit or `.`.
+version_byte(c<Int>)<Bool> -> {
+    if (c == 46) { return true }
+    return c >= 48 && c <= 57
+}
+
+# The version from CMakeLists.txt (`project(VybParser VERSION x.y.z)`), or "".
+cmake_version(text<String>)<String> -> {
+    marker<String> = "project(VybParser VERSION "
+    k<Int> = text.index_of(marker)
+    if (k < 0) { return "" }
+    s<Int> = k + marker.len()
+    e<Int> = s
+    while (e < text.len() && version_byte(byte_at(text, e))) { e = e + 1 }
+    return text.substring(s, e)
+}
+
+# Every version token following a `releases/tag/v` marker in `text`.
+release_tags(text<String>)<Vec<String>> -> {
+    marker<String> = "releases/tag/v"
+    out<Vec<String>> = Vec<String>()
+    pos<Int> = 0
+    while (true) {
+        k<Int> = text.index_of_from(marker, pos)
+        if (k < 0) { break }
+        s<Int> = k + marker.len()
+        e<Int> = s
+        while (e < text.len() && version_byte(byte_at(text, e))) { e = e + 1 }
+        out.push(text.substring(s, e))
+        pos = e
+    }
+    return out
+}
+
 main()<Int> -> {
     # argv[1] is this program: the repo root is two directories up.
     self<String> = ""
@@ -250,6 +339,57 @@ main()<Int> -> {
         i = i + 1
     }
 
+    # -- Check 4: shipped TODO.md item vs a still-open FEATURE_STATUS row --
+    # Curated pairings (row labels are quoted exactly as they appear in the
+    # FEATURE_STATUS tables).
+    pairs<Vec<ContradictionPair>> = Vec<ContradictionPair>()
+    pairs.push(ContradictionPair { item = "Lambda/closure codegen complete", row = "Full closure struct codegen" })
+    pairs.push(ContradictionPair { item = "Lambda/closure codegen complete", row = "Move capture (`my<T>` into closure)" })
+    pairs.push(ContradictionPair { item = "Lambda/closure codegen complete", row = "`our<T>` shared capture" })
+    pairs.push(ContradictionPair { item = "Ownership types runtime-enforced", row = "Ownership: `my`, `our`, `their`, `mild`" })
+    pairs_checked<Int> = 0
+    pi<Int> = 0
+    while (pi < pairs.len()) {
+        pr<ContradictionPair> = pairs.get(pi)
+        st<String> = row_status(status_text, pr.row)
+        if (st.len() == 0) {
+            problems.push("tools/docstatus.vyb: the contradiction table names status row `" + pr.row + "`, which doc/FEATURE_STATUS.md does not have")
+        }
+        li<Int> = find_item_line(ls, pr.item)
+        if (li < 0) {
+            problems.push("tools/docstatus.vyb: the contradiction table names TODO.md item `" + pr.item + "`, which TODO.md no longer contains")
+        } else if (item_shipped(ls.get(li)) && row_open(st)) {
+            problems.push("TODO.md:" + (li + 1).to_string() + ": marks `" + pr.item + "` as shipped, but doc/FEATURE_STATUS.md row `" + pr.row + "` still reads " + st + " — ship the row or unmark the item")
+        }
+        pi = pi + 1
+    }
+    pairs_checked = pairs.len()
+
+    # -- Check 5: user-facing version claims (README link, CHANGELOG section) --
+    version_checked<Int> = 0
+    ver<String> = cmake_version(slurp(root + "/CMakeLists.txt"))
+    readme_text<String> = slurp(root + "/README.md")
+    changelog_text<String> = slurp(root + "/CHANGELOG.md")
+    if (ver.len() == 0) {
+        problems.push("CMakeLists.txt: no `project(VybParser VERSION x.y.z)` line — the version authority is missing")
+    } else {
+        tags<Vec<String>> = release_tags(readme_text)
+        version_checked = version_checked + 1
+        if (tags.len() == 0) {
+            problems.push("README.md: no `releases/tag/v` link — the quick start must point at the released version (v" + ver + ")")
+        }
+        ti<Int> = 0
+        while (ti < tags.len()) {
+            if (tags.get(ti) != ver) {
+                problems.push("README.md: links `releases/tag/v" + tags.get(ti) + "` but CMakeLists.txt builds v" + ver + " — link the version the prose names")
+            }
+            ti = ti + 1
+        }
+        if (!has_sub(changelog_text, "## [" + ver + "]")) {
+            problems.push("CHANGELOG.md: no `## [" + ver + "]` section for the current version v" + ver)
+        }
+    }
+
     if (problems.len() > 0) {
         println("docstatus drift:")
         j<Int> = 0
@@ -264,6 +404,8 @@ main()<Int> -> {
     }
 
     println("docstatus --check OK (" + checked.to_string() + " cited path(s) resolve; " +
-            marked.to_string() + " open item(s) marked)")
+            marked.to_string() + " open item(s) marked; " +
+            pairs_checked.to_string() + " shipped/open contradiction pair(s) checked; " +
+            version_checked.to_string() + " version claim(s) checked against CMakeLists.txt)")
     exit(0)
 }

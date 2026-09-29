@@ -241,8 +241,8 @@ backend-available but not covered by any gate):
   check, in-process `ptxas` validation) all live in the single toolchain — no package
   dependency, plugin, pinned nightly or second build system. As with the rest of this
   section, it is a **P0 feasibility probe**: only `sm_86` has real silicon behind it,
-  and the verified workload is the shared-memory tiled matmul (256/256 against a host
-  reference) plus the cuBLAS/cuFFT/cuDNN cross-validations.
+  and the verified workload is the shared-memory tiled matmul (all 256 elements of
+  `C = A×B` checked against a host reference) plus the cuBLAS/cuFFT/cuDNN cross-validations.
 
 **See:** `doc/MODULE_FFI_BINARY_ROADMAP.md` for the compilation pipeline
 

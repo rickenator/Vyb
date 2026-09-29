@@ -466,6 +466,23 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
   (verified clean under valgrind for block-body, expression-body, and `my`-owned
   returns).
 
+**Remaining (tracked — recorded rather than silently missing):**
+- [ ] **Boxed / lifetime-carrying mutable closures** <!-- open: Boxed / lifetime-carrying mutable closures -->
+  — a closure with mutable captures may not outlive its defining function: the
+  environment stores the outer variable's *stack address*, so returning such a
+  closure is rejected at compile time (a dangling pointer) instead of silently
+  producing a use-after-free (`test/lambda/test_closure_mutable_return_rejected.vyb`).
+  Rust's `FnMut` closures may be returned, so this is a real expressiveness
+  difference. **Decision for 1.0: postponed.** Relaxing it means the env holds an
+  owned heap cell instead of a stack address (plus the capture move/release rules
+  that follow). Tracked by the FEATURE_STATUS row of the same name (#359).
+- [ ] **Generic lambdas** — `|x<T>| -> ...` (type parameters on closures) <!-- open: Generic lambdas (type parameters on closures) -->
+  is unsupported: no parser/codegen path and no fixture exists. Named-function
+  generics and generic binds monomorphize, so this is the one closure shape a user
+  would expect to work and cannot write. **Decision for 1.0: postponed** (a
+  deliberate "not planned" record, per #360); implementing it means monomorphizing
+  a closure at each call site, mirroring generic-function monomorphization.
+
 ---
 
 ## Planned — Needed for 1.0
@@ -539,6 +556,25 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
   plain load/add/sub/store. No behavior change single-threaded; foundation for
   the pthread-backed `threads` module.
 
+**Remaining (tracked — parity gaps vs Rust, recorded rather than silently missing):**
+- [ ] **Drop semantics on propagation paths (`fail`/`trap`)** <!-- open: Drop semantics on propagation paths (`fail`/`trap`) -->
+  — scope exit, overwrite and `return` are covered and verified, but destructor /
+  leak behaviour along `fail`/`trap` propagation is unverified. `fail` crosses the
+  dual-return `{T, i8*}` ABI, so a callee's owned locals unwind through a path that
+  no fixture exercises yet. This was previously only a trailing clause inside the
+  ownership FEATURE_STATUS row; it now has its own row and this item (#358 gap 3).
+- [ ] **Thread-safety encoding (Rust `Send`/`Sync` analogue)** <!-- open: Thread-safety encoding (Rust `Send`/`Sync` analogue) -->
+  — atomic refcounts landed (`our<T>` control block; heap-`String` registry with
+  atomic `refs`; `cgen_ownership` `AtomicRMW` retain/release) and there is a
+  negative cross-thread handoff test, but nothing in the *type system* marks a type
+  thread-safe: a non-thread-safe closure or struct can still be moved to another
+  thread, where Rust would refuse to compile it (#358 gap 4).
+- [ ] **Lifetime inference beyond lexical scope** <!-- open: Lifetime inference beyond lexical scope -->
+  — `borrow`/`view` are lexical-phase by design (documented in #149): no lifetime
+  inference across signatures, and a borrow runs to end of scope rather than last
+  use, so some programs Rust accepts are rejected here. Extending it is a
+  post-1.0 direction; the lexical model is the 1.0 contract (#358 gap 1).
+
 ### 4. Standard Library Expansion (HIGH PRIORITY)
 - [x] **`Option<T>` (removed)** — the Rust-shaped `Some`/`None` enum was superseded by the native `T?` optional and removed from the compiler (and the transitional `core::option` bridge)
 - [x] **`Result<T, E>`** — `Ok(value)` / `Err(error)` for fallible operations; built-in generic enum (`core::result` placeholder module retained for source-compat)
@@ -572,6 +608,15 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
   `test/modules/test_http_server.vyb`)
 - [x] **I/O intrinsics** — `print()` (no newline), `println_int()`, `print_int()`, `println_bool()`, `print_bool()`
 - [x] **`for`-loop desugar over `Iterator`** — `for (item in <iter-expr>)` now desugars onto `core::iter::Iterator` when the iterable is a **non-identifier expression** (e.g. `intsums.iter()` — the natural case, since `v.iter()` returns `VecIter<T>`). The transform emits `{ var __it_<item> = <expr>; while (true) { match (__it_<item>.next()) { item -> { body } ? -> { break } } } }`, so `break`/`continue` re-enter `next()` and re-evaluating the producer each loop starts a fresh iterator (`test/modules/test_for_iter.vyb`). This was made possible by the earlier `core::iter` protocol, nested `their<Vec<T>>` field resolution (`test/modules/test_nested_their_vec_field.vyb`), generic-bind `Result<T,E>` materialization, and the `VecIter<T>`/`v.iter()` stdlib iterator (`test/modules/test_vec_iter.vyb`). The desugar is parse-time and type-blind, so it keys off a non-identifier iterable: plain identifiers keep the existing index-based Vec path and `0..n` ranges the inclusive range path (no regressions). The optional `skip`/step parameter is supported too: `for (item in <iter-expr>, step)` advances the iterator `step` elements per iteration and yields indices 0, step, 2*step, ... (matching the Vec index path; `break`/`continue` stay correct, `test/modules/test_for_iter_skip.vyb`). The desugar lives in `StatementParser::buildForLoopIteratorDesugar` and is parse-time/type-blind, so it keys off a non-identifier iterable. **Identifier iterables now route onto the protocol too**: `for (x in vec)` desugars exactly like `for (x in vec.iter())`, replacing the old index-based `__idx`/`__len` over `vec.get(i)` path. Because the parser has no types at this point, the uniform rule is that any iterable value must expose an `iter()` that yields an `Iterator` — Vec collections provide `iter()` (`import collections`' `VecHigherOps`), and the stdlib iterators themselves are self-iterable (their `iter()` returns a fresh iterator over the same underlying collection), so a stored iterator identifier (`for (y in storedIter)`) iterates too. The standalone `for (x in vec)` without `import collections` now requires the module (`.iter()`/`VecIter` live there). **`HashMap`/`HashSet` iterator binds are done**: reading fields *through* a `their<T>` view field of a generic struct (the earlier blocker) now resolves — `cgen_expr` records each member-read value's AST type in `valueTypeMap`, so `self.set.values.get(i)` / `self.map.keys.get(i)` chain through a nested `their<HashSet<K>>` / `their<HashMap<K,V>>` field. `import collections` ships `MapIter<K,V>` (`m.iter()` yields key/value pairs as `MapEntry<K,V>`, `kv.key` / `kv.value`) and `HashIter<K>` (`s.iter()` yields values), bound to `Iterator` (`test/modules/test_collections_iter.vyb`). This required fixing the `TypePattern` argument splitter, which previously split generic arguments on every comma regardless of nesting depth — so a two-parameter iterator `Item` like `MapEntry<K,V>` mangled to a malformed type. The splitter is now depth-aware.
+- [ ] **Non-identifier `for` over a struct-element `Vec`** <!-- open: Non-identifier `for` over a struct-element `Vec` -->
+  — the desugar (parse-time, type-blind) works for scalar-element producers
+  (`for (x in ints.iter())`, `test/modules/test_for_iter.vyb`) but fails for struct
+  elements: `for (p in make_vec())`, with `make_vec()<Vec<Point>>`, reports
+  `Unknown method 'next' on type 'Vec<Point>'` — while the *identifier* form
+  `for (p in v)` over the same `Vec<Point>` works (verified against `build/vyb`).
+  The likely cause is `VecIter<Point>`'s `next()` not resolving for a struct
+  element type. Tracked by the FEATURE_STATUS row of the same name; documented in
+  `doc/VEC_ITERATION.md`.
 - [x] **`Vec<T>` expansion** — shipped via the `VecOps` bind on the built-in
   `Vec<T>` (pure Vyb; `test/modules/test_vec_expansion.vyb`):
   `find` (first matching index, or `-1`), `first`/`last` (head/tail element),
@@ -1256,7 +1301,7 @@ For Vyb to be considered production-ready at 1.0, **all of the following must be
 - [x] String methods complete (`split` and formatting done; see `.split()`/`.format()`)
 - [x] `HashMap<K, V>` and basic collections (HashMap/HashSet/BTreeMap, `Vec` iterators, growth)
 - [x] FFI (`extern "C"`) working — extern blocks, ABI aliases, `#[repr(C)]`, native `--link`, variadics, `vyb bindgen` (MVP + libclang `--full`)
-- [x] `vyb.toml` and `vyb build` project system (foundation shipped: manifest, multi-file/path-dep build, `vyb new`, `vyb.lock`; remote git/version dependency fetching is a staged follow-up)
+- [x] `vyb.toml` and `vyb build` project system — manifest, multi-file/path-dep build, `vyb new`, `vyb.lock`, and all four dependency sources resolving (`path`, `git:` shallow-clone into `.vybmod/<name>/` on build, `github:` via `vyb mod install github:owner/repo/path`, `version:` against the package registry via `VYB_REGISTRY`/`~/.vyb/registry`); the end-to-end fixture is `test/gitdep_smoke.vyb` (`gitdep smoke: 4/4 checks passed`), documented in `doc/MANIFEST.md`
 - [x] Wildcard trap handler (`trap (e<?>)`) with `typeof` discrimination
 - [ ] All open contradictions resolved (see section above) <!-- open: (none) -->
 
