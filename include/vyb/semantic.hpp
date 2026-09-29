@@ -389,6 +389,21 @@ public:
     bool isReservedWord(const std::string& name);
     bool isLValue(ast::Expression* expr);
     std::string borrowedRootName(ast::Expression* expr);
+    // Thread-boundary capability (#149, #365). `handoffCapable` answers, for a
+    // declared type, "may a value of this type cross a thread boundary as a
+    // handoff?": unique owners (`my<T>`), borrows (`their<T>`, `loc<T>`) and raw
+    // pointers are never handoff-capable, while shared ownership (`our<T>` /
+    // `mild<T>`) and composites (`Vec<T>`, arrays, `T?`, futures, tuples, user
+    // structs and enums) are handoff-capable iff every payload is. `viewable`
+    // is the weaker "may a second thread read it?" relation, derived
+    // structurally in the same pass (see semantic_thread_boundary.cpp).
+    bool handoffCapable(const ast::TypeNode* type) const;
+    bool viewable(const ast::TypeNode* type) const;
+    // Enforce the thread boundary for the closure argument at a spawn site:
+    // reports every capture that is not handoff-capable, and every mutable
+    // capture (which holds the defining frame's address).
+    void checkThreadBoundaryCaptures(ast::FunctionExpression* fe, ast::Node* site,
+                                     const std::string& siteName);
     bool areTypesCompatible(ast::TypeNode* typeA, ast::TypeNode* typeB); // Added
     // Rejects `return v;` where `v` supplies a different number of values than the
     // enclosing function's declared return arity (e.g. a single value returned from

@@ -1,0 +1,25 @@
+// @test: thread boundary rejects a composite holding a unique owner
+// @description: #149's first cut looked only at the top-level type name, so a
+//   struct whose field is a `my<T>` (or a Vec element that is) crossed the
+//   thread boundary silently. The structural check now rejects it: the type is
+//   not handoff-capable, no matter how deeply the unique owner is nested.
+// @category: threads, ownership, diagnostics, thread-boundary
+// @expect: fail
+// @expect-error: not handoff-capable
+// @semantic-only: true
+// @env: VYB_STDLIB=stdlib
+
+import threads::{thread_spawn}
+
+struct Holder {
+    tag: Int,
+    owned: my<Int>
+}
+
+main()<Int> -> {
+    h<Holder> = Holder { tag = 1, owned = my(2) }
+    th<Int> = thread_spawn(|| -> {
+        return h.tag
+    }) else -1
+    return th
+}
