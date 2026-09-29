@@ -1,0 +1,33 @@
+// @test: codegen judges a generic capture at its concrete type (rejected case)
+// @description: Step (c) of #365. A capture whose declared type mentions a generic
+//   function's type parameter cannot be judged by the semantic pass: it runs
+//   before monomorphization, holds no substitutions, and so leaves `our<T>`
+//   permissive because the payload `T` is unresolved. Codegen does hold the
+//   substitutions, so at the spawn site it re-runs the same structural predicate
+//   on the concrete type. Instantiated at T = my<Int>, the capture is
+//   `our<my<Int>>` -- a shared owner OF a unique owner -- whose payload cannot
+//   cross a thread boundary. No @semantic-only here on purpose: the verdict only
+//   exists after monomorphization, so compilation must reach codegen.
+// @category: threads, ownership, diagnostics, thread-boundary, generics
+// @expect: fail
+// @expect-error: not handoff-capable
+// @env: VYB_STDLIB=stdlib
+
+import threads::{thread_spawn, thread_join}
+
+spawn_shared<T>(s<our<T>>)<Int> -> {
+    th<Int> = thread_spawn(|| -> {
+        held<our<T>> = s
+        return 0
+    }) else -1
+    if (th < 0) { return 2 }
+
+    joined<Int> = thread_join(th) else -3
+    return joined
+}
+
+main()<Int> -> {
+    inner<my<Int>> = my(3)
+    shared<our<my<Int>>> = our(inner)
+    return spawn_shared(shared)
+}

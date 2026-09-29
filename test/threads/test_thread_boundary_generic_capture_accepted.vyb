@@ -1,0 +1,35 @@
+// @test: codegen accepts a generic capture instantiated at a capable type
+// @description: The accepted counterpart of the rejected generic-capture fixture
+//   (step (c) of #365): the same generic function instantiated at T = Int, so the
+//   capture is `our<Int>` -- a shared owner whose payload is a plain value, which
+//   is handoff-capable. The spawn-site check at codegen passes, the thread runs
+//   and joins, and the value it returns is checked. The pair is what pins the
+//   step: the same source is refused at one instantiation and accepted at another.
+// @category: threads, ownership, thread-boundary, generics
+// @expect: pass
+// @expect-output: ok
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+
+import threads::{thread_spawn, thread_join}
+
+spawn_shared<T>(s<our<T>>)<Int> -> {
+    th<Int> = thread_spawn(|| -> {
+        held<our<T>> = s
+        if (held == s) { return 7 }
+        return 0
+    }) else -1
+    if (th < 0) { return 2 }
+
+    joined<Int> = thread_join(th) else -3
+    return joined
+}
+
+main()<Int> -> {
+    plain<our<Int>> = our(9)
+    got<Int> = spawn_shared(plain)
+    if (got != 7) { return 1 }
+
+    println("ok")
+    return 0
+}
