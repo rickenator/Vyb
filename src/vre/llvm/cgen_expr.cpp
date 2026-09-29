@@ -37,6 +37,89 @@ static bool vybFloatClass(const std::string& name, unsigned& bits) {
     return false;
 }
 
+// issue #343: infer a generic function's type arguments from WHERE the type
+// parameter appears in the DECLARED parameter type, instead of from argument
+// position. Positional inference binds the whole argument type to the type
+// parameter, so `f<T>(b<Box<T>>)` called with `Box<Int>` monomorphized as
+// `f_Box_Int` whose signature was `Box<Box<Int>>`, and the call then failed with
+// "Argument type mismatch for call to f_Box_Int_. Expected Box_Box_Int but got
+// Box_Int". Walk the declared parameter type and the argument's type in
+// parallel; every type parameter met inside the pattern owns its own slot.
+static void inferGenericArgsFromPattern(const ast::TypeNode* paramType,
+                                        const ast::TypeNode* argType,
+                                        const std::vector<std::string>& typeParamNames,
+                                        std::vector<std::string>& concreteTypeArgs) {
+    if (!paramType || !argType) return;
+
+    if (auto ptn = dynamic_cast<const ast::TypeName*>(paramType)) {
+        // A bare type parameter (`x<T>`) unifies with the argument's whole type.
+        if (ptn->identifier && ptn->genericArgs.empty()) {
+            for (size_t p = 0; p < typeParamNames.size() && p < concreteTypeArgs.size(); ++p) {
+                if (typeParamNames[p] == ptn->identifier->name) {
+                    if (concreteTypeArgs[p].empty()) {
+                        concreteTypeArgs[p] = argType->toString();
+                    }
+                    return;
+                }
+            }
+        }
+        // `Box<T>` against `Box<Int>`: recurse positionally through the generic
+        // arguments. The base names must agree and the arity must match.
+        if (auto atn = dynamic_cast<const ast::TypeName*>(argType)) {
+            if (ptn->identifier && atn->identifier &&
+                ptn->identifier->name == atn->identifier->name &&
+                ptn->genericArgs.size() == atn->genericArgs.size()) {
+                for (size_t k = 0; k < ptn->genericArgs.size(); ++k) {
+                    inferGenericArgsFromPattern(ptn->genericArgs[k].get(),
+                                                atn->genericArgs[k].get(),
+                                                typeParamNames, concreteTypeArgs);
+                }
+            }
+        }
+        return;
+    }
+    if (auto pv = dynamic_cast<const ast::VecType*>(paramType)) {
+        if (auto av = dynamic_cast<const ast::VecType*>(argType)) {
+            inferGenericArgsFromPattern(pv->elementType.get(), av->elementType.get(),
+                                        typeParamNames, concreteTypeArgs);
+        }
+        return;
+    }
+    if (auto po = dynamic_cast<const ast::OptionalType*>(paramType)) {
+        if (auto ao = dynamic_cast<const ast::OptionalType*>(argType)) {
+            inferGenericArgsFromPattern(po->containedType.get(), ao->containedType.get(),
+                                        typeParamNames, concreteTypeArgs);
+        }
+        return;
+    }
+    if (auto pf = dynamic_cast<const ast::FutureType*>(paramType)) {
+        if (auto af = dynamic_cast<const ast::FutureType*>(argType)) {
+            inferGenericArgsFromPattern(pf->resultType.get(), af->resultType.get(),
+                                        typeParamNames, concreteTypeArgs);
+        }
+        return;
+    }
+    if (auto pp = dynamic_cast<const ast::PointerType*>(paramType)) {
+        if (auto ap = dynamic_cast<const ast::PointerType*>(argType)) {
+            inferGenericArgsFromPattern(pp->pointeeType.get(), ap->pointeeType.get(),
+                                        typeParamNames, concreteTypeArgs);
+        }
+        return;
+    }
+    if (auto pt = dynamic_cast<const ast::TupleTypeNode*>(paramType)) {
+        if (auto at = dynamic_cast<const ast::TupleTypeNode*>(argType)) {
+            if (pt->memberTypes.size() == at->memberTypes.size()) {
+                for (size_t k = 0; k < pt->memberTypes.size(); ++k) {
+                    inferGenericArgsFromPattern(pt->memberTypes[k].get(),
+                                                at->memberTypes[k].get(),
+                                                typeParamNames, concreteTypeArgs);
+                }
+            }
+        }
+        return;
+    }
+}
+
 // Is this a sized unsigned integer type name?
 static bool isUnsignedIntName(const std::string& n) {
     return n == "UInt8" || n == "UInt16" || n == "UInt32" || n == "UInt64" ||
@@ -6792,6 +6875,12 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
         // Choose concrete type arguments: explicit (probe<Int>(0, 0)) if the
         // caller wrote them, otherwise infer them from the call-site argument types.
         std::vector<std::string> concreteTypeArgs(numTypeParams, "");
+        // Type-parameter names by slot, so structural inference can map a name it
+        // meets inside a declared parameter type back to its concrete-args slot.
+        std::vector<std::string> typeParamNames;
+        for (const auto& gp : templateFunc->genericParams) {
+            typeParamNames.push_back(gp && gp->name ? gp->name->name : std::string());
+        }
 
         if (!node->explicitTypeArgs.empty()) {
             if (node->explicitTypeArgs.size() != numTypeParams) {
@@ -6841,10 +6930,21 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
 
             VYB_CDBG << "DEBUG: Argument " << i << " has type: " << argTypeName << std::endl;
 
-            // Match argument to type parameter by position
-            // If function has N type params and M args, map arg[i] to param[min(i, N-1)]
-            // For multi-param functions, we need to match each arg to its corresponding param
-            if (i < numTypeParams) {
+            // issue #343: infer the type parameter from WHERE it appears in the
+            // declared parameter type, not by argument position. `f<T>(b<Box<T>>)`
+            // called with `Box<Int>` must bind T = Int; binding T = Box<Int> (the
+            // whole argument type) monomorphizes a signature of `Box<Box<Int>>`
+            // and every call fails with "Argument type mismatch ... Expected
+            // Box_Box_Int but got Box_Int". Positional matching stays as the
+            // fallback for arguments that carried no AST type.
+            if (i < templateFunc->params.size() && templateFunc->params[i].typeNode) {
+                inferGenericArgsFromPattern(templateFunc->params[i].typeNode.get(),
+                                            typeOfNode(node->arguments[i]).get(),
+                                            typeParamNames, concreteTypeArgs);
+            }
+            // Fallback: map arg[i] positionally onto param[i]; if the function
+            // has fewer type params than args, fill whatever slot is still empty.
+            if (i < numTypeParams && concreteTypeArgs[i].empty()) {
                 concreteTypeArgs[i] = argTypeName;
             } else if (numTypeParams > 0 && i >= numTypeParams) {
                 // Extra arguments beyond type params — check if any remaining params are still empty
@@ -7056,10 +7156,19 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
             // Try mangled name if it's a method or from a namespace
             // This part needs a robust name mangling and lookup scheme
             logError(node->callee->loc, "Function " + calleeName + " not found.");
+            // #344: an unresolved `self.<verb>()` (a sibling verb inside a bind) used to
+            // fall through to undef and the program still ran, exiting 0 with a garbage
+            // value. Refuse to run instead of silently miscompiling.
+            if (calleeName.rfind("self.", 0) == 0) {
+                flagHardCodegenError();
+            }
             m_currentLLVMValue = nullptr;
             return;
         } else {
             logError(node->callee->loc, "Function " + calleeName + " not found.");
+            if (calleeName.rfind("self.", 0) == 0) {
+                flagHardCodegenError();
+            }
             m_currentLLVMValue = nullptr;
             return;
         }

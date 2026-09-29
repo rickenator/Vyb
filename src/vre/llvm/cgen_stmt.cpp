@@ -1810,6 +1810,14 @@ void LLVMCodegen::codegenMatch(vyb::ast::MatchStatement* node, llvm::AllocaInst*
                 const std::string& bname = pendingVariantBindings[fi];
                 llvm::Value* fv = extractEnumVariantField(matchValue, pendingVariantPayloadTy, static_cast<unsigned>(fi));
                 if (!fv) { logError(casePattern->loc, "Enum variant pattern binding out of range"); break; }
+                // #345: the extracted payload aliases data the ENUM owns. This
+                // binding introduces a second owner that the generated code
+                // reclaims downstream, so take a reference / clone the heap data
+                // here; otherwise that reclaim drops a buffer the enum (and every
+                // other copy of it) still points at.
+                if (fi < pendingVariantBindTypes.size() && pendingVariantBindTypes[fi]) {
+                    fv = copyOwnedValueForBinding(fv, pendingVariantBindTypes[fi].get(), fv->getType());
+                }
                 llvm::AllocaInst* alloca = createEntryBlockAlloca(fv->getType(), bname);
                 builder->CreateStore(fv, alloca);
                 namedValues[bname] = alloca;

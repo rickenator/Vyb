@@ -831,6 +831,13 @@ void LLVMCodegen::visit(vyb::ast::FunctionDeclaration* node) {
             m_currentLLVMValue = nullptr; return;
         }
         if (!func->empty() && node->body) { // Already has a body, and we are trying to define another
+            // #344: a sibling bind verb may already have been generated on demand while
+            // emitting another verb of the same bind (a forward reference). Its body is
+            // complete and came from this same AST node, so this is not a redefinition.
+            if (onDemandGeneratedMethods.count(functionName)) {
+                m_currentLLVMValue = func;
+                return;
+            }
             logError(node->loc, "Redefinition of function '" + node->id->name + "'.");
             m_currentLLVMValue = nullptr; return;
         }

@@ -476,7 +476,112 @@ llvm::Function* LLVMCodegen::monomorphizeTraitMethod(const std::string& concrete
     }
 
 
+    // #344: a CONCRETE (non-generic) bind has no entry in genericTraitImpls, so the
+    // generic search above cannot produce it. When a bind verb's body calls a SIBLING
+    // verb declared later in the same bind ("forward reference"), codegen reaches this
+    // point with no LLVM function in the module yet: it reported "Function self.<verb>
+    // not found.", emitted undef for the call and the program still ran with exit 0 and
+    // a garbage value. Generate the concrete bind method on demand so the call resolves
+    // independently of declaration order.
+    {
+        const auto& concreteImpls = semantic->getTraitImpls();
+        auto cimpl = concreteImpls.find(concreteType);
+        if (cimpl != concreteImpls.end()) {
+            auto timpl = cimpl->second.find(traitName);
+            if (timpl != cimpl->second.end()) {
+                for (ast::FunctionDeclaration* methodAST : timpl->second) {
+                    if (!methodAST || !methodAST->id || methodAST->id->name != methodName) continue;
+                    std::string fname = concreteType + "_" + traitName + "_" + methodName;
+                    if (llvm::Function* existing = module->getFunction(fname)) {
+                        monomorphizedMethods[cacheKey] = existing;
+                        return existing;
+                    }
+                    if (llvm::Function* generated =
+                            generateConcreteBindMethodOnDemand(concreteType, traitName, methodName)) {
+                        monomorphizedMethods[cacheKey] = generated;
+                        return generated;
+                    }
+                    break; // nothing generated: fall through to the generic search
+                }
+            }
+        }
+    }
+
     return nullptr;
+}
+
+// #344: generate a concrete (non-generic) bind method on demand.
+llvm::Function* LLVMCodegen::generateConcreteBindMethodOnDemand(const std::string& concreteType,
+                                                               const std::string& traitName,
+                                                               const std::string& methodName) {
+    if (!driver_.hasSemanticAnalyzer()) return nullptr;
+    SemanticAnalyzer* semantic = driver_.getSemanticAnalyzer();
+    const auto& impls = semantic->getTraitImpls();
+    auto cimpl = impls.find(concreteType);
+    if (cimpl == impls.end()) return nullptr;
+    auto timpl = cimpl->second.find(traitName);
+    if (timpl == cimpl->second.end()) return nullptr;
+
+    const std::string fname = concreteType + "_" + traitName + "_" + methodName;
+    if (llvm::Function* existing = module->getFunction(fname)) return existing;
+
+    ast::FunctionDeclaration* methodAST = nullptr;
+    for (ast::FunctionDeclaration* m : timpl->second) {
+        if (m && m->id && m->id->name == methodName) { methodAST = m; break; }
+    }
+    if (!methodAST) return nullptr;
+
+    // Generate the concrete Self type so `Self`, field reads and further sibling calls
+    // inside the generated body resolve against the binder's concrete type, exactly
+    // as visit(BindDeclaration) establishes for the eager path.
+    TypePattern concretePattern = TypePattern::parse(concreteType);
+    ast::TypeNodePtr concreteNode = typePatternToTypeNode(concretePattern, methodAST->loc);
+    if (!concreteNode) return nullptr;
+    llvm::Type* concreteLlvmType = codegenType(concreteNode.get());
+    if (!concreteLlvmType) return nullptr;
+
+    // visit(FunctionDeclaration) creates the function under the mangled name, swaps
+    // its own named-value map and scope stack and restores them on exit, but it also
+    // MOVES THE BUILDER into the new function's entry block and leaves its current
+    // debug location set to the generated body's last line. Save everything the
+    // caller's in-flight codegen still needs and put it back afterwards -- a stale
+    // debug location would attach the caller's next instruction to THIS function's
+    // DISubprogram and LLVM would reject the module.
+    llvm::BasicBlock* savedInsertBlock = builder->GetInsertBlock();
+    llvm::BasicBlock::iterator savedInsertPoint = builder->GetInsertPoint();
+    llvm::DebugLoc savedDebugLoc = builder->getCurrentDebugLocation();
+    ast::TypeNode* savedImplTypeNode = m_currentImplTypeNode;
+    std::string savedImplTraitName = m_currentImplTraitName;
+    llvm::StructType* savedClassType = currentClassType;
+    auto savedTypeSubstitutions = currentTypeSubstitutions;
+
+    m_currentImplTypeNode = concreteNode.get();
+    m_currentImplTraitName = traitName;
+    currentClassType = llvm::dyn_cast<llvm::StructType>(concreteLlvmType);
+
+    methodAST->accept(*this);
+
+    m_currentImplTypeNode = savedImplTypeNode;
+    m_currentImplTraitName = savedImplTraitName;
+    currentClassType = savedClassType;
+    currentTypeSubstitutions = savedTypeSubstitutions;
+    if (savedInsertBlock) {
+        if (savedInsertPoint != savedInsertBlock->end()) {
+            builder->SetInsertPoint(savedInsertBlock, savedInsertPoint);
+        } else {
+            builder->SetInsertPoint(savedInsertBlock);
+        }
+    }
+    builder->SetCurrentDebugLocation(savedDebugLoc);
+
+    llvm::Function* generated = module->getFunction(fname);
+    if (generated) {
+        // The eager bind pass will visit this same AST node later; remember that its
+        // body already exists so that pass does not report a redefinition.
+        onDemandGeneratedMethods.insert(fname);
+        monomorphizedMethods[fname] = generated;
+    }
+    return generated;
 }
 
 // Helper: Resolve the concrete type for monomorphization (e.g., Box<Int> -> %struct.Box_Int)

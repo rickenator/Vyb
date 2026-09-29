@@ -113,7 +113,8 @@ LLVMCodegen::LLVMCodegen(Driver& driver)
 
 LLVMCodegen::~LLVMCodegen() = default;
 
-void LLVMCodegen::generate(vyb::ast::Module* astModule, const std::string& outputFilename) {
+void LLVMCodegen::generate(vyb::ast::Module* astModule, const std::string& outputFilename,
+                           bool writeIR) {
     if (!astModule) {
         logError(SourceLocation(), "Cannot generate code: AST module is null.");
         return;
@@ -213,19 +214,28 @@ void LLVMCodegen::generate(vyb::ast::Module* astModule, const std::string& outpu
         return;
     }
 
+    if (vyb::g_debug_codegen) {
+        std::cerr << "DEBUG: Functions in module before printing IR:" << std::endl;
+        for (llvm::Function& func : module->functions()) {
+            std::cerr << "  - " << func.getName().str() << " (blocks: " << func.size() << ")" << std::endl;
+        }
+    }
+
+    // issue #348: only write the IR artifact when the caller asked for it. An ordinary
+    // run/compile used to drop a multi-megabyte `<source>.vyb.ll` beside the program
+    // (152 KB for hello-world, never removed) — the CLI only promises `--emit-llvm`
+    // produces a `.ll`, so an incidental dump is unexpected behaviour that litters the
+    // tree. Opt-in callers: --emit-llvm, and --debug-codegen for debugging.
+    if (!writeIR) {
+        return;
+    }
+
     std::error_code EC;
     llvm::raw_fd_ostream dest(outputFilename, EC, llvm::sys::fs::OpenFlags{});
 
     if (EC) {
         logError(SourceLocation(), "Could not open file: " + EC.message());
         return;
-    }
-
-    if (vyb::g_debug_codegen) {
-        std::cerr << "DEBUG: Functions in module before printing IR:" << std::endl;
-        for (llvm::Function& func : module->functions()) {
-            std::cerr << "  - " << func.getName().str() << " (blocks: " << func.size() << ")" << std::endl;
-        }
     }
 
     module->print(dest, nullptr);
