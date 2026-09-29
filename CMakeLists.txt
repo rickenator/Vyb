@@ -145,6 +145,7 @@ set(PARSER_HEADERS
 set(VRE_SOURCES
     src/vre/value.cpp
     src/vre/semantic.cpp
+    src/vre/semantic_scope.cpp
     src/vre/semantic_ownership.cpp
     src/vre/semantic_thread_boundary.cpp
     src/vre/intrinsics.cpp

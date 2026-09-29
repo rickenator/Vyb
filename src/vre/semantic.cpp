@@ -599,33 +599,10 @@ static std::unique_ptr<ast::TypeNode> concreteTypeStringToNode(const std::string
 
 Scope::Scope(Scope* parent_scope) : parent(parent_scope) {}
 
-SymbolInfo* Scope::find(const std::string& name) {
-    auto it = symbols.find(name);
-    if (it != symbols.end()) {
-        return it->second;
-    }
-    if (parent) {
-        return parent->find(name);
-    }
-    return nullptr;
-}
 
 // Add SymbolTable::lookupDirect (assuming Scope is effectively SymbolTable here based on usage)
-SymbolInfo* SymbolTable::lookupDirect(const std::string& name) {
-    auto it = table.find(name);
-    if (it != table.end()) {
-        return &it->second;
-    }
-    return nullptr;
-}
 
-void Scope::insert(const std::string& name, SymbolInfo* symbol) {
-    symbols[name] = symbol;
-}
 
-Scope* Scope::getParent() {
-    return parent;
-}
 
 // --- SemanticAnalyzer Implementation ---
 
@@ -677,19 +654,12 @@ SemanticAnalyzer::SemanticAnalyzer(Driver& driver) : driver_(driver), currentSco
 // --- Canonical block of helpers and basic visit methods ---
 
 // Helper methods (Single definitions)
-void SemanticAnalyzer::addError(const std::string& message, const ast::Node* node) {
-    errors.push_back(message);
-}
 
 // Non-fatal diagnostic (#365): the curated `bind Handoff -> T` / `bind Viewable ->
 // T` escape hatch deliberately overrides the structural verdict, so a
 // contradiction is said out loud here (and kept for callers that want to list
 // them) without failing the compile. `node` is accepted for symmetry with
 // addError so the message can grow a location prefix later.
-void SemanticAnalyzer::addWarning(const std::string& message, const ast::Node* node) {
-    warnings.push_back(message);
-    std::cerr << "warning: " << message << "\n";
-}
 
 // If `expr` is a bare constructor of the built-in generic data enum Result
 // (`Ok(x)` / `Err(x)`) and `targetType` is the matching enum type, inject the
@@ -873,27 +843,7 @@ bool SemanticAnalyzer::checkCallsFailableFunction(ast::Node* node) {
     return false;
 }
 
-bool SemanticAnalyzer::isInLoop() {
-    SymbolTable* scope = currentScope;
-    while (scope) {
-        if (scope->isLoop) {
-            return true;
-        }
-        scope = scope->getParent();
-    }
-    return false;
-}
 
-bool SemanticAnalyzer::isInFreedomBlock() {
-    SymbolTable* scope = currentScope;
-    while (scope) {
-        if (scope->isFreedomBlock) {
-            return true;
-        }
-        scope = scope->getParent();
-    }
-    return false;
-}
 
 bool SemanticAnalyzer::isIntegerType(ast::TypeNode* type) {
     if (!type) return false;
@@ -941,9 +891,6 @@ bool SemanticAnalyzer::isFloatType(ast::TypeNode* type) {
     return false;
 }
 
-bool SemanticAnalyzer::isReservedWord(const std::string& name) {
-    return reservedWords.count(name);
-}
 
 bool SemanticAnalyzer::isRawLocationType(ast::Expression* expr) {
     auto it = expressionTypes.find(exprKey(expr));
