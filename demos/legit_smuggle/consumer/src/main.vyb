@@ -1,0 +1,75 @@
+// legit-smuggle — Vyb smuggle-safe import demo (one consumer of the shared
+// `chain` core).
+//
+// A privileged package (priv, `[mod] boundary = ["freedom"]` in its
+// vyb.toml — see test_manifest.sh #204) may ONLY be consumed via `smuggle`.
+// Smuggling it is safe when the caller first verifies the artifact's
+// LEGITIMIZATION RECEIPT against the LIVE package's token:
+//
+//   smuggle priv::{priv_value, priv_token}        # the only legal import
+//   receipt   = read + deserialize(SMUGGLE_RECEIPT)
+//   verify(receipt)                                # chain integrity
+//   contains(receipt, name/version/capability)     # identity
+//   tip_hash(receipt) == priv_token()              # matches the live package
+//   -> all pass : SMUGGLE-SAFE (use the package, print its value)
+//   -> any fail : SMUGGLE REFUSED (do NOT use the package)
+//
+// The receipt is produced by VybForge's package legitimization (see
+// VybForge/native/legit/forge_legit.vyb): same core, same tip-token model.
+// A tampered receipt (flipped fact / broken link) fails here — smuggle is
+// gated on integrity, not on the privilege boundary alone.
+
+import io::{open_read, read_all, close}
+import env::{env_get}
+import chain::{deserialize, verify, tip_hash, contains, Record, Chain}
+smuggle priv::{priv_value, priv_token}
+
+read_file(path<String>)<String> -> {
+    match (open_read(path)) {
+        f -> {
+            match (read_all(f)) {
+                s -> { close(f); return s }
+                ? -> { close(f); return "" }
+            }
+        }
+        ? -> { return "" }
+    }
+}
+
+check(cond<Bool>, label<String>)<Int> -> {
+    if (!cond) { println("  FAIL " + label); return 1 }
+    println("  ok   " + label)
+    return 0
+}
+
+main()<Int> -> {
+    // default receipt (written by the runner from the live priv token);
+    // override with SMUGGLE_RECEIPT to verify any other sealed receipt.
+    rpath<String> = env_get("SMUGGLE_RECEIPT") else "/home/rick/Projects/Vyb/demos/legit_smuggle/priv.receipt"
+    raw<String> = read_file(rpath)
+    if (raw.len() == 0) {
+        println("  FAIL cannot read receipt: " + rpath)
+        println("\nSMUGGLE-SAFE: REFUSED (no receipt)")
+        return 1
+    }
+    rc<Chain> = deserialize(raw)
+    fails<Int> = 0
+    fails = fails + check(verify(rc), "receipt chain verifies (integrity)")
+    fails = fails + check(rc.origin.contains("vyb/"), "receipt origin is a vyb authority")
+    fails = fails + check(contains(rc, "name", "priv"), "receipt seals name=priv")
+    fails = fails + check(contains(rc, "version", "0.1.0"), "receipt seals version=0.1.0")
+    live<String> = priv_token()
+    fails = fails + check(tip_hash(rc) == live, "receipt tip == live package token")
+
+    if (fails > 0) {
+        # do NOT consume the privileged package when its legitimacy is broken
+        println("\nSMUGGLE-SAFE: REFUSED (legit check failed — package NOT consumed)")
+        return 1
+    }
+    v<Int> = priv_value()
+    println("  value : " + v.to_string() + " (from smuggled priv)")
+    println("  token : " + live)
+    println("\nSMUGGLE-SAFE: PASS (receipt verified against live token; smuggle consumed)")
+    if (v == 42) { return 0 }
+    return 1
+}

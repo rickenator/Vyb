@@ -1,0 +1,10 @@
+[package]
+name = "legit-smuggle"
+version = "0.1.0"
+
+[dependencies]
+priv = { path = "../priv" }
+
+[[bin]]
+name = "legit-smuggle"
+path = "src/main.vyb"

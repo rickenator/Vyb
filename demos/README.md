@@ -19,3 +19,4 @@ The demos are intentionally compact; richer runtime examples, including
 | `ffi_native_3d/` | native GLFW/OpenGL scene launched through C FFI |
 | `finalization_targets.vyb` | borrow scope checks, typed `fail`/`trap`, and C ABI aliases |
 | `VybWeb/` | native Qt5 browser package (`vyb build demos/VybWeb` → `target/vybweb`; stdlib `qt` + `QWebEngineView`), starts on Google, with back/forward/reload, an address bar, Go, and Quit |
+| `legit_smuggle/` | the signed-ledger smuggling model (#204): a `priv/` package consumed through `smuggle`, a `consumer/` package that verifies the persisted receipt against the package's live legitimization token, and `run_legit_smuggle.sh` which seals a receipt, tampers a copy, and shows both outcomes (`target/` output and `*.receipt` artifacts are gitignored) |
