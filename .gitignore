@@ -27,7 +27,22 @@ __pycache__/
 Vyb.*
 /qtc_clangd/
 .qtc_clangd/
-demos/VybLynx/target-asan/
+
+# Demo build output and dependency materialisation (issue #350). Per-demo
+# `target/` (and ASan variants) plus the `.vybmod/` clone cache are build
+# products, so building a demo -- or any `vyb build` -- leaves the tree clean.
+demos/**/target/
+demos/**/target-*/
+.vybmod/
+
+# Chain receipts are produced by the demos' seal step (demos/legit_smuggle):
+# `priv.receipt` + its deliberately tampered twin are regenerated, not source.
+*.receipt
+*.receipt.tampered
+
+# Generated splash PNG (produced on demand by the tracked tools/vybsplash.vyb;
+# it is not referenced by any tracked document, so it stays out of the tree).
+vybsplash.png
 
 # Hermes agent state (not project code)
 .hermes/
