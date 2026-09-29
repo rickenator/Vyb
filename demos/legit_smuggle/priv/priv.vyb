@@ -1,0 +1,22 @@
+# priv — a privileged package (freedom boundary, #204). Consumed only via
+# `smuggle`. It exposes a value AND the legitimization token of the artifact it
+# ships, so a consumer can cross-check a persisted receipt against the live
+# package: a tampered receipt will not match the live token.
+import chain::{new_chain, tip_hash, Record, Chain}
+
+share(all)
+priv_value()<Int> -> {
+    return 42
+}
+
+# The live legitimization token for the shipped artifact (the tip hash of the
+# in-memory chain sealing this package's identity).
+share(all)
+priv_token()<String> -> {
+    r<Vec<Record>> = Vec()
+    r.push(Record { label = "name", value = "priv" })
+    r.push(Record { label = "version", value = "0.1.0" })
+    r.push(Record { label = "capability", value = "chain" })
+    c<Chain> = new_chain("vyb/smuggle", r)
+    return tip_hash(c)
+}

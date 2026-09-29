@@ -1,0 +1,120 @@
+# seal_recept.vyb — seal (or tamper) a chain receipt using the EXACT hash scheme
+# of the Vyb `chain` core (stdlib/chain/mod.vyb), so the smuggle consumer's
+# `deserialize + verify` accepts it:
+#   record digest = sha256("label=value")
+#   block root    = sha256( sha256("") ++ d0 ++ d1 ++ ... )      (Merkle-Damgard)
+#   block hash    = sha256( "<index>|<prev>|<root>" )
+# Layout (chain::serialize):  O\t<origin>\n  B\t<idx>\t<prev>\t<root>\t<hash>\n
+#                             R\t<label>\t<value>\n  ...
+# The seal path calls chain::new_chain + chain::serialize directly instead of
+# re-deriving the scheme, so the receipt cannot drift from the stdlib verifier.
+#
+# Vyb port of the demo's original Python sealer (#350): the repo proper holds no
+# Python tooling (#226), and the demo's receipts are generated artifacts.
+#
+#   build/vyb demos/legit_smuggle/seal_recept.vyb <out-path>
+#     -> seals the `priv` fact set to <out-path>
+#   build/vyb demos/legit_smuggle/seal_recept.vyb --tamper <in> <out>
+#     -> copies <in> to <out> with the sealed version flipped (the negative case)
+import chain::{Chain, Record, new_chain, serialize}
+import io::{close, File, open_read, open_write, read_all, write_str}
+
+# Read `path` as a whole String ("" when unreadable).
+slurp(path<String>)<String> -> {
+    text<String> = ""
+    match (open_read(path)) {
+        f -> {
+            match (read_all(f)) { s -> { text = s } ? -> { } }
+            close(f)
+        }
+        ? -> { }
+    }
+    return text
+}
+
+# Write `text` to `path`; returns true on a full write.
+spew(path<String>, text<String>)<Bool> -> {
+    match (open_write(path)) {
+        f -> {
+            match (write_str(f, text)) {
+                n -> { close(f); return (n == text.len()) }
+                ? -> { close(f); return false }
+            }
+        }
+        ? -> { return false }
+    }
+    return false
+}
+
+# The program's argv, parsed from `/proc/self/cmdline` (NUL separated; Linux,
+# the same idiom the CLI smoke tests use).
+argv_of()<Vec<String>> -> {
+    raw<String> = slurp("/proc/self/cmdline")
+    out<Vec<String>> = Vec<String>()
+    cur<String> = ""
+    i<Int> = 0
+    while (i < raw.len()) {
+        c<Int> = (raw.char_at(i) as Int) & 0xFF
+        if (c == 0) {
+            if (cur.len() > 0) { out.push(cur) }
+            cur = ""
+        } else {
+            cur = cur + String::from_byte(c)
+        }
+        i = i + 1
+    }
+    if (cur.len() > 0) { out.push(cur) }
+    return out
+}
+
+# Replace every occurrence of `find` in `s` with `repl`.
+replace_all(s<String>, find<String>, repl<String>)<String> -> {
+    out<String> = ""
+    rest<String> = s
+    while (true) {
+        pos<Int> = rest.index_of(find)
+        if (pos < 0) { return out + rest }
+        out = out + rest.substring(0, pos) + repl
+        rest = rest.substring(pos + find.len())
+    }
+    return out
+}
+
+main()<Int> -> {
+    argv<Vec<String>> = argv_of()
+
+    # --tamper <in> <out>: flip the sealed version so the verifier must refuse it.
+    # argv[0] is the compiler, argv[1] is this program, so flags start at 2.
+    if (argv.len() > 2 && argv.get(2) == "--tamper") {
+        if (argv.len() < 5) {
+            println("usage: seal_recept.vyb --tamper <in> <out>")
+            return 1
+        }
+        src<String> = slurp(argv.get(3))
+        if (src.len() == 0) {
+            println("seal_recept: cannot read " + argv.get(3))
+            return 1
+        }
+        if (!spew(argv.get(4), replace_all(src, "0.1.0", "9.9.9-FORGED"))) {
+            println("seal_recept: cannot write " + argv.get(4))
+            return 1
+        }
+        println("tampered receipt ->", argv.get(4))
+        return 0
+    }
+
+    records<Vec<Record>> = Vec<Record>()
+    records.push(Record { label = "name", value = "priv" })
+    records.push(Record { label = "version", value = "0.1.0" })
+    records.push(Record { label = "capability", value = "chain" })
+    text<String> = serialize(new_chain("vyb/smuggle", records))
+
+    out<String> = "priv.receipt"
+    if (argv.len() > 2) { out = argv.get(2) }
+    if (!spew(out, text)) {
+        println("seal_recept: cannot write " + out)
+        return 1
+    }
+    println("sealed receipt ->", out)
+    return 0
+}
