@@ -402,11 +402,18 @@ public:
     // Enforce the thread boundary for the closure argument at a spawn site:
     // reports every capture that is not handoff-capable, and every mutable
     // capture (which holds the defining frame's address). A read-only borrow is
-    // not admitted even when its owner is retained: rule (b) is scoped in
-    // doc/THREAD_BOUNDARY_SCOPE.md but blocked on the
-    // closure-capture lowering, which mis-reads a captured `their<T>`.
+    // admitted only when the closure also captures a *strongly* owned owner of
+    // it (rule (b), doc/THREAD_BOUNDARY_SCOPE.md), so the closure environment
+    // itself keeps the payload alive for the thread's whole run.
     void checkThreadBoundaryCaptures(ast::FunctionExpression* fe, ast::Node* site,
                                      const std::string& siteName);
+    // Rule (b) behind that admission: is `captureName` a read-only borrow whose
+    // owner the closure also captures, with the owner held through `our`/`my`
+    // (not `mild`, which is weak and does not keep the payload alive) and a
+    // handoff-capable payload?
+    bool mayCrossBoundaryWithRetainedOwner(const std::string& captureName,
+                                           const ast::TypeNode* captureType,
+                                           const ast::FunctionExpression* fe) const;
     bool areTypesCompatible(ast::TypeNode* typeA, ast::TypeNode* typeB); // Added
     // Rejects `return v;` where `v` supplies a different number of values than the
     // enclosing function's declared return arity (e.g. a single value returned from

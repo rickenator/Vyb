@@ -167,7 +167,7 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 ### Running the test suite
 
 ```bash
-# 1211 .vyb tests exercised through compile + run + output/return checks
+# 1216 .vyb tests exercised through compile + run + output/return checks
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test
 ```
 
@@ -2658,7 +2658,7 @@ runtime points a single process at a list of tests if needed.
 Canonical suite runner — a Vyb program (`test/run_tests.vyb`), wired into CTest
 as `run-tests`:
 ```bash
-./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1211 tests)
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1216 tests)
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --category async  # filter by category
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --json results.json --evidence evidence.json
 ```

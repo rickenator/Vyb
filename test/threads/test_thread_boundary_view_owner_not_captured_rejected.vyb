@@ -1,0 +1,30 @@
+// @test: thread boundary still rejects a view whose owner is not captured
+// @description: Rule (b) needs the closure to capture the owner, because only
+//   then does the closure environment keep the payload alive. A read-only view
+//   with the owner left behind in the spawner's frame stays refused -- the #149
+//   dangling-read pin (`test/ownership/thread_send_their.vyb`).
+// @category: threads, ownership, diagnostics, thread-boundary, viewable
+// @expect: fail
+// @expect-error: not handoff-capable
+// @semantic-only: true
+// @env: VYB_STDLIB=stdlib
+
+import threads::{thread_spawn, thread_join}
+
+struct Reading {
+    n<Int>
+}
+
+main()<Int> -> {
+    owner<our<Reading>> = our(Reading { n = 7 })
+    ro<their<Reading>> = view(owner)
+
+    # The closure never captures `owner`, so nothing keeps the payload alive.
+    th<Int> = thread_spawn(|| -> {
+        return ro.n
+    }) else -1
+    if (th < 0) { return 2 }
+
+    joined<Int> = thread_join(th) else -3
+    return 0
+}

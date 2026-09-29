@@ -2483,17 +2483,14 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
 
         llvm::Value* valueToBorrow = m_currentLLVMValue;
 
-        // For borrowing, we need to get the address of the value
-        if (valueToBorrow->getType()->isPointerTy()) {
-            // If it's already a pointer (e.g., alloca), use it directly
-            m_currentLLVMValue = valueToBorrow;
-            VYB_CDBG << "DEBUG: Successfully processed borrowing operation " << identCallee->name << "() - returned pointer" << std::endl;
-        } else {
-            // If it's a value, we need to create a temporary and get its address
-            // This shouldn't normally happen for well-formed borrow operations
+        // A borrow addresses the OBJECT, not the variable slot that holds a
+        // pointer to it (see borrowTargetPointer, #365 step 0).
+        if (!valueToBorrow || !valueToBorrow->getType()->isPointerTy()) {
             logError(node->loc, identCallee->name + "() requires an lvalue (something that can be borrowed)");
             return;
         }
+        m_currentLLVMValue = borrowTargetPointer(valueToBorrow, typeOfNode(node->arguments[0]).get(),
+                                                 identCallee->name);
         return;
     }
 
@@ -8770,6 +8767,44 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
     }
 }
 
+llvm::Value* LLVMCodegen::borrowTargetPointer(llvm::Value* operandValue,
+                                              const vyb::ast::TypeNode* operandType,
+                                              const std::string& kw) {
+    if (!operandValue || !operandValue->getType()->isPointerTy()) return operandValue;
+
+    std::string base;
+    if (auto* tn = dynamic_cast<const vyb::ast::TypeName*>(operandType)) {
+        if (tn->identifier && !tn->genericArgs.empty()) base = tn->identifier->name;
+    }
+    if (base.empty()) return operandValue;  // plain struct/pointer: the slot is the object
+
+    llvm::PointerType* ptrTy = llvm::PointerType::get(*context, 0);
+    const bool isSlot = llvm::dyn_cast<llvm::AllocaInst>(operandValue) != nullptr;
+
+    if (base == "our" || base == "mild") {
+        // Control block pointer; the borrowed object is the payload pointer in
+        // field 3. The operand may be the block pointer itself or a slot holding it.
+        llvm::Value* cb = operandValue;
+        if (isSlot) cb = builder->CreateLoad(ptrTy, operandValue, kw + ".cb.load");
+        std::vector<llvm::Type*> cbFields = {
+            llvm::Type::getInt32Ty(*context),
+            llvm::Type::getInt32Ty(*context),
+            llvm::Type::getInt8Ty(*context),
+            ptrTy
+        };
+        llvm::StructType* controlBlockType =
+            llvm::StructType::get(*context, cbFields, /*isPacked=*/false);
+        llvm::Value* payloadField =
+            builder->CreateStructGEP(controlBlockType, cb, 3, kw + ".payload_field");
+        return builder->CreateLoad(ptrTy, payloadField, kw + ".payload");
+    }
+    if ((base == "my" || base == "their" || base == "borrow" || base == "view" || base == "ptr") && isSlot) {
+        // The slot holds the pointee pointer; the borrow is that pointer.
+        return builder->CreateLoad(ptrTy, operandValue, kw + ".ptr.load");
+    }
+    return operandValue;
+}
+
 void LLVMCodegen::visit(ast::BorrowExpression* node) {
     if (!node->expression) {
         logError(node->loc, "Borrow expression missing operand");
@@ -8777,23 +8812,29 @@ void LLVMCodegen::visit(ast::BorrowExpression* node) {
         return;
     }
 
-    // Special handling for identifiers - we want the alloca address, not the loaded value
+    // Special handling for identifiers - the operand's slot, unwrapped the way
+    // member access unwraps it, so `borrow(x).field` reads the object rather than
+    // the pointer stored in x's slot (see borrowTargetPointer, #365 step 0).
     if (auto* identNode = dynamic_cast<ast::Identifier*>(node->expression.get())) {
-        // Look up the identifier in the named values map to get the alloca directly
+        const std::string kw =
+            node->kind == ast::BorrowKind::MUTABLE_BORROW ? "borrow" : "view";
+        llvm::Value* slot = nullptr;
         auto it = namedValues.find(identNode->name);
         if (it != namedValues.end()) {
-            if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(it->second)) {
-                // For borrowing an identifier, return the alloca address directly
-                m_currentLLVMValue = alloca;
-                return;
-            }
+            slot = it->second;
+        } else {
+            auto funcIt = m_currentFunctionNamedValues.find(identNode->name);
+            if (funcIt != m_currentFunctionNamedValues.end()) slot = funcIt->second;
         }
-
-        // Also check current function named values
-        auto funcIt = m_currentFunctionNamedValues.find(identNode->name);
-        if (funcIt != m_currentFunctionNamedValues.end()) {
-            // For borrowing an identifier, return the alloca address directly
-            m_currentLLVMValue = funcIt->second;
+        if (slot) {
+            // Prefer the AST type recorded on the slot (the closure prologue
+            // records the captured variable's type on the reloaded alloca),
+            // else the semantic type of the expression.
+            const ast::TypeNode* opTy = nullptr;
+            auto vtIt = valueTypeMap.find(slot);
+            if (vtIt != valueTypeMap.end() && vtIt->second) opTy = vtIt->second.get();
+            if (!opTy) opTy = typeOfNode(node->expression).get();
+            m_currentLLVMValue = borrowTargetPointer(slot, opTy, kw);
             return;
         }
 
