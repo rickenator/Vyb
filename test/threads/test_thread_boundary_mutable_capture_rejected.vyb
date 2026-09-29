@@ -1,0 +1,20 @@
+// @test: thread boundary rejects a mutable capture
+// @description: A mutable capture holds the defining frame's address, so it is
+//   not handoff-capable whatever the variable's type is -- the #149 check said
+//   nothing about capture kind and let this through.
+// @category: threads, ownership, diagnostics, thread-boundary
+// @expect: fail
+// @expect-error: mutably
+// @semantic-only: true
+// @env: VYB_STDLIB=stdlib
+
+import threads::{thread_spawn}
+
+main()<Int> -> {
+    n<Int> = 0
+    th<Int> = thread_spawn(|| -> {
+        n = n + 1
+        return n
+    }) else -1
+    return th
+}

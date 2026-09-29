@@ -1,0 +1,33 @@
+// @test: thread boundary accepts handoff-capable captures
+// @description: The counterpart of the two rejected fixtures: a by-value Int, a
+//   shared owner (`our<Int>`) and a struct whose fields are all values are
+//   handoff-capable, so the closure runs on another thread and joins normally.
+// @category: threads, thread-boundary, ownership
+// @expect: pass
+// @expect-output: ok
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+
+import threads::{thread_spawn, thread_join}
+
+struct Pair {
+    a: Int,
+    b: Int
+}
+
+main()<Int> -> {
+    local<Int> = 3
+    shared<our<Int>> = our(4)
+    p<Pair> = Pair { a = 1, b = 2 }
+
+    th<Int> = thread_spawn(|| -> {
+        return local + shared + p.a + p.b
+    }) else -1
+    if (th < 0) { return 1 }
+
+    got<Int> = thread_join(th) else -2
+    if (got != 10) { return 2 }
+
+    println("ok")
+    return 0
+}

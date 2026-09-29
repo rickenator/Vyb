@@ -241,7 +241,7 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 - [x] **`println()`/`print()` with multiple arguments** — Space-separated output; all args formatted into a single call
 - [x] **Semantic type recognition** — `Int16`, `Int32`, `Int64`, `UInt8`–`UInt64`, `Float32`, `Float64`, `Char`, `Rune` now fully recognized in semantic analysis (were silently rejected)
 - [x] **Relaxed struct field syntax** — C-style `Type fieldName` accepted alongside canonical `fieldName<Type>`; helps parse legacy/interop fixtures
-- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite runs **1201 tests** via `test/run_tests.vyb`, and that documented size is enforced against the runner by `test/suite_count_check.vyb` in CI
+- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite runs **1204 tests** via `test/run_tests.vyb`, and that documented size is enforced against the runner by `test/suite_count_check.vyb` in CI
 - [x] **Vec parameter deep copy** — Vec parameters receive an independent copy of the data on function entry, eliminating double-free bugs (e.g. recursive quicksort base-case return)
 - [x] **Vec mutation through borrowed struct fields** — `s.items.push(val)` where `s<their<T>>` now correctly mutates in-place; member-expression Vec calls now get a field *pointer* (not a loaded copy)
 - [x] **`their<T>` nested-access audit** — verified multi-level member reads/writes through a `their<T>` borrow receiver (`r.mid.leaf.n`, 2-level writes), borrow-typed struct fields accessed through an outer borrow (`h.inner.n` where `Holder.inner<their<Leaf>>`), and member Vec reads through a borrow. All correct; locked in by `test/ownership/test_their_nested_access.vyb`. (Note: `Vec::get()` returns a copy, so in-place mutation of a nested `Vec<Vec<T>>` needs the inner Vec accessed by reference — not a `their` bug.)
@@ -563,12 +563,22 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
   dual-return `{T, i8*}` ABI, so a callee's owned locals unwind through a path that
   no fixture exercises yet. This was previously only a trailing clause inside the
   ownership FEATURE_STATUS row; it now has its own row and this item (#358 gap 3).
-- [ ] **Thread-safety encoding (Rust `Send`/`Sync` analogue)** <!-- open: Thread-safety encoding (Rust `Send`/`Sync` analogue) -->
+- [ ] **Thread-boundary capability (`handoff` / `viewable`)** <!-- open: Thread-boundary capability (`handoff` / `viewable`) -->
   — atomic refcounts landed (`our<T>` control block; heap-`String` registry with
-  atomic `refs`; `cgen_ownership` `AtomicRMW` retain/release) and there is a
-  negative cross-thread handoff test, but nothing in the *type system* marks a type
-  thread-safe: a non-thread-safe closure or struct can still be moved to another
-  thread, where Rust would refuse to compile it (#358 gap 4).
+  atomic `refs`; `cgen_ownership` `AtomicRMW` retain/release), and the capability
+  is now derived **structurally** rather than by a name test: `handoffCapable`
+  (`src/vre/semantic_thread_boundary.cpp`) refuses unique owners (`my<T>`),
+  borrows (`their<T>`, `loc<T>`), raw pointers, and any composite (`Vec<T>`,
+  arrays, `T?`, futures, tuples, a struct/enum payload) that holds one, while
+  shared ownership (`our<T>`/`mild<T>`) and value payloads are handoff-capable.
+  The gate is enforced at `thread_spawn` for every capture and rejects mutable
+  captures (which hold the defining frame's address); fixtures:
+  `test/threads/test_thread_boundary_unique_owner_rejected.vyb`,
+  `..._mutable_capture_rejected.vyb`, `..._handoff_accepted.vyb`. Still open:
+  the gate is error-only and covers the spawn site only — no `view(x)` /
+  `viewable` enforcement yet, no resolution of type parameters through a
+  monomorphized bind, and the provisional wording stands until the
+  drop-semantics-on-propagation row closes (#365).
 - [ ] **Lifetime inference beyond lexical scope** <!-- open: Lifetime inference beyond lexical scope -->
   — `borrow`/`view` are lexical-phase by design (documented in #149): no lifetime
   inference across signatures, and a borrow runs to end of scope rather than last
@@ -1448,5 +1458,5 @@ Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `
 
 *Last Updated: 2026-09-19 (v0.7.6 release)*
 *Current Version: Vyb v0.7.6 (freedom-1.0 series)*
-*Overall Status: ~60-65% complete toward 1.0 — 1201 tests (documented size enforced against the runner by `test/suite_count_check.vyb`; the full `--execute-jit` sweep runs in `ci.yml`)*
+*Overall Status: ~60-65% complete toward 1.0 — 1204 tests (documented size enforced against the runner by `test/suite_count_check.vyb`; the full `--execute-jit` sweep runs in `ci.yml`)*
 *SUGGESTIONS.md merged into this document.*
