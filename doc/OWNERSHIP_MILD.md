@@ -1,5 +1,18 @@
 # Vyb Ownership Types: `mild<T>`
 
+> **Status: shipped (v0.7.6).** `my<T>` / `our<T>` / `their<T>` / `mild<T>` are
+> implemented and runtime-enforced: compile-time `my<T>` move tracking, `our<T>`
+> copy/assignment/parameter refcounting over an atomic control block, a lexical
+> `their<T>` borrow checker, and `mild<T>` weak handles with `soft()` / `grab()` /
+> `released()`. The tracked record is `TODO.md` § 3 "Ownership Types — Runtime
+> Enforcement (DONE)" and the `doc/FEATURE_STATUS.md` ownership rows, which cite the
+> executable tests under `test/ownership/`. Design-note caveat: this page is
+> **historical** (`doc/DOCS_POLICY.md`) — for current behaviour trust
+> `docs/refman/PROGRAMMERS_GUIDE.md` cross-checked against `build/vyb`. The gaps that
+> remain (drop semantics along `fail`/`trap` propagation, thread-safety encoding,
+> lifetime inference beyond the lexical model) are tracked rows plus roadmap items in
+> `TODO.md` § 3, not claims on this page.
+
 ## Overview
 
 `mild<T>` is Vyb's fourth ownership type, providing **mild references** to `our<T>` (shared ownership) objects. It solves the circular reference problem and enables patterns like observers, caches, and back-pointers in tree structures.
@@ -172,9 +185,17 @@ Vyb now has a minimal real runtime model for `our<T>` / `mild<T>`:
   caller instead of cleaning it up before return.
 - `our<T>` copy/assignment/parameter semantics are complete: every storage
   location holds its own strong ref, retained on shared copy and released on
-  scope exit / overwrite. Full `my<T>` move semantics and a complete ownership
-  transfer checker remain future work.
-- Control-block cleanup is minimal and focused on current scope/return paths.
+  scope exit / overwrite. `my<T>` move semantics also ship: use-after-move is
+  rejected at compile time, ownership transfers on assignment / init / `my`
+  parameter / move-capture, and a moved binding can be revived by reassignment
+  (`test/ownership/`). What remains is not the move checker but the **drop path**:
+  destructor behaviour along `fail`/`trap` propagation is unverified (it crosses the
+  dual-return `{T, i8*}` ABI) — tracked by the `doc/FEATURE_STATUS.md` row "Drop
+  semantics on propagation paths (`fail`/`trap`)" and the matching `TODO.md` item.
+- Control-block cleanup covers the current scope/return paths; the propagation-path
+  cleanup above is the open item, and thread-safety is not encoded in the type system
+  (the "Thread-safety encoding" row) — atomic refcounts exist, but no `Send`/`Sync`
+  analogue marks a type as safe to move across threads.
 
 ### Control Block Structure
 

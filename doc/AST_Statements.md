@@ -311,17 +311,23 @@ public:
 
 ## 12. `EnsureStatement`
 
-Represents an `ensure` contract statement (planned).
+Represents an `ensure` contract statement — implemented as a parse-time desugar,
+with no dedicated AST node (see the note below).
 
--   **C++ Class**: `vyb::ast::EnsureStatement` (planned)
--   **`NodeType`**: `ENSURE_STATEMENT`
+-   **C++ Class**: none — `ensure` is desugared at parse time into an
+    `IfStatement` with the failure handling in the `else` arm (no dedicated node)
+-   **`NodeType`**: `ENSURE_CLAUSE` (the parse-time clause kind; there is no
+    `ENSURE_STATEMENT` node type)
 -   **Fields**:
     -   `condition` (`ExprPtr`): The condition that must hold.
     -   `failExpression` (`std::optional<ExprPtr>`): The `fail` expression if the condition is false.
 
 ```cpp
-// Planned — not yet implemented
-// ensure b != 0 else fail<DivisionError>(DivisionError { dividend: a })
+// Implemented — as a parse-time desugar, not a dedicated AST node (#226-era slice):
+//   ensure b != 0 else fail<DivisionError>(DivisionError { dividend: a })
+//   -> if (b != 0) { } else { fail<DivisionError>(DivisionError { dividend: a }) }
+// See doc/FEATURE_STATUS.md "`fail` / `trap` error system" and
+// test/units/test_ensure_contract.vyb (plus test/trap/11_ensure_with_trap.vyb).
 ```
 
 ## 13. `UnsafeBlockStatement`

@@ -1,5 +1,17 @@
 # Lambda Expressions and Closures in Vyb
 
+> **Status: shipped (v0.7.6).** This page is the design note for lambdas and
+> closures. Closure struct codegen, mutable / move / `our<T>` capture, closure
+> environment refcounting (including returned-closure release), owned /
+> member-receiver capture, and async lambdas all ship today — the tracked record is
+> `TODO.md` § "Lambda / Closures" plus the `doc/FEATURE_STATUS.md` "Lambdas /
+> Closures" table, which cite the executable test for each row. Two gaps remain,
+> both recorded there: a closure with mutable captures cannot escape its defining
+> function (#359), and generic lambdas (`|x<T>| -> ...`) are unsupported (#360).
+> This page is **not** authoritative — for current behaviour trust
+> `docs/refman/PROGRAMMERS_GUIDE.md` cross-checked against `build/vyb`
+> (`doc/DOCS_POLICY.md`).
+
 ## Overview
 
 Vyb supports **lambda expressions** (anonymous functions) with **closure capture**, enabling functional programming patterns like map/filter/reduce, callbacks, and higher-order functions.
@@ -216,8 +228,11 @@ Capture forms
   is a use-after-move diagnostic.
 - **`our<T>` (shared)** — Capturing an `our<T>` bumps its strong count so the
   shared value stays alive for the closure's lifetime. The closure environment is
-  heap-allocated and currently never freed, so the count is intentionally not
-  balanced by a closure-side release.
+  heap-allocated and **refcounted** (`{ i64 refcount; ptr cap_dtor; <captures...> }`):
+  copying a closure into a storage location retains the env, and variable /
+  parameter scope exit and overwrite release it, so the `our<T>` count is balanced
+  by the env's own release when its last reference drops (verified clean under
+  valgrind, including returned closures — `test/lambda/test_closure_our_capture.vyb`).
 
 **Notes & safety**: a mutable capture holds a pointer to the outer variable's
 stack location, so a closure with mutable captures must not outlive its defining
@@ -298,17 +313,34 @@ subject.notify("Hello!")  // "Alice received: Hello!"
 
 ## Current Limitations
 
-1. **Codegen not yet implemented**: Lambda parsing and semantic analysis work, but LLVM code generation is TODO
-2. **No async lambdas**: Async support requires integration with the async runtime
-3. **No move semantics**: Closures currently copy captures; move semantics for `my<T>` captures not yet supported
-4. **No generic lambdas**: Type parameters on lambdas not yet supported
+Everything the earlier draft listed here has since shipped — closure struct codegen
+(`test/lambda/test_closure_capture.vyb`), move capture
+(`test/lambda/test_closure_move_capture.vyb`), async lambdas
+(`test/async/async_lambda.vyb`), mutable capture write-back
+(`test/lambda/test_closure_mutable_capture.vyb`) and env refcounting with
+returned-closure release (`test/lambda/test_closure_our_capture.vyb`). What remains:
+
+1. **A mutable-capture closure cannot escape its defining function** — the
+   environment holds the outer variable's *stack address*, so returning such a
+   closure is rejected at compile time instead of producing a use-after-free
+   (`test/lambda/test_closure_mutable_return_rejected.vyb`). Rust's `FnMut`
+   closures *can* be returned, so this is a real expressiveness difference.
+   Decision for 1.0: postponed (#359); relaxing it means an env-owned heap cell.
+2. **No generic lambdas** — `|x<T>| -> ...` (type parameters on closures) is
+   unsupported: no parser/codegen path and no fixture. Decision for 1.0:
+   postponed, recorded per #360.
 
 ## Future Enhancements
 
-- **Move capture**: Transfer ownership of captured variables into the lambda
-- **Mutable capture**: Allow modifying captured variables
-- **Generic lambdas**: `|x<T>| -> ...` with type parameters
-- **Async lambdas**: `async |x| -> await process(x)`
+Both remaining items are **recorded decisions, not open wish-list entries** — they
+are roadmap items in `TODO.md` § "Lambda / Closures" and rows in
+`doc/FEATURE_STATUS.md`, so their status cannot silently drift:
+
+- **Boxed / lifetime-carrying mutable closures** (#359) — an env-owned heap cell in
+  place of the captured variable's stack address, which would let a mutating closure
+  be returned.
+- **Generic lambdas** (#360) — `|x<T>| -> ...` with type parameters, monomorphized
+  per concrete type at the call site, mirroring generic-function monomorphization.
 
 ## Comparison with Other Languages
 
