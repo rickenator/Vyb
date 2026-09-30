@@ -291,6 +291,29 @@ v5(a<String>, b<String>, c<String>, d<String>, e<String>)<Vec<String>> -> {
     return out
 }
 
+# Push a row built from cells WITHOUT ever holding a Vec *expression temporary*.
+# The compiler does not reclaim a Vec temporary that is consumed and discarded
+# (`rows.push(v2(a, b))` leaked the returned buffer; the ASan suite flags it), so
+# the cell Vec is created here as a named local and freed at scope exit, while
+# push() deep-copies it into the row store.
+share(all)
+push_row2(rows<their<Vec<Vec<String>>>>, a<String>, b<String>) -> {
+    row<Vec<String>> = v2(a, b)
+    rows.push(row)
+}
+
+share(all)
+push_row4(rows<their<Vec<Vec<String>>>>, a<String>, b<String>, c<String>, d<String>) -> {
+    row<Vec<String>> = v4(a, b, c, d)
+    rows.push(row)
+}
+
+share(all)
+push_row5(rows<their<Vec<Vec<String>>>>, a<String>, b<String>, c<String>, d<String>, e<String>) -> {
+    row<Vec<String>> = v5(a, b, c, d, e)
+    rows.push(row)
+}
+
 share(all)
 csv_line(cells<Vec<String>>)<String> -> {
     out<String> = ""
@@ -388,7 +411,11 @@ db_payload(cfg<Config>, sql<String>)<String> -> {
 share(all)
 payload_count(payload<String>)<Int> -> {
     if (payload.len() == 0) { return 0 }
-    return payload.split("\n").len()
+    # Bind the split result: a Vec *expression temporary* is not reclaimed by the
+    # compiler, so `payload.split("\n").len()` leaks the buffer (the ASan suite
+    # flags it). A named local is freed at scope exit.
+    rows<Vec<String>> = payload.split("\n")
+    return rows.len()
 }
 
 share(all)
@@ -931,7 +958,8 @@ export_csv(cfg<Config>)<Vec<String>> -> {
     written<Vec<String>> = Vec<String>()
     if (!ensure_dir(cfg.export_dir)) { return written }
 
-    summary<String> = csv_line(summary_header())
+    summary_hdr<Vec<String>> = summary_header()
+    summary<String> = csv_line(summary_hdr)
     rows<Vec<Vec<String>>> = summary_rows(cfg)
     i<Int> = 0
     while (i < rows.len()) {
@@ -942,24 +970,29 @@ export_csv(cfg<Config>)<Vec<String>> -> {
     path0<String> = cfg.export_dir + "/summary.csv"
     if (spill(path0, summary)) { written.push(path0) }
 
+    # Write the tables. Each header Vec is bound to a local: a Vec expression
+    # temporary (`write_table(path, v5(...), ...)`) is not reclaimed and leaks.
+    dly_hdr<Vec<String>> = v5("date", "count", "uniques", "first_seen", "last_seen")
+    ref_hdr<Vec<String>> = v4("snapshot_utc", "referrer", "count", "uniques")
+    pop_hdr<Vec<String>> = v5("snapshot_utc", "path", "title", "count", "uniques")
     if (write_table(cfg.export_dir + "/clone_daily.csv",
-                    v5("date", "count", "uniques", "first_seen", "last_seen"),
+                    dly_hdr,
                     db_payload(cfg, "SELECT date, count, uniques, first_seen, last_seen FROM clone_daily ORDER BY date"))) {
         written.push(cfg.export_dir + "/clone_daily.csv")
     }
     if (write_table(cfg.export_dir + "/view_daily.csv",
-                    v5("date", "count", "uniques", "first_seen", "last_seen"),
+                    dly_hdr,
                     db_payload(cfg, "SELECT date, count, uniques, first_seen, last_seen FROM view_daily ORDER BY date"))) {
         written.push(cfg.export_dir + "/view_daily.csv")
     }
     if (write_table(cfg.export_dir + "/referrers.csv",
-                    v4("snapshot_utc", "referrer", "count", "uniques"),
+                    ref_hdr,
                     db_payload(cfg, "SELECT timestamp_utc, referrer, count, uniques FROM referrers " +
                                     "ORDER BY timestamp_utc, count DESC, referrer"))) {
         written.push(cfg.export_dir + "/referrers.csv")
     }
     if (write_table(cfg.export_dir + "/popular_paths.csv",
-                    v5("snapshot_utc", "path", "title", "count", "uniques"),
+                    pop_hdr,
                     db_payload(cfg, "SELECT timestamp_utc, path, title, count, uniques FROM popular_paths " +
                                     "ORDER BY timestamp_utc, count DESC, path"))) {
         written.push(cfg.export_dir + "/popular_paths.csv")
@@ -980,34 +1013,34 @@ summary_header()<Vec<String>> -> {
 share(all)
 summary_rows(cfg<Config>)<Vec<Vec<String>>> -> {
     rows<Vec<Vec<String>>> = Vec<Vec<String>>()
-    rows.push(v2("source", "SQLite (vyb-traffic)"))
+    push_row2(borrow(rows), "source", "SQLite (vyb-traffic)")
     latest<Vec<String>> = db_query_one(cfg, "SELECT timestamp_utc, clone_count_14d, clone_uniques_14d, " +
                                            "view_count_14d, view_uniques_14d FROM snapshots " +
                                            "ORDER BY timestamp_utc DESC LIMIT 1")
-    if (latest.len() > 0) { rows.push(v2("latest_snapshot_utc", latest.get(0))) }
+    if (latest.len() > 0) { push_row2(borrow(rows), "latest_snapshot_utc", latest.get(0)) }
     span<Vec<String>> = db_query_one(cfg, "SELECT MIN(timestamp_utc), MAX(timestamp_utc) FROM snapshots")
     if (span.len() > 0 && span.get(0).len() > 0) {
-        rows.push(v2("first_recorded", span.get(0).substring(0, 10)))
-        rows.push(v2("last_recorded", span.get(1).substring(0, 10)))
+        push_row2(borrow(rows), "first_recorded", span.get(0).substring(0, 10))
+        push_row2(borrow(rows), "last_recorded", span.get(1).substring(0, 10))
     }
     if (latest.len() > 0) {
-        rows.push(v2("current_14d_clones", latest.get(1)))
-        rows.push(v2("current_14d_unique_cloners", latest.get(2)))
-        rows.push(v2("current_14d_views", latest.get(3)))
-        rows.push(v2("current_14d_unique_viewers", latest.get(4)))
+        push_row2(borrow(rows), "current_14d_clones", latest.get(1))
+        push_row2(borrow(rows), "current_14d_unique_cloners", latest.get(2))
+        push_row2(borrow(rows), "current_14d_views", latest.get(3))
+        push_row2(borrow(rows), "current_14d_unique_viewers", latest.get(4))
     } else {
-        rows.push(v2("current_14d_clones", ""))
-        rows.push(v2("current_14d_unique_cloners", ""))
-        rows.push(v2("current_14d_views", ""))
-        rows.push(v2("current_14d_unique_viewers", ""))
+        push_row2(borrow(rows), "current_14d_clones", "")
+        push_row2(borrow(rows), "current_14d_unique_cloners", "")
+        push_row2(borrow(rows), "current_14d_views", "")
+        push_row2(borrow(rows), "current_14d_unique_viewers", "")
     }
     totals<Vec<String>> = db_query_one(cfg, totals_sql())
-    rows.push(v2("archived_clone_events", fmt_int(totals.get(0))))
-    rows.push(v2("archived_view_events", fmt_int(totals.get(1))))
-    rows.push(v2("archived_sum_of_daily_clone_uniques_observation_only", fmt_int(totals.get(2))))
-    rows.push(v2("archived_sum_of_daily_view_uniques_observation_only", fmt_int(totals.get(3))))
-    rows.push(v2("unique_cloners_note",
-                 "GitHub does not expose stable identities; summed daily uniques are not a true lifetime unique-user count."))
+    push_row2(borrow(rows), "archived_clone_events", fmt_int(totals.get(0)))
+    push_row2(borrow(rows), "archived_view_events", fmt_int(totals.get(1)))
+    push_row2(borrow(rows), "archived_sum_of_daily_clone_uniques_observation_only", fmt_int(totals.get(2)))
+    push_row2(borrow(rows), "archived_sum_of_daily_view_uniques_observation_only", fmt_int(totals.get(3)))
+    push_row2(borrow(rows), "unique_cloners_note",
+              "GitHub does not expose stable identities; summed daily uniques are not a true lifetime unique-user count.")
     return rows
 }
 
@@ -1021,7 +1054,10 @@ write_table(path<String>, header<Vec<String>>, payload<String>)<Bool> -> {
         i<Int> = 0
         while (i < rows.len()) {
             line<String> = rows.get(i)
-            text = text + csv_line(line.split("\t"))
+            # Bind the split result so the buffer is freed at scope exit (a Vec
+            # expression temporary is not reclaimed by the compiler).
+            cells<Vec<String>> = line.split("\t")
+            text = text + csv_line(cells)
             i = i + 1
         }
     }
