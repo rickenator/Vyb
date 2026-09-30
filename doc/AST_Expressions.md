@@ -461,6 +461,7 @@ p<loc<Int>> = loc(x) // Creates a pointer to x
 ```
 
 AST Representation:
+
 - When parsed as a `ConstructionExpression`:
   - `constructedType`: A `TypeName` node for "loc"
   - `arguments`: A vector containing one expression (the variable being pointed to)
@@ -475,6 +476,7 @@ p<loc<Int>> = from<loc<Int>>(addr) // Converts integer to pointer
 ```
 
 AST Representation:
+
 - Typically a `ConstructionExpression` with:
   - `constructedType`: A `GenericInstanceTypeNode` with the target type (e.g., `from<loc<Int>>`)
   - `arguments`: A vector containing one expression (the value to convert)
@@ -490,6 +492,7 @@ at(p) = 99;         // Writes to pointer
 ```
 
 AST Representation:
+
 - When parsed as a `CallExpression`:
   - `callee`: An `Identifier` node for "at"
   - `arguments`: A vector containing one expression (the pointer to dereference)
@@ -498,6 +501,7 @@ AST Representation:
   - `arguments`: A vector containing one expression (the pointer to dereference)
 
 Note that the behavior of `at(ptr)` depends on context:
+
 - On the right-hand side of an assignment: Returns the value at the pointer's address
 - On the left-hand side of an assignment: Returns the pointer itself to enable direct assignment
 
@@ -552,6 +556,7 @@ public:
 ```
 
 **Key Characteristics**:
+
 - Expression-based pattern matching (unlike match which is statement-based)
 - Returns a value that can be assigned to variables
 - Requires semicolon terminator: `select(...) -> { ... };`
@@ -562,6 +567,7 @@ public:
 - Uses SelectContext stack for proper code generation
 
 **Example**:
+
 ```vyb
 result<Int> = select(status) -> {
     1 -> 100,           // Naked expression
@@ -596,6 +602,7 @@ public:
 ```
 
 **Key Characteristics**:
+
 - Only valid inside select expression blocks
 - Returns value from the **block**, not the enclosing function
 - Requires an expression argument (cannot be empty)
@@ -603,6 +610,7 @@ public:
 - Generates store to resultAlloca and branch to endBlock in LLVM IR
 
 **Example**:
+
 ```vyb
 select(code) -> {
     3 -> {

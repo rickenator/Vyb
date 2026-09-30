@@ -8,5 +8,6 @@ Wants=network-online.target
 Type=oneshot
 # Keep this file mode 0600. It may also contain VYB_TRAFFIC_* overrides.
 EnvironmentFile=-%h/.config/vyb-traffic/env
-Environment="PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
-ExecStart=/usr/bin/env vyb-traffic collect
+# The launcher finds the repository build and its stdlib. Build Vyb first
+# (cmake -S . -B build && cmake --build build -j) from %h/Projects/Vyb.
+ExecStart=%h/Projects/Vyb/vyb-traffic/vyb-traffic collect

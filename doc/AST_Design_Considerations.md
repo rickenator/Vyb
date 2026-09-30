@@ -10,6 +10,7 @@ This document discusses various design choices, alternatives considered, and rat
 Typically, AST nodes in C++ are dynamically allocated on the heap. Smart pointers, particularly `std::unique_ptr`, are often used to manage the lifecycle of these nodes. For Vyb, `PNode`, `PExpression`, `PStatement`, etc., are typedefs for `std::shared_ptr<Node>`, `std::shared_ptr<Expression>`, etc., as seen in `ast.hpp`.
 
 **Considerations for `std::shared_ptr`:**
+
 -   **Pros:**
     -   Simplifies ownership in complex scenarios where multiple parts of the compiler might temporarily need access to AST subtrees (e.g., during transformations or analysis passes that don't modify the tree but hold references).
     -   Can prevent dangling pointers if nodes are referenced from multiple places (though this should be minimized in a tree structure).
@@ -18,6 +19,7 @@ Typically, AST nodes in C++ are dynamically allocated on the heap. Smart pointer
     -   Can lead to cyclic dependencies if not careful (e.g., parent pointers holding `shared_ptr` to children, and children holding `shared_ptr` to parent), though parent pointers are not currently implemented.
 
 **Alternative: `std::unique_ptr`:**
+
 -   **Pros:**
     -   Clear ownership model: each node is owned by its parent or the primary AST structure (e.g., a vector of statements in a block).
     -   Lower overhead than `std::shared_ptr`.
@@ -31,6 +33,7 @@ Typically, AST nodes in C++ are dynamically allocated on the heap. Smart pointer
 The Vyb AST currently uses `std::shared_ptr` for its node pointers (`PNode`, `PExpression`, etc.). This choice was likely made to simplify early development and potentially to accommodate complex tree transformations or analyses where subtrees might be temporarily referenced from multiple places. However, the performance implications and the risk of cycles (especially if parent pointers were introduced) are valid concerns.
 
 **Future Direction:**
+
 -   Re-evaluate the use of `std::shared_ptr`. For a strict tree structure, `std::unique_ptr` is generally preferred for ownership, with raw pointers or references for non-owning access.
 -   Consider an arena allocator for AST nodes. This can significantly improve allocation performance and simplify deallocation (free the entire arena at once after compilation).
 
@@ -45,6 +48,7 @@ The Vyb AST currently uses `std::shared_ptr` for its node pointers (`PNode`, `PE
 The `vyb::ast::Node` class in `ast.hpp` does not currently include a `parent` pointer.
 
 **Discussion:**
+
 -   **Pros of No Parent Pointers:**
     -   Simpler node structure and construction.
     -   Avoids potential `std::shared_ptr` cycles if parent pointers were also `shared_ptr`.
@@ -54,6 +58,7 @@ The `vyb::ast::Node` class in `ast.hpp` does not currently include a `parent` po
     -   Some analyses might be more complex.
 
 **Strategies for Contextual Analysis without Parent Pointers:**
+
 -   **Visitor with Context:** Pass necessary contextual information (e.g., current scope, symbol table, expected type) down the tree as parameters to visitor methods.
 -   **External Scope/Symbol Table Stack:** Maintain a separate stack of symbol tables or scope objects during semantic analysis. As the visitor enters/exits scopes (e.g., `BlockStatement`, `FunctionDeclaration`), the stack is pushed/popped.
 -   **Post-hoc Tree Annotation:** An analysis pass could annotate nodes with relevant information derived from their context, without storing direct parent pointers.
@@ -72,6 +77,7 @@ While the current approach relies on visitors passing context, the utility of pa
 The AST definition in `ast.hpp` does not explicitly include an `ErrorNode` or a similar mechanism for representing parsing errors directly within the tree structure that allow for partial recovery.
 
 **Discussion:**
+
 -   **Parser Error Recovery:** The Vyb parser (`Parser` class and its components) attempts to recover from errors to provide multiple diagnostics. However, how these recovered-but-still-erroneous constructs are represented in the AST is key.
 -   **Benefits of an `ErrorNode`:**
     -   Allows the parser to insert a placeholder in the AST when it encounters a construct it can't fully parse but can recover from.
@@ -95,6 +101,7 @@ Introducing an `ErrorNode` (or multiple types, like `ErrorExpression`, `ErrorSta
 The `Visitor` class in `ast.hpp` defines a pure virtual `visit` method for each concrete AST node type.
 
 **Discussion:**
+
 -   **Pros of Current Approach (Acyclic Visitor):**
     -   Type-safe: The correct `visit` overload is called by the node's `accept` method.
     -   Explicit: Clearly shows all node types that must be handled.
@@ -103,8 +110,10 @@ The `Visitor` class in `ast.hpp` defines a pure virtual `visit` method for each 
     -   Adding new node types requires updating all visitor interfaces and implementations.
 
 **Alternatives to Reduce Boilerplate:**
+
 1.  **Default Visit Methods in Base Visitor:**
     Create a base `Visitor` class where `visit` methods for specific nodes can delegate to more general handlers (e.g., `visit(Expression&)` or a `defaultVisit(Node&)`).
+
     ```cpp
     // Example BaseVisitor
     class BaseVisitor : public Visitor {
@@ -134,6 +143,7 @@ Providing a `BaseVisitor` (as in option 1) with default implementations (e.g., t
 > "The EBNF mentions `path_expression` (e.g., `foo::bar::Baz`) which is common for qualified names. How is this represented in the AST? Is there a dedicated `PathNode` or `QualifiedIdentifierNode`? The `MemberExpression` seems to be for `object.member`. If `MemberExpression` is used for `foo::bar`, it might be confusing. `TypeNode` also has a `name` string which might store a full path."
 
 **Current Status:**
+
 -   `MemberExpression` (`object.member`) is defined for field/method access.
 -   `TypeNode` has a `std::string name` which could store a simple name or a fully qualified name.
 -   The parser logic, especially in `TypeParser` and `ExpressionParser`, handles name resolution.
@@ -141,10 +151,12 @@ Providing a `BaseVisitor` (as in option 1) with default implementations (e.g., t
 
 **Discussion:**
 Representing qualified paths (e.g., `module::type`, `enum::variant`) is crucial.
+
 -   **Option 1: Re-purpose `MemberExpression`:** Using `MemberExpression` for `foo::bar` could work if `foo` is treated as an expression evaluating to a module or namespace object, and `bar` is its member. This might be semantically overloaded.
 -   **Option 2: String in `Identifier` or `TypeNode`:** Store the full path `"foo::bar::Baz"` as a string. This is simple but requires parsing the path string during semantic analysis.
 -   **Option 3: Dedicated `PathExpression` or `QualifiedIdentifier` Node:**
     A `PathExpression` node could hold a sequence of `Identifier`s representing the segments of the path.
+
     ```cpp
     // Conceptual PathExpression
     class PathExpression : public Expression {
@@ -160,6 +172,7 @@ Representing qualified paths (e.g., `module::type`, `enum::variant`) is crucial.
 The parser was updated to use `TypeParser::parse_path()` which returns a `PExpression`. This `PExpression` is likely an `Identifier` for single segment paths or a chain of `MemberExpression`s if `::` is parsed similarly to `.` for paths.
 
 **Clarification & Future Direction:**
+
 -   The use of `PExpression` for `typePath` in `ObjectLiteral` and for `typeName` in `ConstructionExpression` suggests that paths are treated as general expressions. The parser likely constructs these as `Identifier` nodes for simple names or a chain of `MemberExpression`s where the `object` is the preceding part of the path and `member` is the next segment.
 -   While this works, a dedicated `PathExpression` node could offer a clearer semantic distinction for name qualification versus object member access. This would be particularly useful for type names, module paths, and enum variant paths.
 -   For now, the convention seems to be that `MemberExpression` might be used by the parser for `foo::bar` by treating `::` similarly to `.`, or `TypeParser::parse_path()` might be constructing a specific internal representation that resolves to an `Identifier` with a potentially qualified name string.
@@ -177,12 +190,14 @@ The parser was updated to use `TypeParser::parse_path()` which returns a `PExpre
 
 **Discussion:**
 This was partially addressed in `AST_Types.md`. The core issue is how the single `TypeNode` class represents the diversity of type constructs found in the language grammar:
+
 -   **Pointers (`*T`, `*mut T`):** Could be `TypeNode { name: "*T" }` or `TypeNode { name: "T", isPointer: true }`.
 -   **Arrays (`[T; N]`, `[T]`):** Could be `TypeNode { name: "[T; N]" }` or `TypeNode { name: "T", isArray: true, size: N }`.
 -   **Tuples (`(A, B)`):** Could be `TypeNode { name: "(A,B)" }` or a dedicated `TupleTypeNode` holding a list of `PTypeNode`.
 -   **Function Types (`fn(A) -> B`):** Could be `TypeNode { name: "fn(A)->B" }` or a dedicated `FunctionTypeNode` with fields for parameters and return type.
 
 **Current Approach (Inferred from `ast.hpp` and typical parsers):**
+
 -   The `TypeParser` is responsible for parsing type syntax and constructing `TypeNode` instances.
 -   It's likely that complex types are either:
     1.  **Normalized into a string form for `TypeNode::name`**: e.g., `*int`, `[int; 5]`. This is simple for the AST structure but defers parsing of the type structure to semantic analysis.
@@ -190,6 +205,7 @@ This was partially addressed in `AST_Types.md`. The core issue is how the single
     3.  The `parameters` field is primarily for generic arguments like `List<int>` (`TypeNode { name: "List", parameters: [TypeNode { name: "int" }] }`).
 
 **Future Direction/Clarification:**
+
 -   The `AST_Types.md` document should be the primary source for how `TypeNode` represents these. If the C++ `TypeNode` is simple, it should be stated that the `name` field often carries structured information that semantic analysis will decode.
 -   Introducing specialized `TypeNode` subclasses (e.g., `PointerType`, `ArrayType`, `TupleType`, `FunctionType`) inheriting from a base `TypeNode` would create a more explicit and structured AST for types. This would make semantic analysis more straightforward as it could dispatch on the specific type node kind.
 -   The choice depends on the trade-off between AST simplicity and explicitness for later phases. Given Vyb's feature set, a more structured type representation in the AST (subclasses) is likely beneficial in the long run.
@@ -213,6 +229,7 @@ earlier note that they were "planned but not yet implemented" is obsolete; the
 sketches below are retained as the design rationale.
 
 **Conceptual Pattern Nodes:**
+
 -   `IdentifierPattern`: Matches a value and binds it to an identifier (e.g., `x` in `let x = ...`). May include `isMutable`.
 -   `LiteralPattern`: Matches a specific literal value (e.g., `1`, `"hello"`, `true`).
 -   `TuplePattern`: Destructures a tuple (e.g., `(a, b)`).
@@ -226,6 +243,7 @@ sketches below are retained as the design rationale.
 
 **Visitor Integration:**
 Each concrete pattern node would inherit from a base `PatternNode` (which inherits from `vyb::ast::Node`).
+
 ```cpp
 // Conceptual base
 class PatternNode : public Node { /* ... */ };
@@ -242,6 +260,7 @@ public:
 ```
 
 The `Visitor` interface would need corresponding `visit` methods:
+
 ```cpp
 class Visitor {
 public:

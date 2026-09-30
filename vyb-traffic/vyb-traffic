@@ -1,10 +1,16 @@
 #!/usr/bin/env sh
-# vyb-traffic launcher: runs the packaged CLI without a pip install.
-DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-if [ -z "${PYTHONPATH:-}" ]; then
-    PYTHONPATH="$DIR"
-else
-    PYTHONPATH="$DIR:$PYTHONPATH"
+# vyb-traffic launcher: run the Vyb implementation from a source checkout.
+# Resolves symlinks, locates the repository build, sets VYB_STDLIB, and passes
+# the FFI binding module path. Override the compiler with VYB=/path/to/vyb.
+set -eu
+SELF=$(readlink -f "$0")
+DIR=$(CDPATH= cd -- "$(dirname -- "$SELF")" && pwd)
+REPO=$(CDPATH= cd -- "$DIR/.." && pwd)
+VYB=${VYB:-"$REPO/build/vyb"}
+VYB_STDLIB=${VYB_STDLIB:-"$REPO/stdlib"}
+export VYB_STDLIB
+if [ ! -x "$VYB" ]; then
+    echo "vyb-traffic: $VYB is not executable - build Vyb first (cmake --build build)" >&2
+    exit 1
 fi
-export PYTHONPATH
-exec python3 -m vyb_traffic "$@"
+exec "$VYB" "$DIR/vyb-traffic.vyb" --module-path "$REPO/bindings" "$@"

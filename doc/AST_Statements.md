@@ -94,6 +94,7 @@ Represents a for loop. Supports both range-based iteration and Vec<T> iteration.
     -   `body` (`StmtPtr`): The statement (usually a `BlockStatement`) executed for each iteration.
 
 **Syntax Requirements (v0.4.1):**
+
 - Parentheses are **mandatory**: `for (item in expr)` not `for item in expr`
 - Supports range expressions: `for (i in 0..10)` inclusive ranges
 - Supports Vec iteration: `for (item in vec)` where vec is a Vec<T>
@@ -101,6 +102,7 @@ Represents a for loop. Supports both range-based iteration and Vec<T> iteration.
 
 **Desugaring:**
 Vec iteration desugars to index-based loops:
+
 ```vyb
 for (item in vec) { body }
 // Becomes:
@@ -245,6 +247,7 @@ public:
 ```
 
 **Example Usage:**
+
 ```vyb
 match x {
     42 => println("The answer"),
@@ -254,6 +257,7 @@ match x {
 ```
 
 The `MatchStatement` enables comprehensive pattern matching with:
+
 - **Value matching**: Direct comparison with literals (e.g., `42`, `"hello"`)
 - **Wildcard patterns**: `_` matches any value
 - **Fat arrow syntax**: `=>` separates patterns from results
@@ -359,6 +363,7 @@ Freedom blocks are used to contain low-level memory operations that could be fre
 3. Convert between pointer types with `from<loc<T>>(addr)`
 
 Example:
+
 ```vyb
 freedom {
     var<loc<Int>> p = loc(x);

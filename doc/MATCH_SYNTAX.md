@@ -98,6 +98,7 @@ match (score) {
 **Supported Operators**: `==`, `!=`, `<`, `<=`, `>`, `>=`
 
 **Important**: Patterns are evaluated **top-to-bottom**, first match wins:
+
 ```vyb
 match (age) {
     >= 18 -> println("Adult"),     // Catches 18+
@@ -107,6 +108,7 @@ match (age) {
 
 **Unreachable Pattern Detection**:
 The compiler will reject patterns that can never match:
+
 - Wildcard before other patterns
 - Broader ranges before narrower ones
 - Duplicate exact matches
@@ -116,6 +118,7 @@ See the "Unreachable Pattern Detection" section below for details.
 
 ### Future: Complex Patterns
 Planned support for:
+
 - Struct destructuring: `Point { x, y } > ...`
 - Enum variants: `Shape::Circle(r) > ...`
 - Range patterns: `1..10 > ...`
@@ -124,6 +127,7 @@ Planned support for:
 ## Examples
 
 ### Simple Integer Matching
+
 ```vyb
 describe_number(x<Int>)<String> -> {
     match (x) {
@@ -136,6 +140,7 @@ describe_number(x<Int>)<String> -> {
 ```
 
 ### Status Code Handling
+
 ```vyb
 process_status(code<Int>)<Void> -> {
     match (code) {
@@ -148,6 +153,7 @@ process_status(code<Int>)<Void> -> {
 ```
 
 ### Without Wildcard
+
 ```vyb
 check_specific(n<Int>)<Void> -> {
     match (n) {
@@ -221,6 +227,7 @@ pattern         ::= literal
 ## Comparison with Other Languages
 
 ### Rust
+
 ```rust
 match x {
     0 => "zero",
@@ -229,6 +236,7 @@ match x {
 ```
 
 ### Swift
+
 ```swift
 switch x {
 case 0: return "zero"
@@ -237,6 +245,7 @@ default: return "other"
 ```
 
 ### Vyb
+
 ```vyb
 match (x) {
     0 -> "zero",
@@ -245,6 +254,7 @@ match (x) {
 ```
 
 **Advantages**:
+
 - Consistent arrow syntax with functions
 - Clear expression boundaries with parens
 - Intuitive wildcard symbol

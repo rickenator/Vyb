@@ -1,0 +1,53 @@
+// @test: vyb-traffic time and number formatting
+// @description: iso_from_millis / civil_from_days render ISO-8601 UTC stamps for
+//   the epoch, a leap day and a modern instant; group_digits separates thousands;
+//   fmt_nullable maps an archived NULL ("") to "-" but keeps a real 0; sql_lit
+//   doubles single quotes; csv_field quotes only when needed.
+// @category: traffic, time, formatting, tooling
+// @expect: pass
+// @expect-output: traffic-time-ok
+// @expect-return: 0
+// @vyb-args: --module-path vyb-traffic --module-path bindings
+// @env: VYB_STDLIB=stdlib
+
+import traffic::{iso_from_millis, civil_from_days, group_digits, pad_to,
+                 fmt_nullable, fmt_int, sql_lit, csv_field}
+
+main()<Int> -> {
+    # The epoch, and millisecond precision preserved.
+    if (iso_from_millis(0) != "1970-01-01T00:00:00.000Z") { return 1 }
+    if (iso_from_millis(1500) != "1970-01-01T00:00:01.500Z") { return 2 }
+    # A leap day (2024-02-29T00:00:00Z = 1709164800 s).
+    if (iso_from_millis(1709164800000) != "2024-02-29T00:00:00.000Z") { return 3 }
+    # 2026-09-30T04:30:15Z = 1790742615 s.
+    if (iso_from_millis(1790742615000) != "2026-09-30T04:30:15.000Z") { return 4 }
+    # 2000-03-01T12:00:00Z = 951912000 s.
+    if (iso_from_millis(951912000000) != "2000-03-01T12:00:00.000Z") { return 5 }
+
+    ymd<Vec<Int>> = civil_from_days(0)
+    if (ymd.get(0) != 1970 || ymd.get(1) != 1 || ymd.get(2) != 1) { return 6 }
+    ymd2<Vec<Int>> = civil_from_days(19782)
+    if (ymd2.get(0) != 2024 || ymd2.get(1) != 2 || ymd2.get(2) != 29) { return 7 }
+
+    if (pad_to(7, 3) != "007") { return 8 }
+    if (group_digits(0) != "0") { return 9 }
+    if (group_digits(999) != "999") { return 10 }
+    if (group_digits(1000) != "1,000") { return 11 }
+    if (group_digits(1967) != "1,967") { return 12 }
+    if (group_digits(1234567) != "1,234,567") { return 13 }
+    if (group_digits(0 - 1234567) != "-1,234,567") { return 14 }
+
+    # A NULL rolling value reads back as "" and must print "-", never 0.
+    if (fmt_nullable("") != "-") { return 15 }
+    if (fmt_nullable("0") != "0") { return 16 }
+    if (fmt_int("") != "0") { return 17 }
+    if (fmt_int("1967") != "1,967") { return 18 }
+
+    if (sql_lit("it's") != "'it''s'") { return 19 }
+    if (csv_field("plain") != "plain") { return 20 }
+    if (csv_field("a,b") != "\"a,b\"") { return 21 }
+    if (csv_field("say \"hi\"") != "\"say \"\"hi\"\"\"") { return 22 }
+
+    println("traffic-time-ok")
+    return 0
+}

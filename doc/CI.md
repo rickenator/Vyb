@@ -20,8 +20,7 @@ merge/push to `main`:
 - **No branch deletion**.
 
 Deliberately NOT required (non-blocking, so hardware availability / scheduled
-runs never deadlock `main`): the self-hosted `Execute + verify kernels +
-bindings on RTX 3090` job (gpu-kernel.yml) and the scheduled-only
+runs never deadlock `main`): the self-hosted `Execute + verify kernels + bindings on RTX 3090` job (gpu-kernel.yml) and the scheduled-only
 `Memory-safety (ASan full suite)` job. Both still run/report for visibility.
 
 Changes to `main` therefore go through a pull request: push a branch, open a PR,
@@ -34,6 +33,7 @@ wait for the three required checks to pass, then merge.
 | `.github/workflows/refman-check.yml` | `refman-check` — "Validate generated refman matches stdlib" | doc/refman drift + link integrity |
 
 Notes
+
 - The suite size in this table is the *documented* number, and `test/suite_count_check.vyb` — run in the `ci` job — is the authority: it compares every "<N> tests" claim in `README.md`, `docs/refman/PROGRAMMERS_GUIDE.md` and `TODO.md` against `find test -name '*.vyb'` **minus** the files marked `// @not-a-test` (tooling, not fixtures). Today that is 1,209 `.vyb` files − 8 tooling = **1,201** fixtures, which is why the naive file count and the suite count differ by 8.
 - `tools/docstatus.vyb` (also run in the `ci` job) enforces the tracking-doc invariants: cited paths in `doc/FEATURE_STATUS.md` resolve, every unchecked 1.0 item carries an `<!-- open: LABEL -->` marker, no open item names a row already marked ✅, no shipped item's row still reads 📋/🚧, and the README's release link matches the version `CMakeLists.txt` builds.
 - Re-enabling a manually-disabled workflow is `PUT /repos/{owner}/{repo}/actions/workflows/{id}/enable` (the API uses **PUT**; POST 404s) — `gh api -X PUT`.

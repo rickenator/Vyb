@@ -18,11 +18,11 @@ Each system is broken into **phases** with **concrete implementation tasks** and
 
 ## Part 1: Module System (import/smuggle/bundles)
 
-### Overview
+### Module System: Overview
 
 Enable multi-file Vyb programs with controlled visibility using the bundles & sharing system (see `bundles_and_sharing.md`).
 
-### Current State
+### Module System: Current State
 
 - ✅ AST nodes exist: `ImportDeclaration`, `ImportSpecifier` (see `doc/AST_Declarations.md`)
 - ✅ Parser recognizes `import` keyword (basic skeleton)
@@ -37,6 +37,7 @@ Enable multi-file Vyb programs with controlled visibility using the bundles & sh
 **Goal:** Load and compile other Vyb files without visibility checks.
 
 **Tasks:**
+
 1. **Module Registry**
    - Create `ModuleRegistry` class in semantic analyzer
    - Store: `map<string, Module>` (path → compiled module)
@@ -63,6 +64,7 @@ Enable multi-file Vyb programs with controlled visibility using the bundles & sh
    - Test: `import test::module` → can call `module::function()`
 
 **Deliverables:**
+
 - Multi-file compilation works
 - Basic import syntax functional
 - Circular dependency detection
@@ -77,6 +79,7 @@ Enable multi-file Vyb programs with controlled visibility using the bundles & sh
 **Goal:** Parse and store bundle memberships from `bundle(...)` directives.
 
 **Tasks:**
+
 1. **Bundle AST Node**
    - Create `BundleDeclaration` AST node
    - Fields: `vector<vector<string>> bundlePaths` (e.g., `sort.Core` → ["sort", "Core"])
@@ -99,6 +102,7 @@ Enable multi-file Vyb programs with controlled visibility using the bundles & sh
    - Error if `bundle(...)` appears after other declarations
 
 **Deliverables:**
+
 - Parser recognizes `bundle(...)` syntax
 - Module stores bundle membership
 - Test suite: `test/modules/test_bundle_parsing.vyb`
@@ -112,6 +116,7 @@ Enable multi-file Vyb programs with controlled visibility using the bundles & sh
 **Goal:** Parse `share(...)` prefixes on declarations.
 
 **Tasks:**
+
 1. **Share Annotation**
    - Add `shareWith: vector<string>` to `Declaration` base class
    - Empty vector = private (not shared)
@@ -130,6 +135,7 @@ Enable multi-file Vyb programs with controlled visibility using the bundles & sh
    - Warn if sharing with bundles the module doesn't belong to
 
 **Deliverables:**
+
 - Parser recognizes `share(...)` syntax
 - Declarations store visibility metadata
 - Test suite: `test/modules/test_share_parsing.vyb`
@@ -143,7 +149,9 @@ Enable multi-file Vyb programs with controlled visibility using the bundles & sh
 **Goal:** Enforce bundle-based visibility rules during import resolution.
 
 **Tasks:**
+
 1. **Import Validation Algorithm**
+
    ```cpp
    bool canImport(Module* importer, Declaration* target) {
        // No share directive → private
@@ -180,6 +188,7 @@ Enable multi-file Vyb programs with controlled visibility using the bundles & sh
    - Warning: "Using smuggle bypasses visibility checks"
 
 **Deliverables:**
+
 - Full bundle/sharing visibility enforcement
 - `smuggle` keyword functional
 - Comprehensive error messages
@@ -194,6 +203,7 @@ Enable multi-file Vyb programs with controlled visibility using the bundles & sh
 **Goal:** Support flexible module path strategies.
 
 **Tasks:**
+
 1. **Search Path Configuration**
    - Command-line flag: `--module-path /path/to/modules`
    - Environment variable: `VYB_MODULE_PATH`
@@ -217,6 +227,7 @@ Enable multi-file Vyb programs with controlled visibility using the bundles & sh
    - Show full dependency chain in error message
 
 **Deliverables:**
+
 - Robust module loading with search paths
 - Circular dependency protection
 - Test suite: `test/modules/test_module_paths.vyb`
@@ -249,7 +260,9 @@ Enable multi-file Vyb programs with controlled visibility using the bundles & sh
 **Goal:** Organize standard library into importable modules.
 
 **Tasks:**
+
 1. **Module Structure**
+
    ```
    stdlib/
      core/
@@ -278,6 +291,7 @@ Enable multi-file Vyb programs with controlled visibility using the bundles & sh
    - Tool: `vyb doc` to build documentation
 
 **Deliverables:**
+
 - Organized standard library
 - Core auto-import
 - Documentation generation
@@ -289,11 +303,11 @@ Enable multi-file Vyb programs with controlled visibility using the bundles & sh
 
 ## Part 2: FFI System (C Bindings)
 
-### Overview
+### FFI System: Overview
 
 Enable Vyb to call C functions and use C libraries (libc, POSIX, external deps).
 
-### Current State
+### FFI System: Current State
 
 - ✅ LLVM backend can emit C-compatible function calls
 - ✅ `freedom` blocks provide unsafe operations
@@ -307,7 +321,9 @@ Enable Vyb to call C functions and use C libraries (libc, POSIX, external deps).
 **Goal:** Manually declare C functions callable from Vyb.
 
 **Tasks:**
+
 1. **FFI Declaration Syntax**
+
    ```vyb
    extern "C" {
        fn printf(format: *i8, ...) -> Int
@@ -328,6 +344,7 @@ Enable Vyb to call C functions and use C libraries (libc, POSIX, external deps).
    - Support C calling conventions (cdecl by default)
 
 4. **Type Mapping**
+
    ```
    Vyb Type       C Type
    --------       ------
@@ -347,6 +364,7 @@ Enable Vyb to call C functions and use C libraries (libc, POSIX, external deps).
    - Link against C standard library by default
 
 **Deliverables:**
+
 - `extern "C"` syntax functional
 - Can call libc functions (printf, malloc, free)
 - Test suite: `test/ffi/test_extern_c.vyb`
@@ -360,7 +378,9 @@ Enable Vyb to call C functions and use C libraries (libc, POSIX, external deps).
 **Goal:** Define Vyb structs with C-compatible memory layout.
 
 **Tasks:**
+
 1. **C Layout Attribute**
+
    ```vyb
    #[repr(C)]
    struct Point {
@@ -390,6 +410,7 @@ Enable Vyb to call C functions and use C libraries (libc, POSIX, external deps).
    - ✅ Pass by pointer to C functions
 
 **Deliverables:**
+
 - ✅ C-compatible struct layout for the supported subset
 - ✅ Can pass repr(C) structs to C functions by pointer
 - ✅ Test suite: `test/ffi/repr_c_struct_basic.vyb`, `test/ffi/repr_c_struct_rejects_vyb_string.vyb`, `test/ffi/repr_c_struct_rejects_generic.vyb`, `test/ffi/repr_c_struct_rejects_ownership.vyb`, `test/ffi/extern_c_struct_by_pointer.vyb`
@@ -403,7 +424,9 @@ Enable Vyb to call C functions and use C libraries (libc, POSIX, external deps).
 **Goal:** Call C variadic functions like `printf()`.
 
 **Tasks:**
+
 1. **Variadic Syntax**
+
    ```vyb
    extern "C" {
        fn printf(format: *i8, ...) -> Int
@@ -431,6 +454,7 @@ Enable Vyb to call C functions and use C libraries (libc, POSIX, external deps).
    - Hide unsafe variadic calls behind safe API
 
 **Deliverables:**
+
 - Variadic C functions callable
 - Can use printf, scanf, etc.
 - Test suite: `test/ffi/test_variadic.vyb`
@@ -444,7 +468,9 @@ Enable Vyb to call C functions and use C libraries (libc, POSIX, external deps).
 **Goal:** Automated tool to generate Vyb bindings from C headers.
 
 **Tasks:**
+
 1. **Tool: `vyb bindgen`**
+
    ```bash
    vyb bindgen /usr/include/stdio.h > stdio.vyb
    ```
@@ -465,6 +491,7 @@ Enable Vyb to call C functions and use C libraries (libc, POSIX, external deps).
    - Rename conflicting names
 
 **Deliverables:**
+
 - `vyb bindgen` tool functional
 - Can generate bindings for any C library
 - Pre-generated bindings for libc, POSIX
@@ -479,7 +506,9 @@ Enable Vyb to call C functions and use C libraries (libc, POSIX, external deps).
 **Goal:** Safe Vyb wrappers around common C functions.
 
 **Tasks:**
+
 1. **Core Wrappers**
+
    ```vyb
    // stdlib/sys/Libc.vyb
    share(all)
@@ -513,6 +542,7 @@ Enable Vyb to call C functions and use C libraries (libc, POSIX, external deps).
    - Exit codes: exit, atexit
 
 **Deliverables:**
+
 - Safe Vyb stdlib wrapping C
 - No need for users to write `extern "C"`
 - Test suite: Use C wrappers in Vyb programs
@@ -523,11 +553,11 @@ Enable Vyb to call C functions and use C libraries (libc, POSIX, external deps).
 
 ## Part 3: Binary Generation (AOT Compilation)
 
-### Overview
+### Binary Generation: Overview
 
 Compile Vyb programs to native executables instead of JIT-only.
 
-### Current State
+### Binary Generation: Current State
 
 - ✅ LLVM IR generation works (JIT mode)
 - ✅ Can link against C standard library
@@ -540,12 +570,14 @@ Compile Vyb programs to native executables instead of JIT-only.
 **Goal:** Compile Vyb to `.o` object files.
 
 **Tasks:**
+
 1. **LLVM Object File Writer**
    - Use `TargetMachine::addPassesToEmitFile()`
    - Output `.o` file with relocatable code
    - Support multiple targets: x86-64, ARM, RISC-V
 
 2. **Command-Line Interface**
+
    ```bash
    vyb compile main.vyb -o main.o
    vyb compile module.vyb -o module.o
@@ -563,6 +595,7 @@ Compile Vyb programs to native executables instead of JIT-only.
    - `-O3`: Aggressive optimization
 
 **Deliverables:**
+
 - Can compile Vyb to `.o` files
 - Multiple optimization levels
 - Test: Compile and inspect with `objdump`
@@ -576,7 +609,9 @@ Compile Vyb programs to native executables instead of JIT-only.
 **Goal:** Link object files into standalone executables.
 
 **Tasks:**
+
 1. **Linker Invocation**
+
    ```bash
    vyb build main.vyb -o main
    # Internally:
@@ -596,6 +631,7 @@ Compile Vyb programs to native executables instead of JIT-only.
    - Bundle runtime if needed
 
 4. **Multi-File Compilation**
+
    ```bash
    vyb build main.vyb module.vyb util.vyb -o myapp
    ```
@@ -604,6 +640,7 @@ Compile Vyb programs to native executables instead of JIT-only.
    - Resolve imports during linking
 
 **Deliverables:**
+
 - `vyb build` produces executables
 - Can run without `vyb` runtime (standalone)
 - Test: Run compiled binary on different machines
@@ -617,12 +654,14 @@ Compile Vyb programs to native executables instead of JIT-only.
 **Goal:** Apply LLVM optimization passes for performance.
 
 **Tasks:**
+
 1. **Pass Manager Setup**
    - Create `PassManager` and `FunctionPassManager`
    - Add standard LLVM passes (mem2reg, instcombine, etc.)
    - Target-specific passes (vectorization, loop opts)
 
 2. **Optimization Levels**
+
    ```
    -O0: No optimization
    -O1: Basic cleanup
@@ -643,6 +682,7 @@ Compile Vyb programs to native executables instead of JIT-only.
    - Profile-guided optimization (future)
 
 **Deliverables:**
+
 - Optimized binaries significantly faster
 - LTO support for whole-program optimization
 - Performance benchmarks
@@ -656,6 +696,7 @@ Compile Vyb programs to native executables instead of JIT-only.
 **Goal:** Emit DWARF debug info for debuggers (gdb, lldb).
 
 **Tasks:**
+
 1. **LLVM DIBuilder**
    - Create `DIBuilder` for debug metadata
    - Emit line number information
@@ -668,6 +709,7 @@ Compile Vyb programs to native executables instead of JIT-only.
    - Preserve through optimization passes
 
 3. **Debugger Integration**
+
    ```bash
    vyb build --debug main.vyb -o main
    gdb ./main
@@ -683,6 +725,7 @@ Compile Vyb programs to native executables instead of JIT-only.
    - `-g3`: Full info (includes macros, etc.)
 
 **Deliverables:**
+
 - Can debug Vyb programs with gdb/lldb
 - Source-level debugging (step, breakpoint, inspect)
 - Test: Debug session in gdb
@@ -696,7 +739,9 @@ Compile Vyb programs to native executables instead of JIT-only.
 **Goal:** Build multi-module projects with dependencies.
 
 **Tasks:**
+
 1. **Project Manifest: `vyb.toml`**
+
    ```toml
    [package]
    name = "myapp"
@@ -728,6 +773,7 @@ Compile Vyb programs to native executables instead of JIT-only.
    - Vyb library: `.vyblib` (pre-compiled module)
 
 **Deliverables:**
+
 - `vyb build` handles complex projects
 - Dependency management system
 - Can publish/download packages
@@ -742,11 +788,13 @@ Compile Vyb programs to native executables instead of JIT-only.
 ### Recommended Order
 
 **Milestone 1: Basic Modules (v0.5.0)**
+
 - Phase 1.1: Basic Import Infrastructure
 - Phase 2.1: extern "C" Declarations
 - Phase 3.1: Object File Emission
 
 **Milestone 2: Visibility & FFI (v0.5.1-0.5.2)**
+
 - Phase 1.2: Bundle Declaration Parsing
 - Phase 1.3: Share Directive Parsing
 - Phase 1.4: Visibility Checking
@@ -754,11 +802,13 @@ Compile Vyb programs to native executables instead of JIT-only.
 - Phase 2.3: Variadic Functions
 
 **Milestone 3: Compilation Pipeline (v0.5.2-0.5.3)**
+
 - Phase 3.2: Static Linking
 - Phase 3.3: Optimization Pipeline
 - Phase 1.5: Module Path Resolution
 
 **Milestone 4: Production Ready (v0.6.0-0.6.1)**
+
 - Phase 1.6: Standard Library Modules
 - Phase 2.4: C Header Binding Generator
 - Phase 2.5: Standard C Library Wrappers
@@ -768,6 +818,7 @@ Compile Vyb programs to native executables instead of JIT-only.
 ### Parallelization Opportunities
 
 Can work on simultaneously:
+
 - **Track A**: Module system (Phase 1.x)
 - **Track B**: FFI system (Phase 2.x)
 - **Track C**: Binary generation (Phase 3.x)
@@ -777,12 +828,14 @@ Phases within each track are sequential, but tracks are mostly independent until
 ### Testing Strategy
 
 For each phase:
+
 1. **Unit Tests**: Test individual components in isolation
 2. **Integration Tests**: Test interactions between systems
 3. **End-to-End Tests**: Full programs using the feature
 4. **Regression Tests**: Ensure old features still work
 
 Example test layout:
+
 ```
 test/
   modules/
@@ -829,6 +882,7 @@ test/
 ## Success Metrics
 
 For each phase, track:
+
 - **Compilation Speed**: How long to compile 1000 lines?
 - **Binary Size**: How big are optimized executables?
 - **Runtime Performance**: JIT vs AOT performance comparison

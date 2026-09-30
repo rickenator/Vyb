@@ -163,4 +163,39 @@ inline int freshOwningCallArgKind(ast::Expression* expr) {
     return 0;
 }
 
+// ---------------------------------------------------------------------------
+// Vec<T> AST-type predicates (#347 seam: promoted from cgen_ownership.cpp so
+// the main()-return serializer in cgen_stmt.cpp can ask the same questions).
+// ---------------------------------------------------------------------------
+
+// The name of a `TypeName` type node ("" for anything else).
+inline std::string ownedFieldTypeBase(const ast::TypeNode* tn) {
+    if (!tn) return "";
+    if (auto* nn = dynamic_cast<const ast::TypeName*>(tn)) {
+        return nn->identifier ? nn->identifier->name : "";
+    }
+    return "";
+}
+
+// Is `tn` a Vec type, written either as a `VecType` or as `Vec<T>`?
+inline bool isVecTypeNode(const ast::TypeNode* tn) {
+    if (dynamic_cast<const ast::VecType*>(tn)) return true;
+    return ownedFieldTypeBase(tn) == "Vec";
+}
+
+// Element TypeNode of a `Vec<T>` AST type (`T`), or nullptr when `tn` is not a
+// Vec type. Shared by the String and owned-struct element reclaim paths.
+inline const ast::TypeNode* vecElementTypeNode(const ast::TypeNode* tn) {
+    if (!tn) return nullptr;
+    if (auto* vt = dynamic_cast<const ast::VecType*>(tn)) {
+        return vt->elementType.get();
+    }
+    if (auto* name = dynamic_cast<const ast::TypeName*>(tn)) {
+        if (name->identifier && name->identifier->name == "Vec" && !name->genericArgs.empty()) {
+            return name->genericArgs[0].get();
+        }
+    }
+    return nullptr;
+}
+
 } // namespace vyb

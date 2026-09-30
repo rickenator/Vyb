@@ -89,18 +89,15 @@ keeping the hostname for SNI / the `Host:` header (see `#188`):
 - `https://https_get_full_verified` — `stdlib/https/mod.vyb:195`
 - `https://https_get_full` (unverified) — `stdlib/https/mod.vyb:184` (fixed in `#188`)
 
-If resolution fails, the client returns a failed response with `error = "resolve
-failed: <host>"` (see §7) rather than attempting a bogus raw-hostname connect.
+If resolution fails, the client returns a failed response with `error = "resolve failed: <host>"` (see §7) rather than attempting a bogus raw-hostname connect.
 
 ## 7. Error model (explicit, not accidental)
 
 - **`http_get_full` / `https_get_full` return a present `HttpResponse` with a
-  lossless reason on failure.** `HttpResponse { status, reason, headers, body,
-  error<String?> }` (`stdlib/http/mod.vyb:243`): on success `error` is **absent**
+  lossless reason on failure.** `HttpResponse { status, reason, headers, body, error<String?> }` (`stdlib/http/mod.vyb:243`): on success `error` is **absent**
   and `status` is the parsed code; on failure `error` is **present** with a
   reason string and `status` is `-1`. Failure reasons distinguish the phase:
-  `"resolve failed: <host>"`, `"connect <ip>:<port> failed"`, `"socket open
-  failed"`, `"tls handshake failed"`, `"tls stream failed"`,
+  `"resolve failed: <host>"`, `"connect <ip>:<port> failed"`, `"socket open failed"`, `"tls handshake failed"`, `"tls stream failed"`,
   `"bad response: no status line"`. A failed round-trip is therefore **never a
   silent absent** and never a sentinel passed off as data.
 - **`http_get` / `https_get`** (body conveniences) still return `String?` —
@@ -110,8 +107,7 @@ failed: <host>"` (see §7) rather than attempting a bogus raw-hostname connect.
   `TcpStream?`) keep the native-`T?` absent-on-failure shape (see
   `NETWORK_ERROR_CONTRACTS.md`).
 - **`HttpResponse.status == -1`** also covers the case where the status line did
-  not parse (`http_status_code` returns `-1`, paired with `error = "bad
-  response: no status line"`). `reason` may be `""` for non-standard codes.
+  not parse (`http_status_code` returns `-1`, paired with `error = "bad response: no status line"`). `reason` may be `""` for non-standard codes.
 - **Escalation** to the fail/trap framework is explicit and typed:
   - `http::http_error(op, target)` → `HttpError` (`stdlib/http/mod.vyb:271`)
   - `http::http_error(op, target)` message is a fixed `"http <op> failed"`;

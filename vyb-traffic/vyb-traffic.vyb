@@ -1,0 +1,168 @@
+# vyb-traffic - archive GitHub repository traffic beyond GitHub's rolling
+# 14-day window, in Vyb end to end.
+#
+#   vyb-traffic.vyb collect [--owner O] [--repo R] [--db PATH]
+#                           [--export-dir DIR] [--graphs-dir DIR]
+#   vyb-traffic.vyb report  [--recent N] [--no-uniques]
+#   vyb-traffic.vyb export
+#   vyb-traffic.vyb graph
+#   vyb-traffic.vyb init
+#
+# Exit codes: 0 success, 1 fatal error (configuration, storage, usage),
+# 2 partial collection (some endpoint failed, everything that worked is stored).
+#
+# Needs GITHUB_TOKEN in the environment for `collect`, and the FFI binding on the
+# module path: `vyb vyb-traffic/vyb-traffic.vyb --module-path bindings collect`
+# (VYB_MODULE_PATH works too). The token is only ever used in the Authorization
+# header; it is never stored, printed, or logged. Diagnostics go to stderr.
+import traffic::{Config, Run, config_load, collect_run, push_run, now_iso, db_init,
+                 report_text, export_csv, render_graphs, stored_names, run_failures,
+                 warn, repo_slug, argv_of, command_of, find_flag, flag_value}
+
+# `main()<Int>` is documented as the process exit code, but the interpreter run
+# path prints the returned Int and exits 0, so a timer or CI would never see a
+# failure. The builtin `exit(code)` sets the real process status instead.
+EXIT_OK<Int> = 0
+EXIT_ERROR<Int> = 1
+EXIT_PARTIAL<Int> = 2
+
+# Terminate with `code`. Never returns; the trailing `return` only keeps the
+# signature an `Int`.
+exit_with(code<Int>)<Int> -> {
+    exit(code)
+    return code
+}
+
+
+usage()<String> -> {
+    return "vyb-traffic: archive GitHub repository traffic beyond the 14-day window.\n" +
+           "\n" +
+           "usage: vyb-traffic <command> [options]\n" +
+           "\n" +
+           "commands:\n" +
+           "  collect   fetch all four traffic endpoints and store them\n" +
+           "  report    print the rolling window and archived totals\n" +
+           "  export    write summary.csv, clone_daily.csv, view_daily.csv,\n" +
+           "            referrers.csv, popular_paths.csv\n" +
+           "  graph     write daily/cumulative clone and view SVG charts\n" +
+           "  init      create the database schema and data directories\n" +
+           "\n" +
+           "options:\n" +
+           "  --owner NAME       GitHub owner (default: rickenator)\n" +
+           "  --repo NAME        GitHub repository (default: Vyb)\n" +
+           "  --db PATH          SQLite database path\n" +
+           "  --export-dir DIR   CSV output directory\n" +
+           "  --graphs-dir DIR   SVG output directory\n" +
+           "  --recent N         days of recent history in `report` (default: 14)\n" +
+           "  --no-uniques       hide the daily unique-observations section\n" +
+           "  --help, --version\n" +
+           "\n" +
+           "environment: GITHUB_TOKEN (required for collect), VYB_TRAFFIC_OWNER,\n" +
+           "  VYB_TRAFFIC_REPO, VYB_TRAFFIC_DB, VYB_TRAFFIC_EXPORT_DIR,\n" +
+           "  VYB_TRAFFIC_GRAPHS_DIR\n"
+}
+
+version()<String> -> {
+    return "vyb-traffic 0.7.7"
+}
+
+
+main()<Int> -> {
+    args<Vec<String>> = argv_of()
+    cmd<String> = command_of(args)
+
+    if (find_flag(args, "--help") >= 0) {
+        print(usage())
+        return exit_with(EXIT_OK)
+    }
+    if (find_flag(args, "--version") >= 0) {
+        println(version())
+        return exit_with(EXIT_OK)
+    }
+    if (cmd.len() == 0) {
+        print(usage())
+        return exit_with(EXIT_ERROR)
+    }
+
+    cfg<Config> = config_load("", flag_value(args, "--owner"), flag_value(args, "--repo"),
+                              flag_value(args, "--db"), flag_value(args, "--export-dir"),
+                              flag_value(args, "--graphs-dir"))
+    if (cfg.owner.len() == 0 || cfg.repo.len() == 0) {
+        warn("vyb-traffic: error: owner and repo must be non-empty")
+        return exit_with(EXIT_ERROR)
+    }
+
+    if (cmd == "init") {
+        if (!db_init(cfg)) {
+            warn("vyb-traffic: error: cannot initialize database at " + cfg.db_path)
+            return exit_with(EXIT_ERROR)
+        }
+        println("vyb-traffic: initialized database at " + cfg.db_path)
+        return exit_with(EXIT_OK)
+    }
+
+    if (cmd == "collect") {
+        if (cfg.token.len() == 0) {
+            warn("vyb-traffic: error: GITHUB_TOKEN is not set. Set it before running 'collect'.")
+            return exit_with(EXIT_ERROR)
+        }
+        ts<String> = now_iso()
+        run<Run> = collect_run(cfg, ts)
+        sid<Int> = push_run(cfg, run) else -1
+        if (sid < 0) {
+            warn("vyb-traffic: error: failed to store collection in " + cfg.db_path)
+            return exit_with(EXIT_ERROR)
+        }
+        println("vyb-traffic: snapshot " + sid.to_string() + " @ " + ts + " stored: " + stored_names(run))
+        fails<Vec<Vec<String>>> = run_failures(run)
+        if (fails.len() == 0) { return exit_with(EXIT_OK) }
+        i<Int> = 0
+        while (i < fails.len()) {
+            warn("vyb-traffic: warning: " + fails.get(i).get(0) + ": " + fails.get(i).get(1))
+            i = i + 1
+        }
+        return exit_with(EXIT_PARTIAL)
+    }
+
+    if (cmd == "report") {
+        recent<Int> = 14
+        raw<String> = flag_value(args, "--recent")
+        if (raw.len() > 0) { recent = Int::from_string(raw) }
+        if (recent < 1) { recent = 1 }
+        include<Bool> = find_flag(args, "--no-uniques") < 0
+        print(report_text(cfg, recent, include))
+        return exit_with(EXIT_OK)
+    }
+
+    if (cmd == "export") {
+        written<Vec<String>> = export_csv(cfg)
+        if (written.len() == 0) {
+            warn("vyb-traffic: error: could not write CSV exports into " + cfg.export_dir)
+            return exit_with(EXIT_ERROR)
+        }
+        i<Int> = 0
+        while (i < written.len()) {
+            println(written.get(i))
+            i = i + 1
+        }
+        return exit_with(EXIT_OK)
+    }
+
+    if (cmd == "graph") {
+        written<Vec<String>> = render_graphs(cfg)
+        if (written.len() == 0) {
+            warn("vyb-traffic: error: could not write graphs into " + cfg.graphs_dir)
+            return exit_with(EXIT_ERROR)
+        }
+        i<Int> = 0
+        while (i < written.len()) {
+            println(written.get(i))
+            i = i + 1
+        }
+        return exit_with(EXIT_OK)
+    }
+
+    warn("vyb-traffic: error: unknown command '" + cmd + "'")
+    print(usage())
+    return exit_with(EXIT_ERROR)
+}

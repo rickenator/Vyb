@@ -1,5 +1,5 @@
 {
-  "git_rev": "4c532adf52c846d15978f68501cfd1dd54b34cd5",
+  "git_rev": "dc3daf34863e93083ad040beb17d9751ef40a217",
   "modules": [
     "agents",
     "archive",
@@ -161,7 +161,7 @@
         "files": [
           "stdlib/https/mod.vyb"
         ],
-        "exported": 12,
+        "exported": 15,
         "fan_in": 2,
         "fan_out": 4
       },
@@ -670,10 +670,13 @@
           "tls_read_exact",
           "tls_read_all",
           "tls_read_chunked",
+          "https_request_head",
           "socket_open",
           "https_get_hops",
           "https_get_full",
+          "https_get_full_headers",
           "https_get_full_verified",
+          "https_get_hops",
           "https_get",
           "https_get_verified",
           "https_selfhost",
@@ -3287,6 +3290,15 @@
         "fan_in": 0
       },
       {
+        "name": "https_get_full_headers",
+        "module": "https",
+        "file": "stdlib/https/mod.vyb",
+        "kind": "fn",
+        "signature": "https_get_full_headers(host<String>, port<Int>, path<String>, headers<Vec<String>>)<HttpResponse> ->",
+        "summary": "Full HTTPS/1.1 GET round-trip carrying caller-supplied request `headers`. Same",
+        "fan_in": 0
+      },
+      {
         "name": "https_get_full_verified",
         "module": "https",
         "file": "stdlib/https/mod.vyb",
@@ -3300,8 +3312,17 @@
         "module": "https",
         "file": "stdlib/https/mod.vyb",
         "kind": "fn",
-        "signature": "https_get_hops(host<String>, port<Int>, path<String>, ca_pem<String>, verified<Bool>, hops<Int>)<HttpResponse> ->",
+        "signature": "https_get_hops(host<String>, port<Int>, path<String>, headers<Vec<String>>, ca_pem<String>, verified<Bool>, hops<Int>)<HttpResponse> ->",
         "summary": "One HTTPS GET round-trip with redirect following (#194). Resolves `host`, makes a",
+        "fan_in": 0
+      },
+      {
+        "name": "https_get_hops",
+        "module": "https",
+        "file": "stdlib/https/mod.vyb",
+        "kind": "fn",
+        "signature": "return https_get_hops(host, port, path, headers, ca_pem, true, 0)",
+        "summary": "Verified GET round-trip carrying caller-supplied request `headers` -- the",
         "fan_in": 0
       },
       {
@@ -3311,6 +3332,15 @@
         "kind": "fn",
         "signature": "https_get_verified(host<String>, port<Int>, path<String>, ca_pem<String>)<String?> ->",
         "summary": "Verified convenience wrapper returning just the response body as a `String?`",
+        "fan_in": 0
+      },
+      {
+        "name": "https_request_head",
+        "module": "https",
+        "file": "stdlib/https/mod.vyb",
+        "kind": "fn",
+        "signature": "https_request_head(path<String>, host<String>, headers<Vec<String>>)<String> ->",
+        "summary": "Full HTTPS/1.1 GET round-trip. Returns an HttpResponse with the parsed status,",
         "fan_in": 0
       },
       {
@@ -3337,7 +3367,7 @@
         "file": "stdlib/https/mod.vyb",
         "kind": "fn",
         "signature": "fd<Int> = socket_open(2, 1, 6) else -1",
-        "summary": "Full HTTPS/1.1 GET round-trip. Returns an HttpResponse with the parsed status,",
+        "summary": "Shared round-trip: connect to `connect_ip` on `port`, bring up a TLS session",
         "fan_in": 2
       },
       {
@@ -7119,6 +7149,13 @@
     {
       "type": "call",
       "from_module": "https",
+      "from_symbol": "https_get_full_headers",
+      "to_module": "https",
+      "to_symbol": "https_get_hops"
+    },
+    {
+      "type": "call",
+      "from_module": "https",
       "from_symbol": "https_get_full_verified",
       "to_module": "https",
       "to_symbol": "https_get_hops"
@@ -9284,6 +9321,13 @@
       "type": "proseRef",
       "from_module": "https",
       "from_symbol": "https_get",
+      "to_module": "https",
+      "to_symbol": "https_get_full"
+    },
+    {
+      "type": "proseRef",
+      "from_module": "https",
+      "from_symbol": "https_get_full_headers",
       "to_module": "https",
       "to_symbol": "https_get_full"
     },
@@ -11813,6 +11857,13 @@
       "type": "usesType",
       "from_module": "https",
       "from_symbol": "https_get_full",
+      "to_module": "http",
+      "to_symbol": "HttpResponse"
+    },
+    {
+      "type": "usesType",
+      "from_module": "https",
+      "from_symbol": "https_get_full_headers",
       "to_module": "http",
       "to_symbol": "HttpResponse"
     },

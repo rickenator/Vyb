@@ -17,6 +17,7 @@ for (item in vector_expr) {
 ## Features
 
 ### ✅ Basic Iteration
+
 ```vyb
 v<Vec<Int>> = Vec::new();
 v.push(1);
@@ -29,6 +30,7 @@ for (x in v) {
 ```
 
 ### ✅ Empty Vec Handling
+
 ```vyb
 v<Vec<Int>> = Vec::new();
 for (x in v) {
@@ -37,6 +39,7 @@ for (x in v) {
 ```
 
 ### ✅ Break Statement
+
 ```vyb
 for (x in v) {
     if (x > 5) {
@@ -46,6 +49,7 @@ for (x in v) {
 ```
 
 ### ✅ Continue Statement
+
 ```vyb
 for (x in v) {
     if (x == 3) {
@@ -107,6 +111,7 @@ checked):
 ## Tests
 
 All tests passing:
+
 - `comprehensive_test.vyb`: All Vec iteration features
 - `comprehensive_range_test.vyb`: All range-based for loops
 - Individual feature tests in `test/vec_for/`

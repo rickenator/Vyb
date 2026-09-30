@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "vyb/vre/llvm/codegen.hpp"
+#include "vyb/vre/llvm/cgen_internal.hpp"
 #include "vyb/parser/ast.hpp"
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Instructions.h>
@@ -384,18 +385,30 @@ void LLVMCodegen::handleVecPush(vyb::ast::CallExpression* node, llvm::Value* vec
         // struct with owned fields does -- and it is not a *named* struct, so the
         // isKnownStructTypeNode() test below never fired for it and the element was
         // memcpy'd shallow. Clone the inner payload so the outer slot owns it.
+        // #373: a bare buffer copy is not enough -- the inner Vec's own elements
+        // may be owned Strings/structs, and the source binding is released at the
+        // end of its scope, so the copy must retain them too. generateVecDeepCopy
+        // handles both levels (and recurses for deeper nesting).
         llvm::Type* nestedInnerTy = nullptr;
+        const vyb::ast::TypeNode* nestedInnerAst = nullptr;
         if (!node->arguments.empty()) {
             // Use the ARGUMENT's type node: for `outer.push(inner)` that is the
             // inner Vec's own VecType, whereas the receiver's element child can be a
             // TypeName for nested generics and would never cast to VecType.
             if (auto argTy = typeOfNode(node->arguments[0].get())) {
-                if (auto* argVec = dynamic_cast<vyb::ast::VecType*>(argTy.get())) {
-                    if (argVec->elementType) nestedInnerTy = codegenType(argVec->elementType.get());
+                nestedInnerAst = vecElementTypeNode(argTy.get());
+                if (nestedInnerAst) {
+                    nestedInnerTy = codegenType(const_cast<vyb::ast::TypeNode*>(nestedInnerAst));
                 }
             }
         }
-        if (nestedInnerTy && valueToAdd->getType() == elementType) {
+        if (nestedInnerTy && nestedInnerAst && valueToAdd->getType() == elementType) {
+            llvm::Value* srcStruct = builder->CreateLoad(elementType, srcPtr, "vec.push.nested_load");
+            llvm::Value* cloned = generateVecDeepCopy(srcStruct, nestedInnerTy,
+                                                     llvm::cast<llvm::StructType>(elementType),
+                                                     nestedInnerAst);
+            builder->CreateStore(cloned, elementPtr);
+        } else if (nestedInnerTy && valueToAdd->getType() == elementType) {
             llvm::DataLayout dl(module.get());
             llvm::Value* srcStruct = builder->CreateLoad(elementType, srcPtr, "vec.push.nested_load");
             llvm::Value* cloned = deepCopyVecElement(srcStruct, elementType,
@@ -896,15 +909,43 @@ void LLVMCodegen::handleVecSet(vyb::ast::CallExpression* node, llvm::Value* vecP
     // the slot dangled once the source scope closed (silent garbage) and could be
     // freed twice. Release the overwritten slot's buffer, then store a clone.
     llvm::Type* nestedInnerTy = nullptr;
+    const vyb::ast::TypeNode* nestedInnerAst = nullptr;
     if (node->arguments.size() >= 2) {
         // Same as push: the ARGUMENT's node is the inner Vec's VecType (#284).
         if (auto argTy = typeOfNode(node->arguments[1].get())) {
-            if (auto* argVec = dynamic_cast<vyb::ast::VecType*>(argTy.get())) {
-                if (argVec->elementType) nestedInnerTy = codegenType(argVec->elementType.get());
+            nestedInnerAst = vecElementTypeNode(argTy.get());
+            if (nestedInnerAst) {
+                nestedInnerTy = codegenType(const_cast<vyb::ast::TypeNode*>(nestedInnerAst));
             }
         }
     }
-    if (nestedInnerTy && value->getType() == elementLLVMType) {
+    if (nestedInnerTy && nestedInnerAst && value->getType() == elementLLVMType) {
+        llvm::Value* oldElem = builder->CreateLoad(elementLLVMType, elementPtr,
+                                                  "vec.set.old_nested");
+        llvm::Value* oldData = builder->CreateExtractValue(oldElem, 0,
+                                                          "vec.set.old_nested_data");
+        llvm::Value* oldLen = builder->CreateExtractValue(oldElem, 1,
+                                                         "vec.set.old_nested_len");
+        // Drop the overwritten slot's own references before freeing its buffer: the
+        // slot owns one reference per element it holds (#373). Only a Vec<String>
+        // inner buffer holds string references; deeper nesting keeps them shared
+        // (a leak, never a double free).
+        bool nestedInnerIsString = false;
+        if (node->arguments.size() >= 2) {
+            if (auto argTy = typeOfNode(node->arguments[1].get())) {
+                nestedInnerIsString = isVecOfStringTypeNode(argTy.get());
+            }
+        }
+        if (nestedInnerIsString) {
+            builder->CreateCall(getOrCreateVybStringReleaseEachFunction(), {oldData, oldLen});
+        }
+        builder->CreateCall(getOrCreateFreeFunction(), {oldData});
+        // Clone the inner Vec *with* its elements' owned references, so the slot
+        // stays valid after the source binding is released.
+        value = generateVecDeepCopy(value, nestedInnerTy,
+                                    llvm::cast<llvm::StructType>(elementLLVMType),
+                                    nestedInnerAst);
+    } else if (nestedInnerTy && value->getType() == elementLLVMType) {
         llvm::DataLayout dl(module.get());
         llvm::Value* oldElem = builder->CreateLoad(elementLLVMType, elementPtr,
                                                   "vec.set.old_nested");

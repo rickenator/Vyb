@@ -167,7 +167,7 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 ### Running the test suite
 
 ```bash
-# 1221 .vyb tests exercised through compile + run + output/return checks
+# 1234 .vyb tests exercised through compile + run + output/return checks
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test
 ```
 
@@ -228,10 +228,11 @@ Every program has an entry point:
 main()<Int> -> { return 0 }
 ```
 
-`main` may return **any** type. An integer return becomes the process exit
-code; every other value — `String`, `Float`, `Bool`, structs, `Vec`s, tuples,
-maps — auto-serializes on exit (complex values as JSON). Comments use `#` line
-comments (and `//` in some tooling/tests):
+`main` may return **any** type. Every return value auto-serializes as JSON on
+stdout (a bare number, a quoted string, `true`/`false`, a keyed object for a
+struct, an array for a multi-value return) and the process exits `0` — the return
+value is never the exit status. Call the builtin `exit(n)` to set one. Comments
+use `#` line comments (and `//` in some tooling/tests):
 
 ```vyb
 # A doc-ish comment above a declaration becomes that symbol's doc text.
@@ -486,6 +487,7 @@ main()<Int> -> {
 ```
 
 Three things are easy to conflate and are different:
+
 - **Mutating the referenced object** — a `their`-borrow write such as
   `c.count = …`.
 - **Reassigning the callee's local handle** — giving the parameter `c` itself a
@@ -869,6 +871,7 @@ if (shadow.released()) { … }                # true once destroyed
 
 **Lexical enforcement (what the compiler actually checks).** These rules are
 lexical and scope-based, not a general lifetime/region model:
+
 - **Borrows do not escape.** A `their<T>` value is valid only while the scope
   that recorded its `borrow()`/`view()` is still open. Reading or reassigning it
   outside that scope — or returning a borrow of a function-local (as opposed to
@@ -1109,11 +1112,11 @@ result, not a failed call — it is kept as `Int` and does *not* become `T?`.
 Examples: `String::index_of`, `utf8_index`/`utf8_at`, the `http_*` parse
 helpers (`http_index_of`, `http_parse_int`, `http_parse_hex`,
 `http_status_code`), `regex_match` (`0`/`1`), and `curses_getch` (`-1` on
-timeout). These keep the idiomatic `if (idx >= 0)` / `while ((ch = getch()) !=
--1)` test and avoid conflating "no match" with "the call failed". The rule of
-thumb: **absence (`?`) means the operation failed; a sentinel value means the
-operation ran but found nothing.** This carve-out is reserved for sentinels that
-are *in-domain* for the function (an index, a keycode, a computed result).
+timeout). These keep the idiomatic `if (idx >= 0)` / `while ((ch = getch()) != -1)`
+test and avoid conflating "no match" with "the call failed". The rule of thumb:
+**absence (`?`) means the operation failed; a sentinel value means the operation
+ran but found nothing.** This carve-out is reserved for sentinels that are
+*in-domain* for the function (an index, a keycode, a computed result).
 Dimension/measurement getters -- `curses_rows`/`curses_cols`, `qt_window_width`/`qt_window_height`, `qt_screen_width`/`qt_screen_height`/`qt_screen_dpi` -- never meaningfully return `-1`, so they use `Int?` (absent on a bad handle, no screen, or an inactive screen) instead of a `-1` sentinel.
 
 **Which stdlib modules use which shape.** The 0.7.3 batch pushed every
@@ -1881,9 +1884,10 @@ at startup if you need write-to-closed-pipe to terminate instead of erroring.
 Module page: [`http.md`](http.md). Layered over `network`/`threads` (not raw
 runtime calls). Acquisition ops keep the File?/net shape: `http_listen` returns a
 `TcpListener?` and `http_accept` a `TcpStream?` — absence *is* failure. The full
-client `http_get_full` returns a **present** `HttpResponse { status, reason,
-headers, body, error<String?> }`: on success `error` is absent and `status` is the
-parsed code; on failure `status` is `-1` and `error` carries the lossless phase
+client `http_get_full` returns a **present**
+`HttpResponse { status, reason, headers, body, error<String?> }`: on success
+`error` is absent and `status` is the parsed code; on failure `status` is `-1`
+and `error` carries the lossless phase
 reason (`"resolve failed: <host>"`, `"connect <ip>:<port> failed"`,
 `"bad response: no status line"`) — a failed round-trip is **never a silent
 absent** and never a sentinel passed off as data. The body convenience `http_get`
@@ -2284,8 +2288,9 @@ boot/generation (VybOS), or a smuggled-in dependency's identity. One shared
 core, three consumers — every consumer seals its facts into a `Chain` and gets
 back a tamper-evident tip hash (the "legit token") it can later re-verify.
 
-Model: `Record { label, value }` → `ChainBlock { index, prev_hash, root, hash,
-records }` → `Chain { origin, blocks }`. Each block's `root` is the Merkle root
+Model: `Record { label, value }` →
+`ChainBlock { index, prev_hash, root, hash, records }` →
+`Chain { origin, blocks }`. Each block's `root` is the Merkle root
 over its records (per-record digests pair-folded; an odd leaf pairs with
 itself), and `hash = sha256(index | prev_hash | root)` with block 0 linking to
 the chain's `origin` marker. `verify` recomputes every root, hash, and
@@ -2740,14 +2745,15 @@ runtime points a single process at a list of tests if needed.
 
 Canonical suite runner — a Vyb program (`test/run_tests.vyb`), wired into CTest
 as `run-tests`:
+
 ```bash
-./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1221 tests)
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1234 tests)
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --category async  # filter by category
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --json results.json --evidence evidence.json
 ```
 `vyb --repo` (or `vyb test` with no explicit paths inside the compiler repo) runs
-the same Vyb runner, so the compiler's own test path needs no Python. The
-auxiliary harness (`test_harness.vyb`, `triage_tool.vyb`) adds HTML
+the same Vyb runner, so the compiler's own test path is written in Vyb end to end.
+The auxiliary harness (`test_harness.vyb`, `triage_tool.vyb`) adds HTML
 reporting and failure triage on top of that suite; both are Vyb programs now.
 
 Tests carry metadata headers (`@test:`, `@description:`, `@category:`,
@@ -2765,8 +2771,9 @@ build/vyb triage_tool.vyb results.json        # analyse failures
 ### Splash (`tools/vybsplash.vyb`)
 
 The wordmark, rendered by Vyb itself — truecolor ANSI, a PNG through
-`stdlib/png`, or a `data:` URL through `stdlib/base64`. No image asset, no
-Python:
+`stdlib/png`, or a `data:` URL through `stdlib/base64`. Everything is Vyb: no
+image asset, no generator script.
+
 ```bash
 build/vyb tools/vybsplash.vyb                  # terminal splash (gradient)
 build/vyb tools/vybsplash.vyb --plain          # no escapes (pipes, CI logs)
@@ -2812,6 +2819,7 @@ unit that owns it rather than in a 12k-line file:
   visibility the old file-local `static` had; everything else stays TU-local.
 
 The extractor used for the split is a Vyb program:
+
 ```bash
 build/vyb tools/split_tu.vyb src/vre/semantic.cpp src/vre/semantic_vec.cpp \
     CMakeLists.txt 'SemanticAnalyzer::handleVecMethodCall,...'     # --dry to preview
@@ -3087,6 +3095,7 @@ key/seed material on the GPU. Crypto/ledger integration stays host-side.
 
 
 
+
 The **shared cross-module types** (`HttpResponse`, `TcpStream`, `TlsContext`,
 `TlsStream`, `Socket`) and every symbol that uses them are in
 [`interfaces.md`](interfaces.md).
@@ -3096,17 +3105,20 @@ The **shared cross-module types** (`HttpResponse`, `TcpStream`, `TlsContext`,
 ## Appendix A — Memory model
 
 **Ownership types**
+
 - `my<T>`: unique ownership, RAII cleanup.
 - `our<T>`: shared, reference-counted ownership (auto-free at last drop).
 - `their<T>`: non-owning borrow, lifetime-checked.
 - `mild<T>`: weak reference that can detect destruction via `grab()` / `released()`.
 
 **Borrowing operations**
+
 - `view(expr)`: creates a `their<T const>` immutable borrow.
 - `borrow(expr)`: creates a `their<T>` mutable borrow.
 - `soft(expr)`: creates a `mild<T>` weak reference from `our<T>`.
 
 **Freedom operations (`freedom { … }`)**
+
 - `loc<T>`: raw pointer type.
 - `loc(expr)`: take a pointer to an expression.
 - `at(ptr)`: dereference a pointer (read/write).
@@ -3117,15 +3129,35 @@ yields the value directly, with no allocation.
 
 ## Appendix B — Auto-serialization
 
-`main()` return values serialize automatically:
+A `main()` return value is serialized as JSON on stdout; it is never the process
+exit status. Every program that ends by returning a value exits `0`. Use the
+builtin `exit(n)` to set a process status explicitly.
 
 ```vyb
-main()<Int>                        # exit code
-main()<String>                     # prints the string
-main()<Int, String>                # prints [42, "hello"]
-main()<struct>                     # prints the struct as JSON
-main()<Vec<T>>                     # prints the Vec as a JSON array
+main()<Void>                      # no output, exit 0
+main()<Int>                       # prints the number, e.g. 42, exit 0
+main()<Bool>                      # prints true or false, exit 0
+main()<Float>                     # prints the number, exit 0
+main()<String>                    # prints the JSON-quoted string, e.g. "vyb"
+main()<Int, String>               # prints a JSON array, e.g. [42, "hello"]
+main()<struct>                    # prints a keyed JSON object of its fields
+main()<Vec<String>>               # prints a JSON array, e.g. ["alpha", "beta"]
+main() -> { exit(3) }             # no output, exit 3
 ```
+
+```vyb
+main()<Int> -> {
+    println("work done")
+    exit(0)                       # the only way to choose the status
+}
+```
+
+Not yet complete (#375): `bare(...)` prints the keyed object rather than raw
+field values, and `<Type>`-suffixed field names are not implemented. A `Vec<T>`
+return — alone (`main()<Vec<T>>`) or as one element of a multi-value return
+(`main()<Int, Vec<T>>`) — prints a JSON array of its elements, nested
+`Vec<Vec<T>>` returns nest the arrays, and a struct element of a multi-value
+return prints a keyed JSON object.
 
 Custom serialization is available by implementing the `Serialize` aspect.
 

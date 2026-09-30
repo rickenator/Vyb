@@ -52,6 +52,24 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 | `println(a, b, c, ...)` multiple args | ✅ | Space-separated; all args formatted into one output call |
 | `println_int()` / `println_bool()` variants | 🚧 | Still present for compatibility; prefer `println()` |
 
+## Auto-Serialization
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `main()<Int>` / `<Bool>` / `<Float>` / `<String>` return | ✅ | Printed as JSON to stdout; the process always exits 0 |
+| `main()<struct>` (single) | ✅ | Keyed JSON object with plain field names and intact `Vec` fields (#182) |
+| `main()<T1, T2, ...>` multi-value return | ✅ | JSON array; primitives, structs and `Vec` elements all serialize (#375) |
+| `exit(n)` builtin | ✅ | The only way to set the process status; no output (#374) |
+| `main()<Vec<T>>` return | ✅ | JSON array of the elements, e.g. `["alpha", "beta"]`; nested Vecs nest (#375) |
+| Struct element inside a multi-value return | ✅ | Keyed object, e.g. `[{"id": 1, "name": "Alice"}, {...}]` (#375) |
+| `lit("...")` (one primitive argument) | ✅ | Raw literal output |
+| `lit(a, b, c)` multi-argument tuple form | 🚧 | Semantic error: unsupported |
+| `notype()` | ✅ | Elements serialize with plain field names (#375) |
+| `bare()` | 🚧 | Runs, but emits the keyed object rather than raw field values (design-only) |
+| `<Type>`-suffixed struct field names | 🚧 | Not implemented — struct output uses plain field names |
+| `T::from_string(json)` reader | ✅ | Per-type JSON deserialization (v0.4.4) |
+| `deserial(str)` intrinsic | 🚧 | Codegen pass-through placeholder, not a JSON parser |
+
 ## String Concatenation
 
 | Feature | Status | Notes |
@@ -97,11 +115,12 @@ a `my`/`their`/`ptr` slot, and the payload pointer behind an `our`/`mild` contro
 `test/ownership/borrow_pointer_owner_field_read.vyb`, `test/ownership/view_pointer_owner_field_read.vyb`
 and `test/ownership/borrow_pointer_owner_write.vyb`. See `doc/THREAD_BOUNDARY_SCOPE.md` for the step record and the remaining registry-sharing item. Comparison
 write-up in `doc/OWNERSHIP_VS_RUST.md` (#358 gap 4). |
+
 | Lifetime inference beyond lexical scope | 📋 | `borrow`/`view` are lexical-phase: no lifetime inference across signatures, and a borrow runs to end of scope rather than last use, so some programs Rust accepts are rejected here (documented as lexical, #149; parity gap vs Rust, #358 gap 1) |
 | `freedom` blocks + `loc<T>` raw pointers | ✅ | |
 | `match` / `select` expressions | ✅ | Literal, wildcard, comparison, struct-destructuring (`Point { x, y } ->` binds fields in the arm body; unknown fields and type mismatches rejected), inclusive range patterns (`1..10 ->`; inverted ranges rejected as never-matchable), guard clauses (`pattern if condition ->`, with access to destructured bindings), and `match` as a value-returning expression (`r = match (v) { 1..3 -> 10, ? -> 20 }` infers the result type from the first arm and stores the matched arm's value; block arms yield via `pass`) |
 | `defer` | ✅ | |
-| `fail` / `trap` error system | ✅ | Includes typed `fail<T>(value)`, typed traps, wildcard (`e<?>`) and multi-type (`e<Type1 | Type2>`) trap parsing, dual-return ABI `{T, i8*}` / `{i1, i8*}`, Phase 3 fail propagation returns, Phase 4 auto-propagating call-site checks, and Phase 5 untrapped runtime handler dispatch from failable `main`, and `ensure` contract statements (`ensure cond else handling`, desugaring to `if (cond) { } else { handling }`); trap context is function-local so `fail` in a callee (including inside an `if`/`else` branch or an `ensure`-`else`) propagates through the failable ABI and is caught by the caller's trap. Chained `} trap (e<Type>)` clauses dispatch first-type-compatible-wins; a multi-type union handler binds `e` as an opaque error pointer resolved via `e as T` / `typeof(e)` / `typename(e)`. A `trap` block used as a value (`s<String> = { risky() } trap (e<?>) -> { "hello" }`) infers its result type from the handler and sizes the result slot accordingly, so a String handler round-trips as a `{ ptr, len }` (not a hardcoded `i64`) |
+| `fail` / `trap` error system | ✅ | Includes typed `fail<T>(value)`, typed traps, wildcard (`e<?>`) and multi-type (`e<Type1 \| Type2>`) trap parsing, dual-return ABI `{T, i8*}` / `{i1, i8*}`, Phase 3 fail propagation returns, Phase 4 auto-propagating call-site checks, and Phase 5 untrapped runtime handler dispatch from failable `main`, and `ensure` contract statements (`ensure cond else handling`, desugaring to `if (cond) { } else { handling }`); trap context is function-local so `fail` in a callee (including inside an `if`/`else` branch or an `ensure`-`else`) propagates through the failable ABI and is caught by the caller's trap. Chained `} trap (e<Type>)` clauses dispatch first-type-compatible-wins; a multi-type union handler binds `e` as an opaque error pointer resolved via `e as T` / `typeof(e)` / `typename(e)`. A `trap` block used as a value (`s<String> = { risky() } trap (e<?>) -> { "hello" }`) infers its result type from the handler and sizes the result slot accordingly, so a String handler round-trips as a `{ ptr, len }` (not a hardcoded `i64`) |
 | `chan<T>` (typed channels) | ✅ | Built-in generic thread-safe channel (single i64 handle, spatially identical to Int, so sharing a chan by value across pthreads references one channel). `chan<T>()` / `chan<T>(cap)` construct an unbounded/bounded channel; methods `send(v)`, `recv()` (blocking), `poll()` (non-blocking), `len()`, `free()`, and `handle()` (the raw Int for `chan_select`). Int-family scalar payloads use the int-slot channel runtime; String payloads use the refcounted string runtime with reference transfer (`test/modules/test_chan_typed.vyb`, `test/modules/test_chan_threaded.vyb`). Float/Bool/Char payloads are likewise supported (Float as its IEEE bit pattern,
   Bool as 0/1, Char as its code unit), and scalar `poll()` returns the native `T?`
   (absent when empty, read via `poll() else default`) (`test/modules/test_chan_scalar.vyb`).
@@ -152,7 +171,7 @@ write-up in `doc/OWNERSHIP_VS_RUST.md` (#358 gap 4). |
 | Owned / member-receiver capture | ✅ | `my<Struct>`-owning capture and capture of an owned struct field (`test/lambda/test_closure_owned_field_capture.vyb`) |
 | Async lambdas | ✅ | `async` closures on the fibre executor (`test/async/async_lambda.vyb`, `test/async/async_closure_param.vyb`) |
 | Boxed / lifetime-carrying mutable closures | 📋 | A closure with mutable captures may not outlive its defining function: the env holds the outer variable's stack address, so returning one is rejected at compile time rather than producing a use-after-free (`test/lambda/test_closure_mutable_return_rejected.vyb`). Relaxing it means an env-owned heap cell; explicitly postponed for 1.0 (#359) |
-| Generic lambdas (type parameters on closures) | 📋 | `|x<T>| -> ...` is unsupported: no parser/codegen path and no fixture. The natural remaining closure gap now that named-function and bind generics monomorphize (#360) |
+| Generic lambdas (type parameters on closures) | 📋 | `\|x<T>\| -> ...` is unsupported: no parser/codegen path and no fixture. The natural remaining closure gap now that named-function and bind generics monomorphize (#360) |
 
 ## Compiler Backend & FFI
 

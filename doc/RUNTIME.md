@@ -3,6 +3,7 @@
 ## 1. Overview
 
 Vyb's memory model is designed for safety and explicitness, drawing inspiration from modern systems languages. It distinguishes between:
+
 1.  **Binding Mutability**: Whether a variable can be reassigned (default mutable vs `const`).
 2.  **Ownership**: Who is responsible for managing the memory of data (`my<T>`, `our<T>`, `their<T>`).
 3.  **Data Mutability**: Whether the data itself can be changed, often indicated by `const` on the type (e.g., `my<T const>`).
@@ -17,6 +18,7 @@ This document details these aspects of the Vyb runtime.
 Vyb uses two keywords for variable bindings:
 
 *   **`var`**: Declares a mutable binding. The variable can be reassigned to a new value or a different instance of its type.
+
     ```vyb
     var x: Int = 10;
     x = 20; // Allowed
@@ -26,6 +28,7 @@ Vyb uses two keywords for variable bindings:
     ```
 
 *   **`const`**: Declares an immutable binding. The variable cannot be reassigned after initialization.
+
     ```vyb
     const<Float> PI = 3.14159;
     // PI = 3.0; // Error: cannot reassign a const binding
@@ -55,6 +58,7 @@ Vyb employs ownership types to manage memory and control data access:
 *   **`ptr<T>`**: Raw pointer (like `T*`). Operations involving `ptr<T>` are typically restricted to `freedom` blocks.
 
 **Data Mutability** is controlled by applying `const` to the type `T` *within* the ownership wrapper:
+
 *   `my<T>`: Unique ownership of mutable data `T`.
 *   `my<T const>`: Unique ownership of immutable data `T`.
 *   `our<T>`: Shared ownership of mutable data `T` (requires synchronization for thread-safety).
@@ -67,6 +71,7 @@ Vyb employs ownership types to manage memory and control data access:
 Borrowed references (`their<T>`) are created using `borrow(expr)` and `view(expr)`:
 
 *   **`view(expr)`**: Creates an immutable borrow `their<T const>`. This provides a read-only view of the data.
+
     ```vyb
     owner<my<Foo>> = my(Foo{ value: 10 });
     immutable_ref<their<Foo const>> = view(owner);
@@ -75,6 +80,7 @@ Borrowed references (`their<T>`) are created using `borrow(expr)` and `view(expr
     ```
 
 *   **`borrow(expr)`**: Creates a mutable borrow `their<T>`. This allows modification of the data, subject to borrowing rules (e.g., no other active borrows to the same data).
+
     ```vyb
     owner<my<Foo>> = my(Foo{ value: 10 });
     mutable_ref<their<Foo>> = borrow(owner);
@@ -89,12 +95,14 @@ The compiler enforces borrow-checking rules to ensure memory safety (e.g., preve
 Function parameters use ownership types to define how arguments are passed:
 
 *   **`param: T`** (where `T` is a value type like `Int`, `Bool`, or a struct passed by value): The argument is passed by value (copied).
+
     ```vyb
     fn process_value(data: Int) { /* ... */ }
     process_value(10);
     ```
 
 *   **`param: my<T>`** (or `our<T>`): The argument is moved into the function. The caller loses ownership.
+
     ```vyb
     fn consume_data(data: my<Foo>) { /* data is now owned by this function */ }
     my_foo<my<Foo>> = my(Foo{});
@@ -103,6 +111,7 @@ Function parameters use ownership types to define how arguments are passed:
     ```
 
 *   **`param: their<T>`**: The function receives a mutable borrow. The original data must be accessible via a mutable path.
+
     ```vyb
     fn modify_data(data: their<Foo>) {
         data.value = data.value + 1;
@@ -112,6 +121,7 @@ Function parameters use ownership types to define how arguments are passed:
     ```
 
 *   **`param: their<T const>`**: The function receives an immutable borrow. The original data can be mutable or immutable.
+
     ```vyb
     fn read_data(data: their<Foo const>) {
         print(data.value);
@@ -164,6 +174,7 @@ The interaction between instance binding mutability (`var`/`const`), ownership t
 ## 7. Rationale
 
 This memory model, centered around `var`/`const` bindings, `my`/`our`/`their` ownership, and `view`/`borrow` for references, aims to:
+
 -   **Ensure Memory Safety**: Through compile-time checks like borrow checking and ownership tracking.
 -   **Provide Clarity**: Explicit ownership and borrowing make data flow and lifetime predictable.
 -   **Offer Control**: Developers have fine-grained control over mutability at both the binding and type levels.

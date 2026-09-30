@@ -461,6 +461,13 @@ private:
 
     // ToString conversion helpers for mixed-type string concatenation
     llvm::Value* generateToStringCall(llvm::Value* value, llvm::Type* valueType, vyb::ast::TypeNode* astType, SourceLocation loc);
+    // Serialize one value as JSON for main()'s auto-serialized return. The AST type
+    // drives the shape: Vec<T> -> JSON array (elements serialized recursively),
+    // a named struct -> the metadata serializer's object, a String -> JSON string
+    // literal, scalars -> their number/bool form. Returns a `char*` fragment, or
+    // nullptr when the shape is unsupported (the caller then emits "null").
+    llvm::Value* serializeMainReturnJson(llvm::Value* value, const vyb::ast::TypeNode* astType,
+                                         llvm::Type* llvmType, SourceLocation loc);
     llvm::Value* generateTaggedEnumToString(llvm::Value* value, const TaggedEnumInfo& info, const std::string& typeName, SourceLocation loc);
     llvm::Value* generateMixedStringConcatenation(llvm::Value* leftValue, llvm::Value* rightValue,
                                                 vyb::ast::TypeNode* leftTypeNode, vyb::ast::TypeNode* rightTypeNode,

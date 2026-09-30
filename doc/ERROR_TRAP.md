@@ -11,6 +11,7 @@
 **✅ CORE ERROR HANDLING COMPLETE**
 
 Vyb has a **production-ready error handling system** with:
+
 - Runtime infrastructure: VybError struct, heap allocation, type IDs (C++ level)
 - Language features: fail/trap/refail/ensure/panic keywords
 - Advanced patterns: wildcard `trap (e<?>) ->`, multi-type `trap (e<A|B>) ->`
@@ -65,6 +66,7 @@ fail_path:
 ## Core Philosophy
 
 Error handling should be:
+
 - **Explicit but not verbose:** Errors visible at call sites without boilerplate
 - **Type-safe:** Compile-time checking of error types and compatibility
 - **Composable:** Easy to build error hierarchies and handlers
@@ -665,6 +667,7 @@ When a `fail` occurs, Vyb captures a **source-level stack trace** showing the ch
 ### Vyb Source Stack Trace
 
 **Format:**
+
 ```
 Error: DivisionByZero { dividend = 10 }
   at divide (math.vyb:45:9)
@@ -674,17 +677,20 @@ Error: DivisionByZero { dividend = 10 }
 ```
 
 **Captured Information:**
+
 - Function name
 - File path (relative to project root)
 - Line and column number
 - Optionally: parameter values (for debugging)
 
 **Capture Timing:**
+
 - Stack is captured **at the point of `fail`**
 - Minimal runtime overhead (only when errors occur)
 - Stack is **preserved** through `refail` with additional frames appended
 
 **Example with Stack Access:**
+
 ```vyb
 process()<Void> -> {
     {
@@ -708,6 +714,7 @@ process()<Void> -> {
 For debugging **C FFI boundaries** or **compiler issues**, Vyb provides access to the native system stack:
 
 **Access:**
+
 ```vyb
 freedom {
     # Access native stack (DWARF-based)
@@ -720,11 +727,13 @@ freedom {
 ```
 
 **Use Cases:**
+
 - Debugging crashes at C FFI boundaries
 - Compiler development and verification
 - Low-level systems programming
 
 **Implementation:**
+
 - Uses LLVM debug info (DWARF)
 - Stack walking via `libunwind` or platform APIs
 - Available only in `freedom` blocks (low-level access)
@@ -734,6 +743,7 @@ freedom {
 The stack trace **includes cleanup handlers** to show the full unwinding path:
 
 **Example:**
+
 ```vyb
 process_file(path<String>)<String> -> {
     {
@@ -758,11 +768,13 @@ process_file(path<String>)<String> -> {
 ### Performance Considerations
 
 **Lazy Stack Capture:**
+
 - Stack is captured **only when `fail` executes**
 - No overhead for success paths
 - Minimal overhead on error paths
 
 **Debug vs Release Builds:**
+
 - **Debug builds:** Full stack traces with parameter values
 - **Release builds:** Function names and locations only
 - **Compile flag:** `--strip-stack-traces` for minimal binary size
@@ -772,6 +784,7 @@ process_file(path<String>)<String> -> {
 When refailing, the **original stack is preserved** and new frames are appended:
 
 **Example:**
+
 ```vyb
 level1()<Void> -> {
     {
@@ -830,16 +843,19 @@ struct NativeFrame {
 ### Implementation Requirements
 
 **LLVM Backend:**
+
 - Generate DWARF debug info for all functions
 - Include line table information
 - Preserve function names even in release builds (optional)
 
 **Runtime Support:**
+
 - Stack walker using DWARF information
 - Platform-specific unwinding (`libunwind` on Unix, SEH on Windows)
 - Efficient storage for captured frames
 
 **Memory Management:**
+
 - Stack frames stored in error value
 - Cleaned up when error value is dropped
 - No leaks during unwinding
@@ -851,6 +867,7 @@ struct NativeFrame {
 ### Philosophy
 
 **Untrapped errors should not silently crash** - they should be caught by the Vyb runtime and reported with full diagnostic information. This provides:
+
 1. **Better debugging** - See exactly what failed and where
 2. **Meaningful test results** - Tests can report specific failures
 3. **Production reliability** - Graceful degradation instead of segfaults
@@ -981,6 +998,7 @@ enum CaptureResult<T> {
 ### Implementation Details
 
 **C++ Runtime Support:**
+
 ```cpp
 namespace vyb::runtime {
     // Global untrapped error handler
@@ -1015,6 +1033,7 @@ namespace vyb::runtime {
 
 **LLVM Codegen Integration:**
 When a `fail` statement is generated without a trap, emit:
+
 ```llvm
 ; Call runtime error handler
 call void @__vyb_runtime_untrapped_error(
@@ -1051,6 +1070,7 @@ check_invariant(value<Int>)<Void> -> {
 ```
 
 **When to use each:**
+
 - **Untrapped fail**: Recoverable errors that should be handled but weren't
 - **Panic**: Programming errors, corrupted state, "this should never happen"
 
@@ -1082,6 +1102,7 @@ any stdout output — use `println` explicitly before calling `exit(n)` if you n
 ### Environment Variables
 
 Control runtime behavior:
+
 ```bash
 # Verbose error reporting
 VYB_ERROR_VERBOSE=1 ./program
@@ -1104,18 +1125,21 @@ VYB_ERROR_NO_COLOR=1 ./program
    - **Current preference:** Aspects (most flexible, fits Vyb philosophy)
 
 2. **Automatic Error Propagation:** Should `?` operator auto-propagate?
+
    ```vyb
    value<Int> = risky_operation()?  # Auto-propagates failure
    ```
    - **Decision needed:** Explicit vs implicit propagation
 
 3. **Multiple Error Types:** Can a block fail with multiple unrelated types?
+
    ```vyb
    fail NetworkError | FileError  # Union type?
    ```
    - **Decision needed:** Union types or require common base
 
 4. **Error Annotations:** Should functions declare what they can fail with?
+
    ```vyb
    risky_function()<Int> fails<NetworkError, TimeoutError> -> { ... }
    ```
@@ -1145,6 +1169,7 @@ VYB_ERROR_NO_COLOR=1 ./program
 Expose runtime error system to Vyb code through stdlib:
 
 - [ ] **Errable aspect**: Define aspect for error types
+
   ```vyb
   aspect Errable {
       message()<String> -> {}
@@ -1153,6 +1178,7 @@ Expose runtime error system to Vyb code through stdlib:
   ```
 
 - [ ] **Error base struct**: Standard Vyb error type
+
   ```vyb
   struct Error {
       message<String>,
@@ -1162,6 +1188,7 @@ Expose runtime error system to Vyb code through stdlib:
   ```
 
 - [ ] **Display aspect**: General formatting (not error-specific)
+
   ```vyb
   aspect Display {
       display()<String> -> {}
@@ -1169,6 +1196,7 @@ Expose runtime error system to Vyb code through stdlib:
   ```
 
 - [ ] **bind implementations**: Implement aspects for Error and common types
+
   ```vyb
   bind Errable -> Error { ... }
   bind Display -> Error { ... }
@@ -1180,6 +1208,7 @@ Expose runtime error system to Vyb code through stdlib:
 - [ ] **Custom user error types**: User-defined structs implementing Errable
 
 **NOT PLANNED**:
+
 - ❌ Result<T,E> type (trap/fail is superior)
 - ❌ `?` operator (errors propagate automatically)
 - ❌ Error annotations (type system handles this)

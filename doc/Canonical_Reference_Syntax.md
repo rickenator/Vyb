@@ -127,6 +127,7 @@ async main()<Void> -> {
 ## ⚖️ **Syntax Comparison**
 
 ### **✅ Canonical (Use This)**
+
 ```vyb
 data<my<String>>    = my("owned");        // ✅ Ownership construction
 shared<our<Config>> = our(Config::new()); // ✅ Shared construction
@@ -135,6 +136,7 @@ mutable<their<String>> = borrow(data);     // ✅ Mutable borrowing
 ```
 
 ### **❌ Legacy (Don't Use)**
+
 ```vyb
 data<my<String>>    = make_my("owned");   // ❌ Deprecated function
 shared<our<Config>> = make_our(Config::new()); // ❌ Deprecated function

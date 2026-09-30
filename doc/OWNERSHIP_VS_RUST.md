@@ -40,9 +40,12 @@ What ships (all exercised under `test/ownership/`):
 - **`mild<T>` — weak handles as language constructs.** `soft()` increments
   `weak_count`; a failed `grab()` yields `our<T>?`; `released()` reads the release
   flag. See `doc/OWNERSHIP_MILD.md`.
-- **Runtime faults that Rust rejects at compile time** are already filed as defects,
-  not papered over: #284 (`Vec<Vec<T>>` silent corruption / SIGSEGV / heap
-  corruption) and #285 (re-borrowing an existing `their<T>` segfaults).
+- **Runtime faults that Rust rejects at compile time** are filed as defects, not
+  papered over: #285 (re-borrowing an existing `their<T>` segfaults). #284
+  (`Vec<Vec<T>>` silent corruption / SIGSEGV / heap corruption) is fixed, and the
+  follow-on nested-Vec element ownership gap (#373) is closed too: every path that
+  clones a nested Vec deep-copies the inner Vec *and* retains its elements, so a
+  `Vec<Vec<String>>` no longer shares inner buffers with its source binding.
 
 ## Where Rust leads — four gaps, each now tracked
 

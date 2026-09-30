@@ -48,8 +48,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Thread-boundary diagnostics use Vyb's own vocabulary (`handoff` / `viewable`)
   instead of another language's trait names, and say "can not cross a thread
   boundary" rather than naming a foreign `Send` boundary.
+- **`vyb-traffic` is Vyb end to end** — the GitHub traffic archiver is now
+  `vyb-traffic/traffic.vyb` (config, collection, SQLite storage, report, CSV
+  export and SVG charts; 60+ exported functions) plus `vyb-traffic/vyb-traffic.vyb`
+  (the CLI: `collect`/`report`/`export`/`graph`/`init`, exit codes 0/1/2). The
+  Python package, its pytest suite, its packaging metadata and the pip-based
+  install instructions are gone; the checked-in launcher runs the Vyb program and
+  the systemd unit calls that launcher. Graphs are SVG, so no plotting dependency.
+  The tests are `test/traffic/test_traffic_{time,db,report,parse,config,graph}.vyb`.
+  Nested row data crosses call boundaries as TAB/NEWLINE payload strings rather
+  than `Vec<Vec<String>>` values (the compiler handles nested Vecs since the
+  #373 fix; the payload-string design keeps the SQLite row decoder simple).
 
 ### Fixed
+- **Nested `Vec<Vec<T>>` ownership (#373)** — a nested Vec silently shared the
+  source binding's *inner* buffers. A `Vec<Vec<T>>` passed by value is
+  memcpy'd element-wise, and `Vec.push`/`Vec.set` copied an inner Vec's buffer
+  without retaining that buffer's own elements, so the inner strings of a
+  `Vec<Vec<String>>` dangled once the source scope closed (`free(): double free
+  detected` at exit, EXIT 134/139, or silent garbage in the returned rows).
+  Every path that clones a nested Vec — argument passing, return, assignment,
+  `push`, `set`, and the borrowed-element binding — now deep-copies the inner
+  Vec through `generateVecDeepCopy`, which retains each inner element too
+  (`test/ownership/nested_vec_element_ownership.vyb`).
+- **`main()` return serialization of `Vec` and struct elements (#375)** — a
+  `Vec<T>` return printed the positional `{ ptr, len, cap }` walk
+  (`[null, 2, 4]`), and a struct or `Vec` element of a multi-value return fell
+  back to `null` (`[null, null]`, `[7, null]`). The auto-serializer now takes the
+  AST return type: a `Vec<T>` walks `{ data, size }` and serializes each element
+  recursively (so `Vec<Vec<T>>` nests), a named struct element goes through the
+  metadata serializer's keyed object, and scalars keep their number/bool form
+  (`test/json/main_return_{vec,int_vec,struct_tuple,nested_vec}_json.vyb`).
 - **`borrow(x)` / `view(x)` addressed the variable slot, not the object** —
   `borrow` of a pointer-backed owner (`my<T>`, `their<T>`, `ptr<T>`, and `our<T>`/
   `mild<T>` control blocks) returned the address of the operand's *slot*, so a

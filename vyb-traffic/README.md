@@ -6,8 +6,12 @@ database. GitHub exposes repository clone and view traffic for only a rolling
 historical snapshots of referrers and popular content after GitHub stops
 returning them.
 
-SQLite is the source of truth. CSV files and PNG graphs are derived exports and
+SQLite is the source of truth. CSV files and SVG graphs are derived exports and
 can be deleted and regenerated at any time.
+
+The tool is written in Vyb end to end: `traffic.vyb` is the engine (config,
+collection, storage, report, export, graphs) and `vyb-traffic.vyb` is the CLI.
+There is no Python in this directory.
 
 ## Accounting model
 
@@ -29,24 +33,20 @@ lifetime unique users. The same person may be counted on multiple days.
 
 ## Requirements and installation
 
-- Linux and Python 3.10 or newer
+- Linux with a built Vyb toolchain: `build/vyb` and `stdlib/` in the repository
 - A GitHub token for an account with push access to the repository
-- `matplotlib` only for the optional `graph` command
 
-Install for the current user from this directory:
-
-```sh
-python3 -m pip install --user .
-```
-
-For graph support:
+Nothing needs to be installed. Build Vyb once from the repository root and run
+the checked-in launcher, which locates the build and sets `VYB_STDLIB`:
 
 ```sh
-python3 -m pip install --user '.[graphs]'
+cmake -S . -B build && cmake --build build -j
+./vyb-traffic/vyb-traffic --help
 ```
 
-Ensure `$HOME/.local/bin` is in `PATH`. The checked-in executable
-`./vyb-traffic` can also run directly from a source checkout.
+The launcher execs `build/vyb vyb-traffic/vyb-traffic.vyb --module-path bindings`.
+Set `VYB` to use another compiler build. Charts are SVG, so no plotting library
+is required.
 
 ## Token setup
 
@@ -59,8 +59,8 @@ export GITHUB_TOKEN
 printf '\n'
 ```
 
-The token is used only in the `Authorization: Bearer` header. It is never
-written to the database, printed, or logged.
+The token is used only in the `Authorization: Bearer` request header. It is
+never written to the database, printed, or logged.
 
 Optional environment variables:
 
@@ -79,7 +79,7 @@ The export and graph locations can additionally be changed with
 Collect all four GitHub traffic endpoints:
 
 ```sh
-vyb-traffic collect
+./vyb-traffic/vyb-traffic collect
 ```
 
 Each endpoint is fetched independently. If one fails, successful responses are
@@ -90,40 +90,40 @@ SQLite error exits `1`. Concise diagnostics go to stderr.
 Print the current rolling window and archived event totals:
 
 ```sh
-vyb-traffic report
-vyb-traffic report --recent 30
+./vyb-traffic/vyb-traffic report
+./vyb-traffic/vyb-traffic report --recent 30
 ```
 
 Export CSV views to `~/.local/share/vyb-traffic/export/`:
 
 ```sh
-vyb-traffic export
+./vyb-traffic/vyb-traffic export
 ```
 
 This creates `summary.csv`, `clone_daily.csv`, `view_daily.csv`,
 `referrers.csv`, and `popular_paths.csv`.
 
-Generate PNGs under `~/.local/share/vyb-traffic/graphs/`:
+Generate SVG charts under `~/.local/share/vyb-traffic/graphs/`:
 
 ```sh
-vyb-traffic graph
+./vyb-traffic/vyb-traffic graph
 ```
 
-The output is `daily-clones.png`, `daily-views.png`,
-`cumulative-clones.png`, and `cumulative-views.png`. Cumulative charts sum
-daily event counts only. Optional unique lines are labeled daily observations.
+The output is `daily-clones.svg`, `daily-views.svg`, `cumulative-clones.svg`,
+and `cumulative-views.svg`. Cumulative charts sum daily event counts only;
+daily unique observations are never summed into them.
 
-Global overrides must precede the command, for example:
+Global overrides may appear anywhere on the command line, for example:
 
 ```sh
-vyb-traffic --db /srv/private/vyb-traffic.db report
-vyb-traffic --export-dir ./csv export
+./vyb-traffic/vyb-traffic report --db /srv/private/vyb-traffic.db
+./vyb-traffic/vyb-traffic export --export-dir ./csv
 ```
 
 ## Daily scheduling with a systemd user timer
 
 The supplied user timer runs every day at 03:15 local time and catches up after
-a missed run. Install it after installing the CLI:
+a missed run. Install it after checking out the repository:
 
 ```sh
 mkdir -p ~/.config/systemd/user ~/.config/vyb-traffic
@@ -136,7 +136,8 @@ systemctl --user enable --now vyb-traffic.timer
 ```
 
 Optional `VYB_TRAFFIC_*` assignments may be added to the same environment file.
-Check the schedule and recent result with:
+The service runs the checked-in launcher, so build Vyb before enabling the
+timer. Check the schedule and recent result with:
 
 ```sh
 systemctl --user list-timers vyb-traffic.timer
@@ -149,7 +150,7 @@ Systemd user timers are preferred. For cron, the same protected environment
 file can be sourced explicitly:
 
 ```cron
-15 3 * * * . "$HOME/.config/vyb-traffic/env" && export GITHUB_TOKEN VYB_TRAFFIC_OWNER VYB_TRAFFIC_REPO VYB_TRAFFIC_DB && "$HOME/.local/bin/vyb-traffic" collect
+15 3 * * * . "$HOME/.config/vyb-traffic/env" && export GITHUB_TOKEN VYB_TRAFFIC_OWNER VYB_TRAFFIC_REPO VYB_TRAFFIC_DB && "$HOME/Projects/Vyb/vyb-traffic/vyb-traffic" collect
 ```
 
 ## Database schema and durability
@@ -169,8 +170,14 @@ collection times are retained.
 
 ## Testing
 
-Tests use mocked GitHub data and never contact the network:
+The tests are Vyb programs under `test/traffic/`. They use fixed payloads and a
+scratch database in `$TMPDIR` and never contact the network:
 
 ```sh
-python3 -m pytest -q
+for t in test/traffic/test_traffic_*.vyb; do
+    VYB_STDLIB="$PWD/stdlib" ./build/vyb "$t" \
+        --module-path vyb-traffic --module-path bindings
+done
 ```
+
+The full suite (`test/run_tests.vyb`) runs them too.

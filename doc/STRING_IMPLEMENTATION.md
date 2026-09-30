@@ -4,6 +4,7 @@
 The Vyb String type is now fully implemented as a fat pointer struct with comprehensive method support.
 
 ## Type Structure
+
 ```cpp
 struct String {
     ptr: *i8,      // Pointer to null-terminated byte data
@@ -33,23 +34,27 @@ check<Bool> = "Test".starts_with("Te")
 String literals are converted to String structs in the code generation phase:
 
 **In Function Scope:**
+
 - `StringLiteral` visitor creates a String struct `{ptr, len}`
 - Calculates length from the literal's string value
 - Uses `CreateInsertValue` to build the struct
 - Returns the String struct for use in expressions
 
 **In Global Scope:**
+
 - Returns `i8*` for backward compatibility
 - Global string constants remain null-terminated C strings
 - Ensures compatibility with existing code and C interop
 
 **Memory Management:**
+
 - String literals are stored as global constants
 - No malloc/free needed for literal data
 - Efficient: zero runtime allocation for literal strings
 - Safe: literals live for program duration
 
 **Example Code Generation:**
+
 ```vyb
 data<String> = "Hello"
 # Generates LLVM IR approximately:
@@ -133,6 +138,7 @@ data<String> = "Hello"
 
 ### Bounds Checking
 All index-based operations use LLVM BasicBlocks and PHI nodes:
+
 ```llvm
 boundsCheck:
   cond = (idx >= 0 && idx < len)
@@ -152,6 +158,7 @@ mergeBlock:
 
 ### Null Termination
 All String operations that allocate memory add a null terminator:
+
 - Enables compatibility with C string functions (printf, strstr, etc.)
 - Not included in length field
 - Simplifies interop with LLVM printf and other C runtime functions
@@ -224,6 +231,7 @@ All String tests are located in `test/string/` directory for better organization
 ### Test Results
 
 **string_simple_test.vyb:**
+
 ```
 Testing String methods...
 substring length: 5           ✅ (substring(0, 5) of "Hello World")
@@ -237,6 +245,7 @@ All tests completed!
 ```
 
 **string_literal_test.vyb:**
+
 ```
 String literal assigned: 5
 Concatenated length: 11      ✅ ("Hello" + " " + "World")
@@ -245,6 +254,7 @@ Starts with Hello: true      ✅ (literal.starts_with() works)
 ```
 
 **string_test.vyb:**
+
 ```
 Starting String tests...
 Created string from bytes
@@ -254,6 +264,7 @@ String tests completed
 ```
 
 ### Running Tests
+
 ```bash
 # Run all String tests
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test/string
@@ -265,6 +276,7 @@ build/vyb test/string/string_literal_test.vyb
 ## Type Differentiation
 
 The implementation uses struct field count to differentiate String from Vec:
+
 ```cpp
 llvm::Type* allocatedType = allocaInst->getAllocatedType();
 if (allocatedType->isStructTy()) {
@@ -280,6 +292,7 @@ if (allocatedType->isStructTy()) {
 ```
 
 This approach:
+
 - Works with LLVM 18 opaque pointers
 - Reliable across all String/Vec operations
 - No ambiguity between types
@@ -321,6 +334,7 @@ This approach:
 
 ### C Interop
 All String methods produce null-terminated strings compatible with:
+
 - `printf("%s", str.to_bytes())`
 - `strlen(str.to_bytes())`
 - `strcmp(str1.to_bytes(), str2.to_bytes())`
@@ -335,6 +349,7 @@ All String methods produce null-terminated strings compatible with:
 ## Summary
 
 The String type implementation is **complete and production-ready**:
+
 - ✅ 11 methods fully implemented
 - ✅ Natural string literal syntax (`"text"` → String struct)
 - ✅ Comprehensive bounds checking
@@ -345,6 +360,7 @@ The String type implementation is **complete and production-ready**:
 - ✅ Well-documented
 
 **Key Features:**
+
 - **Zero-cost literals**: String literals compile to struct without allocation
 - **Natural syntax**: `"this" + "that"` just works
 - **Safe by default**: Bounds checking on all index operations

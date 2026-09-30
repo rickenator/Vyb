@@ -1,0 +1,44 @@
+// @test: Nested Vec element ownership through a by-value call
+// @description: A Vec<Vec<String>> passed by value deep-copies each inner Vec and
+// @description: retains its string elements, so the caller's rows stay intact after
+// @description: the callee mutates its copy and the builder's scope closes (#373)
+// @category: ownership, vec, memory
+// @expect: pass
+// @expect-output: alias-ok rows=2 last=r1c1
+
+// Inner strings are heap-built (concatenation + to_string), so a shallow copy of
+// the inner element slots would dangle once the builder's scope closed.
+build(n<Int>)<Vec<Vec<String>>> -> {
+    rows<Vec<Vec<String>>> = Vec<Vec<String>>()
+    i<Int> = 0
+    while (i < n) {
+        inner<Vec<String>> = Vec<String>()
+        j<Int> = 0
+        while (j < 2) {
+            inner.push("r" + i.to_string() + "c" + j.to_string())
+            j = j + 1
+        }
+        rows.push(inner)
+        i = i + 1
+    }
+    return rows
+}
+
+// The callee gets its own copy: mutating it must not touch the caller's rows.
+mutate_copy(rows<Vec<Vec<String>>>)<Int> -> {
+    i<Int> = 0
+    while (i < rows.len()) {
+        row<Vec<String>> = rows.get(i)
+        row.push("MUTATED")
+        i = i + 1
+    }
+    return rows.len()
+}
+
+main()<Int> -> {
+    rows<Vec<Vec<String>>> = build(2)
+    mutate_copy(rows)
+    r1<Vec<String>> = rows.get(1)
+    println("alias-ok rows=" + rows.len().to_string() + " last=" + r1.get(1))
+    return 0
+}

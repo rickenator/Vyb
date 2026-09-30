@@ -71,6 +71,7 @@ public:
 Vyb supports two parameter syntax styles that produce identical AST structures:
 
 #### Standard Syntax
+
 ```vyb
 // Explicit mutability with angle brackets
 fn<String> format(var<String> prefix, const<Int> value) -> {
@@ -79,6 +80,7 @@ fn<String> format(var<String> prefix, const<Int> value) -> {
 ```
 
 #### Shorthand Syntax
+
 ```vyb
 // Type-first shorthand (more concise)
 fn<String> format(String prefix, const Int value) -> {
@@ -86,7 +88,8 @@ fn<String> format(String prefix, const Int value) -> {
 }
 ```
 
-#### Mixed Syntax
+#### Mixed Syntax (parameters)
+
 ```vyb
 // Both forms can be used in the same function
 fn<Int> calculate(var<Int> base, Int multiplier, const<Int> offset) -> {
@@ -235,11 +238,12 @@ public:
 } // namespace vyb::ast
 ```
 
-### Field Declaration Syntax
+### Field Declaration Syntax (struct)
 
 Vyb supports two syntaxes for struct field declarations that can be used interchangeably or mixed within the same struct:
 
 #### Colon Syntax (Original)
+
 ```vyb
 struct Person {
     id: Int,
@@ -248,6 +252,7 @@ struct Person {
 ```
 
 #### Angle Bracket Syntax (New)
+
 ```vyb
 struct Person {
     id<Int>,
@@ -255,7 +260,8 @@ struct Person {
 }
 ```
 
-#### Mixed Syntax
+#### Mixed Syntax (fields)
+
 ```vyb
 struct MixedPoint {
     x<Int>,   // Angle bracket syntax
@@ -269,6 +275,7 @@ The angle bracket syntax aligns with Vyb's type-first approach used in function 
 
 *Note: Vyb does not have a class system. The `ClassDeclaration` AST node exists as a
 parser artifact from early development and is **not** exposed in the language. Use structs
+
 + aspects instead. This node may be removed in a future cleanup.*
 
 ```cpp
@@ -315,7 +322,7 @@ public:
 } // namespace vyb::ast
 ```
 
-### Field Declaration Syntax
+### Field Declaration Syntax (AST node)
 
 Fields can be declared using either colon syntax or angle bracket syntax:
 

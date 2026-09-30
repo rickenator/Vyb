@@ -2,6 +2,7 @@
 
 \
 #include "vyb/vre/llvm/codegen.hpp"
+#include "vyb/vre/llvm/cgen_internal.hpp"
 #include "vyb/parser/ast.hpp"
 
 #include <set>
@@ -218,8 +219,21 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
                 if (auto* st = llvm::dyn_cast<llvm::StructType>(varType)) {
                     // initialVal is the address of the borrowed Vec's header.
                     llvm::Value* header = builder->CreateLoad(st, initialVal, "init.vecborrow.header");
-                    uint64_t stride = elementStrideForTypeName(borrowedVec->toString());
-                    initialVal = deepCopyVecElement(header, st, stride);
+                    // #373: clone with the inner elements' owned references intact, so
+                    // this binding stays valid after the container slot is released.
+                    const vyb::ast::TypeNode* innerElemAst = vecElementTypeNode(borrowedVec);
+                    if (innerElemAst) {
+                        if (llvm::Type* innerElemTy =
+                                codegenType(const_cast<vyb::ast::TypeNode*>(innerElemAst))) {
+                            initialVal = generateVecDeepCopy(header, innerElemTy, st, innerElemAst);
+                        } else {
+                            uint64_t stride = elementStrideForTypeName(borrowedVec->toString());
+                            initialVal = deepCopyVecElement(header, st, stride);
+                        }
+                    } else {
+                        uint64_t stride = elementStrideForTypeName(borrowedVec->toString());
+                        initialVal = deepCopyVecElement(header, st, stride);
+                    }
                     VYB_CDBG << "DEBUG: borrowed Vec element bound to '" << node->id->name
                               << "': deep-copied the inner buffer" << std::endl;
                 }

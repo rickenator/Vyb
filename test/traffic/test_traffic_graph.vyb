@@ -1,0 +1,90 @@
+// @test: vyb-traffic SVG graph rendering
+// @description: chart_svg lays out a 720x260 zero-based chart: the point series
+//   spans the plot area, a cumulative chart climbs to the top edge, a single
+//   archived day sits at the left edge, and an empty archive says "no archived
+//   data" instead of drawing a polyline. render_graphs writes the four SVG files
+//   into the graphs directory.
+// @category: traffic, graph, svg, tooling
+// @expect: pass
+// @expect-output: traffic-graph-ok
+// @expect-return: 0
+// @vyb-args: --module-path vyb-traffic --module-path bindings
+// @env: VYB_STDLIB=stdlib
+
+import traffic::{Config, Run, Day, Ref, Path, config_load, db_init, push_run,
+                 chart_svg, render_graphs, slurp}
+import env::{env_get}
+
+run_of(ts<String>)<Run> -> {
+    clones<Vec<Day>> = Vec<Day>()
+    clones.push(Day { timestamp = "2026-09-28T00:00:00Z", count = 12, uniques = 4 })
+    clones.push(Day { timestamp = "2026-09-29T00:00:00Z", count = 1967, uniques = 319 })
+    views<Vec<Day>> = Vec<Day>()
+    views.push(Day { timestamp = "2026-09-29T00:00:00Z", count = 9, uniques = 6 })
+    return Run {
+        timestamp = ts,
+        clone_count = 1979, clone_uniques = 323, clones = clones, clones_ok = true, clones_err = "",
+        view_count = 9, view_uniques = 6, views = views, views_ok = true, views_err = "",
+        refs = Vec<Ref>(), refs_ok = true, refs_err = "",
+        paths = Vec<Path>(), paths_ok = true, paths_err = ""
+    }
+}
+
+main()<Int> -> {
+    # ------------------------------------------------------------- chart_svg
+    daily_payload<String> = "a\t10\nb\t20\nc\t30"
+    daily<String> = chart_svg("Daily clones", daily_payload, false, "rickenator/Vyb")
+    if (!daily.starts_with("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"720\" height=\"260\"")) { return 1 }
+    if (daily.index_of(">Daily clones - rickenator/Vyb</text>") < 0) { return 2 }
+    if (daily.index_of("points=\"60,162 380,98 700,34\"") < 0) { return 3 }
+    # Zero-based axis: the largest value touches the top edge (34) and the
+    # baseline (226) is labelled 0.
+    if (daily.index_of("y=\"226\" fill=\"#94a3b8\"") < 0) { return 4 }
+    if (daily.index_of(">0</text>") < 0) { return 40 }
+    # First and last archived dates are labelled.
+    if (daily.index_of(">a</text>") < 0) { return 5 }
+    if (daily.index_of(">c</text>") < 0) { return 6 }
+    if (!daily.ends_with("source: SQLite (vyb-traffic)</text>\n</svg>\n")) { return 7 }
+
+    # The same payload cumulated climbs monotonically to the top edge.
+    cum<String> = chart_svg("Cumulative clones", daily_payload, true, "rickenator/Vyb")
+    if (cum.index_of("points=\"60,194 380,130 700,34\"") < 0) { return 8 }
+    if (cum.index_of(">Cumulative clones - rickenator/Vyb</text>") < 0) { return 9 }
+
+    # A single archived day sits at the left edge of the plot (x=60) and, being
+    # the maximum, lands on the top edge (y=34).
+    one<String> = chart_svg("Daily clones", "2026-09-28\t12", false, "rickenator/Vyb")
+    if (one.index_of("points=\"60,34\"") < 0) { return 10 }
+    if (one.index_of("polyline") < 0) { return 11 }
+
+    # An empty archive draws no polyline.
+    empty<String> = chart_svg("Daily clones", "", false, "rickenator/Vyb")
+    if (empty.index_of("polyline") >= 0) { return 12 }
+    if (empty.index_of(">no archived data</text>") < 0) { return 13 }
+
+    # -------------------------------------------------------- render_graphs
+    base<String> = env_get("TMPDIR") else "/tmp"
+    db<String> = base + "/vyb_traffic_graph_test.db"
+    cfg<Config> = config_load("", "", "", db, base + "/vyb_traffic_graph_test_export",
+                              base + "/vyb_traffic_graph_test_graphs")
+    if (!db_init(cfg)) { return 14 }
+    sid<Int> = push_run(cfg, run_of("2026-09-30T05:05:00.000Z")) else -1
+    if (sid < 1) { return 15 }
+
+    written<Vec<String>> = render_graphs(cfg)
+    if (written.len() != 4) { return 16 }
+
+    dc<String> = slurp(cfg.graphs_dir + "/daily-clones.svg")
+    if (dc.index_of("Daily clones - rickenator/Vyb") < 0) { return 17 }
+    if (dc.index_of("y=\"44\" fill=\"#94a3b8\"") < 0) { return 18 }
+    if (dc.index_of(">1,967</text>") < 0) { return 180 }
+    dv<String> = slurp(cfg.graphs_dir + "/daily-views.svg")
+    if (dv.index_of("Daily views - rickenator/Vyb") < 0) { return 19 }
+    cc<String> = slurp(cfg.graphs_dir + "/cumulative-clones.svg")
+    if (cc.index_of("Cumulative clones - rickenator/Vyb") < 0) { return 20 }
+    cv<String> = slurp(cfg.graphs_dir + "/cumulative-views.svg")
+    if (cv.index_of("Cumulative views - rickenator/Vyb") < 0) { return 21 }
+
+    println("traffic-graph-ok")
+    return 0
+}

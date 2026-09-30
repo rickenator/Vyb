@@ -1,0 +1,77 @@
+// @test: vyb-traffic GitHub JSON parsing and response shape checks
+// @description: looks_like rejects empty, non-`{`/`[` and marker-less bodies so
+//   a body that would deserialize into all-default fields never passes; the
+//   four endpoint structs deserialize GitHub-shaped JSON (a `{"rows": [...]}`
+//   envelope wraps GitHub's list responses); an absent path title becomes empty
+//   rather than a parse failure.
+// @category: traffic, json, api, tooling
+// @expect: pass
+// @expect-output: traffic-parse-ok
+// @expect-return: 0
+// @vyb-args: --module-path vyb-traffic --module-path bindings
+// @env: VYB_STDLIB=stdlib
+
+import traffic::{GhClones, GhViews, RefList, PathList, Day, Ref, Path, looks_like,
+                 payload_count, recent_lines}
+
+main()<Int> -> {
+    # Shape gate: empty, wrong opener, or missing marker.
+    if (!looks_like("{\"clones\":[]}", "{", "\"clones\"")) { return 1 }
+    if (looks_like("", "{", "\"clones\"")) { return 2 }
+    if (looks_like("<html>", "{", "\"clones\"")) { return 3 }
+    if (looks_like("{\"views\":[]}", "{", "\"clones\"")) { return 4 }
+    if (!looks_like("[{\"referrer\":\"x\"}]", "[", "\"referrer\"")) { return 5 }
+    if (looks_like("[{\"referrer\":\"x\"}]", "{", "\"referrer\"")) { return 6 }
+    # A JSON error body with HTTP 200 must not pass the gate.
+    if (looks_like("{\"message\":\"Not Found\"}", "{", "\"clones\"")) { return 7 }
+
+    clones_json<String> = "{\"clones\":[{\"timestamp\":\"2026-09-28T00:00:00Z\",\"count\":12,\"uniques\":4}," +
+                          "{\"timestamp\":\"2026-09-29T00:00:00Z\",\"count\":7,\"uniques\":3}],\"count\":19,\"uniques\":7}"
+    c<GhClones> = GhClones::from_string(clones_json)
+    if (c.count != 19 || c.uniques != 7) { return 8 }
+    if (c.clones.len() != 2) { return 9 }
+    if (c.clones.get(0).timestamp != "2026-09-28T00:00:00Z") { return 10 }
+    if (c.clones.get(0).count != 12 || c.clones.get(0).uniques != 4) { return 11 }
+    if (c.clones.get(1).count != 7) { return 12 }
+
+    views_json<String> = "{\"views\":[{\"timestamp\":\"2026-09-29T00:00:00Z\",\"count\":55,\"uniques\":11}],\"count\":55,\"uniques\":11}"
+    v<GhViews> = GhViews::from_string(views_json)
+    if (v.count != 55 || v.uniques != 11) { return 13 }
+    if (v.views.len() != 1 || v.views.get(0).count != 55) { return 14 }
+
+    # GitHub returns a bare JSON array for the list endpoints; the tool wraps it.
+    refs_body<String> = "[{\"referrer\":\"github.com\",\"count\":6,\"uniques\":2}]"
+    refs<RefList> = RefList::from_string("{\"rows\":" + refs_body + "}")
+    if (refs.rows.len() != 1) { return 15 }
+    if (refs.rows.get(0).referrer != "github.com") { return 16 }
+    if (refs.rows.get(0).count != 6 || refs.rows.get(0).uniques != 2) { return 17 }
+
+    paths_body<String> = "[{\"path\":\"/rickenator/Vyb\",\"title\":\"Overview\",\"count\":9,\"uniques\":4}]"
+    paths<PathList> = PathList::from_string("{\"rows\":" + paths_body + "}")
+    if (paths.rows.len() != 1) { return 18 }
+    if (paths.rows.get(0).path != "/rickenator/Vyb") { return 19 }
+    if (paths.rows.get(0).title != "Overview") { return 20 }
+
+    # A path with no title (null in GitHub's payload) parses with an empty title.
+    untitled<String> = "[{\"path\":\"/x\",\"title\":null,\"count\":1,\"uniques\":1}]"
+    clean<String> = untitled.replace("\"title\":null", "\"title\":\"\"")
+    ul<PathList> = PathList::from_string("{\"rows\":" + clean + "}")
+    if (ul.rows.len() != 1) { return 21 }
+    if (ul.rows.get(0).title != "") { return 22 }
+
+    # Query payloads are TAB-joined cells and NEWLINE-joined rows.
+    if (payload_count("") != 0) { return 23 }
+    if (payload_count("a\tb") != 1) { return 24 }
+    if (payload_count("a\tb\nc\td\n") != 3) { return 25 }
+
+    # recent_lines keeps only the newest N rows and renders a missing rolling
+    # value as "-", never 0.
+    payload<String> = "2026-09-27\t1\n2026-09-28\t2\t3\n2026-09-29\t4\t5"
+    recent<String> = recent_lines(payload, 2)
+    if (recent.index_of("2026-09-27") >= 0) { return 26 }
+    if (recent.index_of("2026-09-29") < 0) { return 27 }
+    if (recent.index_of("2026-09-28") < 0) { return 28 }
+
+    println("traffic-parse-ok")
+    return 0
+}

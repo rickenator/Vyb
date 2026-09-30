@@ -1,0 +1,96 @@
+// @test: vyb-traffic report text and CSV export
+// @description: report_text labels the rolling window separately from archived
+//   history, shows recent days newest-first, and (only with include_uniques)
+//   states that summed daily uniques are observations, not unique people.
+//   export_csv writes the five derived views, quoting fields that contain a
+//   comma or a quote and never touching the SQLite database.
+// @category: traffic, report, export, tooling
+// @expect: pass
+// @expect-output: traffic-report-ok
+// @expect-return: 0
+// @vyb-args: --module-path vyb-traffic --module-path bindings
+// @env: VYB_STDLIB=stdlib
+
+import traffic::{Config, Run, Day, Ref, Path, config_load, db_init, push_run,
+                 report_text, export_csv, slurp}
+import env::{env_get}
+
+run_of(ts<String>)<Run> -> {
+    clones<Vec<Day>> = Vec<Day>()
+    clones.push(Day { timestamp = "2026-09-28T00:00:00Z", count = 12, uniques = 4 })
+    clones.push(Day { timestamp = "2026-09-29T00:00:00Z", count = 1967, uniques = 319 })
+    views<Vec<Day>> = Vec<Day>()
+    views.push(Day { timestamp = "2026-09-29T00:00:00Z", count = 9, uniques = 6 })
+    refs<Vec<Ref>> = Vec<Ref>()
+    refs.push(Ref { referrer = "vyb-lang.org", count = 2, uniques = 1 })
+    paths<Vec<Path>> = Vec<Path>()
+    paths.push(Path { path = "/rickenator/Vyb", title = "Vyb, it's \"delta\" time", count = 9, uniques = 4 })
+    return Run {
+        timestamp = ts,
+        clone_count = 1967, clone_uniques = 319, clones = clones, clones_ok = true, clones_err = "",
+        view_count = 9, view_uniques = 6, views = views, views_ok = true, views_err = "",
+        refs = refs, refs_ok = true, refs_err = "",
+        paths = paths, paths_ok = true, paths_err = ""
+    }
+}
+
+main()<Int> -> {
+    base<String> = env_get("TMPDIR") else "/tmp"
+    db<String> = base + "/vyb_traffic_report_test.db"
+    cfg<Config> = config_load("", "", "", db, base + "/vyb_traffic_report_test_export",
+                              base + "/vyb_traffic_report_test_graphs")
+    if (!db_init(cfg)) { return 1 }
+    sid<Int> = push_run(cfg, run_of("2026-09-30T04:30:15.000Z")) else -1
+    if (sid < 1) { return 2 }
+
+    text<String> = report_text(cfg, 14, true)
+    if (!text.starts_with("Vyb GitHub Traffic\n==================\n")) { return 3 }
+    if (text.index_of("Current GitHub 14-day window") < 0) { return 4 }
+    if (text.index_of("  Clones:          1,967") < 0) { return 5 }
+    if (text.index_of("  Unique cloners:  319") < 0) { return 6 }
+    if (text.index_of("  Views:           9") < 0) { return 7 }
+    if (text.index_of("  Unique viewers:  6") < 0) { return 8 }
+    if (text.index_of("Archived history") < 0) { return 9 }
+    if (text.index_of("  First recorded:  2026-09-30") < 0) { return 10 }
+    if (text.index_of("  Archived clone events:  1,979") < 0) { return 11 }
+    # Newest day first within the recent window.
+    if (text.index_of("  2026-09-29   1,967") < 0) { return 12 }
+    if (text.index_of("  2026-09-28   12") < 0) { return 13 }
+    if (text.index_of("  2026-09-29   1,967") > text.index_of("  2026-09-28   12")) { return 14 }
+    if (text.index_of("Daily unique observations (archived sums, not unique people)") < 0) { return 15 }
+    if (text.index_of("cannot be summed into a true lifetime unique-user count.") < 0) { return 16 }
+    if (text.index_of("  Sum of daily clone uniques:  323") < 0) { return 17 }
+
+    # --no-uniques drops the observations section but keeps the rest.
+    terse<String> = report_text(cfg, 1, false)
+    if (terse.index_of("Daily unique observations") >= 0) { return 18 }
+    if (terse.index_of("Archived clone events:  1,979") < 0) { return 19 }
+    # --recent 1 shows only the newest day.
+    if (terse.index_of("  2026-09-28") >= 0) { return 20 }
+
+    written<Vec<String>> = export_csv(cfg)
+    if (written.len() != 5) { return 21 }
+
+    summary<String> = slurp(cfg.export_dir + "/summary.csv")
+    if (!summary.starts_with("field,value\n")) { return 22 }
+    if (summary.index_of("archived_clone_events,\"1,979\"") < 0) { return 23 }
+    if (summary.index_of("latest_snapshot_utc,2026-09-30T04:30:15.000Z") < 0) { return 24 }
+    if (summary.index_of("unique_cloners_note,GitHub does not expose stable identities") < 0) { return 25 }
+
+    daily<String> = slurp(cfg.export_dir + "/clone_daily.csv")
+    if (!daily.starts_with("date,count,uniques,first_seen,last_seen\n")) { return 26 }
+    if (daily.index_of("2026-09-29,1967,319,2026-09-30T04:30:15.000Z,") < 0) { return 27 }
+
+    refs_csv<String> = slurp(cfg.export_dir + "/referrers.csv")
+    if (refs_csv.index_of("2026-09-30T04:30:15.000Z,vyb-lang.org,2,1") < 0) { return 28 }
+
+    paths_csv<String> = slurp(cfg.export_dir + "/popular_paths.csv")
+    # A comma and quotes in the title force one quoted, doubled-quote field.
+    if (paths_csv.index_of("\"Vyb, it's \"\"delta\"\" time\"") < 0) { return 29 }
+
+    views_csv<String> = slurp(cfg.export_dir + "/view_daily.csv")
+    if (views_csv.index_of("2026-09-29,9,6,") < 0) { return 30 }
+
+    println("traffic-report-ok")
+    return 0
+}

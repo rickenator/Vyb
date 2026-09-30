@@ -15,6 +15,7 @@ Vyb is one of the most beautiful things we've worked on. Now we strive for **qua
 ## Test Execution Protocol
 
 ### Quick Test Run
+
 ```bash
 # Run the canonical suite (authoritative pass/fail count)
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
@@ -27,6 +28,7 @@ build/vyb test_harness.vyb --html-report test_report.html --json-report test_res
 ```
 
 ### Full Quality Assessment
+
 ```bash
 # 1. Clean build
 mkdir -p build && cd build && cmake .. && make clean && make -j
@@ -42,6 +44,7 @@ build/vyb triage_tool.vyb reports/test_results_*.json --output reports/triage_re
 ```
 
 ### Continuous Testing During Development
+
 ```bash
 # Test specific category
 build/vyb test_harness.vyb --category parser -v
@@ -107,6 +110,7 @@ build/vyb test/path/to/test.vyb
 **Command:** `build/vyb test_harness.vyb --html-report --json-report`
 
 **Results:**
+
 - Total Tests:
 - Passed:
 - Failed:
@@ -114,9 +118,11 @@ build/vyb test/path/to/test.vyb
 - Pass Rate:
 
 **Critical Failures:**
+
 - (List high-priority failures here)
 
 **Non-Critical Failures:**
+
 - (List low-priority failures here)
 
 ---
@@ -170,6 +176,7 @@ What actually happens
 **Error Output:**
 ```
 Paste error output here
+
 ```
 
 **Root Cause:**
@@ -201,18 +208,24 @@ For each test file, verify:
 ## Test Writing Guidelines
 
 ### Good Test Structure
+
 ```vyb
-# Test: [Feature] - [Specific Case]
-# Expected: [Behavior]
-# Exit Code: [0 for success, non-zero for expected failures]
+// @test: [Feature] - [Specific Case]
+// @description: [Behaviour]
+// @expect: pass
+// @expect-return: 0        # the JSONified main() return value
+// @expect-output: [stdout]
 
 [minimal code demonstrating the feature]
 
 main()<Int> -> {
     [test logic]
-    return 0  # or expected exit code
+    return 0              # printed as JSON `0`; the process still exits 0
 }
 ```
+
+`main`'s return value is serialized to stdout, not used as a status; a test that
+needs a non-zero process status calls the builtin `exit(n)`.
 
 ### Test Naming Convention
 - `test_[feature]_[case].vyb` - Basic functionality
@@ -221,6 +234,7 @@ main()<Int> -> {
 - `test_[feature]_integration_[case].vyb` - Multi-feature integration
 
 ### Test Organization
+
 ```
 test/
 ├── aspect/          # Aspect system tests

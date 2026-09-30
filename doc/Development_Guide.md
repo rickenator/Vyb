@@ -65,6 +65,7 @@ Vyb/
 ### Core Language (100% Complete)
 
 #### Variables and Types
+
 ```vyb
 // Type inference
 x = 42          // Int
@@ -78,6 +79,7 @@ PI<Float> = 3.14159
 ```
 
 #### Functions with Dual Parameter Syntax
+
 ```vyb
 // Standard syntax
 add_standard(a<Int>, b<Int>)<Int> -> a + b
@@ -90,6 +92,7 @@ mixed_params(x<Int>, Int y, const Int z)<Int> -> x + y + z
 ```
 
 #### Advanced Collections
+
 ```vyb
 // Dynamic vectors
 numbers<Vec<Int>> = Vec::new()
@@ -104,6 +107,7 @@ element<Int> = fixed[2]  // Array indexing
 ```
 
 #### Pattern Matching
+
 ```vyb
 describe_number(x<Int>)<String> -> {
     match (x) {
@@ -116,6 +120,7 @@ describe_number(x<Int>)<String> -> {
 ```
 
 #### Control Flow
+
 ```vyb
 // Conditionals
 check_sign(x<Int>)<String> -> {
@@ -149,6 +154,7 @@ factorial(n<Int>)<Int> -> {
 Vyb v0.4.0 includes a fully implemented async programming model with comprehensive debugging support.
 
 #### Basic Async Functions
+
 ```vyb
 // Simple async function
 async fetch_data()<Future<Int>> -> {
@@ -159,6 +165,7 @@ async fetch_data()<Future<Int>> -> {
 ```
 
 #### Complex Async Operations
+
 ```vyb
 // Multiple await expressions with state machine debugging
 async process_data()<Future<Int>> -> {
@@ -171,6 +178,7 @@ async process_data()<Future<Int>> -> {
 ```
 
 #### Integration with Main
+
 ```vyb
 main()<Int> -> {
     println("=== Async Demo ===")
@@ -187,6 +195,7 @@ main()<Int> -> {
 - **Variable Scope Tracking**: Track variable lifetime across suspensions
 
 Debug output example:
+
 ```
 DEBUG: Initialized async state debug info for function 'process_data' at line 11
 DEBUG: Created suspension point 1 (await_expression_1) at line 12 column 18
@@ -208,6 +217,7 @@ Vyb provides comprehensive debug information through LLVM's debug infrastructure
 - **Async State Debugging**: Specialized async function debugging
 
 #### Debug Variable Information
+
 ```vyb
 // Debug information is automatically generated for all variables
 async test_debug()<Future<Int>> -> {
@@ -220,6 +230,7 @@ async test_debug()<Future<Int>> -> {
 ```
 
 #### Debugging Commands
+
 ```bash
 # Compile with debug information
 build/vyb --emit-llvm --debug-info test.vyb
@@ -238,6 +249,7 @@ build/vyb --emit-llvm --debug-info test.vyb
 Vyb's canonical suite runner (`test/run_tests.vyb`) manages 1077+ test files; this section describes the auxiliary parallel harness:
 
 #### Basic Usage
+
 ```bash
 # Run the canonical suite (authoritative pass/fail count)
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
@@ -253,6 +265,7 @@ build/vyb test_harness.vyb --html-report report.html --json-report results.json
 ```
 
 #### Advanced Filtering
+
 ```bash
 # Run specific categories
 build/vyb test_harness.vyb --category async,debug
@@ -265,6 +278,7 @@ build/vyb test_harness.vyb --pattern "*async*.vyb"
 ```
 
 #### Test Analysis and Triage
+
 ```bash
 # Analyze failures and create triage plan
 build/vyb triage_tool.vyb results.json
@@ -276,6 +290,7 @@ build/vyb triage_tool.vyb results.json --output-format markdown --output triage.
 ### Test Writing Guidelines
 
 #### Test File Structure
+
 ```vyb
 // @test: Descriptive Test Name
 // @description: Detailed explanation of test purpose
@@ -311,6 +326,7 @@ main()<Int> -> {
 ### Daily Development
 
 #### 1. Quick Development Cycle
+
 ```bash
 # Make code changes
 vim src/vre/llvm/cgen_expr.cpp
@@ -323,6 +339,7 @@ build/vyb test_harness.vyb --category async --pattern "*debug*"
 ```
 
 #### 2. Feature Development
+
 ```bash
 # Run comprehensive tests
 build/vyb test_harness.vyb --workers 8 --json-report results.json
@@ -340,6 +357,7 @@ git commit -m "Implement async state machine debugging
 ```
 
 #### 3. Feature Testing
+
 ```bash
 # Test new async functionality
 build/vyb test/debug_async_test.vyb
@@ -351,6 +369,7 @@ build/vyb test_harness.vyb --category async -v
 ### Release Preparation
 
 #### 1. Comprehensive Testing
+
 ```bash
 # Full test suite with reporting
 build/vyb test_harness.vyb --workers 8 --html-report release-report.html --json-report release-results.json
@@ -360,6 +379,7 @@ build/vyb triage_tool.vyb release-results.json --output-format markdown --output
 ```
 
 #### 2. Performance Analysis
+
 ```bash
 # Performance-focused testing
 build/vyb test_harness.vyb --category performance --exclude-flaky
@@ -369,6 +389,7 @@ build/vyb test_harness.vyb --category runtime -v
 ```
 
 #### 3. Documentation Updates
+
 ```bash
 # Update README with new features
 vim README.md
@@ -382,6 +403,7 @@ vim doc/Async_Programming_Debug_System.md
 ### Code Contribution Process
 
 #### 1. Setting Up Development Environment
+
 ```bash
 # Fork and clone
 git clone https://github.com/your-username/Vyb.git
@@ -398,6 +420,7 @@ build/vyb test_harness.vyb --category basic
 ```
 
 #### 2. Making Changes
+
 ```bash
 # Implement new feature
 # - Add C++ implementation in src/
@@ -412,6 +435,7 @@ build/vyb test_harness.vyb --exclude-flaky
 ```
 
 #### 3. Submission Process
+
 ```bash
 # Commit with descriptive messages
 git add .
@@ -464,6 +488,7 @@ git push origin feature/new-async-debugging
 ### LLVM Integration
 
 #### Understanding the Backend
+
 ```cpp
 // Key LLVM components in Vyb
 class VRECodegen {
@@ -476,6 +501,7 @@ class VRECodegen {
 ```
 
 #### Debug Information Architecture
+
 ```cpp
 // Debug infrastructure components
 struct DebugInfo {
@@ -489,6 +515,7 @@ struct DebugInfo {
 ### Async Implementation Details
 
 #### State Machine Generation
+
 ```cpp
 // AsyncState structure for debug support
 struct AsyncState {
@@ -501,6 +528,7 @@ struct AsyncState {
 ```
 
 #### Suspension Point Implementation
+
 ```cpp
 // Creating suspension points for await expressions
 llvm::DebugLoc createSuspensionPointDebugInfo(unsigned line, unsigned column, int stateId) {
@@ -527,6 +555,7 @@ llvm::DebugLoc createSuspensionPointDebugInfo(unsigned line, unsigned column, in
 ### Debugging Techniques
 
 #### Compiler Debugging
+
 ```bash
 # Enable verbose debug output
 build/vyb --emit-llvm --debug-info --verbose test.vyb
@@ -537,6 +566,7 @@ cat output.ll | grep -A 10 -B 10 "debug"
 ```
 
 #### Runtime Debugging
+
 ```bash
 # Use external debugging tools
 gdb build/vyb
@@ -544,6 +574,7 @@ valgrind --tool=memcheck build/vyb test.vyb
 ```
 
 #### Test Debugging
+
 ```bash
 # Debug specific test failures
 build/vyb test_harness.vyb --pattern "failing_test.vyb" -v
