@@ -16,6 +16,7 @@
 
 #include <iostream>
 #include <set>
+#include <algorithm>
 #include <string>
 
 namespace vyb {
@@ -135,5 +136,138 @@ inline std::string unwrapOwnershipTypeString(const std::string& type) {
     }
     return result;
 }
+
+
+
+inline const char* kernelIntrinsicReturnType(const std::string& name) {
+    if (name == "tid_x" || name == "tid_y" || name == "tid_z" ||
+        name == "blk_x" || name == "blk_y" || name == "blk_z" ||
+        name == "dim_x" || name == "dim_y" || name == "dim_z" ||
+        name == "grid_x" || name == "grid_y" ||
+        name == "lane_id" || name == "warp_size" ||
+        name == "ld_i64") return "Int";
+    if (name == "ld_f64" || name == "ld_f32" || name == "ld_f16" ||
+        name == "ld_bf16" || name == "deq_q4_0" ||
+        name == "ld_shared_f64" || name == "atomic_add_f64") return "Float";
+    if (name == "ld_i32" || name == "atomic_add_i32") return "CInt";
+    if (name == "ld_i8") return "Int8";
+    if (name == "ld_u8") return "UInt8";
+    if (name == "ld_i16") return "Int16";
+    if (name == "ld_u16") return "UInt16";
+    if (name == "st_f64" || name == "st_f32" || name == "st_i64" ||
+        name == "st_i32" || name == "st_i8" || name == "st_u8" ||
+        name == "st_i16" || name == "st_u16" || name == "st_f16" ||
+        name == "st_bf16" || name == "st_shared_f64" ||
+        name == "kernel_barrier") return "Void";
+    return nullptr;
+}
+
+
+inline std::string intCanonicalNameForName(const std::string& name) {
+    if (name == "Int" || name == "Int64" || name == "i64" ||
+        name == "CLong" || name == "CSSize") return "s64";
+    if (name == "UInt64" || name == "u64" || name == "CULong" || name == "CSize") return "u64";
+    if (name == "Int32" || name == "i32" || name == "CInt" ||
+        name == "Rune") return "s32";
+    if (name == "UInt32" || name == "u32" || name == "CUInt") return "u32";
+    if (name == "Int16" || name == "i16" || name == "CShort") return "s16";
+    if (name == "UInt16" || name == "u16" || name == "CUShort") return "u16";
+    if (name == "Int8" || name == "i8" || name == "Char" || name == "CChar") return "s8";
+    if (name == "UInt8" || name == "u8" || name == "CUChar" || name == "Byte") return "u8";
+    return "";
+}
+
+
+
+inline int integerTypeWidthForName(const std::string& name) {
+    if (name == "Int" || name == "Int64" || name == "i64" ||
+        name == "UInt64" || name == "u64" || name == "ULong") return 64;
+    if (name == "Int32" || name == "i32" || name == "UInt32" || name == "u32") return 32;
+    if (name == "Int16" || name == "i16" || name == "UInt16" || name == "u16") return 16;
+    if (name == "Int8" || name == "i8" || name == "UInt8" || name == "u8" ||
+        name == "Char" || name == "Byte") return 8;
+    return 0;
+}
+
+inline int integerTypeWidth(ast::TypeNode* type) {
+    if (!type) return 0;
+    auto* tn = dynamic_cast<ast::TypeName*>(type);
+    if (!tn || !tn->identifier) return 0;
+    return integerTypeWidthForName(tn->identifier->name);
+}
+
+inline std::string intCanonicalName(ast::TypeNode* type) {
+    if (!type) return "";
+    auto* tn = dynamic_cast<ast::TypeName*>(type);
+    if (!tn || !tn->identifier) return "";
+    return intCanonicalNameForName(tn->identifier->name);
+}
+
+inline bool intCanonicalRange(const std::string& c, __int128& lo, __int128& hi) {
+    int bits = 0;
+    bool s = false;
+    if (c == "s64" || c == "u64") { bits = 64; s = (c == "s64"); }
+    else if (c == "s32" || c == "u32") { bits = 32; s = (c == "s32"); }
+    else if (c == "s16" || c == "u16") { bits = 16; s = (c == "s16"); }
+    else if (c == "s8" || c == "u8") { bits = 8; s = (c == "s8"); }
+    else return false;
+    if (s && bits == 64) {
+        lo = INT64_MIN; hi = INT64_MAX;
+    } else if (s) {
+        lo = -(1LL << (bits - 1));
+        hi = (1LL << (bits - 1)) - 1;
+    } else if (bits == 64) {
+        lo = 0; hi = (__int128)UINT64_MAX;
+    } else {
+        lo = 0; hi = (1LL << bits) - 1;
+    }
+    return true;
+}
+
+inline bool intConstantValueFull(ast::Expression* e, __int128& out, bool& isUnsigned) {
+    if (!e) return false;
+    if (auto lit = dynamic_cast<ast::IntegerLiteral*>(e)) {
+        if (lit->isUnsigned) {
+            out = (__int128)lit->uvalue;
+            isUnsigned = true;
+        } else {
+            out = (__int128)lit->value;
+            isUnsigned = false;
+        }
+        return true;
+    }
+    if (auto un = dynamic_cast<ast::UnaryExpression*>(e)) {
+        if (un->op.type == TokenType::MINUS) {
+            __int128 v;
+            bool u;
+            if (intConstantValueFull(un->operand.get(), v, u)) { out = -v; isUnsigned = u; return true; }
+        }
+    }
+    return false;
+}
+
+inline std::string i128ToString(__int128 v) {
+    if (v == 0) return "0";
+    bool neg = v < 0;
+    unsigned __int128 u = neg ? (unsigned __int128)(-(v + 1)) + 1 : (unsigned __int128)v;
+    std::string s;
+    while (u) {
+        s.push_back(static_cast<char>('0' + (u % 10)));
+        u /= 10;
+    }
+    if (neg) s.push_back('-');
+    std::reverse(s.begin(), s.end());
+    return s;
+}
+
+
+
+// Result of the explicit integer-assignment check at assignment/init sites.
+enum class IntAssignCode { NotInteger, Ok, NeedExplicitCast, ConstantOutOfRange };
+
+struct IntAssignCheck {
+    IntAssignCode code;
+    std::string message;
+};
 
 } // namespace vyb
