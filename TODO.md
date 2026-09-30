@@ -563,7 +563,7 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
   dual-return `{T, i8*}` ABI, so a callee's owned locals unwind through a path that
   no fixture exercises yet. This was previously only a trailing clause inside the
   ownership FEATURE_STATUS row; it now has its own row and this item (#358 gap 3).
-- [ ] **Thread-boundary capability (`handoff` / `viewable`)** <!-- open: Thread-boundary capability (`handoff` / `viewable`) -->
+- [x] **Thread-boundary capability (`handoff` / `viewable`)** <!-- shipped: Thread-boundary capability (`handoff` / `viewable`) -->
   — atomic refcounts landed (`our<T>` control block; heap-`String` registry with
   atomic `refs`; `cgen_ownership` `AtomicRMW` retain/release), and the capability
   is now derived **structurally** rather than by a name test: `handoffCapable`
@@ -634,9 +634,10 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
   a contradiction through the new non-fatal `addWarning`. Fixtures:
   `..._curated_bind_accepted.vyb` (semantic-only) and
   `..._curated_bind_absent_rejected.vyb` (the same shape with no bind).
-  Still open (#365): the diagnostic wording stays provisional ("accepted for
-  handoff") until the drop-semantics-on-propagation row closes, and the step record
-  lives in `doc/THREAD_BOUNDARY_SCOPE.md`.
+  The only residue is wording, not enforcement: the diagnostic text stays provisional
+  ("accepted for handoff") until the drop-semantics-on-propagation row above closes,
+  and the step record lives in `doc/THREAD_BOUNDARY_SCOPE.md`. Shipped in v0.7.7
+  (#365, PRs #366-#370).
 - [ ] **Lifetime inference beyond lexical scope** <!-- open: Lifetime inference beyond lexical scope -->
   — `borrow`/`view` are lexical-phase by design (documented in #149): no lifetime
   inference across signatures, and a borrow runs to end of scope rather than last
@@ -1514,7 +1515,7 @@ Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `
 
 ---
 
-*Last Updated: 2026-09-19 (v0.7.6 release)*
-*Current Version: Vyb v0.7.6 (freedom-1.0 series)*
+*Last Updated: 2026-09-29 (v0.7.7 release)*
+*Current Version: Vyb v0.7.7 (freedom-1.0 series)*
 *Overall Status: ~60-65% complete toward 1.0 — 1221 tests (documented size enforced against the runner by `test/suite_count_check.vyb`; the full `--execute-jit` sweep runs in `ci.yml`)*
 *SUGGESTIONS.md merged into this document.*

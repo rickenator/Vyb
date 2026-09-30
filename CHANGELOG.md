@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [0.7.7] - 2026-09-29
 
 ### Added
 - **Thread-boundary capability as a structural property (`handoff`) (#365)** —
@@ -393,7 +393,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `PROGRAMMERS_GUIDE.md`: expanded `;`/`/`-crammed listings, de-blockquoted
   the teardown note, and placed each EBNF key feature on its own line.
 
-## [Unreleased]
+## Un-versioned history
+
+<!-- Entries below predate the versioned sections above: they were never assigned to a
+     release when this CHANGELOG was reorganised, so they are kept verbatim rather than
+     guessed into a version. -->
 
 ### Added
 - **Package-level `freedom` boundary for remote `smuggle` (#204, P0)** —

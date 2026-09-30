@@ -1,6 +1,6 @@
 # Vyb ownership vs Rust: parity, differences, and the tracked gaps
 
-> **Status: current as of v0.7.6.** This is a comparison page under `doc/`
+> **Status: current as of v0.7.7.** This is a comparison page under `doc/`
 > (`doc/DOCS_POLICY.md`: design notes are historical), written to be *falsifiable*:
 > every claim about Vyb below cites an executable path or a tracking row, and every
 > claim about Rust is the ordinary language behaviour. The four gaps it records are
@@ -63,12 +63,20 @@ What ships (all exercised under `test/ownership/`):
    dual-return `{T, i8*}` ABI. *Tracked:* the row "Drop semantics on propagation
    paths (`fail`/`trap`)" and its `TODO.md` § 3 item; before this write-up the only
    mention was a trailing clause inside the ownership row, with no item of its own.
-4. **`Send` / `Sync`.** There is no type-level thread-safety marker. Atomic refcounts
-   have landed (`our<T>` control block, heap-`String` registry, `AtomicRMW` retain /
-   release) and a negative cross-thread handoff test exists — but nothing in the type
-   system encodes it, so a non-thread-safe closure or struct can still cross a thread
-   where Rust would refuse to compile. *Tracked:* the "Thread-safety encoding (Rust
-   `Send`/`Sync` analogue)" row + its `TODO.md` § 3 item.
+4. **Thread-boundary capability (`handoff` / `viewable`).** There is no `Send` / `Sync`
+   trait *name*, but the distinction itself is now type-level rather than conventional:
+   atomic refcounts have landed (`our<T>` control block, heap-`String` registry,
+   `AtomicRMW` retain / release), and a closure handed to `thread_spawn`, `task_spawn`,
+   `async_spawn` or `agent_start` is checked structurally — shared ownership qualifies
+   iff its payload does, a named struct/enum iff every field / variant payload does, and
+   unique owners, borrows and raw pointers never do; a mutable capture is refused
+   whatever its type. A capture whose type still names a type parameter is judged at the
+   resolved type once codegen has the substitutions, and a shape the derivation cannot
+   see through (an FFI struct holding a `ptr<T>`) is admitted only by a reviewed
+   `bind Handoff -> T`, which reports a contradiction as a warning rather than silently
+   overriding. *Tracked:* the "Thread-boundary capability (`handoff` / `viewable`)"
+   row (✅ since v0.7.7) and its `TODO.md` § 3 item; the one residue is diagnostic
+   wording, which stays provisional until the drop-semantics-on-propagation row closes.
 
 ## Where Vyb leads (or differs deliberately)
 
