@@ -28,6 +28,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the computed verdict, and a contradiction is reported as a non-fatal warning.
 
 ### Changed
+- **Compiler sources: the two monoliths are split along cohesive seams (#347)** —
+  `src/vre/semantic.cpp` (11,369 → 9,176 lines) and
+  `src/vre/llvm/cgen_expr.cpp` (12,250 → 5,409 lines) are no longer single ~12k-line
+  translation units. Scope/diagnostics, type relations, intrinsic typing tables,
+  aspect/bind conformance, Vec method resolution and module-boundary analysis moved
+  out of the analyzer; operator lowering and call-site lowering moved out of the
+  expression emitter. Every definition moved verbatim; helpers other units still
+  call are promoted to `vre/semantic_internal.hpp` / `vre/llvm/cgen_internal.hpp`
+  as `inline`, so symbol visibility is unchanged. No behaviour change.
 - **Source compatibility: more spawn-site closures are now rejected (#365)** — the
   previous rule was a shallow test on the captured variable's type string
   (`my<`/`their<` prefix only). Going structural rejects composites holding a
