@@ -145,6 +145,12 @@ set(PARSER_HEADERS
 set(VRE_SOURCES
     src/vre/value.cpp
     src/vre/semantic.cpp
+    src/vre/semantic_module.cpp
+    src/vre/semantic_vec.cpp
+    src/vre/semantic_aspects.cpp
+    src/vre/semantic_intrinsics.cpp
+    src/vre/semantic_type_relations.cpp
+    src/vre/semantic_scope.cpp
     src/vre/semantic_ownership.cpp
     src/vre/semantic_thread_boundary.cpp
     src/vre/intrinsics.cpp
@@ -152,6 +158,8 @@ set(VRE_SOURCES
     src/vre/llvm/cgen_types.cpp
     src/vre/llvm/cgen_util.cpp
     src/vre/llvm/cgen_expr.cpp
+    src/vre/llvm/cgen_expr_call.cpp
+    src/vre/llvm/cgen_expr_operator.cpp
     src/vre/llvm/cgen_expr_kernel.cpp
     src/vre/llvm/cgen_expr_literals.cpp
     src/vre/llvm/cgen_decl.cpp

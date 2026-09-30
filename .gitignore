@@ -47,5 +47,8 @@ vybsplash.png
 # Hermes agent state (not project code)
 .hermes/
 
+# Agent scratch space (probe programs, logs, throwaway scripts; not project code)
+scratch/
+
 # Browser tooling artifacts (agent session state, not project code)
 .playwright-mcp/

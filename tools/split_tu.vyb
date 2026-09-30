@@ -1,0 +1,403 @@
+# tools/split_tu.vyb — extract a cohesive seam out of a monolith .cpp translation
+# unit into its own TU, in Vyb (#347).
+#
+// @not-a-test: true — tooling, not a fixture.
+#
+# Splitting a monolith by hand re-formats code, which is exactly what a
+# behaviour-neutral refactor must not do. This tool moves whole definitions
+# VERBATIM: it locates top-level definitions by their signature, prints the
+# planned region, and (unless `--dry`) rewrites both files plus the CMake source
+# list, so the change is "cut and paste", reviewable line by line.
+#
+# How a seam is located:
+#   * a definition starts at column 0 on a line that is not a comment, not a
+#     continuation of a namespace/block, and not a control-flow keyword;
+#   * its signature may wrap across lines, so the declaration is followed until
+#     its parentheses balance -- a missed wrapped signature is a missed boundary,
+#     and the move then sweeps unrelated code into the new TU;
+#   * the statement is a definition when a `{` follows that `)`, or a
+#     declaration/typedef when a `;` does (both are boundaries worth stopping at).
+#
+# A name may be given with its argument list (`visit(ast::AspectDeclaration`)
+# when the bare name is not unique, in which case the whole signature is matched.
+#
+#   build/vyb tools/split_tu.vyb src/vre/semantic.cpp src/vre/semantic_vec.cpp \
+#       CMakeLists.txt 'SemanticAnalyzer::handleVecMethodCall,...' [--dry]
+#
+# Helpers that other code still calls stay behind: promote them into
+# include/vyb/vre/semantic_internal.hpp as `inline` instead of duplicating them --
+# one definition, file-local visibility unchanged.
+import io::{close, open_read, open_write, read_all, write_str}
+import process::{exec_output}
+
+KW<String> = "if while for switch else do try catch namespace extern template return"
+
+# ------------------------------------------------------------------ string glue
+
+# Read a whole file as a String ("" when it cannot be read).
+slurp(path<String>)<String> -> {
+    text<String> = ""
+    match (open_read(path)) {
+        f -> {
+            match (read_all(f)) { s -> { text = s } ? -> { } }
+            close(f)
+        }
+        ? -> { }
+    }
+    return text
+}
+
+# Write `text` to `path`; true when the whole string was written.
+spill(path<String>, text<String>)<Bool> -> {
+    match (open_write(path)) {
+        f -> {
+            match (write_str(f, text)) { n -> { close(f); return true } ? -> { close(f); return false } }
+        }
+        ? -> { return false }
+    }
+    return false
+}
+
+byte_at(s<String>, i<Int>)<Int> -> {
+    return (s.char_at(i) as Int) & 0xFF
+}
+
+is_space(c<Int>)<Bool> -> {
+    return (c == 32 || c == 9 || c == 13 || c == 10)
+}
+
+# `s` with leading/trailing ASCII whitespace removed.
+trim(s<String>)<String> -> {
+    a<Int> = 0
+    while (a < s.len() && is_space(byte_at(s, a))) { a = a + 1 }
+    b<Int> = s.len()
+    while (b > a && is_space(byte_at(s, b - 1))) { b = b - 1 }
+    return s.substring(a, b)
+}
+
+starts_with(s<String>, prefix<String>)<Bool> -> {
+    if (prefix.len() > s.len()) { return false }
+    return s.substring(0, prefix.len()) == prefix
+}
+
+# Does `s` contain `needle`?
+has_sub(s<String>, needle<String>)<Bool> -> {
+    return s.index_of(needle) >= 0
+}
+
+# `s` up to its first `(` (the signature before the argument list).
+head_of(s<String>)<String> -> {
+    p<Int> = s.index_of("(")
+    if (p < 0) { return s }
+    return s.substring(0, p)
+}
+
+# ------------------------------------------------------------------- argv glue
+
+# The program's argv, parsed from `/proc/self/cmdline` (NUL separated).
+argv_of()<Vec<String>> -> {
+    raw<String> = slurp("/proc/self/cmdline")
+    out<Vec<String>> = Vec<String>()
+    cur<String> = ""
+    i<Int> = 0
+    while (i < raw.len()) {
+        c<Int> = byte_at(raw, i)
+        if (c == 0) {
+            if (cur.len() > 0) { out.push(cur) }
+            cur = ""
+        } else {
+            cur = cur + String::from_byte(c)
+        }
+        i = i + 1
+    }
+    if (cur.len() > 0) { out.push(cur) }
+    return out
+}
+
+has(argv<Vec<String>>, flag<String>)<Bool> -> {
+    i<Int> = 0
+    while (i < argv.len()) {
+        if (argv.get(i) == flag) { return true }
+        i = i + 1
+    }
+    return false
+}
+
+# ------------------------------------------------------------------ definition scan
+
+# Is `w` one of the control-flow / scope keywords that never starts a moveable
+# definition? (checked on the first word of the line)
+is_keyword(w<String>)<Bool> -> {
+    parts<Vec<String>> = KW.split(" ")
+    i<Int> = 0
+    while (i < parts.len()) {
+        if (parts.get(i) == w) { return true }
+        i = i + 1
+    }
+    return false
+}
+
+# First word of `line` (up to whitespace or `(`).
+first_word(line<String>)<String> -> {
+    i<Int> = 0
+    while (i < line.len()) {
+        c<Int> = byte_at(line, i)
+        if (is_space(c) || c == 40) { break }
+        i = i + 1
+    }
+    return line.substring(0, i)
+}
+
+# Does `line` open a top-level definition or declaration? The declaration is
+# followed until its parentheses balance; what follows the closing `)` must hold
+# `{` (a definition) or `;` (a declaration), and the line must not be a comment or
+# a continuation of an enclosing block.
+is_def_start(lines<Vec<String>>, i<Int>)<Bool> -> {
+    line<String> = lines.get(i)
+    if (line.len() == 0) { return false }
+    c0<Int> = byte_at(line, 0)
+    if (c0 == 32 || c0 == 9 || c0 == 35 || c0 == 47 || c0 == 125) { return false }
+    if (is_keyword(first_word(line))) { return false }
+    depth<Int> = 0
+    text<String> = ""
+    k<Int> = i
+    limit<Int> = i + 6
+    while (k < lines.len() && k < limit) {
+        text = text + trim(lines.get(k)) + " "
+        depth = depth + count_of(lines.get(k), 40) - count_of(lines.get(k), 41)
+        if (depth <= 0 && has_sub(text, "(")) { break }
+        k = k + 1
+    }
+    p<Int> = text.index_of(")")
+    if (p < 0) { return false }
+    rest<String> = trim(text.substring(p, text.len()))
+    cp<Int> = rest.index_of("//")
+    if (cp >= 0) { rest = rest.substring(0, cp) }
+    return has_sub(rest, "{") || has_sub(rest, ";")
+}
+
+# How many times `needle` (as a codepoint) occurs in `s`.
+count_of(s<String>, needle<Int>)<Int> -> {
+    n<Int> = 0
+    i<Int> = 0
+    while (i < s.len()) {
+        if (byte_at(s, i) == needle) { n = n + 1 }
+        i = i + 1
+    }
+    return n
+}
+
+# Indices (line numbers) of every top-level definition in `lines`.
+defs(lines<Vec<String>>)<Vec<Int>> -> {
+    out<Vec<Int>> = Vec<Int>()
+    i<Int> = 0
+    while (i < lines.len()) {
+        if (is_def_start(lines, i)) { out.push(i) }
+        i = i + 1
+    }
+    return out
+}
+
+# End (exclusive) of the definition at defs[i]: the next definition, trimmed back
+# over blank/comment lines so that definition keeps its documentation block.
+chunk_end(lines<Vec<String>>, defs<Vec<Int>>, i<Int>)<Int> -> {
+    stop<Int> = lines.len()
+    if (i + 1 < defs.len()) { stop = defs.get(i + 1) }
+    end<Int> = stop
+    while (end > defs.get(i) + 1) {
+        prev<String> = lines.get(end - 1)
+        if (trim(prev).len() == 0 || starts_with(trim(prev), "//")) { end = end - 1 } else { break }
+    }
+    return end
+}
+
+# ------------------------------------------------------------------- the move
+
+# Unique leading `#include` lines of `lines`, stopping at the first file-local
+# helper (the point where real code begins).
+includes_of(lines<Vec<String>>)<Vec<String>> -> {
+    out<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < lines.len()) {
+        line<String> = lines.get(i)
+        if (starts_with(line, "#include")) {
+            if (!contains_str(out, line)) { out.push(line) }
+        }
+        t<String> = trim(line)
+        if (starts_with(t, "static ") && has_sub(t, "(")) { break }
+        i = i + 1
+    }
+    return out
+}
+
+contains_str(v<Vec<String>>, s<String>)<Bool> -> {
+    i<Int> = 0
+    while (i < v.len()) {
+        if (v.get(i) == s) { return true }
+        i = i + 1
+    }
+    return false
+}
+
+join_lines(lines<Vec<String>>, a<Int>, b<Int>)<String> -> {
+    out<String> = ""
+    i<Int> = a
+    while (i < b) {
+        out = out + lines.get(i) + "\n"
+        i = i + 1
+    }
+    return out
+}
+
+main()<Int> -> {
+    argv<Vec<String>> = argv_of()
+    dry<Bool> = has(argv, "--dry")
+    args<Vec<String>> = Vec<String>()
+    i<Int> = 1
+    while (i < argv.len()) {
+        a<String> = argv.get(i)
+        if (!starts_with(a, "--")) { args.push(a) }
+        i = i + 1
+    }
+    if (args.len() < 4) {
+        println("split_tu: usage: split_tu <src.cpp> <new.cpp> <CMakeLists.txt> <name1>,<name2>,... [--dry]")
+        # exit() sets the process status; `return` from main() would only print the
+        # value and still exit 0, which a CI step cannot see.
+        exit(2)
+    }
+    src<String> = args.get(1)
+    dst<String> = args.get(2)
+    cmake<String> = args.get(3)
+    names<Vec<String>> = args.get(4).split(",")
+
+    src_text<String> = slurp(src)
+    lines<Vec<String>> = src_text.split("\n")
+    dlist<Vec<Int>> = defs(lines)
+
+    # picks: a name with `(` matches the whole signature, a bare name matches the
+    # signature before its argument list
+    picks<Vec<Int>> = Vec<Int>()
+    j<Int> = 0
+    while (j < dlist.len()) {
+        d<Int> = dlist.get(j)
+        sig<String> = head_of(lines.get(d))
+        n<Int> = 0
+        hit<Bool> = false
+        while (n < names.len()) {
+            name<String> = names.get(n)
+            if (has_sub(name, "(")) {
+                if (has_sub(lines.get(d), name)) { hit = true }
+            } else {
+                if (has_sub(sig, name)) { hit = true }
+            }
+            n = n + 1
+        }
+        if (hit) { picks.push(j) }
+        j = j + 1
+    }
+    if (picks.len() == 0) {
+        println("split_tu: no definition matched: " + args.get(4))
+        exit(1)
+    }
+
+    # spans, merged so a definition is never emitted twice
+    spans<Vec<Int>> = Vec<Int>()   # flattened s,e pairs
+    n<Int> = 0
+    while (n < picks.len()) {
+        pi<Int> = picks.get(n)
+        s<Int> = dlist.get(pi)
+        e<Int> = chunk_end(lines, dlist, pi)
+        if (spans.len() > 0 && s <= spans.get(spans.len() - 1)) {
+            if (e > spans.get(spans.len() - 1)) { spans.set(spans.len() - 1, e) }
+        } else {
+            spans.push(s)
+            spans.push(e)
+        }
+        n = n + 1
+    }
+
+    moved<Int> = 0
+    k<Int> = 0
+    while (k < spans.len()) {
+        moved = moved + (spans.get(k + 1) - spans.get(k))
+        k = k + 2
+    }
+    println(src + ": moving " + (spans.len() / 2).to_string() + " chunk(s), " + moved.to_string() + " lines -> " + dst)
+    k = 0
+    while (k < spans.len()) {
+        s<Int> = spans.get(k)
+        e<Int> = spans.get(k + 1)
+        println("  " + (s + 1).to_string() + ".." + e.to_string() + ": " + lines.get(s))
+        k = k + 2
+    }
+    if (dry) { exit(0) }
+
+    # banner: what the new TU needs, in the order the source had it
+    banner<String> = "// SPDX-License-Identifier: Apache-2.0\n//\n" +
+                      "// Seam extracted from " + src + " (#347): the member definitions below\n" +
+                      "// are moved VERBATIM -- no reformatting, no renames -- so the split stays\n" +
+                      "// behaviour-neutral. Helpers that other code still calls are promoted into\n" +
+                      "// include/vyb/vre/semantic_internal.hpp as `inline`, never duplicated.\n\n"
+    incs<Vec<String>> = includes_of(lines)
+    m<Int> = 0
+    while (m < incs.len()) {
+        banner = banner + incs.get(m) + "\n"
+        m = m + 1
+    }
+    banner = banner + "\nnamespace vyb {\n\n"
+
+    body<String> = ""
+    k = 0
+    while (k < spans.len()) {
+        body = body + join_lines(lines, spans.get(k), spans.get(k + 1))
+        k = k + 2
+    }
+
+    if (!spill(dst, banner + body + "\n} // namespace vyb\n")) {
+        println("split_tu: could not write " + dst)
+        exit(1)
+    }
+
+    # the source keeps everything the spans did not cover
+    rest<String> = ""
+    i = 0
+    while (i < lines.len()) {
+        if (in_spans(spans, i)) {
+            i = i + 1
+        } else {
+            rest = rest + lines.get(i) + "\n"
+            i = i + 1
+        }
+    }
+    if (!spill(src, rest)) {
+        println("split_tu: could not write " + src)
+        exit(1)
+    }
+
+    # register the new TU next to its source
+    cm<String> = slurp(cmake)
+    if (!has_sub(cm, dst)) {
+        anchor_text<String> = src
+        p<Int> = cm.index_of(anchor_text)
+        if (p < 0) {
+            println("split_tu: " + src + " not found in " + cmake)
+            exit(1)
+        }
+        cm = cm.substring(0, p) + anchor_text + "\n    " + dst + cm.substring(p + anchor_text.len(), cm.len())
+        if (!spill(cmake, cm)) {
+            println("split_tu: could not write " + cmake)
+            exit(1)
+        }
+    }
+    println("split_tu: done")
+    exit(0)
+}
+
+in_spans(spans<Vec<Int>>, line<Int>)<Bool> -> {
+    k<Int> = 0
+    while (k < spans.len()) {
+        if (line >= spans.get(k) && line < spans.get(k + 1)) { return true }
+        k = k + 2
+    }
+    return false
+}
