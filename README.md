@@ -19,7 +19,7 @@
 
 ## 1. Introduction
 
-Welcome to the Vyb programming language version 0.7.6. This overview walks you through what Vyb is and the thinking behind it. Vyb is a systems language built on a simple conviction: you should not have to choose between safety and power. Strong type safety and explicit ownership give your code discipline and predictability, while low-level escape hatches keep raw, machine-near control within reach when you need it. Code runs as fast native executables or through a JIT, so performance stays predictable from first prototype to final program. The syntax is readable and name-first, the abstractions are zero-cost, and the language aims to stay out of your way as your ambitions grow. The rest of this guide shows how those ideas take shape through feature summaries and examples.
+Welcome to the Vyb programming language version 0.7.7. This overview walks you through what Vyb is and the thinking behind it. Vyb is a systems language built on a simple conviction: you should not have to choose between safety and power. Strong type safety and explicit ownership give your code discipline and predictability, while low-level escape hatches keep raw, machine-near control within reach when you need it. Code runs as fast native executables or through a JIT, so performance stays predictable from first prototype to final program. The syntax is readable and name-first, the abstractions are zero-cost, and the language aims to stay out of your way as your ambitions grow. The rest of this guide shows how those ideas take shape through feature summaries and examples.
 
 ### 1.1 Purpose & Audience
 
@@ -66,9 +66,9 @@ Vyb is a statically typed, compiled systems language targeting native code via L
 ## Quick Start
 
 ```bash
-# Option A: official binary SDK (Linux x86_64) — download the v0.7.6 tarball
+# Option A: official binary SDK (Linux x86_64) — download the v0.7.7 tarball
 # from the release page, unpack, and add it to your PATH:
-#   https://github.com/rickenator/Vyb/releases/tag/v0.7.6
+#   https://github.com/rickenator/Vyb/releases/tag/v0.7.7
 # There is no macOS SDK yet: the runtime's async/fibre layer is Linux-only
 # (ucontext/pipe2), so the release workflow cannot build it. See docs/sdk/INSTALL.md.
 
@@ -321,30 +321,36 @@ This unique `import`/`smuggle` distinction makes Vyb's module system both secure
 
 ## In This Release
 
-Vyb **v0.7.6** (freedom-1.0 series) is a mature systems programming language with **native executable generation** and a broad core feature set.
+Vyb **v0.7.7** (freedom-1.0 series) is a mature systems programming language with **native executable generation** and a broad core feature set.
 
-### ✅ **Toolchain now builds and tests itself in Vyb**
+### ✅ **Thread-boundary capability, derived from the type graph**
 
-The last cycle moved the remaining tooling off Python and C++, so the compiler's own pipeline is
-written in the language it compiles:
+A closure handed to `thread_spawn`, `task_spawn`, `async_spawn` or `agent_start` must be able to
+cross an OS thread boundary, and the compiler now proves that structurally instead of testing the
+captured variable's type string:
 
-- **Test runner and harness in Vyb** — `test/run_tests.vyb` with the suite-count check, plus the
-  milestone gate, the examples gate and the CLI smokes (lsp / repl / gitdep / registry).
-- **Reference manual generator** and the syntax-migration tools ported to Vyb.
-- **New stdlib modules** — `base64` and `png`, pure Vyb with no runtime changes.
-- **Language and codegen** — `nil`/present arms with payload binding for optionals, `Vec<Vec<T>>`
-  element typing, sized scalars, and float-literal comparison width.
+- **`handoff` is computed from the type graph** — shared ownership (`our<T>`/`mild<T>`) qualifies
+  iff its payload does; a named struct or enum iff every field / variant payload does; unique
+  owners (`my<T>`), borrows (`their<T>`, `loc<T>`) and raw pointers never do. A *mutable* capture is
+  refused whatever its type. Enforced at every spawn-like site, not only `thread_spawn`.
+- **Generic captures are judged where the substitutions live** — a capture whose declared type
+  still names a type parameter is recorded by the semantic pass and judged by codegen at the
+  resolved type, so the same generic function can be accepted at one instantiation and refused at
+  another.
+- **A curated escape hatch** — the marker aspects `Handoff` / `Viewable` let a reviewed
+  `bind Handoff -> T` state the claim for a shape the derivation cannot see through (an FFI struct
+  holding a `ptr<T>`); it wins over the computed verdict, and a contradiction is a non-fatal warning.
 
-### 🔬 **Found by real workloads**
+### 🧱 **The compiler sources are no longer two ~12k-line files**
 
-Two of the defects fixed this cycle came from a downstream project's GPU workload — millions of
-elements, 60-380 MB device buffers — rather than from the unit suite: **32-bit device stores and
-atomics were lowered as 64-bit** (`st_f32` emitting `st.global.u64`, an array `atomic_add_i32`
-emitting `atom.global.add.u64`, `st_i32` emitted as two halves of one 8-byte store). The first two
-faulted the device; the third corrupted data silently, which is worse. Fixed in `efc8cfe` for
-[#301](https://github.com/rickenator/Vyb/issues/301), with a regression fixture at
-`fixtures/kernel/probe15_store_width.vyb` and an on-silicon verifier at
-`fixtures/cuda/probe15_verify.vyb`.
+`src/vre/semantic.cpp` (11,369 → 9,176 lines) and `src/vre/llvm/cgen_expr.cpp` (12,250 → 5,409
+lines) are split along cohesive seams — scope/diagnostics, type relations, intrinsic typing tables,
+aspect/bind conformance, Vec method resolution, module-boundary analysis, operator lowering,
+call-site lowering — one extraction per commit, each landed with the full suite green. Every
+definition moved verbatim; helpers other units still call are promoted to
+`include/vyb/vre/semantic_internal.hpp` / `include/vyb/vre/llvm/cgen_internal.hpp` as `inline`, so
+symbol visibility is unchanged. The extractor, `tools/split_tu.vyb`, is written in Vyb like the
+rest of the tooling.
 
 ### ✅ **Recent Milestones**
 These features were completed in the current release cycle and are fully tested:
@@ -2970,7 +2976,7 @@ compatibility) and reports the same per-test verdicts as the canonical runner.
 - **Error Context**: Detailed failure information with context and suggestions
 
 #### **Test Statistics**
-- **Total Tests**: 1221 `.vyb` tests (full suite, all passing as of v0.7.6)
+- **Total Tests**: 1221 `.vyb` tests (full suite, all passing as of v0.7.7)
 - **Coverage Areas**: Language features, control flow, error handling, type system, math, strings, introspection
 - **Test Types**: Feature tests (with `@expect: pass`), future-feature docs (with `@expect: fail`), parser tests
 - **Success Rate**: 100% (1221/1221) on the current suite

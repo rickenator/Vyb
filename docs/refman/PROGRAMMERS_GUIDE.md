@@ -2791,6 +2791,36 @@ in the `ci` workflow's build job, where the compiler exists;
 `.github/workflows/refman-check.yml` keeps the wiring and the guide markers
 honest.
 
+### Compiler source layout and the seam splitter (`tools/split_tu.vyb`)
+
+The analyzer and the expression emitter are split by seam, so a change lands in the
+unit that owns it rather than in a 12k-line file:
+
+- `src/vre/semantic.cpp` keeps the analyzer driver; the seams live beside it in
+  `semantic_scope.cpp` (scope, symbol table, diagnostics), `semantic_type_relations.cpp`
+  (type relations / assignability), `semantic_intrinsics.cpp` (kernel-intrinsic return
+  types, integer widths / canonical names / ranges, int-constant folding),
+  `semantic_aspects.cpp` (aspect/bind visitors, trait registration and lookup,
+  `validateAspectInheritance`), `semantic_vec.cpp` (Vec construction, `VecType`, member
+  template instantiation, `getImplementedTraits`, Vec method calls) and
+  `semantic_module.cpp` (`setModuleScoping`, `analyze`, `visit(Module)`).
+- `src/vre/llvm/cgen_expr.cpp` keeps the remaining expression visitors; call-site
+  lowering is `cgen_expr_call.cpp`, operator lowering `cgen_expr_operator.cpp`, and the
+  kernel and literal paths `cgen_expr_kernel.cpp` / `cgen_expr_literals.cpp`.
+- Helpers that more than one unit calls live in `include/vyb/vre/semantic_internal.hpp`
+  and `include/vyb/vre/llvm/cgen_internal.hpp` as `inline` — one definition, the same
+  visibility the old file-local `static` had; everything else stays TU-local.
+
+The extractor used for the split is a Vyb program:
+```bash
+build/vyb tools/split_tu.vyb src/vre/semantic.cpp src/vre/semantic_vec.cpp \
+    CMakeLists.txt 'SemanticAnalyzer::handleVecMethodCall,...'     # --dry to preview
+```
+It locates top-level definitions by signature (following signatures that wrap across
+lines, so a missed one cannot sweep unrelated code into the new TU), prints the planned
+spans, and rewrites the source, the new TU and the CMake source list — the definitions
+move verbatim, so the change reviews as a cut and paste.
+
 ---
 
 ## 9. GPU kernels (CUDA/NVPTX)
