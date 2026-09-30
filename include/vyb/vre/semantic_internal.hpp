@@ -270,4 +270,16 @@ struct IntAssignCheck {
     std::string message;
 };
 
+
+
+inline bool isBuiltinVecType(ast::TypeNode* typeNode) {
+    if (dynamic_cast<ast::VecType*>(typeNode)) {
+        return true;
+    }
+    auto* typeName = dynamic_cast<ast::TypeName*>(typeNode);
+    return typeName && typeName->identifier &&
+           typeName->identifier->name == "Vec" &&
+           !typeName->genericArgs.empty();
+}
+
 } // namespace vyb

@@ -67,8 +67,12 @@ def main():
     picks = set()
     for i, d in enumerate(dlist):
         sig = lines[d].split('(')[0]
-        if any(n in sig for n in names):
-            picks.add(i)
+        for n in names:
+            # a pick may name the argument list (`visit(ast::AspectDeclaration`) when the
+            # bare name is not unique; then match the whole signature line
+            if n in lines[d] if '(' in n else n in sig:
+                picks.add(i)
+                break
     if not picks:
         print('no definition matched:', names); return 1
     spans = []
