@@ -282,4 +282,45 @@ inline bool isBuiltinVecType(ast::TypeNode* typeNode) {
            !typeName->genericArgs.empty();
 }
 
+
+
+// Name a top-level declaration (mirrors ModuleRegistry::declarationName) so
+// module-body statements can be attributed to the module that owns them.
+inline std::string topLevelDeclarationName(const ast::StmtPtr& stmt) {
+    if (auto* fn = dynamic_cast<ast::FunctionDeclaration*>(stmt.get())) {
+        return fn->id ? fn->id->name : "";
+    }
+    if (auto* var = dynamic_cast<ast::VariableDeclaration*>(stmt.get())) {
+        return var->id ? var->id->name : "";
+    }
+    if (auto* alias = dynamic_cast<ast::TypeAliasDeclaration*>(stmt.get())) {
+        return alias->name ? alias->name->name : "";
+    }
+    if (auto* st = dynamic_cast<ast::StructDeclaration*>(stmt.get())) {
+        return st->name ? st->name->name : "";
+    }
+    if (auto* en = dynamic_cast<ast::EnumDeclaration*>(stmt.get())) {
+        return en->name ? en->name->name : "";
+    }
+    if (auto* aspect = dynamic_cast<ast::AspectDeclaration*>(stmt.get())) {
+        return aspect->name ? aspect->name->name : "";
+    }
+    if (auto* cls = dynamic_cast<ast::ClassDeclaration*>(stmt.get())) {
+        return cls->name ? cls->name->name : "";
+    }
+    if (auto* ns = dynamic_cast<ast::NamespaceDeclaration*>(stmt.get())) {
+        return ns->name ? ns->name->name : "";
+    }
+    // A bind is owned by the module that defines it (the `bind:SelfType:Aspect`
+    // key is registered in the owner map), so its method bodies resolve against
+    // that module's scope rather than the consumer's. This keeps a carried
+    // bind's supporting structs/aspects/helpers visible wherever the bind runs.
+    if (auto* bindDecl = dynamic_cast<ast::BindDeclaration*>(stmt.get())) {
+        if (bindDecl->selfType && bindDecl->traitType) {
+            return "bind:" + bindDecl->selfType->toString() + ":" + bindDecl->traitType->toString();
+        }
+    }
+    return "";
+}
+
 } // namespace vyb
