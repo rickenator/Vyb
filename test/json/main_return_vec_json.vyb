@@ -1,0 +1,13 @@
+// @test: main()<Vec<String>> return auto-serializes as a JSON array
+// @description: A Vec return serializes its elements, not the positional
+// @description: { ptr, len, cap } fields the LLVM struct exposes (#375)
+// @category: json, serialization, vec
+// @expect: pass
+// @expect-output: ["alpha", "beta"]
+
+main()<Vec<String>> -> {
+    out<Vec<String>> = Vec<String>()
+    out.push("alpha")
+    out.push("beta")
+    return out
+}

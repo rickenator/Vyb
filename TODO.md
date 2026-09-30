@@ -241,8 +241,10 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 - [x] **`println()`/`print()` with multiple arguments** — Space-separated output; all args formatted into a single call
 - [x] **Semantic type recognition** — `Int16`, `Int32`, `Int64`, `UInt8`–`UInt64`, `Float32`, `Float64`, `Char`, `Rune` now fully recognized in semantic analysis (were silently rejected)
 - [x] **Relaxed struct field syntax** — C-style `Type fieldName` accepted alongside canonical `fieldName<Type>`; helps parse legacy/interop fixtures
-- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite runs **1221 tests** via `test/run_tests.vyb`, and that documented size is enforced against the runner by `test/suite_count_check.vyb` in CI
+- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite runs **1234 tests** via `test/run_tests.vyb`, and that documented size is enforced against the runner by `test/suite_count_check.vyb` in CI
 - [x] **Vec parameter deep copy** — Vec parameters receive an independent copy of the data on function entry, eliminating double-free bugs (e.g. recursive quicksort base-case return)
+- [x] **Nested `Vec<Vec<T>>` element ownership** — every path that clones a nested Vec (by-value argument, return, assignment, `push`, `set`, and the borrowed-element binding) now deep-copies the inner Vec *and* retains its elements, so `Vec<Vec<String>>` rows no longer share inner buffers with their source binding (no double free at exit, no dangling inner strings). Locked in by `test/ownership/nested_vec_element_ownership.vyb` (#373)
+- [~] **Nested Vec reclaim depth ≥ 3** — scope-exit reclaim releases the inner buffer of `Vec<Vec<T>>` but does not recurse further, so a `Vec<Vec<Vec<T>>>` leaks the third level's buffers (a leak, never a double free). Deeper reclaim recursion is unstarted
 - [x] **Vec mutation through borrowed struct fields** — `s.items.push(val)` where `s<their<T>>` now correctly mutates in-place; member-expression Vec calls now get a field *pointer* (not a loaded copy)
 - [x] **`their<T>` nested-access audit** — verified multi-level member reads/writes through a `their<T>` borrow receiver (`r.mid.leaf.n`, 2-level writes), borrow-typed struct fields accessed through an outer borrow (`h.inner.n` where `Holder.inner<their<Leaf>>`), and member Vec reads through a borrow. All correct; locked in by `test/ownership/test_their_nested_access.vyb`. (Note: `Vec::get()` returns a copy, so in-place mutation of a nested `Vec<Vec<T>>` needs the inner Vec accessed by reference — not a `their` bug.)
 - [x] **Semantic use-after-free fix** — `handleVecMethodCallOnMember` no longer stores raw pointers from temporary `VecType` objects into `expressionTypes`; all return types are cloned into `node->type` first
@@ -350,8 +352,8 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 - [x] **DWARF debug info** — Source-level debugging in compiled output
 
 ### Auto-Serialization
-- [x] **`main()` return serialization** — Complex types auto-output as JSON
-- [x] **`lit()`, `notype()`, `bare()`, `deserial()` intrinsics** — Serialization control
+- [x] **`main()` return serialization** — every non-Void return type is printed to stdout as JSON and the process exits 0; Int/Bool/Float/String, a single struct (keyed object, #182), multi-value tuples (primitives, structs and `Vec` elements, #375) and `Vec<T>` returns (JSON array, nested Vecs nest, #375) are all correct; `main`'s return is never the process status — the builtin `exit(n)` sets that (#374)
+- [~] **`lit()`, `notype()`, `bare()`, `deserial()` intrinsics** — `lit("...")` with one primitive argument ships (raw literal output); the multi-argument `lit(a, b, c)` form is a semantic error; `notype()` ships (elements serialize with plain field names, #375); `bare()` emits the keyed object rather than raw field values (design-only); `deserial(x)` is a codegen pass-through placeholder, not a JSON parser
 - [x] **JSON construction intrinsics** — `__vyb_serialize_to_json()`, struct metadata
 - [x] **JSON deserialization** — `T::from_string(json)` round-trip (v0.4.4)
 - [x] **Ser/deser edges — recursive structs terminate cleanly; `fn`/`Self` fields excluded** — `fn`-typed and `Self`-typed
@@ -1517,5 +1519,5 @@ Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `
 
 *Last Updated: 2026-09-29 (v0.7.7 release)*
 *Current Version: Vyb v0.7.7 (freedom-1.0 series)*
-*Overall Status: ~60-65% complete toward 1.0 — 1221 tests (documented size enforced against the runner by `test/suite_count_check.vyb`; the full `--execute-jit` sweep runs in `ci.yml`)*
+*Overall Status: ~60-65% complete toward 1.0 — 1234 tests (documented size enforced against the runner by `test/suite_count_check.vyb`; the full `--execute-jit` sweep runs in `ci.yml`)*
 *SUGGESTIONS.md merged into this document.*

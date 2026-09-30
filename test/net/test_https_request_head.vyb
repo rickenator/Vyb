@@ -1,0 +1,49 @@
+// @test: https header-carrying GET builds the request head with caller headers
+// @description: https_request_head puts Host and Connection lines around the
+//   caller's headers, and the public header-carrying entry points pass those
+//   headers through to the request (the authenticated API shape). The head
+//   builder is pure, so this test needs no socket or network.
+// @category: https, modules, stdlib, http
+// @expect: pass
+// @expect-output: https-head-ok
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+
+import https::{https_request_head, https_get_full_headers, https_get_full_headers_verified}
+
+main()<Int> -> {
+    hs<Vec<String>> = Vec<String>()
+    hs.push("Accept: application/vnd.github+json")
+    hs.push("Authorization: Bearer TESTTOKEN")
+    hs.push("User-Agent: vyb-traffic")
+
+    head<String> = https_request_head("/repos/a/b/traffic/clones", "api.github.com", hs)
+
+    # Request line + Host first.
+    if (!head.starts_with("GET /repos/a/b/traffic/clones HTTP/1.1\r\n")) { return 1 }
+    if (head.index_of("Host: api.github.com\r\n") < 0) { return 2 }
+    # Caller headers present, in order, each CRLF-terminated.
+    if (head.index_of("Accept: application/vnd.github+json\r\n") < 0) { return 3 }
+    if (head.index_of("Authorization: Bearer TESTTOKEN\r\n") < 0) { return 4 }
+    if (head.index_of("User-Agent: vyb-traffic\r\n") < 0) { return 5 }
+    # Terminated by Connection: close and a blank line.
+    if (!head.ends_with("Connection: close\r\n\r\n")) { return 6 }
+    # Header order is preserved.
+    if (head.index_of("Accept") > head.index_of("Authorization")) { return 7 }
+    if (head.index_of("Authorization") > head.index_of("User-Agent")) { return 8 }
+
+    # No headers: still a well-formed head.
+    empty<String> = https_request_head("/x", "h", Vec<String>())
+    if (empty != "GET /x HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n") { return 9 }
+
+    # A header block must never carry a bare LF into the request.
+    if (head.index_of("\n\n") >= 0) { return 10 }
+    i<Int> = 0
+    while (i < head.len()) {
+        if ((head.char_at(i) as Int) == 10 && (i == 0 || (head.char_at(i - 1) as Int) != 13)) { return 11 }
+        i = i + 1
+    }
+
+    println("https-head-ok")
+    return 0
+}

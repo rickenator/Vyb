@@ -1,0 +1,21 @@
+// @test: main()<Vec<Vec<String>>> return auto-serializes as nested JSON arrays
+// @description: The Vec serializer recurses per element, so a nested Vec return
+// @description: comes out as [[...], [...]] rather than a flat/null walk (#375)
+// @category: json, serialization, vec
+// @expect: pass
+// @expect-output: [["r0", "r1"], ["s0"]]
+
+main()<Vec<Vec<String>>> -> {
+    outer<Vec<Vec<String>>> = Vec<Vec<String>>()
+
+    first<Vec<String>> = Vec<String>()
+    first.push("r0")
+    first.push("r1")
+    outer.push(first)
+
+    second<Vec<String>> = Vec<String>()
+    second.push("s0")
+    outer.push(second)
+
+    return outer
+}

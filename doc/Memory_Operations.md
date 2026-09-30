@@ -22,6 +22,7 @@ The `loc<T>` type represents a raw pointer to memory containing a value of type 
 - **Safety**: Always considered freedom to dereference or modify
 
 Example:
+
 ```vyb
 var<Int> x = 42;
 var<loc<Int>> p; // Declares a pointer to Int
@@ -52,6 +53,7 @@ The `loc()` operation creates a pointer to a variable.
 - **Safety**: Must be used within an `freedom` block
 
 Example:
+
 ```vyb
 var<Int> x = 42;
 freedom {
@@ -73,6 +75,7 @@ The `at()` operation accesses the value at a pointer's location.
 - **Safety**: Must be used within an `freedom` block
 
 Examples:
+
 ```vyb
 freedom {
     var<Int> y = at(p);  // Reading from a pointer (load)
@@ -90,6 +93,7 @@ The `from<loc<T>>()` operation converts between different pointer types or from 
 - **Safety**: Must be used within an `freedom` block
 
 Examples:
+
 ```vyb
 freedom {
      // Convert an integer to a pointer
@@ -111,6 +115,7 @@ All memory operations must be contained within `freedom` blocks, which are repre
 - **Purpose**: Explicitly marks code that may violate memory safety
 
 Example:
+
 ```vyb
 var<Int> x = 42;
 var<loc<Int>> p;

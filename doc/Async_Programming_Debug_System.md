@@ -5,6 +5,7 @@ Vyb v0.4.0 introduces comprehensive async programming support with advanced debu
 ## Overview
 
 The Vyb async system provides:
+
 - **Native async/await syntax** with proper parsing and semantic analysis
 - **Future<T> type system** for asynchronous operations
 - **LLVM debug integration** with comprehensive metadata generation
@@ -80,6 +81,7 @@ struct AsyncState {
 #### Debug Method Implementations
 
 **Initialization**:
+
 ```cpp
 void initializeAsyncStateDebugInfo(const std::string& functionName, unsigned line)
 ```
@@ -88,6 +90,7 @@ void initializeAsyncStateDebugInfo(const std::string& functionName, unsigned lin
 - Sets up state descriptions for human-readable debugging
 
 **Suspension Point Creation**:
+
 ```cpp
 llvm::DebugLoc createSuspensionPointDebugInfo(unsigned line, unsigned column, int stateId)
 ```
@@ -96,6 +99,7 @@ llvm::DebugLoc createSuspensionPointDebugInfo(unsigned line, unsigned column, in
 - Associates state IDs with source locations
 
 **State Transition Debugging**:
+
 ```cpp
 void insertAsyncStateTransitionDebugInfo(int fromState, int toState, llvm::DebugLoc loc)
 ```
@@ -104,6 +108,7 @@ void insertAsyncStateTransitionDebugInfo(int fromState, int toState, llvm::Debug
 - Enables step-through debugging of async operations
 
 **Continuation Debugging**:
+
 ```cpp
 void insertContinuationDebugMarker(int stateId, llvm::DebugLoc resumeLocation)
 ```
@@ -209,6 +214,7 @@ main()<Int> -> {
 ### 1. Enable Debug Information
 
 Compile with debug information enabled:
+
 ```bash
 build/vyb --emit-llvm --debug-info test/async_test.vyb
 ```
@@ -216,6 +222,7 @@ build/vyb --emit-llvm --debug-info test/async_test.vyb
 ### 2. Analyze Debug Output
 
 The compiler emits detailed debug information:
+
 - Suspension point creation
 - State transition logging
 - Continuation point tracking
@@ -224,6 +231,7 @@ The compiler emits detailed debug information:
 ### 3. Debug Execution
 
 Use standard debugging tools with full async support:
+
 - **GDB**: Step through async state machines
 - **LLDB**: Inspect suspension points and continuations
 - **Valgrind**: Memory analysis for async operations

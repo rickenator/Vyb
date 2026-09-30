@@ -158,6 +158,7 @@ fn main() -> Int {
 ```
 
 Notes:
+
 - `share(math)` on `add` means only modules that declare `bundle(math)` can import it
 - `share(all)` on `version` makes it universally available without needing `bundle(math)`
 - Anything without `share` remains private to `Arithmetic.vyb`

@@ -1,0 +1,53 @@
+// @test: sqlite posted binding - prepared-statement reads
+// @description: extends the sqlite FFI binding with sqlite_query/sqlite_query1:
+//   prepare -> step -> column_text -> finalize, so archived rows can be read
+//   back as text columns. Verifies CREATE/INSERT/UPSERT/SELECT round-trips,
+//   NULL-vs-empty via COALESCE, and the absent result on a bad statement.
+// @category: ffi, bindings, sqlite
+// @expect: pass
+// @vyb-args: --module-path bindings
+// @expect-output: ok
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+
+import sqlite::{sqlite, sqlite_query}
+import env::{env_get}
+
+check(b<Bool>, out<Int>)<Int> -> {
+    if (!b) { return out }
+    return 0
+}
+
+main()<Int> -> {
+    base<String> = env_get("TMPDIR") else "/tmp"
+    db<String> = base + "/vyb_sqlite_query_test.db"
+    drop<Bool?> = sqlite(db, "DROP TABLE IF EXISTS t")
+
+    created<Bool?> = sqlite(db, "CREATE TABLE t(k TEXT PRIMARY KEY, v TEXT); " +
+                                "INSERT INTO t(k, v) VALUES('a', '1'), ('b', NULL)")
+    if (check(created else false, 1)) { return 1 }
+
+    # UPSERT is idempotent by key, and updates the value in place.
+    again<Bool?> = sqlite(db, "INSERT INTO t(k, v) VALUES('a', '10') " +
+                              "ON CONFLICT(k) DO UPDATE SET v = excluded.v")
+    if (check(again else false, 2)) { return 2 }
+
+    rows<Vec<Vec<String>>> = sqlite_query(db, "SELECT k, COALESCE(v, '<absent>') FROM t ORDER BY k") else Vec<Vec<String>>()
+    if (check(rows.len() == 2, 3)) { return 3 }
+    if (check(rows.get(0).get(0) == "a", 4)) { return 4 }
+    if (check(rows.get(0).get(1) == "10", 5)) { return 5 }
+    if (check(rows.get(1).get(1) == "<absent>", 6)) { return 6 }
+
+    first<Vec<Vec<String>>> = sqlite_query(db, "SELECT k FROM t ORDER BY k LIMIT 1") else Vec<Vec<String>>()
+    if (check(first.len() == 1 && first.get(0).get(0) == "a", 7)) { return 7 }
+
+    missing<Vec<Vec<String>>> = sqlite_query(db, "SELECT k FROM t WHERE k = 'zz'") else Vec<Vec<String>>()
+    if (check(missing.len() == 0, 8)) { return 8 }
+
+    # A statement that cannot be prepared is absent, not a crash.
+    bad<Vec<Vec<String>>> = sqlite_query(db, "SELECT no_such_column FROM t") else Vec<Vec<String>>()
+    if (check(bad.len() == 0, 9)) { return 9 }
+
+    println("ok")
+    return 0
+}

@@ -23,7 +23,7 @@ Declaration ::= "var" "<" Type ">" Identifier [ "=" Expression ]
 
 > **Note:** `const auto` is not supported; use explicit `const<T>` for immutable bindings.
 
-### Examples
+### Declaration Examples
 
 ```vyb
 var<Int> x             // mutable Int, uninitialized
@@ -77,7 +77,7 @@ Expression   ::= <any single Vyb expression>
 - **`->`**: mandatory separator between signature and body.
 - **Braces** `{}` optional only for single-expression bodies.
 
-### Examples
+### Function Declaration Examples
 
 ```vyb
 class Node {
@@ -187,7 +187,7 @@ print(value)      // print without newline (auto-stringifies any type)
 - String concatenation with `+` auto-coerces non-string operands when either side is a `String`.
 - Example: `println("Hello" + 1000)` prints `Hello1000`.
 
-#### Examples
+#### Generic Print Examples
 
 ```vyb
 i<Int> = 42
@@ -230,7 +230,7 @@ fn<String> Bool.to_string()   -> String
 fn<String> String.to_string() -> String
 ```
 
-#### Examples
+#### to_string Examples
 
 ```vyb
 x<Int> = 99
@@ -266,9 +266,10 @@ fn deserial(value: T) -> T
 
 - **`deserial(json_string)`**: Deserializes JSON string back to typed Vyb values. Used for converting JSON input back to Vyb data structures.
 
-#### Examples
+#### Serialization Examples
 
 **lit() Intrinsic:**
+
 ```vyb
 fn<String> main() -> {
     return lit("42");     // Output: 42 (number, not string)
@@ -284,6 +285,7 @@ fn<String> main() -> {
 ```
 
 **notype() Intrinsic:**
+
 ```vyb
 struct Person {
     Int id,
@@ -299,6 +301,7 @@ fn<Person> main() -> {
 ```
 
 **bare() Intrinsic:**
+
 ```vyb
 struct Point {
     Float x,
@@ -314,6 +317,7 @@ fn<Point> main() -> {
 ```
 
 **Multi-Value with Mixed Intrinsics:**
+
 ```vyb
 struct Config {
     String name,

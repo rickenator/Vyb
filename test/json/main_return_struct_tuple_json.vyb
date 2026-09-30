@@ -1,0 +1,17 @@
+// @test: main()<Person, Person> return auto-serializes struct elements as JSON objects
+// @description: Struct elements of a multi-value return go through the metadata
+// @description: serializer (field names included) instead of falling back to null (#375)
+// @category: json, serialization, struct
+// @expect: pass
+// @expect-output: [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]
+
+struct Person {
+    id<Int>,
+    name<String>
+}
+
+main()<Person, Person> -> {
+    p<Person> = Person { id = 1, name = "Alice" }
+    q<Person> = Person { id = 2, name = "Bob" }
+    return p, q
+}

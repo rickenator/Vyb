@@ -205,6 +205,7 @@ Represents an object or struct literal (e.g., `{ name: "Vyb", version: 0.1 }` or
     -   `properties` (`std::vector<ObjectProperty>`): Key-value pairs representing the members of the object.
 
 The `ObjectProperty` struct is defined as:
+
 ```cpp
 // From vyb/parser/ast.hpp
 namespace vyb {
@@ -227,6 +228,7 @@ public:
 ```
 
 And the `ObjectLiteral` class:
+
 ```cpp
 // From vyb/parser/ast.hpp
 namespace vyb {

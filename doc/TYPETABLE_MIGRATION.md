@@ -37,6 +37,7 @@ Also: a file-scope helper MUST be `vyb::ast::Node` (file scope is outside
 ## CHECKPOINT B — delivered (verified 2026-09-10)
 
 What was done (green; see the git commits):
+
 1. Rekey `expressionTypes` from `Node*` onto `node->typeId()` via `exprKey(n)`
    (null -> 0 sentinel), with setType/typeOf backing the owning node-id TypeTable.
 2. Remove the `_ownedTypes` registry + `retainType` keep-alive: `SymbolInfo.type`
@@ -46,8 +47,7 @@ What was done (green; see the git commits):
    thin raw->shared helper; `_ownedTypes` deleted.
 3. (Stretch, not done) Make the AST fields read-only after parse.
 
-1. Rekey `expressionTypes` from `Node*` onto `node->typeId()` via `setType(node,
-   t)` / `typeOf(node)` (mechanical: `expressionTypes[n] = t` -> `setType(n,t)`,
+1. Rekey `expressionTypes` from `Node*` onto `node->typeId()` via `setType(node, t)` / `typeOf(node)` (mechanical: `expressionTypes[n] = t` -> `setType(n,t)`,
    `it = expressionTypes.find(n)` -> `typeOf(n)`, `expressionTypes[n]` reads ->
    `typeOf(n)`). Remove the `expressionTypes` member once empty.
 2. Remove the `_ownedTypes` registry + `retainType`: now that `expressionTypes`
@@ -118,6 +118,7 @@ Build `build/vyb`; confirm it builds. (Full suite 1141 is the gate at the end.)
 
 ### Step 1 — `SymbolInfo.type` raw -> shared_ptr (semantic.hpp:112)
 This is the piece that unblocks making `retainType` return `shared_ptr`.
+
 - Change the field to `std::shared_ptr<ast::TypeNode> type = nullptr;`.
 - Audit every `SymbolInfo` construction passing `retainType(...)` as the last
   field (lines ~1287/1299/1308 struct+enum+alias forward decls; ~1657 param;
@@ -161,8 +162,7 @@ This is the piece that unblocks making `retainType` return `shared_ptr`.
     privately owned; if the raw aliases `node->type`, share `node->type`
     instead. Decide per site; these are the subtle ones.
   - The channel/literal/Vec blocks (lines ~85/98/105/118/125/136, 1169-1193,
-    2861-3260) mostly use `retainType(new ...)` then set `node->type =
-    shared(new...->clone())` — collapse to ONE shared object:
+    2861-3260) mostly use `retainType(new ...)` then set `node->type = shared(new...->clone())` — collapse to ONE shared object:
     `auto t = std::make_shared<...>(...); setType(node, t); node->type = t;`
     (removes the double allocation and the raw mirror).
 - Convert readers (~60): after the map holds shared_ptr,
@@ -175,6 +175,7 @@ This is the piece that unblocks making `retainType` return `shared_ptr`.
 
 ### Step 4 — drop the raw mirror + old registry
 Once every writer/reader routes through `setType`/`typeOf`:
+
 - Delete the `expressionTypes` member, `_ownedTypes`, and any raw pointer that
   only existed to alias them.
 - `retainType` may collapse: if only the TypeTable + `node->type` own types, the
@@ -212,8 +213,7 @@ SymbolInfo/resultType retainType consumers: 1287,1299,1308,1657,1681,1925,1935,
 
 ## Rollback
 The flip has no intermediate green, so if it can't reach a green all-suite state
-in the fresh session, revert cleanly: `git checkout -- src/vre/semantic.cpp
-include/vyb/semantic.hpp` (nothing else in the repo is touched by the flip) and
+in the fresh session, revert cleanly: `git checkout -- src/vre/semantic.cpp include/vyb/semantic.hpp` (nothing else in the repo is touched by the flip) and
 keep increment #1 (`2944d69`) as the milestone. Do NOT commit a red tree.
 
 ## IMMUTABLE-AST (full read-only) — the remaining stretch (NOT done; plan only)

@@ -1,0 +1,134 @@
+// @test: vyb-traffic SQLite upsert semantics
+// @description: one collection run stores rolling values, date-keyed daily
+//   buckets, referrers and paths in one transaction. A failed endpoint keeps a
+//   NULL rolling value with a false flag and cannot erase data stored earlier at
+//   the same timestamp (COALESCE + MAX), a re-observation of a date updates its
+//   counts and moves last_seen, and a successful referrer list replaces the rows
+//   of that snapshot only.
+// @category: traffic, sqlite, storage, tooling
+// @expect: pass
+// @expect-output: traffic-db-ok
+// @expect-return: 0
+// @vyb-args: --module-path vyb-traffic --module-path bindings
+// @env: VYB_STDLIB=stdlib
+
+import traffic::{Config, Run, Day, Ref, Path, config_load, db_init, db_payload, push_run,
+                 now_iso}
+import env::{env_get}
+
+# A run with the given timestamp and a fixed, known payload.
+good_run(ts<String>)<Run> -> {
+    clones<Vec<Day>> = Vec<Day>()
+    clones.push(Day { timestamp = "2026-09-28T00:00:00Z", count = 12, uniques = 4 })
+    clones.push(Day { timestamp = "2026-09-29T00:00:00Z", count = 7, uniques = 3 })
+    views<Vec<Day>> = Vec<Day>()
+    views.push(Day { timestamp = "2026-09-29T00:00:00Z", count = 55, uniques = 11 })
+    refs<Vec<Ref>> = Vec<Ref>()
+    refs.push(Ref { referrer = "github.com", count = 6, uniques = 2 })
+    paths<Vec<Path>> = Vec<Path>()
+    paths.push(Path { path = "/rickenator/Vyb", title = "Overview", count = 9, uniques = 4 })
+    return Run {
+        timestamp = ts,
+        clone_count = 19, clone_uniques = 7, clones = clones, clones_ok = true, clones_err = "",
+        view_count = 55, view_uniques = 11, views = views, views_ok = true, views_err = "",
+        refs = refs, refs_ok = true, refs_err = "",
+        paths = paths, paths_ok = true, paths_err = ""
+    }
+}
+
+# A run where every endpoint failed.
+failed_run(ts<String>)<Run> -> {
+    return Run {
+        timestamp = ts,
+        clone_count = 0, clone_uniques = 0, clones = Vec<Day>(), clones_ok = false, clones_err = "boom",
+        view_count = 0, view_uniques = 0, views = Vec<Day>(), views_ok = false, views_err = "boom",
+        refs = Vec<Ref>(), refs_ok = false, refs_err = "boom",
+        paths = Vec<Path>(), paths_ok = false, paths_err = "boom"
+    }
+}
+
+# Row count of a query payload.
+row_count(payload<String>)<Int> -> {
+    if (payload.len() == 0) { return 0 }
+    return payload.split("\n").len()
+}
+
+# Cell `r`,`c` of a query payload (cells joined by TAB, rows by NEWLINE).
+cell(payload<String>, r<Int>, c<Int>)<String> -> {
+    if (payload.len() == 0) { return "<no-rows>" }
+    rows<Vec<String>> = payload.split("\n")
+    if (r >= rows.len()) { return "<no-row>" }
+    line<String> = rows.get(r)
+    cells<Vec<String>> = line.split("\t")
+    if (c >= cells.len()) { return "<no-cell>" }
+    return cells.get(c)
+}
+
+main()<Int> -> {
+    # A fresh database per run: the test asserts exact row counts, and only the
+    # per-run file guarantees it starts empty.
+    base<String> = env_get("TMPDIR") else "/tmp"
+    db<String> = base + "/vyb_traffic_db_test_" + now_iso() + ".db"
+    cfg<Config> = config_load("", "", "", db, base + "/vyb_traffic_db_test_export", base + "/vyb_traffic_db_test_graphs")
+
+    # Schema creation is idempotent.
+    if (!db_init(cfg)) { return 1 }
+    if (!db_init(cfg)) { return 2 }
+
+    ts<String> = "2026-09-29T03:15:00.000Z"
+    sid<Int> = push_run(cfg, good_run(ts)) else -1
+    if (sid < 1) { return 3 }
+
+    # Two archived days, newest last, both stamped with the snapshot time.
+    daily<String> = db_payload(cfg, "SELECT date, count, uniques, first_seen, last_seen FROM clone_daily ORDER BY date")
+    if (row_count(daily) != 2) { return 4 }
+    if (cell(daily, 0, 0) != "2026-09-28" || cell(daily, 0, 1) != "12") { return 5 }
+    if (cell(daily, 1, 0) != "2026-09-29" || cell(daily, 1, 1) != "7") { return 6 }
+    if (cell(daily, 0, 3) != ts || cell(daily, 0, 4) != ts) { return 7 }
+
+    # A re-run at the same timestamp whose endpoints all failed: the stored
+    # rolling values and flags must survive (never a false zero).
+    sid2<Int> = push_run(cfg, failed_run(ts)) else -1
+    if (sid2 != sid) { return 8 }
+    snap<String> = db_payload(cfg, "SELECT clone_count_14d, clone_uniques_14d, view_count_14d, clones_ok, views_ok, referrers_ok FROM snapshots WHERE timestamp_utc = '" + ts + "'")
+    if (cell(snap, 0, 0) != "19" || cell(snap, 0, 1) != "7") { return 9 }
+    if (cell(snap, 0, 2) != "55") { return 10 }
+    if (cell(snap, 0, 3) != "1" || cell(snap, 0, 4) != "1") { return 11 }
+    refs<String> = db_payload(cfg, "SELECT referrer, count FROM referrers ORDER BY count DESC")
+    if (row_count(refs) != 1 || cell(refs, 0, 0) != "github.com") { return 12 }
+
+    # Re-observing a date updates its counts and moves last_seen forward while
+    # first_seen stays put.
+    later<String> = "2026-09-30T03:15:00.000Z"
+    run2<Run> = good_run(later)
+    run2.clones = Vec<Day>()
+    run2.clones.push(Day { timestamp = "2026-09-28T00:00:00Z", count = 30, uniques = 9 })
+    run2.clone_count = 30
+    run2.clone_uniques = 9
+    sid3<Int> = push_run(cfg, run2) else -1
+    if (sid3 <= sid) { return 13 }
+    again<String> = db_payload(cfg, "SELECT date, count, uniques, first_seen, last_seen FROM clone_daily WHERE date = '2026-09-28'")
+    if (cell(again, 0, 1) != "30" || cell(again, 0, 2) != "9") { return 14 }
+    if (cell(again, 0, 3) != ts) { return 15 }
+    if (cell(again, 0, 4) != later) { return 16 }
+
+    # A successful referrer list replaces that snapshot's rows (older snapshots
+    # keep theirs).
+    run3<Run> = failed_run(later)
+    run3.refs = Vec<Ref>()
+    run3.refs.push(Ref { referrer = "vyb-lang.org", count = 2, uniques = 1 })
+    run3.refs_ok = true
+    sid4<Int> = push_run(cfg, run3) else -1
+    if (sid4 != sid3) { return 17 }
+    late_refs<String> = db_payload(cfg, "SELECT referrer FROM referrers WHERE timestamp_utc = '" + later + "'")
+    if (row_count(late_refs) != 1 || cell(late_refs, 0, 0) != "vyb-lang.org") { return 18 }
+    all_refs<String> = db_payload(cfg, "SELECT referrer FROM referrers ORDER BY timestamp_utc")
+    if (row_count(all_refs) != 2) { return 19 }
+
+    # A path row carries its title and the snapshot it belongs to.
+    paths_payload<String> = db_payload(cfg, "SELECT path, title FROM popular_paths")
+    if (cell(paths_payload, 0, 0) != "/rickenator/Vyb" || cell(paths_payload, 0, 1) != "Overview") { return 20 }
+
+    println("traffic-db-ok")
+    return 0
+}

@@ -200,6 +200,7 @@ Vyb now has a minimal real runtime model for `our<T>` / `mild<T>`:
 ### Control Block Structure
 
 `our<T>` objects maintain a control block with:
+
 - **strong_count**: Number of `our<T>` references
 - **weak_count**: Number of `mild<T>` references
 - **object**: Pointer to the actual data
@@ -307,6 +308,7 @@ fn main() -> Int {
 ## Summary
 
 `mild<T>` is Vyb's solution to circular references and the observer pattern. It provides:
+
 - **Mild (non-owning) references** to `our<T>` objects
 - **Safe access** via `grab()` that returns `our<T>?`
 - **Lifecycle detection** via `released()`

@@ -1,0 +1,113 @@
+// @test: vyb-traffic configuration resolution and CLI argument helpers
+// @description: explicit CLI values beat the environment, the environment beats
+//   the defaults, and XDG_DATA_HOME relocates the data root. The argv helpers
+//   find the command even when the compiler's own `--module-path NAME` pair is
+//   interleaved, and a valueless flag never swallows the next word.
+// @category: traffic, config, cli, tooling
+// @expect: pass
+// @expect-output: traffic-config-ok
+// @expect-return: 0
+// @vyb-args: --module-path vyb-traffic --module-path bindings
+// @env: VYB_STDLIB=stdlib
+
+import traffic::{Config, config_load, data_root, env_or, repo_slug,
+                 argv_of, command_of, find_flag, flag_value, takes_value}
+import env::{env_get, env_set}
+
+args_of()<Vec<String>> -> {
+    a<Vec<String>> = Vec<String>()
+    a.push("vyb")
+    a.push("prog.vyb")
+    a.push("--module-path")
+    a.push("vyb-traffic")
+    a.push("--module-path")
+    a.push("bindings")
+    a.push("--db")
+    a.push("/tmp/x.db")
+    a.push("report")
+    a.push("--recent")
+    a.push("3")
+    return a
+}
+
+main()<Int> -> {
+    # ---------------------------------------------------------------- argv
+    a<Vec<String>> = args_of()
+    if (command_of(a) != "report") { return 1 }
+    if (find_flag(a, "--module-path") != 2) { return 2 }
+    if (find_flag(a, "--nope") != -1) { return 3 }
+    if (flag_value(a, "--db") != "/tmp/x.db") { return 4 }
+    if (flag_value(a, "--recent") != "3") { return 5 }
+    if (flag_value(a, "--missing") != "") { return 6 }
+    if (!takes_value("--module-path")) { return 7 }
+    if (!takes_value("--graphs-dir")) { return 8 }
+    if (takes_value("--no-uniques")) { return 9 }
+    if (takes_value("--help")) { return 10 }
+
+    # The compiler's flags come before the program's, and the program path
+    # itself must not be mistaken for the command.
+    plain<Vec<String>> = Vec<String>()
+    plain.push("vyb")
+    plain.push("vyb-traffic/vyb-traffic.vyb")
+    plain.push("collect")
+    if (command_of(plain) != "collect") { return 11 }
+
+    flagfirst<Vec<String>> = Vec<String>()
+    flagfirst.push("vyb")
+    flagfirst.push("prog.vyb")
+    flagfirst.push("--no-uniques")
+    flagfirst.push("report")
+    if (command_of(flagfirst) != "report") { return 12 }
+
+    valued<Vec<String>> = Vec<String>()
+    valued.push("vyb")
+    valued.push("prog.vyb")
+    valued.push("--recent")
+    valued.push("5")
+    valued.push("report")
+    if (command_of(valued) != "report") { return 13 }
+
+    onlyflags<Vec<String>> = Vec<String>()
+    onlyflags.push("vyb")
+    onlyflags.push("prog.vyb")
+    onlyflags.push("--help")
+    if (command_of(onlyflags) != "") { return 14 }
+
+    # -------------------------------------------------------------- config
+    # Explicit values win; unset fields fall back to the data root.
+    root<String> = data_root()
+    c1<Config> = config_load("tok", "alice", "proj", "/tmp/t.db", "/tmp/t_exp", "/tmp/t_graphs")
+    if (c1.token != "tok" || c1.owner != "alice" || c1.repo != "proj") { return 15 }
+    if (c1.db_path != "/tmp/t.db" || c1.export_dir != "/tmp/t_exp") { return 16 }
+    if (c1.graphs_dir != "/tmp/t_graphs") { return 17 }
+    if (repo_slug(c1) != "alice/proj") { return 18 }
+
+    # Empty strings mean "not given": defaults fill in.
+    c2<Config> = config_load("", "", "", "", "", "")
+    if (c2.db_path != root + "/traffic.db") { return 19 }
+    if (c2.export_dir != root + "/export") { return 20 }
+    if (c2.graphs_dir != root + "/graphs") { return 21 }
+
+    # The environment beats the defaults, and explicit values beat the env.
+    env_set("VYB_TRAFFIC_REPO", "envrepo")
+    env_set("VYB_TRAFFIC_DB", "/tmp/env.db")
+    c3<Config> = config_load("", "", "", "", "", "")
+    if (c3.repo != "envrepo") { return 22 }
+    if (c3.db_path != "/tmp/env.db") { return 23 }
+    c4<Config> = config_load("", "", "clirepo", "/tmp/cli.db", "", "")
+    if (c4.repo != "clirepo") { return 24 }
+    if (c4.db_path != "/tmp/cli.db") { return 25 }
+
+    # XDG_DATA_HOME relocates the data root.
+    env_set("XDG_DATA_HOME", "/tmp/xdgroot")
+    if (data_root() != "/tmp/xdgroot/vyb-traffic") { return 26 }
+
+    # env_or: unset and empty both fall back.
+    if (env_or("VYB_TRAFFIC_REPO", "d") != "envrepo") { return 27 }
+    if (env_or("VYB_TRAFFIC_DEFINITELY_UNSET", "d") != "d") { return 28 }
+    env_set("VYB_TRAFFIC_EMPTYISH", "")
+    if (env_or("VYB_TRAFFIC_EMPTYISH", "d") != "d") { return 29 }
+
+    println("traffic-config-ok")
+    return 0
+}

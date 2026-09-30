@@ -6,21 +6,104 @@
 # out-parameter round-trip. Requires libsqlite3 exposed RTLD_GLOBAL by the
 # compiler (the `vyb mod install` / FFI dlopen hook). See the bg docs for the
 # trust/signing model (Phase 4).
-import sqlite3_binding::{sqlite3_open, sqlite3_close, sqlite3_exec}
+import sqlite3_binding::{sqlite3_open, sqlite3_close, sqlite3_exec,
+                         sqlite3_prepare_v2, sqlite3_step, sqlite3_finalize,
+                         sqlite3_column_count}
 
-# Open `path` (":memory:" is valid), run one SQL statement, close. Present
-# (true) on success, absent on failure. Lossless; no pointer escapes the
-# wrapper.
+# `vyb bindgen` maps `const char*` to the Vyb `CString` view, which is a
+# string-shaped value, not a readable raw pointer. Declaring the two text
+# accessors here with an explicit `loc<CChar>` lets the wrapper measure a column
+# with strlen and copy it out with `String::from_bytes`.
+share(all)
+sqlite3_column_text(stmt<loc<CVoid>>, iCol<CInt>)<loc<CChar>>
+
+share(all)
+strlen(s<loc<CChar>>)<CSize>
+
+# Marker the freedom half returns when libsqlite3 could not open the file or
+# prepare the statement; `sqlite_query` maps it back to absence. Chosen so it
+# cannot collide with the hash / number / date / path text the wrapper stores.
+sqlite_unprepared<String> = "<vyb-sqlite-unprepared>"
+
+# Open `path` (the literal :memory: is valid), run all statements in `sql`,
+# close. Present (true) on success, absent on failure. Lossless; no pointer
+# escapes the wrapper. Multi-statement `sql` (a schema block, or a batch of
+# UPSERTs) runs as one call, so a batch that opens its own transaction is atomic.
+# Rows produced by `sql` are discarded (the callback slot is NULL): use
+# `sqlite_query` when a statement returns data.
 share(all)
 sqlite(path<String>, sql<String>)<Bool?> -> {
     freedom {
         db<loc<CVoid>> = from<loc<CVoid>>(0)
         if (sqlite3_open(path, loc(db)) != 0) { return Bool?() }
-        if (sqlite3_exec(db, sql, loc(0), loc(0), loc(0)) != 0) {
+        # NULL for the callback / arg / errmsg slots: `loc(0)` is the *address* of
+        # a zero, which sqlite3_exec would call as a callback on any row-returning
+        # statement, so a NULL pointer must come from the int-to-pointer form.
+        if (sqlite3_exec(db, sql, from<loc<CVoid>>(0), from<loc<CVoid>>(0), from<loc<CVoid>>(0)) != 0) {
             sqlite3_close(db)
             return Bool?()
         }
         sqlite3_close(db)
         return Bool?(true)
+    }
+}
+
+# Run one SELECT over `path` and return its rows as text columns, in column
+# order. Present(rows) on success (a query with no matches returns no rows),
+# absent when the database or the statement cannot be prepared. A NULL column
+# yields the empty string, so callers that must distinguish NULL from an empty
+# value select the column with an explicit sentinel, e.g. COALESCE(x, '<absent>').
+#
+# Cells travel out of the `freedom` block as one joined String (cells separated
+# by TAB, rows by NEWLINE) and are split afterwards in checked code: escaping a
+# nested `Vec<Vec<String>>` whose inner Strings were built with
+# `String::from_bytes` inside a freedom loop yields dangling elements, while a
+# single owned String escapes cleanly. Values therefore must not contain TAB or
+# NEWLINE; the wrapper's own callers store hashes, numbers, dates and paths.
+share(all)
+sqlite_query(path<String>, sql<String>)<Vec<Vec<String>>?> -> {
+    payload<String> = sqlite_select_text(path, sql) else sqlite_unprepared
+    if (payload == sqlite_unprepared) { return Vec<Vec<String>>?() }
+    rows<Vec<Vec<String>>> = Vec<Vec<String>>()
+    if (payload.len() == 0) { return Vec<Vec<String>>?(rows) }
+    lines<Vec<String>> = payload.split("\n")
+    r<Int> = 0
+    while (r < lines.len()) {
+        rows.push(lines.get(r).split("\t"))
+        r = r + 1
+    }
+    return Vec<Vec<String>>?(rows)
+}
+
+# The freedom half of `sqlite_query`: prepare, step, copy each column's text and
+# join the whole result into one String. Absent when the database or statement
+# cannot be prepared. SQLITE_ROW is 100.
+share(all)
+sqlite_select_text(path<String>, sql<String>)<String?> -> {
+    freedom {
+        db<loc<CVoid>> = from<loc<CVoid>>(0)
+        if (sqlite3_open(path, loc(db)) != 0) { return String?() }
+        st<loc<CVoid>> = from<loc<CVoid>>(0)
+        if (sqlite3_prepare_v2(db, sql, (-1 as CInt), loc(st), from<loc<CChar>>(0)) != 0) {
+            sqlite3_close(db)
+            return String?()
+        }
+        payload<String> = ""
+        cols<Int> = sqlite3_column_count(st) as Int
+        first<Bool> = true
+        while (sqlite3_step(st) == (100 as CInt)) {
+            if (!first) { payload = payload + "\n" }
+            first = false
+            i<Int> = 0
+            while (i < cols) {
+                if (i > 0) { payload = payload + "\t" }
+                p<loc<CChar>> = sqlite3_column_text(st, (i as CInt))
+                payload = payload + String::from_bytes(p, strlen(p) as Int)
+                i = i + 1
+            }
+        }
+        sqlite3_finalize(st)
+        sqlite3_close(db)
+        return String?(payload)
     }
 }

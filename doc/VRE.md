@@ -48,6 +48,7 @@ Vyb's static type system will be mapped to efficient runtime representations.
         the representation is a plain int, an enum-typed extern parameter
         interoperates with a C integer-backed enum passed by value.
     *   **Tagged Unions (Enums with data):** Represented as a struct containing a tag (integer) and a union of the possible data types. The layout will be optimized to minimize space, e.g., by placing the tag and data in a way that leverages alignment.
+
         ```
         // Vyb: enum Result<T, E> { Ok(T), Err(E) }
         // Runtime (conceptual):
@@ -68,6 +69,7 @@ Vyb's static type system will be mapped to efficient runtime representations.
     *   **Dynamic Dispatch (Aspect Objects):** Represented as a fat pointer containing:
         1.  A pointer to the actual object data.
         2.  A pointer to a Virtual Table (vtable) containing function pointers for the aspect methods.
+
         ```
         // Vyb: bind MyAspect -> MyStruct { ... }
         // let x<dyn MyAspect> = MyStruct {}

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "vyb/vre/llvm/codegen.hpp"
+#include "vyb/vre/llvm/cgen_internal.hpp"
 #include "vyb/parser/ast.hpp"
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Constants.h>
@@ -36,19 +37,7 @@ static bool typeNodeIsVecOfString(const vyb::ast::TypeNode* tn) {
 }
 
 // Returns the element TypeNode of a Vec<T> AST type (T), or nullptr if `tn` is
-// not a Vec type. Shared by the String and owned-struct element reclaim paths.
-static const vyb::ast::TypeNode* vecElementTypeNode(const vyb::ast::TypeNode* tn) {
-    if (!tn) return nullptr;
-    if (auto* vt = dynamic_cast<const vyb::ast::VecType*>(tn)) {
-        return vt->elementType.get();
-    }
-    if (auto* name = dynamic_cast<const vyb::ast::TypeName*>(tn)) {
-        if (name->identifier && name->identifier->name == "Vec" && !name->genericArgs.empty()) {
-            return name->genericArgs[0].get();
-        }
-    }
-    return nullptr;
-}
+// not a Vec type. Promoted to cgen_internal.hpp so other TUs share it.
 
 // Is `tn` a primitive scalar TypeName (UInt8/Int/Float/Char/Bool/Bytes/...)?
 // Only scalar-element Vecs need a bare `free(data)` on reclaim; Vec<String> and
@@ -787,13 +776,9 @@ vyb::ast::TypeNodePtr substituteOwnedFieldType(const vyb::ast::TypeNode* tn,
     }
     return tn->clone();
 }
-std::string ownedFieldTypeBase(const vyb::ast::TypeNode* tn) {
-    if (!tn) return "";
-    if (auto* nn = dynamic_cast<const vyb::ast::TypeName*>(tn)) {
-        return nn->identifier ? nn->identifier->name : "";
-    }
-    return "";
-}
+// NOTE: `ownedFieldTypeBase` / `isVecTypeNode` / `vecElementTypeNode` are
+// defined in cgen_internal.hpp (inline) so cgen_stmt.cpp's main()-return
+// serializer asks the same questions; the file-local copies were removed here.
 bool isOwnedFieldString(const vyb::ast::TypeNode* tn) {
     std::string b = ownedFieldTypeBase(tn);
     return b == "String" || b == "string";
@@ -810,10 +795,6 @@ const vyb::ast::TypeNode* myTypeArg(const vyb::ast::TypeNode* tn) {
         if (nn->genericArgs.size() == 1) return nn->genericArgs[0].get();
     }
     return nullptr;
-}
-bool isVecTypeNode(const vyb::ast::TypeNode* tn) {
-    if (dynamic_cast<const vyb::ast::VecType*>(tn)) return true;
-    return ownedFieldTypeBase(tn) == "Vec";
 }
 }
 
@@ -1455,6 +1436,24 @@ llvm::Value* LLVMCodegen::generateVecDeepCopy(llvm::Value* vecStructValue,
         astElemType && elemType && llvm::isa<llvm::StructType>(elemType) &&
         isKnownStructTypeNode(astElemType) && structTypeHasOwnedFields(astElemType);
 
+    // #373: a `Vec<Vec<T>>` element owns its own inner buffer. A raw memcpy of the
+    // element *headers* would leave the clone and the source sharing those inner
+    // buffers, so both tear-downs free the same allocation ("free(): double free
+    // detected at exit") -- an empty inner Vec included, because the sharing is in
+    // the outer element slots. Deep-copy each inner Vec independently, exactly as
+    // the struct-element branch below does for owning struct fields.
+    const vyb::ast::TypeNode* nestedVecElemAst = nullptr;
+    llvm::Type* nestedVecElemLLVM = nullptr;
+    bool elementIsNestedVec = false;
+    if (!elementOwnsHeap && astElemType && isVecTypeNode(astElemType) && elemType &&
+        llvm::isa<llvm::StructType>(elemType) && isVecStructType(elemType)) {
+        nestedVecElemAst = vecElementTypeNode(astElemType);
+        if (nestedVecElemAst) {
+            nestedVecElemLLVM = codegenType(const_cast<vyb::ast::TypeNode*>(nestedVecElemAst));
+            elementIsNestedVec = (nestedVecElemLLVM != nullptr);
+        }
+    }
+
     if (elementOwnsHeap) {
         auto* structElemTy = llvm::cast<llvm::StructType>(elemType);
         llvm::Type* int64Ty = llvm::Type::getInt64Ty(*context);
@@ -1491,6 +1490,47 @@ llvm::Value* LLVMCodegen::generateVecDeepCopy(llvm::Value* vecStructValue,
 
         builder->SetInsertPoint(incBB);
         builder->CreateStore(builder->CreateAdd(idx, idxOne, "vdce.next"), idxAlloca);
+        builder->CreateBr(headBB);
+
+        builder->SetInsertPoint(elemDoneBB);
+    } else if (elementIsNestedVec) {
+        // Inner Vecs are owned containers: clone each one independently so the
+        // deep copy never aliases the source's inner buffers (#373). Recursive, so
+        // deeper nesting is handled by the same rule.
+        auto* innerVecTy = llvm::cast<llvm::StructType>(elemType);
+        llvm::Type* int64Ty = llvm::Type::getInt64Ty(*context);
+        llvm::Value* idxZero = llvm::ConstantInt::get(int64Ty, 0);
+        llvm::Value* idxOne  = llvm::ConstantInt::get(int64Ty, 1);
+
+        llvm::BasicBlock* headBB = llvm::BasicBlock::Create(*context, "vdci.head", currentFunc);
+        llvm::BasicBlock* bodyBB = llvm::BasicBlock::Create(*context, "vdci.body", currentFunc);
+        llvm::BasicBlock* incBB  = llvm::BasicBlock::Create(*context, "vdci.inc", currentFunc);
+        llvm::BasicBlock* elemDoneBB = llvm::BasicBlock::Create(*context, "vdci.done", currentFunc);
+
+        llvm::Value* idxAlloca = builder->CreateAlloca(int64Ty, nullptr, "vdci.i");
+        builder->CreateStore(idxZero, idxAlloca);
+        builder->CreateBr(headBB);
+
+        builder->SetInsertPoint(headBB);
+        llvm::Value* idx = builder->CreateLoad(int64Ty, idxAlloca, "vdci.cur");
+        llvm::Value* inRange = builder->CreateICmpULT(idx, vecSize, "vdci.cmp");
+        builder->CreateCondBr(inRange, bodyBB, elemDoneBB);
+
+        builder->SetInsertPoint(bodyBB);
+        llvm::Value* srcElem = builder->CreateInBoundsGEP(innerVecTy, srcDataPtr, {idx}, "vdci.src");
+        llvm::Value* dstElem = builder->CreateInBoundsGEP(innerVecTy, newDataPtr, {idx}, "vdci.dst");
+        llvm::Value* innerVal = builder->CreateLoad(innerVecTy, srcElem, "vdci.elem");
+        llvm::Value* copied = generateVecDeepCopy(innerVal, nestedVecElemLLVM, innerVecTy,
+                                                  nestedVecElemAst);
+        // The recursive clone may leave the builder in one of its own blocks; store
+        // the copy where it now sits, then route back to the increment.
+        if (builder->GetInsertBlock() && !builder->GetInsertBlock()->getTerminator()) {
+            builder->CreateStore(copied, dstElem);
+        }
+        builder->CreateBr(incBB);
+
+        builder->SetInsertPoint(incBB);
+        builder->CreateStore(builder->CreateAdd(idx, idxOne, "vdci.next"), idxAlloca);
         builder->CreateBr(headBB);
 
         builder->SetInsertPoint(elemDoneBB);

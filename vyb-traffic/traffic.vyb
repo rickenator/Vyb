@@ -1,0 +1,1140 @@
+# traffic - the vyb-traffic engine: durable GitHub traffic archiving on SQLite,
+# written in Vyb end to end.
+#
+# GitHub exposes repository clone/view traffic for a rolling 14-day window only.
+# This module retains each per-day bucket and keeps timestamped snapshots of the
+# referrer and popular-path lists after GitHub stops returning them. SQLite is
+# the source of truth (see `schema_sql`); CSV files and SVG graphs are derived
+# exports that can be deleted and regenerated at any time.
+#
+# Accounting model: a run stores both the rolling 14-day aggregate and every
+# individual date bucket. A date is unique in each daily table and a later
+# observation updates it with SQLite UPSERT semantics, so summing the archived
+# daily counts gives exact archived clone/view events for the collected period.
+# GitHub exposes no stable anonymous identity for cloners or viewers, so daily
+# uniques are stored and reported as *observations* -- never summed into a
+# lifetime unique-user count.
+#
+# Shape: `Config` (resolved paths/slug/token) -> `collect_run` (fetch + parse) ->
+# `Run` (one collection) -> `push_run` (one atomic SQLite transaction) ->
+# `report_text` / `export_csv` / `render_graphs` (read-only views).
+#
+# The FFI half lives in the `sqlite` binding, so run this with
+# `--module-path bindings` (or VYB_MODULE_PATH); the caller passes GITHUB_TOKEN
+# in the environment. The token is used only in the `Authorization` header: it
+# is never written to the database, printed, or logged.
+import fs::{mkdir}
+import io::{open_write, write_str, close, open_read, read_all}
+import env::{env_get}
+import time::{time_epoch_millis}
+import https::{https_get_full_headers_verified, HttpResponse}
+import sqlite::{sqlite, sqlite_query, sqlite_select_text}
+
+API_HOST<String> = "api.github.com"
+DEFAULT_OWNER<String> = "rickenator"
+DEFAULT_REPO<String> = "Vyb"
+ENV_TOKEN<String> = "GITHUB_TOKEN"
+ENV_OWNER<String> = "VYB_TRAFFIC_OWNER"
+ENV_REPO<String> = "VYB_TRAFFIC_REPO"
+ENV_DB<String> = "VYB_TRAFFIC_DB"
+ENV_EXPORT_DIR<String> = "VYB_TRAFFIC_EXPORT_DIR"
+ENV_GRAPHS_DIR<String> = "VYB_TRAFFIC_GRAPHS_DIR"
+USER_AGENT<String> = "vyb-traffic/1.0 (+github.com/rickenator/Vyb)"
+
+# --------------------------------------------------------------------- config
+
+share(all)
+struct Config {
+    token<String>,
+    owner<String>,
+    repo<String>,
+    db_path<String>,
+    export_dir<String>,
+    graphs_dir<String>
+}
+
+# Value of environment variable `name`, or `fallback` when it is unset.
+share(all)
+env_or(name<String>, fallback<String>)<String> -> {
+    v<String> = env_get(name) else ""
+    if (v.len() == 0) { return fallback }
+    return v
+}
+
+# `~/.local/share/vyb-traffic` (honouring XDG_DATA_HOME), without side effects.
+share(all)
+data_root()<String> -> {
+    xdg<String> = env_get("XDG_DATA_HOME") else ""
+    if (xdg.len() > 0) { return xdg + "/vyb-traffic" }
+    home<String> = env_get("HOME") else ""
+    if (home.len() == 0) { return "/tmp/vyb-traffic" }
+    return home + "/.local/share/vyb-traffic"
+}
+
+# Resolve the run configuration. Explicit values (from the CLI) win over the
+# environment, which wins over the defaults. Empty strings mean "not given".
+share(all)
+config_load(token<String>, owner<String>, repo<String>, db_path<String>,
+            export_dir<String>, graphs_dir<String>)<Config> -> {
+    root<String> = data_root()
+    t<String> = token
+    if (t.len() == 0) { t = env_or(ENV_TOKEN, "") }
+    o<String> = owner
+    if (o.len() == 0) { o = env_or(ENV_OWNER, DEFAULT_OWNER) }
+    r<String> = repo
+    if (r.len() == 0) { r = env_or(ENV_REPO, DEFAULT_REPO) }
+    d<String> = db_path
+    if (d.len() == 0) { d = env_or(ENV_DB, root + "/traffic.db") }
+    e<String> = export_dir
+    if (e.len() == 0) { e = env_or(ENV_EXPORT_DIR, root + "/export") }
+    g<String> = graphs_dir
+    if (g.len() == 0) { g = env_or(ENV_GRAPHS_DIR, root + "/graphs") }
+    return Config { token = t, owner = o, repo = r, db_path = d, export_dir = e, graphs_dir = g }
+}
+
+share(all)
+repo_slug(cfg<Config>)<String> -> {
+    return cfg.owner + "/" + cfg.repo
+}
+
+# ------------------------------------------------------------- small helpers
+
+# Longest-prefix directory of `path` ("" when `path` carries no separator).
+share(all)
+dirname_of(path<String>)<String> -> {
+    i<Int> = path.len() - 1
+    while (i >= 0) {
+        if ((path.char_at(i) as Int) == 47) {
+            if (i == 0) { return "/" }
+            return path.substring(0, i)
+        }
+        i = i - 1
+    }
+    return ""
+}
+
+share(all)
+ensure_dir(path<String>)<Bool> -> {
+    if (path.len() == 0) { return true }
+    match (mkdir(path)) {
+        ok -> { return true }
+        ? -> { return false }
+    }
+}
+
+# Read a whole file as a String ("" when it cannot be read).
+share(all)
+slurp(path<String>)<String> -> {
+    match (open_read(path)) {
+        f -> {
+            text<String> = ""
+            match (read_all(f)) { s -> { text = s } ? -> { } }
+            close(f)
+            return text
+        }
+        ? -> { return "" }
+    }
+}
+
+# Write `text` to `path`, truncating; true when the whole string was written.
+share(all)
+spill(path<String>, text<String>)<Bool> -> {
+    match (open_write(path)) {
+        f -> {
+            match (write_str(f, text)) { n -> { close(f); return n == text.len() } ? -> { close(f); return false } }
+        }
+        ? -> { return false }
+    }
+}
+
+# Diagnostic line on stderr (the CLI boundary keeps stdout for data).
+share(all)
+warn(msg<String>)<Int> -> {
+    match (open_write("/dev/stderr")) {
+        f -> { match (write_str(f, msg + "\n")) { n -> { close(f); return n } ? -> { close(f); return -1 } } }
+        ? -> { return -1 }
+    }
+}
+
+# ------------------------------------------------------------------ datetime
+
+# Zero-pad `n` to `width` digits.
+share(all)
+pad_to(n<Int>, width<Int>)<String> -> {
+    s<String> = n.to_string()
+    while (s.len() < width) { s = "0" + s }
+    return s
+}
+
+share(all)
+pad2(n<Int>)<String> -> {
+    return pad_to(n, 2)
+}
+
+# Civil (year, month, day) from days since 1970-01-01 UTC, days >= 0.
+share(all)
+civil_from_days(days<Int>)<Vec<Int>> -> {
+    z<Int> = days + 719468
+    era<Int> = z / 146097
+    doe<Int> = z - era * 146097
+    yoe<Int> = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    y<Int> = yoe + era * 400
+    doy<Int> = doe - (365 * yoe + yoe / 4 - yoe / 100)
+    mp<Int> = (5 * doy + 2) / 153
+    d<Int> = doy - (153 * mp + 2) / 5 + 1
+    m<Int> = mp + 3
+    if (mp >= 10) { m = mp - 9 }
+    if (m <= 2) { y = y + 1 }
+    out<Vec<Int>> = Vec<Int>()
+    out.push(y)
+    out.push(m)
+    out.push(d)
+    return out
+}
+
+# ISO-8601 UTC timestamp with millisecond precision, e.g. 2026-09-29T14:33:12.345Z.
+share(all)
+iso_from_millis(ms<Int>)<String> -> {
+    secs<Int> = ms / 1000
+    milli<Int> = ms % 1000
+    days<Int> = secs / 86400
+    rem<Int> = secs % 86400
+    hh<Int> = rem / 3600
+    mm<Int> = (rem % 3600) / 60
+    ss<Int> = rem % 60
+    ymd<Vec<Int>> = civil_from_days(days)
+    return pad_to(ymd.get(0), 4) + "-" + pad2(ymd.get(1)) + "-" + pad2(ymd.get(2)) +
+           "T" + pad2(hh) + ":" + pad2(mm) + ":" + pad2(ss) + "." + pad_to(milli, 3) + "Z"
+}
+
+share(all)
+now_iso()<String> -> {
+    ms<Int> = time_epoch_millis() else 0
+    return iso_from_millis(ms)
+}
+
+# ------------------------------------------------------------- text formatting
+
+# Thousands-separated integer, e.g. 1234567 -> "1,234,567".
+share(all)
+group_digits(n<Int>)<String> -> {
+    neg<Bool> = n < 0
+    v<Int> = n
+    if (neg) { v = 0 - n }
+    s<String> = v.to_string()
+    out<String> = ""
+    i<Int> = 0
+    while (i < s.len()) {
+        if (i > 0 && ((s.len() - i) % 3) == 0) { out = out + "," }
+        out = out + s.substring(i, i + 1)
+        i = i + 1
+    }
+    if (neg) { return "-" + out }
+    return out
+}
+
+# Render an archived SQLite number: "" (NULL) becomes "-", otherwise grouped.
+share(all)
+fmt_nullable(v<String>)<String> -> {
+    if (v.len() == 0) { return "-" }
+    return group_digits(Int::from_string(v))
+}
+
+share(all)
+fmt_int(v<String>)<String> -> {
+    if (v.len() == 0) { return "0" }
+    return group_digits(Int::from_string(v))
+}
+
+# A SQL string literal (single quotes doubled).
+share(all)
+sql_lit(s<String>)<String> -> {
+    return "'" + s.replace("'", "''") + "'"
+}
+
+# One CSV field: quoted only when it contains a separator, a quote or a newline.
+share(all)
+csv_field(s<String>)<String> -> {
+    risky<Bool> = s.index_of(",") >= 0 || s.index_of("\"") >= 0 ||
+                  s.index_of("\n") >= 0 || s.index_of("\r") >= 0
+    if (!risky) { return s }
+    return "\"" + s.replace("\"", "\"\"") + "\""
+}
+
+# Small Vec<String> constructors (Vyb array literals are fixed-size arrays).
+share(all)
+v2(a<String>, b<String>)<Vec<String>> -> {
+    out<Vec<String>> = Vec<String>()
+    out.push(a)
+    out.push(b)
+    return out
+}
+
+share(all)
+v4(a<String>, b<String>, c<String>, d<String>)<Vec<String>> -> {
+    out<Vec<String>> = Vec<String>()
+    out.push(a)
+    out.push(b)
+    out.push(c)
+    out.push(d)
+    return out
+}
+
+share(all)
+v5(a<String>, b<String>, c<String>, d<String>, e<String>)<Vec<String>> -> {
+    out<Vec<String>> = Vec<String>()
+    out.push(a)
+    out.push(b)
+    out.push(c)
+    out.push(d)
+    out.push(e)
+    return out
+}
+
+share(all)
+csv_line(cells<Vec<String>>)<String> -> {
+    out<String> = ""
+    i<Int> = 0
+    while (i < cells.len()) {
+        if (i > 0) { out = out + "," }
+        out = out + csv_field(cells.get(i))
+        i = i + 1
+    }
+    return out + "\n"
+}
+
+# ------------------------------------------------------------------ schema/DB
+
+share(all)
+schema_sql()<String> -> {
+    return "CREATE TABLE IF NOT EXISTS snapshots (\n" +
+           "    id                 INTEGER PRIMARY KEY AUTOINCREMENT,\n" +
+           "    timestamp_utc      TEXT NOT NULL UNIQUE,\n" +
+           "    clone_count_14d    INTEGER,\n" +
+           "    clone_uniques_14d  INTEGER,\n" +
+           "    view_count_14d     INTEGER,\n" +
+           "    view_uniques_14d   INTEGER,\n" +
+           "    clones_ok          INTEGER NOT NULL DEFAULT 0 CHECK (clones_ok IN (0, 1)),\n" +
+           "    views_ok           INTEGER NOT NULL DEFAULT 0 CHECK (views_ok IN (0, 1)),\n" +
+           "    referrers_ok       INTEGER NOT NULL DEFAULT 0 CHECK (referrers_ok IN (0, 1)),\n" +
+           "    paths_ok           INTEGER NOT NULL DEFAULT 0 CHECK (paths_ok IN (0, 1))\n" +
+           ");\n" +
+           "CREATE TABLE IF NOT EXISTS clone_daily (\n" +
+           "    date       TEXT PRIMARY KEY,\n" +
+           "    count      INTEGER NOT NULL CHECK (count >= 0),\n" +
+           "    uniques    INTEGER NOT NULL CHECK (uniques >= 0),\n" +
+           "    first_seen TEXT NOT NULL,\n" +
+           "    last_seen  TEXT NOT NULL\n" +
+           ");\n" +
+           "CREATE TABLE IF NOT EXISTS view_daily (\n" +
+           "    date       TEXT PRIMARY KEY,\n" +
+           "    count      INTEGER NOT NULL CHECK (count >= 0),\n" +
+           "    uniques    INTEGER NOT NULL CHECK (uniques >= 0),\n" +
+           "    first_seen TEXT NOT NULL,\n" +
+           "    last_seen  TEXT NOT NULL\n" +
+           ");\n" +
+           "CREATE TABLE IF NOT EXISTS referrers (\n" +
+           "    id            INTEGER PRIMARY KEY AUTOINCREMENT,\n" +
+           "    snapshot_id   INTEGER NOT NULL REFERENCES snapshots(id) ON DELETE CASCADE,\n" +
+           "    timestamp_utc TEXT NOT NULL,\n" +
+           "    referrer      TEXT NOT NULL,\n" +
+           "    count         INTEGER NOT NULL CHECK (count >= 0),\n" +
+           "    uniques       INTEGER NOT NULL CHECK (uniques >= 0),\n" +
+           "    UNIQUE (snapshot_id, referrer)\n" +
+           ");\n" +
+           "CREATE INDEX IF NOT EXISTS idx_referrers_timestamp ON referrers(timestamp_utc);\n" +
+           "CREATE TABLE IF NOT EXISTS popular_paths (\n" +
+           "    id            INTEGER PRIMARY KEY AUTOINCREMENT,\n" +
+           "    snapshot_id   INTEGER NOT NULL REFERENCES snapshots(id) ON DELETE CASCADE,\n" +
+           "    timestamp_utc TEXT NOT NULL,\n" +
+           "    path          TEXT NOT NULL,\n" +
+           "    title         TEXT,\n" +
+           "    count         INTEGER NOT NULL CHECK (count >= 0),\n" +
+           "    uniques       INTEGER NOT NULL CHECK (uniques >= 0),\n" +
+           "    UNIQUE (snapshot_id, path)\n" +
+           ");\n" +
+           "CREATE INDEX IF NOT EXISTS idx_paths_timestamp ON popular_paths(timestamp_utc);\n"
+}
+
+# Create the database file and its schema (idempotent). True on success.
+share(all)
+db_init(cfg<Config>)<Bool> -> {
+    parent<String> = dirname_of(cfg.db_path)
+    if (!ensure_dir(parent)) { return false }
+    sql<String> = "PRAGMA journal_mode=WAL;\nPRAGMA synchronous=NORMAL;\n" + schema_sql()
+    ok<Bool> = sqlite(cfg.db_path, sql) else false
+    return ok
+}
+
+# Run a SELECT and return its rows (empty Vec when it cannot be prepared).
+share(all)
+db_rows(cfg<Config>, sql<String>)<Vec<Vec<String>>> -> {
+    rows<Vec<Vec<String>>> = sqlite_query(cfg.db_path, sql) else Vec<Vec<String>>()
+    return rows
+}
+
+# Run a SELECT and return the raw joined payload: cells separated by TAB, rows by
+# NEWLINE ("" for a query with no matches, the sentinel for a prepare failure).
+#
+# Query results travel as this payload because handing a `Vec<Vec<String>>` to
+# another function corrupts it (see `sqlite_query`): every helper below splits the
+# payload itself, so nested vectors only ever live in one frame.
+share(all)
+db_payload(cfg<Config>, sql<String>)<String> -> {
+    return sqlite_select_text(cfg.db_path, sql) else ""
+}
+
+# Number of rows encoded in a payload (0 when it is empty).
+share(all)
+payload_count(payload<String>)<Int> -> {
+    if (payload.len() == 0) { return 0 }
+    return payload.split("\n").len()
+}
+
+share(all)
+db_query_one(cfg<Config>, sql<String>)<Vec<String>> -> {
+    rows<Vec<Vec<String>>> = db_rows(cfg, sql)
+    out<Vec<String>> = Vec<String>()
+    if (rows.len() == 0) { return out }
+    # Copy the row out element by element: `Vec::get` hands back a borrow, which
+    # cannot be returned as an owned Vec in one cast.
+    row<Vec<String>> = rows.get(0)
+    i<Int> = 0
+    while (i < row.len()) {
+        out.push(row.get(i))
+        i = i + 1
+    }
+    return out
+}
+
+# --------------------------------------------------------------- API + collect
+
+# GitHub traffic buckets: one dated entry with counts and uniques.
+share(all)
+struct Day {
+    timestamp<String>,
+    count<Int>,
+    uniques<Int>
+}
+
+# /traffic/clones and /traffic/views responses differ only in the bucket key.
+share(all)
+struct GhClones {
+    count<Int>,
+    uniques<Int>,
+    clones<Vec<Day>>
+}
+
+share(all)
+struct GhViews {
+    count<Int>,
+    uniques<Int>,
+    views<Vec<Day>>
+}
+
+share(all)
+struct Ref {
+    referrer<String>,
+    count<Int>,
+    uniques<Int>
+}
+
+share(all)
+struct Path {
+    path<String>,
+    title<String>,
+    count<Int>,
+    uniques<Int>
+}
+
+# Top-level JSON arrays are wrapped in this envelope: Vyb deserializes structs,
+# so a `{"rows": [...]}` shell turns GitHub's list responses into a struct.
+share(all)
+struct RefList {
+    rows<Vec<Ref>>
+}
+
+share(all)
+struct PathList {
+    rows<Vec<Path>>
+}
+
+# One collection run.
+share(all)
+struct Run {
+    timestamp<String>,
+    clone_count<Int>,
+    clone_uniques<Int>,
+    clones<Vec<Day>>,
+    clones_ok<Bool>,
+    clones_err<String>,
+    view_count<Int>,
+    view_uniques<Int>,
+    views<Vec<Day>>,
+    views_ok<Bool>,
+    views_err<String>,
+    refs<Vec<Ref>>,
+    refs_ok<Bool>,
+    refs_err<String>,
+    paths<Vec<Path>>,
+    paths_ok<Bool>,
+    paths_err<String>
+}
+
+# Lossless reason for the most recent failed fetch (never the token).
+failed_op<String> = ""
+failed_reason<String> = ""
+
+# GET `path` from the GitHub API with the token header. Present body on HTTP 200;
+# absent on any other outcome, with the reason left in `failed_op`/`failed_reason`.
+share(all)
+api_get(cfg<Config>, path<String>)<String?> -> {
+    failed_op = ""
+    failed_reason = ""
+    hs<Vec<String>> = Vec<String>()
+    hs.push("Accept: application/vnd.github+json")
+    hs.push("X-GitHub-Api-Version: 2022-11-28")
+    hs.push("Authorization: Bearer " + cfg.token)
+    hs.push("User-Agent: " + USER_AGENT)
+    r<HttpResponse> = https_get_full_headers_verified(API_HOST, 443, path, hs, "")
+    if (r.status == 200) { return String?(r.body) }
+    if (r.status < 0) {
+        failed_reason = r.error else "round-trip failed"
+        return String?()
+    }
+    if (r.status == 401) {
+        failed_reason = "HTTP 401; check GITHUB_TOKEN and repository access"
+    } else if (r.status == 403) {
+        failed_reason = "HTTP 403; traffic data requires push access (or the API rate limit is exhausted)"
+    } else if (r.status == 429) {
+        failed_reason = "HTTP 429; rate limited"
+    } else {
+        failed_reason = "unexpected HTTP " + r.status.to_string()
+    }
+    return String?()
+}
+
+share(all)
+traffic_path(cfg<Config>, endpoint<String>)<String> -> {
+    return "/repos/" + cfg.owner + "/" + cfg.repo + "/traffic/" + endpoint
+}
+
+# Light shape check: a body that would deserialize into all-default fields is
+# rejected here instead. `opener` is the expected first character ("{" or "[");
+# `marker` must appear somewhere in the body.
+share(all)
+looks_like(body<String>, opener<String>, marker<String>)<Bool> -> {
+    if (body.len() == 0) { return false }
+    if (!body.starts_with(opener)) { return false }
+    return body.index_of(marker) >= 0
+}
+
+# Fetch and parse one endpoint, appending its failure reason when it fails.
+share(all)
+fetch_clones(cfg<Config>, run<Run>)<Run> -> {
+    body<String> = api_get(cfg, traffic_path(cfg, "clones")) else ""
+    if (!looks_like(body, "{", "\"clones\"")) {
+        run.clones_err = reason_or(failed_reason, "malformed clones response")
+        return run
+    }
+    parsed<GhClones> = GhClones::from_string(body)
+    run.clone_count = parsed.count
+    run.clone_uniques = parsed.uniques
+    run.clones = parsed.clones
+    run.clones_ok = true
+    return run
+}
+
+share(all)
+fetch_views(cfg<Config>, run<Run>)<Run> -> {
+    body<String> = api_get(cfg, traffic_path(cfg, "views")) else ""
+    if (!looks_like(body, "{", "\"views\"")) {
+        run.views_err = reason_or(failed_reason, "malformed views response")
+        return run
+    }
+    parsed<GhViews> = GhViews::from_string(body)
+    run.view_count = parsed.count
+    run.view_uniques = parsed.uniques
+    run.views = parsed.views
+    run.views_ok = true
+    return run
+}
+
+share(all)
+fetch_referrers(cfg<Config>, run<Run>)<Run> -> {
+    body<String> = api_get(cfg, traffic_path(cfg, "popular/referrers")) else ""
+    if (!looks_like(body, "[", "\"referrer\"")) {
+        run.refs_err = reason_or(failed_reason, "malformed referrers response")
+        return run
+    }
+    parsed<RefList> = RefList::from_string("{\"rows\":" + body + "}")
+    run.refs = parsed.rows
+    run.refs_ok = true
+    return run
+}
+
+share(all)
+fetch_paths(cfg<Config>, run<Run>)<Run> -> {
+    body<String> = api_get(cfg, traffic_path(cfg, "popular/paths")) else ""
+    if (!looks_like(body, "[", "\"path\"")) {
+        run.paths_err = reason_or(failed_reason, "malformed paths response")
+        return run
+    }
+    # GitHub may report a null title; the struct field is a plain String.
+    clean<String> = body.replace("\"title\":null", "\"title\":\"\"")
+    clean = clean.replace("\"title\": null", "\"title\":\"\"")
+    parsed<PathList> = PathList::from_string("{\"rows\":" + clean + "}")
+    run.paths = parsed.rows
+    run.paths_ok = true
+    return run
+}
+
+share(all)
+reason_or(reason<String>, fallback<String>)<String> -> {
+    if (reason.len() == 0) { return fallback }
+    return reason
+}
+
+# Fetch all four endpoints independently: a failure of one never discards what
+# the others returned.
+share(all)
+collect_run(cfg<Config>, ts<String>)<Run> -> {
+    run<Run> = Run {
+        timestamp = ts,
+        clone_count = 0, clone_uniques = 0, clones = Vec<Day>(), clones_ok = false, clones_err = "",
+        view_count = 0, view_uniques = 0, views = Vec<Day>(), views_ok = false, views_err = "",
+        refs = Vec<Ref>(), refs_ok = false, refs_err = "",
+        paths = Vec<Path>(), paths_ok = false, paths_err = ""
+    }
+    run = fetch_clones(cfg, run)
+    run = fetch_views(cfg, run)
+    run = fetch_referrers(cfg, run)
+    run = fetch_paths(cfg, run)
+    return run
+}
+
+share(all)
+stored_names(run<Run>)<String> -> {
+    names<Vec<String>> = Vec<String>()
+    if (run.clones_ok) { names.push("clones") }
+    if (run.views_ok) { names.push("views") }
+    if (run.refs_ok) { names.push("referrers") }
+    if (run.paths_ok) { names.push("paths") }
+    out<String> = ""
+    i<Int> = 0
+    while (i < names.len()) {
+        if (i > 0) { out = out + ", " }
+        out = out + names.get(i)
+        i = i + 1
+    }
+    if (out.len() == 0) { return "(none)" }
+    return out
+}
+
+share(all)
+run_failures(run<Run>)<Vec<Vec<String>>> -> {
+    out<Vec<Vec<String>>> = Vec<Vec<String>>()
+    if (!run.clones_ok) { row<Vec<String>> = Vec<String>(); row.push("clones"); row.push(run.clones_err); out.push(row) }
+    if (!run.views_ok) { row<Vec<String>> = Vec<String>(); row.push("views"); row.push(run.views_err); out.push(row) }
+    if (!run.refs_ok) { row<Vec<String>> = Vec<String>(); row.push("referrers"); row.push(run.refs_err); out.push(row) }
+    if (!run.paths_ok) { row<Vec<String>> = Vec<String>(); row.push("paths"); row.push(run.paths_err); out.push(row) }
+    return out
+}
+
+# ------------------------------------------------------------------ persistence
+
+share(all)
+flag(v<Bool>)<String> -> {
+    if (v) { return "1" }
+    return "0"
+}
+
+# SQL for a rolling value: the number, or NULL when the endpoint failed (never a
+# misleading zero).
+share(all)
+roll(v<Int>, ok<Bool>)<String> -> {
+    if (ok) { return v.to_string() }
+    return "NULL"
+}
+
+# Persist one run atomically. Every successful endpoint is written in a single
+# transaction; an endpoint that failed keeps its NULL rolling value and a false
+# flag, and cannot erase data stored by an earlier run at the same timestamp.
+# Present(snapshot id) on success, absent when SQLite rejected the batch.
+share(all)
+push_run(cfg<Config>, run<Run>)<Int?> -> {
+    if (!db_init(cfg)) { return Int?() }
+    ts<String> = run.timestamp
+    lit_ts<String> = sql_lit(ts)
+    sid_expr<String> = "(SELECT id FROM snapshots WHERE timestamp_utc = " + lit_ts + ")"
+
+    sql<String> = "PRAGMA foreign_keys=ON;\nBEGIN IMMEDIATE;\n"
+    sql = sql + "INSERT INTO snapshots (timestamp_utc, clone_count_14d, clone_uniques_14d, " +
+                "view_count_14d, view_uniques_14d, clones_ok, views_ok, referrers_ok, paths_ok) VALUES (" +
+                lit_ts + ", " + roll(run.clone_count, run.clones_ok) + ", " +
+                roll(run.clone_uniques, run.clones_ok) + ", " +
+                roll(run.view_count, run.views_ok) + ", " +
+                roll(run.view_uniques, run.views_ok) + ", " +
+                flag(run.clones_ok) + ", " + flag(run.views_ok) + ", " +
+                flag(run.refs_ok) + ", " + flag(run.paths_ok) + ") " +
+                "ON CONFLICT(timestamp_utc) DO UPDATE SET " +
+                "clone_count_14d = COALESCE(excluded.clone_count_14d, snapshots.clone_count_14d), " +
+                "clone_uniques_14d = COALESCE(excluded.clone_uniques_14d, snapshots.clone_uniques_14d), " +
+                "view_count_14d = COALESCE(excluded.view_count_14d, snapshots.view_count_14d), " +
+                "view_uniques_14d = COALESCE(excluded.view_uniques_14d, snapshots.view_uniques_14d), " +
+                "clones_ok = MAX(snapshots.clones_ok, excluded.clones_ok), " +
+                "views_ok = MAX(snapshots.views_ok, excluded.views_ok), " +
+                "referrers_ok = MAX(snapshots.referrers_ok, excluded.referrers_ok), " +
+                "paths_ok = MAX(snapshots.paths_ok, excluded.paths_ok);\n"
+
+    if (run.clones_ok) {
+        i<Int> = 0
+        while (i < run.clones.len()) {
+            sql = sql + daily_sql("clone_daily", run.clones.get(i), ts)
+            i = i + 1
+        }
+    }
+    if (run.views_ok) {
+        i<Int> = 0
+        while (i < run.views.len()) {
+            sql = sql + daily_sql("view_daily", run.views.get(i), ts)
+            i = i + 1
+        }
+    }
+    if (run.refs_ok) {
+        sql = sql + "DELETE FROM referrers WHERE snapshot_id = " + sid_expr + ";\n"
+        i<Int> = 0
+        while (i < run.refs.len()) {
+            item<Ref> = run.refs.get(i)
+            sql = sql + "INSERT INTO referrers (snapshot_id, timestamp_utc, referrer, count, uniques) VALUES (" +
+                        sid_expr + ", " + lit_ts + ", " + sql_lit(item.referrer) + ", " +
+                        item.count.to_string() + ", " + item.uniques.to_string() + ");\n"
+            i = i + 1
+        }
+    }
+    if (run.paths_ok) {
+        sql = sql + "DELETE FROM popular_paths WHERE snapshot_id = " + sid_expr + ";\n"
+        i<Int> = 0
+        while (i < run.paths.len()) {
+            p<Path> = run.paths.get(i)
+            sql = sql + "INSERT INTO popular_paths (snapshot_id, timestamp_utc, path, title, count, uniques) VALUES (" +
+                        sid_expr + ", " + lit_ts + ", " + sql_lit(p.path) + ", " + sql_lit(p.title) + ", " +
+                        p.count.to_string() + ", " + p.uniques.to_string() + ");\n"
+            i = i + 1
+        }
+    }
+    sql = sql + "COMMIT;\n"
+
+    ok<Bool> = sqlite(cfg.db_path, sql) else false
+    if (!ok) { return Int?() }
+    rows<Vec<Vec<String>>> = db_rows(cfg, "SELECT id FROM snapshots WHERE timestamp_utc = " + lit_ts)
+    if (rows.len() == 0) { return Int?() }
+    return Int?(Int::from_string(rows.get(0).get(0)))
+}
+
+# Date-keyed UPSERT for one archived bucket: a later observation of the same
+# date updates the counts and moves `last_seen` forward.
+share(all)
+daily_sql(table<String>, day<Day>, ts<String>)<String> -> {
+    date<String> = day.timestamp
+    if (date.len() > 10) { date = date.substring(0, 10) }
+    return "INSERT INTO " + table + " (date, count, uniques, first_seen, last_seen) VALUES (" +
+           sql_lit(date) + ", " + day.count.to_string() + ", " + day.uniques.to_string() + ", " +
+           sql_lit(ts) + ", " + sql_lit(ts) + ") " +
+           "ON CONFLICT(date) DO UPDATE SET count = excluded.count, uniques = excluded.uniques, " +
+           "last_seen = excluded.last_seen;\n"
+}
+
+# ------------------------------------------------------------------- reporting
+
+share(all)
+report_title(cfg<Config>)<String> -> {
+    if (cfg.owner == "rickenator" && cfg.repo == "Vyb") { return "Vyb GitHub Traffic" }
+    return repo_slug(cfg) + " GitHub Traffic"
+}
+
+# Full text report: the rolling window GitHub currently reports, then the
+# archived history. Daily uniques are labelled observations, never lifetime
+# unique users.
+share(all)
+report_text(cfg<Config>, recent_days<Int>, include_uniques<Bool>)<String> -> {
+    db_init(cfg)
+    title<String> = report_title(cfg)
+    out<String> = title + "\n"
+    i<Int> = 0
+    while (i < title.len()) {
+        out = out + "="
+        i = i + 1
+    }
+
+    out = out + "\n\nCurrent GitHub 14-day window\n"
+    latest<Vec<String>> = db_query_one(cfg, "SELECT timestamp_utc, clone_count_14d, clone_uniques_14d, " +
+                                           "view_count_14d, view_uniques_14d FROM snapshots " +
+                                           "ORDER BY timestamp_utc DESC LIMIT 1")
+    if (latest.len() == 0) {
+        out = out + "  (no collection has been stored yet)\n"
+    } else {
+        out = out + "  Clones:          " + fmt_nullable(latest.get(1)) + "\n"
+        out = out + "  Unique cloners:  " + fmt_nullable(latest.get(2)) + "\n"
+        out = out + "  Views:           " + fmt_nullable(latest.get(3)) + "\n"
+        out = out + "  Unique viewers:  " + fmt_nullable(latest.get(4)) + "\n"
+    }
+
+    out = out + "\nArchived history\n"
+    span<Vec<String>> = db_query_one(cfg, "SELECT MIN(timestamp_utc), MAX(timestamp_utc) FROM snapshots")
+    if (span.len() == 0 || span.get(0).len() == 0) {
+        out = out + "  (empty)\n"
+    } else {
+        out = out + "  First recorded:  " + span.get(0).substring(0, 10) + "\n"
+        out = out + "  Last recorded:   " + span.get(1).substring(0, 10) + "\n"
+        totals<Vec<String>> = db_query_one(cfg, totals_sql())
+        out = out + "  Archived clone events:  " + fmt_int(totals.get(0)) + "\n"
+        out = out + "  Archived view events:   " + fmt_int(totals.get(1)) + "\n"
+    }
+
+    clone_payload<String> = db_payload(cfg, "SELECT date, count FROM clone_daily ORDER BY date")
+    view_payload<String> = db_payload(cfg, "SELECT date, count FROM view_daily ORDER BY date")
+    clone_rows<Int> = payload_count(clone_payload)
+    view_rows<Int> = payload_count(view_payload)
+
+    out = out + "\nRecent daily clones\n" + recent_lines(clone_payload, recent_days)
+    out = out + "\nRecent daily views\n" + recent_lines(view_payload, recent_days)
+
+    if (include_uniques) {
+        out = out + "\nDaily unique observations (archived sums, not unique people)\n"
+        out = out + "  Note: the same person may appear on more than one day, so these\n"
+        out = out + "  observations cannot be summed into a true lifetime unique-user count.\n"
+        totals2<Vec<String>> = db_query_one(cfg, totals_sql())
+        if (clone_rows > 0) {
+            out = out + "  Sum of daily clone uniques:  " + fmt_int(totals2.get(2)) + "\n"
+        }
+        if (view_rows > 0) {
+            out = out + "  Sum of daily view uniques:   " + fmt_int(totals2.get(3)) + "\n"
+        }
+    }
+    return out
+}
+
+# Archived clone/view events and the summed daily uniques (observation only).
+share(all)
+totals_sql()<String> -> {
+    return "SELECT (SELECT COALESCE(SUM(count), 0) FROM clone_daily), " +
+           "(SELECT COALESCE(SUM(count), 0) FROM view_daily), " +
+           "(SELECT COALESCE(SUM(uniques), 0) FROM clone_daily), " +
+           "(SELECT COALESCE(SUM(uniques), 0) FROM view_daily)"
+}
+
+# Newest `recent_days` archived days, most recent first. The payload is
+# `<date>\t<count>` rows joined by NEWLINE, so the split stays inside this frame.
+share(all)
+recent_lines(payload<String>, recent_days<Int>)<String> -> {
+    if (payload.len() == 0) { return "  (none yet)\n" }
+    rows<Vec<String>> = payload.split("\n")
+    n<Int> = recent_days
+    if (n > rows.len()) { n = rows.len() }
+    out<String> = ""
+    i<Int> = 0
+    while (i < n) {
+        line<String> = rows.get(rows.len() - 1 - i)
+        cells<Vec<String>> = line.split("\t")
+        out = out + "  " + cells.get(0) + "   " + fmt_int(cells.get(1)) + "\n"
+        i = i + 1
+    }
+    return out
+}
+
+# ------------------------------------------------------------- CLI arguments
+
+# The program's argv, parsed from `/proc/self/cmdline` (NUL separated). The
+# compiler forwards its own arguments too (`--module-path bindings`), so the
+# helpers below skip a flag's value before deciding what the command is.
+share(all)
+argv_of()<Vec<String>> -> {
+    raw<String> = ""
+    match (open_read("/proc/self/cmdline")) {
+        f -> { match (read_all(f)) { s -> { raw = s } ? -> { } }; close(f) }
+        ? -> { }
+    }
+    out<Vec<String>> = Vec<String>()
+    cur<String> = ""
+    i<Int> = 0
+    while (i < raw.len()) {
+        c<Int> = (raw.char_at(i) as Int) & 0xFF
+        if (c == 0) {
+            if (cur.len() > 0) { out.push(cur) }
+            cur = ""
+        } else {
+            cur = cur + String::from_byte(c)
+        }
+        i = i + 1
+    }
+    if (cur.len() > 0) { out.push(cur) }
+    return out
+}
+
+# Index of `flag` in `args`, or -1.
+share(all)
+find_flag(args<Vec<String>>, flag<String>)<Int> -> {
+    i<Int> = 1
+    while (i < args.len()) {
+        if (args.get(i) == flag) { return i }
+        i = i + 1
+    }
+    return -1
+}
+
+# Value following `flag` in `args` ("" when the flag is absent or last).
+share(all)
+flag_value(args<Vec<String>>, flag<String>)<String> -> {
+    i<Int> = find_flag(args, flag)
+    if (i < 0 || i + 1 >= args.len()) { return "" }
+    return args.get(i + 1)
+}
+
+# Flags that consume the following argument, so it is not mistaken for the
+# command (`--module-path bindings` comes from the compiler, not the user).
+share(all)
+takes_value(flag<String>)<Bool> -> {
+    if (flag == "--module-path") { return true }
+    if (flag == "--owner") { return true }
+    if (flag == "--repo") { return true }
+    if (flag == "--db") { return true }
+    if (flag == "--export-dir") { return true }
+    if (flag == "--graphs-dir") { return true }
+    if (flag == "--recent") { return true }
+    return false
+}
+
+# The first word that is neither a flag nor the hidden program path.
+share(all)
+command_of(args<Vec<String>>)<String> -> {
+    i<Int> = 1
+    while (i < args.len()) {
+        a<String> = args.get(i)
+        if (a.starts_with("-")) {
+            if (takes_value(a)) { i = i + 2 } else { i = i + 1 }
+        } else if (a.ends_with(".vyb")) {
+            i = i + 1
+        } else {
+            return a
+        }
+    }
+    return ""
+}
+
+# ------------------------------------------------------------------- CSV export
+
+# Write the five derived CSV views into `cfg.export_dir`. Returns the files written.
+share(all)
+export_csv(cfg<Config>)<Vec<String>> -> {
+    db_init(cfg)
+    written<Vec<String>> = Vec<String>()
+    if (!ensure_dir(cfg.export_dir)) { return written }
+
+    summary<String> = csv_line(summary_header())
+    rows<Vec<Vec<String>>> = summary_rows(cfg)
+    i<Int> = 0
+    while (i < rows.len()) {
+        row<Vec<String>> = rows.get(i)
+        summary = summary + csv_line(row)
+        i = i + 1
+    }
+    path0<String> = cfg.export_dir + "/summary.csv"
+    if (spill(path0, summary)) { written.push(path0) }
+
+    if (write_table(cfg.export_dir + "/clone_daily.csv",
+                    v5("date", "count", "uniques", "first_seen", "last_seen"),
+                    db_payload(cfg, "SELECT date, count, uniques, first_seen, last_seen FROM clone_daily ORDER BY date"))) {
+        written.push(cfg.export_dir + "/clone_daily.csv")
+    }
+    if (write_table(cfg.export_dir + "/view_daily.csv",
+                    v5("date", "count", "uniques", "first_seen", "last_seen"),
+                    db_payload(cfg, "SELECT date, count, uniques, first_seen, last_seen FROM view_daily ORDER BY date"))) {
+        written.push(cfg.export_dir + "/view_daily.csv")
+    }
+    if (write_table(cfg.export_dir + "/referrers.csv",
+                    v4("snapshot_utc", "referrer", "count", "uniques"),
+                    db_payload(cfg, "SELECT timestamp_utc, referrer, count, uniques FROM referrers " +
+                                    "ORDER BY timestamp_utc, count DESC, referrer"))) {
+        written.push(cfg.export_dir + "/referrers.csv")
+    }
+    if (write_table(cfg.export_dir + "/popular_paths.csv",
+                    v5("snapshot_utc", "path", "title", "count", "uniques"),
+                    db_payload(cfg, "SELECT timestamp_utc, path, title, count, uniques FROM popular_paths " +
+                                    "ORDER BY timestamp_utc, count DESC, path"))) {
+        written.push(cfg.export_dir + "/popular_paths.csv")
+    }
+    return written
+}
+
+share(all)
+summary_header()<Vec<String>> -> {
+    h<Vec<String>> = Vec<String>()
+    h.push("field")
+    h.push("value")
+    return h
+}
+
+# The summary sheet: source, rolling window, archived totals, and the explicit
+# note that summed daily uniques are not lifetime unique users.
+share(all)
+summary_rows(cfg<Config>)<Vec<Vec<String>>> -> {
+    rows<Vec<Vec<String>>> = Vec<Vec<String>>()
+    rows.push(v2("source", "SQLite (vyb-traffic)"))
+    latest<Vec<String>> = db_query_one(cfg, "SELECT timestamp_utc, clone_count_14d, clone_uniques_14d, " +
+                                           "view_count_14d, view_uniques_14d FROM snapshots " +
+                                           "ORDER BY timestamp_utc DESC LIMIT 1")
+    if (latest.len() > 0) { rows.push(v2("latest_snapshot_utc", latest.get(0))) }
+    span<Vec<String>> = db_query_one(cfg, "SELECT MIN(timestamp_utc), MAX(timestamp_utc) FROM snapshots")
+    if (span.len() > 0 && span.get(0).len() > 0) {
+        rows.push(v2("first_recorded", span.get(0).substring(0, 10)))
+        rows.push(v2("last_recorded", span.get(1).substring(0, 10)))
+    }
+    if (latest.len() > 0) {
+        rows.push(v2("current_14d_clones", latest.get(1)))
+        rows.push(v2("current_14d_unique_cloners", latest.get(2)))
+        rows.push(v2("current_14d_views", latest.get(3)))
+        rows.push(v2("current_14d_unique_viewers", latest.get(4)))
+    } else {
+        rows.push(v2("current_14d_clones", ""))
+        rows.push(v2("current_14d_unique_cloners", ""))
+        rows.push(v2("current_14d_views", ""))
+        rows.push(v2("current_14d_unique_viewers", ""))
+    }
+    totals<Vec<String>> = db_query_one(cfg, totals_sql())
+    rows.push(v2("archived_clone_events", fmt_int(totals.get(0))))
+    rows.push(v2("archived_view_events", fmt_int(totals.get(1))))
+    rows.push(v2("archived_sum_of_daily_clone_uniques_observation_only", fmt_int(totals.get(2))))
+    rows.push(v2("archived_sum_of_daily_view_uniques_observation_only", fmt_int(totals.get(3))))
+    rows.push(v2("unique_cloners_note",
+                 "GitHub does not expose stable identities; summed daily uniques are not a true lifetime unique-user count."))
+    return rows
+}
+
+# Write one table as CSV: header, then every row of the payload (`cells` joined
+# by TAB, rows by NEWLINE).
+share(all)
+write_table(path<String>, header<Vec<String>>, payload<String>)<Bool> -> {
+    text<String> = csv_line(header)
+    if (payload.len() > 0) {
+        rows<Vec<String>> = payload.split("\n")
+        i<Int> = 0
+        while (i < rows.len()) {
+            line<String> = rows.get(i)
+            text = text + csv_line(line.split("\t"))
+            i = i + 1
+        }
+    }
+    return spill(path, text)
+}
+
+# ------------------------------------------------------------------ SVG graphs
+
+# Four derived charts: daily clones, daily views, cumulative clones, cumulative
+# views. Event counts only -- daily uniques are observations, not a series.
+share(all)
+render_graphs(cfg<Config>)<Vec<String>> -> {
+    db_init(cfg)
+    written<Vec<String>> = Vec<String>()
+    if (!ensure_dir(cfg.graphs_dir)) { return written }
+    clone_payload<String> = db_payload(cfg, "SELECT date, count FROM clone_daily ORDER BY date")
+    view_payload<String> = db_payload(cfg, "SELECT date, count FROM view_daily ORDER BY date")
+
+    if (emit_chart(cfg, cfg.graphs_dir + "/daily-clones.svg", "Daily clones",
+                   clone_payload, false)) { written.push(cfg.graphs_dir + "/daily-clones.svg") }
+    if (emit_chart(cfg, cfg.graphs_dir + "/daily-views.svg", "Daily views",
+                   view_payload, false)) { written.push(cfg.graphs_dir + "/daily-views.svg") }
+    if (emit_chart(cfg, cfg.graphs_dir + "/cumulative-clones.svg", "Cumulative clones",
+                   clone_payload, true)) { written.push(cfg.graphs_dir + "/cumulative-clones.svg") }
+    if (emit_chart(cfg, cfg.graphs_dir + "/cumulative-views.svg", "Cumulative views",
+                   view_payload, true)) { written.push(cfg.graphs_dir + "/cumulative-views.svg") }
+    return written
+}
+
+share(all)
+emit_chart(cfg<Config>, path<String>, chart_title<String>, payload<String>, cumulative<Bool>)<Bool> -> {
+    return spill(path, chart_svg(chart_title, payload, cumulative, repo_slug(cfg)))
+}
+
+# A minimal SVG line chart: 720x260, zero-based y axis, x = archived day index.
+share(all)
+chart_svg(chart_title<String>, payload<String>, cumulative<Bool>, slug<String>)<String> -> {
+    w<Int> = 720
+    h<Int> = 260
+    left<Int> = 60
+    right<Int> = 20
+    top<Int> = 34
+    bottom<Int> = 34
+    plot_w<Int> = w - left - right
+    plot_h<Int> = h - top - bottom
+
+    values<Vec<Int>> = Vec<Int>()
+    labels<Vec<String>> = Vec<String>()
+    running<Int> = 0
+    i<Int> = 0
+    if (payload.len() > 0) {
+        rows<Vec<String>> = payload.split("\n")
+        while (i < rows.len()) {
+            line<String> = rows.get(i)
+            cells<Vec<String>> = line.split("\t")
+            v<Int> = Int::from_string(cells.get(1))
+            running = running + v
+            if (cumulative) { values.push(running) } else { values.push(v) }
+            labels.push(cells.get(0))
+            i = i + 1
+        }
+    }
+
+    maxv<Int> = 0
+    i = 0
+    while (i < values.len()) {
+        if (values.get(i) > maxv) { maxv = values.get(i) }
+        i = i + 1
+    }
+    if (maxv == 0) { maxv = 1 }
+
+    out<String> = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + w.to_string() +
+                  "\" height=\"" + h.to_string() + "\" viewBox=\"0 0 " + w.to_string() + " " + h.to_string() + "\">\n"
+    out = out + "  <rect width=\"100%\" height=\"100%\" fill=\"#0f172a\"/>\n"
+    out = out + "  <text x=\"" + left.to_string() + "\" y=\"22\" fill=\"#e2e8f0\" font-family=\"sans-serif\" " +
+                "font-size=\"15\">" + chart_title + " - " + slug + "</text>\n"
+    out = out + "  <line x1=\"" + left.to_string() + "\" y1=\"" + (top + plot_h).to_string() + "\" x2=\"" +
+                (left + plot_w).to_string() + "\" y2=\"" + (top + plot_h).to_string() +
+                "\" stroke=\"#475569\" stroke-width=\"1\"/>\n"
+    out = out + "  <line x1=\"" + left.to_string() + "\" y1=\"" + top.to_string() + "\" x2=\"" +
+                left.to_string() + "\" y2=\"" + (top + plot_h).to_string() +
+                "\" stroke=\"#475569\" stroke-width=\"1\"/>\n"
+    out = out + "  <text x=\"4\" y=\"" + (top + 10).to_string() + "\" fill=\"#94a3b8\" " +
+                "font-family=\"sans-serif\" font-size=\"11\">" + group_digits(maxv) + "</text>\n"
+    out = out + "  <text x=\"4\" y=\"" + (top + plot_h).to_string() + "\" fill=\"#94a3b8\" " +
+                "font-family=\"sans-serif\" font-size=\"11\">0</text>\n"
+
+    if (values.len() > 0) {
+        pts<String> = ""
+        i = 0
+        while (i < values.len()) {
+            x<Int> = left
+            if (values.len() > 1) { x = left + (plot_w * i) / (values.len() - 1) }
+            y<Int> = top + plot_h - (plot_h * values.get(i)) / maxv
+            if (i > 0) { pts = pts + " " }
+            pts = pts + x.to_string() + "," + y.to_string()
+            i = i + 1
+        }
+        out = out + "  <polyline fill=\"none\" stroke=\"#38bdf8\" stroke-width=\"2\" points=\"" + pts + "\"/>\n"
+        out = out + "  <text x=\"" + left.to_string() + "\" y=\"" + (top + plot_h + 20).to_string() +
+                    "\" fill=\"#94a3b8\" font-family=\"sans-serif\" font-size=\"11\">" + labels.get(0) + "</text>\n"
+        out = out + "  <text x=\"" + (left + plot_w).to_string() + "\" y=\"" + (top + plot_h + 20).to_string() +
+                    "\" text-anchor=\"end\" fill=\"#94a3b8\" font-family=\"sans-serif\" font-size=\"11\">" +
+                    labels.get(labels.len() - 1) + "</text>\n"
+    } else {
+        out = out + "  <text x=\"" + (left + plot_w / 2).to_string() + "\" y=\"" + (top + plot_h / 2).to_string() +
+                    "\" text-anchor=\"middle\" fill=\"#94a3b8\" font-family=\"sans-serif\" " +
+                    "font-size=\"13\">no archived data</text>\n"
+    }
+
+    out = out + "  <text x=\"" + (left + plot_w).to_string() + "\" y=\"" + (h - 6).to_string() +
+                "\" text-anchor=\"end\" fill=\"#64748b\" font-family=\"sans-serif\" font-size=\"10\">" +
+                "source: SQLite (vyb-traffic)</text>\n"
+    out = out + "</svg>\n"
+    return out
+}

@@ -11,6 +11,7 @@ A **bind** adds an aspect to a type, making that aspect's methods **callable by 
 Simple receiver parameters are written as `self`. This is canonical sugar for `self<Self>` in aspect and bind methods. Keep explicit receiver types, such as `self<their<Self>>`, when ownership or borrowing mode is part of the contract.
 
 ### Example:
+
 ```vyb
 bind Display -> Point {
     show(self)<Void> -> {
@@ -30,16 +31,19 @@ point.show();  // ✅ Works! Prints "Point(x, y)"
 ### Unbounded: `bind<T> Aspect -> Type<T>`
 
 **What It Does:**
+
 - Gives the aspect to `Type<T>` for **ANY type T**
 - External code can call aspect methods no matter what T is
 - `Box<Int>`, `Box<String>`, `Box<Anything>` all get the aspect
 
 **Inside the Bind Implementation:**
+
 - T is **opaque** - you don't know what methods T has
 - Can access struct fields, but **cannot call T's methods**
 - Cannot assume T has any aspects
 
 **Example:**
+
 ```vyb
 bind<T> Display -> Box<T> {
     show(self)<Void> -> {
@@ -62,17 +66,20 @@ box2.show();  // ✅ Works: "Box contains a value"
 ### Bounded: `bind<T<Aspect1, Aspect2>> Aspect -> Type<T>`
 
 **What It Does:**
+
 - Gives the aspect to `Type<T>` **ONLY when T has the required aspects**
 - External code can call aspect methods **only if T satisfies bounds**
 - `Box<Point>` gets the aspect **IF** Point has required aspects
 - `Box<Int>` does NOT get this bind if Int lacks required aspects
 
 **Inside the Bind Implementation:**
+
 - T is **known** to have the bound aspects
 - You **CAN call T's aspect methods**
 - Lets you delegate to T's implementations or use them in custom ways
 
 **Example:**
+
 ```vyb
 bind<T<Display>> Display -> Box<T> {
     show(self)<Void> -> {
@@ -142,22 +149,26 @@ duplicateAndShow<T<Display, Clone>>(item<T>)<T> -> {
 ### 1. Bounds Affect Implementation, Not Just Usage
 
 **Unbounded:**
+
 - **External:** Any `Box<T>` can use the method
 - **Internal:** Implementation can't use T's methods
 
 **Bounded:**
+
 - **External:** Only `Box<T>` where T has required aspects can use the method
 - **Internal:** Implementation CAN use T's aspect methods
 
 ### 2. Both Add Usable Methods
 
 Both bounded and unbounded binds **add methods that external code can call**. The difference is:
+
 - **When** the bind applies (always vs conditionally)
 - **How** the implementation works (generic vs T-aware)
 
 ### 3. Bounds Are Compile-Time Guarantees
 
 When you write `<T<Display>>`:
+
 - **Semantic Analysis:** Validates that bounds are actual aspects
 - **Type Checking:** Ensures T has required aspects at call sites
 - **Inside Implementation:** Compiler knows T's methods exist - no runtime checks

@@ -12,6 +12,7 @@ aspects** are sufficient for modern software development.
 ## The Problem with Classes
 
 ### 1. The Diamond Problem
+
 ```java
 // Java/C++ style - ambiguity!
 class Animal { void eat() { ... } }
@@ -21,6 +22,7 @@ class Bat extends Mammal, Bird { // Which eat()? }
 ```
 
 **Aspect Solution:**
+
 ```vyb
 aspect Eats { eat(self<their<Self>>)<Void> -> { } }
 aspect Flies { fly(self<their<Self>>)<Void> -> { } }
@@ -31,6 +33,7 @@ bind Flies -> Bat { ... }  # No ambiguity
 ```
 
 ### 2. Fragile Base Class Problem
+
 ```python
 # Python - base class change breaks subclasses
 class Animal:
@@ -51,6 +54,7 @@ class Animal:
 **Aspect Solution:** No inheritance = no fragile bases. Each `bind` block stands alone.
 
 ### 3. Forced Hierarchy
+
 ```csharp
 // C# - locked into wrong abstraction
 class Vehicle { ... }
@@ -63,6 +67,7 @@ class AmphibiousCar : Car { ... }  // Can't also extend Boat!
 ```
 
 **Aspect Solution:**
+
 ```vyb
 aspect Drivable { ... }
 aspect Floatable { ... }
@@ -77,6 +82,7 @@ bind Floatable -> AmphibiousCar { ... }
 ## What Aspects Give You (Without Classes)
 
 ### ✅ Polymorphism
+
 ```vyb
 aspect Drawable {
     draw(self<their<Self>>)<Void> -> { }
@@ -93,6 +99,7 @@ render<T<Drawable>>(shape<their<T>>)<Void> -> {
 ```
 
 ### ✅ Code Reuse via Default Implementations
+
 ```vyb
 aspect Iterator {
     type Item                                    # associated type
@@ -119,6 +126,7 @@ aspect Iterator {
 ```
 
 ### ✅ Multiple "Inheritance" (Aspect Bounds)
+
 ```vyb
 # Combine multiple aspect requirements
 serialize<T<ToJson><Debug>>(obj<their<T>>)<String> -> {
@@ -135,6 +143,7 @@ bind Debug -> User { ... }
 ```
 
 ### ✅ Extension Without Modification
+
 ```vyb
 # Extend types you don't own
 bind ToString -> Int {
@@ -149,6 +158,7 @@ s<String> = x.to_string()  # "42"
 ```
 
 ### ✅ Interface Segregation
+
 ```vyb
 # Small, focused aspects
 aspect Read {
@@ -184,6 +194,7 @@ bind Read -> ReadOnlyArchive { ... }
 ## Real-World Examples
 
 ### Example 1: HTTP Client
+
 ```vyb
 # Without classes - compose behaviors
 struct HttpClient {
@@ -214,6 +225,7 @@ bind Closeable -> HttpClient {
 ```
 
 ### Example 2: Game Entities
+
 ```vyb
 # Bad class design:
 # class Entity > Renderable > Movable > Collidable > Enemy
@@ -245,6 +257,7 @@ bind Movable -> Decoration { ... }
 ```
 
 ### Example 3: Serialization
+
 ```vyb
 aspect ToJson {
     to_json(self<their<Self>>)<String> -> { }
@@ -282,6 +295,7 @@ bind ToJson -> User {
 **Classes are NOT part of Vyb's design — now or in the future.**
 
 Why?
+
 1. **Aspects are strictly more powerful** — Everything classes do, aspects do better
 2. **Simpler mental model** — Structs + Aspects + Functions = Complete
 3. **Better with ownership** — Aspect bounds work naturally with `my`/`our`/`their` semantics
@@ -333,6 +347,7 @@ save_to_db<T<Validatable><ToJson>>(item<their<T>>)<Bool> -> {
 ---
 
 **TL;DR:**
+
 - ✅ Structs = Data
 - ✅ Aspects = Behavior Contracts
 - ✅ Bind = Connect Data to Behavior

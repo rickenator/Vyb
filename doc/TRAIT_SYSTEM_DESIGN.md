@@ -44,6 +44,7 @@ distance(p1<Point>, p2<Point>)<Float> -> {
 ```
 
 **Vyb's Approach:**
+
 - Use **structs** for data
 - Use **functions** for behavior
 - Use **aspects** when you need polymorphism
@@ -65,6 +66,7 @@ aspect Comparable {
 ```
 
 **Key Features:**
+
 - `Self` represents the binding type
 - Methods take `their<Self>` (borrowed self) by convention
 - No method bodies — pure interface
@@ -268,11 +270,13 @@ aspect Async<T> {
 ## The Vyb Way
 
 **Data = Structs**
+
 ```vyb
 struct Point { x<Int>, y<Int> }
 ```
 
 **Behavior = Aspects**
+
 ```vyb
 aspect Drawable {
     draw(self<their<Self>>)<Void> -> { }
@@ -286,6 +290,7 @@ bind Drawable -> Point {
 ```
 
 **Polymorphism = Aspect Bounds**
+
 ```vyb
 render<T<Drawable>>(shape<their<T>>)<Void> -> {
     shape.draw()
@@ -310,6 +315,7 @@ render<T<Drawable>>(shape<their<T>>)<Void> -> {
 **Goal:** Make aspect definitions real and usable
 
 **Tasks:**
+
 1. ✅ Parse aspect declarations
 2. ✅ Store aspect definitions in semantic analyzer
 3. ✅ Validate aspect method signatures
@@ -321,6 +327,7 @@ render<T<Drawable>>(shape<their<T>>)<Void> -> {
 **Goal:** Allow types to bind aspects
 
 **Tasks:**
+
 1. ✅ Parse bind blocks
 2. ⬜ Validate bind matches aspect signature
 3. ⬜ Check all required methods implemented
@@ -328,6 +335,7 @@ render<T<Drawable>>(shape<their<T>>)<Void> -> {
 5. ⬜ Enable aspect method calls (value.method())
 
 **Test:**
+
 ```vyb
 struct Point { x<Int>, y<Int> }
 
@@ -350,6 +358,7 @@ main()<Int> -> {
 **Goal:** Make generic functions with aspect bounds usable
 
 **Tasks:**
+
 1. ⬜ Implement monomorphization (generic expansion)
 2. ⬜ Validate aspect bounds during instantiation
 3. ⬜ Generate specialized code for each concrete type
@@ -361,6 +370,7 @@ main()<Int> -> {
 **Goal:** Complete aspect system
 
 **Tasks:**
+
 1. ⬜ Default method implementations
 2. ⬜ Associated types (required for Iterator)
 3. ⬜ Aspect objects (dynamic dispatch)
@@ -393,12 +403,14 @@ main()<Int> -> {
 ### Q: Why no classes?
 
 **A:** Aspects provide everything classes do, without the complexity:
+
 - **Polymorphism** ✅ via aspect bounds
 - **Code reuse** ✅ via default aspect method implementations
 - **Multiple "inheritance"** ✅ unlimited aspect bindings (no diamond problem)
 - **Encapsulation** ✅ via modules and visibility (planned)
 
 Classes add:
+
 - ❌ Fragile base class problem
 - ❌ Diamond problem complexity
 - ❌ Forced inheritance hierarchies
@@ -486,6 +498,7 @@ main()<Int> -> {
 ## Conclusion
 
 Vyb's aspect system balances:
+
 - **Simplicity** — Structs for data, aspects for interfaces
 - **Power** — Generic programming with compile-time safety
 - **Flexibility** — Compose behaviors without class hierarchies

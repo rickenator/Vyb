@@ -23,12 +23,14 @@ The introspection system bridges these realms, allowing runtime code to access c
 
 ### 1. **Lightweight by Nature**
 Type information should be as light as the concept itself:
+
 - Type ID: 8 bytes (uint64_t hash of type name)
 - Type name: Pointer to string literal (8 bytes)
 - Total: 16 bytes for complete type information
 
 ### 2. **Hash-Based Identity**
 Types are identified by `std::hash<std::string>{}(typeName)`:
+
 ```cpp
 uint64_t typeHash = std::hash<std::string>{}("Int");        // 0x...
 uint64_t errorHash = std::hash<std::string>{}("ParseError"); // 0x...
@@ -38,12 +40,14 @@ This system is **already implemented** for error types—we're extending it to a
 
 ### 3. **No Magic, Only Truth**
 Introspection reveals what *is*, not what might be:
+
 - `typeof(value)` returns the **actual runtime type**, not declared type
 - Generic type parameters resolved to concrete types
 - No reflection on uninstantiated generics
 
 ### 4. **Integration with Existing Systems**
 The error handling system (Phase 6) already uses type IDs:
+
 ```cpp
 struct VybError {
     const char* type_name;  // "ParseError"
@@ -63,6 +67,7 @@ We extend this pattern to **all Vyb values**.
 **Purpose**: Get runtime type identity
 
 **Examples**:
+
 ```vyb
 x<Int> = 42
 t<Type> = typeof(x)  # Type representing Int
@@ -85,12 +90,14 @@ if (typeof(x) == typeof<Int>()) {
 ```
 
 **Implementation**:
+
 - At compile-time, semantic analyzer resolves expression type
 - At codegen, generate hash of the type name: `std::hash<std::string>{}(typeName)`
 - Return as opaque 8-byte value (LLVM `i64`)
 - Store in variable of type `Type`
 
 **AST Node**:
+
 ```cpp
 class TypeofExpression : public Expression {
     ExprPtr operand;  // Expression to get type of
@@ -107,6 +114,7 @@ class TypeofExpression : public Expression {
 **Purpose**: Get human-readable type name
 
 **Examples**:
+
 ```vyb
 x<Int> = 42
 name<String> = typename(x)  # "Int"
@@ -119,12 +127,14 @@ println("Value is of type: " + typename(value))
 ```
 
 **Implementation**:
+
 - At compile-time, resolve expression type name
 - At codegen, generate pointer to string literal containing type name
 - Wrap in Vyb String struct: `VybString { data: "Int", length: 3 }`
 - Return as String value
 
 **AST Node**:
+
 ```cpp
 class TypenameExpression : public Expression {
     ExprPtr operand;
@@ -141,6 +151,7 @@ class TypenameExpression : public Expression {
 **Purpose**: Compare type identities
 
 **Examples**:
+
 ```vyb
 x<Int> = 42
 y<String> = "hello"
@@ -167,6 +178,7 @@ if (typeof(x) == typeof<Int>()) {
 ```
 
 **Implementation**:
+
 - `typeof<T>()` generates hash of type name T at compile-time
 - Comparison is simple integer equality of two `i64` values
 - No special AST node needed—uses existing BinaryExpression with EQEQ/NOTEQ
@@ -180,6 +192,7 @@ To support `typename()`, we need a runtime mapping from type ID → type name.
 ### Global Type Registry
 
 **C++ Implementation**:
+
 ```cpp
 // In runtime or codegen
 std::unordered_map<uint64_t, const char*> g_type_registry;
@@ -196,6 +209,7 @@ const char* __vyb_get_typename(uint64_t type_id) {
 
 **Initialization**:
 At module initialization, register all types:
+
 ```cpp
 void __vyb_module_init() {
     __vyb_register_type(std::hash<std::string>{}("Int"), "Int");
@@ -217,6 +231,7 @@ This is called once at program startup, before `main()`.
 **Operations**: Equality comparison (`==`, `!=`)
 
 **Usage**:
+
 ```vyb
 # Declare variable of type Type
 t<Type> = typeof(42)
@@ -231,6 +246,7 @@ if (t == typeof<Int>()) {
 ```
 
 **Implementation**:
+
 - Add `Type` as primitive type in semantic analyzer
 - In LLVM codegen, represent as `i64`
 - Only allow `==` and `!=` operators on Type values
@@ -241,6 +257,7 @@ if (t == typeof<Int>()) {
 
 ### Step 1: Lexer & Tokens ✅
 Add new keywords:
+
 ```cpp
 KEYWORD_TYPEOF,   // "typeof"
 KEYWORD_TYPENAME, // "typename"
@@ -250,6 +267,7 @@ Update lexer to recognize these keywords in `src/parser/lexer.cpp`.
 
 ### Step 2: AST Nodes
 Create new expression types:
+
 ```cpp
 class TypeofExpression : public Expression {
 public:
@@ -277,6 +295,7 @@ public:
 ```
 
 Add to NodeType enum:
+
 ```cpp
 TYPEOF_EXPRESSION,
 TYPENAME_EXPRESSION,
@@ -284,6 +303,7 @@ TYPENAME_EXPRESSION,
 
 ### Step 3: Parser
 Parse `typeof(expr)` and `typename(expr)`:
+
 ```cpp
 ExprPtr Parser::parsePrimaryExpression() {
     // ... existing code ...
@@ -310,22 +330,26 @@ ExprPtr Parser::parsePrimaryExpression() {
 
 ### Step 4: Semantic Analysis
 Add `Type` as primitive type:
+
 ```cpp
 // In semantic analyzer initialization
 registerPrimitiveType("Type");
 ```
 
 For `TypeofExpression`:
+
 - Analyze operand expression to determine its type
 - Set expression result type to `Type`
 
 For `TypenameExpression`:
+
 - Analyze operand expression to determine its type
 - Set expression result type to `String`
 
 ### Step 5: Code Generation
 
 **For `TypeofExpression`**:
+
 ```cpp
 void LLVMCodegen::visit(const TypeofExpression* node) {
     // Get the type name of the operand
@@ -340,6 +364,7 @@ void LLVMCodegen::visit(const TypeofExpression* node) {
 ```
 
 **For `TypenameExpression`**:
+
 ```cpp
 void LLVMCodegen::visit(const TypenameExpression* node) {
     // Get the type name of the operand
@@ -356,6 +381,7 @@ void LLVMCodegen::visit(const TypenameExpression* node) {
 ```
 
 **Type Registry Initialization**:
+
 ```cpp
 void LLVMCodegen::generateModuleInit() {
     // Create __vyb_module_init function
@@ -391,6 +417,7 @@ Call `__vyb_module_init()` from main or module constructor.
 ### Step 6: Runtime Support
 
 Add to `include/vyb/runtime/type_info.hpp`:
+
 ```cpp
 #pragma once
 
@@ -413,6 +440,7 @@ inline bool __vyb_type_equals(uint64_t type_a, uint64_t type_b) {
 ```
 
 Implement in `src/runtime/type_info.cpp`:
+
 ```cpp
 #include "vyb/runtime/type_info.hpp"
 #include <unordered_map>
@@ -442,6 +470,7 @@ const char* __vyb_get_typename(uint64_t type_id) {
 ## Integration with Error Handling
 
 The error handling system **already** stores type IDs:
+
 ```cpp
 struct VybError {
     void* type_id;  // Stored as void* (8 bytes)
@@ -450,6 +479,7 @@ struct VybError {
 ```
 
 In wildcard trap handlers, we can now use introspection:
+
 ```vyb
 {
     risky_operation()
@@ -466,6 +496,7 @@ In wildcard trap handlers, we can now use introspection:
 ```
 
 **Built-in Function**:
+
 ```cpp
 // Extract type from error pointer
 uint64_t __vyb_error_typeof(VybError* error) {
@@ -474,6 +505,7 @@ uint64_t __vyb_error_typeof(VybError* error) {
 ```
 
 Or, we extend `typeof()` to work directly on wildcard error values:
+
 ```vyb
 {
     operation()
@@ -486,6 +518,7 @@ Or, we extend `typeof()` to work directly on wildcard error values:
 ```
 
 The codegen for `typeof(e)` when `e` is a wildcard error:
+
 ```cpp
 // e is VybError* pointer
 // Load type_id field (offset 8 bytes after type_name pointer)
@@ -499,6 +532,7 @@ return typeId;
 ## Testing Strategy
 
 ### Test 1: Basic typeof
+
 ```vyb
 # test/introspection/typeof_basic.vyb
 fn main()<Int> -> {
@@ -513,6 +547,7 @@ fn main()<Int> -> {
 ```
 
 ### Test 2: Basic typename
+
 ```vyb
 # test/introspection/typename_basic.vyb
 fn main()<Int> -> {
@@ -528,6 +563,7 @@ fn main()<Int> -> {
 ```
 
 ### Test 3: Type comparison
+
 ```vyb
 # test/introspection/type_comparison.vyb
 fn main()<Int> -> {
@@ -547,6 +583,7 @@ fn main()<Int> -> {
 ```
 
 ### Test 4: Wildcard trap with typeof
+
 ```vyb
 # test/introspection/wildcard_typeof.vyb
 fn risky()<Int> -> {
@@ -567,6 +604,7 @@ fn main()<Int> -> {
 ```
 
 ### Test 5: Custom struct types
+
 ```vyb
 # test/introspection/struct_typeof.vyb
 struct Point {
@@ -590,6 +628,7 @@ fn main()<Int> -> {
 
 ### README.md
 Add section on introspection:
+
 ```markdown
 ### Introspection
 
@@ -598,11 +637,13 @@ Vyb provides runtime type information through three operators:
 **typeof(expr)** - Get runtime type identity:
 ```vyb
 t<Type> = typeof(42)  # Type representing Int
+
 ```
 
 **typename(expr)** - Get type name as string:
 ```vyb
 name<String> = typename(42)  # "Int"
+
 ```
 
 **Type comparison**:
@@ -610,6 +651,7 @@ name<String> = typename(42)  # "Int"
 if (typeof(x) == typeof<Int>()) {
     println("It's an integer!")
 }
+
 ```
 
 These operators enable powerful patterns like wildcard error handling:
@@ -621,6 +663,7 @@ These operators enable powerful patterns like wildcard error handling:
         println("Parse error: " + typename(e))
     }
 }
+
 ```
 ```
 
@@ -632,6 +675,7 @@ Mark Phase 1 as complete, update status (`../TODO.md` for the living roadmap).
 ## Open Questions & Future Work
 
 ### Q1: Generics with typeof?
+
 ```vyb
 fn identity<T>(value<T>)<T> -> {
     println(typename(value))  # What gets printed?
@@ -644,6 +688,7 @@ x<Int> = identity<Int>(42)  # Prints "Int"
 **Answer**: Yes, `typename()` returns the **concrete type** after monomorphization.
 
 ### Q2: typeof on functions?
+
 ```vyb
 fn add(a<Int>, b<Int>)<Int> -> { return a + b }
 

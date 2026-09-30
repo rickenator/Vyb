@@ -12,3 +12,27 @@ sqlite3_exec(db<loc<CVoid>>, sql<CString>, cb<loc<fn(loc<CVoid>, CInt, loc<loc<C
 share(all)
 sqlite3_errmsg(db<loc<CVoid>>)<CString>
 
+share(all)
+sqlite3_prepare_v2(db<loc<CVoid>>, sql<CString>, nByte<CInt>, ppStmt<loc<loc<CVoid>>>, pzTail<loc<loc<CChar>>>)<CInt>
+
+share(all)
+sqlite3_step(stmt<loc<CVoid>>)<CInt>
+
+share(all)
+sqlite3_finalize(stmt<loc<CVoid>>)<CInt>
+
+share(all)
+sqlite3_column_count(stmt<loc<CVoid>>)<CInt>
+
+share(all)
+sqlite3_column_text(stmt<loc<CVoid>>, iCol<CInt>)<CString>
+
+share(all)
+sqlite3_column_name(stmt<loc<CVoid>>, iCol<CInt>)<CString>
+
+share(all)
+sqlite3_changes(db<loc<CVoid>>)<CInt>
+
+share(all)
+strlen(s<CString>)<CSize>
+

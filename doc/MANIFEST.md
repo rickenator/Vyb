@@ -181,8 +181,7 @@ it into `.vybmod/`:
    manifest declaration; lexical `freedom { ... }` remains local to the
    implementation code, per the #204 spec).
 
-The check is per-install-edge in the consuming build (see `ModuleRegistryOptions
-.privilegedModules` for the build-time smuggle-only enforcement from #204 P0); P2
+The check is per-install-edge in the consuming build (see `ModuleRegistryOptions .privilegedModules` for the build-time smuggle-only enforcement from #204 P0); P2
 adds the *install-time* trust/acceptance gate on top of that.
 
 ### Privileged-package pattern, dogfood (issue #204, P3)
@@ -308,8 +307,7 @@ hash does not verify is rejected outright. Without it, T0 TOFU remains available
 
 ### 4.8 Key operations: storage, rotation, own-SDK builds
 
-- **Storage:** a private signing key is never in the source tree. `vyb mod
-  gen-key` writes to `$VYB_SIGNING_DIR` (default `~/.vyb/signing/`), file mode
+- **Storage:** a private signing key is never in the source tree. `vyb mod gen-key` writes to `$VYB_SIGNING_DIR` (default `~/.vyb/signing/`), file mode
   0600, dir 0700. The SDK packager runs `scripts/ensure_signing_key.sh`, which
   ensures an out-of-tree key exists for every build.
 - **No implicit rotation:** the key is generated ONCE and persists across SDK

@@ -179,6 +179,7 @@ For details on multi-value function syntax and auto-serialization, see [`Auto_Se
 Represents a tuple type with **full variadic support** (e.g., `(i32, string, bool)` or `Tuple<Int, String, Bool>`).
 
 Vyb tuples support **1 to N type parameters** and can be expressed in two equivalent syntaxes:
+
 - **Inline syntax**: `main()<Int, String, Bool>` (comma-separated types)
 - **Generic syntax**: `main()<Tuple<Int, String, Bool>>` (explicit Tuple generic)
 
@@ -190,6 +191,7 @@ Both syntaxes produce identical LLVM anonymous struct types and are fully interc
     -   `elementTypes` (`std::vector<TypeNodePtr>`): A vector of types for the elements in the tuple (variadic, supports any length).
 
 **Examples:**
+
 ```vyb
 # Single-element tuple
 main()<Tuple<Int>> -> return 42
@@ -204,6 +206,7 @@ main()<Tuple<Int, Int, Bool, String, Int, Bool, Int>> ->
 ```
 
 **Implementation Notes:**
+
 - Single-element tuples require special handling in return statements (auto-wrapping scalar to struct)
 - Tuple literals are created via `SequenceExpression` for multi-element, plain expressions for single-element
 - LLVM representation: anonymous struct types `{ T1, T2, ..., TN }`
@@ -289,6 +292,7 @@ Represents a raw memory location (pointer) of type `T`.
   - `typeArguments`: A vector containing a single entry of the pointee type `T`
 
 This type is used in freedom code blocks to work with raw memory. Operations on `loc<T>` include:
+
 - Getting the address of a variable: `loc(x)`
 - Dereferencing a pointer: `at(p)`
 - Converting between pointer types: `from<loc<T>>(addr)`

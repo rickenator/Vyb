@@ -16,8 +16,7 @@ A borrow (`their<T>` / `loc<T>`) addresses the **spawner's frame**. The borrow
 model is lexical (`doc/OWNERSHIP_MILD.md`, #149): nothing proves the frame
 outlives a detached thread's read. Permitting a read-only `view(x)` across a
 spawn site flipped `test/ownership/thread_send_their.vyb` (the #149 pin) from
-rejected to accepted — a reopened dangling read. Measured: `Ran 1209 / Passed
-1203 / Failed 6` with that cut; reverted, back to `Passed 1204 / Failed 5` (the
+rejected to accepted — a reopened dangling read. Measured: `Ran 1209 / Passed 1203 / Failed 6` with that cut; reverted, back to `Passed 1204 / Failed 5` (the
 5 CUDA VRAM-only reds). `viewable` is a *relation*, not a licence at a spawn site.
 
 ## Step 0 — a borrow addressed the variable slot, not the object (LANDED)
@@ -93,6 +92,7 @@ speaks to refuse, so the accepted case is silent.
 Fixtures: `test/threads/test_thread_boundary_view_retained_owner_accepted.vyb`
 (spawns a real thread, reads through both the borrow and the retained owner, and
 checks the joined value — 14), `..._view_owner_not_captured_rejected.vyb` (condition
+
 3) and `..._view_written_rejected.vyb` (condition 2).
 
 ## (c) — decide where the evidence is, defer where it is not (LANDED)

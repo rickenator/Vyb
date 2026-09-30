@@ -1,0 +1,12 @@
+// @test: main()<Int, Vec<String>> return mixes scalar and Vec elements as JSON
+// @description: A Vec tuple member serializes as a JSON array while its scalar
+// @description: sibling keeps its number form -- regression for #375
+// @category: json, serialization, vec
+// @expect: pass
+// @expect-output: [7, ["alpha"]]
+
+main()<Int, Vec<String>> -> {
+    names<Vec<String>> = Vec<String>()
+    names.push("alpha")
+    return 7, names
+}

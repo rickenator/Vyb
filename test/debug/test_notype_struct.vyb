@@ -2,11 +2,11 @@
 // @description: Tests the notype() intrinsic for suppressing type metadata in struct field names
 // @category: intrinsic, json, serialization, struct
 // @expect: pass
-// @expect-output: [null, null]
+// @expect-output: [{"id": 123, "name": "Alice", "salary": 88000}, {"name": "Acme", "employeeCount": 150}]
 
-// Test notype() intrinsic with actual structs (proper usage)
-// Note: notype() currently forwards struct values as-is; auto-serialization
-// doesn't yet handle arbitrary structs through notype(), so output is [null, null]
+// notype() forwards a struct value to the auto-serializer unchanged; since #375 the
+// multi-value return path resolves each element's struct type, so the elements
+// serialize as JSON objects with their field names instead of the old [null, null].
 
 struct Person {
     Int id,

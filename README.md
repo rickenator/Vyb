@@ -28,16 +28,17 @@ This guide is intended for systems programmers, language designers, and develope
 * A compact, expressive syntax for both low-level control and high-level abstractions.
 * Scoped ownership types (`my`/`our`/`their`/`mild`) and reference counting for explicit, safe memory handling, with system-level C interoperability via the FFI.
 * Zero-cost monomorphized generics and aspect/bind polymorphism — native compiled performance or JIT, emitting through LLVM's target set (x86-64/Linux is release-tested; NVPTX is validated `sm_75` → `sm_90a`).
-* Built-in concurrency primitives and customizable threading templates.
+* Closures with full capture semantics: by-value copies, `my<T>` moves, `our<T>` retention, write-through mutable capture, and a reference-counted environment that survives `return`.
+* Threads, channels, and a cooperative executor, with a compile-time thread-boundary capability that decides which closures may be handed to another thread.
 * A foundation for a self-hosted compiler and hybrid VM/JIT architecture for rapid iteration and performance tuning.
 
-Whether you're coming from C/C++, Rust, D, or other modern systems languages, you'll find Vyb's template-driven approach familiar yet uniquely powerful.
+Vyb is a systems language with a template-driven, name-first surface: monomorphized generics, ownership-qualified types (`my`/`our`/`their`/`mild`), `freedom` blocks for raw control, and a single toolchain that JITs, compiles AOT and links native executables.
 
-Here's a comparison of Vyb against several modern systems languages, showing key similarities and differences:
+Here is how Vyb's language surface compares against several modern systems languages:
 
 | Language | Templates / Generics               | Memory Model                                                       | Concurrency                            | Syntax Style                      | Unique Feature                                     | Comment                                                      |
 | -------- | ---------------------------------- | ------------------------------------------------------------------ | -------------------------------------- | --------------------------------- | -------------------------------------------------- | ------------------------------------------------------------ |
-| **Vyb**  | Monomorphized generics everywhere | Ownership types (`my`/`our`/`mild`/`their`), reference counting | Async/await | Name-first syntax `name(params)<Type> ->`, aspect/bind polymorphism | `select` expressions, `defer`, `freedom` blocks, `fail`/`trap` error system | Combines zero-cost generics with readable ownership semantics |
+| **Vyb**  | Monomorphized generics everywhere | Ownership types (`my`/`our`/`mild`/`their`), reference counting | Async/await, threads, channels, agents | Name-first syntax `name(params)<Type> ->`, aspect/bind polymorphism | `select` expressions, `defer`, `freedom` blocks, `fail`/`trap` error system | Combines zero-cost generics with readable ownership semantics |
 | **Rust** | Monomorphized generics             | Ownership/borrow checker; optional `Arc`/`Rc`                      | `async`/`await`, threads, channels     | C-style braces, macros            | Zero-cost abstractions; strong compile-time safety | No global GC; all memory safety enforced at compile time     |
 | **D**    | Runtime & compile-time templates   | GC by default; `@nogc` for manual alloc/free                       | `std.concurrency` fibers, threads      | C-style; mixins                   | Compile-time function execution (CTFE)             | Blend of high-level features with systems control            |
 | **C++**  | Templates & concepts (20+)         | Manual `new`/`delete`; smart pointers (`unique_ptr`, `shared_ptr`) | Threads, coroutines (`co_await`)       | C-style braces                    | Metaprogramming via templates & concepts           | Extensive ecosystem; highest portability                     |
@@ -58,7 +59,9 @@ Vyb is a statically typed, compiled systems language targeting native code via L
 * **`fail`/`trap` Error System**: Typed error propagation with zero-cost success path; no try/catch/finally.
 * **`defer` Statement**: LIFO scope-exit cleanup without RAII ceremony.
 * **Monomorphized Generics**: Zero-cost generics with aspect bounds (`<T<Display>>`).
-* **Concurrency**: `async`/`await` and `Future<T>`.
+* **Closures**: Full capture support — value copies, `my<T>` moves, `our<T>` retention, write-through mutable capture — with a reference-counted environment that is released when the closure dies.
+* **Threads and Concurrency**: pthread-backed `thread_spawn`/`thread_join` with `Mutex`, `Cond`, atomics, channels, `task`/`async` executors and `agent` mailboxes; a compile-time thread-boundary capability (`handoff`/`viewable`) decides which captured values may cross to another thread.
+* **`async`/`await`**: `Future<T>` with a cooperative multi-threaded executor (`asm`-based fiber context switch).
 * **Native Compilation**: Full JIT (LLVM ORC), AOT (object files), and executable generation pipeline.
 
 **Parameter passing is explicit.** A plain `x<T>` parameter is a *value copy* — the callee works on its own copy and the caller's variable is untouched (a `Vec` or an owning struct is deep-copied; a `String` shares its buffer; an `our<T>` bumps its refcount). To read or mutate *in place without copying*, take a `their<T>` borrow, supplied as `borrow(x)` (mutable) or `view(x)` (read-only `their<T const>`). Ownership is separate from reference-passing: `my<T>` is unique ownership (a named `my` passed to a `my` parameter *moves* — use-after-move is rejected), and `our<T>` is shared, ref-counted ownership; neither is another spelling of `ref`. The full, tested rules are in the “Parameter passing” section of the Programmer’s Guide.
@@ -77,7 +80,7 @@ git clone https://github.com/rickenator/Vyb.git
 cd Vyb
 mkdir -p build && cd build && LLVM_DIR=/usr/lib/llvm-18/cmake cmake .. && make -j$(nproc) && cd ..
 
-# Run the full test suite (1221 .vyb tests) with the canonical Vyb runner
+# Run the full test suite (1234 .vyb tests) with the canonical Vyb runner
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
 
 # Run your first Vyb program
@@ -211,6 +214,7 @@ backend-available but not covered by any gate):
 | AArch64, RISC-V, PowerPC, MIPS, SPARC, WebAssembly, SystemZ, Hexagon, LoongArch, M68k, Xtensa, AVR, MSP430, BPF, AMDGPU, VE, Lanai, XCore | Emitted through the same LLVM backend, but **not CI-covered** — no cross-target fixture or toolchain gate exercises them. Treat these as untested in this tree |
 
 **Complete Compilation Features:**
+
 - ✅ **Executable Generation**: Full build pipeline with `--build` flag
 - ✅ **Runtime Library**: Automatic compilation and linking of Vyb runtime
 - ✅ **System Linker Integration**: Platform-aware linker selection (lld, ld, ld64)
@@ -220,29 +224,19 @@ backend-available but not covered by any gate):
 - ✅ **Optimization Levels**: -O0 through -O3 with LLVM optimizations
 - ✅ **Cross-Compilation**: emits through LLVM's target set — x86-64/Linux is release-tested, NVPTX is validated `sm_75` → `sm_90a`; other targets are backend-available but not CI-covered
 - ✅ **Debug Information**: Full DWARF debug metadata
-- 🚧 **NVPTX Kernel Mode** (#198): `--kernel` lowers a `main`-less, host-runtime-free
-  Vyb module as pure device code through the in-process NVPTX backend to PTX
-  (`nvptx64-nvidia-cuda`, default `sm_86`; override via `VYB_KERNEL_GPU`, or pick the
-  artifact path with `--ptx <path>`). Kernels are value/data-parallel Vyb functions
-  with no `__vyb_*` host references; the emitted PTX is validated in-process with
-  `ptxas` when present (hard-fail on reject, graceful skip when absent). The host
-  launch path landed with #199 (launch-arg packing through the CUDA driver API,
-  `fixtures/cuda/launch_fill.vyb`), and cuBLAS/cuFFT/cuDNN bindings are verified on
-  an RTX 3090 (`sm_86`); BLAS-composable tensors are the follow-on milestone. See
-  `test/kernel/`, `fixtures/kernel/axpy.vyb`, and `TODO.md` §GPU for the full list.
-
-  **Comparison (2026-09).** Emitting device code from the *same source language* is
-  not unique to Vyb: Zig ships an LLVM NVPTX backend (`zig build-lib -target
-  nvptx64-cuda-none -mcpu <gpu>`), and Rust has NVIDIA's `cuda-oxide` codegen backend
-  compiling `#[kernel]` functions straight to PTX. Vyb's narrower, real difference is
-  that device lowering, the device intrinsic surface (`tid_*`/`blk_*`/`dim_*`/`grid_*`,
-  `ld_*`/`st_*`, `deq_q4_0`, shared memory, atomics), the in-process NVPTX emitter and
-  its **compile-time acceptance gates** (host-runtime-free check, PTX symbol-presence
-  check, in-process `ptxas` validation) all live in the single toolchain — no package
-  dependency, plugin, pinned nightly or second build system. As with the rest of this
-  section, it is a **P0 feasibility probe**: only `sm_86` has real silicon behind it,
-  and the verified workload is the shared-memory tiled matmul (all 256 elements of
-  `C = A×B` checked against a host reference) plus the cuBLAS/cuFFT/cuDNN cross-validations.
+- 🚧 **NVPTX Kernel Mode** (#198): `--kernel` lowers a `main`-less, host-runtime-free Vyb module
+  to PTX through the in-process NVPTX backend (`nvptx64-nvidia-cuda`, default `sm_86`; override
+  with `VYB_KERNEL_GPU`, or choose the artifact path with `--ptx <path>`).
+  - **Host launch** landed with #199 (launch-arg packing through the CUDA driver API,
+    `fixtures/cuda/launch_fill.vyb`); cuBLAS/cuFFT/cuDNN bindings are verified on an RTX 3090
+    (`sm_86`); BLAS-composable tensors are the follow-on milestone.
+  - **Gates**: the module must be host-runtime-free (no `__vyb_*` references), PTX symbol presence
+    is checked, and the emitted PTX is validated in-process with `ptxas` when present (hard-fail on
+    reject, graceful skip when absent).
+  - **Scope**: a **P0 feasibility probe** — only `sm_86` has real silicon behind it, and the verified
+    workload is the shared-memory tiled matmul (all 256 elements of `C = A×B` checked against a host
+    reference) plus the cuBLAS/cuFFT/cuDNN cross-validations. See `test/kernel/`,
+    `fixtures/kernel/axpy.vyb`, and `TODO.md` §GPU for the full list.
 
 **See:** `doc/MODULE_FFI_BINARY_ROADMAP.md` for the compilation pipeline
 
@@ -267,6 +261,7 @@ backend-available but not covered by any gate):
 Vyb introduces a distinctive approach to module imports with two keywords that serve different security and trust models:
 
 **`import`** - Trusted, Verified Modules:
+
 - Used for modules from signed repositories or project-local sources verified in `vyb.toml`
 - Enforces security checks and version verification
 - Ideal for production dependencies and standard library modules
@@ -275,6 +270,7 @@ Vyb introduces a distinctive approach to module imports with two keywords that s
 - Example: `import utils::math::calculate from "./utils"`
 
 **`smuggle`** - Flexible, External Sources:
+
 - Allows including symbols from external sources (e.g., GitHub repositories) or unsigned modules
 - Bypasses some security checks for rapid prototyping and third-party integration
 - Perfect for experimental dependencies, development tools, or one-off utilities
@@ -282,12 +278,14 @@ Vyb introduces a distinctive approach to module imports with two keywords that s
 - Example: `smuggle debug::Logger from "github.com/user/debug-tools"`
 
 **Syntax:**
+
 ```
 import <module::path> [as <alias>] [from "<locator>"] [;]
 smuggle <module::path> [from "<locator>"] [as <alias>] [;]
 ```
 
 **Locator formats** for `from`:
+
 - Local path: `"./local/experiments"`
 - GitHub shorthand: `"github.com/dev/tools"`
 - Full URL: `"https://github.com/dev/tools"`
@@ -311,6 +309,7 @@ main()<Int> -> {
 ```
 
 Declare dependencies in `vyb.toml`:
+
 ```toml
 [dependencies]
 std = "^1.0.0"  # Signed, from Vyb registry
@@ -321,41 +320,26 @@ This unique `import`/`smuggle` distinction makes Vyb's module system both secure
 
 ## In This Release
 
-Vyb **v0.7.7** (freedom-1.0 series) is a mature systems programming language with **native executable generation** and a broad core feature set.
+Vyb **v0.7.7** (freedom-1.0 series). Highlights of this cycle:
 
-### ✅ **Thread-boundary capability, derived from the type graph**
+- **Thread-boundary capability as a structural property** — a closure handed to
+  `thread_spawn` / `task_spawn` / `async_spawn` / `agent_start` must be able to cross an OS
+  thread boundary, and the compiler proves it from the type graph instead of testing the
+  captured variable's type string. See [Threads and concurrency](#threads-and-concurrency).
+- **Full closure support** — capture by value, `my<T>` move, `our<T>` retention, write-through
+  mutable capture, and a reference-counted environment that survives `return`. See
+  [Closures and lambdas](#closures-and-lambdas).
+- **Refactoring the compiler sources** — the analyzer and the expression emitter are split
+  along cohesive seams; no behaviour change.
+- **Fixed** — `borrow(x)` / `view(x)` addressed the operand's slot instead of the object for
+  pointer-backed owners (`my<T>`, `their<T>`, `ptr<T>`, `our<T>`/`mild<T>` control blocks).
 
-A closure handed to `thread_spawn`, `task_spawn`, `async_spawn` or `agent_start` must be able to
-cross an OS thread boundary, and the compiler now proves that structurally instead of testing the
-captured variable's type string:
+## Feature highlights
 
-- **`handoff` is computed from the type graph** — shared ownership (`our<T>`/`mild<T>`) qualifies
-  iff its payload does; a named struct or enum iff every field / variant payload does; unique
-  owners (`my<T>`), borrows (`their<T>`, `loc<T>`) and raw pointers never do. A *mutable* capture is
-  refused whatever its type. Enforced at every spawn-like site, not only `thread_spawn`.
-- **Generic captures are judged where the substitutions live** — a capture whose declared type
-  still names a type parameter is recorded by the semantic pass and judged by codegen at the
-  resolved type, so the same generic function can be accepted at one instantiation and refused at
-  another.
-- **A curated escape hatch** — the marker aspects `Handoff` / `Viewable` let a reviewed
-  `bind Handoff -> T` state the claim for a shape the derivation cannot see through (an FFI struct
-  holding a `ptr<T>`); it wins over the computed verdict, and a contradiction is a non-fatal warning.
-
-### 🧱 **The compiler sources are no longer two ~12k-line files**
-
-`src/vre/semantic.cpp` (11,369 → 9,176 lines) and `src/vre/llvm/cgen_expr.cpp` (12,250 → 5,409
-lines) are split along cohesive seams — scope/diagnostics, type relations, intrinsic typing tables,
-aspect/bind conformance, Vec method resolution, module-boundary analysis, operator lowering,
-call-site lowering — one extraction per commit, each landed with the full suite green. Every
-definition moved verbatim; helpers other units still call are promoted to
-`include/vyb/vre/semantic_internal.hpp` / `include/vyb/vre/llvm/cgen_internal.hpp` as `inline`, so
-symbol visibility is unchanged. The extractor, `tools/split_tu.vyb`, is written in Vyb like the
-rest of the tooling.
-
-### ✅ **Recent Milestones**
-These features were completed in the current release cycle and are fully tested:
+These features are complete and fully tested:
 
 - **`defer` statement** — `defer cleanup()` executes at scope exit in LIFO order; ideal for resource cleanup
+
   ```vyb
   main()<Int> -> {
       defer println("cleanup done")
@@ -365,6 +349,7 @@ These features were completed in the current release cycle and are fully tested:
   // Output: before return \n cleanup done
   ```
 - **Math library** — `abs`, `min`, `max`, `sqrt`, `sin`, `cos`, `tan`, `exp`, `log`, `log2`, `log10`, `pow`, `floor`, `ceil`, `round`
+
   ```vyb
   main()<Int> -> {
       x<Float> = sqrt(2.0)
@@ -374,6 +359,7 @@ These features were completed in the current release cycle and are fully tested:
   }
   ```
 - **String methods** — `.len()`, `.contains()`, `.starts_with()`, `.ends_with()`, `.to_upper()`, `.to_lower()`, `.substring()`, `.char_at()`, `.split()`, `.format()`, `String::from_bytes()`
+
   ```vyb
   main()<Int> -> {
       s<String> = "Hello, world!"
@@ -384,12 +370,14 @@ These features were completed in the current release cycle and are fully tested:
   }
   ```
 - **Type inference from initializer** — Variables without annotation infer type from RHS
+
   ```vyb
   x = 42          // inferred as Int
   msg = "hello"   // inferred as String
   ok = true       // inferred as Bool
   ```
 - **Vec `for` loop type inference** — Compiler-generated loop variables require no explicit types
+
   ```vyb
   nums<Vec<Int>> = Vec()
   nums.push(10)
@@ -398,6 +386,7 @@ These features were completed in the current release cycle and are fully tested:
   }
   ```
 - **`select` expressions** — Pattern matching that yields a value; Vyb-original concept
+
   ```vyb
   grade<String> = select(score) -> {
       >= 90 -> "A",
@@ -410,6 +399,7 @@ These features were completed in the current release cycle and are fully tested:
   into one arm so you don't repeat a result per value; the arm matches when the
   target equals *any* element. Sets hold literals and bare enum-variant names
   only; empty `{}` and mixed types are rejected.
+
   ```vyb
   parity(x<Int>)<String> -> {
       return select(x) -> {
@@ -420,17 +410,19 @@ These features were completed in the current release cycle and are fully tested:
   }
   ```
 - **`typeof` / `typename` intrinsics** — Runtime type introspection
+
   ```vyb
   x<Int> = 42
   same<Bool> = (typeof(x) == typeof(100))    // true
   name<String> = typename(x)                  // "Int"
   ```
 - **Immutable bindings (`const`)** — `name<Type const>` declares an immutable variable
+
   ```vyb
   pi<Float const> = 3.14159
   ```
 
-### ✅ **Binary Executable Generation **
+### ✅ **Binary Executable Generation**
 - **Full Compilation Pipeline**: Complete source → object → executable workflow
 - **Build Command**: `vyb program.vyb --build myapp` creates standalone executables
 - **Runtime Library**: Automatic compilation and linking of Vyb runtime (vyb_runtime.c)
@@ -441,7 +433,7 @@ These features were completed in the current release cycle and are fully tested:
 - **Production Ready**: Deploy native executables without any runtime dependencies
 - **Cross-Platform**: Linux and macOS support with proper platform detection
 
-### ✅ **JSON Serialization & Deserialization **
+### ✅ **JSON Serialization & Deserialization**
 - **Runtime Type Metadata**: Complete type registration system with field introspection
 - **Automatic Serialization**: `.to_string()` method on structs generates JSON
 - **JSON Deserialization**: `T::from_string(json)` creates instances from JSON strings
@@ -509,6 +501,7 @@ Comprehensive string manipulation built into the `String` type:
 | `String::from_bytes(ptr, len)` | Construct from bytes | `String::from_bytes(p, n)` |
 
 **String concatenation** with `+` auto-converts non-String operands:
+
 ```vyb
 id<Int> = 42
 msg<String> = "User ID: " + id    // "User ID: 42"
@@ -517,6 +510,7 @@ msg<String> = "User ID: " + id    // "User ID: 42"
 **Splitting** returns a fresh `Vec<String>` of the parts between each occurrence
 of the separator. An empty separator yields a single-element Vec holding the
 whole string; leading, trailing, and consecutive separators produce empty parts.
+
 ```vyb
 csv<String> = "alpha,beta,gamma"
 parts<Vec<String>> = csv.split(",")   // parts.len() == 3; parts.get(1) == "beta"
@@ -526,6 +520,7 @@ parts<Vec<String>> = csv.split(",")   // parts.len() == 3; parts.get(1) == "beta
 corresponding argument in order. Arguments of any serializable type (String,
 Int, Float, Bool, ...) are converted automatically; placeholders beyond the
 supplied arguments are emitted verbatim.
+
 ```vyb
 tmpl<String> = "User {} has {} badge(s)."
 msg<String> = tmpl.format("Vyb", 3)   // "User Vyb has 3 badge(s)."
@@ -535,6 +530,7 @@ msg<String> = tmpl.format("Vyb", 3)   // "User Vyb has 3 badge(s)."
 named variable but on any String value: a literal, a function/expression result,
 or a struct/array field. Only the receiver itself still needs to be a String;
 no intermediate variable is required.
+
 ```vyb
 upper<String> = "hello".to_upper()                        // "HELLO"
 head<String> = full_name().substring(0, 5)                // first 5 chars
@@ -561,6 +557,7 @@ releases each one on cleanup (reclaiming `Vec<String>` element references too), 
 they safely outlive the caller's scope while the worker runs.
 
 #### Async Function Syntax
+
 ```vyb
 // Async function returning Future<Int>
 async compute_value()<Future<Int>> -> {
@@ -576,13 +573,14 @@ async process_data()<Future<String>> -> {
 }
 ```
 
-#### Key Features
+#### Async Key Features
 - **async keyword**: Declares asynchronous functions that return Future<T>
 - **await expressions**: Resolve a Future's value where it is awaited
 - **Future<T> types**: Type-safe asynchronous return values
 - **Debug support**: DWARF metadata for debugging async code paths
 
 #### Usage Example
+
 ```vyb
 main() -> {
     // Call async functions; each returns a Future<T>
@@ -596,6 +594,7 @@ main() -> {
 **See:** `test/async/async_simple.vyb` for a working example.
 
 **See also:**
+
 - `test/async/async_event_loop.vyb` — two concurrent sleeps finish in ~20ms
 - `test/async/async_params.vyb` — parameterized concurrency
 - `test/async/async_nested_await.vyb` — a task that awaits a child
@@ -611,53 +610,18 @@ main() -> {
 
 ### ✅ **Concurrency Modules (stdlib)**
 
-The standard library ships a layered concurrency story, all built on the external
-pthread runtime (no raw C ABI in user code):
-
-- **`channels`** — thread-safe message passing. `chan_new`/`chan_bounded(n)` give
-  Int channels; `chan_send` (`Bool`) / `chan_recv` / `chan_try` (`Int?`, no `-1`
-  sentinel) / `chan_len` / `chan_free` pass values across threads.
-  `chan_select(handles<Vec<Int>>)` waits on many channels at once and returns
-  the index of the first ready one. String-payload channels (`strchan_*`) retain
-  the string on send and transfer the reference on recv/`try`.
-- **`threads`** — pthread-backed `thread_spawn` (returns an `Int?` handle, absent
-  on spawn failure)/`thread_join`/`thread_detach`, `mutex_*`, `cond_*`, and
-  lock-free `atomic_*`.
-- **`tasks`** — fire-and-forget workers on a detached pthread: `task_spawn`
-  returns an `Int?` handle, `task_await` blocks on its result, `task_poll`
-  returns an `Int?` result (absent while still running), `task_free` reclaims it.
-- **`asyncs`** — a **multi-threaded executor**: a pool of worker threads (one
-  scheduler per CPU core) running stackful fibers, each fiber pinned to its
-  worker and load-balanced by round-robin spawn. Tasks suspend *mid-body* with
-  `async_sleep_ms` (a timer, not a thread sleep), `async_yield` (round-robin),
-  or `async_await` (wait on another task) — so concurrent timers complete in
-  ~max rather than ~sum wall time, and CPU-bound tasks run across cores, with no
-  state-machine transform. `async_detach(t)` reclaims a single finished task
-  early so long-lived programs recycle fibers instead of one per spawn (a
-  still-running task self-reaps when it completes).
-
-```vyb
-import asyncs
-h1<Int> = async_spawn(|| -> { async_sleep_ms(20); return 10 }) else 0
-h2<Int> = async_spawn(|| -> { async_sleep_ms(20); return 32 }) else 0
-v1 = async_await(h1)   // 10, ~20ms total for both
-v2 = async_await(h2)   // 32
-async_detach(h1)       // reclaim the finished task early
-async_run_all()        // flush + reclaim
-```
-
-`async_spawn`/`async_accept` return `Int?` and are absent on failure; `async_poll`
-returns `Int?` (absent while a fiber is still running, present holding its result,
-which may legitimately be `-1`) — no sentinel overloads.
-
-Replaces the old C++ `AsyncRuntime` executor that has been retired; concurrency
-now lives on the external pthread runtime and this cooperative executor.
+The standard library ships `threads` (pthread-backed spawn/join/detach, `Mutex`, `Cond`,
+lock-free atomics), `channels` (thread-safe message passing, `chan_select`, string channels),
+`tasks` (fire-and-forget workers), `asyncs` (a multi-threaded fiber executor) and `agents`
+(mailbox workers). The API and the semantics of each — including what may be captured across a
+thread boundary — are in [Threads and concurrency](#threads-and-concurrency).
 
 ### ✅ **Introspection System**
 
 Vyb features **runtime type introspection** for self-aware programs:
 
 #### Type Reflection Operators
+
 ```vyb
 // Get runtime type hash — use for equality comparison
 x<Int> = 42
@@ -670,7 +634,7 @@ name<String> = typename(x)                // "Int"
 same_expr<Bool> = (typeof(x + 5) == typeof(x * 2))   // true
 ```
 
-#### Key Features
+#### Introspection Key Features
 - **`typeof(expr)`**: Returns a type discriminant for runtime type comparison; same types always compare equal
 - **`typename(expr)`**: Returns `String` with the human-readable type name (e.g., `"Int"`, `"Float"`, `"Bool"`)
 - **Expression-based**: Works on variables, literals, arithmetic expressions
@@ -678,6 +642,7 @@ same_expr<Bool> = (typeof(x + 5) == typeof(x * 2))   // true
 - **Note**: `typeof` result is an opaque `Type` value; use only for `==`/`!=` comparisons
 
 #### Usage Examples
+
 ```vyb
 // Type comparison
 x<Int> = 42
@@ -753,6 +718,7 @@ main()<Int> -> {
 ```
 
 **Why Aspects > Classes:**
+
 - Multiple aspect implementations (no diamond problem)
 - Composition over inheritance (more flexible)
 - Extension without modification (bind aspects to any type)
@@ -771,6 +737,7 @@ The standard library ships six canonical contract aspects — `Display`, `Debug`
 non-stdlib modules (opt out with `no_core()`), so contract methods are available
 on built-in scalars with no import. They bind to user structs the same way, and
 drive the generic call sites for the stdlib collections and `Iterator` protocol:
+
 ```vyb
 // Hash/comparison-backed collections (import collections) resolve the
 // Hashable/Comparable bounds on generic keys automatically.
@@ -785,6 +752,7 @@ show_all<T<Display>>(item<T>) -> {
 #### Primitive Types
 
 **Signed Integers:**
+
 | Type | Description | Size | Range/Notes | Example |
 |------|-------------|------|-------------|---------|
 | `Int` / `Int64` | Signed integer (default) | 64-bit | -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807 | `x<Int> = 42` |
@@ -793,6 +761,7 @@ show_all<T<Display>>(item<T>) -> {
 | `Int8` | 8-bit signed integer | 8-bit | -128 to 127 | `byte<Int8> = 127` |
 
 **Unsigned Integers:**
+
 | Type | Description | Size | Range/Notes | Example |
 |------|-------------|------|-------------|---------|
 | `UInt64` | 64-bit unsigned integer | 64-bit | 0 to 18,446,744,073,709,551,615 | `max<UInt64> = 18446744073709551615u` |
@@ -801,18 +770,21 @@ show_all<T<Display>>(item<T>) -> {
 | `UInt8` | 8-bit unsigned integer | 8-bit | 0 to 255 | `byte<UInt8> = 255` |
 
 **Floating Point:**
+
 | Type | Description | Size | Precision | Example |
 |------|-------------|------|-----------|---------|
 | `Float` / `Float64` | Double precision (default) | 64-bit | IEEE 754 double (~15-17 digits) | `pi<Float> = 3.14159` |
 | `Float32` | Single precision | 32-bit | IEEE 754 single (~6-9 digits) | `ratio<Float32> = 1.5` |
 
 **Character Types:**
+
 | Type | Description | Size | Range/Notes | Example |
 |------|-------------|------|-------------|---------|
 | `Char` | UTF-8 code unit | 8-bit | Single byte (0-255) | `ch<Char> = 65` # 'A' |
 | `Rune` | Unicode code point | 32-bit | Full Unicode range (U+0000 to U+10FFFF) | `emoji<Rune> = 128512` # 😀 |
 
 **Other Types:**
+
 | Type | Description | Size | Range/Notes | Example |
 |------|-------------|------|-------------|---------|
 | `Bool` | Boolean | 1-bit | `true` or `false` | `flag<Bool> = true` |
@@ -845,6 +817,7 @@ show_all<T<Display>>(item<T>) -> {
 Vyb features **unified canonical syntax** for ownership and borrowing operations:
 
 #### **Type Annotations**
+
 ```vyb
 # In variable declarations and function signatures
 data<my<String>>     # Unique ownership type
@@ -853,6 +826,7 @@ view<their<Data>>    # Borrowed reference type
 ```
 
 #### **Value Construction**
+
 ```vyb
 # Create owned values with my() and our() constructors
 unique<my<String>>   = my("owned string")
@@ -861,6 +835,7 @@ result<my<Data>>     = my(compute_data())
 ```
 
 #### **Borrowing Operations**
+
 ```vyb
 # Create temporary references with view/borrow/soft functions
 readonly<their<String const>> = view(data)     # Immutable borrow
@@ -896,12 +871,14 @@ build/vyb migrate_syntax.vyb --migrate --directory . --backup --report
 Vyb introduces **`mild<T>`** - weak references that solve circular reference problems without preventing cleanup:
 
 **Why mild<T>?**
+
 - **Break Cycles**: Tree nodes with parent pointers, doubly-linked lists
 - **Observer Pattern**: Subjects don't keep observers alive
 - **Caches**: Entries that can be collected when memory is needed
 - **Safe Access**: Can detect when target object has been destroyed
 
 **Key Methods:**
+
 ```vyb
 # grab() -> our<T>?
 # Attempts to upgrade mild reference to strong reference
@@ -915,6 +892,7 @@ is_alive<Bool> = !node.parent.released()
 ```
 
 **Creating Mild References:**
+
 ```vyb
 # Use soft() to create mild<T> from our<T>
 shared_data<our<Config>> = our(Config::new())
@@ -922,6 +900,7 @@ shadow<mild<Config>> = soft(shared_data)  # Create mild reference
 ```
 
 **Example: Tree with Parent Pointers**
+
 ```vyb
 struct TreeNode {
     value<Int>,
@@ -981,6 +960,226 @@ functions work directly (`printf("%s", s)` accepts a Vyb `String`). See
 ## Language Overview
 
 Vyb (freedom-1.0 series) is a mature, actively developed systems programming language with name-first syntax, a sized type system (Int8–Int64, UInt8–UInt64, Float32/Float64, Char, Rune, Bytes), compile-time monomorphized generics, aspect/bind polymorphism, pattern matching, `Vec<T>`, and comprehensive collection support. The core language is stable and well tested.
+
+### Closures and lambdas
+
+A lambda is a first-class value of type `fn(...) -> R`: it can be held in a variable, passed to a
+function, returned from one, and fed to combinators such as `Vec::map` / `filter` / `fold`. The
+body may be an expression or a block.
+
+```vyb
+makeAdder(base<Int>)<fn(Int) -> Int> -> {
+    return |x<Int>| -> x + base
+}
+
+main()<Int> -> {
+    twice<Int> = 2
+    f<fn(Int) -> Int> = |x<Int>| -> x * twice
+    println(f(10).to_string())            // 20 — a copy of `twice`
+
+    add5<fn(Int) -> Int> = makeAdder(5)
+    println(add5(10).to_string())         // 15 — the environment outlives the frame
+    return 0
+}
+```
+
+**Value shape.** A lambda that captures nothing lowers to a bare function pointer (null
+environment), so it satisfies an `fn` parameter with no allocation. A capturing lambda is a
+`{env, fn}` pair whose environment is a reference-counted heap struct holding exactly the captured
+values; the callable is an ordinary function whose hidden first parameter is that environment, so
+both forms call through one shape.
+
+**Capture forms and what each means.**
+
+| Capture | Written as | Semantics |
+| --- | --- | --- |
+| by value | a plain name | the environment holds a copy; later writes to the outer variable do not reach the closure |
+| move | capturing a `my<T>` | ownership transfers into the closure; the outer variable is dead afterwards (use-after-move) |
+| shared | capturing an `our<T>` | the environment takes a strong reference, so the target stays alive for the life of the closure |
+| mutable | assigning to a captured name | the environment stores the *address* of the outer variable, so writes inside the closure write through to the enclosing scope |
+
+```vyb
+counter<Int> = 0
+bump<fn(Int) -> Int> = |u<Int>| -> counter = counter + 1
+bump(0)
+bump(0)
+println(counter.to_string())          // 2 — the outer variable sees both writes
+
+shared<our<Int>> = our(7)
+read<fn(Int) -> Int> = |u<Int>| -> shared + 3
+println(read(0).to_string())          // 10 — the closure retains the shared value
+```
+
+**Lifecycle.** The environment is reference-counted: copying the closure retains it, exiting the
+scope or overwriting the variable releases it, and a closure returned from a function hands back
+an owned reference, so the environment survives the frame that built it.
+
+**Where it stops.** A mutable capture is the address of a variable in the enclosing frame, so such
+a closure cannot outlive that frame:
+
+```
+Semantic Errors:
+  Cannot return a closure with mutable captures: it holds pointers into the enclosing stack frame that would dangle after this function returns.
+```
+
+Moving a `my<T>` into a closure is destructive in the same way, and reading the variable afterwards
+is an error:
+
+```
+Semantic Errors:
+  Use after move: 'x' has been moved and is no longer valid.
+```
+
+Boxed lifetime-carrying closures and generic lambdas are still open items (`TODO.md` §3).
+
+### Threads and concurrency
+
+Vyb's concurrency is a small set of stdlib modules over POSIX threads, plus one compile-time rule
+about closures: **a closure handed to another thread must be able to cross an OS thread boundary.**
+
+**The modules.**
+
+- **`threads`** — `thread_spawn(work<fn() -> Int>)` starts a pthread and returns an `Int?` handle
+  (absent if the spawn failed); `thread_join` blocks until it finishes and yields the closure's
+  result; `thread_detach` releases the handle without waiting. `Mutex`
+  (`mutex_new`/`lock`/`unlock`), condition variables (`cond_new`/`cond_wait`/`cond_signal`) and
+  lock-free `atomic_*` give mutual exclusion and shared counters. Everything maps 1:1 onto POSIX
+  threads, keeping the pthread ABI out of Vyb code.
+- **`channels`** — thread-safe message passing. `chan_new()`/`chan_bounded(n)` create Int channels;
+  `chan_send` returns `Bool`, `chan_recv` blocks, `chan_try` returns `Int?` (no `-1` sentinel),
+  `chan_len` reports buffered depth, and `chan_select(handles)` waits on several at once and
+  returns the index of the first ready one. `strchan_*` channels retain the string on send and
+  transfer the reference on receive.
+- **`tasks`** — fire-and-forget workers on a detached pthread: `task_spawn` returns an `Int?`
+  handle, `task_await` blocks on its result, `task_poll` returns `Int?` (absent while it is still
+  running), `task_free` reclaims it.
+- **`asyncs`** — a multi-threaded executor: one scheduler per CPU core, stackful fibers pinned to
+  their worker and load-balanced by round-robin spawn. A task suspends *mid-body* with
+  `async_sleep_ms` (a timer, not a thread sleep), `async_yield`, or `async_await` (wait on another
+  task), so concurrent timers finish in ~max rather than ~sum wall time and CPU-bound tasks spread
+  across cores, with no state-machine transform. `async_detach` reclaims a finished task early so
+  long-lived programs recycle fibers; `async_run_all()` flushes the executor.
+- **`agents`** — mailbox workers. `agent_start(behavior)` runs `behavior(message)` on a worker
+  thread for each message, then once more with an absent optional after `agent_close` has drained
+  the mailbox; `agent_send` posts a message (a full bounded mailbox returns `false`), `agent_len`
+  reports buffered-but-unhandled messages, `agent_alive` reports whether the worker still runs,
+  and `agent_free` waits then reclaims it.
+
+**What a closure may capture across a thread boundary.** `thread_spawn`, `task_spawn`,
+`async_spawn` and `agent_start` hand a closure's environment to another OS thread, so every
+captured value must remain valid there. The compiler proves this structurally from the type graph;
+the capability is called **handoff**:
+
+- a plain value copy is handoff-capable — the environment carries its own copy;
+- `our<T>` / `mild<T>` is handoff-capable iff its payload is: the environment takes a strong
+  reference, so the target survives on the other thread;
+- a named struct or enum is handoff-capable iff every field / variant payload is; `Vec<T>`,
+  arrays, `T?` and tuples derive structurally;
+- `my<T>` (a unique owner), `their<T>`/`loc<T>` (borrows and raw pointers) are never
+  handoff-capable: moving an owner off its thread, or passing a borrow of the spawner's frame,
+  would leave the spawner with an invalid owner or a dangling alias;
+- a **mutable** capture is refused whatever its type, because its environment entry is the address
+  of a variable in the spawner's frame — the same reason a mutable capture cannot be returned;
+- the one borrowing form that is accepted is a read-only `view(x)` — **viewable** — when the
+  closure also captures the owner through strong ownership (`our<X>` / `my<X>`), since then the
+  owner outlives the thread.
+
+```vyb
+import threads::{thread_spawn, thread_join}
+
+struct Pair { a: Int, b: Int }
+
+main()<Int> -> {
+    local<Int> = 3
+    shared<our<Int>> = our(4)
+    p<Pair> = Pair { a = 1, b = 2 }
+
+    h<Int> = thread_spawn(|| -> local + shared + p.a + p.b) else -1
+    if (h < 0) { return 1 }
+    println("joined = " + thread_join(h).to_string())   // 10
+    return 0
+}
+```
+
+A capture whose declared type still names a type parameter is recorded by the semantic pass and
+judged by codegen at the instantiated type, so the same generic function can be accepted at one
+instantiation and refused at another. The check runs before code is generated, so a refusal is a
+compile error, not a runtime surprise:
+
+```
+Semantic Errors:
+  thread_spawn: 'h' is Holder -- it cannot cross a thread boundary (not handoff-capable). Hand it off as shared ownership (our(h)) or pass a copy.
+```
+
+For a shape the type graph cannot see through — an FFI struct holding a `ptr<T>`, an opaque C
+handle — a reviewed bind states the claim: the marker aspects `Handoff` / `Viewable`
+(`core::aspects`, re-exported by `core::prelude`) let you write `bind Handoff -> T`. The curated
+claim wins over the computed verdict, and a contradiction between the two is reported as a
+non-fatal warning.
+
+Channels are the usual way to get values *out* of a thread, while a closure's captures carry
+values *in*:
+
+```vyb
+import threads::{thread_spawn, thread_join}
+import channels::{chan_new, chan_send, chan_recv}
+
+main()<Int> -> {
+    ch<Int> = chan_new() else 0
+    h<Int> = thread_spawn(|| -> {
+        i<Int> = 0
+        while (i < 3) {
+            chan_send(ch, i * 10)
+            i = i + 1
+        }
+        chan_send(ch, -1)
+        return 0
+    }) else -1
+    if (h < 0) { return 1 }
+
+    total<Int> = 0
+    closer<Bool> = false
+    while (!closer) {
+        v<Int> = chan_recv(ch) else -1
+        if (v < 0) { closer = true } else { total = total + v }
+    }
+    thread_join(h)
+    println("total = " + total.to_string())   // 30
+    return 0
+}
+```
+
+The executor and mailbox forms:
+
+```vyb
+import asyncs::{async_spawn, async_await, async_sleep_ms, async_run_all}
+import tasks::{task_spawn, task_await, task_free}
+
+a<Int> = async_spawn(|| -> { async_sleep_ms(20); return 10 }) else 0
+b<Int> = async_spawn(|| -> { async_sleep_ms(20); return 32 }) else 0
+println("async: " + async_await(a).to_string() + ", " + async_await(b).to_string())  // async: 10, 32
+
+t<Int> = task_spawn(|| -> 40 + 2) else 0
+println("task: " + task_await(t).to_string())   // task: 42
+task_free(t)
+async_run_all()
+```
+
+```vyb
+import agents
+
+counter<Int> = agent_start(|message<Int?>| -> {
+    match (message) {
+        v -> { println("agent got " + v.to_string()) }
+        ? -> { println("agent: mailbox closed") }
+    }
+}) else -1
+
+agent_send(counter, 42)
+agent_send(counter, 43)
+agent_close(counter)
+agent_free(counter)
+```
 
 ### Language Features Showcase
 
@@ -1115,6 +1314,7 @@ freedom_memory_example()<Int> -> {
 ```
 
 **FREEDOM Code Guidelines:**
+
 1. Minimize the scope of `freedom` blocks
 2. Document all invariants and assumptions
 3. Validate pointers before dereferencing
@@ -1208,6 +1408,7 @@ open_and_process()<Int> -> {
 #### Type System Features
 
 **Current Primitive Types**:
+
 - **Signed integers**: `Int`/`Int64` (default), `Int32`, `Int16`, `Int8`
 - **Unsigned integers**: `UInt64`, `UInt32`, `UInt16`, `UInt8`
 - **Floating point**: `Float`/`Float64` (default), `Float32`
@@ -1223,6 +1424,7 @@ open_and_process()<Int> -> {
   width/signedness is a compile error (`x<Int8> = 300`, `x<Int8> = wide<Int>`).
 
 **Current Collection Types**:
+
 - **Fixed arrays**: `[T; N]` with compile-time size
 - **Dynamic arrays**: `Vec<T>` resizable collections
 - **Keyed maps**: `HashMap<K, V>` (hash buckets, auto-growing), `BTreeMap<K, V>` (ordered by key)
@@ -1238,6 +1440,7 @@ lambdas (`fn`) where a mapping function is needed.
 **Ownership Types**: `my<T>` (unique), `our<T>` (shared), `their<T>` (borrowed), `mild<T>` (mild reference), `loc<T>` (freedom raw pointer)
 
 **Type Aliasing**: All numeric types support multiple naming conventions:
+
 - Vyb style: `Int32`, `Float64`, `UInt8`
 - C style: `int32`, `float64`, `uint8`
 - LLVM style: `i32`, `f64`, `u8`
@@ -1349,10 +1552,12 @@ main()<Int> -> {
 ```
 
 **Import Types:**
+
 - **`import`**: For signed, verified modules from registries or project dependencies
 - **`smuggle`**: For external, experimental, or development-only modules
 
 Declare dependencies in `vyb.toml`:
+
 ```toml
 [dependencies]
 std = "^1.0.0"                    # Verified registry package
@@ -1417,6 +1622,7 @@ array_example()<Int> -> {
 ```
 
 **Keyed & Set Collections** — imported with `import collections`:
+
 ```vyb
 import collections
 
@@ -1446,6 +1652,7 @@ main()<Int> -> {
 ```
 
 **Higher-Order Vec Combinators** — non-capturing lambdas, also `import collections`:
+
 ```vyb
 import collections
 
@@ -1656,6 +1863,7 @@ invalid_patterns(x<Int>)<String> -> {
 ```
 
 **Comparison Pattern Rules:**
+
 - **Evaluation Order**: Patterns tested top-to-bottom, first-match-wins
 - **Type Safety**: Works with `Int` and `Float` types
 - **Compile-Time Errors**: Unreachable patterns detected and rejected
@@ -1663,6 +1871,7 @@ invalid_patterns(x<Int>)<String> -> {
 - **No Gaps Required**: `>= 90`, `>= 80`, `>= 70` is valid (evaluates top-to-bottom)
 
 **Match vs Select with Comparison Patterns:**
+
 - **`select`**: Expression that evaluates to a value - use naked expressions or `pass` keyword
 - **`match`**: Statement for side effects - pattern arms can `return` from enclosing function
 - Both support identical comparison pattern syntax and unreachable pattern detection
@@ -1753,6 +1962,7 @@ main()<Int> -> {
 ```
 
 **Tuple Features:**
+
 - **Variadic**: Supports 1 to N type parameters (tested up to 7+ elements)
 - **Dual Syntax**: Both `(T,U,V)` inline and `Tuple<T,U,V>` generic forms
 - **Type Safety**: Full compile-time type checking for all elements
@@ -1780,6 +1990,7 @@ struct String {
 ```
 
 This design provides:
+
 - **O(1) length queries** - No strlen() scanning needed
 - **C interoperability** - Null termination for printf, strstr, etc.
 - **Memory efficiency** - Just 16 bytes overhead per string
@@ -1812,6 +2023,7 @@ pair — HTTP requests depend on this.
 ### Complete Method Reference
 
 **Constructor**
+
 ```vyb
 # Create from raw bytes (C interop)
 name<String> = String::from_bytes("Alice", 5)
@@ -1819,12 +2031,14 @@ raw<String> = String::from_bytes(c_ptr, c_len)
 ```
 
 **Property Access**
+
 ```vyb
 msg<String> = "Hello"
 length<Int> = msg.len()  # Returns 5, O(1) operation
 ```
 
 **Substring Operations**
+
 ```vyb
 text<String> = "Hello World"
 
@@ -1840,6 +2054,7 @@ invalid<Int> = text.char_at(99)   # 0 (null char for out of bounds)
 ```
 
 **Search and Comparison**
+
 ```vyb
 sentence<String> = "The quick brown fox"
 
@@ -1857,6 +2072,7 @@ always<Bool> = sentence.starts_with("")          # true
 ```
 
 **Case Conversion**
+
 ```vyb
 mixed<String> = "Hello World"
 
@@ -1869,6 +2085,7 @@ println(mixed)  # Still "Hello World"
 ```
 
 **String Concatenation**
+
 ```vyb
 # Using + operator (most natural)
 full<String> = "Hello" + " " + "World"
@@ -1884,6 +2101,7 @@ result<String> = "Code".to_upper() + " " + "Language".to_lower()
 ### Practical Examples
 
 **Text Processing**
+
 ```vyb
 process_input(text<String>)<Bool> -> {
     # Validate input
@@ -1909,6 +2127,7 @@ process_input(text<String>)<Bool> -> {
 ```
 
 **String Manipulation**
+
 ```vyb
 format_name(first<String>, last<String>)<String> -> {
     # Capitalize first letter of each name
@@ -1930,6 +2149,7 @@ main()<Int> -> {
 ```
 
 **Data Validation**
+
 ```vyb
 validate_email(email<String>)<Bool> -> {
     # Simple email validation
@@ -1948,6 +2168,7 @@ validate_email(email<String>)<Bool> -> {
 ### Memory Management
 
 **Allocation Strategy**
+
 ```vyb
 # Read-only operations: ZERO allocations
 len<Int> = "Hello".len()                    # No malloc
@@ -1964,6 +2185,7 @@ concat<String> = "A" + "B"                  # malloc(3) for "AB\0"
 ```
 
 **Bounds Safety**
+
 ```vyb
 # All index operations are bounds-checked at runtime
 text<String> = "Vyb"
@@ -1979,7 +2201,7 @@ oob2<Int> = text.char_at(100)    # Returns 0 (null char)
 empty<String> = text.substring(10, 20)  # Returns {null, 0}
 ```
 
-### Performance Characteristics
+### String Performance Characteristics
 
 | Operation | Time | Space | Notes |
 |-----------|------|-------|-------|
@@ -2034,10 +2256,12 @@ Vyb features an **explicit error handling system** that combines the clarity of 
 ### The Philosophy
 
 Traditional error handling offers two flawed extremes:
+
 - **Exceptions**: Hidden control flow, unclear what can fail, runtime overhead
 - **Result Types**: Verbose unwrapping, easy to ignore errors, cluttered code
 
 Vyb's approach:
+
 - **Explicit propagation**: Errors visible in type signatures
 - **Zero-cost success**: No overhead when operations succeed
 - **Pattern matching**: Handle errors elegantly with full type safety
@@ -2060,6 +2284,7 @@ divide(a<Int>, b<Int>)<Int> -> {
 ```
 
 **Type System Integration:**
+
 - Success path: Returns `(value, null_ptr)` tuple
 - Error path: Returns `(undefined, error_ptr)` tuple
 - Error pointers carry heap-allocated error structs
@@ -2095,6 +2320,7 @@ divide_structured(a<Int>, b<Int>)<Int> -> {
 ```
 
 **Error Memory Layout:**
+
 ```
 Heap-allocated error struct (16 bytes):
   Offset 0-7:  Type ID hash (i64) - For pattern matching
@@ -2102,6 +2328,7 @@ Heap-allocated error struct (16 bytes):
 ```
 
 **Type ID Hashing:**
+
 - `Int` → hash("Int") = -3994496327427856726
 - `String` → hash("String") = unique value
 - `DivisionError` → hash("DivisionError") = unique value
@@ -2170,6 +2397,7 @@ process_data(input<String>)<Int> -> {
 ```
 
 **Pattern Matching Features:**
+
 - Type-safe: Only valid error types accepted
 - Exhaustive: Compiler ensures all error types handled
 - Field access: Access struct fields in trap handlers (`e.code`, `e.dividend`)
@@ -2209,6 +2437,7 @@ main()<Int> -> {
 ```
 
 **Propagation Mechanics:**
+
 1. `divide(10, 0)` allocates error on heap, returns `(undef, error_ptr)`
 2. `compute` checks error pointer, finds non-null, propagates `(undef, error_ptr)`
 3. `main` trap block catches error, extracts type and value
@@ -2233,6 +2462,7 @@ main()<Int> -> {
 ```
 
 **Runtime Output:**
+
 ```
 ┌─ UNTRAPPED FAILURE ──────────────────────────────────────────┐
 │ Error: <runtime error>                                       │
@@ -2244,6 +2474,7 @@ Exit Code: 1
 ```
 
 **Safety Guarantees:**
+
 - No silent failures
 - No undefined behavior
 - Clear error location (stack-trace capture in error structs)
@@ -2289,6 +2520,7 @@ main()<Int> -> {
 ```
 
 **Output:**
+
 ```
 Validation failed:
   Field: input
@@ -2432,33 +2664,26 @@ after_trap:
 }
 ```
 
-### Performance Characteristics
+### Error-Handling Performance Characteristics
 
 **Happy Path (No Errors):**
+
 - **Zero allocation**: No heap operations when no errors occur
 - **Zero branching overhead**: Modern CPUs predict success path well
 - **Single comparison**: `icmp ne ptr %error, null` per call
 - **Optimal inlining**: Small functions inline away error checks
 
 **Error Path:**
+
 - **One malloc**: 16-byte allocation for error struct
 - **Type matching**: O(1) hash comparison per trap handler
 - **Single free**: Clean error memory in trap handler
 - **Stack unwinding**: Return through call frames (no exception tables)
 
-**Comparison to Alternatives:**
-
-| Approach | Success Overhead | Error Overhead | Hidden Control Flow | Compile-time Safety |
-|----------|-----------------|----------------|---------------------|---------------------|
-| **Vyb trap/fail** | ~1 comparison | 1 malloc + type match | No | Yes |
-| C++ exceptions | Exception tables | Stack unwinding + allocation | Yes | Partial |
-| Rust Result<T,E> | Match overhead | Enum size increase | No | Yes |
-| Go error returns | Comparison + check | Allocation | No | Weak (can ignore) |
-| Java checked exceptions | Exception tables | Stack trace + allocation | Yes | Partial |
-
 ### Error Handling Best Practices
 
 **1. Use Specific Error Types**
+
 ```vyb
 # Good: Rich context
 struct FileError {
@@ -2472,6 +2697,7 @@ fail 404
 ```
 
 **2. Handle Errors Close to Source**
+
 ```vyb
 # Good: Handle immediately if recovery is possible
 result<String> = {
@@ -2486,6 +2712,7 @@ data<String> = read_file(path)  # Propagates error to caller
 ```
 
 **3. Document Error Conditions**
+
 ```vyb
 # Read configuration from file
 #
@@ -2499,6 +2726,7 @@ read_config(path<String>)<Config> -> {
 ```
 
 **4. Prefer Structured Errors Over Codes**
+
 ```vyb
 # Good: Self-documenting
 struct NetworkError {
@@ -2634,6 +2862,7 @@ main()<Int> -> {
 ```
 
 **Key Takeaways:**
+
 - **Type Safety**: Each error type is distinct and statically checked
 - **Composability**: Errors propagate through multiple function layers
 - **Clarity**: Error handling is explicit in code structure
@@ -2670,9 +2899,10 @@ cmake --build build --target run-milestone
 
 Vyb's canonical test runner is `test/run_tests.vyb` — a Vyb program, the same
 suite wired into CTest as the `run-tests` target and used for the full regression
-gate (currently **1221 `.vyb` tests, all passing**):
+gate (currently **1234 `.vyb` tests, all passing**):
 
 ### Quick Testing
+
 ```bash
 # Full suite (JIT execution), from the repo root
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
@@ -2686,13 +2916,14 @@ build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test --evidence evidence
 ```
 
 `vyb --repo` (or `vyb test` with no explicit paths inside the compiler repo) runs
-the same Vyb runner, so the compiler's own test path needs no Python. A secondary
+the same Vyb runner, so the compiler's own test path is written in Vyb end to end. A secondary
 harness (`test_harness.vyb`) plus `triage_tool.vyb` — both Vyb programs — add
 JSON/HTML reporting, failure-triage, and performance analysis on top of that
 suite; the authoritative pass/fail count is always the `run-tests` CTest target
 output.
 
 ### Test Analysis and Triage
+
 ```bash
 # Analyze test failures and create triage plan
 build/vyb triage_tool.vyb results.json
@@ -2705,7 +2936,7 @@ build/vyb triage_tool.vyb results.json --priority critical,high
 ```
 
 ### Test Features
-- **1221 Tests, All Passing**: The full `run_tests.vyb` suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area
+- **1234 Tests, All Passing**: The full `run_tests.vyb` suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area
 - **Harness Reporting**: `test_harness.vyb` adds JSON/HTML reports and failure triage on top of the runner (sequential execution; `--workers` is accepted for compatibility)
 - **Rich Reporting**: HTML, JSON, and console output with detailed metrics
 - **Smart Categorization**: Automatic test categorization and filtering
@@ -2791,6 +3022,7 @@ Vyb/
 ### Simple Programs
 
 **Hello World:**
+
 ```vyb
 main() -> {
     println("Hello, Vyb!")
@@ -2798,6 +3030,7 @@ main() -> {
 ```
 
 **Mathematical Computation:**
+
 ```vyb
 fibonacci(n<Int>)<Int> -> {
     if (n <= 1) {
@@ -2813,6 +3046,7 @@ main()<Int> -> {
 ```
 
 **Data Processing with Auto-Serialization:**
+
 ```vyb
 struct Result {
     success<Bool>,
@@ -2906,6 +3140,7 @@ One of Vyb's standout features is automatic serialization of complex return type
 ### Implementation Details
 
 The JSON system is built on:
+
 - **Runtime Type Metadata**: Global type registry with field information
 - **C Runtime Functions**: `__vyb_complex_to_json_with_metadata()` and
   `__vyb_complex_from_json_with_metadata()`
@@ -2923,7 +3158,7 @@ This makes Vyb excellent for data processing scripts, API services, and configur
 Vyb provides multiple memory management strategies:
 
 ```vyb
-# Unique ownership (like Rust's Box)
+# Unique ownership: one owner, RAII cleanup
 owned<my<String>> = my("unique data")
 
 # Shared ownership (reference counted)
@@ -2976,10 +3211,10 @@ compatibility) and reports the same per-test verdicts as the canonical runner.
 - **Error Context**: Detailed failure information with context and suggestions
 
 #### **Test Statistics**
-- **Total Tests**: 1221 `.vyb` tests (full suite, all passing as of v0.7.7)
+- **Total Tests**: 1234 `.vyb` tests (full suite, all passing as of v0.7.7)
 - **Coverage Areas**: Language features, control flow, error handling, type system, math, strings, introspection
 - **Test Types**: Feature tests (with `@expect: pass`), future-feature docs (with `@expect: fail`), parser tests
-- **Success Rate**: 100% (1221/1221) on the current suite
+- **Success Rate**: 100% (1234/1234) on the current suite
 
 ### 🔧 **Syntax Migration Tools**
 
@@ -3052,6 +3287,7 @@ See `doc/` directory for detailed design documents and RFCs.
 ## Recent Progress
 
 **Latest cycle (v0.7.x)**: stdlib concurrency + a network/UI demo
+
 - ✅ **`chain` stdlib module** — a hash-chained legitimization core written
   entirely in Vyb over `crypto.sha256`: `Record {label, value}` facts are
   sealed into Merkle-rooted, prev-hash-linked `ChainBlock`s, producing a
@@ -3081,6 +3317,7 @@ See `doc/` directory for detailed design documents and RFCs.
   the interface stays responsive.
 
 **v0.4.2 (freedom-1.0 series)**: Generic function monomorphization and FREEDOM blocks
+
 - ✅ **Generic Functions**: Complete LLVM monomorphization system for generic functions with bounded type parameters
   - **Type Parameter Substitution**: `T → Point` during codegen
   - **On-Demand Instantiation**: Generate specialized functions like `printItem_Point` from templates
@@ -3093,7 +3330,7 @@ See `doc/` directory for detailed design documents and RFCs.
   - **Type inference**: First case determines result type for entire select
   - **Pattern matching**: Exact equality patterns with wildcard `?` support
 - ✅ **Canonical Syntax Unification**: Complete migration to unified `my()`/`our()` constructors and `view`/`borrow` operators
-- ✅ **Modern Test Harness**: `test/run_tests.vyb` running the full suite — 1221 `.vyb` tests all passing — with an auxiliary parallel/HTML/triage harness
+- ✅ **Modern Test Harness**: `test/run_tests.vyb` running the full suite — 1234 `.vyb` tests all passing — with an auxiliary parallel/HTML/triage harness
 - ✅ **Syntax Migration Tools**: Automated migration from legacy to canonical syntax with comprehensive reporting
 - ✅ **Match Statements**: Complete pattern matching with `->` arrow syntax and `?` wildcard; no-match results in NOP
 - ✅ **Break/Continue**: Loop control flow statements working in all loop types
@@ -3129,17 +3366,20 @@ one grammar home; the appendix also notes which productions are legacy.
 ### B. Memory Model Reference
 
 **Ownership Types:**
+
 - `my<T>`: Unique ownership, RAII cleanup
 - `our<T>`: Shared ownership, reference counted
 - `their<T>`: Non-owning borrow, lifetime checked
 - `mild<T>`: Mild reference, can detect destruction via `grab()` and `released()`
 
 **Borrowing Operations:**
+
 - `view(expr)`: Creates `their<T const>` immutable borrow
 - `borrow(expr)`: Creates `their<T>` mutable borrow
 - `soft(expr)`: Creates `mild<T>` mild reference from `our<T>`
 
 **Freedom Operations:**
+
 - `loc<T>`: Raw pointer type
 - `loc(expr)`: Get pointer to expression
 - `at(ptr)`: Dereference pointer (read/write)
@@ -3150,10 +3390,12 @@ one grammar home; the appendix also notes which productions are legacy.
 Vyb automatically serializes complex return types from `main()`:
 
 **Simple Returns:**
+
 - `main()<Int> -> { return 42 }` → Exit code 42
 - `main()<String> -> { return "hello" }` → Outputs: hello
 
 **Complex Returns:**
+
 - `main()<Int,String> -> { return 42, "hello" }` → Outputs: [42, "hello"]
 - Struct returns → JSON with field names and values
 - Vec returns → JSON array representation

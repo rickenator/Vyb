@@ -10,10 +10,15 @@
 # re-exported so consumers can name it, and `https_selfhost` gives a no-external-
 # server diagnostic of the whole tls+http wiring.
 #
+#   https_request_head(path, host, headers) -> String      pure request-head builder
 #   https_get(host, port, path) -> String?             full GET round-trip -> body (absent on failure)
 #   https_get_full(host, port, path) -> HttpResponse   parsed status/headers/body; failed round-trips carry `error` String?
 #   https_get_full_verified(host, port, path, ca) -> HttpResponse
 #   https_get_verified(host, port, path, ca) -> String?
+#   https_get_full_headers(host, port, path, headers) -> HttpResponse
+#   https_get_full_headers_verified(host, port, path, headers, ca) -> HttpResponse
+#       the header-carrying forms add caller request headers (Authorization,
+#       User-Agent, Accept, ...) between the Host and Connection lines.
 #
 #   Fallibility: `https_get_full*` always returns a present `HttpResponse` whose
 #   `error` String? is the lossless failure reason (`status` -1 on failure); the
@@ -98,13 +103,28 @@ tls_read_chunked(s<TlsStream>)<String> -> {
 # reason, headers, and body; status is -1 if the round-trip could not be
 # completed (e.g. connection/handshake failure).
 share(all)
+# The request head for a GET of `path` on `host` carrying `headers` (each entry
+# already formatted, e.g. "Authorization: Bearer <token>"). `Host` and
+# `Connection: close` are always emitted; the caller's headers sit between them.
+# Pure string building, so it is testable without a socket.
+https_request_head(path<String>, host<String>, headers<Vec<String>>)<String> -> {
+    head<String> = "GET " + path + " HTTP/1.1\r\nHost: " + host + "\r\n"
+    i<Int> = 0
+    while (i < headers.len()) {
+        head = head + headers.get(i) + "\r\n"
+        i = i + 1
+    }
+    return head + "Connection: close\r\n\r\n"
+}
+
+share(all)
 # Shared round-trip: connect to `connect_ip` on `port`, bring up a TLS session
 # over it that verifies the peer against the `verify_host` (SNI + hostname check
-# on verifying contexts), send a GET for `path`, and parse the response. Owns
-# and frees `ctx`.
+# on verifying contexts), send a GET for `path` with `headers`, and parse the
+# response. Owns and frees `ctx`.
 # socket_open(AF_INET=2, SOCK_STREAM=1, IPPROTO_TCP=6).
 https_fetch(verify_host<String>, connect_ip<String>, port<Int>, path<String>,
-            ctx<TlsContext>)<HttpResponse> -> {
+            headers<Vec<String>>, ctx<TlsContext>)<HttpResponse> -> {
     fd<Int> = socket_open(2, 1, 6) else -1
     if (fd < 0) { tls_free_context(ctx); return http_err("socket open failed") }
     if (!(socket_connect(fd, connect_ip, port) else false)) {
@@ -116,8 +136,7 @@ https_fetch(verify_host<String>, connect_ip<String>, port<Int>, path<String>,
         s -> {
             match (s.connect()) {
                 c -> {
-                    req<String> = "GET " + path + " HTTP/1.1" + "\r\n" + "Host: " + verify_host +
-                                  "\r\n" + "Connection: close" + "\r\n" + "\r\n"
+                    req<String> = https_request_head(path, verify_host, headers)
                     tls_write(c, req)
                     line<String> = tls_read_line(c)
                     code<Int> = http_status_code(line)
@@ -188,18 +207,18 @@ https_fetch(verify_host<String>, connect_ip<String>, port<Int>, path<String>,
 # NOT followed and the 3xx response (with its Location exposed via http_location)
 # is returned so the caller can decide.
 share(all)
-https_get_hops(host<String>, port<Int>, path<String>, ca_pem<String>, verified<Bool>, hops<Int>)<HttpResponse> -> {
+https_get_hops(host<String>, port<Int>, path<String>, headers<Vec<String>>, ca_pem<String>, verified<Bool>, hops<Int>)<HttpResponse> -> {
     ip<String> = socket_resolve(host) else ""
     if (ip.len() == 0) { return http_err("resolve failed: " + host) }
     R2<HttpResponse> = http_err("tls client context failed")
     if (verified) {
         match (tls_client_context_verified(ca_pem)) {
-            c -> { R2 = https_fetch(host, ip, port, path, c) }
+            c -> { R2 = https_fetch(host, ip, port, path, headers, c) }
             ? -> { return http_err("tls client context failed") }
         }
     } else {
         match (tls_client_context()) {
-            c -> { R2 = https_fetch(host, ip, port, path, c) }
+            c -> { R2 = https_fetch(host, ip, port, path, headers, c) }
             ? -> { return http_err("tls client context failed") }
         }
     }
@@ -207,7 +226,7 @@ https_get_hops(host<String>, port<Int>, path<String>, ca_pem<String>, verified<B
     if (http_is_redirect(R2.status) && hops < http_redir_max() && lv.len() > 0) {
         tg<HttpTarget> = http_resolve_location(lv, "https", host, port, path)
         if (tg.scheme == "https") {
-            return https_get_hops(tg.host, tg.port, tg.path, ca_pem, verified, hops + 1)
+            return https_get_hops(tg.host, tg.port, tg.path, headers, ca_pem, verified, hops + 1)
         }
     }
     return R2
@@ -218,7 +237,15 @@ https_get_hops(host<String>, port<Int>, path<String>, ca_pem<String>, verified<B
 # while kept as the SNI / `Host:` header. Does not verify the peer's CA chain.
 share(all)
 https_get_full(host<String>, port<Int>, path<String>)<HttpResponse> -> {
-    return https_get_hops(host, port, path, "", false, 0)
+    return https_get_hops(host, port, path, Vec<String>(), "", false, 0)
+}
+
+share(all)
+# Full HTTPS/1.1 GET round-trip carrying caller-supplied request `headers`. Same
+# unverified-context behaviour as `https_get_full`; use the `_verified` form when
+# the peer's CA chain must be checked.
+https_get_full_headers(host<String>, port<Int>, path<String>, headers<Vec<String>>)<HttpResponse> -> {
+    return https_get_hops(host, port, path, headers, "", false, 0)
 }
 
 # Full HTTPS/1.1 GET round-trip with peer verification. `host` is a hostname:
@@ -227,7 +254,16 @@ https_get_full(host<String>, port<Int>, path<String>)<HttpResponse> -> {
 # the system default CA paths.
 share(all)
 https_get_full_verified(host<String>, port<Int>, path<String>, ca_pem<String>)<HttpResponse> -> {
-    return https_get_hops(host, port, path, ca_pem, true, 0)
+    return https_get_hops(host, port, path, Vec<String>(), ca_pem, true, 0)
+}
+
+share(all)
+# Verified GET round-trip carrying caller-supplied request `headers` -- the
+# authenticated API shape (e.g. "Authorization: Bearer <token>",
+# "User-Agent: ..."). `ca_pem` is "" for the system default CA paths.
+https_get_full_headers_verified(host<String>, port<Int>, path<String>, headers<Vec<String>>,
+                                ca_pem<String>)<HttpResponse> -> {
+    return https_get_hops(host, port, path, headers, ca_pem, true, 0)
 }
 
 # Convenience wrapper returning just the response body as a `String?` (absent on

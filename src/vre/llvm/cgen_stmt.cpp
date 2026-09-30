@@ -3,6 +3,7 @@
 #include <vyb/parser/ast.hpp>
 #include <set>
 #include "vyb/vre/llvm/codegen.hpp"
+#include "vyb/vre/llvm/cgen_internal.hpp"
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Function.h>
@@ -398,7 +399,22 @@ void LLVMCodegen::visit(vyb::ast::ReturnStatement *node) {
                         namedUserStruct = monomorphizedStructs.count(
                             currentFunctionAST->returnTypeNode->toString()) > 0;
                     }
-                    if (namedUserStruct) {
+                    // #375: a `Vec<T>` return is an LLVM struct { ptr, len, cap }, not a
+                    // named user struct and not a tuple -- walking it positionally
+                    // produced `[null, 2, 4]`. Serialize its elements as a JSON array.
+                    const vyb::ast::TypeNode* retAst = nullptr;
+                    std::shared_ptr<vyb::ast::TypeNode> retAstHolder;
+                    if (node->argument) {
+                        retAstHolder = typeOfNode(node->argument.get());
+                        if (retAstHolder) retAst = retAstHolder.get();
+                    }
+                    if (!retAst && currentFunctionAST && currentFunctionAST->returnTypeNode) {
+                        retAst = currentFunctionAST->returnTypeNode.get();
+                    }
+                    if (retAst && isVecTypeNode(retAst) && isVecStructType(origType)) {
+                        jsonStr = serializeMainReturnJson(returnValue, retAst, origType, node->loc);
+                        if (!jsonStr) jsonStr = builder->CreateGlobalStringPtr("null");
+                    } else if (namedUserStruct) {
                         // generateToStringCall returns a Vyb String struct
                         // { char*, i64 }; extract the data pointer to feed the
                         // already-registered buffer into the println path below.
@@ -424,7 +440,21 @@ void LLVMCodegen::visit(vyb::ast::ReturnStatement *node) {
                             } else {
                                 elem = i == 0 ? returnValue : llvm::ConstantInt::get(st->getElementType(0), 0);
                             }
-                            llvm::Value* elemJson = serializeOne(elem, st->getElementType(i));
+                            // Each element's AST type (the tuple's member list) drives the
+                            // shape: a Vec or struct element serializes as real JSON
+                            // instead of the positional `null` fallback (#375).
+                            const vyb::ast::TypeNode* elemAst = nullptr;
+                            if (retAst) {
+                                if (auto* tt = dynamic_cast<const vyb::ast::TupleTypeNode*>(retAst)) {
+                                    if (i < tt->memberTypes.size() && tt->memberTypes[i]) {
+                                        elemAst = tt->memberTypes[i].get();
+                                    }
+                                }
+                            }
+                            llvm::Value* elemJson = elemAst
+                                ? serializeMainReturnJson(elem, elemAst, st->getElementType(i), node->loc)
+                                : serializeOne(elem, st->getElementType(i));
+                            if (!elemJson) elemJson = builder->CreateGlobalStringPtr("null");
                             if (i > 0) {
                                 llvm::Value* sep = builder->CreateGlobalStringPtr(", ");
                                 jsonStr = builder->CreateCall(concat, {jsonStr, sep}, "arr.sep");
@@ -2639,6 +2669,117 @@ void LLVMCodegen::visit(vyb::ast::TupleDestructureAssignment* node) {
     }
 
     m_currentLLVMValue = nullptr;
+}
+
+llvm::Value* LLVMCodegen::serializeMainReturnJson(llvm::Value* value,
+                                                  const vyb::ast::TypeNode* astType,
+                                                  llvm::Type* llvmType,
+                                                  SourceLocation loc) {
+    if (!value || !llvmType) return nullptr;
+
+    auto declFn = [&](const std::string& name, llvm::FunctionType* ft) -> llvm::Function* {
+        llvm::Function* f = module->getFunction(name);
+        if (!f) f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, name, module.get());
+        return f;
+    };
+
+    // Vec<T>: emit a JSON array by walking { data, size }; each element is
+    // serialized recursively from its AST type, so Vec<Vec<T>> and Vec<Struct>
+    // both come out as nested JSON instead of `null` (#375).
+    if (astType && isVecTypeNode(astType) && llvmType->isStructTy() && isVecStructType(llvmType) &&
+        llvm::cast<llvm::StructType>(llvmType)->getNumElements() >= 2) {
+        const vyb::ast::TypeNode* elemAst = vecElementTypeNode(astType);
+        llvm::Type* elemLLVM = elemAst
+            ? codegenType(const_cast<vyb::ast::TypeNode*>(elemAst)) : nullptr;
+        if (elemAst && elemLLVM) {
+            llvm::DataLayout dl(module.get());
+            uint64_t stride = dl.getTypeAllocSize(elemLLVM);
+            llvm::Value* dataPtr = builder->CreateExtractValue(value, 0, "json.vec.data");
+            llvm::Value* len = builder->CreateExtractValue(value, 1, "json.vec.len");
+            llvm::Value* outVar = builder->CreateAlloca(int8PtrType, nullptr, "json.vec.out");
+            builder->CreateStore(builder->CreateGlobalStringPtr("["), outVar);
+
+            llvm::BasicBlock* headBB = llvm::BasicBlock::Create(*context, "json.vec.head", currentFunction);
+            llvm::BasicBlock* bodyBB = llvm::BasicBlock::Create(*context, "json.vec.body", currentFunction);
+            llvm::BasicBlock* incBB  = llvm::BasicBlock::Create(*context, "json.vec.inc", currentFunction);
+            llvm::BasicBlock* doneBB = llvm::BasicBlock::Create(*context, "json.vec.done", currentFunction);
+            llvm::Value* idxVar = builder->CreateAlloca(int64Type, nullptr, "json.vec.i");
+            builder->CreateStore(llvm::ConstantInt::get(int64Type, 0), idxVar);
+            builder->CreateBr(headBB);
+
+            builder->SetInsertPoint(headBB);
+            llvm::Value* idx = builder->CreateLoad(int64Type, idxVar, "json.vec.cur");
+            builder->CreateCondBr(builder->CreateICmpULT(idx, len, "json.vec.cmp"), bodyBB, doneBB);
+
+            builder->SetInsertPoint(bodyBB);
+            llvm::Value* off = builder->CreateMul(
+                idx, llvm::ConstantInt::get(int64Type, stride), "json.vec.off");
+            llvm::Value* elemPtr = builder->CreateGEP(llvm::Type::getInt8Ty(*context), dataPtr, off,
+                                                     "json.vec.elem.p");
+            llvm::Value* elem = builder->CreateLoad(elemLLVM, elemPtr, "json.vec.elem");
+            llvm::Value* elemJson = serializeMainReturnJson(elem, elemAst, elemLLVM, loc);
+            if (!elemJson) elemJson = builder->CreateGlobalStringPtr("null");
+            // The recursive call may leave the builder in one of its own blocks.
+            if (builder->GetInsertBlock() && !builder->GetInsertBlock()->getTerminator()) {
+                llvm::Value* acc = builder->CreateLoad(int8PtrType, outVar, "json.vec.acc");
+                llvm::Value* sep = builder->CreateSelect(
+                    builder->CreateICmpNE(idx, llvm::ConstantInt::get(int64Type, 0), "json.vec.first"),
+                    builder->CreateGlobalStringPtr(", "),
+                    builder->CreateGlobalStringPtr(""), "json.vec.sep");
+                if (llvm::Value* withSep = generateStringConcatenation(acc, sep, loc)) acc = withSep;
+                if (llvm::Value* withElem = generateStringConcatenation(acc, elemJson, loc)) acc = withElem;
+                builder->CreateStore(acc, outVar);
+            }
+            builder->CreateBr(incBB);
+
+            builder->SetInsertPoint(incBB);
+            builder->CreateStore(
+                builder->CreateAdd(idx, llvm::ConstantInt::get(int64Type, 1), "json.vec.next"), idxVar);
+            builder->CreateBr(headBB);
+
+            builder->SetInsertPoint(doneBB);
+            llvm::Value* acc = builder->CreateLoad(int8PtrType, outVar, "json.vec.final");
+            return generateStringConcatenation(acc, builder->CreateGlobalStringPtr("]"), loc);
+        }
+    }
+
+    // String: JSON string literal.
+    if (llvmType->isStructTy() && isVybStringStructType(llvmType)) {
+        llvm::Value* p = builder->CreateExtractValue(value, 0, "json.str.ptr");
+        llvm::FunctionType* ft = llvm::FunctionType::get(int8PtrType, {int8PtrType}, false);
+        return builder->CreateCall(declFn("__vyb_json_escape_string", ft), {p}, "json.str");
+    }
+
+    // Named user struct: the metadata-driven serializer emits a JSON object with
+    // the struct's own field names (Vec/nested fields included).
+    if (astType && llvmType->isStructTy() && isKnownStructTypeNode(astType)) {
+        llvm::Value* serialized = generateToStringCall(
+            value, llvmType, const_cast<vyb::ast::TypeNode*>(astType), loc);
+        if (serialized && serialized->getType()->isStructTy()) {
+            return builder->CreateExtractValue(serialized, 0, "json.struct.data");
+        }
+        return nullptr;
+    }
+
+    if (llvmType->isIntegerTy(1)) {
+        llvm::Value* boolVal = builder->CreateICmpNE(value, llvm::ConstantInt::get(int1Type, 0),
+                                                    "json.bool.v");
+        llvm::FunctionType* ft = llvm::FunctionType::get(int8PtrType, {int1Type}, false);
+        return builder->CreateCall(declFn("__vyb_bool_to_string", ft), {boolVal}, "json.bool");
+    }
+    if (llvmType->isIntegerTy()) {
+        llvm::Value* i64Val = builder->CreateSExtOrTrunc(value, int64Type, "json.int.v");
+        llvm::FunctionType* ft = llvm::FunctionType::get(int8PtrType, {int64Type}, false);
+        return builder->CreateCall(declFn("__vyb_int_to_string", ft), {i64Val}, "json.int");
+    }
+    if (llvmType->isFloatTy() || llvmType->isDoubleTy()) {
+        llvm::Value* dblVal = llvmType->isFloatTy()
+            ? builder->CreateFPExt(value, doubleType, "json.float.v") : value;
+        llvm::FunctionType* ft = llvm::FunctionType::get(int8PtrType, {doubleType}, false);
+        return builder->CreateCall(declFn("__vyb_float_to_string", ft), {dblVal}, "json.float");
+    }
+
+    return nullptr;
 }
 
 }  // namespace vyb

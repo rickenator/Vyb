@@ -10,6 +10,7 @@ verdicts match the retired Python harness exactly.
 ## Overview
 
 The Vyb test system consists of:
+
 - **1195 Tests, All Passing**: The canonical `test/run_tests.vyb` suite covers all language features
 - **Modern Test Harness**: Parallel execution with intelligent categorization
 - **Rich Reporting**: HTML, JSON, and console output formats
@@ -262,6 +263,7 @@ Slowest Tests:
 ### HTML Report
 
 Rich HTML reports include:
+
 - **Interactive test results** with expand/collapse details
 - **Statistical dashboards** with visual charts
 - **Filterable tables** for easy navigation
@@ -305,6 +307,7 @@ Structured JSON output for programmatic analysis:
 ### Execution Metrics
 
 The test harness tracks comprehensive performance data:
+
 - **Individual test timing**: Identifies slow tests
 - **Category performance**: Compares subsystem speeds
 - **Parallel efficiency**: Measures threading benefits
@@ -313,6 +316,7 @@ The test harness tracks comprehensive performance data:
 ### Optimization Insights
 
 Performance analysis reveals:
+
 - **Hot paths**: Most time-consuming test categories
 - **Bottlenecks**: Tests that consistently run slowly
 - **Regression detection**: Performance degradations over time
@@ -358,6 +362,7 @@ build/vyb triage_tool.vyb release-results.json --output-format markdown --output
 ### Parallel Execution Optimization
 
 The test harness optimizes parallel execution:
+
 - **Intelligent work distribution**: Balances load across workers
 - **Memory-aware scheduling**: Prevents memory contention
 - **Timeout handling**: Prevents hung tests from blocking others
@@ -366,6 +371,7 @@ The test harness optimizes parallel execution:
 ### Smart Test Discovery
 
 Advanced discovery features:
+
 - **Recursive directory scanning**: Finds tests in nested directories
 - **Multiple pattern support**: Flexible file matching
 - **Metadata caching**: Speeds up repeated discovery
@@ -374,6 +380,7 @@ Advanced discovery features:
 ### Extensible Reporting
 
 The reporting system supports:
+
 - **Custom report formats**: Easy to add new output types
 - **Template-based generation**: Customizable report layouts
 - **Plugin architecture**: Extensible analysis capabilities

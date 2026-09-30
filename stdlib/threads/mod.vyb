@@ -1,8 +1,11 @@
 # threads - pthread-backed threading and mutexes for Vyb.
 #
-# A thread runs a `fn() -> Int` closure (no captures / no arguments in this
-# first cut — capturing closures are a later follow-on): thread_spawn starts it
-# and returns a handle, thread_join blocks until it finishes and returns the
+# A thread runs a `fn() -> Int` closure. Capturing closures are supported: the
+# closure's environment is handed to the new OS thread, so every captured value
+# must be able to cross a thread boundary (see `handoff` in the Programmer's
+# Guide) — a value copy or an `our<T>` qualifies, a `my<T>` owner or a borrow
+# does not, and a mutable capture is refused. thread_spawn starts the thread and
+# returns a handle, thread_join blocks until it finishes and returns the
 # closure's result. A Mutex provides mutual exclusion. Everything maps 1:1 onto
 # POSIX threads underneath, keeping the pthread ABI out of Vyb code.
 #

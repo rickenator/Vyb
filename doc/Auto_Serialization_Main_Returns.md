@@ -1,19 +1,31 @@
 **Multi-Value Returns with Typeful JSON Serialization**
 
-**Status:** ✅ Core functionality IMPLEMENTED and COHERENT (v0.5.3)
-- Auto-serialization implemented for ALL non-Void, non-String main() return types
-- Coherent rules: Int, Bool, Float, String, multi-value tuples all JSONify to stdout; exit code is always 0
+**Status:** Core functionality IMPLEMENTED and COHERENT (v0.5.3+). The intrinsics
+proposed further down — the multi-argument `lit(...)`, `notype()`, `bare()` and
+`<Type>`-suffixed field names — are DESIGN ONLY and are not implemented; see
+"Implementation status" at the end.
+
+- Auto-serialization implemented for non-Void `main()` return types
+- Coherent rules: Int, Bool, Float, String, single structs and multi-value tuples
+  JSONify to stdout; the exit code is always 0
 - `exit(n)` built-in available to set the process exit code explicitly
 - Multi-value returns produce JSON arrays: `[42, "hello"]`
 - Single Int returns print the numeric value (e.g. `42`)
 - Single Bool returns print `true` or `false`
 - Single Float returns print the numeric value
-- Single String returns print JSON-encoded string `"hello"`
+- Single String returns print the JSON-encoded string `"hello"`
+- Single struct returns print a keyed JSON object of its fields, e.g.
+  `{"system": "x86_64-linux", "hostname": "hera", "packages": ["bash"]}` — no
+  type wrapper and no `<Type>` field suffixes
+- Single `Vec<T>` returns print a JSON array of the elements, e.g.
+  `["alpha", "beta"]`; nested `Vec<Vec<T>>` returns nest the arrays, and struct
+  or `Vec` elements inside a multi-value return serialize the same way (#375)
 
 ## Coherence Rules for main() Return Values
 
-The rules below define how `main()` return values are handled. All non-Void return types
-produce JSON output to stdout and exit with code 0. Use `exit(n)` to set a custom exit code.
+The rules below define how `main()` return values are handled. Every non-Void
+return type produces JSON output to stdout and the process exits with code 0.
+Use `exit(n)` to set a custom exit code.
 
 | Return type     | Output                            | Exit code | Notes                        |
 | --------------- | --------------------------------- | --------- | ---------------------------- |
@@ -22,7 +34,10 @@ produce JSON output to stdout and exit with code 0. Use `exit(n)` to set a custo
 | `main()<Bool>`  | `true` or `false`                 | 0         | JSON boolean                 |
 | `main()<Float>` | number (e.g. `3.14`)             | 0         | JSON number                  |
 | `main()<String>`| `"hello world"` (quoted)          | 0         | JSON string                  |
-| `main()<T1,T2>` | `[val1, val2]` JSON array         | 0         | Multi-value tuple            |
+| `main()<T>` (struct) | `{"field": value, ...}`      | 0         | Keyed JSON object            |
+| `main()<T1,T2>` | `[val1, val2]` JSON array         | 0         | Multi-value tuple; struct/Vec elements serialize too |
+| `main()<Vec<T>>` | `["alpha", "beta"]`              | 0         | JSON array of the elements (#375) |
+| `main()<Struct, Struct>` | `[{"id": 1, "name": "Alice"}, {...}]` | 0 | Struct elements keyed objects (#375) |
 | `exit(n)`       | *(none)*                          | n         | Built-in; works anywhere     |
 
 ### Key rule
@@ -31,6 +46,9 @@ produce JSON output to stdout and exit with code 0. Use `exit(n)` to set a custo
   and the process exits with code 0.
 - **`exit(n)`** terminates the process immediately with exit code `n`. No output is produced.
   Use this to explicitly control the process exit code from any function.
+- **A `Vec<T>` return** prints a JSON array of its elements (`["alpha", "beta"]`);
+  nested `Vec<Vec<T>>` returns nest the arrays, and a struct or `Vec` element of
+  a multi-value return serializes the same way (#375).
 
 ### Migration note
 
@@ -293,6 +311,32 @@ This preserves symmetry with `main()` return rules and guarantees a 1:1 mapping 
 2. Implement JSON emitter after AST lowering.
 3. Extend VybR with `deserial`, `fromJson`, and error-reporting.
 4. Test nested structs, literal returns, array-of-primitives, versioning, and error cases.
+
+## Implementation status
+
+Verified against `build/vyb` (v0.7.7). What ships:
+
+| Feature | State |
+| --- | --- |
+| Int / Bool / Float / String returns | shipped, JSONified |
+| Single struct return (keyed object, intact `Vec` fields) | shipped (#182) |
+| Multi-value return of primitives, e.g. `[42, "hello"]` | shipped |
+| `main()<Vec<T>>` return, e.g. `["alpha", "beta"]` | shipped (#375) |
+| Struct or `Vec` element inside a multi-value return | shipped (#375) |
+| Nested `main()<Vec<Vec<T>>>` return | shipped (#375) |
+| `exit(n)` | shipped (sets the process status) |
+| `lit("...")` with a single primitive argument | shipped (raw literal output) |
+| `lit(a, b, c)` multi-argument tuple form | **not implemented** — a semantic error |
+| `bare(...)` in a multi-value return | runs, but emits the keyed object rather than raw field values (design-only) |
+| `notype(...)` in a multi-value return | shipped — elements serialize with plain field names |
+| `<Type>`-suffixed field names in struct output | **not implemented** — a single struct prints its plain field names (`{"name": "vyb", "n": 7}`) with no type wrapper |
+| `deserial(str)` / `vyb::fromJson<T>` | not implemented: `deserial(x)` is a pass-through placeholder in codegen, and there is no `json` module — use the per-type `T::from_string` JSON reader |
+| `--json-return` compiler flag | not present |
+
+The sections above that describe `notype()`, `bare()`, the `<Type>` suffix scheme
+and the raw-literal tuple form are design notes for future work, not shipped
+behaviour. For the shipped contract, trust `docs/refman/PROGRAMMERS_GUIDE.md`
+(Appendix B) and the code.
 
 ---
 

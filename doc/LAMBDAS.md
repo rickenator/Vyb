@@ -239,8 +239,7 @@ stack location, so a closure with mutable captures must not outlive its defining
 function. Returning such a closure is rejected at compile time (a dangling
 pointer) instead of silently producing a use-after-free. Block lambdas follow
 named-function semantics: their value comes from explicit `return` statements;
-a block lambda with no `return` is `void` (and can be called as a `fn(...) ->
-void`). Zero-arg lambdas may be written `|| -> body`.
+a block lambda with no `return` is `void` (and can be called as a `fn(...) -> void`). Zero-arg lambdas may be written `|| -> body`.
 
 ## Examples
 
