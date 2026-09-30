@@ -690,6 +690,12 @@ private:
                               llvm::StructType* llvmTy);
     void reclaimStructOwnedFieldsAt(llvm::Value* structPtr, const vyb::ast::TypeNode* astType,
                                     llvm::StructType* llvmTy, std::set<std::string>& visited);
+    // Release the storage owned by the *elements* of a Vec whose element type is
+    // itself a Vec (any nesting depth): frees each level's inner buffers and drops
+    // the string references of the innermost level. The caller frees the buffer it
+    // passed in. Leaves the builder at a fresh continuation block.
+    void emitInnerVecCleanup(llvm::Value* dataPtr, llvm::Value* elemCount,
+                             const vyb::ast::TypeNode* vecAst, const std::string& tag);
 
     // Reclaim the ORIGINAL owned buffers of a fresh owned-struct TEMP argument
     // after it was deep-copied into a Vec slot (Vec.push/set). Same leak class as

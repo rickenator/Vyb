@@ -400,16 +400,24 @@ void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
                 // (each push/get/set deep-copied its owned fields). Before the
                 // buffer is freed, reclaim each element's owned fields so none of
                 // the deep-copied inner buffers leak.
+                //
+                // A Vec<Vec<T>> element is an LLVM struct too, but it is NOT a
+                // user struct: its {data,size,cap} header must be released by the
+                // recursive nested-Vec path below, not by the struct-field
+                // reclaim. Excluding it here is what makes the inner buffers of
+                // `Vec<Vec<String>>` reachable (they used to leak one buffer per
+                // pushed row).
+                const vyb::ast::TypeNode* elemAstNode = nullptr;
+                if (astIt != valueTypeMap.end()) {
+                    elemAstNode = vecElementTypeNode(astIt->second.get());
+                }
+                const bool elemIsVec = elemAstNode && isVecTypeNode(elemAstNode);
                 const vyb::ast::TypeNode* vecElemAst = nullptr;
                 llvm::Type* vecElemLlvm = nullptr;
-                if (astIt != valueTypeMap.end()) {
-                    vecElemAst = vecElementTypeNode(astIt->second.get());
-                    if (vecElemAst && isKnownStructTypeNode(vecElemAst) &&
-                        structTypeHasOwnedFields(vecElemAst)) {
-                        vecElemLlvm = codegenType(const_cast<vyb::ast::TypeNode*>(vecElemAst));
-                    } else {
-                        vecElemAst = nullptr;
-                    }
+                if (!elemIsVec && elemAstNode && isKnownStructTypeNode(elemAstNode) &&
+                    structTypeHasOwnedFields(elemAstNode)) {
+                    vecElemAst = elemAstNode;
+                    vecElemLlvm = codegenType(const_cast<vyb::ast::TypeNode*>(elemAstNode));
                 }
 
                 // Create null check before freeing
@@ -461,45 +469,16 @@ void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
                     builder->CreateBr(rbHeader);
                     builder->SetInsertPoint(rbExit);
                 }
-                // #284: a Vec<Vec<T>> element owns its own inner buffer (each push/set
-                // deep-copied it). Release those inner buffers before the outer storage
-                // is freed; otherwise every copied inner buffer leaks under ASan.
-                const vyb::ast::TypeNode* nestedVecElemAst = nullptr;
-                if (astIt != valueTypeMap.end()) {
-                    const vyb::ast::TypeNode* e = vecElementTypeNode(astIt->second.get());
-                    if (e && !isKnownStructTypeNode(e) && e->toString().rfind("Vec<", 0) == 0) {
-                        nestedVecElemAst = e;
-                    }
-                }
-                if (nestedVecElemAst) {
+                // #284/#373: a nested Vec element owns its own inner buffer, and
+                // deeper nesting owns further buffers below that. Release every level
+                // recursively before the outer storage is freed; otherwise the
+                // deep-copied inner buffers leak (LeakSanitizer flags one buffer per
+                // copy -- the old one-level loop freed only the first level).
+                if (elemIsVec) {
                     llvm::Value* elemCount = builder->CreateExtractValue(vecPtr, 1, var.name + "_elem_count");
-                    llvm::Value* innerBytes = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 24);
-                    llvm::BasicBlock* nvHeader = llvm::BasicBlock::Create(*context, var.name + "_nvec_header", currentFunction);
-                    llvm::BasicBlock* nvBody = llvm::BasicBlock::Create(*context, var.name + "_nvec_body", currentFunction);
-                    llvm::BasicBlock* nvExit = llvm::BasicBlock::Create(*context, var.name + "_nvec_exit", currentFunction);
-                    llvm::Value* nvZero = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0);
-                    llvm::Value* nvIdxA = builder->CreateAlloca(llvm::Type::getInt64Ty(*context), nullptr, var.name + "_nvec_idx");
-                    builder->CreateStore(nvZero, nvIdxA);
-                    builder->CreateBr(nvHeader);
-                    builder->SetInsertPoint(nvHeader);
-                    llvm::Value* nvIx = builder->CreateLoad(llvm::Type::getInt64Ty(*context), nvIdxA);
-                    builder->CreateCondBr(builder->CreateICmpULT(nvIx, elemCount, var.name + "_nvec_cmp"), nvBody, nvExit);
-                    builder->SetInsertPoint(nvBody);
-                    llvm::Value* nvOff = builder->CreateMul(nvIx, innerBytes, var.name + "_nvec_off");
-                    llvm::Value* nvElemP = builder->CreateGEP(llvm::Type::getInt8Ty(*context), dataPtr, nvOff, var.name + "_nvec_elem");
-                    llvm::Value* nvInner = builder->CreateLoad(llvm::PointerType::get(*context, 0), nvElemP, var.name + "_nvec_data");
-                    llvm::BasicBlock* nvFree = llvm::BasicBlock::Create(*context, var.name + "_nvec_free", currentFunction);
-                    llvm::BasicBlock* nvSkip = llvm::BasicBlock::Create(*context, var.name + "_nvec_skip", currentFunction);
-                    builder->CreateCondBr(
-                        builder->CreateICmpNE(nvInner, llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0)), var.name + "_nvec_nonnull"),
-                        nvFree, nvSkip);
-                    builder->SetInsertPoint(nvFree);
-                    builder->CreateCall(getOrCreateFreeFunction(), {nvInner});
-                    builder->CreateBr(nvSkip);
-                    builder->SetInsertPoint(nvSkip);
-                    builder->CreateStore(builder->CreateAdd(nvIx, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1)), nvIdxA);
-                    builder->CreateBr(nvHeader);
-                    builder->SetInsertPoint(nvExit);
+                    // Pass the variable's own Vec type: the helper treats its argument
+                    // as "the Vec whose elements live in this buffer".
+                    emitInnerVecCleanup(dataPtr, elemCount, astIt->second.get(), var.name + "_nvec");
                 }
                 llvm::Function* freeFunc = getOrCreateFreeFunction();
                 builder->CreateCall(freeFunc, {dataPtr});
@@ -983,6 +962,15 @@ void LLVMCodegen::reclaimStructOwnedFieldsAt(llvm::Value* structPtr,
                     builder->CreateBr(hdr);
                     builder->SetInsertPoint(ext);
                 }
+            }
+            // A Vec<Vec<T>> field owns one array buffer per element (each push/set
+            // deep-copied the inner Vec). Release the deeper levels recursively
+            // before the outer array buffer is freed, otherwise every inner buffer
+            // leaks (the one-level paths above do not reach them). Pass the FIELD's
+            // Vec type: its elements live in this buffer.
+            if (eAst && isVecTypeNode(eAst)) {
+                llvm::Value* sz = builder->CreateExtractValue(sl, 1, "reclaim.nvec.size");
+                emitInnerVecCleanup(data, sz, f, "reclaim.nvec");
             }
             llvm::Value* isNull = builder->CreateICmpEQ(
                 data, llvm::ConstantPointerNull::get(rawPtr), "reclaim.isnull");
@@ -2090,4 +2078,112 @@ void LLVMCodegen::retainStringElements(llvm::Value* dataPtr, llvm::Value* count)
     if (!dataPtr || !count) return;
     builder->CreateCall(getOrCreateVybStringRetainEachFunction(),
                         {dataPtr, count});
+}
+
+// Release the storage owned by the elements of a Vec whose element type is itself a
+// Vec: for every element release the level below (further inner buffers, or the
+// innermost Strings' references) and then free that element's own buffer. The
+// caller frees the buffer passed in here. Scope-exit reclaim calls this so a
+// `Vec<Vec<T>>` (and any deeper nesting) does not leak the buffers the clone paths
+// allocate -- LeakSanitizer flags exactly one buffer per copied inner Vec.
+void LLVMCodegen::emitInnerVecCleanup(llvm::Value* dataPtr, llvm::Value* elemCount,
+                                      const vyb::ast::TypeNode* vecAst, const std::string& tag) {
+    if (!dataPtr || !vecAst) return;
+    const vyb::ast::TypeNode* elemAst = vecElementTypeNode(vecAst);
+    if (!elemAst) return;
+
+    llvm::Type* elemLlvm = codegenType(const_cast<vyb::ast::TypeNode*>(elemAst));
+    if (!elemLlvm) return;
+
+    llvm::Type* int64Ty = llvm::Type::getInt64Ty(*context);
+
+    if (isVecTypeNode(elemAst) && llvm::isa<llvm::StructType>(elemLlvm)) {
+        uint64_t stride = (uint64_t)llvm::DataLayout(module.get()).getTypeAllocSize(elemLlvm);
+        llvm::BasicBlock* headerBB = llvm::BasicBlock::Create(*context, tag + "_hdr", currentFunction);
+        llvm::BasicBlock* bodyBB = llvm::BasicBlock::Create(*context, tag + "_body", currentFunction);
+        llvm::BasicBlock* doneBB = llvm::BasicBlock::Create(*context, tag + "_done", currentFunction);
+        llvm::Value* idxAlloca = builder->CreateAlloca(int64Ty, nullptr, tag + "_idx");
+        builder->CreateStore(llvm::ConstantInt::get(int64Ty, 0), idxAlloca);
+        builder->CreateBr(headerBB);
+
+        builder->SetInsertPoint(headerBB);
+        llvm::Value* idx = builder->CreateLoad(int64Ty, idxAlloca, tag + "_i");
+        builder->CreateCondBr(builder->CreateICmpULT(idx, elemCount, tag + "_cmp"), bodyBB, doneBB);
+
+        builder->SetInsertPoint(bodyBB);
+        llvm::Value* off = builder->CreateMul(
+            idx, llvm::ConstantInt::get(int64Ty, stride), tag + "_off");
+        llvm::Value* elemPtr = builder->CreateGEP(llvm::Type::getInt8Ty(*context), dataPtr, off,
+                                                 tag + "_elem");
+        llvm::Value* inner = builder->CreateLoad(elemLlvm, elemPtr, tag + "_inner");
+        llvm::Value* innerData = builder->CreateExtractValue(inner, 0, tag + "_inner_data");
+        llvm::Value* innerLen = builder->CreateExtractValue(inner, 1, tag + "_inner_len");
+
+        // Release the deeper levels first; the recursion may end in its own block.
+        emitInnerVecCleanup(innerData, innerLen, elemAst, tag + "_in");
+
+        if (builder->GetInsertBlock() && !builder->GetInsertBlock()->getTerminator()) {
+            llvm::BasicBlock* freeBB = llvm::BasicBlock::Create(*context, tag + "_free", currentFunction);
+            llvm::BasicBlock* skipBB = llvm::BasicBlock::Create(*context, tag + "_skip", currentFunction);
+            llvm::Value* nonNull = builder->CreateICmpNE(
+                innerData,
+                llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0)),
+                tag + "_nn");
+            builder->CreateCondBr(nonNull, freeBB, skipBB);
+            builder->SetInsertPoint(freeBB);
+            builder->CreateCall(getOrCreateFreeFunction(), {innerData});
+            builder->CreateBr(skipBB);
+            builder->SetInsertPoint(skipBB);
+            builder->CreateStore(
+                builder->CreateAdd(idx, llvm::ConstantInt::get(int64Ty, 1), tag + "_next"), idxAlloca);
+            builder->CreateBr(headerBB);
+        }
+
+        // The loop-exit block must branch into a continuation block; the caller
+        // resumes emitting from there (an unterminated block fails LLVM verify).
+        llvm::BasicBlock* contBB = llvm::BasicBlock::Create(*context, tag + "_cont", currentFunction);
+        builder->SetInsertPoint(doneBB);
+        builder->CreateBr(contBB);
+        builder->SetInsertPoint(contBB);
+        return;
+    }
+
+    if (isOwnedFieldString(elemAst)) {
+        // Innermost level: one reference per String element is dropped here and the
+        // String registry reclaims the buffers.
+        releaseStringElements(dataPtr, elemCount);
+        return;
+    }
+
+    if (isKnownStructTypeNode(elemAst) && structTypeHasOwnedFields(elemAst)) {
+        // Element is a user struct with owned fields (e.g. Vec<Vec<Day>>): reclaim
+        // each element's owned fields, since each push/set deep-copied them.
+        llvm::Type* eTy = codegenType(const_cast<vyb::ast::TypeNode*>(elemAst));
+        auto* eStruct = eTy ? llvm::dyn_cast<llvm::StructType>(eTy) : nullptr;
+        if (!eStruct) return;
+        uint64_t stride = (uint64_t)llvm::DataLayout(module.get()).getTypeAllocSize(eStruct);
+        llvm::BasicBlock* contBB = llvm::BasicBlock::Create(*context, tag + "_scont", currentFunction);
+        llvm::BasicBlock* hdrBB = llvm::BasicBlock::Create(*context, tag + "_shdr", currentFunction);
+        llvm::BasicBlock* bdyBB = llvm::BasicBlock::Create(*context, tag + "_sbdy", currentFunction);
+        llvm::BasicBlock* extBB = llvm::BasicBlock::Create(*context, tag + "_sext", currentFunction);
+        llvm::Value* idxAlloca = builder->CreateAlloca(int64Ty, nullptr, tag + "_sidx");
+        builder->CreateStore(llvm::ConstantInt::get(int64Ty, 0), idxAlloca);
+        builder->CreateBr(hdrBB);
+        builder->SetInsertPoint(hdrBB);
+        llvm::Value* idx = builder->CreateLoad(int64Ty, idxAlloca, tag + "_si");
+        builder->CreateCondBr(builder->CreateICmpULT(idx, elemCount, tag + "_scmp"), bdyBB, extBB);
+        builder->SetInsertPoint(bdyBB);
+        llvm::Value* off = builder->CreateMul(idx, llvm::ConstantInt::get(int64Ty, stride), tag + "_soff");
+        llvm::Value* elemPtr = builder->CreateGEP(llvm::Type::getInt8Ty(*context), dataPtr, off, tag + "_selem");
+        std::set<std::string> visited;
+        reclaimStructOwnedFieldsAt(elemPtr, elemAst, eStruct, visited);
+        builder->CreateStore(builder->CreateAdd(idx, llvm::ConstantInt::get(int64Ty, 1), tag + "_snext"),
+                             idxAlloca);
+        builder->CreateBr(hdrBB);
+        builder->SetInsertPoint(extBB);
+        builder->CreateBr(contBB);
+        builder->SetInsertPoint(contBB);
+        return;
+    }
+    // Scalar elements own nothing further.
 }

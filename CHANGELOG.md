@@ -87,6 +87,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unwraps the pointee the way member access already did
   (`test/ownership/borrow_pointer_owner_field_read.vyb`,
   `..._view_pointer_owner_field_read.vyb`, `..._borrow_pointer_owner_write.vyb`).
+- **Nested `Vec` teardown leaked one inner buffer per element (#373 follow-up,
+  landed just after the v0.7.7 tag)** — scope-exit reclaim of a `Vec<Vec<T>>`
+  classified the element as a struct with owned fields (`Vec<T>` is an LLVM
+  struct too), so it released the *outer* buffer's entries as if they were
+  strings and never freed the inner buffers; `Vec<Vec<Vec<T>>>` also lost the
+  innermost level. Teardown now branches on the element's AST type: for a `Vec`
+  element every inner level is released recursively (`emitInnerVecCleanup`)
+  before the outer storage is freed, struct-field reclaim is skipped for it, and
+  a `Vec<Vec<T>>` *field* of a struct takes the same recursive path. Verified
+  with `ASAN_OPTIONS=halt_on_error=1:detect_leaks=1` on
+  `test/collections/test_nested_vec_deep_copy.vyb`, the SQLite binding
+  (`test/bindgen/test_sqlite_query.vyb`) and
+  `test/traffic/test_traffic_{parse,db,graph,report}.vyb`.
+- **`Vec` expression temporaries were not reclaimed** — a Vec created, consumed
+  and discarded inside one expression (`payload.split("\n").len()`,
+  `rows.push(v2(a, b))`, `write_table(path, v5(...), payload)`) leaked its
+  buffer. `vyb-traffic` and the SQLite binding now bind such results to named
+  locals (or build the row inside the push helper), so the ASan suite is
+  leak-clean again; the underlying gap is recorded in `TODO.md`.
 
 ---
 

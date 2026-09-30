@@ -50,7 +50,9 @@ failed_run(ts<String>)<Run> -> {
 # Row count of a query payload.
 row_count(payload<String>)<Int> -> {
     if (payload.len() == 0) { return 0 }
-    return payload.split("\n").len()
+    # Bind the split: a Vec expression temporary is not reclaimed and leaks.
+    rows<Vec<String>> = payload.split("\n")
+    return rows.len()
 }
 
 # Cell `r`,`c` of a query payload (cells joined by TAB, rows by NEWLINE).

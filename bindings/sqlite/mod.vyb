@@ -69,7 +69,10 @@ sqlite_query(path<String>, sql<String>)<Vec<Vec<String>>?> -> {
     lines<Vec<String>> = payload.split("\n")
     r<Int> = 0
     while (r < lines.len()) {
-        rows.push(lines.get(r).split("\t"))
+        # Bind the cell Vec: a Vec expression temporary passed straight to push()
+        # is not reclaimed by the compiler and leaks (the ASan suite flags it).
+        cells<Vec<String>> = lines.get(r).split("\t")
+        rows.push(cells)
         r = r + 1
     }
     return Vec<Vec<String>>?(rows)
