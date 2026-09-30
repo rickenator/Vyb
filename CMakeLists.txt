@@ -157,6 +157,7 @@ set(VRE_SOURCES
     src/vre/llvm/cgen_types.cpp
     src/vre/llvm/cgen_util.cpp
     src/vre/llvm/cgen_expr.cpp
+    src/vre/llvm/cgen_expr_call.cpp
     src/vre/llvm/cgen_expr_operator.cpp
     src/vre/llvm/cgen_expr_kernel.cpp
     src/vre/llvm/cgen_expr_literals.cpp
