@@ -29,6 +29,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reference-manual gate are the proof.
 
 ### Fixed
+- **The abandoning-handler path reclaims the error it caught (#398)** — a trap
+  handler whose `refail` has no enclosing trap that can catch it leaves the frame
+  through a non-returning runtime abort (`__vyb_runtime_untrapped_error`), and the
+  handler-exit free of the caught error was emitted *after* that call, i.e. dead
+  code: `test/trap/refail_test.vyb` leaked 282 B in 5 allocations. The exit free now
+  steps back over non-returning calls (the runtime aborts already carry `noreturn`)
+  before choosing its insertion point, so the caught error is freed before the abort
+  and the re-raised one is freed by the untrapped handler as before. Both fixtures
+  of the path are leak-clean under `ASAN_OPTIONS=detect_leaks=1`; the `ci.yml` ASan
+  job now asserts the fixture's non-zero exit *and* the absence of a leak report.
 - **Non-identifier `for` over a struct-element `Vec` (#387)** — the parse-time
   desugar bound a non-identifier producer as the iterator itself, so
   `for (p in make_vec())` with `make_vec()<Vec<Point>>` reported

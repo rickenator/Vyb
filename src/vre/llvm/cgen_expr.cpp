@@ -3814,7 +3814,21 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
             }
             if (llvm::Instruction* term = builder->GetInsertBlock()->getTerminator()) {
                 // Handler ended in `return`: free the error before the terminator.
-                builder->SetInsertPoint(term);
+                //
+                // A handler can also end by *abandoning* -- when the error it
+                // re-raises has no enclosing trap that can catch it and the frame
+                // cannot return a failable result, the exit path calls a
+                // non-returning runtime abort (`__vyb_runtime_untrapped_error`,
+                // `__vyb_runtime_panic`, `exit`). Those declarations carry
+                // `noreturn`, so step back over such calls first: inserting in
+                // front of the terminator would put the free *after* the abort,
+                // where it never runs and the caught error leaks (#398).
+                llvm::Instruction* at = term;
+                while (auto* abortCall = llvm::dyn_cast<llvm::CallInst>(at->getPrevNode())) {
+                    if (!abortCall->doesNotReturn()) break;
+                    at = abortCall;
+                }
+                builder->SetInsertPoint(at);
             }
             // A bare `refail` re-raises the SAME caught error object, so its
             // ownership transferred outward and this handler must not free it
