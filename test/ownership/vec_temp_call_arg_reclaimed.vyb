@@ -1,0 +1,33 @@
+// @test: A fresh Vec temp as a by-value argument is reclaimed
+// @description: `emit("/tmp/x", build_row(a, b), "t")` passes a Vec expression the
+// @description: callee gets its own copy of; the caller's temp has no named owner,
+// @description: so its element buffer is released once the call returns. The callee
+// @description: reads the copy's elements and the caller reads them back, proving
+// @description: neither the copy nor the freed temp's storage is aliased
+// @description: (TODO.md:248 shape 3)
+// @category: ownership, vec, memory
+// @expect: pass
+// @expect-output: seen=6:a49b:t
+
+build_row(a<String>, b<String>)<Vec<String>> -> {
+    r<Vec<String>> = Vec<String>()
+    r.push(a)
+    r.push(b)
+    return r
+}
+
+emit(path<String>, rows<Vec<String>>, tag<String>)<String> -> {
+    joined<String> = rows.get(0) + rows.get(1)
+    return path.len().to_string() + ":" + joined + ":" + tag
+}
+
+main()<Int> -> {
+    seen<String> = ""
+    i<Int> = 0
+    while (i < 50) {
+        seen = emit("/tmp/x", build_row("a" + i.to_string(), "b"), "t")
+        i = i + 1
+    }
+    println("seen=" + seen)
+    return 0
+}

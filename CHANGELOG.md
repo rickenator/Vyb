@@ -100,12 +100,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `test/collections/test_nested_vec_deep_copy.vyb`, the SQLite binding
   (`test/bindgen/test_sqlite_query.vyb`) and
   `test/traffic/test_traffic_{parse,db,graph,report}.vyb`.
-- **`Vec` expression temporaries were not reclaimed** — a Vec created, consumed
-  and discarded inside one expression (`payload.split("\n").len()`,
-  `rows.push(v2(a, b))`, `write_table(path, v5(...), payload)`) leaked its
-  buffer. `vyb-traffic` and the SQLite binding now bind such results to named
-  locals (or build the row inside the push helper), so the ASan suite is
-  leak-clean again; the underlying gap is recorded in `TODO.md`.
+- **`Vec` expression temporaries leaked their element buffer** — a Vec created,
+  consumed and discarded inside one expression or statement had no named owner, so
+  nothing ever released its buffer: `payload.split("\n").len()` (a temp as the
+  method receiver), `rows.push(v2(a, b))` / `rows.set(i, v2(a, b))` (a fresh Vec as
+  the element, at every nesting level), and a Vec-returning call on its own line
+  (`mk("a", "b")` — a discarded statement result). Scope-exit teardown and the new
+  call-site reclaim now share one helper, `reclaimVecStorage`, so a temporary is
+  unwound exactly like a named binding: element String references, owned
+  struct-element fields, every nested Vec level, then the buffer behind a null
+  check. The reclaim fires only for an expression that builds a fresh Vec at the
+  site — a named/field read, an element accessor that hands back a view of the
+  receiver's buffer (`get`/`first`/`last`/`get_vec`/`pop`) and a mutator that hands
+  the receiver's own buffer back (`push`/`set`/`insert`/`remove_at`/`clear`/
+  `push_array`/`resize`/`concat`) are all excluded — and a temporary *receiver* is
+  reclaimed only for the pure readers (`len`/`is_empty`/`capacity`). Measured with
+  `ASAN_OPTIONS=detect_leaks=1`: `payload.split("\n").len()` ×50 leaked 3200 B in
+  50 allocations and `rows.push(v2(a, b))` ×50 the same before the fix, both
+  leak-free after; locked in by
+  `test/ownership/vec_temp_{receiver,push_arg,set_arg,discarded_call}_reclaimed.vyb`
+  (an element accessor on a temp receiver, `payload.split("\n").get(0)`, still leaks
+  one buffer per evaluation — recorded in `TODO.md`).
 - **A curated thread-boundary bind was invisible through a wrapper (`bind
   Handoff -> T`, landed just after the v0.7.7 tag)** — the structural walk asked
   the claim only for the type string as written, so `bind Handoff -> T` covered `T`

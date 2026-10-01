@@ -650,6 +650,14 @@ private:
     bool isOptionalStructType(llvm::Type* type); // literal `{ T, i1 }` native `T?`
     llvm::Value* generateOptionalEquality(llvm::Value* L, llvm::Value* R, vyb::TokenType op); // presence+payload == / !=
     bool exprProducesOwnedStringTemp(vyb::ast::Expression* expr); // String expr yielding a fresh owned heap buffer
+    // A Vec expression that builds a fresh buffer with no named owner: a
+    // Vec-returning call (`payload.split("\n")`, `v5(a, b)`) or a `Vec<T>()`
+    // literal. A read of a binding/field is owned by that location's own cleanup;
+    // element accessors that borrow from the receiver's buffer (`get`, `first`,
+    // `last`, `get_vec`, `pop`) and the mutators that hand that same buffer back
+    // (`push`, `set`, `insert`, `remove_at`, `clear`, `push_array`, `resize`,
+    // `concat`) are not fresh allocations and return false here.
+    bool exprProducesFreshVecTemp(vyb::ast::Expression* expr);
     bool exprIsStringTransfer(vyb::ast::Expression* expr); // String value whose single ref transfers on stow
     bool exprIsOurTransfer(vyb::ast::Expression* expr);   // `our`/`grab`/fn-call value whose fresh strong ref transfers on stow
     bool exprIsMildTransfer(vyb::ast::Expression* expr);  // `soft(...)` value whose fresh weak ref transfers on stow
@@ -696,6 +704,17 @@ private:
     // passed in. Leaves the builder at a fresh continuation block.
     void emitInnerVecCleanup(llvm::Value* dataPtr, llvm::Value* elemCount,
                              const vyb::ast::TypeNode* vecAst, const std::string& tag);
+
+    // Release the storage a Vec value owns: drop every String element reference,
+    // reclaim owned struct fields per element and every nested-Vec level, then free
+    // the element buffer. Leaves the builder at a fresh continuation block. Used by
+    // scope-exit cleanup AND by the fresh-temporary reclaim at a call site (a Vec
+    // expression result nobody can reach afterwards, e.g. `payload.split("\n").len()`
+    // or `rows.push(v2(a, b))`). `vecValue` is either the Vec struct value or a
+    // pointer to it; a null data pointer is a no-op. Never call this on a borrow:
+    // it frees the storage, so the caller must own it.
+    void reclaimVecStorage(llvm::Value* vecValue, llvm::Type* vecStructTy,
+                           const vyb::ast::TypeNode* vecAst, const std::string& tag);
 
     // Reclaim the ORIGINAL owned buffers of a fresh owned-struct TEMP argument
     // after it was deep-copied into a Vec slot (Vec.push/set). Same leak class as

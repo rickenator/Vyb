@@ -1,0 +1,24 @@
+// @test: A Vec created and read inside one expression releases its buffer
+// @description: `payload.split("\n").len()` builds a Vec with no named owner,
+// @description: reads one field of its header and drops it. The temp's element
+// @description: buffer is unreachable afterwards, so the call site reclaims it;
+// @description: the named `parts` binding next to it keeps its own cleanup
+// @description: (TODO.md:248 shape 1 -- one leak per evaluation before the fix)
+// @category: ownership, vec, memory
+// @expect: pass
+// @expect-output: total = 150 parts = 3
+
+main()<Int> -> {
+    payload<String> = "a|b|c\nx|y|z\n"
+    total<Int> = 0
+    i<Int> = 0
+    while (i < 50) {
+        total = total + payload.split("\n").len()
+        i = i + 1
+    }
+    // The named case next to the temp case: its buffer belongs to `parts` and is
+    // released by that binding's own scope-exit cleanup, not by the temp reclaim.
+    parts<Vec<String>> = payload.split("\n")
+    println("total = " + total.to_string() + " parts = " + parts.len().to_string())
+    return 0
+}

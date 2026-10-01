@@ -80,7 +80,7 @@ git clone https://github.com/rickenator/Vyb.git
 cd Vyb
 mkdir -p build && cd build && LLVM_DIR=/usr/lib/llvm-18/cmake cmake .. && make -j$(nproc) && cd ..
 
-# Run the full test suite (1239 .vyb tests) with the canonical Vyb runner
+# Run the full test suite (1244 .vyb tests) with the canonical Vyb runner
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
 
 # Run your first Vyb program
@@ -865,6 +865,42 @@ build/vyb migrate_syntax.vyb --migrate --directory . --backup --report
 - **Freedom operations**: `loc<T>` pointers in `freedom {}` blocks
 - **Raw Memory Operations**: Complete `freedom` block system with `loc<T>` pointers
 - **Memory Safety**: Borrow checking and lifetime analysis prevent dangling pointers
+- **Temporary reclaim**: a value built inline and never bound to a name is released at
+  the site that builds it — a `Vec` consumed inside one expression
+  (`payload.split("\n").len()`), a fresh row pushed or set into a `Vec<Vec<T>>`
+  (`rows.push(build_row(a, b))`), a by-value `Vec` argument, and a `Vec`-returning
+  call used as a statement (`mk("a", "b")` on its own line). Scope-exit teardown and
+  the call-site reclaim share the same nested unwind — element `String` references,
+  owned struct-element fields, every nested Vec level, then the buffer
+
+#### Reclaiming Temporaries
+
+A temporary is unwound exactly like a named binding of the same type, so what is
+*not* reclaimed is a temporary whose own result aliases its storage: an element
+accessor such as `payload.split("\n").get(0)` returns a value that may point into the
+temporary's element buffer, so that buffer is left alone (one buffer per evaluation
+leaks). Bind the Vec to a name first — `parts<Vec<String>> = payload.split("\n")`,
+then `parts.get(0)` — and the binding's own scope-exit cleanup releases it.
+
+```vyb
+main()<Int> -> {
+    payload<String> = "a|b|c\nx|y|z\n"
+    total<Int> = 0
+
+    # The temporary Vec from split() is released as len() returns
+    total = total + payload.split("\n").len()
+
+    # A named binding owns its buffer, so a borrow out of it is safe
+    parts<Vec<String>> = payload.split("\n")
+    println(total.to_string() + " " + parts.get(0))
+    return 0
+}
+```
+
+`test/ownership/vec_temp_receiver_reclaimed.vyb` and
+`test/ownership/vec_temp_{push_arg,set_arg,discarded_call}_reclaimed.vyb` lock the
+reclaimed shapes in (the push/set fixtures read their rows back, so a slot that
+aliased freed storage would show as garbage).
 
 #### Weak References with mild<T>
 
@@ -3059,7 +3095,7 @@ cmake --build build --target run-milestone
 
 Vyb's canonical test runner is `test/run_tests.vyb` — a Vyb program, the same
 suite wired into CTest as the `run-tests` target and used for the full regression
-gate (currently **1239 `.vyb` tests, all passing**):
+gate (currently **1244 `.vyb` tests, all passing**):
 
 ### Quick Testing
 
@@ -3096,7 +3132,7 @@ build/vyb triage_tool.vyb results.json --priority critical,high
 ```
 
 ### Test Features
-- **1239 Tests, All Passing**: The full `run_tests.vyb` suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area
+- **1244 Tests, All Passing**: The full `run_tests.vyb` suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area
 - **Harness Reporting**: `test_harness.vyb` adds JSON/HTML reports and failure triage on top of the runner (sequential execution; `--workers` is accepted for compatibility)
 - **Rich Reporting**: HTML, JSON, and console output with detailed metrics
 - **Smart Categorization**: Automatic test categorization and filtering
@@ -3371,10 +3407,10 @@ compatibility) and reports the same per-test verdicts as the canonical runner.
 - **Error Context**: Detailed failure information with context and suggestions
 
 #### **Test Statistics**
-- **Total Tests**: 1239 `.vyb` tests (full suite, all passing as of v0.7.7)
+- **Total Tests**: 1244 `.vyb` tests (full suite, all passing as of v0.7.7)
 - **Coverage Areas**: Language features, control flow, error handling, type system, math, strings, introspection
 - **Test Types**: Feature tests (with `@expect: pass`), future-feature docs (with `@expect: fail`), parser tests
-- **Success Rate**: 100% (1239/1239) on the current suite
+- **Success Rate**: 100% (1244/1244) on the current suite
 
 ### 🔧 **Syntax Migration Tools**
 
@@ -3490,7 +3526,7 @@ See `doc/` directory for detailed design documents and RFCs.
   - **Type inference**: First case determines result type for entire select
   - **Pattern matching**: Exact equality patterns with wildcard `?` support
 - ✅ **Canonical Syntax Unification**: Complete migration to unified `my()`/`our()` constructors and `view`/`borrow` operators
-- ✅ **Modern Test Harness**: `test/run_tests.vyb` running the full suite — 1239 `.vyb` tests all passing — with an auxiliary parallel/HTML/triage harness
+- ✅ **Modern Test Harness**: `test/run_tests.vyb` running the full suite — 1244 `.vyb` tests all passing — with an auxiliary parallel/HTML/triage harness
 - ✅ **Syntax Migration Tools**: Automated migration from legacy to canonical syntax with comprehensive reporting
 - ✅ **Match Statements**: Complete pattern matching with `->` arrow syntax and `?` wildcard; no-match results in NOP
 - ✅ **Break/Continue**: Loop control flow statements working in all loop types

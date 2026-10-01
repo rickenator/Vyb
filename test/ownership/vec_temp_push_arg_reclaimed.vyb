@@ -1,0 +1,32 @@
+// @test: A fresh Vec temp pushed into a Vec<Vec<String>> is reclaimed
+// @description: `rows.push(build_row(a, b))` deep-copies the temp's elements into
+// @description: the slot (nested-Vec copy retains each inner String), so the temp's
+// @description: own buffer is dead and gets released -- every nesting level, not
+// @description: just the outer one. Reading the rows back proves the deep copy did
+// @description: not alias the freed storage (TODO.md:248 shape 2)
+// @category: ownership, vec, memory
+// @expect: pass
+// @expect-output: rows=50 last=r49/c first=r0 sized=2
+
+build_row(a<String>, b<String>)<Vec<String>> -> {
+    r<Vec<String>> = Vec<String>()
+    r.push(a)
+    r.push(b)
+    return r
+}
+
+main()<Int> -> {
+    rows<Vec<Vec<String>>> = Vec<Vec<String>>()
+    i<Int> = 0
+    while (i < 50) {
+        rows.push(build_row("r" + i.to_string(), "c"))
+        i = i + 1
+    }
+    last<Vec<String>> = rows.get(49)
+    first<Vec<String>> = rows.get(0)
+    println("rows=" + rows.len().to_string() +
+            " last=" + last.get(0) + "/" + last.get(1) +
+            " first=" + first.get(0) +
+            " sized=" + last.len().to_string())
+    return 0
+}

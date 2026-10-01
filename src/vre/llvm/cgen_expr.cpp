@@ -4763,6 +4763,49 @@ llvm::Value* LLVMCodegen::generateArraySerialization(llvm::Value* arrayPtr, vyb:
 // This is deliberately conservative: borrows (named-var reads, struct fields,
 // string literals in .rodata) and values whose provenance is unknown return
 // false so they are never freed here.
+// Does this expression build a fresh Vec whose buffer nobody else can reach?
+//
+// The Vec counterpart of exprProducesOwnedStringTemp: a Vec created, passed as an
+// argument or used as a method receiver, has no named binding to reclaim it, so
+// the call site must release the buffer itself (TODO.md:248 -- `split(...).len()`,
+// `rows.push(v2(a, b))`). Two families are deliberately excluded:
+//
+//   * reads of a binding/field -- that location's own scope-exit cleanup owns the
+//     buffer (freeing it here would double-free);
+//   * calls that hand back a borrow of the receiver's buffer (`get`, `first`,
+//     `last`, `get_vec`, `pop`) or the receiver's own buffer itself (`push`, `set`,
+//     `insert`, `remove_at`, `clear`, `push_array`, `resize`, `concat`) -- their
+//     result aliases storage the receiver still owns, exactly the case that made
+//     exprProducesOwnedStringTemp exclude Vec element access.
+bool LLVMCodegen::exprProducesFreshVecTemp(vyb::ast::Expression* expr) {
+    if (!expr) return false;
+    // A named binding or a field read is owned by its own cleanup.
+    if (dynamic_cast<vyb::ast::Identifier*>(expr) ||
+        dynamic_cast<vyb::ast::MemberExpression*>(expr) ||
+        dynamic_cast<vyb::ast::ArrayLiteral*>(expr)) {
+        return false;
+    }
+    auto* call = dynamic_cast<vyb::ast::CallExpression*>(expr);
+    if (!call) return false;
+
+    if (auto* member = dynamic_cast<vyb::ast::MemberExpression*>(call->callee.get())) {
+        if (auto* prop = dynamic_cast<vyb::ast::Identifier*>(member->property.get())) {
+            static const std::set<std::string> aliasesReceiver = {
+                "push", "pop", "set", "insert", "remove_at", "remove", "clear",
+                "push_array", "resize", "concat", "get", "first", "last", "peek",
+                "get_vec", "get_array", "to_array", "iter", "contains", "index_of",
+            };
+            if (aliasesReceiver.count(prop->name)) return false;
+        }
+    }
+    // A fetch through a borrow (`outer.get(0)` on a `Vec<Vec<T>>`) is a view of the
+    // *outer* buffer, not a fresh allocation -- covered by the deny-list above
+    // (`get`/`first`/`last`/`get_vec`), which is what makes this safe to free.
+
+    auto t = typeOfNode(expr);
+    return t && isVecTypeNode(t.get());
+}
+
 bool LLVMCodegen::exprProducesOwnedStringTemp(vyb::ast::Expression* expr) {
     if (!expr) return false;
 

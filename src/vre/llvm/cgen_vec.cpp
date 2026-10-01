@@ -453,6 +453,22 @@ void LLVMCodegen::reclaimFreshStructArgTemp(vyb::ast::CallExpression* node, unsi
                  dynamic_cast<ast::ObjectLiteral*>(node->arguments[argIdx].get()) != nullptr;
     if (!fresh || !typeOfNode(node->arguments[argIdx])) return;
     const vyb::ast::TypeNode* at = typeOfNode(node->arguments[argIdx]).get();
+    // A fresh Vec temp as the element (`rows.push(v2(a, b))` into a
+    // `Vec<Vec<String>>`, `rows.set(0, v2(a, b))`): the slot above already
+    // deep-copied the elements, so the temp's own buffer is unreachable and must be
+    // released -- every nesting level included (reclaimVecStorage drops the element
+    // String references and the inner Vec buffers, then frees the temp's storage).
+    // A named source stays with its own cleanup: the freshness test above is what
+    // keeps that from double-freeing.
+    if (isVecTypeNode(at)) {
+        // Only when the element type is known: the clone of a Vec with an unknown
+        // element AST is a raw slot memcpy that shares the temp's inner buffers, so
+        // freeing the temp under it would dangle. With the element known,
+        // generateVecDeepCopy clones every nesting level independently.
+        if (vecElementTypeNode(at) == nullptr) return;
+        reclaimVecStorage(value, elementType, at, "vecarg.tmp");
+        return;
+    }
     if (!isKnownStructTypeNode(at) || !structTypeHasOwnedFields(at)) return;
     auto* st = llvm::dyn_cast<llvm::StructType>(elementType);
     if (!st) return;
@@ -942,9 +958,16 @@ void LLVMCodegen::handleVecSet(vyb::ast::CallExpression* node, llvm::Value* vecP
         builder->CreateCall(getOrCreateFreeFunction(), {oldData});
         // Clone the inner Vec *with* its elements' owned references, so the slot
         // stays valid after the source binding is released.
+        llvm::Value* setSrcVecValue = value;
         value = generateVecDeepCopy(value, nestedInnerTy,
                                     llvm::cast<llvm::StructType>(elementLLVMType),
                                     nestedInnerAst);
+        // A fresh Vec TEMP as the assigned value (`rows.set(i, build_row(a, b))`) was
+        // cloned just above with its elements' own references, so the temp's own
+        // storage is unreachable and gets reclaimed (every nesting level). A named
+        // source owns its own cleanup -- the freshness test inside the helper keeps
+        // that from double-freeing.
+        reclaimFreshStructArgTemp(node, 1, setSrcVecValue, elementLLVMType);
     } else if (nestedInnerTy && value->getType() == elementLLVMType) {
         llvm::DataLayout dl(module.get());
         llvm::Value* oldElem = builder->CreateLoad(elementLLVMType, elementPtr,
