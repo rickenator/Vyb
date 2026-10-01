@@ -1,0 +1,143 @@
+// F11 repro (#345): reducing a card across types through a generic frame leaves the
+// copied MachineFace payload dangling.
+//
+// (a) and (c) print the audit correctly; (b), where the app argument is a live
+// LOCAL rather than a temporary, prints garbage bytes at 0.7.6. Seen first in
+// VybWin's src/vybwin.vyb §6.2 self-check (the "arena card audit" check).
+//
+//   VYB_STDLIB=<vyb>/stdlib <vyb>/build/vyb repro/f11_generic_copy_dangling.vyb
+
+aspect Face {
+    type Body
+    title(self)<String> -> { }
+    body(self)<Face::Body> -> { }
+}
+
+aspect Shell : Face {
+    summon_hint(self)<String> -> { }
+}
+
+struct ShellFace { name<String>, markup<String>, index<Int>, of<Int> }
+struct MachineFace { pid<Int>, rss_kb<Int>, audit<String>, index<Int>, of<Int> }
+struct SourcesFace { count<Int>, detail<String>, index<Int>, of<Int> }
+
+enum FaceSlot { Shell(ShellFace), Machine(MachineFace), Sources(SourcesFace), Empty }
+
+struct MediaApp { name<String>, source_detail<String>, index<Int>, of<Int> }
+struct Card<A> { app<A>, faces<Vec<FaceSlot>>, target<Int>, tucked<Bool>, in_arena<Bool> }
+
+bind Face -> ShellFace {
+    type Body = String
+    title(self)<String> -> { return self.name }
+    body(self)<Self::Body> -> { return self.markup }
+}
+
+bind Shell -> ShellFace {
+    summon_hint(self)<String> -> { return "summon " + self.name }
+}
+
+bind Face -> MediaApp {
+    type Body = String
+    title(self)<String> -> { return self.name }
+    body(self)<Self::Body> -> { return self.source_detail }
+}
+
+bind Shell -> MediaApp {
+    summon_hint(self)<String> -> { return "summon " + self.name }
+}
+
+bind Face -> FaceSlot {
+    type Body = String
+    title(self)<String> -> {
+        return match (self) {
+            Shell(s) -> s.title()
+            Machine(m) -> "machine"
+            Sources(x) -> "sources"
+            Empty -> "empty slot"
+        }
+    }
+    body(self)<Self::Body> -> {
+        return match (self) {
+            Machine(m) -> m.audit
+            Shell(s) -> s.markup
+            Sources(x) -> x.detail
+            Empty -> ""
+        }
+    }
+}
+
+bind Face -> MachineFace {
+    type Body = String
+    title(self)<String> -> { return "machine" }
+    body(self)<Self::Body> -> { return self.audit }
+}
+
+bind Face -> SourcesFace {
+    type Body = String
+    title(self)<String> -> { return "sources" }
+    body(self)<Self::Body> -> { return self.detail }
+}
+
+aspect MachineT {
+    type Truth
+    truth(self)<MachineT::Truth> -> { }
+}
+
+bind<A<Shell>> MachineT -> Card<A> {
+    type Truth = MachineFace
+    truth(self)<Self::Truth> -> {
+        slot<FaceSlot> = self.faces.get(1)
+        return match (slot) {
+            Machine(m) -> m
+            ? -> MachineFace { pid = 0, rss_kb = 0, audit = "corrupt", index = 1, of = 1 }
+        }
+    }
+}
+
+summon<A<Shell>>(app<A>, truth<MachineFace>, extras<Vec<FaceSlot>>)<Card<A>> -> {
+    n<Int> = 2 + extras.len()
+    faces<Vec<FaceSlot>> = Vec()
+    faces.push(FaceSlot::Shell(ShellFace { name = app.title(), markup = app.body(), index = 0, of = n }))
+    faces.push(FaceSlot::Machine(MachineFace { pid = truth.pid, rss_kb = truth.rss_kb, audit = truth.audit, index = 1, of = n }))
+    return Card<A> { app = app, faces = faces, target = 0, tucked = false, in_arena = true }
+}
+
+// the cross-type reduction: Card<A> -> Card<ShellFace>
+into_arena<A<Shell>>(app<A>, c<Card<A>>)<Card<ShellFace>> -> {
+    slot<FaceSlot> = c.faces.get(0)
+    shell<ShellFace> = match (slot) {
+        Shell(s) -> s
+        ? -> ShellFace { name = app.title(), markup = app.body(), index = 0, of = c.faces.len() }
+    }
+    return Card<ShellFace> { app = shell, faces = c.faces, target = c.target, tucked = c.tucked, in_arena = true }
+}
+
+summon_audit(who<String>, when<String>)<String> -> {
+    return "summoned by " + who + " · " + when
+}
+
+media_app()<MediaApp> -> {
+    return MediaApp { name = "media", source_detail = "deck A/B, mic, browser tab", index = 0, of = 3 }
+}
+
+mk(audit<String>)<Card<MediaApp>> -> {
+    a<MediaApp> = media_app()
+    truth<MachineFace> = MachineFace { pid = 4243, rss_kb = 24576, audit = audit, index = 1, of = 3 }
+    return summon(a, truth, Vec())
+}
+
+show(tag<String>, c<Card<ShellFace>>) -> {
+    t<MachineFace> = c.truth()
+    println(tag + " pid=" + t.pid.to_string() + " audit=[" + t.audit + "]")
+}
+
+main()<Int> -> {
+    m<Card<MediaApp>> = mk(summon_audit("helm", "14:02"))
+    println("source  audit=[" + m.truth().audit + "]")
+    r1<Card<ShellFace>> = into_arena(media_app(), m)
+    show("(a) temporary app:", r1)
+    app2<MediaApp> = media_app()
+    r2<Card<ShellFace>> = into_arena(app2, m)
+    show("(b) local app:    ", r2)
+    return 0
+}

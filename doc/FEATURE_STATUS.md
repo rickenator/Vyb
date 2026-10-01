@@ -180,6 +180,7 @@ write-up in `doc/OWNERSHIP_VS_RUST.md` (#358 gap 4). |
 | LLVM IR codegen | ✅ | |
 | JIT execution | ✅ | |
 | AOT native executable | ✅ | `--build` flag with repeatable `--link <lib-or-path>` linker inputs |
+| IR optimization phase (`-O0`–`-O3`) | ✅ | `optimize_module` (`src/main.cpp`) is a named phase scheduled per compilation path: the AOT paths call it from a target machine built from the requested triple/CPU/reloc, the JIT path through `jit_optimize_module` (default triple, `generic` CPU, no reloc). `-O0` = no IR passes, `-O1`/`-O2`/`-O3` = `default<On>`, `-O2` default; the level now reaches both paths (the JIT path used to hardcode O2). Contract in `docs/refman/PROGRAMMERS_GUIDE.md`; `ci.yml` asserts each level selects its own pipeline and that output is identical at every level |
 | Multi-file compilation | ✅ | ModuleRegistry resolves local imports, module paths, stdlib discovery, and dependency order |
 | `extern "C"` FFI | ✅ | Extern blocks parse/codegen, freedom-gated calls, C ABI scalar/pointer aliases, conservative `#[repr(C)]` structs |
 | Variadic C functions | ✅ | A trailing `...` marks an extern declaration variadic (isVarArg); call sites accept extra args and auto-extract Vyb `String` data pointers for `%s` (`test/ffi/variadic_c_printf.vyb`) |

@@ -35,7 +35,7 @@
 
 // Declare function for JIT compilation and execution of Vyb code
 // This is implemented in main.cpp with auto-serialization support
-int run_vyb_code(const std::string& source, const std::string& fileName, bool generateLLVMIR = false);
+int run_vyb_code(const std::string& source, const std::string& fileName, bool generateLLVMIR = false, int optLevel = 2);
 
 /* // EBNF Grammar of the Vyb Language  // Uncommented
 //

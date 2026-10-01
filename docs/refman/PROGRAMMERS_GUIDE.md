@@ -2779,6 +2779,29 @@ runtime points a single process at a list of tests if needed.
 ./build.sh --test-pattern '*.vyb' # filter by filename pattern
 ```
 
+### Optimization phases (`-O0`–`-O3`)
+
+The driver accepts `-O0`, `-O1`, `-O2` and `-O3` (`-O2` is the default) and the
+level now reaches **both** compilation paths: the AOT paths
+(`vyb build --object`, `--kernel`) and the JIT execution path. The phase is
+`optimize_module` (`src/main.cpp`), keyed by level:
+
+| Level | IR pipeline | AOT backend level |
+|---|---|---|
+| `-O0` | none — the phase returns before building a pass manager | `CodeGenOptLevel::None` |
+| `-O1` | LLVM `default<O1>` | `Less` |
+| `-O2` (default) | LLVM `default<O2>` | `Default` |
+| `-O3` | LLVM `default<O3>` | `Aggressive` |
+
+Each path owns the target machine the phase needs: the AOT paths build it from
+the requested triple/CPU/relocation model, while the JIT path builds one from the
+default target triple (`generic` CPU, no relocation model) and pins the module's
+data layout to it. `-O0` means "no IR passes" on both paths, not "no code
+generation". `--debug-codegen` prints which pipeline ran (`Skipping IR
+optimization (-O0)` / `Applying IR optimization passes (-On)`), and `ci.yml`
+asserts per level that the pipeline selected differs *and* that program output is
+identical at every level.
+
 ### Test harness
 
 Canonical suite runner — a Vyb program (`test/run_tests.vyb`), wired into CTest

@@ -1,0 +1,31 @@
+// F10 repro (#344): a bind body that calls a SIBLING verb declared later in the same
+// bind is reported as "Function self.inner not found" — but the program still
+// runs, with the call evaluating to undef (garbage), and exit code 0.
+// Expected: 30. Observed at 0.7.6: the diagnostic line plus a garbage integer.
+// Declaring `inner` before `outer` makes it correct.
+//
+//   VYB_STDLIB=<vyb>/stdlib <vyb>/build/vyb repro/f10_bind_forward_ref.vyb
+
+aspect AB {
+    outer(self)<Int> -> { }
+    inner(self)<Int> -> { }
+}
+
+struct S { items<Vec<Int>> }
+
+bind AB -> S {
+    // forward reference: `inner` is declared after this verb
+    outer(self)<Int> -> { return self.inner() * 10 }
+
+    inner(self)<Int> -> { return self.items.len() }
+}
+
+main()<Int> -> {
+    s<S> = S { items = Vec() }
+    s.items.push(1)
+    s.items.push(2)
+    s.items.push(3)
+    println("inner() = " + s.inner().to_string())
+    println("outer() = " + s.outer().to_string())
+    return 0
+}

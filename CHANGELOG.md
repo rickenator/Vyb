@@ -27,6 +27,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   only a writer and no reader at all (`FunctionDeclaration::errorTypes`) was
   dropped outright. No behaviour change: the suite, the CLI smokes and the
   reference-manual gate are the proof.
+- **The 1.0 contradiction gate is mechanical (#395)** — the 1.0 must-have row
+  "All open contradictions resolved" pointed at a section that no longer exists, and
+  the check behind it was one-way: a shipped TODO.md item could leave its
+  FEATURE_STATUS row advertised as planned (the case found here: `Drop semantics on
+  propagation paths (fail/trap)` read 📋 while its item read shipped, since closed).
+  `tools/docstatus.vyb` gains a sixth invariant for the reverse direction — a
+  `- [x]` item carrying an explicit `<!-- shipped: LABEL -->` marker names the row
+  that records it, and that row may no longer read 📋/🚧 — general where the existing
+  curated pair table was per-item. The row is closed with the audit's method and its
+  result recorded, and `ci.yml`'s description of the gate names all six invariants.
+- **IR optimization is now a scheduled phase, not an inline side effect (#393)** —
+  `optimize_module` already existed but each path reached it as part of emitting
+  or launching. The JIT path now calls it through `jit_optimize_module`
+  (`src/main.cpp`), which owns the target machine the IR pipeline needs (default
+  triple, `generic` CPU, no relocation model), pins the module's data layout to
+  it, and runs the same level-keyed pipeline the AOT paths run from their own
+  machine. The contract — which passes, in what order, at which level, per path —
+  is documented in `docs/refman/PROGRAMMERS_GUIDE.md`. No behaviour change at the
+  default level.
 - **The propagation-path drop-semantics record is closed out (#397)** — three
   residues of the thread-boundary and fail-path work are settled. The
   `doc/FEATURE_STATUS.md` row `Drop semantics on propagation paths (fail/trap)` moves
@@ -51,6 +70,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the re-raised one is freed by the untrapped handler as before. Both fixtures
   of the path are leak-clean under `ASAN_OPTIONS=detect_leaks=1`; the `ci.yml` ASan
   job now asserts the fixture's non-zero exit *and* the absence of a leak report.
+- **`-O` levels now reach the JIT path (#394)** — the driver parsed `-O0`–`-O3`
+  and the AOT paths honoured them, but the JIT path called
+  `optimize_module(module.get(), targetMachine, 2)` unconditionally, so `-O0`,
+  `-O1` and `-O3` silently ran the O2 pipeline (and `-O0` did not mean "no
+  passes" there). The parsed level is now threaded through `run_vyb_code`, and
+  `-O0` means "no IR passes" on both paths. `ci.yml` runs the same fixture at
+  every level and requires identical output plus the level-specific pipeline line
+  from `--debug-codegen`.
 - **Non-identifier `for` over a struct-element `Vec` (#387)** — the parse-time
   desugar bound a non-identifier producer as the iterator itself, so
   `for (p in make_vec())` with `make_vec()<Vec<Point>>` reported

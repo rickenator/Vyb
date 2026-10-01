@@ -1,0 +1,13 @@
+// F8 repro (#342): a function that is not `share(all)` in an IMPORTED module is
+// not resolvable at all — not even from another function of that same module.
+// Expected: 7. Observed at 0.7.6: "Undefined identifier: helper" (analysis fails,
+// so the program does not run). The identical pair in the root file prints 7.
+//
+//   VYB_STDLIB=<vyb>/stdlib <vyb>/build/vyb repro/f8_private_fn.vyb
+
+import f8_private_fn::mod
+
+main()<Int> -> {
+    println("public_thing() = " + public_thing().to_string())
+    return 0
+}

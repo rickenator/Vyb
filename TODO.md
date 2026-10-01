@@ -1147,10 +1147,12 @@ The semantic analyzer currently mutates AST nodes directly (sets `node->type`,
   the risk to guard against during future edits.
 
 ### B. IR Optimization as a Separate Phase
-IR optimization is currently applied inline during JIT setup.
+IR optimization runs as a named phase (`optimize_module`), scheduled by each
+compilation path rather than applied as a side effect of emitting or launching
+(#393), at the level the driver was asked for on both paths (#394).
 
-- [ ] Extract into an explicit `optimize(module)` step controllable per compilation target
-- [ ] Expose `-O0`–`-O3` flags consistently for both JIT and AOT paths
+- [x] Extract into an explicit `optimize(module)` step controllable per compilation target — the phase is `optimize_module` (`src/main.cpp`), called by the AOT paths (`compile_vyb_to_object`, `compile_vyb_kernel`) from a target machine they own, and by the JIT path through `jit_optimize_module`, which builds the machine the IR pipeline needs from the default target triple and pins the data layout to it. The contract (which passes, per level, per path) is documented in `docs/refman/PROGRAMMERS_GUIDE.md` §"Optimization phases", and `ci.yml` asserts the JIT path selects the requested pipeline
+- [x] Expose `-O0`–`-O3` flags consistently for both JIT and AOT paths — the JIT path used to hardcode O2 (`optimize_module(..., 2)`), so `-O0`/`-O1`/`-O3` silently did nothing there; the parsed level is now threaded through `run_vyb_code`. `-O0` means "no IR passes" on both paths. `ci.yml` runs the same fixture at every level and requires identical output plus the level-specific pipeline line
 
 ### C. Error Recovery in Parsing
 The parser used to throw on the first error. It now synchronizes per top-level
@@ -1426,7 +1428,19 @@ For Vyb to be considered production-ready at 1.0, **all of the following must be
 - [x] FFI (`extern "C"`) working — extern blocks, ABI aliases, `#[repr(C)]`, native `--link`, variadics, `vyb bindgen` (MVP + libclang `--full`)
 - [x] `vyb.toml` and `vyb build` project system — manifest, multi-file/path-dep build, `vyb new`, `vyb.lock`, and all four dependency sources resolving (`path`, `git:` shallow-clone into `.vybmod/<name>/` on build, `github:` via `vyb mod install github:owner/repo/path`, `version:` against the package registry via `VYB_REGISTRY`/`~/.vyb/registry`); the end-to-end fixture is `test/gitdep_smoke.vyb` (`gitdep smoke: 4/4 checks passed`), documented in `doc/MANIFEST.md`
 - [x] Wildcard trap handler (`trap (e<?>)`) with `typeof` discrimination
-- [ ] All open contradictions resolved (see section above) <!-- open: (none) -->
+- [x] All open contradictions resolved — AUDITED AND GATED. The row used to point at a
+  section that no longer exists; there is no separate list to restore, because the
+  contradiction class is now mechanical: `tools/docstatus.vyb` checks six invariants
+  (cited paths resolve; every unchecked 1.0 item names the row tracking it or
+  `(none)`, and never a ✅ row; a shipped item's FEATURE_STATUS row never still reads
+  📋/🚧 — curated table *plus* the general `<!-- shipped: LABEL -->` direction added
+  by this item; the README tag and CHANGELOG section match `CMakeLists.txt`). The
+  audit walk found exactly one live contradiction at the time it was written — the
+  `Drop semantics on propagation paths (fail/trap)` row still 📋 while its TODO item
+  read shipped — which is closed in the same change and is the case the new check
+  pins. One known non-contradiction is recorded rather than hidden: the curated
+  `bind Handoff -> T` disagreeing with the derived verdict is a non-fatal
+  `addWarning` by design.
 
 ### Should-Have for 1.0
 - [x] REPL (`vyb repl`) — JIT-backed eval loop (persistent declarations + variables, bare-expression auto-display, multiline via bracket balance, error recovery); protocol smoke test in hosted CI (`test/repl_smoke.vyb`). readline history/editing + `:type` are follow-ons
