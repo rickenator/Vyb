@@ -152,6 +152,30 @@ jobs:
           VYB_ASAN: "1"
         run: ./build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test --json /tmp/asan-suite.json --evidence /tmp/asan-evidence.json
 
+      - name: Abandoning-handler path stays leak-free (#398)
+        # A handler that re-raises an error no enclosing trap can catch leaves the
+        # frame through a non-returning runtime abort, so the caught error has to be
+        # freed *before* that call. `test/trap/refail_test.vyb` is the negative
+        # fixture for that path (it exits non-zero by design), hence not part of the
+        # suite: assert its exit status and its freedom from leaks explicitly.
+        env:
+          ASAN_OPTIONS: "halt_on_error=1:detect_leaks=1"
+        run: |
+          set +e
+          out=$(./build/vyb --module-path stdlib test/trap/refail_test.vyb 2>&1)
+          rc=$?
+          set -e
+          echo "$out" | tail -8
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::refail_test.vyb must exit non-zero (untrapped wrapped refail)"
+            exit 1
+          fi
+          if echo "$out" | grep -q 'LeakSanitizer'; then
+            echo "::error::leaked on the abandoning-handler path"
+            exit 1
+          fi
+          echo "abandoning-handler path: non-zero exit, no leak"
+
       - name: Upload ASan release evidence (#158)
         if: always()
         uses: actions/upload-artifact@v4

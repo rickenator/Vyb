@@ -29,9 +29,11 @@
 // Vocabulary is borrowed from the ownership rules the language already has -- a
 // value is `handoff`-capable when it can be handed to another thread, and
 // `viewable` when a second thread may read it -- rather than from another
-// language's trait names. The gate is error-only; the provisional wording
-// ("not handoff-capable") is deliberate while the drop-semantics row for
-// propagation paths is still open.
+// language's trait names. The gate is error-only, and its wording ("not
+// handoff-capable" / "accepted for handoff") is final: the propagation-path
+// reclamation it used to wait on is covered -- a failing frame reclaims its live
+// scopes before forwarding (#380) and an abandoning handler reclaims both error
+// objects (#398) -- so the gate says exactly what it checks, no more.
 
 #include "vyb/semantic.hpp"
 #include "vyb/parser/ast.hpp"

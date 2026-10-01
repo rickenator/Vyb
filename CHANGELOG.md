@@ -27,8 +27,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   only a writer and no reader at all (`FunctionDeclaration::errorTypes`) was
   dropped outright. No behaviour change: the suite, the CLI smokes and the
   reference-manual gate are the proof.
+- **The propagation-path drop-semantics record is closed out (#397)** — three
+  residues of the thread-boundary and fail-path work are settled. The
+  `doc/FEATURE_STATUS.md` row `Drop semantics on propagation paths (fail/trap)` moves
+  from 📋 to ✅, citing the fail-path unwind (#380,
+  `test/ownership/fail_path_unwinds_owned_locals.vyb`) and the abandoning-handler free
+  (#398), and stating explicitly what is *not* claimed (an abandoning frame's own
+  owned locals are not unwound — the process terminates there). The thread-boundary
+  diagnostic wording is declared final instead of provisional: an accepted capture is
+  *accepted for handoff*, never "guaranteed safe" — the gate proves a capture can
+  cross the boundary, not that every path reclaims it — in
+  `src/vre/semantic_thread_boundary.cpp`, `docs/refman/PROGRAMMERS_GUIDE.md` §5 and
+  `doc/THREAD_BOUNDARY_SCOPE.md` (whose step list is now fully closed).
 
 ### Fixed
+- **The abandoning-handler path reclaims the error it caught (#398)** — a trap
+  handler whose `refail` has no enclosing trap that can catch it leaves the frame
+  through a non-returning runtime abort (`__vyb_runtime_untrapped_error`), and the
+  handler-exit free of the caught error was emitted *after* that call, i.e. dead
+  code: `test/trap/refail_test.vyb` leaked 282 B in 5 allocations. The exit free now
+  steps back over non-returning calls (the runtime aborts already carry `noreturn`)
+  before choosing its insertion point, so the caught error is freed before the abort
+  and the re-raised one is freed by the untrapped handler as before. Both fixtures
+  of the path are leak-clean under `ASAN_OPTIONS=detect_leaks=1`; the `ci.yml` ASan
+  job now asserts the fixture's non-zero exit *and* the absence of a leak report.
 - **Non-identifier `for` over a struct-element `Vec` (#387)** — the parse-time
   desugar bound a non-identifier producer as the iterator itself, so
   `for (p in make_vec())` with `make_vec()<Vec<Point>>` reported

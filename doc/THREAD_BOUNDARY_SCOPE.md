@@ -5,10 +5,12 @@ thread boundary when the closure also captures the owner, so the payload stays
 alive — and **(c)** — make the resolution explicit by running the capability check
 where monomorphization has already happened.
 
-Status: **step 0, (b) and (c) are landed, and the curated escape hatch is in**
-(PR #368 for step 0 + (b); PR #369 for the first cut of (c); the deferral rework,
-the registries and the curated binds follow on main). What remains is one refman
-subsection and the wording question, which is settled by the drop-semantics row.
+Status: **all steps landed** — step 0, (b) and (c) are in (PR #368 for step 0 + (b);
+PR #369 for the first cut of (c); the deferral rework, the registries and the curated
+binds follow on main), the refman subsection is written (`PROGRAMMERS_GUIDE.md` §5),
+and the wording question is settled (#397): with propagation-path reclamation
+verified (#380, #398) the diagnostic text is final, still "accepted for handoff"
+rather than "guaranteed safe".
 
 ## Why the simple reading of `viewable` fails
 
@@ -251,9 +253,14 @@ curated type) and `..._curated_bind_wrapper_absent_rejected.vyb`, plus
    carries "Thread-boundary capability (`handoff` / `viewable`)" — the shape table,
    the retained-owner rule, "generics resolve where the evidence is", and the curated
    escape hatch (updated for the claim-through-wrappers behaviour).
-9. **Remaining** — the wording question, which waits on the
-   drop-semantics-on-propagation row: until a moved value is reliably reclaimed on
-   its new thread, the docs say "accepted for handoff", never "guaranteed safe".
+9. ~~**the wording question**~~ — **done and settled** (#397): the
+   drop-semantics-on-propagation row closed (a failing frame reclaims its live scopes,
+   #380 `test/ownership/fail_path_unwinds_owned_locals.vyb`; an abandoning handler
+   reclaims both error objects, #398, leak-asserted in `ci.yml`), so the diagnostic
+   wording is final rather than provisional. It still says *accepted for handoff* and
+   never "guaranteed safe": the gate proves a capture can cross the boundary, and it
+   does not promise that every path reclaims a moved value — the refman §5 and the
+   `FEATURE_STATUS.md` rows state the same position.
 
 ## Risks / notes
 
