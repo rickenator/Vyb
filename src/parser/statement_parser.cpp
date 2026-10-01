@@ -572,9 +572,32 @@ std::unique_ptr<vyb::ast::ForStatement> StatementParser::parse_for() {
                             for_loc, ident_token, nullptr,
                             std::move(body), std::move(skip_expr), std::move(member_obj));
                     }
+                    // Already an iterator producer (`make_iter()`, `v.iter()`)?
+                    // Use it directly. Anything else is a collection producer
+                    // (e.g. `make_vec()` returning `Vec<Point>`): hoist it to a
+                    // temp identifier and call `.iter()` on that, exactly like
+                    // the member-access case above -- the semantic analyzer
+                    // infers an identifier receiver's `.iter()` but not a bare
+                    // method call in a null-typed initializer. Binding the raw
+                    // producer as the iterator itself made a struct-element
+                    // collection report `Unknown method 'next' on type
+                    // 'Vec<Point>'` while the identifier form worked (#387).
+                    bool alreadyIter = false;
+                    if (auto* producer = dynamic_cast<vyb::ast::CallExpression*>(range_expr.get())) {
+                        if (auto* callee = dynamic_cast<vyb::ast::MemberExpression*>(producer->callee.get())) {
+                            if (auto* prop = dynamic_cast<vyb::ast::Identifier*>(callee->property.get())) {
+                                alreadyIter = (prop->name == "iter");
+                            }
+                        }
+                    }
+                    if (alreadyIter) {
+                        return buildForLoopIteratorDesugar(
+                            for_loc, ident_token, std::move(range_expr),
+                            std::move(body), std::move(skip_expr), nullptr);
+                    }
                     return buildForLoopIteratorDesugar(
-                        for_loc, ident_token, std::move(range_expr),
-                        std::move(body), std::move(skip_expr), nullptr);
+                        for_loc, ident_token, nullptr,
+                        std::move(body), std::move(skip_expr), std::move(range_expr));
                 }
 
                 // A plain-identifier iterable is routed onto the Iterator protocol for

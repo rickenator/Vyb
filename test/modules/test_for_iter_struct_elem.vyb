@@ -1,0 +1,43 @@
+// @test: for-loop desugar over a struct-element Vec producer
+// @description: `for (p in make_vec())` with `make_vec()<Vec<Point>>` must iterate
+//   exactly like the identifier form `for (p in v)`. The desugar bound the raw
+//   producer as the iterator itself, so a struct-element collection reported
+//   `Unknown method 'next' on type 'Vec<Point>'` while the identifier form worked
+//   (#387). A non-identifier producer that is not already an iterator is now
+//   hoisted to a temp identifier and `.iter()`ed, like the member-access case.
+// @category: iterator, vec, struct, for, desugar
+// @expect: pass
+// @expect-output: seen=3 sum=21 last=(5,6)
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+
+import collections
+
+struct Point {
+    x<Int>,
+    y<Int>
+}
+
+make_vec()<Vec<Point>> -> {
+    v<Vec<Point>> = Vec()
+    v.push(Point { x = 1, y = 2 })
+    v.push(Point { x = 3, y = 4 })
+    v.push(Point { x = 5, y = 6 })
+    return v
+}
+
+main()<Int> -> {
+    seen<Int> = 0
+    sum<Int> = 0
+    lastx<Int> = 0
+    lasty<Int> = 0
+    for (p in make_vec()) {
+        seen = seen + 1
+        sum = sum + p.x + p.y
+        lastx = p.x
+        lasty = p.y
+    }
+    println("seen=" + seen.to_string() + " sum=" + sum.to_string() +
+            " last=(" + lastx.to_string() + "," + lasty.to_string() + ")")
+    return 0
+}
