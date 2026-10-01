@@ -1,0 +1,31 @@
+// @test: returning a Vec field of a by-value struct parameter is an independent owner (#412)
+// @description: the callee deep-copies a by-value struct parameter, but its scope-exit
+//   reclaim freed that copy's owned fields even when one of them was the value being
+//   returned -- so the caller's new binding and the callee's copy held the same heap
+//   buffer and the process aborted with "free(): double free detected in tcache 2"
+//   (exit 134) after having produced correct output. A member-access return now
+//   deep-copies the returned Vec, so the returned value owns its buffer and the base
+//   binding is cleaned up normally. Found by VybForge; see issue #412.
+// @category: ownership, vec, struct
+// @expect-output: w=5
+// @expect-return: 0
+
+share(all)
+struct Big {
+    a<Vec<Int>>,
+    b<Int>
+}
+
+share(all)
+f(b<Big>)<Vec<Int>> -> {
+    return b.a
+}
+
+main()<Int> -> {
+    v<Vec<Int>> = Vec()
+    for (i in 0..4) { v.push(i) }
+    x<Big> = Big { a = v, b = 1 }
+    w<Vec<Int>> = f(x)
+    println("w=" + w.len().to_string())
+    return 0
+}

@@ -693,7 +693,20 @@ void LLVMCodegen::visit(vyb::ast::ReturnStatement *node) {
                     bool branchReturn = retExpr &&
                         (dynamic_cast<ast::SelectExpression*>(retExpr) != nullptr ||
                          dynamic_cast<ast::MatchExpression*>(retExpr) != nullptr);
-                    if (branchReturn && returnValue && isVecStructType(returnValue->getType()) &&
+                    // #412: a member read carries the same aliasing hazard as a branch.
+                    // An owned field read out of a binding this frame cleans up -- most
+                    // visibly a by-value struct parameter, whose deep copy the callee
+                    // frees at exit -- is returned as the field's `{ ptr, size, cap }` by
+                    // value, so the callee's cleanup and the caller's new binding hold the
+                    // same heap buffer and free it twice (deterministic double free, found
+                    // by VybForge). Deep-copy the returned Vec so the returned value is an
+                    // independent owner, exactly as the select/match case below does; the
+                    // transfer-name scan is skipped for the same reason (the base binding
+                    // is cleaned up normally).
+                    bool memberVecReturn = retExpr &&
+                        dynamic_cast<ast::MemberExpression*>(retExpr) != nullptr;
+                    if ((branchReturn || memberVecReturn) && returnValue &&
+                        isVecStructType(returnValue->getType()) &&
                         currentFunctionAST && currentFunctionAST->returnTypeNode) {
                         const vyb::ast::TypeNode* elemNode = nullptr;
                         if (auto* vt = dynamic_cast<ast::VecType*>(currentFunctionAST->returnTypeNode.get())) {
