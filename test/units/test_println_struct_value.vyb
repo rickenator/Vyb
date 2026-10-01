@@ -1,0 +1,21 @@
+// @test: println(<struct value>) compiles and prints the keyed JSON (#409)
+// @description: the println argument path handed the struct branch's Vyb String
+//   ({ ptr, i64 }) straight to __vyb_println, which is declared (const char*), so the
+//   emitted module failed LLVM verification -- "Call parameter type does not match
+//   function signature" -- and printing a struct from a Void main did not compile at
+//   all, though the auto-serialization notes describe exactly that form. The data
+//   pointer is now extracted, and the same value feeds the cleanup free, so the
+//   printed JSON and its ownership are unchanged.
+// @category: println, serialization, struct
+// @expect-output: {"id": 123, "name": "Alice", "salary": 88000}
+
+struct Person {
+    Int id,
+    String name,
+    Float salary
+}
+
+main() -> {
+    person<Person> = Person { id = 123, name = "Alice", salary = 88000.0 }
+    println(person)
+}
