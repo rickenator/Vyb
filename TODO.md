@@ -661,11 +661,13 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
   ("accepted for handoff") until the drop-semantics-on-propagation row above closes,
   and the step record lives in `doc/THREAD_BOUNDARY_SCOPE.md`. Shipped in v0.7.7
   (#365, PRs #366-#370).
-- [ ] **Lifetime inference beyond lexical scope** <!-- open: Lifetime inference beyond lexical scope -->
-  — `borrow`/`view` are lexical-phase by design (documented in #149): no lifetime
+- [x] **Lifetime inference beyond lexical scope** — DECIDED, not a 1.0 gap.
+  `borrow`/`view` are lexical-phase by design (documented in #149): no lifetime
   inference across signatures, and a borrow runs to end of scope rather than last
-  use, so some programs Rust accepts are rejected here. Extending it is a
-  post-1.0 direction; the lexical model is the 1.0 contract (#358 gap 1).
+  use, so some programs Rust accepts are rejected here. The lexical model IS the
+  1.0 contract — the decision, not an implementation, is what this row asked for
+  (#358 gap 1, filed as #386 and closed with the decision recorded). The extension
+  is carried as a Post-1.0 Roadmap entry of the same name.
 
 ### 4. Standard Library Expansion (HIGH PRIORITY)
 - [x] **`Option<T>` (removed)** — the Rust-shaped `Some`/`None` enum was superseded by the native `T?` optional and removed from the compiler (and the transitional `core::option` bridge)
@@ -1424,6 +1426,16 @@ For Vyb to be considered production-ready at 1.0, **all of the following must be
 - [ ] Debugger integration validated end-to-end with `gdb`/`lldb` <!-- open: (none) -->
 
 ### Post-1.0 Roadmap
+
+Entries here are planned features, deliberately NOT 1.0 release gates. The ones
+filed in the tracker (see the umbrella issue) are tracked in this section; split
+one into its own issue when work on it starts.
+
+- [ ] Lifetime inference beyond lexical scope — borrows are lexical-phase: nothing
+  crosses a signature and a borrow runs to end of scope rather than to last use.
+  Extending it means a real lifetime solver replacing the lexical model, which is
+  the 1.0 contract, so it is post-1.0 (decision recorded; #386 closed as the
+  decision, #149 for the model itself, #358 gap 1).
 - [x] Agents (lightweight isolated message-passing units) — design doc `doc/AGENTS_DESIGN.md`; Stages 1–5 shipped (see the Agents section above).
 - [x] **Network/socket MVP** — synchronous TCP/IP sockets shipped via the `network`
   stdlib module (`socket_open/bind/listen/accept/connect/send/recv/local_port/close`,
