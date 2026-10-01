@@ -121,6 +121,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `test/ownership/vec_temp_{receiver,push_arg,set_arg,discarded_call}_reclaimed.vyb`
   (an element accessor on a temp receiver, `payload.split("\n").get(0)`, still leaks
   one buffer per evaluation — recorded in `TODO.md`).
+- **A `fail` that left a frame skipped the frame's owned-locals cleanup** —
+  `forwardError` emitted the `{T, i8*}` error return straight from the `fail` site,
+  bypassing the cleanup IR the normal exit runs, so every owned local of the failing
+  frame leaked: a `Vec<String>` local (with a heap String and a nested-block String)
+  leaked 1600 B in 25 propagated fails under `ASAN_OPTIONS=detect_leaks=1`. The
+  propagating branch now unwinds to the function baseline (`exitToFunctionBaseline`)
+  before forwarding, so each live scope of the frame emits its cleanup into the fail
+  branch and the scope stack is restored for sibling paths.
+  `test/ownership/fail_path_unwinds_owned_locals.vyb` traps the error on the caller
+  side (the error still propagates unchanged and the normal path still cleans up); a
+  frame that traps the error itself keeps its locals alive — that trap is an
+  in-function branch, so nothing unwinds.
 - **A curated thread-boundary bind was invisible through a wrapper (`bind
   Handoff -> T`, landed just after the v0.7.7 tag)** — the structural walk asked
   the claim only for the type string as written, so `bind Handoff -> T` covered `T`

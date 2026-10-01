@@ -2375,6 +2375,16 @@ void LLVMCodegen::forwardError(llvm::Value* errorPtr, const SourceLocation& loc)
     // enclosing trap's handler is still on the stack. Propagate like the
     // untrapped case.
     if ((currentFunctionAST && currentFunctionAST->needsErrorReturn) || m_currentFunctionFailable) {
+        // The error is leaving this frame, so the frame's owned locals unwind exactly
+        // the way a `return` unwinds them. Without this the cleanup IR the normal exit
+        // emits is skipped on the fail path and every owned local of the failing frame
+        // leaks: a `Vec<String>` local in a function that `fail`s leaked one 64 B
+        // buffer per propagated fail (probe before the fix: 1600 B / 25 allocs, clean
+        // after). Exit down to the function baseline so the cleanup IR lands in this
+        // branch's own blocks before the error return, then restore the stack so
+        // sibling/continuation paths still see those scopes (the same discipline
+        // exitToFunctionBaseline uses for `return`).
+        exitToFunctionBaseline();
         emitPropagatingErrorReturn(errorPtr);
     } else {
         llvm::Function* untrappedFn = getVybUntrappedErrorFunction();
