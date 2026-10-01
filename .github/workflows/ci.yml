@@ -59,6 +59,31 @@ jobs:
         # what test/run_tests.vyb actually runs.
         run: ./build/vyb test/suite_count_check.vyb
 
+      - name: Optimization level reaches the JIT path (#394)
+        # `-O` used to parse and then be ignored by the JIT path, which hardcoded
+        # O2 -- so -O0/-O1/-O3 silently ran the O2 pipeline. Each level must both
+        # select its own pipeline (asserted through --debug-codegen, which prints
+        # "Skipping IR optimization (-O0)" or "Applying IR optimization passes
+        # (-On)") and produce identical program output.
+        run: |
+          set -euo pipefail
+          export VYB_STDLIB="$PWD/stdlib"
+          f=test/modules/test_for_iter_struct_elem.vyb
+          base=$(./build/vyb "$f")
+          for lvl in 0 1 2 3; do
+            out=$(./build/vyb "$f" "-O$lvl")
+            if [ "$out" != "$base" ]; then
+              echo "::error::output differs at -O$lvl: '$out' != '$base'"
+              exit 1
+            fi
+            if [ "$lvl" = "0" ]; then
+              ./build/vyb --debug-codegen "$f" -O0 2>&1 | grep -q 'Skipping IR optimization (-O0)'
+            else
+              ./build/vyb --debug-codegen "$f" "-O$lvl" 2>&1 | grep -q "Applying IR optimization passes (-O$lvl)"
+            fi
+          done
+          echo "-O0..-O3 each select their own pipeline and agree on output"
+
       - name: Validate tracking docs agree with the tree (TODO.md / FEATURE_STATUS.md)
         # tools/docstatus.vyb enforces five invariants: every repo path cited in the
         # tracking docs resolves on disk; every unchecked 1.0 criterion carries an

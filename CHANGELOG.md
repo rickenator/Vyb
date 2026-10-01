@@ -27,8 +27,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   only a writer and no reader at all (`FunctionDeclaration::errorTypes`) was
   dropped outright. No behaviour change: the suite, the CLI smokes and the
   reference-manual gate are the proof.
+- **IR optimization is now a scheduled phase, not an inline side effect (#393)** —
+  `optimize_module` already existed but each path reached it as part of emitting
+  or launching. The JIT path now calls it through `jit_optimize_module`
+  (`src/main.cpp`), which owns the target machine the IR pipeline needs (default
+  triple, `generic` CPU, no relocation model), pins the module's data layout to
+  it, and runs the same level-keyed pipeline the AOT paths run from their own
+  machine. The contract — which passes, in what order, at which level, per path —
+  is documented in `docs/refman/PROGRAMMERS_GUIDE.md`. No behaviour change at the
+  default level.
 
 ### Fixed
+- **`-O` levels now reach the JIT path (#394)** — the driver parsed `-O0`–`-O3`
+  and the AOT paths honoured them, but the JIT path called
+  `optimize_module(module.get(), targetMachine, 2)` unconditionally, so `-O0`,
+  `-O1` and `-O3` silently ran the O2 pipeline (and `-O0` did not mean "no
+  passes" there). The parsed level is now threaded through `run_vyb_code`, and
+  `-O0` means "no IR passes" on both paths. `ci.yml` runs the same fixture at
+  every level and requires identical output plus the level-specific pipeline line
+  from `--debug-codegen`.
 - **Non-identifier `for` over a struct-element `Vec` (#387)** — the parse-time
   desugar bound a non-identifier producer as the iterator itself, so
   `for (p in make_vec())` with `make_vec()<Vec<Point>>` reported

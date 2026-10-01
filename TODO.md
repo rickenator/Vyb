@@ -1135,10 +1135,12 @@ The semantic analyzer currently mutates AST nodes directly (sets `node->type`,
   the risk to guard against during future edits.
 
 ### B. IR Optimization as a Separate Phase
-IR optimization is currently applied inline during JIT setup.
+IR optimization runs as a named phase (`optimize_module`), scheduled by each
+compilation path rather than applied as a side effect of emitting or launching
+(#393), at the level the driver was asked for on both paths (#394).
 
-- [ ] Extract into an explicit `optimize(module)` step controllable per compilation target
-- [ ] Expose `-O0`–`-O3` flags consistently for both JIT and AOT paths
+- [x] Extract into an explicit `optimize(module)` step controllable per compilation target — the phase is `optimize_module` (`src/main.cpp`), called by the AOT paths (`compile_vyb_to_object`, `compile_vyb_kernel`) from a target machine they own, and by the JIT path through `jit_optimize_module`, which builds the machine the IR pipeline needs from the default target triple and pins the data layout to it. The contract (which passes, per level, per path) is documented in `docs/refman/PROGRAMMERS_GUIDE.md` §"Optimization phases", and `ci.yml` asserts the JIT path selects the requested pipeline
+- [x] Expose `-O0`–`-O3` flags consistently for both JIT and AOT paths — the JIT path used to hardcode O2 (`optimize_module(..., 2)`), so `-O0`/`-O1`/`-O3` silently did nothing there; the parsed level is now threaded through `run_vyb_code`. `-O0` means "no IR passes" on both paths. `ci.yml` runs the same fixture at every level and requires identical output plus the level-specific pipeline line
 
 ### C. Error Recovery in Parsing
 The parser used to throw on the first error. It now synchronizes per top-level

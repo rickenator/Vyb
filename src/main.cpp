@@ -665,6 +665,45 @@ void optimize_module(llvm::Module* module, llvm::TargetMachine* targetMachine, i
     if (vyb::g_debug_codegen) std::cout << "  IR optimization completed" << std::endl;
 }
 
+// Optimization phase for the JIT path (#393).
+//
+// The AOT paths (`compile_vyb_to_object`, `compile_vyb_kernel`) own a target
+// machine built from the requested triple/CPU/relocation model and call
+// `optimize_module` immediately before emitting. The JIT has no such machine, so
+// this builds the one the IR pipeline needs from the *default* target triple
+// ("generic" CPU, no relocation model), pins the module's data layout to it, and
+// runs the same level-keyed pipeline. Contract, identical on both paths:
+//
+//   -O0  no IR passes at all (`optimize_module` returns immediately)
+//   -O1  LLVM `default<O1>`
+//   -O2  LLVM `default<O2>` -- the default when no `-O` flag is given
+//   -O3  LLVM `default<O3>`
+//
+// The AOT paths additionally map the level onto `llvm::CodeGenOptLevel` for the
+// backend leg (None/Less/Default/Aggressive); the JIT leaves that to ORC.
+// Returns false when no target machine could be created -- the module is then
+// left unoptimized, the same degradation the AOT paths would report, and the
+// caller must not treat it as fatal.
+bool jit_optimize_module(llvm::Module* module, int optLevel) {
+    std::string targetTriple = llvm::sys::getDefaultTargetTriple();
+    std::string error;
+    auto target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
+    if (!target) {
+        std::cerr << "Warning: Could not create target for optimization: " << error << std::endl;
+        return false;
+    }
+    llvm::TargetOptions opt;
+    auto targetMachine = target->createTargetMachine(targetTriple, "generic", "",
+                                                     opt, std::optional<llvm::Reloc::Model>());
+    if (!targetMachine) {
+        return false;
+    }
+    module->setDataLayout(targetMachine->createDataLayout());
+    optimize_module(module, targetMachine, optLevel);
+    delete targetMachine;
+    return true;
+}
+
 namespace {
 namespace fs = std::filesystem;
 
@@ -2577,7 +2616,7 @@ extern "C" int vyb_cuda_launch4i(void* f, unsigned gridX, unsigned gridY, unsign
 }
 
 // Function to execute Vyb code using LLVM JIT
-int run_vyb_code(const std::string& source, const std::string& fileName, bool generateLLVMIR) {
+int run_vyb_code(const std::string& source, const std::string& fileName, bool generateLLVMIR, int optLevel) {
     VYB_CDBG << "Starting run_vyb_code for file: " << fileName << std::endl;
 
     // Initialize LLVM targets for JIT
@@ -3741,23 +3780,8 @@ runtimeSymbols[mangle("__vyb_strchan_free")] = llvm::orc::ExecutorSymbolDef(
             _wb.CreateRet(_err);
         }
 
-        // Apply IR optimizations before JIT execution (default -O2 for JIT)
-        // Note: We need a target machine for optimization, but JIT uses default target
-        std::string targetTriple = llvm::sys::getDefaultTargetTriple();
-        std::string error;
-        auto target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
-        if (!target) {
-            std::cerr << "Warning: Could not create target for optimization: " << error << std::endl;
-        } else {
-            llvm::TargetOptions opt;
-            auto targetMachine = target->createTargetMachine(targetTriple, "generic", "",
-                                                             opt, std::optional<llvm::Reloc::Model>());
-            if (targetMachine) {
-                module->setDataLayout(targetMachine->createDataLayout());
-                optimize_module(module.get(), targetMachine, 2);  // Use O2 for JIT by default
-                delete targetMachine;
-            }
-        }
+        // Optimization phase, at the level the CLI asked for (#393/#394).
+        jit_optimize_module(module.get(), optLevel);
 
         // Add the module to the JIT
         auto tsm = llvm::orc::ThreadSafeModule(std::move(module), std::move(context));
@@ -5063,7 +5087,7 @@ int main(int argc, char* argv[]) {
             if (execute_jit) {
                 try {
                     VYB_CDBG << "Starting JIT execution of " << filename << std::endl;
-                    int result = run_vyb_code(source, filename, emit_llvm_ir);
+                    int result = run_vyb_code(source, filename, emit_llvm_ir, optimization_level);
                     return result;
                 } catch (const std::exception& e) {
                     std::cerr << "Error during code execution: " << e.what() << std::endl;
