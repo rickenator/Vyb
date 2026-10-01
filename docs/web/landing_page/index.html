@@ -255,7 +255,7 @@ per-symbol signatures live in the auto-generated pages under <code>docs/refman/<
 </blockquote>
 <hr/>
 <h2 id="1-introduction">1. Introduction<a aria-label="Link to 1. Introduction" class="heading-anchor" href="#1-introduction">#</a></h2>
-<p>Welcome to the Vyb programming language version 0.7.6. This overview walks you through what Vyb is and the thinking behind it. Vyb is a systems language built on a simple conviction: you should not have to choose between safety and power. Strong type safety and explicit ownership give your code discipline and predictability, while low-level escape hatches keep raw, machine-near control within reach when you need it. Code runs as fast native executables or through a JIT, so performance stays predictable from first prototype to final program. The syntax is readable and name-first, the abstractions are zero-cost, and the language aims to stay out of your way as your ambitions grow. The rest of this guide shows how those ideas take shape through feature summaries and examples.</p>
+<p>Welcome to the Vyb programming language version 0.7.7. This overview walks you through what Vyb is and the thinking behind it. Vyb is a systems language built on a simple conviction: you should not have to choose between safety and power. Strong type safety and explicit ownership give your code discipline and predictability, while low-level escape hatches keep raw, machine-near control within reach when you need it. Code runs as fast native executables or through a JIT, so performance stays predictable from first prototype to final program. The syntax is readable and name-first, the abstractions are zero-cost, and the language aims to stay out of your way as your ambitions grow. The rest of this guide shows how those ideas take shape through feature summaries and examples.</p>
 <h3 id="11-purpose-audience">1.1 Purpose &amp; Audience<a aria-label="Link to 1.1 Purpose &amp; Audience" class="heading-anchor" href="#11-purpose-audience">#</a></h3>
 <p>This guide is intended for systems programmers, language designers, and developers who want:</p>
 <ul>
@@ -353,16 +353,16 @@ per-symbol signatures live in the auto-generated pages under <code>docs/refman/<
 </ul>
 <p><strong>Parameter passing is explicit.</strong> A plain <code>x&lt;T&gt;</code> parameter is a <em>value copy</em> — the callee works on its own copy and the caller's variable is untouched (a <code>Vec</code> or an owning struct is deep-copied; a <code>String</code> shares its buffer; an <code>our&lt;T&gt;</code> bumps its refcount). To read or mutate <em>in place without copying</em>, take a <code>their&lt;T&gt;</code> borrow, supplied as <code>borrow(x)</code> (mutable) or <code>view(x)</code> (read-only <code>their&lt;T const&gt;</code>). Ownership is separate from reference-passing: <code>my&lt;T&gt;</code> is unique ownership (a named <code>my</code> passed to a <code>my</code> parameter <em>moves</em> — use-after-move is rejected), and <code>our&lt;T&gt;</code> is shared, ref-counted ownership; neither is another spelling of <code>ref</code>. The full, tested rules are in the “Parameter passing” section of the Programmer’s Guide.</p>
 <h2 id="quick-start">Quick Start<a aria-label="Link to Quick Start" class="heading-anchor" href="#quick-start">#</a></h2>
-<pre><code class="language-bash"># Option A: official binary SDK (Linux x64 / macOS x64) — download the v0.7.6
+<pre><code class="language-bash"># Option A: official binary SDK (Linux x64) — download the v0.7.7
 # tarball from the release page and add it to your PATH:
-#   https://github.com/rickenator/Vyb/releases/tag/v0.7.5
+#   https://github.com/rickenator/Vyb/releases/tag/v0.7.7
 
 # Option B: build from source
 git clone https://github.com/rickenator/Vyb.git
 cd Vyb
 mkdir -p build &amp;&amp; cd build &amp;&amp; LLVM_DIR=/usr/lib/llvm-18/cmake cmake .. &amp;&amp; make -j$(nproc) &amp;&amp; cd ..
 
-# Run the full test suite (1184 .vyb tests) with the canonical harness
+# Run the full test suite (1246 .vyb tests) with the canonical harness
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
 
 # Run your first Vyb program
@@ -448,6 +448,33 @@ vyb new myapp          # creates myapp/vyb.toml + myapp/src/main.vyb
 cd myapp &amp;&amp; vyb build
 ./target/myapp
 </code></pre>
+<h4>Tooling</h4>
+<p>The compiler ships its own tooling surface, all exercised by CI:</p>
+<ul>
+<li><code>vyb check</code> — parse + semantic diagnostics without executing</li>
+<li><code>vyb test</code> (equivalently <code>vyb --repo</code>) — the canonical suite runner, written in Vyb (<code>test/run_tests.vyb</code>)</li>
+<li><code>vyb --format</code> / <code>--check</code> — the formatter: <code>--format</code> pretty-prints a file to canonical (idempotent) source, <code>--check</code> exits non-zero when a file is not already canonical</li>
+<li><code>vyb doc</code> — documentation generator (<code>vyb doc &lt;file&gt; [-o outdir]</code>)</li>
+<li><code>vyb repl</code> — JIT-backed eval loop (persistent declarations, bare-expression auto-display, error recovery)</li>
+<li><code>vyb lsp</code> — language server over stdio (published diagnostics, go-to-definition, hover, completion)</li>
+<li><code>vyb build</code> — project builds from <code>vyb.toml</code>, including all four dependency sources below</li>
+</ul>
+<p>Everything is Vyb or C++ in-tree: the test runner, the doc-status checker, the
+reference-manual generator, the syntax migration tool and even the wordmark
+(<code>tools/vybsplash.vyb</code>) are Vyb programs.</p>
+<h4>Dependencies</h4>
+<p>All four dependency sources resolve: <code>path</code> (a sibling directory),
+<code>git:</code> (shallow clone into <code>.vybmod/&lt;name&gt;/</code> at build
+time), <code>github:</code> (via <code>vyb mod install github:owner/repo/path</code>)
+and <code>version:</code> (against the package registry through
+<code>VYB_REGISTRY</code> / <code>~/.vyb/registry</code>). Resolved versions are
+pinned in <code>vyb.lock</code>.</p>
+<pre><code class="language-toml">[dependencies]
+mylib = { path = "../mylib" }
+utils = { git: "https://github.com/example/utils" }
+tool = { github: "rickenator/Vyb/tools/thing" }
+fmt = { version: "0.3.1" }
+</code></pre>
 <h4>Compiling to Object Files</h4>
 <pre><code class="language-bash"># Compile to object file (default -O2 optimization)
 build/vyb hello.vyb --compile hello.o
@@ -472,7 +499,7 @@ objdump -t hello.o | grep main
 <thead><tr><th>Target</th><th>How it is exercised</th></tr></thead>
 <tbody>
 <tr><td><strong>x86-64 / Linux</strong></td><td><strong>Release-tested</strong> — the canonical JIT suite and the AOT/native-link pass run on every CI build, and the SDK tarball ships this target</td></tr>
-<tr><td><strong>NVPTX</strong> (NVIDIA GPUs)</td><td>Device code emitted and validated with <code>ptxas</code> across <code>sm_75</code> → <code>sm_90a</code> in CI; silicon-verified on <code>sm_86</code> (RTX 3090)</td></tr>
+<tr><td><strong>NVPTX</strong> (NVIDIA GPUs)</td><td>Device code emitted and validated with <code>ptxas</code> across <code>sm_75</code> → <code>sm_90a</code> in CI; silicon-verified on <code>sm_86</code> — the CI runner is an RTX 3090 (a self-hosted job executes the kernel fixtures on the card, including an f64 device-memory round trip)</td></tr>
 <tr><td>AArch64, RISC-V, PowerPC, MIPS, SPARC, WebAssembly, SystemZ, Hexagon, LoongArch, M68k, Xtensa, AVR, MSP430, BPF, AMDGPU, VE, Lanai, XCore</td><td>Emitted through the same LLVM backend, but <strong>not CI-covered</strong> — no cross-target fixture or toolchain gate exercises them. Treat these as untested in this tree</td></tr>
 </tbody>
 </table>
@@ -560,7 +587,7 @@ utils = { git = "https://github.com/user/utils" }  # External, smuggled
 </code></pre>
 <p>This unique <code>import</code>/<code>smuggle</code> distinction makes Vyb's module system both secure and flexible, clearly marking the trust level of your dependencies. See <a href="https://github.com/rickenator/Vyb/blob/main/doc/FEATURE_STATUS.md" rel="noopener noreferrer" target="_blank">doc/FEATURE_STATUS.md</a> for implementation status.</p>
 <h2 id="in-this-release">In This Release<a aria-label="Link to In This Release" class="heading-anchor" href="#in-this-release">#</a></h2>
-<p>Vyb <strong>v0.7.6</strong> (freedom-1.0 series) is a mature systems programming language with <strong>native executable generation</strong> and a broad core feature set.</p>
+<p>Vyb <strong>v0.7.7</strong> (freedom-1.0 series) is a mature systems programming language with <strong>native executable generation</strong> and a broad core feature set.</p>
 <h3 id="recent-milestones">✅ <strong>Recent Milestones</strong><a aria-label="Link to ✅ Recent Milestones" class="heading-anchor" href="#recent-milestones">#</a></h3>
 <p>These features were completed in the current release cycle and are fully tested:</p>
 <ul>
@@ -1322,7 +1349,7 @@ python3 migrate_syntax.py --migrate --directory . --backup --report
 <li><strong>Borrowing</strong>: <code>view(expr)</code> and <code>borrow(expr)</code> for references</li>
 <li><strong>Freedom operations</strong>: <code>loc&lt;T&gt;</code> pointers in <code>freedom {}</code> blocks</li>
 <li><strong>Raw Memory Operations</strong>: Complete <code>freedom</code> block system with <code>loc&lt;T&gt;</code> pointers</li>
-<li><strong>Memory Safety</strong>: Borrow checking and lifetime analysis prevent dangling pointers</li>
+<li><strong>Memory Safety</strong>: Lexical borrow checking — <code>borrow</code>/<code>view</code> are compile-time and frame-scoped, with no lifetime solver to satisfy (by design, see the ownership docs)</li>
 </ul>
 <h4>Weak References with mild<t></t></h4>
 <p>Vyb introduces <strong><code>mild&lt;T&gt;</code></strong> - weak references that solve circular reference problems without preventing cleanup:</p>
@@ -3089,7 +3116,7 @@ cmake --build build --target run-milestone
 <h2 id="test-harness">Test Harness<a aria-label="Link to Test Harness" class="heading-anchor" href="#test-harness">#</a></h2>
 <p>Vyb's canonical test runner is <code>test/run_tests.vyb</code>, the same suite wired into
 CTest as the <code>run-tests</code> target and used for the full regression gate (currently
-<strong>1184 <code>.vyb</code> tests, all passing</strong>):</p>
+<strong>1246 <code>.vyb</code> tests, all passing</strong>):</p>
 <h3 id="quick-testing">Quick Testing<a aria-label="Link to Quick Testing" class="heading-anchor" href="#quick-testing">#</a></h3>
 <pre><code class="language-bash"># Full suite (JIT execution), from the repo root
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
@@ -3115,7 +3142,7 @@ authoritative pass/fail count is always the <code>run-tests</code> CTest target 
 </code></pre>
 <h3 id="test-features">Test Features<a aria-label="Link to Test Features" class="heading-anchor" href="#test-features">#</a></h3>
 <ul>
-<li><strong>1184 Tests, All Passing</strong>: The full <code>run_tests.py</code> suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area</li>
+<li><strong>1246 Tests, All Passing</strong>: The full <code>run_tests.vyb</code> suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area</li>
 <li><strong>Parallel Execution</strong>: Multi-threaded test runner for fast feedback</li>
 <li><strong>Rich Reporting</strong>: HTML, JSON, and console output with detailed metrics</li>
 <li><strong>Smart Categorization</strong>: Automatic test categorization and filtering</li>
@@ -3295,10 +3322,10 @@ python3 test_harness.py --directory test/units --timeout 30
 </ul>
 <h4><strong>Test Statistics</strong></h4>
 <ul>
-<li><strong>Total Tests</strong>: 1184 <code>.vyb</code> tests (full suite, all passing as of v0.7.6)</li>
+<li><strong>Total Tests</strong>: 1246 <code>.vyb</code> tests (full suite, all passing as of v0.7.7)</li>
 <li><strong>Coverage Areas</strong>: Language features, control flow, error handling, type system, math, strings, introspection</li>
 <li><strong>Test Types</strong>: Feature tests (with <code>@expect: pass</code>), future-feature docs (with <code>@expect: fail</code>), parser tests</li>
-<li><strong>Success Rate</strong>: 100% (1184/1184) on the current suite</li>
+<li><strong>Success Rate</strong>: 100% (1246/1246) on the current suite</li>
 </ul>
 <h3 id="syntax-migration-tools">🔧 <strong>Syntax Migration Tools</strong><a aria-label="Link to 🔧 Syntax Migration Tools" class="heading-anchor" href="#syntax-migration-tools">#</a></h3>
 <p>Automated tools ensure codebase consistency and syntax standardization:</p>
@@ -3395,7 +3422,7 @@ the interface stays responsive.</li>
 </ul>
 </li>
 <li>✅ <strong>Canonical Syntax Unification</strong>: Complete migration to unified <code>my()</code>/<code>our()</code> constructors and <code>view</code>/<code>borrow</code> operators</li>
-<li>✅ <strong>Modern Test Harness</strong>: <code>test/run_tests.vyb</code> running the full suite — 1184 <code>.vyb</code> tests all passing — with an auxiliary parallel/HTML/triage harness</li>
+<li>✅ <strong>Modern Test Harness</strong>: <code>test/run_tests.vyb</code> running the full suite — 1246 <code>.vyb</code> tests all passing — with an auxiliary parallel/HTML/triage harness</li>
 <li>✅ <strong>Syntax Migration Tools</strong>: Automated migration from legacy to canonical syntax with comprehensive reporting</li>
 <li>✅ <strong>Match Statements</strong>: Complete pattern matching with <code>-&gt;</code> arrow syntax and <code>?</code> wildcard; no-match results in NOP</li>
 <li>✅ <strong>Break/Continue</strong>: Loop control flow statements working in all loop types</li>
@@ -3428,7 +3455,7 @@ one grammar home; the appendix also notes which productions are legacy.</p>
 <ul>
 <li><code>my&lt;T&gt;</code>: Unique ownership, RAII cleanup</li>
 <li><code>our&lt;T&gt;</code>: Shared ownership, reference counted</li>
-<li><code>their&lt;T&gt;</code>: Non-owning borrow, lifetime checked</li>
+<li><code>their&lt;T&gt;</code>: Non-owning borrow; enforced lexically (compile-time, scoped to the borrow's frame)</li>
 <li><code>mild&lt;T&gt;</code>: Mild reference, can detect destruction via <code>grab()</code> and <code>released()</code></li>
 </ul>
 <p><strong>Borrowing Operations:</strong></p>
@@ -3497,6 +3524,7 @@ Resizable array collection with methods like <code>push()</code>, <code>pop()</c
 
   <footer>
     Vyb Programming Language · Created by · Developed by Aniviza LLC · Open source under Apache License 2.0
+    <br/>Site refreshed 2026-09-30 · describes Vyb v0.7.7 (freedom-1.0 series) · 1246 .vyb tests in the canonical suite
   </footer>
   <a class="backtop" href="#" aria-label="Back to top">↑</a>
   <script>
