@@ -1,0 +1,36 @@
+// @test: A fresh Vec temp set into a Vec<Vec<String>> slot is reclaimed
+// @description: `rows.set(i, build_row(a, b))` deep-copies the temp's elements into
+// @description: the replaced slot, so the temp's own buffer is dead and gets
+// @description: released. Reading the slots back proves the deep copy did not alias
+// @description: the freed storage (TODO.md:248 shape 2, set path)
+// @category: ownership, vec, memory
+// @expect: pass
+// @expect-output: rows=4 r0=s48 r3=s47 sized=2
+
+build_row(a<String>, b<String>)<Vec<String>> -> {
+    r<Vec<String>> = Vec<String>()
+    r.push(a)
+    r.push(b)
+    return r
+}
+
+main()<Int> -> {
+    rows<Vec<Vec<String>>> = Vec<Vec<String>>()
+    i<Int> = 0
+    while (i < 4) {
+        rows.push(build_row("seed", "z"))
+        i = i + 1
+    }
+    j<Int> = 0
+    while (j < 50) {
+        rows.set(j % 4, build_row("s" + j.to_string(), "e"))
+        j = j + 1
+    }
+    r0<Vec<String>> = rows.get(0)
+    r3<Vec<String>> = rows.get(3)
+    println("rows=" + rows.len().to_string() +
+            " r0=" + r0.get(0) +
+            " r3=" + r3.get(0) +
+            " sized=" + r0.len().to_string())
+    return 0
+}

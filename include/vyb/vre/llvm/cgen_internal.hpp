@@ -126,6 +126,18 @@ inline bool receiverIsBorrowValue(const vyb::ast::Expression* e) {
 }
 
 
+// A Vec method that only reads the receiver's header, so a *fresh temporary*
+// receiver can be released as soon as the call returns (e.g.
+// `payload.split("\n").len()` -- the temp's buffer is unreachable afterwards).
+// Element accessors (`get`/`first`/`last`/`peek`/`get_vec`) and the mutators
+// (`push`/`set`/`insert`/`remove_at`/`clear`) are deliberately excluded: they hand
+// the caller a view of, or the address of, the receiver's own buffer, which the
+// caller may keep past this statement.
+inline bool vecReadMethodSafeForTempReceiver(const std::string& m) {
+    return m == "len" || m == "is_empty" || m == "capacity";
+}
+
+
 // True when a channel's payload element type is a Vyb String. Numeric /
 // Bool / Char / Float payloads use the int-slot channel runtime; String payloads
 // use the refcounted string channel runtime.

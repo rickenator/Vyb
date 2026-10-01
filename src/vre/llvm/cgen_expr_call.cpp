@@ -5234,6 +5234,26 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
 
                 // Handle the Vec method with the evaluated value directly
                 handleVecMethodOnValue(node, vecValue, methodName, memberExpr->object.get());
+                // A fresh Vec temp receiver (`payload.split("\n").len()`) owns a
+                // buffer nobody can reach once a pure read returns; release it here
+                // or it leaks for the life of the program (TODO.md:248). Only the
+                // pure readers qualify -- `get`/`last`/`peek`/`get_vec` hand back a
+                // view of the receiver's buffer and the mutators hand back its
+                // address, so freeing the temp under them would dangle (the same
+                // reason exprProducesOwnedStringTemp excludes Vec element access).
+                if (vecReadMethodSafeForTempReceiver(methodName) &&
+                    exprProducesFreshVecTemp(memberExpr->object.get())) {
+                    // The classifier already required a recorded type; the guard is
+                    // for `codegenType`, not for the reclaim (a null AST type is a
+                    // legitimate "free the buffer, nothing to unwind" case).
+                    auto rcvAstNode = typeOfNode(memberExpr->object);
+                    if (rcvAstNode) {
+                        llvm::Type* rcvTy = vecValue->getType()->isStructTy()
+                            ? vecValue->getType()
+                            : codegenType(const_cast<vyb::ast::TypeNode*>(rcvAstNode.get()));
+                        reclaimVecStorage(vecValue, rcvTy, rcvAstNode.get(), "vecrecv.tmp");
+                    }
+                }
                 return;
             }
 
@@ -5977,7 +5997,7 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
             (dynamic_cast<ast::CallExpression*>(node->arguments[i].get()) != nullptr ||
              dynamic_cast<ast::ObjectLiteral*>(node->arguments[i].get()) != nullptr);
         if (tempKind == 0 && freshOwnedVecArg && typeOfNode(node->arguments[i]) &&
-            dynamic_cast<const ast::VecType*>(typeOfNode(node->arguments[i]).get()) != nullptr) {
+            isVecTypeNode(typeOfNode(node->arguments[i]).get())) {
             if (auto* vt = llvm::dyn_cast<llvm::StructType>(argValue->getType())) {
                 llvm::Value* tmp = builder->CreateAlloca(vt, nullptr, "ownedvecarg.tmp");
                 builder->CreateStore(argValue, tmp);

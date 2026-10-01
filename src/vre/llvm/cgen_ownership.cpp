@@ -196,6 +196,104 @@ void LLVMCodegen::registerVariable(const std::string& name, llvm::Value* allocaI
     }
 }
 
+// Release the storage a Vec value owns (see the header comment). Shared by
+// scope-exit cleanup and the fresh-temporary reclaim at a call site: the same
+// structure has to be unwound in both places -- String element references, then
+// per-element owned struct fields, then every nested-Vec level -- before the
+// element buffer itself is freed behind a null check. A null `vecAst` still frees
+// the buffer (nothing at the element level can be reclaimed without the type).
+void LLVMCodegen::reclaimVecStorage(llvm::Value* vecValue, llvm::Type* vecStructTy,
+                                    const vyb::ast::TypeNode* vecAst, const std::string& tag) {
+    if (!vecValue || !vecStructTy || !vecStructTy->isStructTy() || !builder || !currentFunction) {
+        return;
+    }
+
+    llvm::Value* vecPtr = vecValue;
+    if (!vecPtr->getType()->isStructTy()) {
+        vecPtr = builder->CreateLoad(vecStructTy, vecPtr, tag + "_load");
+    }
+    llvm::Value* dataPtr = builder->CreateExtractValue(vecPtr, 0, tag + "_data_ptr");
+
+    // A Vec<String> owns one reference per element (each push/set retained its
+    // String). Before the buffer is freed, drop those references so the buffers
+    // themselves are reclaimed too.
+    const bool vecHoldsStrings = vecAst && typeNodeIsVecOfString(vecAst);
+
+    // A Vec<struct-with-owned-fields> owns one deep copy per element (each
+    // push/get/set deep-copied its owned fields). Before the buffer is freed,
+    // reclaim each element's owned fields so none of the deep-copied inner buffers
+    // leak.
+    //
+    // A Vec<Vec<T>> element is an LLVM struct too, but it is NOT a user struct: its
+    // {data,size,cap} header must be released by the recursive nested-Vec path
+    // below, not by the struct-field reclaim. Excluding it here is what makes the
+    // inner buffers of `Vec<Vec<String>>` reachable (they used to leak one buffer
+    // per pushed row).
+    const vyb::ast::TypeNode* elemAstNode = vecAst ? vecElementTypeNode(vecAst) : nullptr;
+    const bool elemIsVec = elemAstNode && isVecTypeNode(elemAstNode);
+    const vyb::ast::TypeNode* vecElemAst = nullptr;
+    llvm::Type* vecElemLlvm = nullptr;
+    if (!elemIsVec && elemAstNode && isKnownStructTypeNode(elemAstNode) &&
+        structTypeHasOwnedFields(elemAstNode)) {
+        vecElemAst = elemAstNode;
+        vecElemLlvm = codegenType(const_cast<vyb::ast::TypeNode*>(elemAstNode));
+    }
+
+    llvm::Value* isNotNull = builder->CreateICmpNE(
+        dataPtr, llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0)),
+        tag + "_null_check");
+    llvm::BasicBlock* freeBlock = llvm::BasicBlock::Create(*context, tag + "_free_block", currentFunction);
+    llvm::BasicBlock* continueBlock = llvm::BasicBlock::Create(*context, tag + "_continue", currentFunction);
+    builder->CreateCondBr(isNotNull, freeBlock, continueBlock);
+
+    builder->SetInsertPoint(freeBlock);
+    if (vecHoldsStrings) {
+        llvm::Value* elemCount = builder->CreateExtractValue(vecPtr, 1, tag + "_elem_count");
+        releaseStringElements(dataPtr, elemCount);
+    }
+    // Per-element reclaim of deep-copied owned struct fields before freeing the
+    // element buffer.
+    if (vecElemAst && vecElemLlvm) {
+        llvm::Value* elemCount = builder->CreateExtractValue(vecPtr, 1, tag + "_elem_count");
+        llvm::Value* elemBytes = llvm::ConstantInt::get(
+            llvm::Type::getInt64Ty(*context),
+            (unsigned)llvm::DataLayout(module.get()).getTypeAllocSize(vecElemLlvm));
+        llvm::BasicBlock* rbHeader = llvm::BasicBlock::Create(*context, tag + "_reclaim_header", currentFunction);
+        llvm::BasicBlock* rbBody = llvm::BasicBlock::Create(*context, tag + "_reclaim_body", currentFunction);
+        llvm::BasicBlock* rbExit = llvm::BasicBlock::Create(*context, tag + "_reclaim_exit", currentFunction);
+        llvm::Value* zero = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0);
+        llvm::Value* idxAlloca = builder->CreateAlloca(llvm::Type::getInt64Ty(*context), nullptr, tag + "_reclaim_idx");
+        builder->CreateStore(zero, idxAlloca);
+        builder->CreateBr(rbHeader);
+        builder->SetInsertPoint(rbHeader);
+        llvm::Value* idx = builder->CreateLoad(llvm::Type::getInt64Ty(*context), idxAlloca);
+        llvm::Value* cmp = builder->CreateICmpULT(idx, elemCount, tag + "_reclaim_cmp");
+        builder->CreateCondBr(cmp, rbBody, rbExit);
+        builder->SetInsertPoint(rbBody);
+        llvm::Value* elemOff = builder->CreateMul(idx, elemBytes, tag + "_reclaim_off");
+        llvm::Value* elemPtr = builder->CreateGEP(llvm::Type::getInt8Ty(*context), dataPtr, elemOff, tag + "_reclaim_elem");
+        std::set<std::string> visited;
+        reclaimStructOwnedFieldsAt(elemPtr, vecElemAst, llvm::cast<llvm::StructType>(vecElemLlvm), visited);
+        llvm::Value* next = builder->CreateAdd(idx, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1));
+        builder->CreateStore(next, idxAlloca);
+        builder->CreateBr(rbHeader);
+        builder->SetInsertPoint(rbExit);
+    }
+    // #284/#373: a nested Vec element owns its own inner buffer, and deeper nesting
+    // owns further buffers below that. Release every level recursively before the
+    // outer storage is freed; otherwise the deep-copied inner buffers leak
+    // (LeakSanitizer flags one buffer per copy -- the old one-level loop freed only
+    // the first level).
+    if (elemIsVec) {
+        llvm::Value* elemCount = builder->CreateExtractValue(vecPtr, 1, tag + "_elem_count");
+        emitInnerVecCleanup(dataPtr, elemCount, vecAst, tag + "_nvec");
+    }
+    builder->CreateCall(getOrCreateFreeFunction(), {dataPtr});
+    builder->CreateBr(continueBlock);
+
+    builder->SetInsertPoint(continueBlock);
+}
+
 void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
     VYB_CDBG << "DEBUG: Cleaning up variable '" << var.name << "', needsCleanup: "
               << var.needsCleanup << ", isVecWithMallocData: " << var.isVecWithMallocData << std::endl;
@@ -385,108 +483,17 @@ void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
 
                 // Load the Vec struct to access the data pointer
                 llvm::Value* vecPtr = builder->CreateLoad(var.type, var.allocaInst, var.name + "_cleanup_load");
+                (void)vecPtr;
 
-                // Extract the data pointer (field 0) from the Vec struct
-                llvm::Value* dataPtr = builder->CreateExtractValue(vecPtr, 0, var.name + "_data_ptr");
-
-                // A Vec<String> owns one reference per element (each push/set
-                // retained its String). Before the buffer is freed, drop those
-                // references so the buffers themselves are reclaimed too.
+                // The nested unwind (String element references, owned struct
+                // fields, deeper Vec levels, then the buffer) lives in
+                // reclaimVecStorage, shared with the fresh-temporary reclaim at a
+                // call site.
                 auto astIt = valueTypeMap.find(var.allocaInst);
-                bool vecHoldsStrings = astIt != valueTypeMap.end() &&
-                    typeNodeIsVecOfString(astIt->second.get());
+                const vyb::ast::TypeNode* vecAst =
+                    astIt != valueTypeMap.end() ? astIt->second.get() : nullptr;
+                reclaimVecStorage(var.allocaInst, var.type, vecAst, var.name);
 
-                // A Vec<struct-with-owned-fields> owns one deep copy per element
-                // (each push/get/set deep-copied its owned fields). Before the
-                // buffer is freed, reclaim each element's owned fields so none of
-                // the deep-copied inner buffers leak.
-                //
-                // A Vec<Vec<T>> element is an LLVM struct too, but it is NOT a
-                // user struct: its {data,size,cap} header must be released by the
-                // recursive nested-Vec path below, not by the struct-field
-                // reclaim. Excluding it here is what makes the inner buffers of
-                // `Vec<Vec<String>>` reachable (they used to leak one buffer per
-                // pushed row).
-                const vyb::ast::TypeNode* elemAstNode = nullptr;
-                if (astIt != valueTypeMap.end()) {
-                    elemAstNode = vecElementTypeNode(astIt->second.get());
-                }
-                const bool elemIsVec = elemAstNode && isVecTypeNode(elemAstNode);
-                const vyb::ast::TypeNode* vecElemAst = nullptr;
-                llvm::Type* vecElemLlvm = nullptr;
-                if (!elemIsVec && elemAstNode && isKnownStructTypeNode(elemAstNode) &&
-                    structTypeHasOwnedFields(elemAstNode)) {
-                    vecElemAst = elemAstNode;
-                    vecElemLlvm = codegenType(const_cast<vyb::ast::TypeNode*>(elemAstNode));
-                }
-
-                // Create null check before freeing
-                llvm::Value* isNotNull = builder->CreateICmpNE(dataPtr,
-                    llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0)),
-                    var.name + "_null_check");
-
-                llvm::BasicBlock* freeBlock = llvm::BasicBlock::Create(*context, var.name + "_free_block", currentFunction);
-                llvm::BasicBlock* continueBlock = llvm::BasicBlock::Create(*context, var.name + "_continue", currentFunction);
-
-                builder->CreateCondBr(isNotNull, freeBlock, continueBlock);
-
-                // Free block
-                builder->SetInsertPoint(freeBlock);
-                if (vecHoldsStrings) {
-                    llvm::Value* elemCount = builder->CreateExtractValue(vecPtr, 1, var.name + "_elem_count");
-                    releaseStringElements(dataPtr, elemCount);
-                }
-                // Per-element reclaim of deep-copied owned struct fields before
-                // freeing the element buffer.
-                if (vecElemAst && vecElemLlvm) {
-                    llvm::Value* elemCount = builder->CreateExtractValue(vecPtr, 1, var.name + "_elem_count");
-                    llvm::Value* elemBytes = llvm::ConstantInt::get(
-                        llvm::Type::getInt64Ty(*context),
-                        (unsigned)llvm::DataLayout(module.get()).getTypeAllocSize(vecElemLlvm));
-                    // Loop i = 0..elemCount: reclaim owned fields at dataPtr + i*elemBytes.
-                    llvm::BasicBlock* rbHeader = llvm::BasicBlock::Create(
-                        *context, var.name + "_reclaim_header", currentFunction);
-                    llvm::BasicBlock* rbBody = llvm::BasicBlock::Create(
-                        *context, var.name + "_reclaim_body", currentFunction);
-                    llvm::BasicBlock* rbExit = llvm::BasicBlock::Create(
-                        *context, var.name + "_reclaim_exit", currentFunction);
-                    llvm::Value* zero = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0);
-                    llvm::Value* idxAlloca = builder->CreateAlloca(llvm::Type::getInt64Ty(*context), nullptr, var.name + "_reclaim_idx");
-                    builder->CreateStore(zero, idxAlloca);
-                    builder->CreateBr(rbHeader);
-                    builder->SetInsertPoint(rbHeader);
-                    llvm::Value* idx = builder->CreateLoad(llvm::Type::getInt64Ty(*context), idxAlloca);
-                    llvm::Value* cmp = builder->CreateICmpULT(idx, elemCount, var.name + "_reclaim_cmp");
-                    builder->CreateCondBr(cmp, rbBody, rbExit);
-                    builder->SetInsertPoint(rbBody);
-                    llvm::Value* elemOff = builder->CreateMul(idx, elemBytes, var.name + "_reclaim_off");
-                    llvm::Value* elemPtr = builder->CreateGEP(llvm::Type::getInt8Ty(*context), dataPtr, elemOff, var.name + "_reclaim_elem");
-                    std::set<std::string> visited;
-                    reclaimStructOwnedFieldsAt(elemPtr, vecElemAst,
-                        llvm::cast<llvm::StructType>(vecElemLlvm), visited);
-                    llvm::Value* next = builder->CreateAdd(idx, llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1));
-                    builder->CreateStore(next, idxAlloca);
-                    builder->CreateBr(rbHeader);
-                    builder->SetInsertPoint(rbExit);
-                }
-                // #284/#373: a nested Vec element owns its own inner buffer, and
-                // deeper nesting owns further buffers below that. Release every level
-                // recursively before the outer storage is freed; otherwise the
-                // deep-copied inner buffers leak (LeakSanitizer flags one buffer per
-                // copy -- the old one-level loop freed only the first level).
-                if (elemIsVec) {
-                    llvm::Value* elemCount = builder->CreateExtractValue(vecPtr, 1, var.name + "_elem_count");
-                    // Pass the variable's own Vec type: the helper treats its argument
-                    // as "the Vec whose elements live in this buffer".
-                    emitInnerVecCleanup(dataPtr, elemCount, astIt->second.get(), var.name + "_nvec");
-                }
-                llvm::Function* freeFunc = getOrCreateFreeFunction();
-                builder->CreateCall(freeFunc, {dataPtr});
-                VYB_CDBG << "DEBUG: Generated free() call for " << var.name << std::endl;
-                builder->CreateBr(continueBlock);
-
-                // Continue block
-                builder->SetInsertPoint(continueBlock);
 
                 // If this cleanup is happening right before a return, we need to
                 // ensure the continue block has proper termination

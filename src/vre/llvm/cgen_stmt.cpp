@@ -914,6 +914,24 @@ void LLVMCodegen::visit(vyb::ast::ExpressionStatement* node) {
     if (node->expression) {
         node->expression->accept(*this);
         // The value of the expression is m_currentLLVMValue, but it's not used by the statement itself.
+        //
+        // A Vec-typed result thrown away here (`mk("a", "b")` on its own line) has no
+        // named owner either, so its element buffer leaks once per evaluation unless
+        // it is released now (TODO.md:248: created, consumed and discarded in one
+        // statement). Non-last statements only -- the block walker visits a last
+        // ExpressionStatement directly to preserve its value for the enclosing
+        // binding/return. A named or borrowed source is excluded inside the
+        // classifier, and `reclaimVecStorage` never frees a null data pointer.
+        llvm::Value* discardedValue = m_currentLLVMValue;
+        if (discardedValue && exprProducesFreshVecTemp(node->expression.get())) {
+            auto discardedAst = typeOfNode(node->expression);
+            if (discardedAst) {
+                llvm::Type* discardedTy = discardedValue->getType()->isStructTy()
+                    ? discardedValue->getType()
+                    : codegenType(const_cast<vyb::ast::TypeNode*>(discardedAst.get()));
+                reclaimVecStorage(discardedValue, discardedTy, discardedAst.get(), "vecstmt.tmp");
+            }
+        }
     }
     if (!inTrapHandler) {
         m_currentLLVMValue = nullptr; // Expression statement doesn't produce a value for further expressions

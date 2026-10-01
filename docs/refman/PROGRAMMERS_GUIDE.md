@@ -167,7 +167,7 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 ### Running the test suite
 
 ```bash
-# 1239 .vyb tests exercised through compile + run + output/return checks
+# 1244 .vyb tests exercised through compile + run + output/return checks
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test
 ```
 
@@ -503,6 +503,19 @@ variable is left unusable (use-after-move is rejected). A fresh `my(...)` built
 inline as an argument is reclaimed after the call. `our<T>` is shared,
 ref-counted ownership: an `our` parameter takes a strong reference and the
 payload is freed when the last reference drops.
+
+**Temporaries.** A value built inline and never bound to a name is reclaimed by the
+compiler at the site that built it. A `Vec` result consumed inside one expression
+has its buffer released as the consuming call returns
+(`payload.split("\n").len()`), a freshly-built row is released after the slot
+deep-copies it (`rows.push(build_row(a, b))`, `rows.set(i, build_row(a, b))`), and a
+`Vec`-returning call used as a statement is released at the statement
+(`mk("a", "b")` on its own line). What is *not* reclaimed is a temporary whose
+result aliases its own storage — an element accessor such as
+`payload.split("\n").get(0)` still leaks the temporary's buffer, because the value
+it returns may point into it. Bind such a result to a name first
+(`parts<Vec<String>> = payload.split("\n")` then `parts.get(0)`): the named binding
+owns the buffer and its own scope-exit cleanup releases it.
 
 **In short:** plain `x<T>` = your own copy; `their<T>` + `borrow` = read/mutate in
 place with no copy; `their<T const>` + `view` = read-only; `my<T>` = unique-owner
@@ -2759,7 +2772,7 @@ Canonical suite runner — a Vyb program (`test/run_tests.vyb`), wired into CTes
 as `run-tests`:
 
 ```bash
-./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1239 tests)
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1244 tests)
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --category async  # filter by category
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --json results.json --evidence evidence.json
 ```

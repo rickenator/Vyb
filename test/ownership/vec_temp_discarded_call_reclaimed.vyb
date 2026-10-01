@@ -1,0 +1,28 @@
+// @test: A Vec returned by a call and discarded as a statement is reclaimed
+// @description: `mk("a", "b")` on its own line builds a Vec and throws the result
+// @description: away; with no named owner its element buffer has to be released at
+// @description: the statement, so a loop of them does not leak one buffer per
+// @description: iteration (TODO.md:248: created, consumed and discarded in one
+// @description: statement). The named `keep` Vec next to it still owns its own data
+// @category: ownership, vec, memory
+// @expect: pass
+// @expect-output: keep = 50 last = 49
+
+mk(a<String>, b<String>)<Vec<String>> -> {
+    r<Vec<String>> = Vec<String>()
+    r.push(a + "-x")
+    r.push(b + "-y")
+    return r
+}
+
+main()<Int> -> {
+    keep<Vec<String>> = Vec<String>()
+    i<Int> = 0
+    while (i < 50) {
+        mk("a", "b")
+        keep.push(i.to_string())
+        i = i + 1
+    }
+    println("keep = " + keep.len().to_string() + " last = " + keep.get(49))
+    return 0
+}
