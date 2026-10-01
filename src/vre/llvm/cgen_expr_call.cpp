@@ -1515,6 +1515,19 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                     // Fall back to generic serialization for complex/unrecognized types
                     serializedValue = generateGenericSerialization(arg, argType);
                 }
+                // #409: the struct branch of generateToStringCall returns a Vyb String
+                // ({ ptr, i64 }) -- but __vyb_println is declared (const char*) and
+                // __vyb_string_free likewise, so handing over the struct produced a
+                // module the LLVM verifier rejects ("Call parameter type does not match
+                // function signature"), and `println(<struct>)` did not compile at all.
+                // Field 0 is the registered heap buffer the JSON branch returns
+                // (cgen_string.cpp), so it is the right argument for *both* the print
+                // below and the free that serializedTmpIsHeap triggers -- one extraction
+                // used twice, with no change to ownership.
+                if (serializedValue && serializedValue->getType()->isStructTy() &&
+                    isVybStringStructType(serializedValue->getType())) {
+                    serializedValue = builder->CreateExtractValue(serializedValue, 0, "str.ptr");
+                }
                 serializedTmpIsHeap = true;
             }
         }
@@ -1623,6 +1636,14 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                     serializedValue = generateToStringCall(arg, arg->getType(), argType, node->loc);
                     if (!serializedValue) {
                         serializedValue = generateGenericSerialization(arg, argType);
+                    }
+                    // #409: same extraction as the single-argument path -- a struct
+                    // argument serializes to a Vyb String ({ ptr, i64 }), and the print
+                    // and free calls that follow are declared (const char*). Field 0 is
+                    // the registered heap buffer, so one extraction serves both.
+                    if (serializedValue && serializedValue->getType()->isStructTy() &&
+                        isVybStringStructType(serializedValue->getType())) {
+                        serializedValue = builder->CreateExtractValue(serializedValue, 0, "str.ptr");
                     }
                     argSerializedHeap = true;
                 }
