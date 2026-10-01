@@ -6,7 +6,12 @@ name: ci
 # documentation gate (refman-check.yml).
 
 on:
+  # Only main runs on push. A branch push alongside its own pull_request run made every
+  # commit build twice (the PR run gated the heavy jobs out, the push run did the real
+  # work), and with a single self-hosted GPU runner those duplicates queued behind each
+  # other. Branches are exercised by their pull_request run; main keeps push + nightly.
   push:
+    branches: [main]
   pull_request:
   schedule:
     - cron: "0 6 * * *"   # 06:00 UTC daily memory-safety run
