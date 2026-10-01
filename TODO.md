@@ -244,7 +244,7 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 - [x] **`println()`/`print()` with multiple arguments** — Space-separated output; all args formatted into a single call
 - [x] **Semantic type recognition** — `Int16`, `Int32`, `Int64`, `UInt8`–`UInt64`, `Float32`, `Float64`, `Char`, `Rune` now fully recognized in semantic analysis (were silently rejected)
 - [x] **Relaxed struct field syntax** — C-style `Type fieldName` accepted alongside canonical `fieldName<Type>`; helps parse legacy/interop fixtures
-- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite runs **1245 tests** via `test/run_tests.vyb`, and that documented size is enforced against the runner by `test/suite_count_check.vyb` in CI
+- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite runs **1246 tests** via `test/run_tests.vyb`, and that documented size is enforced against the runner by `test/suite_count_check.vyb` in CI
 - [x] **Vec parameter deep copy** — Vec parameters receive an independent copy of the data on function entry, eliminating double-free bugs (e.g. recursive quicksort base-case return)
 - [x] **Nested `Vec<Vec<T>>` element ownership** — every path that clones a nested Vec (by-value argument, return, assignment, `push`, `set`, and the borrowed-element binding) now deep-copies the inner Vec *and* retains its elements, so `Vec<Vec<String>>` rows no longer share inner buffers with their source binding (no double free at exit, no dangling inner strings). Locked in by `test/ownership/nested_vec_element_ownership.vyb` (#373)
 - [x] **Nested Vec reclaim depth ≥ 3** — scope-exit reclaim now releases *every* level of a nested Vec: for a `Vec` element the deeper levels are released recursively (`emitInnerVecCleanup`) before the outer storage is freed, struct-field reclaim is skipped for a Vec element, and a `Vec<Vec<T>>` *field* of a struct takes the same recursive path. Verified under `ASAN_OPTIONS=halt_on_error=1:detect_leaks=1` (`test/collections/test_nested_vec_deep_copy.vyb`, the SQLite binding, `test/traffic/test_traffic_{parse,db,graph,report}.vyb`) (#373)
@@ -702,15 +702,20 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
   `test/modules/test_http_server.vyb`)
 - [x] **I/O intrinsics** — `print()` (no newline), `println_int()`, `print_int()`, `println_bool()`, `print_bool()`
 - [x] **`for`-loop desugar over `Iterator`** — `for (item in <iter-expr>)` now desugars onto `core::iter::Iterator` when the iterable is a **non-identifier expression** (e.g. `intsums.iter()` — the natural case, since `v.iter()` returns `VecIter<T>`). The transform emits `{ var __it_<item> = <expr>; while (true) { match (__it_<item>.next()) { item -> { body } ? -> { break } } } }`, so `break`/`continue` re-enter `next()` and re-evaluating the producer each loop starts a fresh iterator (`test/modules/test_for_iter.vyb`). This was made possible by the earlier `core::iter` protocol, nested `their<Vec<T>>` field resolution (`test/modules/test_nested_their_vec_field.vyb`), generic-bind `Result<T,E>` materialization, and the `VecIter<T>`/`v.iter()` stdlib iterator (`test/modules/test_vec_iter.vyb`). The desugar is parse-time and type-blind, so it keys off a non-identifier iterable: plain identifiers keep the existing index-based Vec path and `0..n` ranges the inclusive range path (no regressions). The optional `skip`/step parameter is supported too: `for (item in <iter-expr>, step)` advances the iterator `step` elements per iteration and yields indices 0, step, 2*step, ... (matching the Vec index path; `break`/`continue` stay correct, `test/modules/test_for_iter_skip.vyb`). The desugar lives in `StatementParser::buildForLoopIteratorDesugar` and is parse-time/type-blind, so it keys off a non-identifier iterable. **Identifier iterables now route onto the protocol too**: `for (x in vec)` desugars exactly like `for (x in vec.iter())`, replacing the old index-based `__idx`/`__len` over `vec.get(i)` path. Because the parser has no types at this point, the uniform rule is that any iterable value must expose an `iter()` that yields an `Iterator` — Vec collections provide `iter()` (`import collections`' `VecHigherOps`), and the stdlib iterators themselves are self-iterable (their `iter()` returns a fresh iterator over the same underlying collection), so a stored iterator identifier (`for (y in storedIter)`) iterates too. The standalone `for (x in vec)` without `import collections` now requires the module (`.iter()`/`VecIter` live there). **`HashMap`/`HashSet` iterator binds are done**: reading fields *through* a `their<T>` view field of a generic struct (the earlier blocker) now resolves — `cgen_expr` records each member-read value's AST type in `valueTypeMap`, so `self.set.values.get(i)` / `self.map.keys.get(i)` chain through a nested `their<HashSet<K>>` / `their<HashMap<K,V>>` field. `import collections` ships `MapIter<K,V>` (`m.iter()` yields key/value pairs as `MapEntry<K,V>`, `kv.key` / `kv.value`) and `HashIter<K>` (`s.iter()` yields values), bound to `Iterator` (`test/modules/test_collections_iter.vyb`). This required fixing the `TypePattern` argument splitter, which previously split generic arguments on every comma regardless of nesting depth — so a two-parameter iterator `Item` like `MapEntry<K,V>` mangled to a malformed type. The splitter is now depth-aware.
-- [ ] **Non-identifier `for` over a struct-element `Vec`** <!-- open: Non-identifier `for` over a struct-element `Vec` -->
-  — the desugar (parse-time, type-blind) works for scalar-element producers
-  (`for (x in ints.iter())`, `test/modules/test_for_iter.vyb`) but fails for struct
-  elements: `for (p in make_vec())`, with `make_vec()<Vec<Point>>`, reports
-  `Unknown method 'next' on type 'Vec<Point>'` — while the *identifier* form
-  `for (p in v)` over the same `Vec<Point>` works (verified against `build/vyb`).
-  The likely cause is `VecIter<Point>`'s `next()` not resolving for a struct
-  element type. Tracked by the FEATURE_STATUS row of the same name; documented in
-  `doc/VEC_ITERATION.md`.
+- [x] **Non-identifier `for` over a struct-element `Vec`** — FIXED:
+  the desugar bound a raw non-identifier producer as the iterator itself, so
+  `for (p in make_vec())` with `make_vec()<Vec<Point>>` reported
+  `Unknown method 'next' on type 'Vec<Point>'` while the identifier form
+  `for (p in v)` worked. `StatementParser` now hoists such a producer to a temp
+  identifier and calls `.iter()` on that — the same shape the member-access case
+  already used, and the reason it works is that the semantic analyzer infers an
+  identifier receiver's `.iter()` but not a bare method call in a null-typed
+  initializer (the `VecIter<Point>::next()` resolution was never the problem:
+  scalar-element producers and `N.iter()` calls were already fine, so an
+  expression that IS already an `.iter()` call is still used directly).
+  Regression: `test/modules/test_for_iter_struct_elem.vyb` (`seen=3 sum=21
+  last=(5,6)`), with `test/modules/test_for_iter{,_skip}.vyb`,
+  `test_vec_iter.vyb` and `test_collections_iter.vyb` re-run alongside it.
 - [x] **`Vec<T>` expansion** — shipped via the `VecOps` bind on the built-in
   `Vec<T>` (pure Vyb; `test/modules/test_vec_expansion.vyb`):
   `find` (first matching index, or `-1`), `first`/`last` (head/tail element),
@@ -1564,5 +1569,5 @@ Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `
 
 *Last Updated: 2026-09-29 (v0.7.7 release)*
 *Current Version: Vyb v0.7.7 (freedom-1.0 series)*
-*Overall Status: ~60-65% complete toward 1.0 — 1245 tests (documented size enforced against the runner by `test/suite_count_check.vyb`; the full `--execute-jit` sweep runs in `ci.yml`)*
+*Overall Status: ~60-65% complete toward 1.0 — 1246 tests (documented size enforced against the runner by `test/suite_count_check.vyb`; the full `--execute-jit` sweep runs in `ci.yml`)*
 *SUGGESTIONS.md merged into this document.*

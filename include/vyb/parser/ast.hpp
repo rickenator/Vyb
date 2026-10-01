@@ -1165,7 +1165,16 @@ public:
     TypeNodePtr typeNode; // Optional type annotation
     std::shared_ptr<Expression> init;  // Optional initializer (shared_ptr for multi-var support)
 
-    VariableDeclaration(SourceLocation loc, std::unique_ptr<Identifier> id, bool isConst, TypeNodePtr typeNode = nullptr, std::shared_ptr<Expression> init = nullptr);
+    // Set by a desugar that binds a *value* producer to a synthetic temp -- the
+    // `for`-loop hoist of a non-identifier iterable (#387). The temp holds what
+    // the producer returned, so codegen must reclaim it at scope exit even though
+    // the binding carries no type annotation and its LLVM struct may be unnamed.
+    // Purely syntactic: the parser states where the binding came from, never a
+    // type, and the member-access hoist (a borrow of `obj.field`) leaves this
+    // false so nothing borrowed is ever freed.
+    bool ownsBoundValue = false;
+
+    VariableDeclaration(SourceLocation loc, std::unique_ptr<Identifier> id, bool isConst, TypeNodePtr typeNode = nullptr, std::shared_ptr<Expression> init = nullptr, bool ownsBoundValue = false);
     ~VariableDeclaration() override = default;
     NodeType getType() const override;
     std::string toString() const override;

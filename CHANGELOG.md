@@ -28,6 +28,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dropped outright. No behaviour change: the suite, the CLI smokes and the
   reference-manual gate are the proof.
 
+### Fixed
+- **Non-identifier `for` over a struct-element `Vec` (#387)** — the parse-time
+  desugar bound a non-identifier producer as the iterator itself, so
+  `for (p in make_vec())` with `make_vec()<Vec<Point>>` reported
+  `Unknown method 'next' on type 'Vec<Point>'` while `for (p in v)` over the same
+  vector worked. A producer that is not already an iterator is now hoisted to a
+  temp identifier and `.iter()`ed — the shape the member-access case already used
+  — because the semantic analyzer infers an identifier receiver's `.iter()` but
+  not a bare method call in a null-typed initializer. An expression that already
+  IS an `.iter()` call is still used directly. `VecIter<Point>::next()` was never
+  the problem: scalar-element producers were already fine. Regression:
+  `test/modules/test_for_iter_struct_elem.vyb`.
+
 ## [0.7.7] - 2026-09-29
 
 ### Added

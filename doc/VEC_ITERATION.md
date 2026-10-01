@@ -95,14 +95,17 @@ checked):
   Requires the stdlib iterator modules to be imported (`import collections`,
   `import core::iter`); without them the desugar has no `iter()`/`next()` to bind and
   reports `Unknown method 'next' on type 'Vec<Point>'`.
-- **Non-identifier iterables work for scalar element Vecs** —
-  `for (x in ints.iter())` ✔ (`test/modules/test_for_iter.vyb`), and re-evaluating the
-  producer each loop starts a fresh iterator.
-- **Non-identifier iterables are NOT yet supported for struct element Vecs** —
-  `for (p in make_vec())` where `make_vec()<Vec<Point>>` fails semantic analysis with
-  `Unknown method 'next' on type 'Vec<Point>'` (a deliberate limitation, tracked by
-  the "Non-identifier `for` over a struct-element `Vec`" row in
-  `doc/FEATURE_STATUS.md`), even though the identifier form over the same Vec works.
+- **Non-identifier iterables work for any element type** — a non-identifier
+  producer that is *not* already an iterator (e.g. `make_vec()` returning
+  `Vec<Point>`) is hoisted to a temp identifier and `.iter()`ed, so
+  `for (p in make_vec())` ✔ and `for (x in ints.iter())` ✔ both work, for scalar
+  and struct elements alike (`test/modules/test_for_iter_struct_elem.vyb`,
+  `test/modules/test_for_iter.vyb`). An expression that already IS an `.iter()`
+  call is used directly (no double `.iter()`), and re-evaluating the producer each
+  loop starts a fresh iterator. Requires the stdlib iterator modules to be
+  imported (`import collections`, `import core::iter`); without them the desugar
+  has no `iter()`/`next()` to bind and reports
+  `Unknown method 'next' on type 'Vec<Point>'`.
 - **`Vec::get()` is element-typed** — `p<Point> = v.get(0)` returns a `Point` and
   `p.x` reads correctly, so the older note here ("`Vec.get()` returns Int regardless
   of the element type") no longer holds; typed constructors (`Vec<Point>()`) and
