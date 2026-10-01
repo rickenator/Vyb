@@ -124,7 +124,7 @@ jobs:
         run: |
           set -euo pipefail
           export VYB_STDLIB="$PWD/stdlib"
-          for r in launch_fill cublas_verify cufft_verify cudnn_verify cudnn_conv_verify; do
+          for r in launch_fill cublas_verify cufft_verify cudnn_verify cudnn_conv_verify f64_verify; do
             ./build/vyb "fixtures/cuda/$r.vyb" --module-path bindings --compile "/tmp/$r.o"
             test -s "/tmp/$r.o" || { echo "FAIL: no object for $r"; exit 1; }
           done
@@ -219,3 +219,10 @@ jobs:
 
       - name: Matmul via signed bindings/cuda module (JIT, on silicon)
         run: VYB_STDLIB="$PWD/stdlib" ./build-ci/vyb --module-path bindings --module-path bindings/cuda fixtures/cuda/matmul_verify.vyb
+
+      - name: f64 transfer round trip via signed bindings/cuda module (JIT, on silicon)
+        # The posted module's cuda_write_f64/cuda_read_f64 (8-byte cuMemcpy*_v2) were
+        # added but had no on-silicon coverage; the matmul runner still reaches around
+        # them with raw cuMemcpy imports. Values whose 4-byte halves differ make a
+        # partial or mis-ordered transfer fail here.
+        run: VYB_STDLIB="$PWD/stdlib" ./build-ci/vyb --module-path bindings fixtures/cuda/f64_verify.vyb

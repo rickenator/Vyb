@@ -1,0 +1,79 @@
+# Host runner for the signed `bindings/cuda` f64 transfer helpers (issue #198 P3):
+# `cuda_write_f64` / `cuda_read_f64` copy a full 8-byte Float through
+# `cuMemcpy*_v2`, so on-silicon coverage of the posted, signed module needs a
+# round trip a 4-byte transfer cannot fake. The values below are chosen so the
+# high and low 4-byte halves differ: a transfer that moved only one word, or
+# mis-ordered the halves, reads back a value these checks reject.
+#
+# Every failing check escalates a ProbeError whose `message` names the check and
+# whose `exitCode` is that check's own status: the runtime's untrapped-error
+# handler exits with it, so the GPU job's bash -e step fails the job. A main()
+# Int return is only printed, never the process status, so `return n` alone
+# cannot fail CI. Codes stay below 256 (a process status is 8 bits):
+#   7 cuda_init  8 no device  14 ordinal  19 ctx retain  11 device alloc
+#   10/12 f64 write (0.5 / 1234.25)   18/21 f64 read
+#
+# Run on a CUDA host:
+#   build/vyb --module-path bindings fixtures/cuda/f64_verify.vyb
+import cuda::{cuda_init, cuda_device_count, cuda_device, cuda_ctx_retain,
+              cuda_mem_alloc, cuda_mem_free, cuda_write_f64, cuda_read_f64}
+
+# A failed check. `exitCode` is the process status the untrapped-error handler
+# reports (it reads the field literally named `exitCode`, type Int).
+struct ProbeError {
+    message<String>,
+    exitCode<Int>
+}
+
+# |got - want| <= eps, without a stdlib math import.
+approx(got<Float>, want<Float>, eps<Float>)<Bool> -> {
+    d<Float> = got - want
+    if (d < 0.0) { d = 0.0 - d }
+    return d <= eps
+}
+
+# The `fail`s stay inline in main: a helper containing one is a failable function,
+# and calling it from a non-failable `main` is a semantic error.
+main()<Int> -> {
+    if (cuda_init() != 0) {
+        fail<ProbeError>(ProbeError { message = "cuda_init", exitCode = 7 })
+    }
+    if (cuda_device_count() < 1) {
+        fail<ProbeError>(ProbeError { message = "no device", exitCode = 8 })
+    }
+    dev<CInt> = cuda_device(0)
+    if (dev < 0) {
+        fail<ProbeError>(ProbeError { message = "ordinal", exitCode = 14 })
+    }
+    if (cuda_ctx_retain(dev) != 0) {
+        fail<ProbeError>(ProbeError { message = "ctx retain", exitCode = 19 })
+    }
+
+    d<Int> = cuda_mem_alloc(8)
+    if (d == 0) {
+        fail<ProbeError>(ProbeError { message = "device alloc", exitCode = 11 })
+    }
+
+    if (cuda_write_f64(d, 0.5) != 0) {
+        fail<ProbeError>(ProbeError { message = "write 0.5", exitCode = 10 })
+    }
+    got<Float> = cuda_read_f64(d)
+    if (!approx(got, 0.5, 0.000001)) {
+        fail<ProbeError>(ProbeError { message = "read 0.5", exitCode = 18 })
+    }
+
+    # 1234.25 is 0x4093490000000000: its high and low 4-byte halves differ, so a
+    # partial or mis-ordered transfer cannot land on this value -- unlike a small
+    # integral value whose two halves are both zero-ish.
+    if (cuda_write_f64(d, 1234.25) != 0) {
+        fail<ProbeError>(ProbeError { message = "write 1234.25", exitCode = 12 })
+    }
+    got2<Float> = cuda_read_f64(d)
+    if (!approx(got2, 1234.25, 0.000001)) {
+        fail<ProbeError>(ProbeError { message = "read 1234.25", exitCode = 21 })
+    }
+
+    println("f64 round trip ok " + got2.to_string())
+    cuda_mem_free(d)
+    return 0
+}

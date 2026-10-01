@@ -26,6 +26,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `bind Handoff -> T` states the claim for a shape the structural derivation cannot
   see through (an FFI struct holding a `ptr<T>`, an opaque C handle); it wins over
   the computed verdict, and a contradiction is reported as a non-fatal warning.
+- **`bindings/cuda` f64 transfers, now covered on silicon (#198 P3)** — the posted,
+  signed module re-exports `cuda_write_f64` / `cuda_read_f64`, which move a full
+  8-byte `Float` through `cuMemcpy*_v2` (the wrapper previously shipped `Int`/`CInt`
+  transfers only, so runners reached around it with raw `cuMemcpy` imports). The
+  re-signed index is current (`sha256` of `bindings/cuda/{mod,cuda_binding}.vyb`
+  match `INDEX.json`, `vyb mod verify-signed bindings/cuda/INDEX.json` reports
+  `SIGNED VERIFY OK`), and `fixtures/cuda/f64_verify.vyb` now round-trips two
+  Float values through device memory on the RTX 3090 runner, with values whose high
+  and low 4-byte halves differ so a partial or mis-ordered transfer fails.
 
 ### Changed
 - **Compiler sources: the two monoliths are split along cohesive seams (#347)** —
