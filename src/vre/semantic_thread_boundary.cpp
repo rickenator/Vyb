@@ -318,7 +318,10 @@ SemanticAnalyzer::mayCrossBoundaryWithRetainedOwner(const std::string& captureNa
     // 2. The closure does not write it. A written borrow reaches this function
     //    only through the mutable-capture list, which is reported separately;
     //    be explicit here so the rule stands on its own.
-    for (const std::string& cap : fe->mutableCapturedVariables) {
+    static const analysis::ClosureCaptures kNoCaptures{};
+    const analysis::ClosureCaptures* capsPtr = capturesOf(fe);
+    const analysis::ClosureCaptures& caps = capsPtr ? *capsPtr : kNoCaptures;
+    for (const std::string& cap : caps.mutableCaptured) {
         if (cap == captureName) return C::NotCapable;
     }
 
@@ -327,10 +330,10 @@ SemanticAnalyzer::mayCrossBoundaryWithRetainedOwner(const std::string& captureNa
     if (rootIt == theirVarRoot_.end() || rootIt->second.empty()) return C::NotCapable;
     const std::string& ownerName = rootIt->second;
     bool capturesOwner = false;
-    for (const std::string& cap : fe->capturedVariables) {
+    for (const std::string& cap : caps.captured) {
         if (cap == ownerName) capturesOwner = true;
     }
-    for (const std::string& cap : fe->mutableCapturedVariables) {
+    for (const std::string& cap : caps.mutableCaptured) {
         if (cap == ownerName) capturesOwner = true;
     }
     if (!capturesOwner) return C::NotCapable;
@@ -365,9 +368,13 @@ void SemanticAnalyzer::checkThreadBoundaryCaptures(ast::FunctionExpression* fe,
 
     std::set<std::string> reported;
 
+    static const analysis::ClosureCaptures kNoCaptures{};
+    const analysis::ClosureCaptures* capsPtr = capturesOf(fe);
+    const analysis::ClosureCaptures& caps = capsPtr ? *capsPtr : kNoCaptures;
+
     // A mutable capture holds the defining frame's address, so it is not a
     // handoff no matter what the variable's type is.
-    for (const std::string& cap : fe->mutableCapturedVariables) {
+    for (const std::string& cap : caps.mutableCaptured) {
         if (!reported.insert(cap).second) continue;
         addError(siteName + ": closure captures '" + cap +
                      "' mutably -- a mutable capture holds the defining frame's address and "
@@ -376,7 +383,7 @@ void SemanticAnalyzer::checkThreadBoundaryCaptures(ast::FunctionExpression* fe,
                  site);
     }
 
-    for (const std::string& cap : fe->capturedVariables) {
+    for (const std::string& cap : caps.captured) {
         if (reported.count(cap)) continue;
         if (!reported.insert(cap).second) continue;
 

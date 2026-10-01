@@ -3572,7 +3572,7 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                         std::string(expectedPayload) + "? parameter");
                     m_currentLLVMValue = nullptr; return;
                 }
-                failable = fe->canFail ? 1 : 0;
+                failable = nodeCanFail(fe) ? 1 : 0;
             }
             node->arguments[0]->accept(*this);
             llvm::Value* cl = m_currentLLVMValue;
@@ -6051,7 +6051,7 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
             if (m_currentVybModule) {
                 for (const auto& stmt : m_currentVybModule->body) {
                     auto* decl = dynamic_cast<ast::FunctionDeclaration*>(stmt.get());
-                    if (decl && decl->id && decl->id->name == calleeIdent->name && decl->needsErrorReturn) {
+                    if (decl && decl->id && decl->id->name == calleeIdent->name && nodeNeedsErrorReturn(decl)) {
                         calleeNeedsErrorReturn = true;
                         break;
                     }
@@ -6097,7 +6097,7 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                     TrapContext& trap = trapStack.back();
                     builder->CreateStore(errorPtr, trap.errorSlot);
                     builder->CreateBr(trap.landingPad);
-                } else if ((currentFunctionAST && currentFunctionAST->needsErrorReturn) || m_currentFunctionFailable) {
+                } else if ((currentFunctionAST && nodeNeedsErrorReturn(currentFunctionAST)) || m_currentFunctionFailable) {
                     // No trap but we're in a failable function - propagate to our caller
                     emitPropagatingErrorReturn(errorPtr);
                 } else {

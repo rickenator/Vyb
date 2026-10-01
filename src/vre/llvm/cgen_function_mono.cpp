@@ -131,7 +131,7 @@ llvm::Function* LLVMCodegen::monomorphizeGenericFunction(const std::string& func
     // (or {i1, i8*} for Void) so that a `fail` in the monomorphized body can
     // propagate the error back to the caller's trap instead of hitting the
     // untrapped runtime handler.
-    const bool monoNeedsErrorReturn = (templateFunc->needsErrorReturn != 0);
+    const bool monoNeedsErrorReturn = nodeNeedsErrorReturn(templateFunc);
     if (monoNeedsErrorReturn) {
         llvm::Type* errorPtrType = llvm::PointerType::get(*context, 0);
         if (returnType->isVoidTy()) {

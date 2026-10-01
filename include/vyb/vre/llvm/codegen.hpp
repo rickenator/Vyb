@@ -16,6 +16,8 @@
 #include <set>
 #include <stack>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "vyb/parser/ast.hpp"
@@ -121,6 +123,47 @@ public:
         const vyb::ast::Node* n = p.get();
         return nodeTypeOf_ ? nodeTypeOf_(n) : std::shared_ptr<vyb::ast::TypeNode>();
     }
+    // #392 immutable AST: the analysis facts the semantic pass recorded for a
+    // node (bound from the Driver's analyzer). Facts for a node codegen
+    // synthesized itself are overlaid from synthFacts_ -- the analyzer never saw
+    // those. The AST no longer carries them (they were mutable fields that both
+    // passes read and wrote).
+    unsigned nodeFacts(const vyb::ast::Node* n) const {
+        if (!n) return 0u;
+        unsigned f = nodeFactsOf_ ? nodeFactsOf_(n) : 0u;
+        auto it = synthFacts_.find(n->typeId());
+        if (it != synthFacts_.end()) f |= it->second;
+        return f;
+    }
+    bool nodeCanFail(const vyb::ast::Node* n) const {
+        return (nodeFacts(n) & vyb::analysis::FuncCanFail) != 0;
+    }
+    bool nodeNeedsErrorReturn(const vyb::ast::Node* n) const {
+        return (nodeFacts(n) & vyb::analysis::FuncNeedsErrorReturn) != 0;
+    }
+    bool nodeOperandFromWildcardError(const vyb::ast::Node* n) const {
+        return (nodeFacts(n) & vyb::analysis::OperandWildcardError) != 0;
+    }
+    bool nodeOperandFromTypeValue(const vyb::ast::Node* n) const {
+        return (nodeFacts(n) & vyb::analysis::OperandFromTypeValue) != 0;
+    }
+    bool nodeOperandIsWildcardError(const vyb::ast::Node* n) const {
+        return (nodeFacts(n) & vyb::analysis::OperandIsWildcardError) != 0;
+    }
+    // Record a fact for a node codegen built itself (the async worker cloned
+    // from a failable function is the case that needs it).
+    void setSynthFact(const vyb::ast::Node* n, unsigned bit, bool on = true) {
+        if (!n) return;
+        if (on) synthFacts_[n->typeId()] |= bit; else synthFacts_[n->typeId()] &= ~bit;
+    }
+    // #392: the capture lists the semantic pass recorded for a closure (bound
+    // from the same analyzer). Empty when the closure was never analyzed --
+    // identical to the retired AST vectors' empty state.
+    const vyb::analysis::ClosureCaptures& nodeCaptures(const vyb::ast::Node* n) const {
+        static const vyb::analysis::ClosureCaptures kEmpty{};
+        const vyb::analysis::ClosureCaptures* c = nodeCapturesOf_ ? nodeCapturesOf_(n) : nullptr;
+        return c ? *c : kEmpty;
+    }
     // True when a call expression's type is `mild<...>` (a shared borrow with
     // retained-on-stow semantics). Made a member (#223) so it resolves the type
     // through typeOfNode instead of the node->type field.
@@ -138,6 +181,13 @@ private:
     // Bound to the semantic analyzer's TypeTable query (#223). null when no
     // analyzer is registered (fallback to node->type above keeps it working).
     std::function<std::shared_ptr<vyb::ast::TypeNode>(const vyb::ast::Node*)> nodeTypeOf_;
+    // #392: the analyzer's fact + capture queries, bound alongside nodeTypeOf_.
+    // null when no analyzer is registered (test/JIT paths): nodeFacts() then
+    // answers 0 and nodeCaptures() answers an empty record.
+    std::function<unsigned(const vyb::ast::Node*)> nodeFactsOf_;
+    std::function<const vyb::analysis::ClosureCaptures*(const vyb::ast::Node*)> nodeCapturesOf_;
+    // Facts recorded for nodes codegen synthesizes (not present in the AST).
+    std::unordered_map<unsigned, unsigned> synthFacts_;
 
     // Thread-boundary capability (#365 step (c)): bound to the semantic analyzer,
     // so codegen asks the question with the registries the semantic pass owns

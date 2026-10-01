@@ -1666,10 +1666,10 @@ void SetPattern::accept(Visitor& visitor) {
 
 // --- TypeofExpression ---
 TypeofExpression::TypeofExpression(SourceLocation loc, ExprPtr operand)
-    : Expression(loc), operand(std::move(operand)), operandFromWildcardError(false) {}
+    : Expression(loc), operand(std::move(operand)) {}
 
 TypeofExpression::TypeofExpression(SourceLocation loc, TypeNodePtr typeArg)
-    : Expression(loc), typeArg(std::move(typeArg)), operandFromWildcardError(false) {}
+    : Expression(loc), typeArg(std::move(typeArg)) {}
 
 NodeType TypeofExpression::getType() const {
     return NodeType::TYPEOF_EXPRESSION;
@@ -1688,8 +1688,7 @@ void TypeofExpression::accept(Visitor& visitor) {
 
 // --- TypenameExpression ---
 TypenameExpression::TypenameExpression(SourceLocation loc, ExprPtr operand)
-    : Expression(loc), operand(std::move(operand)), operandFromWildcardError(false),
-      operandFromTypeValue(false) {}
+    : Expression(loc), operand(std::move(operand)) {}
 
 NodeType TypenameExpression::getType() const {
     return NodeType::TYPENAME_EXPRESSION;

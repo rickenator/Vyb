@@ -216,37 +216,67 @@ The flip has no intermediate green, so if it can't reach a green all-suite state
 in the fresh session, revert cleanly: `git checkout -- src/vre/semantic.cpp include/vyb/semantic.hpp` (nothing else in the repo is touched by the flip) and
 keep increment #1 (`2944d69`) as the milestone. Do NOT commit a red tree.
 
-## IMMUTABLE-AST (full read-only) — the remaining stretch (NOT done; plan only)
+## IMMUTABLE-AST — delivered (#392)
 
-The TypeTable flip above made types OWNED and node-id-keyed, but the AST is not
-yet read-only after parse: `Node::type` (ast.hpp) is still a mutable
-`std::shared_ptr<TypeNode>` member that semantic writes during analysis and
-codegen reads during lowering. Survey 2026-09-10:
+The TypeTable flip made types OWNED and node-id-keyed and deleted the mutable
+`Node::type` field (PR #236). #392 then took the remaining analysis-written state
+off the AST. Survey at the time of that work:
+
+- semantic wrote 9 AST fields: `FunctionDeclaration`/`FunctionExpression`
+  `canFail` / `needsErrorReturn` / `errorTypes`, `FunctionExpression`'s three
+  capture vectors, `TypeofExpression`/`TypenameExpression`/`AsExpression` operand
+  flags, and `MatchExpression::resultType`.
+- codegen performed 6 writes, all transient save/restores or synthesis-time moves.
+
+What landed in #392:
+
+1. The analyzer owns the analysis facts, keyed by the stable `Node::typeId()`
+   exactly like the TypeTable (`analysis::NodeFact` bits in
+   `include/vyb/vre/analysis_facts.hpp`; `markFact` / `markFailable` /
+   `isFailable` / `functionNeedsErrorReturn` / `factsOf`).
+2. Codegen reads them through one binding installed with the existing
+   `typeOfNode` binding in `cgen_main.cpp` (`nodeFactsOf_` → `nodeFacts()` plus
+   the named helpers `nodeCanFail`, `nodeNeedsErrorReturn`, `nodeOperand*`). Facts
+   for nodes codegen synthesizes itself (the async worker cloned from a failable
+   function) live in a codegen-local overlay, `setSynthFact`.
+3. A closure's capture lists are one analyzer-owned record per closure
+   (`include/vyb/vre/closure_captures.hpp`; `resetCaptures` / `addCapture` /
+   `capturesOf`), read by codegen through `nodeCaptures()` and by the
+   thread-boundary predicate directly. The three AST vectors are gone.
+4. `MatchExpression::resultType` became a TypeTable entry (`setType`), read by
+   codegen as `typeOfNode(node)`.
+5. `FunctionDeclaration::errorTypes` was write-only — dropped, together with its
+   one `push_back("Error")`.
+
+Deliberate residuals (documented, not invariants of the analysed tree):
+
+- The analyzer still synthesizes a `VariableDeclaration::typeNode` when the
+  source omitted the annotation, because codegen reads a declaration's declared
+  type as *structure* in 36 places (`cgen_decl.cpp` primarily). Converting those
+  read sites to a synthesized-type query is the follow-on if it is ever needed.
+- Codegen's transient save/restores (a synthesized call's `arguments`, an
+  `isAsync` toggle around the inner-closure lowering) leave the tree unchanged
+  when the visitor returns, so an "AST is read-only during codegen" assertion
+  would have to allow them.
+
+Verification for #392: full build, the complete `.vyb` suite, the LSP/REPL/gitdep
+smokes and the refman gate — the change is behaviour-neutral, so those are the
+proof that no analysis decision moved.
+
+
+## Historical note (superseded)
+
+The survey below was taken 2026-09-10, when the mutable `Node::type` field still
+existed (182 semantic writes, ~341 `->type` references, ~85 codegen reads). It is
+kept as a record of the plan the migration followed; every step it lists has since
+landed (PR #236 deleted the field, and #392 moved the remaining analysis state off
+the AST as described above).
 
 - semantic.cpp: **182 writes** to `node->type`, ~341 `->type` refs total.
 - codegen reads `node->type` directly: cgen_expr.cpp 28, cgen_vec.cpp 22,
   cgen_decl.cpp 35 (+ more in other cgen files) — ~85+ more.
 - `codegen.generate(astModule, filename)` (codegen.hpp:88) receives ONLY the AST;
-  LLVMCodegen has NO access to the analyzer's node-id TypeTable.
+  LLVMCodegen initially had NO access to the analyzer's node-id TypeTable (it now
+  binds `typeOfNode` / `nodeFacts` / `nodeCaptures` from the Driver's analyzer).
 - `Node::inferredTypeName` was DEAD (0 uses) and was removed 2026-09-10.
 
-For the AST to be genuinely immutable after parse, every `node->type`
-write/read must route through the node-id TypeTable, which must be threaded into
-codegen. Steps for a dedicated session:
-
-1. Remove `Node::type` (ast.hpp) OR keep it only as a build-time-only cache —
-   the target is to stop WRITING it during analysis.
-2. semantic.cpp: replace the 182 `node->type = X` writes with `setType(node, X)`
-   (TypeTable), and the ~159 pure semantic `node->type` READS with
-   `typeOf(node)` / `(it=typeOf(n); it ? ... : ...)`. (`node->type` is already
-   redundant with the TypeTable for semantic.)
-3. Thread the TypeTable into codegen: give LLVMCodegen a pointer to the analyzer
-   (or a `const TypeTable&` node-id->shared_ptr map + a `typeOf(Node*)` accessor)
-   and migrate the ~85 cgen `node->type` reads to it. `codegen.generate()` must
-   take the table (or an analyzer reference).
-4. Delete `Node::type` and any leftover semantic/codegen `node->type` access;
-   add a debug assertion that no AST field is written after parse completes.
-5. Rollback = clean checkout of semantic.cpp + codegen/*.cpp + codegen.hpp to the
-   last green commit. This is the single largest item in the migration and spans
-   semantic + ALL cgen files — do it in a fresh session with compile-driven fixes
-   (the 1141/1141 suite + lsp/repl/gitdep smokes are the gate).
