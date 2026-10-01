@@ -2001,6 +2001,19 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 return;
             }
 
+            // #383: `deserial()` is a registered name that has never been a parser.
+            // Codegen forwards its argument (cgen_expr_call.cpp, `name == "deserial"`),
+            // so the serializer then emits the JSON text *as a string* -- the input
+            // comes back quoted and re-escaped. Silent wrong output is worse than a
+            // refusal: reject it here and name the path that does work, until a real
+            // parser exists (the JSON module and `T::from_string` both parse).
+            if (name == "deserial") {
+                addError("deserial() is not implemented; parse the text with the json "
+                         "module or a type's from_string (e.g. T::from_string(text))",
+                         node);
+                return;
+            }
+
             // For notype(): validate that argument is a struct type, not a primitive
             if (name == "notype") {
                 ast::Expression* argExpr = node->arguments[0].get();

@@ -167,7 +167,7 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 ### Running the test suite
 
 ```bash
-# 1248 .vyb tests exercised through compile + run + output/return checks
+# 1249 .vyb tests exercised through compile + run + output/return checks
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test
 ```
 
@@ -2825,7 +2825,7 @@ Canonical suite runner — a Vyb program (`test/run_tests.vyb`), wired into CTes
 as `run-tests`:
 
 ```bash
-./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1248 tests)
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1249 tests)
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --category async  # filter by category
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --json results.json --evidence evidence.json
 ```
@@ -3174,6 +3174,7 @@ key/seed material on the GPU. Crypto/ledger integration stays host-side.
 
 
 
+
 The **shared cross-module types** (`HttpResponse`, `TcpStream`, `TlsContext`,
 `TlsStream`, `Socket`) and every symbol that uses them are in
 [`interfaces.md`](interfaces.md).
@@ -3231,7 +3232,13 @@ main()<Int> -> {
 ```
 
 Not yet complete (#375): `bare(...)` prints the keyed object rather than raw
-field values, and `<Type>`-suffixed field names are not implemented. A `Vec<T>`
+field values in declaration order — it is an exact alias of `notype()` today, and
+the raw-value mode is unimplemented; `<Type>`-suffixed field names are not
+implemented either. `deserial(...)` is *refused* rather than forwarded (#383): it
+used to pass its argument straight to the serializer, so JSON text came back as a
+string (quoted and re-escaped), and the compiler now reports
+`deserial() is not implemented` at the call site — parse with the `json` module or
+a type's `from_string`. A `Vec<T>`
 return — alone (`main()<Vec<T>>`) or as one element of a multi-value return
 (`main()<Int, Vec<T>>`) — prints a JSON array of its elements, nested
 `Vec<Vec<T>>` returns nest the arrays, and a struct element of a multi-value

@@ -1,0 +1,14 @@
+// @test: deserial() is rejected instead of silently re-quoting its input (#383)
+// @description: deserial() is a registered name that was never a parser -- codegen
+//   forwarded its argument, so the serializer emitted the JSON text as a string,
+//   quoted and re-escaped ("{\"id\": 7}" came back as "\"{\\\"id\\\": 7}\""). A silent
+//   wrong answer is worse than a refusal, so it now fails at compile time and names
+//   the path that does parse.
+// @category: intrinsic, json, serialization, error
+// @expect: fail
+// @expect-error: deserial() is not implemented
+
+main()<String> -> {
+    text<String> = "{\"id\": 7, \"name\": \"Bob\"}"
+    return deserial(text)
+}
