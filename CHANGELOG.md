@@ -10,6 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **`bare()` now emits a struct's field values, in declaration order (#383)** — the
+  second half of the intrinsic cleanup. `bare(x)` was an exact alias of `notype(x)`:
+  it forwarded the value and the serializer produced the keyed object it was
+  documented as *not* producing. The request for raw values now travels with the
+  value — codegen records the value `bare()` handed on (`bareSerializationValues`,
+  `codegen.hpp`) and marks the type name at the serialization site (`bare:Person`,
+  `cgen_string.cpp`), and the runtime strips the marker and walks the same field
+  metadata with the names dropped (`__vyb_complex_to_json_values_with_metadata`,
+  `vyb_type_metadata.c`). So a struct serializes as
+  `{"id": 123, "name": "Alice", "salary": 88000}` by default and as
+  `[123, "Alice", 88000]` under `bare()`. Nested values keep their natural form, and
+  every unwrapped path is byte-identical to before. Locked in by
+  `test/units/test_bare_raw_values.vyb`.
 - **`deserial()` is refused instead of silently re-quoting its input (#383)** —
   the name was registered but never a parser: codegen forwarded its argument, so the
   serializer emitted the JSON text as a *string*, and `deserial("{\"id\": 7}")`

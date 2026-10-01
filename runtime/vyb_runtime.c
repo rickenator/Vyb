@@ -664,6 +664,19 @@ char* __vyb_string_from_string(const char* str, bool* success) {
 
 // Generic JSON serialization using type metadata
 char* __vyb_complex_to_json(void* instance, const char* type_name) {
+    // #383: `bare(...)` asks for the struct's field *values* in declaration order
+    // instead of a keyed object. Codegen marks the type name it passes (cgen_string.cpp);
+    // strip the marker here and take the values path. `type_name` stays otherwise
+    // untouched, so every other caller keeps the keyed object it has always had.
+    if (type_name && strncmp(type_name, "bare:", 5) == 0) {
+        type_name += 5;
+        VybTypeMetadata* bare_metadata = __vyb_lookup_type(type_name);
+        if (!bare_metadata) {
+            fprintf(stderr, "Error: Type '%s' not found in registry\n", type_name);
+            return strdup("[]");
+        }
+        return __vyb_complex_to_json_values_with_metadata(instance, bare_metadata);
+    }
     VybTypeMetadata* metadata = __vyb_lookup_type(type_name);
     if (!metadata) {
         fprintf(stderr, "Error: Type '%s' not found in registry\n", type_name);

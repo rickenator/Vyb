@@ -1,0 +1,19 @@
+// @test: bare() emits a struct's field values in declaration order (#383)
+// @description: bare(x) used to be an exact alias of notype(x) -- it forwarded the
+//   value and the serializer still produced the keyed object, so the mode it is
+//   documented as had no effect. The request for raw field values now travels with
+//   the value itself, so the struct prints as a JSON array of its field values in
+//   declaration order, and the plain (unwrapped) value keeps the keyed object.
+// @category: intrinsic, json, serialization
+// @expect-return: [123, "Alice", 88000]
+
+struct Person {
+    Int id,
+    String name,
+    Float salary
+}
+
+main()<Person> -> {
+    person<Person> = Person { id = 123, name = "Alice", salary = 88000.0 }
+    return bare(person)
+}

@@ -352,6 +352,13 @@ private:
     // Monomorphization: Generic type instantiation
     std::map<std::string, vyb::ast::StructDeclaration*> genericStructTemplates; // Store generic struct AST nodes (e.g., Box<T>)
     std::map<std::string, llvm::StructType*> monomorphizedStructs; // Cache instantiated types (e.g., "Box<Int>" -> Box_Int LLVM type)
+
+    // #383: values that came through `bare(...)`. `bare(x)` forwards its argument
+    // (the inner value is untouched), so the fact that it was asked for raw field
+    // values has to travel with the value: the serialization site records it here
+    // and passes a marked type name down to the runtime, which then emits the
+    // struct's field values in declaration order instead of a keyed object.
+    std::vector<llvm::Value*> bareSerializationValues;
     std::map<std::string, vyb::ast::EnumDeclaration*> genericEnumTemplates;   // Generic data-enum AST nodes (enum Box<T> { ... })
     std::map<std::string, llvm::GlobalVariable*> typeMetadataGlobals; // Type metadata for JSON serialization
     std::map<std::string, llvm::GlobalVariable*> enumMetadataGlobals; // Enum metadata for JSON serialization
