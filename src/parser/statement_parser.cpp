@@ -597,7 +597,8 @@ std::unique_ptr<vyb::ast::ForStatement> StatementParser::parse_for() {
                     }
                     return buildForLoopIteratorDesugar(
                         for_loc, ident_token, nullptr,
-                        std::move(body), std::move(skip_expr), std::move(range_expr));
+                        std::move(body), std::move(skip_expr), std::move(range_expr),
+                        /*hoistOwnsValue=*/true);
                 }
 
                 // A plain-identifier iterable is routed onto the Iterator protocol for
@@ -688,7 +689,7 @@ std::unique_ptr<vyb::ast::ForStatement> StatementParser::parse_for() {
 std::unique_ptr<vyb::ast::ForStatement> StatementParser::buildForLoopIteratorDesugar(
     const SourceLocation& loc, const token::Token& ident, vyb::ast::ExprPtr range_expr,
     std::unique_ptr<vyb::ast::BlockStatement> body, vyb::ast::ExprPtr skip_expr,
-    vyb::ast::ExprPtr hoist_expr) {
+    vyb::ast::ExprPtr hoist_expr, bool hoistOwnsValue) {
 
     std::string it_name = "__it_" + ident.lexeme;
 
@@ -704,7 +705,8 @@ std::unique_ptr<vyb::ast::ForStatement> StatementParser::buildForLoopIteratorDes
         std::string src_name = "__src_" + ident.lexeme;
         auto src_var = std::make_unique<vyb::ast::Identifier>(loc, src_name);
         src_decl = std::make_unique<vyb::ast::VariableDeclaration>(
-            loc, std::move(src_var), false, nullptr, std::move(hoist_expr));
+            loc, std::move(src_var), false, nullptr, std::move(hoist_expr),
+            /*ownsBoundValue=*/hoistOwnsValue);
         auto src_ident = std::make_unique<vyb::ast::Identifier>(loc, src_name);
         auto iter_mem = std::make_unique<vyb::ast::MemberExpression>(
             loc, std::move(src_ident), std::make_unique<vyb::ast::Identifier>(loc, "iter"),

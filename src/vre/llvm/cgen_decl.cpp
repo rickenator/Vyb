@@ -463,6 +463,20 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
             }
         }
 
+        // A synthetic temp that a desugar bound to a *value* producer owns what
+        // the producer returned, even though it carries no type annotation and its
+        // LLVM struct can be unnamed -- both checks above miss it, so the storage
+        // leaked (`for (p in make_vec())` leaked one buffer per loop; the
+        // identifier form `for (p in v)` was fine because `v<Vec<Point>>` names the
+        // type). The parser marks exactly the hoist it performed for a
+        // non-identifier producer, never the member-access hoist, which is a
+        // borrow of `obj.field` and must stay unreclaimed (#387).
+        if (!needsCleanup && node->ownsBoundValue) {
+            needsCleanup = true;
+            VYB_CDBG << "DEBUG: Variable '" << node->id->name
+                      << "' owns its bound producer value - needs cleanup" << std::endl;
+        }
+
         // Closure-typed variables own one reference to a capture environment.
         // Only a confirmed `fn` type is treated as a closure: a bare `{ptr, ptr}`
         // layout (e.g. a 2-pointer tuple) must not be reference-counted.
