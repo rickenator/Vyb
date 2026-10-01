@@ -666,9 +666,12 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
   consulted no claims, so a wrapper hid the claim and `our<T>` stayed refused).
   Fixtures: `..._curated_bind_wrapper_accepted.vyb`, `..._wrapper_absent_rejected.vyb`,
   `..._aggregate_accepted.vyb`.
-  The only residue is wording, not enforcement: the diagnostic text stays provisional
-  ("accepted for handoff") until the drop-semantics-on-propagation row above closes,
-  and the step record lives in `doc/THREAD_BOUNDARY_SCOPE.md`. Shipped in v0.7.7
+  The only residue was wording, and it is now settled: the diagnostic text states
+  *accepted for handoff* (never "guaranteed safe") as a final position, because the
+  drop-semantics-on-propagation row above closed — a failing frame reclaims its live
+  scopes (#380, `test/ownership/fail_path_unwinds_owned_locals.vyb`) and the
+  abandoning path reclaims both error objects (#398, leak-asserted in `ci.yml`).
+  The step record lives in `doc/THREAD_BOUNDARY_SCOPE.md`. Shipped in v0.7.7
   (#365, PRs #366-#370).
 - [x] **Lifetime inference beyond lexical scope** — DECIDED, not a 1.0 gap.
   `borrow`/`view` are lexical-phase by design (documented in #149): no lifetime

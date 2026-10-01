@@ -27,6 +27,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   only a writer and no reader at all (`FunctionDeclaration::errorTypes`) was
   dropped outright. No behaviour change: the suite, the CLI smokes and the
   reference-manual gate are the proof.
+- **The propagation-path drop-semantics record is closed out (#397)** — three
+  residues of the thread-boundary and fail-path work are settled. The
+  `doc/FEATURE_STATUS.md` row `Drop semantics on propagation paths (fail/trap)` moves
+  from 📋 to ✅, citing the fail-path unwind (#380,
+  `test/ownership/fail_path_unwinds_owned_locals.vyb`) and the abandoning-handler free
+  (#398), and stating explicitly what is *not* claimed (an abandoning frame's own
+  owned locals are not unwound — the process terminates there). The thread-boundary
+  diagnostic wording is declared final instead of provisional: an accepted capture is
+  *accepted for handoff*, never "guaranteed safe" — the gate proves a capture can
+  cross the boundary, not that every path reclaims it — in
+  `src/vre/semantic_thread_boundary.cpp`, `docs/refman/PROGRAMMERS_GUIDE.md` §5 and
+  `doc/THREAD_BOUNDARY_SCOPE.md` (whose step list is now fully closed).
 
 ### Fixed
 - **The abandoning-handler path reclaims the error it caught (#398)** — a trap
