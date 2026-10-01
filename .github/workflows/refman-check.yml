@@ -1,7 +1,11 @@
 name: refman-check
 
 on:
+  # Same de-duplication as ci.yml: a branch is exercised by its pull_request run, so
+  # pushing the branch as well built and checked the identical commit twice. The gate
+  # still runs on pull requests (where it is required) and on every main push.
   push:
+    branches: [main]
   pull_request:
 
 jobs:
