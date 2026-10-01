@@ -173,15 +173,18 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
   the repo's RTX 3090.
 
 ### Staged follow-ons
-- [~] **Typed host-launch library — f64 re-export** — `bindings/cuda` (a posted, **signed** binding, issue
+- [x] **Typed host-launch library — f64 re-export** — `bindings/cuda` (a posted, **signed** binding, issue
   #198 P3) provides the reusable launch surface (`cuda_init`/`cuda_launch`/
-  `cuda_mem_alloc`/`cuda_read`/`cuda_write`/`cuda_sync`) and is now **adopted** by
-  `fixtures/cuda/matmul_verify.vyb`. Gap: the module shipped i32-only transfers; I added
-  `cuda_write_f64`/`cuda_read_f64` (8-byte f64 via `cuMemcpy*_v2`) to `bindings/cuda/mod.vyb`
-  (compiles clean through the module path). Since `INDEX.json` hashes `mod.vyb` + `cuda_binding.vyb`
-  and is **signed**, this needs a **publisher re-sign**: `vyb mod sign-index bindings/cuda/INDEX.json
-  --key <publisher-priv>`. Until re-signed, the posted signature is stale and the f64 helpers live
-  only in the working tree / uncommitted.
+  `cuda_mem_alloc`/`cuda_read`/`cuda_write`/`cuda_sync`) and is **adopted** by
+  `fixtures/cuda/matmul_verify.vyb`. The f64 gap is closed: `cuda_write_f64`/
+  `cuda_read_f64` (8-byte f64 via `cuMemcpy*_v2`) are in `bindings/cuda/mod.vyb` and the
+  posted index is re-signed and current — `sha256` of `bindings/cuda/mod.vyb`
+  (`0e7f029e…`) and `bindings/cuda/cuda_binding.vyb` (`65ff540a…`) match the `INDEX.json`
+  entries exactly, and `vyb mod verify-signed bindings/cuda/INDEX.json` reports
+  `SIGNED VERIFY OK`. On-silicon coverage added: `fixtures/cuda/f64_verify.vyb` round-trips
+  two Float values through device memory (a `ProbeError` escalates a failed check so the
+  GPU job fails, since a `main()` Int return is not a process status), wired into
+  `gpu-kernel.yml`'s compile-only list and the RTX 3090 silicon leg
 - [x] **GPU CI / hardware-backed integration workload** — **done on push**: self-hosted GPU
   runner `godzilla-gpu` (RTX 3090; systemd user unit `vyb-gpu-runner`, linger enabled) runs
   the `gpu-silicon` job (build + cuBLAS/cuFFT/cuDNN cross-validations + module matmul on real
