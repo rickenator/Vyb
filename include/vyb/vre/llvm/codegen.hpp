@@ -91,10 +91,12 @@ public:
 
     // issue #348: the IR dump is opt-in. `writeIR` defaults to false so an ordinary
     // compile/run never litters `<source>.vyb.ll` beside the program; the --emit-llvm
-    // path and --debug-codegen pass true explicitly. `outputFilename` still names the
-    // DWARF compile unit, so it is always supplied.
+    // `outputFilename` names the emitted `.ll`/object; `sourceFilename` (when given)
+    // is the Vyb source the compile unit's DWARF file table must name, so a debugger
+    // can resolve `break <file>.vyb:<line>` (#390).
     void generate(vyb::ast::Module* astModule, const std::string& outputFilename,
-                  bool writeIR = false); // Add declaration
+                  bool writeIR = false,
+                  const std::string& sourceFilename = ""); // Add declaration
     void dumpIR() const; // Add declaration
     std::unique_ptr<llvm::Module> releaseModule(); // Add declaration
     std::unique_ptr<llvm::LLVMContext> releaseContext(); // Add declaration for context release

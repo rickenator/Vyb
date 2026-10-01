@@ -124,7 +124,7 @@ LLVMCodegen::LLVMCodegen(Driver& driver)
 LLVMCodegen::~LLVMCodegen() = default;
 
 void LLVMCodegen::generate(vyb::ast::Module* astModule, const std::string& outputFilename,
-                           bool writeIR) {
+                           bool writeIR, const std::string& sourceFilename) {
     if (!astModule) {
         logError(SourceLocation(), "Cannot generate code: AST module is null.");
         return;
@@ -182,8 +182,12 @@ void LLVMCodegen::generate(vyb::ast::Module* astModule, const std::string& outpu
         //      reference left in a kernel body is a bug that must surface as an
         //      unresolved-symbol failure at PTX emission.
     } else {
-        // Initialize debug information (host codegen only).
-        initializeDebugInfo(outputFilename);
+        // Initialize debug information (host codegen only). The compile unit's file
+        // must be the *Vyb source*, not the emitted IR: `outputFilename` is the
+        // generated `.ll`/object name, and naming the line table after it makes
+        // `break <file>.vyb:<line>` unresolvable in gdb/lldb (#390 -- the file table
+        // read `<fixture>.vyb.ll`). Callers pass the source path they parsed.
+        initializeDebugInfo(sourceFilename.empty() ? outputFilename : sourceFilename);
     }
 
     astModule->accept(*this);

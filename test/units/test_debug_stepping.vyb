@@ -1,0 +1,24 @@
+// @test: debug-info source stepping fixture (#390)
+// @description: compiled with `--build` under full DWARF, then driven by
+//   test/debug_step.sh: the script sets a breakpoint by Vyb source line, steps, and
+//   reads a local under gdb (and under lldb when it is installed). The breakpoint
+//   marker comment on the `partial` assignment below is the line the script breaks on,
+//   so the fixture and the script cannot drift apart. The fixture is also an ordinary
+//   suite test (it runs to a normal exit).
+// @category: tooling, debug, dwarf
+// @expect: pass
+// @expect-output: total = 42
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+
+accumulate(seed<Int>, extra<Int>)<Int> -> {
+    partial<Int> = seed + extra # bp: partial
+    return partial
+}
+
+main()<Int> -> {
+    base<Int> = 40
+    total<Int> = accumulate(base, 2)
+    println("total = " + total.to_string())
+    return 0
+}

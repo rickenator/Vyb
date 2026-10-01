@@ -60,6 +60,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `doc/THREAD_BOUNDARY_SCOPE.md` (whose step list is now fully closed).
 
 ### Fixed
+- **Debuggers can stop on a Vyb source line (#390)** — DWARF was emitted, but no
+  debugger could use it: the compile unit named the generated `.ll` instead of the
+  Vyb source, so `break <file>.vyb:<line>` was unresolvable, and only a handful of
+  node kinds carried a source location, so a breakpoint resolved to the enclosing
+  function header. `generate()` now takes the source path (the compile unit's file
+  table names it), and every statement sets its own debug location before codegen —
+  the line table now maps instructions to the source the user wrote. AOT-built
+  programs stop at the requested Vyb statement, step, and read back locals.
 - **The abandoning-handler path reclaims the error it caught (#398)** — a trap
   handler whose `refail` has no enclosing trap that can catch it leaves the frame
   through a non-returning runtime abort (`__vyb_runtime_untrapped_error`), and the

@@ -33,7 +33,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake \
             llvm-18-dev libclang-18-dev \
-            catch2
+            catch2 gdb lldb
 
       - name: Configure
         run: >
@@ -114,6 +114,13 @@ jobs:
           # test_compilation emits per-test outputs + .o at the repo root; remove
           # them so the tree stays clean even if a later step fails.
           rm -f test_output_* ./*.o 2>/dev/null || true
+
+      - name: Debugger integration (#390)
+        # DWARF is emitted for every host build; this proves a debugger can use it:
+        # a breakpoint set by Vyb source line stops at that statement, stepping
+        # works, and a local reads back. Both legs run in batch mode; the script
+        # reports and skips any debugger that is not installed.
+        run: ./test/debug_step.sh
 
       - name: Upload release evidence (#158)
         if: always()

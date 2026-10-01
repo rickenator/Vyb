@@ -167,12 +167,29 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 ### Running the test suite
 
 ```bash
-# 1246 .vyb tests exercised through compile + run + output/return checks
+# 1247 .vyb tests exercised through compile + run + output/return checks
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test
 ```
 
 Key test knobs (see also [§8](#8-testing-and-tooling)): `--pattern`, `--category`, `--report`,
 `triage` for triage planning, and HTML report generation.
+
+### Debugging a compiled program
+
+Host builds carry DWARF debug info, and the line table names the *Vyb source* you
+wrote (not the intermediate `.ll`), so ordinary debugger commands work on it: build
+with `--build`, then set a breakpoint by Vyb file and line, step, and read locals.
+
+```bash
+./build/vyb hello.vyb --build hello -O0        # -O0 keeps locals readable
+gdb -batch -ex 'break hello.vyb:4' -ex run -ex next -ex 'print total' ./hello
+```
+
+`-O0` also means "no IR passes" for the JIT path (see *Optimization phases*), so the
+debugging build and the running build agree about what the source means. This is
+exercised end-to-end by `test/debug_step.sh` — the same breakpoint-by-source-line /
+step / read-a-local sequence, run in batch mode under `gdb` and (when installed)
+`lldb` in CI.
 
 ### Projects and packaging
 
@@ -2808,7 +2825,7 @@ Canonical suite runner — a Vyb program (`test/run_tests.vyb`), wired into CTes
 as `run-tests`:
 
 ```bash
-./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1246 tests)
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1247 tests)
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --category async  # filter by category
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --json results.json --evidence evidence.json
 ```

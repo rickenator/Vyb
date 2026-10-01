@@ -244,7 +244,7 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 - [x] **`println()`/`print()` with multiple arguments** — Space-separated output; all args formatted into a single call
 - [x] **Semantic type recognition** — `Int16`, `Int32`, `Int64`, `UInt8`–`UInt64`, `Float32`, `Float64`, `Char`, `Rune` now fully recognized in semantic analysis (were silently rejected)
 - [x] **Relaxed struct field syntax** — C-style `Type fieldName` accepted alongside canonical `fieldName<Type>`; helps parse legacy/interop fixtures
-- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite runs **1246 tests** via `test/run_tests.vyb`, and that documented size is enforced against the runner by `test/suite_count_check.vyb` in CI
+- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite runs **1247 tests** via `test/run_tests.vyb`, and that documented size is enforced against the runner by `test/suite_count_check.vyb` in CI
 - [x] **Vec parameter deep copy** — Vec parameters receive an independent copy of the data on function entry, eliminating double-free bugs (e.g. recursive quicksort base-case return)
 - [x] **Nested `Vec<Vec<T>>` element ownership** — every path that clones a nested Vec (by-value argument, return, assignment, `push`, `set`, and the borrowed-element binding) now deep-copies the inner Vec *and* retains its elements, so `Vec<Vec<String>>` rows no longer share inner buffers with their source binding (no double free at exit, no dangling inner strings). Locked in by `test/ownership/nested_vec_element_ownership.vyb` (#373)
 - [x] **Nested Vec reclaim depth ≥ 3** — scope-exit reclaim now releases *every* level of a nested Vec: for a `Vec` element the deeper levels are released recursively (`emitInnerVecCleanup`) before the outer storage is freed, struct-field reclaim is skipped for a Vec element, and a `Vec<Vec<T>>` *field* of a struct takes the same recursive path. Verified under `ASAN_OPTIONS=halt_on_error=1:detect_leaks=1` (`test/collections/test_nested_vec_deep_copy.vyb`, the SQLite binding, `test/traffic/test_traffic_{parse,db,graph,report}.vyb`) (#373)
@@ -1088,7 +1088,7 @@ with `pass` for multi-statement case bodies. Needs polishing:
   non-reparseable form (known limitation, follow-on). Regression test:
   `test/units/test_format_canonical.vyb`. Implements tracked as `Vyting & Tooling` → Code formatter.
 - [x] **`vyb check`** — AST lint warnings beyond errors: `vyb check <file.vyb> [files/dirs...]`. Parses each `.vyb` (AST only, no execution) and emits `file:line:col: warning: <msg>` for unused variables/parameters, constant boolean conditions, empty blocks, self-comparison, and unreachable code; exits 1 when warnings are found. Regression: `test/units/test_check_warnings.vyb`.
-- [ ] **Debugger integration** — `gdb`/`lldb` with Vyb source stepping (DWARF done, validate end-to-end)
+- [x] **Debugger integration** — `gdb`/`lldb` with Vyb source stepping — validated end-to-end by `test/debug_step.sh` in CI: the fixture is AOT-built with debug info, a breakpoint set by Vyb source line stops at that statement, stepping works, and a local reads back
 
 ### Polish — Silent by Default (HIGH PRIORITY)
 The compiler must be silent in normal use. DEBUG output makes the language feel unfinished.
@@ -1454,7 +1454,7 @@ For Vyb to be considered production-ready at 1.0, **all of the following must be
   `refman --check` in CI.
 - [ ] Test suite covering all 1.0 features <!-- open: (none) -->
 - [x] `vyb test` integrated test runner (`vyb test [paths...]`, see Testing & Tooling)
-- [ ] Debugger integration validated end-to-end with `gdb`/`lldb` <!-- open: (none) -->
+- [x] Debugger integration validated end-to-end with `gdb`/`lldb` — `test/debug_step.sh` sets a breakpoint by Vyb source line, steps, and reads a local (gdb locally and in CI; lldb in CI). Two codegen fixes were needed: the DWARF compile unit named the emitted `.ll` instead of the Vyb source (so `break <file>.vyb:<line>` was unresolvable), and only a handful of nodes carried a source location (so a breakpoint resolved to the enclosing function header)
 
 ### Post-1.0 Roadmap
 
@@ -1595,5 +1595,5 @@ Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `
 
 *Last Updated: 2026-09-29 (v0.7.7 release)*
 *Current Version: Vyb v0.7.7 (freedom-1.0 series)*
-*Overall Status: ~60-65% complete toward 1.0 — 1246 tests (documented size enforced against the runner by `test/suite_count_check.vyb`; the full `--execute-jit` sweep runs in `ci.yml`)*
+*Overall Status: ~60-65% complete toward 1.0 — 1247 tests (documented size enforced against the runner by `test/suite_count_check.vyb`; the full `--execute-jit` sweep runs in `ci.yml`)*
 *SUGGESTIONS.md merged into this document.*
