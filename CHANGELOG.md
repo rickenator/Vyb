@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **`deserial()` is refused instead of silently re-quoting its input (#383)** —
+  the name was registered but never a parser: codegen forwarded its argument, so the
+  serializer emitted the JSON text as a *string*, and `deserial("{\"id\": 7}")`
+  returned `"{\"id\": 7}"` with the quotes escaped. Silent wrong output is worse than
+  a refusal, so it is now a compile error at the call site that names the path which
+  works (`T::from_string`, the `json` module). `bare()`, the other half of the issue,
+  is still an exact alias of `notype()` in the keyed-object case; the raw-value mode
+  it is documented as needs a value-level flag through the serializer, so it stays
+  tracked rather than silently aliased.
 - **The parse tree is no longer a scratchpad for the later passes (#392)** —
   the immutable-AST half of the TypeTable migration. The type mirror itself was
   already gone (`Node::type` deleted, all ~850 references routed through the
