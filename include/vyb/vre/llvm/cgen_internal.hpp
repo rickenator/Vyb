@@ -138,6 +138,20 @@ inline bool vecReadMethodSafeForTempReceiver(const std::string& m) {
 }
 
 
+// #382: an element accessor can qualify for the same reclaim once what it hands
+// back stops aliasing the receiver's storage. That holds for `get`/`first`/`last`/
+// `peek` on every element kind except a `Vec<Vec<T>>` slot: a primitive is loaded
+// by value, a struct element is deep-copied (`generateStructDeepCopy`), and a
+// String element is retained by the accessor itself (`handleVecGet`/
+// `handleVecLast`). The borrow case cannot be told from the receiver's element type
+// alone (`Vec<Vec<T>>` and `Vec<String>` both look like "a Vec"), so the call site
+// tests the accessor's *result* type instead: `borrowedVecInnerNode(result) ==
+// nullptr` is exactly "this result is not a borrow into the receiver".
+inline bool vecElementAccessorValueMethod(const std::string& m) {
+    return m == "get" || m == "first" || m == "last" || m == "peek";
+}
+
+
 // True when a channel's payload element type is a Vyb String. Numeric /
 // Bool / Char / Float payloads use the int-slot channel runtime; String payloads
 // use the refcounted string channel runtime.
