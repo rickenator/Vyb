@@ -2883,7 +2883,7 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
     // failable return ABI `{ i1 dummy, i8* err }`. The user-facing signature
     // above stays plain Void; only the implemented function return becomes the
     // two-field tuple, so the runtime can distinguish a propagated failure.
-    const bool lambdaFailable = node->canFail && returnType->isVoidTy();
+    const bool lambdaFailable = nodeCanFail(node) && returnType->isVoidTy();
     llvm::Type* implReturnType = returnType;
     if (lambdaFailable) {
         implReturnType = llvm::StructType::get(*context,
@@ -2894,8 +2894,9 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
     // references that are visible in the enclosing scope at creation time.
     // Mutable captures store the *address* of the outer variable in the env and
     // write back through it; immutable captures snapshot the value.
+    const analysis::ClosureCaptures& feCaptures = nodeCaptures(node);
     std::unordered_set<std::string> mutableSet(
-        node->mutableCapturedVariables.begin(), node->mutableCapturedVariables.end());
+        feCaptures.mutableCaptured.begin(), feCaptures.mutableCaptured.end());
     struct Capture {
         std::string name;
         llvm::Type* ty;
@@ -2907,7 +2908,7 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
     };
     std::vector<Capture> captures;
     std::vector<llvm::Type*> envFieldTypes;
-    for (const auto& nm : node->capturedVariables) {
+    for (const auto& nm : feCaptures.captured) {
         auto it = namedValues.find(nm);
         if (it == namedValues.end()) continue;  // not a local variable in scope
         llvm::Type* ty = nullptr;
@@ -3852,7 +3853,7 @@ void LLVMCodegen::visit(ast::BlockExpression* node) {
         builder->SetInsertPoint(unmatchedBB);
 
         // PHASE 6.3: Propagate unmatched error to caller if in failable function
-        if ((currentFunctionAST && currentFunctionAST->needsErrorReturn) || m_currentFunctionFailable) {
+        if ((currentFunctionAST && nodeNeedsErrorReturn(currentFunctionAST)) || m_currentFunctionFailable) {
             emitPropagatingErrorReturn(errorPtr);
         } else {
             // Not in failable function - call untrapped error handler
@@ -3962,9 +3963,11 @@ void LLVMCodegen::visit(ast::MatchExpression* node) {
     }
     // Resolve the result type (inferred during semantic analysis). All arms
     // store their value into a shared result slot that becomes the expression.
+    // #392: the inferred type is read from the node-id TypeTable, not the parse
+    // tree.
     llvm::Type* resultType = nullptr;
-    if (node->resultType) {
-        resultType = codegenType(node->resultType.get());
+    if (auto matchResult = typeOfNode(node)) {
+        resultType = codegenType(matchResult.get());
     }
     if (!resultType) {
         logError(node->loc, "Cannot determine result type of match expression");
@@ -4551,7 +4554,7 @@ void LLVMCodegen::visit(ast::AwaitExpression* node) {
                     TrapContext& trap = trapStack.back();
                     builder->CreateStore(errPtr, trap.errorSlot);
                     builder->CreateBr(trap.landingPad);
-                } else if ((currentFunctionAST && currentFunctionAST->needsErrorReturn) || m_currentFunctionFailable) {
+                } else if ((currentFunctionAST && nodeNeedsErrorReturn(currentFunctionAST)) || m_currentFunctionFailable) {
                     emitPropagatingErrorReturn(errPtr);
                 } else {
                     llvm::Function* untrappedFn = getVybUntrappedErrorFunction();
@@ -5062,7 +5065,7 @@ void LLVMCodegen::visit(vyb::ast::TypeofExpression* node) {
     }
 
     // Wildcard trap error (e<?>): load the runtime type ID from the VybError header.
-    if (node->operandFromWildcardError) {
+    if (nodeOperandFromWildcardError(node)) {
         if (!node->operand) { m_currentLLVMValue = nullptr; return; }
         node->operand->accept(*this);
         llvm::Value* errPtr = m_currentLLVMValue;
@@ -5110,7 +5113,7 @@ void LLVMCodegen::visit(vyb::ast::TypenameExpression* node) {
 
     // Wildcard trap error (e<?>): load the runtime type name from the error header
     // and wrap it in a String { ptr, len }.
-    if (node->operandFromWildcardError) {
+    if (nodeOperandFromWildcardError(node)) {
         node->operand->accept(*this);
         llvm::Value* errPtr = m_currentLLVMValue;
         if (!errPtr || !errPtr->getType()->isPointerTy()) {
@@ -5149,7 +5152,7 @@ void LLVMCodegen::visit(vyb::ast::TypenameExpression* node) {
 
     // A `Type` value operand: its runtime value is an opaque uint64 type ID, so
     // look up the registered type name at runtime.
-    if (node->operandFromTypeValue) {
+    if (nodeOperandFromTypeValue(node)) {
         node->operand->accept(*this);
         llvm::Value* typeId = m_currentLLVMValue;
         llvm::Type* i8Ptr = llvm::PointerType::get(*context, 0);
@@ -5225,7 +5228,7 @@ void LLVMCodegen::visit(vyb::ast::AsExpression* node) {
     // Wildcard trap error downcast: `e as TargetType` extracts the concrete
     // payload from the VybError struct { type_hash, type_name, payload, file,
     // line, col } by loading the heap payload at field index 2.
-    if (node->operandIsWildcardError) {
+    if (nodeOperandIsWildcardError(node)) {
         if (!operand->getType()->isPointerTy()) {
             logError(node->loc, "'as' on a wildcard error requires an error pointer.");
             m_currentLLVMValue = nullptr;

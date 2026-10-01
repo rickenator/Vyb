@@ -12,6 +12,8 @@
  */
 
 #include "vyb/parser/ast.hpp"
+#include "vyb/vre/analysis_facts.hpp"
+#include "vyb/vre/closure_captures.hpp"
 // The thread-boundary capability predicate (#365): `Capability` is named by the
 // declarations below, and this early include keeps the struct/enum registries and
 // the predicate in one place.
@@ -633,7 +635,67 @@ public:
         // #223 single authority: the node-id TypeTable is the only type writer.
         if (n) expressionTypes[n->typeId()] = std::move(t);
     }
+    // #392 immutable AST: the analysis facts the codegen pass needs (whether a
+    // function can fail / lowers to the {T, i8*} error ABI, and which origin a
+    // cast/typename operand has) are recorded HERE, keyed by the same stable
+    // Node::typeId() as the TypeTable, instead of being written into the parse
+    // tree. `factsOf` is what codegen binds (see LLVMCodegen::nodeFacts).
+    void markFact(const ast::Node* n, unsigned bit, bool on = true) {
+        if (!n) return;
+        unsigned& f = nodeFacts_[n->typeId()];
+        if (on) f |= bit; else f &= ~bit;
+    }
+    void markFailable(const ast::Node* n) { markFact(n, analysis::FuncCanFail); }
+    void markNeedsErrorReturn(const ast::Node* n) { markFact(n, analysis::FuncNeedsErrorReturn); }
+    bool hasFact(const ast::Node* n, unsigned bit) const {
+        if (!n) return false;
+        auto it = nodeFacts_.find(n->typeId());
+        return it != nodeFacts_.end() && (it->second & bit) != 0;
+    }
+    bool isFailable(const ast::Node* n) const { return hasFact(n, analysis::FuncCanFail); }
+    // This one also accepts smart-pointer receivers, mirroring typeOf above.
+    template <class P>
+    std::enable_if_t<
+        !std::is_convertible<P, const ast::Node*>::value &&
+            std::is_convertible<decltype(std::declval<const P&>().get()),
+                                const ast::Node*>::value,
+        bool>
+    isFailable(const P& p) const {
+        return isFailable(p.get());
+    }
+    bool functionNeedsErrorReturn(const ast::Node* n) const {
+        return hasFact(n, analysis::FuncNeedsErrorReturn);
+    }
+    unsigned factsOf(const ast::Node* n) const {
+        if (!n) return 0u;
+        auto it = nodeFacts_.find(n->typeId());
+        return it == nodeFacts_.end() ? 0u : it->second;
+    }
+    // #392: a closure's capture lists, recorded by the semantic pass and read by
+    // codegen (environment construction) and by the thread-boundary predicate.
+    // Same reason as the facts above: the closure node must not carry mutable
+    // analysis state after the pass.
+    void resetCaptures(const ast::Node* n) {
+        if (n) closureCaptures_[n->typeId()] = analysis::ClosureCaptures{};
+    }
+    void addCapture(const ast::Node* n, const std::string& name, bool written, bool shared) {
+        if (!n) return;
+        analysis::ClosureCaptures& c = closureCaptures_[n->typeId()];
+        c.captured.push_back(name);
+        if (written) c.mutableCaptured.push_back(name);
+        if (shared) c.ourCaptured.push_back(name);
+    }
+    const analysis::ClosureCaptures* capturesOf(const ast::Node* n) const {
+        if (!n) return nullptr;
+        auto it = closureCaptures_.find(n->typeId());
+        return it == closureCaptures_.end() ? nullptr : &it->second;
+    }
 private:
+    // #392: per-closure capture lists, node-id keyed like the facts above.
+    std::unordered_map<unsigned, analysis::ClosureCaptures> closureCaptures_;
+public:
+    // #392: analysis facts, node-id keyed (0 when the node records none).
+    std::unordered_map<unsigned, unsigned> nodeFacts_;
     // CHECKPOINT B step 2: the synthesis registry is gone. Every synthesized type
     // is owned by its consumer (expressionTypes/TypeTable, node->type, or a
     // SymbolInfo.type). retainType() is a thin "wrap a raw new into an owning

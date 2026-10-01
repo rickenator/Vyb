@@ -108,6 +108,10 @@ LLVMCodegen::LLVMCodegen(Driver& driver)
     // the X1 unification keeps typeOfNode(node) aliasing the same object meanwhile.
     if (auto* sa = driver_.getSemanticAnalyzer()) {
         nodeTypeOf_ = [sa](const vyb::ast::Node* n) { return sa->typeOf(n); };
+        // #392 immutable AST: the analysis facts and closure captures live in
+        // the analyzer, keyed by node id -- codegen reads them, never the AST.
+        nodeFactsOf_ = [sa](const vyb::ast::Node* n) { return sa->factsOf(n); };
+        nodeCapturesOf_ = [sa](const vyb::ast::Node* n) { return sa->capturesOf(n); };
         // #365 step (c): ask the semantic pass, which holds the structural
         // registries (struct fields / enum payloads) and the curated
         // `bind Handoff -> T` overrides. This is what lets codegen judge a

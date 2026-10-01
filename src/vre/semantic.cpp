@@ -555,7 +555,7 @@ bool SemanticAnalyzer::checkCallsFailableFunction(ast::Node* node) {
             auto it = functionRegistry.find(idExpr->name);
             if (it != functionRegistry.end()) {
                 ast::FunctionDeclaration* funcDecl = it->second;
-                if (funcDecl->canFail) {
+                if (isFailable(funcDecl)) {
                     return true;  // This calls a failable function!
                 }
             }
@@ -979,13 +979,13 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
         // Scan the function body for fail statements
         bool hasFailStatement = containsFailStatement(node->body.get());
 
-        // Update function metadata for error propagation
-        node->canFail = hasFailStatement;
-        node->needsErrorReturn = hasFailStatement;
-        if (hasFailStatement) {
-            // For now, use generic "Error" type - later we'll extract actual error types
-            node->errorTypes.push_back("Error");
-        }
+        // Update the analyzer's fact table for error propagation (#392): the
+        // parse tree is not a scratchpad, so the flags live by node id. Record
+        // the scan result as an explicit set-or-clear — that is what the retired
+        // `node->canFail = hasFailStatement` did, and the two flags are read back
+        // by codegen and by the propagation loop.
+        markFact(node, analysis::FuncCanFail, hasFailStatement);
+        markFact(node, analysis::FuncNeedsErrorReturn, hasFailStatement);
     }
 
     exitScope();
@@ -5489,27 +5489,20 @@ void SemanticAnalyzer::visit(ast::FunctionExpression* node) {
     // Free variables referenced by the body (not a lambda-local name nor a
     // parameter) that resolve to a variable in an enclosing scope are captures:
     // codegen copies their value into the closure environment at creation.
-    node->capturedVariables.clear();
-    node->mutableCapturedVariables.clear();
-    node->ourCapturedVariables.clear();
+    resetCaptures(node);
     for (const auto& name : ctx.referenced) {
         if (ctx.locals.count(name)) continue;
         if (!ctx.enclosingScope) continue;
         SymbolInfo* sym = ctx.enclosingScope->lookup(name);
         if (sym && sym->kind == SymbolInfo::Kind::Variable) {
-            node->capturedVariables.push_back(name);
-            if (ctx.written.count(name)) {
-                node->mutableCapturedVariables.push_back(name);
-            }
+            // Move capture: ownership of a `my<T>` transfers into the closure on
+            // capture, so the outer variable is moved and may not be read
+            // afterward (use-after-move diagnostic). Shared (`our<T>`) captures
+            // hold a reference, so codegen bumps the strong count at capture.
+            const bool shared = sym->ownershipKind == ast::OwnershipKind::OUR;
+            addCapture(node, name, ctx.written.count(name) != 0, shared);
             if (hasOwnershipKindMY(sym)) {
-                // Move capture: ownership of a `my<T>` transfers into the
-                // closure on capture, so the outer variable is moved and may
-                // not be read afterward (use-after-move diagnostic).
                 recordMove(name);
-            } else if (sym->ownershipKind == ast::OwnershipKind::OUR) {
-                // Shared capture: the closure holds a reference; codegen bumps
-                // the strong count so the value survives beyond the scope.
-                node->ourCapturedVariables.push_back(name);
             }
         }
     }
@@ -6228,7 +6221,9 @@ void SemanticAnalyzer::visit(ast::MatchExpression* node) {
             }
         }
         if (yielded) {
-            node->resultType = yielded->clone();
+            // #392: the inferred result type belongs to the node-id TypeTable,
+            // not to the parse tree (codegen reads it via typeOfNode).
+            setType(node, std::shared_ptr<ast::TypeNode>(yielded->clone()));
         }
     }
 }
@@ -6640,7 +6635,8 @@ void SemanticAnalyzer::visit(ast::ReturnStatement* node) {
         // dangling once the frame is gone. Reject the direct-return case (a
         // value-returning lambda whose body writes to captured stack locals).
         if (auto* fe = dynamic_cast<ast::FunctionExpression*>(node->argument.get())) {
-            if (!fe->mutableCapturedVariables.empty()) {
+            const analysis::ClosureCaptures* feCaps = capturesOf(fe);
+            if (feCaps && !feCaps->mutableCaptured.empty()) {
                 addError("Cannot return a closure with mutable captures: it holds pointers into "
                          "the enclosing stack frame that would dangle after this function returns.",
                          node->argument.get());
@@ -6656,7 +6652,7 @@ void SemanticAnalyzer::validateReturnArity(ast::ReturnStatement* node) {
     // successful `return x` supplies only the payload T, not the error slot. Their
     // declared return node still lists both types, so the arity rule below would
     // otherwise misreport every successful payload return. Skip them.
-    if (currentFunction->needsErrorReturn) return;
+    if (functionNeedsErrorReturn(currentFunction)) return;
 
     ast::TypeNode* retTy = currentFunction->returnTypeNode
         ? (typeOf(currentFunction->returnTypeNode)
@@ -7582,13 +7578,13 @@ void SemanticAnalyzer::visit(ast::ThrowStatement* node) {}
 
 void SemanticAnalyzer::visit(ast::FailStatement* node) {
     if (currentFunction) {
-        currentFunction->canFail = true;
-        currentFunction->needsErrorReturn = true;
+        markFailable(currentFunction);
+        markNeedsErrorReturn(currentFunction);
     }
     // If we're inside a lambda body, flag the lambda too so codegen can select
     // the failable () -> Void ABI for it (used by agent behaviors).
     if (!lambdaStack.empty() && lambdaStack.back()) {
-        lambdaStack.back()->canFail = true;
+        markFailable(lambdaStack.back());
     }
 
     // Verify error expression is present
@@ -7787,11 +7783,11 @@ void SemanticAnalyzer::visit(ast::RefailStatement* node) {
     // refail propagates an in-flight error outward, so the enclosing function
     // (and any enclosing lambda) must use the failable (T, error) ABI.
     if (currentFunction) {
-        currentFunction->canFail = true;
-        currentFunction->needsErrorReturn = true;
+        markFailable(currentFunction);
+        markNeedsErrorReturn(currentFunction);
     }
     if (!lambdaStack.empty() && lambdaStack.back()) {
-        lambdaStack.back()->canFail = true;
+        markFailable(lambdaStack.back());
     }
 
     // Verify refail is inside a trap clause
@@ -8976,7 +8972,7 @@ void SemanticAnalyzer::visit(ast::TypeofExpression* node) {
 
     // A wildcard trap error (e<?>) has no static type; extract its runtime type.
     if (isWildcardErrorExpr(node->operand.get())) {
-        node->operandFromWildcardError = true;
+        markFact(node, analysis::OperandWildcardError);
     }
 }
 
@@ -9000,13 +8996,13 @@ void SemanticAnalyzer::visit(ast::TypenameExpression* node) {
 
     // A wildcard trap error (e<?>): load its runtime type name at codegen.
     if (isWildcardErrorExpr(node->operand.get())) {
-        node->operandFromWildcardError = true;
+        markFact(node, analysis::OperandWildcardError);
     }
 
     // A `Type` value operand: its static type is the opaque `Type`, so the actual
     // type name must be resolved at runtime from the type ID via the registry.
     if (typeOf(node->operand) && typeOf(node->operand)->toString() == "Type") {
-        node->operandFromTypeValue = true;
+        markFact(node, analysis::OperandFromTypeValue);
     }
 }
 
@@ -9051,7 +9047,7 @@ void SemanticAnalyzer::visit(ast::AsExpression* node) {
         if (sym && sym->type == nullptr) isWildcardError = true;
     }
     if (isWildcardError || !operandType) {
-        node->operandIsWildcardError = true;
+        markFact(node, analysis::OperandIsWildcardError);
         return;
     }
 

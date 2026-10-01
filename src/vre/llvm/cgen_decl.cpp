@@ -680,9 +680,9 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
 void LLVMCodegen::visit(vyb::ast::FunctionDeclaration* node) {
     VYB_CDBG << "DEBUG: FunctionDeclaration: " << node->id->name << std::endl;
     // DEBUG: Show error propagation metadata
-    VYB_CDBG << "DEBUG: Function '" << node->id->name << "' - canFail=" << node->canFail
-              << ", needsErrorReturn=" << node->needsErrorReturn
-              << ", errorTypes.size=" << node->errorTypes.size() << std::endl;
+    VYB_CDBG << "DEBUG: Function '" << node->id->name << "' - canFail=" << nodeCanFail(node)
+              << ", needsErrorReturn=" << nodeNeedsErrorReturn(node)
+              << ", errorTypes.size=" << 0u << std::endl;
 
     // Check if this is a generic function (has type parameters)
     if (!node->genericParams.empty()) {
@@ -760,7 +760,7 @@ void LLVMCodegen::visit(vyb::ast::FunctionDeclaration* node) {
             }
 
             // Phase 2: Wrap return type in {T, ptr} for failable functions
-            if (node->needsErrorReturn) {
+            if (nodeNeedsErrorReturn(node)) {
                 VYB_CDBG << "DEBUG: Wrapping return type in {T, ptr} for failable function '"
                           << node->id->name << "'" << std::endl;
                 llvm::Type* errorPtrType = llvm::PointerType::get(*context, 0);  // i8*
@@ -781,7 +781,7 @@ void LLVMCodegen::visit(vyb::ast::FunctionDeclaration* node) {
         // - All other types (Int, Bool, Float, multi-value tuples): change return type to void
         //   and emit serialization (JSON) code in the return statement (cgen_stmt.cpp).
         //   m_mainAutoSerializeOrigRetType records the original type for cgen_stmt.
-        if (node->id->name == "main" && !node->needsErrorReturn) {
+        if (node->id->name == "main" && !nodeNeedsErrorReturn(node)) {
             bool isVoidReturn  = returnType->isVoidTy();
             bool isStringRet   = isVybStringStructType(returnType);
             if (!isVoidReturn && !isStringRet) {
@@ -801,7 +801,7 @@ void LLVMCodegen::visit(vyb::ast::FunctionDeclaration* node) {
             // Phase 2 ABI choice:
             // Keep one uniform failable ABI shape for codegen paths: {payload, error_ptr}.
             // For Void payloads we use i1 as a dummy field, giving {i1, i8*}.
-            if (node->needsErrorReturn) {
+            if (nodeNeedsErrorReturn(node)) {
                 VYB_CDBG << "DEBUG: Wrapping void return in {i1, ptr} for failable function '"
                           << node->id->name << "' (using i1 as dummy)" << std::endl;
                 llvm::Type* errorPtrType = llvm::PointerType::get(*context, 0);
@@ -1130,7 +1130,7 @@ void LLVMCodegen::visit(vyb::ast::FunctionDeclaration* node) {
 
         // Verify function return: ensure all paths return if non-void, or add implicit return.
         const bool isFailableVoidFunction =
-            node->needsErrorReturn && originalReturnType && originalReturnType->isVoidTy();
+            nodeNeedsErrorReturn(node) && originalReturnType && originalReturnType->isVoidTy();
         if (returnType->isVoidTy()) {
             // Non-failable void function: if the last block has no terminator, add `ret void`.
             if (fallthroughBlock && !fallthroughBlock->getTerminator()) {
@@ -1751,7 +1751,7 @@ void LLVMCodegen::createFunctionForwardDeclaration(vyb::ast::FunctionDeclaration
             }
 
             // Phase 2: Wrap return type in {T, ptr} for failable functions
-            if (node->needsErrorReturn) {
+            if (nodeNeedsErrorReturn(node)) {
                 VYB_CDBG << "DEBUG: Forward decl - Wrapping return type in {T, ptr} for failable function '"
                           << node->id->name << "'" << std::endl;
                 llvm::Type* errorPtrType = llvm::PointerType::get(*context, 0);
@@ -1775,7 +1775,7 @@ void LLVMCodegen::createFunctionForwardDeclaration(vyb::ast::FunctionDeclaration
             // Phase 2 ABI choice:
             // Keep one uniform failable ABI shape for codegen paths: {payload, error_ptr}.
             // For Void payloads we use i1 as a dummy field, giving {i1, i8*}.
-            if (node->needsErrorReturn) {
+            if (nodeNeedsErrorReturn(node)) {
                 VYB_CDBG << "DEBUG: Forward decl - Wrapping void return in {i1, ptr} for failable function '"
                           << node->id->name << "'" << std::endl;
                 llvm::Type* errorPtrType = llvm::PointerType::get(*context, 0);
@@ -1789,7 +1789,7 @@ void LLVMCodegen::createFunctionForwardDeclaration(vyb::ast::FunctionDeclaration
     // Create function type and forward declaration
     // Apply the same auto-serialization rule as in visit(FunctionDeclaration):
     // main() with any non-Void, non-String return → use void (auto-serialization).
-    if (node->id->name == "main" && !node->needsErrorReturn) {
+    if (node->id->name == "main" && !nodeNeedsErrorReturn(node)) {
         bool isVoidReturn  = returnType->isVoidTy();
         bool isStringRet   = isVybStringStructType(returnType);
         if (!isVoidReturn && !isStringRet) {
@@ -1804,7 +1804,7 @@ void LLVMCodegen::createFunctionForwardDeclaration(vyb::ast::FunctionDeclaration
     // the `nvvm.kernel` attribute AND the PTX_Kernel calling convention — that's
     // what makes cuLaunchKernel able to run it. Value-returning functions stay
     // `.visible .func` device helpers.
-    if (vyb::g_kernel_mode && returnType->isVoidTy() && !node->needsErrorReturn) {
+    if (vyb::g_kernel_mode && returnType->isVoidTy() && !nodeNeedsErrorReturn(node)) {
         func->addFnAttr("nvvm.kernel");
         func->setCallingConv(llvm::CallingConv::PTX_Kernel);
     }
@@ -1891,8 +1891,10 @@ void LLVMCodegen::codegenAsyncTask(vyb::ast::FunctionDeclaration* node) {
         std::move(node->body),
         /*isAsync=*/false,
         std::move(workerRet));
-    workerNode->canFail = node->canFail;
-    workerNode->needsErrorReturn = node->needsErrorReturn;
+    // #392: the worker is a node codegen synthesized, so the analyzer has no
+    // facts for it -- record the cloned flags in codegen's own overlay.
+    setSynthFact(workerNode.get(), analysis::FuncCanFail, nodeCanFail(node));
+    setSynthFact(workerNode.get(), analysis::FuncNeedsErrorReturn, nodeNeedsErrorReturn(node));
     visit(workerNode.get());
 
     llvm::Function* worker = module->getFunction(workerName);
@@ -1976,7 +1978,7 @@ void LLVMCodegen::codegenAsyncTask(vyb::ast::FunctionDeclaration* node) {
     //    Failable tasks additionally receive the task-id, so a worker failure
     //    (an error from its `{T, i8*}` return) is recorded on the task for the
     //    awaiter to pick up via __vyb_async_take_error.
-    const bool failable = node->canFail;
+    const bool failable = nodeCanFail(node);
     // The async entry ABI is uniform: i64(i8* env, i64 task_id). The task handle
     // is the same value the cooperative trampoline owns, so a failable worker's
     // failure (an error from its `{T, i8*}` return) can be recorded on the task

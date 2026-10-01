@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Changed
+- **The parse tree is no longer a scratchpad for the later passes (#392)** —
+  the immutable-AST half of the TypeTable migration. The type mirror itself was
+  already gone (`Node::type` deleted, all ~850 references routed through the
+  node-id TypeTable), but the analysis passes still wrote the values they needed
+  into AST nodes: `FunctionDeclaration`/`FunctionExpression` carried
+  `canFail` / `needsErrorReturn` / `errorTypes`, a closure carried its three
+  capture lists, cast/typename expressions carried operand-origin flags, and a
+  match expression carried its inferred result type. Those nine writes are now
+  records in the analyzer, keyed by the same stable `Node::typeId()` as the
+  TypeTable (`include/vyb/vre/analysis_facts.hpp`,
+  `include/vyb/vre/closure_captures.hpp`), and codegen reads them through queries
+  bound the same way as its existing `typeOfNode`
+  (`LLVMCodegen::nodeFacts` / `nodeCanFail` /
+  `nodeNeedsErrorReturn` / `nodeOperand*` / `nodeCaptures`). One field that had
+  only a writer and no reader at all (`FunctionDeclaration::errorTypes`) was
+  dropped outright. No behaviour change: the suite, the CLI smokes and the
+  reference-manual gate are the proof.
+
 ## [0.7.7] - 2026-09-29
 
 ### Added

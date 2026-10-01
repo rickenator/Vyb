@@ -1184,10 +1184,13 @@ public:
     bool variadic;       // true for variadic C functions (e.g. `printf(fmt: *i8, ...)`)
     TypeNodePtr returnTypeNode; // Optional return type annotation
 
-    // Error propagation metadata (set during semantic analysis)
-    bool canFail = false;  // Contains fail statements
-    bool needsErrorReturn = false;  // Returns { T, error_ptr } instead of T
-    std::vector<std::string> errorTypes;  // Types that can be failed (for type checking)
+    // Error-propagation metadata used to live here (`canFail` /
+    // `needsErrorReturn` / `errorTypes`, written during semantic analysis) --
+    // #392 moved it to the analyzer's node-id fact table
+    // (include/vyb/vre/analysis_facts.hpp, SemanticAnalyzer::markFailable /
+    // isFailable / functionNeedsErrorReturn), so the parse tree is no longer a
+    // scratchpad for the later passes. LLVMCodegen reads the same table through
+    // its bound `nodeFacts` query.
 
     FunctionDeclaration(SourceLocation loc, std::unique_ptr<Identifier> id, std::vector<FunctionParameter> params, std::unique_ptr<BlockStatement> body, bool isAsync = false, TypeNodePtr returnTypeNode = nullptr, bool hasDefaultImpl = true, std::vector<std::unique_ptr<GenericParameter>> genericParams = std::vector<std::unique_ptr<GenericParameter>>(), bool variadic = false);
     ~FunctionDeclaration() override = default;
@@ -1380,20 +1383,16 @@ public:
     std::vector<FunctionParameter> params;
     ExprPtr body;
     bool isAsync;
-    // Whether the lambda body can propagate a failure (`fail` statement). Set
-    // during semantic analysis so codegen can pick the failable return ABI
-    // (e.g. for agent behaviors that `fail`).
-    bool canFail = false;
-    // Names of variables the lambda captures from its enclosing scope (filled in
-    // during semantic analysis). Codegen copies each captured value by reference
-    // into the closure's environment at creation time.
-    std::vector<std::string> capturedVariables;
-    // Captured vars that the lambda body writes to (mutable context). Codegen
-    // stores the outer variable's address in the env so writes propagate back.
-    std::vector<std::string> mutableCapturedVariables;
-    // Captured vars that are `our<T>` (shared). Codegen bumps their strong count
-    // at capture so the shared value stays alive for the life of the closure.
-    std::vector<std::string> ourCapturedVariables;
+    // Whether the lambda body can propagate a failure (`fail` statement): the
+    // #392 fact table records this (SemanticAnalyzer::markFailable / isFailable),
+    // so codegen can still pick the failable return ABI without a mutable AST
+    // field (e.g. for agent behaviors that `fail`).
+    // Names of variables the lambda captures from its enclosing scope, and of
+    // those it writes to / holds shared (`our<T>`): #392 analysis output, owned
+    // by the analyzer's per-closure capture record
+    // (include/vyb/vre/closure_captures.hpp, SemanticAnalyzer::capturesOf) and
+    // read by codegen through `nodeCaptures`. The closure node no longer carries
+    // mutable vectors for them.
     FunctionExpression(SourceLocation loc, std::vector<FunctionParameter> params, ExprPtr body, bool isAsync = false);
     NodeType getType() const override;
     std::string toString() const override;
@@ -1514,7 +1513,8 @@ class TypeofExpression : public Expression {
 public:
     ExprPtr operand;       // Expression to get type of (nullptr for typeof<T>())
     TypeNodePtr typeArg;   // Compile-time type argument for typeof<T>()
-    bool operandFromWildcardError; // Set by semantic: operand is a wildcard trap `e<?>`
+    // #392: whether the operand is a wildcard trap `e<?>` is recorded in the
+    // analyzer's fact table (analysis::OperandWildcardError), not here.
 
     // typeof(expr)
     TypeofExpression(SourceLocation loc, ExprPtr operand);
@@ -1531,8 +1531,9 @@ public:
 class TypenameExpression : public Expression {
 public:
     ExprPtr operand;  // Expression to get type name of
-    bool operandFromWildcardError; // Set by semantic: operand is a wildcard trap `e<?>`
-    bool operandFromTypeValue;     // Set by semantic: operand's static type is `Type`
+    // #392: the operand's origin (wildcard trap error / opaque `Type` value) is
+    // recorded in the analyzer's fact table (analysis::OperandWildcardError,
+    // analysis::OperandFromTypeValue), not here.
 
     TypenameExpression(SourceLocation loc, ExprPtr operand);
     NodeType getType() const override;
@@ -1548,11 +1549,11 @@ class AsExpression : public Expression {
 public:
     ExprPtr operand;       // The value being downcast
     TypeNodePtr targetType; // The type to downcast to
-    bool operandIsWildcardError; // Set by semantic when operand is a wildcard `e<?>`
+    // #392: whether the operand is a wildcard `e<?>` is recorded in the
+    // analyzer's fact table (analysis::OperandIsWildcardError), not here.
 
     AsExpression(SourceLocation loc, ExprPtr operand, TypeNodePtr targetType)
-        : Expression(loc), operand(std::move(operand)), targetType(std::move(targetType)),
-          operandIsWildcardError(false) {}
+        : Expression(loc), operand(std::move(operand)), targetType(std::move(targetType)) {}
     NodeType getType() const override;
     std::string toString() const override;
     void accept(Visitor& visitor) override;
@@ -1591,7 +1592,8 @@ public:
 class MatchExpression : public Expression {
 public:
     std::unique_ptr<MatchStatement> match; // The underlying match statement
-    TypeNodePtr resultType;                // Inferred result type (set by semantic analysis)
+    // #392: the match expression's inferred result type lives in the node-id
+    // TypeTable (SemanticAnalyzer::setType), not in the parse tree.
 
     MatchExpression(SourceLocation loc, std::unique_ptr<MatchStatement> match);
     NodeType getType() const override;

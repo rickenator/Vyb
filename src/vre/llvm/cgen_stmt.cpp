@@ -108,7 +108,7 @@ void LLVMCodegen::emitDeferredStatementsForCurrentFunction() {
 }
 
 void LLVMCodegen::emitPropagatingErrorReturn(llvm::Value* errorPtr) {
-    if (!currentFunction || ((!currentFunctionAST || !currentFunctionAST->needsErrorReturn) && !m_currentFunctionFailable)) {
+    if (!currentFunction || ((!currentFunctionAST || !nodeNeedsErrorReturn(currentFunctionAST)) && !m_currentFunctionFailable)) {
         return;
     }
 
@@ -516,7 +516,7 @@ void LLVMCodegen::visit(vyb::ast::ReturnStatement *node) {
                 // CRITICAL: Phase 2 wrapping must happen BEFORE type checking
                 // If this is a failable function, we need to wrap the return value
                 // in {T, ptr} BEFORE checking type compatibility
-                if ((currentFunctionAST && currentFunctionAST->needsErrorReturn) || m_currentFunctionFailable) {
+                if ((currentFunctionAST && nodeNeedsErrorReturn(currentFunctionAST)) || m_currentFunctionFailable) {
                     
 
                     // Create null pointer for error (success case)
@@ -885,7 +885,7 @@ void LLVMCodegen::visit(vyb::ast::ReturnStatement *node) {
         exitToFunctionBaseline();
         // Phase 6.4: Pop call frame before return
         generatePopFrameCall();
-        if ((currentFunctionAST && currentFunctionAST->needsErrorReturn) || m_currentFunctionFailable) {
+        if ((currentFunctionAST && nodeNeedsErrorReturn(currentFunctionAST)) || m_currentFunctionFailable) {
             // Failable void functions use a uniform 2-field tuple ABI: {i1 dummy, i8* err}.
             llvm::StructType* returnStructType = llvm::cast<llvm::StructType>(currentFunction->getReturnType());
             llvm::Value* nullErrorPtr = llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0));
@@ -2374,7 +2374,7 @@ void LLVMCodegen::forwardError(llvm::Value* errorPtr, const SourceLocation& loc)
     // No enabled trap in scope: either there is no trap at all, or every
     // enclosing trap's handler is still on the stack. Propagate like the
     // untrapped case.
-    if ((currentFunctionAST && currentFunctionAST->needsErrorReturn) || m_currentFunctionFailable) {
+    if ((currentFunctionAST && nodeNeedsErrorReturn(currentFunctionAST)) || m_currentFunctionFailable) {
         // The error is leaving this frame, so the frame's owned locals unwind exactly
         // the way a `return` unwinds them. Without this the cleanup IR the normal exit
         // emits is skipped on the fail path and every owned local of the failing frame

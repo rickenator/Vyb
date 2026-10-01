@@ -1097,16 +1097,28 @@ These are architectural improvements that will pay dividends as the codebase gro
 The semantic analyzer currently mutates AST nodes directly (sets `node->type`,
 `expressionTypes[node]`, etc.), creating fragile cross-pass dependencies.
 
-- [~] Use an immutable AST + a separate `TypeTable` (map from node ID → type) — the
-  TypeTable half is DONE (2026-09-10, 1141/1141): increment #1 stable node-id +
-  scaffold (`2944d69`); CHECKPOINT A owning shared expressionTypes (`f5c2366`);
-  CHECKPOINT B rekey onto node-id (`e05cc92`) + SymbolInfo.type owning flip + the
-  `_ownedTypes`/`retainType` synthesis-registry removal (this commit). Every type
-  is now owned (TypeTable / node->type / SymbolInfo.type) — no raw mirror, no
-  registry. Remaining = the immutable-AST half (remove `node->type` mutation:
-  route semantic + codegen through the node-id TypeTable, ~500 refs across
-  semantic+cgen — the project's largest item, turnkey plan in
-  `doc/TYPETABLE_MIGRATION.md`; `inferredTypeName` dead field removed 2026-09-10).
+- [x] Use an immutable AST + a separate `TypeTable` (map from node ID → type) — DONE.
+  The TypeTable half landed 2026-09-10 (increment #1 stable node-id `2944d69`;
+  CHECKPOINT A owning `expressionTypes` `f5c2366`; CHECKPOINT B rekey onto node-id
+  `e05cc92` + the `SymbolInfo.type` owning flip and the `_ownedTypes`/`retainType`
+  synthesis-registry removal); the mutable `Node::type` field was then DELETED and
+  all ~850 references migrated through the node-id TypeTable (`db4057e` → `c51031c`
+  → `7bdd80c` → `2ef26ce` → `2e70874`, PR #236), so the AST no longer carries a
+  type mirror and codegen resolves types through a read-only `typeOfNode` bound to
+  the table. The immutable-AST half closed in #392: the values the *analysis*
+  passes used to write into nodes are now records owned by the analyzer, keyed by
+  the same stable node id — `canFail` / `needsErrorReturn` /
+  `errorTypes` (dead field, dropped) on functions, the three closure capture lists,
+  the cast/typename operand-origin flags, and the match expression's inferred
+  result type (`include/vyb/vre/analysis_facts.hpp`,
+  `include/vyb/vre/closure_captures.hpp`; codegen reads them via `nodeFacts` /
+  `nodeCaptures`, bound like `typeOfNode`). Residual, deliberately not part of the
+  analysed tree's invariants: the analyzer still *synthesizes* a
+  `VariableDeclaration::typeNode` when no annotation was written (codegen reads it
+  as declaration structure in 36 places), and codegen performs transient
+  save/restore moves (a synthesized call's arguments, an `isAsync` toggle around
+  an inner-closure lowering) that leave the tree byte-identical when the visitor
+  returns.
 - [x] Avoid raw pointer storage in `expressionTypes` (use stable IDs or `shared_ptr`)
   — AUDITED 2026-09-10: every `.get()` stored in `expressionTypes` is backed by a
   long-lived owner (`node->type`, a `retainType`/function-registry entry, or an

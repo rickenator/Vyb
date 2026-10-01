@@ -203,15 +203,12 @@ void SemanticAnalyzer::visit(ast::Module* node) {
                     continue;
                 }
 
-                if (!funcDecl->canFail) {
+                if (!isFailable(funcDecl)) {
                     // Check if this function calls any failable functions
                     bool callsFailableFunction = checkCallsFailableFunction(funcDecl->body.get());
                     if (callsFailableFunction) {
-                        funcDecl->canFail = true;
-                        funcDecl->needsErrorReturn = true;
-                        if (funcDecl->errorTypes.empty()) {
-                            funcDecl->errorTypes.push_back("Error");
-                        }
+                        markFailable(funcDecl);
+                        markNeedsErrorReturn(funcDecl);
                         changed = true;
                         VYB_CDBG << "DEBUG: Marked function '" << funcDecl->id->name
                                   << "' as failable (calls failable function)" << std::endl;
@@ -232,10 +229,10 @@ void SemanticAnalyzer::visit(ast::Module* node) {
         if (!n) return;
 
         if (auto* call = dynamic_cast<ast::CallExpression*>(n)) {
-            if (!trapProtected && owner && !owner->canFail) {
+            if (!trapProtected && owner && !isFailable(owner)) {
                 if (auto* calleeIdent = dynamic_cast<ast::Identifier*>(call->callee.get())) {
                     auto it = functionRegistry.find(calleeIdent->name);
-                    if (it != functionRegistry.end() && it->second && it->second->canFail) {
+                    if (it != functionRegistry.end() && it->second && isFailable(it->second)) {
                         addError(
                             "Call to failable function '" + calleeIdent->name + "' from non-failable function '" +
                             owner->id->name + "' requires a trap block or marking the caller as failable.",
