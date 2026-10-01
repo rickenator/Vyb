@@ -729,6 +729,17 @@ void LLVMCodegen::handleVecGet(vyb::ast::CallExpression* node, llvm::Value* vecP
             // do not match predecessors").
             validIncoming = builder->GetInsertBlock();
         }
+        // #382: a String element is an LLVM struct too, but `isKnownStructTypeNode`
+        // excludes String, so it never takes the deep copy above -- the load above is
+        // a shallow copy of the slot, leaving the result aliasing the reference the
+        // Vec holds on that element. A `get` hands a *value* to its caller, so the
+        // caller must own a reference of its own: retain it, exactly as `push` and
+        // `set` do for the elements they adopt. Without this the caller's reclaim
+        // drops a reference it never took, and the temp-receiver reclaim at the call
+        // site cannot run at all because the result would dangle.
+        if (isVybStringStructType(elementLLVMType)) {
+            retainStringValue(element);
+        }
     } else {
         element = builder->CreateLoad(elementLLVMType, elementPtr, "vec.element");
     }
@@ -823,6 +834,13 @@ void LLVMCodegen::handleVecLast(vyb::ast::CallExpression* node, llvm::Value* vec
             element = generateStructDeepCopy(
                 element, typeOfNode(node).get(), llvm::cast<llvm::StructType>(elementLLVMType));
             validIncoming = builder->GetInsertBlock();
+        }
+        // #382: a String element is excluded from the deep copy above (see
+        // `isKnownStructTypeNode`), so the load is a shallow copy of the slot and the
+        // result aliases the reference the Vec holds. `first`/`last`/`peek` hand a
+        // value back, so the caller takes its own reference -- same rule as `get`.
+        if (isVybStringStructType(elementLLVMType)) {
+            retainStringValue(element);
         }
     } else {
         element = builder->CreateLoad(elementLLVMType, elementPtr, "vec.last.element");

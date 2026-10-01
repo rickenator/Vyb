@@ -60,6 +60,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `doc/THREAD_BOUNDARY_SCOPE.md` (whose step list is now fully closed).
 
 ### Fixed
+- **A Vec temporary consumed through an element accessor is reclaimed (#382)** —
+  `payload.split("\n").get(0)` leaked one allocation per evaluation (measured: 3200 B
+  in 50 allocations, one per `split()`). The accessor loaded the element pointer out
+  of the receiver's slot without taking a reference, so the returned value aliased
+  storage the temporary owned: freeing the temporary would have dangled it, and the
+  call site therefore refused to reclaim — the leak and the dangling risk were the
+  same fact. `handleVecGet`/`handleVecLast` now retain a `String` element they hand
+  back, exactly as `push`/`set` retain the elements they adopt, and
+  `exprProducesOwnedStringTemp` treats an element accessor's `String` result as owned
+  so its consumer drops the reference the accessor took. That makes `get`/`first`/
+  `last`/`peek` safe to reclaim a fresh temporary receiver under; the `Vec<Vec<T>>`
+  borrow case stays excluded, because the call site tests the accessor's *result* type
+  (`borrowedVecInnerNode`) rather than the receiver's. Both forms measured clean after
+  the change, and the named-receiver binding now takes the reference it releases
+  (previously it dropped one it never took). Regression:
+  `test/ownership/temp_vec_element_accessor_reclaim.vyb`.
 - **Debuggers can stop on a Vyb source line (#390)** — DWARF was emitted, but no
   debugger could use it: the compile unit named the generated `.ll` instead of the
   Vyb source, so `break <file>.vyb:<line>` was unresolvable, and only a handful of

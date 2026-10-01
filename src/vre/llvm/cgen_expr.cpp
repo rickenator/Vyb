@@ -4875,7 +4875,19 @@ bool LLVMCodegen::exprProducesOwnedStringTemp(vyb::ast::Expression* expr) {
                         if (nn->identifier && nn->identifier->name == "Vec") receiverIsVec = true;
                     }
                 }
-                if (receiverIsVec) return false;
+                if (receiverIsVec) {
+                    // #382: an element accessor on a Vec hands back a value its caller
+                    // owns -- `handleVecGet`/`handleVecLast` retain the String element
+                    // they load, exactly as `push`/`set` retain the elements they adopt
+                    // -- so the result IS an owned String temp and whoever consumes it
+                    // (a binding, a call argument, a discarded statement) must drop the
+                    // reference this call took. Every other Vec-receiver call that
+                    // yields a String (a view of the receiver's own buffer) stays
+                    // excluded: treating those as owned would hand out a reference the
+                    // receiver still reclaims, leaving the destination dangling.
+                    auto* prop = dynamic_cast<vyb::ast::Identifier*>(member->property.get());
+                    if (!prop || !vecElementAccessorValueMethod(prop->name)) return false;
+                }
             }
         }
         if (typeOfNode(call)) {

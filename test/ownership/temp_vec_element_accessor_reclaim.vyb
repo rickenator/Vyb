@@ -1,0 +1,48 @@
+// @test: an element accessor on a fresh Vec temporary is reclaimed (#382)
+// @description: `payload.split("\n").get(0)` used inline. Before #382 the accessor
+//   returned an unretained view of the receiver's slot, so the temp receiver's buffer
+//   could not be released (freeing it would have dangled the result) and one
+//   allocation leaked per evaluation. The accessor now retains the element it hands
+//   back, which makes the temp receiver's storage unreachable after the call and lets
+//   the call site reclaim it. The bound and named-receiver forms cover the other half
+//   of the rule: what the accessor returns owns a reference of its own. All three
+//   forms must be leak-clean, and the ASan job runs this fixture.
+// @category: ownership, collections, string, leak
+// @expect: pass
+// @expect-output: inline total = 250 bound total = 250 named = alpha tail = gamma
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+
+main()<Int> -> {
+    payload<String> = "alpha\nbeta\ngamma"
+
+    # Temp receiver, accessor result consumed inline: nothing can escape the
+    # statement, so the temp receiver's buffer is reclaimed at the end of it.
+    inline_total<Int> = 0
+    i<Int> = 0
+    while (i < 50) {
+        inline_total = inline_total + payload.split("\n").get(0).len()
+        i = i + 1
+    }
+
+    # Temp receiver, accessor result bound to a name and used afterwards: the
+    # retained element must outlive the reclamation of the temp receiver.
+    bound_total<Int> = 0
+    j<Int> = 0
+    while (j < 50) {
+        head<String> = payload.split("\n").get(0)
+        bound_total = bound_total + head.len()
+        j = j + 1
+    }
+
+    # Named receiver: the binding owns its own reference, the Vec keeps its own.
+    parts<Vec<String>> = payload.split("\n")
+    named<String> = parts.get(0)
+    tail<String> = parts.last()
+
+    println("inline total = " + inline_total.to_string() +
+            " bound total = " + bound_total.to_string() +
+            " named = " + named + " tail = " + tail)
+
+    return 0
+}

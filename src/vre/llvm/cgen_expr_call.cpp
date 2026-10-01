@@ -5241,7 +5241,17 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                 // view of the receiver's buffer and the mutators hand back its
                 // address, so freeing the temp under them would dangle (the same
                 // reason exprProducesOwnedStringTemp excludes Vec element access).
-                if (vecReadMethodSafeForTempReceiver(methodName) &&
+                // #382: the element accessors qualify too, but only when what they
+                // return does not alias the receiver's storage. A `Vec<Vec<T>>` slot is
+                // the exception: `get` on it is typed as a borrow and yields the slot
+                // address (#297), so `borrowedVecInnerNode` on the accessor's *result*
+                // type is exactly that case and stays excluded. Primitive elements are
+                // loaded by value, struct elements are deep-copied, and String elements
+                // are retained by the accessor (`handleVecGet`/`handleVecLast`).
+                const bool accessorYieldsOwnValue =
+                    vecElementAccessorValueMethod(methodName) &&
+                    borrowedVecInnerNode(typeOfNode(node).get()) == nullptr;
+                if ((vecReadMethodSafeForTempReceiver(methodName) || accessorYieldsOwnValue) &&
                     exprProducesFreshVecTemp(memberExpr->object.get())) {
                     // The classifier already required a recorded type; the guard is
                     // for `codegenType`, not for the reclaim (a null AST type is a
