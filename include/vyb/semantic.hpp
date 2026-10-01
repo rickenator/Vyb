@@ -404,9 +404,14 @@ public:
     //
     // A curated `bind Handoff -> T` (or `bind Viewable -> T`) short-circuits the
     // structural derivation: the explicit bind is the escape hatch for shapes the
-    // compiler cannot see through (FFI `ptr<T>`-holding structs, opaque handles,
-    // reviewed bindings) and wins over the computed verdict, which registration
-    // reports as a warning when the two disagree (#365).
+    // compiler cannot see through or gets wrong (an FFI `ptr<T>`-holding struct or
+    // opaque handle is the motivating case, not a restriction of the feature) and
+    // wins over the computed verdict, which registration reports as a warning when
+    // the two disagree (#365).
+    //
+    // The claim is threaded into the walk rather than checked once, so it is asked
+    // at every level: `bind Handoff -> Box` also admits `our<Box>`, `Vec<Box>` and a
+    // struct field of type `Box` (see thread_boundary::CuratedClaimLookup).
     bool handoffCapable(const ast::TypeNode* type);
     // The tri-state form: the semantic pass cannot decide a type that still
     // mentions a monomorphization type parameter, and DEFERS such captures to

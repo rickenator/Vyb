@@ -106,6 +106,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   buffer. `vyb-traffic` and the SQLite binding now bind such results to named
   locals (or build the row inside the push helper), so the ASan suite is
   leak-clean again; the underlying gap is recorded in `TODO.md`.
+- **A curated thread-boundary bind was invisible through a wrapper (`bind
+  Handoff -> T`, landed just after the v0.7.7 tag)** — the structural walk asked
+  the claim only for the type string as written, so `bind Handoff -> T` covered `T`
+  but not `our<T>` — the idiomatic way to share a curated type — nor `Vec<T>` nor a
+  `T`-typed struct field; the recursion consulted no claims at all and those
+  captures stayed refused. The claim now travels into the walk as
+  `thread_boundary::CuratedClaimLookup` and is asked at every level, after the
+  `my<T>` / `their<T>` / `loc<T>` / `ptr<T>` refusals so rescuing a composition never
+  turns a unique owner or borrow into a handoff. `viewable` runs the same walk in
+  "reading" mode (`Handoff` or `Viewable` counts); `capability` consults `Handoff`
+  alone, so a `Viewable` claim still cannot make a value handoff-capable
+  (`test/threads/test_thread_boundary_curated_bind_wrapper_accepted.vyb`, plus the
+  `..._wrapper_absent_rejected` / `..._aggregate_accepted` fixtures and the
+  deferred-path pair `..._generic_wrapper_accepted` / `..._generic_wrapper_absent_rejected`,
+  which pins that codegen consults the claim for a generic site's substituted type).
 
 ---
 

@@ -28,6 +28,7 @@
 
 #include "vyb/parser/ast.hpp"
 
+#include <functional>
 #include <map>
 #include <string>
 #include <unordered_map>
@@ -44,11 +45,32 @@ using StructFieldRegistry = std::unordered_map<std::string, std::map<std::string
 using EnumPayloadRegistry =
     std::unordered_map<std::string, std::unordered_map<std::string, std::vector<ast::TypeNodePtr>>>;
 
+// The curated claims (`bind Handoff -> T` / `bind Viewable -> T`, `core::aspects`):
+// the reviewed escape hatch for a shape the structural walk cannot see through or
+// gets wrong about. The walk asks these at EVERY level, not only at the top, so a
+// claim on `Box` also covers `our<Box>`, `Vec<Box>` and a struct field of type
+// `Box`. Before that, the recursion consulted no claims at all, so a wrapper hid
+// the claim and `our<Box>` -- the natural way to share a curated type -- stayed
+// refused even though `Box` was bound.
+//
+// Each predicate is asked with the type string exactly as written at that level,
+// which is how registration keyed the claim (the analyzer also matches generic
+// patterns, so `bind Handoff -> Box<T>` covers `Box<Int>`).
+//
+// Null means "this pass has no curated claims"; a null member means the same for
+// that aspect. `capability` consults `handoff` only -- a `Viewable` claim is the
+// weaker relation and must never make a value handoff-capable.
+struct CuratedClaimLookup {
+    std::function<bool(const std::string&)> handoff;
+    std::function<bool(const std::string&)> viewable;
+};
+
 // May a value of `type` cross a thread boundary as a handoff? (See the header
 // comment for the rules and for what a null registry means.)
 bool handoffCapable(const ast::TypeNode* type,
                     const StructFieldRegistry* structs,
-                    const EnumPayloadRegistry* enums);
+                    const EnumPayloadRegistry* enums,
+                    const CuratedClaimLookup* claims = nullptr);
 
 // The same question, but able to say "I cannot decide": the semantic pass runs
 // before monomorphization, so a type that still mentions a type parameter is not
@@ -68,14 +90,16 @@ enum class Capability {
 
 Capability capability(const ast::TypeNode* type,
                       const StructFieldRegistry* structs,
-                      const EnumPayloadRegistry* enums);
+                      const EnumPayloadRegistry* enums,
+                      const CuratedClaimLookup* claims = nullptr);
 
 // The weaker relation: may a second thread *read* a value of this type without
 // taking ownership? A handoff-capable value is viewable, and a borrow of a
 // handoff-capable payload is viewable because a reader only needs the address.
 bool viewable(const ast::TypeNode* type,
               const StructFieldRegistry* structs,
-              const EnumPayloadRegistry* enums);
+              const EnumPayloadRegistry* enums,
+              const CuratedClaimLookup* claims = nullptr);
 
 } // namespace thread_boundary
 } // namespace vyb

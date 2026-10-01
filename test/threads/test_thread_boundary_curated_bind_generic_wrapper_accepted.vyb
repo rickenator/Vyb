@@ -1,0 +1,40 @@
+// @test: a curated bind is honoured on the deferred (codegen) path through a wrapper
+// @description: A generic spawn site sees `our<T>` before monomorphization, so the
+//   semantic pass cannot decide it and records the capture for codegen, which judges
+//   the substituted type with the analyzer's own predicate. The curated claim has to
+//   be threaded there too: instantiated at `our<Held>` the claim on `Held` applies and
+//   the capture is accepted at codegen time, and the same site stays refused for
+//   `our<my<Int>>` because no claim covers a unique owner. Runs (not semantic-only):
+//   both instantiations use a shared owner, so execution is safe.
+// @category: threads, thread-boundary, ownership, aspects, generics
+// @expect: pass
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+
+import core::aspects
+import threads::{thread_spawn, thread_join}
+
+struct Held {
+    n: my<Int>
+}
+
+bind Handoff -> Held {
+    handoff(self<Held>)<Bool> -> { return true }
+}
+
+spawn_shared<T>(s<our<T>>)<Int> -> {
+    th<Int> = thread_spawn(|| -> {
+        held<our<T>> = s
+        return 0
+    }) else -1
+    if (th < 0) { return 2 }
+
+    joined<Int> = thread_join(th) else -3
+    return joined
+}
+
+main()<Int> -> {
+    inner<my<Int>> = my(5)
+    shared<our<Held>> = our(Held { n = inner })
+    return spawn_shared(shared)
+}
