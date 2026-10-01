@@ -1,0 +1,45 @@
+// @test: A failing frame unwinds its owned locals along the fail path
+// @description: A function that builds owned locals (a Vec<String> and a heap
+// @description: String, one of them in a nested block) and then fails must release
+// @description: them when the error leaves the frame: the fail path crosses the
+// @description: dual-return {T, i8*} ABI and used to skip the cleanup IR the normal
+// @description: exit emits, leaking one 64 B buffer per propagated fail. The trapped
+// @description: caller still sees the error, and the normal path still cleans up
+// @category: ownership, trap, memory
+// @expect: pass
+// @expect-output: total = 175 ok = 0
+
+struct Boom {
+    code<Int>,
+}
+
+failing(n<Int>)<Int> -> {
+    rows<Vec<String>> = Vec<String>()
+    label<String> = "prefix-" + n.to_string()
+    i<Int> = 0
+    while (i < n) {
+        # A nested-block local too: the unwind has to cover every live scope of the
+        # frame, not just the function body's.
+        {
+            piece<String> = label + "-" + i.to_string()
+            rows.push(piece)
+        }
+        i = i + 1
+    }
+    if (n > 0) {
+        fail<Boom>(Boom { code: 7 })
+    }
+    return rows.len()
+}
+
+main()<Int> -> {
+    total<Int> = 0
+    i<Int> = 0
+    while (i < 25) {
+        v<Int> = { failing(3) } trap (e<Boom>) -> { e.code }
+        total = total + v
+        i = i + 1
+    }
+    println("total = " + total.to_string() + " ok = " + failing(0).to_string())
+    return 0
+}

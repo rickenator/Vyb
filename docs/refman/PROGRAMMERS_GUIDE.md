@@ -167,7 +167,7 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 ### Running the test suite
 
 ```bash
-# 1244 .vyb tests exercised through compile + run + output/return checks
+# 1245 .vyb tests exercised through compile + run + output/return checks
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test
 ```
 
@@ -1021,6 +1021,13 @@ handle() -> {
 
 - Errors can carry rich context (`struct Error { … }` field sets), and
   `fail` accepts primitives or structured values.
+- **Unwinding on the fail path.** When a `fail` leaves a frame (no eligible `trap`
+  in that frame), the frame's owned locals are released exactly as a `return`
+  releases them: a `Vec<String>` local, a heap `String`, an `our<T>` handle, and
+  locals of any nested block inside the frame all unwind through the error return
+  (`test/ownership/fail_path_unwinds_owned_locals.vyb`). `defer` statements
+  registered in the frame still run LIFO first. A frame that *traps* the error keeps
+  its locals alive — the handler sees them.
 - **Untrapped errors** propagate up the call chain; the harness and the
   serialization path treat them explicitly.
 
@@ -2772,7 +2779,7 @@ Canonical suite runner — a Vyb program (`test/run_tests.vyb`), wired into CTes
 as `run-tests`:
 
 ```bash
-./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1244 tests)
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1245 tests)
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --category async  # filter by category
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --json results.json --evidence evidence.json
 ```
