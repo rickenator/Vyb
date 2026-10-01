@@ -573,7 +573,7 @@ the real `Result` lives in the compiler. Prefer the builtin directly.
 
 Example:
   import core::result
-  fn fallible(ok<Bool>)<Result<Int, String>> -> {
+  fallible(ok<Bool>)<Result<Int, String>> -> {
       if (ok) { return Result<Int, String>::Ok(42) }
       return Result<Int, String>::Err("failed")
   }
