@@ -1,0 +1,41 @@
+// @test: a curated bind covers an aggregate of the bound type (`Vec<T>`)
+// @description: The same claim reached through a composite: `Vec<Held>` is capable
+//   iff its element is, and the element's capability now comes from
+//   `bind Handoff -> Held` -- asked when the walk unwraps the `Vec`, not only for
+//   the top-level type string. `Held` holds a `my<Int>`, so without the claim the
+//   capture is refused (the derivation sees a unique owner under a Vec). Runs (not
+//   semantic-only): the Vec is captured by value, so its unique owner moves into the
+//   closure environment rather than being shared.
+// @category: threads, thread-boundary, ownership, aspects
+// @expect: pass
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+
+import core::aspects
+import threads::{thread_spawn, thread_join}
+
+struct Held {
+    n: my<Int>
+}
+
+bind Handoff -> Held {
+    handoff(self<Held>)<Bool> -> { return true }
+}
+
+with_rows(rows<Vec<Held>>)<Int> -> {
+    th<Int> = thread_spawn(|| -> {
+        seen<Vec<Held>> = rows
+        return 0
+    }) else -1
+    if (th < 0) { return 2 }
+
+    joined<Int> = thread_join(th) else -3
+    return joined
+}
+
+main()<Int> -> {
+    rows<Vec<Held>> = Vec<Held>()
+    rows.push(Held { n = my(1) })
+    rows.push(Held { n = my(2) })
+    return with_rows(rows)
+}

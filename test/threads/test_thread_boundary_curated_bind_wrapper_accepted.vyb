@@ -1,0 +1,42 @@
+// @test: a curated bind covers a wrapper around the bound type (`our<T>`)
+// @description: The curated escape hatch of #365 is asked at EVERY level of the
+//   structural walk, not only for the type as written. `Held` holds a `my<Int>`, so
+//   the derivation refuses it on its own; `bind Handoff -> Held` states the claim,
+//   and the claim therefore also covers `our<Held>` -- the idiomatic way to share a
+//   curated type with the worker. Before the claim was threaded into the recursion,
+//   the walk looked for `our<Held>` in the bind table, missed it, and refused the
+//   capture even though `Held` was bound; the negative control
+//   (test_thread_boundary_curated_bind_wrapper_absent_rejected.vyb) pins that same
+//   refusal without the bind. Runs (not semantic-only): the closure keeps a shared
+//   owner, which is exactly what makes this capture safe to execute.
+// @category: threads, thread-boundary, ownership, aspects
+// @expect: pass
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+
+import core::aspects
+import threads::{thread_spawn, thread_join}
+
+struct Held {
+    n: my<Int>
+}
+
+bind Handoff -> Held {
+    handoff(self<Held>)<Bool> -> { return true }
+}
+
+with_handle(h<our<Held>>)<Int> -> {
+    th<Int> = thread_spawn(|| -> {
+        seen<our<Held>> = h
+        return 0
+    }) else -1
+    if (th < 0) { return 2 }
+
+    joined<Int> = thread_join(th) else -3
+    return joined
+}
+
+main()<Int> -> {
+    inner<my<Int>> = my(3)
+    return with_handle(our(Held { n = inner }))
+}

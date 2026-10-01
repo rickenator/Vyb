@@ -176,8 +176,10 @@ aspect Viewable { viewable(self)<Bool> -> { return true } }
 ```
 
 No bind is needed for ordinary types — both properties are derived structurally.
-The bind exists for what the derivation cannot see through: an FFI struct holding a
-`ptr<T>`, an opaque C handle, a `loc<T>` carrier.
+The bind exists for what the derivation cannot see through **or gets wrong**: an FFI
+struct holding a `ptr<T>`, an opaque C handle, a `loc<T>` carrier, a hand-managed
+arena whose lifetime the author enforces, a unique owner deliberately moved into the
+worker. FFI shapes are the motivating example, not the boundary of the feature.
 
 ```
 share(all)
@@ -195,11 +197,27 @@ non-fatal diagnostic (`SemanticAnalyzer::addWarning`: printed to stderr, kept in
 `warnings`, no effect on the exit code), because overriding is exactly the point.
 The payload then carries the programmer's guarantee.
 
+The claim is threaded into the walk itself (`thread_boundary::CuratedClaimLookup`),
+not checked once at the top, so it is asked at **every** level: `bind Handoff -> T`
+also admits `our<T>` — the idiomatic way to share a curated type — a `Vec<T>`, a
+`Result<T, E>` and a struct field of type `T`. The pre-fix behaviour asked for the
+type string as written (`our<T>` in the bind table, missed) and fell through to the
+structural recursion, which consulted no claims at all, so a wrapper hid the claim.
+The claim is asked *after* the `my<T>` / `their<T>` / `loc<T>` / `ptr<T>` refusals, so
+rescuing a composition never turns a unique owner or a borrow written as the type
+itself into a handoff. `viewable` runs the same walk in "reading" mode, where
+`Handoff` **or** `Viewable` counts; `capability` consults `Handoff` alone, so a
+`Viewable` claim can never make a value handoff-capable.
+
 Fixtures: `test/threads/test_thread_boundary_curated_bind_accepted.vyb`
 (`@semantic-only`, asserting the compile-time acceptance of a bind for a struct
 holding a `my<Int>`) and `..._curated_bind_absent_rejected.vyb` (the same shape and
-the same site with no bind — the structural verdict, refused). The pair isolates the
-bind as the thing that changes the verdict.
+the same site with no bind — the structural verdict, refused); the pair isolates the
+bind as the thing that changes the verdict. For the wrapper the pair is
+`..._curated_bind_wrapper_accepted.vyb` (runs: the closure keeps a shared owner of a
+curated type) and `..._curated_bind_wrapper_absent_rejected.vyb`, plus
+`..._curated_bind_aggregate_accepted.vyb` for the same claim reached through a
+`Vec<T>`.
 
 ## Step plan
 
@@ -216,8 +234,24 @@ bind as the thing that changes the verdict.
    from the analyzer in the `LLVMCodegen` constructor.
 6. ~~**curated escape hatch**~~ — **done**: the two marker aspects, the
    bind-first lookup, the contradiction warning, two fixtures.
-7. **Remaining** — the `docs/refman/PROGRAMMERS_GUIDE.md` thread-boundary
-   subsection (from the issue body), and the wording question, which waits on the
+7. ~~**claim through wrappers**~~ — **done**: the claim travels into the walk as
+   `thread_boundary::CuratedClaimLookup`, so it is asked at every level — a
+   `bind Handoff -> T` also covers `our<T>`, `Vec<T>` and a `T`-typed struct field,
+   and `viewable` runs the walk in "reading" mode. Before this the walk consulted the
+   bind only for the type string as written, so `our<T>` — the idiomatic way to share
+   a curated type — stayed refused even though `T` was bound, and the README had to
+   document that gap as a limitation. Fixtures: the wrapper pair
+   (`..._curated_bind_wrapper_accepted.vyb` runs; `..._wrapper_absent_rejected.vyb`
+   refuses), `..._curated_bind_aggregate_accepted.vyb` for the `Vec<T>` reach, and the
+   deferred-path pair `..._curated_bind_generic_wrapper_accepted.vyb` /
+   `..._generic_wrapper_absent_rejected.vyb` — the generic site defers to codegen, so
+   the pair pins that the claim is consulted there too (without it, codegen refuses
+   with "refusing to run a module whose code generation reported errors").
+8. ~~**refman subsection**~~ — **done**: `docs/refman/PROGRAMMERS_GUIDE.md` §5
+   carries "Thread-boundary capability (`handoff` / `viewable`)" — the shape table,
+   the retained-owner rule, "generics resolve where the evidence is", and the curated
+   escape hatch (updated for the claim-through-wrappers behaviour).
+9. **Remaining** — the wording question, which waits on the
    drop-semantics-on-propagation row: until a moved value is reliably reclaimed on
    its new thread, the docs say "accepted for handoff", never "guaranteed safe".
 

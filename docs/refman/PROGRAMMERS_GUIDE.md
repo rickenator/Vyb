@@ -167,7 +167,7 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 ### Running the test suite
 
 ```bash
-# 1234 .vyb tests exercised through compile + run + output/return checks
+# 1239 .vyb tests exercised through compile + run + output/return checks
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test
 ```
 
@@ -2622,9 +2622,11 @@ spawn_shared(our(9))          # our<Int>        -- accepted
 spawn_shared(our(my(3)))      # our<my<Int>>    -- refused
 ```
 
-**Curated escape hatch.** For shapes the derivation cannot see through — an FFI
-struct holding a `ptr<T>`, an opaque C handle, a `loc<T>` carrier — a reviewed
-bind can state the claim explicitly:
+**Curated escape hatch.** For a shape the derivation cannot see through *or gets
+wrong* — an FFI struct holding a `ptr<T>`, an opaque C handle, a `loc<T>` carrier,
+a hand-managed arena whose lifetime the author enforces, a unique owner
+deliberately moved into the worker — a reviewed bind states the claim explicitly.
+FFI shapes are the motivating case, not the boundary of the feature:
 
 ```vyb
 import core::aspects
@@ -2638,6 +2640,16 @@ The explicit bind wins over the computed verdict, and the compiler reports the
 contradiction as a **warning** rather than an error, because overriding is the
 point; `Handoff` implies `Viewable`. The payload is then the bind author's
 guarantee, and that is the reviewable artefact to point at.
+
+The claim is asked at **every level** of the walk, not only for the type as
+written: `bind Handoff -> T` also admits `our<T>` (the idiomatic way to share a
+curated type), `Vec<T>`, `Result<T, E>` and a struct field of type `T`, and
+`bind Viewable -> T` travels the same way for the read-only relation. It is asked
+*after* the `my<T>` / `their<T>` / `loc<T>` / `ptr<T>` refusals, so a claim rescues
+a composition without turning a unique owner or a borrow written as the type itself
+into a handoff. `Viewable` remains a relation, not a licence at a spawn site: a
+`bind Viewable` alone does not admit a capture, because the sites require handoff
+capability and a `Viewable` claim never confers it.
 
 **Wording.** The gate is an error-only check and says "not handoff-capable" —
 *accepted for handoff*, not "guaranteed safe". A moved value's reclamation on
@@ -2747,7 +2759,7 @@ Canonical suite runner — a Vyb program (`test/run_tests.vyb`), wired into CTes
 as `run-tests`:
 
 ```bash
-./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1234 tests)
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1239 tests)
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --category async  # filter by category
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --json results.json --evidence evidence.json
 ```

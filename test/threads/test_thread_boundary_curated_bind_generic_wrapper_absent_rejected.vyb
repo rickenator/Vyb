@@ -1,0 +1,35 @@
+// @test: without a curated bind, codegen refuses a deferred wrapper capture
+// @description: The negative control for
+//   test_thread_boundary_curated_bind_generic_wrapper_accepted.vyb: the same generic
+//   spawn site, the same instantiation (`our<Held>`), and no `bind Handoff` -- so
+//   codegen, which owns the substituted type, refuses it and the module never runs
+//   ("refusing to run a module whose code generation reported errors"). The pair
+//   shows the curated claim is consulted on the deferred path too, not only in the
+//   semantic pass.
+// @category: threads, thread-boundary, ownership, diagnostics, generics
+// @expect: fail
+// @expect-error: not handoff-capable
+// @env: VYB_STDLIB=stdlib
+
+import threads::{thread_spawn, thread_join}
+
+struct Held {
+    n: my<Int>
+}
+
+spawn_shared<T>(s<our<T>>)<Int> -> {
+    th<Int> = thread_spawn(|| -> {
+        held<our<T>> = s
+        return 0
+    }) else -1
+    if (th < 0) { return 2 }
+
+    joined<Int> = thread_join(th) else -3
+    return joined
+}
+
+main()<Int> -> {
+    inner<my<Int>> = my(5)
+    shared<our<Held>> = our(Held { n = inner })
+    return spawn_shared(shared)
+}

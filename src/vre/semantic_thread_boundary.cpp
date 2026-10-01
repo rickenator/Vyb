@@ -89,6 +89,9 @@ namespace thread_boundary {
 //   * a known enum                     -> iff every variant payload is
 //   * a known struct                   -> iff every field is
 //   * a plain value type               -> Capable
+//   * `bind Handoff -> T` at any level -> Capable (the curated claim: the reviewed
+//       escape hatch, asked with the type string as written at every level of the
+//       walk, so a claim on `Box` also covers `our<Box>` and `Vec<Box>`)
 //   * anything neither registry knows  -> Undecidable (a type parameter before
 //       monomorphization, or an opaque handle in either pass). The semantic pass
 //       DEFERS those captures to codegen rather than admitting them silently;
@@ -97,7 +100,8 @@ namespace thread_boundary {
 //       must never reject a program it cannot reason about.
 Capability capability(const ast::TypeNode* type,
                       const StructFieldRegistry* structs,
-                      const EnumPayloadRegistry* enums) {
+                      const EnumPayloadRegistry* enums,
+                      const CuratedClaimLookup* claims) {
     using C = Capability;
 
     if (!type) return C::NotCapable;
@@ -107,12 +111,20 @@ Capability capability(const ast::TypeNode* type,
     const std::string base = baseNameOf(ts);
 
     if (base == "my" || base == "their" || base == "loc" || base == "ptr") return C::NotCapable;
+
+    // The curated claim (`bind Handoff -> T`), asked at EVERY level of this walk --
+    // not only at the top -- so a claim on `Box` also covers `our<Box>`, `Vec<Box>`
+    // and a struct field of type `Box`. It is asked after the refusal wrappers
+    // above, so a claim rescues a *composition* without ever turning a `my<T>` /
+    // `their<T>` / `loc<T>` / `ptr<T>` written as the type itself into a handoff.
+    if (claims && claims->handoff && claims->handoff(ts)) return C::Capable;
+
     if (base == "our" || base == "mild") {
         const auto args = namedTypeArgs(type);
         if (args.empty()) return C::Undecidable;
         bool undecidable = false;
         for (const auto* a : args) {
-            const C c = capability(a, structs, enums);
+            const C c = capability(a, structs, enums, claims);
             if (c == C::NotCapable) return C::NotCapable;
             if (c == C::Undecidable) undecidable = true;
         }
@@ -124,7 +136,7 @@ Capability capability(const ast::TypeNode* type,
     auto aggregate = [&](const std::vector<const ast::TypeNode*>& payloads) -> C {
         bool undecidable = false;
         for (const auto* p : payloads) {
-            const C c = capability(p, structs, enums);
+            const C c = capability(p, structs, enums, claims);
             if (c == C::NotCapable) return C::NotCapable;
             if (c == C::Undecidable) undecidable = true;
         }
@@ -132,13 +144,13 @@ Capability capability(const ast::TypeNode* type,
     };
 
     if (auto* v = dynamic_cast<const ast::VecType*>(type)) {
-        return capability(v->elementType.get(), structs, enums);
+        return capability(v->elementType.get(), structs, enums, claims);
     }
     if (auto* a = dynamic_cast<const ast::ArrayType*>(type)) {
-        return capability(a->elementType.get(), structs, enums);
+        return capability(a->elementType.get(), structs, enums, claims);
     }
     if (auto* f = dynamic_cast<const ast::FutureType*>(type)) {
-        return capability(f->resultType.get(), structs, enums);
+        return capability(f->resultType.get(), structs, enums, claims);
     }
     if (auto* t = dynamic_cast<const ast::TupleTypeNode*>(type)) {
         std::vector<const ast::TypeNode*> members;
@@ -146,7 +158,7 @@ Capability capability(const ast::TypeNode* type,
         return aggregate(members);
     }
     if (auto* o = dynamic_cast<const ast::OptionalType*>(type)) {
-        return capability(o->containedType.get(), structs, enums);
+        return capability(o->containedType.get(), structs, enums, claims);
     }
 
     // Any other generic named type (`Result<T, E>`, `Pair<A, B>`, a user generic
@@ -190,25 +202,49 @@ Capability capability(const ast::TypeNode* type,
 
 bool handoffCapable(const ast::TypeNode* type,
                     const StructFieldRegistry* structs,
-                    const EnumPayloadRegistry* enums) {
-    return capability(type, structs, enums) == Capability::Capable;
+                    const EnumPayloadRegistry* enums,
+                    const CuratedClaimLookup* claims) {
+    return capability(type, structs, enums, claims) == Capability::Capable;
 }
 
 // May a second thread read a value of this type without taking ownership?
 // The weaker relation: a handoff-capable value is also viewable, and a borrow
 // (`their<T>` / `loc<T>`) of a handoff-capable payload is viewable because a
 // reader only needs the address, not the owner.
+//
+// A curated claim is asked for the type as written, and the walk below is then run
+// in "reading" mode -- a lookup in which `Handoff` OR `Viewable` counts -- so a
+// `Viewable` claim on the payload of a wrapper (`our<W>`, `Vec<W>`) is seen too.
+// Reading mode exists only here: `capability` consults `Handoff` alone, so a
+// `Viewable` claim can never make a value handoff-capable.
 bool viewable(const ast::TypeNode* type,
               const StructFieldRegistry* structs,
-              const EnumPayloadRegistry* enums) {
+              const EnumPayloadRegistry* enums,
+              const CuratedClaimLookup* claims) {
     if (!type) return false;
-    const std::string base = baseNameOf(type->toString());
+    const std::string ts = type->toString();
+    if (claims) {
+        if (claims->viewable && claims->viewable(ts)) return true;
+        if (claims->handoff && claims->handoff(ts)) return true;
+    }
+
+    CuratedClaimLookup reading;
+    const CuratedClaimLookup* readClaims = nullptr;
+    if (claims) {
+        reading.handoff = [claims](const std::string& t) {
+            return (claims->handoff && claims->handoff(t)) ||
+                   (claims->viewable && claims->viewable(t));
+        };
+        readClaims = &reading;
+    }
+
+    const std::string base = baseNameOf(ts);
     if (base == "their" || base == "loc") {
         const auto args = namedTypeArgs(type);
         if (args.empty()) return false;
-        return handoffCapable(args.front(), structs, enums);
+        return handoffCapable(args.front(), structs, enums, readClaims);
     }
-    return handoffCapable(type, structs, enums);
+    return handoffCapable(type, structs, enums, readClaims);
 }
 
 } // namespace thread_boundary
@@ -221,12 +257,25 @@ bool viewable(const ast::TypeNode* type,
 // `ptr<T>`, an opaque handle), so the explicit claim wins. Registration reports
 // the contradiction as a warning (registerTraitImpl), which keeps the override
 // honest without making it impossible.
+//
+// The claim travels down as a CuratedClaimLookup instead of being checked only at
+// the top, so the structural walk asks it at EVERY level: `bind Handoff -> Box`
+// also admits `our<Box>`, `Vec<Box>` and a struct holding a `Box`. The pre-fix
+// behaviour consulted the claim for the type as written alone, so a wrapper hid it
+// and `our<Box>` -- the idiomatic way to share a curated type -- stayed refused.
 thread_boundary::Capability SemanticAnalyzer::handoffCapability(const ast::TypeNode* type) {
     if (!type) return thread_boundary::Capability::NotCapable;
     // The curated claim is a decision, not a deferral: the bind author has
     // spoken for the type regardless of what the derivation can see.
     if (hasAspectBinding(type->toString(), "Handoff")) return thread_boundary::Capability::Capable;
-    return thread_boundary::capability(type, &structFieldTypes, &enumVariantPayloadTypes);
+    thread_boundary::CuratedClaimLookup claims;
+    claims.handoff = [this](const std::string& ts) { return hasAspectBinding(ts, "Handoff"); };
+    claims.viewable = [this](const std::string& ts) {
+        // `Handoff` implies `Viewable`: a value that may be handed over may also
+        // be read by another thread.
+        return hasAspectBinding(ts, "Viewable") || hasAspectBinding(ts, "Handoff");
+    };
+    return thread_boundary::capability(type, &structFieldTypes, &enumVariantPayloadTypes, &claims);
 }
 
 bool SemanticAnalyzer::handoffCapable(const ast::TypeNode* type) {
@@ -239,7 +288,12 @@ bool SemanticAnalyzer::viewable(const ast::TypeNode* type) {
     // `Handoff` implies `Viewable`: a value that may be handed over may also be
     // read by another thread.
     if (hasAspectBinding(ts, "Viewable") || hasAspectBinding(ts, "Handoff")) return true;
-    return thread_boundary::viewable(type, &structFieldTypes, &enumVariantPayloadTypes);
+    thread_boundary::CuratedClaimLookup claims;
+    claims.handoff = [this](const std::string& t) { return hasAspectBinding(t, "Handoff"); };
+    claims.viewable = [this](const std::string& t) {
+        return hasAspectBinding(t, "Viewable") || hasAspectBinding(t, "Handoff");
+    };
+    return thread_boundary::viewable(type, &structFieldTypes, &enumVariantPayloadTypes, &claims);
 }
 
 // Rule (b): a read-only borrow may cross the thread boundary when the closure

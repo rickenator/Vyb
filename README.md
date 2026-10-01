@@ -80,7 +80,7 @@ git clone https://github.com/rickenator/Vyb.git
 cd Vyb
 mkdir -p build && cd build && LLVM_DIR=/usr/lib/llvm-18/cmake cmake .. && make -j$(nproc) && cd ..
 
-# Run the full test suite (1234 .vyb tests) with the canonical Vyb runner
+# Run the full test suite (1239 .vyb tests) with the canonical Vyb runner
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
 
 # Run your first Vyb program
@@ -1111,11 +1111,171 @@ Semantic Errors:
   thread_spawn: 'h' is Holder -- it cannot cross a thread boundary (not handoff-capable). Hand it off as shared ownership (our(h)) or pass a copy.
 ```
 
-For a shape the type graph cannot see through — an FFI struct holding a `ptr<T>`, an opaque C
-handle — a reviewed bind states the claim: the marker aspects `Handoff` / `Viewable`
-(`core::aspects`, re-exported by `core::prelude`) let you write `bind Handoff -> T`. The curated
-claim wins over the computed verdict, and a contradiction between the two is reported as a
-non-fatal warning.
+**When the derivation is not enough: the reviewed claim (`Handoff` / `Viewable`).** Ordinary
+types need nothing from you — their capability is derived from the type graph as described
+above. For the shapes the derivation cannot see through, `core::aspects` declares two **marker
+aspects** (re-exported by `core::prelude`), and a bind states the claim:
+
+```vyb
+aspect Handoff  { handoff(self)<Bool>  -> { return true } }
+aspect Viewable { viewable(self)<Bool> -> { return true } }
+```
+
+A marker aspect has no contract to satisfy; `bind Handoff -> T` is simply the claim "a value of
+`T` may cross a thread boundary", reviewed by whoever wrote the bind. This is a **general escape
+hatch, not an FFI-only feature**. Reach for it whenever the structural verdict is blind to your
+invariants or simply wrong for your design:
+
+* an FFI struct holding a `ptr<T>` / `loc<T>`, or an opaque C handle — the motivating case;
+* a hand-managed arena or pool whose lifetime you enforce yourself;
+* a unique owner you are deliberately *moving* into the worker rather than sharing;
+* a wrapper whose payload really does travel with the closure environment.
+
+Here is a non-FFI claim — a struct holding a unique owner, which the structural derivation
+refuses on its own, handed to a worker that takes the owner with it:
+
+```vyb
+import core::aspects
+import threads::{thread_spawn, thread_join}
+
+struct Token { n: my<Int> }
+
+bind Handoff -> Token {
+    handoff(self<Token>)<Bool> -> { return true }   // the claim; reviewed, not proven
+}
+
+main()<Int> -> {
+    t<Token> = Token { n = my(7) }
+    h<Int> = thread_spawn(|| -> {
+        seen<Token> = t          // the unique owner moves into the closure environment
+        return 0
+    }) else -1
+    if (h < 0) { return 1 }
+    r<Int> = thread_join(h) else -2
+    println("joined = " + r.to_string())                 // joined = 0
+    return 0
+}
+```
+
+And the FFI-shaped claim — a handle carrying raw memory, which the closure reads on the other
+thread (`freedom` is where raw addresses live):
+
+```vyb
+import core::aspects
+import threads::{thread_spawn, thread_join}
+
+struct Handle { raw: loc<Int> }
+
+bind Handoff -> Handle {
+    handoff(self<Handle>)<Bool> -> { return true }
+}
+
+main()<Int> -> {
+    x<Int> = 41
+    h<Int> = -1
+    freedom {
+        p<loc<Int>> = loc(x)
+        hd<Handle> = Handle { raw = p }
+        h = thread_spawn(|| -> {
+            seen<Handle> = hd
+            return 0
+        }) else -1
+    }
+    if (h < 0) { return 1 }
+    r<Int> = thread_join(h) else -2
+    println("joined = " + r.to_string() + " x = " + x.to_string())
+    return 0                                             // joined = 0 x = 41
+}
+```
+
+How the claim behaves:
+
+* The capability check consults the curated bind **first** for the type it names, so the explicit
+  claim wins over the computed verdict.
+* When the claim contradicts the derived shape, registration reports a **non-fatal warning** —
+  overriding is the point — and the payload carries *your* guarantee from then on. Verbatim from
+  the first program above:
+
+```
+warning: curated thread-boundary bind: `bind Handoff -> Token` claims the type may cross a thread boundary, but its structural shape is not handoff-capable -- the explicit bind wins, so the program is accepted; the payload then carries the programmer's guarantee (doc/THREAD_BOUNDARY_SCOPE.md).
+```
+
+* The claim is asked at **every level** of the walk, not only for the type as written: `bind
+  Handoff -> Token` also covers `our<Token>` (the idiomatic way to share it), `Vec<Token>`,
+  `Result<Token, E>` and a struct field of type `Token` — and `bind Viewable -> T` travels the
+  same way for the read-only relation. It is asked *after* the unique-owner and borrow refusals,
+  so it rescues a composition without turning a `my<T>` / `their<T>` / `loc<T>` / `ptr<T>` that
+  appears as the type itself into a handoff.
+* `Handoff` implies `Viewable`: whatever may be handed to another thread may also be read there.
+  `bind Viewable -> T` states only the weaker, read-only claim.
+* `Viewable` is a **relation, not a licence at a spawn site**. A `bind Viewable` by itself does
+  not admit a value capture at `thread_spawn` / `task_spawn` / `async_spawn` / `agent_start`;
+  those sites require handoff capability. Read-only access crosses when the borrow rules above
+  hold (`view(x)` plus a strongly captured owner), and the wording stays "accepted for handoff",
+  never "guaranteed safe" — the claim is yours to keep. Claiming `Viewable` on a value that only
+  ever gets *read* across threads is therefore a statement about the type, not a pass for
+  handing it over:
+
+```vyb
+import core::aspects
+import threads::{thread_spawn, thread_join}
+
+struct Window { raw: loc<Int> }
+
+bind Viewable -> Window {                 // the weaker, read-only claim
+    viewable(self<Window>)<Bool> -> { return true }
+}
+
+main()<Int> -> {
+    x<Int> = 41
+    freedom {
+        p<loc<Int>> = loc(x)
+        w<Window> = Window { raw = p }
+        h<Int> = thread_spawn(|| -> {     // still refused: viewable is not a spawn licence
+            seen<Window> = w
+            return 0
+        }) else -1
+        if (h >= 0) { thread_join(h) }
+    }
+    return 0
+}
+```
+
+```
+warning: curated thread-boundary bind: `bind Viewable -> Window` claims the type may cross a thread boundary, but its structural shape is not viewable -- the explicit bind wins, so the program is accepted; the payload then carries the programmer's guarantee (doc/THREAD_BOUNDARY_SCOPE.md).
+
+Semantic Errors:
+  thread_spawn: 'w' is Window -- it cannot cross a thread boundary (not handoff-capable). Hand it off as shared ownership (our(w)) or pass a copy.
+```
+
+The claim travels with the type, so the same curated `Token` also crosses as a **shared** owner —
+the shape you reach for when several threads read it (runs; prints `joined = 0`):
+
+```vyb
+import core::aspects
+import threads::{thread_spawn, thread_join}
+
+struct Token { n: my<Int> }
+
+bind Handoff -> Token {
+    handoff(self<Token>)<Bool> -> { return true }
+}
+
+main()<Int> -> {
+    shared<our<Token>> = our(Token { n = my(7) })   // a shared owner of a curated type
+    h<Int> = thread_spawn(|| -> {
+        seen<our<Token>> = shared                   // `our<Token>` inherits the claim on `Token`
+        return 0
+    }) else -1
+    if (h < 0) { return 1 }
+    r<Int> = thread_join(h) else -2
+    println("joined = " + r.to_string())            // joined = 0
+    return 0
+}
+```
+
+The full rule set and the measurements behind it are in `doc/THREAD_BOUNDARY_SCOPE.md`; the
+authoritative manual is `docs/refman/PROGRAMMERS_GUIDE.md` §5.
 
 Channels are the usual way to get values *out* of a thread, while a closure's captures carry
 values *in*:
@@ -2899,7 +3059,7 @@ cmake --build build --target run-milestone
 
 Vyb's canonical test runner is `test/run_tests.vyb` — a Vyb program, the same
 suite wired into CTest as the `run-tests` target and used for the full regression
-gate (currently **1234 `.vyb` tests, all passing**):
+gate (currently **1239 `.vyb` tests, all passing**):
 
 ### Quick Testing
 
@@ -2936,7 +3096,7 @@ build/vyb triage_tool.vyb results.json --priority critical,high
 ```
 
 ### Test Features
-- **1234 Tests, All Passing**: The full `run_tests.vyb` suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area
+- **1239 Tests, All Passing**: The full `run_tests.vyb` suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area
 - **Harness Reporting**: `test_harness.vyb` adds JSON/HTML reports and failure triage on top of the runner (sequential execution; `--workers` is accepted for compatibility)
 - **Rich Reporting**: HTML, JSON, and console output with detailed metrics
 - **Smart Categorization**: Automatic test categorization and filtering
@@ -3211,10 +3371,10 @@ compatibility) and reports the same per-test verdicts as the canonical runner.
 - **Error Context**: Detailed failure information with context and suggestions
 
 #### **Test Statistics**
-- **Total Tests**: 1234 `.vyb` tests (full suite, all passing as of v0.7.7)
+- **Total Tests**: 1239 `.vyb` tests (full suite, all passing as of v0.7.7)
 - **Coverage Areas**: Language features, control flow, error handling, type system, math, strings, introspection
 - **Test Types**: Feature tests (with `@expect: pass`), future-feature docs (with `@expect: fail`), parser tests
-- **Success Rate**: 100% (1234/1234) on the current suite
+- **Success Rate**: 100% (1239/1239) on the current suite
 
 ### 🔧 **Syntax Migration Tools**
 
@@ -3330,7 +3490,7 @@ See `doc/` directory for detailed design documents and RFCs.
   - **Type inference**: First case determines result type for entire select
   - **Pattern matching**: Exact equality patterns with wildcard `?` support
 - ✅ **Canonical Syntax Unification**: Complete migration to unified `my()`/`our()` constructors and `view`/`borrow` operators
-- ✅ **Modern Test Harness**: `test/run_tests.vyb` running the full suite — 1234 `.vyb` tests all passing — with an auxiliary parallel/HTML/triage harness
+- ✅ **Modern Test Harness**: `test/run_tests.vyb` running the full suite — 1239 `.vyb` tests all passing — with an auxiliary parallel/HTML/triage harness
 - ✅ **Syntax Migration Tools**: Automated migration from legacy to canonical syntax with comprehensive reporting
 - ✅ **Match Statements**: Complete pattern matching with `->` arrow syntax and `?` wildcard; no-match results in NOP
 - ✅ **Break/Continue**: Loop control flow statements working in all loop types
