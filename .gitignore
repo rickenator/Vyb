@@ -50,5 +50,9 @@ vybsplash.png
 # Agent scratch space (probe programs, logs, throwaway scripts; not project code)
 scratch/
 
+# Object files the AOT/link path drops at the repo root (the test scripts remove
+# them; this keeps a stray one from being committed or staged by `git add -A`)
+/*.o
+
 # Browser tooling artifacts (agent session state, not project code)
 .playwright-mcp/

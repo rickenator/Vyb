@@ -64,6 +64,13 @@ void LLVMCodegen::visit(vyb::ast::BlockStatement* node) {
     for (size_t i = 0; i < node->body.size(); ++i) {
         const auto& stmt = node->body[i];
         if (stmt) {
+            // Point the debug info at this statement's own Vyb source line before
+            // generating it, so the emitted line table maps instructions to the source
+            // the user wrote. Without this, only a handful of nodes carried a
+            // location and `break <file>.vyb:<line>` resolved to the enclosing
+            // function header instead of the statement (#390). Visitors that set a
+            // more precise location still win, since they run after this.
+            setDebugLocation(stmt->loc);
 
             stmt->accept(*this);
         }

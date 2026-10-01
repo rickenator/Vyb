@@ -1007,7 +1007,7 @@ int compile_vyb_to_object(const std::string& source, const std::string& fileName
 
         std::cout << "Generating LLVM IR code..." << std::endl;
         vyb::LLVMCodegen codegen(driver);
-        codegen.generate(parsed.ast.get(), fileName + ".ll", vyb::g_debug_codegen);
+        codegen.generate(parsed.ast.get(), fileName + ".ll", vyb::g_debug_codegen, fileName);
         std::cout << "LLVM IR generation completed" << std::endl;
 
         // Never link a binary built through an unresolved enum payload (#251).
@@ -1187,7 +1187,7 @@ int compile_vyb_kernel(const std::string& source, const std::string& fileName, i
 
         std::cout << "Generating NVPTX-targeted LLVM IR..." << std::endl;
         vyb::LLVMCodegen codegen(driver);
-        codegen.generate(parsed.ast.get(), fileName + ".ll", vyb::g_debug_codegen);
+        codegen.generate(parsed.ast.get(), fileName + ".ll", vyb::g_debug_codegen, fileName);
         std::cout << "LLVM IR generation completed" << std::endl;
 
         // Never emit a device binary built through an unresolved enum payload (#251).
@@ -2660,7 +2660,8 @@ int run_vyb_code(const std::string& source, const std::string& fileName, bool ge
         // issue #348: dump the IR only when asked for (--emit-llvm) or when
         // --debug-codegen wants it; an ordinary run must not litter <.vyb>.ll.
         codegen.generate(parsed.ast.get(), fileName + ".ll",
-                         generateLLVMIR || vyb::g_debug_codegen);
+                         generateLLVMIR || vyb::g_debug_codegen,
+                         /*sourceFilename=*/fileName);
         VYB_CDBG << "LLVM IR generation completed" << std::endl;
 
         if (generateLLVMIR) {
@@ -4998,7 +4999,7 @@ int main(int argc, char* argv[]) {
                 if (dot != std::string::npos) out_ll = out_ll.substr(0, dot);
                 out_ll += ".ll";
 
-                codegen.generate(parsed.ast.get(), out_ll, true);
+                codegen.generate(parsed.ast.get(), out_ll, true, filename);
                 std::cout << "LLVM IR generated to " << out_ll << std::endl;
                 return 0;
             }
