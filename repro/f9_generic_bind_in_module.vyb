@@ -1,0 +1,15 @@
+// F9 repro (#343): a generic bind declared in an imported module is not resolvable
+// outside that module, and (see the f9b variant) not inside it either.
+// Expected: "wrapper 1" and "direct 1". Observed at 0.7.6: "Field 'turn' not
+// found in struct 'Box<T>'" and "Field 'turn' not found in struct 'Box<Int>'".
+//
+//   VYB_STDLIB=<vyb>/stdlib <vyb>/build/vyb repro/f9_generic_bind_in_module.vyb
+
+import f9_generic_bind_in_module::mod
+
+main()<Int> -> {
+    b<Box<Int>> = Box<Int> { v = 3 }
+    println("wrapper " + turn_of(b).to_string())
+    println("direct " + b.turn().to_string())
+    return 0
+}

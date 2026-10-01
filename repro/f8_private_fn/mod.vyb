@@ -1,0 +1,9 @@
+// F8 module (#342): a shared function calling a private (unshared) one, same module.
+share(all)
+public_thing()<Int> -> {
+    return helper()
+}
+
+helper()<Int> -> {
+    return 7
+}

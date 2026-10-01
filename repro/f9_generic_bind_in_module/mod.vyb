@@ -1,0 +1,13 @@
+// F9 module (#343): a GENERIC bind on the module's own generic struct.
+share(all)
+aspect Arr { turn(self)<Int> -> { } }
+
+share(all)
+struct Box<T> { v<T> }
+
+bind<T> Arr -> Box<T> {
+    turn(self)<Int> -> { return 1 }
+}
+
+share(all)
+turn_of<T>(b<Box<T>>)<Int> -> { return b.turn() }

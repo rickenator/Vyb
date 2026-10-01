@@ -577,8 +577,17 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
   `test/ownership/fail_path_unwinds_owned_locals.vyb` reads the error back through a
   `trap` on the caller side and exercises the normal path too). A frame that traps the
   error keeps its locals (its trap is taken as an in-function branch, no unwind) — the
-  handler sees them alive. Not covered: an *untrapped* error in a non-failable frame
-  goes to `__vyb_runtime_untrapped_error` and terminates, so nothing unwinds there
+  handler sees them alive. An *untrapped* error in a non-failable frame goes to
+  `__vyb_runtime_untrapped_error` and terminates, so nothing unwinds there — but
+  the heap error objects on that path are all reclaimed: the re-raised error is
+  freed by the untrapped handler itself, and a trap handler that *abandons* (its
+  `refail` has no enclosing trap to catch it, e.g. a wrapped refail in a
+  non-failable frame) now frees the error it caught before the abort call, which
+  used to sit after it and never run. Verified under `ASAN_OPTIONS=detect_leaks=1`
+  on `test/trap/refail_test.vyb` (282 B / 5 allocs before, clean after; the fixture
+  still exits non-zero) and on the positive `test/trap/19_refail_from_handler.vyb`;
+  the `ci.yml` ASan job asserts both the exit status and the absence of a leak
+  report for that fixture (#398)
 - [x] **Thread-boundary capability (`handoff` / `viewable`)** <!-- shipped: Thread-boundary capability (`handoff` / `viewable`) -->
   — atomic refcounts landed (`our<T>` control block; heap-`String` registry with
   atomic `refs`; `cgen_ownership` `AtomicRMW` retain/release), and the capability
@@ -657,9 +666,12 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
   consulted no claims, so a wrapper hid the claim and `our<T>` stayed refused).
   Fixtures: `..._curated_bind_wrapper_accepted.vyb`, `..._wrapper_absent_rejected.vyb`,
   `..._aggregate_accepted.vyb`.
-  The only residue is wording, not enforcement: the diagnostic text stays provisional
-  ("accepted for handoff") until the drop-semantics-on-propagation row above closes,
-  and the step record lives in `doc/THREAD_BOUNDARY_SCOPE.md`. Shipped in v0.7.7
+  The only residue was wording, and it is now settled: the diagnostic text states
+  *accepted for handoff* (never "guaranteed safe") as a final position, because the
+  drop-semantics-on-propagation row above closed — a failing frame reclaims its live
+  scopes (#380, `test/ownership/fail_path_unwinds_owned_locals.vyb`) and the
+  abandoning path reclaims both error objects (#398, leak-asserted in `ci.yml`).
+  The step record lives in `doc/THREAD_BOUNDARY_SCOPE.md`. Shipped in v0.7.7
   (#365, PRs #366-#370).
 - [x] **Lifetime inference beyond lexical scope** — DECIDED, not a 1.0 gap.
   `borrow`/`view` are lexical-phase by design (documented in #149): no lifetime
@@ -1416,7 +1428,19 @@ For Vyb to be considered production-ready at 1.0, **all of the following must be
 - [x] FFI (`extern "C"`) working — extern blocks, ABI aliases, `#[repr(C)]`, native `--link`, variadics, `vyb bindgen` (MVP + libclang `--full`)
 - [x] `vyb.toml` and `vyb build` project system — manifest, multi-file/path-dep build, `vyb new`, `vyb.lock`, and all four dependency sources resolving (`path`, `git:` shallow-clone into `.vybmod/<name>/` on build, `github:` via `vyb mod install github:owner/repo/path`, `version:` against the package registry via `VYB_REGISTRY`/`~/.vyb/registry`); the end-to-end fixture is `test/gitdep_smoke.vyb` (`gitdep smoke: 4/4 checks passed`), documented in `doc/MANIFEST.md`
 - [x] Wildcard trap handler (`trap (e<?>)`) with `typeof` discrimination
-- [ ] All open contradictions resolved (see section above) <!-- open: (none) -->
+- [x] All open contradictions resolved — AUDITED AND GATED. The row used to point at a
+  section that no longer exists; there is no separate list to restore, because the
+  contradiction class is now mechanical: `tools/docstatus.vyb` checks six invariants
+  (cited paths resolve; every unchecked 1.0 item names the row tracking it or
+  `(none)`, and never a ✅ row; a shipped item's FEATURE_STATUS row never still reads
+  📋/🚧 — curated table *plus* the general `<!-- shipped: LABEL -->` direction added
+  by this item; the README tag and CHANGELOG section match `CMakeLists.txt`). The
+  audit walk found exactly one live contradiction at the time it was written — the
+  `Drop semantics on propagation paths (fail/trap)` row still 📋 while its TODO item
+  read shipped — which is closed in the same change and is the case the new check
+  pins. One known non-contradiction is recorded rather than hidden: the curated
+  `bind Handoff -> T` disagreeing with the derived verdict is a non-fatal
+  `addWarning` by design.
 
 ### Should-Have for 1.0
 - [x] REPL (`vyb repl`) — JIT-backed eval loop (persistent declarations + variables, bare-expression auto-display, multiline via bracket balance, error recovery); protocol smoke test in hosted CI (`test/repl_smoke.vyb`). readline history/editing + `:type` are follow-ons

@@ -7,7 +7,7 @@
 # meaningful if the checklist cannot silently disagree with the status table,
 # so this tool mechanically cross-checks the two.
 #
-# Five checks:
+# Six checks:
 #   1. cited-path evidence — every repo path cited in doc/FEATURE_STATUS.md
 #      (e.g. `test/modules/test_vec_iter.vyb`) must exist on disk. A ✅ row that
 #      cites a renamed/deleted test is drift.
@@ -32,6 +32,12 @@
 #      `## [X.Y.Z]` section for it. README prose is compared against the tree by
 #      nothing else, so pointing at a tag that was never cut used to survive
 #      until a human noticed.
+#   6. shipped-item status agreement — the reverse of 3, and general rather than
+#      curated: a `- [x]` TODO.md item with an explicit `<!-- shipped: LABEL -->`
+#      marker names the FEATURE_STATUS row for that feature, and that row must no
+#      longer read 📋 or 🚧. Check 4 covers the same question for a hand-written
+#      table; this one covers every item that opted in to a marker, so a shipped
+#      item cannot leave its row advertised as planned (#395).
 #
 # Exit 0 = docs agree; exit 1 = drift (with file:line for both sides).
 #
@@ -154,6 +160,18 @@ backtick_spans(text<String>)<Vec<String>> -> {
 # Check 2/3 — the `<!-- open: LABEL -->` marker.
 #------------------------------------------------------------------------------
 marker_open<String> = "<!--" + " open:"
+marker_shipped<String> = "<!--" + " shipped:"
+
+# The LABEL from `<!-- shipped: LABEL -->` in `line`, or "" when absent. A shipped
+# TODO.md item uses this to name the FEATURE_STATUS row that records it.
+shipped_marker(line<String>)<String> -> {
+    k<Int> = line.index_of(marker_shipped)
+    if (k < 0) { return "" }
+    start<Int> = k + marker_shipped.len()
+    end<Int> = line.index_of("-->")
+    if (end < 0 || end <= start) { return "" }
+    return trim(line.substring(start, end))
+}
 
 # The LABEL from `<!-- open: LABEL -->` in `line`, or "" when absent.
 open_marker(line<String>)<String> -> {
@@ -365,6 +383,31 @@ main()<Int> -> {
     }
     pairs_checked = pairs.len()
 
+    # -- Check 6: shipped TODO.md item vs a still-open FEATURE_STATUS row -----
+    # The mechanical, general form of check 4: a shipped item carrying an explicit
+    # `<!-- shipped: LABEL -->` marker names the FEATURE_STATUS row that records it,
+    # so that row may no longer read 📋/🚧. The curated pairs above only cover the
+    # items someone remembered to list; this is the reverse direction of check 3 and
+    # the check that catches a row drifting while its item reads shipped (#395).
+    shipped_checked<Int> = 0
+    si<Int> = 0
+    while (si < ls.len()) {
+        sline<String> = ls.get(si)
+        if (item_shipped(sline)) {
+            slabel<String> = shipped_marker(sline)
+            if (slabel.len() > 0) {
+                shipped_checked = shipped_checked + 1
+                sst<String> = row_status(status_text, slabel)
+                if (sst.len() == 0) {
+                    problems.push("TODO.md:" + (si + 1).to_string() + ": shipped item names status row `" + slabel + "`, which doc/FEATURE_STATUS.md does not have")
+                } else if (row_open(sst)) {
+                    problems.push("TODO.md:" + (si + 1).to_string() + ": marks `" + slabel + "` as shipped, but doc/FEATURE_STATUS.md row still reads " + sst + " — ship the row or unmark the item")
+                }
+            }
+        }
+        si = si + 1
+    }
+
     # -- Check 5: user-facing version claims (README link, CHANGELOG section) --
     version_checked<Int> = 0
     ver<String> = cmake_version(slurp(root + "/CMakeLists.txt"))
@@ -406,6 +449,7 @@ main()<Int> -> {
     println("docstatus --check OK (" + checked.to_string() + " cited path(s) resolve; " +
             marked.to_string() + " open item(s) marked; " +
             pairs_checked.to_string() + " shipped/open contradiction pair(s) checked; " +
+            shipped_checked.to_string() + " shipped-item row(s) checked; " +
             version_checked.to_string() + " version claim(s) checked against CMakeLists.txt)")
     exit(0)
 }

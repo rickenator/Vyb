@@ -2671,11 +2671,17 @@ into a handoff. `Viewable` remains a relation, not a licence at a spawn site: a
 `bind Viewable` alone does not admit a capture, because the sites require handoff
 capability and a `Viewable` claim never confers it.
 
-**Wording.** The gate is an error-only check and says "not handoff-capable" —
-*accepted for handoff*, not "guaranteed safe". A moved value's reclamation on
-`fail`/`trap` propagation paths is still tracked separately, so the compiler is
-declining to accept something it cannot keep alive, not promising that everything
-it accepts is leak-free.
+**Wording.** The gate is an error-only check and refuses with "not handoff-capable";
+an accepted capture is *accepted for handoff*, not "guaranteed safe". The check
+proves the captured value can cross the boundary — it is not a promise that every
+path keeps it alive. That distinction is settled, not pending: a moved value is
+reclaimed on `fail`/`trap` propagation paths both in the frame that fails (every
+live scope emits its cleanup before the error is forwarded, #380,
+`test/ownership/fail_path_unwinds_owned_locals.vyb`) and on the abandoning path,
+where a handler's `refail` has no enclosing trap and the frame exits through the
+untrapped abort — there the caught error is freed before the abort and the re-raised
+one by the untrapped handler (#398, asserted under ASan in `ci.yml`). The wording
+therefore stays "accepted for handoff": the gate keeps saying only what it checks.
 
 Scope and measurements: `doc/THREAD_BOUNDARY_SCOPE.md`. Fixtures:
 `test/threads/test_thread_boundary_*.vyb`.
