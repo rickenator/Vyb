@@ -304,12 +304,25 @@ llvm::Value* LLVMCodegen::generateToStringCall(llvm::Value* value, llvm::Type* v
                 // Cast to void*
                 llvm::Value* voidPtr = builder->CreateBitCast(structPtr, llvm::PointerType::get(*context, 0), "struct.void_ptr");
 
+                // #383: a value that came through `bare(...)` asks for its field
+                // *values* in declaration order, not a keyed object. `typeName` stays
+                // untouched -- it was just used for the monomorphized-struct lookup --
+                // and the marker rides only on the string handed to the runtime, which
+                // strips it and takes the values path (see __vyb_complex_to_json).
+                std::string runtimeTypeName = typeName;
+                for (llvm::Value* bare : bareSerializationValues) {
+                    if (bare == value) {
+                        runtimeTypeName = std::string("bare:") + typeName;
+                        break;
+                    }
+                }
+
                 // Create type name constant
-                llvm::Constant* typeNameStrConst = llvm::ConstantDataArray::getString(*context, typeName, /*AddNull=*/true);
+                llvm::Constant* typeNameStrConst = llvm::ConstantDataArray::getString(*context, runtimeTypeName, /*AddNull=*/true);
                 llvm::GlobalVariable* typeNameGlobal = new llvm::GlobalVariable(
                     *module, typeNameStrConst->getType(), true,
                     llvm::GlobalValue::PrivateLinkage, typeNameStrConst,
-                    ".str.typename." + typeName
+                    ".str.typename." + runtimeTypeName
                 );
                 llvm::Value* typeNamePtr = builder->CreateBitCast(typeNameGlobal, int8PtrType);
 

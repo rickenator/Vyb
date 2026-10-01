@@ -4780,6 +4780,13 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
             // notype() and bare() intrinsics - forward the inner value
             node->arguments[0]->accept(*this);
             // m_currentLLVMValue is already set to the inner expression's result
+            if (identCallee->name == "bare" && m_currentLLVMValue) {
+                // #383: `bare(x)` hands the value on untouched, so the request for raw
+                // field values has to travel with the value itself -- record it here
+                // and let the serialization site (cgen_string.cpp) see it. This is the
+                // only place that knows the expression was wrapped in bare().
+                bareSerializationValues.push_back(m_currentLLVMValue);
+            }
             return;
         }
         else if (identCallee->name == "deserial") {

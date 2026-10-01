@@ -233,6 +233,27 @@ char* __vyb_complex_to_json_with_metadata(void* instance, VybTypeMetadata* metad
     return b.data ? b.data : strdup("{}");
 }
 
+// #383: `bare(...)` -- the field values in declaration order, no keys. Same walk as
+// push_json_struct, minus the name and the ":" so the result is a JSON array.
+static void push_json_struct_values(JsonBuf* b, void* inst, VybTypeMetadata* m) {
+    jb_s(b, "[");
+    for (size_t i = 0; i < m->num_fields; i++) {
+        if (i) jb_s(b, ", ");
+        VybFieldMetadata* f = &m->fields[i];
+        push_json_value(b, (char*)inst + f->offset, f->type_name);
+    }
+    jb_s(b, "]");
+}
+
+char* __vyb_complex_to_json_values_with_metadata(void* instance, VybTypeMetadata* metadata) {
+    if (!instance || !metadata) {
+        return strdup("null");
+    }
+    JsonBuf b = { 0 };
+    push_json_struct_values(&b, instance, metadata);
+    return b.data ? b.data : strdup("[]");
+}
+
 // recursive-descent JSON deserializer (mirrors the growable serializer): parses
 // Int/Float/Bool/String scalars, Vec<T> arrays, and nested structs at any depth,
 // writing each value into its field slot (or Vec element slot). Registered

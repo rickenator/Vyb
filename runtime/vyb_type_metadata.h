@@ -77,6 +77,12 @@ VybEnumMetadata* __vyb_lookup_enum(const char* type_name);
 // JSON serialization using type metadata
 char* __vyb_complex_to_json_with_metadata(void* instance, VybTypeMetadata* metadata);
 
+// #383: the *values* path for `bare(...)` -- same field walk as the keyed-object
+// emitter, with the names dropped, so a struct comes out as `[v0, v1, ...]` in
+// declaration order. `__vyb_complex_to_json` routes to it when codegen marks the
+// type name it hands over (see the "bare:" prefix there).
+char* __vyb_complex_to_json_values_with_metadata(void* instance, VybTypeMetadata* metadata);
+
 // JSON deserialization using type metadata
 void* __vyb_complex_from_json_with_metadata(const char* json_str, VybTypeMetadata* metadata);
 
