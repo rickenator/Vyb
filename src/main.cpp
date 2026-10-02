@@ -1722,6 +1722,22 @@ std::vector<fs::path> project_module_paths(const vyb::Manifest& m) {
             paths.push_back(p);
             auto depSrc = p / "src";
             if (fs::is_directory(depSrc)) paths.push_back(depSrc);
+            // #418: a path dep whose directory is a PACKAGE (`<dir>/mod.vyb`) must also
+            // resolve as `import <depname>` — the spelling every other dependency
+            // source uses, and the one `vyb mod install` writes into vyb.toml.
+            // Resolution tries `<root>/<name>.vyb` then `<root>/<name>/mod.vyb`, so the
+            // package shape resolves from the dep's PARENT directory
+            // (`<parent>/<name>/mod.vyb`). Added only for that shape; the dep dir
+            // stays a root, so the older `import mod` spelling keeps working, and a
+            // plain module directory (modules named `<depname>.vyb`, no mod.vyb — the
+            // demos/legit_smuggle shape) is untouched.
+            if (fs::exists(p / "mod.vyb")) {
+                fs::path parent = p.parent_path();
+                if (!parent.empty() &&
+                    std::find(paths.begin(), paths.end(), parent) == paths.end()) {
+                    paths.push_back(parent);
+                }
+            }
         } else if (d.source == "github" || d.source == "git" || d.source == "version") {
             // `github:` / `git:` / registry `version:` deps materialize as
             // .vybmod/<name>/mod.vyb, so the search path is the .vybmod CONTAINER
@@ -4246,6 +4262,16 @@ static int mod_fetch_github(const std::string& ownerRepoPath, const std::string&
     if (owner.empty() || repo.empty() || subpath.empty()) { std::cerr << "Error: github spec malformed\n"; return 1; }
     std::string base = fs::path(subpath).filename().string();
     std::string name = (base.size() > 4 && base.rfind(".vyb") == base.size() - 4) ? base.substr(0, base.size() - 4) : base;
+    // #418: a package's conventional module file is `<dir>/mod.vyb`, so the package IS
+    // its directory (`github:owner/repo/stdlib/base64/mod.vyb` -> `base64`). That is the
+    // name a consumer imports and the name the dependency is declared under; naming the
+    // package after the file STEM made every such install collide on `mod` and left the
+    // declared dependency with nothing to consume. A bare `<dir>/thing.vyb` keeps its
+    // own stem.
+    if (name == "mod") {
+        std::string parent = fs::path(subpath).parent_path().filename().string();
+        if (!parent.empty() && parent != "." && parent != "/") name = parent;
+    }
     if (name.empty()) name = "mod";
     std::string rawPath = "/" + owner + "/" + repo + "/main/" + subpath;
 
@@ -4563,16 +4589,41 @@ static int mod_install(const std::string& spec, const std::string& exePath, bool
         std::string body;
         { std::ifstream f(tomlPath); std::ostringstream ss; ss << f.rdbuf(); body = ss.str(); }
         std::string depLine = name + " = { path = \".vybmod/" + name + "\" }";
-        if (body.find(depLine) == std::string::npos) {
-            if (body.find("[dependencies]") == std::string::npos) {
-                if (!body.empty() && body.back() != '\n') body += "\n";
-                body += "[dependencies]\n";
+        // #418: rewrite an EXISTING `<name> = { ... }` entry in place rather than adding a
+        // second one for the same name. The common case is a manifest that already
+        // declares `name = { github = "..." }`, and installing must turn that
+        // declaration into the local path it just materialized (the "install resolves,
+        // build consumes" contract). Leaving it alone put a duplicate key in
+        // [dependencies] while the stale remote declaration kept resolving.
+        {
+            std::istringstream in(body);
+            std::ostringstream out;
+            std::string line;
+            bool replaced = false;
+            while (std::getline(in, line)) {
+                size_t b = line.find_first_not_of(" \t");
+                std::string trimmed = (b == std::string::npos) ? "" : line.substr(b);
+                if (trimmed.rfind(name + " =", 0) == 0) {
+                    out << "  " << depLine << "\n";
+                    replaced = true;
+                    continue;
+                }
+                out << line << "\n";
             }
-            size_t pos = body.find("[dependencies]");
-            size_t ins = body.find('\n', pos);
-            ins = (ins == std::string::npos) ? body.size() : ins + 1;
-            body.insert(ins, "  " + depLine + "\n");
-            std::ofstream f(tomlPath, std::ios::trunc); f << body;
+            if (replaced) {
+                body = out.str();
+                std::ofstream f(tomlPath, std::ios::trunc); f << body;
+            } else if (body.find(depLine) == std::string::npos) {
+                if (body.find("[dependencies]") == std::string::npos) {
+                    if (!body.empty() && body.back() != '\n') body += "\n";
+                    body += "[dependencies]\n";
+                }
+                size_t pos = body.find("[dependencies]");
+                size_t ins = body.find('\n', pos);
+                ins = (ins == std::string::npos) ? body.size() : ins + 1;
+                body.insert(ins, "  " + depLine + "\n");
+                std::ofstream f(tomlPath, std::ios::trunc); f << body;
+            }
         }
     }
     std::cout << "installed " << name << " from " << src

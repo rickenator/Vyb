@@ -131,17 +131,38 @@ github:owner/repo/path@sha256:HEX
    mismatch is a **hard error** that aborts the install and reports **both** the
    expected hexadecimal digest and the actual one computed from the fetched
    bytes, so the discrepancy is visible at a glance.
-3. **Materialize** — writes the fetched module (and its relative-import
-   siblings) into the project-local directory
-   `.vybmod/owner/repo/` (mirroring the spec's `owner/repo`).
-4. **Record in the lockfile** — appends `name -> { source, sha256 }` to
-   `vyb.lock`, where `source` is the full spec the module was installed from and
-   `sha256` its integrity digest.
-5. **Register the dependency** — unless an entry already exists, adds
-   `name = { path = ".vybmod/owner/repo" }` to the project's `vyb.toml`
-   `[dependencies]` table, making the installed module resolve as an ordinary
-   local path dependency. If the `name` is already present it is left
-   untouched.
+3. **Materialize** — writes the fetched module file into the project-local
+   `.vybmod/<name>/` directory, `<name>` being the package name (below). The
+   co-located `vyb.toml` is fetched too (best effort) so the package's declared
+   `[mod] capabilities` / freedom boundary can gate the install.
+4. **Record in the lockfile** — rewrites the `<name> = { source, sha256 }` entry
+   in `vyb.lock`, where `source` is the full spec the module was installed from
+   and `sha256` its integrity digest; a privileged package also records
+   `capabilities = [...]` / `freedom = true`, which is what lets a second install
+   skip the trust prompt.
+5. **Register the dependency** — rewrites an EXISTING `<name> = { ... }` line in
+   the project's `vyb.toml` `[dependencies]` to
+   `name = { path = ".vybmod/<name>" }` (the common case: the manifest already
+   declares `name = { github = "..." }`), or inserts that line when the name is
+   absent, so the installed module resolves as an ordinary local path
+   dependency. (#418: it used to add a SECOND entry and leave the remote
+   declaration resolving, so a dependency declared under any name other than the
+   installed one had nothing to consume.)
+
+**Package name.** A package's conventional module file is `<dir>/mod.vyb`, so
+the package is its DIRECTORY: `github:owner/repo/stdlib/base64/mod.vyb` installs
+as `base64`. A spec that names a module file directly
+(`github:owner/repo/bindings/cuda.vyb`) uses that file's stem. (#418: the name
+used to be the module file's stem, so every `.../mod.vyb` spec collided on
+`mod`.)
+
+**Import spelling.** `import <name>` works for every dependency source. A `path`
+dependency whose directory is a package (`<dir>/mod.vyb`) resolves through the
+directory's PARENT (`<parent>/<name>/mod.vyb`), which is the shape
+`vyb mod install` writes into the manifest; a plain module directory (modules
+named `<name>.vyb`, no `mod.vyb` — the `demos/legit_smuggle` shape) resolves
+through the dependency directory itself. A package directory keeps resolving
+under its old file-stem spelling too.
 
 ### Integrity model
 
