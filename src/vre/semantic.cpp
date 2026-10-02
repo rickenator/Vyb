@@ -2188,6 +2188,28 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
 
             ast::TypeNode* innerType = argTypeName->genericArgs[0].get();
 
+            // A shared `our<T>` over a PRIMITIVE payload is stored inline (no heap
+            // box, no control block), so there is no weak count to take and no object
+            // to observe. `soft(our(5))` used to pass this check and reach codegen,
+            // which emitted `load i32, i64 5` / `call void @free(i64 5)` -- invalid IR
+            // that killed the JIT with SIGSEGV (exit 139) instead of reporting anything.
+            // Refuse it here, alongside the notype() primitive rule (#427 defect 2).
+            static const std::set<std::string> inlineOwningTypes = {
+                "Int", "Int8", "Int16", "Int32", "Int64",
+                "UInt8", "UInt16", "UInt32", "UInt64",
+                "Float", "Float32", "Float64",
+                "Bool", "Char", "Rune",
+                "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64"
+            };
+            if (innerType) {
+                std::string innerName = innerType->toString();
+                if (inlineOwningTypes.count(innerName)) {
+                    addError("soft() requires a shared `our<T>` over a struct value: `our<" + innerName +
+                             ">` is stored inline and has no control block", node);
+                    return;
+                }
+            }
+
             // Create mild<T> type
             auto mildId = std::make_unique<ast::Identifier>(node->loc, "mild");
             std::vector<ast::TypeNodePtr> mildArgs;

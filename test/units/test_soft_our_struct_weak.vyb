@@ -1,0 +1,18 @@
+// @test: soft() over a struct `our<T>` still yields a weak handle that observes the drop (#427 defect 2, positive side)
+// @description: the counterpart to test_soft_primitive_refused.vyb: `soft(our(A { v: 5 }))` takes a
+//   weak count on the temporary's control block, the temporary's strong ref is dropped by soft()
+//   itself, and the returned `mild<A>` therefore reports released=true -- the object was freed while
+//   the weak handle lives on. A struct payload is heap-boxed and control-block backed, so the
+//   primitive refusal must not touch it.
+// @category: ownership
+// @expect-output: released=true
+// @expect-return: 0
+
+share(all)
+struct A { v<Int> }
+
+main()<Int> -> {
+    m<mild<A>> = soft(our(A { v: 5 }))
+    println("released=" + m.released().to_string())
+    return 0
+}
