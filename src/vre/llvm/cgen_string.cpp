@@ -552,6 +552,21 @@ llvm::Value* LLVMCodegen::generateTaggedEnumToString(llvm::Value* value, const T
 }
 
 // Enhanced string concatenation that handles mixed types by converting non-strings to strings
+llvm::Value* LLVMCodegen::loadHandleStringPayload(llvm::Value* v, const vyb::ast::TypeNode* tn) {
+    if (!v || !tn || !v->getType()->isPointerTy()) return v;
+    auto* tnn = dynamic_cast<const vyb::ast::TypeName*>(tn);
+    if (!tnn || !tnn->identifier || tnn->genericArgs.empty()) return v;
+    const std::string& head = tnn->identifier->name;
+    if (head != "my" && head != "our" && head != "mild" && head != "their") return v;
+    const vyb::ast::TypeNode* inner = tnn->genericArgs[0].get();
+    if (!inner) return v;
+    const std::string innerName = inner->toString();
+    if (innerName != "String" && innerName != "string") return v;
+    llvm::Type* strTy = codegenType(const_cast<vyb::ast::TypeNode*>(inner));
+    if (!strTy || !strTy->isStructTy()) return v;
+    return builder->CreateLoad(strTy, v, "handle.str.load");
+}
+
 llvm::Value* LLVMCodegen::generateMixedStringConcatenation(llvm::Value* leftValue, llvm::Value* rightValue,
                                                          vyb::ast::TypeNode* leftTypeNode, vyb::ast::TypeNode* rightTypeNode,
                                                          SourceLocation loc, bool freeLeftOwnedTemp, bool freeRightOwnedTemp) {
@@ -559,6 +574,11 @@ llvm::Value* LLVMCodegen::generateMixedStringConcatenation(llvm::Value* leftValu
         logError(loc, "Invalid operands for mixed string concatenation");
         return nullptr;
     }
+
+    // A handle whose payload is a String arrives here as a pointer to the block; load
+    // through it so the operand is treated as the string it owns (#427 defect 10).
+    leftValue = loadHandleStringPayload(leftValue, leftTypeNode);
+    rightValue = loadHandleStringPayload(rightValue, rightTypeNode);
 
     llvm::Value* leftString = nullptr;
     llvm::Value* rightString = nullptr;

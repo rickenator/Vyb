@@ -704,6 +704,14 @@ private:
     llvm::Function* getOrCreateMemsetFunction();
     llvm::Function* getOrCreateMemcpyFunction();
     llvm::StructType* getControlBlockType(llvm::Type* objectPtrType);
+
+    // A handle whose payload is a String (`my<String>`, `our<String>`, `mild<String>`,
+    // `their<String>`) is represented as a POINTER to the String block, so a value
+    // context that wants the string itself must load through it: printing or
+    // concatenating the handle used to feed the pointer to the to_string path and the
+    // program emitted heap bytes (#427 defect 10). Returns `v` unchanged when `tn` is
+    // not such a handle or `v` is not a pointer.
+    llvm::Value* loadHandleStringPayload(llvm::Value* v, const vyb::ast::TypeNode* tn);
     bool isVecStructType(llvm::Type* type); // Check if LLVM type matches Vec{T, i64, i64} layout
     bool isVybStringStructType(llvm::Type* type); // `{ ptr, i64 }` Vyb String layout
     bool isOptionalStructType(llvm::Type* type); // literal `{ T, i1 }` native `T?`

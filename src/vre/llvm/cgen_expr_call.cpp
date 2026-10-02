@@ -1416,6 +1416,11 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                 arg = m_currentLLVMValue;
             }
             if (!arg) return nullptr;
+            // A handle whose payload is a String (`my<String>`) is a pointer to the
+            // String block: load through it so `println(handle)` prints the string it
+            // owns instead of feeding the pointer to the serializer, which emitted heap
+            // bytes (#427 defect 10).
+            arg = loadHandleStringPayload(arg, typeOfNode(argExpr).get());
             llvm::Value* serialized = nullptr;
             if (typeOfNode(argExpr)) {
                 auto* argType = typeOfNode(argExpr).get();
@@ -1485,6 +1490,12 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
         llvm::Value* serializedValue = nullptr;
         bool serializedTmpIsHeap = false;
         bool stringArgOwnedTemp = exprProducesOwnedStringTemp(node->arguments[0].get());
+
+        // A handle whose payload is a String (`my<String>`) is a pointer to the String
+        // block: load through it so the type priority chain below sees the string it owns
+        // instead of dropping to the to_string fallback, which emitted heap bytes
+        // (#427 defect 10).
+        arg = loadHandleStringPayload(arg, typeOfNode(node->arguments[0]).get());
 
         // Check for string type first (Vyb string struct {ptr, len})
         if (typeOfNode(node->arguments[0])) {

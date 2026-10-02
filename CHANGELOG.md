@@ -108,6 +108,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `doc/THREAD_BOUNDARY_SCOPE.md` (whose step list is now fully closed).
 
 ### Fixed
+- **A `my<String>` handle prints the string it owns (#427)** — a `my<String>` is represented as a
+  POINTER to the String block, and both print paths handed that pointer to the serializer, so
+  `println(s)` and `println("x=" + s)` emitted heap bytes (as did reading a `my<String>` field). The
+  single-argument `println` path dispatched on the DECLARED type name (`"my<String>"`, not `"String"`)
+  and fell through to the `to_string` fallback; the concatenation path treated the pointer as a string
+  operand. Both now load through the handle first via a shared `loadHandleStringPayload(value,
+  typeNode)`, which reads the payload from the AST type so no LLVM pointer introspection is needed.
+  Locked in by `test/units/test_my_string_handle_prints.vyb` and
+  `test/units/test_my_string_handle_concat.vyb` (both emitted garbage before). Still unsupported
+  (documented on #427): copying a payload out into a plain binding (`t<String> = s`) is refused by the
+  type check, handles have no methods (`s.len()`), and two handles cannot be added directly.
 - **A bind method called on an ownership handle reaches the object (#427)** — a bind method with a
   by-ref `their<T>` self, called with a HANDLE receiver, was passed the receiver's CONTROL BLOCK
   rather than the object: the callee read the block's fields as the struct's fields (a probing bind
