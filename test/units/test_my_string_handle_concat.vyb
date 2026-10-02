@@ -1,0 +1,21 @@
+// @test: concatenating and reading a `my<String>` field prints the owned text (#427 defect 10)
+// @description: the concatenation path treated a handle operand's pointer as a string, so
+//   `println("c=" + u)` printed the prefix followed by heap bytes, and reading a `my<String>`
+//   struct field (`p.meta`) printed bytes too -- the field access already unwraps the handle for
+//   the member, but the resulting pointer still reached the serializer as a value. Both operands now
+//   load through the handle first (`loadHandleStringPayload`) before the type dispatch. Two handles
+//   must not be added directly (`my<String> + my<String>` is refused by semantic analysis), so the
+//   chain pairs each handle with a plain literal.
+// @category: ownership, string
+// @expect-output: c=concat-ok m=field-ok
+// @expect-return: 0
+
+share(all)
+struct P { meta<my<String>> }
+
+main()<Int> -> {
+    u<my<String>> = my("concat-ok")
+    p<P> = P { meta: my("field-ok") }
+    println("c=" + u + " m=" + p.meta)
+    return 0
+}

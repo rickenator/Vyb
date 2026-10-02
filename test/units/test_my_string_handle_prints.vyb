@@ -1,0 +1,15 @@
+// @test: `println(<my<String>>)` prints the string the handle owns (#427 defect 10)
+// @description: a `my<String>` is represented as a POINTER to the String block. The
+//   single-argument `println` path dispatched on the declared type name -- "my<String>", which is
+//   not "String" -- so it fell through to the `to_string` fallback and printed heap bytes. It now
+//   loads through the handle first (`loadHandleStringPayload`), so the argument is the String it
+//   owns. The value is chosen to be unique so the assertion cannot accidentally match another line.
+// @category: ownership, string
+// @expect-output: plain-ok
+// @expect-return: 0
+
+main()<Int> -> {
+    t<my<String>> = my("plain-ok")
+    println(t)
+    return 0
+}
