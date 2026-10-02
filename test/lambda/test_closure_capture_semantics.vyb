@@ -1,0 +1,24 @@
+// @test: immutable captures snapshot; a mutable capture writes back through the binding
+// @description: the measured capture contract, pinned before the boxed-capture change
+//   (#384) so the rewrite cannot silently alter it. A closure that only READS a local
+//   captures a snapshot of it (a later mutation is invisible through that closure); a
+//   closure that ASSIGNS to the local holds the enclosing frame's address and writes
+//   through it, so the mutation is visible to the enclosing frame. Within the frame's
+//   lifetime both behaviours must survive the move to an env-owned heap cell.
+// @category: lambda, closure, capture
+// @expect-output: ro=1 rw=2 outer=2 ro_after=1
+// @expect-return: 0
+
+main()<Int> -> {
+    c<Int> = 1
+    ro<fn() -> Int> = || -> { return c }
+    rw<fn() -> Int> = || -> { c = c + 1; return c }
+
+    r1<Int> = ro()
+    r2<Int> = rw()
+    r3<Int> = c
+    r4<Int> = ro()
+    println("ro=" + r1.to_string() + " rw=" + r2.to_string() +
+            " outer=" + r3.to_string() + " ro_after=" + r4.to_string())
+    return 0
+}

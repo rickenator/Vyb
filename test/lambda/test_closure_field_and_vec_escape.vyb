@@ -1,0 +1,39 @@
+// @test: a closure stored in a struct field or a Vec element survives its defining frame
+// @description: the "held" escape shapes from the #384 step-0 probe. A closure whose
+//   captures are immutable is a value with its own heap environment, so one stored into a
+//   struct field or pushed into a Vec and called after the defining function has exited
+//   still reads the captured value. Both are reached by binding the closure to a local
+//   first (`g<fn() -> Int> = h.f` / `v.get(0)`); calling a closure-typed FIELD directly
+//   (`h.f()`) is a separate member-call gap, not an ownership one.
+// @category: lambda, closure, escape, struct, vec
+// @expect-output: field=7 vec=9
+// @expect-return: 0
+
+struct Holder {
+    f<fn() -> Int>
+}
+
+makeHolder()<Holder> -> {
+    c<Int> = 7
+    return Holder { f = || -> { return c } }
+}
+
+makeVec()<Vec<fn() -> Int>> -> {
+    c<Int> = 9
+    v<Vec<fn() -> Int>> = Vec()
+    v.push(|| -> { return c })
+    return v
+}
+
+main()<Int> -> {
+    h<Holder> = makeHolder()
+    g<fn() -> Int> = h.f
+    a<Int> = g()
+
+    v<Vec<fn() -> Int>> = makeVec()
+    f<fn() -> Int> = v.get(0)
+    b<Int> = f()
+
+    println("field=" + a.to_string() + " vec=" + b.to_string())
+    return 0
+}
