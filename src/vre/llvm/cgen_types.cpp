@@ -688,8 +688,8 @@ llvm::Type* LLVMCodegen::codegenType(vyb::ast::TypeNode* typeNode) {
                                           << existingType->isOpaque() << std::endl;
                                 llvmType = existingType;
                             } else {
-                                // This case should ideally be caught by semantic analysis if it\'s an undefined type.
-                                // If it\'s a type that will be defined later (e.g. in a different module or due to ordering),
+                                // This case should ideally be caught by semantic analysis if it's an undefined type.
+                                // If it's a type that will be defined later (e.g. in a different module or due to ordering),
                                 // creating an opaque struct might be an option, but can be risky.
                                 // llvmType = llvm::StructType::create(*context, typeNameStr);
                                 logError(typeNode->loc, "Unknown type identifier: " + typeNameStr + ". It might be a forward-declared type not yet fully defined or an undeclared type.");
