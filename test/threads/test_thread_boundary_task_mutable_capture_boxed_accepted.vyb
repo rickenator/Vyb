@@ -1,0 +1,30 @@
+// @test: task_spawn accepts a boxed mutable capture
+// @description: The task_spawn counterpart of the thread_spawn fixture.
+//   __vyb_task_spawn runs its closure on a pthread, so the mutable capture used
+//   to be refused for holding the defining frame's address. With #384 checkpoint
+//   (b)(1) the capture is boxed into a heap cell owned by the closure
+//   environment, so the refusal is lifted and the task delivers the value it
+//   wrote inside the cell.
+// @category: threads, tasks, thread-boundary, ownership, lambda, closure, mutable
+// @expect: pass
+// @expect-output: task=42
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+
+import tasks::{task_spawn, task_await, task_free}
+
+main()<Int> -> {
+    n<Int> = 41
+    t<Int> = task_spawn(|| -> {
+        n = n + 1
+        return n
+    }) else -1
+    if (t < 0) { return 1 }
+
+    got<Int> = task_await(t)
+    if (got != 42) { return 2 }
+    task_free(t)
+
+    println("task=" + got.to_string())
+    return 0
+}

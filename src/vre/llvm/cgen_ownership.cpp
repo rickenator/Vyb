@@ -1827,6 +1827,78 @@ void LLVMCodegen::releaseClosureAlloca(llvm::Value* allocaInst) {
     releaseClosureValue(closureVal);
 }
 
+// #384 checkpoint b(1): reclaim what a boxed mutable-capture cell owns. The
+// cell holds a value of `astType` inline; before the cell block is freed, any
+// storage that value owns has to be released -- a String buffer, a Vec's
+// element storage (recursively), the heap object behind a `my<T>`, an
+// `our<T>`/`mild<T>` control block, a nested closure's environment, or the
+// owned fields of a struct. A primitive owns nothing and the caller frees the
+// cell.
+void LLVMCodegen::reclaimBoxedCapturePayload(llvm::Value* cellPtr,
+                                             const vyb::ast::TypeNode* astType,
+                                             const std::string& tag) {
+    if (!cellPtr || !astType || !builder || !currentFunction) return;
+    llvm::Type* cellTy = codegenType(const_cast<vyb::ast::TypeNode*>(astType));
+    if (!cellTy) return;
+    llvm::PointerType* rawPtr = llvm::PointerType::get(*context, 0);
+
+    if (isOwnedFieldString(astType)) {
+        if (!isVybStringStructType(cellTy)) return;
+        llvm::Value* strVal = builder->CreateLoad(cellTy, cellPtr, tag + ".str");
+        releaseStringValue(strVal);
+        return;
+    }
+    if (isVecTypeNode(astType)) {
+        reclaimVecStorage(cellPtr, cellTy, astType, tag + ".vec");
+        return;
+    }
+    if (const vyb::ast::TypeNode* myArg = myTypeArg(astType)) {
+        if (!cellTy->isPointerTy() || !isMyOwnedStructTypeNode(astType)) return;
+        llvm::Type* pointeeTy = codegenType(const_cast<vyb::ast::TypeNode*>(myArg));
+        if (auto* pois = llvm::dyn_cast<llvm::StructType>(pointeeTy)) {
+            llvm::Value* heapPtr = builder->CreateLoad(rawPtr, cellPtr, tag + ".myptr");
+            llvm::Value* isNull = builder->CreateICmpEQ(
+                heapPtr, llvm::ConstantPointerNull::get(rawPtr), tag + ".mynull");
+            llvm::BasicBlock* freeBB = llvm::BasicBlock::Create(*context, tag + ".my.free", currentFunction);
+            llvm::BasicBlock* contBB = llvm::BasicBlock::Create(*context, tag + ".my.cont", currentFunction);
+            builder->CreateCondBr(isNull, contBB, freeBB);
+            builder->SetInsertPoint(freeBB);
+            std::set<std::string> visited;
+            reclaimStructOwnedFieldsAt(heapPtr, myArg, pois, visited);
+            builder->CreateCall(getOrCreateFreeFunction(), {heapPtr});
+            builder->CreateBr(contBB);
+            builder->SetInsertPoint(contBB);
+        }
+        return;
+    }
+    if (isRefTypeNode(astType, "our") || isRefTypeNode(astType, "mild")) {
+        if (!cellTy->isPointerTy()) return;
+        llvm::Value* cb = builder->CreateLoad(rawPtr, cellPtr, tag + ".cb");
+        if (isRefTypeNode(astType, "mild")) {
+            releaseMildControlBlock(cb, tag + ".mild");
+        } else {
+            const vyb::ast::TypeNode* pointeeAst = ourPointeeOf(astType);
+            llvm::Type* pointeeLlvm = pointeeAst
+                ? codegenType(const_cast<vyb::ast::TypeNode*>(pointeeAst)) : nullptr;
+            std::set<std::string> visited;
+            releaseOurControlBlock(cb, tag + ".our", pointeeAst, pointeeLlvm, &visited);
+        }
+        return;
+    }
+    if (isClosureStructType(cellTy)) {
+        llvm::Value* cl = builder->CreateLoad(cellTy, cellPtr, tag + ".cl");
+        releaseClosureValue(cl);
+        return;
+    }
+    if (isKnownStructTypeNode(astType)) {
+        if (auto* st = llvm::dyn_cast<llvm::StructType>(cellTy)) {
+            std::set<std::string> visited;
+            reclaimStructOwnedFieldsAt(cellPtr, astType, st, visited);
+        }
+        return;
+    }
+}
+
 // Build the per-layout destructor for a closure capture environment that owns
 // transferred standalone `my<Struct>` payloads. The runtime calls the returned
 // function with the env block when its last reference is dropped (the cap_dtor
@@ -1837,8 +1909,9 @@ void LLVMCodegen::releaseClosureAlloca(llvm::Value* allocaInst) {
 // reclaim.
 llvm::Function* LLVMCodegen::generateClosureEnvDtor(
         llvm::StructType* envTy, const std::string& tag,
-        const std::vector<std::pair<size_t, const vyb::ast::TypeNode*>>& ownedFields) {
-    if (!envTy || ownedFields.empty()) return nullptr;
+        const std::vector<std::pair<size_t, const vyb::ast::TypeNode*>>& ownedFields,
+        const std::vector<std::pair<size_t, const vyb::ast::TypeNode*>>& boxedFields) {
+    if (!envTy || (ownedFields.empty() && boxedFields.empty())) return nullptr;
 
     llvm::PointerType* rawPtr = llvm::PointerType::get(*context, 0);
     llvm::FunctionType* dtorTy = llvm::FunctionType::get(
@@ -1878,6 +1951,29 @@ llvm::Function* LLVMCodegen::generateClosureEnvDtor(
                                        llvm::cast<llvm::StructType>(pointeeLL), visited);
             builder->CreateCall(getOrCreateFreeFunction(), {heapPtr});
         }
+        builder->CreateBr(contBB);
+        builder->SetInsertPoint(contBB);
+    }
+    // #384 b(1): each boxed mutable-capture field holds a heap cell with the
+    // captured value stored inline. Reclaim whatever that value owns (a String
+    // buffer, a Vec's storage, a my<T> object, an our/mild control block, a
+    // struct's owned fields) and then free the cell block. Called before the
+    // environment itself is freed.
+    for (const auto& entry : boxedFields) {
+        size_t ix = entry.first;
+        const vyb::ast::TypeNode* cellAst = entry.second;
+        if (ix + 2 >= envTy->getNumElements()) continue;
+        if (!cellAst) continue;
+        llvm::Value* fieldPtr = builder->CreateStructGEP(envTy, envCast, ix + 2, "env.boxed.item");
+        llvm::Value* cellPtr = builder->CreateLoad(rawPtr, fieldPtr, "env.boxed.cell");
+        llvm::Value* isNull = builder->CreateICmpEQ(cellPtr, nullPtr, "env.boxed.null");
+
+        llvm::BasicBlock* freeBB = llvm::BasicBlock::Create(*context, "env.boxed.free", currentFunction);
+        llvm::BasicBlock* contBB = llvm::BasicBlock::Create(*context, "env.boxed.cont", currentFunction);
+        builder->CreateCondBr(isNull, contBB, freeBB);
+        builder->SetInsertPoint(freeBB);
+        reclaimBoxedCapturePayload(cellPtr, cellAst, "env.boxed");
+        builder->CreateCall(getOrCreateFreeFunction(), {cellPtr});
         builder->CreateBr(contBB);
         builder->SetInsertPoint(contBB);
     }
@@ -2045,6 +2141,39 @@ llvm::Value* LLVMCodegen::copyOwnedValueForBinding(llvm::Value* value,
         return generateStructDeepCopy(value, astType, llvm::cast<llvm::StructType>(ty));
     }
     return value;
+}
+
+// #384 b(1): the mirror of reclaimBoxedCapturePayload -- produce a value the
+// boxed cell OWNS, so the cell can outlive the frame without aliasing its
+// storage. A String / `our<T>` / `mild<T>` / closure value is reference counted,
+// so taking a reference is enough (the destructor drops it). A Vec or a struct
+// with owned fields must be deep-copied (the frame keeps and reclaims its own),
+// and a `my<Struct>` must be a fresh object (the frame frees its own). A scalar
+// is copied verbatim.
+llvm::Value* LLVMCodegen::copyCaptureValueForCell(llvm::Value* value,
+                                                  const vyb::ast::TypeNode* astType,
+                                                  llvm::Type* ty) {
+    if (!value || !astType || !ty) return value;
+    if (const vyb::ast::TypeNode* myArg = myTypeArg(astType)) {
+        if (ty->isPointerTy() && isMyOwnedStructTypeNode(astType)) {
+            llvm::Type* pointeeTy = codegenType(const_cast<vyb::ast::TypeNode*>(myArg));
+            if (auto* pois = llvm::dyn_cast<llvm::StructType>(pointeeTy)) {
+                return deepCopyMyStruct(value, myArg, pois);
+            }
+        }
+        return value;
+    }
+    if (isRefTypeNode(astType, "our") || isRefTypeNode(astType, "mild")) {
+        if (!ty->isPointerTy()) return value;
+        if (isRefTypeNode(astType, "mild")) retainMildControlBlock(value, "cap.cell.mild");
+        else retainOurControlBlock(value, "cap.cell.our");
+        return value;
+    }
+    if (isClosureStructType(ty)) {
+        retainClosureValue(value);
+        return value;
+    }
+    return copyOwnedValueForBinding(value, astType, ty);
 }
 
 void LLVMCodegen::releaseStringAlloca(llvm::Value* allocaInst) {

@@ -1,0 +1,37 @@
+// @test: a boxed mutable capture whose value owns heap storage is reclaimed
+// @description: The payload half of #384 checkpoint (b)(1). A mutable capture
+//   whose declared type owns heap data (a Vec buffer, a String buffer) cannot be
+//   stored in the cell by a shallow copy -- the frame reclaims its own storage
+//   on exit, so the cell must own an independent deep copy and its destructor
+//   must reclaim that copy before freeing the cell. Functional output alone
+//   would not catch a missing reclaim: this fixture is also the LeakSanitizer
+//   proof (run under `build-asan/vyb` with detect_leaks=1).
+// @category: lambda, closure, mutable, escape, ownership, vec, string
+// @expect-output: veclen=1 strlen=5
+// @expect-return: 0
+
+makeVecHolder()<fn() -> Int> -> {
+    v<Vec<Int>> = Vec()
+    v.push(1)
+    return || -> {
+        w<Vec<Int>> = Vec()
+        w.push(7)
+        v = w
+        return v.len()
+    }
+}
+
+makeStringHolder()<fn() -> Int> -> {
+    s<String> = "ab"
+    return || -> {
+        s = "hello"
+        return s.len()
+    }
+}
+
+main()<Int> -> {
+    a<fn() -> Int> = makeVecHolder()
+    b<fn() -> Int> = makeStringHolder()
+    println("veclen=" + a().to_string() + " strlen=" + b().to_string())
+    return 0
+}

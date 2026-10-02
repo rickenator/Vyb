@@ -152,6 +152,12 @@ public:
     bool nodeOperandIsWildcardError(const vyb::ast::Node* n) const {
         return (nodeFacts(n) & vyb::analysis::OperandIsWildcardError) != 0;
     }
+    // #384 b(1): the semantic escape predicate decided this closure's mutable
+    // captures must be boxed into environment-owned heap cells because the
+    // closure value can outlive its defining frame.
+    bool nodeClosureMutablesBoxed(const vyb::ast::Node* n) const {
+        return (nodeFacts(n) & vyb::analysis::ClosureMutablesBoxed) != 0;
+    }
     // Record a fact for a node codegen built itself (the async worker cloned
     // from a failable function is the case that needs it).
     void setSynthFact(const vyb::ast::Node* n, unsigned bit, bool on = true) {
@@ -670,7 +676,21 @@ private:
     // owned fields and frees the heap block. Returns the function (or null).
     llvm::Function* generateClosureEnvDtor(
         llvm::StructType* envTy, const std::string& tag,
-        const std::vector<std::pair<size_t, const vyb::ast::TypeNode*>>& ownedFields);
+        const std::vector<std::pair<size_t, const vyb::ast::TypeNode*>>& ownedFields,
+        const std::vector<std::pair<size_t, const vyb::ast::TypeNode*>>& boxedFields = {});
+    // #384 b(1): reclaim the payload held inside a boxed mutable-capture cell
+    // (the cell holds a value of `astType` inline) before the cell block itself
+    // is freed -- a captured String/Vec/my<T>/our<T>/struct owns storage that
+    // would otherwise leak.
+    void reclaimBoxedCapturePayload(llvm::Value* cellPtr, const vyb::ast::TypeNode* astType,
+                                    const std::string& tag);
+    // #384 b(1): the value a boxed mutable-capture cell will OWN -- a deep copy
+    // for a Vec / owned struct, a fresh heap object for `my<Struct>`, a retained
+    // reference for a String / `our<T>` / `mild<T>` / closure value, identity for
+    // a scalar. Mirrors reclaimBoxedCapturePayload so exactly what the cell took
+    // is what the cell's destructor releases.
+    llvm::Value* copyCaptureValueForCell(llvm::Value* value, const vyb::ast::TypeNode* astType,
+                                         llvm::Type* ty);
     // Describes one owned parameter field inside an async-task environment.
     struct AsyncEnvField {
         size_t fieldIx = 0;                    // env struct field index to reclaim

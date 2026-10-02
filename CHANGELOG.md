@@ -10,6 +10,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Boxed mutable-capture closures — a closure with mutable captures can escape its
+  defining function (#384)** — the environment of a mutating closure used to hold the
+  *address* of the outer variable, so returning one was refused (it would dangle) and
+  storing one in a struct field or a `Vec` element silently yielded a dead frame's
+  address. The analyzer now records, as a node fact (`analysis::ClosureMutablesBoxed`),
+  whether a closure value reaches a position that can outlive its frame — a `return`,
+  a struct/aggregate or `Vec` element, a field/element assignment, or the
+  `thread_spawn`/`task_spawn` hand-off —
+  resolving one level of local binding (`f = || -> {...}` then `return f`). Codegen
+  then boxes each mutable capture into a heap cell owned by the closure environment,
+  initialised with an owned copy of the binding's value, and the generated environment
+  destructor reclaims the cell's payload and frees the block on the last release. The
+  compile-time refusal and the thread-boundary `handoffCapable` mutable-capture refusal
+  are conditional now: a mutable capture whose declared type cannot be boxed soundly
+  (a borrow, FFI handle, optional, array, tuple or unresolved name) keeps the previous
+  stack path and the previous refusal at a `return`. A closure that does not escape is
+  untouched — the write-back-through-the-frame contract and its fixtures are unchanged
+  (`test/lambda/test_closure_capture_semantics.vyb`,
+  `test_closure_two_over_one_binding.vyb`). Fixtures:
+  `test/lambda/test_closure_mutable_return_escapes.vyb`,
+  `test_closure_mutable_local_return.vyb`,
+  `test_closure_mutable_field_and_vec_escape.vyb`,
+  `test_closure_mutable_owned_capture_escape.vyb`,
+  `test/threads/test_thread_boundary_mutable_capture_boxed_accepted.vyb`,
+  `test_thread_boundary_task_mutable_capture_boxed_accepted.vyb`. The per-binding
+  shared cell (so the defining frame also observes an escaping closure's writes) is
+  checkpoint (c), still open; a `Vec<fn ...>` element environment is not released when
+  the Vec is reclaimed, and a closure assigned into a struct field is not owned by
+  that field — pre-existing storage-location ownership gaps filed together as #439.
 - **`VYBHOME` + a toplevel `SOURCEME_VYB`, so projects stop hardcoding the checkout
   (#424)** — Vyb now owns its own toolchain paths. Sourcing `SOURCEME_VYB` exports
   `VYBHOME` (the checkout root) and the derived `VYB` (`$VYBHOME/build/vyb`) and

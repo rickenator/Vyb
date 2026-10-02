@@ -1,0 +1,38 @@
+// @test: a mutable-capture closure returned through a local binding escapes
+// @description: The escape predicate resolves one level of local binding, so
+//   `f = || -> {...}` followed by `return f` boxes the closure's mutable
+//   captures exactly like a direct `return || -> {...}`. Without that the
+//   binding would hide the escape and the closure would keep the defining
+//   frame's address in its environment. The third case is a REASSIGNMENT
+//   (`f = <closure>` on an already-declared local): the binding map follows the
+//   new node, so the returned closure is boxed too.
+// @category: lambda, closure, mutable, escape, ownership
+// @expect-output: loc1=21 loc2=22 re1=41 re2=42
+// @expect-return: 0
+
+makeCounter()<fn() -> Int> -> {
+    n<Int> = 20
+    f<fn() -> Int> = || -> {
+        n = n + 1
+        return n
+    }
+    return f
+}
+
+makeRebound()<fn() -> Int> -> {
+    m<Int> = 40
+    f<fn() -> Int> = || -> { return m }
+    f = || -> {
+        m = m + 1
+        return m
+    }
+    return f
+}
+
+main()<Int> -> {
+    f<fn() -> Int> = makeCounter()
+    g<fn() -> Int> = makeRebound()
+    println("loc1=" + f().to_string() + " loc2=" + f().to_string() +
+            " re1=" + g().to_string() + " re2=" + g().to_string())
+    return 0
+}

@@ -1,0 +1,31 @@
+// @test: thread boundary accepts a boxed mutable capture
+// @description: #384 checkpoint (b)(1) makes the mutable-capture refusal
+//   conditional. A closure handed to another thread is escaping by definition,
+//   so its mutable captures are boxed into heap cells owned by the closure
+//   environment -- the environment no longer holds the spawner frame's address,
+//   so the hand-off is sound. The spawned closure reads and writes its own cell;
+//   the spawner's binding is a separate value and is deliberately NOT updated by
+//   the other thread (the write-back contract holds while the defining frame is
+//   alive and the closure does not escape).
+// @category: threads, thread-boundary, ownership, lambda, closure, mutable
+// @expect: pass
+// @expect-output: joined=1 spawner=0
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+
+import threads::{thread_spawn, thread_join}
+
+main()<Int> -> {
+    n<Int> = 0
+    th<Int> = thread_spawn(|| -> {
+        n = n + 1
+        return n
+    }) else -1
+    if (th < 0) { return 1 }
+
+    got<Int> = thread_join(th) else -2
+    if (got != 1) { return 2 }
+
+    println("joined=" + got.to_string() + " spawner=" + n.to_string())
+    return 0
+}

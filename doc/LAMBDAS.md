@@ -316,18 +316,18 @@ Everything the earlier draft listed here has since shipped — closure struct co
 (`test/lambda/test_closure_capture.vyb`), move capture
 (`test/lambda/test_closure_move_capture.vyb`), async lambdas
 (`test/async/async_lambda.vyb`), mutable capture write-back
-(`test/lambda/test_closure_mutable_capture.vyb`) and env refcounting with
-returned-closure release (`test/lambda/test_closure_our_capture.vyb`). What remains:
+(`test/lambda/test_closure_mutable_capture.vyb`), env refcounting with
+returned-closure release (`test/lambda/test_closure_our_capture.vyb`) and the boxed
+escaping mutable capture (`test/lambda/test_closure_mutable_return_escapes.vyb`).
+What remains:
 
-1. **A mutable-capture closure cannot escape its defining function** — the
-   environment holds the outer variable's *stack address*, so returning such a
-   closure is rejected at compile time instead of producing a use-after-free
-   (`test/lambda/test_closure_mutable_return_rejected.vyb`). Rust's `FnMut`
-   closures *can* be returned, so this is a real expressiveness difference.
-   Decision for 1.0: postponed (#359); relaxing it means an env-owned heap cell.
-2. **No generic lambdas** — `|x<T>| -> ...` (type parameters on closures) is
+1. **Generic lambdas** — `|x<T>| -> ...` (type parameters on closures) is
    unsupported: no parser/codegen path and no fixture. Decision for 1.0:
    postponed, recorded per #360.
+2. **The per-binding shared cell** — an *escaping* closure's mutable capture is
+   boxed into a cell the environment owns, so the defining frame does not observe
+   the closure's writes; sharing one cell across the frame and every closure over
+   that binding is checkpoint (c) of #384, not yet implemented.
 
 ## Future Enhancements
 
@@ -335,9 +335,10 @@ Both remaining items are **recorded decisions, not open wish-list entries** — 
 are roadmap items in `TODO.md` § "Lambda / Closures" and rows in
 `doc/FEATURE_STATUS.md`, so their status cannot silently drift:
 
-- **Boxed / lifetime-carrying mutable closures** (#359) — an env-owned heap cell in
-  place of the captured variable's stack address, which would let a mutating closure
-  be returned.
+- **The per-binding shared cell** (#384 checkpoint (c)) — one heap cell per captured
+  binding, shared by the defining frame and every closure over it, so the frame also
+  observes a mutation made through an *escaping* closure. The escaping-closure half
+  (each mutable capture gets its own env-owned cell) shipped in #384 (b)(1).
 - **Generic lambdas** (#360) — `|x<T>| -> ...` with type parameters, monomorphized
   per concrete type at the call site, mirroring generic-function monomorphization.
 

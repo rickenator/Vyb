@@ -91,11 +91,14 @@ What ships (all exercised under `test/ownership/`):
   parameter is a *value copy*; in-place access requires `borrow(x)` / `view(x)`, so
   "copy or reference" is a syntactic decision a reader can see, rather than an
   inferred one.
-- **A mutable-capture closure cannot escape its defining function.** The environment
-  holds the captured variable's *stack address*, so returning such a closure is
-  rejected at compile time (`test/lambda/test_closure_mutable_return_rejected.vyb`).
-  Rust's `FnMut` closures can be returned, so this is a real expressiveness loss —
-  recorded as a deliberate 1.0 postponement (#359), not an oversight.
+- **A mutable-capture closure may escape its defining function.** The environment stores the
+  captured variable's address, so such a closure must not outlive its frame — unless each mutable
+  capture can be boxed, which the compiler does when it sees the closure value leave the frame
+  (returned, stored into a field or a `Vec`, handed to a thread): the environment then owns a heap
+  cell holding the value, and the write inside the closure lands in that cell
+  (`test/lambda/test_closure_mutable_return_escapes.vyb`). A mutable capture whose declared type
+  has no sound cell representation (a borrow, FFI handle, optional, array, unresolved name) is
+  still refused at `return` — the one place it always was.
 
 ## How the comparison stays honest
 

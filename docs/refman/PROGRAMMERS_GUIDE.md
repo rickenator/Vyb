@@ -167,7 +167,7 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 ### Running the test suite
 
 ```bash
-# 1275 .vyb tests exercised through compile + run + output/return checks
+# 1278 .vyb tests exercised through compile + run + output/return checks
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test
 ```
 
@@ -588,6 +588,15 @@ readMine<fn(Int) -> Int> = |x<Int>| -> mine.n + x
   variable afterward is a **use-after-move** error.
 - A **`their<T>`/`view<T>` borrow capture** reads through the held reference
   without ownership.
+- A **mutable capture** stores the outer variable's address, so writes inside the
+  closure reach the enclosing scope while that frame lives. When the closure value
+  can outlive its frame — returned, stored into a struct field or a `Vec` element,
+  or handed to a spawn site — each mutable capture is instead **boxed**: the
+  environment owns a heap cell holding the value (deep-copying what the cell will
+  own), so the closure keeps working after the frame exits and the cell is freed
+  with the environment. A mutable capture whose declared type has no sound cell
+  representation (a borrow, an FFI handle, an optional, an array, or a name the
+  analysis cannot resolve) is still refused when such a closure is returned.
 - A closure that captures an owned struct **owns its payload**: the captured
   `String`/`Vec` fields stay alive even after the maker's scope exits (the env
   keeps a reference to the owned buffer).
@@ -2627,9 +2636,12 @@ ordinary types.
 
 Because the rule is structural, a `Vec<my<Int>>`, a struct with a `my<T>` field,
 or a `T?` over a borrow are all refused — the check walks fields and variant
-payloads, not just the declared type name. A *mutable* capture is refused
-regardless of the variable's type, because it holds the defining frame's
-address; capture by value, or share it as `our(x)`.
+payloads, not just the declared type name. A *mutable* capture is refused unless
+its declared type can be boxed soundly: at a spawn site the compiler boxes it into
+a heap cell owned by the closure environment, so the environment entry is no longer
+an address in the spawner's frame. A borrow, FFI handle, optional, array, tuple or
+unresolved name still cannot be boxed, so a mutable capture of one is refused —
+capture by value, or share it as `our(x)`.
 
 Two Vyb-specific refinements over Rust's `Send`/`Sync`:
 
@@ -2825,7 +2837,7 @@ Canonical suite runner — a Vyb program (`test/run_tests.vyb`), wired into CTes
 as `run-tests`:
 
 ```bash
-./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1275 tests)
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1278 tests)
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --category async  # filter by category
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --json results.json --evidence evidence.json
 ```
