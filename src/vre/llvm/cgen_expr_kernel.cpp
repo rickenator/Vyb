@@ -99,8 +99,40 @@ bool LLVMCodegen::emitKernelIntrinsic(vyb::ast::CallExpression* node) {
             llvm::Value* halfV = builder->CreateFPTrunc(f, llvm::Type::getHalfTy(*context), "h.half");
             enc = builder->CreateBitCast(halfV, i16Ty, "h.enc");
         } else {
+            // bf16 = round-to-nearest-even on the f32 pattern, NOT a truncation. Add 0x7FFF
+            // plus the low mantissa bit (so an exact tie rounds to even) and take the top
+            // half. A plain `lshr 16` is off by one ulp wherever the dropped bits are >=
+            // half an ulp, which is ~50% of values (Vyb#441).
             llvm::Value* bits = builder->CreateBitCast(f, int32Type, "bf.bits");
-            enc = builder->CreateTrunc(builder->CreateLShr(bits, llvm::ConstantInt::get(int32Type, 16)), i16Ty, "bf.enc");
+            llvm::Value* lsb = builder->CreateAnd(
+                builder->CreateLShr(bits, llvm::ConstantInt::get(int32Type, 16)),
+                llvm::ConstantInt::get(int32Type, 1), "bf.lsb");
+            llvm::Value* bias = builder->CreateAdd(
+                llvm::ConstantInt::get(int32Type, 0x7FFF), lsb, "bf.bias");
+            llvm::Value* rounded = builder->CreateLShr(
+                builder->CreateAdd(bits, bias, "bf.round"),
+                llvm::ConstantInt::get(int32Type, 16), "bf.shr");
+            // The rounding constant must never touch Inf or NaN: it carries out of the
+            // exponent, so a NaN silently becomes Inf (0x7f807fff -> 0x7f80). Inf passes
+            // through as its truncated top half; a NaN keeps its sign and gets the canonical
+            // quiet bit. Payload propagation on a conversion is implementation-defined (IEEE
+            // 754), so this is deliberately a single canonical NaN rather than torch's, and
+            // it is the bf16 analogue of what the f16 path gets from cvt.rn.f16.f32.
+            llvm::Value* expo = builder->CreateAnd(
+                bits, llvm::ConstantInt::get(int32Type, 0x7F800000), "bf.expo");
+            llvm::Value* isSpecial = builder->CreateICmpEQ(
+                expo, llvm::ConstantInt::get(int32Type, 0x7F800000), "bf.special");
+            llvm::Value* mant = builder->CreateAnd(
+                bits, llvm::ConstantInt::get(int32Type, 0x007FFFFF), "bf.mant");
+            llvm::Value* qbit = builder->CreateSelect(
+                builder->CreateICmpNE(mant, llvm::ConstantInt::get(int32Type, 0)),
+                llvm::ConstantInt::get(i16Ty, 0x0040), llvm::ConstantInt::get(i16Ty, 0), "bf.qbit");
+            llvm::Value* specialEnc = builder->CreateOr(
+                builder->CreateTrunc(
+                    builder->CreateLShr(bits, llvm::ConstantInt::get(int32Type, 16)), i16Ty, "bf.top"),
+                qbit, "bf.special.enc");
+            enc = builder->CreateSelect(isSpecial, specialEnc,
+                                        builder->CreateTrunc(rounded, i16Ty, "bf.enc"), "bf.store");
         }
         builder->CreateStore(enc, gptr(a));
         m_currentLLVMValue = nullptr;
