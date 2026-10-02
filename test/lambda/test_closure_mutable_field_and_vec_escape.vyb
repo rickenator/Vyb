@@ -1,0 +1,53 @@
+// @test: mutable-capture closures escape through a struct field and a Vec element
+// @description: The two storing shapes the #384 record measured as silently
+//   wrong (they compiled, ran and printed a raw frame address where an Int was
+//   expected). With checkpoint (b)(1) both compile to a heap cell owned by the
+//   closure environment, so the mutation made inside the closure survives the
+//   defining frame AND is visible on the next call. Exact values are asserted,
+//   not just "it does not crash".
+//   LeakSanitizer note: the struct-field shape is clean; the Vec-element shape
+//   inherits a PRE-EXISTING leak (`Vec<fn ...>` element environments are never
+//   released when the Vec is reclaimed -- present before this change too, see
+//   the immutable counterpart test_closure_field_and_vec_escape.vyb and issue
+//   #439), which additionally orphans the boxed cell the unreleased environment
+//   owns.
+// @category: lambda, closure, mutable, escape, struct, vec, ownership
+// @expect-output: field1=11 field2=12 vec0=4
+// @expect-return: 0
+
+struct Holder {
+    f<fn() -> Int>
+}
+
+makeHolder()<Holder> -> {
+    n<Int> = 10
+    return Holder { f = || -> {
+        n = n + 1
+        return n
+    } }
+}
+
+makeVec()<Vec<fn() -> Int>> -> {
+    n<Int> = 3
+    v<Vec<fn() -> Int>> = Vec()
+    v.push(|| -> {
+        n = n + 1
+        return n
+    })
+    return v
+}
+
+main()<Int> -> {
+    h<Holder> = makeHolder()
+    g<fn() -> Int> = h.f
+    a<Int> = g()
+    b<Int> = g()
+
+    v<Vec<fn() -> Int>> = makeVec()
+    e<fn() -> Int> = v.get(0)
+    c<Int> = e()
+
+    println("field1=" + a.to_string() + " field2=" + b.to_string() +
+            " vec0=" + c.to_string())
+    return 0
+}

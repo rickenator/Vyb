@@ -80,7 +80,7 @@ git clone https://github.com/rickenator/Vyb.git
 cd Vyb
 mkdir -p build && cd build && LLVM_DIR=/usr/lib/llvm-18/cmake cmake .. && make -j$(nproc) && cd ..
 
-# Run the full test suite (1275 .vyb tests) with the canonical Vyb runner
+# Run the full test suite (1278 .vyb tests) with the canonical Vyb runner
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
 
 # Run your first Vyb program
@@ -1053,7 +1053,7 @@ both forms call through one shape.
 | by value | a plain name | the environment holds a copy; later writes to the outer variable do not reach the closure |
 | move | capturing a `my<T>` | ownership transfers into the closure; the outer variable is dead afterwards (use-after-move) |
 | shared | capturing an `our<T>` | the environment takes a strong reference, so the target stays alive for the life of the closure |
-| mutable | assigning to a captured name | the environment stores the *address* of the outer variable, so writes inside the closure write through to the enclosing scope |
+| mutable | assigning to a captured name | the environment stores the *address* of the outer variable, so writes inside the closure write through to the enclosing scope. If the closure can outlive its frame (returned, stored in a field or a `Vec`, handed to a thread) that address is replaced by a heap **cell** the environment owns, initialised from the binding |
 
 ```vyb
 counter<Int> = 0
@@ -1071,12 +1071,43 @@ println(read(0).to_string())          // 10 — the closure retains the shared v
 scope or overwriting the variable releases it, and a closure returned from a function hands back
 an owned reference, so the environment survives the frame that built it.
 
-**Where it stops.** A mutable capture is the address of a variable in the enclosing frame, so such
-a closure cannot outlive that frame:
+**Escaping mutable captures are boxed.** A mutable capture stores the outer variable's *address*,
+which is only meaningful while that frame is alive. When the analyzer sees a closure value leave its
+frame — returned, stored into a struct field or a `Vec` element, or handed to
+`thread_spawn`/`task_spawn` — each mutable capture is instead **boxed**: codegen allocates a heap
+cell, initialises it with the binding's current value (deep-copying storage the cell will own), and
+stores the cell pointer in the environment. The environment owns the cell — its generated
+destructor reclaims the cell's payload, if any, then frees the block when the last closure reference
+drops — so the closure works after its defining frame has exited:
+
+```vyb
+makeCounter()<fn() -> Int> -> {
+    n<Int> = 5
+    return || -> {
+        n = n + 1
+        return n
+    }
+}
+
+main()<Int> -> {
+    f<fn() -> Int> = makeCounter()
+    println(f().to_string())              // 6 — read from the cell, not from the dead frame
+    println(f().to_string())              // 7 — the next call starts from the cell's value
+    return 0
+}
+```
+
+A closure that does **not** escape keeps the stack path, so the write-back contract in the table
+above is unchanged: two closures over one binding still do not share mutations through a read, and
+the enclosing frame still observes them.
+
+**Where it stops.** A mutable capture whose declared type has no sound heap-cell representation is
+still refused when the closure is returned — a borrow (`their<T>`/`loc<T>`), an FFI handle, an
+optional, an array, or a name the analysis cannot resolve (a type parameter):
 
 ```
 Semantic Errors:
-  Cannot return a closure with mutable captures: it holds pointers into the enclosing stack frame that would dangle after this function returns.
+  Cannot return a closure with mutable captures: capture 'ro' holds state that would alias the enclosing stack frame after this function returns, and a mutable capture of that type cannot be boxed safely. Capture it by value, share it as our(ro), or keep the closure inside the frame.
 ```
 
 Moving a `my<T>` into a closure is destructive in the same way, and reading the variable afterwards
@@ -1087,7 +1118,9 @@ Semantic Errors:
   Use after move: 'x' has been moved and is no longer valid.
 ```
 
-Boxed lifetime-carrying closures and generic lambdas are still open items (`TODO.md` §3).
+Generic lambdas are still an open item (`TODO.md` §3), and the per-binding shared cell — which would
+let the defining frame observe a mutation made through an *escaping* closure — is not implemented;
+an escaping closure's writes land in its own cell.
 
 ### Threads and concurrency
 
@@ -1135,8 +1168,11 @@ the capability is called **handoff**:
 - `my<T>` (a unique owner), `their<T>`/`loc<T>` (borrows and raw pointers) are never
   handoff-capable: moving an owner off its thread, or passing a borrow of the spawner's frame,
   would leave the spawner with an invalid owner or a dangling alias;
-- a **mutable** capture is refused whatever its type, because its environment entry is the address
-  of a variable in the spawner's frame — the same reason a mutable capture cannot be returned;
+- a **mutable** capture is refused only when its declared type cannot be boxed soundly; when it can,
+  the compiler boxes it into a heap cell owned by the closure environment (the same mechanism that
+  lets a mutable-capture closure be returned), so the environment entry is no longer an address in
+  the spawner's frame. The spawner's own binding is a separate value and does not observe the
+  spawned closure's writes;
 - the one borrowing form that is accepted is a read-only `view(x)` — **viewable** — when the
   closure also captures the owner through strong ownership (`our<X>` / `my<X>`), since then the
   owner outlives the thread.
@@ -3118,7 +3154,7 @@ cmake --build build --target run-milestone
 
 Vyb's canonical test runner is `test/run_tests.vyb` — a Vyb program, the same
 suite wired into CTest as the `run-tests` target and used for the full regression
-gate (currently **1275 `.vyb` tests, all passing**):
+gate (currently **1278 `.vyb` tests, all passing**):
 
 ### Quick Testing
 
@@ -3155,7 +3191,7 @@ build/vyb triage_tool.vyb results.json --priority critical,high
 ```
 
 ### Test Features
-- **1275 Tests, All Passing**: The full `run_tests.vyb` suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area
+- **1278 Tests, All Passing**: The full `run_tests.vyb` suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area
 - **Harness Reporting**: `test_harness.vyb` adds JSON/HTML reports and failure triage on top of the runner (sequential execution; `--workers` is accepted for compatibility)
 - **Rich Reporting**: HTML, JSON, and console output with detailed metrics
 - **Smart Categorization**: Automatic test categorization and filtering
@@ -3430,10 +3466,10 @@ compatibility) and reports the same per-test verdicts as the canonical runner.
 - **Error Context**: Detailed failure information with context and suggestions
 
 #### **Test Statistics**
-- **Total Tests**: 1275 `.vyb` tests (full suite, all passing as of v0.7.7)
+- **Total Tests**: 1278 `.vyb` tests (full suite, all passing as of v0.7.7)
 - **Coverage Areas**: Language features, control flow, error handling, type system, math, strings, introspection
 - **Test Types**: Feature tests (with `@expect: pass`), future-feature docs (with `@expect: fail`), parser tests
-- **Success Rate**: 100% (1275/1275) on the current suite
+- **Success Rate**: 100% (1278/1278) on the current suite
 
 ### 🔧 **Syntax Migration Tools**
 
@@ -3549,7 +3585,7 @@ See `doc/` directory for detailed design documents and RFCs.
   - **Type inference**: First case determines result type for entire select
   - **Pattern matching**: Exact equality patterns with wildcard `?` support
 - ✅ **Canonical Syntax Unification**: Complete migration to unified `my()`/`our()` constructors and `view`/`borrow` operators
-- ✅ **Modern Test Harness**: `test/run_tests.vyb` running the full suite — 1275 `.vyb` tests all passing — with an auxiliary parallel/HTML/triage harness
+- ✅ **Modern Test Harness**: `test/run_tests.vyb` running the full suite — 1278 `.vyb` tests all passing — with an auxiliary parallel/HTML/triage harness
 - ✅ **Syntax Migration Tools**: Automated migration from legacy to canonical syntax with comprehensive reporting
 - ✅ **Match Statements**: Complete pattern matching with `->` arrow syntax and `?` wildcard; no-match results in NOP
 - ✅ **Break/Continue**: Loop control flow statements working in all loop types

@@ -36,6 +36,13 @@ enum NodeFact : unsigned {
     OperandFromTypeValue = 1u << 3,
     // A cast/typename operand is a wildcard error with no static type at all.
     OperandIsWildcardError = 1u << 4,
+    // The closure has mutable captures AND its value can outlive the defining
+    // frame (returned, stored into a field/element, handed to a thread/call).
+    // Codegen must therefore box each mutable capture into a heap cell owned by
+    // the closure environment instead of storing the frame's stack address
+    // (#384 checkpoint b(1)). A closure without this fact keeps the stack path
+    // and its write-back-through-the-frame contract.
+    ClosureMutablesBoxed = 1u << 5,
 };
 
 } // namespace analysis

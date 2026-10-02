@@ -779,6 +779,9 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
 
     enterScope();
     fnParamNamesStack_.emplace_back();
+    // #384 b(1): closure-binding attribution is function-scoped -- a fresh body
+    // gets a fresh map (a nested lambda deliberately does not, see semantic.hpp).
+    mutableClosureBindings_.clear();
 
     // Handle generic parameters if present (e.g., fn printItem<T<Display>>)
     bool hasGenericParams = !node->genericParams.empty();
@@ -1059,6 +1062,11 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
         }
 
         node->init->accept(*this);
+
+        // #384 b(1): remember a closure-typed binding of a mutable-capture
+        // closure, so a later escape of the binding (`return f`, `v.push(f)`,
+        // `h.f = f`) is attributed to that closure node by the escape predicate.
+        if (node->id) recordMutableClosureBinding(node->id->name, node->init.get());
 
         // Type inference: if no annotation given, infer from initializer
         if (needsTypeCheck && expressionTypes.count(exprKey(node->init.get()))) {
@@ -1947,6 +1955,23 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
         if (arg) arg->accept(*this);
     }
 
+    // #384 b(1): a closure handed to a STORING container mutator (`v.push(c)`,
+    // `v.set(i, c)`) becomes an element of a value that can outlive the frame,
+    // so it escapes and codegen must box its mutable captures. A closure passed
+    // to a calling higher-order fn (`map`, `filter`, `for_each`) is invoked
+    // within the frame and keeps the ordinary stack path and write-back
+    // contract -- only storing positions change.
+    if (auto* mutCallee = dynamic_cast<ast::MemberExpression*>(node->callee.get())) {
+        if (auto* mutProp = dynamic_cast<ast::Identifier*>(mutCallee->property.get())) {
+            static const std::set<std::string> kStoringMutators = {
+                "push", "set", "insert", "push_array",
+            };
+            if (kStoringMutators.count(mutProp->name)) {
+                for (auto& a : node->arguments) markEscapingClosureValue(a.get());
+            }
+        }
+    }
+
     // Thread-boundary capability (#149, #365): a closure handed to another thread
     // may only capture handoff-capable state. Unique owners (`my<T>`), borrows
     // (`their<T>`, `loc<T>`) and raw pointers -- and any composite (`Vec<T>`,
@@ -1969,6 +1994,15 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
         };
         if (threadBoundarySites.count(calleeIdent->name) && !node->arguments.empty()) {
             if (auto* fe = dynamic_cast<ast::FunctionExpression*>(node->arguments[0].get())) {
+                // #384 b(1): a closure handed to another thread is by definition
+                // escaping -- its environment outlives the spawner's frame -- so
+                // its mutable captures are boxed into env-owned heap cells. That
+                // is what makes the refusal below conditional: a mutable capture
+                // that holds a heap cell is no longer "the defining frame's
+                // address", and the boxed value is safe to hand off. A closure
+                // whose mutable capture cannot be boxed soundly stays unmarked
+                // here, and the refusal below reports it exactly as before.
+                markEscapingClosureValue(node->arguments[0].get(), /*refusableEscape=*/false);
                 checkThreadBoundaryCaptures(fe, node->arguments[0].get(), calleeIdent->name);
             }
         }
@@ -4971,6 +5005,16 @@ void SemanticAnalyzer::visit(ast::AssignmentExpression* node) {
         }
     }
 
+    // #384 b(1): a closure assigned into a field/element becomes part of an
+    // aggregate that may outlive the frame, so it escapes; a closure assigned to
+    // a plain local rebinds it, so the binding map follows the new node.
+    if (auto* lhsIdent = dynamic_cast<ast::Identifier*>(node->left.get())) {
+        recordMutableClosureBinding(lhsIdent->name, node->right.get());
+    } else if (dynamic_cast<ast::MemberExpression*>(node->left.get()) ||
+               dynamic_cast<ast::ArrayElementExpression*>(node->left.get())) {
+        markEscapingClosureValue(node->right.get());
+    }
+
     // Restore the original type for derefLHS after assignment analysis
     if (derefLHS) {
         if (savedDerefType) {
@@ -5275,6 +5319,12 @@ void SemanticAnalyzer::visit(ast::ObjectLiteral* node) {
         }
     }
 
+    // #384 b(1): a struct literal's field values become fields of an aggregate
+    // that may itself outlive the frame, so a closure stored here escapes.
+    for (auto& prop : node->properties) {
+        markEscapingClosureValue(prop.value.get());
+    }
+
     // Check if this struct has generic parameters that need to be inferred
     auto structFieldsIt = structFieldTypes.find(structName);
     if (structFieldsIt == structFieldTypes.end()) {
@@ -5446,6 +5496,12 @@ void SemanticAnalyzer::visit(ast::ArrayLiteral* node) {
         }
     }
 
+    // #384 b(1): a closure that becomes an array element can outlive the frame
+    // via the array value, so it escapes.
+    for (auto& element : node->elements) {
+        markEscapingClosureValue(element.get());
+    }
+
     if (elementType) {
         // Create an array type [ElementType; Size]
         auto sizeExpr = std::make_unique<ast::IntegerLiteral>(
@@ -5525,6 +5581,7 @@ void SemanticAnalyzer::visit(ast::FunctionExpression* node) {
     // parameter) that resolve to a variable in an enclosing scope are captures:
     // codegen copies their value into the closure environment at creation.
     resetCaptures(node);
+    unboxableMutableCapture_.erase(node);
     for (const auto& name : ctx.referenced) {
         if (ctx.locals.count(name)) continue;
         if (!ctx.enclosingScope) continue;
@@ -5535,7 +5592,15 @@ void SemanticAnalyzer::visit(ast::FunctionExpression* node) {
             // afterward (use-after-move diagnostic). Shared (`our<T>`) captures
             // hold a reference, so codegen bumps the strong count at capture.
             const bool shared = sym->ownershipKind == ast::OwnershipKind::OUR;
-            addCapture(node, name, ctx.written.count(name) != 0, shared);
+            const bool written = ctx.written.count(name) != 0;
+            addCapture(node, name, written, shared);
+            // #384 b(1): remember the first mutable capture whose declared type
+            // cannot be boxed soundly, so the escape predicate refuses (at a
+            // return) or declines to box rather than aliasing the frame.
+            if (written && sym->type && !mutableCaptureTypeBoxable(sym->type.get()) &&
+                unboxableMutableCapture_.find(node) == unboxableMutableCapture_.end()) {
+                unboxableMutableCapture_[node] = name;
+            }
             if (hasOwnershipKindMY(sym)) {
                 recordMove(name);
             }
@@ -6565,6 +6630,135 @@ void SemanticAnalyzer::visit(ast::WhileStatement* node) {
     // Exit the loop scope
     exitScope();
 }
+// #384 checkpoint b(1): record a closure-typed local binding so a later escape
+// of the BINDING (`return f`, `v.push(f)`, `h.f = f`) can be attributed to the
+// closure node that produced it. Called after the initializer has been
+// analyzed, so `capturesOf` already holds the closure's capture lists.
+void SemanticAnalyzer::recordMutableClosureBinding(const std::string& name, ast::Expression* init) {
+    if (name.empty()) return;
+    if (!init) { mutableClosureBindings_.erase(name); return; }
+    if (auto* fe = dynamic_cast<ast::FunctionExpression*>(init)) {
+        const analysis::ClosureCaptures* caps = capturesOf(fe);
+        if (caps && !caps->mutableCaptured.empty()) {
+            mutableClosureBindings_[name] = fe;
+        } else {
+            mutableClosureBindings_.erase(name);
+        }
+        return;
+    }
+    // One level of aliasing: a binding initialized from another closure binding
+    // refers to the same closure value.
+    if (auto* id = dynamic_cast<ast::Identifier*>(init)) {
+        auto it = mutableClosureBindings_.find(id->name);
+        if (it != mutableClosureBindings_.end()) mutableClosureBindings_[name] = it->second;
+        else mutableClosureBindings_.erase(name);
+        return;
+    }
+    mutableClosureBindings_.erase(name);
+}
+
+// #384 checkpoint b(1): the escape predicate. Called at every position where a
+// closure VALUE can outlive the frame that defines its captures (a `return`, a
+// struct/aggregate literal element, a container element stored by a mutator, a
+// thread/spawn hand-off). A mutable capture of a closure that reaches such a
+// position is boxed by codegen into an env-owned heap cell; a closure that
+// never does keeps the stack path and its write-back-through-the-frame
+// contract untouched. The fact is recorded by node id, so it may be set before
+// the closure's own body has been analyzed; codegen simply finds nothing to box
+// when the closure has no mutable captures.
+void SemanticAnalyzer::markEscapingClosureValue(ast::Expression* expr, bool refusableEscape) {
+    if (!expr) return;
+    if (auto* fe = dynamic_cast<ast::FunctionExpression*>(expr)) {
+        // The closure's own body is a separate frame; nothing inside it escapes
+        // through this position.
+        markClosureNodeEscaping(fe, expr, refusableEscape);
+        return;
+    }
+    if (auto* id = dynamic_cast<ast::Identifier*>(expr)) {
+        auto it = mutableClosureBindings_.find(id->name);
+        if (it != mutableClosureBindings_.end() && it->second) {
+            markClosureNodeEscaping(it->second, expr, refusableEscape);
+        }
+        return;
+    }
+    if (auto* ol = dynamic_cast<ast::ObjectLiteral*>(expr)) {
+        for (auto& prop : ol->properties) markEscapingClosureValue(prop.value.get(), refusableEscape);
+        return;
+    }
+    if (auto* al = dynamic_cast<ast::ArrayLiteral*>(expr)) {
+        for (auto& el : al->elements) markEscapingClosureValue(el.get(), refusableEscape);
+        return;
+    }
+    if (auto* seq = dynamic_cast<ast::SequenceExpression*>(expr)) {
+        for (auto& e2 : seq->expressions) markEscapingClosureValue(e2.get(), refusableEscape);
+        return;
+    }
+    if (auto* ce = dynamic_cast<ast::ConditionalExpression*>(expr)) {
+        markEscapingClosureValue(ce->thenExpr.get(), refusableEscape);
+        markEscapingClosureValue(ce->elseExpr.get(), refusableEscape);
+        return;
+    }
+}
+
+// #384 b(1): can a mutable capture of this declared type be boxed soundly? The
+// boxed cell owns an independent copy of the value (deep copy for a Vec
+// element / owned struct, a fresh object for `my<Struct>`, a reference for a
+// String / `our<T>` / `mild<T>` / closure), and the closure environment's
+// destructor reclaims exactly that. Types with no copy/reclaim story here stay
+// on the existing stack path.
+bool SemanticAnalyzer::mutableCaptureTypeBoxable(const ast::TypeNode* t) const {
+    if (!t) return false;
+    // A closure value: its environment is ref-counted, so the cell can hold a
+    // retained reference.
+    if (dynamic_cast<const ast::FunctionType*>(t)) return true;
+    // A Vec<T> is parsed as its own node; the cell deep-copies its storage.
+    if (dynamic_cast<const ast::VecType*>(t)) return true;
+    auto* tn = dynamic_cast<const ast::TypeName*>(t);
+    if (!tn || !tn->identifier) return false;
+    const std::string& base = tn->identifier->name;
+    if (base == "my") {
+        // A `my<T>` mutable capture is already a MOVE capture (recordMove in the
+        // capture recorder): the enclosing binding is dead after the closure is
+        // created, so there is no frame-side owner to keep in step and no sound
+        // cell story here. Keep it on the existing path (and the existing
+        // refusal at a `return`).
+        return false;
+    }
+    if (base == "our" || base == "mild") return tn->genericArgs.size() == 1;
+    if (base == "String" || base == "string") return true;
+    if (base == "Vec") return tn->genericArgs.size() == 1;
+    if (primitiveValueTypes.count(base) > 0) return true;
+    // A named struct the analysis has registered: copied field-wise and
+    // reclaimed field-wise by the cell's destructor.
+    return structFieldTypes.count(base) > 0;
+}
+
+void SemanticAnalyzer::markClosureNodeEscaping(const ast::FunctionExpression* fe,
+                                               const ast::Node* site,
+                                               bool refusableEscape) {
+    if (!fe) return;
+    if (hasFact(fe, analysis::ClosureMutablesBoxed)) return;
+    auto unboxable = unboxableMutableCapture_.find(fe);
+    if (unboxable != unboxableMutableCapture_.end()) {
+        // This closure holds a mutable capture whose declared type has no sound
+        // heap-cell representation. At a position that always refused such a
+        // closure (a `return`) keep refusing, so nothing that compiled before
+        // starts dangling; elsewhere leave the closure on the pre-existing stack
+        // path -- the same behaviour it had before this feature.
+        if (refusableEscape) {
+            addError("Cannot return a closure with mutable captures: capture '" +
+                         unboxable->second +
+                         "' holds state that would alias the enclosing stack frame after this "
+                         "function returns, and a mutable capture of that type cannot be boxed "
+                         "safely. Capture it by value, share it as our(" + unboxable->second +
+                         "), or keep the closure inside the frame.",
+                     site);
+        }
+        return;
+    }
+    markFact(fe, analysis::ClosureMutablesBoxed);
+}
+
 void SemanticAnalyzer::visit(ast::ReturnStatement* node) {
     // Visit the return value if it exists
     if (node->argument) {
@@ -6665,18 +6859,14 @@ void SemanticAnalyzer::visit(ast::ReturnStatement* node) {
             }
         }
 
-        // A closure with mutable captures holds pointers into the enclosing
-        // stack frame; returning it from a function would leave those pointers
-        // dangling once the frame is gone. Reject the direct-return case (a
-        // value-returning lambda whose body writes to captured stack locals).
-        if (auto* fe = dynamic_cast<ast::FunctionExpression*>(node->argument.get())) {
-            const analysis::ClosureCaptures* feCaps = capturesOf(fe);
-            if (feCaps && !feCaps->mutableCaptured.empty()) {
-                addError("Cannot return a closure with mutable captures: it holds pointers into "
-                         "the enclosing stack frame that would dangle after this function returns.",
-                         node->argument.get());
-            }
-        }
+        // #384 checkpoint b(1): a closure with mutable captures carries pointers
+        // into the enclosing stack frame. When its value can outlive that frame
+        // -- here, it is returned -- codegen boxes each mutable capture into a
+        // heap cell owned by the closure environment, so the closure stays
+        // well-defined after the frame exits. Mark the closure (directly or
+        // through a local binding of it) as escaping instead of rejecting it;
+        // the write-back contract is untouched for closures that do not escape.
+        markEscapingClosureValue(node->argument.get(), /*refusableEscape=*/true);
     }
 }
 

@@ -91,6 +91,16 @@ these hold (`SemanticAnalyzer::mayCrossBoundaryWithRetainedOwner`):
 Anything else keeps the verdict ("it cannot cross a thread boundary"). The gate only
 speaks to refuse, so the accepted case is silent.
 
+**Mutable captures (#384 (b)(1)).** A mutable capture is refused unless its declared
+type can be *boxed* into an environment-owned heap cell (primitives, `String`, `Vec`,
+a known struct, `our<T>`/`mild<T>`, a closure value). A spawn site is an escape by
+definition, so the compiler boxes such a capture there and the refusal is lifted; the
+spawner's own binding is a separate value and does not observe the spawned closure's
+writes. A mutable capture of a borrow, FFI handle, optional, array or unresolved name
+cannot be boxed and keeps the refusal (`..._mutable_capture_boxed_accepted.vyb`
+accepts the boxed case for `thread_spawn` and `task_spawn`; the written-borrow
+fixtures below still refuse).
+
 Fixtures: `test/threads/test_thread_boundary_view_retained_owner_accepted.vyb`
 (spawns a real thread, reads through both the borrow and the retained owner, and
 checks the joined value — 14), `..._view_owner_not_captured_rejected.vyb` (condition

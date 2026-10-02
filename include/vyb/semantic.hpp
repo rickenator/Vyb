@@ -452,6 +452,36 @@ public:
     // a `()<A, B>` multi-value function). Prevents such malformed programs from
     // reaching codegen, where they previously crashed codegen (LLVM GEP assert).
     void validateReturnArity(ast::ReturnStatement* node);
+    // #384 checkpoint b(1): the escape predicate for lifetime-carrying
+    // mutable-capture closures. Called at every position where a closure value
+    // can outlive its defining frame (a return, a field/element store, a
+    // container element, a thread/spawn hand-off). Marks the closure node with
+    // analysis::ClosureMutablesBoxed so codegen boxes its mutable captures into
+    // environment-owned heap cells instead of storing the frame's stack address.
+    // A closure value held in a local is resolved one level through
+    // `mutableClosureBindings_` (so `f = || -> {...}; return f` is caught too).
+    // `refusableEscape` is set at a position that already refused such a closure
+    // before this feature (a direct `return`): there, a mutable capture whose
+    // type cannot be boxed soundly is still refused rather than left on the
+    // stack path. Everywhere else an unboxable capture keeps the pre-existing
+    // stack behaviour.
+    void markEscapingClosureValue(ast::Expression* expr, bool refusableEscape = false);
+    // Record `name` as a local binding of a mutable-capture closure, so a later
+    // escape of the binding can be attributed to the closure node.
+    void recordMutableClosureBinding(const std::string& name, ast::Expression* init);
+    // #384 b(1): can a mutable capture of this declared type be boxed soundly --
+    // i.e. copied into a heap cell that OWNS the value and reclaimed when the
+    // closure's environment is dropped? True for primitives, String, Vec, a
+    // known struct, `our<T>`/`mild<T>` (reference taken), and closure values
+    // (environment retained). Anything else -- a borrow, raw/FFI handle,
+    // optional, array, tuple, unresolved name, or `my<T>` (a move capture, which
+    // has no frame-side owner to keep in step) -- stays on the existing stack
+    // path.
+    bool mutableCaptureTypeBoxable(const ast::TypeNode* t) const;
+    // Mark `fe` boxed, or refuse/report it according to `refusableEscape` when
+    // one of its mutable captures cannot be boxed soundly.
+    void markClosureNodeEscaping(const ast::FunctionExpression* fe, const ast::Node* site,
+                                 bool refusableEscape);
     std::shared_ptr<ast::TypeNode> cloneTypeNode(ast::TypeNode* type); // Helper to clone type nodes
     ast::TypeNode* substituteSelfType(ast::TypeNode* returnType, const std::string& concreteType); // Substitute Self with concrete type
     // #250: the return type a bind body inherits from the aspect method it
@@ -809,6 +839,22 @@ public:
     // borrowed from a parameter may be returned (the caller owns the pointee); a
     // borrow of a function-local must not be.
     std::vector<std::unordered_set<std::string>> fnParamNamesStack_;
+
+    // #384 checkpoint b(1): closure-typed function-scoped locals that hold a
+    // mutable-capture closure, so `return f` / `v.push(f)` / `h.f = f` can mark
+    // the underlying closure node as escaping (and hence boxed). Cleared when a
+    // named function body starts; deliberately NOT cleared inside a nested
+    // lambda, so a lambda that hands an enclosing closure binding outward still
+    // attributes the escape to the right node. A stale entry only ever boxes an
+    // extra closure (slower, never unsound).
+    std::unordered_map<std::string, const ast::FunctionExpression*> mutableClosureBindings_;
+
+    // #384 b(1): the name of the first mutable capture of a closure whose type
+    // cannot be boxed soundly (see mutableCaptureTypeBoxable). Recorded when the
+    // closure's captures are recorded -- independent of where it later escapes --
+    // so the escape predicate can refuse a `return` (which always refused such a
+    // closure) instead of boxing it unsoundly.
+    std::unordered_map<const ast::FunctionExpression*, std::string> unboxableMutableCapture_;
 
     // Closure capture detection: while visiting a FunctionExpression body, record
     // the identifiers it references and the names it declares locally, so free

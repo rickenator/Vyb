@@ -1,0 +1,27 @@
+// @test: a returned mutable-capture closure outlives its defining frame
+// @description: #384 checkpoint (b)(1). A closure whose body ASSIGNS to a
+//   captured local used to be refused at `return`: its environment stored the
+//   defining frame's stack address, which dangles once the frame is gone. When
+//   the escape predicate sees the closure leave its frame, codegen boxes each
+//   mutable capture into a heap cell owned by the closure environment, so the
+//   value written inside the closure is read back from the cell after the frame
+//   has exited. The cell is reclaimed when the last closure reference drops
+//   (test/lambda/test_closure_mutable_owned_capture_escape.vyb covers the
+//   payload-owning case).
+// @category: lambda, closure, mutable, escape, ownership
+// @expect-output: esc1=6 esc2=7
+// @expect-return: 0
+
+makeCounter()<fn() -> Int> -> {
+    n<Int> = 5
+    return || -> {
+        n = n + 1
+        return n
+    }
+}
+
+main()<Int> -> {
+    f<fn() -> Int> = makeCounter()
+    println("esc1=" + f().to_string() + " esc2=" + f().to_string())
+    return 0
+}

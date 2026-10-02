@@ -374,15 +374,21 @@ void SemanticAnalyzer::checkThreadBoundaryCaptures(ast::FunctionExpression* fe,
     const analysis::ClosureCaptures* capsPtr = capturesOf(fe);
     const analysis::ClosureCaptures& caps = capsPtr ? *capsPtr : kNoCaptures;
 
-    // A mutable capture holds the defining frame's address, so it is not a
-    // handoff no matter what the variable's type is.
-    for (const std::string& cap : caps.mutableCaptured) {
-        if (!reported.insert(cap).second) continue;
-        addError(siteName + ": closure captures '" + cap +
-                     "' mutably -- a mutable capture holds the defining frame's address and "
-                     "cannot cross a thread boundary (not handoff-capable). Capture it by "
-                     "value, or share it as our(" + cap + ").",
-                 site);
+    // A mutable capture ordinarily holds the defining frame's address, so it is
+    // not a handoff no matter what the variable's type is. #384 checkpoint b(1):
+    // a closure whose value escapes -- and a spawn site always does -- has its
+    // mutable captures boxed into heap cells owned by the closure environment,
+    // so the capture no longer addresses the spawner's frame and the hand-off is
+    // sound. The capture is still type-checked below like every other capture.
+    if (!hasFact(fe, analysis::ClosureMutablesBoxed)) {
+        for (const std::string& cap : caps.mutableCaptured) {
+            if (!reported.insert(cap).second) continue;
+            addError(siteName + ": closure captures '" + cap +
+                         "' mutably -- a mutable capture holds the defining frame's address and "
+                         "cannot cross a thread boundary (not handoff-capable). Capture it by "
+                         "value, or share it as our(" + cap + ").",
+                     site);
+        }
     }
 
     for (const std::string& cap : caps.captured) {

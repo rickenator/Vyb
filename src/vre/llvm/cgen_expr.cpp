@@ -2914,6 +2914,7 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
         bool transfer_own = false;                     // immutable my<Struct>: move the heap payload into the closure
         const vyb::ast::TypeNode* ownTarget = nullptr; // pointee AST type freed by the env's cap_dtor
         size_t fieldIndex = 0;                         // env field index (0-based, excluding the refcount/dtor header)
+        const vyb::ast::TypeNode* astType = nullptr;   // declared AST type of the captured binding (boxed-cell reclaim)
     };
     std::vector<Capture> captures;
     std::vector<llvm::Type*> envFieldTypes;
@@ -2936,20 +2937,29 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
         // transferred payload when the last env reference is dropped.
         bool transferOwn = false;
         const vyb::ast::TypeNode* ownTarget = nullptr;
-        if (!isMut && ty && ty->isPointerTy()) {
+        const vyb::ast::TypeNode* capAstType = nullptr;
+        {
             auto astIt = valueTypeMap.find(it->second);
-            if (astIt != valueTypeMap.end() && astIt->second &&
-                isMyOwnedStructTypeNode(astIt->second.get())) {
-                ownTarget = myPointeeOf(astIt->second.get());
-                transferOwn = ownTarget != nullptr;
-            }
+            if (astIt != valueTypeMap.end() && astIt->second) capAstType = astIt->second.get();
+        }
+        if (!isMut && ty && ty->isPointerTy() && capAstType &&
+            isMyOwnedStructTypeNode(capAstType)) {
+            ownTarget = myPointeeOf(capAstType);
+            transferOwn = ownTarget != nullptr;
         }
         size_t fieldIx = envFieldTypes.size();
-        captures.push_back({nm, ty, it->second, isMut, transferOwn, ownTarget, fieldIx});
+        captures.push_back({nm, ty, it->second, isMut, transferOwn, ownTarget, fieldIx, capAstType});
         // Mutable captures store a pointer to the outer variable; immutable
         // captures store the value itself.
         envFieldTypes.push_back(isMut ? it->second->getType() : ty);
     }
+
+    // #384 checkpoint b(1): the semantic escape predicate marked this closure if
+    // its value can outlive the defining frame. When it did, each mutable
+    // capture is boxed into a heap cell owned by the environment instead of
+    // storing the frame's stack address; a closure that did not keeps the stack
+    // path and its write-back-through-the-frame contract.
+    const bool boxMutables = nodeClosureMutablesBoxed(node);
 
     llvm::StructType* envStructType = nullptr;
     if (!envFieldTypes.empty()) {
@@ -3186,12 +3196,16 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
         // __vyb_closure_release reclaims that payload before freeing the env;
         // otherwise it stays null and the env is freed directly.
         std::vector<std::pair<size_t, const vyb::ast::TypeNode*>> ownedFields;
+        std::vector<std::pair<size_t, const vyb::ast::TypeNode*>> boxedFields;
         for (const auto& cap : captures) {
             if (cap.transfer_own && cap.ownTarget) {
                 ownedFields.emplace_back(cap.fieldIndex, cap.ownTarget);
             }
+            if (boxMutables && cap.mutable_ && cap.astType) {
+                boxedFields.emplace_back(cap.fieldIndex, cap.astType);
+            }
         }
-        llvm::Function* envDtorFn = generateClosureEnvDtor(envStructType, funcName, ownedFields);
+        llvm::Function* envDtorFn = generateClosureEnvDtor(envStructType, funcName, ownedFields, boxedFields);
 
         llvm::Value* refcountPtr = builder->CreateStructGEP(envStructType, envCast, 0, "closure.env.refcountptr");
         builder->CreateStore(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0), refcountPtr, "closure.env.refcount");
@@ -3204,7 +3218,31 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
         for (size_t ci = 0; ci < captures.size(); ++ci) {
             llvm::Value* fieldPtr = builder->CreateStructGEP(envStructType, envCast, ci + 2, "closure.env.setptr");
             if (captures[ci].mutable_) {
-                builder->CreateStore(captures[ci].outer, fieldPtr);
+                // #384 b(1): an escaping closure must not keep the defining
+                // frame's address in its environment -- the frame is gone by the
+                // time the closure is called. Box the binding into a heap cell
+                // initialised from the frame's current value; the env's cap_dtor
+                // reclaims the cell's payload and frees the block when the last
+                // closure reference drops (generateClosureEnvDtor).
+                const bool canBox = boxMutables && captures[ci].astType &&
+                                    llvm::isa<llvm::AllocaInst>(captures[ci].outer);
+                if (canBox) {
+                    llvm::DataLayout cellLayout(module.get());
+                    uint64_t cellBytes = cellLayout.getTypeAllocSize(captures[ci].ty);
+                    llvm::Value* cellRaw = builder->CreateCall(
+                        mallocFunc,
+                        {llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), cellBytes)},
+                        "closure.cap.cell");
+                    llvm::Value* cellTyped = builder->CreateBitCast(
+                        cellRaw, captures[ci].ty->getPointerTo(), "closure.cap.cellptr");
+                    llvm::Value* initVal = builder->CreateLoad(
+                        captures[ci].ty, captures[ci].outer, "closure.cap.init");
+                    initVal = copyCaptureValueForCell(initVal, captures[ci].astType, captures[ci].ty);
+                    builder->CreateStore(initVal, cellTyped);
+                    builder->CreateStore(cellRaw, fieldPtr);
+                } else {
+                    builder->CreateStore(captures[ci].outer, fieldPtr);
+                }
             } else {
                 llvm::Value* val = builder->CreateLoad(captures[ci].ty, captures[ci].outer, "closure.cap.val");
                 builder->CreateStore(val, fieldPtr);

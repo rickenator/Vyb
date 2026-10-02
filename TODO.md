@@ -244,7 +244,7 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 - [x] **`println()`/`print()` with multiple arguments** — Space-separated output; all args formatted into a single call
 - [x] **Semantic type recognition** — `Int16`, `Int32`, `Int64`, `UInt8`–`UInt64`, `Float32`, `Float64`, `Char`, `Rune` now fully recognized in semantic analysis (were silently rejected)
 - [x] **Relaxed struct field syntax** — C-style `Type fieldName` accepted alongside canonical `fieldName<Type>`; helps parse legacy/interop fixtures
-- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite runs **1275 tests** via `test/run_tests.vyb`, and that documented size is enforced against the runner by `test/suite_count_check.vyb` in CI
+- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite runs **1278 tests** via `test/run_tests.vyb`, and that documented size is enforced against the runner by `test/suite_count_check.vyb` in CI
 - [x] **Vec parameter deep copy** — Vec parameters receive an independent copy of the data on function entry, eliminating double-free bugs (e.g. recursive quicksort base-case return)
 - [x] **Nested `Vec<Vec<T>>` element ownership** — every path that clones a nested Vec (by-value argument, return, assignment, `push`, `set`, and the borrowed-element binding) now deep-copies the inner Vec *and* retains its elements, so `Vec<Vec<String>>` rows no longer share inner buffers with their source binding (no double free at exit, no dangling inner strings). Locked in by `test/ownership/nested_vec_element_ownership.vyb` (#373)
 - [x] **Nested Vec reclaim depth ≥ 3** — scope-exit reclaim now releases *every* level of a nested Vec: for a `Vec` element the deeper levels are released recursively (`emitInnerVecCleanup`) before the outer storage is freed, struct-field reclaim is skipped for a Vec element, and a `Vec<Vec<T>>` *field* of a struct takes the same recursive path. Verified under `ASAN_OPTIONS=halt_on_error=1:detect_leaks=1` (`test/collections/test_nested_vec_deep_copy.vyb`, the SQLite binding, `test/traffic/test_traffic_{parse,db,graph,report}.vyb`) (#373)
@@ -474,32 +474,52 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
   returns).
 
 **Remaining (tracked — recorded rather than silently missing):**
-- [ ] **Boxed / lifetime-carrying mutable closures** <!-- open: Boxed / lifetime-carrying mutable closures -->
-  — a closure with mutable captures may not outlive its defining function: the
-  environment stores the outer variable's *stack address*, so returning such a
-  closure is rejected at compile time (a dangling pointer) instead of silently
-  producing a use-after-free (`test/lambda/test_closure_mutable_return_rejected.vyb`).
-  Rust's `FnMut` closures may be returned, so this is a real expressiveness
-  difference. **Decision for 1.0: postponed.** Relaxing it means the env holds an
-  owned heap cell instead of a stack address (plus the capture move/release rules
-  that follow). Tracked by the FEATURE_STATUS row of the same name (#359).
-  **Step 0 probes + the step 1 contract are recorded (#384, landed):** an
+- [x] **Boxed / lifetime-carrying mutable closures** <!-- shipped: Boxed / lifetime-carrying mutable closures -->
+  — **checkpoint (b)(1) landed (#384).** A closure whose value can outlive its
+  defining frame — returned, stored into a struct field or a `Vec` element, or
+  handed to `thread_spawn`/`task_spawn` — now has each mutable capture boxed into
+  a heap cell owned by the closure environment. The escape predicate is recorded
+  by the analyzer as a node fact (`analysis::ClosureMutablesBoxed`,
+  `SemanticAnalyzer::markEscapingClosureValue`), which also resolves a closure held
+  in a local (`f = || -> {...}` then `return f`); codegen allocates the cell,
+  initialises it with the binding's current value (deep-copying storage the cell
+  will own — `copyCaptureValueForCell`), stores the cell pointer in the
+  environment, and the generated environment destructor reclaims the cell's
+  payload then frees the block when the last closure reference drops
+  (`reclaimBoxedCapturePayload`). The old rejection and the `handoffCapable`
+  mutable-capture refusal became conditional and now refuse only a mutable capture
+  whose declared type cannot be boxed soundly (a borrow, FFI handle, optional,
+  array, tuple, or unresolved name) — those keep the previous stack path and the
+  previous refusal at a `return`. A closure that does not escape keeps the stack
+  path and the write-back contract untouched.
+  Fixtures: `test/lambda/test_closure_mutable_return_escapes.vyb`,
+  `test_closure_mutable_local_return.vyb`,
+  `test_closure_mutable_field_and_vec_escape.vyb`,
+  `test_closure_mutable_owned_capture_escape.vyb`,
+  `test/threads/test_thread_boundary_mutable_capture_boxed_accepted.vyb`,
+  `test_thread_boundary_task_mutable_capture_boxed_accepted.vyb`; the step-0
+  fixtures (`test/lambda/test_closure_capture_semantics.vyb`,
+  `test_closure_two_over_one_binding.vyb`) stay green unchanged. Still open from
+  the plan: the per-BINDING shared cell (checkpoint (c)), so the defining frame
+  would also observe a mutation made through an *escaping* closure; and a
+  `Vec<fn ...>` element environment is not released when the Vec is reclaimed
+  (pre-existing, filed as #439).
+  **Step 0 probes + the step 1 contract were recorded (#384, landed):** an
   immutable capture stays a by-value snapshot (`test/lambda/test_closure_capture_semantics.vyb`,
   `test/lambda/test_closure_two_over_one_binding.vyb` — a read-only sibling does NOT
   see a write made through a mutable-capturing sibling, while the enclosing frame
   does), and a returned immutable-capture closure already survives its frame
   (`test_closure_escape_immutable.vyb`, `test_closure_field_and_vec_escape.vyb` —
   struct-field and `Vec`-element holders, reached by binding to a local first).
-  The contract to implement: a mutable capture boxes the BINDING into a heap cell
-  at capture time (the env stores the cell pointer, the enclosing frame shares it,
-  every mutable-capturing closure over that binding shares it), owned by the
-  closure environment through the existing `{ i64 refcount; ptr cap_dtor; ... }`
-  header, so the cell is freed when the last env reference drops — the same
-  transfer mechanism an immutable `my<Struct>` capture already uses. That makes
-  boxing per-binding (only bindings captured mutably) and needs no separate escape
-  analysis for correctness; the compile-time rejection above and the
-  `handoffCapable` mutable-capture refusal (`semantic_thread_boundary.cpp`) are
-  both revisited in the same pass, since a heap-owned cell holds no frame address.
+  **The full step 1 contract (per-BINDING cell) is what checkpoint (c) would land:**
+  a mutable capture boxes the BINDING into a heap cell shared by the enclosing frame
+  at capture time (the env stores the cell pointer, the frame shares it, every
+  mutable-capturing closure over that binding shares it), owned by the closure
+  environment through the existing `{ i64 refcount; ptr cap_dtor; ... }` header.
+  (b)(1) takes the narrower, contract-preserving form the escape predicate can
+  decide: only a mutable capture of a closure that ESCAPES is boxed, with its own
+  cell initialised from the binding — no frame redirection, so every non-escaping
+  fixture and the write-back contract stay exactly as they were.
 - [ ] **Generic lambdas** — `|x<T>| -> ...` (type parameters on closures) <!-- open: Generic lambdas (type parameters on closures) -->
   is unsupported: no parser/codegen path and no fixture exists. Named-function
   generics and generic binds monomorphize, so this is the one closure shape a user
@@ -1653,5 +1673,5 @@ Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `
 
 *Last Updated: 2026-09-29 (v0.7.7 release)*
 *Current Version: Vyb v0.7.7 (freedom-1.0 series)*
-*Overall Status: ~60-65% complete toward 1.0 — 1275 tests (documented size enforced against the runner by `test/suite_count_check.vyb`; the full `--execute-jit` sweep runs in `ci.yml`)*
+*Overall Status: ~60-65% complete toward 1.0 — 1278 tests (documented size enforced against the runner by `test/suite_count_check.vyb`; the full `--execute-jit` sweep runs in `ci.yml`)*
 *SUGGESTIONS.md merged into this document.*
