@@ -1,0 +1,61 @@
+// @test: io::open_append opens for WRITING (regression for #419)
+// @description: `open_append` composed `APPEND | CREATE` with no access-mode bit, so the
+//   descriptor was opened `O_RDONLY|O_CREAT|O_APPEND`: the file was created and the open
+//   succeeded, but every write through the handle failed with `EBADF` ("Bad file
+//   descriptor") -- a silent trap, because the file existing makes it look like a write
+//   bug. `FileFlag` carries no access-mode bit in `APPEND`/`CREATE`, and the runtime maps
+//   the flags straight to `open(2)` access bits, so `open_append` must set `WRITE` the way
+//   its sibling `open_write` does. The fixture appends twice through two separate
+//   `open_append` handles and reads both lines back, which no existing case did (the
+//   stdout line is newline-free so the expected-output check can match it).
+// @category: io, stdlib, files, regression
+// @expect-output: append-ok lines=2 bytes=4
+// @expect-return: 0
+
+import io::{open_append, open_write, open_read, read_all, write_str, close}
+
+main()<Int> -> {
+    path<String> = "/tmp/vyb_open_append_419.txt"
+
+    # Start from a known-empty file (no `remove` in io; TRUNC is the way to clear it).
+    match (open_write(path)) {
+        f -> { close(f) }
+        ? -> { }
+    }
+
+    # Two separate append handles, as an append-only log would use.
+    failed<Bool> = false
+    match (open_append(path)) {
+        w -> {
+            match (write_str(w, "a\n")) { n -> { } ? -> { failed = true } }
+            close(w)
+        }
+        ? -> { failed = true }
+    }
+    match (open_append(path)) {
+        w -> {
+            match (write_str(w, "b\n")) { n -> { } ? -> { failed = true } }
+            close(w)
+        }
+        ? -> { failed = true }
+    }
+    if (failed) {
+        println("append write failed")
+        return 1
+    }
+
+    content<String> = ""
+    match (open_read(path)) {
+        r -> {
+            match (read_all(r)) { s -> { content = s } ? -> { } }
+            close(r)
+        }
+        ? -> { }
+    }
+    if (content != "a\nb\n") {
+        println("append-bad bytes=" + content.len().to_string())
+        return 2
+    }
+    println("append-ok lines=2 bytes=" + content.len().to_string())
+    return 0
+}

@@ -96,6 +96,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `doc/THREAD_BOUNDARY_SCOPE.md` (whose step list is now fully closed).
 
 ### Fixed
+- **`io::open_append` opened a read-only descriptor, so every write failed with `EBADF` (#419)** — `FileFlag` carries no access-mode bit in `APPEND`/`CREATE`, and the runtime maps the flags straight onto `open(2)` access bits, so `APPEND | CREATE` alone produced `open(path, O_RDONLY|O_CREAT|O_APPEND, 0644)`: the file was created and the open succeeded, but the first `write_str` returned absent with `EBADF`. The helper now sets `WRITE` the way its sibling `open_write` does. Silent trap rather than a visible error — the file existing made it look like a write bug. Locked in by `test/modules/test_io_open_append.vyb`, which appends twice through two separate handles and reads both lines back.
 - **A Vec temporary consumed through an element accessor is reclaimed (#382)** —
   `payload.split("\n").get(0)` leaked one allocation per evaluation (measured: 3200 B
   in 50 allocations, one per `split()`). The accessor loaded the element pointer out

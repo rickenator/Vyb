@@ -1,5 +1,5 @@
 {
-  "git_rev": "dc3daf34863e93083ad040beb17d9751ef40a217",
+  "git_rev": "4a2861d53ad89ad40dd806d12fb3b946f06879b9",
   "modules": [
     "agents",
     "archive",
@@ -3493,7 +3493,7 @@
         "file": "stdlib/io/mod.vyb",
         "kind": "fn",
         "signature": "open_append(path<String>)<File?> ->",
-        "summary": "Convenience: open for appending, creating the file if absent (`File?`).",
+        "summary": "Convenience: open for appending, creating the file if absent (`File?`). WRITE is",
         "fan_in": 0
       },
       {
@@ -9372,6 +9372,13 @@
       "from_symbol": "open",
       "to_module": "io",
       "to_symbol": "error_message"
+    },
+    {
+      "type": "proseRef",
+      "from_module": "io",
+      "from_symbol": "open_append",
+      "to_module": "io",
+      "to_symbol": "FileFlag"
     },
     {
       "type": "proseRef",
