@@ -244,7 +244,7 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 - [x] **`println()`/`print()` with multiple arguments** — Space-separated output; all args formatted into a single call
 - [x] **Semantic type recognition** — `Int16`, `Int32`, `Int64`, `UInt8`–`UInt64`, `Float32`, `Float64`, `Char`, `Rune` now fully recognized in semantic analysis (were silently rejected)
 - [x] **Relaxed struct field syntax** — C-style `Type fieldName` accepted alongside canonical `fieldName<Type>`; helps parse legacy/interop fixtures
-- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite runs **1258 tests** via `test/run_tests.vyb`, and that documented size is enforced against the runner by `test/suite_count_check.vyb` in CI
+- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite runs **1260 tests** via `test/run_tests.vyb`, and that documented size is enforced against the runner by `test/suite_count_check.vyb` in CI
 - [x] **Vec parameter deep copy** — Vec parameters receive an independent copy of the data on function entry, eliminating double-free bugs (e.g. recursive quicksort base-case return)
 - [x] **Nested `Vec<Vec<T>>` element ownership** — every path that clones a nested Vec (by-value argument, return, assignment, `push`, `set`, and the borrowed-element binding) now deep-copies the inner Vec *and* retains its elements, so `Vec<Vec<String>>` rows no longer share inner buffers with their source binding (no double free at exit, no dangling inner strings). Locked in by `test/ownership/nested_vec_element_ownership.vyb` (#373)
 - [x] **Nested Vec reclaim depth ≥ 3** — scope-exit reclaim now releases *every* level of a nested Vec: for a `Vec` element the deeper levels are released recursively (`emitInnerVecCleanup`) before the outer storage is freed, struct-field reclaim is skipped for a Vec element, and a `Vec<Vec<T>>` *field* of a struct takes the same recursive path. Verified under `ASAN_OPTIONS=halt_on_error=1:detect_leaks=1` (`test/collections/test_nested_vec_deep_copy.vyb`, the SQLite binding, `test/traffic/test_traffic_{parse,db,graph,report}.vyb`) (#373)
@@ -506,6 +506,27 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
   would expect to work and cannot write. **Decision for 1.0: postponed** (a
   deliberate "not planned" record, per #360); implementing it means monomorphizing
   a closure at each call site, mirroring generic-function monomorphization.
+  **Step 0 probes + the step 1 decision are recorded (#385, landed).** Measured on
+  this tree: a closure with EXPLICIT parameter types works in both positions
+  (`test/lambda/test_closure_typed_param_binding.vyb`,
+  `test/lambda/test_closure_typed_param_aspect_hof.vyb`), while an UN-annotated one
+  is rejected at a typed binding (`Expected fn(Int) -> Int but got fn(?) -> void`),
+  silently DROPS its call statement when bound without a type (`d = |x| -> x * 2;
+  n<Int> = d(3)` leaves `n` null), and SIGSEGVs the driver (exit 139) when passed to
+  the shipped higher-order `map` (warning `Parameter type not specified in function
+  expression, defaulting to pointer type`, then the crash). `|x<T>|` itself parses
+  today as a parameter *annotation* naming an unknown type (`Unknown struct type:
+  T`). Decision: implement per-call-site instantiation as **parameter-type
+  inference at the call site** — `|x| -> x * 2` handed to `f<fn(T) -> T>` (an
+  aspect method or a generic helper) instantiates once per call site, which is what
+  feature (1) needs — and NOT a closure type-parameter list: `param<T>` is already
+  the annotation form, so a second meaning would be ambiguous, and the
+  inferred-parameter path covers the writable shapes. A closure VALUE called at
+  more than one concrete type is rejected with a diagnostic naming what is missing,
+  never inferred from the first call. The inference is a **prerequisite** for the
+  rejection, not a follow-on: a single call at one type silently drops or crashes
+  today. Ordering: after #384, since a capturing generic lambda instantiates its
+  captures per instance and the boxed-capture env layout changes with it.
 
 ---
 
@@ -1618,5 +1639,5 @@ Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `
 
 *Last Updated: 2026-09-29 (v0.7.7 release)*
 *Current Version: Vyb v0.7.7 (freedom-1.0 series)*
-*Overall Status: ~60-65% complete toward 1.0 — 1258 tests (documented size enforced against the runner by `test/suite_count_check.vyb`; the full `--execute-jit` sweep runs in `ci.yml`)*
+*Overall Status: ~60-65% complete toward 1.0 — 1260 tests (documented size enforced against the runner by `test/suite_count_check.vyb`; the full `--execute-jit` sweep runs in `ci.yml`)*
 *SUGGESTIONS.md merged into this document.*

@@ -1,0 +1,23 @@
+// @test: an explicitly typed closure passed to a generic higher-order method
+// @description: the shipped higher-order surface, pinned for #385. `VecHigherOps.map`
+//   takes `f<fn(T) -> T>`, and a closure with an explicit parameter type is accepted
+//   and applied element-wise. The same call with an un-annotated parameter
+//   (`|x| -> x + 10`) is what #385 has to fix: today it warns ("Parameter type not
+//   specified in function expression, defaulting to pointer type") and then crashes
+//   the driver with SIGSEGV (exit 139) -- measured on this tree.
+// @category: lambda, closure, generics, vec
+// @expect-output: w1=12
+// @expect-return: 0
+
+import core::aspects
+import collections
+
+main()<Int> -> {
+    v<Vec<Int>> = Vec()
+    v.push(1)
+    v.push(2)
+
+    w<Vec<Int>> = v.map(|x<Int>| -> x + 10)
+    println("w1=" + w.get(1).to_string())
+    return 0
+}
