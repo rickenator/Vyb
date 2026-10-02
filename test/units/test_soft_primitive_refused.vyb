@@ -1,0 +1,19 @@
+// @test: soft() over an inline primitive `our<T>` is refused, not compiled to invalid IR (#427 defect 2)
+// @description: a shared `our<T>` over a PRIMITIVE payload is stored inline (no heap box, no
+//   control block), so there is no weak count to take and no object to observe. `soft(our(5))`
+//   passed the "argument is our<T>" check and reached codegen, which treated the payload value
+//   itself as the control-block pointer: `load i32, i64 5` / `call void @free(i64 5)` -- invalid
+//   IR the verifier rejected, so the JIT died with SIGSEGV (exit 139) and printed nothing useful.
+//   It is now refused at semantic analysis, next to the notype() primitive rule; codegen also
+//   guards the shape so no invalid IR can escape. The binding form was already refused
+//   ("soft() can only be applied to our<T> (shared ownership) types"); this closes the temporary
+//   form, which slipped through.
+// @category: ownership, diagnostics
+// @expect: fail
+// @expect-error: soft() requires a shared `our<T>` over a struct value
+// @semantic-only: true
+
+main()<Int> -> {
+    m<mild<Int>> = soft(our(5))
+    return 0
+}

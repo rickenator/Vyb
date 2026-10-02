@@ -1337,6 +1337,16 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
 
         llvm::Value* controlBlockPtr = m_currentLLVMValue;
 
+        // A value-typed `our<T>` over a primitive is stored inline and has no control
+        // block, so there is no weak count to take. The semantic rule refuses this
+        // (#427 defect 2); guard here too so no invalid IR can escape to the verifier.
+        if (!controlBlockPtr->getType()->isPointerTy()) {
+            logError(node->loc, "soft() requires a shared `our<T>` over a struct value; "
+                                "a primitive payload is stored inline and has no control block");
+            m_currentLLVMValue = nullptr;
+            return;
+        }
+
         // Soft() increments weak_count in the control block and returns mild<T>
         // Control block: { i32 strong_count, i32 weak_count, i8 object_freed, ptr object_ptr }
 

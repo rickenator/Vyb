@@ -108,6 +108,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `doc/THREAD_BOUNDARY_SCOPE.md` (whose step list is now fully closed).
 
 ### Fixed
+- **`soft()` over an inline primitive `our<T>` is refused instead of emitting invalid IR (#427)** —
+  `soft(our(5))` passed the "argument is `our<T>`" semantic check and reached codegen, which treated
+  the payload value itself as the control-block pointer and emitted
+  `load i32, i64 5` / `call void @free(i64 5)`: invalid IR the verifier rejected, so the JIT died
+  with SIGSEGV (exit 139) instead of reporting anything. A shared `our<T>` over a primitive payload
+  is stored inline (no heap box, no control block), so there is no weak count to take and no object
+  to observe — and the binding form of the same call was already refused while only the temporary
+  form slipped through. Semantic analysis now refuses it with
+  "soft() requires a shared `our<T>` over a struct value: `our<Int>` is stored inline and has no
+  control block" (mirroring the notype() primitive rule), and codegen guards the shape too so no
+  invalid IR can escape. `test/units/test_soft_primitive_refused.vyb` fails on the pre-fix tree and
+  passes now; `test/units/test_soft_our_struct_weak.vyb` asserts the struct path still works
+  (`soft(our(A { v: 5 }))` yields a `mild<A>` reporting `released=true`).
 - **An `our<T>`/`mild<T>` field assignment is a storage location, and a recursive payload
   reclaims without unbounded recursion (#427)** — two of the ten defects the doc-example port
   (#391) turned up, both in the codegen ownership path. `s.a = x` (an `our<A>` into an `our<A>`
