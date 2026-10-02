@@ -503,6 +503,48 @@ llvm::Type* LLVMCodegen::codegenType(vyb::ast::TypeNode* typeNode) {
                 break;
             }
 
+            // A monomorphized type argument can arrive with the APPLIED name baked into a
+            // single identifier -- "mild<A>", "our<Vec<Int>>" -- instead of a structured
+            // `mild` + genericArgs pair, because the generic substitution builds the name
+            // from the argument's string form. Such a name matched nothing, so resolution
+            // fell through to the user-type table and failed; downstream the failure became
+            // `ret undef` and the module was refused, so `for (x in Vec<mild<A>>)` could not
+            // compile at all (#427 defect 6). Split the wrapper prefix off, resolve the inner
+            // type, and apply the same wrapper semantics as the structured branch below.
+            {
+                size_t lt = typeNameStr.find('<');
+                if (lt != std::string::npos && !typeNameStr.empty() && typeNameStr.back() == '>') {
+                    std::string wrapper = typeNameStr.substr(0, lt);
+                    if (wrapper == "my" || wrapper == "our" || wrapper == "their" ||
+                        wrapper == "mild" || wrapper == "view" || wrapper == "borrow") {
+                        // Balance-check the brackets so "our<Vec<mild<A>>>" is accepted and a
+                        // malformed name is not silently treated as an ownership wrapper.
+                        int depth = 0;
+                        bool balanced = true;
+                        for (size_t i = lt; i < typeNameStr.size() && balanced; ++i) {
+                            if (typeNameStr[i] == '<') depth++;
+                            else if (typeNameStr[i] == '>') { depth--; if (depth == 0 && i != typeNameStr.size() - 1) balanced = false; }
+                        }
+                        if (balanced && depth == 0) {
+                            std::string inner = typeNameStr.substr(lt + 1, typeNameStr.size() - lt - 2);
+                            auto innerNode = std::make_unique<ast::TypeName>(
+                                typeNode->loc,
+                                std::make_unique<ast::Identifier>(typeNode->loc, inner));
+                            llvm::Type* underlyingType = codegenType(innerNode.get());
+                            if (underlyingType) {
+                                if (underlyingType->isIntegerTy() || underlyingType->isFloatTy() ||
+                                    underlyingType->isDoubleTy()) {
+                                    llvmType = underlyingType;
+                                } else {
+                                    llvmType = llvm::PointerType::getUnqual(underlyingType);
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
             // Handle ownership types: my<T>, our<T>, their<T>, mild<T>, view<T>, borrow<T>
             if (typeNameStr == "my" || typeNameStr == "our" || typeNameStr == "their" ||
                 typeNameStr == "mild" || typeNameStr == "view" || typeNameStr == "borrow") {

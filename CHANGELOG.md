@@ -108,7 +108,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `doc/THREAD_BOUNDARY_SCOPE.md` (whose step list is now fully closed).
 
 ### Fixed
-- **A module whose code generation failed is refused instead of executed (#427)** —
+- **A `Vec` of ownership handles can be iterated (#427)** — `for (x in Vec<mild<A>>)` and
+  `for (v in Vec<our<A>>)` could not compile: the generic substitution for an ownership type
+  argument bakes the APPLIED name into a single identifier (`mild<A>`) rather than a structured
+  `mild` + `genericArgs` pair, so the ownership branch of `codegenType` (which matches the exact name
+  `mild`) never fired, resolution fell through to the user-type lookup, failed, and — because the
+  failing type sits in the return type of the `VecIter<T>::next` body — the function was emitted as
+  `ret undef`. `codegenType` now recognises an applied ownership name, splits the wrapper prefix off,
+  balance-checks the brackets (so `our<Vec<mild<A>>>` nests), resolves the inner type recursively and
+  applies the same wrapper semantics as the structured branch. This also means the refusal added in
+  the previous fix is no longer reachable through this shape: the program compiles and runs
+  (`for (x in Vec<mild<A>>)` -> `live=1`, `for (v in Vec<our<A>>)` -> `sum=5`, `Vec<Int>` unchanged).
+  Locked in by `test/units/test_vec_handle_iteration.vyb`; the loop needs the iterator module in scope
+  (`import collections`).
+ —
   `for (x in Vec<mild<A>>)` (with the iterator module in scope) surfaced a codegen-only
   `Unknown type identifier: mild<A>` and then the program was JIT'd and RUN anyway, dying at runtime
   with exit 139 (gdb: a pointer passed to `__vyb_int_to_string` where an Int was expected). Type
