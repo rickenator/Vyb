@@ -1,0 +1,83 @@
+#!/bin/sh
+# SOURCEME_VYB — source this to point every Vyb consumer at THIS checkout.
+#
+#   . "$HOME/Projects/Vyb/SOURCEME_VYB"
+#
+# Exports (the pair every project needs, derived from one knob):
+#   VYBHOME     the checkout root
+#   VYB         $VYBHOME/build/vyb
+#   VYB_STDLIB  $VYBHOME/stdlib
+#
+# Resolution order, first hit wins:
+#   1. an explicit $VYBHOME — VYBHOME always wins;
+#   2. a $VYB / $VYB_BIN pointing at a compiler binary, its `build/` dir, or the
+#      checkout root — the home is derived from it, so a project that already
+#      exports one of those keeps working;
+#   3. this file's own directory — so the checkout can live anywhere.
+#
+# Idempotent: sourcing it again recomputes the same values. It touches only the
+# three variables above (PATH is deliberately left alone; the packaged SDK's
+# sdk/env.sh is the one that prepends bin/ to PATH).
+#
+# Sourcing works in bash and zsh (BASH_SOURCE / %x give this file's path). A
+# strictly POSIX shell cannot report the path of a sourced file, so there set the
+# home first:  VYBHOME=/path/to/Vyb . /path/to/Vyb/SOURCEME_VYB
+
+if [ -n "${ZSH_VERSION:-}" ]; then
+    _vyb_self="${(%):-%x}"
+elif [ -n "${BASH_VERSION:-}" ]; then
+    _vyb_self="${BASH_SOURCE[0]}"
+else
+    _vyb_self="$0"
+fi
+_vyb_dir="$(CDPATH= cd -- "$(dirname -- "$_vyb_self")" 2>/dev/null && pwd -P)"
+
+# 1. VYBHOME wins.
+_vyb_home="${VYBHOME:-}"
+
+# 2. Derive the home from an existing VYB / VYB_BIN export.
+if [ -z "$_vyb_home" ]; then
+    _vyb_hint="${VYB:-${VYB_BIN:-}}"
+    if [ -n "$_vyb_hint" ]; then
+        case "$_vyb_hint" in
+            */build/vyb) _vyb_home="$(dirname -- "$(dirname -- "$_vyb_hint")")" ;;
+            */build)     _vyb_home="$(dirname -- "$_vyb_hint")" ;;
+            *)
+                if [ -d "$_vyb_hint" ]; then
+                    if [ -d "$_vyb_hint/build" ]; then
+                        _vyb_home="$_vyb_hint"
+                    elif [ -d "$_vyb_hint/../stdlib" ]; then
+                        _vyb_home="$(CDPATH= cd -- "$_vyb_hint/.." && pwd -P)"
+                    fi
+                fi
+                ;;
+        esac
+    fi
+fi
+
+# 3. This file's own directory.
+if [ -z "$_vyb_home" ]; then
+    _vyb_home="$_vyb_dir"
+fi
+
+# A Vyb checkout always has stdlib/; use that as the sanity check so a POSIX
+# shell (where the path above resolves to the cwd) fails loudly instead of
+# exporting a wrong home.
+if [ -z "$_vyb_home" ] || [ ! -d "$_vyb_home/stdlib" ]; then
+    echo "SOURCEME_VYB: could not resolve a Vyb checkout from" \
+         "\${VYBHOME:-unset}, \${VYB:-unset} or this file's directory." >&2
+    echo "               set it explicitly:  VYBHOME=/path/to/Vyb . /path/to/Vyb/SOURCEME_VYB" >&2
+    unset _vyb_self _vyb_dir _vyb_hint _vyb_home 2>/dev/null
+    return 1 2>/dev/null || exit 1
+fi
+
+VYBHOME="$(CDPATH= cd -- "$_vyb_home" && pwd -P)"
+export VYBHOME
+export VYB="$VYBHOME/build/vyb"
+export VYB_STDLIB="$VYBHOME/stdlib"
+
+if [ ! -x "$VYB" ]; then
+    echo "SOURCEME_VYB: $VYB is not built yet — run: cmake --build $VYBHOME/build" >&2
+fi
+
+unset _vyb_self _vyb_dir _vyb_hint _vyb_home

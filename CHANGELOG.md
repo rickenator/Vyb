@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`VYBHOME` + a toplevel `SOURCEME_VYB`, so projects stop hardcoding the checkout
+  (#424)** — Vyb now owns its own toolchain paths. Sourcing `SOURCEME_VYB` exports
+  `VYBHOME` (the checkout root) and the derived `VYB` (`$VYBHOME/build/vyb`) and
+  `VYB_STDLIB` (`$VYBHOME/stdlib`), so a consumer needs one line
+  (`. "$HOME/Projects/Vyb/SOURCEME_VYB"`) instead of its own
+  `VYB="${VYB:-/path/to/Vyb/build/vyb}"` fallback. An explicit `VYBHOME` wins;
+  otherwise the home is derived from an existing `VYB`/`VYB_BIN`, and otherwise
+  from the script's own location (so a checkout can live anywhere). Idempotent,
+  touches only those three variables, leaves `PATH` to the packaged SDK's
+  `sdk/env.sh`, and fails loudly in a strictly POSIX shell (which cannot report a
+  sourced file's path) instead of exporting a wrong home. Documented in the README
+  and `docs/sdk/INSTALL.md`, locked in by `test/vybenv_smoke.sh` in CI.
 - **`vyb build` auto-fetches a `github:` dependency (#388)** — a `github = "owner/repo/path"`
   entry in `vyb.toml` `[dependencies]` is now fetched on build into `.vybmod/<name>/` when it
   is not already materialized, exactly as a `git:` dep is cloned, so the `vyb mod install
