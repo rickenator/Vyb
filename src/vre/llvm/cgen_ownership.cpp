@@ -1036,7 +1036,7 @@ void LLVMCodegen::reclaimStructOwnedFieldsAt(llvm::Value* structPtr,
                 const vyb::ast::TypeNode* pointeeAst = ourPointeeOf(f);
                 llvm::Type* pointeeLlvm = pointeeAst
                     ? codegenType(const_cast<vyb::ast::TypeNode*>(pointeeAst)) : nullptr;
-                releaseOurControlBlock(cb, "reclaim.our", pointeeAst, pointeeLlvm);
+                releaseOurControlBlock(cb, "reclaim.our", pointeeAst, pointeeLlvm, &visited);
             }
             builder->CreateStore(nullPtr, fptr);
         } else if (isKnownStructTypeNode(f)) {
@@ -1091,7 +1091,8 @@ void LLVMCodegen::retainOurControlBlock(llvm::Value* controlBlockPtr, const std:
 // null) pointer stored by the binding/field being released.
 void LLVMCodegen::releaseOurControlBlock(llvm::Value* controlBlockPtr, const std::string& tag,
                                          const vyb::ast::TypeNode* pointeeAst,
-                                         llvm::Type* pointeeLlvm) {
+                                         llvm::Type* pointeeLlvm,
+                                         std::set<std::string>* visited) {
     if (!controlBlockPtr || !builder || !currentFunction) return;
     llvm::PointerType* rawPtr = llvm::PointerType::get(*context, 0);
     llvm::Constant* nullPtr = llvm::ConstantPointerNull::get(rawPtr);
@@ -1132,8 +1133,14 @@ void LLVMCodegen::releaseOurControlBlock(llvm::Value* controlBlockPtr, const std
     // so the object is genuinely being destroyed (not a shared, still-live one).
     if (pointeeAst && pointeeLlvm) {
         if (auto* poise = llvm::dyn_cast<llvm::StructType>(pointeeLlvm)) {
-            std::set<std::string> visited;
-            reclaimStructOwnedFieldsAt(objectPtr, pointeeAst, poise, visited);
+            if (visited) {
+                // Share the caller's set: a recursive payload type must not expand
+                // another level of reclaim code, or the expansion never terminates.
+                reclaimStructOwnedFieldsAt(objectPtr, pointeeAst, poise, *visited);
+            } else {
+                std::set<std::string> fresh;
+                reclaimStructOwnedFieldsAt(objectPtr, pointeeAst, poise, fresh);
+            }
         }
     }
     builder->CreateCall(getOrCreateFreeFunction(), {objectPtr});
