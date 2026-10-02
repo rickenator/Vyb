@@ -5217,10 +5217,30 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                 // Evaluate the object in "LHS mode" (pointer mode) to get a pointer to the Vec field.
                 // Without this, evaluating `s.items` loads a copy of the Vec struct and mutations
                 // (like push) would be applied to a temporary, losing the changes.
-                bool savedLHS = m_isLHSOfAssignment;
-                m_isLHSOfAssignment = true;
-                memberExpr->object->accept(*this);
-                m_isLHSOfAssignment = savedLHS;
+                // LHS ("pointer") mode is what keeps a mutation through a field
+                // receiver (`s.items.push(x)`) attached to the field rather than to a
+                // temporary copy of it. It only means anything for a *storage
+                // location*. A receiver that is itself a call (`f(x).len()`,
+                // `outer.get(0).len()`) has no slot, and forcing LHS mode on it
+                // propagates down into the call's own argument evaluation: `x` then
+                // reaches `f` as its address instead of a loaded by-value copy
+                // ("Argument type mismatch for call to f. Expected Big but got ptr"),
+                // the receiver evaluates to nothing and the whole statement is
+                // dropped. Evaluate such a receiver normally; a Vec handed back by
+                // value is materialized by handleVecMethodOnValue into its own
+                // temporary, and a borrow in flight is already the Vec* it needs.
+                // #412 (mode 2): chained method call on a Vec-typed call result.
+                const bool receiverIsStorageLocation =
+                    dynamic_cast<ast::Identifier*>(memberExpr->object.get()) != nullptr ||
+                    dynamic_cast<ast::MemberExpression*>(memberExpr->object.get()) != nullptr;
+                if (receiverIsStorageLocation) {
+                    bool savedLHS = m_isLHSOfAssignment;
+                    m_isLHSOfAssignment = true;
+                    memberExpr->object->accept(*this);
+                    m_isLHSOfAssignment = savedLHS;
+                } else {
+                    memberExpr->object->accept(*this);
+                }
                 llvm::Value* vecValue = m_currentLLVMValue;
                 if (!vecValue) {
                     logError(memberExpr->object->loc, "Failed to evaluate object for Vec method call");
@@ -5364,11 +5384,26 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                         if (!implFunc) implFunc = monomorphizeTraitMethod(concreteType, foundTrait, methodName);
                         if (implFunc) {
                             // Evaluate the receiver in LHS (pointer) mode to get the
-                            // address of the member field / object.
-                            bool savedLHS = m_isLHSOfAssignment;
-                            m_isLHSOfAssignment = true;
-                            memberExpr->object->accept(*this);
-                            m_isLHSOfAssignment = savedLHS;
+                            // address of the member field / object. Same restriction as
+                            // the built-in-Vec dispatch above: pointer mode only means
+                            // something for a storage location, and forcing it on a
+                            // call-result receiver pushes the receiver's pointer
+                            // semantics into that call's own argument evaluation (a
+                            // by-value struct argument then arrives as its address and
+                            // the whole statement is dropped). A call receiver yields
+                            // its value, which the temporary-slot branch below handles.
+                            // #412 (mode 2), aspect/bind form.
+                            const bool receiverIsStorageLocation =
+                                dynamic_cast<ast::Identifier*>(memberExpr->object.get()) != nullptr ||
+                                dynamic_cast<ast::MemberExpression*>(memberExpr->object.get()) != nullptr;
+                            if (receiverIsStorageLocation) {
+                                bool savedLHS = m_isLHSOfAssignment;
+                                m_isLHSOfAssignment = true;
+                                memberExpr->object->accept(*this);
+                                m_isLHSOfAssignment = savedLHS;
+                            } else {
+                                memberExpr->object->accept(*this);
+                            }
                             llvm::Value* recvPtr = m_currentLLVMValue;
                             if (!recvPtr) {
                                 logError(memberExpr->object->loc, "Failed to evaluate member-expression receiver for aspect method " + methodName);
