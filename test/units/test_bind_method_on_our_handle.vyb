@@ -1,0 +1,36 @@
+// @test: a bind method called on an `our<T>` handle reaches the object (#427 defect 9)
+// @description: a bind method with a by-ref `their<T>` self, called with a HANDLE receiver, was
+//   passed the receiver's CONTROL BLOCK instead of the object. The callee then read the block's
+//   fields as the struct's fields -- `self.n` printed 0x100000002, i.e. {strong=2, weak=1} -- and
+//   its write landed in the block, so the call had no effect on the object at all: `o.bump()` on an
+//   `our<Observer>` binding, and `observer.bump()` on the value unwrapped from `mild<T>.grab()`
+//   (whose declared type is `our<Observer>`), both silently did nothing. The dispatch now unwraps a
+//   handle receiver to the block's object pointer, exactly as `borrow(x)` does. Both call sites are
+//   asserted, and the object's field is read back after each.
+// @category: ownership, aspect
+// @expect-output: via-binding=1 via-grab=2
+// @expect-return: 0
+
+import core::aspects
+
+share(all)
+struct Observer { n<Int> }
+
+aspect Notify { bump(self<their<Observer>>) -> Void }
+
+bind Notify -> Observer {
+    bump(self<their<Observer>>) -> { self.n = self.n + 1 }
+}
+
+main()<Int> -> {
+    o<our<Observer>> = our(Observer { n: 0 })
+
+    o.bump()                                   // receiver is a handle BINDING
+    viaBinding<Int> = o.n
+
+    m<mild<Observer>> = soft(o)
+    match (m.grab()) { observer -> { observer.bump() } ? -> { println("none") } }
+
+    println("via-binding=" + viaBinding.to_string() + " via-grab=" + o.n.to_string())
+    return 0
+}
