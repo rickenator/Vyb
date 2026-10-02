@@ -23,10 +23,10 @@ main()<Int> -> {
     s<B> = B { a: our(A { v: 1 }) }
     x<our<A>> = our(A { v: 2 })
     s.a = x                       // a field of a value struct
-    println("v=" + s.a.v.to_string())
+    first<Int> = s.a.v
 
     b<our<B>> = our(B { a: our(A { v: 9 }) })
     setb(b, x)                    // a field reached through an owned struct parameter
-    println("after=" + b.a.v.to_string())
+    println("v=" + first.to_string() + " after=" + b.a.v.to_string())
     return 0
 }
