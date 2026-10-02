@@ -897,6 +897,16 @@ void LLVMCodegen::visit(vyb::ast::ReturnStatement *node) {
                 generatePopFrameCall();
                 builder->CreateRet(llvm::UndefValue::get(currentFunction->getReturnType()));
                 logError(node->loc, "Return expression codegen failed, returning undef.");
+                // A function that returns `undef` is not merely degraded: its callers get
+                // whatever the register happens to hold. The module still VERIFIES, so
+                // without this the program would be JIT'd and RUN and could fault at
+                // runtime -- e.g. `for (x in Vec<mild<A>>)` passed a pointer where an Int
+                // was expected and died with exit 139 inside __vyb_int_to_string, after
+                // only a type-resolution diagnostic (#427 defect 6). Flag it hard so the
+                // pipeline refuses to run the module (the #251 gate); a stray unresolved
+                // type elsewhere (a trap/error name, an unused generic) is NOT flagged,
+                // because those modules verifiably still run.
+                flagHardCodegenError();
             }
         }
     } else {

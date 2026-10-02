@@ -108,6 +108,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `doc/THREAD_BOUNDARY_SCOPE.md` (whose step list is now fully closed).
 
 ### Fixed
+- **A module whose code generation failed is refused instead of executed (#427)** —
+  `for (x in Vec<mild<A>>)` (with the iterator module in scope) surfaced a codegen-only
+  `Unknown type identifier: mild<A>` and then the program was JIT'd and RUN anyway, dying at runtime
+  with exit 139 (gdb: a pointer passed to `__vyb_int_to_string` where an Int was expected). Type
+  resolution failed, the failure propagated into a return expression, the function was emitted as
+  `ret undef`, and the module VERIFIED — `llvm::verifyModule` passing is the gate the pipeline
+  trusts before executing. The hard-error flag (#251) is now set where the failure becomes
+  unrecoverable (a return expression that codegens to `undef`), so the run path reports
+  "Code generation failed for '<file>'; refusing to run a module whose code generation reported
+  errors". Not flagged at the `Unknown type identifier` site itself: that lookup also misses
+  benignly in modules that still run (a trap/error name, an unused generic, an unresolved `?`
+  payload) and flagging it there broke three existing tests. The underlying substitution gap (an
+  ownership type argument yields a type node named with the applied string, which the ownership
+  branch of `codegenType` does not match) is recorded in #427 and still open; what changed is that
+  it can no longer take the process down silently.
 - **`our<T>?()` could not be constructed (#427)** — an absent optional owned handle was a parse
   error (`Expected primary expression. (found '?')`) while `Int?()`, a struct (`A?()`) and
   `mild<Int>?()` all parsed, so an `our<T>?` value could only ever come from a call. The expression
