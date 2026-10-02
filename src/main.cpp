@@ -1730,7 +1730,11 @@ std::vector<fs::path> project_module_paths(const vyb::Manifest& m) {
             // (`<parent>/<name>/mod.vyb`). Added only for that shape; the dep dir
             // stays a root, so the older `import mod` spelling keeps working, and a
             // plain module directory (modules named `<depname>.vyb`, no mod.vyb — the
-            // demos/legit_smuggle shape) is untouched.
+            // demos/legit_smuggle shape) is untouched. NOTE: this makes the parent
+            // directory a root for the whole project, so sibling packages under it are
+            // also importable by name — the same visibility the `.vybmod` container
+            // gives the github/git/version sources. The project's own root and src are
+            // earlier roots, so a project-local module of the same name still wins.
             if (fs::exists(p / "mod.vyb")) {
                 fs::path parent = p.parent_path();
                 if (!parent.empty() &&
