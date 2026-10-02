@@ -60,6 +60,19 @@ export PATH="<sdk>/bin:$PATH"
 export VYB_STDLIB="<sdk>/stdlib"
 ```
 
+Building from a source checkout instead of the packaged SDK? The Vyb repository
+ships a toplevel `SOURCEME_VYB` that resolves that checkout and exports
+`VYBHOME` plus the derived `VYB` (`$VYBHOME/build/vyb`) and `VYB_STDLIB`
+(`$VYBHOME/stdlib`) -- one knob, no path literals:
+
+```sh
+. "$HOME/Projects/Vyb/SOURCEME_VYB"
+```
+
+It leaves `PATH` alone (this SDK's `env.sh` is the one that prepends `bin/`), so a
+project can source either depending on whether it is pointed at a checkout or at
+an installed SDK.
+
 ## Contents
 
 The SDK bundles `bin/vyb` (Release compiler) and `bin/vyb-bindgen`, the standard

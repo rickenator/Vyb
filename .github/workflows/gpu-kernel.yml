@@ -81,6 +81,14 @@ jobs:
         # asserts vyb.lock source="version", and runs the built binary.
         run: ./build/vyb test/registry_smoke.vyb
 
+      - name: environment (SOURCEME_VYB) smoke test
+        # Sources the toplevel SOURCEME_VYB in clean shells (env -i) and asserts
+        # the checkout resolves to VYBHOME/VYB/VYB_STDLIB -- self-locating from
+        # bash, derived from an existing VYB/VYB_BIN, an explicit VYBHOME winning,
+        # idempotent, and a strictly POSIX shell failing loudly rather than
+        # exporting a wrong home (#424).
+        run: ./test/vybenv_smoke.sh
+
       - name: Emit + ptxas-validate kernel PTX across arches
         # The --kernel path runs ptxas automatically and FAILS the build if it
         # rejects the artifact (P2.2 gate). For each fixture x arch we assert the
