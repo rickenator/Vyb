@@ -1,5 +1,23 @@
 # Developer tooling: dependencies, formatter, LSP, REPL (#154)
 
+## Toolchain environment — `VYBHOME` / `SOURCEME_VYB` (#424)
+
+**Shipped:** the toplevel `SOURCEME_VYB` is the one place that resolves a checkout.
+Source it (`. "$HOME/Projects/Vyb/SOURCEME_VYB"`) and it exports `VYBHOME` (the
+checkout root), `VYB` (`$VYBHOME/build/vyb`) and `VYB_STDLIB` (`$VYBHOME/stdlib`).
+
+- **Resolution order:** an explicit `VYBHOME` wins; otherwise the home is derived
+  from an existing `VYB`/`VYB_BIN` that points at a compiler binary, its `build/`
+  dir, or the checkout root; otherwise from the file's own directory (bash/zsh).
+- **Idempotent**, touches only those three variables, and never writes PATH — the
+  packaged SDK's `sdk/env.sh` is the PATH one.
+- A strictly POSIX shell cannot report a sourced file's path, so there it fails
+  loudly rather than exporting a wrong home; set `VYBHOME` first in that shell.
+- Locked in by `test/vybenv_smoke.sh` (hosted CI, clean `env -i` shells).
+
+Projects therefore stop carrying a private fallback (`VYB="${VYB:-…}"`) and a
+checkout can move without touching them (consumer: rickenator/VybForge#15).
+
 ## Dependency resolution — shipped scope
 
 **Shipped:** all four dependency source kinds resolve (tracked by

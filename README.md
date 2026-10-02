@@ -115,6 +115,27 @@ echo 'main()<Int,String> -> { return 42, "Hello!" }' > tuple.vyb
 build/vyb tuple.vyb  # Outputs: [42, "Hello!"]
 ```
 
+### Pointing a project at this checkout
+
+Vyb owns the toolchain paths, so a project that builds against it does not need to
+hardcode the checkout. The toplevel `SOURCEME_VYB` resolves *this* checkout and
+exports the two values every consumer needs (`VYBHOME` plus the derived `VYB` and
+`VYB_STDLIB`):
+
+```sh
+. "$HOME/Projects/Vyb/SOURCEME_VYB"   # one line, e.g. in your shell profile
+# VYBHOME=/home/…/Vyb   VYB=$VYBHOME/build/vyb   VYB_STDLIB=$VYBHOME/stdlib
+```
+
+An explicit `VYBHOME` wins. Otherwise the home is derived from an existing
+`VYB`/`VYB_BIN` (a compiler binary, its `build/` directory, or the checkout root),
+and otherwise from `SOURCEME_VYB`'s own location — so the checkout can live
+anywhere. Sourcing is idempotent and touches only those three variables (PATH is
+left alone; the packaged SDK's `sdk/env.sh` is the one that prepends `bin/`). A
+strictly POSIX shell cannot report a sourced file's path, so set the home first:
+`VYBHOME=/path/to/Vyb . /path/to/Vyb/SOURCEME_VYB`. Covered by
+`test/vybenv_smoke.sh` in CI.
+
 ### Compilation to Native Code
 
 Vyb provides a complete compilation pipeline from source to standalone executables:
