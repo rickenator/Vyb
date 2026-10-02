@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`vyb build` auto-fetches a `github:` dependency (#388)** — a `github = "owner/repo/path"`
+  entry in `vyb.toml` `[dependencies]` is now fetched on build into `.vybmod/<name>/` when it
+  is not already materialized, exactly as a `git:` dep is cloned, so the `vyb mod install
+  github:...` step is no longer required for ordinary packages. The verified install command
+  remains the channel for a pinned (`@sha256:HEX`) or `--require-signed` install, and a
+  package declaring a `freedom` boundary or privileged capabilities is REFUSED on build
+  (with a diagnostic naming the `vyb mod install --yes` path that records the trust
+  acceptance) — auto-fetch never takes a trust decision on its own. The raw transport's
+  base is overridable with `VYB_GITHUB_RAW_URL` (`https://host[:port][/prefix]`, `http://`,
+  or a `file://` mirror). Locked in by `test/githubdep_smoke.vyb` (hosted CI, hermetic via a
+  `file://` mirror); `test/registry_smoke.vyb` additionally asserts that a materialized
+  `version:` dep rebuilds with the registry absent.
+
 ### Changed
 - **`bare()` now emits a struct's field values, in declaration order (#383)** — the
   second half of the intrinsic cleanup. `bare(x)` was an exact alias of `notype(x)`:

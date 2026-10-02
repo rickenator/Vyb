@@ -34,7 +34,7 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 | `bundle(...)` visibility | ✅ | Source-level directives are enforced by the local resolver |
 | `share(...)` exports | ✅ | `share(all)` and bundle-scoped shares export declarations/imports |
 | `smuggle` visibility bypass | ✅ | Smuggled imports bypass share/bundle checks |
-| URL/Git dependency fetching (`path`, `git:`, `github:`, `version:` deps in `vyb.toml`) | ✅ | All four dependency sources resolve (`#165`, `#175`): `path` deps are used as-is; `git:` deps are auto shallow-cloned into `.vybmod/<name>/` on build; `github:` deps are materialized by `vyb mod install github:owner/repo/path` and consumed from `.vybmod/<name>/`; `version:` deps resolve against the package registry (`VYB_REGISTRY`, else `~/.vyb/registry`) picking the highest version matching the spec. `doc/MANIFEST.md` documents the contract. |
+| URL/Git dependency fetching (`path`, `git:`, `github:`, `version:` deps in `vyb.toml`) | ✅ | All four dependency sources resolve (`#165`, `#175`): `path` deps are used as-is; `git:` deps are auto shallow-cloned into `.vybmod/<name>/` on build; `github:` deps are auto-fetched into `.vybmod/<name>/` on build (`#388`; a privileged/freedom-boundary package is refused there and needs the explicit `vyb mod install github:owner/repo/path` trust decision); `version:` deps resolve against the package registry (`VYB_REGISTRY`, else `~/.vyb/registry`) picking the highest version matching the spec. `doc/MANIFEST.md` documents the contract. |
 | Module cycle detection | ✅ | Circular imports are rejected with dependency-chain diagnostics |
 | Symbol re-export | ✅ | `share(...)` before an import re-exports selected imported declarations |
 

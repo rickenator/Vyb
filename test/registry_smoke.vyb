@@ -269,6 +269,20 @@ main()<Int> -> {
     if (rcB == 0) { runB = run_sh("timeout 60 '" + consB + "/target/consumerB'") }
     runBOk<Bool> = (runB.index_of("hi-v1") >= 0)
 
+    # 6. offline / cache: the same project rebuilds from the already-materialized
+    #    .vybmod copy with the registry UNAVAILABLE (a nonexistent root) -- no
+    #    re-resolve, no registry read, no "Fetching" line.
+    rcC<Int> = build_in(exe, consB, stdlib, reg + "_gone", tmp + "/buildC.txt")
+    outC<String> = slurp(tmp + "/buildC.txt")
+    offlineOk<Bool> = (rcC == 0) && (outC.index_of("Fetching") < 0)
+    if (!offlineOk) {
+        println("offline rebuild FAILED (rc " + rcC.to_string() + "):")
+        println(outC)
+    }
+    runC<String> = ""
+    if (rcC == 0) { runC = run_sh("timeout 60 '" + consB + "/target/consumerB'") }
+    offlineRunOk<Bool> = (runC.index_of("hi-v1") >= 0)
+
     names<Vec<String>> = Vec<String>()
     names.push("publish(3 versions)")
     names.push("registry layout(Gdemo/<ver>/mod.vyb)")
@@ -277,6 +291,8 @@ main()<Int> -> {
     names.push("run(hi-v11)")
     names.push("exact spec 1.0.0")
     names.push("run(hi-v1)")
+    names.push("offline rebuild from .vybmod cache")
+    names.push("offline rebuild run(hi-v1)")
 
     results<Vec<Bool>> = Vec<Bool>()
     results.push(publishOk)
@@ -286,6 +302,8 @@ main()<Int> -> {
     results.push(runAOk)
     results.push(exactOk)
     results.push(runBOk)
+    results.push(offlineOk)
+    results.push(offlineRunOk)
 
     passed<Int> = 0
     bad<Int> = 0
@@ -305,6 +323,6 @@ main()<Int> -> {
         exit(1)
     }
 
-    println("registry smoke: " + names.len().to_string() + "/" + names.len().to_string() + " checks passed (publish, prefix->highest, lockfile source=version, run, exact)")
+    println("registry smoke: " + names.len().to_string() + "/" + names.len().to_string() + " checks passed (publish, prefix->highest, lockfile source=version, run, exact, offline-cache)")
     return 0
 }

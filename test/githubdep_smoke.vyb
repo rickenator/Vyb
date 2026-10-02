@@ -1,0 +1,275 @@
+// @not-a-test: true
+# githubdep_smoke.vyb -- end-to-end smoke test for `github:`-dependency
+# auto-fetch in `vyb build` (#388). Sibling of test/gitdep_smoke.vyb, which does
+# the same for `git:`-clone deps.
+#
+# Hermetic by construction: `VYB_GITHUB_RAW_URL` points the github raw transport
+# at a `file://` mirror, so no network is involved (the same `file://`-root
+# convention `VYB_REGISTRY` accepts). The mirror is laid out exactly like a
+# repository's raw tree -- <mirror>/<owner>/<repo>/main/<subpath>.
+#
+# Asserts, for a `gadgets = { github = "..." }` dependency that has NOT been
+# installed:
+#   1. `vyb build` auto-fetches it (no `vyb mod install` step needed);
+#   2. it materializes as .vybmod/<dep-name>/mod.vyb;
+#   3. vyb.lock records source = "github";
+#   4. the built binary runs and prints the module function's output;
+#   5. a PRIVILEGED package (a `[mod] boundary = ["freedom"]` manifest) is
+#      REFUSED on build, with nothing materialized -- auto-fetch never takes the
+#      trust decision that `vyb mod install` owns.
+#
+# Usage: vyb test/githubdep_smoke.vyb [path-to-vyb]
+#        (defaults to build/vyb, then build-ci/vyb)
+import io::{close, File, open_read, open_write, read_all, write_str}
+import process::{exec_output}
+
+# ---------------------------------------------------------------- small helpers
+
+# Index of the last '/' in `p`, or -1.
+last_slash(p<String>)<Int> -> {
+    i<Int> = p.len() - 1
+    while (i >= 0) {
+        if (((p.char_at(i) as Int) & 0xFF) == 47) { return i }
+        i = i - 1
+    }
+    return -1
+}
+
+# Directory part of `p` ("" when there is no slash).
+dirname_of(p<String>)<String> -> {
+    i<Int> = last_slash(p)
+    if (i < 0) { return "" }
+    return p.substring(0, i)
+}
+
+# Strip leading/trailing whitespace (spaces, tabs, CR, LF) from `s`.
+trim(s<String>)<String> -> {
+    a<Int> = 0
+    n<Int> = s.len()
+    while (a < n) {
+        c<Int> = (s.char_at(a) as Int) & 0xFF
+        if (c == 32 || c == 9 || c == 13 || c == 10) { a = a + 1 } else { break }
+    }
+    b<Int> = n
+    while (b > a) {
+        c<Int> = (s.char_at(b - 1) as Int) & 0xFF
+        if (c == 32 || c == 9 || c == 13 || c == 10) { b = b - 1 } else { break }
+    }
+    if (b <= a) { return "" }
+    return s.substring(a, b)
+}
+
+# Decimal value of a digit string (stops at the first non-digit).
+digits_to_int(s<String>)<Int> -> {
+    t<String> = trim(s)
+    n<Int> = 0
+    i<Int> = 0
+    while (i < t.len()) {
+        c<Int> = (t.char_at(i) as Int) & 0xFF
+        if (c < 48 || c > 57) { break }
+        n = n * 10 + (c - 48)
+        i = i + 1
+    }
+    return n
+}
+
+# Run `cmd` through the shell and return its stdout ("" when it could not run).
+run_sh(cmd<String>)<String> -> {
+    out<String> = ""
+    freedom {
+        match (exec_output(cmd)) {
+            s -> { out = s }
+            ? -> { out = "" }
+        }
+    }
+    return out
+}
+
+# Read a whole file as a String ("" when it cannot be read).
+slurp(path<String>)<String> -> {
+    text<String> = ""
+    match (open_read(path)) {
+        f -> {
+            match (read_all(f)) { s -> { text = s } ? -> { } }
+            close(f)
+        }
+        ? -> { }
+    }
+    return text
+}
+
+# Write `text` to `path`; true when the whole string was written.
+spill(path<String>, text<String>)<Bool> -> {
+    match (open_write(path)) {
+        f -> {
+            match (write_str(f, text)) { n -> { close(f); return (n == text.len()) } ? -> { close(f); return false } }
+        }
+        ? -> { return false }
+    }
+    return false
+}
+
+# True when `p` exists (file or directory).
+exists(p<String>)<Bool> -> {
+    return (trim(run_sh("test -e '" + p + "' && echo yes || echo no")) == "yes")
+}
+
+# Absolute form of `p`: relative paths resolve against `base`.
+absolute(p<String>, base<String>)<String> -> {
+    if (p.len() > 0 && (((p.char_at(0) as Int) & 0xFF) == 47)) { return p }
+    return trim(run_sh("cd '" + base + "' && pwd")) + "/" + p
+}
+
+# ------------------------------------------------------- command line (/proc)
+
+# The program's argv, parsed from `/proc/self/cmdline` (NUL separated).
+argv_of()<Vec<String>> -> {
+    raw<String> = slurp("/proc/self/cmdline")
+    out<Vec<String>> = Vec<String>()
+    cur<String> = ""
+    i<Int> = 0
+    while (i < raw.len()) {
+        c<Int> = (raw.char_at(i) as Int) & 0xFF
+        if (c == 0) {
+            if (cur.len() > 0) { out.push(cur) }
+            cur = ""
+        } else {
+            cur = cur + String::from_byte(c)
+        }
+        i = i + 1
+    }
+    if (cur.len() > 0) { out.push(cur) }
+    return out
+}
+
+# ------------------------------------------------------------------- the check
+
+main()<Int> -> {
+    argv<Vec<String>> = argv_of()
+
+    # argv[0] is the compiler, argv[1] is this program: derive the repo root.
+    runner<String> = ""
+    if (argv.len() > 1) { runner = argv.get(1) }
+    repoRoot<String> = dirname_of(dirname_of(runner))
+    if (repoRoot.len() == 0 || !exists(repoRoot + "/test")) { repoRoot = "." }
+
+    # A path argument overrides the default binary locations.
+    exe<String> = ""
+    if (argv.len() > 2 && exists(argv.get(2))) { exe = argv.get(2) }
+    if (exe.len() == 0) { exe = repoRoot + "/build/vyb" }
+    if (!exists(exe)) { exe = repoRoot + "/build-ci/vyb" }
+    if (!exists(exe)) {
+        println("githubdep smoke FAILED: no built `vyb` binary found (build/vyb or build-ci/vyb); pass a path")
+        exit(1)
+    }
+    exe = absolute(exe, repoRoot)
+    stdlib<String> = absolute(repoRoot + "/stdlib", repoRoot)
+
+    tmp<String> = "/tmp/vyb_githubdep_smoke"
+    mirror<String> = tmp + "/mirror"
+    consumer<String> = tmp + "/consumer"
+    privConsumer<String> = tmp + "/privconsumer"
+    outPath<String> = tmp + "/out.txt"
+    errPath<String> = tmp + "/err.txt"
+
+    run_sh("rm -rf '" + tmp + "'")
+    run_sh("mkdir -p '" + mirror + "/acme/gadgets/main/gadgets'")
+    run_sh("mkdir -p '" + consumer + "/src'")
+    run_sh("mkdir -p '" + privConsumer + "/src'")
+
+    # 1. The mirror: <mirror>/<owner>/<repo>/main/<subpath>, exactly the tree the
+    #    raw transport would serve.
+    spill(mirror + "/acme/gadgets/main/gadgets/mod.vyb",
+          "share(all)\nexclaim(s<String>)<String> -> {\n    return s + \"!\"\n}\n")
+
+    # 2. A consumer declaring the dep by github: and importing it BY NAME (the
+    #    .vybmod container is the module search root).
+    toml<String> = "[package]\nname = \"ghcon\"\nversion = \"0.1.0\"\n\n[[bin]]\nname = \"ghcon\"\npath = \"src/main.vyb\"\n\n[dependencies]\ngadgets = { github = \"acme/gadgets/gadgets/mod.vyb\" }\n"
+    spill(consumer + "/vyb.toml", toml)
+    spill(consumer + "/src/main.vyb", "import gadgets::{exclaim}\nmain()<Int> -> {\n    println(exclaim(\"ab\"))\n    return 0\n}\n")
+
+    envPrefix<String> = "env -u VYB_MODULE_PATH VYB_STDLIB='" + stdlib + "' VYB_GITHUB_RAW_URL='file://" + mirror + "' "
+
+    # 3. build -- must auto-fetch the dep, with no `vyb mod install`.
+    cmd<String> = "cd '" + consumer + "' && " + envPrefix + exe + " build > " + outPath + " 2> " + errPath + "; echo $?"
+    code<Int> = digits_to_int(trim(run_sh(cmd)))
+    buildErr<String> = slurp(errPath)
+
+    names<Vec<String>> = Vec<String>()
+    results<Vec<Bool>> = Vec<Bool>()
+
+    names.push("build auto-fetches a github dep")
+    results.push(code == 0)
+    if (code != 0) {
+        println("FAIL: vyb build failed (rc " + code.to_string() + "):")
+        println(slurp(outPath))
+        println(buildErr)
+    }
+
+    mod<String> = consumer + "/.vybmod/gadgets/mod.vyb"
+    names.push("materialized .vybmod/<name>/mod.vyb")
+    results.push(exists(mod))
+    if (!exists(mod)) { println("FAIL: dep not materialized at " + mod) }
+
+    lock<String> = slurp(consumer + "/vyb.lock")
+    names.push("vyb.lock records source=github")
+    results.push(lock.index_of("source = \"github\"") >= 0 && lock.index_of("gadgets") >= 0)
+    if (!(lock.index_of("source = \"github\"") >= 0 && lock.index_of("gadgets") >= 0)) {
+        println("FAIL: vyb.lock missing the github dep:")
+        println(lock)
+    }
+
+    binPath<String> = consumer + "/target/ghcon"
+    okRun<Bool> = false
+    if (exists(binPath)) {
+        runOut<String> = trim(run_sh("cd '" + consumer + "' && " + envPrefix + binPath + " 2>/dev/null"))
+        okRun = runOut.index_of("ab!") >= 0
+        if (!okRun) { println("FAIL: built binary wrong: stdout=" + runOut) }
+    } else {
+        println("FAIL: binary not built: " + binPath)
+    }
+    names.push("built binary runs through the fetched module")
+    results.push(okRun)
+
+    # 4. A PRIVILEGED package must be refused on build, and must not materialize.
+    run_sh("mkdir -p '" + mirror + "/acme/priv/main/priv'")
+    spill(mirror + "/acme/priv/main/priv/mod.vyb",
+          "share(all)\nboom()<Int> -> {\n    return 1\n}\n")
+    spill(mirror + "/acme/priv/main/priv/vyb.toml",
+          "[package]\nname = \"priv\"\nversion = \"0.1.0\"\n\n[mod]\nboundary = [\"freedom\"]\n")
+    spill(privConsumer + "/vyb.toml",
+          "[package]\nname = \"ghpriv\"\nversion = \"0.1.0\"\n\n[[bin]]\nname = \"ghpriv\"\npath = \"src/main.vyb\"\n\n[dependencies]\npriv = { github = \"acme/priv/priv/mod.vyb\" }\n")
+    spill(privConsumer + "/src/main.vyb", "import priv::{boom}\nmain()<Int> -> {\n    return boom()\n}\n")
+    privCmd<String> = "cd '" + privConsumer + "' && " + envPrefix + exe + " build > " + outPath + " 2> " + errPath + "; echo $?"
+    privCode<Int> = digits_to_int(trim(run_sh(privCmd)))
+    privErr<String> = slurp(errPath)
+
+    names.push("privileged package refused on build")
+    results.push(privCode != 0 && privErr.index_of("PRIVILEGED package") >= 0)
+    if (!(privCode != 0 && privErr.index_of("PRIVILEGED package") >= 0)) {
+        println("FAIL: privileged dep was not refused (rc " + privCode.to_string() + "):")
+        println(privErr)
+    }
+
+    names.push("refused package left nothing materialized")
+    results.push(!exists(privConsumer + "/.vybmod/priv"))
+    if (exists(privConsumer + "/.vybmod/priv")) {
+        println("FAIL: refused privileged dep was materialized anyway")
+    }
+
+    run_sh("rm -rf '" + tmp + "'")
+
+    passed<Int> = 0
+    i<Int> = 0
+    while (i < names.len()) {
+        if (results.get(i)) { passed = passed + 1 } else { println("  FAIL: " + names.get(i)) }
+        i = i + 1
+    }
+    if (passed != names.len()) {
+        println("githubdep smoke FAILED: " + passed.to_string() + "/" + names.len().to_string() + " checks passed")
+        exit(1)
+    }
+    println("githubdep smoke: " + names.len().to_string() + "/" + names.len().to_string() +
+            " checks passed (auto-fetch-on-build, materialize, lockfile source=github, run, privileged refused)")
+    return 0
+}
