@@ -4,51 +4,44 @@ This document covers Vyb’s built-in intrinsics, variable declaration syntax (i
 
 ---
 
-## 1. Variable & Constant Declarations
+## 1. Variable Bindings
 
-Vyb uses two primary declaration forms:
+A binding names a value with its type:
 
 ```ebnf
-Declaration ::= "var" "<" Type ">" Identifier [ "=" Expression ]
-              | "var" "auto" Identifier "=" Expression
-              | "const" "<" Type ">" Identifier [ "=" Expression ]
+Binding      ::= Identifier "<" Type ">" [ "=" Expression ]
+               | Identifier "=" Expression     # type inferred from the initializer
 ```
 
-- **`var<T> name [= expr]`**
-  Mutable binding of type `T`.
-- **`var auto name = expr`**
-  Mutable binding with type `T` inferred from `expr`.
-- **`const<T> name [= expr]`**
-  Immutable binding of type `T`.
-
-> **Note:** `const auto` is not supported; use explicit `const<T>` for immutable bindings.
+- **`name<Type> = expr`** — the canonical form: a binding of type `Type`.
+- **`name = expr`** — the same, with `Type` inferred from the initializer
+  (`auto name = expr` is the optional explicit spelling of the same thing).
+- **`name<Type const> = expr`** / **`const<Type> name = expr`** — an immutable
+  binding; `const` is a type modifier, so there is no separate declaration keyword.
 
 ### Declaration Examples
 
 ```vyb
-var<Int> x             // mutable Int, uninitialized
-var<Int> y = 42        // mutable Int, initialized
-
-var auto tree = BTree<Int, String, 3>::new()
-// `tree` inferred as BTree<Int, String, 3>
-
-const<String> s = "hello"  // immutable String
+x<Int> = 42            # a binding of type Int
+y = 42                 # the same, with the type inferred from the initializer
+s<String> = "hello"    # a binding of type String
+tree<BTreeMap<Int, String>> = BTreeMap<Int, String>()   # a container binding
 ```
 
 Ownership-aware declarations:
 
 ```vyb
-var<my<Task>> task = my<Task>(Task { id: 1, payload: "foo" })
-var<our<Config>> cfg  = our<Config>(Config { debug: true })
-var<their<Foo>> b     = their<Foo>(owner)       // mutable borrow
-var<their<Foo const>> v = their<Foo const>(owner)  // immutable borrow
+task<my<Task>> = my(Task { id: 1, payload: "foo" })
+cfg<our<Config>> = our(Config { debug: true })
+b<their<Foo>> = borrow(owner)        # mutable borrow
+v<their<Foo const>> = view(owner)    # read-only borrow
 ```
 
 Pointer declarations (inside `freedom`):
 
 ```vyb
 freedom {
-  var<loc<Int>> p = loc(x)
+  p<loc<Int>> = loc(x)
   at(p) = 99
 }
 ```
@@ -57,13 +50,17 @@ freedom {
 
 ## 2. Function Declaration Syntax
 
-Functions follow a `<ReturnType>`‑first style, with a mandatory `->` separator. Braces are optional for single-expression bodies.
+A declaration is `name(params)<ReturnType> -> body`. The return type follows the
+parameter list, the `->` separator is mandatory, and the body is braced. Type
+parameters, when present, precede the parameter list.
 
 ```ebnf
-FunctionDecl ::= "fn" "<" Type ">" Identifier "(" ParamList ")" "->" Body
+FunctionDecl ::= Identifier [ "<" GenericParam { "," GenericParam } ">" ]
+                 "(" ParamList ")" [ "<" ReturnType " >" ] "->" Body
 
+GenericParam ::= Identifier [ "<" Type ">" ]     # optional bound, e.g. K<Equatable>
 ParamList    ::= [ Param { "," Param } ]
-Param        ::= ("var" | "const") "<" Type ">" Identifier
+Param        ::= Identifier "<" Type ">"
 
 Body         ::= Block
                | Expression
@@ -72,25 +69,26 @@ Block        ::= "{" Statement* [ Expression ] "}"
 Expression   ::= <any single Vyb expression>
 ```
 
-- **Return type**: declared in `<Type>` after `fn`.
-- **Parameters**: `var<T>` or `const<T>` before each name.
+- **Return type**: `name(params)<ReturnType> ->`; omit it for a `Void` procedure.
+- **Parameters**: `name<Type>` for each one, comma-separated.
+- **Type parameters**: `name<T>(a<T>)<T> ->`, with an optional bound (`T<Equatable>`).
 - **`->`**: mandatory separator between signature and body.
-- **Braces** `{}` optional only for single-expression bodies.
+- **Braces** `{}` are required for a declaration body; the unbraced `-> expr` arm belongs to closures (`|x| -> expr`).
 
 ### Function Declaration Examples
 
 ```vyb
-class Node {
-  var<Bool> is_leaf
-
-  // Constructor with block body
-  fn<Node> new(const<Bool> is_leaf_param) -> {
-    Node { is_leaf: is_leaf_param }
-  }
-
-  // Concise single-expression function
-  fn<Int> double(var<Int> x) -> x * 2
+struct Node {
+    is_leaf<Bool>
 }
+
+# A constructor is an ordinary function that returns the struct.
+new_node(is_leaf<Bool>)<Node> -> {
+    return Node { is_leaf: is_leaf }
+}
+
+# A short body is still braced.
+double_it(x<Int>)<Int> -> { return x * 2 }
 ```
 
 ---
@@ -103,7 +101,9 @@ Intrinsics are compiler-handled operations, split into **stable** (Sections 4–
 
 These names are reserved and cannot be used as identifiers:
 
-- **Declarations**: `var`, `auto`, `const`
+- **Declarations**: `struct`, `enum`, `type`, `aspect`, `bind`, `share`, `import`, `smuggle`; the
+  binding modifiers `auto` and `const` (and the legacy `var` prefix) are accepted in
+  binding position only.
 - **Ownership & borrowing**: `my`, `our`, `their`, `borrow`, `view`
 - **Pointer & address**: `loc`, `at`, `addr`, `from`
 - **Type metadata**: `sizeof`, `alignof`, `offsetof`
@@ -116,10 +116,10 @@ These names are reserved and cannot be used as identifiers:
 ### 4.1 Core Wrappers
 
 ```vyb
-fn my<T>(value: T) -> my<T>
-fn our<T>(value: T) -> our<T>
-fn their<T>(owner: my<T> | our<T>) -> their<T>
-fn their<T const>(owner: my<T> | our<T>) -> their<T const>
+my(value<T>)<my<T>> ->
+our(value<T>)<our<T>> ->
+borrow(owner)<their<T>> ->
+view(owner)<their<T const>> ->
 ```
 
 - **`my<T>(value)`**: wrap `value` in a unique-owned `my<T>`.
@@ -132,8 +132,8 @@ fn their<T const>(owner: my<T> | our<T>) -> their<T const>
 For convenience, the compiler provides **inferred** shorthand intrinsics:
 
 ```vyb
-fn borrow(owner) -> their<T>
-fn view(owner)   -> their<T const>
+borrow(owner)<their<T>> ->        # `T` inferred from `owner`
+view(owner)<their<T const>> ->    # read-only borrow of `owner`
 ```
 
 - **`borrow(owner)`** infers `T` from `owner` and returns `their<T>`.
@@ -144,10 +144,10 @@ fn view(owner)   -> their<T const>
 ## 5. Memory Intrinsics (`freedom` required)
 
 ```vyb
-freedom fn loc<T>(expr: T) -> loc<T>
-freedom fn at<T>(pointer: loc<T>) -> T
-freedom fn addr<T>(pointer: loc<T>) -> Int64
-freedom fn from<P>(addr: Int64) -> P
+loc(expr<T>)<loc<T>> ->        # requires a `freedom` block
+at(pointer<loc<T>>)<T> ->
+addr(pointer<loc<T>>)<Int64> ->
+from<P>(addr<Int64>)<P> ->
 ```
 
 - **`loc<T>(expr)`**: address‑of a value → `loc<T>`.
@@ -160,9 +160,9 @@ freedom fn from<P>(addr: Int64) -> P
 ## 6. Type Metadata Intrinsics (safe)
 
 ```vyb
-fn sizeof<T>() -> UInt
-fn alignof<T>() -> UInt
-fn offsetof<T>(field: identifier) -> UInt
+sizeof<T>()<UInt> ->
+alignof<T>()<UInt> ->
+offsetof<T>(field)<UInt> ->      # `field` is a field name, not a value
 ```
 
 - **`sizeof<T>()`**: size of `T` in bytes.
@@ -224,10 +224,10 @@ println("Pi ≈ " + f.to_string())     // Pi ≈ 3.14
 Every primitive type has a `to_string()` method returning a `String`:
 
 ```vyb
-fn<String> Int.to_string()    -> String
-fn<String> Float.to_string()  -> String
-fn<String> Bool.to_string()   -> String
-fn<String> String.to_string() -> String
+to_string(self<Int>)<String> ->
+to_string(self<Float>)<String> ->
+to_string(self<Bool>)<String> ->
+to_string(self<String>)<String> ->
 ```
 
 #### to_string Examples
@@ -252,10 +252,9 @@ Vyb provides built-in serialization support for automatic JSON generation of dat
 ### 7.1 Serialization Mode Intrinsics
 
 ```vyb
-fn lit(value: T) -> T
-fn notype(value: T) -> T
-fn bare(value: T) -> T
-fn deserial(value: T) -> T
+lit(value<T>)<T> ->
+notype(value<T>)<T> ->
+bare(value<T>)<T> ->
 ```
 
 - **`lit(value)`**: Emits raw JSON literals without type wrapping. Converts strings to raw JSON values, numbers to unquoted numbers, and booleans to literal true/false. Restricted to primitive values (Int, Float, String, Bool).
@@ -264,22 +263,25 @@ fn deserial(value: T) -> T
 
 - **`bare(value)`**: Emits only raw field values as JSON array, removing all type and field metadata. For structs, outputs values in field declaration order as a JSON array. Only valid for structs.
 
-- **`deserial(json_string)`**: Deserializes JSON string back to typed Vyb values. Used for converting JSON input back to Vyb data structures.
+- **`deserial(json_string)`**: **refused** rather than forwarded (#383) — it raises
+  `deserial() is not implemented` at the call site. Parse JSON with the `json` module, or
+  rebuild the value with the type's own `T::from_string(json)`, which is length- and
+  bounds-checked (see the Programmer's Guide, § serialization).
 
 #### Serialization Examples
 
 **lit() Intrinsic:**
 
 ```vyb
-fn<String> main() -> {
+main()<String> -> {
     return lit("42");     // Output: 42 (number, not string)
 }
 
-fn<String> main() -> {
+main()<String> -> {
     return lit("true");   // Output: true (boolean, not string)
 }
 
-fn<String> main() -> {
+main()<String> -> {
     return lit("hello");  // Output: "hello" (quoted string)
 }
 ```
@@ -288,15 +290,15 @@ fn<String> main() -> {
 
 ```vyb
 struct Person {
-    Int id,
-    String name
+    id<Int>,
+    name<String>
 }
 
-fn<Person> main() -> {
-    var<Person> p = Person(id=123, name="Alice");
+main()<Person> -> {
+    p<Person> = Person { id: 123, name: "Alice" };
     return notype(p);
-    // Output: {"id":123,"name":"Alice"}
-    // instead of {"id<Int>":123,"name<String>":"Alice"}
+    // Output: {"id": 123, "name": "Alice"}
+    // (the old <Type>-suffixed names are not implemented -- see the Programmer's Guide)
 }
 ```
 
@@ -304,15 +306,14 @@ fn<Person> main() -> {
 
 ```vyb
 struct Point {
-    Float x,
-    Float y
+    x<Float>,
+    y<Float>
 }
 
-fn<Point> main() -> {
-    var<Point> point = Point(x=3.5, y=4.2);
+main()<Point> -> {
+    point<Point> = Point { x: 3.5, y: 4.2 };
     return bare(point);
     // Output: [3.5, 4.2]
-    // instead of {"x<Float>":3.5,"y<Float>":4.2}
 }
 ```
 
@@ -320,14 +321,16 @@ fn<Point> main() -> {
 
 ```vyb
 struct Config {
-    String name,
-    Int version
+    name<String>,
+    version<Int>
 }
 
-fn<Config, Int> main() -> {
-    var<Config> cfg = Config(name="app", version=1);
-    return notype(cfg), lit("42");
-    // Output: [{"name":"app","version":1}, 42]
+main()<Config, Int> -> {
+    cfg<Config> = Config { name: "app", version: 1 }
+    return notype(cfg), 42
+    // Output: [{"name": "app", "version": 1}, 42]
+    // A `lit(...)` element inside a MULTI-value return is not codegen-clean on this
+    // build; the single-value `lit()` programs above are.
 }
 ```
 
@@ -336,14 +339,14 @@ fn<Config, Int> main() -> {
 The following intrinsics are provided for manual JSON construction and are used internally by the auto-serialization system:
 
 ```vyb
-fn __vyb_serialize_to_json(value: any) -> String
-fn __vyb_serialize_struct_with_names(value: any) -> String
-fn __vyb_json_array_start() -> String
-fn __vyb_json_array_append(current: String, item: String) -> String
-fn __vyb_json_array_end(current: String) -> String
-fn __vyb_json_object_start() -> String
-fn __vyb_json_object_append_field(current: String, name: String, value: String) -> String
-fn __vyb_json_object_end(current: String) -> String
+__vyb_serialize_to_json(value<any>)<String> ->
+__vyb_serialize_struct_with_names(value<any>)<String> ->
+__vyb_json_array_start()<String> ->
+__vyb_json_array_append(current<String>, item<String>)<String> ->
+__vyb_json_array_end(current<String>)<String> ->
+__vyb_json_object_start()<String> ->
+__vyb_json_object_append_field(current<String>, name<String>, value<String>)<String> ->
+__vyb_json_object_end(current<String>)<String> ->
 ```
 
 - **`__vyb_serialize_to_json(value)`**: serialize any value to JSON string.
@@ -357,24 +360,24 @@ The auto-serialization system automatically activates when `main()` returns a st
 
 ```vyb
 // Simple value return - auto-serialized to JSON
-fn<Int> main() -> {
+main()<Int> -> {
     return 42  // Output: 42
 }
 
 // Struct return - auto-serialized with field names
 struct Point {
-    var<Float> x
-    var<Float> y
+    x<Float>,
+    y<Float>
 }
 
-fn<Point> main() -> {
+main()<Point> -> {
     return Point { x: 3.5, y: 4.2 }
     // Output: {"x": 3.5, "y": 4.2}
 }
 
 // Custom serialization with mode intrinsics
-fn<String> main() -> {
-    var<String> name = "example"
+main()<String> -> {
+    name<String> = "example"
     return lit(name)  // Output: example (without quotes)
 }
 ```
@@ -393,11 +396,11 @@ For comprehensive documentation on auto-serialization capabilities and configura
 ## 9. Proposed/Experimental Intrinsics
 
 ```vyb
-fn offset<T>(ptr: loc<T>, count: Int) -> loc<T>
-fn is_null<T>(ptr: loc<T>) -> Bool
-fn aligned<T>(ptr: loc<T>) -> Bool
-fn mem_copy(dst: loc<UInt8>, src: loc<UInt8>, n: UInt) -> Void
-fn mem_set(ptr: loc<UInt8>, value: UInt8, n: UInt) -> Void
+offset<T>(ptr<loc<T>>, count<Int>)<loc<T>> ->
+is_null<T>(ptr<loc<T>>)<Bool> ->
+aligned<T>(ptr<loc<T>>)<Bool> ->
+mem_copy(dst<loc<UInt8>>, src<loc<UInt8>>, n<UInt>) ->
+mem_set(ptr<loc<UInt8>>, value<UInt8>, n<UInt>) ->
 // Atomic & volatile operations
 ```
 
@@ -405,8 +408,8 @@ fn mem_set(ptr: loc<UInt8>, value: UInt8, n: UInt) -> Void
 
 ## 10. Usage Guidelines
 
-1. **Declarations**: choose explicit (`var<T>`) or inferred (`var auto`).
-2. **Functions**: return in `<Type>`, arrow mandatory, braces optional for single expressions.
+1. **Bindings**: choose explicit (`name<Type> = expr`) or inferred (`name = expr`).
+2. **Functions**: `name(params)<ReturnType> -> { ... }`; the arrow and braces are mandatory.
 3. **Ownership**: use `my<T>`, `our<T>`, `their<T>`, with canonical `borrow(expr)` / `view(expr)` borrowing.
 4. **Intrinsics**: memory ops only in `freedom`, metadata always safe.
 5. **Print**: use generic `println(value)` for any type; prefer `to_string()` for explicit conversion.

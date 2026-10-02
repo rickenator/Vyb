@@ -90,19 +90,19 @@ data<String> = "Hello"
   - Implementation: GEP + load instruction
 
 ### 4. Search Operations
-- **`starts_with(prefix: String) -> Bool`**
+- **`starts_with(prefix<String>)<Bool> ->`**
   - Checks if string starts with given prefix
   - Returns true for empty prefix
   - Memory: No allocation
   - Implementation: memcmp on first N bytes
 
-- **`ends_with(suffix: String) -> Bool`**
+- **`ends_with(suffix<String>)<Bool> ->`**
   - Checks if string ends with given suffix
   - Returns true for empty suffix
   - Memory: No allocation
   - Implementation: memcmp on last N bytes
 
-- **`contains(substring: String) -> Bool`**
+- **`contains(substring<String>)<Bool> ->`**
   - Checks if string contains given substring
   - Memory: No allocation
   - Implementation: C strstr function (null-terminated strings required)
@@ -313,9 +313,9 @@ This approach:
 ## Future Enhancements
 
 ### Potential Additions
-- **split(delimiter: String) -> Vec<String>**: Split string into vector
+- **split(delimiter<String>)<Vec<String>> ->**: Split string into vector
 - **trim() -> String**: Remove leading/trailing whitespace
-- **replace(old: String, new: String) -> String**: Replace substring
+- **replace(old<String>, new<String>)<String> ->**: Replace substring
 - **parse_int() -> Int?**: Parse string to integer
 - **format()**: String interpolation support
 

@@ -534,6 +534,7 @@ return typeId;
 ### Test 1: Basic typeof
 
 ```vyb
+# ILLUSTRATIVE (roadmap surface, not implemented): the form below is the planned model, not the language today.
 # test/introspection/typeof_basic.vyb
 fn main()<Int> -> {
     x<Int> = 42
@@ -549,6 +550,7 @@ fn main()<Int> -> {
 ### Test 2: Basic typename
 
 ```vyb
+# ILLUSTRATIVE (roadmap surface, not implemented): the form below is the planned model, not the language today.
 # test/introspection/typename_basic.vyb
 fn main()<Int> -> {
     x<Int> = 42
@@ -565,6 +567,7 @@ fn main()<Int> -> {
 ### Test 3: Type comparison
 
 ```vyb
+# ILLUSTRATIVE (roadmap surface, not implemented): the form below is the planned model, not the language today.
 # test/introspection/type_comparison.vyb
 fn main()<Int> -> {
     x<Int> = 42
@@ -585,6 +588,7 @@ fn main()<Int> -> {
 ### Test 4: Wildcard trap with typeof
 
 ```vyb
+# ILLUSTRATIVE (roadmap surface, not implemented): the form below is the planned model, not the language today.
 # test/introspection/wildcard_typeof.vyb
 fn risky()<Int> -> {
     fail<ParseError>(ParseError { line: 10, column: 5 })
@@ -606,6 +610,7 @@ fn main()<Int> -> {
 ### Test 5: Custom struct types
 
 ```vyb
+# ILLUSTRATIVE (roadmap surface, not implemented): the form below is the planned model, not the language today.
 # test/introspection/struct_typeof.vyb
 struct Point {
     x<Int>,
@@ -677,6 +682,7 @@ Mark Phase 1 as complete, update status (`../TODO.md` for the living roadmap).
 ### Q1: Generics with typeof?
 
 ```vyb
+# ILLUSTRATIVE (roadmap surface, not implemented): the form below is the planned model, not the language today.
 fn identity<T>(value<T>)<T> -> {
     println(typename(value))  # What gets printed?
     return value
@@ -690,6 +696,7 @@ x<Int> = identity<Int>(42)  # Prints "Int"
 ### Q2: typeof on functions?
 
 ```vyb
+# ILLUSTRATIVE (roadmap surface, not implemented): the form below is the planned model, not the language today.
 fn add(a<Int>, b<Int>)<Int> -> { return a + b }
 
 t<Type> = typeof(add)  # Type representing "fn(Int, Int) -> Int"

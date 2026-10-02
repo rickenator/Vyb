@@ -20,32 +20,36 @@ Vyb uses two keywords for variable bindings:
 *   **`var`**: Declares a mutable binding. The variable can be reassigned to a new value or a different instance of its type.
 
     ```vyb
-    var x: Int = 10;
-    x = 20; // Allowed
+    x<Int> = 10
+    x = 20          // allowed: a later bare assignment updates the binding
 
-    var<my<String>> item = my("hello");
-    item = my("world"); // Allowed, old "hello" is dropped
+    item<my<String>> = my("hello")
+    item = my("world")   // allowed; the old "hello" is dropped
     ```
 
 *   **`const`**: Declares an immutable binding. The variable cannot be reassigned after initialization.
 
     ```vyb
-    const<Float> PI = 3.14159;
+    PI<Float const> = 3.14159
     // PI = 3.0; // Error: cannot reassign a const binding
 
-    const<my<String>> GREETING = my("Hello");
+    GREETING<my<String const>> = my("Hello")
     // GREETING = my("Hi"); // Error
     ```
     Note: `const` on a binding only prevents reassignment. If the bound value holds a mutable type (e.g., `my<Data>`), the data *within* that value might still be modifiable through methods on `Data`, unless the type itself is immutable (e.g., `my<Data const>`).
 
     ```vyb
-    class Counter { value<Int> = 0; fn increment(&mut self) { self.value = self.value + 1; } }
-    const<my<Counter>> c = my(Counter{});
-    // c = my(Counter{}); // Error: c is a const binding
-    c.increment(); // Allowed, if Counter.increment takes their<Counter> (or similar for owned)
-                   // and modifies internal state. The binding `c` is const,
-                   // but the object it points to can be mutated if its type allows.
-                   // To prevent internal mutation, use `my<Counter const>`.
+    struct Counter { value<Int> }
+
+    bind Countable -> Counter {
+        increment(self<their<Counter>>) -> { self.value = self.value + 1 }
+    }
+
+    c<my<Counter>> = my(Counter { value: 0 })
+    c.increment()   // allowed: the handle is shared, so the object it points to is
+                    // mutated through a by-reference bind method
+                    // To prevent internal mutation, hold a read-only handle:
+                    // `my<Counter const>`.
     ```
 
 ## 3. Ownership Qualifiers and Data Mutability
@@ -97,41 +101,41 @@ Function parameters use ownership types to define how arguments are passed:
 *   **`param: T`** (where `T` is a value type like `Int`, `Bool`, or a struct passed by value): The argument is passed by value (copied).
 
     ```vyb
-    fn process_value(data: Int) { /* ... */ }
-    process_value(10);
+    process_value(data<Int>) -> { /* ... */ }
+    process_value(10)
     ```
 
 *   **`param: my<T>`** (or `our<T>`): The argument is moved into the function. The caller loses ownership.
 
     ```vyb
-    fn consume_data(data: my<Foo>) { /* data is now owned by this function */ }
-    my_foo<my<Foo>> = my(Foo{});
-    consume_data(my_foo);
+    consume_data(data<my<Foo>>) -> { /* data is now owned by this function */ }
+    my_foo<my<Foo>> = my(Foo { value: 0 })
+    consume_data(my_foo)
     // my_foo is no longer valid here
     ```
 
 *   **`param: their<T>`**: The function receives a mutable borrow. The original data must be accessible via a mutable path.
 
     ```vyb
-    fn modify_data(data: their<Foo>) {
-        data.value = data.value + 1;
+    modify_data(data<their<Foo>>) -> {
+        data.value = data.value + 1
     }
-    owner<my<Foo>> = my(Foo{value: 5});
-    modify_data(borrow(owner)); // owner.value becomes 6
+    owner<my<Foo>> = my(Foo { value: 5 })
+    modify_data(borrow(owner))   // owner.value becomes 6
     ```
 
 *   **`param: their<T const>`**: The function receives an immutable borrow. The original data can be mutable or immutable.
 
     ```vyb
-    fn read_data(data: their<Foo const>) {
-        print(data.value);
+    read_data(data<their<Foo const>>) -> {
+        print(data.value)
         // data.value = 10; // Error
     }
-    owner_mut<my<Foo>> = my(Foo{value: 7});
-    const<my<Foo const>> owner_const = my(Foo{value: 8});
+    owner_mut<my<Foo>> = my(Foo { value: 7 })
+    owner_const<my<Foo const>> = my(Foo { value: 8 })
 
-    read_data(view(owner_mut));
-    read_data(view(owner_const));
+    read_data(view(owner_mut))
+    read_data(view(owner_const))
     ```
 
 ## 6. Struct and Class Fields
@@ -140,34 +144,28 @@ Fields within structs and classes are declared with a name and a type. Their mut
 
 ```vyb
 struct Point {
-    x<Int>; // A field of value type
-    y: Int;
-    meta: my<String>; // An owned field
+    x<Int>,            // a value-type field
+    y<Int>,
+    label<String>      // a String field
 }
 
 // Instance mutability:
-p1<my<Point>> = my(Point { x: 10, y: 20, meta: my("info") });
-p1.x = 15; // Allowed, p1 is mutable and x is a value type field
-p1.meta = my("new_info"); // Allowed, p1 is mutable, old meta is dropped
+p1<my<Point>> = my(Point { x: 10, y: 20, label: "info" })
+p1.x = 15                   // allowed: `p1` is a mutable handle and `x` is a value field
+p1.label = "new_info"       // allowed: the old value is dropped
 
-const<my<Point>> p2 = my(Point { x: 0, y: 0, meta: my("const_info") });
-// p2.x = 5; // Error: if p2 is a const binding to my<Point>, direct field mutation
-            // might be disallowed or depend on whether Point is a "const-friendly" type.
-            // Typically, for `const p: my<T>`, `T` itself must be treated as `T const`.
-            // To make fields behave like `const` bindings, use `my<Point const>`
-            // or declare fields with immutable types like `my<String const>`.
+// A read-only handle: writes through it are rejected.
+p2<my<Point const>> = my(Point { x: 0, y: 0, label: "const_info" })
+// p2.x = 5; // Error: fields of a `Point const` cannot be written through this handle
 
-// For more fine-grained control, fields can have explicit `const` specifiers,
-// otherwise they default to mutable
-// The AST supports `isMutable` for FieldDeclaration, implying `name<Type>` or `const name<Type>`.
-// Example if `var`/`const` field modifiers are used:
+// Fields are declared `name<Type>`; a field-level const is `name<Type const>`.
 struct Config {
-    var<Int> refresh_rate;
-    const<String> api_key;
+    refresh_rate<Int>,
+    api_key<String const>
 }
-var<Config> my_config = Config { refresh_rate: 60, api_key: "xyz" };
-my_config.refresh_rate = 30; // OK
-// my_config.api_key = "abc"; // Error: api_key is a const field binding
+my_config<Config> = Config { refresh_rate: 60, api_key: "xyz" }
+my_config.refresh_rate = 30   // OK
+// my_config.api_key = "abc"; // Error: api_key is declared const
 ```
 The interaction between instance binding mutability (`var`/`const`), ownership types (`my<T>`, `my<T const>`), and potential field-level `var`/`const` specifiers defines the overall mutability. The primary mechanism should be instance binding and type-level constness.
 

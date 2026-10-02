@@ -31,6 +31,7 @@ bundle(sort.Core, sort.Common)
 Prefix any `fn`/`struct`/`class`/`var` with `share` to export it:
 
 ```vyb
+# ILLUSTRATIVE (roadmap surface, not implemented): the form below is the planned model, not the language today.
 // Exported everywhere
 share(all) fn global_util() { ... }
 
@@ -78,6 +79,7 @@ ModulePath      ::= identifier { "::" identifier }
 ### 6.1 Core Module
 
 ```vyb
+# ILLUSTRATIVE (roadmap surface, not implemented): the form below is the planned model, not the language today.
 // src/sort/Core.vyb
 bundle(sort, sort.Core, sort.Common)
 
@@ -92,6 +94,7 @@ fn partition(nums: my<[Int]>, pivot: Int) -> (my<[Int]>, my<[Int]>) {
 ### 6.2 UI Module
 
 ```vyb
+# ILLUSTRATIVE (roadmap surface, not implemented): the form below is the planned model, not the language today.
 // src/sort/UI.vyb
 bundle(sort, sort.UI, sort.Common)
 
@@ -108,6 +111,7 @@ fn<String> pretty_sort(var<my<[Int]>> nums) -> {
 ### 6.3 External Library
 
 ```vyb
+# ILLUSTRATIVE (roadmap surface, not implemented): the form below is the planned model, not the language today.
 // src/net/http.vyb
 bundle(net.HTTP)
 
@@ -125,6 +129,7 @@ import net.http      // OK: net.http shared with `all`
 ### 6.4 Math Library Example
 
 ```vyb
+# ILLUSTRATIVE (roadmap surface, not implemented): the form below is the planned model, not the language today.
 // File: src/math/Arithmetic.vyb
 bundle(math)               // this module is in bundle "math"
 
@@ -145,6 +150,7 @@ fn validate(a: Int, b: Int) { ... }
 Consuming the library:
 
 ```vyb
+# ILLUSTRATIVE (roadmap surface, not implemented): the form below is the planned model, not the language today.
 // File: src/app/Main.vyb
 bundle(app.Main)           // your app's bundle
 

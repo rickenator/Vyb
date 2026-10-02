@@ -33,8 +33,8 @@
 ```vyb
 # Without mild: Memory leak!
 struct Node {
-    next: our<Node>,  # Strong reference
-    prev: our<Node>   # Strong reference - CIRCULAR!
+    next<our<Node>>,  # Strong reference
+    prev<our<Node>>   # Strong reference - CIRCULAR!
 }
 # Both nodes hold strong references to each other
 # Reference counts never reach zero → memory leak
@@ -45,8 +45,8 @@ struct Node {
 ```vyb
 # With mild: No leak!
 struct Node {
-    next: our<Node>,   # Strong reference (owns)
-    prev: mild<Node>   # Mild reference (doesn't own, breaks cycle)
+    next<our<Node>>,   # Strong reference (owns)
+    prev<mild<Node>>   # Mild reference (doesn't own, breaks cycle)
 }
 # When next is dropped, prev doesn't prevent cleanup
 ```
@@ -96,14 +96,21 @@ if (!shadow.released()) {
 
 ```vyb
 struct TreeNode {
-    value: Int,
-    children: Vec<our<TreeNode>>,  # Own children
-    parent: mild<TreeNode>         # Don't own parent
+    value<Int>,
+    children<Vec<our<TreeNode>>>,   # Own children
+    parent<mild<TreeNode>?>         # Weak parent: ABSENT for the root (`mild<TreeNode>?()`)
 }
 
-fn get_parent_value(node: our<TreeNode>) -> Int {
-    if let parent = node.parent.grab() {
-        return parent.value
+get_parent_value(node<our<TreeNode>>)<Int> -> {
+    weak<mild<TreeNode>?> = node.parent
+    match (weak) {
+        w -> {
+            match (w.grab()) {
+                parent -> { return parent.value }
+                ? -> { }                # the weak reference was already released
+            }
+        }
+        ? -> { }                        # root: no parent at all
     }
     return -1  # Root node or parent destroyed
 }
@@ -113,39 +120,54 @@ fn get_parent_value(node: our<TreeNode>) -> Int {
 
 ```vyb
 struct Subject {
-    observers: Vec<mild<Observer>>
+    observers<Vec<mild<Observer>>>
 }
 
-fn notify(subject: our<Subject>) -> Void {
-    for (shadow in subject.observers) {
-        if let observer = shadow.grab() {
-            observer.update()  # Still alive
+# `Observer.update()` in the old example was a bind method on the unwrapped
+# handle; a plain call keeps the example runnable, and the handle is bound to a
+# local before it is unwrapped (also required by `grab()` on a `mild` element).
+notify(subject<our<Subject>>) -> {
+    shadows<Vec<mild<Observer>>> = subject.observers
+    kept<Vec<mild<Observer>>> = Vec()
+    i<Int> = 0
+    while (i < shadows.len()) {
+        shadow<mild<Observer>> = shadows.get(i)
+        match (shadow.grab()) {
+            observer -> { observer_notify(observer) }   # still alive
+            ? -> { }                                    # skip: was destroyed
         }
-        # Otherwise skip - observer was destroyed
+        if (!shadow.released()) { kept.push(shadow) }   # drop released observers
+        i = i + 1
     }
-
-    # Optional: Clean up released observers
-    subject.observers = subject.observers.filter(|o| !o.released())
+    subject.observers = kept
 }
+
+# `for (shadow in subject.observers)` would be the idiomatic walk, but a
+# `Vec<mild<T>>` loop variable is not bound today, so the walk indexes instead.
 ```
 
 ### 3. Cache with Expiring Entries
 
 ```vyb
 struct Cache {
-    entries: Vec<mild<Entry>>
+    entries<Vec<mild<Entry>>>
 }
 
 # Cache doesn't prevent entries from being freed
 # When user drops all strong references to an entry,
 # the cache's mild reference becomes invalid
 
-fn get_valid_entries(cache: our<Cache>) -> Vec<our<Entry>> {
-    result: Vec<our<Entry>> = Vec()
-    for (shadow in cache.entries) {
-        if let entry = shadow.grab() {
-            result.push(entry)
+get_valid_entries(cache<our<Cache>>)<Vec<our<Entry>>> -> {
+    result<Vec<our<Entry>>> = Vec()
+    shadows<Vec<mild<Entry>>> = cache.entries
+    i<Int> = 0
+    while (i < shadows.len()) {
+        shadow<mild<Entry>> = shadows.get(i)
+        match (shadow.grab()) {
+            entry -> { result.push(entry) }
+            ? -> { }
         }
+        i = i + 1
     }
     return result
 }
@@ -155,16 +177,24 @@ fn get_valid_entries(cache: our<Cache>) -> Vec<our<Entry>> {
 
 ```vyb
 struct ListNode {
-    value: Int,
-    next: our<ListNode>?,    # Strong reference (owns next)
-    prev: mild<ListNode>     # Mild reference (doesn't own prev)
+    value<Int>,
+    next<our<ListNode>>,       # Owns the next node
+    prev<mild<ListNode>?>      # Weak back-reference; ABSENT at the head
 }
 
-fn insert_after(node: our<ListNode>, new_node: our<ListNode>) -> Void {
+# Splice `new_node` in after `node`: `next` is an owned field, so a plain
+# assignment moves the owned handle.
+insert_after(node<our<ListNode>>, new_node<our<ListNode>>) -> {
     new_node.next = node.next
     new_node.prev = soft(node)
     node.next = our(new_node)
 }
+
+# NOTE (declaration-level example): a *recursive* `our<T>` field is not
+# codegen-clean on this build, so this snippet is not compiled by the doc pass.
+# The old spelling of the same model (`next: our<ListNode>?` for the tail) also
+# needs an absent `our<T>?`, which cannot be built as a literal; a list is
+# expressed with a sentinel node or as a `Vec` of nodes instead.
 ```
 
 ## Implementation Details
@@ -258,49 +288,61 @@ Vyb now has a minimal real runtime model for `our<T>` / `mild<T>`:
 
 ```vyb
 struct TreeNode {
-    value: Int,
-    children: Vec<our<TreeNode>>,
-    parent: mild<TreeNode>
+    value<Int>,
+    children<Vec<our<TreeNode>>>,
+    parent<mild<TreeNode>?>        # ABSENT for the root
 }
 
-fn create_node(value: Int, parent: mild<TreeNode>) -> our<TreeNode> {
+create_root(value<Int>)<our<TreeNode>> -> {
     return our(TreeNode {
         value: value,
         children: Vec(),
-        parent: parent
+        parent: mild<TreeNode>?()  # Root has no parent
     })
 }
 
-fn add_child(parent: our<TreeNode>, value: Int) -> our<TreeNode> {
-    child: our<TreeNode> = create_node(value, soft(parent))
+create_node(value<Int>, parent<our<TreeNode>>)<our<TreeNode>> -> {
+    return our(TreeNode {
+        value: value,
+        children: Vec(),
+        parent: soft(parent)       # Weak back-reference to the parent
+    })
+}
+
+add_child(parent<our<TreeNode>>, value<Int>)<our<TreeNode>> -> {
+    child<our<TreeNode>> = create_node(value, parent)
     parent.children.push(child)
     return child
 }
 
-fn get_ancestors(node: our<TreeNode>) -> Vec<Int> {
-    ancestors: Vec<Int> = Vec()
-    current: mild<TreeNode> = node.parent
-
-    while (!current.released()) {
-        if let parent = current.grab() {
-            ancestors.push(parent.value)
-            current = parent.parent
-        } else {
-            break
+get_ancestors(node<our<TreeNode>>)<Vec<Int>> -> {
+    ancestors<Vec<Int>> = Vec()
+    weak<mild<TreeNode>?> = node.parent
+    running<Bool> = true
+    while (running) {
+        match (weak) {
+            w -> {
+                match (w.grab()) {
+                    parent -> {
+                        ancestors.push(parent.value)
+                        weak = parent.parent
+                    }
+                    ? -> { running = false }
+                }
+            }
+            ? -> { running = false }
         }
     }
-
     return ancestors
 }
 
-fn main() -> Int {
-    root: our<TreeNode> = create_node(1, mild<TreeNode>())  # Root has no parent
-    child1: our<TreeNode> = add_child(root, 2)
-    child2: our<TreeNode> = add_child(child1, 3)
+main()<Int> -> {
+    root<our<TreeNode>> = create_root(1)
+    child1<our<TreeNode>> = add_child(root, 2)
+    child2<our<TreeNode>> = add_child(child1, 3)
 
-    ancestors: Vec<Int> = get_ancestors(child2)
-    # Should return [2, 1]
-
+    ancestors<Vec<Int>> = get_ancestors(child2)
+    # [2, 1]: the parent chain above child2
     return 0
 }
 ```

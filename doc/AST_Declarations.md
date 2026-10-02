@@ -73,8 +73,9 @@ Vyb supports two parameter syntax styles that produce identical AST structures:
 #### Standard Syntax
 
 ```vyb
-// Explicit mutability with angle brackets
-fn<String> format(var<String> prefix, const<Int> value) -> {
+// Parameters are declared `name<Type>`; a parameter that must not be written
+// through is typed `Type const`.
+format(prefix<String>, value<Int const>)<String> -> {
     return prefix + value.to_string()
 }
 ```
@@ -82,8 +83,10 @@ fn<String> format(var<String> prefix, const<Int> value) -> {
 #### Shorthand Syntax
 
 ```vyb
-// Type-first shorthand (more concise)
-fn<String> format(String prefix, const Int value) -> {
+// The same declaration with the type spelled after the name is the canonical
+// form; the relaxed C-style `Type name` spelling parses too (see the syntax
+// migration notes) but is not what new code is written in.
+format(prefix<String>, value<Int const>)<String> -> {
     return prefix + value.to_string()
 }
 ```
@@ -91,8 +94,8 @@ fn<String> format(String prefix, const Int value) -> {
 #### Mixed Syntax (parameters)
 
 ```vyb
-// Both forms can be used in the same function
-fn<Int> calculate(var<Int> base, Int multiplier, const<Int> offset) -> {
+// One parameter list, several parameter shapes.
+calculate(base<Int>, multiplier<Int>, offset<Int const>)<Int> -> {
     return base * multiplier + offset
 }
 ```
@@ -131,20 +134,17 @@ public:
 Function declarations in Vyb support multi-value return types using the generic syntax `fn<T1, T2, ...>`. When the function name is `main`, the Vyb runtime automatically serializes returned values to JSON format:
 
 ```vyb
-// Single return type with standard parameter syntax
-fn<Int> add(var<Int> a, var<Int> b) -> a + b
+// Single return type
+add(a<Int>, b<Int>)<Int> -> { return a + b }
 
-// Same function with shorthand parameter syntax
-fn<Int> add_shorthand(Int a, Int b) -> a + b
-
-// Multi-value return type with mixed parameter syntax
-fn<Int, String> get_values(String prefix, const Int count) -> {
+// Multi-value return type
+get_values(prefix<String>, count<Int>)<Int, String> -> {
     return count, prefix + "Hello, World!"
 }
 
 // Auto-serialization in main()
-fn<Int, String> main() -> {
-    return get_values()  // Output: {"Int":42,"String":"Hello, World!"}
+main()<Int, String> -> {
+    return get_values("", 42)  // Output: [42, "Hello, World!"]
 }
 ```
 

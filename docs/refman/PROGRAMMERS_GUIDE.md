@@ -931,7 +931,7 @@ Generic functions and types are monomorphized — a new specialized copy is
 generated per instantiation, so dispatch has no runtime cost:
 
 ```vyb
-fn first<T>(v<Vec<T>>)<T> -> { return v.get(0) }
+first<T>(v<Vec<T>>)<T> -> { return v.get(0) }
 ```
 
 Generic type parameters can be bounded by aspects with the angle-bracket form:
