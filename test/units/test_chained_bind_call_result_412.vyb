@@ -1,0 +1,42 @@
+// @test: bind method chained onto a call result whose argument is a by-value struct (#412)
+// @description: the aspect/bind dispatch for a member-expression receiver forced LHS
+//   ("pointer") mode onto the receiver too, so `f(x).bump()` evaluated `f`'s by-value
+//   struct argument as its address -- "Argument type mismatch for call to f. Expected
+//   Big but got ptr" -- and the statement compiled to nothing (the binding stayed
+//   unassigned and every later use read null). The same restriction now applies here as
+//   for the built-in Vec dispatch: pointer mode is only set for a storage-location
+//   receiver, and a call-result receiver yields its value for the temporary-slot path.
+// @category: ownership, struct, bind, aspect, codegen
+// @expect-output: r=5
+// @expect-return: 0
+
+import core::aspects
+
+struct Big {
+    a<Vec<Int>>,
+    b<Int>
+}
+
+struct Counter {
+    n<Int>
+}
+
+aspect Bump {
+    bump(self<Counter>)<Int>
+}
+
+bind Bump -> Counter {
+    bump(self<Counter>)<Int> -> { return self.n + 1 }
+}
+
+share(all)
+f(b<Big>)<Counter> -> {
+    return Counter { n = b.b }
+}
+
+main()<Int> -> {
+    x<Big> = Big { a = Vec(), b = 4 }
+    r<Int> = f(x).bump()
+    println("r=" + r.to_string())
+    return 0
+}
