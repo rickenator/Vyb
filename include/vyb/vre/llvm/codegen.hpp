@@ -830,9 +830,13 @@ private:
     // struct with owned fields, those fields are reclaimed first so nested
     // resources (inner our/mild refs, Vec storage, String buffers, my blocks) are
     // not leaked. `pointeeAst`/`pointeeLlvm` may be null (treated as scalar/no-op).
+    // `visited`, when supplied, is the caller's reclaim set: a RECURSIVE payload
+    // type (e.g. `struct Node { next<our<Node>> }`) must share it or the reclaim
+    // expansion recurses without bound in the compiler (#391 defect 5).
     void releaseOurControlBlock(llvm::Value* controlBlockPtr, const std::string& tag,
                                 const vyb::ast::TypeNode* pointeeAst = nullptr,
-                                llvm::Type* pointeeLlvm = nullptr);
+                                llvm::Type* pointeeLlvm = nullptr,
+                                std::set<std::string>* visited = nullptr);
     void releaseMildControlBlock(llvm::Value* controlBlockPtr, const std::string& tag);
     // Retain a `mild` weak-count control block: bump the weak count so a new
     // storage location that will release on scope exit holds its own weak ref.

@@ -1,0 +1,21 @@
+// @test: a recursive `our<T>` field reclaims without unbounded compiler recursion (#427 defect 5)
+// @description: `struct L { v<Int>, next<our<L>> }` crashed the compiler with SIGSEGV and no
+//   diagnostic: releaseOurControlBlock began its payload reclaim with a FRESH `visited` set, so
+//   the reclaim expansion for a recursive type never terminated -- reclaim(L) -> release the
+//   `next` handle -> reclaim(L) -> ... until the stack died inside LLVM's value symbol table.
+//   The payload reclaim now shares the caller's set, so the expansion terminates; a two-node
+//   chain is built through both the literal field and a field assignment, then read back.
+// @category: ownership, struct
+// @expect-output: chain 1->2
+// @expect-return: 0
+
+share(all)
+struct L { v<Int>, next<our<L>> }
+
+main()<Int> -> {
+    n2<our<L>> = our(L { v: 2 })
+    n1<our<L>> = our(L { v: 1, next: n2 })
+    n1.next = n2
+    println("chain " + n1.v.to_string() + "->" + n1.next.v.to_string())
+    return 0
+}

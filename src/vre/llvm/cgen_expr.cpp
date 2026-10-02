@@ -633,6 +633,15 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
         }
     }
 
+    // A member target (`s.a = x`) is a storage location just like a variable, so
+    // the overwrite bookkeeping below must run for it too. Without it an `our<T>`
+    // field assignment retains nothing -- the source binding and the field then both
+    // release the same control block at scope exit (double free / heap corruption,
+    // exit 134) -- and the outgoing field value is never released. The Vec case
+    // below already covers member destinations for the same reason.
+    const bool isAssignToStorage = isAssignToVar ||
+        dynamic_cast<ast::MemberExpression*>(node->left.get()) != nullptr;
+
     // Mutable closure captures: propagate writes to the outer variable's
     // address so the enclosing scope (and subsequent invocations) observe the
     // change. This map is only populated while generating a lambda body, so for
@@ -890,7 +899,7 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
     // Closure-typed variable overwrites release the target's previous hold on a
     // capture environment. Load the outgoing value first, then store the incoming
     // value (so a self-assignment keeps its env alive), then release the old one.
-    bool closureOverwrite = isAssignToVar && destPointeeType && isClosureStructType(destPointeeType);
+    bool closureOverwrite = isAssignToStorage && destPointeeType && isClosureStructType(destPointeeType);
     if (closureOverwrite) {
         // Only overwrite-handle assignments to a confirmed `fn` binding; a plain
         // {ptr, ptr} target (2-pointer tuple) must keep plain store semantics.
@@ -1003,7 +1012,7 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
     // `.grab()`, or a function returning `our<T>`) needs no retain.
     bool ourOverwrite = false;
     llvm::Value* oldOurPtr = nullptr;
-    if (isAssignToVar && lhsTypeNode && destPointeeType && destPointeeType->isPointerTy() &&
+    if (isAssignToStorage && lhsTypeNode && destPointeeType && destPointeeType->isPointerTy() &&
         isOurRefType(lhsTypeNode.get())) {
         ourOverwrite = true;
         oldOurPtr = builder->CreateLoad(destPointeeType, LHS, "assign.old_our");
@@ -1019,7 +1028,7 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
     // retained (+weak) to balance its own scope-exit release.
     bool mildOverwrite = false;
     llvm::Value* oldMildPtr = nullptr;
-    if (isAssignToVar && lhsTypeNode && destPointeeType && destPointeeType->isPointerTy() &&
+    if (isAssignToStorage && lhsTypeNode && destPointeeType && destPointeeType->isPointerTy() &&
         isMildRefType(lhsTypeNode.get())) {
         mildOverwrite = true;
         oldMildPtr = builder->CreateLoad(destPointeeType, LHS, "assign.old_mild");
@@ -1144,7 +1153,7 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
     // free). When the source is a local owner, null its slot so ownership
     // transfers to the target. A self-assignment (src == dest) is excluded, and
     // a borrowed `my` parameter (not an owner) is left untouched.
-    if (myOverwrite && identLeft && node->right) {
+    if (myOverwrite && isAssignToStorage && node->right) {
         if (auto* rhsIdent = dynamic_cast<ast::Identifier*>(node->right.get())) {
             const ScopeVariable* srcVar = nullptr;
             for (auto sit = scopeStack.rbegin(); sit != scopeStack.rend() && !srcVar; ++sit) {

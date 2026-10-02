@@ -1,0 +1,32 @@
+// @test: an `our<T>` field assignment retains the incoming handle and releases the outgoing one (#427 defect 4)
+// @description: `s.a = x` (x a binding holding an `our<A>`) skipped the overwrite bookkeeping that
+//   a variable target gets, because every guard was gated on an Identifier LHS. Nothing was
+//   retained, so the source binding and the field both released the same control block at scope
+//   exit -- a double free the allocator reported as `malloc_consolidate(): unaligned fastbin chunk
+//   detected` (exit 134) *after* the program had printed its output -- and the outgoing field value
+//   was leaked for the same reason. A member target is a storage location, so the retain/release
+//   now runs for it (as the Vec-element path already did).
+// @category: ownership, struct
+// @expect-output: v=2 after=2
+// @expect-return: 0
+
+share(all)
+struct A { v<Int> }
+
+share(all)
+struct B { a<our<A>> }
+
+share(all)
+setb(b<our<B>>, x<our<A>>) -> { b.a = x }
+
+main()<Int> -> {
+    s<B> = B { a: our(A { v: 1 }) }
+    x<our<A>> = our(A { v: 2 })
+    s.a = x                       // a field of a value struct
+    first<Int> = s.a.v
+
+    b<our<B>> = our(B { a: our(A { v: 9 }) })
+    setb(b, x)                    // a field reached through an owned struct parameter
+    println("v=" + first.to_string() + " after=" + b.a.v.to_string())
+    return 0
+}

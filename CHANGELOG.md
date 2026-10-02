@@ -108,6 +108,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `doc/THREAD_BOUNDARY_SCOPE.md` (whose step list is now fully closed).
 
 ### Fixed
+- **An `our<T>`/`mild<T>` field assignment is a storage location, and a recursive payload
+  reclaims without unbounded recursion (#427)** — two of the ten defects the doc-example port
+  (#391) turned up, both in the codegen ownership path. `s.a = x` (an `our<A>` into an `our<A>`
+  field) skipped every overwrite-bookkeeping branch, because the closure/my/our/mild guards were
+  all gated on an **Identifier** LHS: nothing retained the incoming control block, so the source
+  binding and the field both released the same one at scope exit — a double free the allocator
+  reported as `malloc_consolidate(): unaligned fastbin chunk detected` (exit 134) *after* the
+  program had printed — and the outgoing field value leaked for the same reason. A member target
+  is a storage location like any other (the Vec path already treated it that way), so the guards
+  now take a variable-or-member test, and the `my<Struct>` move-assignment source-nulling covers
+  member targets too (`test/units/test_our_field_overwrite_retain.vyb`). Separately, a recursive
+  `our<T>` field (`struct L { v<Int>, next<our<L>> }`) crashed the compiler with SIGSEGV and no
+  diagnostic: `releaseOurControlBlock` opened its payload reclaim with a fresh `visited` set, so
+  the reclaim expansion for a recursive type never terminated (reclaim(L) → release the `next`
+  handle → reclaim(L) → …, until the stack died inside LLVM's symbol table). The payload reclaim
+  now shares the caller's set (`test/units/test_recursive_our_field.vyb`).
 - **`vyb mod install` named every package `mod`, and a path dependency's module was importable only by its file stem (#418)** — a github spec's conventional module file is `<dir>/mod.vyb`, so the package is its directory; naming it after the file stem made every install collide on `.vybmod/mod` and left the declared dependency with nothing to consume. Installing also ADDED a second `[dependencies]` entry for such a package instead of rewriting the declared `name = { github = "..." }` line in place, and a `path` dependency whose directory is a package was resolvable only as `import mod`. Now: install names the package after the spec's directory, rewrites the declared entry in place, and `vyb build` also registers a package directory's parent so `import <name>` resolves for every dependency source (the older file-stem spelling still works). Locked in by `test/githubdep_smoke.vyb` (11 checks).
 - **`io::open_append` opened a read-only descriptor, so every write failed with `EBADF` (#419)** — `FileFlag` carries no access-mode bit in `APPEND`/`CREATE`, and the runtime maps the flags straight onto `open(2)` access bits, so `APPEND | CREATE` alone produced `open(path, O_RDONLY|O_CREAT|O_APPEND, 0644)`: the file was created and the open succeeded, but the first `write_str` returned absent with `EBADF`. The helper now sets `WRITE` the way its sibling `open_write` does. Silent trap rather than a visible error — the file existing made it look like a write bug. Locked in by `test/modules/test_io_open_append.vyb`, which appends twice through two separate handles and reads both lines back.
 - **A Vec temporary consumed through an element accessor is reclaimed (#382)** —
