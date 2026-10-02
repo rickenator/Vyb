@@ -5,12 +5,10 @@
 //   closure environment, so the mutation made inside the closure survives the
 //   defining frame AND is visible on the next call. Exact values are asserted,
 //   not just "it does not crash".
-//   LeakSanitizer note: the struct-field shape is clean; the Vec-element shape
-//   inherits a PRE-EXISTING leak (`Vec<fn ...>` element environments are never
-//   released when the Vec is reclaimed -- present before this change too, see
-//   the immutable counterpart test_closure_field_and_vec_escape.vyb and issue
-//   #439), which additionally orphans the boxed cell the unreleased environment
-//   owns.
+//   LeakSanitizer note: both shapes are clean. The Vec-element shape used to
+//   inherit a pre-existing leak (`Vec<fn ...>` element environments were never
+//   released when the Vec was reclaimed, issue #439); that half of #439 is fixed,
+//   so the boxed cell the environment owns is freed with it.
 // @category: lambda, closure, mutable, escape, struct, vec, ownership
 // @expect-output: field1=11 field2=12 vec0=4
 // @expect-return: 0
