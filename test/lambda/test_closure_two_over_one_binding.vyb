@@ -1,0 +1,21 @@
+// @test: two closures over one binding do not share it (immutable snapshot vs write-back)
+// @description: pins the hazard #384 names: a read-only closure over a local keeps its
+//   snapshot, so a mutation performed through a second, mutable-capturing closure is NOT
+//   visible through the first. The mutation does reach the enclosing frame. The boxed-capture
+//   contract keeps this: a capture that only reads stays a snapshot, and only a capture that
+//   assigns turns the binding into a shared heap cell. Fixture is the pre-change baseline.
+// @category: lambda, closure, capture, mutable
+// @expect-output: inc=1 get=0 local=1
+// @expect-return: 0
+
+main()<Int> -> {
+    c<Int> = 0
+    inc<fn() -> Int> = || -> { c = c + 1; return c }
+    get<fn() -> Int> = || -> { return c }
+
+    i1<Int> = inc()
+    g1<Int> = get()
+    l1<Int> = c
+    println("inc=" + i1.to_string() + " get=" + g1.to_string() + " local=" + l1.to_string())
+    return 0
+}
