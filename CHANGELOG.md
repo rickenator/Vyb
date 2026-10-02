@@ -108,6 +108,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `doc/THREAD_BOUNDARY_SCOPE.md` (whose step list is now fully closed).
 
 ### Fixed
+- **A `lit()` component of a multi-value return asserts in LLVM (#427)** —
+  `main()<Int, String> -> { return 1, lit("42") }` and `{ return lit(1), "x" }` both aborted the
+  compiler (`checkGEPType: Invalid GetElementPtrInst indices for type!` and
+  `CreateSExtOrTrunc: Can only sign extend/truncate integers!`). The multi-value return path passes
+  each tuple element to `serializeMainReturnJson` with that element's DECLARED type, but a `lit(...)`
+  value is already-serialized raw JSON arriving as a bare `i8*`, so the serializer applied the
+  declared type's coercion to a pointer (String → `CreateExtractValue`/GEP into a non-aggregate;
+  Int → sign-extend an `i8*`). A bare pointer there is always an already-serialized fragment (a real
+  String is a `{ i8*, i64 }` struct and a Vec a `{ ptr, i64, i64 }` struct), so it is now returned
+  verbatim before any type dispatch — lit()'s contract of no quoting and no escaping — which covers
+  the whole return, a tuple element and a Vec element alike. Locked in by
+  `test/units/test_lit_component_multivalue_return.vyb` (`[1, 42]`) and
+  `test/units/test_lit_first_component_multivalue.vyb` (`[1, "x"]`), both of which aborted the
+  compiler before the fix.
 - **`soft()` over an inline primitive `our<T>` is refused instead of emitting invalid IR (#427)** —
   `soft(our(5))` passed the "argument is `our<T>`" semantic check and reached codegen, which treated
   the payload value itself as the control-block pointer and emitted
