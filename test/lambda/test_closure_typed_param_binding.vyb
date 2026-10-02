@@ -1,0 +1,18 @@
+// @test: a closure with explicitly typed parameters stored in a typed binding
+// @description: the working closure-value shape today, pinned for #385. A closure
+//   whose parameter types are written out (`|x<Int>| -> x * 2`) is accepted when the
+//   binding's `fn(Int) -> Int` type matches, and calling it through that binding
+//   produces the value. This is the shape the inference work must not break: the
+//   un-annotated spelling of the same closure is rejected at the binding
+//   (`Expected fn(Int) -> Int but got fn(?) -> void`) and silently dropped at the
+//   call site -- both recorded on #385.
+// @category: lambda, closure, generics
+// @expect-output: n=6
+// @expect-return: 0
+
+main()<Int> -> {
+    f<fn(Int) -> Int> = |x<Int>| -> x * 2
+    n<Int> = f(3)
+    println("n=" + n.to_string())
+    return 0
+}
