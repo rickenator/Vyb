@@ -1,0 +1,78 @@
+// @test: a `Vec<fn ...>` slot owns its element's environment, released on reclaim (#439)
+// @description: A closure element is a reference-counted value: the slot must own one
+//   reference of its own (`push`/`set` retain it, a Vec deep copy retains every element
+//   it clones) and the Vec's reclaim must drop exactly that reference (a scope-exit
+//   reclaim, the by-value copy a callee reclaims, and the `Vec` field of a struct).
+//   Before this, the environment was never retained and never released, so one 24-byte
+//   environment block leaked per element under LeakSanitizer; a newer `Vec::get` handed
+//   the caller a reference the slot did not hold. Functional output alone cannot catch
+//   it, so this fixture is also the ASan proof (push, a second call through the same
+//   binding, set, a subscript store, a by-value parameter, a returned Vec and a
+//   `Vec<fn ...>` struct field all run and assert their value).
+// @category: vec, ownership, lambda, closure
+// @expect-output: push=1 push2=1 set=3 index=7 byvalue=4 ret=5 field=6
+// @expect-return: 0
+
+struct Fns {
+    v<Vec<fn() -> Int>>
+}
+
+callFirst(v<Vec<fn() -> Int>>)<Int> -> {
+    f<fn() -> Int> = v.get(0)
+    return f()
+}
+
+make()<Vec<fn() -> Int>> -> {
+    n<Int> = 5
+    v<Vec<fn() -> Int>> = Vec()
+    v.push(|| -> { return n })
+    return v
+}
+
+main()<Int> -> {
+    # push retains the element's environment; `get` hands back an owned reference.
+    a<Int> = 1
+    v<Vec<fn() -> Int>> = Vec()
+    v.push(|| -> { return a })
+    p<fn() -> Int> = v.get(0)
+    n1<Int> = p()
+    n2<Int> = p()
+
+    # `set` drops the overwritten slot's reference and takes one for the new value.
+    b<Int> = 3
+    v.set(0, || -> { return b })
+    q<fn() -> Int> = v.get(0)
+    n3<Int> = q()
+
+    # a subscript store is the same storage location: the replaced slot's
+    # reference is dropped and the stored closure is owned by the slot (#439).
+    e<Int> = 7
+    v[0] = || -> { return e }
+    u<fn() -> Int> = v.get(0)
+    n7<Int> = u()
+
+    # a by-value Vec parameter is deep-copied, and that copy's reclaim drops its elements.
+    c<Int> = 4
+    w<Vec<fn() -> Int>> = Vec()
+    w.push(|| -> { return c })
+    n4<Int> = callFirst(w)
+
+    # a returned Vec: the caller's reclaim owns the elements.
+    r<Vec<fn() -> Int>> = make()
+    s<fn() -> Int> = r.get(0)
+    n5<Int> = s()
+
+    # a `Vec<fn ...>` FIELD of a struct is reclaimed with the struct.
+    d<Int> = 6
+    fv<Vec<fn() -> Int>> = Vec()
+    fv.push(|| -> { return d })
+    h<Fns> = Fns { v = fv }
+    t<fn() -> Int> = h.v.get(0)
+    n6<Int> = t()
+
+    println("push=" + n1.to_string() + " push2=" + n2.to_string() +
+            " set=" + n3.to_string() + " index=" + n7.to_string() +
+            " byvalue=" + n4.to_string() + " ret=" + n5.to_string() +
+            " field=" + n6.to_string())
+    return 0
+}

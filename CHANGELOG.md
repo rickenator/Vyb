@@ -64,6 +64,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `file://` mirror); `test/registry_smoke.vyb` additionally asserts that a materialized
   `version:` dep rebuilds with the registry absent.
 
+### Fixed
+- **A closure stored in a `Vec` no longer leaks its capture environment (#439)** — a
+  `Vec<fn ...>` slot held a closure value it had never retained and never released, so
+  one environment block leaked per element (24 B for a one-capture closure, under
+  `ASAN_OPTIONS=halt_on_error=1:detect_leaks=1`) and a boxed mutable capture's heap cell
+  leaked with it. The Vec element path now balances the reference: `push`/`set` retain
+  the element they adopt (and `set` drops the overwritten slot's), the Vec deep copy
+  retains every element it clones, the scope-exit reclaim (`reclaimVecStorage`) and the
+  `Vec<fn ...>` field of a struct (`reclaimStructOwnedFieldsAt`) release one per element,
+  `Vec::get`/`first`/`last` hand back a value the caller owns — the same rule the
+  String-element accessors already followed — and a subscript store (`v[i] = c`) is a
+  storage location like any other, so it drops the replaced slot's reference and owns
+  the one it stores. The three near-identical per-element loops
+  are one helper (`emitClosureElementRefLoop`), and the element predicate/retain pair is
+  `isClosureElementType` / `retainClosureElement`. Locked in by
+  `test/collections/test_vec_closure_element_ownership.vyb` (push, a second call through
+  the same binding, `set`, subscript store, by-value parameter, returned Vec, struct
+  field — exact values) and by the two closure escape fixtures, all
+  LeakSanitizer-clean. A closure assigned into a struct FIELD (`h.f = ...`) is still not
+  owned by that field — that half of #439 remains open.
+
 ### Changed
 - **`bare()` now emits a struct's field values, in declaration order (#383)** — the
   second half of the intrinsic cleanup. `bare(x)` was an exact alias of `notype(x)`:

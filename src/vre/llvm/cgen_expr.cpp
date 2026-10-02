@@ -899,7 +899,15 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
     // Closure-typed variable overwrites release the target's previous hold on a
     // capture environment. Load the outgoing value first, then store the incoming
     // value (so a self-assignment keeps its env alive), then release the old one.
-    bool closureOverwrite = isAssignToStorage && destPointeeType && isClosureStructType(destPointeeType);
+    // #439: an element/subscript destination (`v[i] = c`) is a storage location
+    // too. Without it the slot neither releases the closure it replaces nor owns
+    // the one it stores, so the Vec's reclaim would release an environment whose
+    // only reference was the accessor's caller's.
+    const bool isClosureStorageTarget =
+        isAssignToVar || dynamic_cast<ast::MemberExpression*>(node->left.get()) != nullptr ||
+        dynamic_cast<ast::ArrayElementExpression*>(node->left.get()) != nullptr;
+    bool closureOverwrite =
+        isClosureStorageTarget && destPointeeType && isClosureStructType(destPointeeType);
     if (closureOverwrite) {
         // Only overwrite-handle assignments to a confirmed `fn` binding; a plain
         // {ptr, ptr} target (2-pointer tuple) must keep plain store semantics.

@@ -231,6 +231,12 @@ void LLVMCodegen::reclaimVecStorage(llvm::Value* vecValue, llvm::Type* vecStruct
     // per pushed row).
     const vyb::ast::TypeNode* elemAstNode = vecAst ? vecElementTypeNode(vecAst) : nullptr;
     const bool elemIsVec = elemAstNode && isVecTypeNode(elemAstNode);
+    // #439: a `Vec<fn ...>` owns one environment reference per element (push/set
+    // and the Vec deep copy each retain it); release them before the buffer goes.
+    llvm::Type* elemLlvmTyForClosure =
+        elemAstNode ? codegenType(const_cast<vyb::ast::TypeNode*>(elemAstNode)) : nullptr;
+    const bool vecHoldsClosures = elemLlvmTyForClosure && elemAstNode &&
+        isFnTypeNode(elemAstNode) && isClosureStructType(elemLlvmTyForClosure);
     const vyb::ast::TypeNode* vecElemAst = nullptr;
     llvm::Type* vecElemLlvm = nullptr;
     if (!elemIsVec && elemAstNode && isKnownStructTypeNode(elemAstNode) &&
@@ -250,6 +256,15 @@ void LLVMCodegen::reclaimVecStorage(llvm::Value* vecValue, llvm::Type* vecStruct
     if (vecHoldsStrings) {
         llvm::Value* elemCount = builder->CreateExtractValue(vecPtr, 1, tag + "_elem_count");
         releaseStringElements(dataPtr, elemCount);
+    }
+    // #439: drop one environment reference per closure element before the element
+    // buffer is freed. Without this every element's environment leaks (a fresh
+    // environment starts at refcount 0, and the push/set/copy retain is never
+    // matched by a release).
+    if (vecHoldsClosures) {
+        llvm::Value* elemCount = builder->CreateExtractValue(vecPtr, 1, tag + "_cl_count");
+        emitClosureElementRefLoop(dataPtr, elemCount, elemLlvmTyForClosure, /*retain=*/false,
+                                  tag + "_cl");
     }
     // Per-element reclaim of deep-copied owned struct fields before freeing the
     // element buffer.
@@ -941,6 +956,17 @@ void LLVMCodegen::reclaimStructOwnedFieldsAt(llvm::Value* structPtr,
             // one ~32B block per leaked node -- the array was freed but not the
             // elements). Mirrors the isVecWithMallocData teardown in cleanupVariable.
             const vyb::ast::TypeNode* eAst = vecElementTypeNode(f);
+            // #439: a `Vec<fn ...>` field owns one environment reference per
+            // element (push/set and the deep copy retain it), so drop them before
+            // the element buffer is freed; a shallow `sl` load would otherwise
+            // strand every element's environment.
+            if (eAst && isFnTypeNode(eAst)) {
+                llvm::Type* eLlvm = codegenType(const_cast<vyb::ast::TypeNode*>(eAst));
+                if (eLlvm && isClosureStructType(eLlvm)) {
+                    llvm::Value* cnt = builder->CreateExtractValue(sl, 1, "reclaim.cl.elemcount");
+                    emitClosureElementRefLoop(data, cnt, eLlvm, /*retain=*/false, "reclaim.cl");
+                }
+            }
             if (eAst && isKnownStructTypeNode(eAst) && structTypeHasOwnedFields(eAst)) {
                 llvm::Type* eLlvm = codegenType(const_cast<vyb::ast::TypeNode*>(eAst));
                 if (eLlvm && llvm::isa<llvm::StructType>(eLlvm)) {
@@ -1553,6 +1579,15 @@ llvm::Value* LLVMCodegen::generateVecDeepCopy(llvm::Value* vecStructValue,
         if (elemType && isVybStringStructType(elemType)) {
             retainStringElements(newDataPtr, vecSize);
         }
+        // #439: closure elements are reference-counted environments too. The clone
+        // is an independent holder, so retain every environment it now references;
+        // reclaimVecStorage drops exactly one per element when the clone is
+        // reclaimed (a raw memcpy of the element structs would otherwise leave the
+        // clone aliasing the source's environments and its release would drop a
+        // reference the source still owns).
+        if (elemType && isClosureElementType(elemType, astElemType)) {
+            emitClosureElementRefLoop(newDataPtr, vecSize, elemType, /*retain=*/true, "vdc.clo");
+        }
         builder->CreateBr(doneBB);
 
         builder->SetInsertPoint(doneBB);
@@ -1814,6 +1849,59 @@ void LLVMCodegen::releaseClosureValue(llvm::Value* closureVal) {
     builder->CreateCall(releaseFn, {env});
     builder->CreateBr(done);
     builder->SetInsertPoint(done);
+}
+
+// #439: emit the loop that retains (or releases) the environment of every
+// closure element in a `Vec<fn ...>` element buffer. One implementation for the
+// three sites that need it -- the deep copy retains what it clones, while
+// `reclaimVecStorage` and the Vec-field branch of `reclaimStructOwnedFieldsAt`
+// release what the slots own. Leaves the builder in the loop-exit block.
+void LLVMCodegen::emitClosureElementRefLoop(llvm::Value* dataPtr, llvm::Value* count,
+                                            llvm::Type* elemTy, bool retain,
+                                            const std::string& tag) {
+    if (!dataPtr || !count || !elemTy || !builder || !currentFunction) return;
+    llvm::Type* int64Ty = llvm::Type::getInt64Ty(*context);
+    llvm::Value* elemBytes = llvm::ConstantInt::get(
+        int64Ty, (unsigned)llvm::DataLayout(module.get()).getTypeAllocSize(elemTy));
+    llvm::BasicBlock* headBB = llvm::BasicBlock::Create(*context, tag + ".head", currentFunction);
+    llvm::BasicBlock* bodyBB = llvm::BasicBlock::Create(*context, tag + ".body", currentFunction);
+    llvm::BasicBlock* exitBB = llvm::BasicBlock::Create(*context, tag + ".exit", currentFunction);
+    llvm::Value* idxAlloca = builder->CreateAlloca(int64Ty, nullptr, tag + ".i");
+    builder->CreateStore(llvm::ConstantInt::get(int64Ty, 0), idxAlloca);
+    builder->CreateBr(headBB);
+    builder->SetInsertPoint(headBB);
+    llvm::Value* idx = builder->CreateLoad(int64Ty, idxAlloca, tag + ".cur");
+    builder->CreateCondBr(builder->CreateICmpULT(idx, count, tag + ".cmp"), bodyBB, exitBB);
+    builder->SetInsertPoint(bodyBB);
+    llvm::Value* off = builder->CreateMul(idx, elemBytes, tag + ".off");
+    llvm::Value* elemPtr = builder->CreateGEP(llvm::Type::getInt8Ty(*context), dataPtr, off,
+                                              tag + ".ptr");
+    llvm::Value* closureVal = builder->CreateLoad(elemTy, elemPtr, tag + ".val");
+    if (retain) retainClosureValue(closureVal);
+    else releaseClosureValue(closureVal);
+    builder->CreateStore(
+        builder->CreateAdd(idx, llvm::ConstantInt::get(int64Ty, 1), tag + ".next"), idxAlloca);
+    builder->CreateBr(headBB);
+    builder->SetInsertPoint(exitBB);
+}
+
+bool LLVMCodegen::isClosureElementType(llvm::Type* elementLLVMType,
+                                       const vyb::ast::TypeNode* astElemType) {
+    if (!elementLLVMType || !astElemType) return false;
+    // The AST says the element is a closure VALUE (`fn ...`); the LLVM type must
+    // be the closure struct `{ ptr env, ptr fn }`. Requiring both keeps a
+    // coincidental two-pointer element out of the reference-counted path.
+    return isFnTypeNode(astElemType) && isClosureStructType(elementLLVMType);
+}
+
+void LLVMCodegen::retainClosureElement(llvm::Value* element, llvm::Type* elementLLVMType,
+                                       const vyb::ast::TypeNode* astElemType,
+                                       llvm::BasicBlock** validIncoming) {
+    if (!isClosureElementType(elementLLVMType, astElemType)) return;
+    retainClosureValue(element);
+    // A retain emits its own blocks, so report where the builder ended up: a
+    // merge PHI built afterwards must name that block as its predecessor.
+    if (validIncoming) *validIncoming = builder->GetInsertBlock();
 }
 
 void LLVMCodegen::releaseClosureAlloca(llvm::Value* allocaInst) {

@@ -670,6 +670,25 @@ private:
     bool isFnTypeNode(const vyb::ast::TypeNode* tn) const; // true for `fn` types
     void retainClosureValue(llvm::Value* closureVal);  // +1 on a copied closure value
     void releaseClosureValue(llvm::Value* closureVal); // -1 on a closure value
+    // #439: is this Vec element (or accessor RESULT) a closure VALUE? Both the
+    // declared `fn ...` type and the closure struct `{ ptr env, ptr fn }` are
+    // required, so a coincidental two-pointer element is not reference counted.
+    bool isClosureElementType(llvm::Type* elementLLVMType, const vyb::ast::TypeNode* astElemType);
+    // #439: retain the environment a Vec slot or an accessor result now references
+    // (the slot owns one reference, the accessor's caller takes a new one). No-op
+    // unless the element really is a closure value. When `validIncoming` is
+    // non-null it is set to the block the retain left the builder in -- a retain
+    // emits its own null-check blocks, so a merge PHI built afterwards must name
+    // that block.
+    void retainClosureElement(llvm::Value* element, llvm::Type* elementLLVMType,
+                              const vyb::ast::TypeNode* astElemType,
+                              llvm::BasicBlock** validIncoming);
+    // #439: the per-element loop that retains or releases the environment of every
+    // closure in a `Vec<fn ...>` element buffer -- one implementation for the deep
+    // copy (retain) and the two reclaim sites (release). Leaves the builder in the
+    // loop-exit block.
+    void emitClosureElementRefLoop(llvm::Value* dataPtr, llvm::Value* count,
+                                   llvm::Type* elemTy, bool retain, const std::string& tag);
     void releaseClosureAlloca(llvm::Value* allocaInst); // load closure from an alloca, then -1
     // Build the per-layout destructor for a closure capture environment that
     // owns transferred `my<Struct>` payloads; reclaims each captured pointee's
