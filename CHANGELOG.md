@@ -108,6 +108,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `doc/THREAD_BOUNDARY_SCOPE.md` (whose step list is now fully closed).
 
 ### Fixed
+- **`our<T>?()` could not be constructed (#427)** — an absent optional owned handle was a parse
+  error (`Expected primary expression. (found '?')`) while `Int?()`, a struct (`A?()`) and
+  `mild<Int>?()` all parsed, so an `our<T>?` value could only ever come from a call. The expression
+  parser's type-prefixed construction path (run the TypeParser; if a type parsed and `(` follows,
+  build a ConstructionExpression) is skipped for a list of intrinsic names — `my`, `their`, `our`,
+  `borrow`, `view`, ... — keyed on the name alone; the TypeParser's `?` postfix is what produces the
+  optional, so `our<Int>?(` never reached it and the `?` was left to the expression grammar, which
+  has no `?` primary. The skip is correct for the CALL form (`our(expr)` etc., already covered by
+  the "identifier followed by `(`" branch) and now requires it explicitly, so the ownership keywords
+  reach the same path as every other type name while call-shaped uses are untouched.
+  `test/units/test_our_optional_construction.vyb` fails with the parse error on the pre-fix tree and
+  passes now, asserting both arms (`our<A>?()` matches `?`, a handle from a call matches the value).
 - **An empty `mild<T>()` is refused instead of faulting in the JIT (#427)** — a `mild<T>` is a
   control-block pointer, so a zero-argument construction has nothing to point at: `m<mild<A>> =
   mild<A>(); m.released()` exited 139 with **no output at all** (the generated code faulted before

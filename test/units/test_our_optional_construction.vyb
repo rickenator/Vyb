@@ -1,0 +1,36 @@
+// @test: `our<T>?()` constructs an absent optional owned handle (#427 defect 3)
+// @description: an absent optional could not be constructed for an owned handle: `our<Int>?()`
+//   and `our<A>?()` were rejected in expression position ("Expected primary expression.
+//   (found '?')"), although `Int?()`, a struct (`A?()`) and `mild<Int>?()` all parsed. The
+//   expression parser skips its type-prefixed construction path for the ownership keywords
+//   (`my`/`their`/`our`/`borrow`/`view`) whenever the identifier is followed by a call, but the
+//   skip was keyed on the *name* alone -- so `our<Int>?(` never reached the type parser, whose
+//   `?` postfix is what builds the OptionalType. The skip now requires the call form, so the
+//   keyword reaches the same path as every other type name. Both the absent and the present arm
+//   are asserted: an `our<A>?()` matches `?`, and a handle returned from a call matches the value.
+// @category: ownership, parser
+// @expect-output: empty=2 present=4
+// @expect-return: 0
+
+share(all)
+struct A { v<Int> }
+
+maybe(b<Bool>)<our<A>?> -> {
+    if (b) {
+        return our(A { v: 4 })
+    }
+    return our<A>?()
+}
+
+main()<Int> -> {
+    e<our<A>?> = our<A>?()
+    absent<Int> = 0
+    match (e) { v -> { absent = 1 } ? -> { absent = 2 } }
+
+    f<our<A>?> = maybe(true)
+    present<Int> = 0
+    match (f) { v -> { present = v.v } ? -> { present = -1 } }
+
+    println("empty=" + absent.to_string() + " present=" + present.to_string())
+    return 0
+}

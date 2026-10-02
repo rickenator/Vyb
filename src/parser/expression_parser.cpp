@@ -492,12 +492,21 @@ namespace vyb {
             if (found_method_call_pattern) {
                 skip_type_parsing = true;
             }
-            // Also skip for known intrinsic functions even without parentheses
-            else if (identifier_name == "println" || identifier_name == "print" || identifier_name == "debug" ||
+            // Also skip for known intrinsic functions -- but only in their CALL form
+            // (`println(...)`, `our(expr)`, `my(expr)`, `their(expr)`, `borrow(x)`,
+            // `view(x)`, `lit(x)`, ...). A generic argument list is NOT a call:
+            // `our<Int>?()` constructs an absent optional `our<T>`, and skipping type
+            // parsing for it left the `?` unconsumed -- "Expected primary expression.
+            // (found '?')" (#427 defect 3). `mild`, `Int` and struct names parse their
+            // `T?()` because they are not on this list; the ownership keywords now
+            // reach the same type-prefixed construction path.
+            else if (after_identifier_pos < tokens_.size() &&
+                     tokens_[after_identifier_pos].type == TokenType::LPAREN &&
+                     (identifier_name == "println" || identifier_name == "print" || identifier_name == "debug" ||
                 identifier_name == "error" || identifier_name == "warn" || identifier_name == "info" ||
                 identifier_name == "lit" || identifier_name == "notype" || identifier_name == "bare" ||
                 identifier_name == "deserial" || identifier_name == "my" || identifier_name == "their" ||
-                identifier_name == "our" || identifier_name == "borrow" || identifier_name == "view") {
+                identifier_name == "our" || identifier_name == "borrow" || identifier_name == "view")) {
                 #ifdef VERBOSE
                 VYB_CDBG << "DEBUG: Skipping type parsing for intrinsic function: " << identifier_name << std::endl;
                 #endif
