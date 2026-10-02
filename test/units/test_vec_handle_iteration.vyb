@@ -1,0 +1,36 @@
+// @test: a Vec of ownership handles iterates with `for` (#427 defect 6)
+// @description: `for (x in Vec<mild<A>>)` and `for (v in Vec<our<A>>)` could not compile. The
+//   generic substitution for an OWNERSHIP type argument bakes the applied name into a single
+//   identifier ("mild<A>") instead of building a structured `mild` + genericArgs pair, so the
+//   ownership branch of codegenType (`typeNameStr == "mild"`) did not match; resolution fell
+//   through to the user-type table, failed, the VecIter body's return became `ret undef`, and the
+//   module was refused -- and before #434 it was JIT'd and RUN anyway and died at runtime with exit
+//   139. codegenType now splits the wrapper prefix off an applied ownership name, resolves the
+//   inner type and applies the same wrapper semantics, so both handle kinds iterate. The loop also
+//   needs the iterator module in scope: `for` desugars to `iter()`/`next()` and `VecHigherOps::iter()`
+//   lives in collections.
+// @category: ownership, vec
+// @expect-output: live=1 sum=5
+// @expect-return: 0
+
+import collections
+
+share(all)
+struct A { v<Int> }
+
+main()<Int> -> {
+    weak<Vec<mild<A>>> = Vec()
+    o<our<A>> = our(A { v: 1 })
+    weak.push(soft(o))
+    live<Int> = 0
+    for (m in weak) { if (!m.released()) { live = live + 1 } }
+
+    owned<Vec<our<A>>> = Vec()
+    owned.push(our(A { v: 2 }))
+    owned.push(our(A { v: 3 }))
+    sum<Int> = 0
+    for (v in owned) { sum = sum + v.v }
+
+    println("live=" + live.to_string() + " sum=" + sum.to_string())
+    return 0
+}
