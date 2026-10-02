@@ -94,10 +94,15 @@ open_write(path<String>)<File?> -> {
     return open(path, FileFlag::WRITE | FileFlag::CREATE | FileFlag::TRUNC)
 }
 
-# Convenience: open for appending, creating the file if absent (`File?`).
+# Convenience: open for appending, creating the file if absent (`File?`). WRITE is
+# required in the flag set: `FileFlag` carries no access-mode bit in APPEND/CREATE,
+# and the runtime maps the flags straight to `open(2)` access bits, so
+# `APPEND | CREATE` alone opened the descriptor `O_RDONLY|O_CREAT|O_APPEND` -- the
+# file was created, the open succeeded, and every write through the handle failed
+# with EBADF (#419).
 share(all)
 open_append(path<String>)<File?> -> {
-    return open(path, FileFlag::APPEND | FileFlag::CREATE)
+    return open(path, FileFlag::WRITE | FileFlag::CREATE | FileFlag::APPEND)
 }
 
 # Close an open file. Returns `Bool?` -- present on success, absent on failure.
