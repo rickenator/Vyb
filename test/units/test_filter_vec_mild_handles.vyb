@@ -1,0 +1,40 @@
+// @test: the shipped `filter` over a Vec of weak handles keeps the live ones (#427 defect 7)
+// @description: `v.filter(|o<mild<T>>| -> !o.released())` was dropped -- the binding read null and
+//   nothing was filtered. The cause is the applied-ownership-name substitution failure of defect 6:
+//   the VecHigherOps binds instantiated with T=mild<A> produced a type node whose name is the applied
+//   string ("mild<A>"), which the ownership branch of codegenType did not match, so the predicate's
+//   parameter type never resolved and the whole statement was dropped. Resolving the applied name
+//   (PR #435) fixed the filter as well; this locks the behaviour in with the sharpest shape: two weak
+//   handles, one pointing at a dropped temporary (released) and one at a live value, keep exactly one
+//   element. An inline predicate over Vec<Int>, a lambda stored in a `fn(Int) -> Bool` binding, and
+//   the final `len()` of each result are asserted in the same run.
+// @category: ownership, vec, lambda
+// @expect-output: live=1 of 2 evens=1 stored=1
+// @expect-return: 0
+
+import collections
+
+share(all)
+struct A { v<Int> }
+
+main()<Int> -> {
+    weak<Vec<mild<A>>> = Vec()
+    weak.push(soft(our(A { v: 1 })))   // the temporary is dropped, so this handle is released
+    o<our<A>> = our(A { v: 2 })
+    weak.push(soft(o))                 // alive while `o` holds a strong ref
+
+    live<Vec<mild<A>>> = weak.filter(|m<mild<A>>| -> !m.released())
+
+    nums<Vec<Int>> = Vec()
+    nums.push(1)
+    nums.push(2)
+    nums.push(3)
+    evens<Vec<Int>> = nums.filter(|n<Int>| -> n % 2 == 0)
+
+    keep<fn(Int) -> Bool> = |n<Int>| -> n > 2
+    big<Vec<Int>> = nums.filter(keep)
+
+    println("live=" + live.len().to_string() + " of " + weak.len().to_string() +
+            " evens=" + evens.len().to_string() + " stored=" + big.len().to_string())
+    return 0
+}

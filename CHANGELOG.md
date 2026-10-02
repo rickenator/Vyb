@@ -120,7 +120,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the previous fix is no longer reachable through this shape: the program compiles and runs
   (`for (x in Vec<mild<A>>)` -> `live=1`, `for (v in Vec<our<A>>)` -> `sum=5`, `Vec<Int>` unchanged).
   Locked in by `test/units/test_vec_handle_iteration.vyb`; the loop needs the iterator module in scope
-  (`import collections`).
+  (`import collections`). The same resolution fixed the shipped `filter` over a `Vec` of handles
+  (`v.filter(|o<mild<T>>| -> !o.released())` was dropped and read null), locked in by
+  `test/units/test_filter_vec_mild_handles.vyb` (`live=1 of 2`, with a Vec<Int> predicate and a stored
+  lambda asserted alongside).
  —
   `for (x in Vec<mild<A>>)` (with the iterator module in scope) surfaced a codegen-only
   `Unknown type identifier: mild<A>` and then the program was JIT'd and RUN anyway, dying at runtime
