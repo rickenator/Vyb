@@ -1519,7 +1519,9 @@ freedom_memory_example()<Int> -> {
 
 ### Syntax and Literals
 
-Vyb uses indentation-sensitive syntax with optional braces and semicolons. Whitespace defines blocks, so consistent indentation is key. The unified `name<Type>` syntax provides consistency across all language constructs.
+Declaration bodies are braced (`name(params)<ReturnType> -> { ... }`) and the unified
+`name<Type>` form gives every declaration the same shape. Statements are newline-separated
+inside the braces.
 
 #### Literal Forms
 

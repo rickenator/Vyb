@@ -325,6 +325,7 @@ Enable Vyb to call C functions and use C libraries (libc, POSIX, external deps).
 1. **FFI Declaration Syntax**
 
    ```vyb
+# ILLUSTRATIVE (roadmap surface, not implemented): the form below is the planned model, not the language today.
    extern "C" {
        fn printf(format: *i8, ...) -> Int
        fn malloc(size: i64) -> *i8
@@ -382,6 +383,7 @@ Enable Vyb to call C functions and use C libraries (libc, POSIX, external deps).
 1. **C Layout Attribute**
 
    ```vyb
+# ILLUSTRATIVE (roadmap surface, not implemented): the form below is the planned model, not the language today.
    #[repr(C)]
    struct Point {
        x: Float32,
@@ -428,6 +430,7 @@ Enable Vyb to call C functions and use C libraries (libc, POSIX, external deps).
 1. **Variadic Syntax**
 
    ```vyb
+# ILLUSTRATIVE (roadmap surface, not implemented): the form below is the planned model, not the language today.
    extern "C" {
        fn printf(format: *i8, ...) -> Int
    }
@@ -510,6 +513,7 @@ Enable Vyb to call C functions and use C libraries (libc, POSIX, external deps).
 1. **Core Wrappers**
 
    ```vyb
+# ILLUSTRATIVE (roadmap surface, not implemented): the form below is the planned model, not the language today.
    // stdlib/sys/Libc.vyb
    share(all)
    module sys::Libc

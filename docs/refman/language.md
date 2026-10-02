@@ -50,7 +50,7 @@ helper()<Int> -> { return 42 }
 | enum | `enum Name { MEMBER … }` | [§3.10](PROGRAMMERS_GUIDE.md#310-enums) |
 | constant enum | `enum Name { A = 1, B = 2 }` (bitwise-`|` combinable) | [§3.10](PROGRAMMERS_GUIDE.md#310-enums) |
 | type alias | `type Name = …` | aliases may carry generics |
-| generic function | `fn name<T>(…) …` | [§3.14](PROGRAMMERS_GUIDE.md#314-generics-and-monomorphization) |
+| generic function | `name<T>(…)<Ret> -> { … }` | [§3.14](PROGRAMMERS_GUIDE.md#314-generics-and-monomorphization) |
 | generic type | `struct Pair<K, V>` | [§3.14](PROGRAMMERS_GUIDE.md#314-generics-and-monomorphization) |
 | aspect (contract) | `aspect X { method(self)… }` | [§3.15](PROGRAMMERS_GUIDE.md#315-aspects-and-binds-polymorphism) |
 | bind (impl) | `bind Aspect -> Type { … }` | [§3.15](PROGRAMMERS_GUIDE.md#315-aspects-and-binds-polymorphism) |
@@ -206,7 +206,7 @@ Untrapped errors propagate up the call chain. See
 ## 8. Generics, aspects, binds
 
 ```vyb
-fn first<T>(v<Vec<T>>)<T> -> { return v.get(0) }      # monomorphized per call
+first<T>(v<Vec<T>>)<T> -> { return v.get(0) }      # monomorphized per call
 cmp_lt<T<Comparable>>(a<T>, b<T>)<Bool> -> { … }      # aspect-bound param
 
 aspect Drawable { draw(self)<String> -> { } area(self)<Float> -> { } }

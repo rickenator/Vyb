@@ -202,6 +202,7 @@ Expected behavior:
 For correct usage, wrap one or more structs:
 
 ```vyb
+# ILLUSTRATIVE (roadmap surface, not implemented): the form below is the planned model, not the language today.
 fn<Person, Company> main():
   var<Person> u, var<Company> c = createEntities()
   // emit JSON without <Type> suffix on fields
@@ -224,6 +225,7 @@ Use `lit()` for emitting raw primitives or anonymous tuples.
 By default, returned JSON field names include `<Type>` suffixes. To emit clean JSON without embedded type metadata, wrap return values in the `notype()` intrinsic within `main`:
 
 ```vyb
+# ILLUSTRATIVE (roadmap surface, not implemented): the form below is the planned model, not the language today.
 fn<Person, Company> main():
   var<Person> u, var<Company> c = createEntities()
   // emit JSON without <Type> suffix on fields

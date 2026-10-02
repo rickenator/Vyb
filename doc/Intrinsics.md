@@ -51,8 +51,8 @@ freedom {
 ## 2. Function Declaration Syntax
 
 A declaration is `name(params)<ReturnType> -> body`. The return type follows the
-parameter list, the `->` separator is mandatory, and braces are optional for a
-single-expression body. Type parameters, when present, precede the parameter list.
+parameter list, the `->` separator is mandatory, and the body is braced. Type
+parameters, when present, precede the parameter list.
 
 ```ebnf
 FunctionDecl ::= Identifier [ "<" GenericParam { "," GenericParam } ">" ]
@@ -73,7 +73,7 @@ Expression   ::= <any single Vyb expression>
 - **Parameters**: `name<Type>` for each one, comma-separated.
 - **Type parameters**: `name<T>(a<T>)<T> ->`, with an optional bound (`T<Equatable>`).
 - **`->`**: mandatory separator between signature and body.
-- **Braces** `{}`: optional only for a single-expression body.
+- **Braces** `{}` are required for a declaration body; the unbraced `-> expr` arm belongs to closures (`|x| -> expr`).
 
 ### Function Declaration Examples
 
@@ -87,8 +87,8 @@ new_node(is_leaf<Bool>)<Node> -> {
     return Node { is_leaf: is_leaf }
 }
 
-# Concise single-expression body (braces optional).
-double_it(x<Int>)<Int> -> x * 2
+# A short body is still braced.
+double_it(x<Int>)<Int> -> { return x * 2 }
 ```
 
 ---
@@ -409,7 +409,7 @@ mem_set(ptr<loc<UInt8>>, value<UInt8>, n<UInt>) ->
 ## 10. Usage Guidelines
 
 1. **Bindings**: choose explicit (`name<Type> = expr`) or inferred (`name = expr`).
-2. **Functions**: `name(params)<ReturnType> ->`; the arrow is mandatory and braces are optional for a single expression.
+2. **Functions**: `name(params)<ReturnType> -> { ... }`; the arrow and braces are mandatory.
 3. **Ownership**: use `my<T>`, `our<T>`, `their<T>`, with canonical `borrow(expr)` / `view(expr)` borrowing.
 4. **Intrinsics**: memory ops only in `freedom`, metadata always safe.
 5. **Print**: use generic `println(value)` for any type; prefer `to_string()` for explicit conversion.

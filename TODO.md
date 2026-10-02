@@ -1141,14 +1141,28 @@ The compiler must be silent in normal use. DEBUG output makes the language feel 
 - [x] **Silence parser trace output** — Parser `[PEEK]`/`[CONSUME]`/`[EXPECT]` traces gated behind `#ifdef VERBOSE` and `VERBOSE` no longer defined globally in `CMakeLists.txt`; off by default. Re-enable with `-DVERBOSE` in the build.
 - [x] **Silence optimization pass messages** — `"Skipping IR optimization"` / `"Applying IR optimization passes"` now gated behind `--debug-codegen` (same flag as all other debug output).
 - [x] **Doc consolidation** — `doc/` had overlapping files (`ROADMAP.md`, `TODO_CURRENT.md`, multiple ownership docs). Keep `TODO.md`, `doc/FEATURE_STATUS.md`, `CHANGELOG.md` as living docs; the archived `doc/archive/` subtree has been removed (history lives in git); `doc/README.md` is the index.
-- [ ] **Legacy example modernization** — Remaining design/roadmap docs
-  (`OWNERSHIP_MILD.md`, `MODULE_FFI_BINARY_ROADMAP.md`, `LAMBDAS.md`,
-  `Intrinsics.md`, ...) still show legacy example syntax that interleaves with
-  not-yet-shipped features: `fn name(...) -> Type { }` defs, `if let`, and
-  `name: Type` fields/params. Unlike the verifiable shorthand (`unsafe`, object
-  literal `:` which is valid, and `<T<Aspect>>` which is already canonical),
-  these need per-example porting against compiled Vyb (e.g. `grab()` is used
-  directly, not via `if let`). Suggested as a compiler-verified follow-up.
+- [~] **Legacy example modernization** — **Ported and compiled so far (#391):**
+  `doc/Intrinsics.md` (every fenced `vyb` block: `var<Int> x` -> `x<Int> = 42`,
+  `const<...>` -> a `Type const` modifier, `var auto` -> the inferred `name = value`,
+  the `class` example -> a struct plus constructor-style functions,
+  `fn<R> name(params) ->` -> `name(params)<R> ->`, `a: T` parameters -> `a<T>`,
+  `their<T>(x)`/`their<T const>(x)` -> `borrow(x)`/`view(x)`, and `deserial()`
+  documented as *refused* per #383), `doc/OWNERSHIP_MILD.md` (fields, declarations,
+  `if let x = e.grab()` -> `match`, rebuilt on what compiles), `doc/RUNTIME.md`,
+  the `vyb` blocks of `doc/AST_Declarations.md`, the stale generic-function row in
+  `docs/refman/language.md`, the two `fn first<T>(...)` examples in the authoritative
+  `PROGRAMMERS_GUIDE.md`, and the inline method signatures in
+  `doc/STRING_IMPLEMENTATION.md`. Every ported block was wrapped into a program and
+  compiled. The "braces are optional for a single-expression body" claim was wrong
+  and is corrected in these docs (a declaration body is braced; the unbraced
+  `-> expr` arm is the closure form).
+  **Remaining:** the design/roadmap docs whose examples describe features that do
+  not exist yet (`doc/bundles_and_sharing.md`, `doc/MODULE_FFI_BINARY_ROADMAP.md`,
+  `doc/INTROSPECTION_DESIGN.md`, `doc/Auto_Serialization_Main_Returns.md`) — those
+  blocks now carry an explicit *illustrative, not implemented* note instead of
+  teaching the legacy form, and need the feature's canonical surface decided before
+  a port can be compiled. The `.vyb` fixtures that deliberately exercise the legacy
+  form stay as they are (negative coverage).
 
 ---
 
