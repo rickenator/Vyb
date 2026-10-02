@@ -1,0 +1,21 @@
+// @test: an empty `mild<T>()` is refused instead of faulting in the JIT (#427 defect 1)
+// @description: a `mild<T>` is a control-block pointer, so `mild<A>()` has nothing to point at and
+//   the resulting handle is unusable. `m<mild<A>> = mild<A>(); m.released()` did not evaluate to
+//   null or report anything -- it exited 139 with no output at all (the generated code faulted
+//   before the first println), and the same value in a struct field was inert. An absent weak handle
+//   is spelled `mild<T>?()`, and a live one comes from `soft(our_value)` (asserted by
+//   test_soft_our_struct_weak.vyb), so the empty construction is now refused at semantic analysis
+//   with a message naming both spellings.
+// @category: ownership, diagnostics
+// @expect: fail
+// @expect-error: mild<T>() has no control block
+// @semantic-only: true
+
+share(all)
+struct A { v<Int> }
+
+main()<Int> -> {
+    m<mild<A>> = mild<A>()
+    println("released=" + m.released().to_string())
+    return 0
+}

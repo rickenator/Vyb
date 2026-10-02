@@ -1,0 +1,26 @@
+// @test: the spellings an empty weak handle should use both work (#427 defect 1, positive side)
+// @description: the counterpart to test_empty_mild_refused.vyb, which now tells the reader to write
+//   `mild<T>?()` for an absent weak handle or take one from `soft(our_value)`. Both are asserted
+//   here so the message points at something real: an absent `mild<A>?()` matches its `?` arm, and a
+//   `soft(our(A { v: 3 }))` handle is live while the strong owner exists (its object is reachable
+//   through grab()).
+// @category: ownership
+// @expect-output: absent=none live=3
+// @expect-return: 0
+
+share(all)
+struct A { v<Int> }
+
+main()<Int> -> {
+    e<mild<A>?> = mild<A>?()
+    absent<String> = "some"
+    match (e) { w -> { absent = "some" } ? -> { absent = "none" } }
+
+    o<our<A>> = our(A { v: 3 })
+    w<mild<A>> = soft(o)
+    live<String> = "none"
+    match (w.grab()) { v -> { live = v.v.to_string() } ? -> { live = "none" } }
+
+    println("absent=" + absent + " live=" + live)
+    return 0
+}
