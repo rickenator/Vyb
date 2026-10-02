@@ -5439,6 +5439,44 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                                 builder->CreateStore(selfArg, recvSlot, "aspect.recv.temp.store");
                                 selfArg = recvSlot;
                             }
+
+                            // A receiver whose declared type is an ownership HANDLE (`our<T>` /
+                            // `mild<T>`) holds a CONTROL-BLOCK pointer, not the object; the
+                            // by-ref `self` must receive the block's object pointer. Passing the
+                            // block made the callee read its fields as the struct's (a bind call
+                            // on a handle printed `self.n` as 0x100000002 = {strong=2, weak=1})
+                            // and write into the block, so the call silently had no effect on the
+                            // object: this is why `o.<bind>()` on an `our<T>` and
+                            // `observer.<bind>()` on the value unwrapped from `mild<T>.grab()`
+                            // (whose declared type is `our<T>`) both did nothing (#427 defect 9).
+                            // Unwrap to the object the same way `borrow(x)` does; the dispatch
+                            // above already resolves the aspect/bind against the unwrapped type.
+                            if (receiverIsByRef && selfArg && selfArg->getType()->isPointerTy()) {
+                                ast::TypeNode* recvTyNode = nullptr;
+                                if (typeOfNode(memberExpr->object)) {
+                                    recvTyNode = typeOfNode(memberExpr->object).get();
+                                }
+                                if (!recvTyNode) {
+                                    auto vtIt = valueTypeMap.find(recvPtr);
+                                    if (vtIt != valueTypeMap.end() && vtIt->second) recvTyNode = vtIt->second.get();
+                                }
+                                if (recvTyNode && (isOurRefType(recvTyNode) || isMildRefType(recvTyNode))) {
+                                    const vyb::ast::TypeNode* pointeeAst = isOurRefType(recvTyNode)
+                                        ? ourPointeeOf(recvTyNode) : mildPointeeOf(recvTyNode);
+                                    llvm::Type* pointeeLlvm = pointeeAst
+                                        ? codegenType(const_cast<vyb::ast::TypeNode*>(pointeeAst)) : nullptr;
+                                    if (pointeeLlvm && pointeeLlvm->isStructTy()) {
+                                        llvm::StructType* cbTy = getControlBlockType(
+                                            llvm::PointerType::getUnqual(pointeeLlvm));
+                                        llvm::Value* objFieldPtr = builder->CreateStructGEP(
+                                            cbTy, selfArg, 3, "handle.recv.objptr");
+                                        selfArg = builder->CreateLoad(
+                                            llvm::PointerType::get(*context, 0), objFieldPtr,
+                                            "handle.recv.obj");
+                                    }
+                                }
+                            }
+
                             bool selfIsByRef = implFunc->getArg(0)->getType()->isPointerTy();
                             std::vector<llvm::Value*> argValues;
                             if (selfIsByRef) {

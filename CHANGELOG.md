@@ -108,6 +108,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `doc/THREAD_BOUNDARY_SCOPE.md` (whose step list is now fully closed).
 
 ### Fixed
+- **A bind method called on an ownership handle reaches the object (#427)** — a bind method with a
+  by-ref `their<T>` self, called with a HANDLE receiver, was passed the receiver's CONTROL BLOCK
+  rather than the object: the callee read the block's fields as the struct's fields (a probing bind
+  method printed `self.n` as `0x100000002` = `{strong=2, weak=1}`) and its write landed in the block,
+  so `o.bump()` on an `our<T>` binding and `observer.bump()` on the value unwrapped from
+  `mild<T>.grab()` (declared type `our<T>`) both silently had no effect — while the same value passed
+  explicitly (`helper(borrow(observer))`) worked. The member-receiver dispatch now unwraps a handle
+  receiver to the block's object pointer before building the `self` argument, the same way `borrow(x)`
+  does, gated on the self being by-ref and the receiver's declared type being `our<T>`/`mild<T>`. This
+  also removes a heap-write hazard: the callee used to write its updates into the owner's control
+  block. Locked in by `test/units/test_bind_method_on_our_handle.vyb` (`via-binding=1 via-grab=2`).
 - **A `Vec` of ownership handles can be iterated (#427)** — `for (x in Vec<mild<A>>)` and
   `for (v in Vec<our<A>>)` could not compile: the generic substitution for an ownership type
   argument bakes the APPLIED name into a single identifier (`mild<A>`) rather than a structured
