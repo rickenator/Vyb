@@ -8151,6 +8151,20 @@ void SemanticAnalyzer::visit(ast::ConstructionExpression* node) {
          return;
     }
     const std::string& constructedName = typeNameNode->identifier->name;
+
+    // An EMPTY `mild<T>()` has no control block to point at, so the handle is not a
+    // usable weak reference: `m<mild<A>> = mild<A>(); m.released()` faults in the
+    // JIT (exit 139, no output at all -- it dies before the first println), and the
+    // same value in a field/argument is inert. An absent weak handle is spelled
+    // `mild<T>?()`; a live one comes from soft(our_value). Refuse it here rather
+    // than let it reach codegen (#427 defect 1).
+    if (constructedName == "mild" && node->arguments.empty()) {
+        addError("mild<T>() has no control block; write `mild<T>?()` for an absent weak handle, "
+                 "or take one from soft(<our value>)", node);
+        setType(node, nullptr);
+        return;
+    }
+
     // A ConstructionExpression whose "constructed type" is actually a generic
     // function template invoked with explicit type args (e.g. `make_box<Int>(7)`)
     // is a generic function call, not a struct construction. Delegate to the

@@ -108,6 +108,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `doc/THREAD_BOUNDARY_SCOPE.md` (whose step list is now fully closed).
 
 ### Fixed
+- **An empty `mild<T>()` is refused instead of faulting in the JIT (#427)** — a `mild<T>` is a
+  control-block pointer, so a zero-argument construction has nothing to point at: `m<mild<A>> =
+  mild<A>(); m.released()` exited 139 with **no output at all** (the generated code faulted before
+  the first `println`), and the same value as a struct-field initializer was inert — a silent dead
+  handle rather than a diagnostic. An absent weak handle is spelled `mild<T>?()` and a live one comes
+  from `soft(our_value)`, so the empty construction is now refused at semantic analysis with a message
+  naming both spellings (and offending code cannot reach codegen). Nothing in the repo used the
+  refused form. `test/units/test_empty_mild_refused.vyb` fails on the pre-fix tree and passes now;
+  `test/units/test_absent_mild_optional.vyb` asserts both replacements work (`absent=none`, `live=3`).
 - **A `lit()` component of a multi-value return asserts in LLVM (#427)** —
   `main()<Int, String> -> { return 1, lit("42") }` and `{ return lit(1), "x" }` both aborted the
   compiler (`checkGEPType: Invalid GetElementPtrInst indices for type!` and
