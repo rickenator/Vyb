@@ -69,13 +69,21 @@ mis-parsing:
   is treated as an error, not silently accepted — so a manifest can never
   accidentally rely on semantics the parser ignores.
 - Local `path`, `git`, `github` and `version` dependency sources all resolve
-  (`#165`, `#175`). `path` deps are used as-is; `git` deps are shallow-cloned into
-  `.vybmod/<name>/` on build; `github:` deps are materialized by
-  `vyb mod install github:...` and consumed from `.vybmod/<name>/`; `version`
-  deps resolve against the package registry (`VYB_REGISTRY`, else
-  `~/.vyb/registry`), taking the highest version matching the spec (`""` or
-  `latest` = any; an exact `x.y.z`; `1` = highest `1.x.y`; `1.2` = highest
-  `1.2.y`). See `doc/DEVELOPER_TOOLING.md` for the resolver details.
+  (`#165`, `#175`, `#388`). `path` deps are used as-is; `git` deps are
+  shallow-cloned into `.vybmod/<name>/` on build; `github:` deps are
+  auto-fetched into `.vybmod/<name>/` on build when they are not already
+  materialized (the verified `vyb mod install github:...` command remains for a
+  pinned `@sha256:` or `--require-signed` install, and a package declaring a
+  `freedom`/capability boundary is refused on build — auto-fetch never takes that
+  trust decision); `version` deps resolve against the package registry
+  (`VYB_REGISTRY`, else `~/.vyb/registry`), taking the highest version matching
+  the spec (`""` or `latest` = any; an exact `x.y.z`; `1` = highest `1.x.y`;
+  `1.2` = highest `1.2.y`). A dependency that is already materialized in
+  `.vybmod/<name>/` builds with no registry and no network (offline cache). The
+  `github:` raw transport's base is overridable with `VYB_GITHUB_RAW_URL`
+  (`https://host[:port][/prefix]` for a mirror/proxy, `http://` for a plaintext
+  one, or `file://<dir>` for an offline mirror). See `doc/DEVELOPER_TOOLING.md`
+  for the resolver details.
 
 ## Remote module import (`vyb mod install`)
 

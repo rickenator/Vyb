@@ -1016,14 +1016,20 @@ with `pass` for multi-statement case bodies. Needs polishing:
   github:owner/repo/path` (fetch + sha256 pin + `vyb.lock` record;
   `--require-signed` for posted signatures), which serves as the smuggle
   channel and remote-import conformance path.
-- [~] **Dependency resolution in `vyb build`** — **`github:` deps now resolve**: `vyb build`
-  accepts a `github:` dependency declared in `vyb.toml` `[dependencies]`, wires it into the
-  module search path via the `.vybmod` container (resolving `import <name>` to
-  `.vybmod/<name>/mod.vyb`), and records `source="github", resolved=...` in `vyb.lock`.
-  The verified `vyb mod install github:` command materializes the dep (sha256-pinned,
-  optional `--require-signed`). Auto-fetch-on-build (a `github:` dep the user hasn't
-  installed errors with a `vyb mod install` hint), `git:`-clone deps, `version:`-spec deps
-  (registry-gated lock pins, offline/cache) — staged follow-ons beyond the smuggle channel.
+- [x] **Dependency resolution in `vyb build`** — **`github:` deps auto-fetch on build** (#388):
+  `vyb build` accepts a `github:` dependency declared in `vyb.toml` `[dependencies]`,
+  fetches it when it is not already materialized, wires it into the module search path via
+  the `.vybmod` container (resolving `import <name>` to `.vybmod/<name>/mod.vyb`), and
+  records `source="github", resolved=...` in `vyb.lock`. The verified `vyb mod install
+  github:` command remains for a pinned install (`@sha256:HEX`, `--require-signed`); a
+  PRIVILEGED package (a `[mod] boundary = ["freedom"]` / declared-capability manifest) is
+  REFUSED on build and must go through that explicit trust decision, so auto-fetch never
+  takes it silently. The raw transport's base is overridable (`VYB_GITHUB_RAW_URL`:
+  `https://host[:port][/prefix]`, `http://`, or a `file://` mirror — which also makes the
+  regression test hermetic). Regression: `test/githubdep_smoke.vyb` in hosted CI.
+  `git:`-clone deps auto-clone on build; `version:`-spec deps resolve against the registry
+  and rebuild from the `.vybmod` cache with the registry absent (offline), asserted by
+  `test/registry_smoke.vyb`.
 - [x] **`git:`-clone deps** — `vyb build` accepts a `git:` dependency (`git = "<clone-url>"`),
   AUTO-CLONES it into `.vybmod/<name>/` on build (shallow clone; the repo root's `mod.vyb`
   is the module), wires `import <name>` to `.vybmod/<name>/mod.vyb`, and records

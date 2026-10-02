@@ -68,6 +68,13 @@ jobs:
         # clone-on-build into .vybmod, vyb.lock source="git", and a runnable binary.
         run: ./build/vyb test/gitdep_smoke.vyb
 
+      - name: github dependency smoke test
+        # Points the github raw transport at a `file://` mirror (VYB_GITHUB_RAW_URL,
+        # so no network) and asserts a `github:` dependency is auto-fetched on
+        # build into .vybmod/<name>/, recorded as source="github" in vyb.lock,
+        # runnable, and that a PRIVILEGED package is refused rather than installed.
+        run: ./build/vyb test/githubdep_smoke.vyb
+
       - name: registry + version dependency smoke test
         # Publishes a package via `vyb mod publish` into a temp VYB_REGISTRY dir,
         # resolves a `{ version = "..." }` dep on build (prefix->highest + exact),

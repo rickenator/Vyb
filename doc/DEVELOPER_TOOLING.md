@@ -11,17 +11,27 @@ in full in `doc/MANIFEST.md`):
   modules are importable in the project.
 - **`git:`** — `name = { git = "url" }` with a `rev`/`tag`/`branch` is shallow-cloned
   into `.vybmod/<name>/` on build and consumed from there.
-- **`github:`** — `vyb mod install github:owner/repo/path` materializes the module
-  into `.vybmod/<name>/`; the build then consumes it like a git dep.
+- **`github:`** — `vyb build` AUTO-FETCHES `name = { github = "owner/repo/path" }`
+  into `.vybmod/<name>/` when it is not already materialized (#388) and consumes it
+  like a git dep; `vyb mod install github:owner/repo/path` remains the pinned
+  (`@sha256:HEX`) / `--require-signed` channel. A package that declares a freedom or
+  capability boundary is refused on build — that trust decision belongs to
+  `vyb mod install`. The raw transport's base is overridable with
+  `VYB_GITHUB_RAW_URL`.
 - **`version:`** — matched against the package registry (`VYB_REGISTRY`, else
   `~/.vyb/registry`), picking the highest version satisfying the spec (`""` or
-  `*` matches any); `vyb mod publish` populates it.
+  `*` matches any); `vyb mod publish` populates it. A dep already materialized in
+  `.vybmod/<name>/` rebuilds with the registry absent (offline cache).
 - **Lockfile** — `vyb.lock` records the resolved pins, so a build is reproducible.
 
 The design notes that used to be "staged" are now the implemented behaviour, and
-the acceptance case is a fixture rather than a promise: `test/gitdep_smoke.vyb`
+the acceptance cases are fixtures rather than promises: `test/gitdep_smoke.vyb`
 drives clone-on-build, lockfile, build and run end to end
-(`gitdep smoke: 4/4 checks passed`), and the smoke is wired into CI
+(`gitdep smoke: 4/4 checks passed`), `test/githubdep_smoke.vyb` the same for
+auto-fetch-on-build against a hermetic `file://` mirror plus the privileged-package
+refusal (`githubdep smoke: 6/6 checks passed`), and `test/registry_smoke.vyb` the
+registry/`version:` path including an offline rebuild
+(`registry smoke: 9/9 checks passed`). All three are wired into CI
 (`.github/workflows/gpu-kernel.yml`, see `doc/CI.md`).
 
 **Remaining:** broader ecosystem polish (registry publishing UX, transitive

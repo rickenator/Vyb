@@ -1686,6 +1686,17 @@ int link_vyb_executable(const std::vector<std::string>& objectFiles,
 // ===========================================================================
 // Project system: `vyb build` and `vyb new`
 // ===========================================================================
+
+// #388: defined with the `vyb mod` helpers further down (outside this anonymous
+// namespace); `vyb build` resolves a `github:` dependency through them.
+static int mod_fetch_github(const std::string& ownerRepoPath, const std::string& exePath,
+                            std::string& outDir, bool requireSigned);
+static int mod_copy_module_into(const fs::path& dirPath, const std::string& name,
+                                const fs::path& destRoot, const std::string& srcSpec,
+                                const std::string& pin, bool allowPrivileged, bool yesAll,
+                                std::string& actualHex,
+                                std::vector<std::string>* outCaps, bool* outFreedom);
+
 namespace {
 
 std::string read_source_file(const std::string& filename) {
@@ -1889,24 +1900,52 @@ int run_build_command(int argc, char** argv, const std::string& exeArg) {
 
     // Resolve dependencies before compiling.
     //  - `path` deps are used as-is.
-    //  - `github:` deps are WIRED from .vybmod/<name>/ when present (materialized by
-    //    the verified `vyb mod install github:...` resolver — the doc/MANIFEST.md
-    //    design: install resolves, build consumes). If not materialized, error with a
-    //    hint; auto-fetch on build is a staged follow-up (#165).
+    //  - `github:` deps are AUTO-FETCHED into .vybmod/<name>/ on build (#388),
+    //    mirroring `git:`, and consumed as a module rooted at mod.vyb. The
+    //    verified `vyb mod install github:...` channel remains for a pinned
+    //    (`@sha256:`) or `--require-signed` install; a PRIVILEGED package (a
+    //    freedom boundary / declared capabilities) is refused here and must go
+    //    through that explicit trust decision.
     //  - `git:` deps are AUTO-CLONED into .vybmod/<name>/ on build (shallow clone),
     //    and consumed as a module rooted at the repo (mod.vyb). Auto-fetch on build
     //    is native for git deps.
-    //  - `version` deps remain staged (they need a package registry, none exists).
+    //  - `version` deps materialize from the registry into .vybmod/<name>/; an
+    //    already-materialized dep needs no registry, so a cached project builds
+    //    offline.
     for (const auto& d : manifest->dependencies) {
         if (d.source == "github") {
             fs::path depDir = root / ".vybmod" / d.name;
             std::error_code ec;
             if (!fs::is_directory(depDir, ec) || !fs::exists(depDir / "mod.vyb", ec)) {
-                std::cerr << "Error: dependency '" << d.name << "' (github) is not "
-                          << "materialized in " << depDir.string() << ". "
-                          << (d.url.empty() ? "" : "Run `vyb mod install github:" + d.url + "` first. ")
-                          << "(auto-fetch on build is staged, #165)\n";
-                return 1;
+                if (d.url.empty()) {
+                    std::cerr << "Error: github dependency '" << d.name
+                              << "' has no github spec (expected github = \"owner/repo/path\").\n";
+                    return 1;
+                }
+                const std::string spec = "github:" + d.url;
+                std::cerr << "Fetching github dependency '" << d.name << "' from " << spec << " ...\n";
+                std::string fetchedDir;
+                if (mod_fetch_github(d.url, exeArg, fetchedDir, /*requireSigned=*/false) != 0) {
+                    std::cerr << "Error: could not auto-fetch github dependency '" << d.name
+                              << "' (" << spec << ").\n"
+                              << "  Install it explicitly to see the failure detail, or to pin it:\n"
+                              << "    vyb mod install " << spec << " [@sha256:HEX] [--require-signed]\n";
+                    return 1;
+                }
+                std::string actualHex;
+                int mc = mod_copy_module_into(fs::path(fetchedDir), d.name, root, spec,
+                                              /*pin=*/std::string(), /*allowPrivileged=*/false,
+                                              /*yesAll=*/false, actualHex, nullptr, nullptr);
+                std::error_code tec;
+                fs::remove_all(fs::path(fetchedDir).parent_path(), tec);
+                if (mc != 0) return 1;
+                if (!fs::exists(depDir / "mod.vyb")) {
+                    std::cerr << "Error: github dependency '" << d.name
+                              << "' produced no mod.vyb under " << depDir.string() << "\n";
+                    return 1;
+                }
+                std::cerr << "  materialized " << d.name << " (sha256=" << actualHex << ") -> .vybmod/"
+                          << d.name << "\n";
             }
         } else if (d.source == "git") {
             fs::path depDir = root / ".vybmod" / d.name;
@@ -4095,6 +4134,19 @@ static bool mod_verify_ed25519(const std::string& msg, const std::string& sig,
 static bool mod_verify_index(const std::string& indexPath, const std::string& sigArg,
                              const std::string& optKey, std::string& err);
 
+// #388: base for the `github:` raw transport. The default is the public raw
+// host; `VYB_GITHUB_RAW_URL` overrides it with a mirror/proxy as
+// `https://host[:port][/prefix]`, `http://` (plaintext mirror), or
+// `file://<dir>` (an offline mirror — also what makes the auto-fetch smoke test
+// hermetic). Same `file://`-root convention `VYB_REGISTRY` accepts.
+static std::string mod_github_raw_base() {
+    const char* b = getenv("VYB_GITHUB_RAW_URL");
+    if (!b || !*b) return "https://raw.githubusercontent.com";
+    std::string s(b);
+    while (!s.empty() && s.back() == '/') s.pop_back();
+    return s;
+}
+
 // Fetch one URL from the github raw host into `outFile` via a generated Vyb
 // driver (verified TLS against the system CA). Returns the driver's exit code.
 // `quiet` suppresses the MODFETCH-ERR line on non-200 (used for a best-effort
@@ -4102,22 +4154,68 @@ static bool mod_verify_index(const std::string& indexPath, const std::string& si
 static int mod_fetch_url(const std::string& rawPath, const std::string& outFile,
                          const std::string& capath, const std::string& exePath,
                          const std::string& tmpRoot, bool quiet = false) {
+    const std::string base = mod_github_raw_base();
+
+    // `file://` base = an offline mirror: read <mirrorDir><rawPath> from disk.
+    // This is what makes the auto-fetch smoke test hermetic (no network) and is
+    // the same `file://`-root convention `VYB_REGISTRY` already accepts.
+    if (base.rfind("file://", 0) == 0) {
+        std::string srcPath = base.substr(7) + rawPath;
+        std::string body;
+        { std::ifstream f(srcPath, std::ios::binary); std::ostringstream ss; ss << f.rdbuf(); body = ss.str(); }
+        if (body.empty()) {
+            if (!quiet) std::cerr << "MODFETCH-ERR: no mirror entry at " << srcPath << "\n";
+            return 1;
+        }
+        std::error_code mec;
+        fs::create_directories(fs::path(outFile).parent_path(), mec);
+        std::ofstream o(outFile, std::ios::binary | std::ios::trunc);
+        o << body;
+        if (!o) { if (!quiet) std::cerr << "MODFETCH-ERR: cannot write " << outFile << "\n"; return 1; }
+        return 0;
+    }
+
+    // `https://host[:port][/prefix]` (default the public raw host). `http://`
+    // is accepted for a plaintext mirror and uses the unverified client.
+    std::string host = "raw.githubusercontent.com";
+    std::string port = "443";
+    std::string prefix;
+    bool plainHttp = false;
+    {
+        std::string rest = base;
+        if (rest.rfind("https://", 0) == 0) rest = rest.substr(8);
+        else if (rest.rfind("http://", 0) == 0) { rest = rest.substr(7); plainHttp = true; }
+        auto slash = rest.find('/');
+        std::string authority = (slash == std::string::npos) ? rest : rest.substr(0, slash);
+        if (slash != std::string::npos) prefix = rest.substr(slash);
+        auto colon = authority.find(':');
+        if (colon != std::string::npos) { host = authority.substr(0, colon); port = authority.substr(colon + 1); }
+        else if (!authority.empty()) host = authority;
+        if (host.empty()) host = "raw.githubusercontent.com";
+        if (port.empty()) port = "443";
+    }
+    const std::string fetchPath = prefix + rawPath;
+
     std::string driver = tmpRoot + "/f.vyb";
     {
         std::ostringstream d;
         d << "# generated by vyb mod install (github transport, #175)\n"
-          << "import https::{https_get_full_verified}\n"
-          << "import http::{HttpResponse}\n"
+          << (plainHttp ? "import http::{http_get_full, HttpResponse}\n"
+                        : "import https::{https_get_full_verified}\nimport http::{HttpResponse}\n")
           << "import io::{open_read, read_all, open_write, write_str, close}\n"
-          << "main()<Int> -> {\n"
-          << "    capth<String> = \"" << capath << "\"\n"
-          << "    ca2<String> = \"\"\n"
-          << "    match (open_read(capth)) {\n"
-          << "        cf -> { match (read_all(cf)) { c -> { ca2 = c } ? -> {} } }\n"
-          << "        ? -> {}\n"
-          << "    }\n"
-          << "    r<HttpResponse> = https_get_full_verified(\"raw.githubusercontent.com\", 443, \"" << rawPath << "\", ca2)\n"
-          << "    if (r.status != 200) { "
+          << "main()<Int> -> {\n";
+        if (!plainHttp) {
+            d << "    capth<String> = \"" << capath << "\"\n"
+              << "    ca2<String> = \"\"\n"
+              << "    match (open_read(capth)) {\n"
+              << "        cf -> { match (read_all(cf)) { c -> { ca2 = c } ? -> {} } }\n"
+              << "        ? -> {}\n"
+              << "    }\n"
+              << "    r<HttpResponse> = https_get_full_verified(\"" << host << "\", " << port << ", \"" << fetchPath << "\", ca2)\n";
+        } else {
+            d << "    r<HttpResponse> = http_get_full(\"" << host << "\", " << port << ", \"" << fetchPath << "\")\n";
+        }
+        d << "    if (r.status != 200) { "
           << (quiet ? std::string("return 1") : std::string("println(\"MODFETCH-ERR status=\" + r.status.to_string()); return 1"))
           << " }\n"
           << "    match (open_write(\"" << outFile << "\")) {\n"
@@ -4312,6 +4410,90 @@ static bool mod_confirm_privileged(const std::string& name, const std::string& s
     return false;
 }
 
+// #388: materialize a resolved module directory into `<destRoot>/.vybmod/<name>/`.
+// Shared by `vyb mod install` and `vyb build`'s github auto-fetch so the #204 P2
+// privileged-package trust gate cannot diverge between the two channels:
+//   * collect the module files (mod.vyb is the primary) and hash the primary;
+//   * check an optional `@sha256:` pin;
+//   * a package that declares a freedom boundary / capabilities needs the
+//     one-shot acceptance (already pinned in <destRoot>/vyb.lock, `VYB_MOD_ACCEPT=1`,
+//     or an interactive y) — unless `allowPrivileged` is false, in which case
+//     auto-fetch refuses outright and points at `vyb mod install`.
+// Returns 0 on success, 1 with a diagnostic otherwise. `actualHex` receives the
+// primary's sha256; `outCaps`/`outFreedom` receive the privileged declarations.
+static int mod_copy_module_into(const fs::path& dirPath, const std::string& name,
+                                const fs::path& destRoot, const std::string& srcSpec,
+                                const std::string& pin, bool allowPrivileged, bool yesAll,
+                                std::string& actualHex,
+                                std::vector<std::string>* outCaps, bool* outFreedom) {
+    std::error_code ec;
+    std::vector<std::string> modFiles;
+    fs::path primary;
+    fs::path modVyb = dirPath / "mod.vyb";
+    if (fs::exists(modVyb)) {
+        primary = modVyb;
+        for (auto& e : fs::directory_iterator(dirPath, ec))
+            if (e.is_regular_file() && e.path().extension() == ".vyb") modFiles.push_back(e.path().string());
+    } else {
+        for (auto& e : fs::directory_iterator(dirPath, ec))
+            if (e.is_regular_file() && e.path().extension() == ".vyb") { modFiles.push_back(e.path().string()); primary = e.path(); }
+    }
+    if (modFiles.empty() || primary.empty()) {
+        std::cerr << "Error: no .vyb module found under " << dirPath << "\n";
+        return 1;
+    }
+    std::sort(modFiles.begin(), modFiles.end());
+
+    std::string bytes = modReadFile(primary.string());
+    vyb_file_str d = __vyb_sha256_hex(bytes.empty() ? "" : bytes.data(), (int64_t)bytes.size());
+    actualHex = d.len > 0 ? modHexLower(std::string(d.ptr, (size_t)d.len)) : "";
+    if (!pin.empty() && actualHex != pin) {
+        std::cerr << "Error: sha256 mismatch installing '" << name << "': pinned "
+                  << pin << " but fetched " << actualHex << "\n";
+        return 1;
+    }
+
+    std::vector<std::string> privCaps;
+    bool privFreedom = false;
+    bool privileged = false;
+    {
+        std::error_code tec;
+        if (fs::exists(dirPath / "vyb.toml", tec))
+            privileged = mod_privileged_from(dirPath.string(), privCaps, privFreedom);
+    }
+    if (privileged && !allowPrivileged) {
+        std::cerr << "Error: dependency '" << name << "' (" << srcSpec << ") is a PRIVILEGED package"
+                  << (privFreedom ? " [freedom boundary]" : "")
+                  << (privCaps.empty() ? "" : " [capabilities]") << ".\n"
+                  << "  Auto-fetch on build only materializes ordinary packages; a privileged one\n"
+                  << "  needs the explicit trust decision (which pins the acceptance in vyb.lock):\n"
+                  << "    vyb mod install " << srcSpec << " --yes\n";
+        return 1;
+    }
+    if (privileged) {
+        std::string lockPath = (destRoot / "vyb.lock").string();
+        bool already = mod_lock_already_trusted(lockPath, name);
+        if (!already && !yesAll) {
+            if (!mod_confirm_privileged(name, srcSpec, actualHex, privCaps, privFreedom)) {
+                std::cerr << "Refusing to install privileged package '" << name
+                          << "' (not accepted). Use --yes or VYB_MOD_ACCEPT=1 to accept.\n";
+                return 1;
+            }
+        }
+    }
+    if (outCaps) *outCaps = privCaps;
+    if (outFreedom) *outFreedom = privFreedom;
+
+    fs::path destDir = destRoot / ".vybmod" / name;
+    fs::create_directories(destDir, ec);
+    for (auto& mf : modFiles) {
+        fs::path target = destDir / fs::path(mf).filename();
+        if (fs::exists(target) && modReadFile(target.string()) == modReadFile(mf)) continue;
+        fs::copy_file(mf, target, fs::copy_options::overwrite_existing, ec);
+    }
+    return 0;
+}
+
 static int mod_install(const std::string& spec, const std::string& exePath, bool requireSigned, bool yesAll) {
     std::string src = spec;
     std::string pin;
@@ -4343,66 +4525,17 @@ static int mod_install(const std::string& spec, const std::string& exePath, bool
     std::string name = fs::path(dirPath).filename().string();
     if (name.empty() || name == "." || name == "/") name = "mod";
 
-    std::vector<std::string> modFiles;
-    fs::path primary;
-    fs::path modVyb = fs::path(dirPath) / "mod.vyb";
-    if (fs::exists(modVyb)) {
-        primary = modVyb;
-        for (auto& e : fs::directory_iterator(dirPath, ec))
-            if (e.is_regular_file() && e.path().extension() == ".vyb") modFiles.push_back(e.path().string());
-    } else {
-        for (auto& e : fs::directory_iterator(dirPath, ec))
-            if (e.is_regular_file() && e.path().extension() == ".vyb") { modFiles.push_back(e.path().string()); primary = e.path(); }
-    }
-    if (modFiles.empty() || primary.empty()) {
-        std::cerr << "Error: no .vyb module found under " << dirPath << "\n";
-        return 1;
-    }
-    std::sort(modFiles.begin(), modFiles.end());
-
-    std::string bytes = modReadFile(primary.string());
-    vyb_file_str d = __vyb_sha256_hex(bytes.empty() ? "" : bytes.data(), (int64_t)bytes.size());
-    std::string actualHex = d.len > 0 ? modHexLower(std::string(d.ptr, (size_t)d.len)) : "";
-    if (!pin.empty() && actualHex != pin) {
-        std::cerr << "Error: sha256 mismatch installing '" << name << "': pinned "
-                  << pin << " but fetched " << actualHex << "\n";
-        return 1;
-    }
-
-    // #204 P2: package-level freedom/trust boundary. If the installed package's
-    // manifest declares privileged capabilities (or a freedom boundary), require
-    // an explicit one-shot trust acceptance BEFORE materializing it — unless it
-    // was already accepted on a prior install (pinned in vyb.lock by
-    // source/sha256/capabilities), or the CI policy switch VYB_MOD_ACCEPT=1 / --yes
-    // opts in non-interactively.
+    // #204 P2 trust gate + materialization, shared with `vyb build`'s github
+    // auto-fetch (#388): install allows a privileged package (with the one-shot
+    // acceptance), the auto-fetch path refuses one.
+    std::string actualHex;
     std::vector<std::string> privCaps;
     bool privFreedom = false;
-    bool privileged = false;
-    {
-        std::error_code tec;
-        if (fs::exists(fs::path(dirPath) / "vyb.toml", tec)) {
-            privileged = mod_privileged_from(dirPath, privCaps, privFreedom);
-        }
+    if (mod_copy_module_into(fs::path(dirPath), name, fs::current_path(), src, pin,
+                             /*allowPrivileged=*/true, yesAll, actualHex, &privCaps, &privFreedom) != 0) {
+        return 1;
     }
-    if (privileged) {
-        std::string lockPath = (fs::current_path() / "vyb.lock").string();
-        bool already = mod_lock_already_trusted(lockPath, name);
-        if (!already && !yesAll) {
-            if (!mod_confirm_privileged(name, src, actualHex, privCaps, privFreedom)) {
-                std::cerr << "Refusing to install privileged package '" << name
-                          << "' (not accepted). Use --yes or VYB_MOD_ACCEPT=1 to accept.\n";
-                return 1;
-            }
-        }
-    }
-
-    fs::path destDir = fs::current_path() / ".vybmod" / name;
-    fs::create_directories(destDir, ec);
-    for (auto& mf : modFiles) {
-        fs::path target = destDir / fs::path(mf).filename();
-        if (fs::exists(target) && modReadFile(target.string()) == modReadFile(mf)) continue;
-        fs::copy_file(mf, target, fs::copy_options::overwrite_existing, ec);
-    }
+    const bool privileged = privFreedom || !privCaps.empty();
 
     {
         std::string lockPath = (fs::current_path() / "vyb.lock").string();
