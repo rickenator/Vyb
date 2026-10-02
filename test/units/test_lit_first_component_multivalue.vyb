@@ -1,0 +1,14 @@
+// @test: a `lit(...)` as the FIRST component of a multi-value return serializes raw (#427 defect 8)
+// @description: the mirror image of test_lit_component_multivalue_return.vyb --
+//   `main()<Int, String> -> { return lit(1), "x" }` asserted in
+//   `CreateSExtOrTrunc: Can only sign extend/truncate integers!` (exit 134), because the declared
+//   element type for slot 0 is Int while the value reaching the serializer is lit()'s raw
+//   serialized i8*. Both directions are now the same fix: a bare-pointer component is emitted
+//   verbatim. The ordinary component ("x") still goes through JSON escaping, so the array reads
+//   `[1, "x"]` -- raw for the literal, quoted for the value.
+// @category: serialization
+// @expect-return: [1, "x"]
+
+main()<Int, String> -> {
+    return lit(1), "x"
+}

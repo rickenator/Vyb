@@ -2731,6 +2731,19 @@ llvm::Value* LLVMCodegen::serializeMainReturnJson(llvm::Value* value,
         return f;
     };
 
+    // A `lit(...)` component arrives as an already-serialized raw JSON C string
+    // (i8*), while the declared element type still describes the value's Vyb type
+    // (Int, String, ...). Return the raw pointer verbatim -- lit()'s contract is
+    // exactly "emit the already-serialized JSON with no escaping and no quotes" --
+    // instead of coercing it to the declared type, which is what asserted:
+    // CreateSExtOrTrunc on an i8* (#427 defect 8) and a GEP/ExtractValue into a
+    // non-aggregate pointer. A genuine String value is a { i8*, i64 } struct and a
+    // Vec value a { ptr, i64, i64 } struct, so a BARE pointer here is always an
+    // already-serialized fragment.
+    if (value->getType()->isPointerTy() && !llvmType->isPointerTy()) {
+        return value;
+    }
+
     // Vec<T>: emit a JSON array by walking { data, size }; each element is
     // serialized recursively from its AST type, so Vec<Vec<T>> and Vec<Struct>
     // both come out as nested JSON instead of `null` (#375).

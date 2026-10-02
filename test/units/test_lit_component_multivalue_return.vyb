@@ -1,0 +1,15 @@
+// @test: a `lit(...)` component of a multi-value return serializes raw instead of crashing (#427 defect 8)
+// @description: `main()<Int, String> -> { return 1, lit("42") }` asserted inside LLVM
+//   (`checkGEPType: Invalid GetElementPtrInst indices for type!`, exit 134). The tuple path hands
+//   each element to serializeMainReturnJson with the element's DECLARED type, but a `lit(...)`
+//   value is already-serialized raw JSON arriving as an i8* -- so the serializer applied the
+//   declared type (String -> ExtractValue on a pointer, Int -> CreateSExtOrTrunc) to a bare
+//   pointer. A bare pointer there is always an already-serialized fragment (a real String is a
+//   { i8*, i64 } struct and a Vec a { ptr, i64, i64 } struct), so it is now returned verbatim,
+//   which is lit()'s contract: no quoting, no escaping.
+// @category: serialization, ownership
+// @expect-return: [1, 42]
+
+main()<Int, String> -> {
+    return 1, lit("42")
+}
