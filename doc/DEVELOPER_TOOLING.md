@@ -8,7 +8,10 @@ in full in `doc/MANIFEST.md`):
 
 - **`path`** — `name = { path = "relative/dir" }` is resolved by `vyb build`
   (`project_module_paths`): the directory joins the module search path and its
-  modules are importable in the project.
+  modules are importable in the project. `import <name>` is the spelling for
+  every source: a directory that is a PACKAGE (`<dir>/mod.vyb`) also registers
+  its parent, so `<parent>/<name>/mod.vyb` resolves as `import <name>` (#418),
+  while a plain module directory (`<dir>/<name>.vyb`) resolves as before.
 - **`git:`** — `name = { git = "url" }` with a `rev`/`tag`/`branch` is shallow-cloned
   into `.vybmod/<name>/` on build and consumed from there.
 - **`github:`** — `vyb build` AUTO-FETCHES `name = { github = "owner/repo/path" }`

@@ -257,6 +257,92 @@ main()<Int> -> {
         println("FAIL: refused privileged dep was materialized anyway")
     }
 
+    # 5. #418: `vyb mod install github:...` against a manifest that already declares the
+    #    dependency. The installed package is named after the spec's DIRECTORY (not the
+    #    module file stem, which made every install collide on `mod`), and the declared
+    #    `<name> = { github = ... }` line is rewritten IN PLACE to the local path -- no
+    #    second entry for the same package.
+    instConsumer<String> = tmp + "/installconsumer"
+    run_sh("mkdir -p '" + instConsumer + "/src'")
+    spill(instConsumer + "/vyb.toml",
+          "[package]\nname = \"ghinst\"\nversion = \"0.1.0\"\n\n[[bin]]\nname = \"ghinst\"\npath = \"src/main.vyb\"\n\n[dependencies]\ngadgets = { github = \"acme/gadgets/gadgets/mod.vyb\" }\n")
+    spill(instConsumer + "/src/main.vyb", "import gadgets::{exclaim}\nmain()<Int> -> {\n    println(exclaim(\"ab\"))\n    return 0\n}\n")
+    instCmd<String> = "cd '" + instConsumer + "' && " + envPrefix + exe + " mod install github:acme/gadgets/gadgets/mod.vyb > " + outPath + " 2> " + errPath + "; echo $?"
+    instCode<Int> = digits_to_int(trim(run_sh(instCmd)))
+    instOut<String> = slurp(outPath)
+    instErrS<String> = slurp(errPath)
+    instToml<String> = slurp(instConsumer + "/vyb.toml")
+    instLock<String> = slurp(instConsumer + "/vyb.lock")
+
+    names.push("install names the package after the spec's directory")
+    results.push(instCode == 0 && exists(instConsumer + "/.vybmod/gadgets/mod.vyb"))
+    if (!(instCode == 0 && exists(instConsumer + "/.vybmod/gadgets/mod.vyb"))) {
+        println("FAIL: install did not materialize .vybmod/gadgets (rc " + instCode.to_string() + "):")
+        println(instOut)
+        println(instErrS)
+    }
+
+    names.push("install rewrites the declared dep in place (no duplicate entry)")
+    results.push(instToml.index_of("gadgets = { path = \".vybmod/gadgets\" }") >= 0 &&
+                  instToml.index_of("mod = { path") < 0 &&
+                  instToml.index_of("github") < 0)
+    if (!(instToml.index_of("gadgets = { path = \".vybmod/gadgets\" }") >= 0 &&
+          instToml.index_of("mod = { path") < 0 && instToml.index_of("github") < 0)) {
+        println("FAIL: manifest after install:")
+        println(instToml)
+    }
+
+    names.push("install records the dep name in vyb.lock")
+    results.push(instLock.index_of("gadgets = { source = \"github:") >= 0 &&
+                  instLock.index_of("mod = {") < 0)
+    if (!(instLock.index_of("gadgets = { source = \"github:") >= 0 && instLock.index_of("mod = {") < 0)) {
+        println("FAIL: vyb.lock after install:")
+        println(instLock)
+    }
+
+    # 6. #418: the installed package is consumed as a PATH dep whose directory is a
+    #    package (`<dir>/mod.vyb`), so `import <depname>` must resolve from the dep's
+    #    parent. Built with no mirror reachable, which proves nothing re-fetched.
+    noMirrorPrefix<String> = "env -u VYB_MODULE_PATH VYB_STDLIB='" + stdlib + "' VYB_GITHUB_RAW_URL='file:///nonexistent-mirror' "
+    instBuildCmd<String> = "cd '" + instConsumer + "' && " + noMirrorPrefix + exe + " build > " + outPath + " 2> " + errPath + "; echo $?"
+    instBuildCode<Int> = digits_to_int(trim(run_sh(instBuildCmd)))
+    instBin<String> = instConsumer + "/target/ghinst"
+    instRunOk<Bool> = false
+    if (instBuildCode == 0 && exists(instBin)) {
+        instRun<String> = trim(run_sh("cd '" + instConsumer + "' && " + noMirrorPrefix + instBin + " 2>/dev/null"))
+        instRunOk = instRun.index_of("ab!") >= 0
+    }
+    names.push("installed path dep resolves as `import <depname>`")
+    results.push(instBuildCode == 0 && instRunOk)
+    if (!(instBuildCode == 0 && instRunOk)) {
+        println("FAIL: build/run of the installed path dep (rc " + instBuildCode.to_string() + "):")
+        println(slurp(errPath))
+    }
+
+    # 7. #418: the older spelling still resolves for the same shape (`import mod` on a
+    #    package dir), and a plain module directory is unchanged. Both must keep building.
+    compatConsumer<String> = tmp + "/compatconsumer"
+    run_sh("mkdir -p '" + compatConsumer + "/deps/pkg' '" + compatConsumer + "/deps/mods' '" + compatConsumer + "/src'")
+    spill(compatConsumer + "/deps/pkg/mod.vyb", "share(all)\npkgfn()<Int> -> { return 41 }\n")
+    spill(compatConsumer + "/deps/mods/alphafn.vyb", "share(all)\nalphafn()<Int> -> { return 43 }\n")
+    spill(compatConsumer + "/vyb.toml",
+          "[package]\nname = \"ghcompat\"\nversion = \"0.1.0\"\n\n[[bin]]\nname = \"ghcompat\"\npath = \"src/main.vyb\"\n\n[dependencies]\npkg = { path = \"deps/pkg\" }\nmods = { path = \"deps/mods\" }\n")
+    spill(compatConsumer + "/src/main.vyb",
+          "import mod::{pkgfn}\nimport alphafn::{alphafn}\nmain()<Int> -> {\n    println(\"old=\" + pkgfn().to_string() + \" plain=\" + alphafn().to_string())\n    return 0\n}\n")
+    compatCmd<String> = "cd '" + compatConsumer + "' && " + noMirrorPrefix + exe + " build > " + outPath + " 2> " + errPath + "; echo $?"
+    compatCode<Int> = digits_to_int(trim(run_sh(compatCmd)))
+    compatRunOk<Bool> = false
+    if (compatCode == 0 && exists(compatConsumer + "/target/ghcompat")) {
+        compatRun<String> = trim(run_sh("cd '" + compatConsumer + "' && " + noMirrorPrefix + compatConsumer + "/target/ghcompat 2>/dev/null"))
+        compatRunOk = (compatRun.index_of("old=41") >= 0 && compatRun.index_of("plain=43") >= 0)
+    }
+    names.push("`import mod` and a plain module dir still resolve")
+    results.push(compatCode == 0 && compatRunOk)
+    if (!(compatCode == 0 && compatRunOk)) {
+        println("FAIL: backward-compat shapes (rc " + compatCode.to_string() + "):")
+        println(slurp(errPath))
+    }
+
     run_sh("rm -rf '" + tmp + "'")
 
     passed<Int> = 0
@@ -270,6 +356,6 @@ main()<Int> -> {
         exit(1)
     }
     println("githubdep smoke: " + names.len().to_string() + "/" + names.len().to_string() +
-            " checks passed (auto-fetch-on-build, materialize, lockfile source=github, run, privileged refused)")
+            " checks passed (auto-fetch-on-build, materialize, lockfile source=github, run, privileged refused, install naming + in-place rewrite, path-dep import by name)")
     return 0
 }
