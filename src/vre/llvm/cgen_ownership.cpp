@@ -1913,6 +1913,21 @@ bool LLVMCodegen::isClosureElementType(llvm::Type* elementLLVMType,
     return isFnTypeNode(astElemType) && isClosureStructType(elementLLVMType);
 }
 
+void LLVMCodegen::flushPendingCaptures() {
+    // Called on every exit from a lambda body, in the lambda's own function: copy
+    // each mutable capture's per-call snapshot back into the storage it was captured
+    // from (the defining frame's alloca, or the heap cell an escaping closure owns).
+    // Without this, only an assignment (`n = n + 1`, which routes through
+    // mutableCaptureOuterPointers) propagates, while an in-place mutation
+    // (`v.push(3)`, a subscript store) stays in the snapshot: the mutation is lost
+    // between calls and any buffer it allocated is orphaned.
+    for (const PendingCaptureFlush& f : pendingCaptureFlush) {
+        if (!f.outerPtr || !f.snapshotAlloca || !f.valueType) continue;
+        llvm::Value* cur = builder->CreateLoad(f.valueType, f.snapshotAlloca, "cap.flush.load");
+        builder->CreateStore(cur, f.outerPtr);
+    }
+}
+
 void LLVMCodegen::retainClosureRef(llvm::Value* value, llvm::Type* valueLLVMType,
                                    const vyb::ast::TypeNode* astType,
                                    llvm::BasicBlock** validIncoming) {

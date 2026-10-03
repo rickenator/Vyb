@@ -3009,6 +3009,7 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
     llvm::BasicBlock* savedBlock = builder->GetInsertBlock();
     std::map<std::string, llvm::Value*> savedNamedValues = namedValues;
     std::map<std::string, llvm::Value*> savedMutableCaptureOuterPointers = mutableCaptureOuterPointers;
+    std::vector<PendingCaptureFlush> savedPendingCaptureFlush = pendingCaptureFlush;
     const bool savedFunctionFailable = m_currentFunctionFailable;
 
     currentFunction = function;
@@ -3020,6 +3021,7 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
     generatePushFrameCall(funcName, node->loc);
     namedValues.clear();
     mutableCaptureOuterPointers.clear();
+    pendingCaptureFlush.clear();
     // Isolate scope management from the enclosing function. A lambda body lives
     // in its own LLVM function, but the scope stack / function baseline are
     // shared members; without isolating them, a `return` inside the lambda runs
@@ -3043,12 +3045,24 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
             llvm::Value* fieldVal = builder->CreateLoad(envFieldTypes[ci], fieldPtr, "closure.env.load");
             llvm::AllocaInst* capAlloca = builder->CreateAlloca(captures[ci].ty, nullptr, "closure.cap." + captures[ci].name);
             if (captures[ci].mutable_) {
-                // fieldVal is the address of the outer variable's alloca:
-                // snapshot its current value, and remember the address.
+                // fieldVal is the address of the captured storage: the defining
+                // frame's alloca on the stack path, or the heap cell owned by the
+                // environment when the closure escapes. Snapshot its current value
+                // for this call and remember the address so writes can propagate
+                // back to it.
                 llvm::Value* outerPtr = fieldVal;
                 llvm::Value* snapVal = builder->CreateLoad(captures[ci].ty, outerPtr, "closure.cap.snap");
                 builder->CreateStore(snapVal, capAlloca);
                 mutableCaptureOuterPointers[captures[ci].name] = outerPtr;
+                // An assignment propagates through mutableCaptureOuterPointers, but
+                // a MUTATING METHOD CALL (`v.push(3)`, a subscript store, any
+                // in-place mutation) resolves the binding through namedValues and
+                // therefore writes only into this snapshot. Flush the snapshot back
+                // into the captured storage on every exit from the lambda body, or
+                // the mutation is lost between calls and whatever buffer the call
+                // allocated is orphaned (a `v.push` into an empty captured Vec
+                // leaked one buffer per call and the frame never saw the push).
+                pendingCaptureFlush.push_back({outerPtr, capAlloca, captures[ci].ty});
             } else {
                 builder->CreateStore(fieldVal, capAlloca);
             }
@@ -3080,6 +3094,9 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
         node->body->accept(*this);
         llvm::Value* bodyValue = m_currentLLVMValue;
         if (!builder->GetInsertBlock()->getTerminator()) {
+            // The body fell through: this is one of the lambda's exits, so flush
+            // mutable-capture snapshots before returning.
+            flushPendingCaptures();
             if (lambdaFailable) {
                 // Implicit success of a failable Void lambda: `{ false, null }`.
                 generatePopFrameCall();
@@ -3180,6 +3197,7 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
         builder->SetInsertPoint(savedBlock);
         namedValues = savedNamedValues;
         mutableCaptureOuterPointers = savedMutableCaptureOuterPointers;
+        pendingCaptureFlush = savedPendingCaptureFlush;
         scopeStack = savedLambdaScopeStack;
         m_functionScopeBaseline = savedLambdaBaseline;
         return;
@@ -3193,6 +3211,7 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
     builder->SetInsertPoint(savedBlock);
     namedValues = savedNamedValues;
     mutableCaptureOuterPointers = savedMutableCaptureOuterPointers;
+    pendingCaptureFlush = savedPendingCaptureFlush;
     scopeStack = savedLambdaScopeStack;
     m_functionScopeBaseline = savedLambdaBaseline;
 

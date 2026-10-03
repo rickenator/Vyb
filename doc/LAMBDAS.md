@@ -222,7 +222,11 @@ Capture forms
   snapshots the current value into a local alloca, and assignments (plain and
   compound, including `-=`/`*=`/etc.) write back through that address, so the
   enclosing scope observes every mutation and later invocations start from the
-  latest value.
+  latest value. An **in-place mutating method call** on the captured binding
+  (`v.push(x)`, `v.set(i, x)`, `v[i] = x`, `v.clear()`, …) counts as a write too:
+  the binding is classified mutable, and every exit from the lambda body flushes
+  the snapshot back to the captured storage
+  (`test/lambda/test_closure_mutable_capture_inplace_mutation.vyb`).
 - **Move** — Capturing a `my<T>` transfers ownership into the closure; the
   semantic analyzer marks the outer variable as moved, and reading it afterward
   is a use-after-move diagnostic.

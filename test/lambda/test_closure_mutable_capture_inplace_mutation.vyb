@@ -1,0 +1,73 @@
+// @test: an in-place mutation through a mutable capture reaches the captured storage
+// @description: `v.push(3)` mutates its receiver without an assignment, so the write
+//   has to reach the storage the capture was taken from. The analyzer now records an
+//   in-place mutating method call (`push`/`push_array`/`set`/`insert`/`remove`/
+//   `remove_at`/`resize`/`clear`/`pop`) as a write to the receiver's root binding, so
+//   the capture is classified mutable instead of being copied by value; and every exit
+//   from a lambda body flushes the mutable captures' per-call snapshots back into the
+//   captured storage. Before both halves, `v.push` wrote into the closure's private
+//   copy: the frame never observed the push, a second call saw the original length
+//   again, and the buffer each grow allocated was orphaned -- one leak per call. The
+//   escaping variant additionally mutated a cell the frame never saw. Functional output
+//   alone cannot see the leak, so this fixture is also the LeakSanitizer proof.
+// @category: lambda, closure, capture, mutable, ownership
+// @expect-output: stack=2 stacklen=2 boxed=2 set=9 sub=5 str=2
+// @expect-return: 0
+
+makeBumper()<fn() -> Int> -> {
+    v<Vec<Int>> = Vec()
+    return || -> {
+        v.push(3)
+        return v.len()
+    }
+}
+
+main()<Int> -> {
+    # stack path: a non-escaping closure mutating a captured Vec in place. The frame
+    # observes both pushes, and the frame's Vec owns the grown buffer.
+    v<Vec<Int>> = Vec()
+    f<fn() -> Int> = || -> {
+        v.push(3)
+        return v.len()
+    }
+    a<Int> = f()
+    b<Int> = f()
+    stacklen<Int> = v.len()
+
+    # escaping (boxed) path: the closure's own cell accumulates across calls.
+    g<fn() -> Int> = makeBumper()
+    c<Int> = g()
+    d<Int> = g()
+
+    # `set` is the same class of in-place write.
+    w<Vec<Int>> = Vec()
+    w.push(1)
+    h<fn() -> Int> = || -> {
+        w.set(0, 9)
+        return w.get(0)
+    }
+    e<Int> = h()
+
+    # ...and so is a subscript store.
+    z<Vec<Int>> = Vec()
+    z.push(1)
+    k<fn() -> Int> = || -> {
+        z[0] = 5
+        return z.get(0)
+    }
+    sub<Int> = k()
+
+    # an assignment-shaped mutation keeps working (it already routed through the
+    # captured address).
+    s<String> = "a"
+    m<fn() -> Int> = || -> {
+        s = s + "b"
+        return s.len()
+    }
+    str<Int> = m()
+
+    println("stack=" + b.to_string() + " stacklen=" + stacklen.to_string() +
+            " boxed=" + d.to_string() + " set=" + e.to_string() +
+            " sub=" + sub.to_string() + " str=" + str.to_string())
+    return 0
+}

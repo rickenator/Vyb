@@ -1620,6 +1620,33 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
         }
     }
 
+    // Mutable-capture detection for IN-PLACE mutations (#384): `v.push(3)`,
+    // `v.set(i, x)`, `v.clear()` mutate the receiver's storage without any
+    // assignment, so the binding is written just as surely as `v = ...` is. Without
+    // this the capture was classified read-only and copied by value: the mutation
+    // landed in the closure's private copy (the defining frame never observed it)
+    // and any buffer the call allocated was orphaned -- one buffer per call leaked.
+    // Marked on EVERY enclosing lambda context, so a mutation performed by a nested
+    // lambda also makes the intermediate captures mutable (each level must hold the
+    // address, or the innermost write-back stops at a copy).
+    if (auto* mutCall = dynamic_cast<ast::MemberExpression*>(node->callee.get())) {
+        if (auto* mutName = dynamic_cast<ast::Identifier*>(mutCall->property.get())) {
+            // Keep in step with the mutating method dispatch in codegen
+            // (handleVecPush/Set/Insert/Remove* in cgen_vec.cpp).
+            static const std::set<std::string> kInPlaceMutators = {
+                "push", "push_array", "set", "insert", "remove", "remove_at",
+                "resize", "clear", "pop", "sort", "reverse", "fill", "truncate"};
+            if (kInPlaceMutators.count(mutName->name)) {
+                const std::string root = borrowedRootName(mutCall->object.get());
+                if (!root.empty()) {
+                    for (LambdaCaptureCtx& lctx : lambdaCaptureStack) {
+                        if (!lctx.locals.count(root)) lctx.written.insert(root);
+                    }
+                }
+            }
+        }
+    }
+
     // Bare builtin enum constructor: `Ok(x)` / `Err(e)` for Result. A surrounding
     // annotation (variable declaration or return statement) injects the target enum
     // type into this node, so the constructor infers its payload without explicit

@@ -265,6 +265,19 @@ private:
     // the *outer* variable's alloca, so writes inside a lambda can propagate
     // back to the enclosing scope. Populated only while generating a lambda.
     std::map<std::string, llvm::Value*> mutableCaptureOuterPointers;
+    // A lambda's mutable captures are read/written through a per-call snapshot
+    // alloca (`closure.cap.<name>`); an assignment propagates back through
+    // mutableCaptureOuterPointers, but an in-place mutation (`v.push(3)`, a
+    // subscript store) does not. Each lambda exit flushes these snapshots back into
+    // the captured storage, so a mutation made through a mutable capture is visible
+    // to the defining frame and to later calls.
+    struct PendingCaptureFlush {
+        llvm::Value* outerPtr;      // the captured storage (frame alloca or heap cell)
+        llvm::Value* snapshotAlloca; // this call's snapshot of that storage
+        llvm::Type* valueType;
+    };
+    std::vector<PendingCaptureFlush> pendingCaptureFlush;
+    void flushPendingCaptures();
     std::map<std::string, UserTypeInfo> userTypeMap;
     std::map<std::string, llvm::Type*> typeParameterMap;
     std::map<std::string, llvm::Type*> typeAliasMap; // Maps type alias names to their underlying LLVM types

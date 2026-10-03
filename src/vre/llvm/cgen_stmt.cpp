@@ -139,10 +139,18 @@ void LLVMCodegen::emitPropagatingErrorReturn(llvm::Value* errorPtr) {
 void LLVMCodegen::visit(vyb::ast::ReturnStatement *node) {
     // Emit deferred statements (LIFO) before returning
     emitDeferredStatementsForCurrentFunction();
+    // Inside a lambda body, this is an exit: flush mutable-capture snapshots back
+    // into the storage they were captured from (no-op outside a lambda). Done
+    // before the argument as well as after it, so a bare `return` and a mutation
+    // performed by the argument expression are both covered.
+    flushPendingCaptures();
     if (node->argument) {
         // Codegen the argument expression. The result will be in m_currentLLVMValue.
         node->argument->accept(*this);
         llvm::Value *returnValue = m_currentLLVMValue;
+        // Inside a lambda body, this is an exit: flush mutable-capture snapshots
+        // back into the storage they were captured from (no-op elsewhere).
+        flushPendingCaptures();
 
         if (returnValue) {
             // Debug output to see what we're returning
