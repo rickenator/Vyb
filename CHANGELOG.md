@@ -36,9 +36,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `test/threads/test_thread_boundary_mutable_capture_boxed_accepted.vyb`,
   `test_thread_boundary_task_mutable_capture_boxed_accepted.vyb`. The per-binding
   shared cell (so the defining frame also observes an escaping closure's writes) is
-  checkpoint (c), still open; a `Vec<fn ...>` element environment is not released when
-  the Vec is reclaimed, and a closure assigned into a struct field is not owned by
-  that field — pre-existing storage-location ownership gaps filed together as #439.
+  checkpoint (c), still open; the storage-location ownership gaps the change exposed
+  (`Vec<fn ...>` elements and closure struct fields) were filed as #439 and are fixed
+  by the two `### Fixed` entries below.
 - **`VYBHOME` + a toplevel `SOURCEME_VYB`, so projects stop hardcoding the checkout
   (#424)** — Vyb now owns its own toolchain paths. Sourcing `SOURCEME_VYB` exports
   `VYBHOME` (the checkout root) and the derived `VYB` (`$VYBHOME/build/vyb`) and
@@ -82,8 +82,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `test/collections/test_vec_closure_element_ownership.vyb` (push, a second call through
   the same binding, `set`, subscript store, by-value parameter, returned Vec, struct
   field — exact values) and by the two closure escape fixtures, all
-  LeakSanitizer-clean. A closure assigned into a struct FIELD (`h.f = ...`) is still not
-  owned by that field — that half of #439 remains open.
+  LeakSanitizer-clean.
+- **A closure held in a struct field is owned by that field (#439, second half)** —
+  a `fn` field is now a reference-counted owned field: the struct literal retains the
+  environment it stores (whatever the initializer is), a member store (`h.f = ...`)
+  drops the replaced field's reference and takes one for the new value, a struct deep
+  copy (by-value parameter, `Vec` element, returned value) retains what it clones,
+  `reclaimStructOwnedFieldsAt` releases the field's reference when the struct is
+  reclaimed, and `structTypeHasOwnedFields` counts a `fn` field so that reclaim runs
+  at all. Both environments of `Holder { f = ... }` followed by `h.f = ...` used to
+  leak (48 B / 2 allocations; 56 B / 3 with a boxed mutable capture, whose cell was
+  orphaned with it). Locked in by
+  `test/ownership/test_struct_closure_field_ownership.vyb` (literal, member store,
+  boxed mutable capture, by-value parameter, `Vec` element, returned struct — exact
+  values, LeakSanitizer-clean). Closes #439.
 
 ### Changed
 - **`bare()` now emits a struct's field values, in declaration order (#383)** — the

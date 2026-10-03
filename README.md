@@ -80,7 +80,7 @@ git clone https://github.com/rickenator/Vyb.git
 cd Vyb
 mkdir -p build && cd build && LLVM_DIR=/usr/lib/llvm-18/cmake cmake .. && make -j$(nproc) && cd ..
 
-# Run the full test suite (1279 .vyb tests) with the canonical Vyb runner
+# Run the full test suite (1280 .vyb tests) with the canonical Vyb runner
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
 
 # Run your first Vyb program
@@ -3154,7 +3154,7 @@ cmake --build build --target run-milestone
 
 Vyb's canonical test runner is `test/run_tests.vyb` — a Vyb program, the same
 suite wired into CTest as the `run-tests` target and used for the full regression
-gate (currently **1279 `.vyb` tests, all passing**):
+gate (currently **1280 `.vyb` tests, all passing**):
 
 ### Quick Testing
 
@@ -3191,7 +3191,7 @@ build/vyb triage_tool.vyb results.json --priority critical,high
 ```
 
 ### Test Features
-- **1279 Tests, All Passing**: The full `run_tests.vyb` suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area
+- **1280 Tests, All Passing**: The full `run_tests.vyb` suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area
 - **Harness Reporting**: `test_harness.vyb` adds JSON/HTML reports and failure triage on top of the runner (sequential execution; `--workers` is accepted for compatibility)
 - **Rich Reporting**: HTML, JSON, and console output with detailed metrics
 - **Smart Categorization**: Automatic test categorization and filtering
@@ -3466,10 +3466,10 @@ compatibility) and reports the same per-test verdicts as the canonical runner.
 - **Error Context**: Detailed failure information with context and suggestions
 
 #### **Test Statistics**
-- **Total Tests**: 1279 `.vyb` tests (full suite, all passing as of v0.7.7)
+- **Total Tests**: 1280 `.vyb` tests (full suite, all passing as of v0.7.7)
 - **Coverage Areas**: Language features, control flow, error handling, type system, math, strings, introspection
 - **Test Types**: Feature tests (with `@expect: pass`), future-feature docs (with `@expect: fail`), parser tests
-- **Success Rate**: 100% (1279/1279) on the current suite
+- **Success Rate**: 100% (1280/1280) on the current suite
 
 ### 🔧 **Syntax Migration Tools**
 
@@ -3585,7 +3585,7 @@ See `doc/` directory for detailed design documents and RFCs.
   - **Type inference**: First case determines result type for entire select
   - **Pattern matching**: Exact equality patterns with wildcard `?` support
 - ✅ **Canonical Syntax Unification**: Complete migration to unified `my()`/`our()` constructors and `view`/`borrow` operators
-- ✅ **Modern Test Harness**: `test/run_tests.vyb` running the full suite — 1279 `.vyb` tests all passing — with an auxiliary parallel/HTML/triage harness
+- ✅ **Modern Test Harness**: `test/run_tests.vyb` running the full suite — 1280 `.vyb` tests all passing — with an auxiliary parallel/HTML/triage harness
 - ✅ **Syntax Migration Tools**: Automated migration from legacy to canonical syntax with comprehensive reporting
 - ✅ **Match Statements**: Complete pattern matching with `->` arrow syntax and `?` wildcard; no-match results in NOP
 - ✅ **Break/Continue**: Loop control flow statements working in all loop types

@@ -244,7 +244,7 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
 - [x] **`println()`/`print()` with multiple arguments** — Space-separated output; all args formatted into a single call
 - [x] **Semantic type recognition** — `Int16`, `Int32`, `Int64`, `UInt8`–`UInt64`, `Float32`, `Float64`, `Char`, `Rune` now fully recognized in semantic analysis (were silently rejected)
 - [x] **Relaxed struct field syntax** — C-style `Type fieldName` accepted alongside canonical `fieldName<Type>`; helps parse legacy/interop fixtures
-- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite runs **1279 tests** via `test/run_tests.vyb`, and that documented size is enforced against the runner by `test/suite_count_check.vyb` in CI
+- [x] **Test harness** — `--parse-only` flag forwarded to binary for `@parse-only: true` tests; `n/a` annotation values treated as "skip this check"; the canonical suite runs **1280 tests** via `test/run_tests.vyb`, and that documented size is enforced against the runner by `test/suite_count_check.vyb` in CI
 - [x] **Vec parameter deep copy** — Vec parameters receive an independent copy of the data on function entry, eliminating double-free bugs (e.g. recursive quicksort base-case return)
 - [x] **Nested `Vec<Vec<T>>` element ownership** — every path that clones a nested Vec (by-value argument, return, assignment, `push`, `set`, and the borrowed-element binding) now deep-copies the inner Vec *and* retains its elements, so `Vec<Vec<String>>` rows no longer share inner buffers with their source binding (no double free at exit, no dangling inner strings). Locked in by `test/ownership/nested_vec_element_ownership.vyb` (#373)
 - [x] **Nested Vec reclaim depth ≥ 3** — scope-exit reclaim now releases *every* level of a nested Vec: for a `Vec` element the deeper levels are released recursively (`emitInnerVecCleanup`) before the outer storage is freed, struct-field reclaim is skipped for a Vec element, and a `Vec<Vec<T>>` *field* of a struct takes the same recursive path. Verified under `ASAN_OPTIONS=halt_on_error=1:detect_leaks=1` (`test/collections/test_nested_vec_deep_copy.vyb`, the SQLite binding, `test/traffic/test_traffic_{parse,db,graph,report}.vyb`) (#373)
@@ -501,10 +501,11 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
   fixtures (`test/lambda/test_closure_capture_semantics.vyb`,
   `test_closure_two_over_one_binding.vyb`) stay green unchanged. Still open from
   the plan: the per-BINDING shared cell (checkpoint (c)), so the defining frame
-  would also observe a mutation made through an *escaping* closure; and a closure
-  assigned into a struct field is not owned by that field (`h.f = || -> {...}` —
-  pre-existing, still open as #439; the `Vec<fn ...>` half of that gap, where an
-  element environment was never released on reclaim, is fixed).
+  would also observe a mutation made through an *escaping* closure. The
+  storage-location ownership gap this work exposed (#439 — a closure written into a
+  storage location that never owned its environment) is FIXED for both shapes: a
+  `Vec<fn ...>` element (`test/collections/test_vec_closure_element_ownership.vyb`)
+  and a struct field (`test/ownership/test_struct_closure_field_ownership.vyb`).
   **Step 0 probes + the step 1 contract were recorded (#384, landed):** an
   immutable capture stays a by-value snapshot (`test/lambda/test_closure_capture_semantics.vyb`,
   `test/lambda/test_closure_two_over_one_binding.vyb` — a read-only sibling does NOT
@@ -1674,5 +1675,5 @@ Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `
 
 *Last Updated: 2026-09-29 (v0.7.7 release)*
 *Current Version: Vyb v0.7.7 (freedom-1.0 series)*
-*Overall Status: ~60-65% complete toward 1.0 — 1279 tests (documented size enforced against the runner by `test/suite_count_check.vyb`; the full `--execute-jit` sweep runs in `ci.yml`)*
+*Overall Status: ~60-65% complete toward 1.0 — 1280 tests (documented size enforced against the runner by `test/suite_count_check.vyb`; the full `--execute-jit` sweep runs in `ci.yml`)*
 *SUGGESTIONS.md merged into this document.*
