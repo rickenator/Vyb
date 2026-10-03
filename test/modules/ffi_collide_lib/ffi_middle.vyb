@@ -1,6 +1,12 @@
-# The "middle module" side of #442 (VybForge's native/tensor plays this role): a module that
-# imports a binding and wraps it. Importing THIS file is what used to break the importer's own
-# extern declarations.
+// @test: #442 helper — the module that imports the binding and wraps it
+// @description: Loaded via VYB_MODULE_PATH by test_import_ffi_sibling.vyb. Plays the role
+//   VybForge's native/tensor plays in the report: a module that imports a binding, so that
+//   importing THIS file is what used to break the importer's own extern declarations.
+//   Parse-only: it is a module, not a runnable fixture.
+// @category: modules, imports, ffi, binding
+// @expect: pass
+// @parse-only: true
+
 import ffi_owner::{getpid}
 
 share(all)
