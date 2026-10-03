@@ -3089,6 +3089,12 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
         llvm::AllocaInst* alloca = builder->CreateAlloca(ai.getType(), nullptr, paramNames[pi - 1] + ".addr");
         builder->CreateStore(&ai, alloca);
         namedValues[paramNames[pi - 1]] = alloca;
+        // NOTE (#384 checkpoint (c)): a LAMBDA's own parameter is not promoted. The one
+        // shape that would need it -- a lambda parameter mutably captured by a nested
+        // closure -- is already rejected by the analyzer ("Undefined identifier"), so a
+        // promotion path here would be unreachable and its lifetime unprovable. Parameter
+        // promotion therefore covers named functions, where the return path releases the
+        // cell.
         ++pi;
     }
 

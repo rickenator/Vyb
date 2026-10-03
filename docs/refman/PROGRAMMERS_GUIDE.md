@@ -167,7 +167,7 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 ### Running the test suite
 
 ```bash
-# 1284 .vyb tests exercised through compile + run + output/return checks
+# 1285 .vyb tests exercised through compile + run + output/return checks
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test
 ```
 
@@ -601,7 +601,10 @@ readMine<fn(Int) -> Int> = |x<Int>| -> mine.n + x
   declared type has no sound cell representation (a borrow, an FFI handle, an
   optional, an array, or a name the analysis cannot resolve) is still refused when
   such a closure is returned. A by-value parameter mutably captured by an escaping
-  closure keeps the per-closure boxed cell (its frame does not observe the write).
+  closure is promoted the same way, so the parameter's frame observes the write and the
+  cell is released on the function's return path
+  (`test/lambda/test_closure_mutable_param_observes.vyb`); a *lambda's* own parameter is
+  not promoted, since the shape that would need it is rejected by the analyzer.
 - A closure that captures an owned struct **owns its payload**: the captured
   `String`/`Vec` fields stay alive even after the maker's scope exits (the env
   keeps a reference to the owned buffer).
@@ -2844,7 +2847,7 @@ Canonical suite runner — a Vyb program (`test/run_tests.vyb`), wired into CTes
 as `run-tests`:
 
 ```bash
-./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1284 tests)
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1285 tests)
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --category async  # filter by category
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --json results.json --evidence evidence.json
 ```

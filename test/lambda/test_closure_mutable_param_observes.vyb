@@ -1,0 +1,46 @@
+// @test: a parameter mutably captured by an escaping closure is promoted too
+// @description: #384 checkpoint (c) reaches by-value parameters: a parameter mutably
+//   captured by an escaping closure is promoted to the same refcounted shared cell a
+//   local gets, so the parameter's own frame observes the write the spawned thread made
+//   through the closure (`int=42`; before promotion the spawned closure wrote into its
+//   private boxed cell and this frame still returned 41). The named function's return
+//   path releases the frame's reference, and the last owner runs the cell's destructor --
+//   including for a String payload, whose buffer is reclaimed exactly once. Covers the
+//   Int and String payloads; a `Vec` payload cannot be mutated through a by-value
+//   parameter (that is refused by design, #283, "declare it as their<Vec<...>>"), and a
+//   LAMBDA's own parameter is not promoted (the shape that would need it -- a lambda
+//   parameter captured by a nested closure -- is rejected by the analyzer). LSan-clean.
+// @category: lambda, closure, capture, mutable, ownership, threads, thread-boundary
+// @expect-output: int=42 str=2
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+
+import threads::{thread_spawn, thread_join}
+
+bumpInt(n<Int>)<Int> -> {
+    th<Int> = thread_spawn(|| -> {
+        n = n + 1
+        return n
+    }) else -1
+    if (th < 0) { return -1 }
+    got<Int> = thread_join(th) else -2
+    return n
+}
+
+bumpStr(s<String>)<Int> -> {
+    th<Int> = thread_spawn(|| -> {
+        s = s + "b"
+        return s.len()
+    }) else -1
+    if (th < 0) { return -1 }
+
+    got<Int> = thread_join(th) else -2
+    return s.len()
+}
+
+main()<Int> -> {
+    a<Int> = bumpInt(41)
+    b<Int> = bumpStr("a")
+    println("int=" + a.to_string() + " str=" + b.to_string())
+    return 0
+}

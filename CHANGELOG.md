@@ -41,7 +41,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   still gets an environment-owned boxed cell. Locked in by
   `test/lambda/test_closure_mutable_frame_observes.vyb`,
   `test_closure_mutable_shared_binding.vyb` and
-  `test_closure_mutable_capture_promoted_read.vyb`, all LeakSanitizer-clean.
+  `test_closure_mutable_capture_promoted_read.vyb`, all LeakSanitizer-clean. Promotion
+  covers a by-value parameter as well, so a parameter's frame observes the write made
+  through an escaping closure (the cell is released on the function's return path;
+  `test/lambda/test_closure_mutable_param_observes.vyb`). A *lambda's* own parameter is
+  not promoted: the shape that would need it — a lambda parameter captured by a nested
+  closure — is rejected by the analyzer ("Undefined identifier"), so a promotion path
+  there would be unreachable.
 - **Boxed mutable-capture closures — a closure with mutable captures can escape its
   defining function (#384)** — the environment of a mutating closure used to hold the
   *address* of the outer variable, so returning one was refused (it would dangle) and
