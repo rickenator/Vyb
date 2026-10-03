@@ -5839,6 +5839,24 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                         m_currentLLVMValue = builder->CreateCall(
                             calleeType, funcPtr, fnArgValues,
                             rt->isVoidTy() ? "" : "fnparam.result");
+                        // #427 defects 6/7 / #451: this arm builds its OWN argument list, so
+                        // the generic call path's pending-temporary release never runs here.
+                        // An accessor (`get`/`first`/`last`/`peek`) among the arguments handed
+                        // the caller an OWNED reference, and a by-value parameter only BORROWS
+                        // its argument -- so each such temporary's reference must be dropped
+                        // now, exactly as the generic path does for a fresh temp. A BOUND
+                        // accessor result is owned by its binding and is not released here.
+                        // `fnArgValues[0]` is the hidden environment when there is one.
+                        {
+                            const size_t argBase = envPtr ? 1 : 0;
+                            for (size_t i = 0; i < node->arguments.size(); ++i) {
+                                if (i + argBase < fnArgValues.size() &&
+                                    argIsWeakHandleAccessorTemp(node->arguments[i].get())) {
+                                    releaseMildControlBlock(fnArgValues[i + argBase],
+                                                            "fnparam.temparg.mild");
+                                }
+                            }
+                        }
                         return;
                     }
                 }

@@ -103,6 +103,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `version:` dep rebuilds with the registry absent.
 
 ### Fixed
+- **The shipped `filter`/`map` over a `Vec<mild<T>>` no longer leaks (#427 defects 6/7, #451
+  closed for this half)** — a call whose callee is a `fn(...)` VALUE is emitted by its own arm:
+  it rebuilds the callee's signature, prepends the hidden environment and builds its own argument
+  list, so the generic call path's pending-temporary release never ran for it. An accessor result
+  handed to such a call therefore kept a stranded reference — the accessor hands its caller an
+  OWNED reference, and a by-value parameter only BORROWS its argument. That is exactly the shape
+  `VecHigherOps::filter` uses inside its monomorphized body (`if (f(self.get(i)))`), so the
+  `filter` fixture leaked one 24 B control block per matching element (48 B/2 measured). The arm
+  now drops each fresh accessor-result argument once the call returns, exactly as the generic
+  path does, and leaves a BOUND accessor result to its binding. Locked in by
+  `test/units/test_weak_handle_closure_call_arg.vyb` (the same value through a closure value, a
+  named function, and a binding, in one run) — and by the shipped `filter` fixture, which is
+  clean under LeakSanitizer for the first time since it was written.
 - **A weak handle's reference is released on the call-argument path too (#427 defects 6/7)** — an
   accessor (`get`/`first`/`last`/`peek`) hands its caller an owned reference on the element's
   shared control block, but a by-value callee only BORROWS its argument: `is_live(v.get(0))` over a
@@ -134,10 +147,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   handle element. Locked in by `test/units/test_vec_weak_handle_element_ownership.vyb`
   (named binding, fresh temp, `get`, and both overwrite forms in one run; LSan is the
   proof, and the asserted values prove no over-release freed a live handle). The
-  analogous `Vec<our<T>>` element reference is a separate, still-open gap, as is the
-  scope-exit cleanup of a weak-handle local declared through a type parameter inside a
-  monomorphized generic body (the remaining `filter` leak); both are measured and filed
-  as #451, and this change deliberately leaves the strong element path untouched.
+  analogous `Vec<our<T>>` element reference is a separate, still-open gap — its control block
+  is allocated and never released too, and LeakSanitizer does not report it; it is measured
+  and filed as #451, so this change deliberately leaves the strong element path untouched.
 - **Two modules that define the same helper name can now be imported together (#432)** — the
   import splice flattened every module's declarations into the importer's namespace under
   their plain names, so the same root cause produced two failures. A **whole-module import**

@@ -1,0 +1,54 @@
+// @test: an accessor result passed to a closure VALUE keeps its reference balanced (#427, #451)
+// @description: A call whose callee is a `fn(...)` VALUE (not a named function) is emitted by
+//   its own arm -- it rebuilds the callee's signature, prepends the hidden environment and
+//   builds its own argument list, so the generic call path's pending-temporary release never
+//   runs for it. That left an accessor result handed to a closure with a stranded reference:
+//   the accessor hands its caller an OWNED reference on the element's control block, and a
+//   by-value parameter only BORROWS its argument. Measured before the fix:
+//   `pred(weak.get(0))` on a `Vec<mild<A>>` leaked 24 B / 1 allocation, while the same shape
+//   through a NAMED function (`take(weak.get(0))`) was already clean -- which is what isolates
+//   it to this arm rather than to generics or to the accessor. This is the shape the stdlib's
+//   `VecHigherOps::filter` uses inside its monomorphized body (`if (f(self.get(i)))`), which is
+//   why the shipped `filter` over a `Vec<mild<T>>` leaked one block per matching element.
+//   A BOUND accessor result is owned by its binding and must not be released here, so both
+//   forms are asserted in one run; the values prove no over-release freed a live handle.
+// @category: ownership, lambda, leak
+// @expect-output: viaClosure=true viaNamed=true viaBound=true same=true
+// @expect-return: 0
+
+import collections
+
+share(all)
+struct A { v<Int> }
+
+// The same predicate as a named function: this route already balanced the reference.
+share(all)
+is_live_named(w<mild<A>>)<Bool> -> {
+    return !w.released()
+}
+
+main()<Int> -> {
+    o<our<A>> = our(A { v: 7 })
+    weak<Vec<mild<A>>> = Vec()
+    weak.push(soft(o))
+
+    pred<fn(mild<A>) -> Bool> = |m<mild<A>>| -> !m.released()
+
+    // (a) an accessor result straight into a closure VALUE: the caller owns the reference
+    // and must drop it after the call returns.
+    viaClosure<Bool> = pred(weak.get(0))
+
+    // (b) the same value through the named-function route.
+    viaNamed<Bool> = is_live_named(weak.get(0))
+
+    // (c) through a binding: the binding owns the accessor's reference and releases it at
+    // scope exit, so nothing may be dropped at the call site as well.
+    held<mild<A>> = weak.get(0)
+    viaBound<Bool> = pred(held)
+
+    println("viaClosure=" + viaClosure.to_string() +
+            " viaNamed=" + viaNamed.to_string() +
+            " viaBound=" + viaBound.to_string() +
+            " same=" + (!held.released()).to_string())
+    return 0
+}
