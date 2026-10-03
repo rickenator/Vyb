@@ -215,7 +215,18 @@ Vyb now has a minimal real runtime model for `our<T>` / `mild<T>`:
   caller instead of cleaning it up before return.
 - `our<T>` copy/assignment/parameter semantics are complete: every storage
   location holds its own strong ref, retained on shared copy and released on
-  scope exit / overwrite. `my<T>` move semantics also ship: use-after-move is
+  scope exit / overwrite. The same rule now holds for a `Vec<mild<T>>` SLOT, which
+  owns one weak count on its element's control block: `push`/`set` take it (a fresh
+  `soft(...)` argument also drops the count it was created with), the `get` accessor
+  hands its caller an owned weak ref, an overwrite drops the slot's old ref, and the
+  Vec's reclaim drops one per element. Without that pair a pushed weak handle's block
+  was never freed (LeakSanitizer: one 24 B block per element) and an accessor result
+  released by its binding underflowed the count. The analogous `Vec<our<T>>` element
+  reference is a separate, still-open gap — its control block is allocated and never
+  released either, and LeakSanitizer does not report it — nor does a weak-handle local
+  declared through a type parameter get its scope-exit release inside a monomorphized
+  generic body (`stdlib/collections` `filter`/`map`). Both are measured and filed as
+  #451. `my<T>` move semantics also ship: use-after-move is
   rejected at compile time, ownership transfers on assignment / init / `my`
   parameter / move-capture, and a moved binding can be revived by reassignment
   (`test/ownership/`). What remains is not the move checker but the **drop path**:

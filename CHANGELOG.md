@@ -103,6 +103,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `version:` dep rebuilds with the registry absent.
 
 ### Fixed
+- **A `Vec<mild<T>>` slot owns its element's weak reference (#427 defects 6/7)** — a Vec
+  slot is a storage location, so it owns its own count on the element's shared control
+  block; for a weak handle that count was never taken and never released. A weak handle
+  pushed into a `Vec<mild<T>>` kept its control block — and the object it pointed at —
+  alive forever once the last strong owner dropped, which LeakSanitizer reported as one
+  24 B block per pushed element (`test/units/test_vec_handle_iteration.vyb` 24 B/1,
+  `test_filter_vec_mild_handles.vyb` 48 B/2). The mirror-image half of the same root
+  cause was worse than a leak: the `get` accessor handed back a pointer while the binding
+  that received it released a reference the accessor never took, so the weak count
+  *underflowed* and the block was hidden the same way. Now `push`/`set` retain the slot's
+  own weak count (and a fresh `soft(...)` argument drops the count it was created with,
+  which the generic call path does but a Vec method call never ran), `get` hands its
+  caller an owned weak reference, an overwrite drops the overwritten slot's reference, the
+  Vec's reclaim drops one per element, and a Vec deep copy retains each cloned handle.
+  `normalizeVecStringElement` also wrapped ANY opaque pointer into a `{ ptr, i64 }` String
+  struct — for a handle slot that stored a bogus 16-byte String in an 8-byte slot and
+  called `strlen()` on the control block — so that canonicalization is now skipped for a
+  handle element. Locked in by `test/units/test_vec_weak_handle_element_ownership.vyb`
+  (named binding, fresh temp, `get`, and both overwrite forms in one run; LSan is the
+  proof, and the asserted values prove no over-release freed a live handle). The
+  analogous `Vec<our<T>>` element reference is a separate, still-open gap, as is the
+  scope-exit cleanup of a weak-handle local declared through a type parameter inside a
+  monomorphized generic body (the remaining `filter` leak); both are measured and filed
+  as #451, and this change deliberately leaves the strong element path untouched.
 - **Two modules that define the same helper name can now be imported together (#432)** — the
   import splice flattened every module's declarations into the importer's namespace under
   their plain names, so the same root cause produced two failures. A **whole-module import**
