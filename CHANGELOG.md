@@ -103,6 +103,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `version:` dep rebuilds with the registry absent.
 
 ### Fixed
+- **Two modules that define the same helper name can now be imported together (#432)** — the
+  import splice flattened every module's declarations into the importer's namespace under
+  their plain names, so the same root cause produced two failures. A **whole-module import**
+  refused to compile (`Duplicate symbol after splice: 'hexval'`) even when the program never
+  named the symbol — this blocked VybForge's `native/train/encode_corpus.vyb`, whose
+  `tokenizer.vyb` and `json_parse.vyb` each define their own `hexval`, so that driver could
+  not be compiled or run at all. A **subset import** that carried a private helper did
+  something worse: the carry was skipped as a duplicate, so the module's internal call
+  silently bound to another module's same-named definition (standalone module B printed `2`,
+  while A + subset-B printed `1 1`). Each module's declarations now get a per-module identity
+  where they need one: a declaration **private** to its declaring module (not in that
+  module's `share` set) is renamed to `__pv_<declaring-module>_<name>` and the module's own
+  references are rewritten, so two modules may each define a private `hexval` and each
+  module's callers bind to their own; and a **shared** name already contributed by an earlier
+  import is likewise module-local — the first module to contribute a shared name keeps the
+  plain one, so the importing program's unqualified name means that module's while every
+  module still calls its own. The identity is keyed on the declaring module, so a private
+  symbol keeps one identity however many import hops carry it, and the duplicate check now
+  recognizes an already-mangled name as the same declaration rather than a fresh conflict.
+  A genuine duplicate that still cannot be resolved reports the import site *and both
+  defining modules*. Locked in by `test/modules/test_import_private_name_identity.vyb`
+  (whole import, private-name collision), `test_import_private_name_binding.vyb` (subset
+  import, the silent mis-binding) and `test_import_shared_name_shadowing.vyb` (two modules
+  exporting the same name), with `test/modules/privname_lib/{pna,pnb,pnc,pnd}.vyb`.
 - **A module now resolves its own `extern "C"` declarations after importing a binding
   (#442)** — a file that declares its own FFI entry points could not use them if it also
   imported a module that (transitively) imports a binding declaring the same name: every

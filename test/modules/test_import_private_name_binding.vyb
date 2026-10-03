@@ -1,0 +1,20 @@
+// @test: a subset import binds a carried private helper to its OWN module (#432)
+// @description: The subset form never failed -- it did something worse. `import pnb::{fb}`
+//   carries B's private `hexval` as a dependency, but the carry was skipped as a duplicate of
+//   A's already-spliced `hexval`, so `fb` silently called A's helper: standalone B prints 2,
+//   while A+subset-B printed `1 1`. Giving the carried private declaration its own identity
+//   (which is also why it is no longer a duplicate to skip) makes fb bind to B's own helper.
+// @category: modules, imports
+// @expect-output: fa=1 fb=2
+// @expect-return: 0
+// @env: VYB_MODULE_PATH=test/modules/privname_lib
+
+import pna::{fa}
+import pnb::{fb}
+
+main()<Int> -> {
+    a<Int> = fa(1)
+    b<Int> = fb(1)
+    println("fa=" + a.to_string() + " fb=" + b.to_string())
+    return 0
+}

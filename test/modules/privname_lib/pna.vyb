@@ -1,0 +1,16 @@
+// @test: #432 helper — module A: a SHARED public helper plus a private same-named one
+// @description: Loaded via VYB_MODULE_PATH by the #432 fixtures. `hexval` is A's private
+//   implementation detail; `fa` is its shared surface and calls it. Parse-only.
+// @category: modules, imports
+// @expect: pass
+// @parse-only: true
+
+share(all)
+hexval(c<Int>)<Int> -> {
+    return c
+}
+
+share(all)
+fa(c<Int>)<Int> -> {
+    return hexval(c)
+}
