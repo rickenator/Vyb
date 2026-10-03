@@ -1,0 +1,17 @@
+// @test: #432 helper — module D: exports its own hexval (returning c+2) and a caller
+// @description: Loaded via VYB_MODULE_PATH by test_import_shared_name_shadowing.vyb. Its
+//   hexval collides with module C's EXPORTED hexval, which the fixture imports first; D's
+//   declaration therefore becomes module-local and fd still calls D's own. Parse-only.
+// @category: modules, imports
+// @expect: pass
+// @parse-only: true
+
+share(all)
+hexval(c<Int>)<Int> -> {
+    return c + 2
+}
+
+share(all)
+fd(c<Int>)<Int> -> {
+    return hexval(c)
+}

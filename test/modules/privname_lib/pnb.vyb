@@ -1,0 +1,15 @@
+// @test: #432 helper — module B: a PRIVATE helper named exactly like A's, plus a shared caller
+// @description: Loaded via VYB_MODULE_PATH by the #432 fixtures. B's `hexval` returns c+1, so a
+//   mis-binding to A's `hexval` shows up as a wrong value rather than a compile error. Parse-only.
+// @category: modules, imports
+// @expect: pass
+// @parse-only: true
+
+hexval(c<Int>)<Int> -> {
+    return c + 1
+}
+
+share(all)
+fb(c<Int>)<Int> -> {
+    return hexval(c)
+}

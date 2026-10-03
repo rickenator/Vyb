@@ -31,6 +31,34 @@ that masks the bug: *importing the colliding name* grants it into the importer's
 the failure only appears when the importer declares its own extern without importing that
 name (`test/modules/test_import_ffi_sibling.vyb`).
 
+**Per-module identity for spliced declarations (#432).** The splice flattens a module's
+declarations into the importer's namespace, so two modules may contribute the same name.
+The rule:
+
+- A declaration **private** to its declaring module (not in that module's `share` set) is
+  an implementation detail: the splice renames it to a per-module name (`__pv_<module>`_
+  `<name>`, keyed on the *declaring* module so it keeps one identity across import hops)
+  and rewrites the module's own references to it. Two modules may therefore each define a
+  private `hexval`, and each module's internal callers bind to their own.
+- A declaration whose **shared** name is already in the importer's scope — because an
+  earlier import (or a carried dependency) contributed it — also takes a per-module
+  identity: **the first module to contribute a shared name keeps the plain one**, and a
+  later module's declaration of that name becomes module-local. So `import b;` of a module
+  that shares a name with an already-imported module compiles and runs, and each module's
+  internal calls still resolve to its own definition.
+
+Before this, the same root cause produced two different failures: a whole-module import
+**refused to compile** (`Duplicate symbol after splice: '<name>'`) even when the program
+never named the symbol, and a subset import that carried a private helper **silently bound
+one module's internal call to another module's same-named definition** (standalone B
+printed `2`, while A+subset-B printed `1`). A genuine duplicate that still cannot be
+resolved reports the import site *and both defining modules*.
+
+Fixtures: `test/modules/test_import_private_name_identity.vyb` (whole import, private-name
+collision), `test_import_private_name_binding.vyb` (subset import, the silent mis-binding),
+`test_import_shared_name_shadowing.vyb` (two modules exporting the same name), with
+`test/modules/privname_lib/{pna,pnb,pnc,pnd}.vyb`.
+
 ## Search path precedence
 
 For path imports like `import a::b::c`, resolver search order is:

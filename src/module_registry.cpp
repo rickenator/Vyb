@@ -860,6 +860,33 @@ static std::string mangledNamespaceName(const std::string& ns, const std::string
     return "__ns_" + ns + "_" + symbol;
 }
 
+// #432: the name a module's PRIVATE declaration takes when it is spliced into an importer.
+// A module's private declarations are its implementation details: flattening them under their
+// plain names made two modules' same-named helpers collide in a whole-module import
+// (`Duplicate symbol after splice`) and -- worse -- let a subset import that carried one bind
+// silently to another module's same-named definition. Keyed on the DECLARING module, so a
+// private symbol keeps one identity however many import hops carry it.
+static std::string privateMangledName(const std::string& moduleKey, const std::string& symbol) {
+    // FNV-1a over the canonical module key, rendered as 8 hex digits: short, identifier-safe,
+    // and stable for a given checkout layout.
+    uint64_t h = 1469598103934665603ull;
+    for (unsigned char c : moduleKey) {
+        h ^= static_cast<uint64_t>(c);
+        h *= 1099511628211ull;
+    }
+    static const char* hexDigits = "0123456789abcdef";
+    std::string tag;
+    for (int shift = 28; shift >= 0; shift -= 4) {
+        tag.push_back(hexDigits[(h >> shift) & 0xfu]);
+    }
+    return "__pv_" + tag + "_" + symbol;
+}
+
+// Has this name already been given a per-module private identity by an earlier import hop?
+static bool isPrivateMangledName(const std::string& name) {
+    return name.rfind("__pv_", 0) == 0;
+}
+
 static void rewriteNamespaceRawStmt(ast::Statement* stmt, const ModuleNSMap& localNS);
 static void rewriteNamespaceStmt(ast::StmtPtr& stmt, const ModuleNSMap& localNS) {
     rewriteNamespaceRawStmt(stmt.get(), localNS);
@@ -1995,6 +2022,53 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
                 // requested name is satisfied, so capture whether this was a subset
                 // import once here rather than testing the now-mutated set mid-loop.
                 const bool isSubsetImport = !requestedNames.empty();
+                // #432: names whose DECLARING module does not export them -- that module's
+                // private implementation details. The splice gives each one a per-module
+                // identity (`privateMangled`) so two modules' same-named private helpers
+                // cannot collide, and a carried private helper cannot silently bind to
+                // another module's same-named definition. Built from the imported module's
+                // (already resolved) body, keyed by the declaring module so a private symbol
+                // keeps one identity however many import hops carry it. Names already carrying
+                // the private prefix were mangled by an earlier hop and stay as they are.
+                NSSymbolMap privateMangled;
+                if (!isNamespaceImport) {
+                    for (const auto& bodyStmt : importedRecord.module->body) {
+                        if (!bodyStmt || isMainFunction(bodyStmt)) continue;
+                        if (dynamic_cast<ast::ImportDeclaration*>(bodyStmt.get())) continue;
+                        std::unordered_set<std::string> stmtNames;
+                        collectDeclarationNames(bodyStmt.get(), stmtNames);
+                        for (const std::string& n : stmtNames) {
+                            if (isPrivateMangledName(n)) continue;
+                            // #432: only a name that would actually COLLIDE -- one this
+                            // importer's scope already has, because an earlier import (or a
+                            // carried dependency) contributed it -- needs an identity of its
+                            // own here. A name with no conflict stays exactly as it was, so a
+                            // module's private helpers are untouched unless two modules really
+                            // do define the same one. That is the whole failure mode: the
+                            // whole-module splice refused to compile, and the subset splice
+                            // skipped the carried private helper (silently binding the
+                            // module's internal call to the other module's definition). The
+                            // first module to contribute a name keeps the plain one.
+                            // #432: a name this importer's scope already has needs an identity
+                            // of its own only when it comes from a DIFFERENT module -- a real
+                            // cross-module collision. The same origin arriving twice is the
+                            // same declaration (a core-aspect clone crossing two import
+                            // paths), which the duplicate check below already resolves; giving
+                            // those a new name would break aspect and bind dispatch. The first
+                            // module to contribute a name keeps the plain one.
+                            if (seenNames.count(n) != 0 && seenOrigins.count(n) != 0 &&
+                                seenOrigins[n] != declaringOrigin(n)) {
+                                privateMangled[n] = privateMangledName(declaringOrigin(n), n);
+                                if (std::getenv("VYB_TRACE_MANGLE")) {
+                                    std::fprintf(stderr, "[mangle] import '%s': name '%s' (declared by %s, in scope from %s) -> %s\n",
+                                                 importPath.importSpelling.c_str(), n.c_str(),
+                                                 declaringOrigin(n).c_str(), seenOrigins[n].c_str(),
+                                                 privateMangled[n].c_str());
+                                }
+                            }
+                        }
+                    }
+                }
                 for (auto& importedStmt : importedRecord.module->body) {
                     if (isMainFunction(importedStmt)) {
                         throw std::runtime_error("Imported module must not define main(): " + importedRecord.sourcePath.string());
@@ -2089,6 +2163,29 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
                         }
                     }
 
+                    // #432: a declaration whose name would collide with one already in this
+                    // importer's scope takes a per-module identity here, before the duplicate
+                    // check, so two modules' same-named helpers cannot collide and a carried
+                    // private helper cannot bind to another module's same-named definition.
+                    // EVERY spliced statement then has its references rewritten to those
+                    // identities -- not just the renamed declaration -- or the module's own
+                    // callers (a shared function calling a private helper) would keep naming
+                    // the plain name and pick up the other module's definition.
+                    if (!isNamespaceImport) {
+                        if (!isPrivateMangledName(name)) {
+                            auto privIt = privateMangled.find(originName);
+                            if (privIt != privateMangled.end()) {
+                                if (!renameDeclaration(copyStmt, privIt->second)) {
+                                    throw std::runtime_error("Cannot give declaration '" + originName +
+                                                             "' from " + importedRecord.sourcePath.string() +
+                                                             " a module-local identity");
+                                }
+                                name = privIt->second;
+                            }
+                        }
+                        mangleBareStmt(copyStmt, privateMangled);
+                    }
+
                     if (seenNames.find(name) != seenNames.end()) {
                         // Same origin declaration deep-cloned through a shared dependency
                         // (e.g. core::aspects surfaced via this module's own core
@@ -2097,8 +2194,12 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
                         // available by a whole import of a module that re-exports it:
                         // skip rather than treat as a real conflict. The requested name
                         // was already erased above, so the missing-import check is happy.
-                        if (seenOrigins.count(name) &&
-                            seenOrigins[name] == declaringOrigin(originName)) {
+                        // A per-module private identity (#432) means the name itself
+                        // identifies the declaration, so seeing it twice is the same
+                        // declaration arriving by another path.
+                        if (isPrivateMangledName(name) ||
+                            (seenOrigins.count(name) &&
+                             seenOrigins[name] == declaringOrigin(originName))) {
                             continue;
                         }
                         const bool explicitlyRequested = requestedRenames.count(originName) > 0;
@@ -2110,9 +2211,14 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
                             // here, so re-splicing it would only collide.
                             continue;
                         }
+                        // #432: name BOTH definitions -- the useful fact is which modules
+                        // define the same symbol, not which import happened last.
+                        std::string otherOrigin = seenOrigins.count(name) ? seenOrigins[name] : std::string("(unknown)");
                         throw std::runtime_error("Duplicate symbol after splice: '" + name +
                                                  "' while importing '" + importPath.importSpelling + "' from " +
-                                                 importPath.importerFile + ":" + std::to_string(importPath.line));
+                                                 importPath.importerFile + ":" + std::to_string(importPath.line) +
+                                                 " -- already defined by " + otherOrigin +
+                                                 ", also defined by " + declaringOrigin(originName));
                     }
 
                     if (isNamespaceImport) {

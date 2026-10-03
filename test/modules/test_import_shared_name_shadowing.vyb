@@ -1,0 +1,22 @@
+// @test: two modules that EXPORT the same helper name can both be imported (#432)
+// @description: The VybForge shape (tokenizer.vyb and json_parse.vyb each share their own
+//   `hexval` reader). The first module to contribute a shared name keeps the plain one -- the
+//   importing program's unqualified `hexval` means module C's, which the fixture asserts -- and
+//   a later module's declaration of a name already in scope takes a per-module identity, so its
+//   own callers still bind to its own helper (fd=3 from D's c+2, not C's 1) and the program
+//   compiles instead of failing with `Duplicate symbol after splice`. This is why VybForge's
+//   native/train/encode_corpus.vyb could not be compiled or run at all.
+// @category: modules, imports
+// @expect-output: fc=1 fd=3
+// @expect-return: 0
+// @env: VYB_MODULE_PATH=test/modules/privname_lib
+
+import pnc::{fc}
+import pnd
+
+main()<Int> -> {
+    c<Int> = fc(1)
+    d<Int> = fd(1)
+    println("fc=" + c.to_string() + " fd=" + d.to_string())
+    return 0
+}

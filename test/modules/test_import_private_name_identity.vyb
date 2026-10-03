@@ -1,0 +1,24 @@
+// @test: a whole-module import of a module whose private helper name collides (#432)
+// @description: `import pnb` splices every declaration of B, including B's PRIVATE `hexval`,
+//   which returns c+1. With A's `hexval` already spliced (carried by `import pna::{fa}`), the
+//   whole-module import used to fail outright -- `Duplicate symbol after splice: 'hexval'` --
+//   even though the program never names `hexval` itself. A module's private declarations are its
+//   implementation details, so the splice now gives them a per-module identity instead of
+//   flattening them under their plain name. `fb` must therefore still call B's own hexval
+//   (fb(1)=2, not A's 1): a fixture that asserted only "it compiles" would miss the silent
+//   mis-binding the same root cause produced in the subset form
+//   (test_import_private_name_binding.vyb).
+// @category: modules, imports
+// @expect-output: fa=1 fb=2
+// @expect-return: 0
+// @env: VYB_MODULE_PATH=test/modules/privname_lib
+
+import pna::{fa}
+import pnb
+
+main()<Int> -> {
+    a<Int> = fa(1)
+    b<Int> = fb(1)
+    println("fa=" + a.to_string() + " fb=" + b.to_string())
+    return 0
+}

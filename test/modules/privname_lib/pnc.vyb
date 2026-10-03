@@ -1,0 +1,17 @@
+// @test: #432 helper — module C: shares BOTH its hexval and its caller
+// @description: Loaded via VYB_MODULE_PATH by test_import_shared_name_shadowing.vyb, which
+//   needs two modules that each EXPORT `hexval` (the VybForge shape: tokenizer.vyb and
+//   json_parse.vyb both share their own hexval reader). Parse-only.
+// @category: modules, imports
+// @expect: pass
+// @parse-only: true
+
+share(all)
+hexval(c<Int>)<Int> -> {
+    return c
+}
+
+share(all)
+fc(c<Int>)<Int> -> {
+    return hexval(c)
+}
