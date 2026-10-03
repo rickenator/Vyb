@@ -1,0 +1,74 @@
+// @test: a closure held in a struct field is owned by that field (#439)
+// @description: A `fn` field is reference counted like any other owned field: the
+//   struct literal takes one reference on the capture environment, a member store
+//   drops the replaced field's reference and takes one for the new value, a struct
+//   deep copy (by-value parameter, Vec element, returned value) retains what it
+//   clones, and reclaiming the struct drops the field's reference -- which is also
+//   what frees a boxed mutable capture's heap cell. Without that, both the literal's
+//   and the assigned closure's environments leaked (48 B / 2 allocations for this
+//   shape) and a field whose value came from a binding shared the binding's
+//   environment without a reference of its own. Functional output alone cannot see
+//   it, so this fixture is also the LeakSanitizer proof.
+// @category: ownership, struct, lambda, closure
+// @expect-output: lit=1 assign=2 mut=13 byvalue=4 vec=5 ret=6
+// @expect-return: 0
+
+struct Holder {
+    f<fn() -> Int>
+}
+
+callField(h<Holder>)<Int> -> {
+    g<fn() -> Int> = h.f
+    return g()
+}
+
+makeHolder()<Holder> -> {
+    n<Int> = 6
+    return Holder { f = || -> { return n } }
+}
+
+main()<Int> -> {
+    # a struct literal's closure field owns its own environment reference.
+    a<Int> = 1
+    h<Holder> = Holder { f = || -> { return a } }
+    g<fn() -> Int> = h.f
+    literal<Int> = g()
+
+    # a member store releases the replaced field's reference and owns the new one.
+    b<Int> = 2
+    h.f = || -> { return b }
+    k<fn() -> Int> = h.f
+    assign<Int> = k()
+
+    # a boxed mutable capture in a field: the write lands in the environment's cell.
+    m<Int> = 12
+    h.f = || -> {
+        m = m + 1
+        return m
+    }
+    q<fn() -> Int> = h.f
+    mutated<Int> = q()
+
+    # a by-value struct parameter is deep-copied; the copy owns its field's reference.
+    c<Int> = 4
+    w<Holder> = Holder { f = || -> { return c } }
+    byvalue<Int> = callField(w)
+
+    # the same for a struct element of a Vec.
+    d<Int> = 5
+    v<Vec<Holder>> = Vec()
+    v.push(Holder { f = || -> { return d } })
+    e<Holder> = v.get(0)
+    r<fn() -> Int> = e.f
+    vec<Int> = r()
+
+    # and for a struct returned from a function.
+    z<Holder> = makeHolder()
+    s<fn() -> Int> = z.f
+    ret<Int> = s()
+
+    println("lit=" + literal.to_string() + " assign=" + assign.to_string() +
+            " mut=" + mutated.to_string() + " byvalue=" + byvalue.to_string() +
+            " vec=" + vec.to_string() + " ret=" + ret.to_string())
+    return 0
+}

@@ -251,7 +251,7 @@ void LLVMCodegen::handleVecPush(vyb::ast::CallExpression* node, llvm::Value* vec
     // own a reference of its own (the pushed value may be a fresh literal at
     // refcount 0, or a binding that releases on scope exit). reclaimVecStorage
     // drops exactly this one when the Vec is reclaimed.
-    retainClosureElement(valueToAdd, elementType, typeOfNode(node->arguments[0]).get(), nullptr);
+    retainClosureRef(valueToAdd, elementType, typeOfNode(node->arguments[0]).get(), nullptr);
 
     // Calculate the actual element size using DataLayout
     llvm::DataLayout dataLayout(module.get());
@@ -750,7 +750,7 @@ void LLVMCodegen::handleVecGet(vyb::ast::CallExpression* node, llvm::Value* vecP
         // reference (the binding path treats a call result as already retained) --
         // same rule as the String element above. `validIncoming` follows the
         // retain's blocks so the merge PHI below names the right predecessor.
-        retainClosureElement(element, elementLLVMType, typeOfNode(node).get(), &validIncoming);
+        retainClosureRef(element, elementLLVMType, typeOfNode(node).get(), &validIncoming);
     } else {
         element = builder->CreateLoad(elementLLVMType, elementPtr, "vec.element");
     }
@@ -857,7 +857,7 @@ void LLVMCodegen::handleVecLast(vyb::ast::CallExpression* node, llvm::Value* vec
         // reference (the binding path treats a call result as already retained) --
         // same rule as the String element above. `validIncoming` follows the
         // retain's blocks so the merge PHI below names the right predecessor.
-        retainClosureElement(element, elementLLVMType, typeOfNode(node).get(), &validIncoming);
+        retainClosureRef(element, elementLLVMType, typeOfNode(node).get(), &validIncoming);
     } else {
         element = builder->CreateLoad(elementLLVMType, elementPtr, "vec.last.element");
     }
@@ -1023,7 +1023,7 @@ void LLVMCodegen::handleVecSet(vyb::ast::CallExpression* node, llvm::Value* vecP
         // Vec's reclaim releases exactly one per slot.
         llvm::Value* oldElem = builder->CreateLoad(elementLLVMType, elementPtr, "vec.set.old_elem");
         releaseClosureValue(oldElem);
-        retainClosureElement(value, elementLLVMType, typeOfNode(node->arguments[1]).get(), nullptr);
+        retainClosureRef(value, elementLLVMType, typeOfNode(node->arguments[1]).get(), nullptr);
     } else if (elementLLVMType && elementLLVMType->isStructTy() &&
                typeOfNode(node->arguments[1]) &&
                isKnownStructTypeNode(typeOfNode(node->arguments[1]).get()) &&

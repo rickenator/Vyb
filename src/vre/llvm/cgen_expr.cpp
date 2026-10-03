@@ -260,6 +260,14 @@ void LLVMCodegen::visit(vyb::ast::ObjectLiteral* node) {
         const vyb::ast::TypeNode* fieldAst =
             (fieldIndex >= 0 && (size_t)fieldIndex < objectFieldTypes.size())
                 ? objectFieldTypes[(size_t)fieldIndex].get() : nullptr;
+        // #439: a closure field owns one reference on its capture environment
+        // whatever the initializer is -- a fresh literal starts at refcount 0, a
+        // binding keeps its own reference, and a call result's reference belongs to
+        // the temporary. The struct's reclaim (reclaimStructOwnedFieldsAt) drops
+        // exactly this reference, so the field must take it unconditionally.
+        if (fieldAst && fieldValue && isFnTypeNode(fieldAst)) {
+            retainClosureRef(fieldValue, fieldValue->getType(), fieldAst, nullptr);
+        }
         if (fieldValue && borrowedRead && fieldAst) {
             if (objFieldTypeIsVec(fieldAst) && isVecStructType(fieldValue->getType())) {
                 // Deep-copy a borrowed Vec so the field owns an independent buffer.

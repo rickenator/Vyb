@@ -885,6 +885,11 @@ bool LLVMCodegen::structTypeHasOwnedFields(const vyb::ast::TypeNode* astType) co
     for (const auto& f : fields) {
         if (!f) continue;
         if (isVecTypeNode(f.get()) || isOwnedFieldString(f.get())) return true;
+        // #439: a closure field owns one reference on its capture environment; the
+        // struct is not reference-counted by the environment, so the field must be
+        // released when the struct is reclaimed -- and that reclaim only runs for a
+        // struct the analysis treats as owning fields.
+        if (isFnTypeNode(f.get())) return true;
         // A `my<Struct>` field owns a heap allocation; reclaim it on scope exit so
         // the pointed-to struct (and any of its owned fields) is freed once the
         // owning binding drops.
@@ -1051,6 +1056,14 @@ void LLVMCodegen::reclaimStructOwnedFieldsAt(llvm::Value* structPtr,
                     builder->CreateStore(nullPtr, fptr);
                 }
             }
+        } else if (isFnTypeNode(f) && fLLVM && isClosureStructType(fLLVM)) {
+            // #439: a closure field owns one reference on its capture environment
+            // (the struct literal, a member store and a struct deep copy each take
+            // it). Drop it here and clear the slot so a second reclaim of the same
+            // struct cannot release it twice.
+            llvm::Value* clv = builder->CreateLoad(fLLVM, fptr, "reclaim.closure");
+            releaseClosureValue(clv);
+            builder->CreateStore(llvm::ConstantAggregateZero::get(fLLVM), fptr);
         } else if (isRefTypeNode(f, "mild") || isRefTypeNode(f, "our")) {
             // A ref field claims a count on a shared control block. Release it on
             // scope exit so the control block is freed once the last owner drops.
@@ -1695,6 +1708,12 @@ llvm::Value* LLVMCodegen::generateStructDeepCopy(llvm::Value* structValue,
                     continue;
                 }
             }
+        } else if (isFnTypeNode(f) && fLLVM && isClosureStructType(fLLVM)) {
+            // #439: a closure field is a reference-counted value -- the copy owns a
+            // reference of its own, which reclaimStructOwnedFieldsAt drops in step.
+            retainClosureValue(fv);
+            outVal = builder->CreateInsertValue(outVal, fv, i, "sdc.closure.own");
+            continue;
         } else if (isRefTypeNode(f, "mild") || isRefTypeNode(f, "our")) {
             if (fLLVM->isPointerTy()) {
                 if (isRefTypeNode(f, "mild")) retainMildControlBlock(fv, "sdc.mild");
@@ -1894,11 +1913,11 @@ bool LLVMCodegen::isClosureElementType(llvm::Type* elementLLVMType,
     return isFnTypeNode(astElemType) && isClosureStructType(elementLLVMType);
 }
 
-void LLVMCodegen::retainClosureElement(llvm::Value* element, llvm::Type* elementLLVMType,
-                                       const vyb::ast::TypeNode* astElemType,
-                                       llvm::BasicBlock** validIncoming) {
-    if (!isClosureElementType(elementLLVMType, astElemType)) return;
-    retainClosureValue(element);
+void LLVMCodegen::retainClosureRef(llvm::Value* value, llvm::Type* valueLLVMType,
+                                   const vyb::ast::TypeNode* astType,
+                                   llvm::BasicBlock** validIncoming) {
+    if (!isClosureElementType(valueLLVMType, astType)) return;
+    retainClosureValue(value);
     // A retain emits its own blocks, so report where the builder ended up: a
     // merge PHI built afterwards must name that block as its predecessor.
     if (validIncoming) *validIncoming = builder->GetInsertBlock();
