@@ -6071,6 +6071,15 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
             }
         }
         int tempKind = freshOwningCallArgKind(node->arguments[i].get());
+        // #427 defects 6/7: an accessor (`get`/`first`/`last`/`peek`) hands its caller an
+        // OWNED reference on a weak-handle slot, and a by-value callee only borrows its
+        // argument -- so an accessor result passed straight into a call must have that
+        // reference dropped once the callee returns, exactly like a fresh `soft(...)`
+        // argument (kind 2). A BOUND accessor result is owned by its binding, which
+        // releases it at scope exit, so it is not released here.
+        if (tempKind == 0 && argIsWeakHandleAccessorTemp(node->arguments[i].get())) {
+            tempKind = 2;
+        }
         if (tempKind != 0) {
             TempRelease tr{tempKind, argValue, nullptr, nullptr};
             if (typeOfNode(node->arguments[i])) {

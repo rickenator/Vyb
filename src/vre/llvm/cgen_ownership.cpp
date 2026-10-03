@@ -2132,17 +2132,24 @@ void LLVMCodegen::retainClosureRef(llvm::Value* value, llvm::Type* valueLLVMType
 // does not report it -- so a uniform fix here would not be a measured improvement and
 // risks over-releasing a path whose current balance is not yet explained. Filed on its
 // own; this change deliberately leaves the strong element path byte-for-byte as it was.
-bool LLVMCodegen::elementTypeIsMildHandle(const vyb::ast::TypeNode* elemAst) {
+bool LLVMCodegen::elementTypeIsHandle(const vyb::ast::TypeNode* elemAst,
+                                      const std::string& wrapper) {
     if (!elemAst) return false;
     std::string name = elemAst->toString();
-    // Inside a monomorphized generic body the element AST still names the type parameter
-    // (`T`); the concrete instantiation is what decides ownership, so resolve it through
-    // the active substitutions before classifying.
+    // Inside a monomorphized generic body the AST still names the type parameter (`T`);
+    // the concrete instantiation is what decides ownership, so resolve it through the
+    // active substitutions before classifying. The substituted form is an APPLIED name
+    // (`mild<A>`), so compare the wrapper prefix rather than the whole string.
     if (!currentTypeSubstitutions.empty()) {
         auto it = currentTypeSubstitutions.find(name);
         if (it != currentTypeSubstitutions.end()) name = it->second;
     }
-    return name.rfind("mild<", 0) == 0;
+    auto lt = name.find('<');
+    return (lt == std::string::npos ? name : name.substr(0, lt)) == wrapper;
+}
+
+bool LLVMCodegen::elementTypeIsMildHandle(const vyb::ast::TypeNode* elemAst) {
+    return elementTypeIsHandle(elemAst, "mild");
 }
 
 // The same "storage location owns one reference" rule for a Vec slot: an accessor
