@@ -1,0 +1,43 @@
+// @test: two escaping closures over one binding share it (per-binding cell)
+// @description: #384 checkpoint (c). A binding mutably captured by a closure that
+//   escapes is promoted to ONE refcounted cell, so two escaping closures over that
+//   binding observe each other's writes -- the second bump sees the first bump's value
+//   (`a=1 b=2 a2=3`). Before this, each escaping closure boxed a private copy of the
+//   binding's value, so both bumps reported 1 and the third call reported 2 from the
+//   first closure's own cell, and the frame never saw any of them. A READ-ONLY sibling
+//   still keeps its snapshot: only a mutable capture joins the shared cell (see
+//   `test_closure_two_over_one_binding.vyb` for the immutable-snapshot contract and the
+//   non-escaping stack path). LeakSanitizer-clean.
+// @category: lambda, closure, capture, mutable, ownership
+// @expect-output: a=1 b=2 a2=3
+// @expect-return: 0
+
+struct Pair {
+    bump<fn() -> Int>,
+    other<fn() -> Int>
+}
+
+makePair()<Pair> -> {
+    c<Int> = 0
+    return Pair {
+        bump = || -> {
+            c = c + 1
+            return c
+        },
+        other = || -> {
+            c = c + 1
+            return c
+        }
+    }
+}
+
+main()<Int> -> {
+    p<Pair> = makePair()
+    f<fn() -> Int> = p.bump
+    g<fn() -> Int> = p.other
+    a<Int> = f()
+    b<Int> = g()
+    a2<Int> = f()
+    println("a=" + a.to_string() + " b=" + b.to_string() + " a2=" + a2.to_string())
+    return 0
+}

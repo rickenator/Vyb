@@ -1,0 +1,51 @@
+// @test: a mutation through an escaping closure is visible to the defining frame
+// @description: #384 checkpoint (c). A binding that an escaping closure mutably
+//   captures is promoted to ONE refcounted cell shared by the frame and every
+//   environment that captures it -- the frame holds one reference, each capturing
+//   environment another, and the last owner runs the cell's destructor, which
+//   reclaims the payload (a String buffer, a Vec's storage, a struct's owned fields)
+//   and frees the block. Before this, each escaping closure boxed a PRIVATE copy, so
+//   the frame never observed the mutation (`frame=0` where this fixture now asserts
+//   `frame=1`) and two escaping closures over one binding each saw their own value.
+//   The stack path is untouched: a closure that does NOT escape still writes back
+//   through the frame's storage and keeps its snapshot semantics
+//   (`test_closure_mutable_capture_inplace_mutation.vyb`,
+//   `test_closure_two_over_one_binding.vyb`). LeakSanitizer-clean, since the shared
+//   cell's lifetime is the interesting part: the frame exits first here and the
+//   closure outlives it.
+// @category: lambda, closure, capture, mutable, ownership
+// @expect-output: frame=2 cell=2 boxed=2
+// @expect-return: 0
+
+makeBumper()<fn() -> Int> -> {
+    n<Int> = 0
+    return || -> {
+        n = n + 1
+        return n
+    }
+}
+
+main()<Int> -> {
+    # The closure escapes into a Vec kept in the frame, so the frame is still alive
+    # when the mutation happens and must observe it.
+    n<Int> = 0
+    v<Vec<fn() -> Int>> = Vec()
+    v.push(|| -> {
+        n = n + 1
+        return n
+    })
+    f<fn() -> Int> = v.get(0)
+    a<Int> = f()
+    b<Int> = f()
+    frame<Int> = n
+
+    # The boxed path: the closure outlives its frame, and the cell carries the value
+    # across the boundary instead of a private copy per closure.
+    g<fn() -> Int> = makeBumper()
+    c<Int> = g()
+    d<Int> = g()
+
+    println("frame=" + frame.to_string() + " cell=" + b.to_string() +
+            " boxed=" + d.to_string())
+    return 0
+}

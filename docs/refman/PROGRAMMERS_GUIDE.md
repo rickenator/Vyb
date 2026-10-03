@@ -167,7 +167,7 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 ### Running the test suite
 
 ```bash
-# 1281 .vyb tests exercised through compile + run + output/return checks
+# 1284 .vyb tests exercised through compile + run + output/return checks
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test
 ```
 
@@ -591,12 +591,17 @@ readMine<fn(Int) -> Int> = |x<Int>| -> mine.n + x
 - A **mutable capture** stores the outer variable's address, so writes inside the
   closure reach the enclosing scope while that frame lives. When the closure value
   can outlive its frame — returned, stored into a struct field or a `Vec` element,
-  or handed to a spawn site — each mutable capture is instead **boxed**: the
-  environment owns a heap cell holding the value (deep-copying what the cell will
-  own), so the closure keeps working after the frame exits and the cell is freed
-  with the environment. A mutable capture whose declared type has no sound cell
-  representation (a borrow, an FFI handle, an optional, an array, or a name the
-  analysis cannot resolve) is still refused when such a closure is returned.
+  or handed to a spawn site — the captured binding is **promoted to one refcounted
+  heap cell shared by the defining frame and every environment that captures it**
+  (the frame reads and writes through the cell's value field, each environment holds
+  a reference, and the last owner's destructor reclaims the payload and frees the
+  block). So the frame observes a mutation made through an escaping closure — a
+  spawner sees the write its spawned thread made once it joins — and two escaping
+  closures over one binding observe each other's writes. A mutable capture whose
+  declared type has no sound cell representation (a borrow, an FFI handle, an
+  optional, an array, or a name the analysis cannot resolve) is still refused when
+  such a closure is returned. A by-value parameter mutably captured by an escaping
+  closure keeps the per-closure boxed cell (its frame does not observe the write).
 - A closure that captures an owned struct **owns its payload**: the captured
   `String`/`Vec` fields stay alive even after the maker's scope exits (the env
   keeps a reference to the owned buffer).
@@ -2632,14 +2637,16 @@ ordinary types.
 | `my<T>` | ❌ | a unique owner must not be in two threads' ownership at once |
 | `their<T>`, `loc<T>` | ❌ | a borrow addresses the spawner's frame |
 | raw pointer (`ptr<T>`, `#[repr(C)]` FFI, `loc<T>` carriers) | ❌ | |
-| closure | iff every capture is, and no capture is mutable | a mutable capture stores the *address* of the outer variable |
+| closure | iff every capture is, and no capture is mutable | a mutable capture is promoted to a refcounted cell shared with the frame (or boxed when it cannot be) |
 
 Because the rule is structural, a `Vec<my<Int>>`, a struct with a `my<T>` field,
 or a `T?` over a borrow are all refused — the check walks fields and variant
 payloads, not just the declared type name. A *mutable* capture is refused unless
-its declared type can be boxed soundly: at a spawn site the compiler boxes it into
-a heap cell owned by the closure environment, so the environment entry is no longer
-an address in the spawner's frame. A borrow, FFI handle, optional, array, tuple or
+its declared type can be boxed soundly: at a spawn site the compiler promotes the
+captured binding to a refcounted cell shared by the spawner's frame and the spawned
+closure's environment (so the spawner observes the write once it joins; the frame
+holds one reference on the cell, each environment another, and the last owner runs
+the cell's destructor). A borrow, FFI handle, optional, array, tuple or
 unresolved name still cannot be boxed, so a mutable capture of one is refused —
 capture by value, or share it as `our(x)`.
 
@@ -2837,7 +2844,7 @@ Canonical suite runner — a Vyb program (`test/run_tests.vyb`), wired into CTes
 as `run-tests`:
 
 ```bash
-./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1281 tests)
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1284 tests)
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --category async  # filter by category
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --json results.json --evidence evidence.json
 ```
