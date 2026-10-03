@@ -720,6 +720,20 @@ public:
         auto it = closureCaptures_.find(n->typeId());
         return it == closureCaptures_.end() ? nullptr : &it->second;
     }
+    // #384 checkpoint (c): which declaration does `name` bind to, searching the
+    // active block scopes from innermost outward? A closure that mutably captures a
+    // name needs this to mark the DECLARATION (the frame's storage is what promotion
+    // changes), since the analyzer reaches the closure after the declaration it
+    // captures -- often in a different function, for a closure written inside a
+    // nested named function. Returns null for a name this analyzer never saw as a
+    // local declaration (a parameter, a global, a field).
+    ast::VariableDeclaration* lookupLocalDeclaration(const std::string& name) const {
+        for (auto it = declScopes.rbegin(); it != declScopes.rend(); ++it) {
+            auto found = it->find(name);
+            if (found != it->end()) return found->second;
+        }
+        return nullptr;
+    }
 private:
     // #392: per-closure capture lists, node-id keyed like the facts above.
     std::unordered_map<unsigned, analysis::ClosureCaptures> closureCaptures_;
@@ -870,6 +884,11 @@ public:
     };
     std::vector<LambdaCaptureCtx> lambdaCaptureStack;
     std::vector<ast::FunctionExpression*> lambdaStack;
+
+    // #384 checkpoint (c): per-block-scope map from a local name to its declaration
+    // node, pushed/popped alongside the symbol table, so a closure that mutably
+    // captures a name can mark that declaration as promoted to a shared cell.
+    std::vector<std::unordered_map<std::string, ast::VariableDeclaration*>> declScopes;
 
     // Helper methods for move tracking
     void recordMove(const std::string& varName);
