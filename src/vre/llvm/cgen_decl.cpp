@@ -1007,10 +1007,23 @@ void LLVMCodegen::visit(vyb::ast::FunctionDeclaration* node) {
             }
             builder->CreateStore(argVal, alloca);
             namedValues[paramNames[i]] = alloca;
+            // #384 checkpoint (c): a by-value parameter mutably captured by an escaping
+            // closure is promoted to a shared cell exactly like a local declaration, so
+            // the parameter's frame observes the closure's writes too. The callee reaches
+            // the binding through the cell's value field and the cell is released on this
+            // function's return path (registerVariable below records it as the owner).
+            PromotedBindingCell paramCell = maybePromoteBinding(
+                paramNames[i], node->params[i].name.get(), alloca,
+                node->params[i].typeNode.get(), paramTypes[i]);
+            if (paramCell.valuePtr) {
+                builder->CreateStore(argVal, paramCell.valuePtr);
+                namedValues[paramNames[i]] = paramCell.valuePtr;
+            }
+            llvm::Value* paramSlot = namedValues[paramNames[i]];
 
             // Store type information for function parameters
             if (node->params[i].typeNode) {
-                valueTypeMap[alloca] = std::shared_ptr<vyb::ast::TypeNode>(node->params[i].typeNode->clone());
+                valueTypeMap[paramSlot] = std::shared_ptr<vyb::ast::TypeNode>(node->params[i].typeNode->clone());
                 VYB_CDBG << "DEBUG: Stored type mapping for parameter '" << paramNames[i] << "'" << std::endl;
             }
 
@@ -1032,11 +1045,11 @@ void LLVMCodegen::visit(vyb::ast::FunctionDeclaration* node) {
                     llvm::Type* elemLLVMType = codegenType(elemTypeNode);
                     if (elemLLVMType) {
                         // Load the struct stored so far (the shallow copy)
-                        llvm::Value* shallowVec = builder->CreateLoad(paramTypes[i], alloca, paramNames[i] + "_shallow");
+                        llvm::Value* shallowVec = builder->CreateLoad(paramTypes[i], paramSlot, paramNames[i] + "_shallow");
                         // Clone the data
                         llvm::Value* deepVec = generateVecDeepCopy(shallowVec, elemLLVMType, paramTypes[i], elemTypeNode);
                         if (deepVec) {
-                            builder->CreateStore(deepVec, alloca);
+                            builder->CreateStore(deepVec, paramSlot);
                             VYB_CDBG << "DEBUG: Deep-copied Vec parameter '" << paramNames[i] << "'" << std::endl;
                             vecParam = true;
                         }
@@ -1055,12 +1068,12 @@ void LLVMCodegen::visit(vyb::ast::FunctionDeclaration* node) {
             if (node->params[i].typeNode && paramTypes[i]->isStructTy() &&
                 isKnownStructTypeNode(node->params[i].typeNode.get()) &&
                 structTypeHasOwnedFields(node->params[i].typeNode.get())) {
-                llvm::Value* shallowStruct = builder->CreateLoad(paramTypes[i], alloca, paramNames[i] + "_shallow");
+                llvm::Value* shallowStruct = builder->CreateLoad(paramTypes[i], paramSlot, paramNames[i] + "_shallow");
                 llvm::Value* deepStruct = generateStructDeepCopy(
                     shallowStruct, node->params[i].typeNode.get(),
                     llvm::cast<llvm::StructType>(paramTypes[i]));
                 if (deepStruct) {
-                    builder->CreateStore(deepStruct, alloca);
+                    builder->CreateStore(deepStruct, paramSlot);
                     ownedStructParam = true;
                     VYB_CDBG << "DEBUG: Deep-copied owned-struct parameter '" << paramNames[i] << "'" << std::endl;
                 }
@@ -1103,7 +1116,8 @@ void LLVMCodegen::visit(vyb::ast::FunctionDeclaration* node) {
             ast::OwnershipKind paramOwnership = ast::OwnershipKind::MY;
             if (ourParam) paramOwnership = ast::OwnershipKind::OUR;
             registerVariable(paramNames[i], alloca, argVal, paramOwnership, paramTypes[i],
-                             vecParam || ownedStructParam || closureParam || stringParam || ourParam);
+                             vecParam || ownedStructParam || closureParam || stringParam || ourParam,
+                             paramCell.base);
 
             // Create debug information for the parameter
             if (debugBuilder && !debugScopeStack.empty()) {

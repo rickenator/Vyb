@@ -861,6 +861,11 @@ void SemanticAnalyzer::visit(ast::FunctionDeclaration* node) {
     for (auto& param : node->params) {
         if (param.name) {
             if (!fnParamNamesStack_.empty()) fnParamNamesStack_.back().insert(param.name->name);
+            // #384 checkpoint (c): a parameter's declaration node is its name Identifier,
+            // recorded per block scope so a closure that mutably captures it can mark it
+            // for promotion (codegen holds the same node where the parameter's storage is
+            // created).
+            if (!declScopes.empty()) declScopes.back()[param.name->name] = param.name.get();
             if (!processingTraitOrBindMethod &&
                 param.name->name == "self" &&
                 isSelfReceiverType(param.typeNode.get())) {
@@ -5588,6 +5593,9 @@ void SemanticAnalyzer::visit(ast::FunctionExpression* node) {
     for (const auto& param : node->params) {
         if (param.name) {
             if (!fnParamNamesStack_.empty()) fnParamNamesStack_.back().insert(param.name->name);
+            // #384 checkpoint (c): a lambda's own parameter can be mutably captured by a
+            // closure nested inside the lambda body, so record it for promotion too.
+            if (!declScopes.empty()) declScopes.back()[param.name->name] = param.name.get();
             ast::TypeNode* paramTypeRaw = param.typeNode ? param.typeNode.get() : nullptr;
             currentScope->add(SymbolInfo{
                 SymbolInfo::Kind::Variable,
@@ -6803,12 +6811,11 @@ void SemanticAnalyzer::markClosureNodeEscaping(const ast::FunctionExpression* fe
     // inside a nested named function), and the whole analysis has run by codegen time.
     if (const analysis::ClosureCaptures* caps = capturesOf(fe)) {
         for (const std::string& cap : caps->mutableCaptured) {
-            if (ast::VariableDeclaration* decl = lookupLocalDeclaration(cap)) {
+            if (ast::Node* decl = lookupLocalDeclaration(cap)) {
                 markFact(decl, analysis::CellPromotedBinding);
             }
-            // A mutable capture with no local declaration is a parameter (promotion
-            // for parameters is a follow-up), a global, or a field of a captured
-            // struct -- nothing to promote here.
+            // A mutable capture with no declaration this analyzer recorded is a global or
+            // a struct field -- nothing to promote here.
         }
     }
 }

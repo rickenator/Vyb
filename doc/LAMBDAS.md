@@ -333,10 +333,11 @@ What remains:
    the defining frame and every environment that captures it, so the frame and other
    closures observe the closure's writes (and the last owner reclaims the payload;
    `test/lambda/test_closure_mutable_frame_observes.vyb`,
-   `test_closure_mutable_shared_binding.vyb`). Promotion covers local declarations; a
-   by-value *parameter* mutably captured by an escaping closure still gets the
-   environment-owned boxed cell (independent per closure), so a parameter's frame does
-   not observe the write yet.
+   `test_closure_mutable_shared_binding.vyb`). Promotion covers local declarations and
+   by-value parameters (a parameter's frame observes the write too;
+   `test/lambda/test_closure_mutable_param_observes.vyb`). A *lambda's* own parameter is
+   not promoted: the shape that would need it — a lambda parameter captured by a nested
+   closure — is rejected by the analyzer.
 
 ## Future Enhancements
 
