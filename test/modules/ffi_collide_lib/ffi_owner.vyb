@@ -1,0 +1,5 @@
+# The "binding" side of #442: declares an FFI entry point and shares it, exactly as a posted
+# binding does (bindings/cuda/cuda_binding.vyb shares each declaration). Bodyless declarations
+# are external functions.
+share(all)
+getpid()<CInt>

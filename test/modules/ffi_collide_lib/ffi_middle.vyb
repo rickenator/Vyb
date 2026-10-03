@@ -1,0 +1,11 @@
+# The "middle module" side of #442 (VybForge's native/tensor plays this role): a module that
+# imports a binding and wraps it. Importing THIS file is what used to break the importer's own
+# extern declarations.
+import ffi_owner::{getpid}
+
+share(all)
+ffi_middle_probe()<CInt> -> {
+    freedom {
+        return getpid()
+    }
+}

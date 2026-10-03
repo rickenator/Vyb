@@ -1586,12 +1586,12 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
         // consumer of this module does not inherit this module's dependencies.
         std::unordered_set<std::string>& ownScope = effectiveScope_[currentKey];
         for (auto& stmt : module->body) {
-            std::string name = declarationName(stmt);
-            if (name.empty()) {
-                continue;
+            std::unordered_set<std::string> declNames;
+            collectDeclarationNames(stmt.get(), declNames);  // #442: sees through `extern "C" { }`
+            for (const std::string& name : declNames) {
+                ownScope.insert(name);
+                moduleKeyByName_[name] = currentKey;
             }
-            ownScope.insert(name);
-            moduleKeyByName_[name] = currentKey;
         }
         for (const auto& kv : metadata.sharesByName) {
             exports_[currentKey].insert(kv.first);
@@ -1962,10 +1962,12 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
                     for (const auto& decl : importedRecord.module->body) {
                         if (!decl || isMainFunction(decl)) continue;
                         if (dynamic_cast<ast::BindDeclaration*>(decl.get())) continue;
-                        std::string n = declarationName(decl);
-                        if (n.empty()) continue;
-                        if (declarationVisible(n, importedRecord, metadata.bundles, importDecl)) {
-                            namespaceMangled[n] = mangledNamespaceName(nsName, n);
+                        std::unordered_set<std::string> declNames;
+                        collectDeclarationNames(decl.get(), declNames);  // #442
+                        for (const std::string& n : declNames) {
+                            if (declarationVisible(n, importedRecord, metadata.bundles, importDecl)) {
+                                namespaceMangled[n] = mangledNamespaceName(nsName, n);
+                            }
                         }
                     }
                 }
@@ -2191,10 +2193,7 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
         auto& moduleAll = allNames_[currentKey];
         moduleAll.clear();
         for (auto& stmt : resolvedBody) {
-            std::string name = declarationName(stmt);
-            if (!name.empty()) {
-                moduleAll.insert(name);
-            }
+            collectDeclarationNames(stmt.get(), moduleAll);  // #442: sees through `extern "C" { }`
         }
 
         module->body = std::move(resolvedBody);
@@ -2485,35 +2484,56 @@ std::unique_ptr<ast::Module> ModuleRegistry::parseModuleOnly(const std::string& 
     return ast;
 }
 
-std::string ModuleRegistry::declarationName(const ast::StmtPtr& stmt) {
-    if (auto* fn = dynamic_cast<ast::FunctionDeclaration*>(stmt.get())) {
+std::string ModuleRegistry::declarationName(const ast::Statement* stmt) {
+    if (!stmt) return "";
+    if (auto* fn = dynamic_cast<const ast::FunctionDeclaration*>(stmt)) {
         return fn->id ? fn->id->name : "";
     }
-    if (auto* var = dynamic_cast<ast::VariableDeclaration*>(stmt.get())) {
+    if (auto* var = dynamic_cast<const ast::VariableDeclaration*>(stmt)) {
         return var->id ? var->id->name : "";
     }
-    if (auto* typeAlias = dynamic_cast<ast::TypeAliasDeclaration*>(stmt.get())) {
+    if (auto* typeAlias = dynamic_cast<const ast::TypeAliasDeclaration*>(stmt)) {
         return typeAlias->name ? typeAlias->name->name : "";
     }
-    if (auto* st = dynamic_cast<ast::StructDeclaration*>(stmt.get())) {
+    if (auto* st = dynamic_cast<const ast::StructDeclaration*>(stmt)) {
         return st->name ? st->name->name : "";
     }
-    if (auto* en = dynamic_cast<ast::EnumDeclaration*>(stmt.get())) {
+    if (auto* en = dynamic_cast<const ast::EnumDeclaration*>(stmt)) {
         return en->name ? en->name->name : "";
     }
-    if (auto* aspect = dynamic_cast<ast::AspectDeclaration*>(stmt.get())) {
+    if (auto* aspect = dynamic_cast<const ast::AspectDeclaration*>(stmt)) {
         return aspect->name ? aspect->name->name : "";
     }
-    if (auto* cls = dynamic_cast<ast::ClassDeclaration*>(stmt.get())) {
+    if (auto* cls = dynamic_cast<const ast::ClassDeclaration*>(stmt)) {
         return cls->name ? cls->name->name : "";
     }
-    if (auto* bind = dynamic_cast<ast::BindDeclaration*>(stmt.get())) {
+    if (auto* bind = dynamic_cast<const ast::BindDeclaration*>(stmt)) {
         if (bind->selfType && bind->traitType) {
             return "bind:" + bind->selfType->toString() + ":" + bind->traitType->toString();
         }
         return "bind";
     }
     return "";
+}
+
+void ModuleRegistry::collectDeclarationNames(const ast::Statement* stmt,
+                                             std::unordered_set<std::string>& out) {
+    if (!stmt) return;
+    // An `extern "C" { ... }` block is a namespace statement named `__extern_C`; the
+    // functions it declares are this module's own top-level declarations (#442). A nested
+    // block (an extern inside a namespace, say) is handled by the same recursion.
+    if (auto* ns = dynamic_cast<const ast::NamespaceDeclaration*>(stmt)) {
+        if (ns->name && ns->name->name == "__extern_C") {
+            for (const auto& member : ns->members) {
+                collectDeclarationNames(member.get(), out);
+            }
+            return;
+        }
+    }
+    std::string name = declarationName(stmt);
+    if (!name.empty()) {
+        out.insert(name);
+    }
 }
 
 bool ModuleRegistry::renameDeclaration(ast::StmtPtr& stmt, const std::string& newName) {
