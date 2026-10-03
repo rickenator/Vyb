@@ -105,7 +105,20 @@ private:
     static std::filesystem::path modulePathRelativeFile(const std::string& modulePath);
     static SourceMetadata preprocessModuleSource(const std::string& source);
     static std::unique_ptr<ast::Module> parseModuleOnly(const std::string& source, const std::string& fileName);
-    static std::string declarationName(const ast::StmtPtr& stmt);
+    static std::string declarationName(const ast::Statement* stmt);
+    static std::string declarationName(const ast::StmtPtr& stmt) {
+        return declarationName(stmt.get());
+    }
+    // #442: EVERY top-level declaration name a statement contributes. `declarationName`
+    // returns one name and knows nothing about an `extern "C" { ... }` block, which the
+    // parser models as a NamespaceDeclaration named `__extern_C` -- so the functions such
+    // a block declares were invisible to the registry's per-module bookkeeping and the
+    // module that declared them could not resolve them once any other module in the
+    // program (typically an imported binding) claimed the same name. An FFI declaration
+    // names a process-global C symbol, so the block's members belong to the module that
+    // writes them exactly like top-level functions do.
+    static void collectDeclarationNames(const ast::Statement* stmt,
+                                        std::unordered_set<std::string>& out);
     static bool renameDeclaration(ast::StmtPtr& stmt, const std::string& newName);
     static bool isMainFunction(const ast::StmtPtr& stmt);
     static bool sharesAllow(const std::vector<std::string>& shares, const std::vector<std::string>& importerBundles);

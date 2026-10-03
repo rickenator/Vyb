@@ -103,6 +103,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `version:` dep rebuilds with the registry absent.
 
 ### Fixed
+- **A module now resolves its own `extern "C"` declarations after importing a binding
+  (#442)** — a file that declares its own FFI entry points could not use them if it also
+  imported a module that (transitively) imports a binding declaring the same name: every
+  call reported `Undefined identifier`. The parser models `extern "C" { ... }` as a
+  namespace statement named `__extern_C`, and the registry's per-module declaration
+  bookkeeping reads one name per statement — it had no case for that node, so the block's
+  members never entered the declaring module's scope or its name→owner map, while the
+  binding's plain top-level declaration claimed the name. The namespace gate then hid the
+  name from the module that declared it. `collectDeclarationNames` now walks a statement's
+  members (including an `__extern_C` block) and is used at the three sites that enumerate a
+  module's own declarations — the scope/owner seeding, the namespace-import mangling map,
+  and the smuggle scope — because an FFI declaration names a process-global C symbol and
+  belongs to every module that writes it. Locked in by
+  `test/modules/test_import_ffi_sibling.vyb` (with `ffi_collide_lib/ffi_owner.vyb` and
+  `ffi_middle.vyb`, the reported three-file shape on a libc symbol, so no GPU is needed);
+  it fails with `Undefined identifier` when the fix is reverted. Importing the colliding
+  NAME masks the bug (it grants the name into the importer's scope), which is why the
+  fixture imports only the middle module's helper.
 - **An in-place mutation through a mutable capture now reaches the captured storage
   (#384)** — `v.push(3)`, `v.set(i, x)`, `v[i] = x` and `v.clear()` mutate the receiver
   without an assignment, and neither half of the write-back path handled that: the

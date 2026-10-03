@@ -1,0 +1,37 @@
+// @test: a module resolves its OWN extern "C" declarations after importing a binding (#442)
+// @description: A file that declares its own `extern "C"` functions could not use them if it
+//   also imported a module that (transitively) imports a binding declaring the same FFI entry
+//   point. The registry attributed the name to a module the importer does not scope, so the
+//   namespace gate hid it and every call reported `Undefined identifier` -- the importer's own
+//   declaration table stopped resolving. The parser models `extern "C" { ... }` as a namespace
+//   statement named `__extern_C`, which the registry's per-module declaration bookkeeping could
+//   not see through. Now the block's members count as the declaring module's own declarations:
+//   an FFI declaration names a process-global C symbol, so the module that writes it resolves
+//   it however many other modules declare it. The three-file shape mirrors the report
+//   (binding -> module that imports it -> this file); `getpid` is a libc symbol so the
+//   collision needs no GPU. Fails with `Undefined identifier: getpid` when the fix is reverted.
+// @category: modules, imports, ffi, binding
+// @expect-output: mine=ok other=ok
+// @expect-return: 0
+// @env: VYB_MODULE_PATH=test/modules/ffi_collide_lib
+
+import ffi_middle::{ffi_middle_probe}
+
+extern "C" {
+    getpid()<CInt>
+}
+
+main()<Int> -> {
+    freedom {
+        pid<CInt> = getpid()
+        if (pid <= 0) {
+            return 1
+        }
+    }
+    other<CInt> = ffi_middle_probe()
+    if (other <= 0) {
+        return 2
+    }
+    println("mine=ok other=ok")
+    return 0
+}

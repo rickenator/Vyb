@@ -1,0 +1,11 @@
+// @test: #442 helper — the "binding" side that declares a shared FFI entry point
+// @description: Loaded via VYB_MODULE_PATH by test_import_ffi_sibling.vyb. Declares and
+//   shares an FFI entry point exactly as a posted binding does
+//   (bindings/cuda/cuda_binding.vyb shares each declaration); a bodyless declaration is an
+//   external function. Parse-only: it is a module, not a runnable fixture.
+// @category: modules, imports, ffi, binding
+// @expect: pass
+// @parse-only: true
+
+share(all)
+getpid()<CInt>
