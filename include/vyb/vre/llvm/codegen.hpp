@@ -758,12 +758,34 @@ private:
     void retainClosureRef(llvm::Value* value, llvm::Type* valueLLVMType,
                           const vyb::ast::TypeNode* astType,
                           llvm::BasicBlock** validIncoming);
-    // #439: the per-element loop that retains or releases the environment of every
-    // closure in a `Vec<fn ...>` element buffer -- one implementation for the deep
-    // copy (retain) and the two reclaim sites (release). Leaves the builder in the
-    // loop-exit block.
-    void emitClosureElementRefLoop(llvm::Value* dataPtr, llvm::Value* count,
-                                   llvm::Type* elemTy, bool retain, const std::string& tag);
+    // #427 defects 6/7: is this Vec's slot element a `mild<T>` handle? Answered from the
+    // type NAME with the active monomorphization substitutions applied, because inside a
+    // generic body (`VecHigherOps::filter` pushes into `Vec<T>`) the AST still names the
+    // type parameter -- and a store whose retain misses while the reclaim's release fires
+    // drives the weak count negative instead of balancing it.
+    bool elementTypeIsMildHandle(const vyb::ast::TypeNode* elemAst);
+    // A Vec accessor call (`get`/`first`/`last`/`peek`) on a weak-handle slot: its result
+    // is an owned reference the consuming store must drop after taking its own.
+    bool argIsWeakHandleAccessorTemp(vyb::ast::Expression* arg);
+    // The same "a storage location owns one reference" rule for a Vec slot / an accessor
+    // result: a closure environment (#439) or a `mild` handle's weak count (#427 defects
+    // 6/7, `weakSlot`). The closure case is decided by the LLVM type + AST; `weakSlot` is
+    // decided by the caller, which can resolve substitutions. No-op for anything else.
+    void retainElementRef(llvm::Value* value, llvm::Type* valueLLVMType,
+                          const vyb::ast::TypeNode* astType, bool weakSlot,
+                          llvm::BasicBlock** validIncoming);
+    // The matching release for retainElementRef, used where a location drops the element
+    // it held (a `set` overwrite) and for the per-element reclaim loop.
+    void releaseElementValue(llvm::Value* value, llvm::Type* valueLLVMType,
+                             const vyb::ast::TypeNode* astType, bool weakSlot,
+                             const std::string& tag);
+    // The per-element loop that retains or releases every reference-counted element in a
+    // Vec's element buffer -- one implementation for the deep copy (retain) and the
+    // reclaim sites (release). Leaves the builder in the loop-exit block.
+    void emitElementRefLoop(llvm::Value* dataPtr, llvm::Value* count, llvm::Type* elemTy,
+                            bool retain, const std::string& tag,
+                            const vyb::ast::TypeNode* astElemType = nullptr,
+                            bool weakSlot = false);
     void releaseClosureAlloca(llvm::Value* allocaInst); // load closure from an alloca, then -1
     // Build the per-layout destructor for a closure capture environment that
     // owns transferred `my<Struct>` payloads; reclaims each captured pointee's

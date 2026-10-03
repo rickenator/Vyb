@@ -1,0 +1,47 @@
+// @test: a `Vec<mild<A>>` slot owns its element's weak reference (#427 defects 6/7)
+// @description: A Vec slot is a storage location, so it owns its own count on an
+//   element's shared control block -- for a weak handle that is one WEAK count, and it
+//   must hold for a NAMED `mild<T>` binding and for a fresh `soft(...)` temporary
+//   alike. Before the fix neither the store nor the reclaim touched the count: the
+//   element's control block (and the object it points at) were never freed once the
+//   last strong owner dropped, which LeakSanitizer reported as one 24 B block per
+//   pushed weak element. The mirror-image half was an accessor whose result a binding
+//   released without the accessor ever taking a reference -- the weak count underflowed
+//   and the block was hidden the same way. `get`, `set`-overwrite (named and fresh) and
+//   the reclaim all participate, so every shape is asserted in one run. The program
+//   output cannot see any of this; the leak-free requirement is the LeakSanitizer proof,
+//   and the values here prove no over-release freed a live handle.
+// @category: ownership, vec, leak
+// @expect-output: n=2 first=false second=false same=true
+// @expect-return: 0
+
+import collections
+
+share(all)
+struct A { v<Int> }
+
+main()<Int> -> {
+    o<our<A>> = our(A { v: 4 })
+    weak<Vec<mild<A>>> = Vec()
+
+    // A named weak binding and a fresh `soft(...)` temp: the slot takes its own weak
+    // count for both (the fresh temp also drops the count it was created with).
+    w<mild<A>> = soft(o)
+    weak.push(w)
+    weak.push(soft(o))
+
+    a<mild<A>> = weak.get(0)
+    b<mild<A>> = weak.get(1)
+
+    // Overwrite slot 0 twice -- once from the named binding, once from a fresh temp --
+    // so the overwritten slot's own reference is dropped exactly once each time.
+    weak.set(0, w)
+    weak.set(0, soft(o))
+    c<mild<A>> = weak.get(0)
+
+    println("n=" + weak.len().to_string() +
+            " first=" + a.released().to_string() +
+            " second=" + b.released().to_string() +
+            " same=" + (!a.released()).to_string())
+    return 0
+}

@@ -223,11 +223,27 @@ void LLVMCodegen::handleVecPush(vyb::ast::CallExpression* node, llvm::Value* vec
     // direct result of `__vyb_string_concat` / `__vyb_int_to_string`) is wrapped
     // into the 16-byte { ptr, i64 } String struct so every Vec<String> element
     // shares the same layout (get/set/clear all stride by that struct).
-    valueToAdd = normalizeVecStringElement(valueToAdd);
+    // #427 defects 6/7: an `our<T>`/`mild<T>` slot element IS an opaque pointer, so
+    // the String canonicalization below -- which wraps ANY `i8*` into a `{ ptr, i64 }`
+    // struct and calls strlen() on it -- must not touch it. It stored a bogus
+    // 16-byte String in an 8-byte handle slot and read past the control block.
+    const vyb::ast::TypeNode* pushedAst = typeOfNode(node->arguments[0]).get();
+    llvm::Type* elementType = vecElementTypeFromReceiver(node);
+    // The ownership decision keys on the SLOT's element type, not the pushed
+    // expression's: inside a monomorphized generic body (`VecHigherOps::filter` does
+    // `out.push(self.get(i))`) the argument is still typed `T` while the slot is
+    // already `mild<A>`. The retain below and the reclaim in reclaimVecStorage must ask
+    // the same question from the same source, or the weak count goes negative instead of
+    // balancing (measured: a crash in JIT teardown from the corrupted heap).
+    const vyb::ast::TypeNode* elemAstForOwnership = vecElementNodeFromReceiver(node);
+    if (!elemAstForOwnership) elemAstForOwnership = pushedAst;
+    const bool pushSlotIsWeakHandle = elementTypeIsMildHandle(elemAstForOwnership);
+    if (!pushSlotIsWeakHandle) {
+        valueToAdd = normalizeVecStringElement(valueToAdd);
+    }
 
     // Get the element type: prefer the Vec's *declared* element type (#281), so
     // a `Vec<UInt8>` strides by 1 byte and not by the pushed value's i64 width.
-    llvm::Type* elementType = vecElementTypeFromReceiver(node);
     if (!elementType) elementType = valueToAdd->getType();
 
     // Coerce an integer value to the element width (an Int literal is i64; a
@@ -247,11 +263,22 @@ void LLVMCodegen::handleVecPush(vyb::ast::CallExpression* node, llvm::Value* vec
         retainStringValue(valueToAdd);
     }
 
-    // #439: a closure element's environment is reference counted, so the slot must
-    // own a reference of its own (the pushed value may be a fresh literal at
-    // refcount 0, or a binding that releases on scope exit). reclaimVecStorage
-    // drops exactly this one when the Vec is reclaimed.
-    retainClosureRef(valueToAdd, elementType, typeOfNode(node->arguments[0]).get(), nullptr);
+    // #439 / #427 defects 6/7: a closure element's environment and an `our`/`mild`
+    // element's control block are reference counted, so the slot must own a
+    // reference of its own (the pushed value may be a fresh literal/handle at count
+    // 0/1, or a binding that releases on scope exit). reclaimVecStorage drops
+    // exactly this one when the Vec is reclaimed.
+    retainElementRef(valueToAdd, elementType, elemAstForOwnership, pushSlotIsWeakHandle,
+                     nullptr);
+    // #427 defects 6/7: the slot just took its OWN weak count, so a fresh `soft(...)`
+    // argument must drop the one it was created with. The generic call path does this
+    // for a fresh `mild` temp (`freshOwningCallArgKind() == 2`); a Vec method call
+    // does not run that machinery, which stranded the count and kept the control block
+    // (and its object) alive forever.
+    if (freshOwningCallArgKind(node->arguments[0].get()) == 2 ||
+        argIsWeakHandleAccessorTemp(node->arguments[0].get())) {
+        releaseMildControlBlock(valueToAdd, "vec.push.temparg.mild");
+    }
 
     // Calculate the actual element size using DataLayout
     llvm::DataLayout dataLayout(module.get());
@@ -746,13 +773,26 @@ void LLVMCodegen::handleVecGet(vyb::ast::CallExpression* node, llvm::Value* vecP
         if (isVybStringStructType(elementLLVMType)) {
             retainStringValue(element);
         }
-        // #439: a closure element is handed back as a value whose caller owns a
-        // reference (the binding path treats a call result as already retained) --
-        // same rule as the String element above. `validIncoming` follows the
-        // retain's blocks so the merge PHI below names the right predecessor.
-        retainClosureRef(element, elementLLVMType, typeOfNode(node).get(), &validIncoming);
+        // #439 / #427 defects 6/7: a closure element and an `our`/`mild` element are
+        // handed back as a value whose caller owns a reference (the binding path
+        // treats a call result as already retained) -- same rule as the String
+        // element above. `validIncoming` follows the retain's blocks so the merge
+        // PHI below names the right predecessor.
+        retainElementRef(element, elementLLVMType, typeOfNode(node).get(),
+                         elementTypeIsMildHandle(vecElementNodeFromReceiver(node)),
+                         &validIncoming);
     } else {
         element = builder->CreateLoad(elementLLVMType, elementPtr, "vec.element");
+        // #427 defects 6/7: a `mild` element is a bare control-block pointer, not a
+        // struct, so it takes THIS branch. Its caller owns the reference it receives
+        // (the binding path treats an accessor result as a transferring source), so
+        // take one here, exactly as the String and closure element paths above do.
+        // `validIncoming` follows the retain's blocks so the merge PHI below names the
+        // right predecessor. The AST comes from the RECEIVER's element type, not the
+        // call's: `last`/`first` are typed as an optional, which would hide the ref.
+        retainElementRef(element, elementLLVMType, vecElementNodeFromReceiver(node),
+                         elementTypeIsMildHandle(vecElementNodeFromReceiver(node)),
+                         &validIncoming);
     }
     builder->CreateBr(mergeBlock);
 
@@ -853,13 +893,20 @@ void LLVMCodegen::handleVecLast(vyb::ast::CallExpression* node, llvm::Value* vec
         if (isVybStringStructType(elementLLVMType)) {
             retainStringValue(element);
         }
-        // #439: a closure element is handed back as a value whose caller owns a
-        // reference (the binding path treats a call result as already retained) --
-        // same rule as the String element above. `validIncoming` follows the
-        // retain's blocks so the merge PHI below names the right predecessor.
-        retainClosureRef(element, elementLLVMType, typeOfNode(node).get(), &validIncoming);
+        // #439 / #427 defects 6/7: a closure element and an `our`/`mild` element are
+        // handed back as a value whose caller owns a reference (the binding path
+        // treats a call result as already retained) -- same rule as `get`.
+        retainElementRef(element, elementLLVMType, typeOfNode(node).get(),
+                         elementTypeIsMildHandle(vecElementNodeFromReceiver(node)),
+                         &validIncoming);
     } else {
         element = builder->CreateLoad(elementLLVMType, elementPtr, "vec.last.element");
+        // #427 defects 6/7: same as `get` -- a `mild` element is a pointer, so the
+        // caller of `last` owns the reference it receives. The AST is the receiver's
+        // element type (`last` itself is typed as an optional).
+        retainElementRef(element, elementLLVMType, vecElementNodeFromReceiver(node),
+                         elementTypeIsMildHandle(vecElementNodeFromReceiver(node)),
+                         &validIncoming);
     }
     builder->CreateBr(mergeBlock);
 
@@ -909,12 +956,18 @@ void LLVMCodegen::handleVecSet(vyb::ast::CallExpression* node, llvm::Value* vecP
     }
 
     // Same single-layout normalization as push: a raw char* String element must
-    // live in the Vec as the canonical { ptr, i64 } struct.
-    value = normalizeVecStringElement(value);
+    // live in the Vec as the canonical { ptr, i64 } struct -- but an
+    // `our<T>`/`mild<T>` element is itself a bare pointer (#427 defects 6/7), so it
+    // must not be wrapped into that struct.
+    llvm::Type* elementLLVMType = vecElementTypeFromReceiver(node);
+    const vyb::ast::TypeNode* setAst = vecElementNodeFromReceiver(node);
+    if (!setAst) setAst = typeOfNode(node->arguments[1]).get();
+    if (!elementTypeIsMildHandle(setAst)) {
+        value = normalizeVecStringElement(value);
+    }
 
     // Determine the element type from the Vec's declared element type (#281); the
     // value's own type is only a fallback, or a `Vec<UInt8>` would stride by 8.
-    llvm::Type* elementLLVMType = vecElementTypeFromReceiver(node);
     if (!elementLLVMType) elementLLVMType = value->getType();
     if (!elementLLVMType) elementLLVMType = llvm::Type::getInt64Ty(*context);
     uint64_t elementSizeBytes = 8;
@@ -1016,14 +1069,27 @@ void LLVMCodegen::handleVecSet(vyb::ast::CallExpression* node, llvm::Value* vecP
         if (!exprIsStringTransfer(node->arguments[1].get())) {
             retainStringValue(value);
         }
-    } else if (isClosureElementType(elementLLVMType, typeOfNode(node->arguments[1]).get())) {
-        // #439: the slot owns one environment reference -- drop the overwritten
-        // slot's reference and take one for the incoming value (a fresh literal
-        // starts at refcount 0, a binding keeps its own reference too), so the
-        // Vec's reclaim releases exactly one per slot.
+    } else if (isClosureElementType(elementLLVMType, typeOfNode(node->arguments[1]).get()) ||
+               elementTypeIsMildHandle(vecElementNodeFromReceiver(node))) {
+        // #439 / #427 defects 6/7: the slot owns one reference -- drop the
+        // overwritten slot's reference and take one for the incoming value (a fresh
+        // literal or handle starts at count 0/1, a binding keeps its own reference
+        // too), so the Vec's reclaim releases exactly one per slot.
+        // The ownership decision keys on the SLOT's element type (see push): inside a
+        // monomorphized generic body the incoming expression may still be typed `T`.
+        const vyb::ast::TypeNode* incomingAst = vecElementNodeFromReceiver(node);
+        if (!incomingAst) incomingAst = typeOfNode(node->arguments[1]).get();
+        const bool setSlotIsWeakHandle = elementTypeIsMildHandle(incomingAst);
         llvm::Value* oldElem = builder->CreateLoad(elementLLVMType, elementPtr, "vec.set.old_elem");
-        releaseClosureValue(oldElem);
-        retainClosureRef(value, elementLLVMType, typeOfNode(node->arguments[1]).get(), nullptr);
+        releaseElementValue(oldElem, elementLLVMType, incomingAst, setSlotIsWeakHandle,
+                            "vec.set.old");
+        retainElementRef(value, elementLLVMType, incomingAst, setSlotIsWeakHandle, nullptr);
+        // Same fresh-temp release as push: the slot owns its own weak count now, so a
+        // fresh `soft(...)` source must drop the reference it was created with.
+        if (freshOwningCallArgKind(node->arguments[1].get()) == 2 ||
+            argIsWeakHandleAccessorTemp(node->arguments[1].get())) {
+            releaseMildControlBlock(value, "vec.set.temparg.mild");
+        }
     } else if (elementLLVMType && elementLLVMType->isStructTy() &&
                typeOfNode(node->arguments[1]) &&
                isKnownStructTypeNode(typeOfNode(node->arguments[1]).get()) &&
