@@ -158,6 +158,11 @@ public:
     bool nodeClosureMutablesBoxed(const vyb::ast::Node* n) const {
         return (nodeFacts(n) & vyb::analysis::ClosureMutablesBoxed) != 0;
     }
+    // #384 checkpoint (c): this declaration's binding is promoted to a shared,
+    // refcounted heap cell (see analysis::CellPromotedBinding).
+    bool nodeCellPromotedBinding(const vyb::ast::Node* n) const {
+        return (nodeFacts(n) & vyb::analysis::CellPromotedBinding) != 0;
+    }
     // Record a fact for a node codegen built itself (the async worker cloned
     // from a failable function is the case that needs it).
     void setSynthFact(const vyb::ast::Node* n, unsigned bit, bool on = true) {
@@ -328,8 +333,32 @@ private:
         llvm::Type* type;
         bool isVecWithMallocData; // Tracks if this is a Vec that owns malloc'd data
         bool isOwnedStruct;       // Tracks if this is a struct binding owning Vec/String fields
+        // #384 checkpoint (c): the base of the refcounted cell this binding was
+        // promoted to (null when it was not). The binding's reads/writes go through
+        // the cell's value field; this is the owner handle scope exit releases, and it
+        // replaces the ordinary per-type reclaim so the payload is reclaimed exactly
+        // once, by the cell's destructor when the last owner drops.
+        llvm::Value* ownedCellBase = nullptr;
     };
     std::vector<std::vector<ScopeVariable>> scopeStack;
+    // #384 checkpoint (c): a promoted binding's storage is the value field of its shared
+    // cell -- a struct GEP, not an alloca. Everywhere codegen discriminates "storage slot
+    // (load from / store to)" from "value", both kinds must answer yes, so those sites ask
+    // through these helpers rather than `dyn_cast<llvm::AllocaInst>` directly. A promoted
+    // slot is registered when the cell is created.
+    std::set<llvm::Value*> promotedValueSlots_;
+    bool isStorageSlot(llvm::Value* v) const {
+        if (!v) return false;
+        if (llvm::isa<llvm::AllocaInst>(v)) return true;
+        return promotedValueSlots_.count(v) != 0;
+    }
+    llvm::Type* storageSlotValueType(llvm::Value* v) const {
+        if (auto* ai = llvm::dyn_cast<llvm::AllocaInst>(v)) return ai->getAllocatedType();
+        if (auto* gep = llvm::dyn_cast<llvm::GetElementPtrInst>(v)) {
+            return gep->getResultElementType();
+        }
+        return v ? v->getType() : nullptr;
+    }
     // Counter for synthetic owned-struct receiver-temp alloca names (#192).
     int m_recvStructTempCounter = 0;
     std::map<std::string, uint32_t> refCounts; // For our<T> reference counting
@@ -668,7 +697,30 @@ private:
     void exitScope();
     void exitToFunctionBaseline();
     void cleanupScopesToBaseline(size_t baseline);
-    void registerVariable(const std::string& name, llvm::Value* allocaInst, llvm::Value* value, ast::OwnershipKind ownership, llvm::Type* type, bool needsCleanup = false);
+    void registerVariable(const std::string& name, llvm::Value* allocaInst, llvm::Value* value, ast::OwnershipKind ownership, llvm::Type* type, bool needsCleanup = false, llvm::Value* ownedCellBase = nullptr);
+    // #384 checkpoint (c): promote a binding an escaping closure mutably captures to a
+    // refcounted cell `{ i64 refcount; ptr dtor; T value }`, shared with every
+    // environment that captures it. Returns the cell base (the owner handle) and the
+    // value field pointer the frame's reads and writes go through; a null valuePtr
+    // means the binding is not promoted. `localSlot` is the binding's frame storage as
+    // codegen currently has it (the cell is initialised from it), and `astType` is the
+    // declared type used for the cell's payload reclaim.
+    struct PromotedBindingCell {
+        llvm::Value* base = nullptr;
+        llvm::Value* valuePtr = nullptr;
+    };
+    PromotedBindingCell maybePromoteBinding(const std::string& name,
+                                            const vyb::ast::Node* declNode,
+                                            llvm::Value* localSlot,
+                                            const vyb::ast::TypeNode* astType,
+                                            llvm::Type* varType);
+    // #384 checkpoint (c): the per-cell destructor for a promoted binding's payload
+    // (`{ i64 refcount; ptr cap_dtor; T value }` -- the closure env layout, so
+    // __vyb_closure_release drives it). Null when the payload needs no reclaim, in
+    // which case the runtime frees the block on the last release.
+    llvm::Function* generatePromotedCellDtor(llvm::StructType* cellTy,
+                                             const std::string& tag,
+                                             const vyb::ast::TypeNode* payloadAst);
     void cleanupVariable(const ScopeVariable& var);
     void incrementRefCount(const std::string& name);
     void decrementRefCount(const std::string& name);
@@ -683,6 +735,15 @@ private:
     bool isFnTypeNode(const vyb::ast::TypeNode* tn) const; // true for `fn` types
     void retainClosureValue(llvm::Value* closureVal);  // +1 on a copied closure value
     void releaseClosureValue(llvm::Value* closureVal); // -1 on a closure value
+    // #384 checkpoint (c): a promoted binding's shared cell reuses the closure
+    // environment header (`{ i64 refcount; ptr cap_dtor; T value }`) but is not a
+    // closure value, so it is retained/released through the raw runtime entry points
+    // with the cell BASE pointer (the refcount lives there, not at the value field).
+    void retainClosureEnvPtr(llvm::Value* envPtr);
+    void releaseClosureEnvPtr(llvm::Value* envPtr);
+    // The cell's value field address is what the frame and every capturing environment
+    // hold; its BASE is what carries the refcount, so recover it where needed.
+    llvm::Value* promotedCellBaseFromValuePtr(llvm::Value* valuePtr, llvm::StructType* cellTy);
     // #439: is this Vec element / struct field (or accessor RESULT) a closure
     // VALUE? Both the declared `fn ...` type and the closure struct
     // `{ ptr env, ptr fn }` are required, so a coincidental two-pointer value is
@@ -710,7 +771,11 @@ private:
     llvm::Function* generateClosureEnvDtor(
         llvm::StructType* envTy, const std::string& tag,
         const std::vector<std::pair<size_t, const vyb::ast::TypeNode*>>& ownedFields,
-        const std::vector<std::pair<size_t, const vyb::ast::TypeNode*>>& boxedFields = {});
+        const std::vector<std::pair<size_t, const vyb::ast::TypeNode*>>& boxedFields,
+        // #384 checkpoint (c): capture fields holding the value-field address of a
+        // PROMOTED binding's shared cell (frame and environment co-own the cell). The
+        // destructor releases the cell instead of reclaiming and freeing the block.
+        const std::vector<std::pair<size_t, llvm::StructType*>>& sharedCellFields = {});
     // #384 b(1): reclaim the payload held inside a boxed mutable-capture cell
     // (the cell holds a value of `astType` inline) before the cell block itself
     // is freed -- a captured String/Vec/my<T>/our<T>/struct owns storage that

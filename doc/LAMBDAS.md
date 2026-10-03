@@ -328,10 +328,15 @@ What remains:
 1. **Generic lambdas** — `|x<T>| -> ...` (type parameters on closures) is
    unsupported: no parser/codegen path and no fixture. Decision for 1.0:
    postponed, recorded per #360.
-2. **The per-binding shared cell** — an *escaping* closure's mutable capture is
-   boxed into a cell the environment owns, so the defining frame does not observe
-   the closure's writes; sharing one cell across the frame and every closure over
-   that binding is checkpoint (c) of #384, not yet implemented.
+2. **~~The per-binding shared cell~~** — **landed (#384 checkpoint (c))**: a binding
+   mutably captured by an escaping closure is promoted to ONE refcounted cell shared by
+   the defining frame and every environment that captures it, so the frame and other
+   closures observe the closure's writes (and the last owner reclaims the payload;
+   `test/lambda/test_closure_mutable_frame_observes.vyb`,
+   `test_closure_mutable_shared_binding.vyb`). Promotion covers local declarations; a
+   by-value *parameter* mutably captured by an escaping closure still gets the
+   environment-owned boxed cell (independent per closure), so a parameter's frame does
+   not observe the write yet.
 
 ## Future Enhancements
 

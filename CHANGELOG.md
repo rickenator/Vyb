@@ -10,6 +10,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Per-binding shared cell for escaping closures — a mutation through an escaping
+  closure is visible to the defining frame (#384 checkpoint (c))** — a binding that an
+  escaping closure mutably captures is now promoted to ONE refcounted heap cell shared
+  by the frame and every environment that captures it, instead of each escaping closure
+  boxing a private copy of the binding's value. The cell reuses the closure
+  environment's header (`{ i64 refcount; ptr cap_dtor; T value }`), so the runtime's
+  `__vyb_closure_retain`/`__vyb_closure_release` drive it unchanged: the frame keeps one
+  reference and reads/writes through the cell's value field, each capturing environment
+  takes another reference, and the last owner runs the cell's destructor, which reclaims
+  the payload (String buffer, `Vec` storage, struct owned fields, `our`/`mild` control
+  block, closure environment) and frees the block. Promotion is decided by the analyzer
+  and marked on the *declaration* (`analysis::CellPromotedBinding`), resolved by walking
+  each mutable capture through a new per-block `name -> declaration` map
+  (`declScopes`, pushed/popped with the symbol table) — it has to be known when the
+  binding is declared, because the closure literal usually comes later in the body and
+  analysis completes before codegen. Because a promoted binding's storage is a GEP into
+  the cell rather than a stack alloca, the storage-vs-value discriminations in codegen
+  now ask `isStorageSlot()` (reads, the LHS of an assignment, capture recording,
+  subscript receivers). Observable change: a spawner observes a write its spawned thread
+  made through the closure (`spawner=1` in
+  `test/threads/test_thread_boundary_mutable_capture_boxed_accepted.vyb`, `spawner=42`
+  in the `task_spawn` fixture) and two escaping closures over one binding observe each
+  other's writes (`test/lambda/test_closure_mutable_shared_binding.vyb`), where both
+  previously saw private copies. The stack path is unchanged: a non-escaping closure
+  still writes back through the frame and keeps its snapshot rules
+  (`test/lambda/test_closure_capture_semantics.vyb`,
+  `test_closure_two_over_one_binding.vyb` pass untouched), an immutable capture is still
+  a by-value snapshot, and a by-value parameter mutably captured by an escaping closure
+  still gets an environment-owned boxed cell. Locked in by
+  `test/lambda/test_closure_mutable_frame_observes.vyb`,
+  `test_closure_mutable_shared_binding.vyb` and
+  `test_closure_mutable_capture_promoted_read.vyb`, all LeakSanitizer-clean.
 - **Boxed mutable-capture closures — a closure with mutable captures can escape its
   defining function (#384)** — the environment of a mutating closure used to hold the
   *address* of the outer variable, so returning one was refused (it would dangle) and

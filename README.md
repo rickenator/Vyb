@@ -80,7 +80,7 @@ git clone https://github.com/rickenator/Vyb.git
 cd Vyb
 mkdir -p build && cd build && LLVM_DIR=/usr/lib/llvm-18/cmake cmake .. && make -j$(nproc) && cd ..
 
-# Run the full test suite (1281 .vyb tests) with the canonical Vyb runner
+# Run the full test suite (1284 .vyb tests) with the canonical Vyb runner
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
 
 # Run your first Vyb program
@@ -1101,6 +1101,14 @@ A closure that does **not** escape keeps the stack path, so the write-back contr
 above is unchanged: two closures over one binding still do not share mutations through a read, and
 the enclosing frame still observes them.
 
+A closure that **does** escape promotes its captured binding to one refcounted cell shared with the
+defining frame (checkpoint (c)), so the frame and every other closure over that binding observe the
+mutation — a spawner sees the write its spawned thread made through the closure, and two escaping
+closures over one binding see each other's (`test/lambda/test_closure_mutable_frame_observes.vyb`,
+`test_closure_mutable_shared_binding.vyb`). The frame holds one reference on the cell and each
+capturing environment another; the last owner runs the cell's destructor, which reclaims the payload
+and frees the block.
+
 An **in-place mutation** through a mutable capture is a write like any other — `v.push(x)`,
 `v.set(i, x)`, `v[i] = x`, `v.clear()` on a captured binding are recorded as writes to it, and each
 exit from the closure body flushes the captured value back, so the enclosing scope and later
@@ -1174,10 +1182,12 @@ the capability is called **handoff**:
   handoff-capable: moving an owner off its thread, or passing a borrow of the spawner's frame,
   would leave the spawner with an invalid owner or a dangling alias;
 - a **mutable** capture is refused only when its declared type cannot be boxed soundly; when it can,
-  the compiler boxes it into a heap cell owned by the closure environment (the same mechanism that
-  lets a mutable-capture closure be returned), so the environment entry is no longer an address in
-  the spawner's frame. The spawner's own binding is a separate value and does not observe the
-  spawned closure's writes;
+  the compiler promotes the captured binding to one refcounted heap cell shared by the spawner's frame
+  and every environment that captures it (checkpoint (c)); the frame keeps one reference and each
+  environment another, and the last owner runs the cell's destructor, so the spawner **does** observe
+  the spawned closure's writes once it joins, and two escaping closures over one binding observe each
+  other's (`test/threads/test_thread_boundary_mutable_capture_boxed_accepted.vyb`,
+  `test/lambda/test_closure_mutable_shared_binding.vyb`);
 - the one borrowing form that is accepted is a read-only `view(x)` — **viewable** — when the
   closure also captures the owner through strong ownership (`our<X>` / `my<X>`), since then the
   owner outlives the thread.
@@ -3159,7 +3169,7 @@ cmake --build build --target run-milestone
 
 Vyb's canonical test runner is `test/run_tests.vyb` — a Vyb program, the same
 suite wired into CTest as the `run-tests` target and used for the full regression
-gate (currently **1281 `.vyb` tests, all passing**):
+gate (currently **1284 `.vyb` tests, all passing**):
 
 ### Quick Testing
 
@@ -3196,7 +3206,7 @@ build/vyb triage_tool.vyb results.json --priority critical,high
 ```
 
 ### Test Features
-- **1281 Tests, All Passing**: The full `run_tests.vyb` suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area
+- **1284 Tests, All Passing**: The full `run_tests.vyb` suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area
 - **Harness Reporting**: `test_harness.vyb` adds JSON/HTML reports and failure triage on top of the runner (sequential execution; `--workers` is accepted for compatibility)
 - **Rich Reporting**: HTML, JSON, and console output with detailed metrics
 - **Smart Categorization**: Automatic test categorization and filtering
@@ -3471,10 +3481,10 @@ compatibility) and reports the same per-test verdicts as the canonical runner.
 - **Error Context**: Detailed failure information with context and suggestions
 
 #### **Test Statistics**
-- **Total Tests**: 1281 `.vyb` tests (full suite, all passing as of v0.7.7)
+- **Total Tests**: 1284 `.vyb` tests (full suite, all passing as of v0.7.7)
 - **Coverage Areas**: Language features, control flow, error handling, type system, math, strings, introspection
 - **Test Types**: Feature tests (with `@expect: pass`), future-feature docs (with `@expect: fail`), parser tests
-- **Success Rate**: 100% (1281/1281) on the current suite
+- **Success Rate**: 100% (1284/1284) on the current suite
 
 ### 🔧 **Syntax Migration Tools**
 
@@ -3590,7 +3600,7 @@ See `doc/` directory for detailed design documents and RFCs.
   - **Type inference**: First case determines result type for entire select
   - **Pattern matching**: Exact equality patterns with wildcard `?` support
 - ✅ **Canonical Syntax Unification**: Complete migration to unified `my()`/`our()` constructors and `view`/`borrow` operators
-- ✅ **Modern Test Harness**: `test/run_tests.vyb` running the full suite — 1281 `.vyb` tests all passing — with an auxiliary parallel/HTML/triage harness
+- ✅ **Modern Test Harness**: `test/run_tests.vyb` running the full suite — 1284 `.vyb` tests all passing — with an auxiliary parallel/HTML/triage harness
 - ✅ **Syntax Migration Tools**: Automated migration from legacy to canonical syntax with comprehensive reporting
 - ✅ **Match Statements**: Complete pattern matching with `->` arrow syntax and `?` wildcard; no-match results in NOP
 - ✅ **Break/Continue**: Loop control flow statements working in all loop types

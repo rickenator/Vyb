@@ -685,22 +685,22 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
         // If the LHS is a variable and RHS is a pointer-to-int conversion (addr()),
         // we're probably assigning an address to an int variable, which is valid
         if (isAssignToVar && RHS->getType()->isIntegerTy()) {
-            // Create an alloca if LHS doesn't point to memory yet
-            llvm::AllocaInst* allocaInst = nullptr;
-            if (auto existingAlloca = llvm::dyn_cast<llvm::AllocaInst>(LHS)) {
-                // LHS is already an alloca, use it
-                allocaInst = existingAlloca;
+            // Create a storage slot if LHS doesn't point to memory yet. A promoted
+            // binding's slot is a cell value field (a GEP), so ask isStorageSlot.
+            llvm::Value* destSlot = nullptr;
+            if (isStorageSlot(LHS)) {
+                // LHS is already a storage slot, use it
+                destSlot = LHS;
             } else {
-                // Need to create an alloca for the LHS
+                // Look up the slot for the variable
                 if (identLeft) {
-                    // Look up the alloca for the variable
                     auto it = namedValues.find(identLeft->name);
-                    if (it != namedValues.end() && llvm::isa<llvm::AllocaInst>(it->second)) {
-                        allocaInst = llvm::cast<llvm::AllocaInst>(it->second);
+                    if (it != namedValues.end() && isStorageSlot(it->second)) {
+                        destSlot = it->second;
                     }
                 }
 
-                if (!allocaInst) {
+                if (!destSlot) {
                     logError(errorLoc, "Cannot assign to " + lhsNodeType + " (not a valid destination for assignment)");
                     m_currentLLVMValue = nullptr;
                     return;
@@ -708,11 +708,11 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
             }
 
             // Store the integer value directly
-            builder->CreateStore(RHS, allocaInst);
+            builder->CreateStore(RHS, destSlot);
 
             // Preserve AST type information
             if (lhsTypeNode) {
-                valueTypeMap[allocaInst] = lhsTypeNode;
+                valueTypeMap[destSlot] = lhsTypeNode;
             }
 
             m_currentLLVMValue = RHS;
@@ -1272,9 +1272,10 @@ void LLVMCodegen::visit(vyb::ast::ArrayElementExpression *node) {
     if (auto* identExpr = dynamic_cast<vyb::ast::Identifier*>(node->array.get())) {
         auto it = namedValues.find(identExpr->name);
         if (it != namedValues.end()) {
-            if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(it->second)) {
-                // For array variables, we need the alloca (pointer to array), not the loaded value
-                arrayPtr = alloca;
+            if (isStorageSlot(it->second)) {
+                // For array variables (and a promoted binding's cell value field), we
+                // need the slot pointer, not a loaded value.
+                arrayPtr = it->second;
             } else {
                 arrayPtr = it->second; // Global or function
             }
@@ -1411,15 +1412,17 @@ void LLVMCodegen::visit(ast::Identifier* node) {
     // Look up the identifier in the named values map
     auto it = namedValues.find(node->name);
     if (it != namedValues.end()) {
-        // Check if this is an AllocaInst (variable) and we're not on the LHS of assignment
-        if (auto* alloca = llvm::dyn_cast<llvm::AllocaInst>(it->second)) {
+        // Check if this is a storage slot -- a local's alloca, or the value field of a
+        // promoted binding's shared cell (#384 checkpoint (c), a GEP, not an alloca) --
+        // and we're not on the LHS of assignment
+        if (isStorageSlot(it->second)) {
             if (!m_isLHSOfAssignment) {
-                // Load the value from the alloca for variable access
-                llvm::Type* loadType = alloca->getAllocatedType();
-                llvm::Value* loadedValue = builder->CreateLoad(loadType, alloca, node->name);
+                // Load the value from the slot for variable access
+                llvm::Type* loadType = storageSlotValueType(it->second);
+                llvm::Value* loadedValue = builder->CreateLoad(loadType, it->second, node->name);
 
-                // Propagate type information from alloca to loaded value
-                auto typeIt = valueTypeMap.find(alloca);
+                // Propagate type information from the slot to the loaded value
+                auto typeIt = valueTypeMap.find(it->second);
                 if (typeIt != valueTypeMap.end()) {
                     valueTypeMap[loadedValue] = typeIt->second;
                     VYB_CDBG << "DEBUG: Propagated type mapping from alloca to loaded value for '" << node->name << "'" << std::endl;
@@ -1987,7 +1990,7 @@ llvm::Value* LLVMCodegen::borrowTargetPointer(llvm::Value* operandValue,
     if (base.empty()) return operandValue;  // plain struct/pointer: the slot is the object
 
     llvm::PointerType* ptrTy = llvm::PointerType::get(*context, 0);
-    const bool isSlot = llvm::dyn_cast<llvm::AllocaInst>(operandValue) != nullptr;
+    const bool isSlot = isStorageSlot(operandValue);
 
     if (base == "our" || base == "mild") {
         // Control block pointer; the borrowed object is the payload pointer in
@@ -2938,8 +2941,8 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
         auto it = namedValues.find(nm);
         if (it == namedValues.end()) continue;  // not a local variable in scope
         llvm::Type* ty = nullptr;
-        if (auto* ai = llvm::dyn_cast<llvm::AllocaInst>(it->second)) {
-            ty = ai->getAllocatedType();
+        if (isStorageSlot(it->second)) {
+            ty = storageSlotValueType(it->second);
         } else {
             ty = it->second->getType();
         }
@@ -3232,15 +3235,32 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
         // otherwise it stays null and the env is freed directly.
         std::vector<std::pair<size_t, const vyb::ast::TypeNode*>> ownedFields;
         std::vector<std::pair<size_t, const vyb::ast::TypeNode*>> boxedFields;
+        // #384 checkpoint (c): capture fields pointing at a PROMOTED binding's shared
+        // cell. The frame co-owns that cell, so the destructor releases the cell (the
+        // last owner runs the cell's own destructor) instead of freeing a block it does
+        // not own.
+        std::vector<std::pair<size_t, llvm::StructType*>> sharedCellFields;
         for (const auto& cap : captures) {
             if (cap.transfer_own && cap.ownTarget) {
                 ownedFields.emplace_back(cap.fieldIndex, cap.ownTarget);
             }
-            if (boxMutables && cap.mutable_ && cap.astType) {
+            if (boxMutables && cap.mutable_ && cap.astType &&
+                promotedValueSlots_.count(cap.outer) == 0) {
                 boxedFields.emplace_back(cap.fieldIndex, cap.astType);
             }
+            // A promoted capture holds the value-field address of a cell the FRAME also
+            // owns, so the environment must release (not free) it. Collected here, before
+            // the destructor is generated below, or the destructor would not know about it.
+            if (cap.mutable_ && promotedValueSlots_.count(cap.outer) != 0) {
+                sharedCellFields.emplace_back(
+                    cap.fieldIndex,
+                    llvm::StructType::get(*context, {llvm::Type::getInt64Ty(*context),
+                                                     llvm::PointerType::get(*context, 0),
+                                                     cap.ty}));
+            }
         }
-        llvm::Function* envDtorFn = generateClosureEnvDtor(envStructType, funcName, ownedFields, boxedFields);
+        llvm::Function* envDtorFn = generateClosureEnvDtor(envStructType, funcName, ownedFields, boxedFields,
+                                                          sharedCellFields);
 
         llvm::Value* refcountPtr = builder->CreateStructGEP(envStructType, envCast, 0, "closure.env.refcountptr");
         builder->CreateStore(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0), refcountPtr, "closure.env.refcount");
@@ -3253,6 +3273,21 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
         for (size_t ci = 0; ci < captures.size(); ++ci) {
             llvm::Value* fieldPtr = builder->CreateStructGEP(envStructType, envCast, ci + 2, "closure.env.setptr");
             if (captures[ci].mutable_) {
+                // #384 checkpoint (c): the captured binding was promoted to a shared
+                // cell, so the environment stores the cell's value-field address (exactly
+                // the slot the frame reads and writes through) and takes a reference of
+                // its own. The cell therefore outlives whichever owner goes first, and its
+                // destructor reclaims the payload when the last one drops.
+                if (promotedValueSlots_.count(captures[ci].outer) != 0) {
+                    llvm::StructType* sharedCellTy = llvm::StructType::get(
+                        *context, {llvm::Type::getInt64Ty(*context),
+                                   llvm::PointerType::get(*context, 0),
+                                   captures[ci].ty});
+                    llvm::Value* cellBase = promotedCellBaseFromValuePtr(captures[ci].outer, sharedCellTy);
+                    retainClosureEnvPtr(cellBase);
+                    builder->CreateStore(captures[ci].outer, fieldPtr);
+                    continue;
+                }
                 // #384 b(1): an escaping closure must not keep the defining
                 // frame's address in its environment -- the frame is gone by the
                 // time the closure is called. Box the binding into a heap cell

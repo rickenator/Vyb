@@ -43,6 +43,13 @@ enum NodeFact : unsigned {
     // (#384 checkpoint b(1)). A closure without this fact keeps the stack path
     // and its write-back-through-the-frame contract.
     ClosureMutablesBoxed = 1u << 5,
+    // #384 checkpoint (c): this declaration's binding is mutably captured by a
+    // closure that can escape, so it is promoted to one refcounted heap cell shared
+    // by the defining frame and every environment that captures it -- instead of the
+    // frame owning its own storage and each escaping closure getting a private copy.
+    // Marked on the declaration (not the closure), because the frame's storage is
+    // what changes and codegen must know before the closure literal is reached.
+    CellPromotedBinding = 1u << 6,
 };
 
 } // namespace analysis

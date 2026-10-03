@@ -161,7 +161,8 @@ void LLVMCodegen::cleanupScopesToBaseline(size_t baseline) {
 }
 
 void LLVMCodegen::registerVariable(const std::string& name, llvm::Value* allocaInst, llvm::Value* value,
-                                  ast::OwnershipKind ownership, llvm::Type* type, bool needsCleanup) {
+                                  ast::OwnershipKind ownership, llvm::Type* type, bool needsCleanup,
+                                  llvm::Value* ownedCellBase) {
     if (scopeStack.empty()) {
         std::cout << "ERROR: No active scope to register variable: " << name << std::endl;
         return;
@@ -179,6 +180,9 @@ void LLVMCodegen::registerVariable(const std::string& name, llvm::Value* allocaI
     var.type = type;
     var.isVecWithMallocData = needsCleanup && isVecStructType(type);
     var.isOwnedStruct = false; // resolved lazily at cleanup / return-transfer time
+    // #384 checkpoint (c): a promoted binding's cell is released at scope exit in place
+    // of the ordinary per-type reclaim (cleanupVariable short-circuits on this).
+    var.ownedCellBase = ownedCellBase;
 
     if (var.isVecWithMallocData) {
         VYB_CDBG << "DEBUG: Variable '" << name << "' identified as Vec with malloc'd data" << std::endl;
@@ -312,6 +316,19 @@ void LLVMCodegen::reclaimVecStorage(llvm::Value* vecValue, llvm::Type* vecStruct
 void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
     VYB_CDBG << "DEBUG: Cleaning up variable '" << var.name << "', needsCleanup: "
               << var.needsCleanup << ", isVecWithMallocData: " << var.isVecWithMallocData << std::endl;
+
+    // #384 checkpoint (c): a promoted binding lives in a refcounted cell shared with
+    // every escaping closure that captures it. The frame holds one reference; drop it
+    // here and let the cell's destructor reclaim the payload once the last owner (the
+    // last capturing environment) goes too. The ordinary per-type reclaim below must
+    // NOT also run -- that would reclaim the same payload twice.
+    if (var.ownedCellBase) {
+        VYB_CDBG << "DEBUG: Releasing promoted cell for '" << var.name << "'" << std::endl;
+        // The cell base is a raw `{ i64 refcount; ptr cap_dtor; ... }` block, not a
+        // closure value, so release it through the raw runtime entry point.
+        releaseClosureEnvPtr(var.ownedCellBase);
+        return;
+    }
 
     // Skip cleanup if not needed
     if (!var.needsCleanup) {
@@ -1913,6 +1930,148 @@ bool LLVMCodegen::isClosureElementType(llvm::Type* elementLLVMType,
     return isFnTypeNode(astElemType) && isClosureStructType(elementLLVMType);
 }
 
+// #384 checkpoint (c): the destructor for a promoted binding's shared cell. The cell
+// layout is the closure environment's header plus the payload
+// (`{ i64 refcount; ptr cap_dtor; T value }`), so the runtime's
+// `__vyb_closure_release` drives it unchanged: on the last release it calls this with
+// the cell block, and this reclaims whatever the payload owns and frees the block
+// (a dtor that returns without freeing would leak the block; a null dtor makes the
+// runtime free it directly, which is why a scalar payload can skip this entirely).
+llvm::Function* LLVMCodegen::generatePromotedCellDtor(llvm::StructType* cellTy,
+                                                      const std::string& tag,
+                                                      const vyb::ast::TypeNode* payloadAst) {
+    if (!cellTy || !payloadAst) return nullptr;
+    llvm::PointerType* rawPtr = llvm::PointerType::get(*context, 0);
+    llvm::FunctionType* dtorTy = llvm::FunctionType::get(
+        llvm::Type::getVoidTy(*context), {rawPtr}, false);
+    std::string fnName = "cell.dtor." + tag;
+    if (llvm::Function* existing = module->getFunction(fnName)) return existing;
+
+    llvm::Function* dtor = llvm::Function::Create(
+        dtorTy, llvm::Function::InternalLinkage, fnName, module.get());
+    dtor->getArg(0)->setName("cell.raw");
+
+    llvm::Function* savedFunction = currentFunction;
+    llvm::BasicBlock* savedBlock = builder->GetInsertBlock();
+    currentFunction = dtor;
+    builder->SetInsertPoint(llvm::BasicBlock::Create(*context, "entry", dtor));
+
+    llvm::Value* cellCast = builder->CreateBitCast(dtor->getArg(0), cellTy->getPointerTo(),
+                                                  "cell.dtor.ptr");
+    llvm::Value* payloadPtr = builder->CreateStructGEP(cellTy, cellCast, 2, "cell.dtor.value");
+    reclaimBoxedCapturePayload(payloadPtr, payloadAst, tag + ".payload");
+    builder->CreateCall(getOrCreateFreeFunction(), {dtor->getArg(0)});
+    builder->CreateRetVoid();
+
+    currentFunction = savedFunction;
+    builder->SetInsertPoint(savedBlock);
+    return dtor;
+}
+
+// #384 checkpoint (c): promote a binding to a shared cell when the analyzer marked its
+// declaration (an escaping closure mutably captures it). The frame keeps the cell base
+// to release at scope exit; its reads and writes go through the value field, so every
+// existing read/write path works unchanged and the frame observes a mutation the
+// closure makes (the closure's environment stores the same value-field address).
+LLVMCodegen::PromotedBindingCell LLVMCodegen::maybePromoteBinding(
+        const std::string& name, const vyb::ast::Node* declNode, llvm::Value* localSlot,
+        const vyb::ast::TypeNode* astType, llvm::Type* varType) {
+    PromotedBindingCell none;
+    if (!declNode || !varType || !localSlot) return none;
+    if (!nodeCellPromotedBinding(declNode)) return none;
+
+    llvm::StructType* cellTy = llvm::StructType::get(
+        *context, {llvm::Type::getInt64Ty(*context),
+                   llvm::PointerType::get(*context, 0),
+                   varType});
+    llvm::DataLayout layout(module.get());
+    uint64_t cellBytes = layout.getTypeAllocSize(cellTy);
+    llvm::Value* cellRaw = builder->CreateCall(
+        getOrCreateMallocFunction(),
+        {llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), cellBytes)},
+        "cell.alloc." + name);
+    llvm::Value* cell = builder->CreateBitCast(cellRaw, cellTy->getPointerTo(),
+                                               "cell." + name);
+
+    // One reference for the defining frame: released by cleanupVariable at scope exit.
+    llvm::Value* rcPtr = builder->CreateStructGEP(cellTy, cell, 0, "cell.rcptr." + name);
+    builder->CreateStore(llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1), rcPtr);
+    llvm::Function* cellDtorFn =
+        generatePromotedCellDtor(cellTy, name + "." + std::to_string((uintptr_t)declNode), astType);
+    llvm::Value* dtorVal = cellDtorFn
+        ? llvm::ConstantExpr::getBitCast(cellDtorFn, llvm::PointerType::get(*context, 0))
+        : static_cast<llvm::Value*>(llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0)));
+    llvm::Value* dtorPtr = builder->CreateStructGEP(cellTy, cell, 1, "cell.dtorptr." + name);
+    builder->CreateStore(dtorVal, dtorPtr);
+
+    llvm::Value* valuePtr = builder->CreateStructGEP(cellTy, cell, 2, "cell.value." + name);
+    // The cell takes the binding's current value as its own (no extra retain: the
+    // reference the binding held moves into the cell, and the cell's dtor is the one
+    // that reclaims the payload when the last owner drops).
+    if (localSlot->getType()->isPointerTy()) {
+        llvm::Value* initVal = builder->CreateLoad(varType, localSlot, "cell.init." + name);
+        builder->CreateStore(initVal, valuePtr);
+    }
+    VYB_CDBG << "DEBUG: promoted binding '" << name << "' to a shared cell" << std::endl;
+    // The frame reaches this binding through the value field; register it so every
+    // storage-slot discrimination (reads, LHS of an assignment, capture recording,
+    // subscript receivers) treats it as storage rather than as a value.
+    promotedValueSlots_.insert(valuePtr);
+    return PromotedBindingCell{cellRaw, valuePtr};
+}
+
+// #384 checkpoint (c): retain/release a promoted binding's shared cell. The cell uses
+// the closure environment's header layout (refcount at offset 0, destructor pointer at
+// offset 8), so the runtime's own entry points drive it; the callers pass the cell BASE
+// because that is where the refcount lives.
+void LLVMCodegen::retainClosureEnvPtr(llvm::Value* envPtr) {
+    if (!envPtr || !envPtr->getType()->isPointerTy()) return;
+    llvm::Value* isNull = builder->CreateICmpEQ(
+        envPtr, llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0)),
+        "cell.retain.null");
+    llvm::BasicBlock* doRetain = llvm::BasicBlock::Create(*context, "cell.retain.yes", currentFunction);
+    llvm::BasicBlock* done = llvm::BasicBlock::Create(*context, "cell.retain.done", currentFunction);
+    builder->CreateCondBr(isNull, done, doRetain);
+    builder->SetInsertPoint(doRetain);
+    builder->CreateCall(getOrCreateClosureRetainFunction(), {envPtr});
+    builder->CreateBr(done);
+    builder->SetInsertPoint(done);
+}
+
+void LLVMCodegen::releaseClosureEnvPtr(llvm::Value* envPtr) {
+    if (!envPtr || !envPtr->getType()->isPointerTy()) return;
+    llvm::Value* isNull = builder->CreateICmpEQ(
+        envPtr, llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0)),
+        "cell.release.null");
+    llvm::BasicBlock* doRel = llvm::BasicBlock::Create(*context, "cell.release.yes", currentFunction);
+    llvm::BasicBlock* done = llvm::BasicBlock::Create(*context, "cell.release.done", currentFunction);
+    builder->CreateCondBr(isNull, done, doRel);
+    builder->SetInsertPoint(doRel);
+    builder->CreateCall(getOrCreateClosureReleaseFunction(), {envPtr});
+    builder->CreateBr(done);
+    builder->SetInsertPoint(done);
+}
+
+// #384 checkpoint (c): recover a shared cell's BASE from the value-field address an
+// environment (or the frame) holds, so it can be retained/released. The value field sits
+// at a non-zero offset, so this must step BACKWARDS by that offset: a struct GEP on a
+// bitcast of the value pointer would land back on the value itself, and the refcount
+// update would land on the payload.
+llvm::Value* LLVMCodegen::promotedCellBaseFromValuePtr(llvm::Value* valuePtr,
+                                                       llvm::StructType* cellTy) {
+    if (!valuePtr || !cellTy || !cellTy->isSized()) return nullptr;
+    llvm::DataLayout layout(module.get());
+    const llvm::StructLayout* structLayout = layout.getStructLayout(cellTy);
+    uint64_t payloadOffset = structLayout->getElementOffset(2);
+    llvm::Value* asBytes = builder->CreateBitCast(
+        valuePtr, llvm::PointerType::get(*context, 0), "cell.bytes");
+    return builder->CreateGEP(
+        llvm::Type::getInt8Ty(*context), asBytes,
+        llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context),
+                               -static_cast<int64_t>(payloadOffset)),
+        "cell.base");
+}
+
 void LLVMCodegen::flushPendingCaptures() {
     // Called on every exit from a lambda body, in the lambda's own function: copy
     // each mutable capture's per-call snapshot back into the storage it was captured
@@ -2032,8 +2191,9 @@ void LLVMCodegen::reclaimBoxedCapturePayload(llvm::Value* cellPtr,
 llvm::Function* LLVMCodegen::generateClosureEnvDtor(
         llvm::StructType* envTy, const std::string& tag,
         const std::vector<std::pair<size_t, const vyb::ast::TypeNode*>>& ownedFields,
-        const std::vector<std::pair<size_t, const vyb::ast::TypeNode*>>& boxedFields) {
-    if (!envTy || (ownedFields.empty() && boxedFields.empty())) return nullptr;
+        const std::vector<std::pair<size_t, const vyb::ast::TypeNode*>>& boxedFields,
+        const std::vector<std::pair<size_t, llvm::StructType*>>& sharedCellFields) {
+    if (!envTy || (ownedFields.empty() && boxedFields.empty() && sharedCellFields.empty())) return nullptr;
 
     llvm::PointerType* rawPtr = llvm::PointerType::get(*context, 0);
     llvm::FunctionType* dtorTy = llvm::FunctionType::get(
@@ -2098,6 +2258,20 @@ llvm::Function* LLVMCodegen::generateClosureEnvDtor(
         builder->CreateCall(getOrCreateFreeFunction(), {cellPtr});
         builder->CreateBr(contBB);
         builder->SetInsertPoint(contBB);
+    }
+    // #384 checkpoint (c): a capture field pointing at a PROMOTED binding's shared cell
+    // holds the cell's value-field address; the environment owns one reference, so drop
+    // it (the last owner -- the frame, or another environment -- runs the cell's own
+    // destructor and frees the block). Freeing here would corrupt the heap: the address
+    // is the cell's payload, not the start of its allocation.
+    for (const auto& entry : sharedCellFields) {
+        size_t ix = entry.first;
+        llvm::StructType* cellTy = entry.second;
+        if (ix + 2 >= envTy->getNumElements() || !cellTy) continue;
+        llvm::Value* fieldPtr = builder->CreateStructGEP(envTy, envCast, ix + 2, "env.shared.item");
+        llvm::Value* valuePtr = builder->CreateLoad(rawPtr, fieldPtr, "env.shared.valueptr");
+        llvm::Value* cellBase = promotedCellBaseFromValuePtr(valuePtr, cellTy);
+        releaseClosureEnvPtr(cellBase);
     }
     // The runtime only frees the env block itself when the cap_dtor is null;
     // when a per-layout destructor exists, __vyb_closure_release runs it and

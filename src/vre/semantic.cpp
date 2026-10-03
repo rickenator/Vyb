@@ -529,6 +529,7 @@ void SemanticAnalyzer::enterScope() {
     currentScope = new SymbolTable(currentScope, &scopeGate_);
     borrowScopes.emplace_back();
     moveScopes.emplace_back();
+    declScopes.emplace_back();
 }
 
 void SemanticAnalyzer::exitScope() {
@@ -540,6 +541,9 @@ void SemanticAnalyzer::exitScope() {
     if (!borrowScopes.empty()) {
         borrowScopes.pop_back();
         moveScopes.pop_back();
+    }
+    if (!declScopes.empty()) {
+        declScopes.pop_back();
     }
 }
 
@@ -1192,6 +1196,13 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
 
     SymbolInfo::Kind kind = SymbolInfo::Kind::Variable;
     currentScope->add(SymbolInfo{kind, node->id->name, node->isConst, ast::OwnershipKind::MY, symbolType ? retainType(symbolType->clone().release()) : nullptr}); // Explicit SymbolInfo
+    // #384 checkpoint (c): remember which declaration a local name binds to in THIS
+    // scope, so a closure that mutably captures the name can mark the declaration
+    // (the frame's storage is what a promoted binding changes). Declarations only;
+    // parameters are handled where they are registered.
+    if (!declScopes.empty()) {
+        declScopes.back()[node->id->name] = node;
+    }
 }
 
 void SemanticAnalyzer::visit(ast::ClassDeclaration* node) {
@@ -6784,6 +6795,22 @@ void SemanticAnalyzer::markClosureNodeEscaping(const ast::FunctionExpression* fe
         return;
     }
     markFact(fe, analysis::ClosureMutablesBoxed);
+    // #384 checkpoint (c): promotion is a decision about the BINDING, not about the
+    // closure, but the closure is what tells us the binding is mutated by something
+    // that can outlive the frame. Mark the captured binding's declaration so codegen
+    // swaps its storage for the shared refcounted cell the moment the binding is
+    // declared -- the closure literal usually comes later in the body (and may live
+    // inside a nested named function), and the whole analysis has run by codegen time.
+    if (const analysis::ClosureCaptures* caps = capturesOf(fe)) {
+        for (const std::string& cap : caps->mutableCaptured) {
+            if (ast::VariableDeclaration* decl = lookupLocalDeclaration(cap)) {
+                markFact(decl, analysis::CellPromotedBinding);
+            }
+            // A mutable capture with no local declaration is a parameter (promotion
+            // for parameters is a follow-up), a global, or a field of a captured
+            // struct -- nothing to promote here.
+        }
+    }
 }
 
 void SemanticAnalyzer::visit(ast::ReturnStatement* node) {

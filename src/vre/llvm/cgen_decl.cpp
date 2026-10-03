@@ -326,6 +326,9 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
              m_currentLLVMValue = nullptr;
              return;
         }
+        // #384 checkpoint (c): set when this binding was promoted to a shared cell; the
+        // cell base is what scope exit releases (passed to registerVariable below).
+        llvm::Value* promotedCellBase = nullptr;
         // A Vec whose initializer is a borrow (a field/member extract such as
         // `self.keys`) shares the source's data buffer. Give the new binding its
         // own deep copy so both the source and this binding own independent data
@@ -366,9 +369,22 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
             initialVal = generateStructDeepCopy(
                 initialVal, node->typeNode.get(), llvm::cast<llvm::StructType>(varType));
         }
-        builder->CreateStore(initialVal, alloca);
-        // Register the variable in namedValues
-        namedValues[node->id->name] = alloca;
+        // #384 checkpoint (c): a binding an escaping closure mutably captures lives in
+        // one refcounted cell shared with every environment that captures it, so the
+        // frame and the closures observe each other's mutations (the closure's env
+        // stores the cell's value-field address, and the frame's reads/writes go
+        // through the same field). The frame owns one reference, released at scope exit.
+        PromotedBindingCell promoted =
+            maybePromoteBinding(node->id->name, node, alloca, node->typeNode.get(), varType);
+        if (promoted.valuePtr) {
+            promotedCellBase = promoted.base;
+            builder->CreateStore(initialVal, promoted.valuePtr);
+            namedValues[node->id->name] = promoted.valuePtr;
+        } else {
+            builder->CreateStore(initialVal, alloca);
+            // Register the variable in namedValues
+            namedValues[node->id->name] = alloca;
+        }
         // Store the type info for this variable (with type substitution if in monomorphization)
         if (typeOfNode(node->id)) {
             // Check if we need to substitute type parameters
@@ -407,6 +423,12 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
             // (scopeVarIsOwnedStruct) could not find its type and its owned Vec fields
             // leaked -- #192 generator tail.
             valueTypeMap[alloca] = typeOfNode(node->init);
+        }
+        // #384 checkpoint (c): the promoted binding's reads/writes resolve through the
+        // cell's value field (namedValues above), so the AST type codegen consults for
+        // member access / ownership decisions must be keyed on that pointer too.
+        if (promoted.valuePtr && valueTypeMap.count(alloca)) {
+            valueTypeMap[promoted.valuePtr] = valueTypeMap[alloca];
         }
 
         // Determine ownership kind from variable's type annotation
@@ -592,7 +614,8 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
         // is a borrow -- no AST shape has to be re-derived here.
 
         // Register variable for scope-based cleanup
-        registerVariable(node->id->name, alloca, initialVal, ownership, varType, needsCleanup);
+        registerVariable(node->id->name, alloca, initialVal, ownership, varType, needsCleanup,
+                         promotedCellBase);
 
         // Hand-off of a newly stowed closure value into a durable storage
         // location. A direct call that returns a closure already retained the

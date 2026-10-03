@@ -1,0 +1,29 @@
+// @test: a promoted binding's reads resolve through its shared cell
+// @description: #384 checkpoint (c): an escaping closure's mutable capture promotes the
+//   binding to a shared cell, and the FRAME then reads that binding through the cell's
+//   value field instead of a stack alloca -- so every read shape (a `len()` call, a
+//   subscript, a method that loads the receiver) has to keep working, and the payload
+//   has to stay owned by whichever of frame/closure is last. Exercises the Vec payload
+//   with both a push inside the closure and reads in the frame. LeakSanitizer-clean.
+// @category: lambda, closure, capture, mutable, ownership
+// @expect-output: len=2 first=7 vec=7 8
+// @expect-return: 0
+
+main()<Int> -> {
+    v<Vec<Int>> = Vec()
+    esc<Vec<fn() -> Int>> = Vec()
+    esc.push(|| -> {
+        v.push(7)
+        v.push(8)
+        return v.len()
+    })
+    f<fn() -> Int> = esc.get(0)
+    inside<Int> = f()
+
+    # The frame reads the same binding after the closure mutated it.
+    len<Int> = v.len()
+    first<Int> = v[0]
+    println("len=" + len.to_string() + " first=" + first.to_string() +
+            " vec=" + v.get(0).to_string() + " " + v.get(1).to_string())
+    return 0
+}
