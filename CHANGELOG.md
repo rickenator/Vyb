@@ -103,6 +103,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `version:` dep rebuilds with the registry absent.
 
 ### Fixed
+- **A weak handle's reference is released on the call-argument path too (#427 defects 6/7)** — an
+  accessor (`get`/`first`/`last`/`peek`) hands its caller an owned reference on the element's
+  shared control block, but a by-value callee only BORROWS its argument: `is_live(v.get(0))` over a
+  `Vec<mild<A>>` stranded that reference, one 24 B control block per call (LeakSanitizer). The
+  generic call path already released a fresh `soft(...)` argument once the callee returned; it now
+  classifies an accessor result on a weak-handle slot the same way — resolving the active
+  monomorphization substitutions, so it fires inside a generic body as well. A BOUND accessor
+  result stays owned by its binding and is not released a second time. Locked in by
+  `test/units/test_weak_handle_param_arg.vyb`, which passes a fresh and a bound accessor result
+  through the same parameter in one run (the asserted values prove no over-release freed a live
+  handle).
 - **A `Vec<mild<T>>` slot owns its element's weak reference (#427 defects 6/7)** — a Vec
   slot is a storage location, so it owns its own count on the element's shared control
   block; for a weak handle that count was never taken and never released. A weak handle

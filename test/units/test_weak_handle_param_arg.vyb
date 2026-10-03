@@ -1,0 +1,45 @@
+// @test: an accessor result passed to a by-value weak parameter (#427 defects 6/7)
+// @description: An accessor (`get`/`first`/`last`/`peek`) hands its caller an OWNED reference
+//   on the element's control block, but a by-value callee only BORROWS its argument. So an
+//   accessor result passed straight into a call stranded that reference -- one 24 B control
+//   block per call, measured before the fix with `is_live(v.get(0))` on a `Vec<mild<A>>`. The
+//   generic call path already released a fresh `soft(...)` argument once the callee returned;
+//   it now classifies an accessor result on a weak-handle slot the same way, and a BOUND
+//   accessor result stays owned by its binding (nothing is released twice).
+//   This is the same rule the Vec stores follow: the location that consumes the value takes its
+//   own reference, and the temporary's is dropped by whoever owns it.
+//   Invisible to program output; LeakSanitizer is the proof. The asserted values prove no
+//   over-release freed a live handle.
+// @category: ownership, vec, leak
+// @expect-output: viaTemp=true viaBound=true same=true
+// @expect-return: 0
+
+import collections
+
+share(all)
+struct A { v<Int> }
+
+share(all)
+is_live(w<mild<A>>)<Bool> -> {
+    return !w.released()
+}
+
+main()<Int> -> {
+    o<our<A>> = our(A { v: 6 })
+    weak<Vec<mild<A>>> = Vec()
+    weak.push(soft(o))
+
+    // A fresh accessor result straight into the call: the caller owns its reference and must
+    // drop it after the callee returns.
+    temp<Bool> = is_live(weak.get(0))
+
+    // The same value through a binding: the binding owns the reference (it took the accessor's)
+    // and releases it at scope exit -- it must NOT be dropped at the call site as well.
+    bound<mild<A>> = weak.get(0)
+    viaBinding<Bool> = is_live(bound)
+
+    println("viaTemp=" + temp.to_string() +
+            " viaBound=" + viaBinding.to_string() +
+            " same=" + (!bound.released()).to_string())
+    return 0
+}

@@ -758,11 +758,13 @@ private:
     void retainClosureRef(llvm::Value* value, llvm::Type* valueLLVMType,
                           const vyb::ast::TypeNode* astType,
                           llvm::BasicBlock** validIncoming);
-    // #427 defects 6/7: is this Vec's slot element a `mild<T>` handle? Answered from the
-    // type NAME with the active monomorphization substitutions applied, because inside a
-    // generic body (`VecHigherOps::filter` pushes into `Vec<T>`) the AST still names the
-    // type parameter -- and a store whose retain misses while the reclaim's release fires
-    // drives the weak count negative instead of balancing it.
+    // #427 defects 6/7: is this type a `mild<T>`/`our<T>` handle? Answered from the type
+    // NAME with the active monomorphization substitutions applied, because inside a
+    // generic body (a declaration `x<T>` instantiated as `mild<A>`; `VecHigherOps::filter`
+    // pushes into `Vec<T>`) the AST still names the type parameter -- and a storage
+    // location whose retain misses while the matching release fires drives the count
+    // negative instead of balancing it. `elementTypeIsMildHandle` is the `mild` case.
+    bool elementTypeIsHandle(const vyb::ast::TypeNode* elemAst, const std::string& wrapper);
     bool elementTypeIsMildHandle(const vyb::ast::TypeNode* elemAst);
     // A Vec accessor call (`get`/`first`/`last`/`peek`) on a weak-handle slot: its result
     // is an owned reference the consuming store must drop after taking its own.
