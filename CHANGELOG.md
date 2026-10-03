@@ -65,6 +65,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `version:` dep rebuilds with the registry absent.
 
 ### Fixed
+- **An in-place mutation through a mutable capture now reaches the captured storage
+  (#384)** — `v.push(3)`, `v.set(i, x)`, `v[i] = x` and `v.clear()` mutate the receiver
+  without an assignment, and neither half of the write-back path handled that: the
+  analyzer classified the capture read-only (`written` was filled only from an
+  assignment's LHS), so the closure held a **copy** of the binding while sharing its
+  buffer — the defining frame never observed the push, a second call saw the original
+  length again, and each grow inside the closure orphaned a buffer (measured: 64 B / 2
+  allocations for two pushes into a captured `Vec<Int>`). Now an in-place mutating
+  method call on a captured binding is recorded as a write to the receiver's root
+  binding (`push`, `push_array`, `set`, `insert`, `remove`, `remove_at`, `resize`,
+  `clear`, `pop`, `sort`, `reverse`, `fill`, `truncate` — every enclosing lambda
+  context is marked, so a nested lambda's mutation makes the intermediate captures
+  mutable too, or the write-back would stop at a copy), and every exit from a lambda
+  body flushes the mutable captures' per-call snapshots back into the captured storage
+  (`flushPendingCaptures`: the implicit fall-through return, and each `return`
+  statement both before and after its argument). This applies to the stack path and to
+  the boxed escaping path alike. Locked in by
+  `test/lambda/test_closure_mutable_capture_inplace_mutation.vyb` (stack path, boxed
+  path, `set`, subscript store, assignment — exact values, LeakSanitizer-clean).
 - **A closure stored in a `Vec` no longer leaks its capture environment (#439)** — a
   `Vec<fn ...>` slot held a closure value it had never retained and never released, so
   one environment block leaked per element (24 B for a one-capture closure, under
