@@ -1,0 +1,15 @@
+// @test: the explicit `|x<T>|` closure spelling is diagnosed, not left to an operator error
+// @description: #463 -- a closure has no type-parameter list (`param<T>` is already the
+//   annotation form, per the decision recorded on #385). `|x<T>|` parses as an annotation naming
+//   a type `T` that does not exist, which surfaced as `Operator '*' is not defined for operands
+//   'T' and 'Int'` plus a signature mismatch. It now names the two forms that work: a concrete
+//   annotation, or no annotation with the context supplying the signature.
+// @category: lambda, closure, generics, diagnostics
+// @expect: fail
+// @expect-error: is not a type
+
+main()<Int> -> {
+    f<fn(Int) -> Int> = |x<T>| -> x * 2
+    println("f(3)=" + f(3).to_string())
+    return 0
+}
