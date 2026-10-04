@@ -1,0 +1,13 @@
+// @test: an un-annotated closure parameter inferred from a typed fn binding
+// @description: #385 -- a closure stored in a binding whose declared type is fn(...)
+//   takes that signature's parameter types, so the body type-checks without an explicit
+//   `|x<Int>|` annotation. Before this, the closure inferred `fn(?) -> void`.
+// @category: lambda, closure, generics, inference
+// @expect-output: b=6
+// @expect-return: 0
+
+main()<Int> -> {
+    f<fn(Int) -> Int> = |x| -> x * 2
+    println("b=" + f(3).to_string())
+    return 0
+}

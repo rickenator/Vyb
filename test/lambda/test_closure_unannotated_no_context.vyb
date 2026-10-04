@@ -1,0 +1,14 @@
+// @test: an un-annotated closure parameter with no contextual signature is refused
+// @description: #385 -- inference fills a parameter only when the enclosing context
+//   supplies a matching fn(...) signature. An untyped binding supplies none, so the
+//   closure is refused with a diagnostic rather than silently accepted (and the call is
+//   never silently dropped).
+// @category: lambda, closure, generics, inference
+// @expect: fail
+// @expect-error: Cannot determine type of object in member expression.
+
+main()<Int> -> {
+    g = |x| -> x * 2
+    println("g=" + g(3).to_string())
+    return 0
+}
