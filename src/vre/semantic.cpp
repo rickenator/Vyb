@@ -2013,7 +2013,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
     std::map<std::string, ast::TypeNode*> vecArgSubstitutions;
     size_t vecArgIndex = 0;
     const bool vecArgHasSignature =
-        closureSignatureForVecCombinatorArg(node, vecArgSubstitutions, vecArgSignature, vecArgIndex);
+        closureSignatureForCalleeArg(node, vecArgSubstitutions, vecArgSignature, vecArgIndex);
     for (size_t argIndex = 0; argIndex < node->arguments.size(); ++argIndex) {
         auto& arg = node->arguments[argIndex];
         if (!arg) continue;
@@ -5594,13 +5594,47 @@ void SemanticAnalyzer::visit(ast::ArrayLiteral* node) {
 // type is `fn(T) -> T` with T bound to the receiver's element type -- exactly the
 // substitution `v.push(x)` uses from the same VecType. Only a single-type-parameter aspect
 // is handled, which is what the Vec combinators declare.
-bool SemanticAnalyzer::closureSignatureForVecCombinatorArg(
+bool SemanticAnalyzer::closureSignatureForCalleeArg(
         ast::CallExpression* call,
         std::map<std::string, ast::TypeNode*>& substitutions,
         const ast::FunctionType*& signature,
         size_t& closureArgIndex) {
     closureArgIndex = 0;
     if (!call) return false;
+
+    // A plain function whose parameter is declared `fn(...)`: that argument takes the
+    // signature directly. A parameter that references the callee's OWN generic parameters
+    // is skipped -- there is no forward inference from a closure argument yet, so such a
+    // call still fails, but later and more clearly than here.
+    if (auto* id = dynamic_cast<ast::Identifier*>(call->callee.get())) {
+        auto it = functionRegistry.find(id->name);
+        if (it == functionRegistry.end() || !it->second) return false;
+        ast::FunctionDeclaration* fd = it->second;
+        std::set<std::string> gparams;
+        for (const auto& gp : fd->genericParams) {
+            if (gp && gp->name) gparams.insert(gp->name->name);
+        }
+        size_t argIndex = 0;
+        for (const auto& p : fd->params) {
+            ast::TypeNode* pt = p.typeNode.get();
+            if (pt) {
+                bool refsGeneric = false;
+                for (const auto& g : gparams) {
+                    if (pt->toString().find(g) != std::string::npos) { refsGeneric = true; break; }
+                }
+                if (!refsGeneric) {
+                    if (auto* ft = dynamic_cast<ast::FunctionType*>(pt)) {
+                        signature = ft;
+                        closureArgIndex = argIndex;
+                        return true;
+                    }
+                }
+            }
+            ++argIndex;
+        }
+        return false;
+    }
+
     auto* mem = dynamic_cast<ast::MemberExpression*>(call->callee.get());
     if (!mem) return false;
     auto* objId = dynamic_cast<ast::Identifier*>(mem->object.get());
