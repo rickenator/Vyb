@@ -1,0 +1,19 @@
+// @test: an un-annotated closure passed to a plain function's fn(...) parameter
+// @description: #385 -- a plain function declares its closure parameter's type, and an
+//   argument written without annotations takes that signature, the same inference a Vec
+//   combinator's argument gets. Before this the closure reached codegen with '?' typed
+//   parameters ('Unknown type identifier: ?', 'Both operands to a binary operator are not
+//   of the same type!', 'Argument codegen failed for call to h'). The GENERIC form -- a
+//   parameter written in terms of the callee's own type parameters -- is still open (#456).
+// @category: lambda, closure, generics, inference
+// @expect-output: n3=21
+// @expect-return: 0
+
+h(f<fn(Int) -> Int>)<Int> -> {
+    return f(f(5)) + 1
+}
+
+main()<Int> -> {
+    println("n3=" + h(|x| -> x * 2).to_string())
+    return 0
+}

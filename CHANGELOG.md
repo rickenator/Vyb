@@ -27,10 +27,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   which declares its closure second, after an init value -- works too:
   `nums.reduce(0, |a, b| -> a + b)`, where a two-parameter closure with no annotations
   previously reached codegen with pointer-typed parameters and crashed the driver (rc=139).
+  A plain function's closure parameter works through the same argument path --
+  `h(f<fn(Int) -> Int>)<Int>` called with `|x| -> x * 2` gives 21, where the argument
+  previously reached codegen with `?`-typed parameters (`Unknown type identifier: ?`). The
+  generic form -- a parameter written in terms of the callee's own type parameters -- is
+  still open (#456).
   Remaining from the recorded decision: a
   diagnostic for a closure value called at more than one concrete type, and the explicit
-  `|x<T>| -> ...` spelling (#456 records the related gap that a plain function parameter of
-  type `fn(...)` does not parse).
+  `|x<T>| -> ...` spelling (#456 covers the separate generic-function inference gap).
 - **Per-binding shared cell for escaping closures — a mutation through an escaping
   closure is visible to the defining frame (#384 checkpoint (c))** — a binding that an
   escaping closure mutably captures is now promoted to ONE refcounted heap cell shared

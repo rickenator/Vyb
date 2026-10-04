@@ -901,13 +901,14 @@ public:
     };
     std::vector<ExpectedClosureSignature> expectedClosureSignatures_;
 
-    // #385: for a Vec combinator call (`v.map(f)`, `v.filter(f)`, `v.for_each(f)`) the
-    // closure signature its argument must satisfy, carrying the receiver's element type as
-    // the substitution for the aspect's type parameter. False when the callee is not one.
-    bool closureSignatureForVecCombinatorArg(ast::CallExpression* call,
-                                             std::map<std::string, ast::TypeNode*>& substitutions,
-                                             const ast::FunctionType*& signature,
-                                             size_t& closureArgIndex);
+    // #385: for a call argument whose parameter is declared `fn(...)` -- a Vec combinator's
+    // closure, or a plain function's closure parameter -- the signature that argument must
+    // satisfy, plus any substitution that makes it concrete. False when the callee is not
+    // such a call.
+    bool closureSignatureForCalleeArg(ast::CallExpression* call,
+                                      std::map<std::string, ast::TypeNode*>& substitutions,
+                                      const ast::FunctionType*& signature,
+                                      size_t& closureArgIndex);
 
     // #384 checkpoint (c): per-block-scope map from a local name to the node that
     // declares it -- a VariableDeclaration for a local, a parameter's name Identifier for
