@@ -130,6 +130,21 @@ void SemanticAnalyzer::handleChanMethod(ast::CallExpression* node, ast::TypeNode
     addError("Unknown method '" + methodName + "' on type 'chan<T>'", node);
 }
 
+// #463: the names a closure parameter may be annotated with WITHOUT being declared in scope --
+// the primitives and C interop types the analyzer recognises. `currentScope->lookup("Int")` does
+// NOT find them, so a scope test alone reports `|x<Int>| -> ...` as a bad annotation.
+static bool isBuiltinTypeName(const std::string& name) {
+    static const std::set<std::string> builtins = {
+        "Int", "Int8", "Int16", "Int32", "Int64",
+        "UInt", "UInt8", "UInt16", "UInt32", "UInt64",
+        "Float", "Float32", "Float64", "Bool", "String", "Void", "Char", "Rune",
+        "CChar", "CUChar", "CShort", "CUShort", "CInt", "CUInt",
+        "CLong", "CULong", "CSize", "CSSize", "CFloat", "CDouble", "CVoid", "CString",
+        "Self", "Vec", "Option", "Result", "Map", "Set", "Box", "Future", "chan"
+    };
+    return builtins.count(name) != 0;
+}
+
 static bool isBuiltinVecMethodName(const std::string& methodName) {
     return methodName == "push" || methodName == "pop" || methodName == "len" ||
            methodName == "get" || methodName == "set" || methodName == "push_array" ||
@@ -5842,6 +5857,37 @@ void SemanticAnalyzer::visit(ast::FunctionExpression* node) {
             }
             ++paramIndex;
         }
+    }
+
+    // #463: `|x<T>| -> ...` is NOT a closure type-parameter list -- `param<T>` is already the
+    // annotation form, and the decision recorded on #385 chose inference at the call site
+    // precisely to avoid a second meaning. Today it parses as an annotation NAMING a type `T`,
+    // so the body reports `Operator '*' is not defined for operands 'T' and 'Int'` and the
+    // closure's signature never matches. Say what actually works instead.
+    //
+    // Deliberately narrow, to avoid firing on things that are fine: only a bare TypeName with
+    // no generic arguments, whose name the ENCLOSING scope does not know as a type. That keeps
+    // `|x<Int>| -> ...`, a struct/enum/alias in scope, a module-qualified name, and a type
+    // parameter of an enclosing generic (`|x<T>|` inside `f<T>(...)`, which is legitimate)
+    // silent. A forward-declared type resolved later is the known risk.
+    for (const auto& param : node->params) {
+        if (!param.typeNode) continue;
+        auto* annotatedName = dynamic_cast<ast::TypeName*>(param.typeNode.get());
+        if (!annotatedName || !annotatedName->identifier || !annotatedName->genericArgs.empty()) continue;
+        const std::string& annotated = annotatedName->identifier->name;
+        if (isBuiltinTypeName(annotated)) continue;
+        SymbolInfo* annotationSym = currentScope->lookup(annotated);
+        if (annotationSym &&
+            (annotationSym->kind == SymbolInfo::Kind::Type ||
+             annotationSym->kind == SymbolInfo::Kind::TYPE_PARAMETER)) {
+            continue;
+        }
+        addError("'" + annotated + "' is not a type, so it cannot annotate a closure parameter. "
+                 "A closure has no type-parameter list: annotate the parameter with a concrete "
+                 "type ('|x<Int>| -> ...'), or leave it unannotated and let the context supply "
+                 "the signature ('f<fn(Int) -> Int> = |x| -> x * 2', 'nums.map(|x| -> x * 2)', or "
+                 "a function's 'fn(...)' parameter).", param.typeNode.get());
+        break; // one diagnostic per closure
     }
 
     // Enter a new scope for the lambda body

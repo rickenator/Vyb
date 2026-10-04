@@ -45,7 +45,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   un-annotated closure is still refused, and only because nothing can infer it.
   Remaining from the recorded decision: a
   diagnostic for a closure value called at more than one concrete type (unreachable while a
-  closure value cannot be polymorphic), and the explicit `|x<T>| -> ...` spelling (#463).
+  closure value cannot be polymorphic).
+  The explicit `|x<T>| -> ...` spelling now REFUSES with a message naming the forms that work
+  (#463) -- a bare annotation whose name the enclosing scope does not know as a type and which is
+  not a builtin gets "is not a type, so it cannot annotate a closure parameter", instead of the
+  operator error and signature mismatch it produced before. The check is narrow on purpose: a
+  concrete annotation, a struct/enum/alias in scope, and `|x<T>|` inside a generic body (where T
+  is the enclosing function's type parameter) all stay silent.
 - **Per-binding shared cell for escaping closures — a mutation through an escaping
   closure is visible to the defining frame (#384 checkpoint (c))** — a binding that an
   escaping closure mutably captures is now promoted to ONE refcounted heap cell shared
