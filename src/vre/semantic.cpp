@@ -3058,6 +3058,23 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                 }
                 return;
             }
+            // #385/#456: a parameter declared in terms of the callee's type parameters can
+            // be a closure (`h<T>(f<fn(T) -> T>)`). Without this case an annotated argument
+            // (`|x<Int>| -> x + 1`, whose type is fn(Int) -> Int) inferred nothing and the
+            // call failed with `Unknown struct type: T`.
+            if (auto ft = dynamic_cast<ast::FunctionType*>(paramType)) {
+                if (auto aft = dynamic_cast<ast::FunctionType*>(argType)) {
+                    if (ft->parameterTypes.size() == aft->parameterTypes.size()) {
+                        for (size_t i = 0; i < ft->parameterTypes.size(); ++i) {
+                            unifyGenericType(ft->parameterTypes[i].get(), aft->parameterTypes[i].get(),
+                                             genericParamNames, substitutions);
+                        }
+                    }
+                    unifyGenericType(ft->returnType.get(), aft->returnType.get(),
+                                     genericParamNames, substitutions);
+                }
+                return;
+            }
             if (auto ft = dynamic_cast<ast::FutureType*>(paramType)) {
                 if (auto aft = dynamic_cast<ast::FutureType*>(argType)) {
                     unifyGenericType(ft->resultType.get(), aft->resultType.get(),
@@ -5768,14 +5785,9 @@ void SemanticAnalyzer::reportUnannotatedClosureArgForGenericCallee(ast::CallExpr
                      "<Int>(|x<Int>| -> ...)' is the form that works.", call);
             return; // one diagnostic per call
         }
-        if (call->explicitTypeArgs.empty()) {
-            // The closure is annotated, so only the type argument is missing: saying so saves
-            // the user the misleading `Unknown struct type: T` that follows from it.
-            addError("The type parameter of '" + id->name + "' cannot be inferred from this "
-                     "closure argument, and no type argument is written. Pass it explicitly -- '" +
-                     id->name + "<Int>(|x<Int>| -> ...)' is the form that works.", call);
-            return;
-        }
+        // An ANNOTATED closure supplies its own signature, so the type parameter IS inferable
+        // from it (semantic `unifyGenericType` and codegen `inferGenericArgsFromPattern` both
+        // descend into a FunctionType) -- no diagnostic here.
     }
 }
 

@@ -38,9 +38,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shape WITH an explicit type argument no longer CRASHES the driver (rc=139 in codegen).
   Inference from a non-closure argument is untouched (`apply(5, |v<Int>| -> v * 3)` still
   infers), which is what keeps the diagnostic from firing on shapes that work.
+  That same shape now also WORKS when the closure is annotated: `h(|x<Int>| -> x + 2)` gives 9,
+  because semantic `unifyGenericType` and codegen's `inferGenericArgsFromPattern` both descend
+  into a `FunctionType` (#456) -- before, `T` was bound to the argument's whole type, so the
+  call failed with `Unknown struct type: T`, or crashed with an explicit type argument. Only the
+  un-annotated closure is still refused, and only because nothing can infer it.
   Remaining from the recorded decision: a
-  diagnostic for a closure value called at more than one concrete type, and the explicit
-  `|x<T>| -> ...` spelling (#456 covers the separate generic-function inference gap).
+  diagnostic for a closure value called at more than one concrete type (unreachable while a
+  closure value cannot be polymorphic), and the explicit `|x<T>| -> ...` spelling (#463).
 - **Per-binding shared cell for escaping closures — a mutation through an escaping
   closure is visible to the defining frame (#384 checkpoint (c))** — a binding that an
   escaping closure mutably captures is now promoted to ONE refcounted heap cell shared

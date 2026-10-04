@@ -78,6 +78,23 @@ inline void inferGenericArgsFromPattern(const ast::TypeNode* paramType,
         }
         return;
     }
+    // #385/#456: a closure-typed parameter -- `h<T>(f<fn(T) -> T>)` called with
+    // `|x<Int>| -> x + 1`. Without this the bare-parameter case above binds T to the
+    // argument's WHOLE type ("fn(Int) -> Int"), so monomorphization instantiates a
+    // signature with a closure type where Int belongs. Unify the pieces instead.
+    if (auto pf = dynamic_cast<const ast::FunctionType*>(paramType)) {
+        if (auto af = dynamic_cast<const ast::FunctionType*>(argType)) {
+            if (pf->parameterTypes.size() == af->parameterTypes.size()) {
+                for (size_t k = 0; k < pf->parameterTypes.size(); ++k) {
+                    inferGenericArgsFromPattern(pf->parameterTypes[k].get(), af->parameterTypes[k].get(),
+                                                typeParamNames, concreteTypeArgs);
+                }
+            }
+            inferGenericArgsFromPattern(pf->returnType.get(), af->returnType.get(),
+                                        typeParamNames, concreteTypeArgs);
+        }
+        return;
+    }
     if (auto pf = dynamic_cast<const ast::FutureType*>(paramType)) {
         if (auto af = dynamic_cast<const ast::FutureType*>(argType)) {
             inferGenericArgsFromPattern(pf->resultType.get(), af->resultType.get(),
