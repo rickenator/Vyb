@@ -280,6 +280,15 @@ void LLVMCodegen::handleVecPush(vyb::ast::CallExpression* node, llvm::Value* vec
         argIsWeakHandleAccessorTemp(node->arguments[0].get())) {
         releaseMildControlBlock(valueToAdd, "vec.push.temparg.mild");
     }
+    // #427/#451: the same rule one reference kind over. A fresh `our(...)` argument is kind 1
+    // (the owned case); the slot now retains it, so the temporary's own reference must be
+    // dropped here or every such push strands one control block (measured: 24 B per push,
+    // invisible to the JIT suite).
+    if (freshOwningCallArgKind(node->arguments[0].get()) == 1 &&
+        elementTypeIsOwnedHandle(elemAstForOwnership)) {
+        releaseOurControlBlock(valueToAdd, "vec.push.temparg.our", elemAstForOwnership,
+                               elementType);
+    }
 
     // Calculate the actual element size using DataLayout
     llvm::DataLayout dataLayout(module.get());
@@ -1090,6 +1099,11 @@ void LLVMCodegen::handleVecSet(vyb::ast::CallExpression* node, llvm::Value* vecP
         if (freshOwningCallArgKind(node->arguments[1].get()) == 2 ||
             argIsWeakHandleAccessorTemp(node->arguments[1].get())) {
             releaseMildControlBlock(value, "vec.set.temparg.mild");
+        }
+        // #427/#451: the owned-handle twin of the rule above (see vec.push).
+        if (freshOwningCallArgKind(node->arguments[1].get()) == 1 &&
+            elementTypeIsOwnedHandle(incomingAst)) {
+            releaseOurControlBlock(value, "vec.set.temparg.our", incomingAst, elementLLVMType);
         }
     } else if (elementLLVMType && elementLLVMType->isStructTy() &&
                typeOfNode(node->arguments[1]) &&
