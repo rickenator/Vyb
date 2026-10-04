@@ -676,10 +676,14 @@ See `doc/bundles_and_sharing.md` and `doc/MODULE_FFI_BINARY_ROADMAP.md`.
   thread — `thread_spawn`, `task_spawn`, `agent_start` and `async_spawn` (the
   runtime decides: the first three `pthread_create`, and an async task's
   ucontext fibre is pinned to a worker pthread) — for every capture, rejecting
-  mutable captures (which hold the defining frame's address). Fixtures:
+  mutable captures whose declared type has no sound cell representation (a borrow, an FFI
+  handle, an optional, an array, a tuple, an unresolved name). A mutable capture that CAN be
+  boxed is accepted instead — see the boxed/lifetime-carrying row. Fixtures:
   `test/threads/test_thread_boundary_unique_owner_rejected.vyb`,
-  `..._mutable_capture_rejected.vyb`, `..._async_unique_owner_rejected.vyb`,
-  `..._task_mutable_capture_rejected.vyb`, `..._view_read_rejected.vyb`,
+  `test/threads/test_thread_boundary_mutable_capture_boxed_accepted.vyb`,
+  `..._async_unique_owner_rejected.vyb`,
+  `test/threads/test_thread_boundary_task_mutable_capture_boxed_accepted.vyb`,
+  `..._view_read_rejected.vyb`,
   `..._view_write_rejected.vyb`, `..._view_owner_not_captured_rejected.vyb`,
   `..._view_written_rejected.vyb`, `..._handoff_accepted.vyb`,
   `..._async_task_accepted.vyb` and `..._view_retained_owner_accepted.vyb`

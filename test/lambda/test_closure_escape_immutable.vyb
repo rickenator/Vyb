@@ -3,8 +3,8 @@
 //   immutable snapshots carries its own heap environment (refcounted, released when the
 //   closure value dies), so returning it and calling it after the defining function has
 //   exited is well-defined and leaks nothing. This is the shape the boxed-capture work
-//   must keep working; the mutable-capture counterpart is still rejected at compile time
-//   (test/lambda/test_closure_mutable_return_rejected.vyb).
+//   must keep working; the mutable-capture counterpart escapes the same way once its
+//   captures can be boxed (test/lambda/test_closure_mutable_return_escapes.vyb).
 // @category: lambda, closure, escape, ownership
 // @expect-output: escaped=5
 // @expect-return: 0
