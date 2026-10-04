@@ -910,6 +910,12 @@ public:
                                       const ast::FunctionType*& signature,
                                       size_t& closureArgIndex);
 
+    // #385: a generic callee whose type parameter appears only in a closure parameter cannot
+    // infer it from an UN-annotated closure. Diagnose it, naming the spelling that works,
+    // instead of falling through to `Unknown struct type: T` (or a codegen crash when the
+    // type argument is explicit).
+    void reportUnannotatedClosureArgForGenericCallee(ast::CallExpression* call);
+
     // #384 checkpoint (c): per-block-scope map from a local name to the node that
     // declares it -- a VariableDeclaration for a local, a parameter's name Identifier for
     // a parameter -- pushed/popped alongside the symbol table, so a closure that mutably

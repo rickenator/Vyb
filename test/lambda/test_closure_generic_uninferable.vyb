@@ -1,0 +1,18 @@
+// @test: a generic callee whose type parameter cannot be inferred from an un-annotated closure
+// @description: #385 -- when a type parameter appears ONLY in the callee's closure parameter,
+//   an un-annotated closure gives nothing to infer it from. This used to fail with
+//   `Unknown struct type: T`, and with an explicit type argument it CRASHED the driver
+//   (rc=139 in codegen). It is now one diagnostic naming the form that works:
+//   `<callee><Int>(|x<Int>| -> ...)`.
+// @category: lambda, closure, generics, inference, diagnostics
+// @expect: fail
+// @expect-error: Closure parameter has no type
+
+h<T>(f<fn(T) -> T>)<T> -> {
+    return f(f(5))
+}
+
+main()<Int> -> {
+    println("n1=" + h(|x| -> x + 1).to_string())
+    return 0
+}
