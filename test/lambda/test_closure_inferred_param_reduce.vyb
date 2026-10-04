@@ -1,0 +1,27 @@
+// @test: a Vec combinator whose closure is not the first argument, and a borrowed receiver
+// @description: #385 -- the closure argument's position comes from the method's declared
+//   parameter list, not from an assumption that it is first: `reduce` declares
+//   `f<fn(T, T) -> T>` as its SECOND parameter, after an init value. An un-annotated
+//   two-parameter closure used to reach codegen with pointer-typed parameters and crash the
+//   driver (rc=139); it now infers `fn(Int, Int) -> Int`. `retain`, whose receiver is a
+//   `their<Vec<T>>` borrow and whose closure is first, works through the same path.
+// @category: lambda, closure, generics, inference, vec
+// @expect-output: sum=6 kept=1
+// @expect-return: 0
+import collections
+
+main()<Int> -> {
+    nums<Vec<Int>> = Vec()
+    nums.push(1)
+    nums.push(2)
+    nums.push(3)
+    sum<Int> = nums.reduce(0, |a, b| -> a + b)
+
+    kept<Vec<Int>> = Vec()
+    kept.push(1)
+    kept.push(2)
+    kept.retain(|x| -> x > 1)
+
+    println("sum=" + sum.to_string() + " kept=" + kept.len().to_string())
+    return 0
+}

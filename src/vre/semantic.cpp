@@ -2011,12 +2011,13 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
     // argument, so a closure never sees another argument's signature.
     const ast::FunctionType* vecArgSignature = nullptr;
     std::map<std::string, ast::TypeNode*> vecArgSubstitutions;
+    size_t vecArgIndex = 0;
     const bool vecArgHasSignature =
-        closureSignatureForVecCombinatorArg(node, vecArgSubstitutions, vecArgSignature);
+        closureSignatureForVecCombinatorArg(node, vecArgSubstitutions, vecArgSignature, vecArgIndex);
     for (size_t argIndex = 0; argIndex < node->arguments.size(); ++argIndex) {
         auto& arg = node->arguments[argIndex];
         if (!arg) continue;
-        const bool pushSignature = vecArgHasSignature && argIndex == 0;
+        const bool pushSignature = vecArgHasSignature && argIndex == vecArgIndex;
         if (pushSignature) {
             expectedClosureSignatures_.push_back(ExpectedClosureSignature{vecArgSignature, vecArgSubstitutions});
         }
@@ -5596,7 +5597,9 @@ void SemanticAnalyzer::visit(ast::ArrayLiteral* node) {
 bool SemanticAnalyzer::closureSignatureForVecCombinatorArg(
         ast::CallExpression* call,
         std::map<std::string, ast::TypeNode*>& substitutions,
-        const ast::FunctionType*& signature) {
+        const ast::FunctionType*& signature,
+        size_t& closureArgIndex) {
+    closureArgIndex = 0;
     if (!call) return false;
     auto* mem = dynamic_cast<ast::MemberExpression*>(call->callee.get());
     if (!mem) return false;
@@ -5621,19 +5624,25 @@ bool SemanticAnalyzer::closureSignatureForVecCombinatorArg(
         const TraitMethod* method = nullptr;
         if (!findAspectMethod(aspectName, propId->name, declaringAspect, method)) return false;
         if (!method) return false;
-        // The registry declares the receiver as the leading `self` parameter; the closure
-        // parameter is the first one after it.
-        size_t paramIndex = 0;
-        if (!method->parameterNames.empty() && method->parameterNames[0] == "self") paramIndex = 1;
-        if (paramIndex >= method->parameterTypes.size()) return false;
-        auto* ft = dynamic_cast<ast::FunctionType*>(method->parameterTypes[paramIndex]);
-        if (!ft) return false;
-        signature = ft;
-        // The bind's type parameters carry the names to substitute -- `Vec<T>` binds
-        // exactly one, whose value is the receiver's element type. A concrete bind declares
-        // none, so its signature is already exact.
-        if (typeParams.size() == 1) substitutions[typeParams[0]] = elementType;
-        return true;
+        // The registry declares the receiver as the leading `self` parameter, so the call's
+        // arguments map onto the parameters AFTER it. The closure is the first of those
+        // whose declared type is a closure -- `map`/`filter` take it first, `reduce` takes
+        // an init value first and the closure second.
+        const bool hasSelf = !method->parameterNames.empty() && method->parameterNames[0] == "self";
+        size_t paramIndex = hasSelf ? 1 : 0;
+        while (paramIndex < method->parameterTypes.size()) {
+            if (auto* ft = dynamic_cast<ast::FunctionType*>(method->parameterTypes[paramIndex])) {
+                signature = ft;
+                closureArgIndex = paramIndex - (hasSelf ? 1 : 0);
+                // The bind's type parameters carry the names to substitute -- `Vec<T>`
+                // binds exactly one, whose value is the receiver's element type. A concrete
+                // bind declares none, so its signature is already exact.
+                if (typeParams.size() == 1) substitutions[typeParams[0]] = elementType;
+                return true;
+            }
+            ++paramIndex;
+        }
+        return false;
     };
 
     auto concrete = traitImpls.find(receiverStr);
