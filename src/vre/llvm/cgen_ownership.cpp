@@ -2152,6 +2152,10 @@ bool LLVMCodegen::elementTypeIsMildHandle(const vyb::ast::TypeNode* elemAst) {
     return elementTypeIsHandle(elemAst, "mild");
 }
 
+bool LLVMCodegen::elementTypeIsOwnedHandle(const vyb::ast::TypeNode* elemAst) {
+    return elementTypeIsHandle(elemAst, "our");
+}
+
 // The same "storage location owns one reference" rule for a Vec slot: an accessor
 // (`get`/`first`/`last`/`peek`) hands its caller an OWNED reference (#427 defects 6/7,
 // see handleVecGet/handleVecLast). When such a result is passed straight into a store --
@@ -2179,6 +2183,16 @@ void LLVMCodegen::retainElementRef(llvm::Value* value, llvm::Type* valueLLVMType
         retainClosureRef(value, valueLLVMType, astType, validIncoming);
         return;
     }
+    // #427: an `our<T>` element is a bare handle pointer and the slot owns a STRONG reference
+    // on it. `weakSlot` is `elementTypeIsMildHandle(...)`, false for `our<T>`, so this case is
+    // detected from the AST type. Without it the slot retained nothing while the consumer of
+    // `get(0)` released one -- a net over-release (heap corruption, rc=134).
+    if (elementTypeIsOwnedHandle(astType)) {
+        if (!valueLLVMType->isPointerTy()) return;
+        retainOurControlBlock(value, "elem.our.retain");
+        if (validIncoming) *validIncoming = builder->GetInsertBlock();
+        return;
+    }
     if (!weakSlot || !valueLLVMType->isPointerTy()) return;
     retainMildControlBlock(value, "elem.mild.retain");
     if (validIncoming) *validIncoming = builder->GetInsertBlock();
@@ -2190,6 +2204,14 @@ void LLVMCodegen::releaseElementValue(llvm::Value* value, llvm::Type* valueLLVMT
     if (!value || !valueLLVMType || !astType || !builder || !currentFunction) return;
     if (isClosureElementType(valueLLVMType, astType)) {
         releaseClosureValue(value);
+        return;
+    }
+    // #427/#451: the `our<T>` twin of the weak case below -- the slot owns a STRONG reference
+    // (retained by retainElementRef), so the reclaim must drop exactly one, or every
+    // Vec<our<T>> leaks a control block per element.
+    if (elementTypeIsOwnedHandle(astType)) {
+        if (!valueLLVMType->isPointerTy()) return;
+        releaseOurControlBlock(value, tag + ".our", astType, valueLLVMType);
         return;
     }
     if (!weakSlot || !valueLLVMType->isPointerTy()) return;

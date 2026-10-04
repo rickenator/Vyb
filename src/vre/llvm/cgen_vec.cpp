@@ -7,7 +7,6 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/DerivedTypes.h>
-#include <iostream>
 
 namespace vyb {
 
@@ -238,7 +237,9 @@ void LLVMCodegen::handleVecPush(vyb::ast::CallExpression* node, llvm::Value* vec
     const vyb::ast::TypeNode* elemAstForOwnership = vecElementNodeFromReceiver(node);
     if (!elemAstForOwnership) elemAstForOwnership = pushedAst;
     const bool pushSlotIsWeakHandle = elementTypeIsMildHandle(elemAstForOwnership);
-    if (!pushSlotIsWeakHandle) {
+    // #427: an `our<T>` element is a bare pointer too (the comment on the `set` site already
+    // named both wrappers); String-wrapping it stored 16 bytes into an 8-byte slot.
+    if (!pushSlotIsWeakHandle && !elementTypeIsOwnedHandle(elemAstForOwnership)) {
         valueToAdd = normalizeVecStringElement(valueToAdd);
     }
 
@@ -278,6 +279,15 @@ void LLVMCodegen::handleVecPush(vyb::ast::CallExpression* node, llvm::Value* vec
     if (freshOwningCallArgKind(node->arguments[0].get()) == 2 ||
         argIsWeakHandleAccessorTemp(node->arguments[0].get())) {
         releaseMildControlBlock(valueToAdd, "vec.push.temparg.mild");
+    }
+    // #427/#451: the same rule one reference kind over. A fresh `our(...)` argument is kind 1
+    // (the owned case); the slot now retains it, so the temporary's own reference must be
+    // dropped here or every such push strands one control block (measured: 24 B per push,
+    // invisible to the JIT suite).
+    if (freshOwningCallArgKind(node->arguments[0].get()) == 1 &&
+        elementTypeIsOwnedHandle(elemAstForOwnership)) {
+        releaseOurControlBlock(valueToAdd, "vec.push.temparg.our", elemAstForOwnership,
+                               elementType);
     }
 
     // Calculate the actual element size using DataLayout
@@ -962,7 +972,7 @@ void LLVMCodegen::handleVecSet(vyb::ast::CallExpression* node, llvm::Value* vecP
     llvm::Type* elementLLVMType = vecElementTypeFromReceiver(node);
     const vyb::ast::TypeNode* setAst = vecElementNodeFromReceiver(node);
     if (!setAst) setAst = typeOfNode(node->arguments[1]).get();
-    if (!elementTypeIsMildHandle(setAst)) {
+    if (!elementTypeIsMildHandle(setAst) && !elementTypeIsOwnedHandle(setAst)) {
         value = normalizeVecStringElement(value);
     }
 
@@ -1089,6 +1099,11 @@ void LLVMCodegen::handleVecSet(vyb::ast::CallExpression* node, llvm::Value* vecP
         if (freshOwningCallArgKind(node->arguments[1].get()) == 2 ||
             argIsWeakHandleAccessorTemp(node->arguments[1].get())) {
             releaseMildControlBlock(value, "vec.set.temparg.mild");
+        }
+        // #427/#451: the owned-handle twin of the rule above (see vec.push).
+        if (freshOwningCallArgKind(node->arguments[1].get()) == 1 &&
+            elementTypeIsOwnedHandle(incomingAst)) {
+            releaseOurControlBlock(value, "vec.set.temparg.our", incomingAst, elementLLVMType);
         }
     } else if (elementLLVMType && elementLLVMType->isStructTy() &&
                typeOfNode(node->arguments[1]) &&
