@@ -538,33 +538,26 @@ launch path are done; the surrounding ecosystem is staged. Reference material:
   decide: only a mutable capture of a closure that ESCAPES is boxed, with its own
   cell initialised from the binding — no frame redirection, so every non-escaping
   fixture and the write-back contract stay exactly as they were.
-- [ ] **Generic lambdas** — `|x<T>| -> ...` (type parameters on closures) <!-- open: Generic lambdas (type parameters on closures) -->
-  is unsupported: no parser/codegen path and no fixture exists. Named-function
-  generics and generic binds monomorphize, so this is the one closure shape a user
-  would expect to work and cannot write. **Decision for 1.0: postponed** (a
-  deliberate "not planned" record, per #360); implementing it means monomorphizing
-  a closure at each call site, mirroring generic-function monomorphization.
-  **Step 0 probes + the step 1 decision are recorded (#385, landed).** Measured on
-  this tree: a closure with EXPLICIT parameter types works in both positions
-  (`test/lambda/test_closure_typed_param_binding.vyb`,
-  `test/lambda/test_closure_typed_param_aspect_hof.vyb`), while an UN-annotated one
-  is rejected at a typed binding (`Expected fn(Int) -> Int but got fn(?) -> void`),
-  silently DROPS its call statement when bound without a type (`d = |x| -> x * 2;
-  n<Int> = d(3)` leaves `n` null), and SIGSEGVs the driver (exit 139) when passed to
-  the shipped higher-order `map` (warning `Parameter type not specified in function
-  expression, defaulting to pointer type`, then the crash). `|x<T>|` itself parses
-  today as a parameter *annotation* naming an unknown type (`Unknown struct type:
-  T`). Decision: implement per-call-site instantiation as **parameter-type
-  inference at the call site** — `|x| -> x * 2` handed to `f<fn(T) -> T>` (an
-  aspect method or a generic helper) instantiates once per call site, which is what
-  feature (1) needs — and NOT a closure type-parameter list: `param<T>` is already
-  the annotation form, so a second meaning would be ambiguous, and the
-  inferred-parameter path covers the writable shapes. A closure VALUE called at
-  more than one concrete type is rejected with a diagnostic naming what is missing,
-  never inferred from the first call. The inference is a **prerequisite** for the
-  rejection, not a follow-on: a single call at one type silently drops or crashes
-  today. Ordering: after #384, since a capturing generic lambda instantiates its
-  captures per instance and the boxed-capture env layout changes with it.
+- [x] **Generic lambdas** — `|x<T>| -> ...` (type parameters on closures) <!-- shipped: Generic lambdas (type parameters on closures) -->
+  shipped as **parameter-type inference at the call site** (the decision recorded on #385, not a
+  closure type-parameter list: `param<T>` is already the annotation form). A closure parameter
+  written without an annotation takes its type from the expected signature — a binding declared
+  `fn(...)` (`test/lambda/test_closure_inferred_param_binding.vyb`), a Vec combinator's declared
+  parameter with the receiver's element type substituted (`test_closure_inferred_param_map.vyb`,
+  `_filter.vyb`, `_reduce.vyb` — the closure's POSITION comes from the method's parameters, so
+  `reduce`'s second-position closure works), or a plain function's `fn(...)` parameter
+  (`test_closure_inferred_param_plain_function.vyb`). An explicitly annotated parameter is never
+  rewritten, and a closure with no context is still refused
+  (`test_closure_unannotated_no_context.vyb`). The un-inferable generic shape, and the codegen
+  crash it used to cause (rc=139), are now one diagnostic naming the form that works
+  `test_closure_generic_uninferable.vyb`, `test_closure_generic_explicit_type_arg.vyb`).
+  A generic callee whose type parameter appears only in its closure parameter now infers it from
+  the closure's OWN annotations: `h(|x<Int>| -> x + 2)` gives 9 (#456) — semantic
+  `unifyGenericType` and codegen `inferGenericArgsFromPattern` both descend into a `FunctionType`,
+  where before `T` was bound to the argument's whole type. An un-annotated closure in that
+  position is still refused by the diagnostic above, since nothing can infer it. One limit
+  remains, filed: #463 (the explicit `|x<T>| -> ...` spelling still parses as an annotation
+  naming a type that does not exist, and wants a diagnostic naming the supported forms).
 
 ---
 
