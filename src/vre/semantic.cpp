@@ -1065,12 +1065,23 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
         // Bare Option constructor injection: `result<Option<Int>> = None` or
         // `result<Option<Int>> = Some(value)` infers the payload type from the
         // variable's declared Option<T> annotation without explicit type args.
+        bool pushedExpectedClosure = false;
         if (node->typeNode && node->init) {
             ast::TypeNode* varType = typeOf(node->typeNode) ? typeOf(node->typeNode).get() : node->typeNode.get();
             if (varType) injectBareEnumConstructorType(*this, node->init.get(), varType);
+            // #385: a typed `fn(...)` binding hands its initializer closure a signature to
+            // take un-annotated parameter types from.
+            if (varType) {
+                if (auto* fnType = dynamic_cast<ast::FunctionType*>(varType)) {
+                    expectedClosureSignatures_.push_back(fnType);
+                    pushedExpectedClosure = true;
+                }
+            }
         }
 
         node->init->accept(*this);
+
+        if (pushedExpectedClosure) expectedClosureSignatures_.pop_back();
 
         // #384 b(1): remember a closure-typed binding of a mutable-capture
         // closure, so a later escape of the binding (`return f`, `v.push(f)`,
@@ -5569,19 +5580,37 @@ void SemanticAnalyzer::visit(ast::FunctionExpression* node) {
     // contains the lambda itself, so free variables resolve from it (and its
     // ancestors) but never from within the lambda's own body scope.
     lambdaCaptureStack.push_back(LambdaCaptureCtx{currentScope, {}, {}});
+    // #385: an un-annotated parameter takes its type from the enclosing context's expected
+    // closure signature, when one of matching arity is in scope (a typed `fn(...)` binding,
+    // or a call whose parameter type is a `fn(...)`). Resolved once here and used both to
+    // build the closure's FunctionType and to type the parameter inside the body.
+    const ast::FunctionType* expectedSig = nullptr;
+    if (!expectedClosureSignatures_.empty()) {
+        const ast::FunctionType* cand = expectedClosureSignatures_.back();
+        if (cand && cand->parameterTypes.size() == node->params.size()) expectedSig = cand;
+    }
     {
         LambdaCaptureCtx& ctx = lambdaCaptureStack.back();
+        size_t paramIndex = 0;
         for (const auto& param : node->params) {
             if (param.name) {
                 ctx.locals.insert(param.name->name);
             }
+            ast::TypeNodePtr expectedParamType = nullptr;
+            if (expectedSig && paramIndex < expectedSig->parameterTypes.size()) {
+                auto& ep = expectedSig->parameterTypes[paramIndex];
+                if (ep) expectedParamType = ep->clone();
+            }
             if (param.typeNode) {
                 paramTypes.push_back(param.typeNode->clone());
+            } else if (expectedParamType) {
+                paramTypes.push_back(std::move(expectedParamType));
             } else {
                 // Unknown parameter type — use a generic placeholder
                 paramTypes.push_back(std::make_unique<ast::TypeName>(
                     node->loc, std::make_unique<ast::Identifier>(node->loc, "?")));
             }
+            ++paramIndex;
         }
     }
 
@@ -5590,13 +5619,21 @@ void SemanticAnalyzer::visit(ast::FunctionExpression* node) {
     fnParamNamesStack_.emplace_back();
 
     // Register each parameter in the lambda's scope
+    size_t regIndex = 0;
     for (const auto& param : node->params) {
         if (param.name) {
             if (!fnParamNamesStack_.empty()) fnParamNamesStack_.back().insert(param.name->name);
             // #384 checkpoint (c): a lambda's own parameter can be mutably captured by a
             // closure nested inside the lambda body, so record it for promotion too.
             if (!declScopes.empty()) declScopes.back()[param.name->name] = param.name.get();
+            // #385: prefer the resolved parameter type. For a parameter written without an
+            // annotation that may be the type inferred from the enclosing context's
+            // expected signature, which is what lets the BODY type-check (and so the
+            // closure's return type infer) instead of seeing an untyped name.
             ast::TypeNode* paramTypeRaw = param.typeNode ? param.typeNode.get() : nullptr;
+            if (!paramTypeRaw && expectedSig && regIndex < expectedSig->parameterTypes.size()) {
+                paramTypeRaw = expectedSig->parameterTypes[regIndex].get();
+            }
             currentScope->add(SymbolInfo{
                 SymbolInfo::Kind::Variable,
                 param.name->name,
@@ -5605,6 +5642,7 @@ void SemanticAnalyzer::visit(ast::FunctionExpression* node) {
                 paramTypeRaw ? retainType(paramTypeRaw->clone().release()) : nullptr
             });
         }
+        ++regIndex;
     }
 
     // Visit body to detect captures and validate inner expressions
