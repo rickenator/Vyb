@@ -22,7 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with no context in scope is still refused rather than silently accepted
   (`test/lambda/test_closure_inferred_param_binding.vyb`,
   `test_closure_inferred_param_map.vyb`, `test_closure_inferred_param_filter.vyb`,
-  `test_closure_unannotated_no_context.vyb`). Remaining from the recorded decision: a
+  `test_closure_unannotated_no_context.vyb`). The closure argument's position comes from the
+  method's declared parameter list rather than an assumption that it is first, so `reduce` --
+  which declares its closure second, after an init value -- works too:
+  `nums.reduce(0, |a, b| -> a + b)`, where a two-parameter closure with no annotations
+  previously reached codegen with pointer-typed parameters and crashed the driver (rc=139).
+  Remaining from the recorded decision: a
   diagnostic for a closure value called at more than one concrete type, and the explicit
   `|x<T>| -> ...` spelling (#456 records the related gap that a plain function parameter of
   type `fn(...)` does not parse).

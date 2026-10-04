@@ -906,7 +906,8 @@ public:
     // the substitution for the aspect's type parameter. False when the callee is not one.
     bool closureSignatureForVecCombinatorArg(ast::CallExpression* call,
                                              std::map<std::string, ast::TypeNode*>& substitutions,
-                                             const ast::FunctionType*& signature);
+                                             const ast::FunctionType*& signature,
+                                             size_t& closureArgIndex);
 
     // #384 checkpoint (c): per-block-scope map from a local name to the node that
     // declares it -- a VariableDeclaration for a local, a parameter's name Identifier for
