@@ -2206,6 +2206,14 @@ void LLVMCodegen::releaseElementValue(llvm::Value* value, llvm::Type* valueLLVMT
         releaseClosureValue(value);
         return;
     }
+    // #427/#451: the `our<T>` twin of the weak case below -- the slot owns a STRONG reference
+    // (retained by retainElementRef), so the reclaim must drop exactly one, or every
+    // Vec<our<T>> leaks a control block per element.
+    if (elementTypeIsOwnedHandle(astType)) {
+        if (!valueLLVMType->isPointerTy()) return;
+        releaseOurControlBlock(value, tag + ".our", astType, valueLLVMType);
+        return;
+    }
     if (!weakSlot || !valueLLVMType->isPointerTy()) return;
     releaseMildControlBlock(value, tag + ".mild");
 }
