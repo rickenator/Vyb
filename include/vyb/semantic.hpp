@@ -887,6 +887,12 @@ public:
     std::vector<LambdaCaptureCtx> lambdaCaptureStack;
     std::vector<ast::FunctionExpression*> lambdaStack;
 
+    // #385: the closure signature the ENCLOSING context expects -- a typed `fn(...)`
+    // binding's declared type, or a call's `fn(...)` parameter type -- used to fill in a
+    // closure parameter written without an annotation. Innermost wins; a parameter that
+    // carries its own annotation is never rewritten.
+    std::vector<const ast::FunctionType*> expectedClosureSignatures_;
+
     // #384 checkpoint (c): per-block-scope map from a local name to the node that
     // declares it -- a VariableDeclaration for a local, a parameter's name Identifier for
     // a parameter -- pushed/popped alongside the symbol table, so a closure that mutably

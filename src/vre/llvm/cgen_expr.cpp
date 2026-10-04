@@ -2875,14 +2875,24 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
     // Process parameters.
     std::vector<llvm::Type*> paramTypes;
     std::vector<std::string> paramNames;
+    // #385: an un-annotated parameter's type may have been inferred by the analyzer from
+    // the enclosing context's expected closure signature; that lands on the lambda's
+    // semantic FunctionType, so consult it before falling back to a pointer type.
+    ast::FunctionType* semFnType = dynamic_cast<ast::FunctionType*>(typeOfNode(node).get());
+    size_t genParamIndex = 0;
     for (const auto& param : node->params) {
         llvm::Type* paramType = param.typeNode ? codegenType(param.typeNode.get()) : nullptr;
+        if (!paramType && semFnType && genParamIndex < semFnType->parameterTypes.size() &&
+            semFnType->parameterTypes[genParamIndex]) {
+            paramType = codegenType(semFnType->parameterTypes[genParamIndex].get());
+        }
         if (!paramType) {
             paramType = llvm::PointerType::get(*context, 0);
             logWarning(node->loc, "Parameter type not specified in function expression, defaulting to pointer type");
         }
         paramTypes.push_back(paramType);
         paramNames.push_back(param.name ? param.name->name : "param" + std::to_string(paramNames.size()));
+        ++genParamIndex;
     }
 
     // Infer return type from the semantic FunctionType the analyzer attached to
@@ -2890,9 +2900,9 @@ void LLVMCodegen::visit(ast::FunctionExpression* node) {
     // bodies). Prefer that over typeOfNode(node->body), which is null when a block ends
     // in a `return` statement (rather than a tail expression).
     llvm::Type* returnType = llvm::Type::getVoidTy(*context);
-    if (auto* ft = dynamic_cast<ast::FunctionType*>(typeOfNode(node).get())) {
-        if (ft->returnType) {
-            llvm::Type* t = codegenType(ft->returnType.get());
+    if (semFnType) {
+        if (semFnType->returnType) {
+            llvm::Type* t = codegenType(semFnType->returnType.get());
             if (t) returnType = t;
         }
     } else if (node->body && typeOfNode(node->body)) {
