@@ -1073,7 +1073,7 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
             // take un-annotated parameter types from.
             if (varType) {
                 if (auto* fnType = dynamic_cast<ast::FunctionType*>(varType)) {
-                    expectedClosureSignatures_.push_back(fnType);
+                    expectedClosureSignatures_.push_back(ExpectedClosureSignature{fnType, {}});
                     pushedExpectedClosure = true;
                 }
             }
@@ -2005,8 +2005,23 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
     injectBareEnumCtorArgTypes(node);
 
     // Visit arguments
-    for (auto& arg : node->arguments) {
-        if (arg) arg->accept(*this);
+    // #385: a Vec combinator's closure argument (`v.map(|x| -> ...)`) takes the signature
+    // the aspect method declares, with the receiver's element type substituted for the
+    // aspect's type parameter. The signature is active only for the visit of ITS own
+    // argument, so a closure never sees another argument's signature.
+    const ast::FunctionType* vecArgSignature = nullptr;
+    std::map<std::string, ast::TypeNode*> vecArgSubstitutions;
+    const bool vecArgHasSignature =
+        closureSignatureForVecCombinatorArg(node, vecArgSubstitutions, vecArgSignature);
+    for (size_t argIndex = 0; argIndex < node->arguments.size(); ++argIndex) {
+        auto& arg = node->arguments[argIndex];
+        if (!arg) continue;
+        const bool pushSignature = vecArgHasSignature && argIndex == 0;
+        if (pushSignature) {
+            expectedClosureSignatures_.push_back(ExpectedClosureSignature{vecArgSignature, vecArgSubstitutions});
+        }
+        arg->accept(*this);
+        if (pushSignature) expectedClosureSignatures_.pop_back();
     }
 
     // #384 b(1): a closure handed to a STORING container mutator (`v.push(c)`,
@@ -5573,6 +5588,70 @@ void SemanticAnalyzer::visit(ast::ArrayLiteral* node) {
         setType(node,  std::shared_ptr<ast::TypeNode>(expressionTypes[exprKey(node)]->clone()));
     }
 }
+// #385: the closure signature a Vec combinator's argument must satisfy. `v.map(f)` binds
+// the aspect method declared `map(self<Vec<T>>, f<fn(T) -> T>)`, so the closure parameter's
+// type is `fn(T) -> T` with T bound to the receiver's element type -- exactly the
+// substitution `v.push(x)` uses from the same VecType. Only a single-type-parameter aspect
+// is handled, which is what the Vec combinators declare.
+bool SemanticAnalyzer::closureSignatureForVecCombinatorArg(
+        ast::CallExpression* call,
+        std::map<std::string, ast::TypeNode*>& substitutions,
+        const ast::FunctionType*& signature) {
+    if (!call) return false;
+    auto* mem = dynamic_cast<ast::MemberExpression*>(call->callee.get());
+    if (!mem) return false;
+    auto* objId = dynamic_cast<ast::Identifier*>(mem->object.get());
+    auto* propId = dynamic_cast<ast::Identifier*>(mem->property.get());
+    if (!objId || !propId) return false;
+    SymbolInfo* sym = currentScope->lookup(objId->name);
+    if (!sym || !sym->type) return false;
+
+    ast::TypeNode* elementType = nullptr;
+    if (auto* vt = dynamic_cast<ast::VecType*>(sym->type.get())) {
+        elementType = vt->elementType.get();
+    } else if (auto* tn = dynamic_cast<ast::TypeName*>(sym->type.get())) {
+        if (!tn->identifier || tn->identifier->name != "Vec" || tn->genericArgs.size() != 1) return false;
+        elementType = tn->genericArgs[0].get();
+    }
+    if (!elementType) return false;
+    const std::string receiverStr = sym->type->toString();
+
+    auto tryAspect = [&](const std::string& aspectName, const std::vector<std::string>& typeParams) -> bool {
+        const TraitInfo* declaringAspect = nullptr;
+        const TraitMethod* method = nullptr;
+        if (!findAspectMethod(aspectName, propId->name, declaringAspect, method)) return false;
+        if (!method) return false;
+        // The registry declares the receiver as the leading `self` parameter; the closure
+        // parameter is the first one after it.
+        size_t paramIndex = 0;
+        if (!method->parameterNames.empty() && method->parameterNames[0] == "self") paramIndex = 1;
+        if (paramIndex >= method->parameterTypes.size()) return false;
+        auto* ft = dynamic_cast<ast::FunctionType*>(method->parameterTypes[paramIndex]);
+        if (!ft) return false;
+        signature = ft;
+        // The bind's type parameters carry the names to substitute -- `Vec<T>` binds
+        // exactly one, whose value is the receiver's element type. A concrete bind declares
+        // none, so its signature is already exact.
+        if (typeParams.size() == 1) substitutions[typeParams[0]] = elementType;
+        return true;
+    };
+
+    auto concrete = traitImpls.find(receiverStr);
+    if (concrete != traitImpls.end()) {
+        for (const auto& entry : concrete->second) {
+            if (tryAspect(entry.first, {})) return true;
+        }
+    }
+    for (const auto& typeEntry : genericTraitImpls) {
+        if (!matchesPattern(receiverStr, typeEntry.first)) continue;
+        for (const auto& entry : typeEntry.second) {
+            const GenericImplInfo* implInfo = entry.second.get();
+            if (implInfo && tryAspect(entry.first, implInfo->typeParams)) return true;
+        }
+    }
+    return false;
+}
+
 void SemanticAnalyzer::visit(ast::FunctionExpression* node) {
     // Collect parameter types for the FunctionType
     std::vector<ast::TypeNodePtr> paramTypes;
@@ -5585,9 +5664,13 @@ void SemanticAnalyzer::visit(ast::FunctionExpression* node) {
     // or a call whose parameter type is a `fn(...)`). Resolved once here and used both to
     // build the closure's FunctionType and to type the parameter inside the body.
     const ast::FunctionType* expectedSig = nullptr;
+    std::map<std::string, ast::TypeNode*> expectedSubsts;
     if (!expectedClosureSignatures_.empty()) {
-        const ast::FunctionType* cand = expectedClosureSignatures_.back();
-        if (cand && cand->parameterTypes.size() == node->params.size()) expectedSig = cand;
+        const ExpectedClosureSignature& cand = expectedClosureSignatures_.back();
+        if (cand.signature && cand.signature->parameterTypes.size() == node->params.size()) {
+            expectedSig = cand.signature;
+            expectedSubsts = cand.substitutions;
+        }
     }
     {
         LambdaCaptureCtx& ctx = lambdaCaptureStack.back();
@@ -5599,7 +5682,15 @@ void SemanticAnalyzer::visit(ast::FunctionExpression* node) {
             ast::TypeNodePtr expectedParamType = nullptr;
             if (expectedSig && paramIndex < expectedSig->parameterTypes.size()) {
                 auto& ep = expectedSig->parameterTypes[paramIndex];
-                if (ep) expectedParamType = ep->clone();
+                if (ep) {
+                    // #385: a signature that still carries the aspect's type parameter
+                    // (`fn(T) -> T` from a Vec combinator) is made concrete here with the
+                    // receiver's element type.
+                    if (!expectedSubsts.empty()) {
+                        expectedParamType = substituteGenericArgsForValidation(ep.get(), expectedSubsts);
+                    }
+                    if (!expectedParamType) expectedParamType = ep->clone();
+                }
             }
             if (param.typeNode) {
                 paramTypes.push_back(param.typeNode->clone());
@@ -5631,8 +5722,13 @@ void SemanticAnalyzer::visit(ast::FunctionExpression* node) {
             // expected signature, which is what lets the BODY type-check (and so the
             // closure's return type infer) instead of seeing an untyped name.
             ast::TypeNode* paramTypeRaw = param.typeNode ? param.typeNode.get() : nullptr;
-            if (!paramTypeRaw && expectedSig && regIndex < expectedSig->parameterTypes.size()) {
-                paramTypeRaw = expectedSig->parameterTypes[regIndex].get();
+            if (!paramTypeRaw && expectedSig && regIndex < paramTypes.size() && paramTypes[regIndex]) {
+                // #385: the resolved -- and, when the context carried one, substituted --
+                // type: the same node the closure's FunctionType received, so the BODY sees
+                // a concrete type too. Guarded on expectedSig so a closure with NO context
+                // keeps its untyped parameter (a placeholder would make the body report
+                // operator errors it did not report before).
+                paramTypeRaw = paramTypes[regIndex].get();
             }
             currentScope->add(SymbolInfo{
                 SymbolInfo::Kind::Variable,

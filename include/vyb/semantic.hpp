@@ -891,7 +891,22 @@ public:
     // binding's declared type, or a call's `fn(...)` parameter type -- used to fill in a
     // closure parameter written without an annotation. Innermost wins; a parameter that
     // carries its own annotation is never rewritten.
-    std::vector<const ast::FunctionType*> expectedClosureSignatures_;
+    // #385: a closure signature the ENCLOSING context expects -- a typed `fn(...)`
+    // binding's declared type, or a Vec combinator's closure parameter -- plus the
+    // substitutions that make its type parameters concrete (a combinator's `fn(T) -> T`
+    // with T bound to the receiver's element type). Empty substitutions = already concrete.
+    struct ExpectedClosureSignature {
+        const ast::FunctionType* signature = nullptr;
+        std::map<std::string, ast::TypeNode*> substitutions;
+    };
+    std::vector<ExpectedClosureSignature> expectedClosureSignatures_;
+
+    // #385: for a Vec combinator call (`v.map(f)`, `v.filter(f)`, `v.for_each(f)`) the
+    // closure signature its argument must satisfy, carrying the receiver's element type as
+    // the substitution for the aspect's type parameter. False when the callee is not one.
+    bool closureSignatureForVecCombinatorArg(ast::CallExpression* call,
+                                             std::map<std::string, ast::TypeNode*>& substitutions,
+                                             const ast::FunctionType*& signature);
 
     // #384 checkpoint (c): per-block-scope map from a local name to the node that
     // declares it -- a VariableDeclaration for a local, a parameter's name Identifier for

@@ -10,6 +10,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **A closure written without parameter annotations takes its type from the enclosing
+  context (#385)** — `f<fn(Int) -> Int> = |x| -> x * 2` previously failed with
+  `Initializer type does not match variable type for 'f'. Expected fn(Int) -> Int but got
+  fn(?) -> void`. An un-annotated parameter now takes its type from the expected
+  signature: a binding whose declared type is `fn(...)`, or a Vec combinator's method
+  signature with the receiver's element type substituted for the aspect's type parameter
+  (`nums.map(|x| -> x * 2)` infers `fn(Int) -> Int`, while `nums.filter(|x| -> x > 1)`
+  infers `fn(Int) -> Bool` — the declared signature, not a hardcoded one). An explicitly
+  annotated parameter (`|x<Int>| -> ...`) is never rewritten, and an un-annotated parameter
+  with no context in scope is still refused rather than silently accepted
+  (`test/lambda/test_closure_inferred_param_binding.vyb`,
+  `test_closure_inferred_param_map.vyb`, `test_closure_inferred_param_filter.vyb`,
+  `test_closure_unannotated_no_context.vyb`). Remaining from the recorded decision: a
+  diagnostic for a closure value called at more than one concrete type, and the explicit
+  `|x<T>| -> ...` spelling (#456 records the related gap that a plain function parameter of
+  type `fn(...)` does not parse).
 - **Per-binding shared cell for escaping closures — a mutation through an escaping
   closure is visible to the defining frame (#384 checkpoint (c))** — a binding that an
   escaping closure mutably captures is now promoted to ONE refcounted heap cell shared

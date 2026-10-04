@@ -1,0 +1,19 @@
+// @test: a Vec combinator whose closure returns a DIFFERENT type than its element
+// @description: #385 -- `filter`'s aspect method declares `fn(T) -> Bool`, while `map`'s
+//   declares `fn(T) -> T`. The inferred closure takes the DECLARED parameter's signature,
+//   not a hardcoded one, so `|x| -> x > 1` infers `fn(Int) -> Bool` and keeps two of the
+//   three elements.
+// @category: lambda, closure, generics, inference, vec
+// @expect-output: kept=2
+// @expect-return: 0
+import collections
+
+main()<Int> -> {
+    nums<Vec<Int>> = Vec()
+    nums.push(1)
+    nums.push(2)
+    nums.push(3)
+    kept<Vec<Int>> = nums.filter(|x| -> x > 1)
+    println("kept=" + kept.len().to_string())
+    return 0
+}
