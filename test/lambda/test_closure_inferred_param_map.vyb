@@ -1,0 +1,23 @@
+// @test: a Vec combinator's closure parameter inferred from the method signature
+// @description: #385 -- `nums.map(|x| -> x * 2)` takes the aspect method's declared
+//   parameter type `fn(T) -> T` with T bound to the receiver's element type (Vec<Int>
+//   here), so the closure needs no annotation. `import collections` is what brings
+//   VecHigherOps into scope; without it `map` is not a method on Vec at all.
+// @category: lambda, closure, generics, inference, vec
+// @expect-output: total=12
+// @expect-return: 0
+import collections
+
+main()<Int> -> {
+    nums<Vec<Int>> = Vec()
+    nums.push(1)
+    nums.push(2)
+    nums.push(3)
+    doubled<Vec<Int>> = nums.map(|x| -> x * 2)
+    total<Int> = 0
+    for (d in doubled) {
+        total += d
+    }
+    println("total=" + total.to_string())
+    return 0
+}
