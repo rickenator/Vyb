@@ -32,6 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   previously reached codegen with `?`-typed parameters (`Unknown type identifier: ?`). The
   generic form -- a parameter written in terms of the callee's own type parameters -- is
   still open (#456).
+  A generic callee whose type parameter occurs ONLY in its closure parameter is now diagnosed
+  instead of falling through: `h(|x| -> x + 1)` names the spelling that works
+  (`h<Int>(|x<Int>| -> ...)`) rather than reporting `Unknown struct type: T`, and the same
+  shape WITH an explicit type argument no longer CRASHES the driver (rc=139 in codegen).
+  Inference from a non-closure argument is untouched (`apply(5, |v<Int>| -> v * 3)` still
+  infers), which is what keeps the diagnostic from firing on shapes that work.
   Remaining from the recorded decision: a
   diagnostic for a closure value called at more than one concrete type, and the explicit
   `|x<T>| -> ...` spelling (#456 covers the separate generic-function inference gap).

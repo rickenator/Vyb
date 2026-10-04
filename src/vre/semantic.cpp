@@ -2009,6 +2009,10 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
     // the aspect method declares, with the receiver's element type substituted for the
     // aspect's type parameter. The signature is active only for the visit of ITS own
     // argument, so a closure never sees another argument's signature.
+    // #385: diagnose the un-inferable generic-closure shape BEFORE anything else, so it
+    // cannot fall through to a misleading error or a codegen crash.
+    reportUnannotatedClosureArgForGenericCallee(node);
+
     const ast::FunctionType* vecArgSignature = nullptr;
     std::map<std::string, ast::TypeNode*> vecArgSubstitutions;
     size_t vecArgIndex = 0;
@@ -5693,6 +5697,86 @@ bool SemanticAnalyzer::closureSignatureForCalleeArg(
         }
     }
     return false;
+}
+
+// #385: a generic callee whose type parameter appears ONLY in its closure parameter cannot
+// infer it from an un-annotated closure -- there is nothing else to infer it from. Measured
+// shapes without this diagnostic: `h(|x| -> x + 1)` fails with `Unknown struct type: T`, and
+// `h<Int>(|x| -> x + 1)` CRASHES the driver (rc=139) in codegen. Both become one honest
+// error naming the spelling that works today: explicit type argument + annotated closure.
+void SemanticAnalyzer::reportUnannotatedClosureArgForGenericCallee(ast::CallExpression* call) {
+    if (!call) return;
+    auto* id = dynamic_cast<ast::Identifier*>(call->callee.get());
+    if (!id) return;
+    auto it = functionRegistry.find(id->name);
+    if (it == functionRegistry.end() || !it->second) return;
+    ast::FunctionDeclaration* fd = it->second;
+    if (fd->genericParams.empty()) return;
+    std::set<std::string> genericParamNames;
+    for (const auto& gp : fd->genericParams) {
+        if (gp && gp->name) genericParamNames.insert(gp->name->name);
+    }
+    if (genericParamNames.empty()) return;
+
+    for (size_t i = 0; i < call->arguments.size() && i < fd->params.size(); ++i) {
+        auto* ft = dynamic_cast<ast::FunctionType*>(fd->params[i].typeNode.get());
+        if (!ft) continue;
+        // Which of the callee's type parameters this closure signature involves...
+        std::set<std::string> inSignature;
+        auto collect = [&](ast::TypeNode* t) {
+            if (!t) return;
+            const std::string s = t->toString();
+            for (const auto& g : genericParamNames) {
+                if (s.find(g) != std::string::npos) inSignature.insert(g);
+            }
+        };
+        for (const auto& pt : ft->parameterTypes) collect(pt.get());
+        collect(ft->returnType.get());
+        if (inSignature.empty()) continue;
+
+        // ...and which of those are inferable from ANOTHER parameter. Only a type parameter
+        // that occurs nowhere else is genuinely un-inferable here; otherwise the ordinary
+        // inference path applies and a diagnostic would be wrong.
+        std::set<std::string> inferableElsewhere;
+        for (size_t j = 0; j < fd->params.size(); ++j) {
+            if (j == i) continue;
+            ast::TypeNode* other = fd->params[j].typeNode.get();
+            if (!other) continue;
+            const std::string s = other->toString();
+            for (const auto& g : inSignature) {
+                if (s.find(g) != std::string::npos) inferableElsewhere.insert(g);
+            }
+        }
+        bool uninferable = false;
+        for (const auto& g : inSignature) {
+            if (!inferableElsewhere.count(g)) { uninferable = true; break; }
+        }
+        if (!uninferable) continue;
+
+        auto* closure = dynamic_cast<ast::FunctionExpression*>(call->arguments[i].get());
+        if (!closure) continue;
+
+        bool hasUnannotatedParameter = false;
+        for (const auto& p : closure->params) {
+            if (!p.typeNode) { hasUnannotatedParameter = true; break; }
+        }
+
+        if (hasUnannotatedParameter) {
+            addError("Closure parameter has no type, and '" + id->name + "' declares its type in "
+                     "terms of its own type parameter, so it cannot be inferred here. Write the type "
+                     "argument explicitly AND annotate the closure -- '" + id->name +
+                     "<Int>(|x<Int>| -> ...)' is the form that works.", call);
+            return; // one diagnostic per call
+        }
+        if (call->explicitTypeArgs.empty()) {
+            // The closure is annotated, so only the type argument is missing: saying so saves
+            // the user the misleading `Unknown struct type: T` that follows from it.
+            addError("The type parameter of '" + id->name + "' cannot be inferred from this "
+                     "closure argument, and no type argument is written. Pass it explicitly -- '" +
+                     id->name + "<Int>(|x<Int>| -> ...)' is the form that works.", call);
+            return;
+        }
+    }
 }
 
 void SemanticAnalyzer::visit(ast::FunctionExpression* node) {

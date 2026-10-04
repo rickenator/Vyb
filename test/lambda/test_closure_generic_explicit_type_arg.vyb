@@ -1,0 +1,24 @@
+// @test: the generic-closure forms that DO work, including inference from another argument
+// @description: #385 -- two working spellings around the same generic callee:
+//   `h<Int>(|x<Int>| -> x + 1)` writes the type argument explicitly and annotates the closure
+//   (7), and `apply(5, |v<Int>| -> v * 3)` lets the type parameter infer from a NON-closure
+//   argument (15). The second is the guard that the un-inferable diagnostic does not fire when
+//   the type parameter occurs somewhere else in the callee's parameters.
+// @category: lambda, closure, generics, inference
+// @expect-output: m1=7 mx=15
+// @expect-return: 0
+
+h<T>(f<fn(T) -> T>)<T> -> {
+    return f(f(5))
+}
+
+apply<T>(x<T>, f<fn(T) -> T>)<T> -> {
+    return f(x)
+}
+
+main()<Int> -> {
+    a<Int> = h<Int>(|x<Int>| -> x + 1)
+    b<Int> = apply(5, |v<Int>| -> v * 3)
+    println("m1=" + a.to_string() + " mx=" + b.to_string())
+    return 0
+}
