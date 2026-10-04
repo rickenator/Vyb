@@ -766,6 +766,7 @@ private:
     // negative instead of balancing it. `elementTypeIsMildHandle` is the `mild` case.
     bool elementTypeIsHandle(const vyb::ast::TypeNode* elemAst, const std::string& wrapper);
     bool elementTypeIsMildHandle(const vyb::ast::TypeNode* elemAst);
+    bool elementTypeIsOwnedHandle(const vyb::ast::TypeNode* elemAst);
     // A Vec accessor call (`get`/`first`/`last`/`peek`) on a weak-handle slot: its result
     // is an owned reference the consuming store must drop after taking its own.
     bool argIsWeakHandleAccessorTemp(vyb::ast::Expression* arg);

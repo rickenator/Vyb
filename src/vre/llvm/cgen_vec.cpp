@@ -7,7 +7,6 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/DerivedTypes.h>
-#include <iostream>
 
 namespace vyb {
 
@@ -238,7 +237,9 @@ void LLVMCodegen::handleVecPush(vyb::ast::CallExpression* node, llvm::Value* vec
     const vyb::ast::TypeNode* elemAstForOwnership = vecElementNodeFromReceiver(node);
     if (!elemAstForOwnership) elemAstForOwnership = pushedAst;
     const bool pushSlotIsWeakHandle = elementTypeIsMildHandle(elemAstForOwnership);
-    if (!pushSlotIsWeakHandle) {
+    // #427: an `our<T>` element is a bare pointer too (the comment on the `set` site already
+    // named both wrappers); String-wrapping it stored 16 bytes into an 8-byte slot.
+    if (!pushSlotIsWeakHandle && !elementTypeIsOwnedHandle(elemAstForOwnership)) {
         valueToAdd = normalizeVecStringElement(valueToAdd);
     }
 
@@ -962,7 +963,7 @@ void LLVMCodegen::handleVecSet(vyb::ast::CallExpression* node, llvm::Value* vecP
     llvm::Type* elementLLVMType = vecElementTypeFromReceiver(node);
     const vyb::ast::TypeNode* setAst = vecElementNodeFromReceiver(node);
     if (!setAst) setAst = typeOfNode(node->arguments[1]).get();
-    if (!elementTypeIsMildHandle(setAst)) {
+    if (!elementTypeIsMildHandle(setAst) && !elementTypeIsOwnedHandle(setAst)) {
         value = normalizeVecStringElement(value);
     }
 
