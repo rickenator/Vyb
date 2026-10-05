@@ -1,0 +1,27 @@
+// @test: a bare local Vec<our<T>> reclaims its element handles at scope exit (#468)
+// @description: A `Vec<our<A>>` local whose slots each own one strong reference on
+//   their control block leaked those references at scope exit: the reclaim only
+//   released the element buffer (`free(data_ptr)`) and never dropped the per-element
+//   count, because `reclaimVecStorage` classified ownership handles with a `mild`-only
+//   test (`elementTypeIsMildHandle`). The vecHoldsOwnershipHandles gate now asks the
+//   owned twin (`elementTypeIsOwnedHandle`) too, so the handles (and their objects)
+//   are reclaimed with the buffer. No iteration here -- this is the scope-exit half;
+//   the iterated shapes are in test_vec_handle_iteration.vyb and
+//   test_vec_our_handle_double_iteration.vyb. LeakSanitizer: was 64 B / 4 allocations,
+//   now clean.
+// @category: ownership, vec
+// @expect-output: n=2
+// @expect-return: 0
+
+import collections
+
+share(all)
+struct A { v<Int> }
+
+main()<Int> -> {
+    owned<Vec<our<A>>> = Vec()
+    owned.push(our(A { v: 2 }))
+    owned.push(our(A { v: 3 }))
+    println("n=" + owned.len().to_string())
+    return 0
+}

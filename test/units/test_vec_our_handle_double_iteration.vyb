@@ -1,0 +1,32 @@
+// @test: iterating a Vec<our<T>> twice does not over-release the elements (#468, #451)
+// @description: `for (x in Vec<our<A>>)` desugars to `iter()`/`next()`, and the
+//   monomorphized `VecIter<our<A>>::next` body reads `self.data.get(i)` through a
+//   `their<Vec<T>>` receiver. `vecElementNodeFromReceiver` only recognised a bare
+//   `VecType`, so inside that generic body it returned null, the owned-handle retain
+//   in `handleVecGet` never fired, and the match-temp reclaim of the `T?` result then
+//   released a reference the slot still owned -- a net over-release. The first loop
+//   looked right by luck; a second loop read the freed control block (JIT aborted
+//   with `malloc(): unaligned tcache chunk detected`, rc=134; ASan printed garbage
+//   `s2`). The receiver's ownership wrapper is now unwrapped to find the element type,
+//   so `get` retains exactly what the consumer releases. Both loops must read the
+//   same, live values.
+// @category: ownership, vec
+// @expect-output: s1=5 s2=5 len=2
+// @expect-return: 0
+
+import collections
+
+share(all)
+struct A { v<Int> }
+
+main()<Int> -> {
+    vs<Vec<our<A>>> = Vec()
+    vs.push(our(A { v: 2 }))
+    vs.push(our(A { v: 3 }))
+    s1<Int> = 0
+    for (x in vs) { s1 = s1 + x.v }
+    s2<Int> = 0
+    for (y in vs) { s2 = s2 + y.v }
+    println("s1=" + s1.to_string() + " s2=" + s2.to_string() + " len=" + vs.len().to_string())
+    return 0
+}
