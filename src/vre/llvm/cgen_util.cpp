@@ -165,12 +165,27 @@ llvm::Value* LLVMCodegen::tryCast(llvm::Value* value, llvm::Type* targetType, co
         if (optSt && optSt->getNumElements() == 2 &&
             optSt->getElementType(1)->isIntegerTy(1)) {
             // `return nil` in an optional-returning function: the absent case.
-            // `nil` is a bare pointer while a payload-carrying optional slot (e.g.
-            // `Vec<T>?`) holds a struct, so a pointer arriving where a non-pointer
-            // payload is expected means "absent". Build `{ <undef payload>, i0 }`
-            // so the module stays well-formed; consumers test presence first.
+            // `nil` (and its synonym `null`) codegens to a NULL POINTER, so the
+            // absent case is recognised two ways:
+            //  - a pointer arriving where the payload is NOT a pointer (`Int?`,
+            //    `String?`, `Vec<T>?`) can only be "absent"; and
+            //  - for a POINTER payload (`our<T>?` = `{ ptr, i1 }`) the pointer
+            //    alone cannot distinguish `nil` from a legitimate handle, so a
+            //    literal null constant (what `nil` always codegens to) is the
+            //    absent one while any non-null pointer is the present payload.
+            //    Without this, `x<our<A>?> = nil` and `return nil` from an
+            //    `our<A>?`-returning function silently built a PRESENT optional
+            //    with a null payload -- the nil arm of a `match` never fired (#474).
+            // Build `{ <undef payload>, i0 }` so the module stays well-formed;
+            // consumers test presence first.
+            bool nullPointerConstant = false;
+            if (value->getType()->isPointerTy()) {
+                if (auto* c = llvm::dyn_cast<llvm::Constant>(value)) {
+                    nullPointerConstant = c->isNullValue();
+                }
+            }
             if (value->getType()->isPointerTy() &&
-                !optSt->getElementType(0)->isPointerTy()) {
+                (!optSt->getElementType(0)->isPointerTy() || nullPointerConstant)) {
                 llvm::Value* absent = llvm::UndefValue::get(targetType);
                 absent = builder->CreateInsertValue(
                     absent, llvm::ConstantInt::get(llvm::Type::getInt1Ty(*context), 0),

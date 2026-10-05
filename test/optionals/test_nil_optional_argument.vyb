@@ -1,0 +1,42 @@
+// @test: nil is accepted where a native optional parameter is expected (#474)
+// @description: `nil` is the language's absent literal (with `null` as its synonym), but the
+//   call-argument path had no coercion to a native optional `T?` parameter at all, so
+//   `maybe(nil)` for `maybe(x<Int?>)` was rejected with "Argument type mismatch ... Expected
+//   { i64, i1 } but got ptr" -- and so was a plain present payload (`maybe(7)`). A `T?`
+//   argument is now routed through tryCast. The absent case must not be inferred from the
+//   value's LLVM type: `nil` codegens to a bare pointer, indistinguishable from a legitimate
+//   pointer payload (`our<T>?` = `{ ptr, i1 }`), so a literal null CONSTANT is the absent one.
+//   The same ambiguity had also made `x<our<A>?> = nil` and `return nil` from an
+//   `our<A>?`-returning function build a PRESENT optional with a null payload -- the nil arm
+//   of a match never fired -- and tryCast now handles both. Every shape is asserted below.
+// @category: optionals, codegen
+// @expect-output: args=5 ret=1 init=1
+// @expect-return: 0
+
+share(all)
+struct A { v<Int> }
+
+absentInt(x<Int?>)<Int> -> { match (x) { v -> { return 0 } nil -> { return 1 } } }
+presentInt(x<Int?>)<Int> -> { match (x) { v -> { return 1 } nil -> { return 0 } } }
+absentStr(x<String?>)<Int> -> { match (x) { v -> { return 0 } nil -> { return 1 } } }
+absentStruct(x<A?>)<Int> -> { match (x) { v -> { return 0 } nil -> { return 1 } } }
+absentOur(x<our<A>?>)<Int> -> { match (x) { v -> { return 0 } nil -> { return 1 } } }
+mk(b<Bool>)<our<A>?> -> { if (b) { return our(A { v: 5 }) } return nil }
+
+main()<Int> -> {
+    # nil at an optional parameter (pointer and non-pointer payloads), and a present payload
+    args<Int> = absentInt(nil) + presentInt(7) + absentStr(nil) + absentStruct(nil)
+        + absentOur(nil)
+
+    # return nil from an our<A>?-returning function (a pointer payload)
+    ret<Int> = 0
+    match (mk(false)) { v -> { } nil -> { ret = 1 } }
+
+    # a declaration initialised with nil
+    init<Int> = 0
+    d<our<A>?> = nil
+    match (d) { v -> { } nil -> { init = 1 } }
+
+    println("args=" + args.to_string() + " ret=" + ret.to_string() + " init=" + init.to_string())
+    return 0
+}
