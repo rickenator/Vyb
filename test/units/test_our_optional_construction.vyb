@@ -1,4 +1,4 @@
-// @test: `our<T>?()` constructs an absent optional owned handle (#427 defect 3)
+// @test: `our<T>?()` constructs an absent optional owned handle (#427 defect 3, #471)
 // @description: an absent optional could not be constructed for an owned handle: `our<Int>?()`
 //   and `our<A>?()` were rejected in expression position ("Expected primary expression.
 //   (found '?')"), although `Int?()`, a struct (`A?()`) and `mild<Int>?()` all parsed. The
@@ -8,8 +8,13 @@
 //   `?` postfix is what builds the OptionalType. The skip now requires the call form, so the
 //   keyword reaches the same path as every other type name. Both the absent and the present arm
 //   are asserted: an `our<A>?()` matches `?`, and a handle returned from a call matches the value.
+//   The grouped spellings are asserted too (#471): a parenthesized type parses as a single-member
+//   tuple, so `(T)?` used to build OptionalType(TupleType(T)) -- a type not equal to `T?`, refused
+//   with "Expected T? but got (T)?". The one-element group is now unwrapped before the optional
+//   wrapper, so `(Int)?()` / `(our<A>)?()` construct the same absent optionals as `Int?()` /
+//   `our<A>?()`. A multi-member tuple (`(Int, Int)?`) is left as the tuple.
 // @category: ownership, parser
-// @expect-output: empty=2 present=4
+// @expect-output: empty=2 present=4 grouped=0 tuple=1
 // @expect-return: 0
 
 share(all)
@@ -31,6 +36,20 @@ main()<Int> -> {
     present<Int> = 0
     match (f) { v -> { present = v.v } ? -> { present = -1 } }
 
-    println("empty=" + absent.to_string() + " present=" + present.to_string())
+    # grouped spellings (#471): `(T)?()` must be the same type as `T?`
+    gg<Int?> = (Int)?()
+    gh<our<A>?> = (our<A>)?()
+    gp<mild<A>?> = (mild<A>)?()
+    grouped<Int> = 0
+    match (gg) { v -> { grouped = grouped + 100 } ? -> { } }
+    match (gh) { v -> { grouped = grouped + 10 } ? -> { } }
+    match (gp) { v -> { grouped = grouped + 1 } ? -> { } }
+
+    tt<(Int, Int)?> = (Int, Int)?()
+    tuple<Int> = 0
+    match (tt) { v -> { tuple = -1 } ? -> { tuple = 1 } }
+
+    println("empty=" + absent.to_string() + " present=" + present.to_string()
+        + " grouped=" + grouped.to_string() + " tuple=" + tuple.to_string())
     return 0
 }
