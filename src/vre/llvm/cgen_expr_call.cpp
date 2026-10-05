@@ -6060,6 +6060,19 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                         // Sign-extend to larger width (e.g., i32 to i64)
                         argValue = builder->CreateSExt(argValue, expectedArgType, "callargsext");
                     }
+                } else if (auto* optSt = llvm::dyn_cast<llvm::StructType>(expectedArgType);
+                           optSt && optSt->getNumElements() == 2 &&
+                           optSt->getElementType(1)->isIntegerTy(1)) {
+                    // #474: a native optional `T?` parameter is a `{ payload, i1 }`
+                    // struct, and it takes either a payload (wrap present) or `nil`
+                    // (wrap absent). tryCast builds both forms, but the argument
+                    // path never reached it, so a call passing `nil` -- and even a
+                    // plain payload such as `maybe(7)` for `Int?` -- was rejected
+                    // as a type mismatch. tryCast returns null for a genuinely
+                    // incompatible argument, so the mismatch error below still
+                    // fires for those.
+                    llvm::Value* wrapped = tryCast(argValue, expectedArgType, node->arguments[i]->loc);
+                    if (wrapped) argValue = wrapped;
                 } else if (expectedArgType->isStructTy() && argValue->getType()->isPointerTy()) {
                     // Expected a Vyb String { ptr, len } and got a raw char* (e.g.
                     // the result of to_string() / substring / concat). Fair
