@@ -5059,7 +5059,22 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
             bool objectAstIsString = false;
             if (typeOfNode(memberExpr->object)) {
                 if (auto objTn = dynamic_cast<ast::TypeName*>(typeOfNode(memberExpr->object).get())) {
-                    objectAstIsString = objTn->identifier && objTn->identifier->name == "String";
+                    if (objTn->identifier) {
+                        const std::string& head = objTn->identifier->name;
+                        if (head == "String") {
+                            objectAstIsString = true;
+                        } else if ((head == "my" || head == "our" || head == "their" ||
+                                    head == "view" || head == "borrow" || head == "mild") &&
+                                   objTn->genericArgs.size() == 1 && objTn->genericArgs[0] &&
+                                   objTn->genericArgs[0]->toString() == "String") {
+                            // #427 item 2: a handle to a String implicitly yields
+                            // its payload as the method receiver. Evaluating the
+                            // object yields the handle's payload pointer (the
+                            // block stores the String struct at offset 0), which
+                            // the pointer branch below uses directly as strPtr.
+                            objectAstIsString = true;
+                        }
+                    }
                 }
             }
             if (objectAstIsString) {

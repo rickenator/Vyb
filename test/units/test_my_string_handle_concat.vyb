@@ -1,13 +1,16 @@
-// @test: concatenating and reading a `my<String>` field prints the owned text (#427 defect 10)
+// @test: a `my<String>` handle yields its payload on copy-out, as a field, and as a method receiver (#427)
 // @description: the concatenation path treated a handle operand's pointer as a string, so
 //   `println("c=" + u)` printed the prefix followed by heap bytes, and reading a `my<String>`
 //   struct field (`p.meta`) printed bytes too -- the field access already unwraps the handle for
 //   the member, but the resulting pointer still reached the serializer as a value. Both operands now
-//   load through the handle first (`loadHandleStringPayload`) before the type dispatch. Two handles
-//   must not be added directly (`my<String> + my<String>` is refused by semantic analysis), so the
-//   chain pairs each handle with a plain literal.
+//   load through the handle first (`loadHandleStringPayload`) before the type dispatch. Item 2 of
+//   #427 closes the two remaining halves with the same rule: a handle implicitly yields its payload
+//   String in a String context, so `t<String> = u` copies the payload out, `f<String> = p.meta`
+//   copies a handle FIELD's payload out, and `u.len()` dispatches to the payload's String method.
+//   Two handles must not be added directly (`my<String> + my<String>` is refused by semantic
+//   analysis), so each handle is paired with a plain literal.
 // @category: ownership, string
-// @expect-output: c=concat-ok m=field-ok
+// @expect-output: c=concat-ok m=field-ok hen=9 copy=concat-ok fld=field-ok
 // @expect-return: 0
 
 share(all)
@@ -16,6 +19,8 @@ struct P { meta<my<String>> }
 main()<Int> -> {
     u<my<String>> = my("concat-ok")
     p<P> = P { meta: my("field-ok") }
-    println("c=" + u + " m=" + p.meta)
+    t<String> = u
+    f<String> = p.meta
+    println("c=" + u + " m=" + p.meta + " hen=" + u.len().to_string() + " copy=" + t + " fld=" + f)
     return 0
 }

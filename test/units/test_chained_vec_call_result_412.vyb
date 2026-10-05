@@ -1,4 +1,4 @@
-// @test: chained method call on a Vec returned by a by-value-struct-argument call (#412)
+// @test: chained method/member access on a Vec returned by a by-value-struct-argument call (#412, #427)
 // @description: a method call chained directly onto a call whose argument is a by-value
 //   struct compiled to nothing at all -- `f(x)` was evaluated in LHS ("pointer") mode,
 //   which pushed the receiver's pointer semantics down into the call's own argument
@@ -6,10 +6,14 @@
 //   f. Expected Big but got ptr") and the statement was dropped: `n` was never assigned
 //   and the program printed nothing but compile diagnostics. A call-result receiver has
 //   no storage slot, so it is now evaluated normally and the returned Vec is materialized
-//   into its own temporary. Binding the result first (`w = f(x); w.len()`) always worked
-//   and is asserted alongside the chained form.
+//   into its own temporary. #427 item 1 extends the same rule to MEMBER access on an
+//   ownership-handle call result: the receiver `hs.get(0)` is an `our<A>` whose type lives
+//   in the semantic table, not in the LLVM value map, so the member lookup now falls back
+//   to the receiver expression's type -- `hs.get(0).v` resolves the payload struct instead
+//   of failing to determine it. The bound form (`g<our<A>> = hs.get(0)`) is asserted
+//   alongside the chained one.
 // @category: ownership, vec, struct
-// @expect-output: chained len=5
+// @expect-output: chained len=5 bound field=7 chained field=7
 // @expect-return: 0
 
 share(all)
@@ -23,15 +27,19 @@ f(b<Big>)<Vec<Int>> -> {
     return b.a
 }
 
+share(all)
+struct A { v<Int> }
+
 main()<Int> -> {
     v<Vec<Int>> = Vec()
     for (i in 0..4) { v.push(i) }
     x<Big> = Big { a = v, b = 1 }
-
-    w<Vec<Int>> = f(x)
-    println("bound len=" + w.len().to_string())
-
     n<Int> = f(x).len()
-    println("chained len=" + n.to_string())
+
+    hs<Vec<our<A>>> = Vec()
+    hs.push(our(A { v: 7 }))
+    g<our<A>> = hs.get(0)
+    println("chained len=" + n.to_string() + " bound field=" + g.v.to_string() +
+            " chained field=" + hs.get(0).v.to_string())
     return 0
 }
