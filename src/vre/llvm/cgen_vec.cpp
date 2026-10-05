@@ -95,9 +95,20 @@ vyb::ast::TypeNode* LLVMCodegen::vecElementNodeFromReceiver(vyb::ast::CallExpres
     if (!callee) return nullptr;
     auto recvType = typeOfNode(callee->object.get());
     if (!recvType) return nullptr;
-    auto* vecTy = dynamic_cast<vyb::ast::VecType*>(recvType.get());
-    if (!vecTy || !vecTy->elementType) return nullptr;
-    return vecTy->elementType.get();
+    if (auto* vecTy = dynamic_cast<vyb::ast::VecType*>(recvType.get())) {
+        if (!vecTy->elementType) return nullptr;
+        return vecTy->elementType.get();
+    }
+    // #468: the receiver may be a by-reference borrow of the Vec rather than a
+    // `VecType` node -- e.g. `VecIter<T>::next` reads `self.data.get(i)` where
+    // `self.data` is typed `their<Vec<T>>`. The ownership wrapper is a TypeName,
+    // so the `VecType` cast above misses and the element type (and therefore the
+    // owned-handle retain in `handleVecGet`) was never found inside a
+    // monomorphized generic body. Unwrap the borrow before giving up.
+    if (vyb::ast::TypeNode* inner = borrowedVecInnerNode(recvType.get())) {
+        return const_cast<vyb::ast::TypeNode*>(vecElementTypeNode(inner));
+    }
+    return nullptr;
 }
 
 // #284: a `Vec` element stored into another Vec must own its own buffer. The old

@@ -1005,6 +1005,10 @@ private:
     // ({ value(0)=cb, hasValue(1) }). Releases a grabbed `our<T>?` on scope exit.
     void reclaimOptionalOurPayload(llvm::Value* optPtr, const vyb::ast::TypeNode* optAst,
                                    llvm::StructType* optLlvm, bool retain);
+    // The `mild` twin: drop the one WEAK count an accessor took when it handed back
+    // a `mild<A>?` (`get`/`last`/an iterator's `next()`). Layout is the same
+    // ({ value(0)=cb, hasValue(1) }); only the count decremented differs.
+    void reclaimOptionalMildPayload(llvm::Value* optPtr, llvm::StructType* optLlvm);
     // Trap matching (#157): aspect name -> concrete type names that bind it (from the
     // module's `bind <Aspect> -> <Type>` declarations). An aspect-typed trap matches
     // every such concrete type. Built lazily on first trap dispatch.

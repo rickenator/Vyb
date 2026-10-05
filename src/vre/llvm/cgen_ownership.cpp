@@ -241,11 +241,14 @@ void LLVMCodegen::reclaimVecStorage(llvm::Value* vecValue, llvm::Type* vecStruct
         elemAstNode ? codegenType(const_cast<vyb::ast::TypeNode*>(elemAstNode)) : nullptr;
     const bool vecHoldsClosures = elemLlvmTyForClosure && elemAstNode &&
         isFnTypeNode(elemAstNode) && isClosureStructType(elemLlvmTyForClosure);
-    // #427 defects 6/7: a `Vec<our<A>>`/`Vec<mild<A>>` element holds one count on a
-    // shared control block (the push/set store retains it). Drop those before the
-    // element buffer is freed, or the block's count never reaches zero and the
-    // control block leaks -- LeakSanitizer flags one 24 B block per weak element.
-    const bool vecHoldsOwnershipHandles = elementTypeIsMildHandle(elemAstNode);
+    // #427 defects 6/7 + #468: a `Vec<our<A>>`/`Vec<mild<A>>` element holds one count
+    // on a shared control block (the push/set store retains it). Drop those before
+    // the element buffer is freed, or the block's count never reaches zero and the
+    // control block leaks -- LeakSanitizer flags one 24 B block per weak element, and
+    // an owned (`our<T>`) element's block leaks silently (no LSan report) while the
+    // slot keeps a strong reference nothing ever drops.
+    const bool vecHoldsOwnershipHandles = elementTypeIsMildHandle(elemAstNode) ||
+                                          elementTypeIsOwnedHandle(elemAstNode);
     const bool vecHoldsRefCounted = vecHoldsClosures || vecHoldsOwnershipHandles;
     const vyb::ast::TypeNode* vecElemAst = nullptr;
     llvm::Type* vecElemLlvm = nullptr;
@@ -387,6 +390,17 @@ void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
                             reclaimOptionalOurPayload(
                                 var.allocaInst, astIt->second.get(),
                                 llvm::cast<llvm::StructType>(var.type), /*retain=*/false);
+                            return;
+                        }
+                        // #468: the `mild` twin. A `mild<A>?` handed back by an
+                        // accessor (`get`/`last`) or an iterator's `next()` owns one WEAK
+                        // count on the element's control block; drop it on scope exit.
+                        if (ot->containedType && isMildRefType(ot->containedType.get()) &&
+                            llvm::isa<llvm::StructType>(var.type)) {
+                            VYB_CDBG << "DEBUG: Releasing owned `mild<T>?` payload for variable: "
+                                      << var.name << std::endl;
+                            reclaimOptionalMildPayload(
+                                var.allocaInst, llvm::cast<llvm::StructType>(var.type));
                             return;
                         }
                     }
@@ -997,6 +1011,19 @@ void LLVMCodegen::reclaimStructOwnedFieldsAt(llvm::Value* structPtr,
                     emitElementRefLoop(data, cnt, eLlvm, /*retain=*/false, "reclaim.cl");
                 }
             }
+            // #468: a `Vec<our<T>>`/`Vec<mild<T>>` FIELD owns one count per element on
+            // the element's shared control block (push/set retains it), exactly like the
+            // standalone-local case in `reclaimVecStorage`. Drop those before the
+            // element buffer is freed, or every handle the Vec field holds is stranded
+            // (LSan reports the weak blocks; the strong `our<T>` ones leak silently).
+            if (eAst && (elementTypeIsMildHandle(eAst) || elementTypeIsOwnedHandle(eAst))) {
+                llvm::Type* eLlvm = codegenType(const_cast<vyb::ast::TypeNode*>(eAst));
+                if (eLlvm && eLlvm->isPointerTy()) {
+                    llvm::Value* cnt = builder->CreateExtractValue(sl, 1, "reclaim.our.elemcount");
+                    emitElementRefLoop(data, cnt, eLlvm, /*retain=*/false, "reclaim.our",
+                                       eAst, elementTypeIsMildHandle(eAst));
+                }
+            }
             if (eAst && isKnownStructTypeNode(eAst) && structTypeHasOwnedFields(eAst)) {
                 llvm::Type* eLlvm = codegenType(const_cast<vyb::ast::TypeNode*>(eAst));
                 if (eLlvm && llvm::isa<llvm::StructType>(eLlvm)) {
@@ -1433,6 +1460,32 @@ void LLVMCodegen::reclaimOptionalOurPayload(llvm::Value* optPtr, const vyb::ast:
     builder->SetInsertPoint(contBB);
 }
 
+// #468: drop the one WEAK count a `mild<A>?` accessor result owns. Symmetric to
+// `reclaimOptionalOurPayload` (same `{ value(0)=cb, hasValue(1) }` layout), only the
+// count is the element control block's weak count. Needed so an iterator's
+// `next()` -- which reads `self.data.get(i)` and hands the mild handle back as a
+// `mild<A>?` -- balances the weak retain the accessor took; without it the count
+// is stranded and the control block leaks (LSan: 24 B per element).
+void LLVMCodegen::reclaimOptionalMildPayload(llvm::Value* optPtr, llvm::StructType* optLlvm) {
+    if (!optPtr || !optLlvm || optLlvm->getNumElements() < 2 || !builder || !currentFunction) return;
+    llvm::PointerType* rawPtr = llvm::PointerType::get(*context, 0);
+
+    llvm::Value* hasPtr = builder->CreateStructGEP(optLlvm, optPtr, 1, "optmild.has_ptr");
+    llvm::Value* has = builder->CreateLoad(llvm::Type::getInt1Ty(*context), hasPtr, "optmild.has");
+
+    llvm::BasicBlock* doBB = llvm::BasicBlock::Create(*context, "optmild.do", currentFunction);
+    llvm::BasicBlock* contBB = llvm::BasicBlock::Create(*context, "optmild.cont", currentFunction);
+    builder->CreateCondBr(has, doBB, contBB);
+    builder->SetInsertPoint(doBB);
+
+    llvm::Value* cb = builder->CreateLoad(rawPtr,
+        builder->CreateStructGEP(optLlvm, optPtr, 0, "optmild.val_ptr"), "optmild.val");
+    releaseMildControlBlock(cb, "optmild.release");
+
+    builder->CreateBr(contBB);
+    builder->SetInsertPoint(contBB);
+}
+
 // Does an enum-typed initializer hand over its payload's strong ref (a "fresh
 // transfer" that needs no further retain on stow), or is it a borrowed copy that
 // must be retained? `grab()` and function calls returning the enum transfer;
@@ -1624,11 +1677,13 @@ llvm::Value* LLVMCodegen::generateVecDeepCopy(llvm::Value* vecStructValue,
         // clone aliasing the source's environments and its release would drop a
         // reference the source still owns).
         if (elemType && (isClosureElementType(elemType, astElemType) ||
-                         elementTypeIsMildHandle(astElemType))) {
+                         elementTypeIsMildHandle(astElemType) ||
+                         elementTypeIsOwnedHandle(astElemType))) {
+            const bool closureElem = isClosureElementType(elemType, astElemType);
+            const bool mildElem = elementTypeIsMildHandle(astElemType);
             emitElementRefLoop(newDataPtr, vecSize, elemType, /*retain=*/true, "vdc.elem",
-                               isClosureElementType(elemType, astElemType) ? nullptr
-                                                                          : astElemType,
-                               elementTypeIsMildHandle(astElemType));
+                               closureElem ? nullptr : astElemType,
+                               mildElem);
         }
         builder->CreateBr(doneBB);
 
