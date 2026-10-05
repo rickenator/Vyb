@@ -1989,6 +1989,44 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
             }
             m_currentLLVMValue = loaded;
         }
+
+        // #427 leak: a chained MEMBER read on an OWNED handle yielded by a Vec
+        // accessor (`hs.get(0).v`) materializes no named binding, so the reference
+        // the accessor took (handleVecGet/handleVecLast retain the element's
+        // control block -- #427 defects 6/7, see retainElementRef) has no owner;
+        // without dropping it here one control block (24 B) + its payload (8 B)
+        // leak per evaluation (ASan: 32 B in 2 allocations). This mirrors the
+        // chained-method receiver temp reclaim (#412, cgen_expr_call.cpp): the
+        // receiver is a call result, not a slot, so this site owns its reference
+        // and releases it after consuming the field. A BOUND accessor result
+        // (`g<our<A>> = hs.get(0)`) is owned by its binding and is not released
+        // here. `objectValue` is still the control-block pointer: the
+        // objectIsOurControlBlock branch above only rebound `structPtr` to the
+        // payload, and the field load is already emitted, so the release cannot
+        // invalidate it (the Vec also holds a strong reference).
+        if (objectValue && objectValue->getType()->isPointerTy() && node->object) {
+            if (auto* call = dynamic_cast<ast::CallExpression*>(node->object.get())) {
+                if (auto* calleeMember = dynamic_cast<ast::MemberExpression*>(call->callee.get())) {
+                    if (auto* prop = dynamic_cast<ast::Identifier*>(calleeMember->property.get())) {
+                        const std::string& m = prop->name;
+                        if (m == "get" || m == "first" || m == "last" || m == "peek") {
+                            const vyb::ast::TypeNode* elemAst = vecElementNodeFromReceiver(call);
+                            if (elemAst && elementTypeIsOwnedHandle(elemAst)) {
+                                const vyb::ast::TypeNode* pointeeAst =
+                                    ourPointeeOf(typeOfNode(node->object).get());
+                                llvm::Type* pointeeLlvm = pointeeAst
+                                    ? codegenType(const_cast<vyb::ast::TypeNode*>(pointeeAst))
+                                    : nullptr;
+                                releaseOurControlBlock(objectValue, "member.recv.our",
+                                                       pointeeAst, pointeeLlvm);
+                            } else if (elemAst && elementTypeIsMildHandle(elemAst)) {
+                                releaseMildControlBlock(objectValue, "member.recv.mild");
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
