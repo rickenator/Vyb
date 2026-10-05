@@ -1162,7 +1162,25 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
                                 borrowTy->genericArgs[0]->toString() == varType->toString();
                         }
                     }
-                    if (!narrowed && !borrowedVecInit) {
+                    // #427 item 2: a handle whose payload is a String (`my<String>`,
+                    // `our<String>`, ...) implicitly yields its payload in a String
+                    // context (assignment), matching the print/concat behaviour.
+                    // Accept the unwrapped copy-out when the destination is the
+                    // payload String.
+                    bool handlePayloadInit = false;
+                    if (varType->toString() == "String") {
+                        if (auto* ow = dynamic_cast<ast::TypeName*>(initType)) {
+                            if (ow->identifier &&
+                                (ow->identifier->name == "my" || ow->identifier->name == "our" ||
+                                 ow->identifier->name == "their" || ow->identifier->name == "view" ||
+                                 ow->identifier->name == "borrow" || ow->identifier->name == "mild") &&
+                                ow->genericArgs.size() == 1 && ow->genericArgs[0] &&
+                                ow->genericArgs[0]->toString() == "String") {
+                                handlePayloadInit = true;
+                            }
+                        }
+                    }
+                    if (!narrowed && !borrowedVecInit && !handlePayloadInit) {
                         addError("Initializer type does not match variable type for '" + node->id->name + "'. Expected " + varType->toString() + " but got " + initType->toString(), node);
                     }
                 }
@@ -3984,10 +4002,31 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                     }
                 }
 
-                // Check for String type methods
+                // Check for String type methods. An ownership handle whose payload
+                // is a String (`my<String>`, `our<String>`, ...) resolves to the
+                // String method set too: the handle implicitly yields its payload
+                // in a String context, the same way print/concat already do
+                // (#427 item 2).
+                bool receiverIsString = false;
                 if (objSymbol && objSymbol->type) {
                     if (auto objTypeName = dynamic_cast<ast::TypeName*>(objSymbol->type.get())) {
-                        if (objTypeName->identifier && objTypeName->identifier->name == "String") {
+                        if (objTypeName->identifier) {
+                            const std::string& recvHead = objTypeName->identifier->name;
+                            if (recvHead == "String") {
+                                receiverIsString = true;
+                            } else if ((recvHead == "my" || recvHead == "our" || recvHead == "their" ||
+                                        recvHead == "view" || recvHead == "borrow" || recvHead == "mild") &&
+                                       objTypeName->genericArgs.size() == 1 &&
+                                       objTypeName->genericArgs[0] &&
+                                       objTypeName->genericArgs[0]->toString() == "String") {
+                                receiverIsString = true;
+                            }
+                        }
+                    }
+                }
+                if (receiverIsString) {
+                    {
+                        {
                             // String methods: len/length -> Int, contains/starts_with/ends_with -> Bool,
                             // substring/to_upper/to_lower/concat -> String, char_at -> Int
                             if (methodName == "len" || methodName == "length") {

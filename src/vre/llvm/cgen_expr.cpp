@@ -1847,10 +1847,24 @@ void LLVMCodegen::visit(ast::MemberExpression* node) {
                 if (llvm::PointerType* ptrType = llvm::dyn_cast<llvm::PointerType>(objectValue->getType())) {
                     // For newer LLVM versions, we need to use a different approach
                     // Since we can't easily get the pointee type, try to get it from the value type map
+                    // The receiver's AST type: prefer the LLVM-value map (an
+                    // alloca/loaded value that has been registered), but fall
+                    // back to the semantic type of the receiver EXPRESSION. A
+                    // call/member result that yields an ownership handle (e.g.
+                    // `vs.get(0)`, `p.meta`) is not a named slot and so has no
+                    // valueTypeMap entry; without this fallback member access on
+                    // it fails with "Cannot determine struct type for member
+                    // access" (#427 item 1).
+                    std::shared_ptr<vyb::ast::TypeNode> objectAstTypeNode;
                     auto valueTypeIter = valueTypeMap.find(objectValue);
                     if (valueTypeIter != valueTypeMap.end()) {
+                        objectAstTypeNode = valueTypeIter->second;
+                    } else {
+                        objectAstTypeNode = typeOfNode(node->object);
+                    }
+                    if (objectAstTypeNode) {
                         // Get the AST type and convert it to LLVM type
-                        if (auto astType = valueTypeIter->second.get()) {
+                        if (auto astType = objectAstTypeNode.get()) {
                             // Handle ownership types specially - extract underlying type
                             ast::TypeNode* underlyingType = astType;
                             if (auto typeNameNode = dynamic_cast<ast::TypeName*>(astType)) {

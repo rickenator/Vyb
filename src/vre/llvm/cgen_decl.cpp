@@ -240,6 +240,16 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
             }
         }
 
+        // #427 item 2: a handle whose payload is a String (`my<String>`,
+        // `our<String>`, ...) implicitly yields its payload when bound to a
+        // String variable -- the same unwrapping print/concat already do. The
+        // handle slot holds a pointer to the payload String struct, so load
+        // through it; the binding then owns a plain String.
+        if (initialVal && node->init && node->typeNode && varType &&
+            initialVal->getType()->isPointerTy() && isVybStringStructType(varType)) {
+            initialVal = loadHandleStringPayload(initialVal, typeOfNode(node->init).get());
+        }
+
         if (!varType) {
             varType = initialVal->getType();
         } else {
