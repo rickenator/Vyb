@@ -250,6 +250,18 @@ vyb::ast::TypeNodePtr TypeParser::parse_postfix_type(vyb::ast::TypeNodePtr curre
             // current_type->isPointer = true;
             current_type = std::make_unique<vyb::ast::PointerType>(op_loc, std::move(current_type));
         } else if (this->match(vyb::TokenType::QUESTION_MARK)) {
+            // A parenthesized type parses as a single-member TupleTypeNode
+            // (`parse_atomic_or_group_type`), so `(T)?` would otherwise build
+            // OptionalType(TupleType(T)) -- a type NOT equal to `T?`, which the
+            // semantic analyzer then rejects ("Expected T? but got (T)?"). A
+            // one-element group is just the grouped type, so unwrap it before
+            // applying the optional wrapper (#471). A genuine multi-member tuple
+            // (`(Int, String)?`) is left as the tuple.
+            if (auto* grouped = dynamic_cast<vyb::ast::TupleTypeNode*>(current_type.get())) {
+                if (grouped->memberTypes.size() == 1) {
+                    current_type = std::move(grouped->memberTypes[0]);
+                }
+            }
             // if (current_type->isOptional) {
             if (dynamic_cast<vyb::ast::OptionalType*>(current_type.get())) {
                 throw this->error(this->previous_token(), "Type is already optional: " + current_type->loc.toString());
