@@ -40,14 +40,17 @@ jobs:
         # the name is derived rather than interpolated directly.
         run: |
           set -euo pipefail
-          owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
-          repo=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
+          # github.repository already carries the owner ("rickenator/Vyb"), so the image
+          # is owner/repo-ci -- prefixing the owner again published
+          # ghcr.io/rickenator/rickenator/vyb-ci, which no `container:` could pull
+          # ("manifest unknown").
+          slug=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
           digest=$(sha256sum .github/ci/Dockerfile | cut -c1-12)
           {
-            echo "IMAGE=ghcr.io/$owner/$repo-ci"
+            echo "IMAGE=ghcr.io/$slug-ci"
             echo "TAG=toolchain-$digest"
           } >> "$GITHUB_ENV"
-          echo "publishing $owner/$repo-ci:toolchain-$digest"
+          echo "publishing ghcr.io/$slug-ci:toolchain-$digest"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
