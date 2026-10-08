@@ -63,10 +63,12 @@ wait
 ```
 
 `--shard K/N` (K 0-based) walks the runner's own deterministic discovery list and
-keeps every `N`th entry, so the shards partition the suite exactly: their counts
-must add up to the number `test/suite_count_check.vyb` documents, which is what
-`.github/workflows/ci.yml` asserts after the shards (`--shard` with `K >= N`, or a
-non-numeric spec, exits 2 rather than silently running nothing).
+keeps every `N`th entry, so the shards partition the suite exactly. `--list` prints
+the files an invocation selects without running them, and CI compares file lists
+rather than counts: the union of the four shard lists must equal the full list, so a
+missing shard (lines only in the union's absence) or a duplicated one (an extra
+occurrence) fails the job. A malformed `--shard` spec, or `K >= N`, exits 2 rather
+than silently running nothing.
 
 You can run the same gate through CMake with:
 

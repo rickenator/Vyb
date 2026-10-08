@@ -3190,10 +3190,10 @@ build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test --evidence evidence
 
 The runner is single-threaded, so `--shard K/N` is how CI (`.github/workflows/ci.yml`)
 runs the suite on several cores at once: it walks the same deterministic discovery
-list and keeps every `N`th entry, so the shards are disjoint and complete. CI then
-asserts their counts add up to the number `test/suite_count_check.vyb` documents, and
-the compiler build is cached through `ccache` so a re-run does not rebuild it from
-scratch.
+list and keeps every `N`th entry, so the shards are disjoint and complete. `--list`
+prints what an invocation selects without running it, and CI proves the partition by
+diffing the union of the four shard lists against the full list. The compiler build is
+cached through `ccache`, so a re-run does not rebuild it from scratch.
 
 `vyb --repo` (or `vyb test` with no explicit paths inside the compiler repo) runs
 the same Vyb runner, so the compiler's own test path is written in Vyb end to end. A secondary

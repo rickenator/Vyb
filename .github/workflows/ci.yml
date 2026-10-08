@@ -107,18 +107,33 @@ jobs:
           cat /tmp/shard-*.log
           exit "$rc"
 
-      - name: Verify the shards covered the whole suite (#481)
-        # Runs after the count check, so `canonical` is the number the runner documents
-        # for this tree. The shards' own evidence totals must add up to it exactly.
+      - name: Verify the shards partition the suite (#481)
+        # Compare file lists, not counts: CI legitimately skips tests whose libraries
+        # are absent (the pre-shard run reports the same 7 skips), so an executed-count
+        # comparison would measure the environment rather than the sharding. The union
+        # of the four shard lists must equal the full discovery list exactly -- `diff`
+        # exposes both a missing shard (lines only in "all") and a duplicated one (an
+        # extra occurrence in the union).
         run: |
           set -euo pipefail
-          canonical=$(./build/vyb test/suite_count_check.vyb | grep -oE '\([0-9]+ \.vyb tests' | grep -oE '[0-9]+')
-          ran=$(python3 -c "import glob,json;print(sum(json.load(open(p))['total'] for p in sorted(glob.glob('/tmp/evidence-*.json'))))")
-          echo "shards ran $ran tests; the runner documents $canonical"
-          if [ "$ran" != "$canonical" ]; then
-            echo "::error::the shards ran $ran of $canonical tests -- a shard is duplicated or missing"
+          export VYB_STDLIB="$PWD/stdlib"
+          # `--list` prints the selected files; keep only the path lines (the JIT runner
+          # also echoes main's return value, and a stray line here would look like a
+          # missing test).
+          runner() { ./build/vyb test/run_tests.vyb --test-dir test "$@"; }
+          list() { runner "$@" --list | grep -E '\.vyb$' | LC_ALL=C sort; }
+          list > /tmp/all.txt
+          for i in $(seq 0 3); do
+            list --shard "$i/4" > "/tmp/shard-$i.txt"
+          done
+          cat /tmp/shard-0.txt /tmp/shard-1.txt /tmp/shard-2.txt /tmp/shard-3.txt \
+            | LC_ALL=C sort > /tmp/union.txt
+          if ! diff -q /tmp/all.txt /tmp/union.txt > /dev/null; then
+            echo "::error::the shards do not cover the suite exactly; diff of all vs union:"
+            diff /tmp/all.txt /tmp/union.txt | head -30
             exit 1
           fi
+          echo "$(wc -l < /tmp/all.txt) test files, partitioned exactly across 4 shards"
 
       - name: Optimization level reaches the JIT path (#394)
         # `-O` used to parse and then be ignored by the JIT path, which hardcoded
