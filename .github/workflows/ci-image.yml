@@ -1,0 +1,77 @@
+name: ci-image
+
+# Publishes the CI toolchain image (#484) that the hosted jobs run in, so no job pays a
+# per-run `apt-get install` -- 30s when the mirror behaves and 5-20 minutes when it does
+# not (observed: 10.8 min, 5.2 min, and a 20-minute hang that needed a cancel + rerun).
+#
+# Pushed by CI rather than by hand: the workflow's GITHUB_TOKEN may write packages, and
+# building from the committed Dockerfile keeps the image's provenance reviewable in the
+# tree. The image is tagged by the Dockerfile's own content hash, and ci.yml/gpu-kernel.yml
+# pin that tag -- a PR that edits the Dockerfile without bumping the pin is caught by the
+# "Verify the toolchain image pin" step in those workflows, so the jobs can never quietly
+# run an older environment than the tree describes.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/ci/Dockerfile'
+      - '.github/workflows/ci-image.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-image-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    name: Build + push the CI toolchain image
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Name the image and compute its content tag
+        # GHCR requires lowercase repository names and the repo is `rickenator/Vyb`, so
+        # the name is derived rather than interpolated directly.
+        run: |
+          set -euo pipefail
+          owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
+          repo=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')
+          digest=$(sha256sum .github/ci/Dockerfile | cut -c1-12)
+          {
+            echo "IMAGE=ghcr.io/$owner/$repo-ci"
+            echo "TAG=toolchain-$digest"
+          } >> "$GITHUB_ENV"
+          echo "publishing $owner/$repo-ci:toolchain-$digest"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push (Dockerfile's checks gate the push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .github/ci/Dockerfile
+          push: true
+          # The content tag is what the workflows pin; `latest` is for by-hand use.
+          tags: |
+            ${{ env.IMAGE }}:${{ env.TAG }}
+            ${{ env.IMAGE }}:latest
+
+      - name: Report the tag to pin
+        run: |
+          echo "### CI toolchain image published" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "$IMAGE:$TAG" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "Pin this tag in the \`container:\` of ci.yml and gpu-kernel.yml." >> "$GITHUB_STEP_SUMMARY"
