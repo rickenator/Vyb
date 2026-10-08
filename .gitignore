@@ -56,3 +56,6 @@ scratch/
 
 # Browser tooling artifacts (agent session state, not project code)
 .playwright-mcp/
+
+# ccache object cache when CI builds in the workspace (#481)
+.ccache/
