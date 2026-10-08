@@ -1,0 +1,83 @@
+// @test: #480 - the operand of at()/from<>() is a value, not the assignment target
+// @description: an assignment target is evaluated with the target flag set, which made
+//   an identifier or array element used as a *value* inside `at(from<loc<T>>(x))`
+//   yield its address instead of its value: the store landed in x itself (silently)
+//   instead of through the address x holds. Every operand shape is checked here,
+//   along with the loc<T> form that always worked, and the pointer must survive.
+// @category: ffi, memory
+// @expect: pass
+// @expect-return: 0
+
+struct Holder {
+    a<Int>,
+    b<Int>
+}
+
+main()<Int> -> {
+    var<Int> identSrc = 0
+    var<Int> identPtr = 0
+    var<Int> elemSrc = 0
+    var<Int> elemCell = 0
+    var<Int> memberSrc = 0
+    var<Int> memberField = 0
+    var<Int> locSrc = 0
+    var<Int> readIdent = 0
+    var<Int> readElem = 0
+    var<Int> readMember = 0
+
+    freedom {
+        # 1. identifier operand: the store must go through the pointer it holds
+        identSrc = 42
+        identPtr = addr(identSrc)
+        at(from<loc<Int>>(identPtr)) = 7
+        readIdent = at(from<loc<Int>>(identPtr))
+
+        # 2. array-element operand: the element holds the address
+        elemSrc = 43
+        cells<[Int; 1]> = [addr(elemSrc)]
+        at(from<loc<Int>>(cells[0])) = 8
+        readElem = at(from<loc<Int>>(cells[0]))
+
+        # 3. member operand: a struct field holds the address
+        memberSrc = 44
+        h<Holder> = Holder { a: addr(memberSrc), b: 0 }
+        memberField = h.a
+        at(from<loc<Int>>(memberField)) = 9
+        readMember = at(from<loc<Int>>(memberField))
+
+        # 4. the loc<T> form keeps working exactly as before
+        locSrc = 45
+        lp<loc<Int>> = loc(locSrc)
+        at(lp) = 10
+    }
+
+    println("identifier operand: src=")
+    println_int(identSrc)
+    println(" pointer=")
+    println_int(identPtr)
+    println(" read=")
+    println_int(readIdent)
+    println("array-element operand: src=")
+    println_int(elemSrc)
+    println(" read=")
+    println_int(readElem)
+    println("member operand: src=")
+    println_int(memberSrc)
+    println(" read=")
+    println_int(readMember)
+    println("loc<T> form: src=")
+    println_int(locSrc)
+
+    if (identSrc != 7) { return 1 }
+    if (readIdent != 7) { return 2 }
+    # the reported symptom: the pointer variable itself was overwritten
+    if (identPtr == 7) { return 3 }
+    if (elemSrc != 8) { return 4 }
+    if (readElem != 8) { return 5 }
+    if (memberSrc != 9) { return 6 }
+    if (readMember != 9) { return 7 }
+    if (locSrc != 10) { return 8 }
+    # each cell still holds its own source's address
+    if (identPtr == elemCell) { return 9 }
+    return 0
+}

@@ -167,7 +167,7 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 ### Running the test suite
 
 ```bash
-# 1313 .vyb tests exercised through compile + run + output/return checks
+# 1314 .vyb tests exercised through compile + run + output/return checks
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test
 ```
 
@@ -1365,7 +1365,10 @@ including re-exports (e.g. `https` re-exports `HttpResponse` from `http`).
   `runtime/vyb_runtime.c` (`__vyb_*`). `docs/refman/runtime.md` lists every
   intrinsic the stdlib uses, with the C source line each call resolves to.
 - **`freedom` blocks** allow raw `loc<T>` pointers and relaxed guarantees;
-  `at(ptr)` dereferences, `from<loc<T>>()` converts. **`addr(x)`** yields the
+  `at(ptr)` dereferences, `from<loc<T>>()` converts. Both take a **value** — an
+  identifier or element inside them is read, not addressed, so
+  `at(from<loc<Int>>(p)) = v` stores through the address `p` holds rather than into
+  `p` itself. **`addr(x)`** yields the
   *address of `x`'s storage* as an `Int`: the storage itself for a scalar, an
   array, a struct, an array element or a field; the byte buffer for a `String`
   (the same `char*` a `CString` parameter receives); and the pointer it holds for
@@ -2867,7 +2870,7 @@ Canonical suite runner — a Vyb program (`test/run_tests.vyb`), wired into CTes
 as `run-tests`:
 
 ```bash
-./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1313 tests)
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1314 tests)
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --category async  # filter by category
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --json results.json --evidence evidence.json
 ```
