@@ -241,3 +241,21 @@ jobs:
         # them with raw cuMemcpy imports. Values whose 4-byte halves differ make a
         # partial or mis-ordered transfer fail here.
         run: VYB_STDLIB="$PWD/stdlib" ./build-ci/vyb --module-path bindings fixtures/cuda/f64_verify.vyb
+
+      - name: Emit five-parameter kernel PTX (#476)
+        run: VYB_STDLIB="$PWD/stdlib" ./build-ci/vyb --kernel fixtures/kernel/launch5.vyb --gpu sm_86 --ptx fixtures/cuda/launch5.ptx
+
+      - name: Five-argument kernel from a Vyb-built params array, on silicon (#476)
+        # A `main() Int` return is only printed, so gate on the runner's own success
+        # line instead: it is printed after the launch value and the one-call String
+        # upload have both been verified against the device.
+        shell: bash
+        run: |
+          set -euo pipefail
+          export VYB_STDLIB="$PWD/stdlib"
+          out=$(./build-ci/vyb test/ffi/test_cuda_launch_n.vyb)
+          echo "$out"
+          case "$out" in
+            *"LAUNCH5 OK"*) ;;
+            *) echo "FAIL: #476 the 5-argument launch or the addr(String) upload did not verify"; exit 1 ;;
+          esac
