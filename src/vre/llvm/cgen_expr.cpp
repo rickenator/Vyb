@@ -605,8 +605,15 @@ void LLVMCodegen::visit(vyb::ast::AddrOfExpression *node) {
 void LLVMCodegen::visit(vyb::ast::PointerDerefExpression *node) {
     // at(ptr) dereferences a pointer for reading or writing
 
-    // 1. Evaluate the pointer expression
+    // 1. Evaluate the pointer expression. The operand is a *value* (the pointer), not
+    // the assignment target -- only the dereference itself is written -- so evaluate it
+    // with the target flag cleared; otherwise an identifier or array element inside
+    // `at(...) = v` yields its address instead of its value and the store lands in the
+    // wrong place (#480).
+    bool wasLHSOfAssignment = m_isLHSOfAssignment;
+    m_isLHSOfAssignment = false;
     node->pointer->accept(*this);
+    m_isLHSOfAssignment = wasLHSOfAssignment;
     llvm::Value *ptrVal = m_currentLLVMValue;
     if (!ptrVal) {
         logError(node->loc, "Pointer expression in at() evaluated to null");
@@ -2312,8 +2319,15 @@ void LLVMCodegen::visit(ast::FromIntToLocExpression* node) {
         return;
     }
 
-    // Evaluate the integer expression
+    // Evaluate the integer expression. Its operand is a *value*, never the assignment
+    // target: with the target flag set, an identifier or array element yields its
+    // address instead of its value, so `at(from<loc<Int>>(p)) = 7` handed from<> the
+    // address of p's own slot and the store then landed in p rather than through it --
+    // silently, with no diagnostic (#480).
+    bool wasLHSOfAssignment = m_isLHSOfAssignment;
+    m_isLHSOfAssignment = false;
     node->getAddressExpression()->accept(*this);
+    m_isLHSOfAssignment = wasLHSOfAssignment;
     llvm::Value* intValue = m_currentLLVMValue;
 
     if (!intValue) {
