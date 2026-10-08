@@ -30,7 +30,7 @@ jobs:
     # shares that job's compiler-object cache (same key prefix) instead of paying a
     # second cold build of identical translation units in its own workflow.
     env:
-      CCACHE_DIR: ${{ runner.temp }}/ccache
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_MAXSIZE: 2G
       CCACHE_COMPRESS: "true"
       CCACHE_COMPILERCHECK: content

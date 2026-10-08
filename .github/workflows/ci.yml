@@ -30,7 +30,7 @@ jobs:
     # follows the compiler sources and `restore-keys` falls back to the newest cache,
     # where ccache's own content hashes still find every unchanged translation unit.
     env:
-      CCACHE_DIR: ${{ runner.temp }}/ccache
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_MAXSIZE: 2G
       CCACHE_COMPRESS: "true"
       CCACHE_COMPILERCHECK: content
@@ -206,7 +206,7 @@ jobs:
     # sanitizer flags produce different objects. This job rebuilds a Debug+ASan
     # compiler from scratch on every main push otherwise.
     env:
-      CCACHE_DIR: ${{ runner.temp }}/ccache
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_MAXSIZE: 2G
       CCACHE_COMPRESS: "true"
       CCACHE_COMPILERCHECK: content
