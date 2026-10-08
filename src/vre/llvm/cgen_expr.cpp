@@ -344,8 +344,12 @@ void LLVMCodegen::visit(vyb::ast::ArrayLiteral* node) {
         return;
     }
 
-    std::vector<llvm::Constant*> constantElements;
+    // Evaluate every element once, in order (each `accept` clobbers
+    // m_currentLLVMValue, so the values must be collected before anything is stored),
+    // and decide whether the literal can be a compile-time ConstantArray (#478).
+    std::vector<llvm::Value*> elementValues;
     llvm::Type* elementLlvmType = nullptr;
+    bool allConstant = true;
 
     for (const auto& elemExpr : node->elements) {
         elemExpr->accept(*this); // Codegen element
@@ -366,19 +370,10 @@ void LLVMCodegen::visit(vyb::ast::ArrayLiteral* node) {
             m_currentLLVMValue = nullptr;
             return;
         }
-        // Array literals must consist of constants to form a ConstantArray
-        if (auto* constElem = llvm::dyn_cast<llvm::Constant>(elemValue)) {
-            constantElements.push_back(constElem);
-        } else {
-            // If elements are not constant, we can't create a llvm::ConstantArray.
-            // This means the array must be constructed at runtime, e.g., by allocating
-            // memory and storing each element. This is more like ArrayInitializationExpression
-            // or requires a helper function.
-            // For now, array literals are assumed to produce ConstantArrays.
-            logError(elemExpr->loc, "Array literal element is not a constant value. Runtime array construction not yet fully supported here.");
-            m_currentLLVMValue = nullptr;
-            return;
+        if (!llvm::isa<llvm::Constant>(elemValue)) {
+            allConstant = false;
         }
+        elementValues.push_back(elemValue);
     }
 
     if (!elementLlvmType) { // Should not happen if elements is not empty and codegen succeeded
@@ -387,8 +382,46 @@ void LLVMCodegen::visit(vyb::ast::ArrayLiteral* node) {
         return;
     }
 
-    llvm::ArrayType* arrayType = llvm::ArrayType::get(elementLlvmType, constantElements.size());
-    m_currentLLVMValue = llvm::ConstantArray::get(arrayType, constantElements);
+    llvm::ArrayType* arrayType = llvm::ArrayType::get(elementLlvmType, elementValues.size());
+
+    // A literal made only of constants is a ConstantArray (#478 keeps this path).
+    if (allConstant) {
+        std::vector<llvm::Constant*> constantElements;
+        constantElements.reserve(elementValues.size());
+        for (llvm::Value* elemValue : elementValues) {
+            constantElements.push_back(llvm::cast<llvm::Constant>(elemValue));
+        }
+        m_currentLLVMValue = llvm::ConstantArray::get(arrayType, constantElements);
+        VYB_CDBG << "DEBUG: ArrayLiteral produced type=" << getTypeName(m_currentLLVMValue->getType()) << std::endl;
+        return;
+    }
+
+    // Runtime construction (#478): the elements are values, not constants, so
+    // materialize the array in a temporary -- store each element, then load the
+    // aggregate. The result is the same array *value* the constant path produces, so
+    // no consumer of an array literal can tell the two apart.
+    //
+    // At module scope currentFunction is null while a global's deferred initializer is
+    // emitted into `__vyb_module_init`, so fall back to the block being emitted into:
+    // the temporary is entry-block storage that the stores below fill in program order.
+    llvm::Function* allocaFunc = currentFunction;
+    if (!allocaFunc && builder->GetInsertBlock()) {
+        allocaFunc = builder->GetInsertBlock()->getParent();
+    }
+    llvm::Value* tmp = createEntryBlockAlloca(allocaFunc, "arrlit.tmp", arrayType);
+    if (!tmp) {
+        logError(node->loc, "Failed to allocate the runtime array literal.");
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+    llvm::Value* zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), 0);
+    for (size_t i = 0; i < elementValues.size(); ++i) {
+        llvm::Value* elemIndex = llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context),
+                                                        static_cast<uint64_t>(i));
+        llvm::Value* slot = builder->CreateGEP(arrayType, tmp, {zero, elemIndex}, "arrlit.slot");
+        builder->CreateStore(elementValues[i], slot);
+    }
+    m_currentLLVMValue = builder->CreateLoad(arrayType, tmp, "arrlit.value");
     VYB_CDBG << "DEBUG: ArrayLiteral produced type=" << getTypeName(m_currentLLVMValue->getType()) << std::endl;
 }
 

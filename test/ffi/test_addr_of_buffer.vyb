@@ -24,6 +24,10 @@ main()<Int> -> {
     var<Int> viaAddr = 0
     var<Int> written = 0
     var<Int> held = 0
+    var<Int> addr0 = 0
+    var<Int> addr1 = 0
+    var<Int> cellRead0 = 0
+    var<Int> cellRead1 = 0
 
     freedom {
         # a String's address is its bytes, not the {ptr, len} struct: the very buffer
@@ -51,6 +55,16 @@ main()<Int> -> {
         n<Int> = 7
         p<loc<Int>> = loc(n)
         held = at(from<loc<Int>>(addr(p)))
+
+        # #476's argument-array idiom reads as a single literal now that #478 builds a
+        # literal with runtime elements: each cell holds the address of a live binding.
+        c0<Int> = 11
+        c1<Int> = 22
+        addr0 = addr(c0)
+        addr1 = addr(c1)
+        cells<[Int; 2]> = [addr(c0), addr(c1)]
+        cellRead0 = cells[0]
+        cellRead1 = cells[1]
     }
 
     println("memcmp(String, addr(String)) = ")
@@ -67,6 +81,10 @@ main()<Int> -> {
     println_int(written)
     println("pointer held by a loc<T> via addr() = ")
     println_int(held)
+    println("addr() array literal cell 0 == addr(c0): ")
+    if (cellRead0 == addr0) { println("YES") } else { println("NO") }
+    println("addr() array literal cell 1 == addr(c1): ")
+    if (cellRead1 == addr1) { println("YES") } else { println("NO") }
 
     if (same != 0) { return 1 }
     if (slen != 5) { return 2 }
@@ -76,5 +94,7 @@ main()<Int> -> {
     if (written != 99) { return 6 }
     if (held != 7) { return 7 }
     if (addrArr != addrElem0) { return 8 }
+    if (cellRead0 != addr0) { return 9 }
+    if (cellRead1 != addr1) { return 10 }
     return 0
 }

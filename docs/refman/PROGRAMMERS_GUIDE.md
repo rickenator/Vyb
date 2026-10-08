@@ -167,7 +167,7 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 ### Running the test suite
 
 ```bash
-# 1312 .vyb tests exercised through compile + run + output/return checks
+# 1313 .vyb tests exercised through compile + run + output/return checks
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test
 ```
 
@@ -1249,8 +1249,23 @@ Index operations are bounds-checked and return safe defaults
 
 ### 3.18 Collections
 
-All collections are `Vec<T>`-family structs with generic **aspect-bind**
-methods and monomorphized internals.
+All collections are `Vec<T>`-family structs with generic **aspect-bind** methods and
+monomorphized internals.
+
+Fixed-size arrays (`[T; N]`) are values. A literal may be built from runtime values —
+loaded variables, call results, `addr()`s — in which case the array is assembled when
+the expression runs; a literal of only constants is still a compile-time constant:
+
+```vyb
+a<Int> = 3
+v<[Int; 3]> = [a, a * 2, a * 3]      # runtime elements are fine
+k<[Int; 3]> = [1, 2, 3]              # constant elements -> compile-time constant
+v[0]                                  # index a binding to read or write an element
+```
+
+A nested literal builds an inner array *value*, so read it back through a binding
+(`row<[T; N]> = grid[i]`); chained subscripts on an array value (`grid[i][j]`) are not
+supported yet.
 
 ```vyb
 v<Vec<Int>> = Vec()          # empty, growable
@@ -2852,7 +2867,7 @@ Canonical suite runner — a Vyb program (`test/run_tests.vyb`), wired into CTes
 as `run-tests`:
 
 ```bash
-./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1312 tests)
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1313 tests)
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --category async  # filter by category
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --json results.json --evidence evidence.json
 ```
@@ -3094,9 +3109,7 @@ The caller builds `kernelParams` itself:
 ```
 outD<Int> = 0 ; cuMemAlloc_v2(loc(outD), 8)
 ka<Int> = 10 ; kn<Int> = 2 ; kz<Int> = 3 ; kalpha<Float> = 1.5
-params<[Int; 5]> = [0, 0, 0, 0, 0]      # array literals need constant elements
-params[0] = addr(outD) ; params[1] = addr(ka) ; params[2] = addr(kn)
-params[3] = addr(kz)   ; params[4] = addr(kalpha)
+params<[Int; 5]> = [addr(outD), addr(ka), addr(kn), addr(kz), addr(kalpha)]
 cuda_launch_n(from<loc<CVoid>>(addr(hf)), 1,1,1, 1,1,1, addr(params), 5)
 ```
 
