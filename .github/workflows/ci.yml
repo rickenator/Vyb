@@ -25,6 +25,23 @@ jobs:
     name: Build + JIT suite + AOT/native-link
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # #484: the toolchain comes from the image, so there is no apt step at all -- that
+    # step was 32s on a good mirror and 5-20 minutes when the mirror misbehaved. The tag
+    # is the Dockerfile's content hash; the pin check below fails if the two drift apart.
+    container:
+      image: ghcr.io/rickenator/vyb-ci:toolchain-d0f7901abd08
+      # lldb disables ASLR with personality(2) before launching the fixture, and the
+      # default seccomp profile answers EPERM ("Cannot launch ...: personality set failed:
+      # Operation not permitted"), so the debugger-integration leg would fail for purely
+      # environmental reasons. Unconfined seccomp for this one job -- it runs only this
+      # repository's code inside this repository's image -- keeps gdb *and* lldb coverage.
+      options: --security-opt seccomp=unconfined
+    # #484: inside a container the runner defaults step shells to `sh`, where
+    # `set -o pipefail` is illegal -- the shard/partition/pin steps all use it. Ask for
+    # bash explicitly rather than sprinkling `shell:` on every step.
+    defaults:
+      run:
+        shell: bash
     # #481: the compiler build is the other half of this job's cost, so it is cached
     # through ccache. A warm cache turns a multi-minute rebuild into seconds; the key
     # follows the compiler sources and `restore-keys` falls back to the newest cache,
@@ -37,17 +54,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+      - name: Allow git on the mounted workspace (#484)
+        # The runner owns the checked-out tree (/__w/Vyb/Vyb) but steps inside the
+        # container run as root, so git refuses the repository with "dubious ownership"
+        # and every git call comes back empty. That is not cosmetic: the refman generator
+        # stamps HEAD into all 38 generated pages, so an empty rev read as drift in every
+        # one of them ("commit: unknown" vs the real hash), failing the job for a reason
+        # that has nothing to do with the docs.
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      - name: Install build dependencies
+      - name: Verify the toolchain image pin matches the Dockerfile (#484)
+        # The jobs run inside the image the Dockerfile describes, so the pin is that
+        # file's content hash. Editing the Dockerfile without repinning would leave CI on
+        # an older environment than the tree claims -- caught here, not silently.
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential cmake ccache \
-            llvm-18-dev libclang-18-dev \
-            catch2 gdb lldb
+          set -euo pipefail
+          current=$(sha256sum .github/ci/Dockerfile | cut -c1-12)
+          pins=$(grep -ohE 'vyb-ci:toolchain-[0-9a-f]{12}' .github/workflows/ci.yml .github/workflows/gpu-kernel.yml | sort -u)
+          if [ "$pins" != "vyb-ci:toolchain-$current" ]; then
+            echo "::error::the container pin(s) read '$pins' but the Dockerfile hashes to toolchain-$current; publish the image (ci-image workflow) and update both workflows"
+            exit 1
+          fi
+          echo "toolchain image pin matches the Dockerfile: toolchain-$current"
 
       - name: Restore the compiler-object cache (ccache)
         uses: actions/cache@v4
@@ -217,6 +245,17 @@ jobs:
     # Memory-safety on main push + the daily schedule; not on every PR to keep
     # PR feedback fast (ASan+JIT is slow).
     if: ${{ github.event_name != 'pull_request' }}
+    # #484: the toolchain comes from the image, so there is no apt step at all -- that
+    # step was 32s on a good mirror and 5-20 minutes when the mirror misbehaved. The tag
+    # is the Dockerfile's content hash; the pin check below fails if the two drift apart.
+    container:
+      image: ghcr.io/rickenator/vyb-ci:toolchain-d0f7901abd08
+    # #484: inside a container the runner defaults step shells to `sh`, where
+    # `set -o pipefail` is illegal -- the shard and pin steps here use it. Ask for bash
+    # explicitly rather than sprinkling `shell:` on every step.
+    defaults:
+      run:
+        shell: bash
     # #481: same ccache treatment as the suite job, with its own key because the
     # sanitizer flags produce different objects. This job rebuilds a Debug+ASan
     # compiler from scratch on every main push otherwise.
@@ -228,17 +267,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential cmake ccache \
-            llvm-18-dev libclang-18-dev \
-            catch2
+      - name: Allow git on the mounted workspace (#484)
+        # The runner owns the checked-out tree (/__w/Vyb/Vyb) but steps inside the
+        # container run as root, so git refuses the repository with "dubious ownership"
+        # and every git call comes back empty. That is not cosmetic: the refman generator
+        # stamps HEAD into all 38 generated pages, so an empty rev read as drift in every
+        # one of them ("commit: unknown" vs the real hash), failing the job for a reason
+        # that has nothing to do with the docs.
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Restore the ASan compiler-object cache (ccache)
         uses: actions/cache@v4
