@@ -1,0 +1,19 @@
+// Vyb CUDA kernel with FIVE parameters (issue #476) — the shape the fixed-arity
+// launchers cannot express: four was the cap, so a kernel needing a fifth scalar
+// had to smuggle it through one of its buffers.
+//     vyb --kernel <this file> --ptx launch5.ptx
+//
+// The host builds cuLaunchKernel's kernelParams array itself (an `[Int; 5]` whose
+// elements are `addr()` of each argument cell) and hands it to the generic launcher
+// `vyb_cuda_launch_n`, so a kernel's arity is not a property of the launcher at all.
+// The args mix Int cells with an f64 cell on purpose: each cell carries the bits the
+// kernel expects, so no argument's SysV register class is a launcher concern.
+//
+// Params: out (f64 out buffer), a, n, z (Int scalars), alpha (f64 scalar).
+//   out[0] = (a + 100*n + 10000*z) * alpha
+// The weights are distinct so a mis-packed argument cannot pass by accident.
+launch5(out<Int>, a<Int>, n<Int>, z<Int>, alpha<Float>) -> {
+    if (tid_x() == 0) {
+        st_f64(out, (1.0 * (a + 100 * n + 10000 * z)) * alpha)
+    }
+}

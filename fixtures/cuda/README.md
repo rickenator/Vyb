@@ -9,6 +9,9 @@ NOT transient build residue.
 - `axpy_buf.ptx` — loaded by `test/ffi/test_cuda_axpy.vyb`.
 - `matmul.ptx` — loaded by `test/ffi/test_cuda_matmul.vyb`.
 - `p203_verify.ptx` — loaded by `test/ffi/test_cuda_p203.vyb`.
+- `launch5.ptx` — loaded by `test/ffi/test_cuda_launch_n.vyb`; emitted from
+  `fixtures/kernel/launch5.vyb` (five parameters — beyond the four the fixed-arity
+  launchers pack).
 
 They are checked in so the CUDA tests are reproducible on GPU-bearing CI
 without a live `ptxas` step at test time. Keep them — do not "clean" them up.

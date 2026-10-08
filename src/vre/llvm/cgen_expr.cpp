@@ -502,35 +502,71 @@ void LLVMCodegen::visit(vyb::ast::LocationExpression *node) {
 }
 
 void LLVMCodegen::visit(vyb::ast::AddrOfExpression *node) {
-    // addr(expr) gets the address of a pointer expression
+    // addr(x) yields the address of x's storage as an integer (issue #476).
+    //
+    // `x` is an lvalue, and there are three shapes:
+    //   - a loc<T> / pointer binding: the address of the *pointer it holds* (the
+    //     historic meaning -- addr(hf) on a CUfunction handle);
+    //   - a String binding: the address of its byte buffer -- the data field of the
+    //     inline `{ ptr, i64 }` value, i.e. the same `char*` the FFI already
+    //     extracts for a `CString` parameter. That is the pointer a caller needs to
+    //     hand a whole String to one `cuMemcpyHtoD`, instead of one 8-byte copy per
+    //     element;
+    //   - any other lvalue (scalar, array, struct, array element, struct field): the
+    //     address of the storage itself, so a program can build the 8-byte argument
+    //     cells of a kernelParams `void*[]` and pass their addresses to the
+    //     launcher.
+    //
+    // The operand is evaluated in assignment-target mode: every lvalue visitor
+    // yields the address of the object rather than its value in that mode (an alloca
+    // for a binding, a GEP for an array element or a field), which is exactly the
+    // storage address addr() is after -- the same storage `x = v` would write.
 
-    // 1. Evaluate the expression to get the pointer
+    auto toAddress = [&](llvm::Value* pointer) {
+        m_currentLLVMValue = builder->CreatePtrToInt(pointer, int64Type, "addr_cast");
+    };
+
+    bool wasLHS = m_isLHSOfAssignment;
+    m_isLHSOfAssignment = true;
     node->getLocation()->accept(*this);
-    llvm::Value *exprVal = m_currentLLVMValue;
-    if (!exprVal) {
+    m_isLHSOfAssignment = wasLHS;
+
+    llvm::Value* storage = m_currentLLVMValue;
+    if (!storage) {
         logError(node->loc, "Expression in addr() evaluated to null");
         m_currentLLVMValue = nullptr;
         return;
     }
 
-    // 2. If we have a pointer to a pointer, load the actual pointer
-    if (exprVal->getType()->isPointerTy()) {
-        // Load the pointer value if we have a pointer-to-pointer
-        if (auto allocaInst = llvm::dyn_cast<llvm::AllocaInst>(exprVal)) {
-            if (allocaInst->getAllocatedType()->isPointerTy()) {
-                exprVal = builder->CreateLoad(allocaInst->getAllocatedType(), exprVal, "ptr_load");
-            }
-        }
-    }
-
-    // 3. Convert the pointer to an integer
-    if (!exprVal->getType()->isPointerTy()) {
+    if (!storage->getType()->isPointerTy()) {
         logError(node->loc, "Expression in addr() must be a pointer type");
         m_currentLLVMValue = nullptr;
         return;
     }
 
-    m_currentLLVMValue = builder->CreatePtrToInt(exprVal, int64Type, "addr_cast");
+    llvm::Type* storageType = nullptr;
+    if (auto* globalVar = llvm::dyn_cast<llvm::GlobalVariable>(storage)) {
+        storageType = globalVar->getValueType();
+    } else if (isStorageSlot(storage)) {
+        storageType = storageSlotValueType(storage);
+    }
+    if (storageType) {
+        if (storageType->isPointerTy()) {
+            // A loc<T>/pointer binding: the pointer it holds, not its slot.
+            toAddress(builder->CreateLoad(storageType, storage, "addr.loc"));
+            return;
+        }
+        if (isVybStringStructType(storageType)) {
+            // A String is its bytes at the FFI boundary: hand back the data field,
+            // so `addr(s)` is directly usable as a C `char*`.
+            llvm::Value* dataField = builder->CreateStructGEP(storageType, storage, 0, "addr.str.field");
+            toAddress(builder->CreateLoad(llvm::PointerType::get(*context, 0), dataField, "addr.str.data"));
+            return;
+        }
+    }
+
+    // Scalar / array / struct / element / field: the storage address itself.
+    toAddress(storage);
 }
 
 void LLVMCodegen::visit(vyb::ast::PointerDerefExpression *node) {

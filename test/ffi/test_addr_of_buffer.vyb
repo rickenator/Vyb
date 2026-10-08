@@ -1,0 +1,80 @@
+// @test: #476 - addr() names the storage of a scalar, an array and a String
+// @description: addr() on a plain binding used to demand a pointer operand and
+//   load the value, so a scalar, an array or a String had no address. It now names
+//   the storage: an array's address is its first element's, a scalar's address reads
+//   and writes that binding, a String's address is its byte buffer (the same char* a
+//   CString parameter receives), and a loc<T>/pointer binding still yields the
+//   pointer it holds (the historic meaning, e.g. a CUfunction handle).
+// @category: ffi, memory
+// @expect: pass
+// @expect-return: 0
+
+extern "C" {
+    memcmp(a<CString>, b<CString>, n<Int>)<CInt>
+    strlen(s<CString>)<Int>
+}
+
+main()<Int> -> {
+    var<CInt> same = -1
+    var<Int> slen = 0
+    var<Int> addrArr = 0
+    var<Int> addrElem0 = 0
+    var<Int> first = 0
+    var<Int> third = 0
+    var<Int> viaAddr = 0
+    var<Int> written = 0
+    var<Int> held = 0
+
+    freedom {
+        # a String's address is its bytes, not the {ptr, len} struct: the very buffer
+        # a CString parameter already extracts, so one copy can move a whole String.
+        s<String> = "hello"
+        pc<loc<Int8>> = from<loc<Int8>>(addr(s))
+        same = memcmp(s, pc, 5)
+        slen = strlen(pc)
+
+        # an array's address is the address of its first element
+        a<[Int; 3]> = [11, 22, 33]
+        addrArr = addr(a)
+        addrElem0 = addr(a[0])
+        first = at(from<loc<Int>>(addrArr))
+        third = at(from<loc<Int>>(addrArr + 16))
+
+        # a scalar's address is the binding's own storage: readable and writable
+        x<Int> = 41
+        px<loc<Int>> = from<loc<Int>>(addr(x))
+        viaAddr = at(px)
+        at(px) = 99
+        written = x
+
+        # a loc<T> binding keeps its historic meaning: addr() is the pointer it holds
+        n<Int> = 7
+        p<loc<Int>> = loc(n)
+        held = at(from<loc<Int>>(addr(p)))
+    }
+
+    println("memcmp(String, addr(String)) = ")
+    println_int(same)
+    println("strlen(addr(String)) = ")
+    println_int(slen)
+    println("first element via addr(array) = ")
+    println_int(first)
+    println("third element via addr(array) = ")
+    println_int(third)
+    println("scalar read through addr() = ")
+    println_int(viaAddr)
+    println("scalar written through addr() = ")
+    println_int(written)
+    println("pointer held by a loc<T> via addr() = ")
+    println_int(held)
+
+    if (same != 0) { return 1 }
+    if (slen != 5) { return 2 }
+    if (first != 11) { return 3 }
+    if (third != 33) { return 4 }
+    if (viaAddr != 41) { return 5 }
+    if (written != 99) { return 6 }
+    if (held != 7) { return 7 }
+    if (addrArr != addrElem0) { return 8 }
+    return 0
+}
