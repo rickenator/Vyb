@@ -26,6 +26,17 @@ jobs:
     name: Emit PTX + ptxas across arches + compile FFI runners
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # #484: the toolchain comes from the image, so there is no apt step at all -- that
+    # step was 32s on a good mirror and 5-20 minutes when the mirror misbehaved. The tag
+    # is the Dockerfile's content hash; the pin check below fails if the two drift apart.
+    container:
+      image: ghcr.io/rickenator/vyb-ci:toolchain-d0f7901abd08
+    # #484: inside a container the runner defaults step shells to `sh`, where
+    # `set -o pipefail` is illegal -- the pin step below uses it. Ask for bash explicitly
+    # rather than sprinkling `shell:` on every step.
+    defaults:
+      run:
+        shell: bash
     # #481: this job configures the same Release flags as ci.yml's suite job, so it
     # shares that job's compiler-object cache (same key prefix) instead of paying a
     # second cold build of identical translation units in its own workflow.
@@ -37,20 +48,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+      - name: Allow git on the mounted workspace (#484)
+        # The runner owns the checked-out tree (/__w/Vyb/Vyb) but steps inside the
+        # container run as root, so git refuses the repository with "dubious ownership"
+        # and every git call comes back empty (the refman generator stamps HEAD into all
+        # 38 generated pages, so an empty rev read as drift in every one of them).
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      - name: Install build dependencies
+      - name: Verify the toolchain image pin matches the Dockerfile (#484)
+        # The jobs run inside the image the Dockerfile describes, so the pin is that
+        # file's content hash. Editing the Dockerfile without repinning would leave CI on
+        # an older environment than the tree claims -- caught here, not silently.
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential cmake ccache \
-            llvm-18-dev libclang-18-dev \
-            catch2 \
-            nvidia-cuda-toolkit      # provides ptxas for the acceptance gate; NVPTX lowering itself is in-process (no nvcc needed)
+          set -euo pipefail
+          current=$(sha256sum .github/ci/Dockerfile | cut -c1-12)
+          pins=$(grep -ohE 'vyb-ci:toolchain-[0-9a-f]{12}' .github/workflows/ci.yml .github/workflows/gpu-kernel.yml | sort -u)
+          if [ "$pins" != "vyb-ci:toolchain-$current" ]; then
+            echo "::error::the container pin(s) read '$pins' but the Dockerfile hashes to toolchain-$current; publish the image (ci-image workflow) and update both workflows"
+            exit 1
+          fi
+          echo "toolchain image pin matches the Dockerfile: toolchain-$current"
 
       - name: Verify ptxas present
+        # Baked into the toolchain image (#484): ptxas comes from NVIDIA's CUDA repo as
+        # cuda-nvcc-12-6 rather than Ubuntu's nvidia-cuda-toolkit, which would drag the
+        # userspace driver (libcuda.so.1) in and un-skip the CUDA tests.
         run: ptxas --version | head -1
 
       - name: Restore the compiler-object cache (ccache)
