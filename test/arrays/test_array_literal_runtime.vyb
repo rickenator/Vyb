@@ -1,0 +1,73 @@
+// @test: #478 - an array literal whose elements are runtime values
+// @description: a literal built from loaded values, call results, mixed
+//   constant/runtime elements, or an f64 expression used to be refused in codegen
+//   ("Array literal element is not a constant value"); it now materializes the array
+//   at runtime and yields the same array *value* the constant path produces, so every
+//   consumer sees the same type. Constant-only literals keep taking the ConstantArray
+//   path (covered here as the control case).
+// @category: arrays, codegen
+// @expect: pass
+// @expect-return: 0
+
+sq(x<Int>)<Int> -> { return x * x }
+
+sum2(v<[Int; 2]>)<Int> -> { return v[0] + v[1] }
+
+main()<Int> -> {
+    a<Int> = 3
+    b<Int> = 4
+
+    # all-runtime elements
+    v<[Int; 2]> = [a, b]
+    if (v[0] != 3) { return 1 }
+    if (v[1] != 4) { return 2 }
+
+    # mixed constant / runtime elements
+    m<[Int; 3]> = [a, 5, b]
+    if (m[0] != 3) { return 3 }
+    if (m[1] != 5) { return 4 }
+    if (m[2] != 4) { return 5 }
+
+    # call results as elements
+    c<[Int; 2]> = [sq(a), sq(b)]
+    if (c[0] != 9) { return 6 }
+    if (c[1] != 16) { return 7 }
+
+    # f64 elements
+    f<[Float; 2]> = [1.0 * a, 1.0 * b]
+    d<Float> = f[0] + f[1] - 7.0
+    if (d < 0.0) { d = 0.0 - d }
+    if (d > 0.001) { return 8 }
+
+    # a runtime literal as a call argument
+    if (sum2([a, a + 4]) != 10) { return 9 }
+
+    # nested: the inner literal produces a value, so a named binding reads it back
+    n<[[Int; 2]; 2]> = [[a, b], [b + 1, a + 1]]
+    row0<[Int; 2]> = n[0]
+    row1<[Int; 2]> = n[1]
+    if (row0[0] != 3) { return 10 }
+    if (row0[1] != 4) { return 11 }
+    if (row1[0] != 5) { return 12 }
+    if (row1[1] != 4) { return 13 }
+
+    # the same literal rebuilt inside a loop: the temporary must not accumulate state
+    total<Int> = 0
+    i<Int> = 0
+    for (i in 0..3) {
+        row<[Int; 2]> = [i, i * 2]
+        total = total + row[0] + row[1]
+    }
+    if (total != 18) { return 14 }
+
+    # control: a constant-only literal still works, and so does filling elementwise
+    k<[Int; 2]> = [7, 8]
+    if (k[0] + k[1] != 15) { return 15 }
+    p<[Int; 2]> = [0, 0]
+    p[0] = a
+    p[1] = b
+    if (p[0] + p[1] != 7) { return 16 }
+
+    println("RUNTIME ARRAY LITERAL OK")
+    return 0
+}

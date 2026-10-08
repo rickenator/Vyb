@@ -215,9 +215,7 @@ The caller can now build `kernelParams` itself:
 ```
 outD<Int> = 0 ; cuMemAlloc_v2(loc(outD), 8)
 ka<Int> = 10 ; kn<Int> = 2 ; kz<Int> = 3 ; kalpha<Float> = 1.5
-params<[Int; 5]> = [0, 0, 0, 0, 0]      # array literals need constant elements
-params[0] = addr(outD) ; params[1] = addr(ka) ; params[2] = addr(kn)
-params[3] = addr(kz)   ; params[4] = addr(kalpha)
+params<[Int; 5]> = [addr(outD), addr(ka), addr(kn), addr(kz), addr(kalpha)]
 cuda_launch_n(from<loc<CVoid>>(addr(hf)), 1,1,1, 1,1,1, addr(params), 5)
 ```
 
