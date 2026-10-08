@@ -2674,6 +2674,26 @@ extern "C" int vyb_cuda_launch4i(void* f, unsigned gridX, unsigned gridY, unsign
     return launch(f, gridX, gridY, gridZ, blockX, blockY, blockZ, 0, nullptr, params, nullptr);
 }
 
+// Issue #476: the generic launcher. cuLaunchKernel takes exactly ONE argument --
+// `kernelParams`, an array of pointers to the kernel's 8-byte argument cells -- so
+// a kernel's arity is not part of the launcher's signature at all, and neither is
+// any argument's register class. The caller now builds that array itself (addr()
+// on a scalar/array yields each cell's address, #476), so there is no arity cap and
+// no FP-last-arg variant: each cell already holds the bits the kernel expects
+// (an Int value, or an f64's bit pattern). `kernelParams` is a Vyb `[Int; N]`
+// whose elements are the cells' addresses, passed by its own address.
+extern "C" int vyb_cuda_launch_n(void* f, unsigned gridX, unsigned gridY, unsigned gridZ,
+                                 unsigned blockX, unsigned blockY, unsigned blockZ,
+                                 void* kernelParams, int64_t nargs) {
+    typedef int (*CuLaunchFn)(void*, unsigned, unsigned, unsigned, unsigned, unsigned,
+                              unsigned, unsigned, void*, void**, void*);
+    static CuLaunchFn launch = (CuLaunchFn)dlsym(RTLD_DEFAULT, "cuLaunchKernel");
+    if (!launch) return 1;
+    if (!kernelParams || nargs <= 0) return 2;
+    return launch(f, gridX, gridY, gridZ, blockX, blockY, blockZ, 0, nullptr,
+                  (void**)kernelParams, nullptr);
+}
+
 // Function to execute Vyb code using LLVM JIT
 int run_vyb_code(const std::string& source, const std::string& fileName, bool generateLLVMIR, int optLevel) {
     VYB_CDBG << "Starting run_vyb_code for file: " << fileName << std::endl;
@@ -2908,6 +2928,11 @@ int run_vyb_code(const std::string& source, const std::string& fileName, bool ge
                 llvm::orc::ExecutorAddr::fromPtr(&vyb_cuda_launch4), llvm::JITSymbolFlags::Exported);
             runtimeSymbols[mangle("cuda_launch4i")] = llvm::orc::ExecutorSymbolDef(
                 llvm::orc::ExecutorAddr::fromPtr(&vyb_cuda_launch4i), llvm::JITSymbolFlags::Exported);
+            // Issue #476: the generic launcher. The caller builds kernelParams itself
+            // (an `[Int; N]` of argument-cell addresses), so this one entry replaces
+            // any per-arity or per-register-class variant.
+            runtimeSymbols[mangle("cuda_launch_n")] = llvm::orc::ExecutorSymbolDef(
+                llvm::orc::ExecutorAddr::fromPtr(&vyb_cuda_launch_n), llvm::JITSymbolFlags::Exported);
 
             // Register numbered variants (LLVM auto-renames when same function declared multiple times
             // in the module; e.g. malloc.1, malloc.2, ... up to MAX_LIBC_SYMBOL_VARIANTS)

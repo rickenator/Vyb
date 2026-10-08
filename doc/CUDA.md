@@ -190,6 +190,41 @@ pp<loc<CVoid>> = from<loc<CVoid>>(addr(sel)) # pp holds &slot
 cuLaunchKernel(hf, ..., loc(pp), ...)        # *kernelParams == &slot
 ```
 
+### Kernel arity and the argument buffer (issue #476)
+
+`cuLaunchKernel` takes exactly **one** argument — `kernelParams`, the `void*[]` above —
+so a kernel's arity is not part of the launch surface at all. What used to cap it at
+four scalars was the *shim*: `cuda_launch4`/`cuda_launch4i` pack a fixed `void* params[4]`,
+and the pair exists because the last argument's SysV register class has to match the Vyb
+declaration (`double` → XMM0 vs `int64` → RDI). A kernel needing a fifth scalar, or a
+pointer to a constant table, had nowhere to put it.
+
+The caller can now build `kernelParams` itself:
+
+* **`addr(x)` names the storage of any lvalue.** For a scalar / array / struct / element /
+  field it is the address of the storage; for a `String` it is the byte buffer (the same
+  `char*` a `CString` parameter receives), so a whole String moves in *one*
+  `cuMemcpyHtoD` instead of one 8-byte copy per element; for a `loc<T>`/pointer binding it
+  is the pointer it holds (the historic meaning, e.g. a `CUfunction` handle).
+* **`cuda_launch_n(f, gx, gy, gz, bx, by, bz, kernelParams, nargs)`** (compiler-provided,
+  like the `cuda_launch4*` pair) passes that array straight through. No arity cap, no
+  register-class variants: each 8-byte cell already holds the bits the kernel expects
+  (an Int value, or an f64's bit pattern), so the *caller* decides an argument's class by
+  what it puts in the cell.
+
+```
+outD<Int> = 0 ; cuMemAlloc_v2(loc(outD), 8)
+ka<Int> = 10 ; kn<Int> = 2 ; kz<Int> = 3 ; kalpha<Float> = 1.5
+params<[Int; 5]> = [0, 0, 0, 0, 0]      # array literals need constant elements
+params[0] = addr(outD) ; params[1] = addr(ka) ; params[2] = addr(kn)
+params[3] = addr(kz)   ; params[4] = addr(kalpha)
+cuda_launch_n(from<loc<CVoid>>(addr(hf)), 1,1,1, 1,1,1, addr(params), 5)
+```
+
+`test/ffi/test_cuda_launch_n.vyb` runs exactly this against `fixtures/kernel/launch5.vyb`
+(five parameters, four Int cells plus an f64 cell) and verifies the value on silicon;
+`test/ffi/test_addr_of_buffer.vyb` covers the `addr()` semantics without a GPU.
+
 ## Security note
 
 Kernels are pure value/data-parallel compute. Only integer buffer addresses and raw typed
@@ -204,6 +239,8 @@ Any crypto/ledger integration stays host-side.
 | `fixtures/kernel/axpy_buf.vyb` | Launchable Void 1-D axpy over a flattened buffer |
 | `fixtures/kernel/matmul.vyb` | Register-tiled 4x4 tile matmul, no shared memory |
 | `fixtures/kernel/p203_verify.vyb` | deq_q4_0 + fp16/bf16 loads on device |
+| `fixtures/kernel/launch5.vyb` | Five parameters (four `Int` + one f64) — the arity the fixed-arity launchers cannot pack |
+| `fixtures/cuda/launch5.ptx` | Emitted PTX for `launch5.vyb`, loaded by `test/ffi/test_cuda_launch_n.vyb` |
 | `fixtures/cuda/launch_fill.vyb` | Host driver-API launcher (reads `fill_kernel.ptx`, expects 42) |
 | `fixtures/cuda/*.ptx` | Emitted PTX artifacts |
 | `fixtures/cuda/*.vyb.ll` | Generated LLVM IR |

@@ -1,0 +1,110 @@
+// @skip-if-missing-lib: libcuda.so.1  # CUDA-required; skipped by the harness on GPU-less runners
+// @test: #476 - a 5-argument kernel launched through a caller-built kernelParams array
+// @description: builds cuLaunchKernel's kernelParams `void*[]` in Vyb itself (addr()
+//   of each argument cell) and launches the five-parameter `launch5` kernel built
+//   from fixtures/kernel/launch5.vyb through the generic launcher, verifying that
+//   every argument -- Int cells and an f64 cell alike -- lands where the kernel
+//   expects it. Also uploads a whole String to the device in ONE cuMemcpyHtoD via
+//   addr(String). SKIPs (ret 0) when no CUDA/GPU.
+// @category: ffi, cuda, kernel
+// @expect: pass
+// @expect-return: 0
+
+# Issue #476: no launcher arity cap and no per-argument register class, because the
+# caller packs the parameters itself and cuLaunchKernel only ever takes one pointer.
+import io::{open_read, read_all}
+
+extern "C" {
+    cuInit(flags<CUInt>)<CInt>
+    cuDeviceGetCount(count<loc<CInt>>)<CInt>
+    cuDeviceGet(device<loc<CInt>>, ordinal<CInt>)<CInt>
+    cuCtxCreate_v2(pctx<loc<loc<CVoid>>>, flags<CUInt>, dev<CInt>)<CInt>
+    cuModuleLoadData(hmod<loc<loc<CVoid>>>, image<CString>)<CInt>
+    cuModuleGetFunction(hfunc<loc<loc<CVoid>>>, hmod<loc<CVoid>>, name<CString>)<CInt>
+    cuMemAlloc_v2(dptr<loc<Int>>, bytesize<Int>)<CInt>
+    cuMemcpyHtoD_v2(dstDevice<Int>, srcHost<loc<CVoid>>, ByteCount<Int>)<CInt>
+    cuMemcpyDtoH_v2(dstHost<loc<CVoid>>, srcDevice<Int>, ByteCount<Int>)<CInt>
+    cuMemFree_v2(dptr<Int>)<CInt>
+    cuCtxSynchronize()<CInt>
+    cuda_launch_n(f<loc<CVoid>>, gridX<CUInt>, gridY<CUInt>, gridZ<CUInt>,
+                      blockX<CUInt>, blockY<CUInt>, blockZ<CUInt>,
+                      kernelParams<Int>, nargs<Int>)<CInt>
+}
+
+main()<Int> -> {
+    freedom {
+        if (cuInit(0) != 0) { println("SKIP: no CUDA"); return 0 }
+        var<CInt> ndev = 0
+        if (cuDeviceGetCount(loc(ndev)) != 0 || ndev < 1) { println("SKIP: no CUDA device"); return 0 }
+        var<CInt> dev = 0
+        if (cuDeviceGet(loc(dev), 0) != 0) { return 14 }
+        ctx<loc<CVoid>> = from<loc<CVoid>>(0)
+        if (cuCtxCreate_v2(loc(ctx), 0, dev) != 0) { return 14 }
+    }
+
+    ptx<String> = ""
+    match (open_read("fixtures/cuda/launch5.ptx")) {
+        f -> { match (read_all(f)) { s -> { ptx = s } ? -> { return 13 } } }
+        ? -> { return 13 }
+    }
+
+    freedom {
+        hmod<loc<CVoid>> = from<loc<CVoid>>(0)
+        if (cuModuleLoadData(loc(hmod), ptx) != 0) { return 9 }
+        hf<loc<CVoid>> = from<loc<CVoid>>(0)
+        if (cuModuleGetFunction(loc(hf), hmod, "launch5") != 0) { return 10 }
+
+        outD<Int> = 0
+        if (cuMemAlloc_v2(loc(outD), 8) != 0) { return 11 }
+
+        # one 8-byte cell per kernel parameter; the cells are the kernel's arguments
+        # in order: out, a, n, z, alpha. The array is filled elementwise: an array
+        # literal's elements must be compile-time constants, and these are addresses
+        # of live locals.
+        ka<Int> = 10
+        kn<Int> = 2
+        kz<Int> = 3
+        kalpha<Float> = 1.5
+        params<[Int; 5]> = [0, 0, 0, 0, 0]
+        params[0] = addr(outD)
+        params[1] = addr(ka)
+        params[2] = addr(kn)
+        params[3] = addr(kz)
+        params[4] = addr(kalpha)
+
+        rc<CInt> = cuda_launch_n(from<loc<CVoid>>(addr(hf)), 1, 1, 1, 1, 1, 1,
+                                     addr(params), 5)
+        if (rc != 0) { println("launch rc "); println_int(rc); return 12 }
+        if (cuCtxSynchronize() != 0) { return 17 }
+
+        rv<Float> = 0.0
+        if (cuMemcpyDtoH_v2(loc(rv), outD, 8) != 0) { return 16 }
+        # (10 + 100*2 + 10000*3) * 1.5 = 45315.0
+        diff<Float> = rv - 45315.0
+        if (diff < 0.0) { diff = 0.0 - diff }
+        cuMemFree_v2(outD)
+        if (diff > 0.001) {
+            println("launch5 result = ")
+            println(rv)
+            return 1
+        }
+
+        # addr(String) is the byte buffer: one call uploads the whole String, instead
+        # of one 8-byte copy per element.
+        payload<String> = "ABCDEFGH"
+        sdD<Int> = 0
+        if (cuMemAlloc_v2(loc(sdD), 8) != 0) { return 11 }
+        if (cuMemcpyHtoD_v2(sdD, from<loc<CVoid>>(addr(payload)), 8) != 0) { return 15 }
+        if (cuCtxSynchronize() != 0) { return 17 }
+        back<Int> = 0
+        if (cuMemcpyDtoH_v2(loc(back), sdD, 8) != 0) { return 16 }
+        cuMemFree_v2(sdD)
+        println("device bytes as Int = ")
+        println_int(back)
+        # "ABCDEFGH" little-endian = 0x4847464544434241
+        if (back != 5208208757389214273) { return 2 }
+
+        println("LAUNCH5 OK")
+        return 0
+    }
+}

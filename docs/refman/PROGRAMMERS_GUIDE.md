@@ -167,7 +167,7 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 ### Running the test suite
 
 ```bash
-# 1310 .vyb tests exercised through compile + run + output/return checks
+# 1312 .vyb tests exercised through compile + run + output/return checks
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test
 ```
 
@@ -1350,7 +1350,12 @@ including re-exports (e.g. `https` re-exports `HttpResponse` from `http`).
   `runtime/vyb_runtime.c` (`__vyb_*`). `docs/refman/runtime.md` lists every
   intrinsic the stdlib uses, with the C source line each call resolves to.
 - **`freedom` blocks** allow raw `loc<T>` pointers and relaxed guarantees;
-  `at(ptr)` dereferences, `from<loc<T>>()` converts.
+  `at(ptr)` dereferences, `from<loc<T>>()` converts. **`addr(x)`** yields the
+  *address of `x`'s storage* as an `Int`: the storage itself for a scalar, an
+  array, a struct, an array element or a field; the byte buffer for a `String`
+  (the same `char*` a `CString` parameter receives); and the pointer it holds for
+  a `loc<T>`/pointer binding. It is what lets a Vyb program build a C `void*[]`
+  (or any buffer) itself.
 
 ### 3.21 Serialization
 
@@ -2847,7 +2852,7 @@ Canonical suite runner — a Vyb program (`test/run_tests.vyb`), wired into CTes
 as `run-tests`:
 
 ```bash
-./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1310 tests)
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1312 tests)
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --category async  # filter by category
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --json results.json --evidence evidence.json
 ```
@@ -3065,6 +3070,41 @@ pp<loc<CVoid>> = from<loc<CVoid>>(addr(sel)) # pp holds &slot
 cuLaunchKernel(hf, ..., loc(pp), ...)        # *kernelParams == &slot
 ```
 
+### 9.5.1 Kernel arity and the argument buffer (issue #476)
+
+`cuLaunchKernel` takes exactly one argument — `kernelParams`, the `void*[]` above —
+so a kernel's arity is not part of the launch surface. What capped it at four
+scalars was the shim: `cuda_launch4`/`cuda_launch4i` pack a fixed `void* params[4]`,
+and the pair exists because the last argument's SysV register class must match the
+Vyb declaration (`double` → XMM0 vs `int64` → RDI). A kernel needing a fifth
+scalar, or a pointer to a constant table, had nowhere to put it.
+
+The caller builds `kernelParams` itself:
+
+- **`addr(x)`** names the storage of any lvalue — a scalar, array, struct, element
+  or field; a `String`'s byte buffer (the same `char*` a `CString` parameter
+  receives, so one `cuMemcpyHtoD` moves a whole String); or, for a
+  `loc<T>`/pointer binding, the pointer it holds (the historic meaning, e.g. a
+  `CUfunction` handle).
+- **`cuda_launch_n(f, gx, gy, gz, bx, by, bz, kernelParams, nargs)`** (provided by
+  the compiler, like `cuda_launch4*`) passes that array straight through. No arity
+  cap and no register-class variants: each 8-byte cell holds the bits the kernel
+  expects, so the caller decides an argument's class by what it stores in the cell.
+
+```
+outD<Int> = 0 ; cuMemAlloc_v2(loc(outD), 8)
+ka<Int> = 10 ; kn<Int> = 2 ; kz<Int> = 3 ; kalpha<Float> = 1.5
+params<[Int; 5]> = [0, 0, 0, 0, 0]      # array literals need constant elements
+params[0] = addr(outD) ; params[1] = addr(ka) ; params[2] = addr(kn)
+params[3] = addr(kz)   ; params[4] = addr(kalpha)
+cuda_launch_n(from<loc<CVoid>>(addr(hf)), 1,1,1, 1,1,1, addr(params), 5)
+```
+
+`test/ffi/test_cuda_launch_n.vyb` runs this against `fixtures/kernel/launch5.vyb`
+(five parameters: four Int cells plus an f64 cell) and verifies the result on
+silicon; `test/ffi/test_addr_of_buffer.vyb` covers the `addr()` semantics with no
+GPU.
+
 ### 9.6 Security note
 
 Kernels are pure value/data-parallel compute. Only integer buffer addresses
@@ -3080,6 +3120,8 @@ key/seed material on the GPU. Crypto/ledger integration stays host-side.
 | `fixtures/kernel/matmul.vyb` | Register-tiled 4x4 tile matmul, no shared memory |
 | `fixtures/kernel/matmul_smem.vyb` | **Shared-memory tiled matmul** (16×16 tiles in `__vyb_kernel_shared` + `kernel_barrier`) — verified on GPU (as tested on an RTX 3090) |
 | `fixtures/kernel/p203_verify.vyb` | deq_q4_0 + fp16/bf16 loads on device |
+| `fixtures/kernel/launch5.vyb` | **Five parameters** (four `Int` + one f64) — the arity the fixed-arity launchers cannot pack |
+| `fixtures/cuda/launch5.ptx` | Emitted PTX for `launch5.vyb`, loaded by `test/ffi/test_cuda_launch_n.vyb` |
 | `fixtures/cuda/launch_fill.vyb` | Host driver-API launcher (reads `fill_kernel.ptx`, expects 42) |
 | `fixtures/cuda/matmul_verify.vyb` | Host runner — **adopts the signed `bindings/cuda` module** (`import cuda::{...}` + `import cuda_binding::{cuMemcpy*_v2}` via `--module-path bindings --module-path bindings/cuda`), launches `matmul_smem` via `cuda_launch`'s single descriptor arg, and verifies `C = A×B` on silicon (`MATMUL PASS`) |
 | `fixtures/cuda/cublas_verify.vyb` | **cuBLAS cross-validation** — runs the same random A,B through our `matmul_smem` kernel, NVIDIA cuBLAS DGEMM, and a host reference; all 256 elements agree on GPU (`CUDA CROSS-VALIDATION`, as tested on an RTX 3090). Native `--build --link -lcublas --link -lcuda`, no `import io`. |
