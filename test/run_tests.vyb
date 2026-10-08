@@ -495,13 +495,15 @@ main()<Int> -> {
         parts<Vec<String>> = shardSpec.split("/")
         if (parts.len() != 2 || !is_all_digits(parts.get(0)) || !is_all_digits(parts.get(1))) {
             println("--shard expects K/N with decimal K and N (e.g. 0/4); got '" + shardSpec + "'")
-            return 2
+            # exit(), not return: a main() Int return is only printed, so a typo in a
+            # CI invocation would otherwise pass as an empty, green run (#481 follow-up).
+            exit(2)
         }
         shardIndex = digits_to_int(parts.get(0))
         shardCount = digits_to_int(parts.get(1))
         if (shardCount < 1 || shardIndex >= shardCount) {
             println("--shard K/N out of range: K=" + shardIndex.to_string() + " N=" + shardCount.to_string())
-            return 2
+            exit(2)   # as above: a return would not reach the process status
         }
     }
 
