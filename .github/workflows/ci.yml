@@ -25,6 +25,15 @@ jobs:
     name: Build + JIT suite + AOT/native-link
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # #481: the compiler build is the other half of this job's cost, so it is cached
+    # through ccache. A warm cache turns a multi-minute rebuild into seconds; the key
+    # follows the compiler sources and `restore-keys` falls back to the newest cache,
+    # where ccache's own content hashes still find every unchanged translation unit.
+    env:
+      CCACHE_DIR: ${{ runner.temp }}/ccache
+      CCACHE_MAXSIZE: 2G
+      CCACHE_COMPRESS: "true"
+      CCACHE_COMPILERCHECK: content
     steps:
       - uses: actions/checkout@v4
 
@@ -36,9 +45,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential cmake \
+            build-essential cmake ccache \
             llvm-18-dev libclang-18-dev \
             catch2 gdb lldb
+
+      - name: Restore the compiler-object cache (ccache)
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ runner.os }}-release-${{ hashFiles('src/**', 'include/**', 'CMakeLists.txt', 'cmake/**') }}
+          restore-keys: |
+            ccache-${{ runner.os }}-release-
 
       - name: Configure
         run: >
@@ -48,21 +65,60 @@ jobs:
           -DVYB_USE_QT5=OFF
           -DVYB_USE_OPENSSL=ON
           -DVYB_BINDGEN_LIBCLANG=ON
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
         run: cmake --build build --parallel "$(nproc)"
+
+      - name: Report the compiler-object cache (#481)
+        # Informational, never gating: a low hit rate is a signal to widen the key, not
+        # a failure. Printed on every run so the cache's effect is visible in the log.
+        if: always()
+        run: ccache -s
 
       - name: Verify build identity (#160)
         # The binary must report build=Release (never silently Debug) + no sanitizer.
         run: test "$(./build/vyb --version)" = "Vyb $(grep '^project' CMakeLists.txt | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+') (build=Release, sanitize=none)"
 
-      - name: Full JIT test suite
-        run: ./build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test --json /tmp/suite.json --evidence /tmp/release-evidence.json
-
       - name: Validate documented suite count matches runner (#226)
         # Vyb implementation of the old suite_count_check.py: the count must match
         # what test/run_tests.vyb actually runs.
         run: ./build/vyb test/suite_count_check.vyb
+
+      - name: Full JIT suite - 4 shards in parallel (#481)
+        # The runner executes tests serially, so the suite is split into four
+        # round-robin shards (`--shard K/N`) and run concurrently. Shards partition the
+        # runner's deterministic discovery list, and the next step asserts they add up
+        # to the documented suite size -- a shard that ran nothing, or four shards that
+        # ran the same slice, must fail rather than pass quietly.
+        env:
+          SHARDS: "4"
+        run: |
+          set -uo pipefail
+          export VYB_STDLIB="$PWD/stdlib"
+          rc=0
+          for i in $(seq 0 $((SHARDS - 1))); do
+            ./build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test --shard "$i/$SHARDS" \
+              --json "/tmp/suite-$i.json" --evidence "/tmp/evidence-$i.json" \
+              > "/tmp/shard-$i.log" 2>&1 &
+          done
+          for p in $(jobs -p); do wait "$p" || rc=1; done
+          cat /tmp/shard-*.log
+          exit "$rc"
+
+      - name: Verify the shards covered the whole suite (#481)
+        # Runs after the count check, so `canonical` is the number the runner documents
+        # for this tree. The shards' own evidence totals must add up to it exactly.
+        run: |
+          set -euo pipefail
+          canonical=$(./build/vyb test/suite_count_check.vyb | grep -oE '\([0-9]+ \.vyb tests' | grep -oE '[0-9]+')
+          ran=$(python3 -c "import glob,json;print(sum(json.load(open(p))['total'] for p in sorted(glob.glob('/tmp/evidence-*.json'))))")
+          echo "shards ran $ran tests; the runner documents $canonical"
+          if [ "$ran" != "$canonical" ]; then
+            echo "::error::the shards ran $ran of $canonical tests -- a shard is duplicated or missing"
+            exit 1
+          fi
 
       - name: Optimization level reaches the JIT path (#394)
         # `-O` used to parse and then be ignored by the JIT path, which hardcoded
@@ -133,8 +189,9 @@ jobs:
         with:
           name: release-evidence
           path: |
-            /tmp/suite.json
-            /tmp/release-evidence.json
+            /tmp/suite-*.json
+            /tmp/evidence-*.json
+            /tmp/shard-*.log
             /tmp/aot-evidence.json
           if-no-files-found: ignore
 
@@ -145,6 +202,14 @@ jobs:
     # Memory-safety on main push + the daily schedule; not on every PR to keep
     # PR feedback fast (ASan+JIT is slow).
     if: ${{ github.event_name != 'pull_request' }}
+    # #481: same ccache treatment as the suite job, with its own key because the
+    # sanitizer flags produce different objects. This job rebuilds a Debug+ASan
+    # compiler from scratch on every main push otherwise.
+    env:
+      CCACHE_DIR: ${{ runner.temp }}/ccache
+      CCACHE_MAXSIZE: 2G
+      CCACHE_COMPRESS: "true"
+      CCACHE_COMPILERCHECK: content
     steps:
       - uses: actions/checkout@v4
 
@@ -156,9 +221,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential cmake \
+            build-essential cmake ccache \
             llvm-18-dev libclang-18-dev \
             catch2
+
+      - name: Restore the ASan compiler-object cache (ccache)
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ runner.os }}-asan-${{ hashFiles('src/**', 'include/**', 'CMakeLists.txt', 'cmake/**') }}
+          restore-keys: |
+            ccache-${{ runner.os }}-asan-
 
       - name: Configure (ASan)
         run: >
@@ -169,6 +242,8 @@ jobs:
           -DVYB_USE_OPENSSL=ON
           -DVYB_BINDGEN_LIBCLANG=OFF
           -DVYB_SANITIZE="address,undefined"
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build (ASan)
         run: cmake --build build --parallel 2

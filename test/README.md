@@ -52,6 +52,22 @@ The Vyb runner executes each test through the compiler (JIT) by default;
 module, FFI, introspection, primitive type, range, Vec iteration, and stdlib
 suites and enforces at least 126 passing tests before the next milestone.
 
+The runner executes tests serially, so CI splits the suite into `N` disjoint
+round-robin shards and runs them concurrently:
+
+```bash
+for i in 0 1 2 3; do
+  build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test --shard "$i/4" &
+done
+wait
+```
+
+`--shard K/N` (K 0-based) walks the runner's own deterministic discovery list and
+keeps every `N`th entry, so the shards partition the suite exactly: their counts
+must add up to the number `test/suite_count_check.vyb` documents, which is what
+`.github/workflows/ci.yml` asserts after the shards (`--shard` with `K >= N`, or a
+non-numeric spec, exits 2 rather than silently running nothing).
+
 You can run the same gate through CMake with:
 
 ```bash

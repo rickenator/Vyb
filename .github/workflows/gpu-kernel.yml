@@ -10,7 +10,11 @@ name: gpu-kernel
 # skill for how to run fixtures/cuda/<runner>.vyb on hardware.
 
 on:
+  # #481: main only, mirroring ci.yml. A bare `push:` fired this workflow for every
+  # branch push *on top of* the branch's own pull_request run, so each pushed commit
+  # ran the whole kernel matrix -- and a cold compiler build -- twice.
   push:
+    branches: [main]
   pull_request:
 
 concurrency:
@@ -22,6 +26,14 @@ jobs:
     name: Emit PTX + ptxas across arches + compile FFI runners
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # #481: this job configures the same Release flags as ci.yml's suite job, so it
+    # shares that job's compiler-object cache (same key prefix) instead of paying a
+    # second cold build of identical translation units in its own workflow.
+    env:
+      CCACHE_DIR: ${{ runner.temp }}/ccache
+      CCACHE_MAXSIZE: 2G
+      CCACHE_COMPRESS: "true"
+      CCACHE_COMPILERCHECK: content
     steps:
       - uses: actions/checkout@v4
 
@@ -33,13 +45,21 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential cmake \
+            build-essential cmake ccache \
             llvm-18-dev libclang-18-dev \
             catch2 \
             nvidia-cuda-toolkit      # provides ptxas for the acceptance gate; NVPTX lowering itself is in-process (no nvcc needed)
 
       - name: Verify ptxas present
         run: ptxas --version | head -1
+
+      - name: Restore the compiler-object cache (ccache)
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ runner.os }}-release-${{ hashFiles('src/**', 'include/**', 'CMakeLists.txt', 'cmake/**') }}
+          restore-keys: |
+            ccache-${{ runner.os }}-release-
 
       - name: Configure
         run: >
@@ -49,6 +69,8 @@ jobs:
           -DVYB_USE_QT5=OFF
           -DVYB_USE_OPENSSL=ON
           -DVYB_BINDGEN_LIBCLANG=ON
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
         run: cmake --build build --parallel "$(nproc)"

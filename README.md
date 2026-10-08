@@ -3180,10 +3180,20 @@ build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
 # Run a single category (parse, semantic, async, tls, ...)
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test --category async
 
+# Split the suite across cores: K is 0-based, N is the shard count
+build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test --shard 0/4 &
+
 # Save results as JSON, or full run evidence
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test --json results.json
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test --evidence evidence.json
 ```
+
+The runner is single-threaded, so `--shard K/N` is how CI (`.github/workflows/ci.yml`)
+runs the suite on several cores at once: it walks the same deterministic discovery
+list and keeps every `N`th entry, so the shards are disjoint and complete. CI then
+asserts their counts add up to the number `test/suite_count_check.vyb` documents, and
+the compiler build is cached through `ccache` so a re-run does not rebuild it from
+scratch.
 
 `vyb --repo` (or `vyb test` with no explicit paths inside the compiler repo) runs
 the same Vyb runner, so the compiler's own test path is written in Vyb end to end. A secondary
