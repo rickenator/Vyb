@@ -877,6 +877,17 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
             RHS = builder->CreatePtrToInt(RHS, destPointeeType, "assigncast");
         } else if (destPointeeType->isPointerTy() && RHS->getType()->isIntegerTy()) {
             RHS = builder->CreateIntToPtr(RHS, destPointeeType, "assigncast");
+        } else if (destPointeeType->isFloatingPointTy() && RHS->getType()->isFloatingPointTy()) {
+            // #488: narrowing/widening a FLOAT into a float slot of a different width.
+            // The binary-operator rule promotes two live float values to the WIDER width (see
+            // cgen_expr_operator.cpp), and an intrinsic like `ld_f32` has a Float64 Vyb-surface
+            // result by design, so `s<Float32> = s + ld_f32(..)` arrives here as a `double` with a
+            // `float` destination. Without this conversion the store was `store double, ptr<float>`
+            // -- invalid IR that passes module verification with exit 0, only warns
+            // ("Type mismatch in assignment"), and then MISCOMPILES: the accumulation loop is
+            // deleted and the variable reads back as 0. Narrow/widen explicitly so the stored
+            // value is one the declared width can hold.
+            RHS = builder->CreateFPCast(RHS, destPointeeType, "assigncast");
         }
     }
 
