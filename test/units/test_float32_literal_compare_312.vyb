@@ -36,11 +36,36 @@ main()<Int> -> {
     c<Float64> = 2.5
     assert(c == 2.5)
 
-    // arithmetic that mixes a Float32 value with a float literal
+        // arithmetic that mixes a Float32 value with a float literal
     d<Float32> = a + 1.5
     assert(d == 4.0)
     e<Float32> = a * 2.0
     assert(e == 5.0)
+    // #488: an ASSIGNMENT of a Float64-valued expression back into a Float32 variable must
+    // narrow at the store. The binary-op rule promotes two live float values to the wider
+    // width, so the RHS arrives as a `double`; with no store conversion this emitted
+    // `store double, ptr<float>` -- invalid IR that passed module verification, exited 0,
+    // only warned ("Type mismatch in assignment"), and then MISCOMPILED: an accumulation
+    // loop built this way was deleted and the variable read back as 0.
+    n<Float64> = 3.0
+    g<Float32> = 1.0
+    g = g + n
+    assert(g == 4.0)
+
+    // the loop shape the device-side miscompile showed up in
+    s<Float32> = 0.0
+    k<Int> = 0
+    for (k in 0..3) {
+        s = s + n
+    }
+    assert(s == 12.0)
+
+    // narrowing is not the identity: the stored value must be the FLOAT32 of the expression
+    h<Float32> = 0.0
+    w<Float64> = 0.1
+    h = w
+    assert(h == 0.1)
+    assert(h != w)
 
     // aliases for the 32-bit width resolve the same way
     f<f32> = 1.5
