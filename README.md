@@ -513,7 +513,7 @@ Comprehensive string manipulation built into the `String` type:
 | `.ends_with(suf)` | Suffix test | `s.ends_with("!")` → `Bool` |
 | `.to_upper()` | Uppercase copy | `s.to_upper()` → `String` |
 | `.to_lower()` | Lowercase copy | `s.to_lower()` → `String` |
-| `.substring(start, len)` | Slice | `s.substring(0, 5)` → `String` |
+| `.substring(start, end?)` | Slice `[start, end)`; `end` defaults to the length | `s.substring(0, 5)` → `String` |
 | `.char_at(i)` | ASCII code at index | `s.char_at(1)` → `Int` |
 | `.trim()` / `.strip()` | Strip surrounding whitespace | `s.trim()` → `String` |
 | `.replace(old, new)` | Replace all occurrences | `s.replace("a", "b")` → `String` |
