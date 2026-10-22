@@ -1140,9 +1140,14 @@ with `pass` for multi-statement case bodies. Needs polishing:
   guide sections; registered in the guide's front matter; validated by
   `refman --check` (no drift — hand-authored page).
 - [ ] **Web landing page** — `docs/web/landing_page/index.html` is the deployed
-  project site (see `vyb-lang.org` / `aniviza.com`). Update it periodically as
-  needed to reflect the current feature set and project status — ad hoc, no
-  fixed schedule.
+  project site (see `vyb-lang.org` / `aniviza.com`). Its body is a render of
+  `README.md`, so the README is the source of truth for the page's feature list,
+  version and test count; the shell (head metadata, hero, footer) is
+  hand-maintained. Update it periodically as needed to reflect the current
+  feature set and project status — ad hoc, no fixed schedule. See
+  `docs/web/landing_page/README.md` for the regeneration steps and
+  `docs/web/landing_page/deploy.sh` (upload + live-token verification) for
+  publishing.
 - [x] **Hyperlinked refman generator** — `tools/refman.vyb` scans `stdlib/**/*.vyb`
   and emits `docs/refman/` (module pages + cross-indexes + `graph.json`) as an
   inter-relationship graph (import, implement, uses-type, runtime-ref, prose-ref,
