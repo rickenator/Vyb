@@ -1,0 +1,23 @@
+# checksum.vyb -- a minimal freestanding module for `vyb --target`.
+# Scalar code only: no String/Vec/println, so it needs no Vyb runtime and links
+# into any C program for the target (ESP-IDF, bare metal, ...).
+#
+#   vyb --target xtensa-esp32s3-elf -O2 -c checksum.o examples/freestanding/checksum.vyb
+#   vyb --target x86_64-linux-gnu   -O2 -c checksum.o examples/freestanding/checksum.vyb
+#
+# C side:  uint32_t fletcher_step(uint32_t state, uint32_t byte);
+#          uint32_t rotl32(uint32_t x, uint32_t n);
+
+share(all)
+rotl32(x<UInt32>, n<UInt32>)<UInt32> -> {
+    k<UInt32> = n & (31 as UInt32)
+    if (k == (0 as UInt32)) { return x }
+    return (x << k) | (x >> ((32 as UInt32) - k))
+}
+
+share(all)
+fletcher_step(state<UInt32>, byte<UInt32>)<UInt32> -> {
+    lo<UInt32> = ((state & (0xffff as UInt32)) + (byte & (0xff as UInt32))) % (65535 as UInt32)
+    hi<UInt32> = ((state >> (16 as UInt32)) + lo) % (65535 as UInt32)
+    return (hi << (16 as UInt32)) | lo
+}
