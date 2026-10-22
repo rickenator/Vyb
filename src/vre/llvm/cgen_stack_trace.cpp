@@ -86,7 +86,7 @@ static llvm::Function* getPopCallFrameFunction(llvm::Module* module, llvm::LLVMC
 // Generate a call to push the current function onto the call stack
 void LLVMCodegen::generatePushFrameCall(const std::string& functionName, const SourceLocation& loc) {
     // Kernel mode (issue #198): device functions have no host call-stack runtime.
-    if (vyb::g_kernel_mode) return;
+    if (vyb::noHostRuntime()) return;  // also freestanding --target
     llvm::Function* pushFunc = getPushCallFrameFunction(module.get(), context.get(), int8PtrType);
 
     // Create string constants
@@ -102,7 +102,7 @@ void LLVMCodegen::generatePushFrameCall(const std::string& functionName, const S
 // Generate a call to pop the current function from the call stack
 void LLVMCodegen::generatePopFrameCall() {
     // Kernel mode (issue #198): device functions have no host call-stack runtime.
-    if (vyb::g_kernel_mode) return;
+    if (vyb::noHostRuntime()) return;  // also freestanding --target
     llvm::Function* popFunc = getPopCallFrameFunction(module.get(), context.get());
     builder->CreateCall(popFunc, {});
 }

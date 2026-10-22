@@ -50,6 +50,20 @@ extern bool g_debug_codegen;
 // calls, no __vyb_* intrinsic externs. The codegen subsets what it emits accordingly.
 extern bool g_kernel_mode;
 
+// Freestanding cross-target mode (`--target <triple>`, e.g. xtensa-esp32s3-elf).
+// The module is lowered for a non-host LLVM target with no Vyb host runtime: no
+// `main` wrapper, no DWARF, no __vyb_* intrinsic externs, no type-metadata
+// registry, no call-stack frame hooks. The result is a plain relocatable object
+// that a C toolchain (ESP-IDF, newlib, ...) links like any other.
+extern bool g_freestanding;
+extern std::string g_target_triple;    // LLVM triple for --target (normalized)
+extern std::string g_target_cpu;       // --mcpu (or implied by a --target alias)
+extern std::string g_target_features;  // --mattr
+
+// True when no Vyb host runtime is available to the module being compiled:
+// NVPTX kernels (--kernel) and freestanding cross targets (--target).
+inline bool noHostRuntime() { return g_kernel_mode || g_freestanding; }
+
 // Convenience macro: use VYB_CDBG in place of std::cerr for DEBUG-level codegen output.
 // The entire chained << expression is skipped when g_debug_codegen is false.
 #define VYB_CDBG if (vyb::g_debug_codegen) std::cerr
