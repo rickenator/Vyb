@@ -27,7 +27,7 @@ This guide is intended for systems programmers, language designers, and develope
 
 * A compact, expressive syntax for both low-level control and high-level abstractions.
 * Scoped ownership types (`my`/`our`/`their`/`mild`) and reference counting for explicit, safe memory handling, with system-level C interoperability via the FFI.
-* Zero-cost monomorphized generics and aspect/bind polymorphism — native compiled performance or JIT, emitting through LLVM's target set (x86-64/Linux is release-tested; NVPTX is validated `sm_75` → `sm_90a`).
+* Zero-cost monomorphized generics and aspect/bind polymorphism — native compiled performance or JIT, emitting through LLVM's target set (x86-64/Linux is release-tested; NVPTX device code is validated with `ptxas` from `sm_75` through `sm_90` in CI, and `sm_90a` additionally emits and validates on a local toolchain).
 * Closures with full capture semantics: by-value copies, `my<T>` moves, `our<T>` retention, write-through mutable capture, and a reference-counted environment that survives `return`.
 * Threads, channels, and a cooperative executor, with a compile-time thread-boundary capability that decides which closures may be handed to another thread.
 * A foundation for a self-hosted compiler and hybrid VM/JIT architecture for rapid iteration and performance tuning.
@@ -69,9 +69,11 @@ Vyb is a statically typed, compiled systems language targeting native code via L
 ## Quick Start
 
 ```bash
-# Option A: official binary SDK (Linux x86_64) — download the v0.7.7 tarball
-# from the release page, unpack, and add it to your PATH:
-#   https://github.com/rickenator/Vyb/releases/tag/v0.7.7
+# Option A: official binary SDK (Linux x86_64) — download the newest
+# vyb-sdk-<version>-linux-x86_64.tar.gz from the release page, unpack it, and
+# put its bin/ on your PATH:
+#   https://github.com/rickenator/Vyb/releases   (all releases)
+#   releases are cut from the version tags: https://github.com/rickenator/Vyb/releases/tag/v0.7.7
 # There is no macOS SDK yet: the runtime's async/fibre layer is Linux-only
 # (ucontext/pipe2), so the release workflow cannot build it. See docs/sdk/INSTALL.md.
 
@@ -231,7 +233,7 @@ backend-available but not covered by any gate):
 | Target | How it is exercised |
 | --- | --- |
 | **x86-64 / Linux** | **Release-tested** — the canonical JIT suite and the AOT/native-link pass run on every CI build, and the SDK tarball ships this target (`docs/sdk/INSTALL.md`) |
-| **NVPTX** (NVIDIA GPUs) | Device code emitted and validated with `ptxas` across `sm_75` → `sm_90a` in CI; silicon-verified on `sm_86` (RTX 3090) |
+| **NVPTX** (NVIDIA GPUs) | Device code emitted and validated with `ptxas` across `sm_75` → `sm_90` in CI (`sm_90a` additionally validates on a local toolchain); silicon-verified on `sm_86` (RTX 3090) |
 | AArch64, RISC-V, PowerPC, MIPS, SPARC, WebAssembly, SystemZ, Hexagon, LoongArch, M68k, Xtensa, AVR, MSP430, BPF, AMDGPU, VE, Lanai, XCore | Emitted through the same LLVM backend, but **not CI-covered** — no cross-target fixture or toolchain gate exercises them. Treat these as untested in this tree |
 
 **Complete Compilation Features:**
@@ -243,7 +245,7 @@ backend-available but not covered by any gate):
 - ✅ **Static Linking**: Optional `--static` flag for standalone binaries
 - ✅ **Object File Emission**: AOT compilation to .o files
 - ✅ **Optimization Levels**: -O0 through -O3 with LLVM optimizations
-- ✅ **Cross-Compilation**: emits through LLVM's target set — x86-64/Linux is release-tested, NVPTX is validated `sm_75` → `sm_90a`; other targets are backend-available but not CI-covered
+- ✅ **Cross-Compilation**: emits through LLVM's target set — x86-64/Linux is release-tested, NVPTX is validated `sm_75` → `sm_90` in CI (`sm_90a` locally); other targets are backend-available but not CI-covered
 - ✅ **Debug Information**: Full DWARF debug metadata
 - 🚧 **NVPTX Kernel Mode** (#198): `--kernel` lowers a `main`-less, host-runtime-free Vyb module
   to PTX through the in-process NVPTX backend (`nvptx64-nvidia-cuda`, default `sm_86`; override
@@ -467,7 +469,7 @@ These features are complete and fully tested:
 ### ✅ **Native Code Compilation**
 - **Object File Emission**: Compile to .o files with `--compile/-c` flag
 - **Optimization Levels**: -O0 (none), -O1 (basic), -O2 (default), -O3 (aggressive)
-- **Cross-Compilation**: emits through LLVM's target set (x86-64/Linux release-tested, NVPTX validated `sm_75` → `sm_90a`; other targets not CI-covered)
+- **Cross-Compilation**: emits through LLVM's target set (x86-64/Linux release-tested, NVPTX validated `sm_75` → `sm_90` in CI, `sm_90a` locally; other targets not CI-covered)
 - **Debug Information**: Full DWARF metadata for debugging compiled code
 - **Standard Toolchain**: Compatible with system linkers (ld, lld, gold)
 - **ELF Format**: Standard relocatable object files for linking
@@ -3282,7 +3284,7 @@ Bigger worked examples: `fixtures/kernel/matmul_smem.vyb` (shared-memory tiled m
   allocate device counters as 8 bytes and copy 8 bytes back.
 - **Testing.** `test/ffi/test_cuda_*.vyb` run against the checked-in golden `.ptx`
   (`fixtures/cuda/README.md`); `.github/workflows/gpu-kernel.yml` re-emits every kernel across
-  `sm_75..sm_90a` on CPU and runs the on-silicon cross-validations on a self-hosted GPU runner.
+  `sm_75..sm_90` on CPU (`sm_90a` emits and ptxas-validates on a local toolchain) and runs the on-silicon cross-validations on a self-hosted GPU runner.
 
 Full reference: [doc/CUDA.md](doc/CUDA.md).
 

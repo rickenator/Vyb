@@ -144,7 +144,25 @@ void LLVMCodegen::generate(vyb::ast::Module* astModule, const std::string& outpu
     // only matters here, where the layout is consulted. Kernel mode keeps
     // its NVPTX layout (set by the --kernel path after codegen; its metadata
     // registry is never registered on device).
-    if (!vyb::g_kernel_mode) {
+    if (vyb::g_freestanding) {
+        // Freestanding --target: every layout query must see the *target's*
+        // DataLayout (e.g. Xtensa: 32-bit pointers, 4-aligned i64 stack slots),
+        // not the host's, or type sizes baked into the IR would be wrong on device.
+        std::string targetErr;
+        const llvm::Target* tgt =
+            llvm::TargetRegistry::lookupTarget(vyb::g_target_triple, targetErr);
+        if (tgt) {
+            llvm::TargetOptions tmOpt;
+            std::unique_ptr<llvm::TargetMachine> tm(tgt->createTargetMachine(
+                vyb::g_target_triple, vyb::g_target_cpu.empty() ? "generic" : vyb::g_target_cpu,
+                vyb::g_target_features, tmOpt, std::optional<llvm::Reloc::Model>(llvm::Reloc::Static)));
+            module->setTargetTriple(vyb::g_target_triple);
+            module->setDataLayout(tm->createDataLayout());
+        } else {
+            std::cerr << "warning: target '" << vyb::g_target_triple
+                      << "' is not linked into this vyb (" << targetErr << ")\n";
+        }
+    } else if (!vyb::g_kernel_mode) {
         // Idempotent: the execute/compile paths already initialize the native
         // target, but paths that only generate IR (--emit-llvm, #215 repro)
         // may not have — lookupTarget needs the registry populated.
@@ -168,7 +186,10 @@ void LLVMCodegen::generate(vyb::ast::Module* astModule, const std::string& outpu
         }
     }
 
-    if (vyb::g_kernel_mode) {
+    if (vyb::noHostRuntime()) {
+        // Freestanding --target shares (a) and (b) below: no DWARF (keeps the
+        // object small and avoids host file-path strings in flash) and no
+        // __vyb_* runtime externs.
         // issue #198: lower the module as NVPTX device code. Two things differ
         // from host codegen:
         //  (a) No DWARF debug info: it is not available on the GPU, and LLVM's
@@ -194,6 +215,8 @@ void LLVMCodegen::generate(vyb::ast::Module* astModule, const std::string& outpu
 
     if (vyb::g_kernel_mode) {
         module->setTargetTriple("nvptx64-nvidia-cuda");
+    } else if (vyb::g_freestanding) {
+        module->setTargetTriple(vyb::g_target_triple);
     } else {
         // Ensure all core intrinsic functions are declared in the module
         // This prevents JIT runtime errors when functions are not found
@@ -468,7 +491,7 @@ void LLVMCodegen::visit(vyb::ast::Module* node) {
     // are pure data-parallel kernels with no host runtime. Skipping it also keeps
     // __vyb_* reference-count/registry symbols out of the NVPTX module.
     VYB_CDBG << "DEBUG: Fourth pass - registering type metadata" << std::endl;
-    if (!vyb::g_kernel_mode) {
+    if (!vyb::noHostRuntime()) {
         registerTypeMetadata();
         registerTypeNames();
     }

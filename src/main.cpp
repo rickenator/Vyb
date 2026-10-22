@@ -564,6 +564,8 @@ extern "C" {
 
 // LLVM includes for object file emission
 #include <llvm/IR/LegacyPassManager.h>
+#include <llvm/TargetParser/Triple.h>
+#include <llvm/MC/MCSubtargetInfo.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/BasicBlock.h>
@@ -604,6 +606,11 @@ namespace vyb {
     bool g_kernel_mode = false;
     // NVPTX GPU arch for --kernel (e.g. sm_90) from --gpu; empty => $VYB_KERNEL_GPU / sm_86.
     std::string g_kernel_gpu = "";
+    // Freestanding cross-target mode: --target <triple> [--mcpu <cpu>] [--mattr <f>].
+    bool g_freestanding = false;
+    std::string g_target_triple = "";
+    std::string g_target_cpu = "";
+    std::string g_target_features = "";
 }
 
 // Concrete implementation of SemanticAnalyzer
@@ -965,6 +972,162 @@ static void finalizeStandaloneExecutable(llvm::Module* module, bool mainReturnIs
     } else {
         builder.CreateCall(progMain);  // discard any payload (Void/auto-serialized)
         builder.CreateRet(builder.getInt32(0));
+    }
+}
+
+// Freestanding cross-target support (`--target <triple>`) ======================
+// Friendly aliases for Espressif's Xtensa parts. LLVM spells all three as the
+// one triple `xtensa-esp-unknown-elf` and selects the core with -mcpu, exactly
+// like `clang --target=xtensa-esp-elf -mcpu=esp32s3`.
+static void resolve_target_alias(std::string& triple, std::string& cpu) {
+    static const std::map<std::string, std::string> espAliases = {
+        {"xtensa-esp32-elf", "esp32"},     {"xtensa-esp32-none-elf", "esp32"},
+        {"xtensa-esp32s2-elf", "esp32s2"}, {"xtensa-esp32s2-none-elf", "esp32s2"},
+        {"xtensa-esp32s3-elf", "esp32s3"}, {"xtensa-esp32s3-none-elf", "esp32s3"},
+        {"esp32", "esp32"}, {"esp32s2", "esp32s2"}, {"esp32s3", "esp32s3"},
+    };
+    auto it = espAliases.find(triple);
+    if (it != espAliases.end()) {
+        if (cpu.empty()) cpu = it->second;
+        triple = "xtensa-esp-unknown-elf";
+    }
+    triple = llvm::Triple::normalize(triple);
+}
+
+// Compile a Vyb module as freestanding code for a non-host LLVM target and emit
+// a relocatable object (or assembly). Mirrors compile_vyb_kernel: no JIT, no
+// `main` wrapper, no host runtime -- and it refuses to emit an object that still
+// references __vyb_* runtime symbols, since nothing on the target defines them.
+int compile_vyb_freestanding(const std::string& source, const std::string& fileName,
+                             const std::string& outputFile, int optLevel, bool emitAsm) {
+    llvm::InitializeAllTargetInfos();
+    llvm::InitializeAllTargets();
+    llvm::InitializeAllTargetMCs();
+    llvm::InitializeAllAsmParsers();
+    llvm::InitializeAllAsmPrinters();
+
+    const std::string& triple = vyb::g_target_triple;
+    const std::string cpu = vyb::g_target_cpu.empty() ? "generic" : vyb::g_target_cpu;
+    std::cout << "Compiling " << fileName << " for " << triple << " (cpu " << cpu
+              << ", freestanding)..." << std::endl;
+    try {
+        std::string error;
+        const llvm::Target* target = llvm::TargetRegistry::lookupTarget(triple, error);
+        if (!target) {
+            std::string have;
+            for (const auto& t : llvm::TargetRegistry::targets()) {
+                if (!have.empty()) have += ", ";
+                have += t.getName();
+            }
+            throw std::runtime_error("target '" + triple + "' is not linked into this vyb (" + error +
+                "). Backends available: " + have +
+                ". For Xtensa/ESP32 build vyb against an Xtensa-enabled LLVM 18 "
+                "(see doc/ESP32.md).");
+        }
+        llvm::TargetOptions opt;
+        opt.FunctionSections = true;  // one section per function: linker GC + IRAM placement
+        opt.DataSections = true;
+        std::unique_ptr<llvm::TargetMachine> targetMachine(target->createTargetMachine(
+            triple, cpu, vyb::g_target_features, opt,
+            std::optional<llvm::Reloc::Model>(llvm::Reloc::Static)));
+        if (!targetMachine) throw std::runtime_error("could not create a TargetMachine for " + triple);
+        if (cpu != "generic" &&
+            !targetMachine->getMCSubtargetInfo()->isCPUStringValid(cpu)) {
+            std::string hint;
+            if (llvm::Triple(triple).getArch() == llvm::Triple::xtensa) {
+                hint = ". This vyb's LLVM has an Xtensa backend without the ESP32 cores (upstream "
+                       "LLVM 18's Xtensa is MC-only); build vyb against Espressif's LLVM fork "
+                       "(esp-18.1.2_20240912), see doc/ESP32.md";
+            }
+            throw std::runtime_error("cpu '" + cpu + "' is not valid for " + triple +
+                                     " (target not linked into this vyb with that CPU)" + hint);
+        }
+
+        vyb::Driver driver;
+        auto parsed = parse_vyb_module(source, fileName);
+        vyb::SemanticAnalyzer semanticAnalyzer(driver);
+        driver.setSemanticAnalyzer(&semanticAnalyzer);
+        semanticAnalyzer.setModuleScoping(parsed.ownerByName, parsed.effectiveScope);
+        semanticAnalyzer.analyze(parsed.ast.get());
+        const auto& semanticErrors = semanticAnalyzer.getErrors();
+        if (!semanticErrors.empty()) {
+            std::cerr << "\nSemantic Errors:" << std::endl;
+            for (const auto& e : semanticErrors) std::cerr << "  " << e << std::endl;
+            throw std::runtime_error("Semantic analysis failed with " +
+                std::to_string(semanticErrors.size()) + " error(s)");
+        }
+
+        vyb::LLVMCodegen codegen(driver);
+        codegen.generate(parsed.ast.get(), fileName + ".ll", vyb::g_debug_codegen, fileName);
+        if (codegen.hasHardCodegenError()) {
+            throw std::runtime_error("Code generation failed for '" + fileName + "'");
+        }
+        llvm::Module* module = codegen.getModule();
+        module->setTargetTriple(triple);
+        module->setDataLayout(targetMachine->createDataLayout());
+
+        // Acceptance gate: nothing on a freestanding target defines the Vyb host
+        // runtime, so an unresolved __vyb_* reference is a hard error here rather
+        // than a link failure (or worse, a stub) later on the device side.
+        std::vector<std::string> hostRefs;
+        for (llvm::Function& f : module->functions()) {
+            if (f.getName().starts_with("__vyb_") && f.isDeclaration() && !f.use_empty()) {
+                hostRefs.push_back(f.getName().str());
+            }
+        }
+        if (!hostRefs.empty()) {
+            std::cerr << "Freestanding module uses Vyb host-runtime symbols "
+                         "(no runtime exists for " << triple << "):" << std::endl;
+            for (const auto& s : hostRefs) std::cerr << "  " << s << std::endl;
+            throw std::runtime_error("use only scalar/value code (no String, Vec, println, "
+                                     "closures, ...) in a --target module, or call C via FFI");
+        }
+        // Drop unused declarations so the object's symbol table is just the API + FFI.
+        for (auto it = module->begin(); it != module->end();) {
+            llvm::Function& f = *it++;
+            if (f.isDeclaration() && f.use_empty() && f.getName().starts_with("__vyb_")) f.eraseFromParent();
+        }
+
+        std::string verifyErrors;
+        llvm::raw_string_ostream verifyStream(verifyErrors);
+        if (llvm::verifyModule(*module, &verifyStream)) {
+            verifyStream.flush();
+            throw std::runtime_error("Module verification failed: " + verifyErrors);
+        }
+
+        optimize_module(module, targetMachine.get(), optLevel);
+        if (vyb::g_debug_codegen || getenv("VYB_DUMP_TARGET_IR")) {
+            std::error_code ec;
+            llvm::raw_fd_ostream ir(outputFile + ".ll", ec, llvm::sys::fs::OF_None);
+            if (!ec) module->print(ir, nullptr);
+        }
+
+        llvm::CodeGenOptLevel cgOptLevel;
+        switch (optLevel) {
+            case 0: cgOptLevel = llvm::CodeGenOptLevel::None; break;
+            case 1: cgOptLevel = llvm::CodeGenOptLevel::Less; break;
+            case 3: cgOptLevel = llvm::CodeGenOptLevel::Aggressive; break;
+            default: cgOptLevel = llvm::CodeGenOptLevel::Default; break;
+        }
+        targetMachine->setOptLevel(cgOptLevel);
+        {
+            std::error_code EC;
+            llvm::raw_fd_ostream dest(outputFile, EC, llvm::sys::fs::OF_None);
+            if (EC) throw std::runtime_error("Could not open file: " + EC.message());
+            llvm::legacy::PassManager pass;
+            auto fileType = emitAsm ? llvm::CodeGenFileType::AssemblyFile
+                                    : llvm::CodeGenFileType::ObjectFile;
+            if (targetMachine->addPassesToEmitFile(pass, dest, nullptr, fileType)) {
+                throw std::runtime_error("target " + triple + " can't emit this file type");
+            }
+            pass.run(*module);
+            dest.flush();
+        }
+        std::cout << "Successfully compiled to: " << outputFile << std::endl;
+        return 0;
+    } catch (const std::exception& e) {
+        std::cerr << "Error compiling for target: " << e.what() << std::endl;
+        return 1;
     }
 }
 
@@ -4946,6 +5109,7 @@ int main(int argc, char* argv[]) {
     bool compile_mode = false;
     bool build_mode = false;
     bool kernel_mode = false;   // issue #198: --kernel  (NVPTX device code)
+    bool emit_asm = false;      // --emit-asm / -S with --target: assembly instead of .o
     std::string compile_output;
     std::string kernel_output;  // issue #198 P2.1: --ptx <path> (kernel PTX output)
     std::string build_output;
@@ -5021,6 +5185,41 @@ int main(int argc, char* argv[]) {
                 return 1;
             }
             vyb::g_kernel_gpu = argv[++i];
+            continue;
+        } else if (arg == "--target" || arg.rfind("--target=", 0) == 0) {
+            // Freestanding cross-target compile, e.g. --target xtensa-esp32s3-elf.
+            std::string t;
+            if (arg == "--target") {
+                if (i + 1 >= argc) {
+                    std::cerr << "Error: --target requires an LLVM triple, e.g. --target xtensa-esp32s3-elf" << std::endl;
+                    return 1;
+                }
+                t = argv[++i];
+            } else {
+                t = arg.substr(9);
+            }
+            vyb::g_target_triple = t;
+            vyb::g_freestanding = true;
+            execute_jit = false;
+            continue;
+        } else if (arg == "--mcpu" || arg.rfind("--mcpu=", 0) == 0) {
+            if (arg == "--mcpu") {
+                if (i + 1 >= argc) { std::cerr << "Error: --mcpu requires a CPU name" << std::endl; return 1; }
+                vyb::g_target_cpu = argv[++i];
+            } else {
+                vyb::g_target_cpu = arg.substr(7);
+            }
+            continue;
+        } else if (arg == "--mattr" || arg.rfind("--mattr=", 0) == 0) {
+            if (arg == "--mattr") {
+                if (i + 1 >= argc) { std::cerr << "Error: --mattr requires a feature list" << std::endl; return 1; }
+                vyb::g_target_features = argv[++i];
+            } else {
+                vyb::g_target_features = arg.substr(8);
+            }
+            continue;
+        } else if (arg == "--emit-asm" || arg == "-S") {
+            emit_asm = true;
             continue;
         } else if (arg == "--static") {
             static_link = true;
@@ -5240,6 +5439,24 @@ int main(int argc, char* argv[]) {
                 return 0;
             }
 
+            // Freestanding cross-target (--target): emit a target object, no JIT.
+            if (vyb::g_freestanding) {
+                if (kernel_mode || build_mode) {
+                    std::cerr << "Error: --target cannot be combined with --kernel or --build "
+                                 "(link the object with the target's own toolchain)" << std::endl;
+                    return 1;
+                }
+                resolve_target_alias(vyb::g_target_triple, vyb::g_target_cpu);
+                std::string objFile = compile_output;
+                if (objFile.empty()) {
+                    objFile = filename;
+                    size_t dot = objFile.find_last_of('.');
+                    if (dot != std::string::npos) objFile = objFile.substr(0, dot);
+                    objFile += emit_asm ? ".s" : ".o";
+                }
+                return compile_vyb_freestanding(source, filename, objFile, optimization_level, emit_asm);
+            }
+
             // Kernel mode (issue #198): compile the module as pure NVPTX device
             // code and lower it to a PTX artifact. No JIT, no host runtime.
             if (kernel_mode) {
@@ -5348,6 +5565,12 @@ int main(int argc, char* argv[]) {
         std::cout << "  --ptx <path>          Write the --kernel PTX artifact to <path>" << std::endl;
         std::cout << "  --gpu <arch>          NVPTX GPU arch for --kernel (e.g. sm_90; default sm_86," << std::endl;
         std::cout << "                        overrides $VYB_KERNEL_GPU)" << std::endl;
+        std::cout << "  --target <triple>     Freestanding cross-compile to an object for <triple>" << std::endl;
+        std::cout << "                        (no host runtime; e.g. xtensa-esp32s3-elf, esp32, or any" << std::endl;
+        std::cout << "                        triple of a linked LLVM backend). Use with -c <out.o>" << std::endl;
+        std::cout << "  --mcpu <cpu>          Target CPU for --target (implied by the esp32* aliases)" << std::endl;
+        std::cout << "  --mattr <features>    Target feature string for --target (+a,-b)" << std::endl;
+        std::cout << "  --emit-asm, -S        With --target: write assembly (.s) instead of an object" << std::endl;
         std::cout << "  --compile, -c [file]  Compile to object file (.o)" << std::endl;
         std::cout << "  --build, -b [file]    Compile and link to executable (NEW!)" << std::endl;
         std::cout << "  --link <lib-or-path>  Link a native build with -l<lib> or an explicit library/object path (repeatable)" << std::endl;

@@ -18,6 +18,7 @@ namespace fs = std::filesystem;
 // resolution treats the root as a pure device module and skips the stdlib
 // core::aspects auto-import (it would drag host __vyb_* symbols into NVPTX code).
 extern bool g_kernel_mode;
+extern bool g_freestanding;
 
 namespace {
 
@@ -2546,7 +2547,7 @@ ModuleRegistry::SourceMetadata ModuleRegistry::preprocessModuleSource(const std:
         // pre-wires host-sided Display/hash binds for the scalar types) would pull
         // host-runtime __vyb_* symbols into the NVPTX module, so `--kernel` implies
         // `no_core()` unless the module explicitly imports what it needs.
-        if (vyb::g_kernel_mode) {
+        if (vyb::g_kernel_mode || vyb::g_freestanding) {
             metadata.coreAutoImport = false;
         }
 

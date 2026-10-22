@@ -47,7 +47,14 @@ if(VYB_USE_OPENSSL)
 endif()
 
 # Find LLVM
-find_package(LLVM 18.1.3 REQUIRED CONFIG)
+# Any LLVM 18.1.x: distro LLVM 18.1.3 for host/NVPTX, or Espressif's LLVM 18 fork
+# (esp-18.1.2_*) to add the Xtensa ESP32/S2/S3 backend for `vyb --target`
+# (scripts/build-llvm-esp.sh, doc/ESP32.md).
+find_package(LLVM 18.1 REQUIRED CONFIG)
+if("Xtensa" IN_LIST LLVM_TARGETS_TO_BUILD)
+  message(STATUS "LLVM has the Xtensa backend: vyb --target xtensa-esp32s3-elf available "
+                 "(ESP32 cores require Espressif's LLVM fork)")
+endif()
 message(STATUS "LLVM package version: ${LLVM_PACKAGE_VERSION}")
 message(STATUS "LLVM include dirs: ${LLVM_INCLUDE_DIRS}")
 message(STATUS "LLVM library dirs: ${LLVM_LIBRARY_DIRS}")
