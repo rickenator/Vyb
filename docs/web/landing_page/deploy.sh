@@ -9,9 +9,9 @@
 # the web host, which is separate from the repository.
 #
 # Host: anivizac@69.89.24.177 (Bluehost), ssh on port 2222. The vyb-lang.org
-# document root is an addon-domain directory under public_html; set DEST if you
-# know its name, otherwise the default below is used and the post-upload check
-# tells you whether it landed.
+# document root is /home4/anivizac/vyb/ (verified 2026-10-22); note it is NOT
+# under public_html. If the key here is not authorized on the host, run the
+# upload from apex, where ~/.ssh/anivizac_key IS authorized.
 #
 # Auth: this machine holds ~/.ssh/id_ed25519_aniviza, which the host does NOT
 # yet accept, and there is no SSH password to type — only the cPanel login.
@@ -34,7 +34,7 @@ cd "$(dirname "$0")"
 
 HOST="anivizac@69.89.24.177"
 PORT=2222
-DEST="${DEST:-public_html/vyb-lang.org/}"
+DEST="${DEST:-/home4/anivizac/vyb/}"   # vyb-lang.org doc root (verified Oct 22 2026)
 SITE="https://vyb-lang.org/"
 # A string that exists ONLY in the current page — the live check greps for it,
 # so a stale upload (or a wrong document root) cannot pass as success.
