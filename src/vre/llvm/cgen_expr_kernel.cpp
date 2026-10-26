@@ -216,6 +216,241 @@ bool LLVMCodegen::emitKernelIntrinsic(vyb::ast::CallExpression* node) {
         return nullptr;
     };
 
+    // ---- Ursela GPU features (local branch ursela/gpu-features) -------------------------
+    // Native-width scalar ops, bit casts, warp shuffles, byte-addressed typed shared memory,
+    // 16-byte vector loads and the f16 tensor-core MMA. Every intrinsic coerces its operands to
+    // the machine type it needs, so Vyb Int/Float/CInt/UInt32/Float32 arguments all work.
+    llvm::Type* f32Ty = llvm::Type::getFloatTy(*context);
+    llvm::Type* halfTy = llvm::Type::getHalfTy(*context);
+    auto argAs = [&](size_t i, llvm::Type* t) -> llvm::Value* {
+        llvm::Value* v = argv(i);
+        if (!v) return nullptr;
+        if (v->getType() == t) return v;
+        // UInt32/CInt -> i32 bit patterns are reinterpretations, never value conversions
+        if (v->getType()->isIntegerTy() && t->isIntegerTy())
+            return builder->CreateZExtOrTrunc(v, t, "u.cast");
+        return coerceToElem(v, t);
+    };
+    auto sharedPtr = [&](llvm::Value* byteOff) -> llvm::Value* {
+        if (!sharedBuf) {
+            uint64_t bytes = vyb::g_kernel_shared_bytes ? vyb::g_kernel_shared_bytes : 32768;
+            llvm::ArrayType* at = llvm::ArrayType::get(doubleType, bytes / 8);
+            sharedBuf = new llvm::GlobalVariable(*module, at, false,
+                llvm::GlobalValue::InternalLinkage, llvm::UndefValue::get(at),
+                "__vyb_kernel_shared", nullptr,
+                llvm::GlobalVariable::NotThreadLocal, /*AddressSpace=*/3);
+            sharedBuf->setAlignment(llvm::Align(16));
+        }
+        llvm::Value* off = byteOff;
+        if (off->getType() != int64Type) off = builder->CreateZExtOrTrunc(off, int64Type, "sh.off");
+        return builder->CreateInBoundsGEP(int8Type, sharedBuf, off, "shb.ptr");
+    };
+    auto intrinsicFn = [&](llvm::Intrinsic::ID id, llvm::ArrayRef<llvm::Type*> tys) -> llvm::Function* {
+        return llvm::Intrinsic::getDeclaration(module.get(), id, tys);
+    };
+    // fma_f32(a, b, c) -> Float32 / fma_f64(a, b, c) -> Float: one fused multiply-add.
+    if (name == "fma_f32" || name == "fma_f64") {
+        llvm::Type* t = (name == "fma_f32") ? f32Ty : doubleType;
+        llvm::Value* a = argAs(0, t); llvm::Value* b = argAs(1, t); llvm::Value* c = argAs(2, t);
+        if (!a || !b || !c) { m_currentLLVMValue = nullptr; return true; }
+        m_currentLLVMValue = builder->CreateCall(intrinsicFn(llvm::Intrinsic::fma, {t}), {a, b, c}, "fma");
+        return true;
+    }
+    // Bit casts: f32_bits(Float32) -> UInt32, f32_from_bits(UInt32) -> Float32.
+    if (name == "f32_bits") {
+        llvm::Value* a = argAs(0, f32Ty);
+        m_currentLLVMValue = a ? builder->CreateBitCast(a, int32Type, "f.bits") : nullptr;
+        return true;
+    }
+    if (name == "f32_from_bits") {
+        llvm::Value* a = argAs(0, int32Type);
+        m_currentLLVMValue = a ? builder->CreateBitCast(a, f32Ty, "f.from") : nullptr;
+        return true;
+    }
+    // f16 packing: h2_pack(lo, hi) -> UInt32 (two round-to-nearest halves, lo in bits 0..15),
+    // h_bits(x) -> UInt32 (one half, zero-extended), h_lo/h_hi(UInt32) -> Float32 (unpack).
+    if (name == "h2_pack") {
+        llvm::Value* lo = argAs(0, f32Ty); llvm::Value* hi = argAs(1, f32Ty);
+        if (!lo || !hi) { m_currentLLVMValue = nullptr; return true; }
+        llvm::Value* l16 = builder->CreateBitCast(builder->CreateFPTrunc(lo, halfTy), i16Ty);
+        llvm::Value* h16 = builder->CreateBitCast(builder->CreateFPTrunc(hi, halfTy), i16Ty);
+        llvm::Value* r = builder->CreateOr(builder->CreateZExt(l16, int32Type),
+            builder->CreateShl(builder->CreateZExt(h16, int32Type), 16), "h2.pack");
+        m_currentLLVMValue = r;
+        return true;
+    }
+    if (name == "h_bits") {
+        llvm::Value* a = argAs(0, f32Ty);
+        if (!a) { m_currentLLVMValue = nullptr; return true; }
+        m_currentLLVMValue = builder->CreateZExt(
+            builder->CreateBitCast(builder->CreateFPTrunc(a, halfTy), i16Ty), int32Type, "h.bits");
+        return true;
+    }
+    if (name == "h_lo" || name == "h_hi") {
+        llvm::Value* a = argAs(0, int32Type);
+        if (!a) { m_currentLLVMValue = nullptr; return true; }
+        if (name == "h_hi") a = builder->CreateLShr(a, 16);
+        llvm::Value* h = builder->CreateBitCast(builder->CreateTrunc(a, i16Ty), halfTy);
+        m_currentLLVMValue = builder->CreateFPExt(h, f32Ty, "h.unpack");
+        return true;
+    }
+    // Warp shuffles (full-warp mask): shfl_{xor,down,up,idx}_{f32,u32}(v, lane_arg) and
+    // shfl_xor_f64(v, mask) (two 32-bit shuffles of the halves).
+    if (name.rfind("shfl_", 0) == 0) {
+        std::string rest = name.substr(5);
+        size_t us = rest.find('_');
+        if (us != std::string::npos) {
+            std::string mode = rest.substr(0, us), ty = rest.substr(us + 1);
+            llvm::Intrinsic::ID idF = 0, idI = 0;
+            int clampC = 0x1f;
+            if (mode == "xor") { idF = llvm::Intrinsic::nvvm_shfl_sync_bfly_f32; idI = llvm::Intrinsic::nvvm_shfl_sync_bfly_i32; }
+            else if (mode == "down") { idF = llvm::Intrinsic::nvvm_shfl_sync_down_f32; idI = llvm::Intrinsic::nvvm_shfl_sync_down_i32; }
+            else if (mode == "up") { idF = llvm::Intrinsic::nvvm_shfl_sync_up_f32; idI = llvm::Intrinsic::nvvm_shfl_sync_up_i32; clampC = 0; }
+            else if (mode == "idx") { idF = llvm::Intrinsic::nvvm_shfl_sync_idx_f32; idI = llvm::Intrinsic::nvvm_shfl_sync_idx_i32; }
+            if (idF && (ty == "f32" || ty == "u32" || ty == "f64")) {
+                llvm::Value* mask = llvm::ConstantInt::get(int32Type, 0xffffffffu);
+                llvm::Value* cc = llvm::ConstantInt::get(int32Type, clampC);
+                if (ty == "f64") {
+                    llvm::Value* v = argAs(0, doubleType);
+                    llvm::Value* b = argAs(1, int32Type);
+                    if (!v || !b) { m_currentLLVMValue = nullptr; return true; }
+                    llvm::Value* bits = builder->CreateBitCast(v, int64Type);
+                    llvm::Value* lo = builder->CreateTrunc(bits, int32Type);
+                    llvm::Value* hi = builder->CreateTrunc(builder->CreateLShr(bits, 32), int32Type);
+                    llvm::Function* f = intrinsicFn(idI, {});
+                    llvm::Value* lo2 = builder->CreateCall(f, {mask, lo, b, cc});
+                    llvm::Value* hi2 = builder->CreateCall(f, {mask, hi, b, cc});
+                    llvm::Value* r = builder->CreateOr(builder->CreateZExt(lo2, int64Type),
+                        builder->CreateShl(builder->CreateZExt(hi2, int64Type), 32));
+                    m_currentLLVMValue = builder->CreateBitCast(r, doubleType, "shfl.f64");
+                    return true;
+                }
+                bool isF = (ty == "f32");
+                llvm::Value* v = argAs(0, isF ? f32Ty : int32Type);
+                llvm::Value* b = argAs(1, int32Type);
+                if (!v || !b) { m_currentLLVMValue = nullptr; return true; }
+                m_currentLLVMValue = builder->CreateCall(intrinsicFn(isF ? idF : idI, {}), {mask, v, b, cc}, "shfl");
+                return true;
+            }
+        }
+    }
+    // Byte-addressed typed shared memory over the same module buffer as ld/st_shared_f64:
+    // ld/st_shared_{u32,f32,u16}(byte_off[, v]); ld_shared_v4_u32(byte_off, i) reads one lane of a
+    // 16-byte-aligned vector load (repeated calls on one address CSE into one ld.shared.v4).
+    if (name == "ld_shared_u32" || name == "ld_shared_f32" || name == "ld_shared_u16") {
+        llvm::Type* t = (name == "ld_shared_f32") ? f32Ty : (name == "ld_shared_u16" ? i16Ty : int32Type);
+        llvm::Value* off = argv(0);
+        if (!off) { m_currentLLVMValue = nullptr; return true; }
+        llvm::Value* v = builder->CreateAlignedLoad(t, sharedPtr(off), llvm::Align(t == i16Ty ? 2 : 4), "shb.ld");
+        if (t == i16Ty) v = builder->CreateZExt(v, int32Type);
+        m_currentLLVMValue = v;
+        return true;
+    }
+    if (name == "st_shared_u32" || name == "st_shared_f32" || name == "st_shared_u16") {
+        llvm::Type* t = (name == "st_shared_f32") ? f32Ty : (name == "st_shared_u16" ? i16Ty : int32Type);
+        llvm::Value* off = argv(0);
+        llvm::Value* v = argAs(1, t);
+        if (!off || !v) { m_currentLLVMValue = nullptr; return true; }
+        builder->CreateAlignedStore(v, sharedPtr(off), llvm::Align(t == i16Ty ? 2 : 4));
+        m_currentLLVMValue = nullptr;
+        return true;
+    }
+    if (name == "ld_shared_v4_u32" || name == "ld_shared_v2_u32") {
+        unsigned n = (name == "ld_shared_v4_u32") ? 4 : 2;
+        llvm::Value* off = argv(0);
+        llvm::Value* i = argAs(1, int32Type);
+        if (!off || !i) { m_currentLLVMValue = nullptr; return true; }
+        llvm::Type* vt = llvm::FixedVectorType::get(int32Type, n);
+        llvm::Value* vec = builder->CreateAlignedLoad(vt, sharedPtr(off), llvm::Align(4 * n), "shb.vld");
+        m_currentLLVMValue = builder->CreateExtractElement(vec, i, "shb.lane");
+        return true;
+    }
+    if (name == "st_shared_v4_u32") {
+        llvm::Value* off = argv(0);
+        llvm::Value* a = argAs(1, int32Type); llvm::Value* b = argAs(2, int32Type);
+        llvm::Value* c = argAs(3, int32Type); llvm::Value* d = argAs(4, int32Type);
+        if (!off || !a || !b || !c || !d) { m_currentLLVMValue = nullptr; return true; }
+        llvm::Type* vt = llvm::FixedVectorType::get(int32Type, 4);
+        llvm::Value* vec = llvm::UndefValue::get(vt);
+        vec = builder->CreateInsertElement(vec, a, (uint64_t)0);
+        vec = builder->CreateInsertElement(vec, b, (uint64_t)1);
+        vec = builder->CreateInsertElement(vec, c, (uint64_t)2);
+        vec = builder->CreateInsertElement(vec, d, (uint64_t)3);
+        builder->CreateAlignedStore(vec, sharedPtr(off), llvm::Align(16));
+        m_currentLLVMValue = nullptr;
+        return true;
+    }
+    // Global native-width loads: ld_u32(addr) -> UInt32 and ld_f32n(addr) -> Float32 (no widening),
+    // ld_v4_u32 / ld_v2_u32(addr, i) -> UInt32 (one lane of an aligned 16/8-byte vector load; the
+    // repeated loads of one address merge into a single ld.global.v4.u32), ld_v4_f32(addr, i).
+    if (name == "ld_u32" || name == "ld_f32n") {
+        llvm::Type* t = (name == "ld_u32") ? int32Type : f32Ty;
+        llvm::Value* a = argv(0);
+        if (!a) { m_currentLLVMValue = nullptr; return true; }
+        m_currentLLVMValue = builder->CreateAlignedLoad(t, gptr(a), llvm::Align(4), "gld32");
+        return true;
+    }
+    if (name == "st_f32n" || name == "st_u32") {
+        llvm::Type* t = (name == "st_u32") ? int32Type : f32Ty;
+        llvm::Value* a = argv(0);
+        llvm::Value* v = argAs(1, t);
+        if (!a || !v) { m_currentLLVMValue = nullptr; return true; }
+        builder->CreateAlignedStore(v, gptr(a), llvm::Align(4));
+        m_currentLLVMValue = nullptr;
+        return true;
+    }
+    if (name == "ld_v4_u32" || name == "ld_v2_u32" || name == "ld_v4_f32") {
+        unsigned n = (name == "ld_v2_u32") ? 2 : 4;
+        llvm::Type* et = (name == "ld_v4_f32") ? f32Ty : int32Type;
+        llvm::Value* a = argv(0);
+        llvm::Value* i = argAs(1, int32Type);
+        if (!a || !i) { m_currentLLVMValue = nullptr; return true; }
+        llvm::Type* vt = llvm::FixedVectorType::get(et, n);
+        llvm::Value* vec = builder->CreateAlignedLoad(vt, gptr(a), llvm::Align(4 * n), "gvld");
+        m_currentLLVMValue = builder->CreateExtractElement(vec, i, "gv.lane");
+        return true;
+    }
+    // Tensor-core MMA, m16n8k16, row.col, f16 inputs, f32 accumulate:
+    // mma_16816(a0, a1, a2, a3, b0, b1, c0, c1, c2, c3, i) -> Float32, element i of D.
+    // a*/b* are UInt32 half2 fragments (PTX mma fragment layout); c* are Float32 accumulators.
+    // The intrinsic is readnone, so the 4 calls that read D[0..3] with the same operands
+    // collapse into one mma.sync instruction.
+    if (name == "mma_16816") {
+        if (node->arguments.size() != 11) {
+            logError(node->loc, "mma_16816 takes 11 arguments (a0..a3, b0, b1, c0..c3, i)");
+            flagHardCodegenError();
+            m_currentLLVMValue = nullptr;
+            return true;
+        }
+        llvm::Type* h2 = llvm::FixedVectorType::get(halfTy, 2);
+        std::vector<llvm::Value*> ops;
+        for (size_t k = 0; k < 6; ++k) {
+            llvm::Value* v = argAs(k, int32Type);
+            if (!v) { m_currentLLVMValue = nullptr; return true; }
+            ops.push_back(builder->CreateBitCast(v, h2));
+        }
+        for (size_t k = 6; k < 10; ++k) {
+            llvm::Value* v = argAs(k, f32Ty);
+            if (!v) { m_currentLLVMValue = nullptr; return true; }
+            ops.push_back(v);
+        }
+        llvm::Value* i = argAs(10, int32Type);
+        if (!i) { m_currentLLVMValue = nullptr; return true; }
+        llvm::Function* f = intrinsicFn(llvm::Intrinsic::nvvm_mma_m16n8k16_row_col_f32_f32, {});
+        llvm::Value* r = builder->CreateCall(f, ops, "mma");
+        // element select: D is a 4-float struct; pick by (constant or runtime) index
+        llvm::Value* d0 = builder->CreateExtractValue(r, 0);
+        llvm::Value* d1 = builder->CreateExtractValue(r, 1);
+        llvm::Value* d2 = builder->CreateExtractValue(r, 2);
+        llvm::Value* d3 = builder->CreateExtractValue(r, 3);
+        llvm::Value* z = llvm::ConstantInt::get(int32Type, 0);
+        llvm::Value* s01 = builder->CreateSelect(builder->CreateICmpEQ(i, z), d0, d1);
+        llvm::Value* s23 = builder->CreateSelect(builder->CreateICmpEQ(i, llvm::ConstantInt::get(int32Type, 2)), d2, d3);
+        m_currentLLVMValue = builder->CreateSelect(
+            builder->CreateICmpULT(i, llvm::ConstantInt::get(int32Type, 2)), s01, s23, "mma.d");
+        return true;
+    }
+
     // Global atomics (monotonic) — KV-cache writes / reductions.
     if (name == "atomic_add_f64" || name == "atomic_add_i32") {
         bool isI32 = (name == "atomic_add_i32");

@@ -1,0 +1,67 @@
+// @test: kernel-mode native-width, shuffle, bitcast, shared and MMA intrinsics
+// @description: exercises the ursela/gpu-features intrinsics: fma_f32/fma_f64,
+//   f32_bits/f32_from_bits, h2_pack/h_bits/h_lo/h_hi, warp shuffles
+//   (xor/down/up/idx x f32/u32/f64), byte-addressed typed shared memory
+//   (u32/f32/u16 and 16-byte vectors), aligned 16/8-byte global vector loads,
+//   native f32/u32 global loads/stores and mma.m16n8k16 (f16 in, f32 acc). The
+//   kernel must compile to PTX that ptxas accepts with a 48 KB shared buffer.
+// @category: kernel, cuda, types
+// @expect: pass
+// @vyb-args: --kernel --gpu sm_80 --kernel-shared 49152
+
+probe(out<Int>, w<Int>, n<Int>) -> {
+    lane<Int> = lane_id()
+    gid<Int> = blk_x() * dim_x() + tid_x()
+    if (gid < n) {
+        # native f32 / u32 global access and bit casts
+        x<Float32> = ld_f32n(w + gid * 4)
+        u<UInt32> = ld_u32(w + gid * 4)
+        y<Float32> = fma_f32(x, f32_from_bits(u), x)
+        d<Float> = fma_f64(1.5, 2.0, ld_f64(out + gid * 8))
+        b<UInt32> = f32_bits(y)
+
+        # 16- and 8-byte vector loads (one lane each; same address merges)
+        v0<UInt32> = ld_v4_u32(w + gid * 16, 0)
+        v1<UInt32> = ld_v4_u32(w + gid * 16, 1)
+        v2<UInt32> = ld_v2_u32(w + gid * 8, 1)
+        f3<Float32> = ld_v4_f32(w + gid * 16, 3)
+
+        # f16 packing
+        hp<UInt32> = h2_pack(x, f3)
+        hb<UInt32> = h_bits(y)
+        lo<Float32> = h_lo(hp)
+        hi<Float32> = h_hi(hp)
+
+        # warp shuffles
+        s1<Float32> = shfl_xor_f32(lo, 16)
+        s2<UInt32> = shfl_down_u32(v0, 1)
+        s3<UInt32> = shfl_up_u32(v1, 1)
+        s4<Float32> = shfl_idx_f32(hi, 0)
+        s5<Float> = shfl_xor_f64(d, 1)
+        s6<Float> = shfl_down_f64(d, 2)
+
+        # byte-addressed typed shared memory
+        st_shared_u32(lane * 4, b)
+        st_shared_f32(128 + lane * 4, s1)
+        st_shared_u16(256 + lane * 2, hb)
+        st_shared_v4_u32(512 + lane * 16, v0, v1, v2, s2)
+        kernel_barrier()
+        r0<UInt32> = ld_shared_u32(((lane + 1) % 32) * 4)
+        r1<Float32> = ld_shared_f32(128 + lane * 4)
+        r2<UInt32> = ld_shared_u16(256 + lane * 2)
+        r3<UInt32> = ld_shared_v4_u32(512 + lane * 16, 2)
+        r4<UInt32> = ld_shared_v2_u32(512 + lane * 16, 1)
+
+        # tensor-core MMA: D = A*B + C, all four outputs
+        c0<Float32> = mma_16816(r0, r2, r3, r4, s3, hp, r1, s4, y, x, 0)
+        c1<Float32> = mma_16816(r0, r2, r3, r4, s3, hp, r1, s4, y, x, 1)
+        c2<Float32> = mma_16816(r0, r2, r3, r4, s3, hp, r1, s4, y, x, 2)
+        c3<Float32> = mma_16816(r0, r2, r3, r4, s3, hp, r1, s4, y, x, 3)
+
+        st_f32n(w + gid * 4, c0)
+        st_u32(w + n * 4 + gid * 4, f32_bits(c1))
+        st_f64(out + gid * 8, s5 + s6 + ld_shared_f64(4095))
+        st_f32n(w + 2 * n * 4 + gid * 4, c2)
+        st_f32n(w + 3 * n * 4 + gid * 4, c3)
+    }
+}
