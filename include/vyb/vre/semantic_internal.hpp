@@ -152,6 +152,8 @@ inline const char* kernelIntrinsicReturnType(const std::string& name) {
     if (name == "ld_i32" || name == "atomic_add_i32") return "CInt";
     // Ursela GPU features (cgen_expr_kernel.cpp): native-width, bit-level and MMA intrinsics.
     if (name == "fma_f32" || name == "f32_from_bits" || name == "h_lo" || name == "h_hi" ||
+        name == "ex2_f32" || name == "rsqrt_f32" || name == "sqrt_f32" ||
+        name == "max_f32" || name == "min_f32" ||
         name == "shfl_xor_f32" || name == "shfl_down_f32" || name == "shfl_up_f32" ||
         name == "shfl_idx_f32" || name == "ld_shared_f32" || name == "ld_f32n" ||
         name == "ld_v4_f32" || name == "mma_16816") return "Float32";

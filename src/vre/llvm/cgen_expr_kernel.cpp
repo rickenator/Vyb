@@ -256,6 +256,26 @@ bool LLVMCodegen::emitKernelIntrinsic(vyb::ast::CallExpression* node) {
         m_currentLLVMValue = builder->CreateCall(intrinsicFn(llvm::Intrinsic::fma, {t}), {a, b, c}, "fma");
         return true;
     }
+    // Native f32 math: ex2_f32(x) = 2^x (ex2.approx.ftz.f32), rsqrt_f32(x) (rsqrt.approx.ftz.f32),
+    // sqrt_f32(x) (sqrt.rn.f32), max_f32/min_f32(a, b) (max.f32/min.f32). One instruction each, so
+    // f32 kernels need not widen to the f64 vmath routines.
+    if (name == "ex2_f32" || name == "rsqrt_f32" || name == "sqrt_f32") {
+        llvm::Value* a = argAs(0, f32Ty);
+        if (!a) { m_currentLLVMValue = nullptr; return true; }
+        llvm::Function* f = nullptr;
+        if (name == "ex2_f32") f = intrinsicFn(llvm::Intrinsic::nvvm_ex2_approx_ftz_f, {});
+        else if (name == "rsqrt_f32") f = intrinsicFn(llvm::Intrinsic::nvvm_rsqrt_approx_ftz_f, {});
+        else f = intrinsicFn(llvm::Intrinsic::sqrt, {f32Ty});
+        m_currentLLVMValue = builder->CreateCall(f, {a}, "f32m");
+        return true;
+    }
+    if (name == "max_f32" || name == "min_f32") {
+        llvm::Value* a = argAs(0, f32Ty); llvm::Value* b = argAs(1, f32Ty);
+        if (!a || !b) { m_currentLLVMValue = nullptr; return true; }
+        llvm::Intrinsic::ID id = (name == "max_f32") ? llvm::Intrinsic::maxnum : llvm::Intrinsic::minnum;
+        m_currentLLVMValue = builder->CreateCall(intrinsicFn(id, {f32Ty}), {a, b}, "f32mm");
+        return true;
+    }
     // Bit casts: f32_bits(Float32) -> UInt32, f32_from_bits(UInt32) -> Float32.
     if (name == "f32_bits") {
         llvm::Value* a = argAs(0, f32Ty);
