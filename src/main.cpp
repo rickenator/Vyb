@@ -613,6 +613,8 @@ namespace vyb {
     std::string g_target_triple = "";
     std::string g_target_cpu = "";
     std::string g_target_features = "";
+    // Static shared-memory buffer size for --kernel (0 => 32 KB default); --kernel-shared.
+    uint64_t g_kernel_shared_bytes = 0;
 }
 
 // Concrete implementation of SemanticAnalyzer
@@ -1350,6 +1352,12 @@ int compile_vyb_kernel(const std::string& source, const std::string& fileName, i
         }
         std::cout << "Semantic analysis completed" << std::endl;
 
+        if (vyb::g_kernel_shared_bytes == 0) {
+            if (const char* sb = getenv("VYB_KERNEL_SHARED_BYTES")) {
+                unsigned long long b = std::strtoull(sb, nullptr, 10);
+                if (b > 0 && b <= 49152 && (b % 16) == 0) vyb::g_kernel_shared_bytes = b;
+            }
+        }
         std::cout << "Generating NVPTX-targeted LLVM IR..." << std::endl;
         vyb::LLVMCodegen codegen(driver);
         codegen.generate(parsed.ast.get(), fileName + ".ll", vyb::g_debug_codegen, fileName);
@@ -5222,6 +5230,19 @@ int main(int argc, char* argv[]) {
             if (i + 1 < argc && argv[i + 1][0] != '-') {
                 kernel_output = argv[++i];
             }
+            continue;
+        } else if (arg == "--kernel-shared") {
+            // Bytes of static shared memory behind ld/st_shared_* in --kernel mode.
+            if (i + 1 >= argc) {
+                std::cerr << "Error: --kernel-shared requires a byte count, e.g. --kernel-shared 49152" << std::endl;
+                return 1;
+            }
+            unsigned long long b = std::strtoull(argv[++i], nullptr, 10);
+            if (b == 0 || b > 49152 || (b % 16) != 0) {
+                std::cerr << "Error: --kernel-shared must be a multiple of 16 in 16..49152" << std::endl;
+                return 1;
+            }
+            vyb::g_kernel_shared_bytes = b;
             continue;
         } else if (arg == "--gpu") {
             // NVPTX GPU arch for --kernel (e.g. sm_90); overrides $VYB_KERNEL_GPU.

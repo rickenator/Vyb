@@ -170,11 +170,13 @@ bool LLVMCodegen::emitKernelIntrinsic(vyb::ast::CallExpression* node) {
     llvm::GlobalVariable* sharedBuf = module->getNamedGlobal("__vyb_kernel_shared");
     if (name == "ld_shared_f64" || name == "st_shared_f64") {
         if (!sharedBuf) {
-            llvm::ArrayType* at = llvm::ArrayType::get(doubleType, 4096);  // 32 KB (static shared cap is 48KB on sm_86)
+            uint64_t shBytes = vyb::g_kernel_shared_bytes ? vyb::g_kernel_shared_bytes : 32768;
+            llvm::ArrayType* at = llvm::ArrayType::get(doubleType, shBytes / 8);  // default 32 KB (static cap 48 KB)
             sharedBuf = new llvm::GlobalVariable(*module, at, false,
                 llvm::GlobalValue::InternalLinkage, llvm::Constant::getNullValue(at),
                 "__vyb_kernel_shared", nullptr,
                 llvm::GlobalVariable::NotThreadLocal, /*AddressSpace=*/3);
+            sharedBuf->setAlignment(llvm::Align(16));
         }
         llvm::Value* off = argv(0);
         llvm::ArrayType* shTy = llvm::dyn_cast<llvm::ArrayType>(sharedBuf->getValueType());
