@@ -12,6 +12,7 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/IntrinsicsNVPTX.h>
 #include <llvm/IR/GlobalVariable.h>
@@ -274,6 +275,59 @@ bool LLVMCodegen::emitKernelIntrinsic(vyb::ast::CallExpression* node) {
         if (!a || !b) { m_currentLLVMValue = nullptr; return true; }
         llvm::Intrinsic::ID id = (name == "max_f32") ? llvm::Intrinsic::maxnum : llvm::Intrinsic::minnum;
         m_currentLLVMValue = builder->CreateCall(intrinsicFn(id, {f32Ty}), {a, b}, "f32mm");
+        return true;
+    }
+    // Int8 dot products: dp4a_s32(a, b, c) = c + sum_k s8(a)_k * s8(b)_k (dp4a.s32.s32) and
+    // dp4a_us32(a, b, c) with a as four u8 (dp4a.u32.s32). a and b are packed 32-bit words, c and
+    // the result are 32-bit ints. vsub4(a, b) is the per-byte wrapping difference (vsub4 / __vsub4),
+    // used to apply IQ sign masks: vsub4(g ^ m, m) negates the bytes where m = 0xff.
+    if (name == "dp4a_s32" || name == "dp4a_us32" || name == "vsub4") {
+        llvm::Value* a = argAs(0, int32Type); llvm::Value* b = argAs(1, int32Type);
+        if (!a || !b) { m_currentLLVMValue = nullptr; return true; }
+        if (name == "vsub4") {
+            // per-byte subtract without carries: ((a | H) - (b & ~H)) ^ ((a ^ ~b) & H), H = 0x80808080
+            llvm::Value* H = llvm::ConstantInt::get(int32Type, 0x80808080u);
+            llvm::Value* t = builder->CreateSub(builder->CreateOr(a, H), builder->CreateAnd(b, builder->CreateNot(H)));
+            llvm::Value* u = builder->CreateAnd(builder->CreateXor(a, builder->CreateNot(b)), H);
+            m_currentLLVMValue = builder->CreateXor(t, u, "vsub4");
+            return true;
+        }
+        llvm::Value* cc = argAs(2, int32Type);
+        if (!cc) { m_currentLLVMValue = nullptr; return true; }
+        llvm::FunctionType* ft = llvm::FunctionType::get(int32Type, {int32Type, int32Type, int32Type}, false);
+        const char* txt = (name == "dp4a_s32") ? "dp4a.s32.s32 $0, $1, $2, $3;" : "dp4a.u32.s32 $0, $1, $2, $3;";
+        llvm::InlineAsm* ia = llvm::InlineAsm::get(ft, txt, "=r,r,r,r", /*hasSideEffects=*/false);
+        m_currentLLVMValue = builder->CreateCall(ft, ia, {a, b, cc}, "dp4a");
+        return true;
+    }
+    // q8_1 activation quantisation: rni_f32(x) rounds to nearest-even int (cvt.rni.s32.f32),
+    // sat_s8(i) clamps to [-127, 127], pack_s8x4(a, b, c, d) packs the low bytes into one word
+    // (a in byte 0), so a block quantiser is q = pack_s8x4(sat_s8(rni_f32(x_k * inv_d)), ...).
+    if (name == "rni_f32") {
+        llvm::Value* a = argAs(0, f32Ty);
+        if (!a) { m_currentLLVMValue = nullptr; return true; }
+        m_currentLLVMValue = builder->CreateCall(intrinsicFn(llvm::Intrinsic::nvvm_f2i_rn, {}), {a}, "rni");
+        return true;
+    }
+    if (name == "sat_s8") {
+        llvm::Value* a = argAs(0, int32Type);
+        if (!a) { m_currentLLVMValue = nullptr; return true; }
+        llvm::Value* hi = llvm::ConstantInt::get(int32Type, 127);
+        llvm::Value* lo = llvm::ConstantInt::get(int32Type, -127, true);
+        llvm::Value* t = builder->CreateSelect(builder->CreateICmpSGT(a, hi), hi, a);
+        m_currentLLVMValue = builder->CreateSelect(builder->CreateICmpSLT(t, lo), lo, t, "sat8");
+        return true;
+    }
+    if (name == "pack_s8x4") {
+        llvm::Value* r = nullptr;
+        for (unsigned k = 0; k < 4; ++k) {
+            llvm::Value* v = argAs(k, int32Type);
+            if (!v) { m_currentLLVMValue = nullptr; return true; }
+            v = builder->CreateAnd(v, llvm::ConstantInt::get(int32Type, 0xff));
+            if (k) v = builder->CreateShl(v, llvm::ConstantInt::get(int32Type, 8 * k));
+            r = r ? builder->CreateOr(r, v) : v;
+        }
+        m_currentLLVMValue = r;
         return true;
     }
     // Bit casts: f32_bits(Float32) -> UInt32, f32_from_bits(UInt32) -> Float32.

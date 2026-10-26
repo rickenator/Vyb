@@ -150,6 +150,9 @@ inline const char* kernelIntrinsicReturnType(const std::string& name) {
         name == "ld_bf16" || name == "deq_q4_0" ||
         name == "ld_shared_f64" || name == "atomic_add_f64") return "Float";
     if (name == "ld_i32" || name == "atomic_add_i32") return "CInt";
+    // Ursela int8 dot products and q8_1 activation quantisation (cgen_expr_kernel.cpp).
+    if (name == "dp4a_s32" || name == "dp4a_us32" || name == "rni_f32" || name == "sat_s8") return "CInt";
+    if (name == "pack_s8x4" || name == "vsub4") return "UInt32";
     // Ursela GPU features (cgen_expr_kernel.cpp): native-width, bit-level and MMA intrinsics.
     if (name == "fma_f32" || name == "f32_from_bits" || name == "h_lo" || name == "h_hi" ||
         name == "ex2_f32" || name == "rsqrt_f32" || name == "sqrt_f32" ||
