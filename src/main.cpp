@@ -554,6 +554,8 @@ extern "C" {
 
 // LLVM includes for ORC JIT compilation
 #include <dlfcn.h>
+#include <llvm/Transforms/Utils/Cloning.h>
+#include <llvm/IR/InstrTypes.h>
 #include <llvm/ExecutionEngine/Orc/ExecutionUtils.h>
 #include <llvm/ExecutionEngine/Orc/LLJIT.h>
 #include <llvm/ExecutionEngine/Orc/ThreadSafeModule.h>
@@ -1382,6 +1384,49 @@ int compile_vyb_kernel(const std::string& source, const std::string& fileName, i
             throw std::runtime_error("Kernel must be pure device code with no __vyb_* references");
         }
         std::cout << "Kernel module is host-runtime-free (no __vyb_* refs)" << std::endl;
+
+        // Kernel-called-as-helper (Ursela, local branch): codegen marks EVERY Void-returning
+        // function as a launchable kernel (nvvm.kernel + PTX_Kernel calling convention). A Void
+        // helper called from another kernel (e.g. one that wraps kernel_barrier()) is then a call
+        // across a calling-convention mismatch, which LLVM treats as undefined behaviour: the
+        // optimizer replaces the call with `unreachable` and the emitted loop never terminates.
+        // Give every such callee a device-function twin (C calling convention, internal, no
+        // kernel attribute) and point the device calls at it; the kernel entry itself stays.
+        {
+            std::vector<llvm::Function*> kernels;
+            for (llvm::Function& f : module->functions()) {
+                if (!f.isDeclaration() && f.getCallingConv() == llvm::CallingConv::PTX_Kernel)
+                    kernels.push_back(&f);
+            }
+            int twins = 0;
+            for (llvm::Function* kf : kernels) {
+                bool called = false;
+                for (llvm::User* u : kf->users()) {
+                    if (auto* cb = llvm::dyn_cast<llvm::CallBase>(u))
+                        if (cb->getCalledOperand() == kf) { called = true; break; }
+                }
+                if (!called) continue;
+                llvm::ValueToValueMapTy vmap;
+                llvm::Function* dev = llvm::CloneFunction(kf, vmap);
+                dev->setName(kf->getName() + "__vyb_dev");
+                dev->setLinkage(llvm::GlobalValue::InternalLinkage);
+                dev->setCallingConv(llvm::CallingConv::C);
+                dev->removeFnAttr("nvvm.kernel");
+                std::vector<llvm::CallBase*> calls;
+                for (llvm::User* u : kf->users()) {
+                    if (auto* cb = llvm::dyn_cast<llvm::CallBase>(u))
+                        if (cb->getCalledOperand() == kf) calls.push_back(cb);
+                }
+                for (llvm::CallBase* cb : calls) {
+                    cb->setCalledFunction(dev);
+                    cb->setCallingConv(llvm::CallingConv::C);
+                }
+                ++twins;
+            }
+            if (twins > 0)
+                std::cout << "Kernel helpers: " << twins
+                          << " Void function(s) called from device code got a device-function twin" << std::endl;
+        }
 
         // Verify the module at the LLVM level.
         std::cout << "Verifying module..." << std::endl;

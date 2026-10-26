@@ -1,0 +1,29 @@
+// @test: Void helper that wraps kernel_barrier(), called from a kernel loop
+// @description: regression for the kernel_barrier()-in-helper hang. Codegen marks
+//   every Void function as an nvvm kernel (PTX_Kernel calling convention); a device
+//   call to one was a calling-convention mismatch (UB), which the optimizer turned
+//   into `unreachable`, so the caller's loop never terminated on the GPU. The
+//   kernel compiler now gives each device-called Void function a C-convention
+//   device twin and retargets the calls (stdout reports the twin count).
+// @category: kernel, cuda
+// @expect: pass
+// @vyb-args: --kernel
+// @expect-output: Kernel helpers: 1 Void function(s) called from device code got a device-function twin
+
+# Helper: stage one f64 per thread through shared memory between two barriers.
+stage(buf<Int>, t<Int>) -> {
+    kernel_barrier()
+    st_shared_f64(t, ld_f64(buf + t * 8))
+    kernel_barrier()
+}
+
+# Kernel: loops over n tiles, calling the barrier helper each iteration.
+tiles(out<Int>, buf<Int>, n<Int>) -> {
+    t<Int> = tid_x()
+    k<Int> = 0
+    while (k < n) {
+        stage(buf + k * 2048, t)
+        st_f64(out + (k * 256 + t) * 8, ld_shared_f64(255 - t))
+        k = k + 1
+    }
+}
