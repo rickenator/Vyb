@@ -429,6 +429,38 @@ bool LLVMCodegen::emitKernelIntrinsic(vyb::ast::CallExpression* node) {
         m_currentLLVMValue = nullptr;
         return true;
     }
+    // Async global->shared copies (sm_80 cp.async.cg, L2-only, 16 bytes):
+    // cp_async_16(shared_byte_off, global_addr) both 16-byte aligned; cp_async_commit() closes the current group;
+    // cp_async_wait(n) (n an integer literal) waits until at most n groups are pending. A kernel_barrier() is still
+    // needed after the wait before other threads read the copied bytes.
+    if (name == "cp_async_16") {
+        llvm::Value* off = argv(0);
+        llvm::Value* ga = argAs(1, int64Type);
+        if (!off || !ga) { m_currentLLVMValue = nullptr; return true; }
+        builder->CreateCall(intrinsicFn(llvm::Intrinsic::nvvm_cp_async_cg_shared_global_16, {}),
+                            {sharedPtr(off), gptr(ga)});
+        m_currentLLVMValue = nullptr;
+        return true;
+    }
+    if (name == "cp_async_commit") {
+        builder->CreateCall(intrinsicFn(llvm::Intrinsic::nvvm_cp_async_commit_group, {}), {});
+        m_currentLLVMValue = nullptr;
+        return true;
+    }
+    if (name == "cp_async_wait") {
+        llvm::Value* n = argv(0);
+        auto* cn = n ? llvm::dyn_cast<llvm::ConstantInt>(n) : nullptr;
+        if (!cn) {
+            logError(node->loc, "cp_async_wait takes one integer literal");
+            flagHardCodegenError();
+            m_currentLLVMValue = nullptr;
+            return true;
+        }
+        builder->CreateCall(intrinsicFn(llvm::Intrinsic::nvvm_cp_async_wait_group, {}),
+                            {llvm::ConstantInt::get(int32Type, cn->getZExtValue())});
+        m_currentLLVMValue = nullptr;
+        return true;
+    }
     if (name == "ld_shared_v4_u32" || name == "ld_shared_v2_u32") {
         unsigned n = (name == "ld_shared_v4_u32") ? 4 : 2;
         llvm::Value* off = argv(0);

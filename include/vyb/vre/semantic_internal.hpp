@@ -169,7 +169,8 @@ inline const char* kernelIntrinsicReturnType(const std::string& name) {
         name == "ld_shared_v4_u32" || name == "ld_shared_v2_u32" || name == "ld_u32" ||
         name == "ld_v4_u32" || name == "ld_v2_u32") return "UInt32";
     if (name == "st_shared_u32" || name == "st_shared_f32" || name == "st_shared_u16" ||
-        name == "st_shared_v4_u32" || name == "st_f32n" || name == "st_u32") return "Void";
+        name == "st_shared_v4_u32" || name == "st_f32n" || name == "st_u32" ||
+        name == "cp_async_16" || name == "cp_async_commit" || name == "cp_async_wait") return "Void";
     if (name == "ld_i8") return "Int8";
     if (name == "ld_u8") return "UInt8";
     if (name == "ld_i16") return "Int16";
