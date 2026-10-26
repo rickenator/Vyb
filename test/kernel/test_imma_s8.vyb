@@ -1,0 +1,34 @@
+// @test: kernel-mode integer tensor-core MMA intrinsics
+// @description: mma_16832_s8 (mma.m16n8k32.row.col.s32.s8.s8.s32) and mma_16816_s8 (m16n8k16) on
+//   one warp: A 16x32 int8 row-major, B 8x32 int8 (n-major), C/D 16x8 s32. Compiles to PTX that
+//   ptxas accepts; check_imma_s8.py checks the results against Python.
+// @category: kernel, cuda, types
+// @expect: pass
+// @vyb-args: --kernel --gpu sm_80
+
+// A@a (512 B), B@b (256 B), D32 -> d (16x8 s32 = 512 B), D16 -> d + 512; C[r][c] = r * 8 + c
+imma(a<Int>, b<Int>, d<Int>) -> {
+    lane<Int> = tid_x() % 32
+    g<Int> = lane / 4
+    t4<Int> = lane % 4
+    a0<UInt32> = ld_u32(a + g * 32 + t4 * 4)
+    a1<UInt32> = ld_u32(a + (g + 8) * 32 + t4 * 4)
+    a2<UInt32> = ld_u32(a + g * 32 + 16 + t4 * 4)
+    a3<UInt32> = ld_u32(a + (g + 8) * 32 + 16 + t4 * 4)
+    b0<UInt32> = ld_u32(b + g * 32 + t4 * 4)
+    b1<UInt32> = ld_u32(b + g * 32 + 16 + t4 * 4)
+    c0<CInt> = (g * 8 + t4 * 2) as CInt
+    c1<CInt> = (g * 8 + t4 * 2 + 1) as CInt
+    c2<CInt> = ((g + 8) * 8 + t4 * 2) as CInt
+    c3<CInt> = ((g + 8) * 8 + t4 * 2 + 1) as CInt
+    o<Int> = d + (g * 8 + t4 * 2) * 4
+    o8<Int> = d + ((g + 8) * 8 + t4 * 2) * 4
+    st_i32(o, mma_16832_s8(a0, a1, a2, a3, b0, b1, c0, c1, c2, c3, 0))
+    st_i32(o + 4, mma_16832_s8(a0, a1, a2, a3, b0, b1, c0, c1, c2, c3, 1))
+    st_i32(o8, mma_16832_s8(a0, a1, a2, a3, b0, b1, c0, c1, c2, c3, 2))
+    st_i32(o8 + 4, mma_16832_s8(a0, a1, a2, a3, b0, b1, c0, c1, c2, c3, 3))
+    st_i32(o + 512, mma_16816_s8(a0, a1, b0, c0, c1, c2, c3, 0))
+    st_i32(o + 516, mma_16816_s8(a0, a1, b0, c0, c1, c2, c3, 1))
+    st_i32(o8 + 512, mma_16816_s8(a0, a1, b0, c0, c1, c2, c3, 2))
+    st_i32(o8 + 516, mma_16816_s8(a0, a1, b0, c0, c1, c2, c3, 3))
+}

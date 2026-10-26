@@ -525,6 +525,44 @@ bool LLVMCodegen::emitKernelIntrinsic(vyb::ast::CallExpression* node) {
         return true;
     }
 
+    // Integer tensor-core MMA, row.col, s8 x s8 -> s32 accumulate (sm_80+):
+    // mma_16816_s8(a0, a1, b0, c0, c1, c2, c3, i)            m16n8k16: A 2 regs, B 1 reg
+    // mma_16832_s8(a0, a1, a2, a3, b0, b1, c0, c1, c2, c3, i) m16n8k32: A 4 regs, B 2 regs
+    // a*/b* are UInt32 words of 4 packed int8 (PTX mma fragment layout); c* are s32 accumulators;
+    // returns element i (0..3) of D as CInt. Readnone, so the 4 element reads collapse to one mma.sync.
+    if (name == "mma_16816_s8" || name == "mma_16832_s8") {
+        bool k32 = (name == "mma_16832_s8");
+        size_t nab = k32 ? 6 : 3;
+        if (node->arguments.size() != nab + 5) {
+            logError(node->loc, name + (k32 ? " takes 11 arguments (a0..a3, b0, b1, c0..c3, i)"
+                                            : " takes 8 arguments (a0, a1, b0, c0..c3, i)"));
+            flagHardCodegenError();
+            m_currentLLVMValue = nullptr;
+            return true;
+        }
+        std::vector<llvm::Value*> ops;
+        for (size_t k = 0; k < nab + 4; ++k) {
+            llvm::Value* v = argAs(k, int32Type);
+            if (!v) { m_currentLLVMValue = nullptr; return true; }
+            ops.push_back(v);
+        }
+        llvm::Value* i = argAs(nab + 4, int32Type);
+        if (!i) { m_currentLLVMValue = nullptr; return true; }
+        llvm::Function* f = intrinsicFn(k32 ? llvm::Intrinsic::nvvm_mma_m16n8k32_row_col_s8
+                                            : llvm::Intrinsic::nvvm_mma_m16n8k16_row_col_s8, {});
+        llvm::Value* r = builder->CreateCall(f, ops, "imma");
+        llvm::Value* d0 = builder->CreateExtractValue(r, 0);
+        llvm::Value* d1 = builder->CreateExtractValue(r, 1);
+        llvm::Value* d2 = builder->CreateExtractValue(r, 2);
+        llvm::Value* d3 = builder->CreateExtractValue(r, 3);
+        llvm::Value* z = llvm::ConstantInt::get(int32Type, 0);
+        llvm::Value* s01 = builder->CreateSelect(builder->CreateICmpEQ(i, z), d0, d1);
+        llvm::Value* s23 = builder->CreateSelect(builder->CreateICmpEQ(i, llvm::ConstantInt::get(int32Type, 2)), d2, d3);
+        m_currentLLVMValue = builder->CreateSelect(
+            builder->CreateICmpULT(i, llvm::ConstantInt::get(int32Type, 2)), s01, s23, "imma.d");
+        return true;
+    }
+
     // Global atomics (monotonic) — KV-cache writes / reductions.
     if (name == "atomic_add_f64" || name == "atomic_add_i32") {
         bool isI32 = (name == "atomic_add_i32");
