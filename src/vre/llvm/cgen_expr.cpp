@@ -888,6 +888,41 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
             // deleted and the variable reads back as 0. Narrow/widen explicitly so the stored
             // value is one the declared width can hold.
             RHS = builder->CreateFPCast(RHS, destPointeeType, "assigncast");
+        } else if (destPointeeType->isIntegerTy() && RHS->getType()->isIntegerTy()) {
+            // An integer of a different width stored into an integer slot (typically an Int
+            // literal or Int expression stored through `loc<Int32>` / `loc<UInt8>` / ...).
+            // This used to fall through to the generic "Type mismatch" warning and emit
+            // `store i64, ptr` into the narrower location -- writing 8 bytes and clobbering the
+            // neighbouring bytes of memory. Convert to the location's width instead: constants
+            // that fit are narrowed silently, anything else is truncated to the low bits with a
+            // warning; widening sign-extends (zero-extends unsigned/Bool sources).
+            unsigned dw = destPointeeType->getIntegerBitWidth();
+            unsigned sw = RHS->getType()->getIntegerBitWidth();
+            if (dw == 1) {
+                RHS = builder->CreateICmpNE(RHS, llvm::ConstantInt::get(RHS->getType(), 0), "assignbool");
+            } else if (dw < sw) {
+                if (auto* ci = llvm::dyn_cast<llvm::ConstantInt>(RHS)) {
+                    const llvm::APInt& v = ci->getValue();
+                    if (!v.isSignedIntN(dw) && !v.isIntN(dw)) {
+                        logWarning(node->loc, "Integer constant " + std::to_string(ci->getSExtValue()) +
+                                   " does not fit in i" + std::to_string(dw) +
+                                   "; storing its low " + std::to_string(dw) + " bits");
+                    }
+                } else {
+                    logWarning(node->loc, "Implicit narrowing store: i" + std::to_string(sw) +
+                               " value truncated to the i" + std::to_string(dw) +
+                               " location (use an explicit `as` cast to silence)");
+                }
+                RHS = builder->CreateTrunc(RHS, destPointeeType, "assigntrunc");
+            } else {
+                bool srcUnsigned = sw == 1;
+                if (!srcUnsigned && rhsTypeNode) {
+                    std::string tn = rhsTypeNode->toString();
+                    srcUnsigned = tn.rfind("UInt", 0) == 0 || tn == "Byte" || tn == "Bool";
+                }
+                RHS = srcUnsigned ? builder->CreateZExt(RHS, destPointeeType, "assignext")
+                                  : builder->CreateSExt(RHS, destPointeeType, "assignext");
+            }
         }
     }
 
