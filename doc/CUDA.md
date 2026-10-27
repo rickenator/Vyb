@@ -108,6 +108,38 @@ ld_shared_f64(off<Int>)<Float>
 st_shared_f64(off<Int>, v<Float>)
 ```
 
+Static shared size — `--kernel-shared <bytes>` (or `$VYB_KERNEL_SHARED_BYTES`) resizes the
+module-wide `__vyb_kernel_shared` buffer (default 32768, rounded to 16-byte alignment). Use it
+when a kernel needs more than 32 KB (up to the 48 KB static cap) or less, to raise occupancy.
+VybForge's Ridge kernels use 8192–45056 (see VybForge `native/tools/build_ridge_kernels.sh`).
+
+Native-width, bit-level, warp and tensor-core intrinsics (cgen_expr_kernel.cpp; return types
+from `kernelIntrinsicReturnType`). Each family has a GPU test under `test/kernel/` checked
+against a CUDA C reference:
+
+```
+# f32 / packed loads and stores (global, shared; vector forms are single v2/v4 instructions)
+ld_f32n st_f32n ld_u32 st_u32 ld_v2_u32 ld_v4_u32 ld_v4_f32
+ld_shared_f32 st_shared_f32 ld_shared_u32 st_shared_u32 ld_shared_u16 st_shared_u16
+ld_shared_v2_u32 ld_shared_v4_u32 st_shared_v4_u32
+ldg_u32 ldg_v2_u32 ldg_v4_u32 ldg_v4_f32     # guaranteed single ld.global.nc(.v2/.v4)
+# bit casts and half packing
+f32_bits f32_from_bits f64_bits f64_from_bits # register bitcasts (no memory round trip)
+h2_pack h_bits h_lo h_hi
+# f32 / f64 math
+fma_f32 fma_f64 ex2_f32 rsqrt_f32 (approx.ftz) sqrt_f32 (rn) max_f32 min_f32
+# warp shuffles and reductions
+shfl_{xor,down,up,idx}_{f32,f64,u32}  warp_sum_f32 warp_max_f32 warp_sum_i32
+# int8 dot products / q8_1 quantisation
+dp4a_s32 dp4a_us32 dp4a_sgn_s32 pack_s8x4 sat_s8 rni_f32 bytemask4 vsub4 (emulated)
+# tensor cores and async copies (sm_80+)
+mma_16816 (f16 -> f32)  mma_16816_s8 mma_16832_s8 (s8 -> s32)
+cp_async_16 cp_async_commit cp_async_wait
+```
+
+A `Void` helper called from device code gets a device-function twin, so a helper that calls
+`kernel_barrier()` no longer loops forever.
+
 Global atomics (monotonic) — for KV-cache writes / reductions:
 
 ```
