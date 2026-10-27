@@ -3,6 +3,7 @@
 import ctypes as C, random, struct, sys
 ptx = open(sys.argv[1], "rb").read()
 assert b"ld.global.nc.v4" in ptx, "expected ld.global.nc.v4 in PTX"
+assert b"ld.global.nc.v2" in ptx, "expected ld.global.nc.v2 in PTX"
 cu = C.CDLL("libcuda.so.1")
 def ck(r):
     if r: raise SystemExit("cuda err %d" % r)
@@ -35,13 +36,13 @@ for gi, (g, x, nib, c) in enumerate(rows):
     ews = sum(rows[j][3] for j in range(w0, w0 + 32))
     ews = (ews + 2**31) % 2**32 - 2**31
     er = rows[gi // 4][gi % 4] & 0xffffffff
-    fs, fm, fl, _ = struct.unpack_from("<4f", oo.raw, 16 * gi)
+    fs, fm, fl = struct.unpack_from("<3f", oo.raw, 16 * gi); v2, = struct.unpack_from("<I", oo.raw, 16 * gi + 12)
     # butterfly order: v += shfl(v, 16), 8, 4, 2, 1 -- emulate exactly in f32
     v = F[w0:w0 + 32]
     for off in (16, 8, 4, 2, 1):
         v = [f32(v[l] + v[l ^ off]) for l in range(32)]
     efs = v[gi - w0]; efm = max(F[w0:w0 + 32]); efl = F[gi // 4 * 4 + gi % 4]
-    if (m, s, ws, r) != (em, es, ews, er) or (fs, fm, fl) != (efs, efm, efl):
+    if (m, s, ws, r) != (em, es, ews, er) or (fs, fm, fl) != (efs, efm, efl) or v2 != (rows[gi // 4][gi % 4] & 0xffffffff):
         bad += 1
         if bad < 5: print("MISMATCH", gi, (hex(m), s, ws, hex(r), fs, fm, fl), (hex(em), es, ews, hex(er), efs, efm, efl))
 print("SIMD_HELPERS_CHECK", "PASS" if bad == 0 else "FAIL", "n=%d bad=%d" % (N, bad))

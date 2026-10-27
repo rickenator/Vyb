@@ -155,7 +155,7 @@ inline const char* kernelIntrinsicReturnType(const std::string& name) {
         name == "mma_16816_s8" || name == "mma_16832_s8" ||
         name == "dp4a_sgn_s32" || name == "warp_sum_i32") return "CInt";
     if (name == "pack_s8x4" || name == "vsub4" || name == "bytemask4" ||
-        name == "ldg_u32" || name == "ldg_v4_u32") return "UInt32";
+        name == "ldg_u32" || name == "ldg_v4_u32" || name == "ldg_v2_u32") return "UInt32";
     // Ursela GPU features (cgen_expr_kernel.cpp): native-width, bit-level and MMA intrinsics.
     if (name == "fma_f32" || name == "f32_from_bits" || name == "h_lo" || name == "h_hi" ||
         name == "ex2_f32" || name == "rsqrt_f32" || name == "sqrt_f32" ||

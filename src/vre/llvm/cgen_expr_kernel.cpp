@@ -572,24 +572,30 @@ bool LLVMCodegen::emitKernelIntrinsic(vyb::ast::CallExpression* node) {
     // LLVM can never split it into scalar or generic-space loads. (The ld_v4_* forms rely on the
     // optimiser re-merging four vector loads; with a dynamic lane index it folds to a scalar generic
     // `ld.u32` instead -- see test/kernel/test_simd_helpers.vyb.) Lane i may be a runtime value.
-    if (name == "ldg_v4_u32" || name == "ldg_v4_f32") {
+    // ldg_v2_u32(addr, i): the same for an 8-byte `ld.global.nc.v2.u32` (addr 8-byte aligned).
+    if (name == "ldg_v4_u32" || name == "ldg_v4_f32" || name == "ldg_v2_u32") {
         bool isF = (name == "ldg_v4_f32");
+        unsigned n = (name == "ldg_v2_u32") ? 2 : 4;
         llvm::Type* et = isF ? f32Ty : int32Type;
         llvm::Value* a = argAs(0, int64Type);
         llvm::Value* i = argAs(1, int32Type);
         if (!a || !i) { m_currentLLVMValue = nullptr; return true; }
-        llvm::StructType* st = llvm::StructType::get(*context, {et, et, et, et});
+        std::vector<llvm::Type*> ets(n, et);
+        llvm::StructType* st = llvm::StructType::get(*context, ets);
         llvm::FunctionType* ft = llvm::FunctionType::get(st, {int64Type}, false);
-        std::string ty = isF ? "f32" : "u32", c = isF ? "=f,=f,=f,=f,l" : "=r,=r,=r,=r,l";
-        llvm::InlineAsm* ia = llvm::InlineAsm::get(ft, "ld.global.nc.v4." + ty + " {$0, $1, $2, $3}, [$4];", c, false);
+        std::string ty = isF ? "f32" : "u32", r1 = isF ? "=f," : "=r,", c, regs;
+        for (unsigned k = 0; k < n; ++k) { c += r1; regs += (k ? ", $" : "$") + std::to_string(k); }
+        c += "l";
+        std::string asmS = "ld.global.nc.v" + std::to_string(n) + "." + ty + " {" + regs + "}, [$" + std::to_string(n) + "];";
+        llvm::InlineAsm* ia = llvm::InlineAsm::get(ft, asmS, c, false);
         llvm::CallInst* call = builder->CreateCall(ft, ia, {a}, "ldg4");
         call->setDoesNotAccessMemory();
         call->setDoesNotThrow();
-        llvm::Value* r = builder->CreateExtractValue(call, {3});
+        llvm::Value* r = builder->CreateExtractValue(call, {n - 1});
         if (auto* ci = llvm::dyn_cast<llvm::ConstantInt>(i)) {
-            r = builder->CreateExtractValue(call, {(unsigned)(ci->getZExtValue() & 3)}, "ldg4.lane");
+            r = builder->CreateExtractValue(call, {(unsigned)(ci->getZExtValue() & (n - 1))}, "ldg4.lane");
         } else {
-            for (int k = 2; k >= 0; --k)
+            for (int k = (int)n - 2; k >= 0; --k)
                 r = builder->CreateSelect(builder->CreateICmpEQ(i, llvm::ConstantInt::get(int32Type, k)),
                                           builder->CreateExtractValue(call, {(unsigned)k}), r, "ldg4.sel");
         }

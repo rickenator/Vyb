@@ -1,7 +1,7 @@
 // @test: kernel-mode sign-mask, signed dp4a, warp-reduce and read-only vector-load helpers
 // @description: bytemask4 (sign nibble -> 0x00/0xff byte mask), dp4a_sgn_s32 (c + sum +-g*x via
 //   dp4a(g,x) - 2*dp4a(g, x&m)), warp_sum_f32 / warp_max_f32 / warp_sum_i32 (5-step butterfly,
-//   every lane gets the result) and ldg_u32 / ldg_v4_u32 / ldg_v4_f32 (ld.global.nc, one 16-byte
+//   every lane gets the result) and ldg_u32 / ldg_v2_u32 / ldg_v4_u32 / ldg_v4_f32 (ld.global.nc, one 8/16-byte
 //   load per address). Compiles to PTX that ptxas accepts; check_simd_helpers.py checks values.
 // @category: kernel, cuda, types
 // @expect: pass
@@ -9,7 +9,8 @@
 
 // w: n x 4 u32 (g, x, nib, c) -> overwritten with (bytemask4(nib), dp4a_sgn_s32, warp_sum_i32(c),
 //   ldg_v4_u32 lane gid%4 of row gid/4 *before* the stores, read via ldg from a copy in w2)
-// f: n f32 -> o: n x 4 f32 (warp_sum_f32(f), warp_max_f32(f), ldg_v4_f32 lane gid%4 of f row gid/4, 0)
+// f: n f32 -> o: n x 4 f32 (warp_sum_f32(f), warp_max_f32(f), ldg_v4_f32 lane gid%4 of f row gid/4,
+//   ldg_v2_u32 lane gid%2 of w2 pair gid/2 = w2 word gid)
 simdh(w<Int>, w2<Int>, f<Int>, o<Int>, n<Int>) -> {
     gid<Int> = blk_x() * dim_x() + tid_x()
     if (gid < n) {
@@ -29,6 +30,6 @@ simdh(w<Int>, w2<Int>, f<Int>, o<Int>, n<Int>) -> {
         st_f32n(o + gid * 16, warp_sum_f32(v))
         st_f32n(o + gid * 16 + 4, warp_max_f32(v))
         st_f32n(o + gid * 16 + 8, ldg_v4_f32(f + (gid / 4) * 16, gid % 4))
-        st_f32n(o + gid * 16 + 12, 0.0 as Float32)
+        st_i32(o + gid * 16 + 12, ldg_v2_u32(w2 + (gid / 2) * 8, gid % 2))
     }
 }
