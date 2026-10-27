@@ -6101,6 +6101,8 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
 
             if (argValue->getType() != expectedArgType) {
                  logError(node->arguments[i]->loc, "Argument type mismatch for call to " + calleeName + ". Expected " + getTypeName(expectedArgType) + " but got " + getTypeName(argValue->getType()));
+                 // Fatal: the call is not emitted, so running on would silently skip it.
+                 flagHardCodegenError();
                  m_currentLLVMValue = nullptr;
                  return;
             }

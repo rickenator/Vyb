@@ -889,6 +889,9 @@ void LLVMCodegen::visit(vyb::ast::FunctionDeclaration* node) {
     if (func) {
         if (func->getFunctionType() != funcType) {
             logError(node->loc, "Redefinition of function '" + node->id->name + "' with different signature.");
+            // Fatal: running on would silently drop every call to it (e.g. an extern named
+            // memcpy/memmove clashing with the LLVM builtin's ptr signature).
+            flagHardCodegenError();
             m_currentLLVMValue = nullptr; return;
         }
         if (!func->empty() && node->body) { // Already has a body, and we are trying to define another
@@ -900,6 +903,7 @@ void LLVMCodegen::visit(vyb::ast::FunctionDeclaration* node) {
                 return;
             }
             logError(node->loc, "Redefinition of function '" + node->id->name + "'.");
+            flagHardCodegenError();
             m_currentLLVMValue = nullptr; return;
         }
         // If it was a forward declaration and types match, we are now providing the body.
