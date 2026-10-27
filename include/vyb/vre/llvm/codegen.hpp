@@ -56,6 +56,11 @@ extern bool g_kernel_mode;
 // registry, no call-stack frame hooks. The result is a plain relocatable object
 // that a C toolchain (ESP-IDF, newlib, ...) links like any other.
 extern bool g_freestanding;
+
+// Runtime call-frame bookkeeping (__vyb_runtime_push/pop_call_frame around every user
+// function, used for `fail` stack traces). On by default at -O0/-O1; at -O2+ it is off
+// unless VYB_CALL_FRAMES=1 (or --call-frames). Set in main.cpp before codegen.
+extern bool g_call_frames;
 extern std::string g_target_triple;    // LLVM triple for --target (normalized)
 extern std::string g_target_cpu;       // --mcpu (or implied by a --target alias)
 extern std::string g_target_features;  // --mattr
