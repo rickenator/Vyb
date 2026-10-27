@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **The JIT inlines at `-O2`/`-O3` and tunes for the host CPU.** At `-O2` and above,
+  `optimize_module` removes the blanket `noinline` attribute that codegen puts on every user
+  function to keep `-O0`/`-O1` traces frame-exact. Set `VYB_KEEP_NOINLINE=1` to keep it. The
+  JIT's IR pipeline now builds its target machine for the host CPU and features rather than
+  `generic`, so the vectorizer and unroller cost models match the code ORC emits. Set
+  `VYB_JIT_GENERIC=1` to get the old behaviour. Program output is unchanged and the full suite
+  passes. See `docs/refman/PROGRAMMERS_GUIDE.md` → *Optimization phases*.
+
 ### Added
 - **CUDA kernel intrinsics for quantised LLM inference (VybForge 27B Ridge decode)** — the
   native-width, bit-cast, warp-shuffle/reduction, int8 `dp4a`, q8_1 quantisation, `mma.m16n8k16`

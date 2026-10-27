@@ -2857,12 +2857,28 @@ level now reaches **both** compilation paths: the AOT paths
 
 Each path owns the target machine the phase needs: the AOT paths build it from
 the requested triple/CPU/relocation model, while the JIT path builds one from the
-default target triple (`generic` CPU, no relocation model) and pins the module's
-data layout to it. `-O0` means "no IR passes" on both paths, not "no code
+default target triple for the **host CPU and its features** (as reported by
+`llvm::sys::getHostCPUName()` / `getHostCPUFeatures()`, no relocation model) and
+pins the module's data layout to it. ORC already generates machine code for the
+host, so this only lets the IR cost models (loop vectorizer, unroller, inliner)
+see the same CPU instead of SSE2-only `generic`. Set `VYB_JIT_GENERIC=1` to get
+the old `generic` target machine (for example, to compare optimizer decisions
+across machines). `-O0` means "no IR passes" on both paths, not "no code
 generation". `--debug-codegen` prints which pipeline ran (`Skipping IR
 optimization (-O0)` / `Applying IR optimization passes (-On)`), and `ci.yml`
 asserts per level that the pipeline selected differs *and* that program output is
 identical at every level.
+
+**Inlining at `-O2`/`-O3`.** Codegen marks every user function `noinline`
+(`cgen_decl.cpp`, Phase 6.4) so that `-O0`/`-O1` runtime traces show one frame
+per Vyb function. At `-O2` and `-O3`, `optimize_module` removes that attribute
+before the pipeline runs (functions marked `optnone` are left alone), so the
+inliner can fold small helpers such as accessors and raw `load`/`store`
+wrappers into hot loops. The trade-off is the same one C/C++ compilers make:
+at the optimized levels a trace can omit frames that were inlined. Set
+`VYB_KEEP_NOINLINE=1` to keep the attribute at every level when you are
+debugging an optimized build. Program output is the same either way, and the
+full suite passes in both modes.
 
 ### Test harness
 
