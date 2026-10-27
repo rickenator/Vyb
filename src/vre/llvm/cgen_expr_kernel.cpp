@@ -281,6 +281,56 @@ bool LLVMCodegen::emitKernelIntrinsic(vyb::ast::CallExpression* node) {
     // dp4a_us32(a, b, c) with a as four u8 (dp4a.u32.s32). a and b are packed 32-bit words, c and
     // the result are 32-bit ints. vsub4(a, b) is the per-byte wrapping difference (vsub4 / __vsub4),
     // used to apply IQ sign masks: vsub4(g ^ m, m) negates the bytes where m = 0xff.
+    // Sign-mask helpers (2026-10-26, Ridge IQ kernels). Measured on sm_86: the native PTX vsub4 lowers to
+    // MORE SASS than the 4-op carry-free emulation below (32 vs 24 instr for a test kernel; __vsub4 = 24),
+    // so vsub4 keeps the emulation. The cheaper route for sign-applying dot products is:
+    //   bytemask4(n) -> UInt32: byte k = 0xff iff bit k of n (k = 0..3; higher bits ignored). Built as
+    //     ((n & 15) * 0x204081 & 0x01010101) * 255; the four shifted copies occupy disjoint bit ranges, so
+    //     there are no carries (3 integer ops instead of ~11 per-bit extract/or).
+    //   dp4a_sgn_s32(g, x, m, c) -> CInt = c + sum_k (m_k ? -1 : 1) * s8(g)_k * s8(x)_k, computed as
+    //     c + dp4a(g, x) - 2 * dp4a(g, x & m). m must be a byte mask (0x00/0xff per byte). Exact for any
+    //     s8 g and x, since every partial sum fits easily in 32 bits.
+    if (name == "bytemask4") {
+        llvm::Value* n = argAs(0, int32Type);
+        if (!n) { m_currentLLVMValue = nullptr; return true; }
+        llvm::Value* t = builder->CreateAnd(n, llvm::ConstantInt::get(int32Type, 15));
+        t = builder->CreateMul(t, llvm::ConstantInt::get(int32Type, 0x204081));
+        t = builder->CreateAnd(t, llvm::ConstantInt::get(int32Type, 0x01010101));
+        m_currentLLVMValue = builder->CreateMul(t, llvm::ConstantInt::get(int32Type, 255), "bmask4");
+        return true;
+    }
+    if (name == "dp4a_sgn_s32") {
+        llvm::Value* g = argAs(0, int32Type); llvm::Value* x = argAs(1, int32Type);
+        llvm::Value* m = argAs(2, int32Type); llvm::Value* c = argAs(3, int32Type);
+        if (!g || !x || !m || !c) { m_currentLLVMValue = nullptr; return true; }
+        llvm::FunctionType* ft = llvm::FunctionType::get(int32Type, {int32Type, int32Type, int32Type}, false);
+        llvm::InlineAsm* ia = llvm::InlineAsm::get(ft, "dp4a.s32.s32 $0, $1, $2, $3;", "=r,r,r,r", false);
+        llvm::Value* z = llvm::ConstantInt::get(int32Type, 0);
+        llvm::Value* all = builder->CreateCall(ft, ia, {g, x, c}, "dp4a");
+        llvm::Value* neg = builder->CreateCall(ft, ia, {g, builder->CreateAnd(x, m), z}, "dp4a.neg");
+        m_currentLLVMValue = builder->CreateSub(all, builder->CreateShl(neg, 1), "dp4a.sgn");
+        return true;
+    }
+    // Warp reductions (full-warp butterfly; every lane gets the result): warp_sum_f32 / warp_max_f32(x)
+    // -> Float32, warp_sum_i32(x) -> CInt. Five shfl.sync.bfly steps (16, 8, 4, 2, 1); one 32-bit
+    // shuffle per step, where a Float (f64) reduction needs two. Lane-pairing order is fixed, so results
+    // are deterministic.
+    if (name == "warp_sum_f32" || name == "warp_max_f32" || name == "warp_sum_i32") {
+        bool isF = (name != "warp_sum_i32");
+        llvm::Value* v = argAs(0, isF ? f32Ty : int32Type);
+        if (!v) { m_currentLLVMValue = nullptr; return true; }
+        llvm::Value* mask = llvm::ConstantInt::get(int32Type, 0xffffffffu);
+        llvm::Value* cc = llvm::ConstantInt::get(int32Type, 0x1f);
+        llvm::Function* f = intrinsicFn(isF ? llvm::Intrinsic::nvvm_shfl_sync_bfly_f32 : llvm::Intrinsic::nvvm_shfl_sync_bfly_i32, {});
+        for (int off = 16; off >= 1; off /= 2) {
+            llvm::Value* o = builder->CreateCall(f, {mask, v, llvm::ConstantInt::get(int32Type, off), cc}, "wred");
+            if (name == "warp_max_f32") v = builder->CreateCall(intrinsicFn(llvm::Intrinsic::maxnum, {f32Ty}), {v, o});
+            else if (isF) v = builder->CreateFAdd(v, o);
+            else v = builder->CreateAdd(v, o);
+        }
+        m_currentLLVMValue = v;
+        return true;
+    }
     if (name == "dp4a_s32" || name == "dp4a_us32" || name == "vsub4") {
         llvm::Value* a = argAs(0, int32Type); llvm::Value* b = argAs(1, int32Type);
         if (!a || !b) { m_currentLLVMValue = nullptr; return true; }
@@ -503,6 +553,47 @@ bool LLVMCodegen::emitKernelIntrinsic(vyb::ast::CallExpression* node) {
         if (!a || !v) { m_currentLLVMValue = nullptr; return true; }
         builder->CreateAlignedStore(v, gptr(a), llvm::Align(4));
         m_currentLLVMValue = nullptr;
+        return true;
+    }
+    // Read-only (non-coherent) global loads: ldg_u32(addr), ldg_v4_u32 / ldg_v4_f32(addr, i). Same as the
+    // ld_ forms but tagged !invariant.load, so NVPTX emits ld.global.nc (LDG.E.CONSTANT) and GVN can merge
+    // the four lane reads of one address even across stores to other memory. Only for data the kernel
+    // never writes (weights, activations produced by an earlier launch).
+    if (name == "ldg_u32") {
+        llvm::Value* a = argv(0);
+        if (!a) { m_currentLLVMValue = nullptr; return true; }
+        llvm::LoadInst* ld = builder->CreateAlignedLoad(int32Type, gptr(a), llvm::Align(4), "ldg");
+        ld->setMetadata(llvm::LLVMContext::MD_invariant_load, llvm::MDNode::get(*context, {}));
+        m_currentLLVMValue = ld;
+        return true;
+    }
+    // ldg_v4_*: emitted as one `ld.global.nc.v4` inline-asm call returning all four lanes, marked
+    // memory(none) so EarlyCSE/GVN fold every call with the same address into ONE 16-byte load, while
+    // LLVM can never split it into scalar or generic-space loads. (The ld_v4_* forms rely on the
+    // optimiser re-merging four vector loads; with a dynamic lane index it folds to a scalar generic
+    // `ld.u32` instead -- see test/kernel/test_simd_helpers.vyb.) Lane i may be a runtime value.
+    if (name == "ldg_v4_u32" || name == "ldg_v4_f32") {
+        bool isF = (name == "ldg_v4_f32");
+        llvm::Type* et = isF ? f32Ty : int32Type;
+        llvm::Value* a = argAs(0, int64Type);
+        llvm::Value* i = argAs(1, int32Type);
+        if (!a || !i) { m_currentLLVMValue = nullptr; return true; }
+        llvm::StructType* st = llvm::StructType::get(*context, {et, et, et, et});
+        llvm::FunctionType* ft = llvm::FunctionType::get(st, {int64Type}, false);
+        std::string ty = isF ? "f32" : "u32", c = isF ? "=f,=f,=f,=f,l" : "=r,=r,=r,=r,l";
+        llvm::InlineAsm* ia = llvm::InlineAsm::get(ft, "ld.global.nc.v4." + ty + " {$0, $1, $2, $3}, [$4];", c, false);
+        llvm::CallInst* call = builder->CreateCall(ft, ia, {a}, "ldg4");
+        call->setDoesNotAccessMemory();
+        call->setDoesNotThrow();
+        llvm::Value* r = builder->CreateExtractValue(call, {3});
+        if (auto* ci = llvm::dyn_cast<llvm::ConstantInt>(i)) {
+            r = builder->CreateExtractValue(call, {(unsigned)(ci->getZExtValue() & 3)}, "ldg4.lane");
+        } else {
+            for (int k = 2; k >= 0; --k)
+                r = builder->CreateSelect(builder->CreateICmpEQ(i, llvm::ConstantInt::get(int32Type, k)),
+                                          builder->CreateExtractValue(call, {(unsigned)k}), r, "ldg4.sel");
+        }
+        m_currentLLVMValue = r;
         return true;
     }
     if (name == "ld_v4_u32" || name == "ld_v2_u32" || name == "ld_v4_f32") {
