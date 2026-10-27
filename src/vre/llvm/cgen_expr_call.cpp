@@ -1000,6 +1000,68 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
 
 
 
+    // cuda_launch_args(f, gx, gy, gz, bx, by, bz, a0, ..., an): the compiler owns
+    // the kernelParams packing. Each argument is stored in its own entry-block cell at
+    // its own width (Int/f64 8 bytes, CInt/UInt32/Float32 4, Bool 1, loc<T> a pointer),
+    // the cells' addresses fill a `[n x ptr]` array, and the generic launcher
+    // (cuda_launch_n, JIT-provided) passes it straight to cuLaunchKernel.
+    if (identCallee && identCallee->name == "cuda_launch_args" && node->arguments.size() >= 8) {
+        auto rval = [&](size_t i) -> llvm::Value* {
+            node->arguments[i]->accept(*this);
+            llvm::Value* v = m_currentLLVMValue;
+            if (!v) return nullptr;
+            if (auto* ai = llvm::dyn_cast<llvm::AllocaInst>(v)) {
+                llvm::Type* at = ai->getAllocatedType();
+                if (at->isIntegerTy() || at->isFloatingPointTy() || at->isPointerTy())
+                    v = builder->CreateLoad(at, ai, "karg.ld");
+            }
+            return v;
+        };
+        llvm::Type* ptrTy = llvm::PointerType::get(*context, 0);
+        llvm::Value* fn = rval(0);
+        if (!fn) { logError(node->arguments[0]->loc, "cuda_launch_args: kernel handle evaluated to null"); return; }
+        if (fn->getType()->isIntegerTy()) fn = builder->CreateIntToPtr(fn, ptrTy, "kfunc");
+        else if (!fn->getType()->isPointerTy()) {
+            logError(node->arguments[0]->loc, "cuda_launch_args: kernel handle must be an Int or loc<CVoid>");
+            return;
+        }
+        std::vector<llvm::Value*> callArgs{fn};
+        for (size_t d = 1; d <= 6; ++d) {
+            llvm::Value* v = rval(d);
+            if (!v || !v->getType()->isIntegerTy()) {
+                logError(node->arguments[d]->loc, "cuda_launch_args: launch dimensions must be integers");
+                return;
+            }
+            callArgs.push_back(builder->CreateZExtOrTrunc(v, int32Type, "kdim"));
+        }
+        const size_t n = node->arguments.size() - 7;
+        llvm::ArrayType* arrTy = llvm::ArrayType::get(ptrTy, n);
+        llvm::AllocaInst* params = createEntryBlockAlloca(arrTy, "kparams");
+        for (size_t i = 0; i < n; ++i) {
+            llvm::Value* v = rval(7 + i);
+            if (!v) { logError(node->arguments[7 + i]->loc, "cuda_launch_args: kernel argument evaluated to null"); return; }
+            llvm::Type* t = v->getType();
+            if (t->isIntegerTy(1)) { v = builder->CreateZExt(v, int8Type, "karg.b"); t = int8Type; }
+            if (!(t->isIntegerTy() || t->isFloatingPointTy() || t->isPointerTy())) {
+                logError(node->arguments[7 + i]->loc,
+                         "cuda_launch_args: kernel argument " + std::to_string(i) + " is not a scalar");
+                return;
+            }
+            llvm::AllocaInst* cell = createEntryBlockAlloca(t, "karg");
+            builder->CreateStore(v, cell);
+            builder->CreateStore(cell, builder->CreateConstInBoundsGEP2_32(arrTy, params, 0,
+                                                                           (unsigned)i, "kslot"));
+        }
+        callArgs.push_back(builder->CreatePtrToInt(params, int64Type, "kparams.addr"));
+        callArgs.push_back(llvm::ConstantInt::get(int64Type, (uint64_t)n));
+        llvm::FunctionType* ft = llvm::FunctionType::get(int32Type,
+            {ptrTy, int32Type, int32Type, int32Type, int32Type, int32Type, int32Type,
+             int64Type, int64Type}, false);
+        llvm::FunctionCallee launcher = module->getOrInsertFunction("cuda_launch_n", ft);
+        m_currentLLVMValue = builder->CreateCall(launcher, callArgs, "klaunch");
+        return;
+    }
+
     // Special handling for intrinsic functions with potential variable name conflicts
     if (identCallee && node->arguments.size() == 1) {
         // Check for addr() intrinsic

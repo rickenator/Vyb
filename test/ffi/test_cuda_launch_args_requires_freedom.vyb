@@ -1,0 +1,14 @@
+// @test: cuda_launch_args is freedom-gated
+// @description: the kernel-launch helper hands raw device addresses to cuLaunchKernel, so,
+//   like the extern it wraps, it is rejected outside a freedom block (checked at compile
+//   time, so no GPU is needed).
+// @category: ffi, cuda, freedom
+// @expect: fail
+// @expect-error: 'cuda_launch_args' can only be called inside a freedom block
+
+main()<Int> -> {
+    hf<Int> = 0
+    d<Int> = 0
+    rc<CInt> = cuda_launch_args(hf, 1, 1, 1, 32, 1, 1, d, 4)
+    return 0
+}

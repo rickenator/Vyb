@@ -1,0 +1,14 @@
+// @test: cuda_launch_args needs a handle, six dimensions and a kernel argument
+// @description: a call with the launch dimensions but no kernel argument is rejected with a
+//   message that spells out the expected shape.
+// @category: ffi, cuda, diagnostics
+// @expect: fail
+// @expect-error: needs a kernel handle, six launch dimensions and at least one kernel argument
+
+main()<Int> -> {
+    freedom {
+        hf<Int> = 0
+        rc<CInt> = cuda_launch_args(hf, 1, 1, 1, 32, 1, 1)
+    }
+    return 0
+}

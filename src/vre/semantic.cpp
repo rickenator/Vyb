@@ -1739,6 +1739,57 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             return;
         }
     }
+    // cuda_launch_args(f, gridX, gridY, gridZ, blockX, blockY, blockZ, a0, ..., an):
+    // the kernel-launch helper. The compiler packs cuLaunchKernel's `void*[]`
+    // kernelParams itself (one cell per argument, at the argument's own width) and
+    // calls the generic launcher, so callers no longer hand-build `[Int; N]` arrays of
+    // addr(cell). Raw device launch, so freedom-gated like the extern it wraps.
+    if (auto lcCallee = dynamic_cast<ast::Identifier*>(node->callee.get())) {
+        if (lcCallee->name == "cuda_launch_args") {
+            if (!isInFreedomBlock()) {
+                addError("'cuda_launch_args' can only be called inside a freedom block.", node);
+            }
+            if (node->arguments.size() < 8) {
+                addError("cuda_launch_args(f, gridX, gridY, gridZ, blockX, blockY, blockZ, args...) "
+                         "needs a kernel handle, six launch dimensions and at least one kernel "
+                         "argument; got " + std::to_string(node->arguments.size()) + " argument(s)", node);
+            }
+            static const std::set<std::string> kIntNames = {
+                "Int", "Int8", "Int16", "Int32", "Int64", "UInt", "UInt8", "UInt16", "UInt32",
+                "UInt64", "CInt", "CUInt", "CShort", "CUShort", "CLong", "CULong", "CLongLong",
+                "CULongLong", "CChar", "CUChar", "CSize", "CSSize"};
+            static const std::set<std::string> kScalarExtra = {
+                "Float", "Float32", "Float64", "CFloat", "CDouble", "Bool", "loc"};
+            for (size_t i = 0; i < node->arguments.size(); ++i) {
+                auto& a = node->arguments[i];
+                if (!a) continue;
+                a->accept(*this);
+                auto* tn = dynamic_cast<ast::TypeName*>(typeOf(a.get()).get());
+                if (!tn || !tn->identifier) continue;
+                const std::string& tname = tn->identifier->name;
+                if (i >= 1 && i <= 6) {
+                    if (!kIntNames.count(tname)) {
+                        addError("cuda_launch_args: launch dimension " + std::to_string(i) +
+                                 " must be an integer, got '" + tname + "'", a.get());
+                    }
+                } else if (i == 0) {
+                    if (tname != "Int" && tname != "loc") {
+                        addError("cuda_launch_args: the kernel handle must be an Int or a "
+                                 "loc<CVoid>, got '" + tname + "'", a.get());
+                    }
+                } else if (!kIntNames.count(tname) && !kScalarExtra.count(tname)) {
+                    addError("cuda_launch_args: kernel argument " + std::to_string(i - 7) +
+                             " must be a scalar (integer, float, Bool or loc<T>), got '" + tname +
+                             "'; pass a device buffer by its Int address", a.get());
+                }
+            }
+            auto* resTy = new ast::TypeName(node->loc,
+                std::make_unique<ast::Identifier>(node->loc, "CInt"));
+            setType(node,  retainType(resTy));
+            setType(node,  std::shared_ptr<ast::TypeNode>(resTy->clone()));
+            return;
+        }
+    }
     // Check if this is an intrinsic function call before visiting the callee
     bool isIntrinsic = false;
     if (auto ident = dynamic_cast<ast::Identifier*>(node->callee.get())) {

@@ -267,6 +267,30 @@ cuda_launch_n(from<loc<CVoid>>(addr(hf)), 1,1,1, 1,1,1, addr(params), 5)
 (five parameters, four Int cells plus an f64 cell) and verifies the value on silicon;
 `test/ffi/test_addr_of_buffer.vyb` covers the `addr()` semantics without a GPU.
 
+### `cuda_launch_args`: the compiler packs kernelParams
+
+The hand-built array above still costs one cell and one `params[i] = addr(...)` line per
+argument. **`cuda_launch_args(f, gx, gy, gz, bx, by, bz, a0, ..., an)`** (compiler-provided, in a
+`freedom` block) does that packing itself. Each argument is evaluated and stored in its own cell
+at its own width, and the cells' addresses go to `cuda_launch_n`. It returns the `CUresult` as
+`CInt`.
+
+```
+rc<CInt> = cuda_launch_args(hf, 1, 1, 1, 1, 1, 1, outD, ka, ka - 8, kz, kalpha)
+```
+
+* `f` is the `loc<CVoid>` from `cuModuleGetFunction`, or its `Int` value.
+* The six dimensions must be integers.
+* The arguments must be scalars: `Int`/`Float`/`Bool` (8, 8 and 1 bytes), the C and fixed-width
+  aliases at their own width (`CInt`, `UInt32` and `Float32` are 4 bytes), or a `loc<T>`. Pass a
+  device buffer by its `Int` address. A Vyb kernel's `Int`/`Float` parameters are 8 bytes, so
+  widen narrower values with `as Int` first.
+* A non-scalar argument such as a `String` is a compile error.
+* JIT only, like `cuda_launch_n`.
+
+`test/ffi/test_cuda_launch_args.vyb` launches `launch5` this way. The `_requires_freedom`,
+`_rejects_string` and `_arity` tests cover the diagnostics without a GPU.
+
 ## Security note
 
 Kernels are pure value/data-parallel compute. Only integer buffer addresses and raw typed
