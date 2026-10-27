@@ -1,0 +1,15 @@
+// @test: kernel codegen errors are fatal
+// @description: in --kernel mode any codegen error stops the build. Before, the driver
+//   printed the error, dropped the statements it could not lower and still wrote a PTX
+//   (here: a kernel reduced to a bare `ret`) with exit status 0.
+// @category: kernel
+// @expect: fail
+// @expect-error: refusing to emit a kernel whose code generation reported errors
+// @vyb-args: --kernel
+
+bad_len(p<Int>) -> {
+    X<Int> = ld_i64(p + 0)
+    s<[Float32; 4]> = [0.0, 0.0, 0.0]
+    s[0] = ld_f32(X)
+    st_f32(X, s[0])
+}

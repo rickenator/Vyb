@@ -159,6 +159,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `version:` dep rebuilds with the registry absent.
 
 ### Fixed
+- **`--kernel` no longer emits a PTX after a codegen error.** `logError` in kernel mode now flags a
+  hard codegen error, so the driver exits non-zero and writes no PTX. Before, the error was
+  printed, the statements were dropped and the kernel could come out as a bare `ret` with exit
+  status 0 (`test/kernel/kernel_codegen_error_reject.vyb`).
+- **Fixed-array literals are cast element-wise to the declared element type** (`[0.0, 1.5]`
+  bound to `[Float32; 2]` used to fail with "invalid cast from [2 x double] to [2 x float]").
+  With it, kernels can keep `[Float32; N]` scratch arrays in registers when indexed by
+  constant-bound `for` loops (`test/arrays/test_array_literal_elem_cast.vyb`,
+  `test/kernel/test_local_array.vyb`, doc/CUDA.md "Kernel-local arrays").
 - **The shipped `filter`/`map` over a `Vec<mild<T>>` no longer leaks (#427 defects 6/7, #451
   closed for this half)** — a call whose callee is a `fn(...)` VALUE is emitted by its own arm:
   it rebuilds the callee's signature, prepends the hidden environment and builds its own argument

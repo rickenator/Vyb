@@ -164,6 +164,18 @@ pure-arithmetic device math instead — see VybForge `native/kernels/vmath.vyb`
 function. Integer `abs`, `min`/`max` and the arithmetic operators are unaffected
 (they lower to plain arithmetic / `select`).
 
+### Kernel-local arrays (register scratch)
+
+A fixed array declared inside a kernel (`s<[Float32; 16]> = [0.0, ...]`) lives in an `alloca`.
+When every index is a constant after unrolling (constant-bound `for (r in 0..15)` loops are
+fully unrolled at `-O2`), SROA promotes it to registers and the PTX has no `.local` frame
+(`test/kernel/test_local_array.vyb`). An f64 literal bound to a `[Float32; N]` is cast
+element-wise. A runtime (non-unrollable) index keeps the array in local memory, so check the
+PTX for `.local` when it matters.
+
+Any codegen error in `--kernel` mode is fatal: the driver exits non-zero and writes no PTX
+(`test/kernel/kernel_codegen_error_reject.vyb`).
+
 ## Kernel vs. helper functions
 
 How a function lowers determines whether it is launchable:

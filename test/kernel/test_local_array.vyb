@@ -1,0 +1,20 @@
+// @test: kernel-local fixed arrays lower to registers
+// @description: a `[Float32; 16]` scratch array declared in a kernel, initialised from an
+//   f64 literal (cast element-wise) and indexed only by constant-bound `for` loops, is fully
+//   unrolled and promoted to registers by the NVPTX pipeline: the PTX has no `.local` frame.
+//   This replaces hand-written s0..s15 scalars (VybForge `gen_rdeltag.py`).
+// @category: kernel, cuda, arrays
+// @expect: pass
+// @vyb-args: --kernel
+// @expect-output: PTX contains all 1 device function(s)
+
+local_array_rows(p<Int>) -> {
+    X<Int> = ld_i64(p + 0)
+    Y<Int> = ld_i64(p + 8)
+    t<Int> = tid_x()
+    s<[Float32; 16]> = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    for (r in 0..15) { s[r] = ld_f32(X + (t + 32 * r) * 4) }
+    acc<Float32> = 0.0
+    for (r in 0..15) { acc = acc + s[r] * s[r] }
+    for (r in 0..15) { st_f32(Y + (t + 32 * r) * 4, s[r] * acc) }
+}
