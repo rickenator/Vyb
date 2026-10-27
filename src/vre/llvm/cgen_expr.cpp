@@ -29,6 +29,18 @@ static bool vybIntClass(const std::string& name, bool& isUnsigned, unsigned& bit
     if (name == "UInt8"  || name == "u8" || name == "Byte")   { isUnsigned = true;  bits = 8;  return true; }
     if (name == "Char")                                       { isUnsigned = false; bits = 8;  return true; }
     if (name == "Rune")                                       { isUnsigned = false; bits = 32; return true; }
+    // C-ABI aliases (widths match codegenType in cgen_types.cpp). Without these,
+    // `ld_i32(p) as Int` (a CInt result) fell through AsExpression to the
+    // identity case and stayed i32, so `x = ld_i32(p) as Int` stored an i32
+    // into an i64 slot ("Type mismatch in assignment") leaving the high half stale.
+    if (name == "CLong" || name == "CSSize")                  { isUnsigned = false; bits = 64; return true; }
+    if (name == "CInt")                                       { isUnsigned = false; bits = 32; return true; }
+    if (name == "CShort")                                     { isUnsigned = false; bits = 16; return true; }
+    if (name == "CChar")                                      { isUnsigned = false; bits = 8;  return true; }
+    if (name == "CULong" || name == "CSize")                  { isUnsigned = true;  bits = 64; return true; }
+    if (name == "CUInt")                                      { isUnsigned = true;  bits = 32; return true; }
+    if (name == "CUShort")                                    { isUnsigned = true;  bits = 16; return true; }
+    if (name == "CUChar")                                     { isUnsigned = true;  bits = 8;  return true; }
     return false;
 }
 
@@ -5625,6 +5637,26 @@ void LLVMCodegen::visit(vyb::ast::AsExpression* node) {
         m_currentLLVMValue = dUnsigned
             ? builder->CreateFPToUI(operand, targetTy, "as.fptoui")
             : builder->CreateFPToSI(operand, targetTy, "as.fptosi");
+        return;
+    }
+
+    // Integer -> integer of a different width whose source type name is not a
+    // known int class (e.g. an untyped intrinsic result): an identity "cast"
+    // would leave the value at the wrong width. Widen by the target-unknown
+    // default (sign-extend, matching Vyb's signed Int) or truncate.
+    if (operand->getType()->isIntegerTy() && targetTy->isIntegerTy() &&
+        operand->getType()->getIntegerBitWidth() != targetTy->getIntegerBitWidth()) {
+        unsigned srcW = operand->getType()->getIntegerBitWidth();
+        unsigned dstW = targetTy->getIntegerBitWidth();
+        bool sU = false; unsigned sB = 0;
+        bool known = vybIntClass(srcName, sU, sB);
+        if (dstW > srcW) {
+            m_currentLLVMValue = (srcW == 1 || (known && sU))
+                ? builder->CreateZExt(operand, targetTy, "as.zext")
+                : builder->CreateSExt(operand, targetTy, "as.sext");
+        } else {
+            m_currentLLVMValue = builder->CreateTrunc(operand, targetTy, "as.trunc");
+        }
         return;
     }
 
