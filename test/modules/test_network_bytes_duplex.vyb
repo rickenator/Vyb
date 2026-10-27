@@ -1,0 +1,91 @@
+// @test: network socket_exchange_bytes - deadlock-free duplex exchange of large frames
+// @description: two threads swap multi-megabyte Vec<UInt8> frames over loopback
+//   TCP with socket_exchange_bytes at the same time. Each frame is larger
+//   than the default send-buffer ceiling (tcp_wmem max), so two plain
+//   blocking send-then-recv peers would deadlock; the interleaved exchange
+//   drains both directions. Also exercises
+//   TcpStream write_bytes/read_bytes_exact and repeated lock-step exchanges.
+// @category: modules, network, sockets, stdlib, binary, threads
+// @expect: pass
+// @expect-output: duplex-ok
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+
+import network
+import threads::{thread_spawn, thread_join}
+
+pattern(n<Int>, salt<Int>)<Vec<UInt8>> -> {
+    v<Vec<UInt8>> = Vec()
+    i<Int> = 0
+    while (i < n) { v.push(((i * 7 + salt) % 256) as UInt8) ; i = i + 1 }
+    return v
+}
+
+check(v<Vec<UInt8>>, n<Int>, salt<Int>)<Bool> -> {
+    if (v.len() != n) { return false }
+    i<Int> = 0
+    while (i < n) {
+        if ((v.get(i) as Int) != (i * 7 + salt) % 256) { return false }
+        i = i + 13
+    }
+    return (v.get(n - 1) as Int) == ((n - 1) * 7 + salt) % 256
+}
+
+main()<Int> -> {
+    match (tcp_listen("127.0.0.1", 0, 4)) {
+        l -> {
+            port<Int> = l.local_port()
+            lfd<Int> = l.fd
+            srv<Int> = thread_spawn(|| -> {
+                match (tcp_accept(TcpListener { fd = lfd, local_ip = "", local_port = 0 })) {
+                    c -> {
+                        mine<Vec<UInt8>> = pattern(8000000, 5)
+                        step<Int> = 0
+                        while (step < 3) {
+                            match (socket_exchange_bytes(c.fd(), mine, 9000000)) {
+                                got -> { if (!check(got, 6000000, 11)) { return 2 } }
+                                ? -> { return 3 }
+                            }
+                            step = step + 1
+                        }
+                        # TcpStream byte methods: echo a 100 KB block back.
+                        match (c.read_bytes_exact(100000)) {
+                            blk -> { c.write_bytes(blk) }
+                            ? -> { return 4 }
+                        }
+                        c.close()
+                        return 0
+                    }
+                    ? -> { return 1 }
+                }
+}) else -1
+            match (tcp_connect("127.0.0.1", port)) {
+                s -> {
+                    mine<Vec<UInt8>> = pattern(6000000, 11)
+                    step<Int> = 0
+                    while (step < 3) {
+                        match (socket_exchange_bytes(s.fd(), mine, 9000000)) {
+                            got -> { if (!check(got, 8000000, 5)) { return 10 } }
+                            ? -> { return 11 }
+                        }
+                        step = step + 1
+                    }
+                    blk<Vec<UInt8>> = pattern(100000, 3)
+                    if ((s.write_bytes(blk) else -1) != 100000) { return 12 }
+                    match (s.read_bytes_exact(100000)) {
+                        back -> { if (!check(back, 100000, 3)) { return 13 } }
+                        ? -> { return 14 }
+                    }
+                    s.close()
+                    l.close()
+                    r<Int> = thread_join(srv) else -2
+                    if (r != 0) { return 20 + r }
+                    println("duplex-ok")
+                    return 0
+                }
+                ? -> { return 30 }
+            }
+        }
+        ? -> { return 31 }
+    }
+}

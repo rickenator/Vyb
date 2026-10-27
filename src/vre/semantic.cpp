@@ -1761,6 +1761,8 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             name == "vyb_net_listen" || name == "vyb_net_accept" || name == "vyb_net_connect" ||
             name == "vyb_net_send" || name == "vyb_net_recv" || name == "vyb_net_recv_opt" ||
             name == "vyb_net_local_port" ||
+            name == "vyb_net_send_bytes" || name == "vyb_net_recv_bytes_opt" ||
+            name == "vyb_net_exchange_bytes_opt" ||
             name == "vyb_net_error_code" || name == "vyb_net_error_message" ||
             name == "vyb_net_sendto" || name == "vyb_net_recvfrom" || name == "vyb_net_recvfrom_opt" ||
             name == "vyb_net_last_peer_ip" || name == "vyb_net_last_peer_port" ||
@@ -2487,7 +2489,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             // return a String. Arity/diagnostic detail is left to codegen.
             static const std::set<std::string> netIntFuncs = {
                 "vyb_net_open", "vyb_net_close", "vyb_net_bind", "vyb_net_listen",
-                "vyb_net_accept", "vyb_net_connect", "vyb_net_send",
+                "vyb_net_accept", "vyb_net_connect", "vyb_net_send", "vyb_net_send_bytes",
                 "vyb_net_local_port", "vyb_net_error_code",
                 "vyb_net_sendto", "vyb_net_last_peer_port"
             };
@@ -2883,7 +2885,8 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             // native `Vec<UInt8>?` -- the byte-buffer (not String) counterpart of
             // read_all/read_at (#213). Absent on failure, present holding raw
             // bytes otherwise.
-            if (name == "vyb_io_read_bytes_opt" || name == "vyb_io_read_bytes_at_opt") {
+            if (name == "vyb_io_read_bytes_opt" || name == "vyb_io_read_bytes_at_opt" ||
+                name == "vyb_net_recv_bytes_opt" || name == "vyb_net_exchange_bytes_opt") {
                 auto* u8 = new ast::TypeName(node->loc,
                     std::make_unique<ast::Identifier>(node->loc, "UInt8"));
                 auto* vec = new ast::VecType(node->loc,

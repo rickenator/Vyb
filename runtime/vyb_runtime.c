@@ -22,6 +22,7 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <poll.h>
+#include <sys/uio.h>
 #include <termios.h>
 #include <signal.h>
 #include <sys/ioctl.h>
@@ -1758,6 +1759,167 @@ VYB_WEAK vyb_file_str __vyb_net_recv(int64_t fd, int64_t maxlen) {
     r.len = (int64_t)n;
     vyb_net_err = 0;
     return r;
+}
+
+// ---------------------------------------------------------------------------
+// Binary (byte-buffer) socket I/O (#NETBYTES). The `Vec<UInt8>` counterpart of
+// the String-based send/recv above, mirroring io's read_bytes/write_bytes: raw
+// bytes (NULs, high-bit) cross unchanged, and received buffers are plain
+// malloc'd blocks owned by the Vec (freed on Vec reclaim), NOT registry-owned.
+// ---------------------------------------------------------------------------
+#ifdef MSG_NOSIGNAL
+#define VYB_NET_NOSIG MSG_NOSIGNAL
+#else
+#define VYB_NET_NOSIG 0
+#endif
+
+// Send exactly `len` bytes starting at `data[off]` (a Vec<UInt8> of `size`
+// live bytes), looping over short writes and EINTR. Returns `len` on success,
+// -1 on error (EINVAL for an out-of-range slice) with the net error set.
+VYB_WEAK int64_t __vyb_net_send_bytes(int64_t fd, const char* data, int64_t size, int64_t off, int64_t len) {
+    if (off < 0 || len < 0 || size < 0 || off > size || len > size - off) { vyb_net_err = EINVAL; return -1; }
+    int64_t sent = 0;
+    while (sent < len) {
+        ssize_t n = send((int)fd, data + off + sent, (size_t)(len - sent), VYB_NET_NOSIG);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            vyb_net_err = errno;
+            return -1;
+        }
+        sent += (int64_t)n;
+    }
+    vyb_net_err = 0;
+    return sent;
+}
+
+// Receive into a fresh owning Vec<UInt8> layout { ptr, size, cap } at *out.
+// exact == 0: one recv of up to `n` bytes (n <= 0 -> 4096); size 0 is a clean
+//             end-of-stream.
+// exact != 0: loop until exactly `n` bytes arrived; end-of-stream first is an
+//             error (ECONNRESET). n == 0 yields the present empty Vec.
+// Returns 1 when *out was filled, 0 on error (*out untouched -> absent Vec?).
+VYB_WEAK int64_t __vyb_net_recv_bytes(int64_t fd, int64_t n, int64_t exact, vyb_vec_bytes* out) {
+    if (!out) return 0;
+    if (exact && n < 0) { vyb_net_err = EINVAL; return 0; }
+    if (!exact && n <= 0) n = 4096;
+    char* buf = (char*)malloc((size_t)(n > 0 ? n : 1));
+    if (!buf) { vyb_net_err = errno; return 0; }
+    int64_t got = 0;
+    while (got < n) {
+        ssize_t k = recv((int)fd, buf + got, (size_t)(n - got), 0);
+        if (k < 0) {
+            if (errno == EINTR) continue;
+            vyb_net_err = errno; free(buf); return 0;
+        }
+        if (k == 0) {
+            if (exact) { vyb_net_err = ECONNRESET; free(buf); return 0; }
+            break;
+        }
+        got += (int64_t)k;
+        if (!exact) break;
+    }
+    out->ptr = buf;
+    out->size = got;
+    out->cap = (n > 0 ? n : 1);
+    vyb_net_err = 0;
+    return 1;
+}
+
+static int64_t vyb_net_now_ns(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (int64_t)ts.tv_sec * 1000000000LL + (int64_t)ts.tv_nsec;
+}
+
+// How long a duplex exchange busy-polls a stalled socket before it sleeps in
+// poll(2). Spinning keeps a lock-step exchange (e.g. a per-step halo swap
+// between two nodes) at wire latency instead of scheduler-wakeup latency.
+// VYB_NET_SPIN_US overrides the default (50 us); 0 never spins.
+static int64_t vyb_net_spin_ns(void) {
+    static int64_t cached = -1;
+    if (cached < 0) {
+        const char* e = getenv("VYB_NET_SPIN_US");
+        long long us = e ? atoll(e) : 50;
+        if (us < 0) us = 0;
+        cached = (int64_t)us * 1000LL;
+    }
+    return cached;
+}
+
+// Full-duplex framed exchange: send `len` bytes from `data[off]` as one frame
+// ([8-byte little-endian length][payload]) while receiving one frame from the
+// peer, which must make the matching call. Send and receive are interleaved
+// with non-blocking I/O, so two peers exchanging frames larger than the socket
+// buffers cannot deadlock (each drains the other). The received payload (at
+// most `max_in` bytes; larger -> EMSGSIZE) is written to *out as an owning
+// Vec<UInt8>. Returns 1 on success, 0 on error (end-of-stream mid-frame ->
+// ECONNRESET); after an error the stream position is undefined.
+VYB_WEAK int64_t __vyb_net_exchange_bytes(int64_t fd, const char* data, int64_t size, int64_t off,
+                                          int64_t len, int64_t max_in, vyb_vec_bytes* out) {
+    if (!out) return 0;
+    if (off < 0 || len < 0 || size < 0 || off > size || len > size - off || max_in < 0) {
+        vyb_net_err = EINVAL; return 0;
+    }
+    unsigned char shdr[8], rhdr[8];
+    for (int i = 0; i < 8; i++) shdr[i] = (unsigned char)(((uint64_t)len >> (8 * i)) & 0xff);
+    const char* sp = data ? data + off : NULL;
+    int64_t stotal = 8 + len, sent = 0;
+    int64_t rlen = -1, got = 0;   // got counts header + payload bytes
+    char* rbuf = NULL;
+    int64_t spin = vyb_net_spin_ns(), idle_since = -1;
+    for (;;) {
+        int progress = 0;
+        if (sent < stotal) {
+            struct iovec iov[2]; int cnt = 0;
+            if (sent < 8) { iov[cnt].iov_base = shdr + sent; iov[cnt].iov_len = (size_t)(8 - sent); cnt++; }
+            if (len > 0) {
+                int64_t po = sent < 8 ? 0 : sent - 8;
+                iov[cnt].iov_base = (void*)(sp + po); iov[cnt].iov_len = (size_t)(len - po); cnt++;
+            }
+            struct msghdr mh; memset(&mh, 0, sizeof(mh));
+            mh.msg_iov = iov; mh.msg_iovlen = cnt;
+            ssize_t k = sendmsg((int)fd, &mh, MSG_DONTWAIT | VYB_NET_NOSIG);
+            if (k > 0) { sent += (int64_t)k; progress = 1; }
+            else if (k < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+                vyb_net_err = errno; free(rbuf); return 0;
+            }
+        }
+        if (rlen < 0 || got < 8 + rlen) {
+            ssize_t k;
+            if (got < 8) k = recv((int)fd, rhdr + got, (size_t)(8 - got), MSG_DONTWAIT);
+            else k = recv((int)fd, rbuf + (got - 8), (size_t)(rlen - (got - 8)), MSG_DONTWAIT);
+            if (k > 0) {
+                got += (int64_t)k; progress = 1;
+                if (rlen < 0 && got == 8) {
+                    uint64_t v = 0;
+                    for (int i = 0; i < 8; i++) v |= (uint64_t)rhdr[i] << (8 * i);
+                    if (v > (uint64_t)max_in) { vyb_net_err = EMSGSIZE; return 0; }
+                    rlen = (int64_t)v;
+                    rbuf = (char*)malloc((size_t)(rlen > 0 ? rlen : 1));
+                    if (!rbuf) { vyb_net_err = errno; return 0; }
+                }
+            } else if (k == 0) {
+                vyb_net_err = ECONNRESET; free(rbuf); return 0;
+            } else if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+                vyb_net_err = errno; free(rbuf); return 0;
+            }
+        }
+        if (sent == stotal && rlen >= 0 && got == 8 + rlen) break;
+        if (progress) { idle_since = -1; continue; }
+        int64_t now = vyb_net_now_ns();
+        if (idle_since < 0) idle_since = now;
+        if (now - idle_since < spin) continue;
+        struct pollfd pfd;
+        pfd.fd = (int)fd;
+        pfd.events = (short)(POLLIN | (sent < stotal ? POLLOUT : 0));
+        pfd.revents = 0;
+        if (poll(&pfd, 1, 1000) < 0 && errno != EINTR) { vyb_net_err = errno; free(rbuf); return 0; }
+    }
+    out->ptr = rbuf;
+    out->size = rlen;
+    out->cap = (rlen > 0 ? rlen : 1);
+    vyb_net_err = 0;
+    return 1;
 }
 
 // The port a listening socket is actually bound to (0 passed to bind ->

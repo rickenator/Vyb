@@ -28,7 +28,8 @@
 # `socket_open`/`socket_accept` return `Int?` (the descriptor), `socket_close`/
 # `socket_bind`/`socket_listen`/`socket_connect`/`socket_set_timeout` return
 # `Bool?`, `socket_send` returns `Int?` (bytes written), `socket_recv` returns
-# `String?`, `socket_local_port` returns `Int?`, and `socket_resolve` returns
+# `String?`, the binary `socket_send_bytes`/`socket_recv_bytes(_exact)`/
+# `socket_exchange_bytes` carry `Vec<UInt8>` byte buffers (`Int?` / `Vec<UInt8>?`), `socket_local_port` returns `Int?`, and `socket_resolve` returns
 # `String?`. Absence *is* the failed operation, so callers never touch a
 # sentinel `fd`/`-1`/`""`. Unwrap with `else` for a default, or `match` to
 # escalate into the fail/trap framework via the shared `NetError`/
@@ -129,6 +130,64 @@ socket_recv(fd<Int>, maxlen<Int>)<String?> -> {
     return vyb_net_recv_opt(fd, maxlen)
 }
 
+# --- Binary (byte-buffer) sockets -------------------------------------------
+# The `Vec<UInt8>` counterparts of socket_send/socket_recv, mirroring io's
+# write_bytes/read_bytes: raw bytes (NULs, high-bit bytes) cross unchanged, so
+# binary protocols need no String detour. Same `T?` contract: absence is the
+# failed operation (see socket_error_code()).
+
+# Send every byte of `data` on `fd` (short writes and EINTR are retried).
+# Returns `Int?` -- present holding data.len(), absent on failure.
+share(all)
+socket_send_bytes(fd<Int>, data<Vec<UInt8>>)<Int?> -> {
+    n<Int> = vyb_net_send_bytes(fd, data, 0, data.len())
+    if (n < 0) { return Int?() }
+    return Int?(n)
+}
+
+# Send the `len` bytes of `data` starting at byte `off` -- a prefix or window of
+# a reused buffer without copying it out. An out-of-range slice is absent.
+share(all)
+socket_send_bytes_range(fd<Int>, data<Vec<UInt8>>, off<Int>, len<Int>)<Int?> -> {
+    n<Int> = vyb_net_send_bytes(fd, data, off, len)
+    if (n < 0) { return Int?() }
+    return Int?(n)
+}
+
+# One receive of up to `maxlen` bytes into a fresh `Vec<UInt8>?` -- present
+# holding the bytes read (an empty Vec at end-of-stream), absent on a transport
+# error.
+share(all)
+socket_recv_bytes(fd<Int>, maxlen<Int>)<Vec<UInt8>?> -> {
+    return vyb_net_recv_bytes_opt(fd, maxlen, 0)
+}
+
+# Receive exactly `n` bytes (looping over partial reads) -- the read side of a
+# length-prefixed protocol. Absent on error or if the stream ends first.
+share(all)
+socket_recv_bytes_exact(fd<Int>, n<Int>)<Vec<UInt8>?> -> {
+    return vyb_net_recv_bytes_opt(fd, n, 1)
+}
+
+# Full-duplex framed exchange: send `data` as one length-prefixed frame while
+# receiving the peer's frame (at most `max_in` bytes), which must make the
+# matching call. Send and receive are interleaved, so two peers swapping frames
+# larger than the socket buffers cannot deadlock -- the lock-step halo/boundary
+# exchange of a distributed simulation. Present holding the peer's payload,
+# absent on error (oversized frame, end-of-stream, transport error).
+# VYB_NET_SPIN_US (default 50) is how long a stalled exchange busy-polls before
+# sleeping in poll(2).
+share(all)
+socket_exchange_bytes(fd<Int>, data<Vec<UInt8>>, max_in<Int>)<Vec<UInt8>?> -> {
+    return vyb_net_exchange_bytes_opt(fd, data, 0, data.len(), max_in)
+}
+
+# socket_exchange_bytes over the window data[off, off+len).
+share(all)
+socket_exchange_bytes_range(fd<Int>, data<Vec<UInt8>>, off<Int>, len<Int>, max_in<Int>)<Vec<UInt8>?> -> {
+    return vyb_net_exchange_bytes_opt(fd, data, off, len, max_in)
+}
+
 # The local port a socket is bound to (useful after binding port 0). Returns
 # `Int?` -- present holding the port, absent on failure.
 share(all)
@@ -214,6 +273,9 @@ share(all)
 aspect TcpStreamOps {
     write(self<Self>, data<String>)<Int?> -> { }
     read(self<Self>, max<Int>)<String?> -> { }
+    write_bytes(self<Self>, data<Vec<UInt8>>)<Int?> -> { }
+    read_bytes(self<Self>, max<Int>)<Vec<UInt8>?> -> { }
+    read_bytes_exact(self<Self>, n<Int>)<Vec<UInt8>?> -> { }
     close(self<Self>)<Bool?> -> { }
     peer_ip(self<Self>)<String> -> { }
     peer_port(self<Self>)<Int> -> { }
@@ -229,6 +291,17 @@ bind TcpStreamOps -> TcpStream {
     }
     read(self<Self>, max<Int>)<String?> -> {
         return vyb_net_recv_opt(self.fd, max)
+    }
+    write_bytes(self<Self>, data<Vec<UInt8>>)<Int?> -> {
+        n<Int> = vyb_net_send_bytes(self.fd, data, 0, data.len())
+        if (n < 0) { return Int?() }
+        return Int?(n)
+    }
+    read_bytes(self<Self>, max<Int>)<Vec<UInt8>?> -> {
+        return vyb_net_recv_bytes_opt(self.fd, max, 0)
+    }
+    read_bytes_exact(self<Self>, n<Int>)<Vec<UInt8>?> -> {
+        return vyb_net_recv_bytes_opt(self.fd, n, 1)
     }
     close(self<Self>)<Bool?> -> {
         r<Int> = vyb_net_close(self.fd)
