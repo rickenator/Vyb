@@ -571,6 +571,7 @@ extern "C" {
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/TargetParser/Host.h>
+#include <llvm/TargetParser/SubtargetFeature.h>
 #include <llvm/MC/TargetRegistry.h>
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/Target/TargetOptions.h>
@@ -667,6 +668,21 @@ void optimize_module(llvm::Module* module, llvm::TargetMachine* targetMachine, i
         }
     }
 
+    // Every user function is emitted `noinline` so -O0/-O1 runtime traces show
+    // each Vyb frame (cgen_decl.cpp, Phase 6.4). At -O2/-O3 that attribute
+    // blocks the inliner from folding even one-line helpers (accessors, raw
+    // load/store wrappers) into hot loops, so drop it there: the optimized
+    // levels trade frame-exact traces for speed, like any C/C++ compiler.
+    // VYB_KEEP_NOINLINE=1 restores the old behaviour for debugging.
+    if (optLevel >= 2 && !std::getenv("VYB_KEEP_NOINLINE")) {
+        for (auto& F : *module) {
+            if (!F.isDeclaration() && F.hasFnAttribute(llvm::Attribute::NoInline)
+                && !F.hasFnAttribute(llvm::Attribute::OptimizeNone)) {
+                F.removeFnAttr(llvm::Attribute::NoInline);
+            }
+        }
+    }
+
     // Run the optimization pipeline
     MPM.run(*module, MAM);
     if (vyb::g_debug_codegen) std::cout << "  IR optimization completed" << std::endl;
@@ -700,7 +716,21 @@ bool jit_optimize_module(llvm::Module* module, int optLevel) {
         return false;
     }
     llvm::TargetOptions opt;
-    auto targetMachine = target->createTargetMachine(targetTriple, "generic", "",
+    // The JIT runs on this machine and ORC codegens for the detected host, so
+    // let the IR pipeline (vectorizer / unroller cost models) see the same
+    // CPU and features instead of "generic" (SSE2-only cost model).
+    std::string hostCPU = llvm::sys::getHostCPUName().str();
+    std::string hostFeatures;
+    {
+        llvm::SubtargetFeatures sf;
+        llvm::StringMap<bool> hf;
+        if (llvm::sys::getHostCPUFeatures(hf)) {
+            for (auto& kv : hf) sf.AddFeature(kv.first(), kv.second);
+        }
+        hostFeatures = sf.getString();
+    }
+    if (std::getenv("VYB_JIT_GENERIC")) { hostCPU = "generic"; hostFeatures.clear(); }
+    auto targetMachine = target->createTargetMachine(targetTriple, hostCPU, hostFeatures,
                                                      opt, std::optional<llvm::Reloc::Model>());
     if (!targetMachine) {
         return false;
