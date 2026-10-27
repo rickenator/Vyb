@@ -1,0 +1,24 @@
+// @test: `as Int` on a CInt widens before the store
+// @description: assigning `(c as Int)` into an Int slot holding -1 must write all 64 bits (bug #4: the cast was a no-op, so the i32 store left the upper half stale)
+// @category: basic, cast
+// @expect: pass
+// @expect-output: 7
+// @expect-return: 0
+
+main()<Int> -> {
+    var<CInt> a = 7
+    var<CInt> m = -3
+    B<Int> = -1
+    B = (a as Int)
+    println(B.to_string())
+    C<Int> = -1
+    C = m as Int
+    println(C.to_string())
+    D<Int> = 4294967296
+    D = D + (a as Int)
+    println(D.to_string())
+    if (B != 7) { return 1 }
+    if (C != -3) { return 2 }
+    if (D != 4294967303) { return 3 }
+    return 0
+}

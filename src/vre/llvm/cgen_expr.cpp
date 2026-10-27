@@ -5598,6 +5598,30 @@ void LLVMCodegen::visit(vyb::ast::AsExpression* node) {
         return;
     }
 
+    // Integer -> integer of a different width where one side is not a sized Vyb Int/UInt
+    // (e.g. `ccmaj as Int` with ccmaj a CInt): the operand used to be passed through unchanged,
+    // so an i32 reached an i64 slot and the store left the slot's upper 32 bits stale (bug #4,
+    // "Storing i32 into location of type i64"). Widen per the source's signedness (C unsigned
+    // aliases CU*, CSize and Bool/i1 zero-extend), narrow by truncation.
+    if (operand->getType()->isIntegerTy() && targetTy->isIntegerTy() &&
+        operand->getType()->getIntegerBitWidth() != targetTy->getIntegerBitWidth()) {
+        unsigned srcW = operand->getType()->getIntegerBitWidth();
+        unsigned dstW = targetTy->getIntegerBitWidth();
+        bool sUnsigned = false; unsigned sBits = 0;
+        if (!vybIntClass(srcName, sUnsigned, sBits)) {
+            sUnsigned = srcW == 1 || srcName == "Bool" || srcName == "CBool" || srcName == "CSize" ||
+                        (srcName.size() > 2 && srcName.compare(0, 2, "CU") == 0);
+        }
+        if (dstW > srcW) {
+            m_currentLLVMValue = sUnsigned
+                ? builder->CreateZExt(operand, targetTy, "as.zext")
+                : builder->CreateSExt(operand, targetTy, "as.sext");
+        } else {
+            m_currentLLVMValue = builder->CreateTrunc(operand, targetTy, "as.trunc");
+        }
+        return;
+    }
+
     // Numeric Int <-> Float casts (#202): the operand and target are both
     // scalars; drive the LLVM conversion from the LLVM type shape. (Floating-
     // point operands/widths also cover Float32 <-> Float.)
