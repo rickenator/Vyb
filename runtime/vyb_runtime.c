@@ -3814,6 +3814,42 @@ VYB_WEAK vyb_file_str __vyb_strchan_try(int64_t ch) {
 // Lossless blocking dequeue for a String channel: reports presence through the
 // return value and writes the String to *out on a present result, transferring
 // the channel's retained reference to the caller. 0 means closed and drained.
+// A by-value `Vec<T>` parameter is deep-copied on function entry. The codegen reports
+// each copy's size here; the first copy at or above VYB_VEC_COPY_WARN_BYTES (default
+// 1 MiB, 0 disables) for a given parameter prints one warning to stderr, since a large
+// list passed by value is a silent per-call malloc + memcpy.
+VYB_WEAK void __vyb_vec_param_copy_check(int64_t bytes, const char* fn, const char* param, const char* type) {
+    static int64_t threshold = -1;
+    int64_t t = __atomic_load_n(&threshold, __ATOMIC_RELAXED);
+    if (t < 0) {
+        const char* e = getenv("VYB_VEC_COPY_WARN_BYTES");
+        t = (e && *e) ? strtoll(e, NULL, 10) : (int64_t)1 << 20;
+        if (t < 0) t = 0;
+        __atomic_store_n(&threshold, t, __ATOMIC_RELAXED);
+    }
+    if (t == 0 || bytes < t) return;
+    static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
+    static const char* seen[64];
+    static int nseen = 0;
+    int fresh = 1;
+    pthread_mutex_lock(&mu);
+    for (int i = 0; i < nseen; i++) {
+        if (seen[i] == param) { fresh = 0; break; }
+    }
+    if (fresh) {
+        if (nseen < 64) seen[nseen++] = param;
+        else fresh = 0;   // stop warning after 64 distinct parameters
+    }
+    pthread_mutex_unlock(&mu);
+    if (!fresh) return;
+    fprintf(stderr,
+        "vyb: warning: %s(): by-value parameter '%s' (%s) deep-copied %lld bytes on entry, "
+        "and every call copies it again. To borrow the caller's list, declare the parameter "
+        "their<%s const> and pass view(x). (Shown once per parameter; "
+        "VYB_VEC_COPY_WARN_BYTES sets the threshold, 0 disables.)\n",
+        fn ? fn : "?", param ? param : "?", type ? type : "Vec", (long long)bytes, type ? type : "Vec<T>");
+}
+
 VYB_WEAK int64_t __vyb_strchan_recv_opt(int64_t ch, vyb_file_str* out) {
     if (!ch || !out) return 0;
     vyb_strchan* c = (vyb_strchan*)(intptr_t)ch;
