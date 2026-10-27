@@ -17,6 +17,11 @@ import network::{socket_open, socket_bind, socket_listen, socket_accept,
                  socket_send_bytes, socket_send_bytes_range, socket_recv_bytes,
                  socket_recv_bytes_exact, socket_exchange_bytes, Socket}
 
+# Forward a read-only borrow through a user function (no copy of the caller's buffer).
+send_window(fd<Int>, d<their<Vec<UInt8> const>>, off<Int>, len<Int>)<Int> -> {
+    return socket_send_bytes_range(fd, d, off, len) else -1
+}
+
 main()<Int> -> {
     srv<Int> = socket_open(Socket::AF_INET, Socket::SOCK_STREAM, 0) else -1
     if (srv < 0) { return 1 }
@@ -35,7 +40,7 @@ main()<Int> -> {
     b.push(1 as UInt8)
     b.push(7 as UInt8)
     b.push(66 as UInt8)
-    if ((socket_send_bytes(cli, b) else -1) != 5) { return 10 }
+    if ((socket_send_bytes(cli, view(b)) else -1) != 5) { return 10 }
     match (socket_recv_bytes_exact(conn, 5)) {
         r -> {
             if (r.len() != 5) { return 11 }
@@ -46,7 +51,7 @@ main()<Int> -> {
     }
 
     # 2. A window of a buffer: bytes [1, 4).
-    if ((socket_send_bytes_range(cli, b, 1, 3) else -1) != 3) { return 20 }
+    if ((socket_send_bytes_range(cli, view(b), 1, 3) else -1) != 3) { return 20 }
     match (socket_recv_bytes_exact(conn, 3)) {
         r -> {
             if ((r.get(0) as Int) != 255 || (r.get(2) as Int) != 7) { return 21 }
@@ -54,13 +59,13 @@ main()<Int> -> {
         ? -> { return 22 }
     }
     # Out-of-range slices are the absent Int?, and nothing is sent.
-    if ((socket_send_bytes_range(cli, b, 3, 5) else -1) != -1) { return 23 }
-    if ((socket_send_bytes_range(cli, b, -1, 1) else -1) != -1) { return 24 }
+    if ((socket_send_bytes_range(cli, view(b), 3, 5) else -1) != -1) { return 23 }
+    if ((socket_send_bytes_range(cli, view(b), -1, 1) else -1) != -1) { return 24 }
     if (socket_error_code() == 0) { return 25 }
 
     # 3. Empty buffer: present 0; an exact read of 0 bytes is the present empty Vec.
     empty<Vec<UInt8>> = Vec()
-    if ((socket_send_bytes(cli, empty) else -1) != 0) { return 30 }
+    if ((socket_send_bytes(cli, view(empty)) else -1) != 0) { return 30 }
     match (socket_recv_bytes_exact(conn, 0)) {
         r -> { if (r.len() != 0) { return 31 } }
         ? -> { return 32 }
@@ -70,7 +75,7 @@ main()<Int> -> {
     big<Vec<UInt8>> = Vec()
     i<Int> = 0
     while (i < 60000) { big.push((i % 251) as UInt8) ; i = i + 1 }
-    if ((socket_send_bytes(cli, big) else -1) != 60000) { return 40 }
+    if ((socket_send_bytes(cli, view(big)) else -1) != 60000) { return 40 }
     match (socket_recv_bytes_exact(conn, 60000)) {
         r -> {
             if (r.len() != 60000) { return 41 }
@@ -85,7 +90,7 @@ main()<Int> -> {
     }
 
     # 5. socket_recv_bytes is one read: it returns what is there, up to maxlen.
-    if ((socket_send_bytes_range(cli, b, 0, 2) else -1) != 2) { return 50 }
+    if ((socket_send_bytes_range(cli, view(b), 0, 2) else -1) != 2) { return 50 }
     match (socket_recv_bytes(conn, 4096)) {
         r -> { if (r.len() < 1 || r.len() > 2) { return 51 } ;
                if (r.len() == 1) { socket_recv_bytes_exact(conn, 1) } }
@@ -101,11 +106,11 @@ main()<Int> -> {
     fr.push(9 as UInt8)
     fr.push(8 as UInt8)
     fr.push(0 as UInt8)
-    if ((socket_send_bytes(conn, fr) else -1) != 11) { return 60 }
+    if ((socket_send_bytes(conn, view(fr)) else -1) != 11) { return 60 }
     out<Vec<UInt8>> = Vec()
     out.push(1 as UInt8)
     out.push(2 as UInt8)
-    match (socket_exchange_bytes(cli, out, 16)) {
+    match (socket_exchange_bytes(cli, view(out), 16)) {
         r -> {
             if (r.len() != 3) { return 61 }
             if ((r.get(0) as Int) != 9 || (r.get(2) as Int) != 0) { return 62 }
@@ -121,14 +126,31 @@ main()<Int> -> {
         ? -> { return 67 }
     }
 
+    # 6b. A borrow forwarded through a user function sends the caller's live
+    #     bytes: a write to the Vec after the first send shows up in the second.
+    win<Vec<UInt8>> = Vec()
+    win.push(5 as UInt8)
+    win.push(6 as UInt8)
+    win.push(7 as UInt8)
+    if (send_window(cli, view(win), 1, 2) != 2) { return 68 }
+    win.set(2, 42 as UInt8)
+    if (send_window(cli, view(win), 1, 2) != 2) { return 69 }
+    match (socket_recv_bytes_exact(conn, 4)) {
+        r -> {
+            if ((r.get(0) as Int) != 6 || (r.get(1) as Int) != 7) { return 72 }
+            if ((r.get(2) as Int) != 6 || (r.get(3) as Int) != 42) { return 73 }
+        }
+        ? -> { return 74 }
+    }
+
     # 7. A frame larger than max_in is refused (absent), not allocated.
     hdr<Vec<UInt8>> = Vec()
     hdr.push(100 as UInt8)
     k = 0
     while (k < 7) { hdr.push(0 as UInt8) ; k = k + 1 }
-    socket_send_bytes(conn, hdr)
+    socket_send_bytes(conn, view(hdr))
     absent<Bool> = false
-    match (socket_exchange_bytes(cli, empty, 16)) {
+    match (socket_exchange_bytes(cli, view(empty), 16)) {
         r -> { absent = false }
         ? -> { absent = true }
     }

@@ -42,7 +42,7 @@ main()<Int> -> {
                         mine<Vec<UInt8>> = pattern(8000000, 5)
                         step<Int> = 0
                         while (step < 3) {
-                            match (socket_exchange_bytes(c.fd(), mine, 9000000)) {
+                            match (socket_exchange_bytes(c.fd(), view(mine), 9000000)) {
                                 got -> { if (!check(got, 6000000, 11)) { return 2 } }
                                 ? -> { return 3 }
                             }
@@ -50,7 +50,7 @@ main()<Int> -> {
                         }
                         # TcpStream byte methods: echo a 100 KB block back.
                         match (c.read_bytes_exact(100000)) {
-                            blk -> { c.write_bytes(blk) }
+                            blk -> { c.write_bytes(view(blk)) }
                             ? -> { return 4 }
                         }
                         c.close()
@@ -64,14 +64,14 @@ main()<Int> -> {
                     mine<Vec<UInt8>> = pattern(6000000, 11)
                     step<Int> = 0
                     while (step < 3) {
-                        match (socket_exchange_bytes(s.fd(), mine, 9000000)) {
+                        match (socket_exchange_bytes(s.fd(), view(mine), 9000000)) {
                             got -> { if (!check(got, 8000000, 5)) { return 10 } }
                             ? -> { return 11 }
                         }
                         step = step + 1
                     }
                     blk<Vec<UInt8>> = pattern(100000, 3)
-                    if ((s.write_bytes(blk) else -1) != 100000) { return 12 }
+                    if ((s.write_bytes(view(blk)) else -1) != 100000) { return 12 }
                     match (s.read_bytes_exact(100000)) {
                         back -> { if (!check(back, 100000, 3)) { return 13 } }
                         ? -> { return 14 }

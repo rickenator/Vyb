@@ -134,12 +134,14 @@ socket_recv(fd<Int>, maxlen<Int>)<String?> -> {
 # The `Vec<UInt8>` counterparts of socket_send/socket_recv, mirroring io's
 # write_bytes/read_bytes: raw bytes (NULs, high-bit bytes) cross unchanged, so
 # binary protocols need no String detour. Same `T?` contract: absence is the
-# failed operation (see socket_error_code()).
+# failed operation (see socket_error_code()). The sending side takes a
+# read-only borrow -- pass `view(buf)` -- so a large, reused send buffer is
+# never copied (a by-value `Vec` parameter is deep-copied on every call).
 
 # Send every byte of `data` on `fd` (short writes and EINTR are retried).
 # Returns `Int?` -- present holding data.len(), absent on failure.
 share(all)
-socket_send_bytes(fd<Int>, data<Vec<UInt8>>)<Int?> -> {
+socket_send_bytes(fd<Int>, data<their<Vec<UInt8> const>>)<Int?> -> {
     n<Int> = vyb_net_send_bytes(fd, data, 0, data.len())
     if (n < 0) { return Int?() }
     return Int?(n)
@@ -148,7 +150,7 @@ socket_send_bytes(fd<Int>, data<Vec<UInt8>>)<Int?> -> {
 # Send the `len` bytes of `data` starting at byte `off` -- a prefix or window of
 # a reused buffer without copying it out. An out-of-range slice is absent.
 share(all)
-socket_send_bytes_range(fd<Int>, data<Vec<UInt8>>, off<Int>, len<Int>)<Int?> -> {
+socket_send_bytes_range(fd<Int>, data<their<Vec<UInt8> const>>, off<Int>, len<Int>)<Int?> -> {
     n<Int> = vyb_net_send_bytes(fd, data, off, len)
     if (n < 0) { return Int?() }
     return Int?(n)
@@ -178,13 +180,13 @@ socket_recv_bytes_exact(fd<Int>, n<Int>)<Vec<UInt8>?> -> {
 # VYB_NET_SPIN_US (default 50) is how long a stalled exchange busy-polls before
 # sleeping in poll(2).
 share(all)
-socket_exchange_bytes(fd<Int>, data<Vec<UInt8>>, max_in<Int>)<Vec<UInt8>?> -> {
+socket_exchange_bytes(fd<Int>, data<their<Vec<UInt8> const>>, max_in<Int>)<Vec<UInt8>?> -> {
     return vyb_net_exchange_bytes_opt(fd, data, 0, data.len(), max_in)
 }
 
 # socket_exchange_bytes over the window data[off, off+len).
 share(all)
-socket_exchange_bytes_range(fd<Int>, data<Vec<UInt8>>, off<Int>, len<Int>, max_in<Int>)<Vec<UInt8>?> -> {
+socket_exchange_bytes_range(fd<Int>, data<their<Vec<UInt8> const>>, off<Int>, len<Int>, max_in<Int>)<Vec<UInt8>?> -> {
     return vyb_net_exchange_bytes_opt(fd, data, off, len, max_in)
 }
 
@@ -273,7 +275,7 @@ share(all)
 aspect TcpStreamOps {
     write(self<Self>, data<String>)<Int?> -> { }
     read(self<Self>, max<Int>)<String?> -> { }
-    write_bytes(self<Self>, data<Vec<UInt8>>)<Int?> -> { }
+    write_bytes(self<Self>, data<their<Vec<UInt8> const>>)<Int?> -> { }
     read_bytes(self<Self>, max<Int>)<Vec<UInt8>?> -> { }
     read_bytes_exact(self<Self>, n<Int>)<Vec<UInt8>?> -> { }
     close(self<Self>)<Bool?> -> { }
@@ -292,7 +294,7 @@ bind TcpStreamOps -> TcpStream {
     read(self<Self>, max<Int>)<String?> -> {
         return vyb_net_recv_opt(self.fd, max)
     }
-    write_bytes(self<Self>, data<Vec<UInt8>>)<Int?> -> {
+    write_bytes(self<Self>, data<their<Vec<UInt8> const>>)<Int?> -> {
         n<Int> = vyb_net_send_bytes(self.fd, data, 0, data.len())
         if (n < 0) { return Int?() }
         return Int?(n)

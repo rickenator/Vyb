@@ -21,7 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that interleaves non-blocking send and recv. Two peers exchanging frames larger than the socket
   buffers therefore cannot deadlock (a lock-step halo exchange), and `VYB_NET_SPIN_US` (default
   50) sets how long a stalled exchange spins before it sleeps in poll(2). Runtime:
-  `__vyb_net_send_bytes`, `__vyb_net_recv_bytes`, `__vyb_net_exchange_bytes`. Tests:
+  `__vyb_net_send_bytes`, `__vyb_net_recv_bytes`, `__vyb_net_exchange_bytes`. The sending side
+  takes a read-only borrow, `data<their<Vec<UInt8> const>>`, which callers pass as `view(buf)`.
+  A by-value `Vec` parameter deep-copies the buffer on every call: an 11 MB send buffer forwarded
+  through one user function cost 9.2 ms per exchange by value and 3 µs as a borrow. Tests:
   `test/modules/test_network_bytes.vyb` and `test/modules/test_network_bytes_duplex.vyb`.
 - **CUDA kernel intrinsics for quantised LLM inference (VybForge 27B Ridge decode)** — the
   native-width, bit-cast, warp-shuffle/reduction, int8 `dp4a`, q8_1 quantisation, `mma.m16n8k16`

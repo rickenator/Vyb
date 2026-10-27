@@ -3094,6 +3094,11 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                 llvm::Value* fd = needArg(0); llvm::Value* data = needArg(1);
                 llvm::Value* off = needArg(2); llvm::Value* len = needArg(3);
                 if (!fd || !data || !off || !len) return;
+                if (data->getType()->isPointerTy()) {
+                    // a their<Vec<UInt8>> borrow: read the caller's { ptr, size, cap } in place
+                    llvm::StructType* vt = llvm::StructType::get(*context, {int8PtrType, int64Type, int64Type}, false);
+                    data = builder->CreateLoad(vt, data, "net.vecborrow");
+                }
                 llvm::Value* dataPtr = toStrPtr(data);
                 llvm::Value* dataSize = llvm::ConstantInt::get(int64Type, 0);
                 if (data->getType()->isStructTy())
@@ -4411,6 +4416,8 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
             llvm::Value* has = nullptr;
             if (isEx) {
                 llvm::Value* data = av[1];
+                if (data->getType()->isPointerTy())   // a their<Vec<UInt8>> borrow
+                    data = builder->CreateLoad(vecByteTy, data, "netbytes.vecborrow");
                 llvm::Value* dataPtr = data->getType()->isStructTy() ? builder->CreateExtractValue(data, 0, "netbytes.vecptr") : llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0));
                 llvm::Value* dataSize = llvm::ConstantInt::get(int64Type, 0);
                 if (data->getType()->isStructTy())
