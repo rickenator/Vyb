@@ -159,6 +159,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `version:` dep rebuilds with the registry absent.
 
 ### Fixed
+- **Subscripting a `Vec` bound by an optional present arm works** — in
+  `match (f()) { g -> ... }` (or a `select` present arm) over a `Vec<T>?`, the binding kept
+  the payload type as written, the unresolved `TypeName` `Vec<T>`, while a declared
+  variable gets the resolved `VecType`. So `g[i]` had no type: `addr(g[0])` failed with
+  "Cannot take address of expression with unknown type using addr()", and
+  `q<UInt8> = g[0]` failed in codegen with "Could not determine element type for array
+  access". The workaround was to copy the binding into a typed local first. A `Vec`/`Tuple`
+  payload is now resolved the same way as a declaration's type. Covered by
+  `test/optionals/test_optional_vec_binding_index.vyb`.
 - **The shipped `filter`/`map` over a `Vec<mild<T>>` no longer leaks (#427 defects 6/7, #451
   closed for this half)** — a call whose callee is a `fn(...)` VALUE is emitted by its own arm:
   it rebuilds the callee's signature, prepends the hidden environment and builds its own argument

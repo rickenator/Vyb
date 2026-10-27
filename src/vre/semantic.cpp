@@ -6436,7 +6436,7 @@ void SemanticAnalyzer::visit(ast::SelectExpression* node) {
                 // analyzed with its payload name in scope instead of cascading
                 // "Undefined identifier" errors for an arm that never runs.
                 {
-                    ast::TypeNode* optPayload = selectOptionalType->containedType.get();
+                    ast::TypeNode* optPayload = resolveOptionalPayloadType(selectOptionalType->containedType.get());
                     if (currentScope->lookupDirect(vid->name)) {
                         addError("Redefinition of variable \"" + vid->name +
                                  "\" in optional present pattern.", vid);
@@ -7715,7 +7715,7 @@ void SemanticAnalyzer::visit(ast::MatchStatement* node) {
                         addError("Optional present arm has no payload type.", vid);
                     } else {
                         if (!presentGuard && unguardedPresentIndex == SIZE_MAX) unguardedPresentIndex = i;
-                        ast::TypeNode* optPayload = matchedOptionalType->containedType.get();
+                        ast::TypeNode* optPayload = resolveOptionalPayloadType(matchedOptionalType->containedType.get());
                         currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, vid->name, false,
                             ast::OwnershipKind::MY,
                             optPayload ? retainType(optPayload->clone().release()) : nullptr});
@@ -8098,6 +8098,25 @@ void SemanticAnalyzer::registerGenericEnumConcrete(
         }
         concrete[kv.first] = std::move(concretePayload);
     }
+}
+
+ast::TypeNode* SemanticAnalyzer::resolveOptionalPayloadType(ast::TypeNode* payload) {
+    // The payload of a `Vec<T>?` is still the TypeName `Vec<T>` as written; a declared
+    // variable gets the VecType that visiting the TypeName produces, but an optional
+    // payload binding cloned the raw TypeName. Subscripting such a binding then had no
+    // element type: `g[0]` was untyped in this pass (so `addr(g[0])` reported "unknown
+    // type") and codegen could not find the element type. Resolve it the same way.
+    auto* payloadName = dynamic_cast<ast::TypeName*>(payload);
+    if (!payloadName || !payloadName->identifier) return payload;
+    const std::string& n = payloadName->identifier->name;
+    if (n != "Vec" && n != "Tuple") return payload;
+    if (!typeOf(payloadName)) payloadName->accept(*this);
+    auto resolved = typeOf(payloadName);
+    if (resolved && (dynamic_cast<ast::VecType*>(resolved.get()) ||
+                     dynamic_cast<ast::TupleTypeNode*>(resolved.get()))) {
+        return resolved.get();
+    }
+    return payload;
 }
 
 void SemanticAnalyzer::materializeConcreteEnum(ast::TypeNode* type) {
