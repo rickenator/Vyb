@@ -1,3 +1,4 @@
+// @expect-return: 32
 // Simple tuple indexing test
 
 get_pair()<Tuple<Int, Int>> -> {

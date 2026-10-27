@@ -248,8 +248,8 @@ jobs:
       - name: 32-bit store/atomic access-width probe on silicon (#301)
         # The runner escalates a failed check as a ProbeError carrying that check's
         # own exit status; the runtime's untrapped-error handler exits with it, so
-        # bash -e fails the job. A main() Int return is only printed, never the
-        # process status -- `return n` alone cannot fail CI.
+        # bash -e fails the job. A main() Int return is also the process status
+        # (low 8 bits), so `return n` with n != 0 fails the step too.
         shell: bash
         run: |
           set -euo pipefail
@@ -290,9 +290,9 @@ jobs:
         run: VYB_STDLIB="$PWD/stdlib" ./build-ci/vyb --kernel fixtures/kernel/launch5.vyb --gpu sm_86 --ptx fixtures/cuda/launch5.ptx
 
       - name: Five-argument kernel from a Vyb-built params array, on silicon (#476)
-        # A `main() Int` return is only printed, so gate on the runner's own success
-        # line instead: it is printed after the launch value and the one-call String
-        # upload have both been verified against the device.
+        # A non-zero `main() Int` return fails the step under set -e; also gate on
+        # the runner's own success line: it is printed after the launch value and the
+        # one-call String upload have both been verified against the device.
         shell: bash
         run: |
           set -euo pipefail

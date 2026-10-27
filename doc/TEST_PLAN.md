@@ -220,7 +220,7 @@ For each test file, verify:
 
 main()<Int> -> {
     [test logic]
-    return 0              # printed as JSON `0`; the process still exits 0
+    return 0              # printed as JSON `0` and is the exit status (0 = pass)
 }
 ```
 

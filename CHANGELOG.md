@@ -300,6 +300,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   values, LeakSanitizer-clean). Closes #439.
 
 ### Changed
+- **`main()<Int>` return is the process exit status again** — an `Int` (or failable
+  `Int`) `main` return is still printed as JSON, and its low 8 bits are now also the
+  exit status, in the JIT runner and in `--build`/`--compile` executables alike
+  (`return 300` exits 44, `return -1` exits 255). Bool, Float, String, struct, tuple
+  and `Vec` returns still exit 0. Codegen stores the value in the exported
+  `__vyb_main_exit_status`, which the JIT runner and the standalone `int main()`
+  wrapper read. The test harnesses (`test/run_tests.vyb`, `vyb test`) now expect an
+  executed pass test's integer `@expect-return` as its exit status.
+  `test/process/test_main_exit_code.vyb` covers 42, 0, 300, -1, a computed value,
+  Bool/Void mains, `exit(3)`, and the harness accepting or rejecting a non-zero return.
 - **`bare()` now emits a struct's field values, in declaration order (#383)** — the
   second half of the intrinsic cleanup. `bare(x)` was an exact alias of `notype(x)`:
   it forwarded the value and the serializer produced the keyed object it was

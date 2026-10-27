@@ -1,3 +1,4 @@
+// @expect-return: 42
 // Test unified syntax with integers (should work perfectly)
 x<Int> = 42;
 

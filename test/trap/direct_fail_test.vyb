@@ -1,3 +1,4 @@
+// @expect-return: -1
 # Test fail directly in trap block (not in called function)
 
 main()<Int> -> {

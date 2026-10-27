@@ -56,7 +56,7 @@ Legend: ✅ Implemented | 🚧 Partial / Stubbed | 📋 Planned
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| `main()<Int>` / `<Bool>` / `<Float>` / `<String>` return | ✅ | Printed as JSON to stdout; the process always exits 0 |
+| `main()<Int>` / `<Bool>` / `<Float>` / `<String>` return | ✅ | Printed as JSON to stdout; an Int return is also the exit status (low 8 bits), others exit 0 |
 | `main()<struct>` (single) | ✅ | Keyed JSON object with plain field names and intact `Vec` fields (#182) |
 | `main()<T1, T2, ...>` multi-value return | ✅ | JSON array; primitives, structs and `Vec` elements all serialize (#375) |
 | `exit(n)` builtin | ✅ | The only way to set the process status; no output (#374) |

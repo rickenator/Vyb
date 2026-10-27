@@ -1,3 +1,4 @@
+// @expect-return: 10
 main()<Int> -> {
     x<my<Int>> = my(10);
 

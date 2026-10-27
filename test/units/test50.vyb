@@ -1,3 +1,4 @@
+// @expect-return: 10
 // test50.vyb - Tests borrow(expr) and view(expr) syntax
 main()<Int> -> {
     x<my<Int>> = my(10);

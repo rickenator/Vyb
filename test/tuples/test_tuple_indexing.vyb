@@ -1,3 +1,4 @@
+// @expect-return: 41
 // Test tuple element access using [index] syntax
 
 get_triple()<Tuple<Int, Int, Int>> -> {

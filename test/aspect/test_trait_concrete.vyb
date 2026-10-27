@@ -1,3 +1,4 @@
+// @expect-return: 1
 # Test concrete aspect implementation without generics
 # Define a simple struct and implement a aspect -> it
 

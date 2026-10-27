@@ -1,3 +1,4 @@
+// @expect-return: 30
 // Test that struct construction works correctly
 
 struct Point {

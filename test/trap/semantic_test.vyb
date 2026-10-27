@@ -1,5 +1,6 @@
 # Semantic Test: Complete error handling with struct definition
 // @expect: pass
+// @expect-return: -1
 
 struct MyError {
     code<Int>,

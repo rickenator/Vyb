@@ -1,3 +1,4 @@
+// @expect-return: 3
 // Phase 3 (simplified): Trait implementation -> concrete Vec type
 // Tests bind Trait -> Vec<Int> (concrete generic type)
 
