@@ -1,0 +1,32 @@
+// @test: small kernel helpers are inlined into the kernel by default
+// @description: in --kernel mode a value-returning helper is a device function. It used to
+//   carry `noinline` (the host stack-trace policy), so every use was a real PTX `.func`
+//   call with parameter marshalling. Kernel helpers are now left to the optimizer's
+//   inliner, so both calls to `wsel` below are inlined (stdout reports the call counts).
+// @category: kernel, cuda
+// @expect: pass
+// @vyb-args: --kernel
+// @expect-output: Kernel helper calls: 2 before optimization, 0 after inlining
+
+# Helper: decode a weight from a u8 code (fast path) or an f32 fallback table.
+wsel(c<Int>, hi<Float32>, lo<Float32>, wc<Int>, k<Int>)<Float32> -> {
+    w<Float32> = 0.0 as Float32
+    if (c != 0) {
+        w = fma_f32(c as Float32, hi, (c as Float32) * lo)
+    } else {
+        w = ld_f32n(wc + k * 4)
+    }
+    return w
+}
+
+# Kernel: two decodes per thread.
+wdec(out<Int>, codes<Int>, wc<Int>, n<Int>) -> {
+    gid<Int> = blk_x() * dim_x() + tid_x()
+    if (gid < n) {
+        hi<Float32> = 0.5 as Float32
+        lo<Float32> = 0.25 as Float32
+        a<Float32> = wsel(ld_u8(codes + gid * 2), hi, lo, wc, gid * 2)
+        b<Float32> = wsel(ld_u8(codes + gid * 2 + 1), hi, lo, wc, gid * 2 + 1)
+        st_f32n(out + gid * 4, a + b)
+    }
+}

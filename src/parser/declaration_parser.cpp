@@ -36,6 +36,10 @@ vyb::ast::DeclPtr DeclarationParser::parse() {
     token::Token current_token = this->peek();
     token::Token next_token = this->peekNext();
 
+    if (current_token.type == vyb::TokenType::AT) {
+        // Function attribute(s), e.g. `@inline` / `@noinline`, then the function.
+        return this->parse_function();
+    }
     if (current_token.type == vyb::TokenType::KEYWORD_EXTERN) {
         if (next_token.type == vyb::TokenType::STRING_LITERAL) {
             return this->parse_extern_block();
@@ -395,7 +399,48 @@ vyb::ast::FunctionParameter DeclarationParser::parse_function_parameter_struct()
 
 
 // Returns vyb::FunctionDeclaration as per parser.hpp (assuming it's a DeclPtr compatible type)
+// Leading function attributes: `@inline` (always inline the function into its
+// callers) and `@noinline` (never inline it). They precede a top-level function or
+// a bind/aspect method and may be on their own line:
+//
+//     @inline
+//     scale(x<Float32>, k<Float32>)<Float32> -> { return x * k }
 std::unique_ptr<vyb::ast::FunctionDeclaration> DeclarationParser::parse_function() {
+    this->skip_indents_dedents();
+    int inline_hint = 0;
+    while (this->peek().type == vyb::TokenType::AT) {
+        SourceLocation at_loc = this->current_location();
+        this->consume();
+        if (this->peek().type != vyb::TokenType::IDENTIFIER) {
+            throw std::runtime_error("Expected attribute name after '@' at " + location_to_string(at_loc));
+        }
+        std::string attr = this->consume().lexeme;
+        int hint = 0;
+        if (attr == "inline") hint = 1;
+        else if (attr == "noinline") hint = -1;
+        else {
+            throw std::runtime_error("Unknown function attribute '@" + attr + "' at " + location_to_string(at_loc) +
+                                     " (expected @inline or @noinline)");
+        }
+        if (inline_hint != 0 && inline_hint != hint) {
+            throw std::runtime_error("Conflicting attributes @inline and @noinline at " + location_to_string(at_loc));
+        }
+        inline_hint = hint;
+        this->skip_comments_and_newlines();
+        this->skip_indents_dedents();
+    }
+    auto fn = this->parse_function_unattributed();
+    if (fn && inline_hint != 0) {
+        if (!fn->body) {
+            throw std::runtime_error(std::string("Attribute @") + (inline_hint > 0 ? "inline" : "noinline") +
+                                     " needs a function with a body ('" + (fn->id ? fn->id->name : std::string("?")) + "')");
+        }
+        fn->inlineHint = inline_hint;
+    }
+    return fn;
+}
+
+std::unique_ptr<vyb::ast::FunctionDeclaration> DeclarationParser::parse_function_unattributed() {
     // Skip INDENT/DEDENT tokens before parsing a function (especially for indentation-based bodies)
     this->skip_indents_dedents();
     // Fresh per-function scope for bare-inference classification. Parameters

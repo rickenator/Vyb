@@ -1,0 +1,13 @@
+// @test: unknown function attribute is a parse error
+// @category: parser
+// @expect: fail
+// @expect-error: Unknown function attribute '@fast'
+
+@fast
+f(x<Int>)<Int> -> {
+    return x + 1
+}
+
+main()<Int> -> {
+    return f(1)
+}

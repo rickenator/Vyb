@@ -258,6 +258,7 @@ namespace vyb { // Changed Vyb to vyb
         DeclarationParser(const std::vector<vyb::token::Token>& tokens, size_t& pos, const std::string& file_path, TypeParser& type_parser, ExpressionParser& expr_parser, StatementParser& stmt_parser, std::set<std::string>& knownTypeNames);
         vyb::ast::DeclPtr parse();
         std::unique_ptr<vyb::ast::FunctionDeclaration> parse_function();
+        std::unique_ptr<vyb::ast::FunctionDeclaration> parse_function_unattributed();
         std::unique_ptr<vyb::ast::Declaration> parse_struct();
         std::unique_ptr<vyb::ast::Declaration> parse_trait_declaration();
         std::unique_ptr<vyb::ast::Declaration> parse_impl();

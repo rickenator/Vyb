@@ -167,7 +167,7 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 ### Running the test suite
 
 ```bash
-# 1322 .vyb tests exercised through compile + run + output/return checks
+# 1326 .vyb tests exercised through compile + run + output/return checks
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test
 ```
 
@@ -449,6 +449,25 @@ The same applies inside a shared module: a `share(all)` function may call a
 sibling `share(all)` helper declared later in the same module file (the helper
 must still be shared and imported by consumers, per the module contract). See
 [§3.19](#319-modules-and-imports).
+
+**Inlining attributes.** `@inline` or `@noinline` may precede a function or a
+bind/aspect method that has a body, on its own line or the same line:
+
+```vyb
+@inline
+sq(x<Int>)<Int> -> { return x * x }      # always inlined into its callers
+
+@noinline
+cube(x<Int>)<Int> -> { return x * x * x }  # never inlined
+```
+
+Without an attribute, a host function is kept out of line, so every Vyb frame
+shows up in a stack trace. An `@inline` function is folded into its callers and
+does not get its own frame. In `--kernel` builds there are no stack traces, so a
+device helper with no attribute is left to the optimizer, which inlines small
+helpers. `@noinline` keeps a helper as a real PTX `.func` call. Any other
+`@name` is a parse error. A recursive `@inline` function still compiles, but its
+recursive calls stay calls.
 
 ### 3.4.1 Parameter passing: value, borrow, and ownership
 
@@ -2870,7 +2889,7 @@ Canonical suite runner — a Vyb program (`test/run_tests.vyb`), wired into CTes
 as `run-tests`:
 
 ```bash
-./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1322 tests)
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1326 tests)
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --category async  # filter by category
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --json results.json --evidence evidence.json
 ```

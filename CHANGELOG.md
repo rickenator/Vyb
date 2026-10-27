@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`@inline` / `@noinline` function attributes, and kernel helpers are inlined automatically.**
+  `@inline` before a function or bind/aspect method makes it `alwaysinline`, and `@noinline`
+  keeps it out of line. Both work on the host and in `--kernel` builds. Device helpers in
+  `--kernel` builds no longer get the host's stack-trace `noinline`, so the -O2 inliner inlines
+  small ones. Before this, every helper was a real PTX `.func` call, which made hot kernels
+  inline helpers by hand. `--kernel` builds print `Kernel helper calls: N before optimization,
+  M after inlining`. Host functions without an attribute are unchanged. Tests are in
+  `test/parser/test_inline_attr*.vyb` and `test/kernel/test_{inline,noinline}_helper*.vyb`.
 - **CUDA kernel intrinsics for quantised LLM inference (VybForge 27B Ridge decode)** — the
   native-width, bit-cast, warp-shuffle/reduction, int8 `dp4a`, q8_1 quantisation, `mma.m16n8k16`
   (f16 and s8) and `cp.async` intrinsics listed in `doc/CUDA.md` → "Native-width, bit-level, warp
