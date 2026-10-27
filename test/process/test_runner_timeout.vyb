@@ -1,0 +1,58 @@
+// @test: run_tests.vyb per-test timeout
+// @description: the suite runner fails a hanging test once its per-test limit
+//   (// @timeout: SECS here) runs out, reports "timed out after N s", keeps going
+//   with the next test and exits 1, instead of stalling the whole suite.
+// @category: process, stdlib, tooling
+// @expect: pass
+// @expect-output: runner timeout ok
+// @env: VYB_STDLIB=stdlib
+import io::{close, open_write, write_str}
+import process::{exec_output}
+import time::{time_nanos}
+
+sh(cmd<String>)<String> -> {
+    out<String> = ""
+    freedom {
+        match (exec_output(cmd)) {
+            s -> { out = s }
+            ? -> { out = "" }
+        }
+    }
+    return out
+}
+
+put(path<String>, text<String>)<Bool> -> {
+    match (open_write(path)) {
+        f -> { match (write_str(f, text)) { n -> { close(f); return true } ? -> { close(f); return false } } }
+        ? -> { return false }
+    }
+    return false
+}
+
+main()<Int> -> {
+    # the compiler running this test: the shell's parent is this JIT process
+    vyb<String> = sh("readlink /proc/$PPID/exe").trim()
+    dir<String> = sh("mktemp -d /tmp/vyb-timeout-XXXXXX").trim()
+    if (vyb.len() == 0 || dir.len() == 0) { println("setup failed"); return 1 }
+    hang<String> = "// @test: hang_fixture\n// @timeout: 1\n// @expect: pass\nextern \"C\" { usleep(us<CUInt>)<CInt> }\nmain()<Int> -> {\n    var<Int> i = 0\n    while (i < 1) { freedom { usleep(100000) } }\n    return 0\n}\n"
+    quick<String> = "// @test: quick_fixture\n// @expect: pass\n// @expect-output: quick done\nmain()<Int> -> {\n    println(\"quick done\")\n    return 0\n}\n"
+    if (!put(dir + "/a_hang.vyb", hang) || !put(dir + "/b_quick.vyb", quick)) { println("cannot write fixtures"); return 1 }
+
+    t0<Int> = time_nanos() else 0
+    out<String> = sh(vyb + " test/run_tests.vyb --vyb " + vyb + " --test-dir " + dir + " -v 2>&1; echo RC=$?")
+    secs<Int> = ((time_nanos() else 0) - t0) / 1000000000
+    sh("rm -rf " + dir)
+
+    var<Int> bad = 0
+    if (out.index_of("FAIL: hang_fixture") < 0) { println("hang_fixture was not failed"); bad = 1 }
+    if (out.index_of("timed out after 1 s") < 0) { println("no timeout reason"); bad = 1 }
+    if (out.index_of("PASS: quick_fixture") < 0) { println("the run did not go on to quick_fixture"); bad = 1 }
+    if (out.index_of("RC=1") < 0) { println("runner did not exit 1"); bad = 1 }
+    if (secs > 60) { println("took " + secs.to_string() + " s"); bad = 1 }
+    if (bad == 1) {
+        println(out)
+        return 1
+    }
+    println("runner timeout ok")
+    return 0
+}
