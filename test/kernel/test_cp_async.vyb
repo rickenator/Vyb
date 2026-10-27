@@ -1,0 +1,21 @@
+// @test: cp_async_16 / cp_async_commit / cp_async_wait lower to sm_80 cp.async PTX
+// @category: kernel
+// @expect: pass
+// @vyb-args: --kernel --gpu sm_80 --kernel-shared 4096
+// cp_async_16 / cp_async_commit / cp_async_wait: each thread copies 16 B global->shared asynchronously,
+// waits, barriers, then writes its neighbour's 16 B back (out[t] = in[(t+1) % 256]). Compile-only check:
+// vyb --kernel --gpu sm_80 --kernel-shared 4096 test_cp_async.vyb; the PTX must contain cp.async.cg.shared.global.
+cpa_test(p<Int>) -> {
+    I<Int> = ld_i64(p + 0)
+    O<Int> = ld_i64(p + 8)
+    t<Int> = tid_x()
+    cp_async_16(t * 16, I + t * 16)
+    cp_async_commit()
+    cp_async_wait(0)
+    kernel_barrier()
+    s<Int> = ((t + 1) % 256) * 16
+    st_u32(O + t * 16, ld_shared_u32(s))
+    st_u32(O + t * 16 + 4, ld_shared_u32(s + 4))
+    st_u32(O + t * 16 + 8, ld_shared_u32(s + 8))
+    st_u32(O + t * 16 + 12, ld_shared_u32(s + 12))
+}

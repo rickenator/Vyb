@@ -1,0 +1,19 @@
+// @test: kernel-mode f64 bit casts
+// @description: f64_bits(Float) -> Int and f64_from_bits(Int) -> Float are register bitcasts (the old
+//   idiom was st_f64 + ld_i64 through global memory). Kernel f64b writes, per element, the bits of x,
+//   a round trip and the rsqrt seed f64_from_bits(0x5FE6EB50C7B537A9 - bits / 2); check_f64_bits.py
+//   checks values against Python struct.
+// @category: kernel, cuda, types
+// @expect: pass
+// @vyb-args: --kernel --gpu sm_80
+
+f64b(x<Int>, o<Int>, n<Int>) -> {
+    gid<Int> = blk_x() * dim_x() + tid_x()
+    if (gid < n) {
+        v<Float> = ld_f64(x + gid * 8)
+        b<Int> = f64_bits(v)
+        st_i64(o + gid * 24, b)
+        st_f64(o + gid * 24 + 8, f64_from_bits(b))
+        st_f64(o + gid * 24 + 16, f64_from_bits(6910469410427058089 - b / 2))
+    }
+}
