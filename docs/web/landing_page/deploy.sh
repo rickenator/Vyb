@@ -11,7 +11,11 @@
 # Host: anivizac@69.89.24.177 (Bluehost), ssh on port 2222. The vyb-lang.org
 # document root is /home4/anivizac/vyb/ (verified 2026-10-22); note it is NOT
 # under public_html. If the key here is not authorized on the host, run the
-# upload from apex, where ~/.ssh/anivizac_key IS authorized.
+# upload from apex, where ~/.ssh/anivizac_key IS authorized — copy this
+# directory to apex and run
+#   DEPLOY_KEY=$HOME/.ssh/anivizac_key ./deploy.sh
+# after seeding ~/.ssh/known_hosts.vyb-lang with
+#   ssh-keyscan -p 2222 -t ed25519 69.89.24.177
 #
 # Auth: this machine holds ~/.ssh/id_ed25519_aniviza, which the host does NOT
 # yet accept, and there is no SSH password to type — only the cPanel login.
@@ -38,14 +42,17 @@ DEST="${DEST:-/home4/anivizac/vyb/}"   # vyb-lang.org doc root (verified Oct 22 
 SITE="https://vyb-lang.org/"
 # A string that exists ONLY in the current page — the live check greps for it,
 # so a stale upload (or a wrong document root) cannot pass as success.
-TOKEN='1314'
+TOKEN='1322'
 
 # Files that make up the live root. Everything the page references must be here:
 # the og:/twitter: image (/vyb.png) was missing on the host, so social previews
 # 404'd until it was added to this list.
 FILES=(index.html vyb.png favicon.ico favicon-16x16.png favicon-32x32.png apple-touch-icon.png)
 
-KEY="$HOME/.ssh/id_ed25519_aniviza"
+# The authorized key differs by machine: godzilla holds id_ed25519_aniviza
+# (not yet authorized on the host); apex holds anivizac_key, which is. Override
+# with DEPLOY_KEY=... when running this script from apex.
+KEY="${DEPLOY_KEY:-$HOME/.ssh/id_ed25519_aniviza}"
 KEY_OPT=()
 [ -f "$KEY" ] && KEY_OPT=(-i "$KEY")
 SSH_OPTS=(-P "$PORT" "${KEY_OPT[@]}" -o IdentitiesOnly=yes

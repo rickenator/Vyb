@@ -43,9 +43,11 @@
         "url": "https://vyb-lang.org/",
         "codeRepository": "https://github.com/rickenator/Vyb",
         "programmingLanguage": "Vyb",
+        "softwareVersion": "0.7.7",
         "runtimePlatform": "LLVM / native machine code (JIT and AOT)",
-                "targetPlatform": [
-          "x86-64 / Linux (release-tested)", "NVPTX / NVIDIA GPU (sm_75..sm_90 in CI, sm_90a locally; ptxas-validated)"
+        "targetPlatform": [
+          "x86-64 / Linux (release-tested)",
+          "NVPTX / NVIDIA GPU (sm_75..sm_90 in CI, sm_90a locally; ptxas-validated)"
         ],
         "license": "https://www.apache.org/licenses/LICENSE-2.0",
         "isAccessibleForFree": true,
@@ -130,6 +132,9 @@
     hr{border:0;border-top:1px solid var(--line);margin:40px 0}
     .badge-row img{vertical-align:middle}
     footer{border-top:1px solid var(--line);padding:30px 22px 50px;color:#6f8d93;text-align:center;font-size:13px}
+    .footer-links{display:flex;flex-wrap:wrap;gap:10px 18px;justify-content:center;margin-bottom:12px;font-size:14px}
+    .footer-links a{color:#9fd8de} .footer-links a:hover{color:#e8fb66}
+    main li>p{margin:0}
     .backtop{position:fixed;right:18px;bottom:18px;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:#0c1d22;border:1px solid #23444c;color:#bdebf0;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:.2s}
     .backtop.show{opacity:1;pointer-events:auto}
     @media (max-width:900px){.hero{grid-template-columns:1fr;padding-top:44px}.logo-wrap{min-height:260px;order:-1}.logo{max-width:390px}.layout{grid-template-columns:1fr}aside{display:none}.topbar nav a:nth-child(2){display:none}}
@@ -152,7 +157,7 @@
     <div>
       <div class="eyebrow">Open Source · Systems Programming · LLVM</div>
       <h1><span class="grad">Vyb Programming Language</span><br>Systems Programming</h1>
-      <p class="lede"><strong>Vyb is an open-source systems programming language developed by Aniviza.</strong></p>
+      <p class="lede"><strong>Vyb is an open-source systems programming language developed by Aniviza.</strong> The whole family — the OS, the window environment, the GPU workbench, and the connectome work — is written in it.</p>
       <div class="hero-actions">
         <a class="btn primary" href="https://github.com/rickenator/Vyb" target="_blank" rel="noopener">View Vyb on GitHub ↗</a>
         <a class="btn" href="https://github.com/rickenator/Vyb/blob/main/docs/refman/PROGRAMMERS_GUIDE.md" target="_blank" rel="noopener">Programmer's Guide ↗</a>
@@ -168,6 +173,7 @@
   <div class="layout">
     <aside aria-label="Table of contents">
       <div class="toc-title">On this page</div>
+<!-- TOC:BEGIN (generated from README.md headings by build_page.py -- do not edit) -->
 <a class="toc-h2" href="#vyb-programming-guide">Vyb Programming Guide</a>
 <a class="toc-h2" href="#1-introduction">1. Introduction</a>
 <a class="toc-h3" href="#11-purpose-audience">1.1 Purpose &amp; Audience</a>
@@ -176,7 +182,7 @@
 <a class="toc-h3" href="#pointing-a-project-at-this-checkout">Pointing a project at this checkout</a>
 <a class="toc-h3" href="#compilation-to-native-code">Compilation to Native Code</a>
 <a class="toc-h3" href="#13-key-concepts-terminology">1.3 Key Concepts &amp; Terminology</a>
-<a class="toc-h3" href="#14-import-vs-smuggle-vybs-unique-module-system">1.4 Import vs Smuggle - Vyb's Unique Module System</a>
+<a class="toc-h3" href="#14-import-vs-smuggle-vybs-unique-module-system">1.4 Import vs Smuggle - Vyb&#x27;s Unique Module System</a>
 <a class="toc-h2" href="#in-this-release">In This Release</a>
 <a class="toc-h2" href="#feature-highlights">Feature highlights</a>
 <a class="toc-h3" href="#binary-executable-generation">✅ Binary Executable Generation</a>
@@ -265,10 +271,13 @@
 <a class="toc-h3" href="#c-auto-serialization-reference">C. Auto-Serialization Reference</a>
 <a class="toc-h2" href="#glossary">Glossary</a>
 <a class="toc-h2" href="#license">License</a>
+<a class="toc-h2" href="#the-vyb-family">The Vyb family</a>
+<!-- TOC:END -->
     </aside>
     <main id="content">
       <div class="identity-box">Vyb is the open-source systems programming language developed by <b>Aniviza LLC</b>. The canonical project site is <b>vyb-lang.org</b>; source and maintained documentation live in the <a href="https://github.com/rickenator/Vyb" target="_blank" rel="noopener">rickenator/Vyb GitHub repository</a>.</div>
-      <p><a href="https://deepwiki.com/rickenator/Vyb"><img alt="Ask DeepWiki" src="https://deepwiki.com/badge.svg"/></a></p>
+<!-- BODY:BEGIN (generated from README.md by build_page.py -- do not edit) -->
+<p><a href="https://deepwiki.com/rickenator/Vyb" rel="noopener noreferrer" target="_blank"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki" /></a></p>
 <h2 id="vyb-programming-guide">Vyb Programming Guide<a aria-label="Link to Vyb Programming Guide" class="heading-anchor" href="#vyb-programming-guide">#</a></h2>
 <blockquote>
 <p><strong>Where the docs live.</strong> This README is the project <strong>overview</strong>. The
@@ -280,7 +289,7 @@ standard-library tour, with a <strong>core-feature registry</strong> (§1.1) tha
 feature to its section and is updated when core features change. Exact
 per-symbol signatures live in the auto-generated pages under <code>docs/refman/</code>.</p>
 </blockquote>
-<hr>
+<hr />
 <h2 id="1-introduction">1. Introduction<a aria-label="Link to 1. Introduction" class="heading-anchor" href="#1-introduction">#</a></h2>
 <p>Welcome to the Vyb programming language version 0.7.7. This overview walks you through what Vyb is and the thinking behind it. Vyb is a systems language built on a simple conviction: you should not have to choose between safety and power. Strong type safety and explicit ownership give your code discipline and predictability, while low-level escape hatches keep raw, machine-near control within reach when you need it. Code runs as fast native executables or through a JIT, so performance stays predictable from first prototype to final program. The syntax is readable and name-first, the abstractions are zero-cost, and the language aims to stay out of your way as your ambitions grow. The rest of this guide shows how those ideas take shape through feature summaries and examples.</p>
 <h3 id="11-purpose-audience">1.1 Purpose &amp; Audience<a aria-label="Link to 1.1 Purpose &amp; Audience" class="heading-anchor" href="#11-purpose-audience">#</a></h3>
@@ -388,15 +397,15 @@ per-symbol signatures live in the auto-generated pages under <code>docs/refman/<
 # put its bin/ on your PATH:
 #   https://github.com/rickenator/Vyb/releases   (all releases)
 #   releases are cut from the version tags: https://github.com/rickenator/Vyb/releases/tag/v0.7.7
-# There is no macOS SDK yet: the runtime's async/fibre layer is Linux-only
-# (ucontext/pipe2), so the release workflow cannot build it. See docs/sdk/INSTALL.md.
+# The shipped SDK target is Linux x86_64; see docs/sdk/INSTALL.md for the
+# unpack/PATH steps and the exact platform the release workflow builds.
 
 # Option B: build from source (requires LLVM 18 + CMake)
 git clone https://github.com/rickenator/Vyb.git
 cd Vyb
 mkdir -p build &amp;&amp; cd build &amp;&amp; LLVM_DIR=/usr/lib/llvm-18/cmake cmake .. &amp;&amp; make -j$(nproc) &amp;&amp; cd ..
 
-# Run the full test suite (1314 .vyb tests) with the canonical Vyb runner
+# Run the full test suite (1322 .vyb tests) with the canonical Vyb runner
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
 
 # Run your first Vyb program
@@ -548,7 +557,7 @@ backend-available but not covered by any gate):</p>
 <ul>
 <li>✅ <strong>Executable Generation</strong>: Full build pipeline with <code>--build</code> flag</li>
 <li>✅ <strong>Runtime Library</strong>: Automatic compilation and linking of Vyb runtime</li>
-<li>✅ <strong>System Linker Integration</strong>: Platform-aware linker selection (lld, ld, ld64)</li>
+<li>✅ <strong>System Linker Integration</strong>: Platform-aware linker selection (lld, ld)</li>
 <li>✅ <strong>Dynamic Linking</strong>: Links against system libc and libm</li>
 <li>✅ <strong>Static Linking</strong>: Optional <code>--static</code> flag for standalone binaries</li>
 <li>✅ <strong>Object File Emission</strong>: AOT compilation to .o files</li>
@@ -556,25 +565,29 @@ backend-available but not covered by any gate):</p>
 <li>✅ <strong>Cross-Compilation</strong>: emits through LLVM's target set — x86-64/Linux is release-tested, NVPTX is validated <code>sm_75</code> → <code>sm_90</code> in CI (<code>sm_90a</code> locally); other targets are backend-available but not CI-covered</li>
 <li>✅ <strong>Debug Information</strong>: Full DWARF debug metadata</li>
 <li>🚧 <strong>NVPTX Kernel Mode</strong> (#198): <code>--kernel</code> lowers a <code>main</code>-less, host-runtime-free Vyb module
-  to PTX through the in-process NVPTX backend (<code>nvptx64-nvidia-cuda</code>, default <code>sm_86</code>; override
-  with <code>VYB_KERNEL_GPU</code>, or choose the artifact path with <code>--ptx &lt;path&gt;</code>).</li>
+to PTX through the in-process NVPTX backend (<code>nvptx64-nvidia-cuda</code>, default <code>sm_86</code>; override
+with <code>VYB_KERNEL_GPU</code>, or choose the artifact path with <code>--ptx &lt;path&gt;</code>).
+<ul>
 <li><strong>Host launch</strong> landed with #199 (launch-arg packing through the CUDA driver API,
-    <code>fixtures/cuda/launch_fill.vyb</code>); cuBLAS/cuFFT/cuDNN bindings are verified on an RTX 3090
-    (<code>sm_86</code>); BLAS-composable tensors are the follow-on milestone.</li>
+<code>fixtures/cuda/launch_fill.vyb</code>); cuBLAS/cuFFT/cuDNN bindings are verified on an RTX 3090
+(<code>sm_86</code>); BLAS-composable tensors are the follow-on milestone.</li>
 <li><strong>Gates</strong>: the module must be host-runtime-free (no <code>__vyb_*</code> references), PTX symbol presence
-    is checked, and the emitted PTX is validated in-process with <code>ptxas</code> when present (hard-fail on
-    reject, graceful skip when absent).</li>
+is checked, and the emitted PTX is validated in-process with <code>ptxas</code> when present (hard-fail on
+reject, graceful skip when absent).</li>
 <li><strong>Scope</strong>: a <strong>P0 feasibility probe</strong> — only <code>sm_86</code> has real silicon behind it, and the verified
-    workload is the shared-memory tiled matmul (all 256 elements of <code>C = A×B</code> checked against a host
-    reference) plus the cuBLAS/cuFFT/cuDNN cross-validations. See <code>test/kernel/</code>,
-    <code>fixtures/kernel/axpy.vyb</code>, and <code>TODO.md</code> §GPU for the full list.</li>
+workload is the shared-memory tiled matmul (all 256 elements of <code>C = A×B</code> checked against a host
+reference) plus the cuBLAS/cuFFT/cuDNN cross-validations. See <code>test/kernel/</code>,
+<code>fixtures/kernel/axpy.vyb</code>, and <code>TODO.md</code> §GPU for the full list.</li>
+</ul>
+</li>
 </ul>
 <p><strong>See:</strong> <code>doc/MODULE_FFI_BINARY_ROADMAP.md</code> for the compilation pipeline</p>
 <h3 id="13-key-concepts-terminology">1.3 Key Concepts &amp; Terminology<a aria-label="Link to 1.3 Key Concepts &amp; Terminology" class="heading-anchor" href="#13-key-concepts-terminology">#</a></h3>
 <ul>
 <li><strong>Template</strong>: A generic type/function parameterized by types or constants, instantiated at compile time.</li>
 <li><strong>Binding Mutability</strong>: Variables are declared with unified syntax (mutable by default) or <code>const</code> (immutable binding, cannot be reassigned).</li>
-<li><strong>Ownership Types</strong>:<ul>
+<li><strong>Ownership Types</strong>:
+<ul>
 <li><code>my&lt;T&gt;</code>: Unique ownership of data <code>T</code>.</li>
 <li><code>our&lt;T&gt;</code>: Shared (reference-counted) ownership of data <code>T</code>.</li>
 <li><code>their&lt;T&gt;</code>: Non-owning borrow/reference to data <code>T</code>.</li>
@@ -582,7 +595,8 @@ backend-available but not covered by any gate):</p>
 </ul>
 </li>
 <li><strong>Data Mutability</strong>: Indicated by <code>const</code> on the type itself (e.g., <code>my&lt;T const&gt;</code> for unique ownership of immutable data).</li>
-<li><strong>Borrowing</strong>:<ul>
+<li><strong>Borrowing</strong>:
+<ul>
 <li><code>view(expr)</code>: Creates an immutable borrow <code>their&lt;T const&gt;</code>.</li>
 <li><code>borrow(expr)</code>: Creates a mutable borrow <code>their&lt;T&gt;</code>.</li>
 <li><code>soft(expr)</code>: Creates a mild reference <code>mild&lt;T&gt;</code> from <code>our&lt;T&gt;</code>.</li>
@@ -597,17 +611,17 @@ backend-available but not covered by any gate):</p>
 <li>Used for modules from signed repositories or project-local sources verified in <code>vyb.toml</code></li>
 <li>Enforces security checks and version verification</li>
 <li>Ideal for production dependencies and standard library modules</li>
-<li>Optional <code>from "&lt;locator&gt;"</code> specifies the source URL or local path</li>
+<li>Optional <code>from &quot;&lt;locator&gt;&quot;</code> specifies the source URL or local path</li>
 <li>Example: <code>import std::collections::Vec</code></li>
-<li>Example: <code>import utils::math::calculate from "./utils"</code></li>
+<li>Example: <code>import utils::math::calculate from &quot;./utils&quot;</code></li>
 </ul>
 <p><strong><code>smuggle</code></strong> - Flexible, External Sources:</p>
 <ul>
 <li>Allows including symbols from external sources (e.g., GitHub repositories) or unsigned modules</li>
 <li>Bypasses some security checks for rapid prototyping and third-party integration</li>
 <li>Perfect for experimental dependencies, development tools, or one-off utilities</li>
-<li><code>from "&lt;locator&gt;"</code> specifies the source (local path, GitHub shorthand, or full URL)</li>
-<li>Example: <code>smuggle debug::Logger from "github.com/user/debug-tools"</code></li>
+<li><code>from &quot;&lt;locator&gt;&quot;</code> specifies the source (local path, GitHub shorthand, or full URL)</li>
+<li>Example: <code>smuggle debug::Logger from &quot;github.com/user/debug-tools&quot;</code></li>
 </ul>
 <p><strong>Syntax:</strong></p>
 <pre><code>import &lt;module::path&gt; [as &lt;alias&gt;] [from &quot;&lt;locator&gt;&quot;] [;]
@@ -615,9 +629,9 @@ smuggle &lt;module::path&gt; [from &quot;&lt;locator&gt;&quot;] [as &lt;alias&gt
 </code></pre>
 <p><strong>Locator formats</strong> for <code>from</code>:</p>
 <ul>
-<li>Local path: <code>"./local/experiments"</code></li>
-<li>GitHub shorthand: <code>"github.com/dev/tools"</code></li>
-<li>Full URL: <code>"https://github.com/dev/tools"</code></li>
+<li>Local path: <code>&quot;./local/experiments&quot;</code></li>
+<li>GitHub shorthand: <code>&quot;github.com/dev/tools&quot;</code></li>
+<li>Full URL: <code>&quot;https://github.com/dev/tools&quot;</code></li>
 </ul>
 <p>This dual system provides both safety for production code and flexibility for development:</p>
 <pre><code class="language-vyb"># Production imports - verified and trusted
@@ -644,97 +658,114 @@ utils = { git = &quot;https://github.com/user/utils&quot; }  # External, smuggle
 <p>Vyb <strong>v0.7.7</strong> (freedom-1.0 series). Highlights of this cycle:</p>
 <ul>
 <li><strong>Thread-boundary capability as a structural property</strong> — a closure handed to
-  <code>thread_spawn</code> / <code>task_spawn</code> / <code>async_spawn</code> / <code>agent_start</code> must be able to cross an OS
-  thread boundary, and the compiler proves it from the type graph instead of testing the
-  captured variable's type string. See <a href="#threads-and-concurrency">Threads and concurrency</a>.</li>
+<code>thread_spawn</code> / <code>task_spawn</code> / <code>async_spawn</code> / <code>agent_start</code> must be able to cross an OS
+thread boundary, and the compiler proves it from the type graph instead of testing the
+captured variable's type string. See <a href="#threads-and-concurrency">Threads and concurrency</a>.</li>
 <li><strong>Full closure support</strong> — capture by value, <code>my&lt;T&gt;</code> move, <code>our&lt;T&gt;</code> retention, write-through
-  mutable capture, and a reference-counted environment that survives <code>return</code>. See
-  <a href="#closures-and-lambdas">Closures and lambdas</a>.</li>
+mutable capture, and a reference-counted environment that survives <code>return</code>. See
+<a href="#closures-and-lambdas">Closures and lambdas</a>.</li>
 <li><strong>Refactoring the compiler sources</strong> — the analyzer and the expression emitter are split
-  along cohesive seams; no behaviour change.</li>
+along cohesive seams; no behaviour change.</li>
 <li><strong>Fixed</strong> — <code>borrow(x)</code> / <code>view(x)</code> addressed the operand's slot instead of the object for
-  pointer-backed owners (<code>my&lt;T&gt;</code>, <code>their&lt;T&gt;</code>, <code>ptr&lt;T&gt;</code>, <code>our&lt;T&gt;</code>/<code>mild&lt;T&gt;</code> control blocks).</li>
+pointer-backed owners (<code>my&lt;T&gt;</code>, <code>their&lt;T&gt;</code>, <code>ptr&lt;T&gt;</code>, <code>our&lt;T&gt;</code>/<code>mild&lt;T&gt;</code> control blocks).</li>
 </ul>
 <h2 id="feature-highlights">Feature highlights<a aria-label="Link to Feature highlights" class="heading-anchor" href="#feature-highlights">#</a></h2>
 <p>These features are complete and fully tested:</p>
 <ul>
-<li><strong><code>defer</code> statement</strong> — <code>defer cleanup()</code> executes at scope exit in LIFO order; ideal for resource cleanup</li>
+<li>
+<p><strong><code>defer</code> statement</strong> — <code>defer cleanup()</code> executes at scope exit in LIFO order; ideal for resource cleanup</p>
+<pre><code class="language-vyb">main()&lt;Int&gt; -&gt; {
+    defer println(&quot;cleanup done&quot;)
+    println(&quot;before return&quot;)
+    return 0
+}
+// Output: before return \n cleanup done
+</code></pre>
+</li>
+<li>
+<p><strong>Math library</strong> — <code>abs</code>, <code>min</code>, <code>max</code>, <code>sqrt</code>, <code>sin</code>, <code>cos</code>, <code>tan</code>, <code>exp</code>, <code>log</code>, <code>log2</code>, <code>log10</code>, <code>pow</code>, <code>floor</code>, <code>ceil</code>, <code>round</code></p>
+<pre><code class="language-vyb">main()&lt;Int&gt; -&gt; {
+    x&lt;Float&gt; = sqrt(2.0)
+    y&lt;Int&gt; = abs(-5)
+    println_int(y)    // 5
+    return 0
+}
+</code></pre>
+</li>
+<li>
+<p><strong>String methods</strong> — <code>.len()</code>, <code>.contains()</code>, <code>.starts_with()</code>, <code>.ends_with()</code>, <code>.to_upper()</code>, <code>.to_lower()</code>, <code>.substring()</code>, <code>.char_at()</code>, <code>.split()</code>, <code>.format()</code>, <code>String::from_bytes()</code></p>
+<pre><code class="language-vyb">main()&lt;Int&gt; -&gt; {
+    s&lt;String&gt; = &quot;Hello, world!&quot;
+    if (s.contains(&quot;world&quot;)) {
+        println(s.to_upper())   // HELLO, WORLD!
+    }
+    return 0
+}
+</code></pre>
+</li>
+<li>
+<p><strong>Type inference from initializer</strong> — Variables without annotation infer type from RHS</p>
+<pre><code class="language-vyb">x = 42          // inferred as Int
+msg = &quot;hello&quot;   // inferred as String
+ok = true       // inferred as Bool
+</code></pre>
+</li>
+<li>
+<p><strong>Vec <code>for</code> loop type inference</strong> — Compiler-generated loop variables require no explicit types</p>
+<pre><code class="language-vyb">nums&lt;Vec&lt;Int&gt;&gt; = Vec()
+nums.push(10)
+for (n in nums) {
+    println(n)   // n is automatically Int
+}
+</code></pre>
+</li>
+<li>
+<p><strong><code>select</code> expressions</strong> — Pattern matching that yields a value; Vyb-original concept</p>
+<pre><code class="language-vyb">grade&lt;String&gt; = select(score) -&gt; {
+    &gt;= 90 -&gt; &quot;A&quot;,
+    &gt;= 80 -&gt; &quot;B&quot;,
+    &gt;= 70 -&gt; &quot;C&quot;,
+    ? -&gt; &quot;F&quot;
+}
+</code></pre>
+</li>
+<li>
+<p><strong>Set patterns in <code>select</code> arms (<code>{ … }</code>)</strong> — group several discrete values
+into one arm so you don't repeat a result per value; the arm matches when the
+target equals <em>any</em> element. Sets hold literals and bare enum-variant names
+only; empty <code>{}</code> and mixed types are rejected.</p>
+<pre><code class="language-vyb">parity(x&lt;Int&gt;)&lt;String&gt; -&gt; {
+    return select(x) -&gt; {
+        {1, 3, 5, 7, 9} -&gt; &quot;odd&quot;,
+        {2, 4, 6, 8}    -&gt; &quot;even&quot;,
+        ?               -&gt; &quot;out of bounds&quot;
+    }
+}
+</code></pre>
+</li>
+<li>
+<p><strong><code>typeof</code> / <code>typename</code> intrinsics</strong> — Runtime type introspection</p>
+<pre><code class="language-vyb">x&lt;Int&gt; = 42
+same&lt;Bool&gt; = (typeof(x) == typeof(100))    // true
+name&lt;String&gt; = typename(x)                  // &quot;Int&quot;
+</code></pre>
+</li>
+<li>
+<p><strong>Immutable bindings (<code>const</code>)</strong> — <code>name&lt;Type const&gt;</code> declares an immutable variable</p>
+<pre><code class="language-vyb">pi&lt;Float const&gt; = 3.14159
+</code></pre>
+</li>
 </ul>
-<p><code>vyb
-  main()&lt;Int&gt; -&gt; {
-      defer println("cleanup done")
-      println("before return")
-      return 0
-  }
-  // Output: before return \n cleanup done</code>
-- <strong>Math library</strong> — <code>abs</code>, <code>min</code>, <code>max</code>, <code>sqrt</code>, <code>sin</code>, <code>cos</code>, <code>tan</code>, <code>exp</code>, <code>log</code>, <code>log2</code>, <code>log10</code>, <code>pow</code>, <code>floor</code>, <code>ceil</code>, <code>round</code></p>
-<p><code>vyb
-  main()&lt;Int&gt; -&gt; {
-      x&lt;Float&gt; = sqrt(2.0)
-      y&lt;Int&gt; = abs(-5)
-      println_int(y)    // 5
-      return 0
-  }</code>
-- <strong>String methods</strong> — <code>.len()</code>, <code>.contains()</code>, <code>.starts_with()</code>, <code>.ends_with()</code>, <code>.to_upper()</code>, <code>.to_lower()</code>, <code>.substring()</code>, <code>.char_at()</code>, <code>.split()</code>, <code>.format()</code>, <code>String::from_bytes()</code></p>
-<p><code>vyb
-  main()&lt;Int&gt; -&gt; {
-      s&lt;String&gt; = "Hello, world!"
-      if (s.contains("world")) {
-          println(s.to_upper())   // HELLO, WORLD!
-      }
-      return 0
-  }</code>
-- <strong>Type inference from initializer</strong> — Variables without annotation infer type from RHS</p>
-<p><code>vyb
-  x = 42          // inferred as Int
-  msg = "hello"   // inferred as String
-  ok = true       // inferred as Bool</code>
-- <strong>Vec <code>for</code> loop type inference</strong> — Compiler-generated loop variables require no explicit types</p>
-<p><code>vyb
-  nums&lt;Vec&lt;Int&gt;&gt; = Vec()
-  nums.push(10)
-  for (n in nums) {
-      println(n)   // n is automatically Int
-  }</code>
-- <strong><code>select</code> expressions</strong> — Pattern matching that yields a value; Vyb-original concept</p>
-<p><code>vyb
-  grade&lt;String&gt; = select(score) -&gt; {
-      &gt;= 90 -&gt; "A",
-      &gt;= 80 -&gt; "B",
-      &gt;= 70 -&gt; "C",
-      ? -&gt; "F"
-  }</code>
-- <strong>Set patterns in <code>select</code> arms (<code>{ … }</code>)</strong> — group several discrete values
-  into one arm so you don't repeat a result per value; the arm matches when the
-  target equals <em>any</em> element. Sets hold literals and bare enum-variant names
-  only; empty <code>{}</code> and mixed types are rejected.</p>
-<p><code>vyb
-  parity(x&lt;Int&gt;)&lt;String&gt; -&gt; {
-      return select(x) -&gt; {
-          {1, 3, 5, 7, 9} -&gt; "odd",
-          {2, 4, 6, 8}    -&gt; "even",
-          ?               -&gt; "out of bounds"
-      }
-  }</code>
-- <strong><code>typeof</code> / <code>typename</code> intrinsics</strong> — Runtime type introspection</p>
-<p><code>vyb
-  x&lt;Int&gt; = 42
-  same&lt;Bool&gt; = (typeof(x) == typeof(100))    // true
-  name&lt;String&gt; = typename(x)                  // "Int"</code>
-- <strong>Immutable bindings (<code>const</code>)</strong> — <code>name&lt;Type const&gt;</code> declares an immutable variable</p>
-<p><code>vyb
-  pi&lt;Float const&gt; = 3.14159</code></p>
 <h3 id="binary-executable-generation">✅ <strong>Binary Executable Generation</strong><a aria-label="Link to ✅ Binary Executable Generation" class="heading-anchor" href="#binary-executable-generation">#</a></h3>
 <ul>
 <li><strong>Full Compilation Pipeline</strong>: Complete source → object → executable workflow</li>
 <li><strong>Build Command</strong>: <code>vyb program.vyb --build myapp</code> creates standalone executables</li>
 <li><strong>Runtime Library</strong>: Automatic compilation and linking of Vyb runtime (vyb_runtime.c)</li>
-<li><strong>System Linker Integration</strong>: Platform-aware linker selection (lld, ld for Linux; ld64 for macOS)</li>
+<li><strong>System Linker Integration</strong>: Platform-aware linker selection (lld, ld)</li>
 <li><strong>C Runtime Initialization</strong>: Automatic discovery and linking of CRT files (crt1.o, crti.o, crtn.o)</li>
 <li><strong>Dynamic Linking</strong>: Links against system libc and libm by default</li>
 <li><strong>Static Linking</strong>: Optional <code>--static</code> flag for fully standalone binaries</li>
 <li><strong>Production Ready</strong>: Deploy native executables without any runtime dependencies</li>
-<li><strong>Cross-Platform</strong>: Linux and macOS support with proper platform detection</li>
 </ul>
 <h3 id="json-serialization-deserialization">✅ <strong>JSON Serialization &amp; Deserialization</strong><a aria-label="Link to ✅ JSON Serialization &amp; Deserialization" class="heading-anchor" href="#json-serialization-deserialization">#</a></h3>
 <ul>
@@ -758,9 +789,12 @@ utils = { git = &quot;https://github.com/user/utils&quot; }  # External, smuggle
 </ul>
 <h3 id="core-language-features">✅ <strong>Core Language Features</strong><a aria-label="Link to ✅ Core Language Features" class="heading-anchor" href="#core-language-features">#</a></h3>
 <ul>
-<li><strong>Functions</strong>: <code>name(params)&lt;ReturnType&gt; -&gt; body</code> with full LLVM compilation</li>
+<li><strong>Functions</strong>: <code>name(params)&lt;ReturnType&gt; -&gt; body</code> with full LLVM compilation
+<ul>
 <li><strong>Standard parameters</strong>: <code>param&lt;Type&gt;</code> or <code>param&lt;Type const&gt;</code></li>
 <li><strong>Immutable parameters</strong>: <code>param&lt;Type const&gt;</code> for read-only arguments</li>
+</ul>
+</li>
 <li><strong>Variables</strong>: <code>name&lt;Type&gt; = value</code> with type inference and explicit typing</li>
 <li><strong>Immutable bindings</strong>: <code>name&lt;Type const&gt; = value</code> — cannot be reassigned</li>
 <li><strong>Resizable Arrays</strong>: <code>Vec&lt;T&gt;</code> with a vybish constructor (<code>Vec()</code>, <code>Vec(n)</code>) and <code>push()</code>, <code>pop()</code>, <code>len()</code>, <code>get()</code> methods</li>
@@ -769,7 +803,7 @@ utils = { git = &quot;https://github.com/user/utils&quot; }  # External, smuggle
 <li><strong>Structs</strong>: <code>struct Point { x&lt;Int&gt;, y&lt;Int&gt; }</code> with field access (<code>p.x</code>, <code>p.y</code>)</li>
 <li><strong>Control Flow</strong>: <code>if/else</code>, <code>while/for</code> loops, <code>match</code> statements, <code>break</code>/<code>continue</code> (including labeled: <code>outer: for ... break outer</code>)</li>
 <li><strong><code>defer</code> statement</strong>: <code>defer expr</code> — LIFO scope-exit execution for cleanup</li>
-<li><strong>Select Expressions</strong>: <code>select(expr) -&gt; { pattern -&gt; result }</code> — pattern matching that returns a value; <code>pass</code> keyword for multi-statement arms; brace-delimited set arms (<code>{1, 3, 5} -&gt; "odd"</code>) match any element</li>
+<li><strong>Select Expressions</strong>: <code>select(expr) -&gt; { pattern -&gt; result }</code> — pattern matching that returns a value; <code>pass</code> keyword for multi-statement arms; brace-delimited set arms (<code>{1, 3, 5} -&gt; &quot;odd&quot;</code>) match any element</li>
 <li><strong>Arithmetic</strong>: Full binary operators (<code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, <code>==</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;</code>, etc.)</li>
 <li><strong>Bitwise Operators</strong>: <code>|</code>, <code>&amp;</code>, <code>^</code>, <code>~</code>, <code>&lt;&lt;</code>, <code>&gt;&gt;</code> on <code>Int</code> with <code>&amp;=</code>, <code>|=</code>, <code>^=</code>, <code>&lt;&lt;=</code>, <code>&gt;&gt;=</code> compound-assigns</li>
 <li><strong>Pattern Matching</strong>: <code>match (expr) { pattern -&gt; result }</code> with comparison patterns (<code>&gt;= 90</code>, <code>&lt; 0</code>) and wildcard <code>?</code></li>
@@ -779,7 +813,7 @@ utils = { git = &quot;https://github.com/user/utils&quot; }  # External, smuggle
 </ul>
 <h3 id="advanced-type-system">✅ <strong>Advanced Type System</strong><a aria-label="Link to ✅ Advanced Type System" class="heading-anchor" href="#advanced-type-system">#</a></h3>
 <ul>
-<li><strong>Multi-value returns</strong>: <code>main()&lt;Int,String&gt; -&gt; return 42, "hello"</code> — auto-serialized as JSON</li>
+<li><strong>Multi-value returns</strong>: <code>main()&lt;Int,String&gt; -&gt; return 42, &quot;hello&quot;</code> — auto-serialized as JSON</li>
 <li><strong>Variadic Tuples</strong>: <code>Tuple&lt;T,U,V,...&gt;</code> with inline <code>(T,U,V)</code> syntax</li>
 <li><strong>Auto-serialization</strong>: Complex return types automatically output as JSON</li>
 <li><strong>Type inference</strong>: Full type checking and inference — <code>x = 42</code> infers <code>Int</code></li>
@@ -807,17 +841,17 @@ utils = { git = &quot;https://github.com/user/utils&quot; }  # External, smuggle
 <tr>
 <td><code>.contains(sub)</code></td>
 <td>Substring test</td>
-<td><code>s.contains("Vyb")</code> → <code>Bool</code></td>
+<td><code>s.contains(&quot;Vyb&quot;)</code> → <code>Bool</code></td>
 </tr>
 <tr>
 <td><code>.starts_with(pre)</code></td>
 <td>Prefix test</td>
-<td><code>s.starts_with("He")</code> → <code>Bool</code></td>
+<td><code>s.starts_with(&quot;He&quot;)</code> → <code>Bool</code></td>
 </tr>
 <tr>
 <td><code>.ends_with(suf)</code></td>
 <td>Suffix test</td>
-<td><code>s.ends_with("!")</code> → <code>Bool</code></td>
+<td><code>s.ends_with(&quot;!&quot;)</code> → <code>Bool</code></td>
 </tr>
 <tr>
 <td><code>.to_upper()</code></td>
@@ -830,8 +864,8 @@ utils = { git = &quot;https://github.com/user/utils&quot; }  # External, smuggle
 <td><code>s.to_lower()</code> → <code>String</code></td>
 </tr>
 <tr>
-<td><code>.substring(start, len)</code></td>
-<td>Slice</td>
+<td><code>.substring(start, end?)</code></td>
+<td>Slice <code>[start, end)</code>; <code>end</code> defaults to the length</td>
 <td><code>s.substring(0, 5)</code> → <code>String</code></td>
 </tr>
 <tr>
@@ -847,12 +881,12 @@ utils = { git = &quot;https://github.com/user/utils&quot; }  # External, smuggle
 <tr>
 <td><code>.replace(old, new)</code></td>
 <td>Replace all occurrences</td>
-<td><code>s.replace("a", "b")</code> → <code>String</code></td>
+<td><code>s.replace(&quot;a&quot;, &quot;b&quot;)</code> → <code>String</code></td>
 </tr>
 <tr>
 <td><code>.split(sep)</code></td>
 <td>Split into <code>Vec&lt;String&gt;</code> of its parts</td>
-<td><code>s.split(",")</code> → <code>Vec&lt;String&gt;</code></td>
+<td><code>s.split(&quot;,&quot;)</code> → <code>Vec&lt;String&gt;</code></td>
 </tr>
 <tr>
 <td><code>.format(args...)</code></td>
@@ -976,7 +1010,7 @@ same_expr&lt;Bool&gt; = (typeof(x + 5) == typeof(x * 2))   // true
 <h4 id="introspection-key-features">Introspection Key Features<a aria-label="Link to Introspection Key Features" class="heading-anchor" href="#introspection-key-features">#</a></h4>
 <ul>
 <li><strong><code>typeof(expr)</code></strong>: Returns a type discriminant for runtime type comparison; same types always compare equal</li>
-<li><strong><code>typename(expr)</code></strong>: Returns <code>String</code> with the human-readable type name (e.g., <code>"Int"</code>, <code>"Float"</code>, <code>"Bool"</code>)</li>
+<li><strong><code>typename(expr)</code></strong>: Returns <code>String</code> with the human-readable type name (e.g., <code>&quot;Int&quot;</code>, <code>&quot;Float&quot;</code>, <code>&quot;Bool&quot;</code>)</li>
 <li><strong>Expression-based</strong>: Works on variables, literals, arithmetic expressions</li>
 <li><strong>Zero-cost</strong>: Type information extracted at compile-time, evaluated at runtime via std::hash</li>
 <li><strong>Note</strong>: <code>typeof</code> result is an opaque <code>Type</code> value; use only for <code>==</code>/<code>!=</code> comparisons</li>
@@ -1056,7 +1090,7 @@ main()&lt;Int&gt; -&gt; {
 <li>No fragile base class problem</li>
 <li>Explicit binding makes relationships clear</li>
 </ul>
-<p><strong>See:</strong> <code>doc/ASPECT_SYSTEM_DESIGN.md</code> for complete specification and <code>test/aspect/</code> for working examples</p>
+<p><strong>See:</strong> <code>doc/TRAIT_SYSTEM_DESIGN.md</code> for the complete specification and <code>test/aspect/</code> for working examples</p>
 <h4 id="core-contracts-coreaspects"><strong>Core Contracts (<code>core::aspects</code>)</strong><a aria-label="Link to Core Contracts (core::aspects)" class="heading-anchor" href="#core-contracts-coreaspects">#</a></h4>
 <p>The standard library ships six canonical contract aspects — <code>Display</code>, <code>Debug</code>,
 <code>Clone</code>, <code>Equatable</code>, <code>Hashable</code>, and <code>Comparable</code> (with
@@ -1239,7 +1273,7 @@ show_all&lt;T&lt;Display&gt;&gt;(item&lt;T&gt;) -&gt; {
 <td>UTF-8 string</td>
 <td>Variable</td>
 <td>Heap-allocated fat pointer <code>{ ptr, len }</code></td>
-<td><code>name&lt;String&gt; = "Alice"</code></td>
+<td><code>name&lt;String&gt; = &quot;Alice&quot;</code></td>
 </tr>
 <tr>
 <td><code>Bytes</code></td>
@@ -1383,19 +1417,19 @@ build/vyb migrate_syntax.vyb --migrate --directory . --backup --report
 <li><strong>Raw Memory Operations</strong>: Complete <code>freedom</code> block system with <code>loc&lt;T&gt;</code> pointers</li>
 <li><strong>Memory Safety</strong>: Borrow checking and lifetime analysis prevent dangling pointers</li>
 <li><strong>Temporary reclaim</strong>: a value built inline and never bound to a name is released at
-  the site that builds it — a <code>Vec</code> consumed inside one expression
-  (<code>payload.split("\n").len()</code>), a fresh row pushed or set into a <code>Vec&lt;Vec&lt;T&gt;&gt;</code>
-  (<code>rows.push(build_row(a, b))</code>), a by-value <code>Vec</code> argument, and a <code>Vec</code>-returning
-  call used as a statement (<code>mk("a", "b")</code> on its own line). Scope-exit teardown and
-  the call-site reclaim share the same nested unwind — element <code>String</code> references,
-  owned struct-element fields, every nested Vec level, then the buffer</li>
+the site that builds it — a <code>Vec</code> consumed inside one expression
+(<code>payload.split(&quot;\n&quot;).len()</code>), a fresh row pushed or set into a <code>Vec&lt;Vec&lt;T&gt;&gt;</code>
+(<code>rows.push(build_row(a, b))</code>), a by-value <code>Vec</code> argument, and a <code>Vec</code>-returning
+call used as a statement (<code>mk(&quot;a&quot;, &quot;b&quot;)</code> on its own line). Scope-exit teardown and
+the call-site reclaim share the same nested unwind — element <code>String</code> references,
+owned struct-element fields, every nested Vec level, then the buffer</li>
 </ul>
 <h4 id="reclaiming-temporaries">Reclaiming Temporaries<a aria-label="Link to Reclaiming Temporaries" class="heading-anchor" href="#reclaiming-temporaries">#</a></h4>
 <p>A temporary is unwound exactly like a named binding of the same type, so what is
 <em>not</em> reclaimed is a temporary whose own result aliases its storage: an element
-accessor such as <code>payload.split("\n").get(0)</code> returns a value that may point into the
+accessor such as <code>payload.split(&quot;\n&quot;).get(0)</code> returns a value that may point into the
 temporary's element buffer, so that buffer is left alone (one buffer per evaluation
-leaks). Bind the Vec to a name first — <code>parts&lt;Vec&lt;String&gt;&gt; = payload.split("\n")</code>,
+leaks). Bind the Vec to a name first — <code>parts&lt;Vec&lt;String&gt;&gt; = payload.split(&quot;\n&quot;)</code>,
 then <code>parts.get(0)</code> — and the binding's own scope-exit cleanup releases it.</p>
 <pre><code class="language-vyb">main()&lt;Int&gt; -&gt; {
     payload&lt;String&gt; = &quot;a|b|c\nx|y|z\n&quot;
@@ -1506,7 +1540,7 @@ access_parent(node&lt;our&lt;TreeNode&gt;&gt;)&lt;Int&gt; -&gt; {
 <td><code>libc</code> linked; I/O built on top of C runtime</td>
 </tr>
 <tr>
-<td><strong><code>extern "C"</code> blocks</strong></td>
+<td><strong><code>extern &quot;C&quot;</code> blocks</strong></td>
 <td>✅ Complete</td>
 <td>Declare C functions callable from Vyb (incl. variadic <code>printf(fmt, ...)</code>); maps <code>loc&lt;T&gt;</code>→<code>T*</code> and C aliases (<code>CInt</code>, <code>CString</code>, <code>CSize</code>, …)</td>
 </tr>
@@ -1522,11 +1556,11 @@ access_parent(node&lt;our&lt;TreeNode&gt;&gt;)&lt;Int&gt; -&gt; {
 </tr>
 </tbody>
 </table>
-<p><strong>With <code>extern "C"</code> and the typed C aliases, the POSIX API is reachable with a
+<p><strong>With <code>extern &quot;C&quot;</code> and the typed C aliases, the POSIX API is reachable with a
 thin Vyb wrapper, enabling networking, file I/O, threading, and more without
 language-level changes.</strong> FFI callbacks arrive as bare <code>loc&lt;fn&gt;</code> function
 pointer parameters (see <code>test/ffi/callback_fnptr.vyb</code>), and variadic C
-functions work directly (<code>printf("%s", s)</code> accepts a Vyb <code>String</code>). See
+functions work directly (<code>printf(&quot;%s&quot;, s)</code> accepts a Vyb <code>String</code>). See
 <code>doc/FFI_DESIGN.md</code> for the complete design.</p>
 <h2 id="language-overview">Language Overview<a aria-label="Link to Language Overview" class="heading-anchor" href="#language-overview">#</a></h2>
 <p>Vyb (freedom-1.0 series) is a mature, actively developed systems programming language with name-first syntax, a sized type system (Int8–Int64, UInt8–UInt64, Float32/Float64, Char, Rune, Bytes), compile-time monomorphized generics, aspect/bind polymorphism, pattern matching, <code>Vec&lt;T&gt;</code>, and comprehensive collection support. The core language is stable and well tested.</p>
@@ -1655,30 +1689,30 @@ about closures: <strong>a closure handed to another thread must be able to cross
 <p><strong>The modules.</strong></p>
 <ul>
 <li><strong><code>threads</code></strong> — <code>thread_spawn(work&lt;fn() -&gt; Int&gt;)</code> starts a pthread and returns an <code>Int?</code> handle
-  (absent if the spawn failed); <code>thread_join</code> blocks until it finishes and yields the closure's
-  result; <code>thread_detach</code> releases the handle without waiting. <code>Mutex</code>
-  (<code>mutex_new</code>/<code>lock</code>/<code>unlock</code>), condition variables (<code>cond_new</code>/<code>cond_wait</code>/<code>cond_signal</code>) and
-  lock-free <code>atomic_*</code> give mutual exclusion and shared counters. Everything maps 1:1 onto POSIX
-  threads, keeping the pthread ABI out of Vyb code.</li>
+(absent if the spawn failed); <code>thread_join</code> blocks until it finishes and yields the closure's
+result; <code>thread_detach</code> releases the handle without waiting. <code>Mutex</code>
+(<code>mutex_new</code>/<code>lock</code>/<code>unlock</code>), condition variables (<code>cond_new</code>/<code>cond_wait</code>/<code>cond_signal</code>) and
+lock-free <code>atomic_*</code> give mutual exclusion and shared counters. Everything maps 1:1 onto POSIX
+threads, keeping the pthread ABI out of Vyb code.</li>
 <li><strong><code>channels</code></strong> — thread-safe message passing. <code>chan_new()</code>/<code>chan_bounded(n)</code> create Int channels;
-  <code>chan_send</code> returns <code>Bool</code>, <code>chan_recv</code> blocks, <code>chan_try</code> returns <code>Int?</code> (no <code>-1</code> sentinel),
-  <code>chan_len</code> reports buffered depth, and <code>chan_select(handles)</code> waits on several at once and
-  returns the index of the first ready one. <code>strchan_*</code> channels retain the string on send and
-  transfer the reference on receive.</li>
+<code>chan_send</code> returns <code>Bool</code>, <code>chan_recv</code> blocks, <code>chan_try</code> returns <code>Int?</code> (no <code>-1</code> sentinel),
+<code>chan_len</code> reports buffered depth, and <code>chan_select(handles)</code> waits on several at once and
+returns the index of the first ready one. <code>strchan_*</code> channels retain the string on send and
+transfer the reference on receive.</li>
 <li><strong><code>tasks</code></strong> — fire-and-forget workers on a detached pthread: <code>task_spawn</code> returns an <code>Int?</code>
-  handle, <code>task_await</code> blocks on its result, <code>task_poll</code> returns <code>Int?</code> (absent while it is still
-  running), <code>task_free</code> reclaims it.</li>
+handle, <code>task_await</code> blocks on its result, <code>task_poll</code> returns <code>Int?</code> (absent while it is still
+running), <code>task_free</code> reclaims it.</li>
 <li><strong><code>asyncs</code></strong> — a multi-threaded executor: one scheduler per CPU core, stackful fibers pinned to
-  their worker and load-balanced by round-robin spawn. A task suspends <em>mid-body</em> with
-  <code>async_sleep_ms</code> (a timer, not a thread sleep), <code>async_yield</code>, or <code>async_await</code> (wait on another
-  task), so concurrent timers finish in ~max rather than ~sum wall time and CPU-bound tasks spread
-  across cores, with no state-machine transform. <code>async_detach</code> reclaims a finished task early so
-  long-lived programs recycle fibers; <code>async_run_all()</code> flushes the executor.</li>
+their worker and load-balanced by round-robin spawn. A task suspends <em>mid-body</em> with
+<code>async_sleep_ms</code> (a timer, not a thread sleep), <code>async_yield</code>, or <code>async_await</code> (wait on another
+task), so concurrent timers finish in ~max rather than ~sum wall time and CPU-bound tasks spread
+across cores, with no state-machine transform. <code>async_detach</code> reclaims a finished task early so
+long-lived programs recycle fibers; <code>async_run_all()</code> flushes the executor.</li>
 <li><strong><code>agents</code></strong> — mailbox workers. <code>agent_start(behavior)</code> runs <code>behavior(message)</code> on a worker
-  thread for each message, then once more with an absent optional after <code>agent_close</code> has drained
-  the mailbox; <code>agent_send</code> posts a message (a full bounded mailbox returns <code>false</code>), <code>agent_len</code>
-  reports buffered-but-unhandled messages, <code>agent_alive</code> reports whether the worker still runs,
-  and <code>agent_free</code> waits then reclaims it.</li>
+thread for each message, then once more with an absent optional after <code>agent_close</code> has drained
+the mailbox; <code>agent_send</code> posts a message (a full bounded mailbox returns <code>false</code>), <code>agent_len</code>
+reports buffered-but-unhandled messages, <code>agent_alive</code> reports whether the worker still runs,
+and <code>agent_free</code> waits then reclaims it.</li>
 </ul>
 <p><strong>What a closure may capture across a thread boundary.</strong> <code>thread_spawn</code>, <code>task_spawn</code>,
 <code>async_spawn</code> and <code>agent_start</code> hand a closure's environment to another OS thread, so every
@@ -1687,22 +1721,22 @@ the capability is called <strong>handoff</strong>:</p>
 <ul>
 <li>a plain value copy is handoff-capable — the environment carries its own copy;</li>
 <li><code>our&lt;T&gt;</code> / <code>mild&lt;T&gt;</code> is handoff-capable iff its payload is: the environment takes a strong
-  reference, so the target survives on the other thread;</li>
+reference, so the target survives on the other thread;</li>
 <li>a named struct or enum is handoff-capable iff every field / variant payload is; <code>Vec&lt;T&gt;</code>,
-  arrays, <code>T?</code> and tuples derive structurally;</li>
+arrays, <code>T?</code> and tuples derive structurally;</li>
 <li><code>my&lt;T&gt;</code> (a unique owner), <code>their&lt;T&gt;</code>/<code>loc&lt;T&gt;</code> (borrows and raw pointers) are never
-  handoff-capable: moving an owner off its thread, or passing a borrow of the spawner's frame,
-  would leave the spawner with an invalid owner or a dangling alias;</li>
+handoff-capable: moving an owner off its thread, or passing a borrow of the spawner's frame,
+would leave the spawner with an invalid owner or a dangling alias;</li>
 <li>a <strong>mutable</strong> capture is refused only when its declared type cannot be boxed soundly; when it can,
-  the compiler promotes the captured binding to one refcounted heap cell shared by the spawner's frame
-  and every environment that captures it (checkpoint (c)); the frame keeps one reference and each
-  environment another, and the last owner runs the cell's destructor, so the spawner <strong>does</strong> observe
-  the spawned closure's writes once it joins, and two escaping closures over one binding observe each
-  other's (<code>test/threads/test_thread_boundary_mutable_capture_boxed_accepted.vyb</code>,
-  <code>test/lambda/test_closure_mutable_shared_binding.vyb</code>);</li>
+the compiler promotes the captured binding to one refcounted heap cell shared by the spawner's frame
+and every environment that captures it (checkpoint (c)); the frame keeps one reference and each
+environment another, and the last owner runs the cell's destructor, so the spawner <strong>does</strong> observe
+the spawned closure's writes once it joins, and two escaping closures over one binding observe each
+other's (<code>test/threads/test_thread_boundary_mutable_capture_boxed_accepted.vyb</code>,
+<code>test/lambda/test_closure_mutable_shared_binding.vyb</code>);</li>
 <li>the one borrowing form that is accepted is a read-only <code>view(x)</code> — <strong>viewable</strong> — when the
-  closure also captures the owner through strong ownership (<code>our&lt;X&gt;</code> / <code>my&lt;X&gt;</code>), since then the
-  owner outlives the thread.</li>
+closure also captures the owner through strong ownership (<code>our&lt;X&gt;</code> / <code>my&lt;X&gt;</code>), since then the
+owner outlives the thread.</li>
 </ul>
 <pre><code class="language-vyb">import threads::{thread_spawn, thread_join}
 
@@ -1733,8 +1767,8 @@ aspects</strong> (re-exported by <code>core::prelude</code>), and a bind states 
 <pre><code class="language-vyb">aspect Handoff  { handoff(self)&lt;Bool&gt;  -&gt; { return true } }
 aspect Viewable { viewable(self)&lt;Bool&gt; -&gt; { return true } }
 </code></pre>
-<p>A marker aspect has no contract to satisfy; <code>bind Handoff -&gt; T</code> is simply the claim "a value of
-<code>T</code> may cross a thread boundary", reviewed by whoever wrote the bind. This is a <strong>general escape
+<p>A marker aspect has no contract to satisfy; <code>bind Handoff -&gt; T</code> is simply the claim &quot;a value of
+<code>T</code> may cross a thread boundary&quot;, reviewed by whoever wrote the bind. This is a <strong>general escape
 hatch, not an FFI-only feature</strong>. Reach for it whenever the structural verdict is blind to your
 invariants or simply wrong for your design:</p>
 <ul>
@@ -1797,29 +1831,28 @@ main()&lt;Int&gt; -&gt; {
 <p>How the claim behaves:</p>
 <ul>
 <li>The capability check consults the curated bind <strong>first</strong> for the type it names, so the explicit
-  claim wins over the computed verdict.</li>
+claim wins over the computed verdict.</li>
 <li>When the claim contradicts the derived shape, registration reports a <strong>non-fatal warning</strong> —
-  overriding is the point — and the payload carries <em>your</em> guarantee from then on. Verbatim from
-  the first program above:</li>
+overriding is the point — and the payload carries <em>your</em> guarantee from then on. Verbatim from
+the first program above:</li>
 </ul>
 <pre><code>warning: curated thread-boundary bind: `bind Handoff -&gt; Token` claims the type may cross a thread boundary, but its structural shape is not handoff-capable -- the explicit bind wins, so the program is accepted; the payload then carries the programmer's guarantee (doc/THREAD_BOUNDARY_SCOPE.md).
 </code></pre>
 <ul>
-<li>The claim is asked at <strong>every level</strong> of the walk, not only for the type as written: <code>bind
-  Handoff -&gt; Token</code> also covers <code>our&lt;Token&gt;</code> (the idiomatic way to share it), <code>Vec&lt;Token&gt;</code>,
-  <code>Result&lt;Token, E&gt;</code> and a struct field of type <code>Token</code> — and <code>bind Viewable -&gt; T</code> travels the
-  same way for the read-only relation. It is asked <em>after</em> the unique-owner and borrow refusals,
-  so it rescues a composition without turning a <code>my&lt;T&gt;</code> / <code>their&lt;T&gt;</code> / <code>loc&lt;T&gt;</code> / <code>ptr&lt;T&gt;</code> that
-  appears as the type itself into a handoff.</li>
+<li>The claim is asked at <strong>every level</strong> of the walk, not only for the type as written: <code>bind Handoff -&gt; Token</code> also covers <code>our&lt;Token&gt;</code> (the idiomatic way to share it), <code>Vec&lt;Token&gt;</code>,
+<code>Result&lt;Token, E&gt;</code> and a struct field of type <code>Token</code> — and <code>bind Viewable -&gt; T</code> travels the
+same way for the read-only relation. It is asked <em>after</em> the unique-owner and borrow refusals,
+so it rescues a composition without turning a <code>my&lt;T&gt;</code> / <code>their&lt;T&gt;</code> / <code>loc&lt;T&gt;</code> / <code>ptr&lt;T&gt;</code> that
+appears as the type itself into a handoff.</li>
 <li><code>Handoff</code> implies <code>Viewable</code>: whatever may be handed to another thread may also be read there.
-  <code>bind Viewable -&gt; T</code> states only the weaker, read-only claim.</li>
+<code>bind Viewable -&gt; T</code> states only the weaker, read-only claim.</li>
 <li><code>Viewable</code> is a <strong>relation, not a licence at a spawn site</strong>. A <code>bind Viewable</code> by itself does
-  not admit a value capture at <code>thread_spawn</code> / <code>task_spawn</code> / <code>async_spawn</code> / <code>agent_start</code>;
-  those sites require handoff capability. Read-only access crosses when the borrow rules above
-  hold (<code>view(x)</code> plus a strongly captured owner), and the wording stays "accepted for handoff",
-  never "guaranteed safe" — the claim is yours to keep. Claiming <code>Viewable</code> on a value that only
-  ever gets <em>read</em> across threads is therefore a statement about the type, not a pass for
-  handing it over:</li>
+not admit a value capture at <code>thread_spawn</code> / <code>task_spawn</code> / <code>async_spawn</code> / <code>agent_start</code>;
+those sites require handoff capability. Read-only access crosses when the borrow rules above
+hold (<code>view(x)</code> plus a strongly captured owner), and the wording stays &quot;accepted for handoff&quot;,
+never &quot;guaranteed safe&quot; — the claim is yours to keep. Claiming <code>Viewable</code> on a value that only
+ever gets <em>read</em> across threads is therefore a statement about the type, not a pass for
+handing it over:</li>
 </ul>
 <pre><code class="language-vyb">import core::aspects
 import threads::{thread_spawn, thread_join}
@@ -2151,12 +2184,12 @@ open_and_process()&lt;Int&gt; -&gt; {
 <li><strong>Binary data</strong>: <code>Bytes</code> (fat pointer for raw bytes)</li>
 <li><strong>Other</strong>: <code>Bool</code>, <code>String</code>, <code>Void</code></li>
 <li><strong>Integer casts</strong>: <code>value as Type</code> between the sized integer types — widening
-  sign/zero-extends from the source type, narrowing truncates. E.g. packing eight
-  <code>UInt8</code> into an <code>Int64</code>: <code>(b0 as Int64) | ((b1 as Int64) &lt;&lt; 8) | ...</code>.</li>
+sign/zero-extends from the source type, narrowing truncates. E.g. packing eight
+<code>UInt8</code> into an <code>Int64</code>: <code>(b0 as Int64) | ((b1 as Int64) &lt;&lt; 8) | ...</code>.</li>
 <li><strong>Explicit integer assignment</strong>: a variable/field may only change integer
-  width or signedness through <code>as</code>; a bare in-range constant still fits
-  (<code>x&lt;Int8&gt; = 3</code>), but an out-of-range constant or any typed value crossing
-  width/signedness is a compile error (<code>x&lt;Int8&gt; = 300</code>, <code>x&lt;Int8&gt; = wide&lt;Int&gt;</code>).</li>
+width or signedness through <code>as</code>; a bare in-range constant still fits
+(<code>x&lt;Int8&gt; = 3</code>), but an out-of-range constant or any typed value crossing
+width/signedness is a compile error (<code>x&lt;Int8&gt; = 300</code>, <code>x&lt;Int8&gt; = wide&lt;Int&gt;</code>).</li>
 </ul>
 <p><strong>Current Collection Types</strong>:</p>
 <ul>
@@ -2594,13 +2627,13 @@ name(c&lt;Color&gt;)&lt;String&gt; -&gt; {
 compile time:</p>
 <ul>
 <li>Comparison patterns, payload-binding variants (<code>Circle(r)</code>), and arbitrary
-  expressions are not allowed inside a set.</li>
+expressions are not allowed inside a set.</li>
 <li>An empty set <code>{}</code> is rejected, as is a wildcard that is not the last arm.</li>
 <li>Every element must share the select target's type (<code>Int</code> + <code>String</code> in one
-  set is an error).</li>
+set is an error).</li>
 <li>A value listed in more than one arm is claimed by the earliest arm (no error).</li>
 <li>Enum-variant elements count toward <code>select</code> exhaustiveness checks on
-  tagged-union enums.</li>
+tagged-union enums.</li>
 </ul>
 <h3 id="variadic-tuples">Variadic Tuples<a aria-label="Link to Variadic Tuples" class="heading-anchor" href="#variadic-tuples">#</a></h3>
 <p>Vyb supports <strong>fully variadic tuple types</strong> that can hold any number of heterogeneous elements (1 to N):</p>
@@ -2655,9 +2688,9 @@ main()&lt;Int&gt; -&gt; {
 <li><strong>LLVM Structs</strong>: Compiled to efficient anonymous struct types</li>
 <li><strong>Element access</strong>: Bracket indexing (<code>tuple[0]</code>, <code>tuple[1]</code>, …) with <code>.len()</code></li>
 <li><strong>Tuple variables</strong>: Stored in typed variables, built from literals <code>(a, b, c)</code>
-  (single-element <code>(v,)</code>), and passed to functions</li>
+(single-element <code>(v,)</code>), and passed to functions</li>
 <li><strong>Serialization</strong>: A tuple returned from <code>main()</code> serializes to a JSON array
-  (<code>[1, "a", true]</code>)</li>
+(<code>[1, &quot;a&quot;, true]</code>)</li>
 </ul>
 <h2 id="string-theory">String Theory<a aria-label="Link to String Theory" class="heading-anchor" href="#string-theory">#</a></h2>
 <p>Vyb's String type is a production-ready fat pointer implementation with comprehensive method support and natural literal syntax. Unlike C's null-terminated strings or C++'s heavyweight <code>std::string</code>, Vyb Strings combine the best of both worlds: efficient representation with modern conveniences.</p>
@@ -2691,8 +2724,8 @@ check&lt;Bool&gt; = &quot;Einstein&quot;.starts_with(&quot;Ein&quot;)  # Returns
 # All without explicit constructors!
 </code></pre>
 <p>String literals process backslash escapes: <code>\n</code> LF, <code>\r</code> CR, <code>\t</code> TAB, <code>\\</code> a
-literal backslash, <code>\"</code> a double quote, <code>\0</code> NUL, and <code>\xHH</code> a hex byte. Any
-other <code>\X</code> is kept verbatim (regex/path-friendly), so <code>"\r\n"</code> is a real CRLF
+literal backslash, <code>\&quot;</code> a double quote, <code>\0</code> NUL, and <code>\xHH</code> a hex byte. Any
+other <code>\X</code> is kept verbatim (regex/path-friendly), so <code>&quot;\r\n&quot;</code> is a real CRLF
 pair — HTTP requests depend on this.</p>
 <h3 id="complete-method-reference">Complete Method Reference<a aria-label="Link to Complete Method Reference" class="heading-anchor" href="#complete-method-reference">#</a></h3>
 <p><strong>Constructor</strong></p>
@@ -3008,9 +3041,9 @@ divide_structured(a&lt;Int&gt;, b&lt;Int&gt;)&lt;Int&gt; -&gt; {
 </code></pre>
 <p><strong>Type ID Hashing:</strong></p>
 <ul>
-<li><code>Int</code> → hash("Int") = -3994496327427856726</li>
-<li><code>String</code> → hash("String") = unique value</li>
-<li><code>DivisionError</code> → hash("DivisionError") = unique value</li>
+<li><code>Int</code> → hash(&quot;Int&quot;) = -3994496327427856726</li>
+<li><code>String</code> → hash(&quot;String&quot;) = unique value</li>
+<li><code>DivisionError</code> → hash(&quot;DivisionError&quot;) = unique value</li>
 <li>Enables runtime type dispatch in trap handlers</li>
 </ul>
 <h3 id="the-trap-block">The trap Block<a aria-label="Link to The trap Block" class="heading-anchor" href="#the-trap-block">#</a></h3>
@@ -3524,7 +3557,7 @@ cmake --build build --target run-milestone
 <h2 id="test-harness">Test Harness<a aria-label="Link to Test Harness" class="heading-anchor" href="#test-harness">#</a></h2>
 <p>Vyb's canonical test runner is <code>test/run_tests.vyb</code> — a Vyb program, the same
 suite wired into CTest as the <code>run-tests</code> target and used for the full regression
-gate (currently <strong>1314 <code>.vyb</code> tests, all passing</strong>):</p>
+gate (currently <strong>1322 <code>.vyb</code> tests, all passing</strong>):</p>
 <h3 id="quick-testing">Quick Testing<a aria-label="Link to Quick Testing" class="heading-anchor" href="#quick-testing">#</a></h3>
 <pre><code class="language-bash"># Full suite (JIT execution), from the repo root
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
@@ -3563,7 +3596,7 @@ build/vyb triage_tool.vyb results.json --priority critical,high
 </code></pre>
 <h3 id="test-features">Test Features<a aria-label="Link to Test Features" class="heading-anchor" href="#test-features">#</a></h3>
 <ul>
-<li><strong>1314 Tests, All Passing</strong>: The full <code>run_tests.vyb</code> suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area</li>
+<li><strong>1322 Tests, All Passing</strong>: The full <code>run_tests.vyb</code> suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area</li>
 <li><strong>Harness Reporting</strong>: <code>test_harness.vyb</code> adds JSON/HTML reports and failure triage on top of the runner (sequential execution; <code>--workers</code> is accepted for compatibility)</li>
 <li><strong>Rich Reporting</strong>: HTML, JSON, and console output with detailed metrics</li>
 <li><strong>Smart Categorization</strong>: Automatic test categorization and filtering</li>
@@ -3600,37 +3633,43 @@ device buffer:</p>
 <h3 id="rules-that-save-a-bad-afternoon">Rules that save a bad afternoon<a aria-label="Link to Rules that save a bad afternoon" class="heading-anchor" href="#rules-that-save-a-bad-afternoon">#</a></h3>
 <ul>
 <li><strong>Build the argument array yourself.</strong> <code>cuLaunchKernel</code> takes one pointer — the array of
-  argument cells — and <code>addr()</code> (issue #476) lets Vyb build it directly in one array literal:
-  <code>params = [addr(outD), addr(ka), …]</code>, then <code>cuda_launch_n(hf, …, addr(params), nargs)</code>
-  (issue #478 made a literal with runtime elements work). Kernel arity is therefore not a
-  launcher limit; the fixed-arity <code>cuda_launch4*</code> shims remain for the four-scalar case. (The
-  issue #199 pitfall was <em>packing</em>: element <em>i</em> of <code>kernelParams</code> must point at the buffer holding
-  argument <em>i</em>'s value.) Float parameters travel as the raw f64 bits in their cell.</li>
+argument cells — and <code>addr()</code> (issue #476) lets Vyb build it directly in one array literal:
+<code>params = [addr(outD), addr(ka), …]</code>, then <code>cuda_launch_n(hf, …, addr(params), nargs)</code>
+(issue #478 made a literal with runtime elements work). Kernel arity is therefore not a
+launcher limit; the fixed-arity <code>cuda_launch4*</code> shims remain for the four-scalar case. (The
+issue #199 pitfall was <em>packing</em>: element <em>i</em> of <code>kernelParams</code> must point at the buffer holding
+argument <em>i</em>'s value.) Float parameters travel as the raw f64 bits in their cell.</li>
 <li><strong>Bulk transfers.</strong> Upload whole arrays with one <code>cuMemcpyHtoD_v2</code> — from a buffer read with C
-  stdio, or straight from a String's bytes via <code>addr(s)</code> (#476). A per-element <code>cuda_write_i32</code>
-  loop is fine for a 512-element fixture and fatal for a 60 MB array.</li>
+stdio, or straight from a String's bytes via <code>addr(s)</code> (#476). A per-element <code>cuda_write_i32</code>
+loop is fine for a 512-element fixture and fatal for a 60 MB array.</li>
 <li><strong>Width discipline.</strong> The width of a store or atomic is the <em>intrinsic's</em> element type, not the
-  width of the Vyb operand: <code>st_f32</code> writes four bytes even though a Vyb <code>Float</code> is f64 in LLVM.
-  <code>fixtures/kernel/probe15_store_width.vyb</code> is the regression fixture for exactly that, checked on
-  silicon by <code>fixtures/cuda/probe15_verify.vyb</code>.</li>
+width of the Vyb operand: <code>st_f32</code> writes four bytes even though a Vyb <code>Float</code> is f64 in LLVM.
+<code>fixtures/kernel/probe15_store_width.vyb</code> is the regression fixture for exactly that, checked on
+silicon by <code>fixtures/cuda/probe15_verify.vyb</code>.</li>
 <li><strong>Readback.</strong> A 4-byte scalar copied into an 8-byte host slot leaves garbage in the upper half —
-  allocate device counters as 8 bytes and copy 8 bytes back.</li>
+allocate device counters as 8 bytes and copy 8 bytes back.</li>
 <li><strong>Testing.</strong> <code>test/ffi/test_cuda_*.vyb</code> run against the checked-in golden <code>.ptx</code>
-  (<code>fixtures/cuda/README.md</code>); <code>.github/workflows/gpu-kernel.yml</code> re-emits every kernel across
-  <code>sm_75..sm_90</code> on CPU (<code>sm_90a</code> emits and ptxas-validates on a local toolchain) and runs the on-silicon cross-validations on a self-hosted GPU runner.</li>
+(<code>fixtures/cuda/README.md</code>); <code>.github/workflows/gpu-kernel.yml</code> re-emits every kernel across
+<code>sm_75..sm_90</code> on CPU (<code>sm_90a</code> emits and ptxas-validates on a local toolchain) and runs the on-silicon cross-validations on a self-hosted GPU runner.</li>
 </ul>
 <p>Full reference: <a href="https://github.com/rickenator/Vyb/blob/main/doc/CUDA.md" rel="noopener noreferrer" target="_blank">doc/CUDA.md</a>.</p>
 <h2 id="project-structure">Project Structure<a aria-label="Link to Project Structure" class="heading-anchor" href="#project-structure">#</a></h2>
 <pre><code>Vyb/
-├── src/              # C++ source code
-│   ├── main.cpp      # Entry point with LLVM JIT
-│   ├── lexer.cpp     # Tokenization
-│   ├── parser.cpp    # Syntax analysis
-│   └── ast.cpp       # Abstract syntax tree
+├── src/              # C++ source of the compiler and driver
+│   ├── main.cpp      # Entry point: JIT / AOT / --build / --kernel / test runner
+│   ├── parser/       # Lexer, AST, and the parser split by grammar area
+│   ├── vre/          # Semantic analysis, aspects, intrinsics, LLVM codegen
+│   └── runtime/      # C++-side runtime support (error handling)
 ├── include/vyb/      # Header files
-├── test/             # Vyb test programs
+├── stdlib/           # The Vyb standard library (io, collections, asyncs, ...)
+├── runtime/          # vyb_runtime.c — linked into compiled executables
+├── docs/             # refman/ (Programmer's Guide + symbol pages), sdk/, web/ (this site)
+├── doc/              # Design notes and feature-status documents
+├── test/             # The .vyb test suite + run_tests.vyb (the canonical runner)
+├── fixtures/         # Kernel/CUDA fixtures and their host-side verification
 ├── examples/         # Example programs
-├── doc/              # Documentation
+├── sdk/              # SDK packaging (env.sh, install notes)
+├── tools/            # Vyb programs that drive the toolchain (docgen, splash, ...)
 └── build/            # Build output
 </code></pre>
 <h2 id="examples">Examples<a aria-label="Link to Examples" class="heading-anchor" href="#examples">#</a></h2>
@@ -3715,22 +3754,22 @@ println(person2.age.to_string())  # Output: 30
 <li><strong>Struct Fields</strong>: Primitive, <code>Vec</code>, and nested struct fields</li>
 <li><strong>Excluded</strong>: <code>fn</code> and <code>Self</code> field types are not serializable</li>
 <li><strong>Round-Trip</strong>: Lossless struct → JSON → struct at arbitrary nesting depth.
-  <code>to_string()</code> emits JSON with no fixed-size cap, so long strings, wide Vecs,
-  and deeply nested structures never truncate; <code>T::from_string(json)</code> rebuilds
-  the full value, including owned <code>String</code> and <code>Vec</code> payloads.</li>
+<code>to_string()</code> emits JSON with no fixed-size cap, so long strings, wide Vecs,
+and deeply nested structures never truncate; <code>T::from_string(json)</code> rebuilds
+the full value, including owned <code>String</code> and <code>Vec</code> payloads.</li>
 <li><strong>Type Safety</strong>: Runtime validation of JSON structure</li>
 <li><strong>Deserialization safety</strong>: <code>T::from_string()</code> never trusts lengths or counts
-  from the input. <code>Vec&lt;T&gt;</code> capacity grows only as elements are actually parsed
-  (never from a declared size), every allocation is OOM-guarded, and unknown
-  fields are skipped rather than written out of bounds. Cleanly-deserialized
-  input can't trigger an allocation bomb from hostile JSON.</li>
+from the input. <code>Vec&lt;T&gt;</code> capacity grows only as elements are actually parsed
+(never from a declared size), every allocation is OOM-guarded, and unknown
+fields are skipped rather than written out of bounds. Cleanly-deserialized
+input can't trigger an allocation bomb from hostile JSON.</li>
 </ul>
 <h3 id="auto-serialization-for-main-returns">Auto-Serialization for main() Returns<a aria-label="Link to Auto-Serialization for main() Returns" class="heading-anchor" href="#auto-serialization-for-main-returns">#</a></h3>
 <p>One of Vyb's standout features is automatic serialization of complex return types from <code>main()</code>:</p>
 <ul>
 <li><strong>Simple integers</strong>: Serialize to stdout (<code>main()&lt;Int&gt; -&gt; { return 42 }</code> prints <code>42</code>)</li>
 <li><strong>Complex types</strong>: Automatically serialize to JSON-like format</li>
-<li><strong>Tuples</strong>: <code>main()&lt;Int,String&gt; -&gt; { return 10, "hello" }</code> outputs <code>[10, "hello"]</code></li>
+<li><strong>Tuples</strong>: <code>main()&lt;Int,String&gt; -&gt; { return 10, &quot;hello&quot; }</code> outputs <code>[10, &quot;hello&quot;]</code></li>
 <li><strong>Structs</strong>: Full structured output with field names and values</li>
 </ul>
 <h3 id="implementation-details">Implementation Details<a aria-label="Link to Implementation Details" class="heading-anchor" href="#implementation-details">#</a></h3>
@@ -3738,10 +3777,10 @@ println(person2.age.to_string())  # Output: 30
 <ul>
 <li><strong>Runtime Type Metadata</strong>: Global type registry with field information</li>
 <li><strong>C Runtime Functions</strong>: <code>__vyb_complex_to_json_with_metadata()</code> and
-  <code>__vyb_complex_from_json_with_metadata()</code></li>
+<code>__vyb_complex_from_json_with_metadata()</code></li>
 <li><strong>Type Registration</strong>: Automatic registration via global constructors</li>
 <li><strong>Scalable Emitter</strong>: A growable output buffer emits arbitrary-depth JSON;
-  recursive deserialization fills primitives, <code>Vec&lt;T&gt;</code>, and nested structs</li>
+recursive deserialization fills primitives, <code>Vec&lt;T&gt;</code>, and nested structs</li>
 <li><strong>String Conversion</strong>: Seamless char* to VybString{data, length} struct conversion</li>
 </ul>
 <p>See <code>test/json/</code> for comprehensive examples and <code>runtime/vyb_type_metadata.c</code> for implementation.</p>
@@ -3795,10 +3834,10 @@ compatibility) and reports the same per-test verdicts as the canonical runner.</
 </ul>
 <h4 id="test-statistics"><strong>Test Statistics</strong><a aria-label="Link to Test Statistics" class="heading-anchor" href="#test-statistics">#</a></h4>
 <ul>
-<li><strong>Total Tests</strong>: 1314 <code>.vyb</code> tests (full suite, all passing as of v0.7.7)</li>
+<li><strong>Total Tests</strong>: 1322 <code>.vyb</code> tests (full suite, all passing as of v0.7.7)</li>
 <li><strong>Coverage Areas</strong>: Language features, control flow, error handling, type system, math, strings, introspection</li>
 <li><strong>Test Types</strong>: Feature tests (with <code>@expect: pass</code>), future-feature docs (with <code>@expect: fail</code>), parser tests</li>
-<li><strong>Success Rate</strong>: 100% (1314/1314) on the current suite</li>
+<li><strong>Success Rate</strong>: 100% (1322/1322) on the current suite</li>
 </ul>
 <h3 id="syntax-migration-tools">🔧 <strong>Syntax Migration Tools</strong><a aria-label="Link to 🔧 Syntax Migration Tools" class="heading-anchor" href="#syntax-migration-tools">#</a></h3>
 <p>Automated tools ensure codebase consistency and syntax standardization:</p>
@@ -3862,48 +3901,54 @@ build/vyb triage_tool.vyb test_results.json --output-format markdown --output tr
 <p><strong>Latest cycle (v0.7.x)</strong>: stdlib concurrency + a network/UI demo</p>
 <ul>
 <li>✅ <strong><code>chain</code> stdlib module</strong> — a hash-chained legitimization core written
-  entirely in Vyb over <code>crypto.sha256</code>: <code>Record {label, value}</code> facts are
-  sealed into Merkle-rooted, prev-hash-linked <code>ChainBlock</code>s, producing a
-  tamper-evident tip hash that a consumer can re-verify offline. One shared
-  core, three consumers (VybOS package/boot legitimization, VybForge
-  build records, smuggled-dependency receipts). Integrity layer by design —
-  any record/order/link tamper fails <code>verify</code>; a signature layer (authenticity
-  over keyed origins, key rotation, registry checkpoints) is the next
-  increment on the same records. A provenance ledger, not a currency.</li>
+entirely in Vyb over <code>crypto.sha256</code>: <code>Record {label, value}</code> facts are
+sealed into Merkle-rooted, prev-hash-linked <code>ChainBlock</code>s, producing a
+tamper-evident tip hash that a consumer can re-verify offline. One shared
+core, three consumers (VybOS package/boot legitimization, VybForge
+build records, smuggled-dependency receipts). Integrity layer by design —
+any record/order/link tamper fails <code>verify</code>; a signature layer (authenticity
+over keyed origins, key rotation, registry checkpoints) is the next
+increment on the same records. A provenance ledger, not a currency.</li>
 <li>✅ <strong>Serializer field-offset fix (#215)</strong> — codegen now sets the host
-  <code>DataLayout</code> before baking struct field offsets, so <code>to_string()</code> no longer
-  mis-encodes an <code>Int</code> field that follows a <code>Bool</code> field at index ≥ 1.</li>
+<code>DataLayout</code> before baking struct field offsets, so <code>to_string()</code> no longer
+mis-encodes an <code>Int</code> field that follows a <code>Bool</code> field at index ≥ 1.</li>
 <li>✅ <strong>Set patterns in <code>select</code> arms (<code>{ … }</code>)</strong> — group several values into one
-  arm; the arm matches when the target equals <em>any</em> element. Sets hold literals
-  and bare enum-variant names; empty <code>{}</code> and mixed types are rejected, and the
-  <code>?</code> wildcard must remain the last arm.</li>
+arm; the arm matches when the target equals <em>any</em> element. Sets hold literals
+and bare enum-variant names; empty <code>{}</code> and mixed types are rejected, and the
+<code>?</code> wildcard must remain the last arm.</li>
 <li>✅ <strong>Per-task async reclamation (<code>async_detach</code>)</strong> — reclaim a single finished
-  fiber's stack and captured environment early, so long-lived programs recycle
-  fibers instead of accumulating one per <code>async_spawn</code>; a still-running task
-  self-reaps on completion.</li>
+fiber's stack and captured environment early, so long-lived programs recycle
+fibers instead of accumulating one per <code>async_spawn</code>; a still-running task
+self-reaps on completion.</li>
 <li>✅ <strong><code>http</code>/<code>https</code> client hardening</strong> — chunked response-body decoding and
-  dependable host connection (IPv4 address resolution), plus TLS context race
-  fixes, so a web-capable client app can load real pages.</li>
+dependable host connection (IPv4 address resolution), plus TLS context race
+fixes, so a web-capable client app can load real pages.</li>
 <li>✅ <strong>VybLynx TUI demo (<code>demos/VybLynx</code>)</strong> — a curses box window with keyboard
-  navigation, in-window URL editor, offline/error panes, and agent downloads;
-  pages are fetched off the UI thread through the stdlib <code>asyncs</code> executor so
-  the interface stays responsive.</li>
+navigation, in-window URL editor, offline/error panes, and agent downloads;
+pages are fetched off the UI thread through the stdlib <code>asyncs</code> executor so
+the interface stays responsive.</li>
 </ul>
 <p><strong>v0.4.2 (freedom-1.0 series)</strong>: Generic function monomorphization and FREEDOM blocks</p>
 <ul>
-<li>✅ <strong>Generic Functions</strong>: Complete LLVM monomorphization system for generic functions with bounded type parameters</li>
+<li>✅ <strong>Generic Functions</strong>: Complete LLVM monomorphization system for generic functions with bounded type parameters
+<ul>
 <li><strong>Type Parameter Substitution</strong>: <code>T → Point</code> during codegen</li>
 <li><strong>On-Demand Instantiation</strong>: Generate specialized functions like <code>printItem_Point</code> from templates</li>
 <li><strong>Method Resolution</strong>: Call aspect methods on generic parameters (<code>item.show()</code> where <code>item: T&lt;Display&gt;</code>)</li>
 <li><strong>Caching</strong>: Reuse monomorphized functions for same type combinations</li>
 <li><strong>Integration</strong>: Works seamlessly with aspects, traits, and generic structs</li>
-<li>✅ <strong>Select Expressions</strong>: Pattern matching expressions with <code>select(expr) -&gt; { pattern -&gt; result };</code> syntax</li>
+</ul>
+</li>
+<li>✅ <strong>Select Expressions</strong>: Pattern matching expressions with <code>select(expr) -&gt; { pattern -&gt; result };</code> syntax
+<ul>
 <li><strong>Naked expressions</strong>: Simple values auto-return without <code>pass</code> keyword</li>
 <li><strong>Complex blocks</strong>: Use <code>pass</code> keyword to return from block without exiting function</li>
 <li><strong>Type inference</strong>: First case determines result type for entire select</li>
 <li><strong>Pattern matching</strong>: Exact equality patterns with wildcard <code>?</code> support</li>
+</ul>
+</li>
 <li>✅ <strong>Canonical Syntax Unification</strong>: Complete migration to unified <code>my()</code>/<code>our()</code> constructors and <code>view</code>/<code>borrow</code> operators</li>
-<li>✅ <strong>Modern Test Harness</strong>: <code>test/run_tests.vyb</code> running the full suite — 1314 <code>.vyb</code> tests all passing — with an auxiliary parallel/HTML/triage harness</li>
+<li>✅ <strong>Modern Test Harness</strong>: <code>test/run_tests.vyb</code> running the full suite — 1322 <code>.vyb</code> tests all passing — with an auxiliary parallel/HTML/triage harness</li>
 <li>✅ <strong>Syntax Migration Tools</strong>: Automated migration from legacy to canonical syntax with comprehensive reporting</li>
 <li>✅ <strong>Match Statements</strong>: Complete pattern matching with <code>-&gt;</code> arrow syntax and <code>?</code> wildcard; no-match results in NOP</li>
 <li>✅ <strong>Break/Continue</strong>: Loop control flow statements working in all loop types</li>
@@ -3924,7 +3969,7 @@ build/vyb triage_tool.vyb test_results.json --output-format markdown --output tr
 <li><strong>Tests</strong>: Review <code>test/</code> for feature demonstrations</li>
 <li><strong>Issues</strong>: Report bugs or request features on GitHub</li>
 </ul>
-<hr>
+<hr />
 <h2 id="appendix">Appendix<a aria-label="Link to Appendix" class="heading-anchor" href="#appendix">#</a></h2>
 <h3 id="a-grammar-ebnf">A. Grammar (EBNF)<a aria-label="Link to A. Grammar (EBNF)" class="heading-anchor" href="#a-grammar-ebnf">#</a></h3>
 <p>The formal EBNF grammar now lives in the canonical reference,
@@ -3957,11 +4002,11 @@ one grammar home; the appendix also notes which productions are legacy.</p>
 <p><strong>Simple Returns:</strong></p>
 <ul>
 <li><code>main()&lt;Int&gt; -&gt; { return 42 }</code> → Exit code 42</li>
-<li><code>main()&lt;String&gt; -&gt; { return "hello" }</code> → Outputs: hello</li>
+<li><code>main()&lt;String&gt; -&gt; { return &quot;hello&quot; }</code> → Outputs: hello</li>
 </ul>
 <p><strong>Complex Returns:</strong></p>
 <ul>
-<li><code>main()&lt;Int,String&gt; -&gt; { return 42, "hello" }</code> → Outputs: [42, "hello"]</li>
+<li><code>main()&lt;Int,String&gt; -&gt; { return 42, &quot;hello&quot; }</code> → Outputs: [42, &quot;hello&quot;]</li>
 <li>Struct returns → JSON with field names and values</li>
 <li>Vec returns → JSON array representation</li>
 </ul>
@@ -3992,18 +4037,56 @@ Flexible module inclusion from external, potentially unverified sources.</p>
 Compile-time generic construct parameterized by types or constants.</p>
 <p><strong>Vec<T></strong>
 Resizable array collection with methods like <code>push()</code>, <code>pop()</code>, <code>len()</code>, <code>get()</code>.</p>
-<hr>
+<hr />
 <h2 id="license">License<a aria-label="Link to License" class="heading-anchor" href="#license">#</a></h2>
 <p>Copyright 2026 Aniviza LLC. Licensed under the
-<a href="http://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a> — see the
+<a href="http://www.apache.org/licenses/LICENSE-2.0" rel="noopener noreferrer" target="_blank">Apache License, Version 2.0</a> — see the
 <a href="https://github.com/rickenator/Vyb/blob/main/LICENSE" rel="noopener noreferrer" target="_blank">LICENSE</a> file for the full text.</p>
-<hr>
+<hr />
+<h2 id="the-vyb-family">The Vyb family<a aria-label="Link to The Vyb family" class="heading-anchor" href="#the-vyb-family">#</a></h2>
+<p>Vyb is a language with more than one consumer; each project below is written in
+it and is a real, running thing rather than a demo.</p>
+<table>
+<thead>
+<tr>
+<th>project</th>
+<th>what it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><a href="https://github.com/rickenator/VybOS" rel="noopener noreferrer" target="_blank">VybOS</a></strong></td>
+<td>a Linux-based OS whose declarative, content-addressed configuration and control framework are Vyb; PID 1 is Vyb</td>
+</tr>
+<tr>
+<td><strong>VybWin</strong> <em>(private for now)</em></td>
+<td>the window environment for VybOS: apps are cards summoned into an arena, with the ledger one flip away</td>
+</tr>
+<tr>
+<td><strong><a href="https://github.com/rickenator/VybForge" rel="noopener noreferrer" target="_blank">VybForge</a></strong></td>
+<td>the shop floor: a desired-state interviewer for VybOS, a Vyb-native on-GPU inference substrate, and the self-contained voice loop</td>
+</tr>
+<tr>
+<td><strong><a href="https://github.com/rickenator/VybFly" rel="noopener noreferrer" target="_blank">VybFly</a></strong></td>
+<td>FlyScale — a whole-brain connectome scaling study run on a Vyb-native simulator and Vyb GPU kernels</td>
+</tr>
+</tbody>
+</table>
+<hr />
 <p><em>Vyb (freedom-1.0 series): A mature systems programming language with a comprehensive sized type system, unified name-first syntax, pattern matching, compile-time monomorphized generics, resizable collections, an aspect/bind polymorphism system, and a unique import/smuggle module system.</em></p>
 
+<!-- BODY:END -->
     </main>
   </div>
 
   <footer>
+    <div class="footer-links">
+      <a href="https://github.com/rickenator/Vyb" target="_blank" rel="noopener">Vyb</a>
+      <a href="https://github.com/rickenator/VybOS" target="_blank" rel="noopener">VybOS</a>
+      <a href="https://github.com/rickenator/VybForge" target="_blank" rel="noopener">VybForge</a>
+      <a href="https://github.com/rickenator/VybFly" target="_blank" rel="noopener">VybFly</a>
+      <a href="https://aniviza.com/" target="_blank" rel="noopener">Aniviza</a>
+    </div>
     Vyb Programming Language · Developed by Aniviza LLC · Open source under Apache License 2.0
   </footer>
   <a class="backtop" href="#" aria-label="Back to top">↑</a>
