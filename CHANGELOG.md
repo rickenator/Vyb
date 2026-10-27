@@ -152,14 +152,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shared cell (so the defining frame also observes an escaping closure's writes) is
   checkpoint (c), still open; the storage-location ownership gaps the change exposed
   (`Vec<fn ...>` elements and closure struct fields) were filed as #439 and are fixed
-  by the two `### Fixed`- **`as` between `Int` and the C ABI integer aliases miscompiled.** `CInt`, `CUInt`, `CLong`,
-  `CULong`, `CSize`, `CSSize`, `CShort`, `CUShort`, `CChar` and `CUChar` were missing from the
-  integer-class table, so for example `x<Int> = cfunc() as Int` stored an i32 into an i64 slot
-  and kept stale high bits, with only a "Type mismatch in assignment" warning. The aliases are now
-  classified, and any int-to-int `as` that is not otherwise handled extends or truncates. It
-  zero-extends from unsigned types and `i1`, and sign-extends otherwise. Covered by
-  `test/types/cint_as_int_widen_test.vyb`.
- entries below.
+  by the two `### Fixed` entries below.
 - **`VYBHOME` + a toplevel `SOURCEME_VYB`, so projects stop hardcoding the checkout
   (#424)** — Vyb now owns its own toolchain paths. Sourcing `SOURCEME_VYB` exports
   `VYBHOME` (the checkout root) and the derived `VYB` (`$VYBHOME/build/vyb`) and
@@ -192,6 +185,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   neither of which names the problem. `fail<E>(e)` statements and `ptr<T>` types are unaffected.
   Tests are in `test/parser/test_reserved_word_*.vyb`.
 
+- **`as` between `Int` and the C ABI integer aliases miscompiled.** `CInt`, `CUInt`, `CLong`,
+  `CULong`, `CSize`, `CSSize`, `CShort`, `CUShort`, `CChar` and `CUChar` were missing from the
+  integer-class table, so for example `x<Int> = cfunc() as Int` stored an i32 into an i64 slot
+  and kept stale high bits, with only a "Type mismatch in assignment" warning. The aliases are now
+  classified, and any int-to-int `as` that is not otherwise handled extends or truncates. It
+  zero-extends from unsigned types and `i1`, and sign-extends otherwise. Covered by
+  `test/types/cint_as_int_widen_test.vyb`.
 - **The shipped `filter`/`map` over a `Vec<mild<T>>` no longer leaks (#427 defects 6/7, #451
   closed for this half)** — a call whose callee is a `fn(...)` VALUE is emitted by its own arm:
   it rebuilds the callee's signature, prepends the hidden environment and builds its own argument
