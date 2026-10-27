@@ -3385,10 +3385,17 @@ typedef struct {
 
 // Agent behavior receives Vyb `T?`: its payload plus a presence flag. A final
 // absent value signals that the mailbox has closed and drained; no payload value
-// is reserved for shutdown. Scalar Bool and String callbacks are invoked as
-// their ABI-lowered payload components plus that flag.
+// is reserved for shutdown. Scalar Bool, Float and String callbacks are invoked
+// as their ABI-lowered payload components plus that flag.
+//
+// Float must not be passed as a C struct { double; bool }. The behavior is an
+// LLVM function taking { double, i1 } by value, which LLVM lowers to separate
+// scalars (the double in an FP register, the flag in the next integer
+// register). The C ABI for the struct only agrees with that on x86-64. On
+// AArch64 the struct is not an HFA, so C passes it in two integer registers
+// (x1, x2) while the behavior reads d0 and w1. The flag then came from the
+// double's low bits, so a value like 1.25 looked absent and the agent dropped it.
 typedef struct { int64_t value; bool present; } vyb_agent_int_opt;
-typedef struct { double value; bool present; } vyb_agent_float_opt;
 
 // Forward declarations for the String channel runtime, which is defined later
 // in this file but used by String-payload agents.
@@ -3440,12 +3447,12 @@ static void* vyb_agent_loop(void* arg) {
             int64_t v = 0;
             int present = __vyb_chan_recv_opt(a->mailbox, &v);
             double d = 0.0; if (present) memcpy(&d, &v, sizeof(d));
-            vyb_agent_float_opt event = { d, present != 0 };
+            int64_t has = present != 0;
             if (a->failable) {
-                vyb_agent_fail_ret r = ((vyb_agent_fail_ret (*)(void*, vyb_agent_float_opt))a->fn)(a->env, event);
+                vyb_agent_fail_ret r = ((vyb_agent_fail_ret (*)(void*, double, int64_t))a->fn)(a->env, d, has);
                 if (r.err) { vyb_agent_close_self(a, r.err); break; }
             } else {
-                ((void (*)(void*, vyb_agent_float_opt))a->fn)(a->env, event);
+                ((void (*)(void*, double, int64_t))a->fn)(a->env, d, has);
             }
             if (!present) break;
         }
