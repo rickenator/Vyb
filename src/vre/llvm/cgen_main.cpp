@@ -471,11 +471,25 @@ void LLVMCodegen::visit(vyb::ast::Module* node) {
         }
     }
 
-    // THIRD PASS: Process all remaining statements (skip structs already processed in first pass)
+    // GLOBALS PASS (#5): emit every top-level variable declaration (module
+    // global) in source order BEFORE any function body, so a function may read or
+    // assign a global declared further down the file. Mirrors the semantic
+    // globals pre-pass in SemanticAnalyzer::visit(Module*).
+    VYB_CDBG << "DEBUG: Globals pass - processing top-level variable declarations" << std::endl;
+    for (size_t i = 0; i < node->body.size(); ++i) {
+        const auto& stmt = node->body[i];
+        if (stmt && stmt->getType() == vyb::ast::NodeType::VARIABLE_DECLARATION) {
+            stmt->accept(*this);
+        }
+    }
+
+    // THIRD PASS: Process all remaining statements (skip structs already processed
+    // in first pass, and globals already emitted by the globals pass)
     VYB_CDBG << "DEBUG: Third pass - processing all statements" << std::endl;
     for (size_t i = 0; i < node->body.size(); ++i) {
         const auto& stmt = node->body[i];
         if (stmt) {
+            if (stmt->getType() == vyb::ast::NodeType::VARIABLE_DECLARATION) continue;
             // Skip struct declarations since they were already processed in first pass
             if (stmt->getType() == vyb::ast::NodeType::STRUCT_DECLARATION) {
                 VYB_CDBG << "DEBUG: Skipping struct declaration statement " << i << " (already processed in first pass)" << std::endl;

@@ -162,8 +162,31 @@ void SemanticAnalyzer::visit(ast::Module* node) {
     // non-function code resolves against the owning module's scope so a global
     // initializer/expression in the entry file cannot name another module's
     // private dependency; function declarations manage their own owner.
+    //
+    // Module globals (top-level variable declarations) are visited first, in source order,
+    // so a function body may read or assign a global declared further down the file, the
+    // same way it may call a later function (#211). Initializers still see only the globals
+    // above them, since the visits keep source order.
+    auto visitTopLevel = [&](ast::StmtPtr& item) {
+        std::string owner = defaultOwner_;
+        if (std::string name = topLevelDeclarationName(item); !name.empty()) {
+            auto ownerIt = scopeGate_.ownerByName.find(name);
+            if (ownerIt != scopeGate_.ownerByName.end()) {
+                owner = ownerIt->second;
+            }
+        }
+        ownerStack_.push_back(scopeGate_.currentOwner);
+        scopeGate_.currentOwner = owner;
+        item->accept(*this);
+        scopeGate_.currentOwner = ownerStack_.back();
+        ownerStack_.pop_back();
+    };
+    for (auto& item : node->body) {
+        if (item && dynamic_cast<ast::VariableDeclaration*>(item.get())) visitTopLevel(item);
+    }
     for (auto& item : node->body) {
         if (!item) continue;
+        if (dynamic_cast<ast::VariableDeclaration*>(item.get())) continue;  // globals: visited above
         if (dynamic_cast<ast::FunctionDeclaration*>(item.get())) {
             item->accept(*this);
             continue;
