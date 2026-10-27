@@ -1,0 +1,11 @@
+// @test: prefetch address must be an integer
+// @description: prefetch() takes an Int address; a String argument is a compile error
+// @category: memory, intrinsics, diagnostics
+// @expect: fail
+// @expect-error: prefetch() address must be an integer address (Int)
+// @semantic-only: true
+
+main()<Int> -> {
+    prefetch("nope")
+    return 0
+}
