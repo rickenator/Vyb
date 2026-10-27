@@ -74,15 +74,15 @@ Vyb is a statically typed, compiled systems language targeting native code via L
 # put its bin/ on your PATH:
 #   https://github.com/rickenator/Vyb/releases   (all releases)
 #   releases are cut from the version tags: https://github.com/rickenator/Vyb/releases/tag/v0.7.7
-# There is no macOS SDK yet: the runtime's async/fibre layer is Linux-only
-# (ucontext/pipe2), so the release workflow cannot build it. See docs/sdk/INSTALL.md.
+# The shipped SDK target is Linux x86_64; see docs/sdk/INSTALL.md for the
+# unpack/PATH steps and the exact platform the release workflow builds.
 
 # Option B: build from source (requires LLVM 18 + CMake)
 git clone https://github.com/rickenator/Vyb.git
 cd Vyb
 mkdir -p build && cd build && LLVM_DIR=/usr/lib/llvm-18/cmake cmake .. && make -j$(nproc) && cd ..
 
-# Run the full test suite (1314 .vyb tests) with the canonical Vyb runner
+# Run the full test suite (1323 .vyb tests) with the canonical Vyb runner
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
 
 # Run your first Vyb program
@@ -240,7 +240,7 @@ backend-available but not covered by any gate):
 
 - ✅ **Executable Generation**: Full build pipeline with `--build` flag
 - ✅ **Runtime Library**: Automatic compilation and linking of Vyb runtime
-- ✅ **System Linker Integration**: Platform-aware linker selection (lld, ld, ld64)
+- ✅ **System Linker Integration**: Platform-aware linker selection (lld, ld)
 - ✅ **Dynamic Linking**: Links against system libc and libm
 - ✅ **Static Linking**: Optional `--static` flag for standalone binaries
 - ✅ **Object File Emission**: AOT compilation to .o files
@@ -449,12 +449,11 @@ These features are complete and fully tested:
 - **Full Compilation Pipeline**: Complete source → object → executable workflow
 - **Build Command**: `vyb program.vyb --build myapp` creates standalone executables
 - **Runtime Library**: Automatic compilation and linking of Vyb runtime (vyb_runtime.c)
-- **System Linker Integration**: Platform-aware linker selection (lld, ld for Linux; ld64 for macOS)
+- **System Linker Integration**: Platform-aware linker selection (lld, ld)
 - **C Runtime Initialization**: Automatic discovery and linking of CRT files (crt1.o, crti.o, crtn.o)
 - **Dynamic Linking**: Links against system libc and libm by default
 - **Static Linking**: Optional `--static` flag for fully standalone binaries
 - **Production Ready**: Deploy native executables without any runtime dependencies
-- **Cross-Platform**: Linux and macOS support with proper platform detection
 
 ### ✅ **JSON Serialization & Deserialization**
 - **Runtime Type Metadata**: Complete type registration system with field introspection
@@ -749,7 +748,7 @@ main()<Int> -> {
 - No fragile base class problem
 - Explicit binding makes relationships clear
 
-**See:** `doc/ASPECT_SYSTEM_DESIGN.md` for complete specification and `test/aspect/` for working examples
+**See:** `doc/TRAIT_SYSTEM_DESIGN.md` for the complete specification and `test/aspect/` for working examples
 
 #### **Core Contracts (`core::aspects`)**
 
@@ -3171,7 +3170,8 @@ cmake --build build --target run-milestone
 
 Vyb's canonical test runner is `test/run_tests.vyb` — a Vyb program, the same
 suite wired into CTest as the `run-tests` target and used for the full regression
-gate (currently **1314 `.vyb` tests, all passing**):
+gate (**1323 `.vyb` test files** today; the `run-tests` CTest target, not this
+file count, is the authoritative pass/fail):
 
 ### Quick Testing
 
@@ -3218,7 +3218,7 @@ build/vyb triage_tool.vyb results.json --priority critical,high
 ```
 
 ### Test Features
-- **1314 Tests, All Passing**: The full `run_tests.vyb` suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area
+- **1323 Test Files**: The full `run_tests.vyb` suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area
 - **Harness Reporting**: `test_harness.vyb` adds JSON/HTML reports and failure triage on top of the runner (sequential execution; `--workers` is accepted for compatibility)
 - **Rich Reporting**: HTML, JSON, and console output with detailed metrics
 - **Smart Categorization**: Automatic test categorization and filtering
@@ -3292,15 +3292,21 @@ Full reference: [doc/CUDA.md](doc/CUDA.md).
 
 ```
 Vyb/
-├── src/              # C++ source code
-│   ├── main.cpp      # Entry point with LLVM JIT
-│   ├── lexer.cpp     # Tokenization
-│   ├── parser.cpp    # Syntax analysis
-│   └── ast.cpp       # Abstract syntax tree
+├── src/              # C++ source of the compiler and driver
+│   ├── main.cpp      # Entry point: JIT / AOT / --build / --kernel / test runner
+│   ├── parser/       # Lexer, AST, and the parser split by grammar area
+│   ├── vre/          # Semantic analysis, aspects, intrinsics, LLVM codegen
+│   └── runtime/      # C++-side runtime support (error handling)
 ├── include/vyb/      # Header files
-├── test/             # Vyb test programs
+├── stdlib/           # The Vyb standard library (io, collections, asyncs, ...)
+├── runtime/          # vyb_runtime.c — linked into compiled executables
+├── docs/             # refman/ (Programmer's Guide + symbol pages), sdk/, web/ (this site)
+├── doc/              # Design notes and feature-status documents
+├── test/             # The .vyb test suite + run_tests.vyb (the canonical runner)
+├── fixtures/         # Kernel/CUDA fixtures and their host-side verification
 ├── examples/         # Example programs
-├── doc/              # Documentation
+├── sdk/              # SDK packaging (env.sh, install notes)
+├── tools/            # Vyb programs that drive the toolchain (docgen, splash, ...)
 └── build/            # Build output
 ```
 
@@ -3498,10 +3504,10 @@ compatibility) and reports the same per-test verdicts as the canonical runner.
 - **Error Context**: Detailed failure information with context and suggestions
 
 #### **Test Statistics**
-- **Total Tests**: 1314 `.vyb` tests (full suite, all passing as of v0.7.7)
+- **Total Tests**: 1323 `.vyb` test files (`test/run_tests.vyb --list` on this tree)
 - **Coverage Areas**: Language features, control flow, error handling, type system, math, strings, introspection
 - **Test Types**: Feature tests (with `@expect: pass`), future-feature docs (with `@expect: fail`), parser tests
-- **Success Rate**: 100% (1314/1314) on the current suite
+- **Pass/Fail Gate**: CI's `run-tests` CTest target is the authority for the current suite
 
 ### 🔧 **Syntax Migration Tools**
 
@@ -3617,7 +3623,7 @@ See `doc/` directory for detailed design documents and RFCs.
   - **Type inference**: First case determines result type for entire select
   - **Pattern matching**: Exact equality patterns with wildcard `?` support
 - ✅ **Canonical Syntax Unification**: Complete migration to unified `my()`/`our()` constructors and `view`/`borrow` operators
-- ✅ **Modern Test Harness**: `test/run_tests.vyb` running the full suite — 1314 `.vyb` tests all passing — with an auxiliary parallel/HTML/triage harness
+- ✅ **Modern Test Harness**: `test/run_tests.vyb` running the full suite — 1323 `.vyb` tests — with an auxiliary parallel/HTML/triage harness
 - ✅ **Syntax Migration Tools**: Automated migration from legacy to canonical syntax with comprehensive reporting
 - ✅ **Match Statements**: Complete pattern matching with `->` arrow syntax and `?` wildcard; no-match results in NOP
 - ✅ **Break/Continue**: Loop control flow statements working in all loop types
@@ -3735,6 +3741,20 @@ Resizable array collection with methods like `push()`, `pop()`, `len()`, `get()`
 Copyright 2026 Aniviza LLC. Licensed under the
 [Apache License, Version 2.0](http://www.apache.org/licenses/LICENSE-2.0) — see the
 [LICENSE](LICENSE) file for the full text.
+
+---
+
+## The Vyb family
+
+Vyb is a language with more than one consumer; each project below is written in
+it and is a real, running thing rather than a demo.
+
+| project | what it is |
+|---|---|
+| **[VybOS](https://github.com/rickenator/VybOS)** | a Linux-based OS whose declarative, content-addressed configuration and control framework are Vyb; PID 1 is Vyb |
+| **VybWin** *(private for now)* | the window environment for VybOS: apps are cards summoned into an arena, with the ledger one flip away |
+| **[VybForge](https://github.com/rickenator/VybForge)** | the shop floor: a desired-state interviewer for VybOS, a Vyb-native on-GPU inference substrate, and the self-contained voice loop |
+| **[VybFly](https://github.com/rickenator/VybFly)** | FlyScale — a whole-brain connectome scaling study run on a Vyb-native simulator and Vyb GPU kernels |
 
 ---
 
