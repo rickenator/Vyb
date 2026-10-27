@@ -63,6 +63,10 @@ extern std::string g_target_features;  // --mattr
 // True when no Vyb host runtime is available to the module being compiled:
 // NVPTX kernels (--kernel) and freestanding cross targets (--target).
 inline bool noHostRuntime() { return g_kernel_mode || g_freestanding; }
+// Kernel mode: size in bytes of the module-wide static shared-memory buffer behind
+// ld/st_shared_* (0 => the 32 KB default). Set by --kernel-shared or
+// $VYB_KERNEL_SHARED_BYTES; at most 48 KB (the static __shared__ cap), multiple of 16.
+extern uint64_t g_kernel_shared_bytes;
 
 // Convenience macro: use VYB_CDBG in place of std::cerr for DEBUG-level codegen output.
 // The entire chained << expression is skipped when g_debug_codegen is false.

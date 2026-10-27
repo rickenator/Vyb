@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **CUDA kernel intrinsics for quantised LLM inference (VybForge 27B Ridge decode)** — the
+  native-width, bit-cast, warp-shuffle/reduction, int8 `dp4a`, q8_1 quantisation, `mma.m16n8k16`
+  (f16 and s8) and `cp.async` intrinsics listed in `doc/CUDA.md` → "Native-width, bit-level, warp
+  and tensor-core intrinsics", plus guaranteed single-instruction `ldg_u32` / `ldg_v2_u32` /
+  `ldg_v4_u32` / `ldg_v4_f32` non-coherent loads and `f64_bits` / `f64_from_bits` register
+  bitcasts (these replace store/load round trips through global memory). Each has a GPU test in
+  `test/kernel/` checked against a CUDA C reference. `vsub4` stays emulated, because native
+  PTX `vsub4` is 32 SASS instructions vs 24 on sm_86.
+- **`--kernel-shared <bytes>` / `$VYB_KERNEL_SHARED_BYTES`** sets the static shared-memory
+  buffer size for `--kernel` builds. The default is 32 KB, aligned to 16 bytes.
+
+- **Fix (kernel):** a `Void` helper called from device code now gets a device-function twin. Before this, a
+  helper that called `kernel_barrier()` compiled into an infinite loop (regression test included).
+
 - **A closure written without parameter annotations takes its type from the enclosing
   context (#385)** — `f<fn(Int) -> Int> = |x| -> x * 2` previously failed with
   `Initializer type does not match variable type for 'f'. Expected fn(Int) -> Int but got

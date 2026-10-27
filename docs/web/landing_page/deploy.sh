@@ -42,7 +42,7 @@ DEST="${DEST:-/home4/anivizac/vyb/}"   # vyb-lang.org doc root (verified Oct 22 
 SITE="https://vyb-lang.org/"
 # A string that exists ONLY in the current page — the live check greps for it,
 # so a stale upload (or a wrong document root) cannot pass as success.
-TOKEN='1323'
+TOKEN='1322'
 
 # Files that make up the live root. Everything the page references must be here:
 # the og:/twitter: image (/vyb.png) was missing on the host, so social previews

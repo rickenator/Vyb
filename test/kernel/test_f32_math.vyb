@@ -1,0 +1,20 @@
+// @test: kernel-mode native f32 math intrinsics
+// @description: ex2_f32 (ex2.approx.ftz.f32), rsqrt_f32 (rsqrt.approx.ftz.f32), sqrt_f32
+//   (sqrt.rn.f32) and max_f32/min_f32 return Float32 and compile to PTX that ptxas accepts,
+//   so f32 kernels need not widen to the f64 vmath routines.
+// @category: kernel, cuda, types
+// @expect: pass
+// @vyb-args: --kernel --gpu sm_80
+
+f32math(w<Int>, n<Int>) -> {
+    gid<Int> = blk_x() * dim_x() + tid_x()
+    if (gid < n) {
+        x<Float32> = ld_f32n(w + gid * 4)
+        e<Float32> = ex2_f32(x * (1.4426950408889634 as Float32))
+        r<Float32> = rsqrt_f32(e)
+        s<Float32> = sqrt_f32(e)
+        m<Float32> = max_f32(r, s)
+        l<Float32> = min_f32(r, s)
+        st_f32n(w + gid * 4, m - l + e)
+    }
+}

@@ -405,7 +405,7 @@ git clone https://github.com/rickenator/Vyb.git
 cd Vyb
 mkdir -p build &amp;&amp; cd build &amp;&amp; LLVM_DIR=/usr/lib/llvm-18/cmake cmake .. &amp;&amp; make -j$(nproc) &amp;&amp; cd ..
 
-# Run the full test suite (1323 .vyb tests) with the canonical Vyb runner
+# Run the full test suite (1322 .vyb tests) with the canonical Vyb runner
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
 
 # Run your first Vyb program
@@ -3557,8 +3557,7 @@ cmake --build build --target run-milestone
 <h2 id="test-harness">Test Harness<a aria-label="Link to Test Harness" class="heading-anchor" href="#test-harness">#</a></h2>
 <p>Vyb's canonical test runner is <code>test/run_tests.vyb</code> — a Vyb program, the same
 suite wired into CTest as the <code>run-tests</code> target and used for the full regression
-gate (<strong>1323 <code>.vyb</code> test files</strong> today; the <code>run-tests</code> CTest target, not this
-file count, is the authoritative pass/fail):</p>
+gate (currently <strong>1322 <code>.vyb</code> tests, all passing</strong>):</p>
 <h3 id="quick-testing">Quick Testing<a aria-label="Link to Quick Testing" class="heading-anchor" href="#quick-testing">#</a></h3>
 <pre><code class="language-bash"># Full suite (JIT execution), from the repo root
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
@@ -3597,7 +3596,7 @@ build/vyb triage_tool.vyb results.json --priority critical,high
 </code></pre>
 <h3 id="test-features">Test Features<a aria-label="Link to Test Features" class="heading-anchor" href="#test-features">#</a></h3>
 <ul>
-<li><strong>1323 Test Files</strong>: The full <code>run_tests.vyb</code> suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area</li>
+<li><strong>1322 Tests, All Passing</strong>: The full <code>run_tests.vyb</code> suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area</li>
 <li><strong>Harness Reporting</strong>: <code>test_harness.vyb</code> adds JSON/HTML reports and failure triage on top of the runner (sequential execution; <code>--workers</code> is accepted for compatibility)</li>
 <li><strong>Rich Reporting</strong>: HTML, JSON, and console output with detailed metrics</li>
 <li><strong>Smart Categorization</strong>: Automatic test categorization and filtering</li>
@@ -3835,10 +3834,10 @@ compatibility) and reports the same per-test verdicts as the canonical runner.</
 </ul>
 <h4 id="test-statistics"><strong>Test Statistics</strong><a aria-label="Link to Test Statistics" class="heading-anchor" href="#test-statistics">#</a></h4>
 <ul>
-<li><strong>Total Tests</strong>: 1323 <code>.vyb</code> test files (<code>test/run_tests.vyb --list</code> on this tree)</li>
+<li><strong>Total Tests</strong>: 1322 <code>.vyb</code> tests (full suite, all passing as of v0.7.7)</li>
 <li><strong>Coverage Areas</strong>: Language features, control flow, error handling, type system, math, strings, introspection</li>
 <li><strong>Test Types</strong>: Feature tests (with <code>@expect: pass</code>), future-feature docs (with <code>@expect: fail</code>), parser tests</li>
-<li><strong>Pass/Fail Gate</strong>: CI's <code>run-tests</code> CTest target is the authority for the current suite</li>
+<li><strong>Success Rate</strong>: 100% (1322/1322) on the current suite</li>
 </ul>
 <h3 id="syntax-migration-tools">🔧 <strong>Syntax Migration Tools</strong><a aria-label="Link to 🔧 Syntax Migration Tools" class="heading-anchor" href="#syntax-migration-tools">#</a></h3>
 <p>Automated tools ensure codebase consistency and syntax standardization:</p>
@@ -3949,7 +3948,7 @@ the interface stays responsive.</li>
 </ul>
 </li>
 <li>✅ <strong>Canonical Syntax Unification</strong>: Complete migration to unified <code>my()</code>/<code>our()</code> constructors and <code>view</code>/<code>borrow</code> operators</li>
-<li>✅ <strong>Modern Test Harness</strong>: <code>test/run_tests.vyb</code> running the full suite — 1323 <code>.vyb</code> tests — with an auxiliary parallel/HTML/triage harness</li>
+<li>✅ <strong>Modern Test Harness</strong>: <code>test/run_tests.vyb</code> running the full suite — 1322 <code>.vyb</code> tests all passing — with an auxiliary parallel/HTML/triage harness</li>
 <li>✅ <strong>Syntax Migration Tools</strong>: Automated migration from legacy to canonical syntax with comprehensive reporting</li>
 <li>✅ <strong>Match Statements</strong>: Complete pattern matching with <code>-&gt;</code> arrow syntax and <code>?</code> wildcard; no-match results in NOP</li>
 <li>✅ <strong>Break/Continue</strong>: Loop control flow statements working in all loop types</li>

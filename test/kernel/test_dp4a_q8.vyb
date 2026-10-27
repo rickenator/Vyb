@@ -1,0 +1,31 @@
+// @test: kernel-mode int8 dot-product and q8_1 quantisation intrinsics
+// @description: dp4a_s32 (dp4a.s32.s32), dp4a_us32 (dp4a.u32.s32) and vsub4 return 32-bit ints;
+//   rni_f32 (cvt.rni.s32.f32), sat_s8 and pack_s8x4 build a q8_1-style packed word from four
+//   Float32 activations. Compiles to PTX that ptxas accepts.
+// @category: kernel, cuda, types
+// @expect: pass
+// @vyb-args: --kernel --gpu sm_80
+
+// w: n x 4 u32 words in (a, b, c, m), out word 0 = dp4a_s32, 1 = dp4a_us32, 2 = vsub4(a ^ m, m)
+// x: n x 4 f32, q: n u32 = pack_s8x4(sat_s8(rni_f32(x_k * 2.5)))
+dp4aq8(w<Int>, x<Int>, q<Int>, n<Int>) -> {
+    gid<Int> = blk_x() * dim_x() + tid_x()
+    if (gid < n) {
+        a<UInt32> = ld_u32(w + gid * 16)
+        b<UInt32> = ld_u32(w + gid * 16 + 4)
+        c<CInt> = ld_i32(w + gid * 16 + 8)
+        m<UInt32> = ld_u32(w + gid * 16 + 12)
+        s<CInt> = dp4a_s32(a, b, c)
+        u<CInt> = dp4a_us32(a, b, c)
+        v<UInt32> = vsub4(a ^ m, m)
+        st_i32(w + gid * 16, s)
+        st_i32(w + gid * 16 + 4, u)
+        st_i32(w + gid * 16 + 8, v)
+        sc<Float32> = 2.5 as Float32
+        q0<CInt> = sat_s8(rni_f32(ld_f32n(x + gid * 16) * sc))
+        q1<CInt> = sat_s8(rni_f32(ld_f32n(x + gid * 16 + 4) * sc))
+        q2<CInt> = sat_s8(rni_f32(ld_f32n(x + gid * 16 + 8) * sc))
+        q3<CInt> = sat_s8(rni_f32(ld_f32n(x + gid * 16 + 12) * sc))
+        st_i32(q + gid * 4, pack_s8x4(q0, q1, q2, q3))
+    }
+}
