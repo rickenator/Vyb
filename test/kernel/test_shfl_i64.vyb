@@ -1,0 +1,18 @@
+// @test: kernel-mode 64-bit integer warp shuffles
+// @description: shfl_{xor,down,up,idx}_i64(v, lane_arg) shuffle a full Int across the warp as two
+//   32-bit shfl.sync of the halves (the f64 forms already did this through a bitcast). Values whose
+//   halves differ (lane << 40 | lane * 3 + 7) make a dropped or swapped half visible;
+//   check_shfl_i64.py checks every lane against Python on a GPU.
+// @category: kernel, cuda, warp
+// @expect: pass
+// @vyb-args: --kernel --gpu sm_80
+
+shfl64(o<Int>) -> {
+    gid<Int> = blk_x() * dim_x() + tid_x()
+    lane<Int> = gid & 31
+    v<Int> = (lane << 40) | (lane * 3 + 7) | (-1 << 62)
+    st_i64(o + gid * 32, shfl_xor_i64(v, 5))
+    st_i64(o + gid * 32 + 8, shfl_down_i64(v, 3))
+    st_i64(o + gid * 32 + 16, shfl_up_i64(v, 2))
+    st_i64(o + gid * 32 + 24, shfl_idx_i64(v, 31 - lane))
+}

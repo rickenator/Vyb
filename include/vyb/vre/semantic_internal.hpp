@@ -146,7 +146,9 @@ inline const char* kernelIntrinsicReturnType(const std::string& name) {
         name == "grid_x" || name == "grid_y" ||
         name == "lane_id" || name == "warp_size" ||
         name == "ld_i64" || name == "atomic_add_i64" || name == "atomic_xor_i64" ||
-        name == "popc_u32" || name == "ctz_u32") return "Int";
+        name == "popc_u32" || name == "ctz_u32" ||
+        name == "shfl_xor_i64" || name == "shfl_down_i64" || name == "shfl_up_i64" ||
+        name == "shfl_idx_i64") return "Int";
     if (name == "ld_f64" || name == "ld_f32" || name == "ld_f16" ||
         name == "ld_bf16" || name == "deq_q4_0" ||
         name == "ld_shared_f64" || name == "atomic_add_f64") return "Float";

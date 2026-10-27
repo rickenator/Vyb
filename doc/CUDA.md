@@ -129,7 +129,7 @@ h2_pack h_bits h_lo h_hi
 # f32 / f64 math
 fma_f32 fma_f64 ex2_f32 rsqrt_f32 (approx.ftz) sqrt_f32 (rn) max_f32 min_f32
 # warp shuffles and reductions
-shfl_{xor,down,up,idx}_{f32,f64,u32}  warp_sum_f32 warp_max_f32 warp_sum_i32
+shfl_{xor,down,up,idx}_{f32,f64,u32,i64}  warp_sum_f32 warp_max_f32 warp_sum_i32
 # int8 dot products / q8_1 quantisation
 dp4a_s32 dp4a_us32 dp4a_sgn_s32 pack_s8x4 sat_s8 rni_f32 bytemask4 vsub4 (emulated)
 # tensor cores and async copies (sm_80+)
