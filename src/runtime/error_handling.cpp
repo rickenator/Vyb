@@ -78,6 +78,8 @@ static std::atomic<VybUntrappedErrorHandler> g_custom_handler{nullptr};
 // lets a crash handler (or error path) read exactly the running fiber's frames.
 static thread_local std::vector<VybStackFrame> g_call_stack;
 static constexpr size_t MAX_CALL_STACK_DEPTH = 256;
+static thread_local size_t g_call_stack_overflow = 0;        // untracked frames past the limit
+static thread_local bool g_call_stack_overflow_warned = false;
 
 // ===== Helper Functions =====
 
@@ -157,7 +159,7 @@ VybStackTrace* __vyb_runtime_capture_stack_trace(size_t max_frames) {
 void __vyb_runtime_print_stack_trace(VybStackTrace* trace, FILE* output) {
     fprintf(output, "\nStack Trace:\n");
     if (!trace || trace->frame_count == 0) {
-        fprintf(output, "  <no stack trace available>\n");
+        fprintf(output, "  <no stack trace available> (call-frame tracking is off at -O2/-O3; rerun with -O0 or VYB_CALL_FRAMES=1)\n");
         return;
     }
 
@@ -188,8 +190,14 @@ void __vyb_runtime_free_stack_trace(VybStackTrace* trace) {
 void __vyb_runtime_push_call_frame(const char* function_name, const char* file_path, uint32_t line, uint32_t column) {
 
     // Prevent stack overflow
+    // Past the trace limit, count the untracked frames so the matching pops stay
+    // balanced (previously every deeper call printed a warning on push AND on pop
+    // and the pops unwound frames that were still live). Warn once per thread.
     if (g_call_stack.size() >= MAX_CALL_STACK_DEPTH) {
-        fprintf(stderr, "Warning: Call stack depth limit reached (%zu frames)\n", MAX_CALL_STACK_DEPTH);
+        if (g_call_stack_overflow++ == 0 && !g_call_stack_overflow_warned) {
+            g_call_stack_overflow_warned = true;
+            fprintf(stderr, "Warning: Call stack depth limit reached (%zu frames); deeper frames are not traced\n", MAX_CALL_STACK_DEPTH);
+        }
         return;
     }
 
@@ -205,7 +213,9 @@ void __vyb_runtime_push_call_frame(const char* function_name, const char* file_p
 
 void __vyb_runtime_pop_call_frame() {
 
-    if (!g_call_stack.empty()) {
+    if (g_call_stack_overflow > 0) {
+        --g_call_stack_overflow;
+    } else if (!g_call_stack.empty()) {
         g_call_stack.pop_back();
     } else {
         fprintf(stderr, "Warning: Attempted to pop empty call stack\n");

@@ -1,0 +1,15 @@
+// @test: deep recursion at default -O2 without call-frame bookkeeping
+// @description: -O2+ elides __vyb_runtime_push/pop_call_frame (VYB_CALL_FRAMES=1 or -O0 keeps it); recursion far past the 256-frame trace limit is still correct
+// @category: optimization, functions, regression
+// @expect: pass
+// @expect-return: 42
+
+depth(n<Int>)<Int> -> {
+    if (n == 0) { return 0 }
+    return 1 + depth(n - 1)
+}
+
+main()<Int> -> {
+    if (depth(5000) != 5000) { return 1 }
+    return 42
+}
