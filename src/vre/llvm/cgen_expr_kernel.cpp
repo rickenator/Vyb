@@ -386,6 +386,17 @@ bool LLVMCodegen::emitKernelIntrinsic(vyb::ast::CallExpression* node) {
         m_currentLLVMValue = a ? builder->CreateBitCast(a, int32Type, "f.bits") : nullptr;
         return true;
     }
+    // f64_bits(Float) -> Int, f64_from_bits(Int) -> Float: register bit casts (no memory round trip).
+    if (name == "f64_bits") {
+        llvm::Value* a = argAs(0, doubleType);
+        m_currentLLVMValue = a ? builder->CreateBitCast(a, int64Type, "d.bits") : nullptr;
+        return true;
+    }
+    if (name == "f64_from_bits") {
+        llvm::Value* a = argAs(0, int64Type);
+        m_currentLLVMValue = a ? builder->CreateBitCast(a, doubleType, "d.from") : nullptr;
+        return true;
+    }
     if (name == "f32_from_bits") {
         llvm::Value* a = argAs(0, int32Type);
         m_currentLLVMValue = a ? builder->CreateBitCast(a, f32Ty, "f.from") : nullptr;

@@ -164,7 +164,8 @@ inline const char* kernelIntrinsicReturnType(const std::string& name) {
         name == "shfl_idx_f32" || name == "ld_shared_f32" || name == "ld_f32n" ||
         name == "ld_v4_f32" || name == "mma_16816" ||
         name == "warp_sum_f32" || name == "warp_max_f32" || name == "ldg_v4_f32") return "Float32";
-    if (name == "fma_f64" || name == "shfl_xor_f64" || name == "shfl_down_f64" ||
+    if (name == "f64_bits") return "Int";
+    if (name == "fma_f64" || name == "f64_from_bits" || name == "shfl_xor_f64" || name == "shfl_down_f64" ||
         name == "shfl_up_f64" || name == "shfl_idx_f64") return "Float";
     if (name == "f32_bits" || name == "h2_pack" || name == "h_bits" ||
         name == "shfl_xor_u32" || name == "shfl_down_u32" || name == "shfl_up_u32" ||
