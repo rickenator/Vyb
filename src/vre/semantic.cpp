@@ -1746,7 +1746,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
         if (name == "lit" || name == "notype" || name == "bare" || name == "deserial" ||
             name == "borrow" || name == "view" || name == "my" || name == "their" || name == "our" ||
             name == "soft" || name == "println" || name == "print" || name == "println_int" ||
-            name == "print_int" || name == "println_bool" || name == "print_bool" ||
+            name == "print_int" || name == "println_bool" || name == "print_bool" || name == "prefetch" ||
             name == "abs" || name == "sqrt" || name == "pow" || name == "sin" || name == "cos" ||
             name == "tan" || name == "exp" || name == "log" || name == "log2" || name == "log10" ||
             name == "floor" || name == "ceil" || name == "round" || name == "min" || name == "max" ||
@@ -2392,6 +2392,45 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
         }
 
         // Handle println_int / print_int intrinsics
+        // prefetch(addr) / prefetch(addr, rw) / prefetch(addr, rw, locality): a cache hint
+        // (llvm.prefetch). `addr` is an Int address (e.g. from addr()/a Vec data pointer);
+        // `rw` (0 = read, 1 = write) and `locality` (0 = no temporal locality .. 3 = keep in
+        // all cache levels, default 3) must be integer constants. A prefetch never faults, so
+        // it does not need a freedom block; it has no observable effect on program results.
+        if (name == "prefetch") {
+            if (node->arguments.empty() || node->arguments.size() > 3) {
+                addError("prefetch() expects 1 to 3 arguments: prefetch(addr, rw = 0, locality = 3)", node);
+                return;
+            }
+            for (auto& arg : node->arguments) if (arg) arg->accept(*this);
+            auto addrTypeIt = expressionTypes.find(exprKey(node->arguments[0].get()));
+            bool addrIsInt = false;
+            if (addrTypeIt != expressionTypes.end() && addrTypeIt->second) {
+                if (auto tn = dynamic_cast<ast::TypeName*>(unwrapPrimitiveOwnershipType(addrTypeIt->second.get())))
+                    addrIsInt = isIntegerType(tn);
+            }
+            if (!addrIsInt) {
+                addError("prefetch() address must be an integer address (Int)", node);
+                return;
+            }
+            const char* argNames[3] = {"addr", "rw", "locality"};
+            const int64_t argMax[3] = {0, 1, 3};
+            for (size_t i = 1; i < node->arguments.size(); ++i) {
+                __int128 cv = 0;
+                bool cu = false;
+                if (!intConstantValueFull(node->arguments[i].get(), cv, cu) || cv < 0 || cv > argMax[i]) {
+                    addError(std::string("prefetch() '") + argNames[i] + "' must be an integer constant in 0.." +
+                             std::to_string(argMax[i]), node);
+                    return;
+                }
+            }
+            auto voidId = std::make_unique<ast::Identifier>(node->loc, "Void");
+            ast::TypeNode* voidType = new ast::TypeName(node->loc, std::move(voidId), std::vector<ast::TypeNodePtr>{});
+            setType(node,  retainType(voidType));
+            setType(node,  std::shared_ptr<ast::TypeNode>(voidType->clone().release()));
+            return;
+        }
+
         if (name == "println_int" || name == "print_int" || name == "println_bool" || name == "print_bool") {
             if (node->arguments.size() != 1) {
                 addError(name + "() expects exactly one argument", node);
