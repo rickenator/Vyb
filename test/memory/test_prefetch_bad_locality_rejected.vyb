@@ -1,0 +1,12 @@
+// @test: prefetch locality must be a constant in 0..3
+// @description: prefetch(addr, rw, locality) rejects an out-of-range locality hint at compile time
+// @category: memory, intrinsics, diagnostics
+// @expect: fail
+// @expect-error: prefetch() 'locality' must be an integer constant in 0..3
+// @semantic-only: true
+
+main()<Int> -> {
+    var<Int> a = 4096
+    prefetch(a, 0, 4)
+    return 0
+}

@@ -1731,6 +1731,41 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
         return;
     }
 
+    // prefetch(addr[, rw[, locality]]) -> llvm.prefetch.p0(ptr, rw, locality, /*data cache*/ 1).
+    // Semantic analysis guarantees rw/locality are in-range integer constants.
+    if (identCallee && identCallee->name == "prefetch" && !node->arguments.empty() && node->arguments.size() <= 3) {
+        node->arguments[0]->accept(*this);
+        llvm::Value* addrV = m_currentLLVMValue;
+        if (!addrV || !addrV->getType()->isIntegerTy()) {
+            logError(node->arguments[0]->loc, "prefetch() address must be an integer address");
+            flagHardCodegenError();
+            m_currentLLVMValue = nullptr;
+            return;
+        }
+        auto constArg = [&](size_t i, uint64_t dflt) -> uint64_t {
+            if (i >= node->arguments.size()) return dflt;
+            node->arguments[i]->accept(*this);
+            if (auto* ci = llvm::dyn_cast_or_null<llvm::ConstantInt>(m_currentLLVMValue)) return ci->getZExtValue();
+            return dflt;
+        };
+        uint64_t rw = constArg(1, 0) & 1;
+        uint64_t locality = constArg(2, 3);
+        if (locality > 3) locality = 3;
+        if (!g_kernel_mode) {
+            llvm::Type* i32 = llvm::Type::getInt32Ty(*context);
+            llvm::Type* ptrTy = llvm::PointerType::getUnqual(*context);
+            if (addrV->getType()->getIntegerBitWidth() != 64)
+                addrV = builder->CreateSExtOrTrunc(addrV, int64Type, "prefetch_addr");
+            llvm::Value* p = builder->CreateIntToPtr(addrV, ptrTy, "prefetch_ptr");
+            llvm::FunctionCallee pf = module->getOrInsertFunction(
+                "llvm.prefetch.p0", llvm::FunctionType::get(llvm::Type::getVoidTy(*context), {ptrTy, i32, i32, i32}, false));
+            builder->CreateCall(pf, {p, llvm::ConstantInt::get(i32, rw), llvm::ConstantInt::get(i32, locality),
+                                     llvm::ConstantInt::get(i32, 1)});
+        }
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
     // Handle println_bool() / print_bool() intrinsics - route through generic to_string path
     if (identCallee && (identCallee->name == "println_bool" || identCallee->name == "print_bool") && node->arguments.size() == 1) {
         node->arguments[0]->accept(*this);

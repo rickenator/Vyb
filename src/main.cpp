@@ -611,6 +611,7 @@ namespace vyb {
     std::string g_kernel_gpu = "";
     // Freestanding cross-target mode: --target <triple> [--mcpu <cpu>] [--mattr <f>].
     bool g_freestanding = false;
+    bool g_call_frames = true;
     std::string g_target_triple = "";
     std::string g_target_cpu = "";
     std::string g_target_features = "";
@@ -1184,8 +1185,21 @@ int compile_vyb_freestanding(const std::string& source, const std::string& fileN
 }
 
 // Function to compile Vyb code to object file
+// Call-frame bookkeeping policy (see vyb::g_call_frames). VYB_CALL_FRAMES=0/1 overrides.
+static void configure_call_frames(int optLevel) {
+    if (const char* e = std::getenv("VYB_CALL_FRAMES")) {
+        vyb::g_call_frames = std::string(e) != "0";
+        return;
+    }
+    // Each user function call costs an out-of-line push + pop into a thread_local
+    // vector (fib(35): 0.32 s with frames vs 0.10 s without), and the opaque calls
+    // survive inlining inside hot loops. Keep them for -O0/-O1 debugging builds only.
+    vyb::g_call_frames = optLevel < 2;
+}
+
 int compile_vyb_to_object(const std::string& source, const std::string& fileName,
                           const std::string& outputFile, int optLevel = 2) {
+    configure_call_frames(optLevel);
     std::cout << "Compiling " << fileName << " to object file..." << std::endl;
 
     // Initialize LLVM targets
@@ -2967,6 +2981,7 @@ extern "C" int vyb_cuda_launch_n(void* f, unsigned gridX, unsigned gridY, unsign
 // Function to execute Vyb code using LLVM JIT
 int run_vyb_code(const std::string& source, const std::string& fileName, bool generateLLVMIR, int optLevel) {
     VYB_CDBG << "Starting run_vyb_code for file: " << fileName << std::endl;
+    configure_call_frames(optLevel);
 
     // Initialize LLVM targets for JIT
     VYB_CDBG << "Initializing LLVM targets..." << std::endl;

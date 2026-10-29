@@ -1,0 +1,19 @@
+// @test: out-of-range integer constant stored through a narrow loc is rejected
+// @description: at(loc<UInt8>) = 300 must be a compile error, not a silent wide store
+// @category: memory, freedom, diagnostics, regression
+// @expect: fail
+// @expect-error: Integer constant 300 is out of range for type 'UInt8' in assignment.
+// @semantic-only: true
+
+extern "C" {
+    calloc(n<Int>, sz<Int>)<Int>
+}
+
+main()<Int> -> {
+    var<Int> p = 0
+    freedom {
+        p = calloc(1, 8)
+        at(from<loc<UInt8>>(p)) = 300
+    }
+    return 0
+}
