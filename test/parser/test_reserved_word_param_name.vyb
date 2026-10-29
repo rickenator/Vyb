@@ -1,0 +1,10 @@
+// @test: A reserved word as a typed parameter name names the word
+// @description: `f(match<Int>)` used to fail with the bare "Expected parameter declaration"; the
+//   declaration parser now names the reserved word. `ptr<T>` types and
+//   `fail<E>(e)` statements are unaffected: only `word<T>` followed by `,` `)` or `=` is refused.
+// @category: parser, diagnostics
+// @expect: fail
+// @expect-error: 'match' is a reserved word and cannot be used as a parameter name
+
+f(match<Int>)<Int> -> { return 1 }
+main()<Int> -> { return f(2) }

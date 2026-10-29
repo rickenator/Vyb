@@ -91,6 +91,12 @@ namespace vyb { // Changed Vyb to vyb
         const vyb::token::Token& peekNext() const;
         /// k-th non-comment/newline token after the current one (k=0 == peek()).
         const vyb::token::Token& peekAhead(size_t k) const;
+        /// True for every reserved-word token type (token.hpp: KEYWORD_LET .. KEYWORD_TYPENAME).
+        static bool isReservedWordToken(vyb::TokenType t);
+        /// When peek() is a reserved word written as a typed name, `word<Type>` followed by one of
+        /// `follow` (e.g. `fail<Int> = 0`, a parameter `match<Int>,`), returns true. The angle
+        /// brackets are balanced (`>>` closes two), so `fail<Err>(e)` and `ptr<Int> p` do not match.
+        bool reservedWordAsTypedName(std::initializer_list<vyb::TokenType> follow) const;
         const vyb::token::Token& previous_token() const;
         void put_back_token();
         vyb::token::Token consume();

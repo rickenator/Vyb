@@ -325,6 +325,13 @@ vyb::ast::FunctionParameter DeclarationParser::parse_function_parameter_struct()
         return vyb::ast::FunctionParameter(std::move(name_ident), std::move(type_annot), is_mutable);
     }
 
+    // A reserved word as a parameter name (`f(fail<Int>)`) used to surface as the bare
+    // "Expected parameter declaration"; name the word instead.
+    if (this->reservedWordAsTypedName({vyb::TokenType::COMMA, vyb::TokenType::RPAREN, vyb::TokenType::EQ})) {
+        throw std::runtime_error("'" + this->peek().lexeme + "' is a reserved word and cannot be used "
+                                 "as a parameter name at " + location_to_string(this->current_location()));
+    }
+
     // Check for unified syntax vs legacy relaxed syntax
     if (this->peek().type == vyb::TokenType::IDENTIFIER) {
         auto lookahead = this->peekNext();

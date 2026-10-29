@@ -171,6 +171,7 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 # 1324 .vyb tests exercised through compile + run + output/return checks
 # 1328 .vyb tests exercised through compile + run + output/return checks
 # 1324 .vyb tests exercised through compile + run + output/return checks
+# 1331 .vyb tests exercised through compile + run + output/return checks
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test
 ```
 
@@ -2917,6 +2918,7 @@ as `run-tests`:
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1324 tests)
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1328 tests)
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1324 tests)
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1331 tests)
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --category async  # filter by category
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --json results.json --evidence evidence.json
 ```

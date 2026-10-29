@@ -25,6 +25,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `timed out after N s` and the suite goes on, where before one hang stalled the whole run.
   If `timeout` (coreutils) is missing, the runner warns and runs without a limit. Covered by
   `test/process/test_runner_timeout.vyb`.
+- **`cuda_launch_args(f, gridX, gridY, gridZ, blockX, blockY, blockZ, args...)`**, a
+  compiler-provided kernel-launch helper. The compiler stores each argument in its own cell at
+  the argument's width and builds cuLaunchKernel's `void*[]` kernelParams itself, then calls the
+  generic launcher. Callers no longer hand-pack an `[Int; N]` of `addr(cell)`, which a VybFly
+  launch needed 15 and 18 lines for. It is freedom-gated, and launch dimensions and arguments are
+  type-checked (scalars only; a `String` is rejected rather than packed as a host pointer).
+  There are 4 tests in `test/ffi/test_cuda_launch_args*.vyb`; the launch one runs on a GPU and
+  SKIPs without one.
+- **64-bit integer warp shuffles** `shfl_xor_i64`, `shfl_down_i64`, `shfl_up_i64` and
+  `shfl_idx_i64`. These are two 32-bit `shfl.sync` halves, sharing the f64 lowering without the
+  bitcasts. There is a test in `test/kernel/test_shfl_i64.vyb` plus an on-GPU check
+  (`check_shfl_i64.py`).
 - **CUDA kernel atomics, bit counting and warp ballot** — `atomic_or_u32`, `atomic_and_u32`,
   `atomic_xor_u32`, `atomic_add_i64`, `atomic_xor_i64`, `atomic_add_f32` and `atomic_max_i32`
   (lowered to `atom.global` / `red.global` when the result is unused), plus `popc_u32`, `ctz_u32`
@@ -256,6 +268,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   names the function, parameter, type and size, and points to the `their<Vec<T> const>` /
   `view(x)` borrow. Behavior and copy semantics are unchanged. Covered by
   `test/vectors/test_vec_param_copy_warning.vyb`.
+- **A reserved word used as a typed variable or parameter name** (`fail<Int> = 3`,
+  `f(match<Int>)`) now reports "'fail' is a reserved word and cannot be used as a variable
+  name". It used to report "Expected '(' after typed fail" or "Expected parameter declaration",
+  neither of which names the problem. `fail<E>(e)` statements and `ptr<T>` types are unaffected.
+  Tests are in `test/parser/test_reserved_word_*.vyb`.
+
 - **The shipped `filter`/`map` over a `Vec<mild<T>>` no longer leaks (#427 defects 6/7, #451
   closed for this half)** — a call whose callee is a `fn(...)` VALUE is emitted by its own arm:
   it rebuilds the callee's signature, prepends the hidden environment and builds its own argument
