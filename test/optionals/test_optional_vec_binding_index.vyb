@@ -1,0 +1,78 @@
+# Optionals - subscripting a Vec bound by an optional present arm.
+#   - `match (f()) { g -> ... g[i] ... }` where f returns Vec<UInt8>?
+#   - the element reads as its element type (arithmetic, comparison)
+#   - addr(g[0]) inside freedom type-checks and points at the first element
+#   - the same for a Vec<Int>? local, and a `select` present arm
+# Regression: the payload binding kept the raw TypeName `Vec<T>` instead of
+# the VecType a declared variable gets, so `g[0]` had no type. addr(g[0])
+# failed with "Cannot take address of expression with unknown type" and a
+# plain `q<UInt8> = g[0]` failed in codegen ("Could not determine element type").
+// @test: Optionals - Vec payload binding subscript and addr()
+// @category: optionals,vectors,types
+// @expect: pass
+// @expect-output: vec binding index ok
+
+import collections
+
+mk()<Vec<UInt8>?> -> {
+    var<Vec<UInt8>> v = Vec<UInt8>()
+    v.push(7 as UInt8)
+    v.push(9 as UInt8)
+    return v
+}
+
+ints(n<Int>)<Vec<Int>?> -> {
+    if (n < 0) { return nil }
+    var<Vec<Int>> v = Vec<Int>()
+    var<Int> i = 0
+    while (i < n) {
+        v.push(i * 10)
+        i = i + 1
+    }
+    return v
+}
+
+main()<Int> -> {
+    var<Int> code = 0
+    match (mk()) {
+        g -> {
+            q<UInt8> = g[1]
+            if ((q as Int) != 9) { code = 1 }
+            if ((g[0] as Int) + (g[1] as Int) != 16) { code = 2 }
+            freedom {
+                p0<Int> = addr(g[0])
+                p1<Int> = addr(g[1])
+                if (p0 == 0) { code = 3 }
+                if (p1 - p0 != 1) { code = 4 }
+            }
+        }
+        ? -> { code = 5 }
+    }
+    if (code != 0) { return code }
+
+    got<Vec<Int>?> = ints(4)
+    match (got) {
+        w -> {
+            if (w[3] != 30) { return 6 }
+            freedom {
+                a0<Int> = addr(w[0])
+                a2<Int> = addr(w[2])
+                if (a2 - a0 != 16) { return 7 }
+            }
+        }
+        ? -> { return 8 }
+    }
+
+    s3<Vec<Int>?> = ints(3)
+    t = select (s3) -> {
+        nil -> -1,
+        s -> s[2] + s[1]
+    }
+    if (t != 30) { return 9 }
+    match (ints(0 - 1)) {
+        z -> { return 11 }
+        ? -> { }
+    }
+    println("vec binding index ok")
+    return 0
+}
