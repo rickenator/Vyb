@@ -193,6 +193,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   access". The workaround was to copy the binding into a typed local first. A `Vec`/`Tuple`
   payload is now resolved the same way as a declaration's type. Covered by
   `test/optionals/test_optional_vec_binding_index.vyb`.
+- **Warning for a large `Vec` passed by value** — a by-value `Vec<T>` parameter is
+  deep-copied (malloc + memcpy) on every call, and nothing in the source shows the cost. An
+  11 MB `Vec<UInt8>` costs about 0.5 ms per call, and in VybFly's two-rank split this was a
+  7.7x slowdown (91.9 s vs 11.9 s). When such a copy reaches `VYB_VEC_COPY_WARN_BYTES`
+  (default 1 MiB, `0` disables), the runtime now prints one stderr warning per parameter. It
+  names the function, parameter, type and size, and points to the `their<Vec<T> const>` /
+  `view(x)` borrow. Behavior and copy semantics are unchanged. Covered by
+  `test/vectors/test_vec_param_copy_warning.vyb`.
 - **The shipped `filter`/`map` over a `Vec<mild<T>>` no longer leaks (#427 defects 6/7, #451
   closed for this half)** — a call whose callee is a `fn(...)` VALUE is emitted by its own arm:
   it rebuilds the callee's signature, prepends the hidden environment and builds its own argument

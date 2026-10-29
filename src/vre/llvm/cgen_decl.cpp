@@ -1056,6 +1056,25 @@ void LLVMCodegen::visit(vyb::ast::FunctionDeclaration* node) {
                     if (elemLLVMType) {
                         // Load the struct stored so far (the shallow copy)
                         llvm::Value* shallowVec = builder->CreateLoad(paramTypes[i], paramSlot, paramNames[i] + "_shallow");
+                        // A by-value Vec parameter costs a malloc + memcpy of the whole list on every
+                        // call (an 11 MB Vec<UInt8> is ~0.5 ms per call), and nothing in the source
+                        // shows it. Report the copy size to the runtime, which warns once per parameter
+                        // when it reaches VYB_VEC_COPY_WARN_BYTES (default 1 MiB, 0 disables).
+                        if (!vyb::noHostRuntime()) {
+                            llvm::Type* i64Ty = llvm::Type::getInt64Ty(*context);
+                            llvm::Type* ptrTy = llvm::PointerType::getUnqual(*context);
+                            llvm::DataLayout copyDl(module.get());
+                            llvm::Value* copyBytes = builder->CreateMul(
+                                builder->CreateExtractValue(shallowVec, 1, "vcw.size"),
+                                llvm::ConstantInt::get(i64Ty, copyDl.getTypeAllocSize(elemLLVMType)), "vcw.bytes");
+                            llvm::FunctionCallee copyCheck = module->getOrInsertFunction(
+                                "__vyb_vec_param_copy_check",
+                                llvm::FunctionType::get(llvm::Type::getVoidTy(*context), {i64Ty, ptrTy, ptrTy, ptrTy}, false));
+                            builder->CreateCall(copyCheck, {copyBytes,
+                                builder->CreateGlobalStringPtr(functionName, "vcw.fn"),
+                                builder->CreateGlobalStringPtr(paramNames[i], "vcw.param"),
+                                builder->CreateGlobalStringPtr(node->params[i].typeNode->toString(), "vcw.type")});
+                        }
                         // Clone the data
                         llvm::Value* deepVec = generateVecDeepCopy(shallowVec, elemLLVMType, paramTypes[i], elemTypeNode);
                         if (deepVec) {

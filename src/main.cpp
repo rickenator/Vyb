@@ -490,6 +490,8 @@ extern "C" {
     int64_t __vyb_strchan_try_opt(int64_t ch, vyb_file_str* out);
     int64_t __vyb_strchan_len(int64_t ch);
     int64_t __vyb_strchan_close(int64_t ch);
+    // Warn once per by-value Vec parameter whose entry copy is large (VYB_VEC_COPY_WARN_BYTES).
+    void __vyb_vec_param_copy_check(int64_t bytes, const char* fn, const char* param, const char* type);
     int64_t __vyb_strchan_free(int64_t ch);
     // Tasks (tasks stdlib module): a detached pthread running a closure whose
     // result is delivered to a private capacity-1 channel. handle == chan.
@@ -4017,6 +4019,8 @@ int run_vyb_code(const std::string& source, const std::string& fileName, bool ge
             llvm::orc::ExecutorAddr::fromPtr(&__vyb_strchan_try_opt), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyb_strchan_try")] = llvm::orc::ExecutorSymbolDef(
             llvm::orc::ExecutorAddr::fromPtr(&__vyb_strchan_try), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_vec_param_copy_check")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_vec_param_copy_check), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyb_strchan_len")] = llvm::orc::ExecutorSymbolDef(
             llvm::orc::ExecutorAddr::fromPtr(&__vyb_strchan_len), llvm::JITSymbolFlags::Exported);
                 runtimeSymbols[mangle("__vyb_strchan_close")] = llvm::orc::ExecutorSymbolDef(

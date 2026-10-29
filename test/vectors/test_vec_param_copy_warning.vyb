@@ -1,0 +1,46 @@
+# Vectors - warning for a large Vec passed by value.
+#   - a by-value Vec parameter at or above VYB_VEC_COPY_WARN_BYTES prints one
+#     stderr warning naming the function, parameter, type and byte count
+#   - the copy itself is unchanged: the callee mutates its own copy only
+#   - a Vec under the threshold and a their<Vec<T> const> borrow do not warn
+# main calls exit(3) on success so the runner (which compares stderr only for
+# `@expect: fail`) checks the warning text.
+// @test: Vectors - large by-value Vec parameter copy warning
+// @category: vectors,ownership,performance
+// @env: VYB_VEC_COPY_WARN_BYTES=4096
+// @expect: fail
+// @expect-return: 3
+// @expect-error: vyb: warning: bump_first(): by-value parameter 'v' (Vec<Int>) deep-copied 8000 bytes
+
+import collections
+
+bump_first(v<Vec<Int>>)<Int> -> {
+    v[0] = v[0] + 100
+    return v[0] + v.len()
+}
+
+small_len(s<Vec<Int>>)<Int> -> {
+    return s.len()
+}
+
+borrowed_len(b<their<Vec<Int> const>>)<Int> -> {
+    return b.len()
+}
+
+main()<Int> -> {
+    var<Vec<Int>> big = Vec<Int>()
+    var<Int> i = 0
+    while (i < 1000) {
+        big.push(i)
+        i = i + 1
+    }
+    var<Vec<Int>> tiny = Vec<Int>()
+    tiny.push(5)
+    if (bump_first(big) != 1100) { return 10 }
+    if (bump_first(big) != 1100) { return 11 }
+    if (big[0] != 0) { return 12 }
+    if (small_len(tiny) != 1) { return 13 }
+    if (borrowed_len(view(big)) != 1000) { return 14 }
+    println("copy warning checked")
+    exit(3)
+}
