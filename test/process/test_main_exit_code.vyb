@@ -1,0 +1,107 @@
+// @test: main() Int return is the exit status (JIT and --build)
+// @description: `vyb file.vyb` and a `--build` executable both exit with an Int
+//   main()'s return value (low 8 bits, as with C's exit()) as well as printing it;
+//   Bool and Void mains still exit 0, exit() still wins, and run_tests.vyb expects an
+//   integer @expect-return as the exit status of a passing test.
+// @category: process, tooling
+// @expect: pass
+// @expect-output: main exit code ok
+// @expect-return: 0
+// @env: VYB_STDLIB=stdlib
+import io::{close, open_write, write_str}
+import process::{exec_output}
+
+sh(cmd<String>)<String> -> {
+    out<String> = ""
+    freedom {
+        match (exec_output(cmd)) {
+            s -> { out = s }
+            ? -> { out = "" }
+        }
+    }
+    return out
+}
+
+put(path<String>, text<String>)<Bool> -> {
+    match (open_write(path)) {
+        f -> { match (write_str(f, text)) { n -> { close(f); return true } ? -> { close(f); return false } } }
+        ? -> { return false }
+    }
+    return false
+}
+
+# Write `body` as a program, run it with the JIT, return "<last stdout line>|<exit>".
+run(vyb<String>, dir<String>, name<String>, body<String>)<String> -> {
+    path<String> = dir + "/" + name + ".vyb"
+    if (!put(path, body)) { return "write failed" }
+    outp<String> = dir + "/" + name + ".out"
+    return sh(vyb + " " + path + " > " + outp + " 2>/dev/null; rc=$?; printf '%s|%s' \"$(tail -n 1 " + outp + ")\" \"$rc\"").trim()
+}
+
+# Same, but build a standalone executable with --build and run that.
+run_aot(vyb<String>, dir<String>, name<String>, body<String>)<String> -> {
+    path<String> = dir + "/" + name + ".vyb"
+    if (!put(path, body)) { return "write failed" }
+    exe<String> = dir + "/" + name + ".bin"
+    outp<String> = dir + "/" + name + ".aout"
+    return sh(vyb + " " + path + " --build " + exe + " > /dev/null 2>&1 || { printf 'build failed'; exit 0; }; " + exe + " > " + outp + " 2>/dev/null; rc=$?; printf '%s|%s' \"$(tail -n 1 " + outp + ")\" \"$rc\"").trim()
+}
+
+main()<Int> -> {
+    # the compiler running this test: the shell's parent is this JIT process
+    vyb<String> = sh("readlink /proc/$PPID/exe").trim()
+    dir<String> = sh("mktemp -d /tmp/vyb-exit-XXXXXX").trim()
+    if (vyb.len() == 0 || dir.len() == 0) { println("setup failed"); return 1 }
+    var<Int> bad = 0
+
+    names<Vec<String>> = Vec::new()
+    bodies<Vec<String>> = Vec::new()
+    wants<Vec<String>> = Vec::new()
+    names.push("ret42");   bodies.push("main()<Int> -> {\n    return 42\n}\n");               wants.push("42|42")
+    names.push("ret0");    bodies.push("main()<Int> -> {\n    return 0\n}\n");                wants.push("0|0")
+    names.push("ret300");  bodies.push("main()<Int> -> {\n    return 300\n}\n");              wants.push("300|44")
+    names.push("retneg");  bodies.push("main()<Int> -> {\n    return 0 - 1\n}\n");            wants.push("-1|255")
+    names.push("retcomp"); bodies.push("f(x<Int>)<Int> -> { return x * 3 }\nmain()<Int> -> {\n    return f(5)\n}\n"); wants.push("15|15")
+    names.push("retbool"); bodies.push("main()<Bool> -> {\n    return true\n}\n");            wants.push("true|0")
+    names.push("retvoid"); bodies.push("main() -> {\n    println(\"v\")\n}\n");               wants.push("v|0")
+    names.push("exit3");   bodies.push("main()<Int> -> {\n    exit(3)\n    return 9\n}\n");   wants.push("|3")
+
+    i<Int> = 0
+    while (i < names.len()) {
+        got<String> = run(vyb, dir, names.get(i), bodies.get(i))
+        if (got != wants.get(i)) {
+            println(names.get(i) + ": want '" + wants.get(i) + "', got '" + got + "'")
+            bad = 1
+        }
+        i = i + 1
+    }
+
+    # The --build executable's int main() wrapper reads the same status.
+    i = 0
+    while (i < names.len()) {
+        got<String> = run_aot(vyb, dir, names.get(i) + "_aot", bodies.get(i))
+        if (got != wants.get(i)) {
+            println(names.get(i) + " (--build): want '" + wants.get(i) + "', got '" + got + "'")
+            bad = 1
+        }
+        i = i + 1
+    }
+
+    # run_tests.vyb: a passing test whose main returns 7 has exit status 7, which the
+    # runner now expects from its @expect-return; a wrong @expect-return still fails.
+    tdir<String> = dir + "/suite"
+    sh("mkdir -p " + tdir)
+    good<String> = "// @test: seven_fixture\n// @expect: pass\n// @expect-return: 7\nmain()<Int> -> {\n    return 7\n}\n"
+    wrong<String> = "// @test: wrong_fixture\n// @expect: pass\n// @expect-return: 8\nmain()<Int> -> {\n    return 7\n}\n"
+    if (!put(tdir + "/a_seven.vyb", good) || !put(tdir + "/b_wrong.vyb", wrong)) { println("cannot write fixtures"); bad = 1 }
+    out<String> = sh(vyb + " test/run_tests.vyb --vyb " + vyb + " --test-dir " + tdir + " -v 2>&1; echo RC=$?")
+    if (out.index_of("PASS: seven_fixture") < 0) { println("seven_fixture did not pass"); bad = 1 }
+    if (out.index_of("FAIL: wrong_fixture") < 0) { println("wrong_fixture did not fail"); bad = 1 }
+    if (out.index_of("RC=1") < 0) { println("runner did not exit 1"); bad = 1 }
+    if (bad == 1) { println(out) }
+
+    sh("rm -rf " + dir)
+    if (bad == 1) { return 1 }
+    println("main exit code ok")
+    return 0
+}

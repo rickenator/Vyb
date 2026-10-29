@@ -3289,13 +3289,14 @@ yields the value directly, with no allocation.
 
 ## Appendix B — Auto-serialization
 
-A `main()` return value is serialized as JSON on stdout; it is never the process
-exit status. Every program that ends by returning a value exits `0`. Use the
-builtin `exit(n)` to set a process status explicitly.
+A `main()` return value is serialized as JSON on stdout. An `Int` return is also
+the process exit status, truncated to its low 8 bits as with C's `exit()`
+(`return 300` exits 44, `return -1` exits 255); every other return type exits
+`0`. Use the builtin `exit(n)` to set a process status without printing.
 
 ```vyb
 main()<Void>                      # no output, exit 0
-main()<Int>                       # prints the number, e.g. 42, exit 0
+main()<Int>                       # prints the number, e.g. 42, exit 42
 main()<Bool>                      # prints true or false, exit 0
 main()<Float>                     # prints the number, exit 0
 main()<String>                    # prints the JSON-quoted string, e.g. "vyb"

@@ -1,9 +1,10 @@
 #!/bin/bash
 # Test AOT compilation of Vyb examples (`--build`) -- #158 (+ #166 aspect suite).
 #
-# The compiled executable must exit 0 and write the program's main-return value
-# (JSON-serialized) to stdout, matching the JIT contract enforced by test/run_tests.vyb,
-# OR (for the native/aspect conformance set) simply exit 0. Pass `--json <file>`
+# The compiled executable must write the program's main-return value (JSON-serialized)
+# to stdout and exit with it (an Int return is the exit status, low 8 bits), matching
+# the JIT contract enforced by test/run_tests.vyb, OR (for the native/aspect
+# conformance set) exit with the test's integer @expect-return (0 when it has none). Pass `--json <file>`
 # for machine-readable per-test results + totals (reproducible release evidence);
 # the exit code is 0 only when every test passes.
 
@@ -42,15 +43,17 @@ test_compile() {
 
     local actual_return
     actual_return=$(printf '%s\n' "$output" | sed '/^$/d' | tail -1)
+    local expected_exit=0
+    if [[ "$expected_return" =~ ^-?[0-9]+$ ]]; then expected_exit=$(( expected_return & 255 )); fi
 
-    if [ "$actual_exit" -eq 0 ] && [ "$actual_return" = "$expected_return" ]; then
-        echo "✓ Pass: $test_name (exit code: 0, return: $actual_return)"
+    if [ "$actual_exit" -eq "$expected_exit" ] && [ "$actual_return" = "$expected_return" ]; then
+        echo "✓ Pass: $test_name (exit code: $actual_exit, return: $actual_return)"
         TESTS_PASSED=$((TESTS_PASSED + 1))
         JENTRIES+=("\"$test_name\": {\"pass\":true, \"return\":\"$actual_return\"}")
         rm -f "test_output_$test_name" "test_output_$test_name.o"
         return 0
     else
-        echo "✗ Fail: $test_name (expected exit 0 and return: $expected_return, got exit: $actual_exit, return: $actual_return)"
+        echo "✗ Fail: $test_name (expected exit $expected_exit and return: $expected_return, got exit: $actual_exit, return: $actual_return)"
         TESTS_FAILED=$((TESTS_FAILED + 1))
         JENTRIES+=("\"$test_name\": {\"pass\":false, \"expected\":\"$expected_return\", \"exit\":$actual_exit, \"return\":\"$actual_return\"}")
         return 1
@@ -58,8 +61,9 @@ test_compile() {
 }
 
 # #166: native (AOT) conformance for the generic/aspect suite. Each @expect:
-# pass test is compiled natively and run; assertion is exit 0 (the test returns 0
-# on success). VYB_STDLIB lets the module imports resolve for --build.
+# pass test is compiled natively and run; assertion is that it exits with its
+# integer @expect-return (low 8 bits; 0 when it declares none), since an Int main()
+# return is the exit status. VYB_STDLIB lets the module imports resolve for --build.
 native_aspect() {
     local test_file=$1
     local test_name=$(basename "$test_file" .vyb)
@@ -70,15 +74,18 @@ native_aspect() {
         JENTRIES+=("\"$test_name (native)\": {\"pass\":false, \"note\":\"build failed\"}")
         return 1
     fi
+    local expected_exit=0 declared
+    declared=$(grep -m1 -o '// @expect-return: *-\?[0-9]\+ *$' "$test_file" | sed 's/.*: *//; s/ *$//')
+    if [ -n "$declared" ]; then expected_exit=$(( declared & 255 )); fi
     local actual_exit
     ./test_output_$test_name > /dev/null 2>&1
     actual_exit=$?
-    if [ "$actual_exit" -eq 0 ]; then
-        echo "✓ Pass: $test_name (native, exit 0)"
+    if [ "$actual_exit" -eq "$expected_exit" ]; then
+        echo "✓ Pass: $test_name (native, exit $actual_exit)"
         TESTS_PASSED=$((TESTS_PASSED + 1))
         JENTRIES+=("\"$test_name (native)\": {\"pass\":true}")
     else
-        echo "✗ Fail: $test_name (native, exit: $actual_exit)"
+        echo "✗ Fail: $test_name (native, expected exit $expected_exit, got: $actual_exit)"
         TESTS_FAILED=$((TESTS_FAILED + 1))
         JENTRIES+=("\"$test_name (native)\": {\"pass\":false, \"exit\":$actual_exit}")
     fi

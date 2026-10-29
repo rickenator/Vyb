@@ -1,9 +1,10 @@
 // @test: Int return from main is JSONified as output
-// @description: main()<Int> should print the integer value to stdout and exit 0 (not use exit code)
+// @description: main()<Int> prints the integer value to stdout and also exits with it (low 8 bits)
 // @category: basic, return-coherence
 // @expect: pass
 // @execute-jit: true
 // @expect-output: 42
+// @expect-return: 42
 
 main()<Int> -> {
     return 42

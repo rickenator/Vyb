@@ -3683,7 +3683,7 @@ Vyb automatically serializes complex return types from `main()`:
 
 **Simple Returns:**
 
-- `main()<Int> -> { return 42 }` → Exit code 42
+- `main()<Int> -> { return 42 }` → Outputs: 42, exit code 42 (low 8 bits)
 - `main()<String> -> { return "hello" }` → Outputs: hello
 
 **Complex Returns:**

@@ -1,3 +1,4 @@
+// @expect-return: 33
 // Test all supported parameter syntax variations
 test_standard(a<Int>, const<Int> b)<Int> -> {
     return a + b;

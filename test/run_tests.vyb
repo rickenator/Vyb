@@ -102,6 +102,20 @@ bool_str(b<Bool>)<String> -> {
     return "false"
 }
 
+# True for an optional '-' followed by one or more decimal digits.
+is_int_literal(s<String>)<Bool> -> {
+    t<String> = trim(s)
+    i<Int> = 0
+    if (t.len() > 0 && (((t.char_at(0) as Int) & 0xFF) == 45)) { i = 1 }
+    if (i >= t.len()) { return false }
+    while (i < t.len()) {
+        c<Int> = (t.char_at(i) as Int) & 0xFF
+        if (c < 48 || c > 57) { return false }
+        i = i + 1
+    }
+    return true
+}
+
 # Decimal value of a digit string (stops at the first non-digit; handles a
 # leading '-'). `StringOps::to_int` is not available on this build, and
 # `exec_output`'s child status arrives as text, so the runner converts itself.
@@ -356,6 +370,11 @@ run_one(file<String>, vyb<String>, repoRoot<String>, tmpDir<String>, idx<Int>, j
     if (expect == "fail" && expectRet.len() > 0 && expectRet != "n/a") {
         expected = digits_to_int(expectRet)
     }
+    # An executed Int main() exits with its return value (low 8 bits, as with C's
+    # exit()), so a passing test's integer @expect-return is its exit status too.
+    if (willExecute && expect == "pass" && is_int_literal(expectRet)) {
+        expected = digits_to_int(expectRet) & 255
+    }
 
     reasons<String> = ""
     if (code != expected) {
@@ -495,15 +514,15 @@ main()<Int> -> {
         parts<Vec<String>> = shardSpec.split("/")
         if (parts.len() != 2 || !is_all_digits(parts.get(0)) || !is_all_digits(parts.get(1))) {
             println("--shard expects K/N with decimal K and N (e.g. 0/4); got '" + shardSpec + "'")
-            # exit(), not return: a main() Int return is only printed, so a typo in a
-            # CI invocation would otherwise pass as an empty, green run (#481 follow-up).
+            # exit(), not return: a return would also print the status as JSON, and a
+            # typo in a CI invocation must not pass as an empty, green run (#481 follow-up).
             exit(2)
         }
         shardIndex = digits_to_int(parts.get(0))
         shardCount = digits_to_int(parts.get(1))
         if (shardCount < 1 || shardIndex >= shardCount) {
             println("--shard K/N out of range: K=" + shardIndex.to_string() + " N=" + shardCount.to_string())
-            exit(2)   # as above: a return would not reach the process status
+            exit(2)   # as above
         }
     }
 

@@ -1,3 +1,4 @@
+// @expect-return: 50
 # Test: Multi-type trap as fallback after specific trap
 # Expected: Multi-type trap catches String, return 50
 

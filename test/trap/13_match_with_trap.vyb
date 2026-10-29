@@ -1,3 +1,4 @@
+// @expect-return: -1
 # Test 13: Match expression with trap - error handling in pattern matching
 # Tests that errors from match arms can be trapped
 

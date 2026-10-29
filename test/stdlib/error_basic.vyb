@@ -1,3 +1,4 @@
+// @expect-return: 1
 # Test stdlib Error types with Errable aspect
 #
 # This test verifies:

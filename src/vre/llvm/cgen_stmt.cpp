@@ -486,6 +486,23 @@ void LLVMCodegen::visit(vyb::ast::ReturnStatement *node) {
                 llvm::Function* printlnFunc = getVybPrintlnFunction();
                 if (jsonStr) builder->CreateCall(printlnFunc, {jsonStr});
 
+                // An Int main() return is also the process exit status: store it in
+                // the exported __vyb_main_exit_status, which the JIT runner reads after
+                // main returns (the OS keeps the low 8 bits, as with C's exit()).
+                // Bool, Float, String and multi-value returns still exit 0.
+                if (m_mainAutoSerializeOrigRetType->isIntegerTy() &&
+                        !m_mainAutoSerializeOrigRetType->isIntegerTy(1) &&
+                        returnValue->getType()->isIntegerTy()) {
+                    llvm::GlobalVariable* exitGv = module->getNamedGlobal("__vyb_main_exit_status");
+                    if (!exitGv) {
+                        exitGv = new llvm::GlobalVariable(*module, int64Type, false,
+                            llvm::GlobalValue::ExternalLinkage,
+                            llvm::ConstantInt::get(int64Type, 0), "__vyb_main_exit_status");
+                    }
+                    builder->CreateStore(
+                        builder->CreateSExtOrTrunc(returnValue, int64Type, "exit.status"), exitGv);
+                }
+
                 // A struct main()-return was auto-serialized above. The returned
                 // struct's OWNED fields (Vec<String>/String buffers) are dead after
                 // emission, but the struct is the *return value*, not a local

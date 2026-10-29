@@ -876,9 +876,10 @@ ParsedModule parse_vyb_module(const std::string& source, const std::string& file
 // Vyb String) — none of which matches crt0's expectation of `int main(...)`.
 // Without a wrapper the process would leak an arbitrary value (observed as exit
 // 128) from a stale register. We rename the Vyb `main` to `__vyb_program_main`
-// and emit a true `int main()` that runs it and exits 0 — serializing a String
-// return to stdout and reporting an untrapped failable error, mirroring the JIT
-// runner in run_vyb_code.
+// and emit a true `int main()` that runs it — serializing a String return to
+// stdout, reporting an untrapped failable error, and exiting with an Int main()'s
+// return value (low 8 bits; every other main exits 0), mirroring the JIT runner
+// in run_vyb_code.
 static void finalizeStandaloneExecutable(llvm::Module* module, bool mainReturnIsLitRaw = false) {
     llvm::Function* progMain = module->getFunction("main");
     if (!progMain) {
@@ -972,10 +973,27 @@ static void finalizeStandaloneExecutable(llvm::Module* module, bool mainReturnIs
         builder.CreateCall(untrapped, {err});
         builder.CreateUnreachable();
         builder.SetInsertPoint(okBB);
-        builder.CreateRet(builder.getInt32(0));
+        // A failable Int main() exits with its payload (low 8 bits), like the JIT.
+        auto* fst = llvm::cast<llvm::StructType>(retTy);
+        if (fst->getNumElements() == 2 && fst->getElementType(0)->isIntegerTy(64)) {
+            llvm::Value* payload = builder.CreateExtractValue(res, 0, "main.payload");
+            builder.CreateRet(builder.CreateTrunc(
+                builder.CreateAnd(payload, builder.getInt64(0xFF)), builder.getInt32Ty(), "main.exit"));
+        } else {
+            builder.CreateRet(builder.getInt32(0));
+        }
     } else {
         builder.CreateCall(progMain);  // discard any payload (Void/auto-serialized)
-        builder.CreateRet(builder.getInt32(0));
+        // An Int main() stored its return value in __vyb_main_exit_status during
+        // auto-serialization; it becomes the exit status (low 8 bits), matching the
+        // JIT runner. Every other main exits 0.
+        if (llvm::GlobalVariable* exitGv = module->getNamedGlobal("__vyb_main_exit_status")) {
+            llvm::Value* status = builder.CreateLoad(builder.getInt64Ty(), exitGv, "main.status");
+            builder.CreateRet(builder.CreateTrunc(
+                builder.CreateAnd(status, builder.getInt64(0xFF)), builder.getInt32Ty(), "main.exit"));
+        } else {
+            builder.CreateRet(builder.getInt32(0));
+        }
     }
 }
 
@@ -2592,6 +2610,12 @@ int run_test_command(int argc, char** argv, const std::string& exeArg) {
         if (expect == "fail" && !expectRet.empty() && expectRet != "n/a") {
             try { expectedExit = std::stoi(expectRet); } catch (...) {}
         }
+        // An executed Int main() exits with its return value (low 8 bits), so a
+        // passing test's integer @expect-return is also its expected exit status.
+        if (willExecute && expect == "pass" &&
+                std::regex_match(expectRet, std::regex("-?[0-9]+"))) {
+            try { expectedExit = static_cast<int>(std::stoll(expectRet) & 0xFF); } catch (...) {}
+        }
         bool ok = (ret == expectedExit);
         std::vector<std::string> reasons;
         if (!ok) reasons.push_back("expected exit " + std::to_string(expectedExit) + ", got " + std::to_string(ret));
@@ -4139,7 +4163,9 @@ runtimeSymbols[mangle("__vyb_strchan_free")] = llvm::orc::ExecutorSymbolDef(
                     if (result.error != nullptr) {
                         __vyb_runtime_untrapped_error(result.error);
                     }
-                    return 0;
+                    // Like a plain Int main(): the return value is the exit status.
+                    std::cout.flush();
+                    return static_cast<int>(static_cast<uint64_t>(result.value) & 0xFF);
                 }
                 if (mainFailablePayloadIsStruct) {
                     // A failable main with a non-scalar (String) payload returns a
@@ -4188,13 +4214,22 @@ runtimeSymbols[mangle("__vyb_strchan_free")] = llvm::orc::ExecutorSymbolDef(
             // Non-String struct: fall through to void call (codegen changed return type to void)
         }
         // Void return (or any non-String type, which codegen has lowered to void with
-        // inline serialization): call as void and return 0.
+        // inline serialization): call as void. An Int main() also stored its return
+        // value in __vyb_main_exit_status, which becomes the exit status (low 8 bits,
+        // as with C's exit()); every other main exits 0.
         {
             typedef void (*VoidMainFuncType)();
             VoidMainFuncType voidMainFunc = reinterpret_cast<VoidMainFuncType>(
                 static_cast<void*>(executorAddr.toPtr<void*>()));
             voidMainFunc();
-            return 0;
+            std::cout.flush();
+            auto exitSym = jit->lookup("__vyb_main_exit_status");
+            if (!exitSym) {
+                llvm::consumeError(exitSym.takeError());
+                return 0;
+            }
+            int64_t status = *exitSym->toPtr<int64_t*>();
+            return static_cast<int>(static_cast<uint64_t>(status) & 0xFF);
         }
     } catch (const std::exception& e) {
         std::cerr << "Error running Vyb code: " << e.what() << std::endl;

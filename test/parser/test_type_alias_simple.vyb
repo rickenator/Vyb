@@ -1,3 +1,4 @@
+// @expect-return: 47
 // Simple test file for type alias functionality
 type<Int> MyInt;
 
