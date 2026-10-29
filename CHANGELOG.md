@@ -159,6 +159,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `version:` dep rebuilds with the registry absent.
 
 ### Fixed
+- **Float agents no longer hang on AArch64** — the runtime called a `Float` agent behavior
+  through a C struct `{ double; bool }` by value, but the behavior's lowered signature is
+  `(env, double, i1)`. On x86-64 both land in the same registers; on AArch64 the non-HFA
+  struct goes in `x1`/`x2`, so the behavior read its present flag from the low bits of the
+  double. For 1.25 those bits are zero, so the message looked absent, the agent stopped, and
+  `test/agents/test_agent_payloads.vyb` blocked forever in `strchan_recv`. The runtime now
+  calls `fn(void*, double, int64_t)`, the same way it already calls `Bool` and `String`
+  behaviors. Covered by `test/agents/test_agent_float_abi.vyb`, which checks values with both
+  zero and non-zero low bits plus the failable path, and fails with a return code where the
+  old build hung.
 - **The shipped `filter`/`map` over a `Vec<mild<T>>` no longer leaks (#427 defects 6/7, #451
   closed for this half)** — a call whose callee is a `fn(...)` VALUE is emitted by its own arm:
   it rebuilds the callee's signature, prepends the hidden environment and builds its own argument
