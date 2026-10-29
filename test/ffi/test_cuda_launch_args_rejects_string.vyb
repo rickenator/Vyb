@@ -1,0 +1,17 @@
+// @test: cuda_launch_args rejects a non-scalar kernel argument
+// @description: every kernel argument is packed into one cell at its own width, so only
+//   scalars (integers, floats, Bool, loc<T>) can be passed; a String must not be silently
+//   packed as a host pointer. Device buffers go by their Int address.
+// @category: ffi, cuda, diagnostics
+// @expect: fail
+// @expect-error: cuda_launch_args: kernel argument 1 must be a scalar
+
+main()<Int> -> {
+    freedom {
+        hf<Int> = 0
+        d<Int> = 0
+        s<String> = "host"
+        rc<CInt> = cuda_launch_args(hf, 1, 1, 1, 32, 1, 1, d, s)
+    }
+    return 0
+}

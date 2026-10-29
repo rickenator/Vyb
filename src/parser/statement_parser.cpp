@@ -60,6 +60,13 @@ vyb::ast::StmtPtr StatementParser::parse() {
         }
     }
     vyb::token::Token current_token = this->peek();
+    // A reserved word used as a variable name (`fail<Int> = 0`, `match<Int> = 3`) would otherwise
+    // reach that keyword's own parser and fail with an unrelated message ("Expected '(' after
+    // typed fail"); say what is actually wrong.
+    if (this->reservedWordAsTypedName({vyb::TokenType::EQ})) {
+        throw std::runtime_error("'" + current_token.lexeme + "' is a reserved word and cannot be used "
+                                 "as a variable name at " + location_to_string(current_token.location));
+    }
     switch (current_token.type) {
         case vyb::TokenType::KEYWORD_MUT:
         case vyb::TokenType::KEYWORD_CONST:

@@ -129,7 +129,7 @@ h2_pack h_bits h_lo h_hi
 # f32 / f64 math
 fma_f32 fma_f64 ex2_f32 rsqrt_f32 (approx.ftz) sqrt_f32 (rn) max_f32 min_f32
 # warp shuffles and reductions
-shfl_{xor,down,up,idx}_{f32,f64,u32}  warp_sum_f32 warp_max_f32 warp_sum_i32
+shfl_{xor,down,up,idx}_{f32,f64,u32,i64}  warp_sum_f32 warp_max_f32 warp_sum_i32
 # int8 dot products / q8_1 quantisation
 dp4a_s32 dp4a_us32 dp4a_sgn_s32 pack_s8x4 sat_s8 rni_f32 bytemask4 vsub4 (emulated)
 # tensor cores and async copies (sm_80+)
@@ -145,6 +145,18 @@ Global atomics (monotonic) — for KV-cache writes / reductions:
 ```
 atomic_add_f64(addr<Int>, v<Float>)<Float>
 atomic_add_i32(addr<Int>, v<CInt>)<CInt>
+atomic_add_f32(addr<Int>, v<Float32>)<Float32>
+atomic_add_i64(addr<Int>, v<Int>)<Int>       atomic_xor_i64(addr<Int>, v<Int>)<Int>
+atomic_or_u32 / atomic_and_u32 / atomic_xor_u32(addr<Int>, v<UInt32>)<UInt32>
+atomic_max_i32(addr<Int>, v<CInt>)<CInt>
+```
+
+Each returns the old value; an unused result lets ptxas emit the `red.global` form.
+Bit counting and warp vote (`test/kernel/test_atomics_bits.vyb`, checked by `check_atomics_bits.py`):
+
+```
+popc_u32(x<UInt32>)<Int>    ctz_u32(x<UInt32>)<Int>     # ctz_u32(0) == 32
+ballot_u32(pred)<UInt32>    # vote.sync.ballot.b32, full mask: every lane must reach it
 ```
 
 ### No host libm in device code (issue #256)
@@ -254,6 +266,30 @@ cuda_launch_n(from<loc<CVoid>>(addr(hf)), 1,1,1, 1,1,1, addr(params), 5)
 `test/ffi/test_cuda_launch_n.vyb` runs exactly this against `fixtures/kernel/launch5.vyb`
 (five parameters, four Int cells plus an f64 cell) and verifies the value on silicon;
 `test/ffi/test_addr_of_buffer.vyb` covers the `addr()` semantics without a GPU.
+
+### `cuda_launch_args`: the compiler packs kernelParams
+
+The hand-built array above still costs one cell and one `params[i] = addr(...)` line per
+argument. **`cuda_launch_args(f, gx, gy, gz, bx, by, bz, a0, ..., an)`** (compiler-provided, in a
+`freedom` block) does that packing itself. Each argument is evaluated and stored in its own cell
+at its own width, and the cells' addresses go to `cuda_launch_n`. It returns the `CUresult` as
+`CInt`.
+
+```
+rc<CInt> = cuda_launch_args(hf, 1, 1, 1, 1, 1, 1, outD, ka, ka - 8, kz, kalpha)
+```
+
+* `f` is the `loc<CVoid>` from `cuModuleGetFunction`, or its `Int` value.
+* The six dimensions must be integers.
+* The arguments must be scalars: `Int`/`Float`/`Bool` (8, 8 and 1 bytes), the C and fixed-width
+  aliases at their own width (`CInt`, `UInt32` and `Float32` are 4 bytes), or a `loc<T>`. Pass a
+  device buffer by its `Int` address. A Vyb kernel's `Int`/`Float` parameters are 8 bytes, so
+  widen narrower values with `as Int` first.
+* A non-scalar argument such as a `String` is a compile error.
+* JIT only, like `cuda_launch_n`.
+
+`test/ffi/test_cuda_launch_args.vyb` launches `launch5` this way. The `_requires_freedom`,
+`_rejects_string` and `_arity` tests cover the diagnostics without a GPU.
 
 ## Security note
 

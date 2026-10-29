@@ -1,0 +1,72 @@
+# Agents - Float payload ABI.
+#   - each Float message reaches the behavior as present, with its exact value
+#     (values whose bit patterns have zero and non-zero low bits)
+#   - the failable Float behavior path gets the same lowering
+#   - the closing absent event still arrives last
+# Regression: the runtime passed Float? as a C struct { double; bool }. On
+# AArch64 that does not match the behavior's lowered (double, i1) arguments, so
+# the flag came from the double's low bits and 1.25 looked absent. Written so
+# the bug fails with a return code instead of blocking.
+// @test: Agents - Float payload ABI (value and present flag)
+// @category: agents,concurrency,stdlib
+// @expect: pass
+// @expect-return: 0
+
+import agents
+import channels
+
+main()<Int> -> {
+    out<Int> = chan_new() else 0
+    fa<Int> = agent_start_float(|message<Float?>| -> {
+        match (message) {
+            f -> {
+                if (f == 1.25) { chan_send(out, 1) }
+                else if (f == -0.5) { chan_send(out, 2) }
+                else if (f == 0.0) { chan_send(out, 3) }
+                else if (f == 0.1) { chan_send(out, 4) }
+                else { chan_send(out, 99) }
+            }
+            ? -> { chan_send(out, 100) }
+        }
+    }) else 0
+    if (fa == 0) { return 1 }
+    agent_send_float(fa, 1.25)
+    agent_send_float(fa, -0.5)
+    agent_send_float(fa, 0.0)
+    agent_send_float(fa, 0.1)
+    if ((chan_recv(out) else -1) != 1) { return 2 }
+    if ((chan_recv(out) else -1) != 2) { return 3 }
+    if ((chan_recv(out) else -1) != 3) { return 4 }
+    if ((chan_recv(out) else -1) != 4) { return 5 }
+    agent_close(fa)
+    if ((chan_recv(out) else -1) != 100) { return 6 }
+    agent_free(fa)
+
+    # Failable behavior: fails with code 7 on a negative value.
+    res<Int> = chan_new() else 0
+    dl<Int> = chan_new() else 0
+    fb<Int> = agent_start_float(|message<Float?>| -> {
+        match (message) {
+            f -> {
+                if (f < 0.0) { fail<Int>(7) }
+                if (f == 2.5) { chan_send(res, 5) } else { chan_send(res, 98) }
+            }
+            ? -> { chan_send(res, 100) }
+        }
+    }) else 0
+    if (fb == 0) { return 7 }
+    if (!(agent_dead_letter(fb, dl) else false)) { return 8 }
+    agent_send_float(fb, 2.5)
+    if ((chan_recv(res) else -1) != 5) { return 9 }
+    agent_send_float(fb, -1.0)
+    if ((chan_recv(dl) else -1) != fb) { return 10 }
+    if (agent_status(fb) != 2) { return 11 }
+    if (agent_error_code(fb) != 7) { return 12 }
+    agent_free(fb)
+
+    chan_free(out)
+    chan_free(res)
+    chan_free(dl)
+    println("float agent abi ok")
+    return 0
+}

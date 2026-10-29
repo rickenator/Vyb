@@ -430,7 +430,7 @@ bool LLVMCodegen::emitKernelIntrinsic(vyb::ast::CallExpression* node) {
         return true;
     }
     // Warp shuffles (full-warp mask): shfl_{xor,down,up,idx}_{f32,u32}(v, lane_arg) and
-    // shfl_xor_f64(v, mask) (two 32-bit shuffles of the halves).
+    // shfl_{xor,down,up,idx}_{f64,i64}(v, lane_arg) (two 32-bit shuffles of the halves).
     if (name.rfind("shfl_", 0) == 0) {
         std::string rest = name.substr(5);
         size_t us = rest.find('_');
@@ -442,14 +442,15 @@ bool LLVMCodegen::emitKernelIntrinsic(vyb::ast::CallExpression* node) {
             else if (mode == "down") { idF = llvm::Intrinsic::nvvm_shfl_sync_down_f32; idI = llvm::Intrinsic::nvvm_shfl_sync_down_i32; }
             else if (mode == "up") { idF = llvm::Intrinsic::nvvm_shfl_sync_up_f32; idI = llvm::Intrinsic::nvvm_shfl_sync_up_i32; clampC = 0; }
             else if (mode == "idx") { idF = llvm::Intrinsic::nvvm_shfl_sync_idx_f32; idI = llvm::Intrinsic::nvvm_shfl_sync_idx_i32; }
-            if (idF && (ty == "f32" || ty == "u32" || ty == "f64")) {
+            if (idF && (ty == "f32" || ty == "u32" || ty == "f64" || ty == "i64")) {
                 llvm::Value* mask = llvm::ConstantInt::get(int32Type, 0xffffffffu);
                 llvm::Value* cc = llvm::ConstantInt::get(int32Type, clampC);
-                if (ty == "f64") {
-                    llvm::Value* v = argAs(0, doubleType);
+                if (ty == "f64" || ty == "i64") {
+                    const bool isD = (ty == "f64");
+                    llvm::Value* v = argAs(0, isD ? doubleType : int64Type);
                     llvm::Value* b = argAs(1, int32Type);
                     if (!v || !b) { m_currentLLVMValue = nullptr; return true; }
-                    llvm::Value* bits = builder->CreateBitCast(v, int64Type);
+                    llvm::Value* bits = isD ? builder->CreateBitCast(v, int64Type) : v;
                     llvm::Value* lo = builder->CreateTrunc(bits, int32Type);
                     llvm::Value* hi = builder->CreateTrunc(builder->CreateLShr(bits, 32), int32Type);
                     llvm::Function* f = intrinsicFn(idI, {});
@@ -457,7 +458,7 @@ bool LLVMCodegen::emitKernelIntrinsic(vyb::ast::CallExpression* node) {
                     llvm::Value* hi2 = builder->CreateCall(f, {mask, hi, b, cc});
                     llvm::Value* r = builder->CreateOr(builder->CreateZExt(lo2, int64Type),
                         builder->CreateShl(builder->CreateZExt(hi2, int64Type), 32));
-                    m_currentLLVMValue = builder->CreateBitCast(r, doubleType, "shfl.f64");
+                    m_currentLLVMValue = isD ? builder->CreateBitCast(r, doubleType, "shfl.f64") : r;
                     return true;
                 }
                 bool isF = (ty == "f32");
@@ -715,6 +716,70 @@ bool LLVMCodegen::emitKernelIntrinsic(vyb::ast::CallExpression* node) {
         llvm::Value* r = builder->CreateAtomicRMW(op, gptr(a), v,
             llvm::MaybeAlign(), llvm::AtomicOrdering::Monotonic, llvm::SyncScope::System);
         m_currentLLVMValue = r;
+        return true;
+    }
+
+    // Integer/f32 global atomics (monotonic, system scope), each returning the old value.
+    // An unused result lets ptxas emit the fire-and-forget red.global form.
+    //   atomic_add_f32(a, Float32)  atomic_add_i64(a, Int)  atomic_xor_i64(a, Int)
+    //   atomic_or_u32(a, UInt32)    atomic_and_u32(a, UInt32)  atomic_xor_u32(a, UInt32)
+    //   atomic_max_i32(a, CInt)
+    if (name == "atomic_add_f32" || name == "atomic_add_i64" || name == "atomic_xor_i64" ||
+        name == "atomic_or_u32" || name == "atomic_and_u32" || name == "atomic_xor_u32" ||
+        name == "atomic_max_i32") {
+        llvm::Type* el = (name == "atomic_add_f32") ? f32Ty
+                       : (name == "atomic_add_i64" || name == "atomic_xor_i64") ? int64Type : int32Type;
+        llvm::AtomicRMWInst::BinOp op =
+            (name == "atomic_add_f32") ? llvm::AtomicRMWInst::FAdd
+          : (name == "atomic_add_i64") ? llvm::AtomicRMWInst::Add
+          : (name == "atomic_or_u32") ? llvm::AtomicRMWInst::Or
+          : (name == "atomic_and_u32") ? llvm::AtomicRMWInst::And
+          : (name == "atomic_max_i32") ? llvm::AtomicRMWInst::Max
+          : llvm::AtomicRMWInst::Xor;
+        if (node->arguments.size() != 2) {
+            logError(node->loc, name + " takes 2 arguments (address, value)");
+            flagHardCodegenError();
+            m_currentLLVMValue = nullptr;
+            return true;
+        }
+        llvm::Value* a = argv(0);
+        llvm::Value* v = argAs(1, el);
+        if (!a || !v) { m_currentLLVMValue = nullptr; return true; }
+        m_currentLLVMValue = builder->CreateAtomicRMW(op, gptr(a), v,
+            llvm::MaybeAlign(), llvm::AtomicOrdering::Monotonic, llvm::SyncScope::System);
+        return true;
+    }
+    // Bit counting on a 32-bit word: popc_u32(x) (popc.b32) and ctz_u32(x) (trailing zeros,
+    // 32 for x == 0; brev + clz), both returned as Int so they index directly.
+    if (name == "popc_u32" || name == "ctz_u32") {
+        llvm::Value* x = argAs(0, int32Type);
+        if (!x) { m_currentLLVMValue = nullptr; return true; }
+        llvm::Value* r = (name == "popc_u32")
+            ? builder->CreateCall(intrinsicFn(llvm::Intrinsic::ctpop, {int32Type}), {x}, "popc")
+            : builder->CreateCall(intrinsicFn(llvm::Intrinsic::cttz, {int32Type}),
+                                  {x, llvm::ConstantInt::getFalse(*context)}, "ctz");
+        m_currentLLVMValue = builder->CreateZExt(r, int64Type, "bits.i64");
+        return true;
+    }
+    // ballot_u32(pred) -> UInt32: vote.sync.ballot.b32 over the full warp (bit k = lane k's
+    // pred != 0). Like the shuffles, every lane of the warp must reach it.
+    if (name == "ballot_u32") {
+        llvm::Value* p = argv(0);
+        if (!p) { m_currentLLVMValue = nullptr; return true; }
+        if (!p->getType()->isIntegerTy(1)) {
+            if (p->getType()->isIntegerTy())
+                p = builder->CreateICmpNE(p, llvm::ConstantInt::get(p->getType(), 0), "ballot.p");
+            else if (p->getType()->isFloatingPointTy())
+                p = builder->CreateFCmpUNE(p, llvm::ConstantFP::get(p->getType(), 0.0), "ballot.p");
+            else {
+                logError(node->loc, "ballot_u32 needs an integer or Bool predicate");
+                flagHardCodegenError();
+                m_currentLLVMValue = nullptr;
+                return true;
+            }
+        }
+        m_currentLLVMValue = builder->CreateCall(intrinsicFn(llvm::Intrinsic::nvvm_vote_ballot_sync, {}),
+            {llvm::ConstantInt::get(int32Type, 0xFFFFFFFFu), p}, "ballot");
         return true;
     }
 

@@ -167,7 +167,11 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 ### Running the test suite
 
 ```bash
-# 1322 .vyb tests exercised through compile + run + output/return checks
+# 1323 .vyb tests exercised through compile + run + output/return checks
+# 1324 .vyb tests exercised through compile + run + output/return checks
+# 1328 .vyb tests exercised through compile + run + output/return checks
+# 1324 .vyb tests exercised through compile + run + output/return checks
+# 1331 .vyb tests exercised through compile + run + output/return checks
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test
 ```
 
@@ -2823,6 +2827,30 @@ println("{} {}: {}".format(resp.status_code, resp.headers.len(), resp.body))
 - **Bounds checks** happen at runtime on string/`get`/`at` operations and
   return safe defaults rather than reading out of bounds.
 - **`freedom`** is the documented escape from checked access when needed.
+- **An integer store through a typed location stores the location's width.** For
+  `store(p, v)` / `p.store(v)` with `p<loc<Int32>>`, `loc<Int16>`, `loc<UInt8>`
+  and so on, an integer value is truncated to the pointee width, or sign- or
+  zero-extended when the pointee is wider. Zero extension applies to unsigned,
+  `Byte` and `Bool` sources. Storing to `Bool`/`i1` stores `v != 0`. A constant
+  that does not fit, and any non-constant that is narrowed, gets a compile-time
+  warning. Earlier compilers did a full 8-byte store here, which silently
+  overwrote the neighbouring bytes (`test/memory/test_narrow_store_no_clobber.vyb`).
+- **`prefetch(addr[, rw[, locality]])`** is a hint that the cache line at the
+  integer address `addr` will be needed soon. It lowers to `llvm.prefetch` and
+  returns nothing. `rw` is `0` for a read (the default) or `1` for a write.
+  `locality` runs from `0` (no temporal reuse) to `3` (keep in all cache levels,
+  the default). Both must be integer constants, which are checked at compile
+  time. In `--kernel` builds the call compiles to nothing. Use it in `freedom`
+  loops over indirect data, for example
+  `prefetch(rec + 8 * at(loc<Int32>(idx + 4 * (k + 16))))`.
+- **Call-frame bookkeeping is a debug feature.** At `-O0`/`-O1`, every Vyb call
+  is bracketed by `__vyb_runtime_push_call_frame` / `pop_call_frame`, so runtime
+  errors print a Vyb-level stack trace. At `-O2`/`-O3` (the default level) these
+  calls are not emitted. Set `VYB_CALL_FRAMES=1` to force them on, or `0` to
+  force them off. In call-heavy code the difference is large: `fib(35)` takes
+  0.32 s with frames and 0.10 s without. The runtime's frame stack holds 256
+  entries. Deeper recursion prints one warning and keeps pushes and pops
+  balanced, and the trace shows the outermost 256 frames.
 
 For profiling and leak checking the project supports both **ASan** and
 **Valgrind** builds (`build-asan/`, `valgrind … ./build/vyb file.vyb`); the
@@ -2857,12 +2885,28 @@ level now reaches **both** compilation paths: the AOT paths
 
 Each path owns the target machine the phase needs: the AOT paths build it from
 the requested triple/CPU/relocation model, while the JIT path builds one from the
-default target triple (`generic` CPU, no relocation model) and pins the module's
-data layout to it. `-O0` means "no IR passes" on both paths, not "no code
+default target triple for the **host CPU and its features** (as reported by
+`llvm::sys::getHostCPUName()` / `getHostCPUFeatures()`, no relocation model) and
+pins the module's data layout to it. ORC already generates machine code for the
+host, so this only lets the IR cost models (loop vectorizer, unroller, inliner)
+see the same CPU instead of SSE2-only `generic`. Set `VYB_JIT_GENERIC=1` to get
+the old `generic` target machine (for example, to compare optimizer decisions
+across machines). `-O0` means "no IR passes" on both paths, not "no code
 generation". `--debug-codegen` prints which pipeline ran (`Skipping IR
 optimization (-O0)` / `Applying IR optimization passes (-On)`), and `ci.yml`
 asserts per level that the pipeline selected differs *and* that program output is
 identical at every level.
+
+**Inlining at `-O2`/`-O3`.** Codegen marks every user function `noinline`
+(`cgen_decl.cpp`, Phase 6.4) so that `-O0`/`-O1` runtime traces show one frame
+per Vyb function. At `-O2` and `-O3`, `optimize_module` removes that attribute
+before the pipeline runs (functions marked `optnone` are left alone), so the
+inliner can fold small helpers such as accessors and raw `load`/`store`
+wrappers into hot loops. The trade-off is the same one C/C++ compilers make:
+at the optimized levels a trace can omit frames that were inlined. Set
+`VYB_KEEP_NOINLINE=1` to keep the attribute at every level when you are
+debugging an optimized build. Program output is the same either way, and the
+full suite passes in both modes.
 
 ### Test harness
 
@@ -2870,7 +2914,11 @@ Canonical suite runner — a Vyb program (`test/run_tests.vyb`), wired into CTes
 as `run-tests`:
 
 ```bash
-./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1322 tests)
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1323 tests)
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1324 tests)
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1328 tests)
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1324 tests)
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1331 tests)
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --category async  # filter by category
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --json results.json --evidence evidence.json
 ```
@@ -3289,13 +3337,14 @@ yields the value directly, with no allocation.
 
 ## Appendix B — Auto-serialization
 
-A `main()` return value is serialized as JSON on stdout; it is never the process
-exit status. Every program that ends by returning a value exits `0`. Use the
-builtin `exit(n)` to set a process status explicitly.
+A `main()` return value is serialized as JSON on stdout. An `Int` return is also
+the process exit status, truncated to its low 8 bits as with C's `exit()`
+(`return 300` exits 44, `return -1` exits 255); every other return type exits
+`0`. Use the builtin `exit(n)` to set a process status without printing.
 
 ```vyb
 main()<Void>                      # no output, exit 0
-main()<Int>                       # prints the number, e.g. 42, exit 0
+main()<Int>                       # prints the number, e.g. 42, exit 42
 main()<Bool>                      # prints true or false, exit 0
 main()<Float>                     # prints the number, exit 0
 main()<String>                    # prints the JSON-quoted string, e.g. "vyb"

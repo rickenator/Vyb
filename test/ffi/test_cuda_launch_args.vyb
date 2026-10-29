@@ -1,0 +1,77 @@
+// @skip-if-missing-lib: libcuda.so.1  # CUDA-required; skipped by the harness on GPU-less runners
+// @test: cuda_launch_args packs kernelParams itself (no hand-built void*[] of addr(cell))
+// @description: launches the five-parameter `launch5` kernel (fixtures/kernel/launch5.vyb)
+//   through the compiler-provided helper `cuda_launch_args(f, gx, gy, gz, bx, by, bz,
+//   args...)`. The compiler stores every argument in its own cell at the argument's width
+//   and passes the cells' addresses to the generic launcher, so the call reads like a
+//   kernel call: Int variables, an rvalue expression and an f64 all land where the kernel
+//   expects them. The handle is passed as the loc<CVoid> cuModuleGetFunction returned.
+//   SKIPs (ret 0) when no CUDA/GPU.
+// @category: ffi, cuda, kernel
+// @expect: pass
+// @expect-return: 0
+
+import io::{open_read, read_all}
+
+extern "C" {
+    cuInit(flags<CUInt>)<CInt>
+    cuDeviceGetCount(count<loc<CInt>>)<CInt>
+    cuDeviceGet(device<loc<CInt>>, ordinal<CInt>)<CInt>
+    cuCtxCreate_v2(pctx<loc<loc<CVoid>>>, flags<CUInt>, dev<CInt>)<CInt>
+    cuModuleLoadData(hmod<loc<loc<CVoid>>>, image<CString>)<CInt>
+    cuModuleGetFunction(hfunc<loc<loc<CVoid>>>, hmod<loc<CVoid>>, name<CString>)<CInt>
+    cuMemAlloc_v2(dptr<loc<Int>>, bytesize<Int>)<CInt>
+    cuMemcpyDtoH_v2(dstHost<loc<CVoid>>, srcDevice<Int>, ByteCount<Int>)<CInt>
+    cuMemFree_v2(dptr<Int>)<CInt>
+    cuCtxSynchronize()<CInt>
+}
+
+main()<Int> -> {
+    freedom {
+        if (cuInit(0) != 0) { println("SKIP: no CUDA"); return 0 }
+        var<CInt> ndev = 0
+        if (cuDeviceGetCount(loc(ndev)) != 0 || ndev < 1) { println("SKIP: no CUDA device"); return 0 }
+        var<CInt> dev = 0
+        if (cuDeviceGet(loc(dev), 0) != 0) { return 14 }
+        ctx<loc<CVoid>> = from<loc<CVoid>>(0)
+        if (cuCtxCreate_v2(loc(ctx), 0, dev) != 0) { return 14 }
+    }
+
+    ptx<String> = ""
+    match (open_read("fixtures/cuda/launch5.ptx")) {
+        f -> { match (read_all(f)) { s -> { ptx = s } ? -> { return 13 } } }
+        ? -> { return 13 }
+    }
+
+    freedom {
+        hmod<loc<CVoid>> = from<loc<CVoid>>(0)
+        if (cuModuleLoadData(loc(hmod), ptx) != 0) { return 9 }
+        hf<loc<CVoid>> = from<loc<CVoid>>(0)
+        if (cuModuleGetFunction(loc(hf), hmod, "launch5") != 0) { return 10 }
+
+        outD<Int> = 0
+        if (cuMemAlloc_v2(loc(outD), 8) != 0) { return 11 }
+
+        ka<Int> = 10
+        kz<Int> = 3
+        kalpha<Float> = 1.5
+        # out, a, n, z, alpha -- n is an rvalue on purpose
+        rc<CInt> = cuda_launch_args(hf, 1, 1, 1, 1, 1, 1, outD, ka, ka - 8, kz, kalpha)
+        if (rc != 0) { println("launch rc "); println_int(rc); return 12 }
+        if (cuCtxSynchronize() != 0) { return 17 }
+
+        rv<Float> = 0.0
+        if (cuMemcpyDtoH_v2(loc(rv), outD, 8) != 0) { return 16 }
+        cuMemFree_v2(outD)
+        # (10 + 100*2 + 10000*3) * 1.5 = 45315.0
+        diff<Float> = rv - 45315.0
+        if (diff < 0.0) { diff = 0.0 - diff }
+        if (diff > 0.001) {
+            println("launch5 result = ")
+            println(rv)
+            return 1
+        }
+        println("LAUNCH_ARGS OK")
+        return 0
+    }
+}

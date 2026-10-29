@@ -145,11 +145,17 @@ inline const char* kernelIntrinsicReturnType(const std::string& name) {
         name == "dim_x" || name == "dim_y" || name == "dim_z" ||
         name == "grid_x" || name == "grid_y" ||
         name == "lane_id" || name == "warp_size" ||
-        name == "ld_i64") return "Int";
+        name == "ld_i64" || name == "atomic_add_i64" || name == "atomic_xor_i64" ||
+        name == "popc_u32" || name == "ctz_u32" ||
+        name == "shfl_xor_i64" || name == "shfl_down_i64" || name == "shfl_up_i64" ||
+        name == "shfl_idx_i64") return "Int";
     if (name == "ld_f64" || name == "ld_f32" || name == "ld_f16" ||
         name == "ld_bf16" || name == "deq_q4_0" ||
         name == "ld_shared_f64" || name == "atomic_add_f64") return "Float";
-    if (name == "ld_i32" || name == "atomic_add_i32") return "CInt";
+    if (name == "ld_i32" || name == "atomic_add_i32" || name == "atomic_max_i32") return "CInt";
+    if (name == "atomic_or_u32" || name == "atomic_and_u32" || name == "atomic_xor_u32" ||
+        name == "ballot_u32") return "UInt32";
+    if (name == "atomic_add_f32") return "Float32";
     // Ursela int8 dot products and q8_1 activation quantisation (cgen_expr_kernel.cpp).
     if (name == "dp4a_s32" || name == "dp4a_us32" || name == "rni_f32" || name == "sat_s8" ||
         name == "mma_16816_s8" || name == "mma_16832_s8" ||

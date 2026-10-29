@@ -9,7 +9,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **The JIT inlines at `-O2`/`-O3` and tunes for the host CPU.** At `-O2` and above,
+  `optimize_module` removes the blanket `noinline` attribute that codegen puts on every user
+  function to keep `-O0`/`-O1` traces frame-exact. Set `VYB_KEEP_NOINLINE=1` to keep it. The
+  JIT's IR pipeline now builds its target machine for the host CPU and features rather than
+  `generic`, so the vectorizer and unroller cost models match the code ORC emits. Set
+  `VYB_JIT_GENERIC=1` to get the old behaviour. Program output is unchanged and the full suite
+  passes. See `docs/refman/PROGRAMMERS_GUIDE.md` → *Optimization phases*.
+
 ### Added
+- **Per-test timeout in `test/run_tests.vyb`** — each test now runs under `timeout -k 5 N`
+  (default 300 s, `--timeout SECS` to change it, `--timeout 0` for no limit), and a file can
+  set its own limit with `// @timeout: SECS`. A hung test now fails with
+  `timed out after N s` and the suite goes on, where before one hang stalled the whole run.
+  If `timeout` (coreutils) is missing, the runner warns and runs without a limit. Covered by
+  `test/process/test_runner_timeout.vyb`.
+- **`cuda_launch_args(f, gridX, gridY, gridZ, blockX, blockY, blockZ, args...)`**, a
+  compiler-provided kernel-launch helper. The compiler stores each argument in its own cell at
+  the argument's width and builds cuLaunchKernel's `void*[]` kernelParams itself, then calls the
+  generic launcher. Callers no longer hand-pack an `[Int; N]` of `addr(cell)`, which a VybFly
+  launch needed 15 and 18 lines for. It is freedom-gated, and launch dimensions and arguments are
+  type-checked (scalars only; a `String` is rejected rather than packed as a host pointer).
+  There are 4 tests in `test/ffi/test_cuda_launch_args*.vyb`; the launch one runs on a GPU and
+  SKIPs without one.
+- **64-bit integer warp shuffles** `shfl_xor_i64`, `shfl_down_i64`, `shfl_up_i64` and
+  `shfl_idx_i64`. These are two 32-bit `shfl.sync` halves, sharing the f64 lowering without the
+  bitcasts. There is a test in `test/kernel/test_shfl_i64.vyb` plus an on-GPU check
+  (`check_shfl_i64.py`).
+- **CUDA kernel atomics, bit counting and warp ballot** — `atomic_or_u32`, `atomic_and_u32`,
+  `atomic_xor_u32`, `atomic_add_i64`, `atomic_xor_i64`, `atomic_add_f32` and `atomic_max_i32`
+  (lowered to `atom.global` / `red.global` when the result is unused), plus `popc_u32`, `ctz_u32`
+  (both return `Int`) and `ballot_u32` (`vote.sync.ballot.b32`, full warp). Each is in
+  `doc/CUDA.md`, with a test in `test/kernel/test_atomics_bits.vyb` and an on-GPU check
+  (`check_atomics_bits.py`, PASS on GB10/sm_121). These enable exact, float-atomic-free
+  scatter/gather such as the bit-exact VybFly GPU ladder engine (10x connectome: 3.94 s, vs 10.29 s
+  for the float-atomic CUDA kernel on the same GPU).
+### Fixed
+- **A narrow integer store no longer overwrites the neighbouring memory.** Before this fix,
+  storing an `Int` (including a literal) through `loc<Int32>`, `loc<Int16>` or `loc<UInt8>`
+  emitted an 8-byte store and silently clobbered the next field or element. Integer stores now
+  convert to the pointee width: they truncate, or sign- or zero-extend. A constant that is out of
+  range, and any narrowed non-constant, gets a warning. Tests:
+  `test/memory/test_narrow_store_no_clobber.vyb` (returns 39 on the old compiler and 42 now) and
+  `test_narrow_store_out_of_range_rejected.vyb`.
+- **Recursion deeper than the 256-entry runtime frame stack** used to print two warnings per
+  extra frame and leave pushes and pops out of balance. It now prints one warning, and the stack
+  stays balanced.
+
+### Changed
+- **No call-frame bookkeeping at `-O2`/`-O3`.** The `push_call_frame`/`pop_call_frame` pair
+  around every call is now emitted only at `-O0`/`-O1`, unless `VYB_CALL_FRAMES=1`
+  is set (`0` forces it off). With it removed, `fib(35)` drops from 0.32 s to 0.10 s. The
+  "no stack trace" message names both ways to turn traces on. Test:
+  `test/optimization/test_deep_recursion_no_call_frames.vyb`.
+
+### Added
+- **`prefetch(addr[, rw[, locality]])` intrinsic.** It lowers to `llvm.prefetch`, with `rw`
+  in 0..1 and `locality` in 0..3 checked at compile time as integer constants. In `--kernel`
+  builds it compiles to nothing. Tests: `test/memory/test_prefetch_intrinsic.vyb`,
+  `test_prefetch_bad_locality_rejected.vyb`, `test_prefetch_bad_address_rejected.vyb`.
+- **Binary (byte-buffer) sockets in `network`** — `socket_send_bytes` / `socket_send_bytes_range`,
+  `socket_recv_bytes` / `socket_recv_bytes_exact`, `socket_exchange_bytes(_range)` and the
+  `TcpStream` methods `write_bytes` / `read_bytes` / `read_bytes_exact` carry `Vec<UInt8>`
+  buffers. They mirror io's `write_bytes` / `read_bytes`. Before this the module was Strings-only,
+  so binary protocols either went through a String or dropped to raw `extern "C"`
+  `send`/`recv`. Sends loop over short writes and EINTR. `socket_recv_bytes_exact` reassembles a
+  length-prefixed read and is absent if the stream ends early. `socket_exchange_bytes` is a
+  full-duplex framed swap (an 8-byte little-endian length, then the payload, capped by `max_in`)
+  that interleaves non-blocking send and recv. Two peers exchanging frames larger than the socket
+  buffers therefore cannot deadlock (a lock-step halo exchange), and `VYB_NET_SPIN_US` (default
+  50) sets how long a stalled exchange spins before it sleeps in poll(2). Runtime:
+  `__vyb_net_send_bytes`, `__vyb_net_recv_bytes`, `__vyb_net_exchange_bytes`. The sending side
+  takes a read-only borrow, `data<their<Vec<UInt8> const>>`, which callers pass as `view(buf)`.
+  A by-value `Vec` parameter deep-copies the buffer on every call: an 11 MB send buffer forwarded
+  through one user function cost 9.2 ms per exchange by value and 3 µs as a borrow. Tests:
+  `test/modules/test_network_bytes.vyb` and `test/modules/test_network_bytes_duplex.vyb`.
 - **CUDA kernel intrinsics for quantised LLM inference (VybForge 27B Ridge decode)** — the
   native-width, bit-cast, warp-shuffle/reduction, int8 `dp4a`, q8_1 quantisation, `mma.m16n8k16`
   (f16 and s8) and `cp.async` intrinsics listed in `doc/CUDA.md` → "Native-width, bit-level, warp
@@ -132,7 +207,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shared cell (so the defining frame also observes an escaping closure's writes) is
   checkpoint (c), still open; the storage-location ownership gaps the change exposed
   (`Vec<fn ...>` elements and closure struct fields) were filed as #439 and are fixed
-  by the two `### Fixed` entries below.
+  by the two `### Fixed`- **`as` between `Int` and the C ABI integer aliases miscompiled.** `CInt`, `CUInt`, `CLong`,
+  `CULong`, `CSize`, `CSSize`, `CShort`, `CUShort`, `CChar` and `CUChar` were missing from the
+  integer-class table, so for example `x<Int> = cfunc() as Int` stored an i32 into an i64 slot
+  and kept stale high bits, with only a "Type mismatch in assignment" warning. The aliases are now
+  classified, and any int-to-int `as` that is not otherwise handled extends or truncates. It
+  zero-extends from unsigned types and `i1`, and sign-extends otherwise. Covered by
+  `test/types/cint_as_int_widen_test.vyb`.
+ entries below.
 - **`VYBHOME` + a toplevel `SOURCEME_VYB`, so projects stop hardcoding the checkout
   (#424)** — Vyb now owns its own toolchain paths. Sourcing `SOURCEME_VYB` exports
   `VYBHOME` (the checkout root) and the derived `VYB` (`$VYBHOME/build/vyb`) and
@@ -159,6 +241,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `version:` dep rebuilds with the registry absent.
 
 ### Fixed
+- **Float agents no longer hang on AArch64** — the runtime called a `Float` agent behavior
+  through a C struct `{ double; bool }` by value, but the behavior's lowered signature is
+  `(env, double, i1)`. On x86-64 both land in the same registers; on AArch64 the non-HFA
+  struct goes in `x1`/`x2`, so the behavior read its present flag from the low bits of the
+  double. For 1.25 those bits are zero, so the message looked absent, the agent stopped, and
+  `test/agents/test_agent_payloads.vyb` blocked forever in `strchan_recv`. The runtime now
+  calls `fn(void*, double, int64_t)`, the same way it already calls `Bool` and `String`
+  behaviors. Covered by `test/agents/test_agent_float_abi.vyb`, which checks values with both
+  zero and non-zero low bits plus the failable path, and fails with a return code where the
+  old build hung.
+- **Subscripting a `Vec` bound by an optional present arm works** — in
+  `match (f()) { g -> ... }` (or a `select` present arm) over a `Vec<T>?`, the binding kept
+  the payload type as written, the unresolved `TypeName` `Vec<T>`, while a declared
+  variable gets the resolved `VecType`. So `g[i]` had no type: `addr(g[0])` failed with
+  "Cannot take address of expression with unknown type using addr()", and
+  `q<UInt8> = g[0]` failed in codegen with "Could not determine element type for array
+  access". The workaround was to copy the binding into a typed local first. A `Vec`/`Tuple`
+  payload is now resolved the same way as a declaration's type. Covered by
+  `test/optionals/test_optional_vec_binding_index.vyb`.
+- **Warning for a large `Vec` passed by value** — a by-value `Vec<T>` parameter is
+  deep-copied (malloc + memcpy) on every call, and nothing in the source shows the cost. An
+  11 MB `Vec<UInt8>` costs about 0.5 ms per call, and in VybFly's two-rank split this was a
+  7.7x slowdown (91.9 s vs 11.9 s). When such a copy reaches `VYB_VEC_COPY_WARN_BYTES`
+  (default 1 MiB, `0` disables), the runtime now prints one stderr warning per parameter. It
+  names the function, parameter, type and size, and points to the `their<Vec<T> const>` /
+  `view(x)` borrow. Behavior and copy semantics are unchanged. Covered by
+  `test/vectors/test_vec_param_copy_warning.vyb`.
+- **A reserved word used as a typed variable or parameter name** (`fail<Int> = 3`,
+  `f(match<Int>)`) now reports "'fail' is a reserved word and cannot be used as a variable
+  name". It used to report "Expected '(' after typed fail" or "Expected parameter declaration",
+  neither of which names the problem. `fail<E>(e)` statements and `ptr<T>` types are unaffected.
+  Tests are in `test/parser/test_reserved_word_*.vyb`.
+
 - **The shipped `filter`/`map` over a `Vec<mild<T>>` no longer leaks (#427 defects 6/7, #451
   closed for this half)** — a call whose callee is a `fn(...)` VALUE is emitted by its own arm:
   it rebuilds the callee's signature, prepends the hidden environment and builds its own argument
@@ -300,6 +415,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   values, LeakSanitizer-clean). Closes #439.
 
 ### Changed
+- **`main()<Int>` return is the process exit status again** — an `Int` (or failable
+  `Int`) `main` return is still printed as JSON, and its low 8 bits are now also the
+  exit status, in the JIT runner and in `--build`/`--compile` executables alike
+  (`return 300` exits 44, `return -1` exits 255). Bool, Float, String, struct, tuple
+  and `Vec` returns still exit 0. Codegen stores the value in the exported
+  `__vyb_main_exit_status`, which the JIT runner and the standalone `int main()`
+  wrapper read. The test harnesses (`test/run_tests.vyb`, `vyb test`) now expect an
+  executed pass test's integer `@expect-return` as its exit status.
+  `test/process/test_main_exit_code.vyb` covers 42, 0, 300, -1, a computed value,
+  Bool/Void mains, `exit(3)`, and the harness accepting or rejecting a non-zero return.
 - **`bare()` now emits a struct's field values, in declaration order (#383)** — the
   second half of the intrinsic cleanup. `bare(x)` was an exact alias of `notype(x)`:
   it forwarded the value and the serializer produced the keyed object it was

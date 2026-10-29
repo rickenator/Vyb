@@ -804,6 +804,9 @@ public:
     // return type (so the bind's own `Option<T>` was registered, but not the
     // client-substituted `Option<Int>`).
     void materializeConcreteEnum(ast::TypeNode* type);
+    // The type an optional payload binding (`match`/`select` present arm) carries:
+    // a written `Vec<T>` / `Tuple<...>` payload resolved to its VecType/TupleTypeNode.
+    ast::TypeNode* resolveOptionalPayloadType(ast::TypeNode* payload);
 
     // Context for resolving 'Self' type in aspect implementations
     ast::TypeNode* currentImplType = nullptr;  // Set to Box<T> when processing bind Display -> Box<T>

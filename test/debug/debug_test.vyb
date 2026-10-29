@@ -2,6 +2,7 @@
 // @description: Tests the multi-value function return with extra debugging
 // @category: syntax, function, json
 // @expect: pass
+// @expect-return: 42
 
 // Function that returns multiple values (Int and String)
 get_values()<Int, String> -> {

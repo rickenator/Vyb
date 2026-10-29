@@ -78,6 +78,30 @@ namespace vyb {
         return tokens_[temp_pos];
     }
 
+    bool BaseParser::isReservedWordToken(vyb::TokenType t) {
+        return t >= vyb::TokenType::KEYWORD_LET && t <= vyb::TokenType::KEYWORD_TYPENAME;
+    }
+
+    bool BaseParser::reservedWordAsTypedName(std::initializer_list<vyb::TokenType> follow) const {
+        if (tokens_.empty() || !isReservedWordToken(peek().type)) return false;
+        if (peekAhead(1).type != vyb::TokenType::LT) return false;
+        int depth = 1;
+        size_t k = 2;
+        while (depth > 0 && k < 96) {
+            const vyb::TokenType t = peekAhead(k).type;
+            if (t == vyb::TokenType::END_OF_FILE || t == vyb::TokenType::LBRACE ||
+                t == vyb::TokenType::RBRACE || t == vyb::TokenType::SEMICOLON) return false;
+            if (t == vyb::TokenType::LT) depth++;
+            else if (t == vyb::TokenType::GT) depth--;
+            else if (t == vyb::TokenType::RSHIFT) depth -= 2;
+            k++;
+        }
+        if (depth != 0) return false;
+        const vyb::TokenType nt = peekAhead(k).type;
+        for (vyb::TokenType f : follow) if (nt == f) return true;
+        return false;
+    }
+
     const vyb::token::Token& BaseParser::peekAhead(size_t k) const {
         size_t temp_pos = pos_;
         size_t seen = 0;

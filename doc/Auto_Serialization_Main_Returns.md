@@ -7,7 +7,8 @@ proposed further down — the multi-argument `lit(...)`, `notype()`, `bare()` an
 
 - Auto-serialization implemented for non-Void `main()` return types
 - Coherent rules: Int, Bool, Float, String, single structs and multi-value tuples
-  JSONify to stdout; the exit code is always 0
+  JSONify to stdout; an Int return is also the process exit status (its low
+  8 bits), and every other return type exits 0
 - `exit(n)` built-in available to set the process exit code explicitly
 - Multi-value returns produce JSON arrays: `[42, "hello"]`
 - Single Int returns print the numeric value (e.g. `42`)
@@ -24,13 +25,15 @@ proposed further down — the multi-argument `lit(...)`, `notype()`, `bare()` an
 ## Coherence Rules for main() Return Values
 
 The rules below define how `main()` return values are handled. Every non-Void
-return type produces JSON output to stdout and the process exits with code 0.
-Use `exit(n)` to set a custom exit code.
+return type produces JSON output to stdout. A `main()<Int>` (or failable
+`main()<Int, E>`) return is also the process exit status, truncated to its low
+8 bits as with C's `exit()` (`300` exits 44, `-1` exits 255); every other return
+type exits 0. Use `exit(n)` to set an exit code without printing anything.
 
 | Return type     | Output                            | Exit code | Notes                        |
 | --------------- | --------------------------------- | --------- | ---------------------------- |
 | `main()<Void>`  | *(none)*                          | 0         | No output                    |
-| `main()<Int>`   | number (e.g. `42`)               | 0         | JSON number                  |
+| `main()<Int>`   | number (e.g. `42`)               | n & 255   | JSON number; also the exit status |
 | `main()<Bool>`  | `true` or `false`                 | 0         | JSON boolean                 |
 | `main()<Float>` | number (e.g. `3.14`)             | 0         | JSON number                  |
 | `main()<String>`| `"hello world"` (quoted)          | 0         | JSON string                  |
@@ -42,8 +45,8 @@ Use `exit(n)` to set a custom exit code.
 
 ### Key rule
 
-- **All non-Void return types** are auto-JSONified: the value is printed to stdout as JSON
-  and the process exits with code 0.
+- **All non-Void return types** are auto-JSONified: the value is printed to stdout as JSON.
+  An `Int` return is also the exit status (low 8 bits); every other type exits 0.
 - **`exit(n)`** terminates the process immediately with exit code `n`. No output is produced.
   Use this to explicitly control the process exit code from any function.
 - **A `Vec<T>` return** prints a JSON array of its elements (`["alpha", "beta"]`);
@@ -51,6 +54,13 @@ Use `exit(n)` to set a custom exit code.
   a multi-value return serializes the same way (#375).
 
 ### Migration note
+
+**Unreleased:** a `main()<Int>` return is the process exit status again (low 8
+bits), in the JIT runner and in `--build`/`--compile` executables alike, and it
+is still printed as JSON. A program that ends with `return 1` now exits 1, so a
+test or script that returned a non-zero Int as data should return it from a
+helper or print it instead. Bool, Float, String, struct, tuple and `Vec` returns
+still exit 0.
 
 Prior to v0.5.3, `main()<Int>` used the Unix exit-code convention (the integer return value
 became the process exit code). Programs that relied on that behavior should be updated to
@@ -60,10 +70,11 @@ call `exit(n)` explicitly:
 // Old behavior (v0.5.2 and earlier):
 main()<Int> -> { return 42 }  // exit code 42, no stdout output
 
-// New behavior (v0.5.3+): returns 42 as JSON to stdout, exits 0
-main()<Int> -> { return 42 }  // stdout: 42, exit code: 0
+// v0.5.3 until Unreleased: returns 42 as JSON to stdout, exits 0
+// Unreleased: returns 42 as JSON to stdout, exits 42
+main()<Int> -> { return 42 }  // stdout: 42, exit code: 42
 
-// To get the old behavior, use exit(n):
+// To set the status without printing, use exit(n):
 main() -> { exit(42) }         // no stdout output, exit code: 42
 ```
 

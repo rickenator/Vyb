@@ -1095,9 +1095,9 @@ main() -> {
 `exit(n)` is a noreturn built-in that works in any function context. It does NOT produce
 any stdout output — use `println` explicitly before calling `exit(n)` if you need output.
 
-> **Note:** `main()<Int>` no longer sets the exit code. As of v0.5.3, returning an `Int`
-> from `main()` JSONifies it to stdout (just like Bool, Float, and String) and exits with
-> code 0. Use `exit(n)` to set a custom exit code.
+> **Note:** returning an `Int` from `main()` JSONifies it to stdout (just like Bool,
+> Float, and String) and also makes it the exit status (low 8 bits). Other return
+> types exit 0. Use `exit(n)` to set an exit code without printing.
 
 ### Environment Variables
 

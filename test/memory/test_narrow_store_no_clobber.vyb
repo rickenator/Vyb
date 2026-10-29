@@ -1,0 +1,46 @@
+// @test: narrow integer stores do not clobber neighbouring memory
+// @description: Storing an Int (i64) literal or expression through loc<Int32>/loc<Int16>/loc<UInt8> writes only the location's width (regression: used to emit a full 8-byte store)
+// @category: memory, freedom, codegen, regression
+// @expect: pass
+// @expect-return: 42
+
+extern "C" {
+    calloc(n<Int>, sz<Int>)<Int>
+}
+
+main()<Int> -> {
+    var<Int> p = 0
+    freedom { p = calloc(8, 8) }
+    var<Int> bad = 0
+    var<Int> k = 9
+    var<Int> s = 0
+    freedom {
+        at(from<loc<Int>>(p)) = 0 - 1
+        at(from<loc<Int>>(p + 8)) = 0 - 1
+        at(from<loc<Int>>(p + 16)) = 0 - 1
+        at(from<loc<Int>>(p + 24)) = 0 - 1
+        // literals that fit the location width
+        at(from<loc<Int32>>(p)) = 5
+        at(from<loc<UInt8>>(p + 8)) = 6
+        at(from<loc<Int16>>(p + 16)) = 7
+        // an explicitly cast expression stored into a narrower slot
+        at(from<loc<Int32>>(p + 24)) = (k * 2) as Int32
+        if (at(from<loc<Int>>(p)) != 0 - 4294967291) { bad = bad + 1 }
+        if (at(from<loc<Int>>(p + 8)) != 0 - 250) { bad = bad + 2 }
+        if (at(from<loc<Int>>(p + 16)) != 0 - 65529) { bad = bad + 4 }
+        if (at(from<loc<Int>>(p + 24)) != 0 - 4294967278) { bad = bad + 8 }
+        // read back at the narrow width
+        if ((at(from<loc<Int32>>(p)) as Int) != 5) { bad = bad + 16 }
+        // negative literal into Int32 keeps the upper half untouched
+        at(from<loc<Int>>(p + 32)) = 0
+        at(from<loc<Int32>>(p + 32)) = -1
+        if (at(from<loc<Int>>(p + 32)) != 4294967295) { bad = bad + 32 }
+        s = at(from<loc<Int>>(p + 40))
+        if (s != 0) { bad = bad + 64 }
+    }
+    if (bad != 0) {
+        println("narrow store mismatch mask={}".format(bad))
+        return bad
+    }
+    return 42
+}

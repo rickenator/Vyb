@@ -1000,6 +1000,68 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
 
 
 
+    // cuda_launch_args(f, gx, gy, gz, bx, by, bz, a0, ..., an): the compiler owns
+    // the kernelParams packing. Each argument is stored in its own entry-block cell at
+    // its own width (Int/f64 8 bytes, CInt/UInt32/Float32 4, Bool 1, loc<T> a pointer),
+    // the cells' addresses fill a `[n x ptr]` array, and the generic launcher
+    // (cuda_launch_n, JIT-provided) passes it straight to cuLaunchKernel.
+    if (identCallee && identCallee->name == "cuda_launch_args" && node->arguments.size() >= 8) {
+        auto rval = [&](size_t i) -> llvm::Value* {
+            node->arguments[i]->accept(*this);
+            llvm::Value* v = m_currentLLVMValue;
+            if (!v) return nullptr;
+            if (auto* ai = llvm::dyn_cast<llvm::AllocaInst>(v)) {
+                llvm::Type* at = ai->getAllocatedType();
+                if (at->isIntegerTy() || at->isFloatingPointTy() || at->isPointerTy())
+                    v = builder->CreateLoad(at, ai, "karg.ld");
+            }
+            return v;
+        };
+        llvm::Type* ptrTy = llvm::PointerType::get(*context, 0);
+        llvm::Value* fn = rval(0);
+        if (!fn) { logError(node->arguments[0]->loc, "cuda_launch_args: kernel handle evaluated to null"); return; }
+        if (fn->getType()->isIntegerTy()) fn = builder->CreateIntToPtr(fn, ptrTy, "kfunc");
+        else if (!fn->getType()->isPointerTy()) {
+            logError(node->arguments[0]->loc, "cuda_launch_args: kernel handle must be an Int or loc<CVoid>");
+            return;
+        }
+        std::vector<llvm::Value*> callArgs{fn};
+        for (size_t d = 1; d <= 6; ++d) {
+            llvm::Value* v = rval(d);
+            if (!v || !v->getType()->isIntegerTy()) {
+                logError(node->arguments[d]->loc, "cuda_launch_args: launch dimensions must be integers");
+                return;
+            }
+            callArgs.push_back(builder->CreateZExtOrTrunc(v, int32Type, "kdim"));
+        }
+        const size_t n = node->arguments.size() - 7;
+        llvm::ArrayType* arrTy = llvm::ArrayType::get(ptrTy, n);
+        llvm::AllocaInst* params = createEntryBlockAlloca(arrTy, "kparams");
+        for (size_t i = 0; i < n; ++i) {
+            llvm::Value* v = rval(7 + i);
+            if (!v) { logError(node->arguments[7 + i]->loc, "cuda_launch_args: kernel argument evaluated to null"); return; }
+            llvm::Type* t = v->getType();
+            if (t->isIntegerTy(1)) { v = builder->CreateZExt(v, int8Type, "karg.b"); t = int8Type; }
+            if (!(t->isIntegerTy() || t->isFloatingPointTy() || t->isPointerTy())) {
+                logError(node->arguments[7 + i]->loc,
+                         "cuda_launch_args: kernel argument " + std::to_string(i) + " is not a scalar");
+                return;
+            }
+            llvm::AllocaInst* cell = createEntryBlockAlloca(t, "karg");
+            builder->CreateStore(v, cell);
+            builder->CreateStore(cell, builder->CreateConstInBoundsGEP2_32(arrTy, params, 0,
+                                                                           (unsigned)i, "kslot"));
+        }
+        callArgs.push_back(builder->CreatePtrToInt(params, int64Type, "kparams.addr"));
+        callArgs.push_back(llvm::ConstantInt::get(int64Type, (uint64_t)n));
+        llvm::FunctionType* ft = llvm::FunctionType::get(int32Type,
+            {ptrTy, int32Type, int32Type, int32Type, int32Type, int32Type, int32Type,
+             int64Type, int64Type}, false);
+        llvm::FunctionCallee launcher = module->getOrInsertFunction("cuda_launch_n", ft);
+        m_currentLLVMValue = builder->CreateCall(launcher, callArgs, "klaunch");
+        return;
+    }
+
     // Special handling for intrinsic functions with potential variable name conflicts
     if (identCallee && node->arguments.size() == 1) {
         // Check for addr() intrinsic
@@ -1727,6 +1789,41 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
             builder->CreateCall(getVybPrintFunction(), {strVal});
         }
         builder->CreateCall(getOrCreateVybStringFreeFunction(), {strVal});
+        m_currentLLVMValue = nullptr;
+        return;
+    }
+
+    // prefetch(addr[, rw[, locality]]) -> llvm.prefetch.p0(ptr, rw, locality, /*data cache*/ 1).
+    // Semantic analysis guarantees rw/locality are in-range integer constants.
+    if (identCallee && identCallee->name == "prefetch" && !node->arguments.empty() && node->arguments.size() <= 3) {
+        node->arguments[0]->accept(*this);
+        llvm::Value* addrV = m_currentLLVMValue;
+        if (!addrV || !addrV->getType()->isIntegerTy()) {
+            logError(node->arguments[0]->loc, "prefetch() address must be an integer address");
+            flagHardCodegenError();
+            m_currentLLVMValue = nullptr;
+            return;
+        }
+        auto constArg = [&](size_t i, uint64_t dflt) -> uint64_t {
+            if (i >= node->arguments.size()) return dflt;
+            node->arguments[i]->accept(*this);
+            if (auto* ci = llvm::dyn_cast_or_null<llvm::ConstantInt>(m_currentLLVMValue)) return ci->getZExtValue();
+            return dflt;
+        };
+        uint64_t rw = constArg(1, 0) & 1;
+        uint64_t locality = constArg(2, 3);
+        if (locality > 3) locality = 3;
+        if (!g_kernel_mode) {
+            llvm::Type* i32 = llvm::Type::getInt32Ty(*context);
+            llvm::Type* ptrTy = llvm::PointerType::getUnqual(*context);
+            if (addrV->getType()->getIntegerBitWidth() != 64)
+                addrV = builder->CreateSExtOrTrunc(addrV, int64Type, "prefetch_addr");
+            llvm::Value* p = builder->CreateIntToPtr(addrV, ptrTy, "prefetch_ptr");
+            llvm::FunctionCallee pf = module->getOrInsertFunction(
+                "llvm.prefetch.p0", llvm::FunctionType::get(llvm::Type::getVoidTy(*context), {ptrTy, i32, i32, i32}, false));
+            builder->CreateCall(pf, {p, llvm::ConstantInt::get(i32, rw), llvm::ConstantInt::get(i32, locality),
+                                     llvm::ConstantInt::get(i32, 1)});
+        }
         m_currentLLVMValue = nullptr;
         return;
     }
@@ -2990,6 +3087,7 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
         else if (fname == "vyb_net_accept") rtName = "__vyb_net_accept";
         else if (fname == "vyb_net_connect") rtName = "__vyb_net_connect";
         else if (fname == "vyb_net_send") rtName = "__vyb_net_send";
+        else if (fname == "vyb_net_send_bytes") rtName = "__vyb_net_send_bytes";
         else if (fname == "vyb_net_recv") rtName = "__vyb_net_recv";
         else if (fname == "vyb_net_local_port") rtName = "__vyb_net_local_port";
         else if (fname == "vyb_net_error_code") rtName = "__vyb_net_error_code";
@@ -3084,6 +3182,28 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                     dataLen = builder->CreateExtractValue(data, 1, "net.strlen");
                 llvm::FunctionType* ft = llvm::FunctionType::get(int64Type, {int64Type, int8PtrType, int64Type}, false);
                 m_currentLLVMValue = builder->CreateCall(getNetFn(ft), {toI64(fd), dataPtr, dataLen}, "net.sent");
+                return;
+            } else if (fname == "vyb_net_send_bytes") {
+                // (fd, data<Vec<UInt8>>, off, len): send the byte slice
+                // data[off, off+len) whole. `data` is { ptr, size, cap }; the
+                // runtime bounds-checks the slice against `size`.
+                if (!checkArity(4)) return;
+                llvm::Value* fd = needArg(0); llvm::Value* data = needArg(1);
+                llvm::Value* off = needArg(2); llvm::Value* len = needArg(3);
+                if (!fd || !data || !off || !len) return;
+                if (data->getType()->isPointerTy()) {
+                    // a their<Vec<UInt8>> borrow: read the caller's { ptr, size, cap } in place
+                    llvm::StructType* vt = llvm::StructType::get(*context, {int8PtrType, int64Type, int64Type}, false);
+                    data = builder->CreateLoad(vt, data, "net.vecborrow");
+                }
+                llvm::Value* dataPtr = toStrPtr(data);
+                llvm::Value* dataSize = llvm::ConstantInt::get(int64Type, 0);
+                if (data->getType()->isStructTy())
+                    dataSize = builder->CreateExtractValue(data, 1, "net.vecsize");
+                llvm::FunctionType* ft = llvm::FunctionType::get(
+                    int64Type, {int64Type, int8PtrType, int64Type, int64Type, int64Type}, false);
+                m_currentLLVMValue = builder->CreateCall(getNetFn(ft),
+                    {toI64(fd), dataPtr, dataSize, toI64(off), toI64(len)}, "net.sent_bytes");
                 return;
             } else if (fname == "vyb_net_recv") {
                 if (!checkArity(2)) return;
@@ -4358,6 +4478,64 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
             llvm::Value* opt = llvm::UndefValue::get(optTy);
             opt = builder->CreateInsertValue(opt, val, 0, "readbytes.v");
             opt = builder->CreateInsertValue(opt, builder->CreateTrunc(has, llvm::Type::getInt1Ty(*context), "readbytes.h"), 1);
+            m_currentLLVMValue = opt;
+            return;
+        } else if (fname == "vyb_net_recv_bytes_opt" || fname == "vyb_net_exchange_bytes_opt") {
+            // Binary socket reads returning a native `Vec<UInt8>?` (the
+            // byte-buffer counterparts of vyb_net_recv_opt), lowered like
+            // vyb_io_read_bytes_at_opt onto a zeroed Vec slot:
+            //   vyb_net_recv_bytes_opt(fd, n, exact)
+            //   vyb_net_exchange_bytes_opt(fd, data<Vec<UInt8>>, off, len, max_in)
+            const bool isEx = (fname == "vyb_net_exchange_bytes_opt");
+            const size_t want = isEx ? 5 : 3;
+            if (node->arguments.size() != want) {
+                logError(node->loc, isEx
+                    ? "vyb_net_exchange_bytes_opt expects 5 arguments (fd, data, off, len, max_in)"
+                    : "vyb_net_recv_bytes_opt expects 3 arguments (fd, n, exact)");
+                m_currentLLVMValue = nullptr; return;
+            }
+            std::vector<llvm::Value*> av;
+            for (size_t i = 0; i < want; ++i) {
+                node->arguments[i]->accept(*this);
+                if (!m_currentLLVMValue) return;
+                av.push_back(m_currentLLVMValue);
+            }
+            auto toNBI64 = [&](llvm::Value* v) -> llvm::Value* {
+                if (v->getType()->isIntegerTy(64)) return v;
+                if (v->getType()->isIntegerTy()) return builder->CreateSExt(v, int64Type, "netbytes.toi64");
+                return v;
+            };
+            llvm::StructType* vecByteTy = llvm::StructType::get(*context, {int8PtrType, int64Type, int64Type}, false);
+            llvm::StructType* optTy = llvm::StructType::get(*context, {vecByteTy, llvm::Type::getInt1Ty(*context)}, false);
+            llvm::Value* slot = builder->CreateAlloca(vecByteTy, nullptr, "netbytes.slot");
+            builder->CreateStore(llvm::Constant::getNullValue(vecByteTy), slot, "netbytes.zero");
+            llvm::Type* ptrTy = llvm::PointerType::get(*context, 0);
+            llvm::Value* has = nullptr;
+            if (isEx) {
+                llvm::Value* data = av[1];
+                if (data->getType()->isPointerTy())   // a their<Vec<UInt8>> borrow
+                    data = builder->CreateLoad(vecByteTy, data, "netbytes.vecborrow");
+                llvm::Value* dataPtr = data->getType()->isStructTy() ? builder->CreateExtractValue(data, 0, "netbytes.vecptr") : llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0));
+                llvm::Value* dataSize = llvm::ConstantInt::get(int64Type, 0);
+                if (data->getType()->isStructTy())
+                    dataSize = builder->CreateExtractValue(data, 1, "netbytes.vecsize");
+                llvm::FunctionType* ft = llvm::FunctionType::get(int64Type,
+                    {int64Type, int8PtrType, int64Type, int64Type, int64Type, int64Type, ptrTy}, false);
+                llvm::Function* f = module->getFunction("__vyb_net_exchange_bytes");
+                if (!f) f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "__vyb_net_exchange_bytes", module.get());
+                has = builder->CreateCall(f, {toNBI64(av[0]), dataPtr, dataSize, toNBI64(av[2]),
+                                              toNBI64(av[3]), toNBI64(av[4]), slot}, "netbytes.has");
+            } else {
+                llvm::FunctionType* ft = llvm::FunctionType::get(int64Type,
+                    {int64Type, int64Type, int64Type, ptrTy}, false);
+                llvm::Function* f = module->getFunction("__vyb_net_recv_bytes");
+                if (!f) f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "__vyb_net_recv_bytes", module.get());
+                has = builder->CreateCall(f, {toNBI64(av[0]), toNBI64(av[1]), toNBI64(av[2]), slot}, "netbytes.has");
+            }
+            llvm::Value* val = builder->CreateLoad(vecByteTy, slot, "netbytes.val");
+            llvm::Value* opt = llvm::UndefValue::get(optTy);
+            opt = builder->CreateInsertValue(opt, val, 0, "netbytes.v");
+            opt = builder->CreateInsertValue(opt, builder->CreateTrunc(has, llvm::Type::getInt1Ty(*context), "netbytes.h"), 1);
             m_currentLLVMValue = opt;
             return;
         } else if (fname == "vyb_net_recv_opt") {

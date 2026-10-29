@@ -1739,6 +1739,57 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             return;
         }
     }
+    // cuda_launch_args(f, gridX, gridY, gridZ, blockX, blockY, blockZ, a0, ..., an):
+    // the kernel-launch helper. The compiler packs cuLaunchKernel's `void*[]`
+    // kernelParams itself (one cell per argument, at the argument's own width) and
+    // calls the generic launcher, so callers no longer hand-build `[Int; N]` arrays of
+    // addr(cell). Raw device launch, so freedom-gated like the extern it wraps.
+    if (auto lcCallee = dynamic_cast<ast::Identifier*>(node->callee.get())) {
+        if (lcCallee->name == "cuda_launch_args") {
+            if (!isInFreedomBlock()) {
+                addError("'cuda_launch_args' can only be called inside a freedom block.", node);
+            }
+            if (node->arguments.size() < 8) {
+                addError("cuda_launch_args(f, gridX, gridY, gridZ, blockX, blockY, blockZ, args...) "
+                         "needs a kernel handle, six launch dimensions and at least one kernel "
+                         "argument; got " + std::to_string(node->arguments.size()) + " argument(s)", node);
+            }
+            static const std::set<std::string> kIntNames = {
+                "Int", "Int8", "Int16", "Int32", "Int64", "UInt", "UInt8", "UInt16", "UInt32",
+                "UInt64", "CInt", "CUInt", "CShort", "CUShort", "CLong", "CULong", "CLongLong",
+                "CULongLong", "CChar", "CUChar", "CSize", "CSSize"};
+            static const std::set<std::string> kScalarExtra = {
+                "Float", "Float32", "Float64", "CFloat", "CDouble", "Bool", "loc"};
+            for (size_t i = 0; i < node->arguments.size(); ++i) {
+                auto& a = node->arguments[i];
+                if (!a) continue;
+                a->accept(*this);
+                auto* tn = dynamic_cast<ast::TypeName*>(typeOf(a.get()).get());
+                if (!tn || !tn->identifier) continue;
+                const std::string& tname = tn->identifier->name;
+                if (i >= 1 && i <= 6) {
+                    if (!kIntNames.count(tname)) {
+                        addError("cuda_launch_args: launch dimension " + std::to_string(i) +
+                                 " must be an integer, got '" + tname + "'", a.get());
+                    }
+                } else if (i == 0) {
+                    if (tname != "Int" && tname != "loc") {
+                        addError("cuda_launch_args: the kernel handle must be an Int or a "
+                                 "loc<CVoid>, got '" + tname + "'", a.get());
+                    }
+                } else if (!kIntNames.count(tname) && !kScalarExtra.count(tname)) {
+                    addError("cuda_launch_args: kernel argument " + std::to_string(i - 7) +
+                             " must be a scalar (integer, float, Bool or loc<T>), got '" + tname +
+                             "'; pass a device buffer by its Int address", a.get());
+                }
+            }
+            auto* resTy = new ast::TypeName(node->loc,
+                std::make_unique<ast::Identifier>(node->loc, "CInt"));
+            setType(node,  retainType(resTy));
+            setType(node,  std::shared_ptr<ast::TypeNode>(resTy->clone()));
+            return;
+        }
+    }
     // Check if this is an intrinsic function call before visiting the callee
     bool isIntrinsic = false;
     if (auto ident = dynamic_cast<ast::Identifier*>(node->callee.get())) {
@@ -1746,7 +1797,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
         if (name == "lit" || name == "notype" || name == "bare" || name == "deserial" ||
             name == "borrow" || name == "view" || name == "my" || name == "their" || name == "our" ||
             name == "soft" || name == "println" || name == "print" || name == "println_int" ||
-            name == "print_int" || name == "println_bool" || name == "print_bool" ||
+            name == "print_int" || name == "println_bool" || name == "print_bool" || name == "prefetch" ||
             name == "abs" || name == "sqrt" || name == "pow" || name == "sin" || name == "cos" ||
             name == "tan" || name == "exp" || name == "log" || name == "log2" || name == "log10" ||
             name == "floor" || name == "ceil" || name == "round" || name == "min" || name == "max" ||
@@ -1761,6 +1812,8 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             name == "vyb_net_listen" || name == "vyb_net_accept" || name == "vyb_net_connect" ||
             name == "vyb_net_send" || name == "vyb_net_recv" || name == "vyb_net_recv_opt" ||
             name == "vyb_net_local_port" ||
+            name == "vyb_net_send_bytes" || name == "vyb_net_recv_bytes_opt" ||
+            name == "vyb_net_exchange_bytes_opt" ||
             name == "vyb_net_error_code" || name == "vyb_net_error_message" ||
             name == "vyb_net_sendto" || name == "vyb_net_recvfrom" || name == "vyb_net_recvfrom_opt" ||
             name == "vyb_net_last_peer_ip" || name == "vyb_net_last_peer_port" ||
@@ -2392,6 +2445,45 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
         }
 
         // Handle println_int / print_int intrinsics
+        // prefetch(addr) / prefetch(addr, rw) / prefetch(addr, rw, locality): a cache hint
+        // (llvm.prefetch). `addr` is an Int address (e.g. from addr()/a Vec data pointer);
+        // `rw` (0 = read, 1 = write) and `locality` (0 = no temporal locality .. 3 = keep in
+        // all cache levels, default 3) must be integer constants. A prefetch never faults, so
+        // it does not need a freedom block; it has no observable effect on program results.
+        if (name == "prefetch") {
+            if (node->arguments.empty() || node->arguments.size() > 3) {
+                addError("prefetch() expects 1 to 3 arguments: prefetch(addr, rw = 0, locality = 3)", node);
+                return;
+            }
+            for (auto& arg : node->arguments) if (arg) arg->accept(*this);
+            auto addrTypeIt = expressionTypes.find(exprKey(node->arguments[0].get()));
+            bool addrIsInt = false;
+            if (addrTypeIt != expressionTypes.end() && addrTypeIt->second) {
+                if (auto tn = dynamic_cast<ast::TypeName*>(unwrapPrimitiveOwnershipType(addrTypeIt->second.get())))
+                    addrIsInt = isIntegerType(tn);
+            }
+            if (!addrIsInt) {
+                addError("prefetch() address must be an integer address (Int)", node);
+                return;
+            }
+            const char* argNames[3] = {"addr", "rw", "locality"};
+            const int64_t argMax[3] = {0, 1, 3};
+            for (size_t i = 1; i < node->arguments.size(); ++i) {
+                __int128 cv = 0;
+                bool cu = false;
+                if (!intConstantValueFull(node->arguments[i].get(), cv, cu) || cv < 0 || cv > argMax[i]) {
+                    addError(std::string("prefetch() '") + argNames[i] + "' must be an integer constant in 0.." +
+                             std::to_string(argMax[i]), node);
+                    return;
+                }
+            }
+            auto voidId = std::make_unique<ast::Identifier>(node->loc, "Void");
+            ast::TypeNode* voidType = new ast::TypeName(node->loc, std::move(voidId), std::vector<ast::TypeNodePtr>{});
+            setType(node,  retainType(voidType));
+            setType(node,  std::shared_ptr<ast::TypeNode>(voidType->clone().release()));
+            return;
+        }
+
         if (name == "println_int" || name == "print_int" || name == "println_bool" || name == "print_bool") {
             if (node->arguments.size() != 1) {
                 addError(name + "() expects exactly one argument", node);
@@ -2487,7 +2579,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             // return a String. Arity/diagnostic detail is left to codegen.
             static const std::set<std::string> netIntFuncs = {
                 "vyb_net_open", "vyb_net_close", "vyb_net_bind", "vyb_net_listen",
-                "vyb_net_accept", "vyb_net_connect", "vyb_net_send",
+                "vyb_net_accept", "vyb_net_connect", "vyb_net_send", "vyb_net_send_bytes",
                 "vyb_net_local_port", "vyb_net_error_code",
                 "vyb_net_sendto", "vyb_net_last_peer_port"
             };
@@ -2883,7 +2975,8 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
             // native `Vec<UInt8>?` -- the byte-buffer (not String) counterpart of
             // read_all/read_at (#213). Absent on failure, present holding raw
             // bytes otherwise.
-            if (name == "vyb_io_read_bytes_opt" || name == "vyb_io_read_bytes_at_opt") {
+            if (name == "vyb_io_read_bytes_opt" || name == "vyb_io_read_bytes_at_opt" ||
+                name == "vyb_net_recv_bytes_opt" || name == "vyb_net_exchange_bytes_opt") {
                 auto* u8 = new ast::TypeName(node->loc,
                     std::make_unique<ast::Identifier>(node->loc, "UInt8"));
                 auto* vec = new ast::VecType(node->loc,
@@ -6436,7 +6529,7 @@ void SemanticAnalyzer::visit(ast::SelectExpression* node) {
                 // analyzed with its payload name in scope instead of cascading
                 // "Undefined identifier" errors for an arm that never runs.
                 {
-                    ast::TypeNode* optPayload = selectOptionalType->containedType.get();
+                    ast::TypeNode* optPayload = resolveOptionalPayloadType(selectOptionalType->containedType.get());
                     if (currentScope->lookupDirect(vid->name)) {
                         addError("Redefinition of variable \"" + vid->name +
                                  "\" in optional present pattern.", vid);
@@ -7715,7 +7808,7 @@ void SemanticAnalyzer::visit(ast::MatchStatement* node) {
                         addError("Optional present arm has no payload type.", vid);
                     } else {
                         if (!presentGuard && unguardedPresentIndex == SIZE_MAX) unguardedPresentIndex = i;
-                        ast::TypeNode* optPayload = matchedOptionalType->containedType.get();
+                        ast::TypeNode* optPayload = resolveOptionalPayloadType(matchedOptionalType->containedType.get());
                         currentScope->add(SymbolInfo{SymbolInfo::Kind::Variable, vid->name, false,
                             ast::OwnershipKind::MY,
                             optPayload ? retainType(optPayload->clone().release()) : nullptr});
@@ -8098,6 +8191,25 @@ void SemanticAnalyzer::registerGenericEnumConcrete(
         }
         concrete[kv.first] = std::move(concretePayload);
     }
+}
+
+ast::TypeNode* SemanticAnalyzer::resolveOptionalPayloadType(ast::TypeNode* payload) {
+    // The payload of a `Vec<T>?` is still the TypeName `Vec<T>` as written; a declared
+    // variable gets the VecType that visiting the TypeName produces, but an optional
+    // payload binding cloned the raw TypeName. Subscripting such a binding then had no
+    // element type: `g[0]` was untyped in this pass (so `addr(g[0])` reported "unknown
+    // type") and codegen could not find the element type. Resolve it the same way.
+    auto* payloadName = dynamic_cast<ast::TypeName*>(payload);
+    if (!payloadName || !payloadName->identifier) return payload;
+    const std::string& n = payloadName->identifier->name;
+    if (n != "Vec" && n != "Tuple") return payload;
+    if (!typeOf(payloadName)) payloadName->accept(*this);
+    auto resolved = typeOf(payloadName);
+    if (resolved && (dynamic_cast<ast::VecType*>(resolved.get()) ||
+                     dynamic_cast<ast::TupleTypeNode*>(resolved.get()))) {
+        return resolved.get();
+    }
+    return payload;
 }
 
 void SemanticAnalyzer::materializeConcreteEnum(ast::TypeNode* type) {

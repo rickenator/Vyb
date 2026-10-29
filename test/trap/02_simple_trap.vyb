@@ -1,3 +1,4 @@
+// @expect-return: -1
 # Test 02: Simple trap - catching a failure
 # Tests basic trap clause that handles a specific error type
 

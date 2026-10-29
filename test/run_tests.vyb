@@ -18,13 +18,18 @@
 #   VYB_STDLIB=$PWD/stdlib build/vyb test/run_tests.vyb --json /tmp/results.json
 #
 # Options: --test-dir DIR  --pattern GLOB  --category C  --vyb PATH  --no-execute
-#          --verbose | -v | -vv  --json FILE  --evidence FILE  --help
+#          --timeout SECS  --verbose | -v | -vv  --json FILE  --evidence FILE  --help
 #
 # Directives honored (same set as run_tests.py):
 #   @test, @description, @category (comma separated), @expect (pass/fail),
 #   @expect-output, @expect-return, @expect-error, @parse-only, @semantic-only,
 #   @skip-asan (skipped when VYB_ASAN=1), @skip-if-missing-lib, @execute-jit,
-#   @vyb-args, @env (K=V; K=V)
+#   @vyb-args, @env (K=V; K=V), @timeout (seconds; overrides --timeout)
+#
+# Each test runs under a per-test wall-clock limit (`--timeout SECS`, default 300,
+# 0 = none; a file's `// @timeout: SECS` overrides it) via coreutils `timeout`, so a
+# hanging fixture fails on its own with "timed out after N s" instead of stalling
+# the whole suite until CTest's 1800 s limit kills it with no per-test verdict.
 #
 # JIT execution is the default, exactly as before: a test is only compiled
 # without running when `--no-execute` is given or when it is @parse-only /
@@ -100,6 +105,20 @@ first_token(s<String>)<String> -> {
 bool_str(b<Bool>)<String> -> {
     if (b) { return "true" }
     return "false"
+}
+
+# True for an optional '-' followed by one or more decimal digits.
+is_int_literal(s<String>)<Bool> -> {
+    t<String> = trim(s)
+    i<Int> = 0
+    if (t.len() > 0 && (((t.char_at(0) as Int) & 0xFF) == 45)) { i = 1 }
+    if (i >= t.len()) { return false }
+    while (i < t.len()) {
+        c<Int> = (t.char_at(i) as Int) & 0xFF
+        if (c < 48 || c > 57) { return false }
+        i = i + 1
+    }
+    return true
 }
 
 # Decimal value of a digit string (stops at the first non-digit; handles a
@@ -316,8 +335,17 @@ struct RunResult {
 }
 
 # Run test file `file` and compare against its directives.
-run_one(file<String>, vyb<String>, repoRoot<String>, tmpDir<String>, idx<Int>, jit<Bool>, verbose<Bool>)<RunResult> -> {
+run_one(file<String>, vyb<String>, repoRoot<String>, tmpDir<String>, idx<Int>, jit<Bool>, verbose<Bool>, timeoutSecs<Int>)<RunResult> -> {
     content<String> = slurp(file)
+
+    # Per-test limit: the file's @timeout wins over --timeout; 0 runs unbounded.
+    limit<Int> = timeoutSecs
+    own<String> = first_token(directive(content, "timeout"))
+    if (own.len() > 0 && is_all_digits(own)) { limit = digits_to_int(own) }
+    # -k: a child that ignores SIGTERM is SIGKILLed 5 s later. timeout(1) signals
+    # its whole process group, so processes the test spawned go too.
+    limitPrefix<String> = ""
+    if (limit > 0) { limitPrefix = "timeout -k 5 " + limit.to_string() + " " }
 
     flags<String> = directive(content, "vyb-args")
     if (directive_true(content, "parse-only")) { flags = flags + " --parse-only" }
@@ -330,7 +358,7 @@ run_one(file<String>, vyb<String>, repoRoot<String>, tmpDir<String>, idx<Int>, j
     outPath<String> = tmpDir + "/" + idx.to_string() + ".out"
     errPath<String> = tmpDir + "/" + idx.to_string() + ".err"
 
-    cmd<String> = "cd " + repoRoot + " && " + envPrefix + vyb + " " + flags + " " + file
+    cmd<String> = "cd " + repoRoot + " && " + envPrefix + limitPrefix + vyb + " " + flags + " " + file
     cmd = cmd + " > " + outPath + " 2> " + errPath + "; echo $?"
     rcText<String> = trim(run_sh(cmd))
 
@@ -341,6 +369,12 @@ run_one(file<String>, vyb<String>, repoRoot<String>, tmpDir<String>, idx<Int>, j
 
     out<String> = slurp(outPath)
     err<String> = slurp(errPath)
+
+    # timeout(1) exits 124 after SIGTERM and 137 when it had to SIGKILL.
+    if (limit > 0 && (code == 124 || code == 137)) {
+        why<String> = "timed out after " + limit.to_string() + " s (raise it with // @timeout: SECS or --timeout SECS)\n"
+        return RunResult { ok = false, code = code, stdout = out, stderr = err, reasons = why }
+    }
 
     expect<String> = directive(content, "expect")
     if (expect.len() == 0) { expect = "pass" }
@@ -355,6 +389,11 @@ run_one(file<String>, vyb<String>, repoRoot<String>, tmpDir<String>, idx<Int>, j
     if (expect == "fail") { expected = 1 }
     if (expect == "fail" && expectRet.len() > 0 && expectRet != "n/a") {
         expected = digits_to_int(expectRet)
+    }
+    # An executed Int main() exits with its return value (low 8 bits, as with C's
+    # exit()), so a passing test's integer @expect-return is its exit status too.
+    if (willExecute && expect == "pass" && is_int_literal(expectRet)) {
+        expected = digits_to_int(expectRet) & 255
     }
 
     reasons<String> = ""
@@ -458,6 +497,7 @@ main()<Int> -> {
         println("run_tests.vyb - Vyb test-suite runner (Vyb implementation)")
         println("usage: vyb test/run_tests.vyb [--test-dir DIR] [--pattern GLOB]")
         println("       [--category C] [--shard K/N] [--list] [--vyb PATH] [--no-execute] [-v|-vv]")
+        println("       [--timeout SECS (per test, default 300, 0 = none; // @timeout: overrides)]")
         println("       [--json FILE] [--evidence FILE] [--help]")
         return 0
     }
@@ -485,6 +525,20 @@ main()<Int> -> {
     verbose<Int> = verbosity(argv)
     jit<Bool> = !has(argv, "--no-execute")
 
+    timeoutSecs<Int> = 300
+    timeoutSpec<String> = opt(argv, "--timeout")
+    if (timeoutSpec.len() > 0) {
+        if (!is_all_digits(timeoutSpec)) {
+            println("--timeout expects whole seconds (0 = no limit); got '" + timeoutSpec + "'")
+            exit(2)
+        }
+        timeoutSecs = digits_to_int(timeoutSpec)
+    }
+    if (timeoutSecs > 0 && trim(run_sh("command -v timeout")).len() == 0) {
+        println("warning: coreutils timeout not found; running tests without a per-test limit")
+        timeoutSecs = 0
+    }
+
     # #481: --shard K/N splits the run into N disjoint round-robin shards (0-based K)
     # so CI can run the single-threaded suite on several cores at once. A malformed
     # spec is a hard error: silently running a wrong subset would be a false green.
@@ -495,15 +549,15 @@ main()<Int> -> {
         parts<Vec<String>> = shardSpec.split("/")
         if (parts.len() != 2 || !is_all_digits(parts.get(0)) || !is_all_digits(parts.get(1))) {
             println("--shard expects K/N with decimal K and N (e.g. 0/4); got '" + shardSpec + "'")
-            # exit(), not return: a main() Int return is only printed, so a typo in a
-            # CI invocation would otherwise pass as an empty, green run (#481 follow-up).
+            # exit(), not return: a return would also print the status as JSON, and a
+            # typo in a CI invocation must not pass as an empty, green run (#481 follow-up).
             exit(2)
         }
         shardIndex = digits_to_int(parts.get(0))
         shardCount = digits_to_int(parts.get(1))
         if (shardCount < 1 || shardIndex >= shardCount) {
             println("--shard K/N out of range: K=" + shardIndex.to_string() + " N=" + shardCount.to_string())
-            exit(2)   # as above: a return would not reach the process status
+            exit(2)   # as above
         }
     }
 
@@ -595,7 +649,7 @@ main()<Int> -> {
         name<String> = directive(content, "test")
         if (name.len() == 0) { name = basename_of(file) }
 
-        r<RunResult> = run_one(file, vyb, repoRoot, tmpDir, ran, jit, (verbose > 1))
+        r<RunResult> = run_one(file, vyb, repoRoot, tmpDir, ran, jit, (verbose > 1), timeoutSecs)
         ran = ran + 1
 
         if (r.ok) {

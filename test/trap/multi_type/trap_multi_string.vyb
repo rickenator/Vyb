@@ -1,3 +1,4 @@
+// @expect-return: 20
 # Test: Two-type union trap catching String
 # Expected: Should catch String and return 20
 

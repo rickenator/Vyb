@@ -153,6 +153,10 @@ extern "C" {
     vyb_file_str __vyb_net_recv(int64_t fd, int64_t maxlen);
     int64_t __vyb_net_recv_opt(int64_t fd, int64_t maxlen, vyb_file_str* out);
     int64_t __vyb_net_local_port(int64_t fd);
+    int64_t __vyb_net_send_bytes(int64_t fd, const char* data, int64_t size, int64_t off, int64_t len);
+    int64_t __vyb_net_recv_bytes(int64_t fd, int64_t n, int64_t exact, vyb_vec_bytes* out);
+    int64_t __vyb_net_exchange_bytes(int64_t fd, const char* data, int64_t size, int64_t off,
+                                     int64_t len, int64_t max_in, vyb_vec_bytes* out);
     int64_t __vyb_net_error_code(void);
     const char* __vyb_net_error_message(void);
     vyb_file_str __vyb_net_resolve(const char* host);
@@ -490,6 +494,8 @@ extern "C" {
     int64_t __vyb_strchan_try_opt(int64_t ch, vyb_file_str* out);
     int64_t __vyb_strchan_len(int64_t ch);
     int64_t __vyb_strchan_close(int64_t ch);
+    // Warn once per by-value Vec parameter whose entry copy is large (VYB_VEC_COPY_WARN_BYTES).
+    void __vyb_vec_param_copy_check(int64_t bytes, const char* fn, const char* param, const char* type);
     int64_t __vyb_strchan_free(int64_t ch);
     // Tasks (tasks stdlib module): a detached pthread running a closure whose
     // result is delivered to a private capacity-1 channel. handle == chan.
@@ -573,6 +579,7 @@ extern "C" {
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/TargetParser/Host.h>
+#include <llvm/TargetParser/SubtargetFeature.h>
 #include <llvm/MC/TargetRegistry.h>
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/Target/TargetOptions.h>
@@ -610,6 +617,7 @@ namespace vyb {
     std::string g_kernel_gpu = "";
     // Freestanding cross-target mode: --target <triple> [--mcpu <cpu>] [--mattr <f>].
     bool g_freestanding = false;
+    bool g_call_frames = true;
     std::string g_target_triple = "";
     std::string g_target_cpu = "";
     std::string g_target_features = "";
@@ -671,6 +679,21 @@ void optimize_module(llvm::Module* module, llvm::TargetMachine* targetMachine, i
         }
     }
 
+    // Every user function is emitted `noinline` so -O0/-O1 runtime traces show
+    // each Vyb frame (cgen_decl.cpp, Phase 6.4). At -O2/-O3 that attribute
+    // blocks the inliner from folding even one-line helpers (accessors, raw
+    // load/store wrappers) into hot loops, so drop it there: the optimized
+    // levels trade frame-exact traces for speed, like any C/C++ compiler.
+    // VYB_KEEP_NOINLINE=1 restores the old behaviour for debugging.
+    if (optLevel >= 2 && !std::getenv("VYB_KEEP_NOINLINE")) {
+        for (auto& F : *module) {
+            if (!F.isDeclaration() && F.hasFnAttribute(llvm::Attribute::NoInline)
+                && !F.hasFnAttribute(llvm::Attribute::OptimizeNone)) {
+                F.removeFnAttr(llvm::Attribute::NoInline);
+            }
+        }
+    }
+
     // Run the optimization pipeline
     MPM.run(*module, MAM);
     if (vyb::g_debug_codegen) std::cout << "  IR optimization completed" << std::endl;
@@ -704,7 +727,21 @@ bool jit_optimize_module(llvm::Module* module, int optLevel) {
         return false;
     }
     llvm::TargetOptions opt;
-    auto targetMachine = target->createTargetMachine(targetTriple, "generic", "",
+    // The JIT runs on this machine and ORC codegens for the detected host, so
+    // let the IR pipeline (vectorizer / unroller cost models) see the same
+    // CPU and features instead of "generic" (SSE2-only cost model).
+    std::string hostCPU = llvm::sys::getHostCPUName().str();
+    std::string hostFeatures;
+    {
+        llvm::SubtargetFeatures sf;
+        llvm::StringMap<bool> hf;
+        if (llvm::sys::getHostCPUFeatures(hf)) {
+            for (auto& kv : hf) sf.AddFeature(kv.first(), kv.second);
+        }
+        hostFeatures = sf.getString();
+    }
+    if (std::getenv("VYB_JIT_GENERIC")) { hostCPU = "generic"; hostFeatures.clear(); }
+    auto targetMachine = target->createTargetMachine(targetTriple, hostCPU, hostFeatures,
                                                      opt, std::optional<llvm::Reloc::Model>());
     if (!targetMachine) {
         return false;
@@ -876,9 +913,10 @@ ParsedModule parse_vyb_module(const std::string& source, const std::string& file
 // Vyb String) — none of which matches crt0's expectation of `int main(...)`.
 // Without a wrapper the process would leak an arbitrary value (observed as exit
 // 128) from a stale register. We rename the Vyb `main` to `__vyb_program_main`
-// and emit a true `int main()` that runs it and exits 0 — serializing a String
-// return to stdout and reporting an untrapped failable error, mirroring the JIT
-// runner in run_vyb_code.
+// and emit a true `int main()` that runs it — serializing a String return to
+// stdout, reporting an untrapped failable error, and exiting with an Int main()'s
+// return value (low 8 bits; every other main exits 0), mirroring the JIT runner
+// in run_vyb_code.
 static void finalizeStandaloneExecutable(llvm::Module* module, bool mainReturnIsLitRaw = false) {
     llvm::Function* progMain = module->getFunction("main");
     if (!progMain) {
@@ -972,10 +1010,27 @@ static void finalizeStandaloneExecutable(llvm::Module* module, bool mainReturnIs
         builder.CreateCall(untrapped, {err});
         builder.CreateUnreachable();
         builder.SetInsertPoint(okBB);
-        builder.CreateRet(builder.getInt32(0));
+        // A failable Int main() exits with its payload (low 8 bits), like the JIT.
+        auto* fst = llvm::cast<llvm::StructType>(retTy);
+        if (fst->getNumElements() == 2 && fst->getElementType(0)->isIntegerTy(64)) {
+            llvm::Value* payload = builder.CreateExtractValue(res, 0, "main.payload");
+            builder.CreateRet(builder.CreateTrunc(
+                builder.CreateAnd(payload, builder.getInt64(0xFF)), builder.getInt32Ty(), "main.exit"));
+        } else {
+            builder.CreateRet(builder.getInt32(0));
+        }
     } else {
         builder.CreateCall(progMain);  // discard any payload (Void/auto-serialized)
-        builder.CreateRet(builder.getInt32(0));
+        // An Int main() stored its return value in __vyb_main_exit_status during
+        // auto-serialization; it becomes the exit status (low 8 bits), matching the
+        // JIT runner. Every other main exits 0.
+        if (llvm::GlobalVariable* exitGv = module->getNamedGlobal("__vyb_main_exit_status")) {
+            llvm::Value* status = builder.CreateLoad(builder.getInt64Ty(), exitGv, "main.status");
+            builder.CreateRet(builder.CreateTrunc(
+                builder.CreateAnd(status, builder.getInt64(0xFF)), builder.getInt32Ty(), "main.exit"));
+        } else {
+            builder.CreateRet(builder.getInt32(0));
+        }
     }
 }
 
@@ -1136,8 +1191,21 @@ int compile_vyb_freestanding(const std::string& source, const std::string& fileN
 }
 
 // Function to compile Vyb code to object file
+// Call-frame bookkeeping policy (see vyb::g_call_frames). VYB_CALL_FRAMES=0/1 overrides.
+static void configure_call_frames(int optLevel) {
+    if (const char* e = std::getenv("VYB_CALL_FRAMES")) {
+        vyb::g_call_frames = std::string(e) != "0";
+        return;
+    }
+    // Each user function call costs an out-of-line push + pop into a thread_local
+    // vector (fib(35): 0.32 s with frames vs 0.10 s without), and the opaque calls
+    // survive inlining inside hot loops. Keep them for -O0/-O1 debugging builds only.
+    vyb::g_call_frames = optLevel < 2;
+}
+
 int compile_vyb_to_object(const std::string& source, const std::string& fileName,
                           const std::string& outputFile, int optLevel = 2) {
+    configure_call_frames(optLevel);
     std::cout << "Compiling " << fileName << " to object file..." << std::endl;
 
     // Initialize LLVM targets
@@ -2592,6 +2660,12 @@ int run_test_command(int argc, char** argv, const std::string& exeArg) {
         if (expect == "fail" && !expectRet.empty() && expectRet != "n/a") {
             try { expectedExit = std::stoi(expectRet); } catch (...) {}
         }
+        // An executed Int main() exits with its return value (low 8 bits), so a
+        // passing test's integer @expect-return is also its expected exit status.
+        if (willExecute && expect == "pass" &&
+                std::regex_match(expectRet, std::regex("-?[0-9]+"))) {
+            try { expectedExit = static_cast<int>(std::stoll(expectRet) & 0xFF); } catch (...) {}
+        }
         bool ok = (ret == expectedExit);
         std::vector<std::string> reasons;
         if (!ok) reasons.push_back("expected exit " + std::to_string(expectedExit) + ", got " + std::to_string(ret));
@@ -2913,6 +2987,7 @@ extern "C" int vyb_cuda_launch_n(void* f, unsigned gridX, unsigned gridY, unsign
 // Function to execute Vyb code using LLVM JIT
 int run_vyb_code(const std::string& source, const std::string& fileName, bool generateLLVMIR, int optLevel) {
     VYB_CDBG << "Starting run_vyb_code for file: " << fileName << std::endl;
+    configure_call_frames(optLevel);
 
     // Initialize LLVM targets for JIT
     VYB_CDBG << "Initializing LLVM targets..." << std::endl;
@@ -3756,6 +3831,12 @@ int run_vyb_code(const std::string& source, const std::string& fileName, bool ge
             llvm::orc::ExecutorAddr::fromPtr(&__vyb_net_recv_opt), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyb_net_local_port")] = llvm::orc::ExecutorSymbolDef(
             llvm::orc::ExecutorAddr::fromPtr(&__vyb_net_local_port), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_net_send_bytes")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_net_send_bytes), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_net_recv_bytes")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_net_recv_bytes), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_net_exchange_bytes")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_net_exchange_bytes), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyb_net_error_code")] = llvm::orc::ExecutorSymbolDef(
             llvm::orc::ExecutorAddr::fromPtr(&__vyb_net_error_code), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyb_net_error_message")] = llvm::orc::ExecutorSymbolDef(
@@ -3948,6 +4029,8 @@ int run_vyb_code(const std::string& source, const std::string& fileName, bool ge
             llvm::orc::ExecutorAddr::fromPtr(&__vyb_strchan_try_opt), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyb_strchan_try")] = llvm::orc::ExecutorSymbolDef(
             llvm::orc::ExecutorAddr::fromPtr(&__vyb_strchan_try), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_vec_param_copy_check")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_vec_param_copy_check), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyb_strchan_len")] = llvm::orc::ExecutorSymbolDef(
             llvm::orc::ExecutorAddr::fromPtr(&__vyb_strchan_len), llvm::JITSymbolFlags::Exported);
                 runtimeSymbols[mangle("__vyb_strchan_close")] = llvm::orc::ExecutorSymbolDef(
@@ -4139,7 +4222,9 @@ runtimeSymbols[mangle("__vyb_strchan_free")] = llvm::orc::ExecutorSymbolDef(
                     if (result.error != nullptr) {
                         __vyb_runtime_untrapped_error(result.error);
                     }
-                    return 0;
+                    // Like a plain Int main(): the return value is the exit status.
+                    std::cout.flush();
+                    return static_cast<int>(static_cast<uint64_t>(result.value) & 0xFF);
                 }
                 if (mainFailablePayloadIsStruct) {
                     // A failable main with a non-scalar (String) payload returns a
@@ -4188,13 +4273,22 @@ runtimeSymbols[mangle("__vyb_strchan_free")] = llvm::orc::ExecutorSymbolDef(
             // Non-String struct: fall through to void call (codegen changed return type to void)
         }
         // Void return (or any non-String type, which codegen has lowered to void with
-        // inline serialization): call as void and return 0.
+        // inline serialization): call as void. An Int main() also stored its return
+        // value in __vyb_main_exit_status, which becomes the exit status (low 8 bits,
+        // as with C's exit()); every other main exits 0.
         {
             typedef void (*VoidMainFuncType)();
             VoidMainFuncType voidMainFunc = reinterpret_cast<VoidMainFuncType>(
                 static_cast<void*>(executorAddr.toPtr<void*>()));
             voidMainFunc();
-            return 0;
+            std::cout.flush();
+            auto exitSym = jit->lookup("__vyb_main_exit_status");
+            if (!exitSym) {
+                llvm::consumeError(exitSym.takeError());
+                return 0;
+            }
+            int64_t status = *exitSym->toPtr<int64_t*>();
+            return static_cast<int>(static_cast<uint64_t>(status) & 0xFF);
         }
     } catch (const std::exception& e) {
         std::cerr << "Error running Vyb code: " << e.what() << std::endl;

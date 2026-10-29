@@ -29,6 +29,18 @@ static bool vybIntClass(const std::string& name, bool& isUnsigned, unsigned& bit
     if (name == "UInt8"  || name == "u8" || name == "Byte")   { isUnsigned = true;  bits = 8;  return true; }
     if (name == "Char")                                       { isUnsigned = false; bits = 8;  return true; }
     if (name == "Rune")                                       { isUnsigned = false; bits = 32; return true; }
+    // C-ABI aliases (widths match codegenType in cgen_types.cpp). Without these,
+    // `ld_i32(p) as Int` (a CInt result) fell through AsExpression to the
+    // identity case and stayed i32, so `x = ld_i32(p) as Int` stored an i32
+    // into an i64 slot ("Type mismatch in assignment") leaving the high half stale.
+    if (name == "CLong" || name == "CSSize")                  { isUnsigned = false; bits = 64; return true; }
+    if (name == "CInt")                                       { isUnsigned = false; bits = 32; return true; }
+    if (name == "CShort")                                     { isUnsigned = false; bits = 16; return true; }
+    if (name == "CChar")                                      { isUnsigned = false; bits = 8;  return true; }
+    if (name == "CULong" || name == "CSize")                  { isUnsigned = true;  bits = 64; return true; }
+    if (name == "CUInt")                                      { isUnsigned = true;  bits = 32; return true; }
+    if (name == "CUShort")                                    { isUnsigned = true;  bits = 16; return true; }
+    if (name == "CUChar")                                     { isUnsigned = true;  bits = 8;  return true; }
     return false;
 }
 
@@ -888,6 +900,41 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
             // deleted and the variable reads back as 0. Narrow/widen explicitly so the stored
             // value is one the declared width can hold.
             RHS = builder->CreateFPCast(RHS, destPointeeType, "assigncast");
+        } else if (destPointeeType->isIntegerTy() && RHS->getType()->isIntegerTy()) {
+            // An integer of a different width stored into an integer slot (typically an Int
+            // literal or Int expression stored through `loc<Int32>` / `loc<UInt8>` / ...).
+            // This used to fall through to the generic "Type mismatch" warning and emit
+            // `store i64, ptr` into the narrower location -- writing 8 bytes and clobbering the
+            // neighbouring bytes of memory. Convert to the location's width instead: constants
+            // that fit are narrowed silently, anything else is truncated to the low bits with a
+            // warning; widening sign-extends (zero-extends unsigned/Bool sources).
+            unsigned dw = destPointeeType->getIntegerBitWidth();
+            unsigned sw = RHS->getType()->getIntegerBitWidth();
+            if (dw == 1) {
+                RHS = builder->CreateICmpNE(RHS, llvm::ConstantInt::get(RHS->getType(), 0), "assignbool");
+            } else if (dw < sw) {
+                if (auto* ci = llvm::dyn_cast<llvm::ConstantInt>(RHS)) {
+                    const llvm::APInt& v = ci->getValue();
+                    if (!v.isSignedIntN(dw) && !v.isIntN(dw)) {
+                        logWarning(node->loc, "Integer constant " + std::to_string(ci->getSExtValue()) +
+                                   " does not fit in i" + std::to_string(dw) +
+                                   "; storing its low " + std::to_string(dw) + " bits");
+                    }
+                } else {
+                    logWarning(node->loc, "Implicit narrowing store: i" + std::to_string(sw) +
+                               " value truncated to the i" + std::to_string(dw) +
+                               " location (use an explicit `as` cast to silence)");
+                }
+                RHS = builder->CreateTrunc(RHS, destPointeeType, "assigntrunc");
+            } else {
+                bool srcUnsigned = sw == 1;
+                if (!srcUnsigned && rhsTypeNode) {
+                    std::string tn = rhsTypeNode->toString();
+                    srcUnsigned = tn.rfind("UInt", 0) == 0 || tn == "Byte" || tn == "Bool";
+                }
+                RHS = srcUnsigned ? builder->CreateZExt(RHS, destPointeeType, "assignext")
+                                  : builder->CreateSExt(RHS, destPointeeType, "assignext");
+            }
         }
     }
 
@@ -5625,6 +5672,26 @@ void LLVMCodegen::visit(vyb::ast::AsExpression* node) {
         m_currentLLVMValue = dUnsigned
             ? builder->CreateFPToUI(operand, targetTy, "as.fptoui")
             : builder->CreateFPToSI(operand, targetTy, "as.fptosi");
+        return;
+    }
+
+    // Integer -> integer of a different width whose source type name is not a
+    // known int class (e.g. an untyped intrinsic result): an identity "cast"
+    // would leave the value at the wrong width. Widen by the target-unknown
+    // default (sign-extend, matching Vyb's signed Int) or truncate.
+    if (operand->getType()->isIntegerTy() && targetTy->isIntegerTy() &&
+        operand->getType()->getIntegerBitWidth() != targetTy->getIntegerBitWidth()) {
+        unsigned srcW = operand->getType()->getIntegerBitWidth();
+        unsigned dstW = targetTy->getIntegerBitWidth();
+        bool sU = false; unsigned sB = 0;
+        bool known = vybIntClass(srcName, sU, sB);
+        if (dstW > srcW) {
+            m_currentLLVMValue = (srcW == 1 || (known && sU))
+                ? builder->CreateZExt(operand, targetTy, "as.zext")
+                : builder->CreateSExt(operand, targetTy, "as.sext");
+        } else {
+            m_currentLLVMValue = builder->CreateTrunc(operand, targetTy, "as.trunc");
+        }
         return;
     }
 
