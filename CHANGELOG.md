@@ -33,6 +33,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`check_atomics_bits.py`, PASS on GB10/sm_121). These enable exact, float-atomic-free
   scatter/gather such as the bit-exact VybFly GPU ladder engine (10x connectome: 3.94 s, vs 10.29 s
   for the float-atomic CUDA kernel on the same GPU).
+### Fixed
+- **A narrow integer store no longer overwrites the neighbouring memory.** Before this fix,
+  storing an `Int` (including a literal) through `loc<Int32>`, `loc<Int16>` or `loc<UInt8>`
+  emitted an 8-byte store and silently clobbered the next field or element. Integer stores now
+  convert to the pointee width: they truncate, or sign- or zero-extend. A constant that is out of
+  range, and any narrowed non-constant, gets a warning. Tests:
+  `test/memory/test_narrow_store_no_clobber.vyb` (returns 39 on the old compiler and 42 now) and
+  `test_narrow_store_out_of_range_rejected.vyb`.
+- **Recursion deeper than the 256-entry runtime frame stack** used to print two warnings per
+  extra frame and leave pushes and pops out of balance. It now prints one warning, and the stack
+  stays balanced.
+
+### Changed
+- **No call-frame bookkeeping at `-O2`/`-O3`.** The `push_call_frame`/`pop_call_frame` pair
+  around every call is now emitted only at `-O0`/`-O1`, unless `VYB_CALL_FRAMES=1`
+  is set (`0` forces it off). With it removed, `fib(35)` drops from 0.32 s to 0.10 s. The
+  "no stack trace" message names both ways to turn traces on. Test:
+  `test/optimization/test_deep_recursion_no_call_frames.vyb`.
+
+### Added
+- **`prefetch(addr[, rw[, locality]])` intrinsic.** It lowers to `llvm.prefetch`, with `rw`
+  in 0..1 and `locality` in 0..3 checked at compile time as integer constants. In `--kernel`
+  builds it compiles to nothing. Tests: `test/memory/test_prefetch_intrinsic.vyb`,
+  `test_prefetch_bad_locality_rejected.vyb`, `test_prefetch_bad_address_rejected.vyb`.
 - **CUDA kernel intrinsics for quantised LLM inference (VybForge 27B Ridge decode)** — the
   native-width, bit-cast, warp-shuffle/reduction, int8 `dp4a`, q8_1 quantisation, `mma.m16n8k16`
   (f16 and s8) and `cp.async` intrinsics listed in `doc/CUDA.md` → "Native-width, bit-level, warp
