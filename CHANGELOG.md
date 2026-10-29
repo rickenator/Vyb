@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Per-test timeout in `test/run_tests.vyb`** — each test now runs under `timeout -k 5 N`
+  (default 300 s, `--timeout SECS` to change it, `--timeout 0` for no limit), and a file can
+  set its own limit with `// @timeout: SECS`. A hung test now fails with
+  `timed out after N s` and the suite goes on, where before one hang stalled the whole run.
+  If `timeout` (coreutils) is missing, the runner warns and runs without a limit. Covered by
+  `test/process/test_runner_timeout.vyb`.
 - **CUDA kernel intrinsics for quantised LLM inference (VybForge 27B Ridge decode)** — the
   native-width, bit-cast, warp-shuffle/reduction, int8 `dp4a`, q8_1 quantisation, `mma.m16n8k16`
   (f16 and s8) and `cp.async` intrinsics listed in `doc/CUDA.md` → "Native-width, bit-level, warp
