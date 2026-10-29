@@ -145,6 +145,18 @@ Global atomics (monotonic) — for KV-cache writes / reductions:
 ```
 atomic_add_f64(addr<Int>, v<Float>)<Float>
 atomic_add_i32(addr<Int>, v<CInt>)<CInt>
+atomic_add_f32(addr<Int>, v<Float32>)<Float32>
+atomic_add_i64(addr<Int>, v<Int>)<Int>       atomic_xor_i64(addr<Int>, v<Int>)<Int>
+atomic_or_u32 / atomic_and_u32 / atomic_xor_u32(addr<Int>, v<UInt32>)<UInt32>
+atomic_max_i32(addr<Int>, v<CInt>)<CInt>
+```
+
+Each returns the old value; an unused result lets ptxas emit the `red.global` form.
+Bit counting and warp vote (`test/kernel/test_atomics_bits.vyb`, checked by `check_atomics_bits.py`):
+
+```
+popc_u32(x<UInt32>)<Int>    ctz_u32(x<UInt32>)<Int>     # ctz_u32(0) == 32
+ballot_u32(pred)<UInt32>    # vote.sync.ballot.b32, full mask: every lane must reach it
 ```
 
 ### No host libm in device code (issue #256)

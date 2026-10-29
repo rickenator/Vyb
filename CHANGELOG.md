@@ -25,6 +25,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `timed out after N s` and the suite goes on, where before one hang stalled the whole run.
   If `timeout` (coreutils) is missing, the runner warns and runs without a limit. Covered by
   `test/process/test_runner_timeout.vyb`.
+- **CUDA kernel atomics, bit counting and warp ballot** — `atomic_or_u32`, `atomic_and_u32`,
+  `atomic_xor_u32`, `atomic_add_i64`, `atomic_xor_i64`, `atomic_add_f32` and `atomic_max_i32`
+  (lowered to `atom.global` / `red.global` when the result is unused), plus `popc_u32`, `ctz_u32`
+  (both return `Int`) and `ballot_u32` (`vote.sync.ballot.b32`, full warp). Each is in
+  `doc/CUDA.md`, with a test in `test/kernel/test_atomics_bits.vyb` and an on-GPU check
+  (`check_atomics_bits.py`, PASS on GB10/sm_121). These enable exact, float-atomic-free
+  scatter/gather such as the bit-exact VybFly GPU ladder engine (10x connectome: 3.94 s, vs 10.29 s
+  for the float-atomic CUDA kernel on the same GPU).
 - **CUDA kernel intrinsics for quantised LLM inference (VybForge 27B Ridge decode)** — the
   native-width, bit-cast, warp-shuffle/reduction, int8 `dp4a`, q8_1 quantisation, `mma.m16n8k16`
   (f16 and s8) and `cp.async` intrinsics listed in `doc/CUDA.md` → "Native-width, bit-level, warp
@@ -147,7 +155,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shared cell (so the defining frame also observes an escaping closure's writes) is
   checkpoint (c), still open; the storage-location ownership gaps the change exposed
   (`Vec<fn ...>` elements and closure struct fields) were filed as #439 and are fixed
-  by the two `### Fixed` entries below.
+  by the two `### Fixed`- **`as` between `Int` and the C ABI integer aliases miscompiled.** `CInt`, `CUInt`, `CLong`,
+  `CULong`, `CSize`, `CSSize`, `CShort`, `CUShort`, `CChar` and `CUChar` were missing from the
+  integer-class table, so for example `x<Int> = cfunc() as Int` stored an i32 into an i64 slot
+  and kept stale high bits, with only a "Type mismatch in assignment" warning. The aliases are now
+  classified, and any int-to-int `as` that is not otherwise handled extends or truncates. It
+  zero-extends from unsigned types and `i1`, and sign-extends otherwise. Covered by
+  `test/types/cint_as_int_widen_test.vyb`.
+ entries below.
 - **`VYBHOME` + a toplevel `SOURCEME_VYB`, so projects stop hardcoding the checkout
   (#424)** — Vyb now owns its own toolchain paths. Sourcing `SOURCEME_VYB` exports
   `VYBHOME` (the checkout root) and the derived `VYB` (`$VYBHOME/build/vyb`) and

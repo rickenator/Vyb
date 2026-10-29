@@ -1,0 +1,39 @@
+// @test: C-ABI int alias as-cast widens
+// @description: `x = c as Int` with c<CInt>/CUInt/CShort/CUChar must sign/zero-extend into the 64-bit slot, not store a narrow value (stale high half)
+// @category: types, conversion, ffi
+// @expect: pass
+// @expect-output: a=-5
+// @expect-output: b=4294967295
+// @expect-output: c=-7
+// @expect-output: d=200
+// @expect-output: e=-3
+// @expect-output: f=-1
+
+main()<Int> -> {
+    c1<CInt> = -5
+    c2<CUInt> = 4294967295
+    c3<CShort> = -7
+    c4<CUChar> = 200
+    c5<CLong> = -3
+    var<Int> a = 1234567890123
+    var<Int> b = 1234567890123
+    var<Int> c = 1234567890123
+    var<Int> d = 1234567890123
+    var<Int> e = 1234567890123
+    a = c1 as Int
+    b = c2 as Int
+    c = c3 as Int
+    d = c4 as Int
+    e = c5 as Int
+    println("a=" + a.to_string())
+    println("b=" + b.to_string())
+    println("c=" + c.to_string())
+    println("d=" + d.to_string())
+    println("e=" + e.to_string())
+    var<CInt> n = 0
+    var<Int> w = 99999999999
+    n = n - 1
+    w = n as Int
+    println("f=" + w.to_string())
+    return 0
+}

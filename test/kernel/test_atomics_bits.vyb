@@ -1,0 +1,25 @@
+// @test: kernel-mode integer/f32 atomics, bit counting and warp ballot
+// @description: atomic_{or,and,xor}_u32, atomic_add_i64, atomic_xor_i64, atomic_add_f32 and
+//   atomic_max_i32 lower to atom/red.global (monotonic) on the widths they name; popc_u32 and
+//   ctz_u32 return Int; ballot_u32 is vote.sync.ballot.b32 over the full warp. The launch covers
+//   exactly n threads (n a multiple of the block size) so every lane reaches the ballot.
+//   check_atomics_bits.py checks every output and accumulator against Python on a GPU.
+// @category: kernel, cuda, atomics
+// @expect: pass
+// @vyb-args: --kernel --gpu sm_80
+
+atombits(x<Int>, acc<Int>, o<Int>) -> {
+    gid<Int> = blk_x() * dim_x() + tid_x()
+    v<UInt32> = ld_u32(x + gid * 4)
+    vi<Int> = v as Int
+    b<UInt32> = ballot_u32(vi & 1)
+    st_u32(o + gid * 16, b)
+    st_i64(o + gid * 16 + 8, popc_u32(v) * 64 + ctz_u32(v))
+    atomic_or_u32(acc, v)
+    atomic_and_u32(acc + 4, v)
+    atomic_xor_u32(acc + 8, v)
+    atomic_max_i32(acc + 12, vi >> 1)
+    atomic_add_i64(acc + 16, vi * 4097)
+    atomic_xor_i64(acc + 24, vi << 20)
+    atomic_add_f32(acc + 32, 1.0 as Float32)
+}
