@@ -57,6 +57,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in 0..1 and `locality` in 0..3 checked at compile time as integer constants. In `--kernel`
   builds it compiles to nothing. Tests: `test/memory/test_prefetch_intrinsic.vyb`,
   `test_prefetch_bad_locality_rejected.vyb`, `test_prefetch_bad_address_rejected.vyb`.
+- **Binary (byte-buffer) sockets in `network`** — `socket_send_bytes` / `socket_send_bytes_range`,
+  `socket_recv_bytes` / `socket_recv_bytes_exact`, `socket_exchange_bytes(_range)` and the
+  `TcpStream` methods `write_bytes` / `read_bytes` / `read_bytes_exact` carry `Vec<UInt8>`
+  buffers. They mirror io's `write_bytes` / `read_bytes`. Before this the module was Strings-only,
+  so binary protocols either went through a String or dropped to raw `extern "C"`
+  `send`/`recv`. Sends loop over short writes and EINTR. `socket_recv_bytes_exact` reassembles a
+  length-prefixed read and is absent if the stream ends early. `socket_exchange_bytes` is a
+  full-duplex framed swap (an 8-byte little-endian length, then the payload, capped by `max_in`)
+  that interleaves non-blocking send and recv. Two peers exchanging frames larger than the socket
+  buffers therefore cannot deadlock (a lock-step halo exchange), and `VYB_NET_SPIN_US` (default
+  50) sets how long a stalled exchange spins before it sleeps in poll(2). Runtime:
+  `__vyb_net_send_bytes`, `__vyb_net_recv_bytes`, `__vyb_net_exchange_bytes`. The sending side
+  takes a read-only borrow, `data<their<Vec<UInt8> const>>`, which callers pass as `view(buf)`.
+  A by-value `Vec` parameter deep-copies the buffer on every call: an 11 MB send buffer forwarded
+  through one user function cost 9.2 ms per exchange by value and 3 µs as a borrow. Tests:
+  `test/modules/test_network_bytes.vyb` and `test/modules/test_network_bytes_duplex.vyb`.
 - **CUDA kernel intrinsics for quantised LLM inference (VybForge 27B Ridge decode)** — the
   native-width, bit-cast, warp-shuffle/reduction, int8 `dp4a`, q8_1 quantisation, `mma.m16n8k16`
   (f16 and s8) and `cp.async` intrinsics listed in `doc/CUDA.md` → "Native-width, bit-level, warp

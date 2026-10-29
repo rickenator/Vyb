@@ -3025,6 +3025,7 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
         else if (fname == "vyb_net_accept") rtName = "__vyb_net_accept";
         else if (fname == "vyb_net_connect") rtName = "__vyb_net_connect";
         else if (fname == "vyb_net_send") rtName = "__vyb_net_send";
+        else if (fname == "vyb_net_send_bytes") rtName = "__vyb_net_send_bytes";
         else if (fname == "vyb_net_recv") rtName = "__vyb_net_recv";
         else if (fname == "vyb_net_local_port") rtName = "__vyb_net_local_port";
         else if (fname == "vyb_net_error_code") rtName = "__vyb_net_error_code";
@@ -3119,6 +3120,28 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                     dataLen = builder->CreateExtractValue(data, 1, "net.strlen");
                 llvm::FunctionType* ft = llvm::FunctionType::get(int64Type, {int64Type, int8PtrType, int64Type}, false);
                 m_currentLLVMValue = builder->CreateCall(getNetFn(ft), {toI64(fd), dataPtr, dataLen}, "net.sent");
+                return;
+            } else if (fname == "vyb_net_send_bytes") {
+                // (fd, data<Vec<UInt8>>, off, len): send the byte slice
+                // data[off, off+len) whole. `data` is { ptr, size, cap }; the
+                // runtime bounds-checks the slice against `size`.
+                if (!checkArity(4)) return;
+                llvm::Value* fd = needArg(0); llvm::Value* data = needArg(1);
+                llvm::Value* off = needArg(2); llvm::Value* len = needArg(3);
+                if (!fd || !data || !off || !len) return;
+                if (data->getType()->isPointerTy()) {
+                    // a their<Vec<UInt8>> borrow: read the caller's { ptr, size, cap } in place
+                    llvm::StructType* vt = llvm::StructType::get(*context, {int8PtrType, int64Type, int64Type}, false);
+                    data = builder->CreateLoad(vt, data, "net.vecborrow");
+                }
+                llvm::Value* dataPtr = toStrPtr(data);
+                llvm::Value* dataSize = llvm::ConstantInt::get(int64Type, 0);
+                if (data->getType()->isStructTy())
+                    dataSize = builder->CreateExtractValue(data, 1, "net.vecsize");
+                llvm::FunctionType* ft = llvm::FunctionType::get(
+                    int64Type, {int64Type, int8PtrType, int64Type, int64Type, int64Type}, false);
+                m_currentLLVMValue = builder->CreateCall(getNetFn(ft),
+                    {toI64(fd), dataPtr, dataSize, toI64(off), toI64(len)}, "net.sent_bytes");
                 return;
             } else if (fname == "vyb_net_recv") {
                 if (!checkArity(2)) return;
@@ -4393,6 +4416,64 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
             llvm::Value* opt = llvm::UndefValue::get(optTy);
             opt = builder->CreateInsertValue(opt, val, 0, "readbytes.v");
             opt = builder->CreateInsertValue(opt, builder->CreateTrunc(has, llvm::Type::getInt1Ty(*context), "readbytes.h"), 1);
+            m_currentLLVMValue = opt;
+            return;
+        } else if (fname == "vyb_net_recv_bytes_opt" || fname == "vyb_net_exchange_bytes_opt") {
+            // Binary socket reads returning a native `Vec<UInt8>?` (the
+            // byte-buffer counterparts of vyb_net_recv_opt), lowered like
+            // vyb_io_read_bytes_at_opt onto a zeroed Vec slot:
+            //   vyb_net_recv_bytes_opt(fd, n, exact)
+            //   vyb_net_exchange_bytes_opt(fd, data<Vec<UInt8>>, off, len, max_in)
+            const bool isEx = (fname == "vyb_net_exchange_bytes_opt");
+            const size_t want = isEx ? 5 : 3;
+            if (node->arguments.size() != want) {
+                logError(node->loc, isEx
+                    ? "vyb_net_exchange_bytes_opt expects 5 arguments (fd, data, off, len, max_in)"
+                    : "vyb_net_recv_bytes_opt expects 3 arguments (fd, n, exact)");
+                m_currentLLVMValue = nullptr; return;
+            }
+            std::vector<llvm::Value*> av;
+            for (size_t i = 0; i < want; ++i) {
+                node->arguments[i]->accept(*this);
+                if (!m_currentLLVMValue) return;
+                av.push_back(m_currentLLVMValue);
+            }
+            auto toNBI64 = [&](llvm::Value* v) -> llvm::Value* {
+                if (v->getType()->isIntegerTy(64)) return v;
+                if (v->getType()->isIntegerTy()) return builder->CreateSExt(v, int64Type, "netbytes.toi64");
+                return v;
+            };
+            llvm::StructType* vecByteTy = llvm::StructType::get(*context, {int8PtrType, int64Type, int64Type}, false);
+            llvm::StructType* optTy = llvm::StructType::get(*context, {vecByteTy, llvm::Type::getInt1Ty(*context)}, false);
+            llvm::Value* slot = builder->CreateAlloca(vecByteTy, nullptr, "netbytes.slot");
+            builder->CreateStore(llvm::Constant::getNullValue(vecByteTy), slot, "netbytes.zero");
+            llvm::Type* ptrTy = llvm::PointerType::get(*context, 0);
+            llvm::Value* has = nullptr;
+            if (isEx) {
+                llvm::Value* data = av[1];
+                if (data->getType()->isPointerTy())   // a their<Vec<UInt8>> borrow
+                    data = builder->CreateLoad(vecByteTy, data, "netbytes.vecborrow");
+                llvm::Value* dataPtr = data->getType()->isStructTy() ? builder->CreateExtractValue(data, 0, "netbytes.vecptr") : llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0));
+                llvm::Value* dataSize = llvm::ConstantInt::get(int64Type, 0);
+                if (data->getType()->isStructTy())
+                    dataSize = builder->CreateExtractValue(data, 1, "netbytes.vecsize");
+                llvm::FunctionType* ft = llvm::FunctionType::get(int64Type,
+                    {int64Type, int8PtrType, int64Type, int64Type, int64Type, int64Type, ptrTy}, false);
+                llvm::Function* f = module->getFunction("__vyb_net_exchange_bytes");
+                if (!f) f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "__vyb_net_exchange_bytes", module.get());
+                has = builder->CreateCall(f, {toNBI64(av[0]), dataPtr, dataSize, toNBI64(av[2]),
+                                              toNBI64(av[3]), toNBI64(av[4]), slot}, "netbytes.has");
+            } else {
+                llvm::FunctionType* ft = llvm::FunctionType::get(int64Type,
+                    {int64Type, int64Type, int64Type, ptrTy}, false);
+                llvm::Function* f = module->getFunction("__vyb_net_recv_bytes");
+                if (!f) f = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "__vyb_net_recv_bytes", module.get());
+                has = builder->CreateCall(f, {toNBI64(av[0]), toNBI64(av[1]), toNBI64(av[2]), slot}, "netbytes.has");
+            }
+            llvm::Value* val = builder->CreateLoad(vecByteTy, slot, "netbytes.val");
+            llvm::Value* opt = llvm::UndefValue::get(optTy);
+            opt = builder->CreateInsertValue(opt, val, 0, "netbytes.v");
+            opt = builder->CreateInsertValue(opt, builder->CreateTrunc(has, llvm::Type::getInt1Ty(*context), "netbytes.h"), 1);
             m_currentLLVMValue = opt;
             return;
         } else if (fname == "vyb_net_recv_opt") {

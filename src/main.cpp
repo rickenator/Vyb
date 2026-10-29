@@ -153,6 +153,10 @@ extern "C" {
     vyb_file_str __vyb_net_recv(int64_t fd, int64_t maxlen);
     int64_t __vyb_net_recv_opt(int64_t fd, int64_t maxlen, vyb_file_str* out);
     int64_t __vyb_net_local_port(int64_t fd);
+    int64_t __vyb_net_send_bytes(int64_t fd, const char* data, int64_t size, int64_t off, int64_t len);
+    int64_t __vyb_net_recv_bytes(int64_t fd, int64_t n, int64_t exact, vyb_vec_bytes* out);
+    int64_t __vyb_net_exchange_bytes(int64_t fd, const char* data, int64_t size, int64_t off,
+                                     int64_t len, int64_t max_in, vyb_vec_bytes* out);
     int64_t __vyb_net_error_code(void);
     const char* __vyb_net_error_message(void);
     vyb_file_str __vyb_net_resolve(const char* host);
@@ -3827,6 +3831,12 @@ int run_vyb_code(const std::string& source, const std::string& fileName, bool ge
             llvm::orc::ExecutorAddr::fromPtr(&__vyb_net_recv_opt), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyb_net_local_port")] = llvm::orc::ExecutorSymbolDef(
             llvm::orc::ExecutorAddr::fromPtr(&__vyb_net_local_port), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_net_send_bytes")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_net_send_bytes), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_net_recv_bytes")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_net_recv_bytes), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_net_exchange_bytes")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_net_exchange_bytes), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyb_net_error_code")] = llvm::orc::ExecutorSymbolDef(
             llvm::orc::ExecutorAddr::fromPtr(&__vyb_net_error_code), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyb_net_error_message")] = llvm::orc::ExecutorSymbolDef(
