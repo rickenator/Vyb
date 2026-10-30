@@ -44,6 +44,11 @@ using namespace vyb;
 // Error Logging Utility
 void LLVMCodegen::logError(const SourceLocation& loc, const std::string& message) {
     if (m_suppressLogging) return;
+    // A device module is never run through the host fallback paths that tolerate a logged
+    // error, so any codegen error in --kernel mode is fatal: without this the driver used to
+    // print the error, drop the offending statements and still emit a "valid" PTX (e.g. a
+    // kernel reduced to a bare `ret`) with exit status 0.
+    if (vyb::g_kernel_mode) flagHardCodegenError();
     std::cerr << "Error at " << (!loc.filePath.empty() ? loc.filePath.c_str() : "unknown_file") << ":" << loc.line << ":" << loc.column << ": " << message << std::endl;
 }
 
