@@ -1,0 +1,41 @@
+// @test: string reference-count registry stays correct under churn
+// @description: 60k live Strings plus 200k register/release cycles. The registry's live counter used to drift down on tombstone reuse, so the table stopped growing, probe clusters grew and every string op degraded (83 shard-header parses: 1.4 s empty heap vs 127 s with 150k live) until long-running drivers SIGSEGV'd.
+// @category: memory
+// @expect: pass
+// @expect-output: ok 200000
+import env::{env_get}
+
+main()<Int> -> {
+    live<Int> = 60000
+    lv<String> = env_get("VYB_TEST_LIVE") else ""
+    if (lv.len() > 0) { live = lv.to_int() }
+    rounds<Int> = 200000
+    rv<String> = env_get("VYB_TEST_ROUNDS") else ""
+    if (rv.len() > 0) { rounds = rv.to_int() }
+
+    keep<Vec<String>> = Vec()
+    i<Int> = 0
+    while (i < live) {
+        keep.push("live_payload_string_number_" + i.to_string())
+        i = i + 1
+    }
+
+    hits<Int> = 0
+    i = 0
+    while (i < rounds) {
+        s<String> = "churn_" + i.to_string()
+        hits = hits + s.len()
+        i = i + 1
+    }
+    # the live set must still be intact and readable
+    check<Int> = 0
+    i = 0
+    while (i < keep.len()) {
+        check = check + keep.get(i).len()
+        i = i + 1
+    }
+    if (keep.len() != live) { println("LIVE_SET_LOST " + keep.len().to_string()); return 2 }
+    if (check <= 0) { println("LIVE_SET_CORRUPT"); return 3 }
+    println("ok " + rounds.to_string())
+    return 0
+}

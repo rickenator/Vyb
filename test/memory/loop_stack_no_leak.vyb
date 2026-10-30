@@ -1,0 +1,27 @@
+// @test: loop-body temporaries do not leak stack (alloca hoisting)
+// @description: 250k iterations each copying a struct with String fields out of a Vec. Before the hoistStaticAllocas fix every iteration leaked its temporary's stack slot, so this overflowed the default 8 MB stack with SIGSEGV inside __vyb_string_release.
+// @category: memory
+// @expect: pass
+// @expect-output: ok 250000
+import env::{env_get}
+
+struct Item { name<String>, k<Int>, tag<String> }
+
+main()<Int> -> {
+    v<Vec<Item>> = Vec()
+    v.push(Item { name = "the_first_item_name", k = 1, tag = "t1" })
+    v.push(Item { name = "the_second_item_name", k = 2, tag = "t2" })
+    n<Int> = 250000
+    ns<String> = env_get("VYB_TEST_N") else ""
+    if (ns.len() > 0) { n = ns.to_int() }
+
+    hits<Int> = 0
+    i<Int> = 0
+    while (i < n) {
+        t<Item> = v.get(i % 2)
+        hits = hits + t.name.len() + t.tag.len() + t.k
+        i = i + 1
+    }
+    println("ok " + i.to_string())
+    return 0
+}

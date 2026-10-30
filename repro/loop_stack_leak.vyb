@@ -1,0 +1,16 @@
+struct One { a<String>, k<Int> }
+
+main()<Int> -> {
+    arr<Vec<One>> = Vec()
+    arr.push(One { a = "hello", k = 1 })
+    n<Int> = 200000
+    hits<Int> = 0
+    i<Int> = 0
+    while (i < n) {
+        t<One> = arr.get(0)
+        hits = hits + t.a.len()
+        i = i + 1
+    }
+    println("hits=" + hits.to_string())
+    return 0
+}

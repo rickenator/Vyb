@@ -1,3 +1,7 @@
+// @test: if/else takes the then-branch
+// @description: main()<i32> returns 42, so an executed Int main exits 42 (C exit() semantics); the expectation was undeclared, which the suite read as exit 0.
+// @expect: pass
+// @expect-return: 42
 main()<i32> -> {
     x<i32> = 15;
     result<i32> = 0;

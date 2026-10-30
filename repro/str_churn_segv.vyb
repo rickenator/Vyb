@@ -1,0 +1,135 @@
+# repro: SIGSEGV / progressive slowdown under heavy String churn + a large live heap.
+#
+# Found building the GLM-5.3 checkpoint plan in Vyb (150,226 tensors): the driver died
+# with signal 11 at a point that VARIED between runs, and its final shards took 15-43 s
+# each while the first took ~15 ms with identical work.
+#
+# This repro assembles the same ingredients, each switchable with an env flag, so the
+# crashing combination can be bisected:
+#
+#   HASH=1     a HashMap<String,Int> with N entries (name -> slot)
+#   NAMES=1    a Vec<String> of N names (like the parsed weight_map)
+#   BODY=1     read the written body back into one big String + sha256 it
+#   WALKS=k    how many times the plan is walked
+#
+#   N=150000 HASH=1 NAMES=1 BODY=1 WALKS=2 vyb repro/str_churn_segv.vyb
+#
+# Observed 2026-10-29 on HEAD 212af4e1 (build/vyb): completes at N=20000; at N=150000
+# with all four ingredients the original driver died with signal 11.
+
+import io::{open_read, read_all, open_write, write_str, close}
+import env::{env_get}
+import crypto::{sha256}
+import collections::{HashMap}
+import time::{time_mono_millis}
+
+struct Item { name<String>, shard<Int>, off<Int>, nb<Int>, dtype<String> }
+struct Plan { n<Int>, items<Vec<Item>> }
+
+envflag(n<String>)<Bool> -> {
+    v<String> = env_get(n) else ""
+    return v.len() > 0 && v != "0"
+}
+
+envint(n<String>, d<Int>)<Int> -> {
+    v<String> = env_get(n) else ""
+    if (v.len() == 0) { return d }
+    return v.to_int()
+}
+
+make_plan(n<Int>)<Plan> -> {
+    p<Plan> = Plan { n = n, items = Vec() }
+    i<Int> = 0
+    while (i < n) {
+        p.items.push(Item {
+            name = "model.language_model.layers." + (i % 45).to_string() +
+                   ".mlp.experts." + (i % 288).to_string() + ".gate_proj.trellis",
+            shard = (i % 83) + 1,
+            off = i * 4194304,
+            nb = 4194304,
+            dtype = "I16"
+        })
+        i = i + 1
+    }
+    return p
+}
+
+main()<Int> -> {
+    n<Int> = envint("N", 150000)
+    walks<Int> = envint("WALKS", 2)
+    do_hash<Bool> = envflag("HASH")
+    do_names<Bool> = envflag("NAMES")
+    do_body<Bool> = envflag("BODY")
+    h1<Int> = 0
+    n1<Int> = 0
+    b1<Int> = 0
+    if (do_hash) { h1 = 1 }
+    if (do_names) { n1 = 1 }
+    if (do_body) { b1 = 1 }
+    println("N=" + n.to_string() + " WALKS=" + walks.to_string() + " HASH=" + h1.to_string() +
+            " NAMES=" + n1.to_string() + " BODY=" + b1.to_string())
+
+    t0<Int> = time_mono_millis()
+    pl<Plan> = make_plan(n)
+    println("built " + pl.items.len().to_string() + " ms=" + (time_mono_millis() - t0).to_string())
+
+    if (do_names) {
+        t00<Int> = time_mono_millis()
+        names<Vec<String>> = Vec()
+        i<Int> = 0
+        while (i < n) {
+            names.push(pl.items.get(i).name)
+            i = i + 1
+        }
+        println("names " + names.len().to_string() + " ms=" + (time_mono_millis() - t00).to_string())
+    }
+
+    if (do_hash) {
+        t01<Int> = time_mono_millis()
+        pos<HashMap<String, Int>> = HashMap<String, Int>(n)
+        i<Int> = 0
+        while (i < n) {
+            pos.put(pl.items.get(i).name, i)
+            i = i + 1
+        }
+        println("hash " + n.to_string() + " ms=" + (time_mono_millis() - t01).to_string())
+    }
+
+    w<Int> = 0
+    while (w < walks) {
+        tw<Int> = time_mono_millis()
+        match (open_write("native/out/repro_body.txt")) {
+            f -> {
+                i<Int> = 0
+                while (i < pl.items.len()) {
+                    if (i % 25000 == 0) {
+                        println("  walk " + w.to_string() + " i=" + i.to_string() +
+                                " ms=" + (time_mono_millis() - tw).to_string())
+                    }
+                    t<Item> = pl.items.get(i)
+                    write_str(f, t.name + "|" + t.shard.to_string() + "|" + t.off.to_string() +
+                              "|" + t.nb.to_string() + "|" + t.dtype + "\n")
+                    i = i + 1
+                }
+                close(f)
+            }
+            ? -> { println("open failed"); return 1 }
+        }
+        println("walk " + w.to_string() + " done ms=" + (time_mono_millis() - tw).to_string())
+        w = w + 1
+    }
+
+    if (do_body) {
+        t2<Int> = time_mono_millis()
+        body<String> = ""
+        match (open_read("native/out/repro_body.txt")) {
+            f -> { match (read_all(f)) { s -> { body = s } ? -> { return 5 } } close(f) }
+            ? -> { return 5 }
+        }
+        println("body bytes=" + body.len().to_string() + " ms=" + (time_mono_millis() - t2).to_string())
+        dig<String> = sha256(body)
+        println("digest=" + dig.substring(0, 16) + " ms=" + (time_mono_millis() - t2).to_string())
+    }
+    println("DONE")
+    return 0
+}

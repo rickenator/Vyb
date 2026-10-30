@@ -1,0 +1,14 @@
+struct One { a<String>, k<Int> }
+
+main()<Int> -> {
+    arr<Vec<One>> = Vec()
+    arr.push(One { a = "hello_world_number_one", k = 1 })
+    arr.push(One { a = "second_string_live", k = 2 })
+    println("before: " + arr.get(0).a + " / " + arr.get(1).a)
+    t<One> = arr.get(0)
+    println("copy: " + t.a)
+    u<String> = arr.get(0).a
+    println("copy again: " + u)
+    println("after: " + arr.get(0).a + " / " + arr.get(1).a)
+    return 0
+}

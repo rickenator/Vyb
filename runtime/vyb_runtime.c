@@ -310,6 +310,7 @@ static int vyb_str_reg_rehash(size_t newcap) {
     if (!nw) return 0;                             // out of memory; caller handles
     atomic_store_explicit(&vyb_str_growing, 1, memory_order_release);
     while (atomic_load_explicit(&vyb_str_rdrs, memory_order_acquire) != 0) { }
+    size_t reinserted = 0;                          // authoritative live count
     for (size_t i = 0; i < oldcap; ++i) {
         void* p = atomic_load_explicit(&old[i].p, memory_order_relaxed);
         if (p == NULL || p == VYB_STR_TOMB) continue;   // empty slot or stale tombstone
@@ -322,6 +323,7 @@ static int vyb_str_reg_rehash(size_t newcap) {
             if (sp == NULL || sp == VYB_STR_TOMB) {
                 atomic_store_explicit(&nw[k].refs, refs, memory_order_relaxed);
                 atomic_store_explicit(&nw[k].p, p, memory_order_relaxed);
+                reinserted++;
                 break;
             }
         }
@@ -332,6 +334,10 @@ static int vyb_str_reg_rehash(size_t newcap) {
     free(old);
     vyb_str_tombs = 0;                              // drop all tombstones
     vyb_str_churn = 0;                              // fresh cluster structure
+    // The table is now the authority on the live count (the incremental counter used to
+    // drift, see __vyb_string_register). Healing here means a future accounting bug can
+    // cost one rehash, not unbounded probe growth.
+    vyb_str_live = reinserted;
     return 1;
 }
 
@@ -410,11 +416,17 @@ VYB_WEAK void __vyb_string_register(void* p) {
         // pointer also sees the initialized refcount (release/acquire pairing).
         atomic_store_explicit(&s->refs, 1, memory_order_relaxed);
         atomic_store_explicit(&s->p, p, memory_order_release);
+        // The slot holds a real pointer again, so it counts as LIVE in both cases.
+        // Reusing a tombstone used to decrement the tombstone count and nothing else,
+        // while release() always decrements live on the way out: under churn the live
+        // count drifted DOWN, so `crowded` never fired, the table stopped growing and
+        // linear-probe clusters grew without bound. Symptom: every string op got slower
+        // as the heap filled (83 shard-header parses: 1.4 s with an empty heap, 127 s
+        // with 150k live Strings) and long-running drivers eventually SIGSEGV'd.
         if (slotP == VYB_STR_TOMB && vyb_str_tombs > 0) {
             vyb_str_tombs--;        // a freed slot just became live again
-        } else if (slotP == NULL) {
-            vyb_str_live++;         // a brand-new live entry
         }
+        vyb_str_live++;
     }
     pthread_mutex_unlock(&vyb_str_reg_lock);
 }

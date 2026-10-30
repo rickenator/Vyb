@@ -342,6 +342,48 @@ llvm::Value* LLVMCodegen::createEntryBlockAlloca(llvm::Function* func, const std
     return alloca;
 }
 
+// Hoist every static alloca into the entry block (see codegen.hpp for why).
+void LLVMCodegen::hoistStaticAllocas() {
+    if (!module) return;
+    size_t moved = 0;
+    for (llvm::Function& fn : *module) {
+        if (fn.isDeclaration()) continue;
+        llvm::BasicBlock& entry = fn.getEntryBlock();
+        // Insertion point: right after the entry block's existing alloca run, so the
+        // hoisted slots join the prologue instead of landing before the dbg intrinsics.
+        llvm::Instruction* insertPt = nullptr;
+        for (llvm::Instruction& inst : entry) {
+            if (llvm::isa<llvm::AllocaInst>(&inst)) insertPt = &inst;
+            else break;
+        }
+        std::vector<llvm::AllocaInst*> pending;
+        for (llvm::BasicBlock& bb : fn) {
+            if (&bb == &entry) continue;
+            for (llvm::Instruction& inst : bb) {
+                auto* ai = llvm::dyn_cast<llvm::AllocaInst>(&inst);
+                // NOT isStaticAlloca(): LLVM's predicate is false for any alloca that is
+                // already outside the entry block, which is exactly the case to fix.
+                // Hoist anything with a CONSTANT element count (scalars and fixed-size
+                // struct slots); leave variable-length arrays alone.
+                if (ai && llvm::isa<llvm::ConstantInt>(ai->getArraySize())) pending.push_back(ai);
+            }
+        }
+        for (llvm::AllocaInst* ai : pending) {
+            if (insertPt) {
+                ai->moveAfter(insertPt);
+            } else {
+                ai->moveBefore(&*entry.begin());
+            }
+            insertPt = ai;
+            ++moved;
+        }
+    }
+    if (vyb::g_debug_codegen) {
+        std::cerr << "DEBUG: hoistStaticAllocas moved " << moved
+                  << " alloca(s) into entry blocks\n";
+    }
+}
+
 llvm::AllocaInst* LLVMCodegen::createEntryBlockAlloca(llvm::Type* type, const std::string& name) {
     if (!currentFunction) {
         // No error reporting mechanism available here, just return nullptr

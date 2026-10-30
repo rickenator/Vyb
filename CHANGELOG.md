@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Loop-body temporaries leaked stack (SIGSEGV in long loops).** Codegen emitted `alloca`
+  for expression temporaries at their point of use, so an `alloca` inside a loop body
+  allocated a fresh slot on every iteration — LLVM only reclaims stack at function exit.
+  A 130k-iteration loop copying a 5-field struct out of a `Vec` overflowed the default 8 MB
+  stack and died with SIGSEGV inside `__vyb_string_release` (varying crash points, unusable
+  backtrace). Codegen now hoists every constant-size `alloca` out of non-entry blocks into
+  the function's entry block (`hoistStaticAllocas`, called before verification); dynamic
+  (variable-length array) allocas stay in place. Note `AllocaInst::isStaticAlloca()` is
+  false for an alloca already outside the entry block, so the hoist filters on
+  `isa<ConstantInt>(getArraySize())` instead. Covered by
+  `test/memory/loop_stack_no_leak.vyb` (250k iterations, default stack).
+- **String reference-count registry's live counter drifted under churn.** Reusing a
+  tombstone slot decremented the tombstone count but not `vyb_str_live`, while `release()`
+  always decrements it: with churn the live count drifted DOWN, so the "crowded" growth
+  test never fired, the table stopped growing and linear-probe clusters grew without bound.
+  Every string operation got progressively slower (parsing all 83 shard headers of a 164 GiB
+  checkpoint: 1.4 s with an empty heap, 127 s with 150k live Strings) and long-running
+  drivers eventually SIGSEGV'd. The counter is now incremented on tombstone reuse, and a
+  rehash re-derives it from the table itself (self-healing). After the fix the same workload
+  takes 1.09 s with 150k live Strings. Covered by `test/memory/string_registry_churn.vyb`.
+
 ### Changed
 - **The JIT inlines at `-O2`/`-O3` and tunes for the host CPU.** At `-O2` and above,
   `optimize_module` removes the blanket `noinline` attribute that codegen puts on every user

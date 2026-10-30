@@ -223,6 +223,11 @@ void LLVMCodegen::generate(vyb::ast::Module* astModule, const std::string& outpu
         ensureCoreIntrinsicFunctions();
     }
 
+    // Reclaim per-iteration stack: an alloca emitted inside a loop body only frees at
+    // function exit, so temporaries leaked a slot per iteration and a long loop
+    // overflowed the stack (see hoistStaticAllocas in cgen_util.cpp).
+    hoistStaticAllocas();
+
     // Finalize debug information before verification
     finalizeDebugInfo();
 

@@ -503,6 +503,17 @@ private:
     llvm::Value* createEntryBlockAlloca(llvm::Function* func, const std::string& varName, llvm::Type* type);
     llvm::AllocaInst* createEntryBlockAlloca(llvm::Type* type, const std::string& name);
 
+    // Hoist every STATIC alloca out of non-entry blocks into the function's entry
+    // block. An `alloca` inside a loop body is not reclaimed until the function
+    // returns (LLVM only shrinks the stack at function exit), so a temporary in a hot
+    // loop leaked its slot per iteration: a 130k-iteration loop over a 5-field struct
+    // temp overflowed the default 8 MB stack (SIGSEGV inside __vyb_string_release,
+    // backtrace unusable). Hoisting gives one slot per static site — the same model
+    // createEntryBlockAlloca() above already uses. Dynamic (variable-length) allocas
+    // are left in place: their size may differ per iteration, so a single slot would
+    // be wrong.
+    void hoistStaticAllocas();
+
 
     // Type system helpers
     std::string getTypeName(llvm::Type* type);
