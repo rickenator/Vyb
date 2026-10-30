@@ -9,6 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Kernel helpers are inlined by default.** Device code (`--kernel`) no longer marks every
+  user function `noinline`; small helpers are left to the optimizer's inliner, so a wrapper
+  around `ld_f32n`/`fma_f32` no longer costs a call frame plus parameter marshalling at each
+  use. `@inline` (alwaysinline) and `@noinline` (never inline) opt either way, in host and
+  kernel code alike.
+- **Register-resident fixed arrays in kernels.** `[Float32; N]` locals declared in a kernel
+  lower to registers instead of local memory when every access is a constant index; `--kernel`
+  codegen errors are now fatal rather than warnings, so a bad kernel fails at compile time.
+- **Integer warp shuffles, atomics and warp intrinsics in kernels.** `shfl` for 64-bit
+  integer lanes, `atomic or/and/xor/add/max`, `popc`/`ctz`/`ballot`, plus `cuda_launch_args`
+  for kernels that take their arguments directly rather than through a parameter buffer.
+- **C int aliases convert on assignment.** Assigning an unsized Vyb `Int` into a slot of
+  another width no longer silently truncates (`as`-cast widening, bug #4).
+- **Semantic errors carry `file:line:col`.** Errors reported through `addError` ignored the
+  node and printed without a location; in a large file that made a one-line diagnostic
+  impossible to place.
+- **Globals may be used before their declaration** in the file (bug #5).
+
+### Fixed
+- **`@noinline` was silently dropped at -O2.** `optimize_module` removes the `noinline`
+  attribute at -O2/-O3 so the inliner can fold the Phase-6.4 trace default, but it also
+  removed it from functions the programmer had explicitly marked `@noinline`, so an
+  out-of-line device helper was inlined anyway. Codegen now tags an explicit `@noinline`
+  with `vyb-explicit-noinline` and the sweep skips it. Covered by
+  `test/kernel/test_noinline_helper.vyb`.
+- **Function `Redefinition` and call-argument type mismatch are hard errors** in codegen,
+  instead of producing a silently wrong module.
+
 ### Fixed
 - **Loop-body temporaries leaked stack (SIGSEGV in long loops).** Codegen emitted `alloca`
   for expression temporaries at their point of use, so an `alloca` inside a loop body

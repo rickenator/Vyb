@@ -925,6 +925,12 @@ void LLVMCodegen::visit(vyb::ast::FunctionDeclaration* node) {
         func->addFnAttr(llvm::Attribute::AlwaysInline);
     } else if (node->inlineHint < 0 || !vyb::g_kernel_mode) {
         func->addFnAttr(llvm::Attribute::NoInline);
+        // An explicit `@noinline` is a promise to the programmer, not the Phase-6.4
+        // trace default: tag it so `optimize_module`'s -O2 attribute sweep (which
+        // exists to undo the default) leaves it alone.
+        if (node->inlineHint < 0) {
+            func->addFnAttr("vyb-explicit-noinline", "1");
+        }
     }
 
     // DEBUG: Print the ACTUAL function type after creation/retrieval

@@ -167,11 +167,7 @@ flags: `--compile <out.o>`, `--link <lib>`, `--static`, and `-O<0..3>`.
 ### Running the test suite
 
 ```bash
-# 1323 .vyb tests exercised through compile + run + output/return checks
-# 1324 .vyb tests exercised through compile + run + output/return checks
-# 1328 .vyb tests exercised through compile + run + output/return checks
-# 1324 .vyb tests exercised through compile + run + output/return checks
-# 1331 .vyb tests exercised through compile + run + output/return checks
+# 1357 .vyb tests exercised through compile + run + output/return checks
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test
 ```
 
@@ -2045,7 +2041,6 @@ Module page: [`prelude.md`](prelude.md). Re-exports `Display`, `Debug`,
 imports them itself or redefines one of the core aspects.
 
 ---
----
 
 ### 4.16 `utf8` — UTF-8 codepoints over byte strings
 
@@ -2914,11 +2909,7 @@ Canonical suite runner — a Vyb program (`test/run_tests.vyb`), wired into CTes
 as `run-tests`:
 
 ```bash
-./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1323 tests)
-./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1324 tests)
-./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1328 tests)
-./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1324 tests)
-./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1331 tests)
+./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test                 # full suite (1357 tests)
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --category async  # filter by category
 ./build/vyb test/run_tests.vyb --vyb ./build/vyb --test-dir test --json results.json --evidence evidence.json
 ```

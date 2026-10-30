@@ -688,7 +688,8 @@ void optimize_module(llvm::Module* module, llvm::TargetMachine* targetMachine, i
     if (optLevel >= 2 && !std::getenv("VYB_KEEP_NOINLINE")) {
         for (auto& F : *module) {
             if (!F.isDeclaration() && F.hasFnAttribute(llvm::Attribute::NoInline)
-                && !F.hasFnAttribute(llvm::Attribute::OptimizeNone)) {
+                && !F.hasFnAttribute(llvm::Attribute::OptimizeNone)
+                && !F.hasFnAttribute("vyb-explicit-noinline")) {
                 F.removeFnAttr(llvm::Attribute::NoInline);
             }
         }
