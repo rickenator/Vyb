@@ -1,0 +1,34 @@
+# repro/string_assign_leak.vyb — is the leak in the assignment or in the match arm?
+import io::{open_read, read_all, close}
+import env::{env_get}
+
+slurp(path<String>)<String> -> {
+    r<String> = ""
+    match (open_read(path)) {
+        f -> { match (read_all(f)) { s -> { r = s } ? -> { } } close(f) }
+        ? -> { }
+    }
+    return r
+}
+
+main()<Int> -> {
+    path<String> = env_get("VYB_LEAK_FILE") else "native/out/x.txt"
+    n<Int> = (env_get("VYB_LEAK_ITERS") else "200").to_int()
+    bytes<Int> = 0
+    i<Int> = 0
+    while (i < n) {
+        // plain call-result assignment (no match arm in the caller)
+        s<String> = slurp(path)
+        bytes = bytes + s.len()
+        // and one match-arm assignment of the same value
+        t<String> = ""
+        match (open_read(path)) {
+            f -> { match (read_all(f)) { r -> { t = r } ? -> { } } close(f) }
+            ? -> { }
+        }
+        bytes = bytes + t.len()
+        i = i + 1
+    }
+    println("bytes=" + bytes.to_string())
+    return 0
+}
