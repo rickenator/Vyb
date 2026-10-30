@@ -64,11 +64,71 @@ void ModuleParser::synchronizeToNextDeclaration() {
     }
 }
 
+// Pre-register every module global's name before any function body is parsed
+// (#5). A bare `name = expr` inside a function is an inferred local declaration
+// when `name` is not yet a known variable, so without this pre-scan a function
+// that assigns a global declared further down the file silently got a fresh
+// local instead (and its writes were lost). The scan only looks at statements
+// that start at nesting depth 0: `name<Type> = ...` / `name<Type>`, `name = ...`,
+// and `let|mut|var|const|auto name ...`. Generic functions (`name<T>(...)`) are
+// excluded because a '(' follows their angle brackets.
+void ModuleParser::prescanModuleGlobals() {
+    using TT = vyb::TokenType;
+    const auto& t = this->tokens_;
+    const size_t n = t.size();
+    int depth = 0;
+    bool atStart = true;
+    for (size_t i = this->pos_; i < n && t[i].type != TT::END_OF_FILE; ++i) {
+        TT tt = t[i].type;
+        if (tt == TT::COMMENT) continue;
+        if (tt == TT::LBRACE || tt == TT::LPAREN || tt == TT::LBRACKET || tt == TT::INDENT) {
+            ++depth; atStart = false; continue;
+        }
+        if (tt == TT::RBRACE || tt == TT::RPAREN || tt == TT::RBRACKET || tt == TT::DEDENT) {
+            if (depth > 0) --depth;
+            atStart = (depth == 0 && (tt == TT::RBRACE || tt == TT::DEDENT));
+            continue;
+        }
+        if (tt == TT::NEWLINE || tt == TT::SEMICOLON) { if (depth == 0) atStart = true; continue; }
+        if (depth != 0 || !atStart) { atStart = false; continue; }
+        atStart = false;
+        if ((tt == TT::KEYWORD_LET || tt == TT::KEYWORD_MUT || tt == TT::KEYWORD_VAR ||
+             tt == TT::KEYWORD_CONST || tt == TT::KEYWORD_AUTO) &&
+            i + 1 < n && t[i + 1].type == TT::IDENTIFIER) {
+            this->declaration_parser_.declareGlobalVariable(t[i + 1].lexeme);
+            continue;
+        }
+        if (tt != TT::IDENTIFIER || i + 1 >= n) continue;
+        if (t[i + 1].type == TT::EQ) {
+            this->declaration_parser_.declareGlobalVariable(t[i].lexeme);
+            continue;
+        }
+        if (t[i + 1].type != TT::LT) continue;
+        int angle = 0;
+        size_t j = i + 1;
+        for (; j < n; ++j) {
+            TT a = t[j].type;
+            if (a == TT::LT) ++angle;
+            else if (a == TT::GT) --angle;
+            else if (a == TT::RSHIFT) angle -= 2;
+            else if (a == TT::NEWLINE || a == TT::END_OF_FILE || a == TT::LBRACE) { angle = -100; break; }
+            if (angle <= 0) break;
+        }
+        if (angle != 0 || j + 1 >= n) continue;
+        TT after = t[j + 1].type;
+        if (after == TT::EQ || after == TT::NEWLINE || after == TT::SEMICOLON || after == TT::END_OF_FILE) {
+            this->declaration_parser_.declareGlobalVariable(t[i].lexeme);
+        }
+    }
+}
+
 std::unique_ptr<vyb::ast::Module> ModuleParser::parse() {
     vyb::SourceLocation module_loc = this->current_location();
     std::vector<vyb::ast::StmtPtr> module_body;
 
     this->skip_comments_and_newlines();
+
+    prescanModuleGlobals();
 
     while (this->peek().type != vyb::TokenType::END_OF_FILE) {
         vyb::token::Token current_token_before_parse = this->peek();

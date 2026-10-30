@@ -295,6 +295,9 @@ namespace vyb { // Changed Vyb to vyb
         // parser can collect multiple errors per file instead of aborting.
         static bool isTopLevelStarter(vyb::TokenType tt);
         void synchronizeToNextDeclaration();
+        // Pre-register module global names so function bodies may assign a
+        // global declared later in the file (#5).
+        void prescanModuleGlobals();
     public:
         ModuleParser(const std::vector<vyb::token::Token>& tokens, size_t& pos, const std::string& file_path, DeclarationParser& declaration_parser);
         std::unique_ptr<vyb::ast::Module> parse();
