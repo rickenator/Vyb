@@ -1192,6 +1192,11 @@ public:
     bool hasDefaultImpl; // true if method has arrow (-> {...}), false if mandatory (no arrow)
     bool variadic;       // true for variadic C functions (e.g. `printf(fmt: *i8, ...)`)
     TypeNodePtr returnTypeNode; // Optional return type annotation
+    // Inlining hint from a leading attribute: +1 for `@inline` (always inline),
+    // -1 for `@noinline` (never inline), 0 for none (the default policy: host
+    // functions stay out of line for stack traces, kernel helpers are left to
+    // the optimizer's inliner).
+    int inlineHint = 0;
 
     // Error-propagation metadata used to live here (`canFail` /
     // `needsErrorReturn` / `errorTypes`, written during semantic analysis) --

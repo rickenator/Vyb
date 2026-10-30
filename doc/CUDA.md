@@ -198,6 +198,22 @@ How a function lowers determines whether it is launchable:
 - A **value-returning top-level function** stays a `.visible .func` device helper
   (callable from kernels, not launchable on its own).
 
+**Helper inlining.** Kernel-mode functions do not carry the host's `noinline`
+attribute (the host keeps it so stack traces stay complete). The -O2 inliner
+therefore inlines small device helpers into the kernels that call them, the same as
+for a CUDA C `__device__` function. Before this change, every helper call was a real
+PTX `call` with parameter marshalling, so hot kernels had to inline their helpers by
+hand. `@inline` forces a helper to be inlined and `@noinline` keeps it as a `.func`
+(see the Programmer's Guide, §3.4). After optimization the compiler prints how many
+calls to device functions remain:
+
+```
+Kernel helper calls: 2 before optimization, 0 after inlining
+```
+
+Regression tests: `test/kernel/test_inline_helpers.vyb` (default inlining) and
+`test/kernel/test_noinline_helper.vyb` (`@noinline`).
+
 All kernel parameters cross the FFI as 8-byte typed values — `Int` buffer addresses, `Int`
 counts, `Float` scalars — so the host packs `kernelParams` purely from 64-bit values with
 no device staging buffer.

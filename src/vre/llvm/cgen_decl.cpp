@@ -911,9 +911,21 @@ void LLVMCodegen::visit(vyb::ast::FunctionDeclaration* node) {
         func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, functionName, module.get());
     }
 
-    // Phase 6.4: Prevent inlining to preserve stack traces
-    // Add noinline attribute so functions appear in call stack
-    func->addFnAttr(llvm::Attribute::NoInline);
+    // Inlining policy.
+    //  - `@inline`   -> alwaysinline (host and kernel).
+    //  - `@noinline` -> noinline (host and kernel).
+    //  - default, host: noinline (Phase 6.4: keep every function in the call stack
+    //    so stack traces stay complete).
+    //  - default, kernel (--kernel): no attribute. Device code has no stack traces,
+    //    and a forced out-of-line `.func` call per helper costs a call frame plus
+    //    parameter marshalling on every use, so small helpers are left to the
+    //    optimizer's inliner like any C/CUDA device function.
+    if (node->inlineHint > 0) {
+        func->removeFnAttr(llvm::Attribute::NoInline);
+        func->addFnAttr(llvm::Attribute::AlwaysInline);
+    } else if (node->inlineHint < 0 || !vyb::g_kernel_mode) {
+        func->addFnAttr(llvm::Attribute::NoInline);
+    }
 
     // DEBUG: Print the ACTUAL function type after creation/retrieval
     std::string actualFuncTypeStr;

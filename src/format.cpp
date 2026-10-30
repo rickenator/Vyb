@@ -224,6 +224,7 @@ void SourcePrinter::visit(ast::VariableDeclaration* n) {
 }
 
 void SourcePrinter::visit(ast::FunctionDeclaration* n) {
+    if (n->inlineHint != 0) { emit(n->inlineHint > 0 ? "@inline" : "@noinline"); newline(); }
     if (n->id) emit(n->id->name);
     printGenericParams(n->genericParams);
     printParamList(n->params);

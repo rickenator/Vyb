@@ -748,7 +748,9 @@ public:
         result_ = std::move(v);
     }
     void visit(ast::FunctionDeclaration* node) override {
-        result_ = std::make_unique<ast::FunctionDeclaration>(node->loc, cloneId(node->id.get()), cloneParams(node->params), cloneBlock(node->body.get()), node->isAsync, cloneTy(node->returnTypeNode.get()), node->hasDefaultImpl, cloneGenericParams(node->genericParams), node->variadic);
+        auto fd = std::make_unique<ast::FunctionDeclaration>(node->loc, cloneId(node->id.get()), cloneParams(node->params), cloneBlock(node->body.get()), node->isAsync, cloneTy(node->returnTypeNode.get()), node->hasDefaultImpl, cloneGenericParams(node->genericParams), node->variadic);
+        fd->inlineHint = node->inlineHint;
+        result_ = std::move(fd);
     }
     void visit(ast::TypeAliasDeclaration* node) override {
         result_ = std::make_unique<ast::TypeAliasDeclaration>(node->loc, cloneId(node->name.get()), cloneTy(node->typeNode.get()));
