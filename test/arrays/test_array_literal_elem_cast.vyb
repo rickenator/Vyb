@@ -1,0 +1,23 @@
+// @test: fixed-array literal element cast
+// @description: a literal whose elements have a different scalar type than the declared
+//   element type (e.g. `[0.0, 1.5]`, typed [2 x double], bound to `[Float32; 2]`) used to
+//   be refused ("Unsupported or invalid cast from type [2 x double] to [2 x float]"); it is
+//   now cast element-wise. Covers constant and runtime elements. This is what lets NVPTX
+//   kernels declare register-resident `[Float32; N]` scratch arrays.
+// @category: arrays, codegen
+// @expect: pass
+// @expect-return: 0
+
+main()<Int> -> {
+    s<[Float32; 4]> = [0.0, 1.5, 2.5, 0.0]
+    a<Float> = 3.0
+    r<[Float32; 2]> = [a, a * 2.0]
+    for (i in 0..3) { s[i] = s[i] + r[0] }
+    t<Float32> = 0.0
+    for (i in 0..3) { t = t + s[i] }
+    e<Float32> = 16.0
+    if (t != e) { return 1 }
+    e = 6.0
+    if (r[1] != e) { return 2 }
+    return 0
+}

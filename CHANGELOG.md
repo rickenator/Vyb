@@ -9,6 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Kernel helpers are inlined by default.** Device code (`--kernel`) no longer marks every
+  user function `noinline`; small helpers are left to the optimizer's inliner, so a wrapper
+  around `ld_f32n`/`fma_f32` no longer costs a call frame plus parameter marshalling at each
+  use. `@inline` (alwaysinline) and `@noinline` (never inline) opt either way, in host and
+  kernel code alike.
+- **Register-resident fixed arrays in kernels.** `[Float32; N]` locals declared in a kernel
+  lower to registers instead of local memory when every access is a constant index; `--kernel`
+  codegen errors are now fatal rather than warnings, so a bad kernel fails at compile time.
+- **Integer warp shuffles, atomics and warp intrinsics in kernels.** `shfl` for 64-bit
+  integer lanes, `atomic or/and/xor/add/max`, `popc`/`ctz`/`ballot`, plus `cuda_launch_args`
+  for kernels that take their arguments directly rather than through a parameter buffer.
+- **C int aliases convert on assignment.** Assigning an unsized Vyb `Int` into a slot of
+  another width no longer silently truncates (`as`-cast widening, bug #4).
+- **Semantic errors carry `file:line:col`.** Errors reported through `addError` ignored the
+  node and printed without a location; in a large file that made a one-line diagnostic
+  impossible to place.
+- **Globals may be used before their declaration** in the file (bug #5).
+
+### Fixed
+- **`@noinline` was silently dropped at -O2.** `optimize_module` removes the `noinline`
+  attribute at -O2/-O3 so the inliner can fold the Phase-6.4 trace default, but it also
+  removed it from functions the programmer had explicitly marked `@noinline`, so an
+  out-of-line device helper was inlined anyway. Codegen now tags an explicit `@noinline`
+  with `vyb-explicit-noinline` and the sweep skips it. Covered by
+  `test/kernel/test_noinline_helper.vyb`.
+- **Function `Redefinition` and call-argument type mismatch are hard errors** in codegen,
+  instead of producing a silently wrong module.
+
 ### Fixed
 - **Loop-body temporaries leaked stack (SIGSEGV in long loops).** Codegen emitted `alloca`
   for expression temporaries at their point of use, so an `alloca` inside a loop body
@@ -229,14 +258,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shared cell (so the defining frame also observes an escaping closure's writes) is
   checkpoint (c), still open; the storage-location ownership gaps the change exposed
   (`Vec<fn ...>` elements and closure struct fields) were filed as #439 and are fixed
-  by the two `### Fixed`- **`as` between `Int` and the C ABI integer aliases miscompiled.** `CInt`, `CUInt`, `CLong`,
-  `CULong`, `CSize`, `CSSize`, `CShort`, `CUShort`, `CChar` and `CUChar` were missing from the
-  integer-class table, so for example `x<Int> = cfunc() as Int` stored an i32 into an i64 slot
-  and kept stale high bits, with only a "Type mismatch in assignment" warning. The aliases are now
-  classified, and any int-to-int `as` that is not otherwise handled extends or truncates. It
-  zero-extends from unsigned types and `i1`, and sign-extends otherwise. Covered by
-  `test/types/cint_as_int_widen_test.vyb`.
- entries below.
+  by the two `### Fixed` entries below.
 - **`VYBHOME` + a toplevel `SOURCEME_VYB`, so projects stop hardcoding the checkout
   (#424)** — Vyb now owns its own toolchain paths. Sourcing `SOURCEME_VYB` exports
   `VYBHOME` (the checkout root) and the derived `VYB` (`$VYBHOME/build/vyb`) and
@@ -296,6 +318,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   neither of which names the problem. `fail<E>(e)` statements and `ptr<T>` types are unaffected.
   Tests are in `test/parser/test_reserved_word_*.vyb`.
 
+- **`as` between `Int` and the C ABI integer aliases miscompiled.** `CInt`, `CUInt`, `CLong`,
+  `CULong`, `CSize`, `CSSize`, `CShort`, `CUShort`, `CChar` and `CUChar` were missing from the
+  integer-class table, so for example `x<Int> = cfunc() as Int` stored an i32 into an i64 slot
+  and kept stale high bits, with only a "Type mismatch in assignment" warning. The aliases are now
+  classified, and any int-to-int `as` that is not otherwise handled extends or truncates. It
+  zero-extends from unsigned types and `i1`, and sign-extends otherwise. Covered by
+  `test/types/cint_as_int_widen_test.vyb`.
 - **The shipped `filter`/`map` over a `Vec<mild<T>>` no longer leaks (#427 defects 6/7, #451
   closed for this half)** — a call whose callee is a `fn(...)` VALUE is emitted by its own arm:
   it rebuilds the callee's signature, prepends the hidden environment and builds its own argument

@@ -1,0 +1,21 @@
+// @test: @noinline keeps a kernel helper out of line
+// @description: `@noinline` opts a device helper out of the default kernel inlining, so
+//   both call sites stay real PTX `.func` calls after optimization.
+// @category: kernel, cuda
+// @expect: pass
+// @vyb-args: --kernel
+// @expect-output: Kernel helper calls: 2 before optimization, 2 after inlining
+
+@noinline
+axpb(a<Float32>, x<Float32>, b<Float32>)<Float32> -> {
+    return fma_f32(a, x, b)
+}
+
+twice(out<Int>, w<Int>, n<Int>) -> {
+    gid<Int> = blk_x() * dim_x() + tid_x()
+    if (gid < n) {
+        x<Float32> = ld_f32n(w + gid * 4)
+        y<Float32> = axpb(2.0 as Float32, x, 1.0 as Float32)
+        st_f32n(out + gid * 4, axpb(y, x, 3.0 as Float32))
+    }
+}

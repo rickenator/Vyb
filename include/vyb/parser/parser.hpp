@@ -264,6 +264,7 @@ namespace vyb { // Changed Vyb to vyb
         DeclarationParser(const std::vector<vyb::token::Token>& tokens, size_t& pos, const std::string& file_path, TypeParser& type_parser, ExpressionParser& expr_parser, StatementParser& stmt_parser, std::set<std::string>& knownTypeNames);
         vyb::ast::DeclPtr parse();
         std::unique_ptr<vyb::ast::FunctionDeclaration> parse_function();
+        std::unique_ptr<vyb::ast::FunctionDeclaration> parse_function_unattributed();
         std::unique_ptr<vyb::ast::Declaration> parse_struct();
         std::unique_ptr<vyb::ast::Declaration> parse_trait_declaration();
         std::unique_ptr<vyb::ast::Declaration> parse_impl();
@@ -295,6 +296,9 @@ namespace vyb { // Changed Vyb to vyb
         // parser can collect multiple errors per file instead of aborting.
         static bool isTopLevelStarter(vyb::TokenType tt);
         void synchronizeToNextDeclaration();
+        // Pre-register module global names so function bodies may assign a
+        // global declared later in the file (#5).
+        void prescanModuleGlobals();
     public:
         ModuleParser(const std::vector<vyb::token::Token>& tokens, size_t& pos, const std::string& file_path, DeclarationParser& declaration_parser);
         std::unique_ptr<vyb::ast::Module> parse();

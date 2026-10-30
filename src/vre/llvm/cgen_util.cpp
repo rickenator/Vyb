@@ -249,6 +249,25 @@ llvm::Value* LLVMCodegen::tryCast(llvm::Value* value, llvm::Type* targetType, co
         return builder->CreateExtractValue(value, 0, "optional.payload");
     }
 
+    // Fixed array of the same length but a different element type, e.g. the literal
+    // `[0.0, 0.0]` (typed [2 x double]) bound to `s<[Float32; 2]>`: cast element-wise.
+    // Constant elements fold to a constant array, so this costs nothing at run time and
+    // lets kernels declare register-resident `[Float32; N]` scratch arrays.
+    if (auto* dstArr = llvm::dyn_cast<llvm::ArrayType>(targetType)) {
+        if (auto* srcArr = llvm::dyn_cast<llvm::ArrayType>(value->getType())) {
+            if (srcArr->getNumElements() == dstArr->getNumElements()) {
+                llvm::Value* out = llvm::UndefValue::get(dstArr);
+                for (unsigned i = 0; i < dstArr->getNumElements(); ++i) {
+                    llvm::Value* e = builder->CreateExtractValue(value, i, "arr.cast.elt");
+                    llvm::Value* c = tryCast(e, dstArr->getElementType(), loc);
+                    if (!c) return nullptr;
+                    out = builder->CreateInsertValue(out, c, i, "arr.cast");
+                }
+                return out;
+            }
+        }
+    }
+
     logError(loc, "Unsupported or invalid cast from type " + getTypeName(value->getType()) + " to " + getTypeName(targetType));
     return nullptr;
 }

@@ -1,0 +1,17 @@
+// @test: extern redefinition with a different signature is fatal
+// @description: an extern named memcpy with an Int dst clashes with the LLVM builtin (ptr params);
+//   codegen used to log the error, drop every call to it, and run the program anyway
+// @category: ffi, diagnostics
+// @expect: fail
+// @expect-error: Redefinition of function 'memcpy' with different signature.
+
+extern "C" {
+    memcpy(dst<Int>, src<loc<CVoid>>, n<Int>)<Int>
+}
+
+main()<Int> -> {
+    x<Int> = 7
+    freedom { memcpy(0, loc(x), 0) }
+    println("ran")
+    return 0
+}

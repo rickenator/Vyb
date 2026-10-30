@@ -59,3 +59,6 @@ scratch/
 
 # ccache object cache when CI builds in the workspace (#481)
 .ccache/
+build-merge-check/
+build-qt/
+native/

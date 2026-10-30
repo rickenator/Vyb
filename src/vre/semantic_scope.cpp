@@ -46,7 +46,12 @@ Scope* Scope::getParent() {
     return parent;
 }
 void SemanticAnalyzer::addError(const std::string& message, const ast::Node* node) {
-    errors.push_back(message);
+    // Prefix the node location (file:line:col) so a semantic error is findable in a large file.
+    if (node && node->loc.line > 0) {
+        errors.push_back(node->loc.toString() + ": " + message);
+    } else {
+        errors.push_back(message);
+    }
 }
 void SemanticAnalyzer::addWarning(const std::string& message, const ast::Node* node) {
     warnings.push_back(message);

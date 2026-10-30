@@ -176,6 +176,18 @@ pure-arithmetic device math instead — see VybForge `native/kernels/vmath.vyb`
 function. Integer `abs`, `min`/`max` and the arithmetic operators are unaffected
 (they lower to plain arithmetic / `select`).
 
+### Kernel-local arrays (register scratch)
+
+A fixed array declared inside a kernel (`s<[Float32; 16]> = [0.0, ...]`) lives in an `alloca`.
+When every index is a constant after unrolling (constant-bound `for (r in 0..15)` loops are
+fully unrolled at `-O2`), SROA promotes it to registers and the PTX has no `.local` frame
+(`test/kernel/test_local_array.vyb`). An f64 literal bound to a `[Float32; N]` is cast
+element-wise. A runtime (non-unrollable) index keeps the array in local memory, so check the
+PTX for `.local` when it matters.
+
+Any codegen error in `--kernel` mode is fatal: the driver exits non-zero and writes no PTX
+(`test/kernel/kernel_codegen_error_reject.vyb`).
+
 ## Kernel vs. helper functions
 
 How a function lowers determines whether it is launchable:
@@ -185,6 +197,22 @@ How a function lowers determines whether it is launchable:
   a PTX **`.entry`** — that is what makes `cuLaunchKernel` able to run it.
 - A **value-returning top-level function** stays a `.visible .func` device helper
   (callable from kernels, not launchable on its own).
+
+**Helper inlining.** Kernel-mode functions do not carry the host's `noinline`
+attribute (the host keeps it so stack traces stay complete). The -O2 inliner
+therefore inlines small device helpers into the kernels that call them, the same as
+for a CUDA C `__device__` function. Before this change, every helper call was a real
+PTX `call` with parameter marshalling, so hot kernels had to inline their helpers by
+hand. `@inline` forces a helper to be inlined and `@noinline` keeps it as a `.func`
+(see the Programmer's Guide, §3.4). After optimization the compiler prints how many
+calls to device functions remain:
+
+```
+Kernel helper calls: 2 before optimization, 0 after inlining
+```
+
+Regression tests: `test/kernel/test_inline_helpers.vyb` (default inlining) and
+`test/kernel/test_noinline_helper.vyb` (`@noinline`).
 
 All kernel parameters cross the FFI as 8-byte typed values — `Int` buffer addresses, `Int`
 counts, `Float` scalars — so the host packs `kernelParams` purely from 64-bit values with

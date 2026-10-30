@@ -1,0 +1,24 @@
+// @test: a global declared after the functions that use it
+// @description: function bodies read and assign a module global declared further down the file
+// @category: basic, global
+// @expect: pass
+// @expect-output: 1
+// @expect-return: 2
+
+bump()<Int> -> {
+    LATE = LATE + 1
+    return LATE
+}
+
+peek()<Int> -> {
+    return LATE
+}
+
+LATE<Int> = 0
+
+main()<Int> -> {
+    a<Int> = bump()
+    println_int(a)
+    bump()
+    return peek()
+}

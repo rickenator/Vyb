@@ -889,6 +889,9 @@ void LLVMCodegen::visit(vyb::ast::FunctionDeclaration* node) {
     if (func) {
         if (func->getFunctionType() != funcType) {
             logError(node->loc, "Redefinition of function '" + node->id->name + "' with different signature.");
+            // Fatal: running on would silently drop every call to it (e.g. an extern named
+            // memcpy/memmove clashing with the LLVM builtin's ptr signature).
+            flagHardCodegenError();
             m_currentLLVMValue = nullptr; return;
         }
         if (!func->empty() && node->body) { // Already has a body, and we are trying to define another
@@ -900,6 +903,7 @@ void LLVMCodegen::visit(vyb::ast::FunctionDeclaration* node) {
                 return;
             }
             logError(node->loc, "Redefinition of function '" + node->id->name + "'.");
+            flagHardCodegenError();
             m_currentLLVMValue = nullptr; return;
         }
         // If it was a forward declaration and types match, we are now providing the body.
@@ -907,9 +911,27 @@ void LLVMCodegen::visit(vyb::ast::FunctionDeclaration* node) {
         func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, functionName, module.get());
     }
 
-    // Phase 6.4: Prevent inlining to preserve stack traces
-    // Add noinline attribute so functions appear in call stack
-    func->addFnAttr(llvm::Attribute::NoInline);
+    // Inlining policy.
+    //  - `@inline`   -> alwaysinline (host and kernel).
+    //  - `@noinline` -> noinline (host and kernel).
+    //  - default, host: noinline (Phase 6.4: keep every function in the call stack
+    //    so stack traces stay complete).
+    //  - default, kernel (--kernel): no attribute. Device code has no stack traces,
+    //    and a forced out-of-line `.func` call per helper costs a call frame plus
+    //    parameter marshalling on every use, so small helpers are left to the
+    //    optimizer's inliner like any C/CUDA device function.
+    if (node->inlineHint > 0) {
+        func->removeFnAttr(llvm::Attribute::NoInline);
+        func->addFnAttr(llvm::Attribute::AlwaysInline);
+    } else if (node->inlineHint < 0 || !vyb::g_kernel_mode) {
+        func->addFnAttr(llvm::Attribute::NoInline);
+        // An explicit `@noinline` is a promise to the programmer, not the Phase-6.4
+        // trace default: tag it so `optimize_module`'s -O2 attribute sweep (which
+        // exists to undo the default) leaves it alone.
+        if (node->inlineHint < 0) {
+            func->addFnAttr("vyb-explicit-noinline", "1");
+        }
+    }
 
     // DEBUG: Print the ACTUAL function type after creation/retrieval
     std::string actualFuncTypeStr;

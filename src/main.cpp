@@ -688,7 +688,8 @@ void optimize_module(llvm::Module* module, llvm::TargetMachine* targetMachine, i
     if (optLevel >= 2 && !std::getenv("VYB_KEEP_NOINLINE")) {
         for (auto& F : *module) {
             if (!F.isDeclaration() && F.hasFnAttribute(llvm::Attribute::NoInline)
-                && !F.hasFnAttribute(llvm::Attribute::OptimizeNone)) {
+                && !F.hasFnAttribute(llvm::Attribute::OptimizeNone)
+                && !F.hasFnAttribute("vyb-explicit-noinline")) {
                 F.removeFnAttr(llvm::Attribute::NoInline);
             }
         }
@@ -1541,8 +1542,27 @@ int compile_vyb_kernel(const std::string& source, const std::string& fileName, i
         module->setDataLayout(targetMachine->createDataLayout());
         module->setTargetTriple(triple);
 
+        // Count calls from device code to device functions with a body (helpers),
+        // before and after the optimizer, so a kernel author can see whether their
+        // helpers were inlined (#inline-helpers). Intrinsics are not counted.
+        auto countHelperCalls = [](llvm::Module* m) {
+            size_t n = 0;
+            for (llvm::Function& f : m->functions())
+                for (llvm::BasicBlock& bb : f)
+                    for (llvm::Instruction& ins : bb)
+                        if (auto* cb = llvm::dyn_cast<llvm::CallBase>(&ins))
+                            if (llvm::Function* callee = cb->getCalledFunction())
+                                if (!callee->isDeclaration() && !callee->isIntrinsic()) ++n;
+            return n;
+        };
+        size_t helperCallsBefore = countHelperCalls(module);
+
         // Apply IR optimization passes before code generation.
         optimize_module(module, targetMachine, optLevel);
+
+        if (helperCallsBefore > 0)
+            std::cout << "Kernel helper calls: " << helperCallsBefore << " before optimization, "
+                      << countHelperCalls(module) << " after inlining" << std::endl;
 
         // Output path: explicit `--ptx <path>`, else <base>.ptx next to input.
         std::string ptxFile = ptxOutput;

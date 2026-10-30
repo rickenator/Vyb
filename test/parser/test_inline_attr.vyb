@@ -1,0 +1,46 @@
+// @test: @inline / @noinline function attributes on the host (JIT)
+// @description: `@inline` marks a function alwaysinline and `@noinline` keeps it out of
+//   line; functions without an attribute keep the default host policy (noinline, so stack
+//   traces stay complete). Covers a top-level function, a bind method and a recursive
+//   function (which LLVM cannot inline, and must still compile and run).
+// @category: parser, codegen, optimization
+// @expect: pass
+// @expect-return: 1057
+
+struct Acc {
+    total<Int>
+}
+
+aspect AccOps {
+    add(self<Acc>, x<Int>)<Int>
+}
+
+bind AccOps -> Acc {
+    @inline
+    add(self<Acc>, x<Int>)<Int> -> {
+        return self.total + x
+    }
+}
+
+@inline
+sq(x<Int>)<Int> -> {
+    return x * x
+}
+
+@inline   # an attribute may be followed by a comment
+fact(n<Int>)<Int> -> {
+    if (n <= 1) {
+        return 1
+    }
+    return n * fact(n - 1)
+}
+
+@noinline
+cube(x<Int>)<Int> -> {
+    return x * x * x
+}
+
+main()<Int> -> {
+    a<Acc> = Acc { total = 3 }
+    return sq(10) + cube(4) + fact(6) + a.add(170)
+}
