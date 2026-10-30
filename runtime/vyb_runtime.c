@@ -386,7 +386,7 @@ static void vyb_str_reg_maybe_resize(void) {
 }
 
 // Register a just-created heap buffer with an initial reference count of 1.
-VYB_WEAK void __vyb_string_register(void* p) {
+static void vyb_string_register_refs(void* p, int64_t initial_refs) {
     if (!p) return;
     pthread_mutex_lock(&vyb_str_reg_lock);
     vyb_str_maybe_init();
@@ -412,9 +412,9 @@ VYB_WEAK void __vyb_string_register(void* p) {
     }
     void* slotP = atomic_load_explicit(&s->p, memory_order_relaxed);
     if (slotP == NULL || slotP == VYB_STR_TOMB) {
-        // Publish refs(1) before the pointer so a concurrent retain that sees the
-        // pointer also sees the initialized refcount (release/acquire pairing).
-        atomic_store_explicit(&s->refs, 1, memory_order_relaxed);
+        // Publish the initial refcount before the pointer so a concurrent retain that
+        // sees the pointer also sees the initialized count (release/acquire pairing).
+        atomic_store_explicit(&s->refs, initial_refs, memory_order_relaxed);
         atomic_store_explicit(&s->p, p, memory_order_release);
         // The slot holds a real pointer again, so it counts as LIVE in both cases.
         // Reusing a tombstone used to decrement the tombstone count and nothing else,
@@ -429,7 +429,25 @@ VYB_WEAK void __vyb_string_register(void* p) {
         vyb_str_live++;
     }
     pthread_mutex_unlock(&vyb_str_reg_lock);
+
 }
+// Register `p` as owned by its first holder (the usual case: a String built over a heap
+// buffer the runtime just allocated for it). The holder's later release frees it.
+VYB_WEAK void __vyb_string_register(void* p) {
+    if (!p) return;
+    vyb_string_register_refs(p, 1);
+}
+
+// Register `p` with NO owner yet. Use this when the buffer is handed back to generated
+// code as a value that the destination will retain: the retain makes the count 1 and the
+// destination's release frees it. Registering such a buffer with the implicit 1 left every
+// destination retain on top of it -- refs 2, one release, buffer leaked once per call,
+// which is what made `read_all` leak a whole buffer per read.
+VYB_WEAK void __vyb_string_register_borrowed(void* p) {
+    if (!p) return;
+    vyb_string_register_refs(p, 0);
+}
+
 
 // Take one reference on a buffer (untracked = literal/foreign -> no-op).
 VYB_WEAK void* __vyb_string_retain(void* p) {
@@ -848,9 +866,9 @@ VYB_WEAK vyb_file_str __vyb_file_read_all(int64_t fd) {
             return r;
         }
     }
-    // Owned heap buffer: its first holder is the Vyb String built over it, so
-    // register it (refcount 1) and let the String's release free it.
-    __vyb_string_register(buf);
+    // The buffer is handed back as a String value; the destination retains it, so it is
+    // registered with no implicit owner (see __vyb_string_register_borrowed).
+    __vyb_string_register_borrowed(buf);
     r.ptr = buf;
     r.len = (int64_t)len;
     vyb_file_err = 0;
