@@ -132,6 +132,18 @@ cuda_read_f64(src<Int>)<Float> -> {
     }
 }
 
+# Bulk copy host bytes -> device (ANY length, one call). `src` is a Vyb String; its data
+# pointer is what cuMemcpyHtoD wants, so this replaces the 8-byte-at-a-time loops the
+# host drivers had to write when they could not reach the driver API (a 4 MB trellis took
+# ~35 s that way; measured here at ~3 ms). 0 on success.
+share(all)
+cuda_memcpy_h2d(dst<Int>, src<String>, n<Int>)<CInt> -> {
+    if (n <= 0 || n > src.len()) { return 1 }
+    freedom {
+        return cuMemcpyHtoD_v2(dst, src, n)
+    }
+}
+
 # Free device memory. 0 on success.
 share(all)
 cuda_mem_free(devptr<Int>)<CInt> -> {
