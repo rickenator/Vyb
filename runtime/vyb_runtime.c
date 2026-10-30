@@ -1238,7 +1238,7 @@ VYB_WEAK int64_t __vyb_file_read_at(int64_t fd, int64_t off, int64_t maxlen, vyb
     buf[n] = '\0';
     // Owned heap buffer: its first holder is the Vyb String built over it, so
     // register it (refcount 1) and let the String's release free it.
-    __vyb_string_register(buf);
+    __vyb_string_register_borrowed(buf);
     out->ptr = buf;
     out->len = (int64_t)n;
     vyb_file_err = 0;
