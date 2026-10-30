@@ -947,6 +947,33 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
                            node->op.type == vyb::TokenType::LSHIFTEQ ||
                            node->op.type == vyb::TokenType::RSHIFTEQ;
 
+    // Integer into an integer slot of a different width (e.g. `var<CInt> c = 0` then `c = 0`, an i64
+    // literal into an i32 slot): the store was `store i64, ptr<i32>`, which writes 8 bytes into a
+    // 4-byte slot and clobbers whatever sits next to it, with only the warning below. Widen per the
+    // source's signedness (Bool/i1, CBool, CSize, CU* and UInt* zero-extend), narrow by truncation.
+    // A Bool (i1) destination is left alone (truncation would keep only bit 0).
+    if (destPointeeType && !bitwiseCompound && RHS->getType()->isIntegerTy() &&
+        destPointeeType->isIntegerTy() && destPointeeType->getIntegerBitWidth() != 1 &&
+        RHS->getType()->getIntegerBitWidth() != destPointeeType->getIntegerBitWidth()) {
+        unsigned srcW = RHS->getType()->getIntegerBitWidth();
+        unsigned dstW = destPointeeType->getIntegerBitWidth();
+        std::string srcName;
+        if (auto* tn = dynamic_cast<ast::TypeName*>(rhsTypeNode.get())) {
+            if (tn->identifier) srcName = tn->identifier->name;
+        }
+        bool sUnsigned = false; unsigned sBits = 0;
+        if (!vybIntClass(srcName, sUnsigned, sBits)) {
+            sUnsigned = srcW == 1 || srcName == "Bool" || srcName == "CBool" || srcName == "CSize" ||
+                        (srcName.size() > 2 && srcName.compare(0, 2, "CU") == 0);
+        }
+        if (dstW > srcW) {
+            RHS = sUnsigned ? builder->CreateZExt(RHS, destPointeeType, "assign.zext")
+                            : builder->CreateSExt(RHS, destPointeeType, "assign.sext");
+        } else {
+            RHS = builder->CreateTrunc(RHS, destPointeeType, "assign.trunc");
+        }
+    }
+
     // If types still don't match, warn but proceed (might still work in some cases)
     if (RHS->getType() != destPointeeType && !bitwiseCompound) {
         logWarning(node->loc, "Type mismatch in assignment. Storing " + getTypeName(RHS->getType()) +
@@ -5641,6 +5668,30 @@ void LLVMCodegen::visit(vyb::ast::AsExpression* node) {
             m_currentLLVMValue = builder->CreateTrunc(operand, targetTy, "as.trunc");
         } else {
             m_currentLLVMValue = operand;
+        }
+        return;
+    }
+
+    // Integer -> integer of a different width where one side is not a sized Vyb Int/UInt
+    // (e.g. `ccmaj as Int` with ccmaj a CInt): the operand used to be passed through unchanged,
+    // so an i32 reached an i64 slot and the store left the slot's upper 32 bits stale (bug #4,
+    // "Storing i32 into location of type i64"). Widen per the source's signedness (C unsigned
+    // aliases CU*, CSize and Bool/i1 zero-extend), narrow by truncation.
+    if (operand->getType()->isIntegerTy() && targetTy->isIntegerTy() &&
+        operand->getType()->getIntegerBitWidth() != targetTy->getIntegerBitWidth()) {
+        unsigned srcW = operand->getType()->getIntegerBitWidth();
+        unsigned dstW = targetTy->getIntegerBitWidth();
+        bool sUnsigned = false; unsigned sBits = 0;
+        if (!vybIntClass(srcName, sUnsigned, sBits)) {
+            sUnsigned = srcW == 1 || srcName == "Bool" || srcName == "CBool" || srcName == "CSize" ||
+                        (srcName.size() > 2 && srcName.compare(0, 2, "CU") == 0);
+        }
+        if (dstW > srcW) {
+            m_currentLLVMValue = sUnsigned
+                ? builder->CreateZExt(operand, targetTy, "as.zext")
+                : builder->CreateSExt(operand, targetTy, "as.sext");
+        } else {
+            m_currentLLVMValue = builder->CreateTrunc(operand, targetTy, "as.trunc");
         }
         return;
     }
