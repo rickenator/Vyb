@@ -1,5 +1,5 @@
 {
-  "git_rev": "4a2861d53ad89ad40dd806d12fb3b946f06879b9",
+  "git_rev": "f29037179675c0a9d18dd2265e1d7fe93764f483",
   "modules": [
     "agents",
     "archive",
@@ -179,7 +179,7 @@
         "files": [
           "stdlib/network/mod.vyb"
         ],
-        "exported": 40,
+        "exported": 46,
         "fan_in": 3,
         "fan_out": 0
       },
@@ -722,6 +722,12 @@
           "socket_set_timeout",
           "socket_send",
           "socket_recv",
+          "socket_send_bytes",
+          "socket_send_bytes_range",
+          "socket_recv_bytes",
+          "socket_recv_bytes_exact",
+          "socket_exchange_bytes",
+          "socket_exchange_bytes_range",
           "socket_local_port",
           "socket_resolve",
           "socket_error_code",
@@ -3794,6 +3800,24 @@
         "fan_in": 0
       },
       {
+        "name": "socket_exchange_bytes",
+        "module": "network",
+        "file": "stdlib/network/mod.vyb",
+        "kind": "fn",
+        "signature": "socket_exchange_bytes(fd<Int>, data<their<Vec<UInt8> const>>, max_in<Int>)<Vec<UInt8>?> ->",
+        "summary": "Full-duplex framed exchange: send `data` as one length-prefixed frame while",
+        "fan_in": 0
+      },
+      {
+        "name": "socket_exchange_bytes_range",
+        "module": "network",
+        "file": "stdlib/network/mod.vyb",
+        "kind": "fn",
+        "signature": "socket_exchange_bytes_range(fd<Int>, data<their<Vec<UInt8> const>>, off<Int>, len<Int>, max_in<Int>)<Vec<UInt8>?> ->",
+        "summary": "socket_exchange_bytes over the window data[off, off+len).",
+        "fan_in": 0
+      },
+      {
         "name": "socket_listen",
         "module": "network",
         "file": "stdlib/network/mod.vyb",
@@ -3830,6 +3854,24 @@
         "fan_in": 2
       },
       {
+        "name": "socket_recv_bytes",
+        "module": "network",
+        "file": "stdlib/network/mod.vyb",
+        "kind": "fn",
+        "signature": "socket_recv_bytes(fd<Int>, maxlen<Int>)<Vec<UInt8>?> ->",
+        "summary": "One receive of up to `maxlen` bytes into a fresh `Vec<UInt8>?` -- present",
+        "fan_in": 0
+      },
+      {
+        "name": "socket_recv_bytes_exact",
+        "module": "network",
+        "file": "stdlib/network/mod.vyb",
+        "kind": "fn",
+        "signature": "socket_recv_bytes_exact(fd<Int>, n<Int>)<Vec<UInt8>?> ->",
+        "summary": "Receive exactly `n` bytes (looping over partial reads) -- the read side of a",
+        "fan_in": 0
+      },
+      {
         "name": "socket_resolve",
         "module": "network",
         "file": "stdlib/network/mod.vyb",
@@ -3846,6 +3888,24 @@
         "signature": "socket_send(fd<Int>, data<String>)<Int?> ->",
         "summary": "Send the whole of `data` on `fd`. Returns `Int?` -- present holding the number",
         "fan_in": 2
+      },
+      {
+        "name": "socket_send_bytes",
+        "module": "network",
+        "file": "stdlib/network/mod.vyb",
+        "kind": "fn",
+        "signature": "socket_send_bytes(fd<Int>, data<their<Vec<UInt8> const>>)<Int?> ->",
+        "summary": "Send every byte of `data` on `fd` (short writes and EINTR are retried).",
+        "fan_in": 0
+      },
+      {
+        "name": "socket_send_bytes_range",
+        "module": "network",
+        "file": "stdlib/network/mod.vyb",
+        "kind": "fn",
+        "signature": "socket_send_bytes_range(fd<Int>, data<their<Vec<UInt8> const>>, off<Int>, len<Int>)<Int?> ->",
+        "summary": "Send the `len` bytes of `data` starting at byte `off` -- a prefix or window of",
+        "fan_in": 0
       },
       {
         "name": "socket_set_timeout",
@@ -10150,6 +10210,18 @@
     {
       "type": "runtimeRef",
       "from_module": "network",
+      "from_symbol": "socket_exchange_bytes",
+      "to_symbol": "vyb_net_exchange_bytes_opt"
+    },
+    {
+      "type": "runtimeRef",
+      "from_module": "network",
+      "from_symbol": "socket_exchange_bytes_range",
+      "to_symbol": "vyb_net_exchange_bytes_opt"
+    },
+    {
+      "type": "runtimeRef",
+      "from_module": "network",
       "from_symbol": "socket_listen",
       "to_symbol": "vyb_net_listen"
     },
@@ -10174,6 +10246,18 @@
     {
       "type": "runtimeRef",
       "from_module": "network",
+      "from_symbol": "socket_recv_bytes",
+      "to_symbol": "vyb_net_recv_bytes_opt"
+    },
+    {
+      "type": "runtimeRef",
+      "from_module": "network",
+      "from_symbol": "socket_recv_bytes_exact",
+      "to_symbol": "vyb_net_recv_bytes_opt"
+    },
+    {
+      "type": "runtimeRef",
+      "from_module": "network",
       "from_symbol": "socket_resolve",
       "to_symbol": "vyb_net_resolve_opt"
     },
@@ -10182,6 +10266,18 @@
       "from_module": "network",
       "from_symbol": "socket_send",
       "to_symbol": "vyb_net_send"
+    },
+    {
+      "type": "runtimeRef",
+      "from_module": "network",
+      "from_symbol": "socket_send_bytes",
+      "to_symbol": "vyb_net_send_bytes"
+    },
+    {
+      "type": "runtimeRef",
+      "from_module": "network",
+      "from_symbol": "socket_send_bytes_range",
+      "to_symbol": "vyb_net_send_bytes"
     },
     {
       "type": "runtimeRef",
