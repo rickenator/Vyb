@@ -1286,13 +1286,22 @@ int compile_vyb_to_object(const std::string& source, const std::string& fileName
 
         llvm::TargetOptions opt;
         auto relocModel = std::optional<llvm::Reloc::Model>(llvm::Reloc::PIC_);
-        auto targetMachine = target->createTargetMachine(targetTriple, CPU, features,
-                                                         opt, relocModel);
+        // Owned here and released on every exit (the throws below included): a bare
+        // `createTargetMachine` result was never deleted, so each `vyb --build` leaked
+        // the TargetMachine with its subtarget tables (~390 KB) -- harmless to the
+        // binary it built, but under LeakSanitizer the compiler then exits 1 and every
+        // --build reads as a failed build. Declared before `dest` and `pass` so it
+        // outlives both (they hold pointers into it).
+        std::unique_ptr<llvm::TargetMachine> targetMachine(target->createTargetMachine(
+            targetTriple, CPU, features, opt, relocModel));
+        if (!targetMachine) {
+            throw std::runtime_error("could not create a TargetMachine for " + targetTriple);
+        }
 
         module->setDataLayout(targetMachine->createDataLayout());
 
         // Apply IR optimization passes before code generation
-        optimize_module(module, targetMachine, optLevel);
+        optimize_module(module, targetMachine.get(), optLevel);
 
         // Open output file
         std::error_code EC;
