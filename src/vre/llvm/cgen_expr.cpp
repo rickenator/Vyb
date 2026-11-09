@@ -5147,6 +5147,41 @@ llvm::Value* LLVMCodegen::generateArraySerialization(llvm::Value* arrayPtr, vyb:
 //     `insert`, `remove_at`, `clear`, `push_array`, `resize`, `concat`) -- their
 //     result aliases storage the receiver still owns, exactly the case that made
 //     exprProducesOwnedStringTemp exclude Vec element access.
+// A call whose result is not a view of the receiver's (or a binding's) storage:
+// the shape test shared by the fresh-Vec and fresh-`Vec<scalar>?` classifiers.
+static bool isFreshNonAliasingCall(vyb::ast::Expression* expr) {
+    if (!expr) return false;
+    // A named binding or a field read is owned by its own cleanup.
+    if (dynamic_cast<vyb::ast::Identifier*>(expr) ||
+        dynamic_cast<vyb::ast::MemberExpression*>(expr) ||
+        dynamic_cast<vyb::ast::ArrayLiteral*>(expr)) {
+        return false;
+    }
+    auto* call = dynamic_cast<vyb::ast::CallExpression*>(expr);
+    if (!call) return false;
+    if (auto* member = dynamic_cast<vyb::ast::MemberExpression*>(call->callee.get())) {
+        if (auto* prop = dynamic_cast<vyb::ast::Identifier*>(member->property.get())) {
+            static const std::set<std::string> aliasesReceiver = {
+                "push", "pop", "set", "insert", "remove_at", "remove", "clear",
+                "push_array", "resize", "concat", "get", "first", "last", "peek",
+                "get_vec", "get_array", "to_array", "iter", "contains", "index_of",
+            };
+            if (aliasesReceiver.count(prop->name)) return false;
+        }
+    }
+    return true;
+}
+
+// The `Vec<scalar>?` counterpart of exprProducesFreshVecTemp: a call such as
+// `socket_recv_bytes_exact(fd, n)` or `read_bytes(f)` hands its caller a present
+// payload whose data buffer nobody else owns (a binding of the same call frees it
+// on scope exit), so a discarded result must be reclaimed at the statement.
+bool LLVMCodegen::exprProducesFreshOptionalVecTemp(vyb::ast::Expression* expr) {
+    if (!isFreshNonAliasingCall(expr)) return false;
+    auto t = typeOfNode(expr);
+    return t && isOptionalScalarVecType(t.get());
+}
+
 bool LLVMCodegen::exprProducesFreshVecTemp(vyb::ast::Expression* expr) {
     if (!expr) return false;
     // A named binding or a field read is owned by its own cleanup.

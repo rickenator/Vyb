@@ -206,6 +206,54 @@ void LLVMCodegen::registerVariable(const std::string& name, llvm::Value* allocaI
 // per-element owned struct fields, then every nested-Vec level -- before the
 // element buffer itself is freed behind a null check. A null `vecAst` still frees
 // the buffer (nothing at the element level can be reclaimed without the type).
+// Does `optAst` name a native `T?` whose payload is a Vec of primitive scalars
+// (e.g. `Vec<UInt8>?` from io::read_bytes / network::socket_recv_bytes_exact)?
+// Such an optional owns its payload's plain-malloc'd data buffer when present.
+bool LLVMCodegen::isOptionalScalarVecType(const vyb::ast::TypeNode* optAst) {
+    auto* oo = dynamic_cast<const ast::OptionalType*>(optAst);
+    if (!oo || !oo->containedType) return false;
+    const vyb::ast::TypeNode* payload = oo->containedType.get();
+    const vyb::ast::TypeNode* elem = vecElementTypeNode(payload);
+    return elem && isPrimitiveScalarElem(elem) && !typeNodeIsVecOfString(payload);
+}
+
+// Free the owned data buffer of a present `Vec<scalar>?` value
+// (`{ { data, size, cap } value(0), i1 hasValue(1) }`). An absent optional or a
+// null data pointer is a no-op. Shared by a binding's scope-exit cleanup and by a
+// discarded expression statement (`socket_recv_bytes_exact(fd, 8)` on its own
+// line), which has no binding to clean it up. Never call it on a borrow.
+void LLVMCodegen::reclaimOptionalScalarVecPayload(llvm::Value* optVal, const std::string& tag) {
+    if (!optVal || !optVal->getType()->isStructTy() || !builder || !currentFunction) return;
+    auto* optSt = llvm::cast<llvm::StructType>(optVal->getType());
+    if (optSt->getNumElements() < 2 || !optSt->getElementType(0)->isStructTy() ||
+        !optSt->getElementType(1)->isIntegerTy(1)) {
+        return;
+    }
+    llvm::Value* has = builder->CreateExtractValue(optVal, 1, tag + "_has");
+    llvm::BasicBlock* reclaimBB =
+        llvm::BasicBlock::Create(*context, tag + "_reclaim", currentFunction);
+    llvm::BasicBlock* contBB =
+        llvm::BasicBlock::Create(*context, tag + "_cont", currentFunction);
+    builder->CreateCondBr(has, reclaimBB, contBB);
+    builder->SetInsertPoint(reclaimBB);
+    llvm::Value* payloadVec = builder->CreateExtractValue(optVal, 0, tag + "_vec");
+    llvm::Value* dataPtr = builder->CreateExtractValue(payloadVec, 0, tag + "_data");
+    llvm::Value* isNotNull = builder->CreateICmpNE(
+        dataPtr, llvm::ConstantPointerNull::get(llvm::PointerType::get(*context, 0)),
+        tag + "_null");
+    llvm::BasicBlock* freedBB =
+        llvm::BasicBlock::Create(*context, tag + "_freed", currentFunction);
+    llvm::BasicBlock* noFreeBB =
+        llvm::BasicBlock::Create(*context, tag + "_nofree", currentFunction);
+    builder->CreateCondBr(isNotNull, freedBB, noFreeBB);
+    builder->SetInsertPoint(freedBB);
+    builder->CreateCall(getOrCreateFreeFunction(), {dataPtr});
+    builder->CreateBr(contBB);
+    builder->SetInsertPoint(noFreeBB);
+    builder->CreateBr(contBB);
+    builder->SetInsertPoint(contBB);
+}
+
 void LLVMCodegen::reclaimVecStorage(llvm::Value* vecValue, llvm::Type* vecStructTy,
                                     const vyb::ast::TypeNode* vecAst, const std::string& tag) {
     if (!vecValue || !vecStructTy || !vecStructTy->isStructTy() || !builder || !currentFunction) {
@@ -425,34 +473,7 @@ void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
                                 VYB_CDBG << "DEBUG: Reclaiming owned Vec payload of optional: " << var.name << std::endl;
                                 llvm::Value* optVal = builder->CreateLoad(
                                     var.type, var.allocaInst, var.name + "_opt_load");
-                                llvm::Value* has = builder->CreateExtractValue(
-                                    optVal, 1, var.name + "_opt_has");
-                                llvm::BasicBlock* reclaimBB =
-                                    llvm::BasicBlock::Create(*context, var.name + "_opt_reclaim", currentFunction);
-                                llvm::BasicBlock* contBB =
-                                    llvm::BasicBlock::Create(*context, var.name + "_opt_cont", currentFunction);
-                                builder->CreateCondBr(has, reclaimBB, contBB);
-                                builder->SetInsertPoint(reclaimBB);
-                                llvm::Value* payloadVec = builder->CreateExtractValue(
-                                    optVal, 0, var.name + "_opt_vec");
-                                llvm::Value* dataPtr = builder->CreateExtractValue(
-                                    payloadVec, 0, var.name + "_opt_data");
-                                llvm::Value* isNotNull = builder->CreateICmpNE(
-                                    dataPtr,
-                                    llvm::ConstantPointerNull::get(
-                                        llvm::PointerType::get(*context, 0)),
-                                    var.name + "_opt_null");
-                                llvm::BasicBlock* freedBB =
-                                    llvm::BasicBlock::Create(*context, var.name + "_opt_freed", currentFunction);
-                                llvm::BasicBlock* noFreeBB =
-                                    llvm::BasicBlock::Create(*context, var.name + "_opt_nofree", currentFunction);
-                                builder->CreateCondBr(isNotNull, freedBB, noFreeBB);
-                                builder->SetInsertPoint(freedBB);
-                                builder->CreateCall(getOrCreateFreeFunction(), {dataPtr});
-                                builder->CreateBr(contBB);
-                                builder->SetInsertPoint(noFreeBB);
-                                builder->CreateBr(contBB);
-                                builder->SetInsertPoint(contBB);
+                                reclaimOptionalScalarVecPayload(optVal, var.name + "_opt");
                                 return;
                             }
                         }

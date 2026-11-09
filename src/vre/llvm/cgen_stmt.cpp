@@ -987,6 +987,16 @@ void LLVMCodegen::visit(vyb::ast::ExpressionStatement* node) {
                 reclaimVecStorage(discardedValue, discardedTy, discardedAst.get(), "vecstmt.tmp");
             }
         }
+        // Same leak for a discarded `Vec<scalar>?` (`socket_recv_bytes_exact(fd, 8)`
+        // to drain a frame, `read_bytes(f)` for its side effect): the optional's
+        // present payload owns a malloc'd buffer that a binding would free on scope
+        // exit and a `match` frees through its scrutinee temp, but a bare statement
+        // dropped it. The same fresh-call classifier applies (accessors that alias
+        // the receiver and named/field reads are excluded).
+        else if (discardedValue && discardedValue->getType()->isStructTy() &&
+                 exprProducesFreshOptionalVecTemp(node->expression.get())) {
+            reclaimOptionalScalarVecPayload(discardedValue, "optvecstmt.tmp");
+        }
     }
     if (!inTrapHandler) {
         m_currentLLVMValue = nullptr; // Expression statement doesn't produce a value for further expressions
