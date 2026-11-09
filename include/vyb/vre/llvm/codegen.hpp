@@ -902,6 +902,9 @@ private:
     // (`push`, `set`, `insert`, `remove_at`, `clear`, `push_array`, `resize`,
     // `concat`) are not fresh allocations and return false here.
     bool exprProducesFreshVecTemp(vyb::ast::Expression* expr);
+    // A call yielding a fresh `Vec<scalar>?` (socket_recv_bytes_exact, read_bytes):
+    // its present payload's buffer has no other owner.
+    bool exprProducesFreshOptionalVecTemp(vyb::ast::Expression* expr);
     bool exprIsStringTransfer(vyb::ast::Expression* expr); // String value whose single ref transfers on stow
     bool exprIsOurTransfer(vyb::ast::Expression* expr);   // `our`/`grab`/fn-call value whose fresh strong ref transfers on stow
     bool exprIsMildTransfer(vyb::ast::Expression* expr);  // `soft(...)` value whose fresh weak ref transfers on stow
@@ -959,6 +962,11 @@ private:
     // it frees the storage, so the caller must own it.
     void reclaimVecStorage(llvm::Value* vecValue, llvm::Type* vecStructTy,
                            const vyb::ast::TypeNode* vecAst, const std::string& tag);
+    // A native `Vec<scalar>?` (io::read_bytes, socket_recv_bytes_exact, ...) owns its
+    // payload's malloc'd data buffer when present; free it (scope exit of a binding,
+    // or a discarded expression statement). `optVal` is the loaded optional value.
+    bool isOptionalScalarVecType(const vyb::ast::TypeNode* optAst);
+    void reclaimOptionalScalarVecPayload(llvm::Value* optVal, const std::string& tag);
 
     // Reclaim the ORIGINAL owned buffers of a fresh owned-struct TEMP argument
     // after it was deep-copied into a Vec slot (Vec.push/set). Same leak class as

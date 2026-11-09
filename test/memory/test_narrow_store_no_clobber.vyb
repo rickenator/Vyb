@@ -6,6 +6,7 @@
 
 extern "C" {
     calloc(n<Int>, sz<Int>)<Int>
+    free(memory<loc<Void>>)<Void>
 }
 
 main()<Int> -> {
@@ -37,6 +38,7 @@ main()<Int> -> {
         if (at(from<loc<Int>>(p + 32)) != 4294967295) { bad = bad + 32 }
         s = at(from<loc<Int>>(p + 40))
         if (s != 0) { bad = bad + 64 }
+        free(from<loc<Void>>(p))      // the scratch block is ours: release it (LSan gates this suite)
     }
     if (bad != 0) {
         println("narrow store mismatch mask={}".format(bad))

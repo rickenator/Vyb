@@ -6,6 +6,7 @@
 
 extern "C" {
     calloc(n<Int>, sz<Int>)<Int>
+    free(memory<loc<Void>>)<Void>
 }
 
 main()<Int> -> {
@@ -28,6 +29,7 @@ main()<Int> -> {
         freedom { sum = sum + at(from<loc<Int>>(p + i * 8)) }
         i = i + 1
     }
+    freedom { free(from<loc<Void>>(p)) }   // the buffer is ours: release it (LSan gates this suite)
     // prefetching an unmapped address never faults
     prefetch(0)
     prefetch(8, 1, 2)
