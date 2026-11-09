@@ -37,6 +37,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `test/kernel/test_noinline_helper.vyb`.
 - **Function `Redefinition` and call-argument type mismatch are hard errors** in codegen,
   instead of producing a silently wrong module.
+- **A discarded `Vec<scalar>?` call result leaked its buffer.** A call returning a native
+  optional byte/scalar vector used as a bare statement (`socket_recv_bytes_exact(fd, 8)` to
+  drain a frame, a user function returning `Vec<Int>?` called for its side effect) had no
+  binding to free the present payload, so its data buffer leaked once per evaluation.
+  The statement now reclaims it, sharing the scope-exit reclaim a binding already used.
+  Covered by `test/memory/test_discarded_optional_vec_freed.vyb`.
+- **`vyb --build` leaked its TargetMachine.** The object-file path never deleted the
+  `TargetMachine` it created (~390 KB with its subtarget tables), so under LeakSanitizer
+  every `--build` exited 1 and read as a failed build (`test_main_exit_code` in the ASan
+  job). It is now owned by a `unique_ptr`.
 
 ### Fixed
 - **Loop-body temporaries leaked stack (SIGSEGV in long loops).** Codegen emitted `alloca`
