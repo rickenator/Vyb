@@ -978,7 +978,11 @@ void LLVMCodegen::visit(vyb::ast::ExpressionStatement* node) {
         // binding/return. A named or borrowed source is excluded inside the
         // classifier, and `reclaimVecStorage` never frees a null data pointer.
         llvm::Value* discardedValue = m_currentLLVMValue;
-        if (discardedValue && exprProducesFreshVecTemp(node->expression.get())) {
+        // VYB_NO_DISCARD_FREE: diagnostics knob. The discarded-temp reclaim is
+        // suspected of double-freeing buffers whose "fresh" classification is
+        // wrong (the old leaky free masked it; the block pool exposes it).
+        static const bool noDiscardFree = getenv("VYB_NO_DISCARD_FREE") != nullptr;
+        if (!noDiscardFree && discardedValue && exprProducesFreshVecTemp(node->expression.get())) {
             auto discardedAst = typeOfNode(node->expression);
             if (discardedAst) {
                 llvm::Type* discardedTy = discardedValue->getType()->isStructTy()
@@ -993,7 +997,7 @@ void LLVMCodegen::visit(vyb::ast::ExpressionStatement* node) {
         // exit and a `match` frees through its scrutinee temp, but a bare statement
         // dropped it. The same fresh-call classifier applies (accessors that alias
         // the receiver and named/field reads are excluded).
-        else if (discardedValue && discardedValue->getType()->isStructTy() &&
+        else if (!noDiscardFree && discardedValue && discardedValue->getType()->isStructTy() &&
                  exprProducesFreshOptionalVecTemp(node->expression.get())) {
             reclaimOptionalScalarVecPayload(discardedValue, "optvecstmt.tmp");
         }

@@ -99,6 +99,8 @@ extern "C" {
     char* __vyb_string_to_string(const char* str);
     void __vyb_string_register(void* ptr);
     void __vyb_string_free(void* ptr);
+    void* __vyb_pool_alloc(size_t size);
+    void __vyb_pool_free(void* ptr);
     void* __vyb_string_retain(void* ptr);
     void __vyb_string_release_each(void* arr, int64_t n);
     void __vyb_string_retain_each(void* arr, int64_t n);
@@ -3414,6 +3416,10 @@ int run_vyb_code(const std::string& source, const std::string& fileName, bool ge
             llvm::orc::ExecutorAddr::fromPtr(&__vyb_string_to_string), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyb_string_free")] = llvm::orc::ExecutorSymbolDef(
             llvm::orc::ExecutorAddr::fromPtr(&__vyb_string_free), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_pool_alloc")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_pool_alloc), llvm::JITSymbolFlags::Exported);
+        runtimeSymbols[mangle("__vyb_pool_free")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_pool_free), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyb_string_register")] = llvm::orc::ExecutorSymbolDef(
             llvm::orc::ExecutorAddr::fromPtr(&__vyb_string_register), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyb_string_retain")] = llvm::orc::ExecutorSymbolDef(

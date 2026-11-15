@@ -95,6 +95,202 @@ static ssize_t vyb_raw_write(int fd, const void* buf, size_t count) {
 #endif
 
 // ============================================================================
+// LARGE-BLOCK POOL (__vyb_pool_alloc / __vyb_pool_free)
+// ============================================================================
+// Generated code allocates and frees Vec payload buffers with plain
+// malloc/free. Hot loops (streaming dequantization, tensor resolution) churn
+// multi-megabyte buffers per call: libc routes those through mmap/munmap, so
+// every free is a syscall with TLB shootdowns and every alloc re-faults the
+// pages. This pool recycles large blocks in-process: free pushes the block
+// onto a power-of-two size-class bucket (O(1), no syscall) and alloc pops the
+// best fit. Blocks smaller than VYB_POOL_MIN_BYTES pass through to libc.
+//
+// Ownership is tracked in a SIDE TABLE (open-addressing hash of live pool
+// pointers), never in the block: generated code also frees pointers born
+// elsewhere (registry strings, FFI buffers, large libc blocks), and probing a
+// header before such a pointer can cross into an unmapped page. free() looks
+// the pointer up in the table -- a hit recycles the block into its bucket, a
+// miss falls through to libc free, which is correct for anything libc
+// malloc'd and no worse than the pre-pool behavior for anything else. The
+// codegen binds its malloc/free declarations to these symbols (see
+// LLVMCodegen::getOrCreateMallocFunction / getOrCreateFreeFunction).
+//
+// Thread safety: one process-wide mutex; an uncontended lock is far cheaper
+// than munmap. Retention is capped: above the cap, freed blocks go back to
+// libc. Set VYB_POOL_TRACE=1 to trace alloc/free pairs.
+
+#define VYB_POOL_MIN_BYTES ((size_t)64 * 1024)      // pool blocks >= 64 KiB
+#define VYB_POOL_CLASSES 18                          // 64 KiB .. 32 GiB classes
+#define VYB_POOL_CAP_BYTES ((size_t)8 << 30)         // retain at most 8 GiB
+
+typedef struct VybPoolNode {
+    struct VybPoolNode* next;
+    size_t size;                        // payload capacity of this block
+} VybPoolNode;
+
+// Live-set entry. State 1 = live (handed out), 2 = freed (parked in a
+// freelist bucket). Freed blocks STAY in the table so a double free is
+// absorbed (ignored) instead of reaching libc with a block this pool owns --
+// the generated code has latent double-free paths the old leaky free path
+// masked, and a libc free of a block that is also parked in a freelist
+// corrupts both allocators.
+typedef struct VybPoolLive {
+    void* ptr;
+    size_t size;
+    int state;
+} VybPoolLive;
+
+static VybPoolNode* g_vyb_pool_buckets[VYB_POOL_CLASSES];
+static size_t g_vyb_pool_retained = 0;
+static pthread_mutex_t g_vyb_pool_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static VybPoolLive* g_vyb_live = NULL;          // open addressing, power-of-2
+static size_t g_vyb_live_cap = 0;               // table capacity (slots)
+static size_t g_vyb_live_count = 0;             // occupied slots
+
+static size_t vyb_pool_class_of(size_t size) {
+    size_t cls = 0;
+    size_t floor = VYB_POOL_MIN_BYTES;
+    while (cls + 1 < VYB_POOL_CLASSES && floor < size) {
+        floor <<= 1;
+        cls++;
+    }
+    return cls;
+}
+
+static size_t vyb_pool_class_bytes(size_t cls) {
+    return VYB_POOL_MIN_BYTES << cls;
+}
+
+static size_t vyb_pool_hash(void* p) {
+    uintptr_t v = (uintptr_t)p;
+    v ^= v >> 33;
+    v *= 0xff51afd7ed558ccdULL;
+    v ^= v >> 33;
+    return (size_t)v;
+}
+
+// Insert/lookup/remove in the live-set. Returns the entry slot for a present
+// pointer, or the empty slot an insert should use (marked by *found == 0).
+static VybPoolLive* vyb_live_slot(void* p, int* found) {
+    size_t i = vyb_pool_hash(p) & (g_vyb_live_cap - 1);
+    for (;;) {
+        VybPoolLive* e = &g_vyb_live[i];
+        if (e->ptr == NULL) { *found = 0; return e; }
+        if (e->ptr == p) { *found = 1; return e; }
+        i = (i + 1) & (g_vyb_live_cap - 1);
+    }
+}
+
+static void vyb_live_insert(void* p, size_t size) {
+    if (g_vyb_live_cap == 0 || (g_vyb_live_count + 1) * 4 >= g_vyb_live_cap * 3) {
+        size_t ncap = g_vyb_live_cap ? g_vyb_live_cap * 2 : 4096;
+        VybPoolLive* nt = (VybPoolLive*)calloc(ncap, sizeof(VybPoolLive));
+        if (!nt) return;                        // OOM: block stays unpooled-track, freed via libc path below
+        for (size_t i = 0; i < g_vyb_live_cap; i++) {
+            if (g_vyb_live[i].ptr) {
+                int found;
+                VybPoolLive* s = vyb_live_slot(g_vyb_live[i].ptr, &found);
+                *s = g_vyb_live[i];
+            }
+        }
+        free(g_vyb_live);
+        g_vyb_live = nt;
+        g_vyb_live_cap = ncap;
+    }
+    int found;
+    VybPoolLive* s = vyb_live_slot(p, &found);
+    if (!found) { s->ptr = p; s->size = size; s->state = 1; g_vyb_live_count++; }
+    else { s->state = 1; }
+}
+
+// 1 if p is a live pool block (and marks it freed), 0 if not born here.
+// A second free of an already-freed block returns 2 (absorb, do nothing).
+static int vyb_live_take(void* p, size_t* size_out) {
+    if (g_vyb_live_cap == 0) return 0;
+    int found;
+    VybPoolLive* s = vyb_live_slot(p, &found);
+    if (!found) return 0;
+    if (s->state == 2) return 2;
+    *size_out = s->size;
+    s->state = 2;
+    return 1;
+}
+
+VYB_WEAK void* __vyb_pool_alloc(size_t size) {
+    if (size == 0) size = 1;
+    if (size >= VYB_POOL_MIN_BYTES) {
+        size_t cls = vyb_pool_class_of(size);
+        size_t payload;
+        void* base;
+        pthread_mutex_lock(&g_vyb_pool_lock);
+        // Best fit: smallest class whose floor >= size, take its head.
+        while (cls < VYB_POOL_CLASSES && g_vyb_pool_buckets[cls] == NULL) cls++;
+        if (cls < VYB_POOL_CLASSES) {
+            VybPoolNode* n = g_vyb_pool_buckets[cls];
+            g_vyb_pool_buckets[cls] = n->next;
+            g_vyb_pool_retained -= n->size;
+            pthread_mutex_unlock(&g_vyb_pool_lock);
+            payload = n->size;
+            base = (void*)n;
+            pthread_mutex_lock(&g_vyb_pool_lock);
+            vyb_live_insert(base, payload);
+            pthread_mutex_unlock(&g_vyb_pool_lock);
+        } else {
+            // Every bucket is empty (e.g. the retention cap pushed everything
+            // back to libc). cls ran off the table -- allocate the REQUESTED
+            // class, not class VYB_POOL_CLASSES (a 16 GiB region per alloc,
+            // which exhausts the address space and hands the codegen NULLs).
+            pthread_mutex_unlock(&g_vyb_pool_lock);
+            cls = vyb_pool_class_of(size);
+            payload = vyb_pool_class_bytes(cls);
+            base = aligned_alloc(64, payload);
+            if (!base) return NULL;
+        }
+        pthread_mutex_lock(&g_vyb_pool_lock);
+        vyb_live_insert(base, payload);
+        pthread_mutex_unlock(&g_vyb_pool_lock);
+        if (getenv("VYB_POOL_TRACE")) fprintf(stderr, "pool_alloc(%zu) -> %p\n", size, base);
+        return base;
+    }
+    return malloc(size);
+}
+
+VYB_WEAK void __vyb_pool_free(void* p) {
+    if (!p) return;
+    pthread_mutex_lock(&g_vyb_pool_lock);
+    size_t size;
+    int take = vyb_live_take(p, &size);
+    if (take == 2) {
+        // Double free of a block this pool owns: absorb it. The generated
+        // code has latent double-free paths the old leaky free masked; a
+        // second free here must not reach libc (the block is parked in a
+        // freelist bucket) nor re-enter the bucket (it would alias the next
+        // allocation of the same block).
+        pthread_mutex_unlock(&g_vyb_pool_lock);
+        return;
+    }
+    if (take == 0) {
+        // Not born here (registry string, FFI buffer, libc block): libc free,
+        // which is what the pre-pool codegen did with every pointer anyway.
+        pthread_mutex_unlock(&g_vyb_pool_lock);
+        free(p);
+        return;
+    }
+    if (size >= VYB_POOL_MIN_BYTES && g_vyb_pool_retained + size <= VYB_POOL_CAP_BYTES) {
+        size_t cls = vyb_pool_class_of(size);
+        VybPoolNode* n = (VybPoolNode*)p;
+        n->next = g_vyb_pool_buckets[cls];
+        g_vyb_pool_buckets[cls] = n;
+        g_vyb_pool_retained += size;
+        pthread_mutex_unlock(&g_vyb_pool_lock);
+        return;
+    }
+    pthread_mutex_unlock(&g_vyb_pool_lock);
+    free(p);
+}
+
+// ============================================================================
 // CORE RUNTIME SHIMS USED BY NATIVE BUILDS
 // ============================================================================
 // HEAP-STRING REFERENCE COUNTING
@@ -1254,13 +1450,17 @@ VYB_WEAK int64_t __vyb_file_read_at(int64_t fd, int64_t off, int64_t maxlen, vyb
 VYB_WEAK int64_t __vyb_io_read_bytes_all(int64_t fd, vyb_vec_bytes* out) {
     if (!out) return 0;
     size_t cap = 4096, len = 0;
-    char* buf = (char*)malloc(cap);
+    char* buf = (char*)__vyb_pool_alloc(cap);
     if (!buf) { vyb_file_err = errno; return 0; }
     for (;;) {
         if (len == cap) {
             cap *= 2;
-            char* nb = (char*)realloc(buf, cap);
-            if (!nb) { vyb_file_err = errno; free(buf); return 0; }
+            // Pool blocks cannot realloc (the header lives below the payload):
+            // grow by alloc-copy-pool-free instead.
+            char* nb = (char*)__vyb_pool_alloc(cap);
+            if (!nb) { vyb_file_err = errno; __vyb_pool_free(buf); return 0; }
+            memcpy(nb, buf, (size_t)len);
+            __vyb_pool_free(buf);
             buf = nb;
         }
         ssize_t n = vyb_raw_read((int)fd, buf + len, cap - len);
@@ -1270,7 +1470,7 @@ VYB_WEAK int64_t __vyb_io_read_bytes_all(int64_t fd, vyb_vec_bytes* out) {
             break;
         } else {
             vyb_file_err = errno;
-            free(buf);
+            __vyb_pool_free(buf);
             return 0;
         }
     }
@@ -1290,10 +1490,10 @@ VYB_WEAK int64_t __vyb_io_read_bytes_all(int64_t fd, vyb_vec_bytes* out) {
 VYB_WEAK int64_t __vyb_io_read_bytes_at(int64_t fd, int64_t off, int64_t maxlen, vyb_vec_bytes* out) {
     if (!out) return 0;
     if (off < 0 || maxlen < 0) { vyb_file_err = EINVAL; return 0; }
-    char* buf = (char*)malloc((size_t)maxlen + 1);
+    char* buf = (char*)__vyb_pool_alloc((size_t)maxlen + 1);
     if (!buf) { vyb_file_err = errno; return 0; }
     ssize_t n = pread((int)fd, buf, (size_t)maxlen, (off_t)off);
-    if (n < 0) { vyb_file_err = errno; free(buf); return 0; }
+    if (n < 0) { vyb_file_err = errno; __vyb_pool_free(buf); return 0; }
     out->ptr = buf;
     out->size = (int64_t)n;
     out->cap = (int64_t)n;
@@ -1314,6 +1514,9 @@ VYB_WEAK vyb_file_str __vyb_stdin_read(int64_t maxlen) {
     vyb_file_str r = { NULL, 0 };
     if (maxlen <= 0) return r;
     size_t cap = (size_t)maxlen;
+    // Registry-owned (freed via __vyb_string_release -> libc free), so this
+    // buffer must be libc malloc — NOT the pool, whose payload pointers are
+    // offset from their base and would trip "free(): invalid pointer".
     char* buf = (char*)malloc(cap + 1);
     if (!buf) return r;
     ssize_t n = vyb_raw_read(STDIN_FILENO, buf, cap);
@@ -1832,17 +2035,17 @@ VYB_WEAK int64_t __vyb_net_recv_bytes(int64_t fd, int64_t n, int64_t exact, vyb_
     if (!out) return 0;
     if (exact && n < 0) { vyb_net_err = EINVAL; return 0; }
     if (!exact && n <= 0) n = 4096;
-    char* buf = (char*)malloc((size_t)(n > 0 ? n : 1));
+    char* buf = (char*)__vyb_pool_alloc((size_t)(n > 0 ? n : 1));
     if (!buf) { vyb_net_err = errno; return 0; }
     int64_t got = 0;
     while (got < n) {
         ssize_t k = recv((int)fd, buf + got, (size_t)(n - got), 0);
         if (k < 0) {
             if (errno == EINTR) continue;
-            vyb_net_err = errno; free(buf); return 0;
+            vyb_net_err = errno; __vyb_pool_free(buf); return 0;
         }
         if (k == 0) {
-            if (exact) { vyb_net_err = ECONNRESET; free(buf); return 0; }
+            if (exact) { vyb_net_err = ECONNRESET; __vyb_pool_free(buf); return 0; }
             break;
         }
         got += (int64_t)k;
@@ -1911,7 +2114,7 @@ VYB_WEAK int64_t __vyb_net_exchange_bytes(int64_t fd, const char* data, int64_t 
             ssize_t k = sendmsg((int)fd, &mh, MSG_DONTWAIT | VYB_NET_NOSIG);
             if (k > 0) { sent += (int64_t)k; progress = 1; }
             else if (k < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
-                vyb_net_err = errno; free(rbuf); return 0;
+                vyb_net_err = errno; __vyb_pool_free(rbuf); return 0;
             }
         }
         if (rlen < 0 || got < 8 + rlen) {
@@ -1925,13 +2128,13 @@ VYB_WEAK int64_t __vyb_net_exchange_bytes(int64_t fd, const char* data, int64_t 
                     for (int i = 0; i < 8; i++) v |= (uint64_t)rhdr[i] << (8 * i);
                     if (v > (uint64_t)max_in) { vyb_net_err = EMSGSIZE; return 0; }
                     rlen = (int64_t)v;
-                    rbuf = (char*)malloc((size_t)(rlen > 0 ? rlen : 1));
+                    rbuf = (char*)__vyb_pool_alloc((size_t)(rlen > 0 ? rlen : 1));
                     if (!rbuf) { vyb_net_err = errno; return 0; }
                 }
             } else if (k == 0) {
-                vyb_net_err = ECONNRESET; free(rbuf); return 0;
+                vyb_net_err = ECONNRESET; __vyb_pool_free(rbuf); return 0;
             } else if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
-                vyb_net_err = errno; free(rbuf); return 0;
+                vyb_net_err = errno; __vyb_pool_free(rbuf); return 0;
             }
         }
         if (sent == stotal && rlen >= 0 && got == 8 + rlen) break;
@@ -1943,7 +2146,7 @@ VYB_WEAK int64_t __vyb_net_exchange_bytes(int64_t fd, const char* data, int64_t 
         pfd.fd = (int)fd;
         pfd.events = (short)(POLLIN | (sent < stotal ? POLLOUT : 0));
         pfd.revents = 0;
-        if (poll(&pfd, 1, 1000) < 0 && errno != EINTR) { vyb_net_err = errno; free(rbuf); return 0; }
+        if (poll(&pfd, 1, 1000) < 0 && errno != EINTR) { vyb_net_err = errno; __vyb_pool_free(rbuf); return 0; }
     }
     out->ptr = rbuf;
     out->size = rlen;
