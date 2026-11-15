@@ -373,6 +373,11 @@ void LLVMCodegen::reclaimVecStorage(llvm::Value* vecValue, llvm::Type* vecStruct
 }
 
 void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
+    if (getenv("VYB_STR_TRACE")) {
+        auto* stTy = var.type ? llvm::dyn_cast<llvm::StructType>(var.type) : nullptr;
+        fprintf(stderr, "CLEANUP %s nc=%d type=%s\n", var.name.c_str(), var.needsCleanup ? 1 : 0,
+                stTy ? stTy->getStructName().str().c_str() : "nonstruct");
+    }
     VYB_CDBG << "DEBUG: Cleaning up variable '" << var.name << "', needsCleanup: "
               << var.needsCleanup << ", isVecWithMallocData: " << var.isVecWithMallocData << std::endl;
 
@@ -484,6 +489,7 @@ void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
                         // an optional whose payload is a String-bearing struct
                         // leaked the payload's strings at scope exit (the GLM
                         // json_parse header parse leaked ~5,930 strings per call).
+                        if (getenv("VYB_STR_TRACE")) fprintf(stderr, "OPTPAYLOAD %s fires\n", var.name.c_str());
                         if (payload && !isOurRefType(payload) && !isMildRefType(payload) &&
                             !vecElementTypeNode(payload)) {
                             if (auto* payloadLLVM = llvm::dyn_cast<llvm::StructType>(

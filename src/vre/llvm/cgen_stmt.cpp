@@ -1545,6 +1545,7 @@ void LLVMCodegen::codegenMatch(vyb::ast::MatchStatement* node, llvm::AllocaInst*
         // then only aliases it and MUST NOT be registered (double-free).
         if (dynamic_cast<ast::CallExpression*>(node->expr.get()) && typeOfNode(node->expr)) {
             valueTypeMap[matchTemp] = typeOfNode(node->expr);
+            if (getenv("VYB_STR_TRACE")) fprintf(stderr, "OPTREG __match_tmp loc=%s\n", node->expr->loc.toString().c_str());
             registerVariable("__match_tmp", matchTemp, matchValue,
                              ast::OwnershipKind::MY, matchTemp->getAllocatedType(), true);
         }
