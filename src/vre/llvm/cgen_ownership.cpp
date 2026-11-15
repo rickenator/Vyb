@@ -714,15 +714,19 @@ void LLVMCodegen::decrementRefCount(const std::string& name) {
 
 // --- Helper Functions for Memory Management ---
 llvm::Function* LLVMCodegen::getOrCreateFreeFunction() {
-    llvm::Function* freeFunc = module->getFunction("free");
+    // Bind to the runtime's large-block pool rather than libc free: hot loops
+    // (streaming dequantization, tensor resolution) free multi-megabyte Vec
+    // payload buffers per call, and libc routes those through mmap/munmap.
+    // See runtime/vyb_runtime.c (__vyb_pool_alloc/__vyb_pool_free).
+    llvm::Function* freeFunc = module->getFunction("__vyb_pool_free");
     if (!freeFunc) {
-        VYB_CDBG << "DEBUG: Creating free() function declaration" << std::endl;
+        VYB_CDBG << "DEBUG: Creating __vyb_pool_free() function declaration" << std::endl;
         llvm::FunctionType* freeFuncType = llvm::FunctionType::get(
             llvm::Type::getVoidTy(*context),                    // return type
             {llvm::PointerType::get(*context, 0)},              // parameter: void*
             false                                                // not variadic
         );
-        freeFunc = llvm::Function::Create(freeFuncType, llvm::Function::ExternalLinkage, "free", module.get());
+        freeFunc = llvm::Function::Create(freeFuncType, llvm::Function::ExternalLinkage, "__vyb_pool_free", module.get());
     }
     return freeFunc;
 }
@@ -769,15 +773,18 @@ llvm::Function* LLVMCodegen::getOrCreateVybStringRetainFunction() {
 }
 
 llvm::Function* LLVMCodegen::getOrCreateMallocFunction() {
-    llvm::Function* mallocFunc = module->getFunction("malloc");
+    // Bind to the runtime's large-block pool (see getOrCreateFreeFunction and
+    // runtime/vyb_runtime.c): the pool pairs with __vyb_pool_free and adds a
+    // 64-byte header per block.
+    llvm::Function* mallocFunc = module->getFunction("__vyb_pool_alloc");
     if (!mallocFunc) {
-        VYB_CDBG << "DEBUG: Creating malloc() function declaration" << std::endl;
+        VYB_CDBG << "DEBUG: Creating __vyb_pool_alloc() function declaration" << std::endl;
         llvm::FunctionType* mallocFuncType = llvm::FunctionType::get(
             llvm::PointerType::get(*context, 0),                // return type: void*
             {llvm::Type::getInt64Ty(*context)},                 // parameter: size_t
             false                                                // not variadic
         );
-        mallocFunc = llvm::Function::Create(mallocFuncType, llvm::Function::ExternalLinkage, "malloc", module.get());
+        mallocFunc = llvm::Function::Create(mallocFuncType, llvm::Function::ExternalLinkage, "__vyb_pool_alloc", module.get());
     }
     return mallocFunc;
 }

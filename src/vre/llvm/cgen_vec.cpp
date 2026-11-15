@@ -1877,9 +1877,9 @@ void LLVMCodegen::handleVecResize(vyb::ast::CallExpression* node, llvm::Value* v
         {llvm::PointerType::get(*context, 0)},
         false
     );
-    llvm::Function* freeFunc = module->getFunction("free");
+    llvm::Function* freeFunc = module->getFunction("__vyb_pool_free");
     if (!freeFunc) {
-        freeFunc = llvm::Function::Create(freeType, llvm::Function::ExternalLinkage, "free", module.get());
+        freeFunc = llvm::Function::Create(freeType, llvm::Function::ExternalLinkage, "__vyb_pool_free", module.get());
     }
     builder->CreateCall(freeFunc, {oldDataPtr});
     builder->CreateBr(noFreeBlock);
@@ -1901,14 +1901,14 @@ void LLVMCodegen::handleVecResize(vyb::ast::CallExpression* node, llvm::Value* v
     builder->CreateCondBr(hasDataToFree, freeClearBlock, noFreeClearBlock);
 
     builder->SetInsertPoint(freeClearBlock);
-    llvm::Function* freeFunc2 = module->getFunction("free");
+    llvm::Function* freeFunc2 = module->getFunction("__vyb_pool_free");
     if (!freeFunc2) {
         llvm::FunctionType* freeType2 = llvm::FunctionType::get(
             llvm::Type::getVoidTy(*context),
             {llvm::PointerType::get(*context, 0)},
             false
         );
-        freeFunc2 = llvm::Function::Create(freeType2, llvm::Function::ExternalLinkage, "free", module.get());
+        freeFunc2 = llvm::Function::Create(freeType2, llvm::Function::ExternalLinkage, "__vyb_pool_free", module.get());
     }
     builder->CreateCall(freeFunc2, {oldDataPtr});
     builder->CreateBr(noFreeClearBlock);

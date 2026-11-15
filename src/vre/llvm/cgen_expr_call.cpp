@@ -392,10 +392,10 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                     llvm::FunctionType* mallocType = llvm::FunctionType::get(
                         llvm::PointerType::get(*context, 0),
                         {llvm::Type::getInt64Ty(*context)}, false);
-                    llvm::Function* mallocFunc = module->getFunction("malloc");
+                    llvm::Function* mallocFunc = module->getFunction("__vyb_pool_alloc");
                     if (!mallocFunc) {
                         mallocFunc = llvm::Function::Create(mallocType,
-                            llvm::Function::ExternalLinkage, "malloc", module.get());
+                            llvm::Function::ExternalLinkage, "__vyb_pool_alloc", module.get());
                     }
                     llvm::Value* newData = builder->CreateCall(mallocFunc, {allocSize}, "from_bytes.data");
                     builder->CreateCall(getOrCreateVybStringRegisterFunction(), {newData});
@@ -464,10 +464,10 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                         "from_byte.low");
                     llvm::FunctionType* mallocType = llvm::FunctionType::get(
                         llvm::PointerType::get(*context, 0), {llvm::Type::getInt64Ty(*context)}, false);
-                    llvm::Function* mallocFunc = module->getFunction("malloc");
+                    llvm::Function* mallocFunc = module->getFunction("__vyb_pool_alloc");
                     if (!mallocFunc) {
                         mallocFunc = llvm::Function::Create(mallocType,
-                            llvm::Function::ExternalLinkage, "malloc", module.get());
+                            llvm::Function::ExternalLinkage, "__vyb_pool_alloc", module.get());
                     }
                     llvm::Value* size2 = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 2, false);
                     llvm::Value* bytePtr = builder->CreateCall(mallocFunc, {size2}, "from_byte.data");
@@ -1271,7 +1271,7 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
             }
 
             // Allocate memory for the struct on the heap
-            llvm::Function* mallocFunc = module->getFunction("malloc");
+            llvm::Function* mallocFunc = module->getFunction("__vyb_pool_alloc");
             if (!mallocFunc) {
                 // Declare malloc if not already declared
                 llvm::FunctionType* mallocType = llvm::FunctionType::get(
@@ -1282,7 +1282,7 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                 mallocFunc = llvm::Function::Create(
                     mallocType,
                     llvm::Function::ExternalLinkage,
-                    "malloc",
+                    "__vyb_pool_alloc",
                     module.get()
                 );
             }
@@ -6167,8 +6167,8 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
             llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1), "cstr.alloc");
         llvm::FunctionType* mallocType = llvm::FunctionType::get(
             llvm::PointerType::get(*context, 0), {llvm::Type::getInt64Ty(*context)}, false);
-        llvm::Function* mallocFunc = module->getFunction("malloc");
-        if (!mallocFunc) mallocFunc = llvm::Function::Create(mallocType, llvm::Function::ExternalLinkage, "malloc", module.get());
+        llvm::Function* mallocFunc = module->getFunction("__vyb_pool_alloc");
+        if (!mallocFunc) mallocFunc = llvm::Function::Create(mallocType, llvm::Function::ExternalLinkage, "__vyb_pool_alloc", module.get());
         llvm::Value* newData = builder->CreateCall(mallocFunc, {allocSize}, "cstr.new");
         llvm::FunctionType* memcpyType = llvm::FunctionType::get(
             llvm::PointerType::get(*context, 0),
