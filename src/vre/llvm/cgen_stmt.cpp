@@ -136,7 +136,44 @@ void LLVMCodegen::emitPropagatingErrorReturn(llvm::Value* errorPtr) {
     builder->CreateRet(resultStruct);
 }
 
+// Names whose bindings must stay alive because the return expression hands
+// their data to the caller: direct identifiers (moved) and member-expression
+// bases (the returned view borrows their storage).
+static void collectReturnMoveNames(ast::Expression* expr, std::set<std::string>& out) {
+    if (!expr) return;
+    if (auto* ident = dynamic_cast<ast::Identifier*>(expr)) {
+        out.insert(ident->name);
+        return;
+    }
+    if (auto* sel = dynamic_cast<ast::SelectExpression*>(expr)) {
+        for (const auto& arm : sel->cases) collectReturnMoveNames(arm.second.get(), out);
+        return;
+    }
+    if (auto* mem = dynamic_cast<ast::MemberExpression*>(expr)) {
+        if (mem->object) collectReturnMoveNames(mem->object.get(), out);
+    }
+}
+
 void LLVMCodegen::visit(vyb::ast::ReturnStatement *node) {
+    // Return-path scope cleanup. The enclosing blocks' exits take the
+    // terminated path (pop WITHOUT cleanup) whenever this return terminates
+    // their insert block, and the exitToFunctionBaseline() in the tail below
+    // then finds the scopes already popped empty — so without the cleanup
+    // HERE, every binding owned by the returning scopes strands its heap data
+    // until program exit. Measured: the match-scrutinee temps leaked
+    // json_parse's entire JsonDoc per call (~5,930 strings per st_open; the
+    // 45-layer GLM prefill's registry grew to 33M live strings / 64M table
+    // slots — the resolve-depth drift).
+    // Ownership flowing OUT with the return stays alive: a direct identifier
+    // return moves its binding (excluded); a select's moved arms and member
+    // reads borrow their storage (their bases are excluded via
+    // collectReturnMoveNames). Struct literals and calls produce independent
+    // data (the literal retains/copies its fields), so their source bindings
+    // clean up normally.
+    std::set<std::string> keepAlive;
+    if (node->argument) {
+        collectReturnMoveNames(node->argument.get(), keepAlive);
+    }
     // Emit deferred statements (LIFO) before returning
     emitDeferredStatementsForCurrentFunction();
     // Inside a lambda body, this is an exit: flush mutable-capture snapshots back
@@ -152,6 +189,22 @@ void LLVMCodegen::visit(vyb::ast::ReturnStatement *node) {
         // back into the storage they were captured from (no-op elsewhere).
         flushPendingCaptures();
 
+        // Surgical scope cleanup: free ONLY the match-scrutinee temps on the
+        // return path. The blanket unwind broke borrowed my<Struct> returns
+        // (double free) and helper-chain strings; the temps are the drift's
+        // actual source and their ownership is unambiguous. main() is exempt
+        // (its serialization/exit tail reads the returned storage).
+        const bool isMainReturn = currentFunction && currentFunction->getName() == "main";
+        if (!isMainReturn) while (scopeStack.size() > 1) {
+            auto& scopeVars = scopeStack.back();
+            for (auto& var : scopeVars) {
+                if (var.name == "__match_tmp" && var.needsCleanup) {
+                    cleanupVariable(var);
+                    var.needsCleanup = false;  // reclaimed here; the scope pop must not re-run it
+                }
+            }
+            scopeStack.pop_back();
+        }
         if (returnValue) {
             // Debug output to see what we're returning
             VYB_CDBG << "DEBUG: ReturnStatement - Type: " << getTypeName(returnValue->getType())
