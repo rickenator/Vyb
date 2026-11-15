@@ -650,7 +650,7 @@ VYB_WEAK void __vyb_string_register_borrowed(void* p) {
 VYB_WEAK void vyb_str_stats(void) {
     if (getenv("VYB_STR_STATS") == NULL) return;
     pthread_mutex_lock(&vyb_str_reg_lock);
-    fprintf(stderr, "str_stats: live=%zu tombs=%zu cap=%zu retained_pool=%zu\n",
+    fflush(stdout); fprintf(stdout, "str_stats: live=%zu tombs=%zu cap=%zu retained_pool=%zu\n",
             vyb_str_live, vyb_str_tombs, vyb_str_capacity(), g_vyb_pool_retained);
     pthread_mutex_unlock(&vyb_str_reg_lock);
 }
