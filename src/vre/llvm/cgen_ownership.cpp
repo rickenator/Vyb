@@ -477,6 +477,35 @@ void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
                                 return;
                             }
                         }
+                        // A struct-typed payload (`Box?` where Box owns String/Vec
+                        // fields) owns those fields when present. our<T>? and
+                        // mild<T>? are handled in their own branches; Vec<scalar>?
+                        // above. Without this, every match-arm / direct binding of
+                        // an optional whose payload is a String-bearing struct
+                        // leaked the payload's strings at scope exit (the GLM
+                        // json_parse header parse leaked ~5,930 strings per call).
+                        if (payload && !isOurRefType(payload) && !isMildRefType(payload) &&
+                            !vecElementTypeNode(payload)) {
+                            if (auto* payloadLLVM = llvm::dyn_cast<llvm::StructType>(
+                                    codegenType(const_cast<vyb::ast::TypeNode*>(payload)))) {
+                                llvm::Value* optVal = builder->CreateLoad(
+                                    var.type, var.allocaInst, var.name + "_opt_load");
+                                llvm::Value* has = builder->CreateExtractValue(
+                                    optVal, 1, var.name + "_opt_has");
+                                llvm::BasicBlock* reclaimBB = llvm::BasicBlock::Create(
+                                    *context, var.name + "_optstruct_reclaim", currentFunction);
+                                llvm::BasicBlock* contBB = llvm::BasicBlock::Create(
+                                    *context, var.name + "_optstruct_cont", currentFunction);
+                                builder->CreateCondBr(has, reclaimBB, contBB);
+                                builder->SetInsertPoint(reclaimBB);
+                                llvm::Value* payloadPtr = builder->CreateStructGEP(
+                                    var.type, var.allocaInst, 0, var.name + "_opt_payload");
+                                reclaimOwnedStructAt(payloadPtr, payload, payloadLLVM);
+                                builder->CreateBr(contBB);
+                                builder->SetInsertPoint(contBB);
+                                return;
+                            }
+                        }
                     }
                 }
             }

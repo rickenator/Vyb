@@ -543,6 +543,18 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
             const vyb::ast::TypeNode* ownedTy =
                 node->typeNode ? node->typeNode.get()
                                : (node->init && typeOfNode(node->init) ? typeOfNode(node->init).get() : nullptr);
+            // An optional binding (`Box?` where Box owns String/Vec fields) owns
+            // the payload's fields when present: unwrap the optional so the
+            // owned-field probe sees the payload struct. Without this, every
+            // match-arm / direct binding of a String-bearing optional leaked the
+            // payload's strings at scope exit (the GLM json_parse header parse
+            // leaked ~5,930 registry strings per call; the 45-layer prefill's
+            // registry grew ~646k strings/layer).
+            if (ownedTy) {
+                if (auto* ot = dynamic_cast<const ast::OptionalType*>(ownedTy)) {
+                    ownedTy = ot->containedType.get();
+                }
+            }
             if (ownedTy && structTypeHasOwnedFields(ownedTy)) {
                 needsCleanup = true;
                 VYB_CDBG << "DEBUG: Variable '" << node->id->name
