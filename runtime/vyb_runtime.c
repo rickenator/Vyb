@@ -644,6 +644,17 @@ VYB_WEAK void __vyb_string_register_borrowed(void* p) {
     vyb_string_register_refs(p, 0);
 }
 
+// Registry + heap diagnostics for the depth-drift investigation: live string
+// entries, tombstones, table capacity, and process RSS. Called from drivers'
+// per-layer loops (VYB_STR_STATS=1 gates the print). Never fails.
+VYB_WEAK void vyb_str_stats(void) {
+    if (getenv("VYB_STR_STATS") == NULL) return;
+    pthread_mutex_lock(&vyb_str_reg_lock);
+    fflush(stdout); fprintf(stdout, "str_stats: live=%zu tombs=%zu cap=%zu retained_pool=%zu\n",
+            vyb_str_live, vyb_str_tombs, vyb_str_capacity(), g_vyb_pool_retained);
+    pthread_mutex_unlock(&vyb_str_reg_lock);
+}
+
 
 // Take one reference on a buffer (untracked = literal/foreign -> no-op).
 VYB_WEAK void* __vyb_string_retain(void* p) {
