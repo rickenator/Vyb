@@ -164,7 +164,8 @@ void LLVMCodegen::registerVariable(const std::string& name, llvm::Value* allocaI
                                   ast::OwnershipKind ownership, llvm::Type* type, bool needsCleanup,
                                   llvm::Value* ownedCellBase) {
     if (scopeStack.empty()) {
-        std::cout << "ERROR: No active scope to register variable: " << name << std::endl;
+        std::cout << "ERROR: No active scope to register variable: " << name
+                  << " (fn=" << (currentFunction ? currentFunction->getName().str() : "null") << ")" << std::endl;
         return;
     }
 

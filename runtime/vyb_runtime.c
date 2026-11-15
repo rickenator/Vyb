@@ -624,6 +624,11 @@ static void vyb_string_register_refs(void* p, int64_t initial_refs) {
         }
         vyb_str_live++;
     }
+    if (getenv("VYB_STR_TRACE")) {
+        void* cp = s ? atomic_load_explicit(&s->p, memory_order_relaxed) : NULL;
+        fprintf(stderr, "REG %p refs=%lld\n", p,
+                s && cp == p ? (long long)atomic_load_explicit(&s->refs, memory_order_relaxed) : -999LL);
+    }
     pthread_mutex_unlock(&vyb_str_reg_lock);
 
 }
@@ -662,8 +667,10 @@ VYB_WEAK void* __vyb_string_retain(void* p) {
     vyb_str_maybe_init();
     vyb_str_rdr_enter();
     vyb_str_ref* s = vyb_str_lookup_slot(p);
-    if (s && atomic_load_explicit(&s->p, memory_order_acquire) == p)
+    if (s && atomic_load_explicit(&s->p, memory_order_acquire) == p) {
         atomic_fetch_add_explicit(&s->refs, 1, memory_order_relaxed);
+        if (getenv("VYB_STR_TRACE")) fprintf(stderr, "RET %p\n", p);
+    }
     vyb_str_rdr_leave();
     return p;
 }
@@ -679,6 +686,7 @@ VYB_WEAK void __vyb_string_release(void* p) {
         return;
     }
     int64_t old = atomic_fetch_sub_explicit(&s->refs, 1, memory_order_acq_rel);
+    if (getenv("VYB_STR_TRACE")) fprintf(stderr, "REL %p old=%lld\n", p, (long long)old);
     vyb_str_rdr_leave();
     if (old == 1) {
         // Last reference: retire the slot under the register lock so a concurrent
