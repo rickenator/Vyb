@@ -1038,6 +1038,7 @@ void LLVMCodegen::reclaimStructOwnedFieldsAt(llvm::Value* structPtr,
     for (size_t i = 0; i < n; ++i) {
         const vyb::ast::TypeNode* f = fields[i].get();
         llvm::Type* fLLVM = llvmTy->getElementType(i);
+        if (getenv("VYB_STR_TRACE")) fprintf(stderr, "RECLAIM-field %u type=%s ownedStr=%d\n", (unsigned)i, f ? f->toString().c_str() : "null", f && isOwnedFieldString(f) ? 1 : 0);
         if (!f || !fLLVM) continue;
         llvm::Value* fptr = builder->CreateStructGEP(llvmTy, structPtr, i, "reclaim.field");
         if (isVecTypeNode(f)) {
