@@ -1039,6 +1039,7 @@ void LLVMCodegen::reclaimStructOwnedFieldsAt(llvm::Value* structPtr,
     std::vector<vyb::ast::TypeNodePtr> fields;
     if (collectStructConcreteFieldTypes(astType, fields)) {
     size_t n = std::min(fields.size(), (size_t)llvmTy->getNumElements());
+    if (getenv("VYB_STR_TRACE")) fprintf(stderr, "RECLAIM-struct %s fields=%zu llvmElems=%u\n", astType->toString().c_str(), fields.size(), (unsigned)llvmTy->getNumElements());
     llvm::PointerType* rawPtr = llvm::PointerType::get(*context, 0);
     llvm::Constant* zero = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0);
     llvm::Constant* one = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1);
