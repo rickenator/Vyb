@@ -362,6 +362,10 @@ private:
         // replaces the ordinary per-type reclaim so the payload is reclaimed exactly
         // once, by the cell's destructor when the last owner drops.
         llvm::Value* ownedCellBase = nullptr;
+        // Diagnostics: the source location this binding was registered from
+        // (VYB_STR_TRACE=1 carries it into the CLEANUP/OPTPAYLOAD lines so
+        // per-site cleanup coverage can be audited).
+        std::string regLoc;
     };
     std::vector<std::vector<ScopeVariable>> scopeStack;
     // #384 checkpoint (c): a promoted binding's storage is the value field of its shared
@@ -732,6 +736,9 @@ private:
     void exitToFunctionBaseline();
     void cleanupScopesToBaseline(size_t baseline);
     void registerVariable(const std::string& name, llvm::Value* allocaInst, llvm::Value* value, ast::OwnershipKind ownership, llvm::Type* type, bool needsCleanup = false, llvm::Value* ownedCellBase = nullptr);
+    // Diagnostics: source loc stamped onto the next registerVariable's ScopeVariable
+    // (VYB_STR_TRACE carries it into the CLEANUP/OPTPAYLOAD lines).
+    std::string pendingRegLoc;
     // #384 checkpoint (c): promote a binding an escaping closure mutably captures to a
     // refcounted cell `{ i64 refcount; ptr dtor; T value }`, shared with every
     // environment that captures it. Returns the cell base (the owner handle) and the
