@@ -2003,6 +2003,14 @@ void LLVMCodegen::codegenMatch(vyb::ast::MatchStatement* node, llvm::AllocaInst*
             namedValues[pendingOptionalPayload] = alloca;
             if (pendingOptionalPayloadType) {
                 valueTypeMap[alloca] = pendingOptionalPayloadType;
+                // The extraction is a COPY: the match temp's cleanup owns the
+                // original registry refs. A String-typed payload must be
+                // retained here, or the temp's cleanup frees the buffer while
+                // this binding (and anything moved out of it) still references
+                // it — the __vyb_exec_output use-after-free.
+                if (isVybStringStructType(payload->getType())) {
+                    retainStringValue(payload);
+                }
             }
         }
 
