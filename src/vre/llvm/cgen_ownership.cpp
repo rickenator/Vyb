@@ -1091,6 +1091,10 @@ void LLVMCodegen::reclaimStructOwnedFieldsAt(llvm::Value* structPtr,
                                        eAst, elementTypeIsMildHandle(eAst));
                 }
             }
+            if (getenv("VYB_STR_TRACE")) fprintf(stderr, "RECLAIM-vec-elem %s elem=%s known=%d owned=%d\n",
+                f->toString().c_str(), eAst ? eAst->toString().c_str() : "null",
+                eAst ? (isKnownStructTypeNode(eAst) ? 1 : 0) : 0,
+                eAst ? (structTypeHasOwnedFields(eAst) ? 1 : 0) : 0);
             if (eAst && isKnownStructTypeNode(eAst) && structTypeHasOwnedFields(eAst)) {
                 llvm::Type* eLlvm = codegenType(const_cast<vyb::ast::TypeNode*>(eAst));
                 if (eLlvm && llvm::isa<llvm::StructType>(eLlvm)) {
