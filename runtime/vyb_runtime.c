@@ -5254,7 +5254,10 @@ static void vyb_ignore_sigpipe(void) { signal(SIGPIPE, SIG_IGN); }
 static void vyb_sigpipe_reg(void) __attribute__((constructor));
 static void vyb_sigpipe_reg(void) { vyb_ignore_sigpipe(); }
 static void vyb_async_atexit_reg(void) __attribute__((constructor));
-static void vyb_async_atexit_reg(void) { atexit(vyb_async_atexit); }void __vyb_str_site(long n) {
+static void vyb_async_atexit_reg(void) { atexit(vyb_async_atexit); }void __vyb_vec_copy_probe(long size, long cap, long elemsz) {
+    if (getenv("VYB_STR_TRACE")) fprintf(stderr, "VECCOPY size=%ld cap=%ld elemsz=%ld bytes=%ld\n", size, cap, elemsz, cap*elemsz);
+}
+void __vyb_str_site(long n) {
     if (getenv("VYB_STR_TRACE")) fprintf(stderr, "SITE %ld\n", n);
 }
 

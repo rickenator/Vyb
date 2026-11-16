@@ -1614,6 +1614,19 @@ llvm::Value* LLVMCodegen::generateVecDeepCopy(llvm::Value* vecStructValue,
     llvm::Function* mallocFunc = getOrCreateMallocFunction();
     llvm::Value* newDataPtr = builder->CreateCall(mallocFunc, {allocBytes}, "vdc.new_ptr");
 
+    // Diagnostic: the copy's shape under VYB_STR_TRACE.
+    {
+        llvm::Function* probe = module->getFunction("__vyb_vec_copy_probe");
+        if (!probe) {
+            llvm::FunctionType* pft = llvm::FunctionType::get(
+                llvm::Type::getVoidTy(*context),
+                {llvm::Type::getInt64Ty(*context), llvm::Type::getInt64Ty(*context), llvm::Type::getInt64Ty(*context)}, false);
+            probe = llvm::Function::Create(pft, llvm::Function::ExternalLinkage, "__vyb_vec_copy_probe", module.get());
+        }
+        llvm::Value* esz = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), elemSizeBytes);
+        builder->CreateCall(probe, {vecSize, vecCap, esz});
+    }
+
     // If the element type is a struct that owns heap data (String buffers, inner
     // Vecs, nested owning structs), a raw memcpy of the element *structs* would copy
     // the pointers to the source's owned fields verbatim. Reclaiming the clone then
