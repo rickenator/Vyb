@@ -1620,11 +1620,12 @@ llvm::Value* LLVMCodegen::generateVecDeepCopy(llvm::Value* vecStructValue,
         if (!probe) {
             llvm::FunctionType* pft = llvm::FunctionType::get(
                 llvm::Type::getVoidTy(*context),
-                {llvm::Type::getInt64Ty(*context), llvm::Type::getInt64Ty(*context), llvm::Type::getInt64Ty(*context)}, false);
+                {llvm::Type::getInt64Ty(*context), llvm::Type::getInt64Ty(*context), llvm::Type::getInt64Ty(*context),
+                 llvm::PointerType::get(*context, 0)}, false);
             probe = llvm::Function::Create(pft, llvm::Function::ExternalLinkage, "__vyb_vec_copy_probe", module.get());
         }
         llvm::Value* esz = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), elemSizeBytes);
-        builder->CreateCall(probe, {vecSize, vecCap, esz});
+        builder->CreateCall(probe, {vecSize, vecCap, esz, newDataPtr});
     }
 
     // If the element type is a struct that owns heap data (String buffers, inner
