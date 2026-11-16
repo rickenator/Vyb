@@ -5254,7 +5254,20 @@ static void vyb_ignore_sigpipe(void) { signal(SIGPIPE, SIG_IGN); }
 static void vyb_sigpipe_reg(void) __attribute__((constructor));
 static void vyb_sigpipe_reg(void) { vyb_ignore_sigpipe(); }
 static void vyb_async_atexit_reg(void) __attribute__((constructor));
-static void vyb_async_atexit_reg(void) { atexit(vyb_async_atexit); }void __vyb_vec_copy_probe(long size, long cap, long elemsz) {
+static void vyb_async_atexit_reg(void) { atexit(vyb_async_atexit); }void __vyb_vec_copy_verify(void* src, void* dst, long size, long elemsz) {
+    if (!getenv("VYB_STR_TRACE") || !src || !dst) return;
+    long bytes = size * elemsz;
+    const unsigned char* a = (const unsigned char*)src;
+    const unsigned char* b = (const unsigned char*)dst;
+    long mism = -1;
+    for (long i = 0; i < bytes; ++i) { if (a[i] != b[i]) { mism = i; break; } }
+    if (mism >= 0)
+        fprintf(stderr, "VECCOPY-MISMATCH src=%p dst=%p bytes=%ld first=%ld a=%02x b=%02x\n",
+                src, dst, bytes, mism, a[mism], b[mism]);
+    else
+        fprintf(stderr, "VECCOPY-OK bytes=%ld\n", bytes);
+}
+void __vyb_vec_copy_probe(long size, long cap, long elemsz) {
     if (getenv("VYB_STR_TRACE")) fprintf(stderr, "VECCOPY size=%ld cap=%ld elemsz=%ld bytes=%ld\n", size, cap, elemsz, cap*elemsz);
 }
 void __vyb_str_site(long n) {

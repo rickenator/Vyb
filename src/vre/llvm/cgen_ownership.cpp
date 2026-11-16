@@ -1774,6 +1774,19 @@ llvm::Value* LLVMCodegen::generateVecDeepCopy(llvm::Value* vecStructValue,
         builder->SetInsertPoint(doneBB);
     }
 
+    // Diagnostic: verify the copied contents under VYB_STR_TRACE.
+    {
+        llvm::Function* vf = module->getFunction("__vyb_vec_copy_verify");
+        if (!vf) {
+            llvm::FunctionType* vft = llvm::FunctionType::get(
+                llvm::Type::getVoidTy(*context),
+                {llvm::PointerType::get(*context, 0), llvm::PointerType::get(*context, 0),
+                 llvm::Type::getInt64Ty(*context), llvm::Type::getInt64Ty(*context)}, false);
+            vf = llvm::Function::Create(vft, llvm::Function::ExternalLinkage, "__vyb_vec_copy_verify", module.get());
+        }
+        builder->CreateCall(vf, {srcDataPtr, newDataPtr, vecSize, elemSizeVal});
+    }
+
     // Build a new Vec struct with the cloned data pointer
     llvm::Value* newVecStruct = llvm::UndefValue::get(vecStructType);
     newVecStruct = builder->CreateInsertValue(newVecStruct, newDataPtr, 0, "vdc.new_vec0");
