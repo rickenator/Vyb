@@ -73,6 +73,7 @@ void vyb_strq_push(void* p) {
     if (!p) return;
     if (vyb_strq_count == VYB_STRQ_CAP) {
         void* old = vyb_strq_ring[vyb_strq_head];
+        if (getenv("VYB_STR_TRACE")) fprintf(stderr, "FREE-EVICT %p\n", old);
         free(old);
         vyb_strq_ring[vyb_strq_head] = p;
         vyb_strq_head = (vyb_strq_head + 1) % VYB_STRQ_CAP;
@@ -315,6 +316,7 @@ VYB_WEAK void __vyb_pool_free(void* p) {
             return;
         }
     }
+        if (getenv("VYB_STR_TRACE")) fprintf(stderr, "FREE-F %p ra=%p\n", p, __builtin_return_address(0));
         free(p);
         return;
     }
