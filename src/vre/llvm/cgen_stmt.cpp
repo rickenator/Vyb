@@ -198,10 +198,21 @@ void LLVMCodegen::visit(vyb::ast::ReturnStatement *node) {
         if (!isMainReturn) while (scopeStack.size() > 1) {
             auto& scopeVars = scopeStack.back();
             for (auto& var : scopeVars) {
-                if (var.name == "__match_tmp" && var.needsCleanup) {
-                    cleanupVariable(var);
-                    var.needsCleanup = false;  // reclaimed here; the scope pop must not re-run it
+                if (!var.needsCleanup) continue;  // borrowed storage: the real owner frees it
+                // The borrow-retain at the return-transfer (+1 for the caller)
+                // pairs with THIS release: the binding's refs are 2 here, the
+                // release leaves 1 for the caller, and the caller's teardown
+                // takes it to 0. The member bases (the borrowed reads) are
+                // still skipped: their storage belongs to the read's owner.
+                bool isMovedIdent = false;
+                if (node->argument) {
+                    if (auto* ident = dynamic_cast<ast::Identifier*>(node->argument.get())) {
+                        if (var.name == ident->name) isMovedIdent = true;
+                    }
                 }
+                if (keepAlive.count(var.name) && !isMovedIdent) continue;
+                cleanupVariable(var);
+                var.needsCleanup = false;  // reclaimed here; the scope pop must not re-run it
             }
             scopeStack.pop_back();
         }
@@ -714,18 +725,6 @@ void LLVMCodegen::visit(vyb::ast::ReturnStatement *node) {
                 if (currentFunctionAST && returnValue && isVybStringStructType(returnValue->getType())) {
                     bool ownedTransfer = node->argument != nullptr &&
                                          exprIsStringTransfer(node->argument.get());
-                    // A bare identifier returned out of its frame is an owned
-                    // transfer, not a borrow: the return-path cleanup keepAlives
-                    // the moved binding (its scope release is skipped), so the
-                    // borrow's +1 retain would strand one ref per return — the
-                    // ~600K-strand site the site-tagged trace named.
-                    if (!ownedTransfer && node->argument) {
-                        if (auto* ident = dynamic_cast<ast::Identifier*>(node->argument.get())) {
-                            std::set<std::string> moved;
-                            collectReturnMoveNames(node->argument.get(), moved);
-                            if (moved.count(ident->name)) ownedTransfer = true;
-                        }
-                    }
                     if (!ownedTransfer) {
                         emitStrSiteMarker(7);
                         retainStringValue(returnValue);
