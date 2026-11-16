@@ -1258,8 +1258,14 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
         bool borrowedRead =
             dynamic_cast<ast::Identifier*>(node->right.get()) != nullptr ||
             dynamic_cast<ast::MemberExpression*>(node->right.get()) != nullptr ||
+            dynamic_cast<ast::CallExpression*>(node->right.get()) != nullptr ||
             selectAllArmsAreOwnedReads(node->right.get());
         if (borrowedRead) {
+            // The CallExpression arm mirrors the Vec branch above and the
+            // declaration gate in cgen_decl.cpp: a call result is NOT a fresh
+            // single owner — the callee's cleanup reclaims the returned
+            // struct's owned field buffers, so the binding must deep-copy
+            // (the GLM prefill's `g = gx_resolve(...)` re-reads stale fields).
             llvm::Value* dc = generateStructDeepCopy(RHS, ownedStructAst, llvStruct);
             if (dc) RHS = dc;
         }

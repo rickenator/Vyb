@@ -374,9 +374,16 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
         if (initialVal && varType->isStructTy() && node->typeNode &&
             node->init &&
             (dynamic_cast<ast::MemberExpression*>(node->init.get()) != nullptr ||
+             dynamic_cast<ast::CallExpression*>(node->init.get()) != nullptr ||
              dynamic_cast<ast::Identifier*>(node->init.get()) != nullptr) &&
             isKnownStructTypeNode(node->typeNode.get()) &&
             structTypeHasOwnedFields(node->typeNode.get())) {
+            // A CallExpression RHS is included despite the "fresh single owner"
+            // comment: the callee's cleanup reclaims the returned struct's owned
+            // field buffers (the same stale-binding class the Vec branch's
+            // CallExpression arm fixed — the GLM prefill's `g<GxLoc> =
+            // gx_resolve(...)` read garbage from index 9 onward because the
+            // binding aliased the freed return value).
             initialVal = generateStructDeepCopy(
                 initialVal, node->typeNode.get(), llvm::cast<llvm::StructType>(varType));
         }
