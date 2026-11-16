@@ -662,6 +662,7 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
         // (cleanupVariable) releases it.
         if (stringVar) {
             if (!exprIsStringTransfer(node->init.get())) {
+                emitStrSiteMarker(1);
                 retainStringValue(initialVal);
                 VYB_CDBG << "DEBUG: String variable '" << node->id->name << "' retained a shared buffer" << std::endl;
             }
@@ -1157,6 +1158,7 @@ void LLVMCodegen::visit(vyb::ast::FunctionDeclaration* node) {
             // exit, so the callee's use is independent of the argument's lifetime.
             bool stringParam = isVybStringStructType(paramTypes[i]);
             if (stringParam) {
+                emitStrSiteMarker(2);
                 retainStringValue(argVal);
                 VYB_CDBG << "DEBUG: Parameter '" << paramNames[i] << "' is a String - retained buffer" << std::endl;
             }

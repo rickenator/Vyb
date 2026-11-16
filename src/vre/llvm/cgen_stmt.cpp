@@ -715,6 +715,7 @@ void LLVMCodegen::visit(vyb::ast::ReturnStatement *node) {
                     bool ownedTransfer = node->argument != nullptr &&
                                          exprIsStringTransfer(node->argument.get());
                     if (!ownedTransfer) {
+                        emitStrSiteMarker(7);
                         retainStringValue(returnValue);
                         VYB_CDBG << "DEBUG: String return retained a borrowed buffer" << std::endl;
                     }
@@ -2009,6 +2010,7 @@ void LLVMCodegen::codegenMatch(vyb::ast::MatchStatement* node, llvm::AllocaInst*
                 // this binding (and anything moved out of it) still references
                 // it — the __vyb_exec_output use-after-free.
                 if (isVybStringStructType(payload->getType())) {
+                    emitStrSiteMarker(8);
                     retainStringValue(payload);
                 }
             }

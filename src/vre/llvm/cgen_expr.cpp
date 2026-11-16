@@ -1110,6 +1110,7 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
     if (stringOverwrite) {
         oldStringVal = builder->CreateLoad(destPointeeType, LHS, "assign.old_string");
         if (!exprIsStringTransfer(node->right.get())) {
+            emitStrSiteMarker(3);
             retainStringValue(RHS);
         }
     }
@@ -2729,6 +2730,7 @@ void LLVMCodegen::visit(ast::ConstructionExpression* node) {
             // each later released it -> premature free / UAF (#176).
             if (isVybStringStructType(payload->getType()) &&
                 !exprIsStringTransfer(node->arguments[0].get())) {
+                emitStrSiteMarker(4);
                 retainStringValue(payload);
             }
         }

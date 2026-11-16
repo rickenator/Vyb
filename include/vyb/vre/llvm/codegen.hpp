@@ -875,6 +875,7 @@ private:
         const std::vector<AsyncEnvField>& fields);
     void retainStringValue(llvm::Value* strVal);          // +1 on a copied String value
     void releaseStringValue(llvm::Value* strVal);         // -1 on a String value
+    void emitStrSiteMarker(int id);
     // Take a reference / clone the heap data of `value` so a binding that
     // establishes a new owner (a match pattern binding an enum payload) reclaims
     // exactly what it holds (#345).

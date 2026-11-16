@@ -5195,4 +5195,8 @@ static void vyb_ignore_sigpipe(void) { signal(SIGPIPE, SIG_IGN); }
 static void vyb_sigpipe_reg(void) __attribute__((constructor));
 static void vyb_sigpipe_reg(void) { vyb_ignore_sigpipe(); }
 static void vyb_async_atexit_reg(void) __attribute__((constructor));
-static void vyb_async_atexit_reg(void) { atexit(vyb_async_atexit); }
+static void vyb_async_atexit_reg(void) { atexit(vyb_async_atexit); }void __vyb_str_site(long n) {
+    if (getenv("VYB_STR_TRACE")) fprintf(stderr, "SITE %ld\n", n);
+}
+
+

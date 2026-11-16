@@ -1830,6 +1830,7 @@ llvm::Value* LLVMCodegen::generateStructDeepCopy(llvm::Value* structValue,
         } else if (isOwnedFieldString(f)) {
             auto* st2 = llvm::dyn_cast<llvm::StructType>(fLLVM);
             if (st2 && isVybStringStructType(st2)) {
+                emitStrSiteMarker(5);
                 retainStringValue(fv);
                 outVal = builder->CreateInsertValue(outVal, fv, i, "sdc.str");
                 continue;
@@ -2635,6 +2636,16 @@ llvm::Function* LLVMCodegen::generateAsyncEnvDtor(
 // overwrite, temporary consumed — calls __vyb_string_release(). Untracked
 // pointers (string literals in .rodata) are runtime no-ops.
 
+void LLVMCodegen::emitStrSiteMarker(int id) {
+    llvm::Function* fn = module->getFunction("__vyb_str_site");
+    if (!fn) {
+        llvm::FunctionType* ft = llvm::FunctionType::get(llvm::Type::getVoidTy(*context),
+            {llvm::Type::getInt64Ty(*context)}, false);
+        fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "__vyb_str_site", module.get());
+    }
+    builder->CreateCall(fn, {llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), id)});
+}
+
 void LLVMCodegen::retainStringValue(llvm::Value* strVal) {
     if (!strVal || !isVybStringStructType(strVal->getType())) return;
     llvm::Value* data = builder->CreateExtractValue(strVal, 0, "str.retain.data");
@@ -2666,6 +2677,7 @@ llvm::Value* LLVMCodegen::copyOwnedValueForBinding(llvm::Value* value,
     if (!value || !astType || !ty) return value;
     // String: `{ ptr, i64 }` is reference counted, so a copy just takes a reference.
     if (isVybStringStructType(ty)) {
+        emitStrSiteMarker(6);
         retainStringValue(value);
         return value;
     }
