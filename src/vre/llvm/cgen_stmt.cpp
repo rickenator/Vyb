@@ -190,31 +190,28 @@ void LLVMCodegen::visit(vyb::ast::ReturnStatement *node) {
         flushPendingCaptures();
 
         // Surgical scope cleanup: free ONLY the match-scrutinee temps on the
-        // return path. The blanket unwind broke borrowed my<Struct> returns
-        // (double free) and helper-chain strings; the temps are the drift's
-        // actual source and their ownership is unambiguous. main() is exempt
-        // (its serialization/exit tail reads the returned storage).
+        // return path (the resolve-depth drift's actual source). main() is
+        // exempt (its serialization/exit tail reads the returned storage).
+        //
+        // CRITICAL: this must NOT pop the compile-time scopeStack and must
+        // NOT clear the vars' cleanup flags. Codegen CONTINUES after a
+        // return inside a match arm / conditional (the other arms, the join
+        // blocks) — popping the stack left those paths registering variables
+        // with "No active scope" and their cleanups never emitted (the
+        // __recv_struct_tmp failures: btreemap's `bt.get(10) else "?"`
+        // returned garbage from test_collections_btreemap onward). Restoring
+        // needsCleanup lets every OTHER exit path emit its own free, so each
+        // path frees exactly once. The blanket all-vars form double-freed the
+        // closure escape tests (their bindings have return-visible borrow
+        // shapes collectReturnMoveNames does not cover).
         const bool isMainReturn = currentFunction && currentFunction->getName() == "main";
-        if (!isMainReturn) while (scopeStack.size() > 1) {
-            auto& scopeVars = scopeStack.back();
+        if (!isMainReturn) for (size_t si = scopeStack.size(); si-- > 1; ) {
+            auto& scopeVars = scopeStack[si];
             for (auto& var : scopeVars) {
-                if (!var.needsCleanup) continue;  // borrowed storage: the real owner frees it
-                // The borrow-retain at the return-transfer (+1 for the caller)
-                // pairs with THIS release: the binding's refs are 2 here, the
-                // release leaves 1 for the caller, and the caller's teardown
-                // takes it to 0. The member bases (the borrowed reads) are
-                // still skipped: their storage belongs to the read's owner.
-                bool isMovedIdent = false;
-                if (node->argument) {
-                    if (auto* ident = dynamic_cast<ast::Identifier*>(node->argument.get())) {
-                        if (var.name == ident->name) isMovedIdent = true;
-                    }
-                }
-                if (keepAlive.count(var.name) && !isMovedIdent) continue;
+                if (var.name != "__match_tmp" || !var.needsCleanup) continue;
                 cleanupVariable(var);
-                var.needsCleanup = false;  // reclaimed here; the scope pop must not re-run it
+                var.needsCleanup = true;  // restored: sibling codegen paths still clean up
             }
-            scopeStack.pop_back();
         }
         if (returnValue) {
             // Debug output to see what we're returning
