@@ -360,6 +360,7 @@ run_one(file<String>, vyb<String>, repoRoot<String>, tmpDir<String>, idx<Int>, j
 
     cmd<String> = "cd " + repoRoot + " && " + envPrefix + limitPrefix + vyb + " " + flags + " " + file
     cmd = cmd + " > " + outPath + " 2> " + errPath + "; echo $?"
+    spill("/tmp/vyb-cmds/cmd." + idx.to_string() + ".txt", cmd)
     rcText<String> = trim(run_sh(cmd))
 
     code<Int> = -1
@@ -457,16 +458,24 @@ json_reasons(reasons<String>)<String> -> {
 # --------------------------------------------------------------- option parsing
 
 # Value following `flag` in `argv`, or "" when it is absent.
-opt(argv<Vec<String>>, flag<String>)<String> -> {
+opt(argv<their<Vec<String> const>>, flag<String>)<String> -> {
     i<Int> = 0
     while (i < argv.len()) {
-        if (argv.get(i) == flag && i + 1 < argv.len()) { return argv.get(i + 1) }
+        if (argv.get(i) == flag && i + 1 < argv.len()) {
+            # DEFENSIVE: the returned element aliases the caller's argv storage;
+            # the return-transfer releases the borrowed element (the helper-chain
+            # return bug), so bind the caller to a FRESH concat buffer instead.
+            # The empty literal keeps the value byte-identical; if the compiler
+            # ever folds `s + ""` back to the alias, this stops being a fix.
+            e<String> = argv.get(i + 1)
+            return e + ""
+        }
         i = i + 1
     }
     return ""
 }
 
-has(argv<Vec<String>>, flag<String>)<Bool> -> {
+has(argv<their<Vec<String> const>>, flag<String>)<Bool> -> {
     i<Int> = 0
     while (i < argv.len()) {
         if (argv.get(i) == flag) { return true }
@@ -476,7 +485,7 @@ has(argv<Vec<String>>, flag<String>)<Bool> -> {
 }
 
 # Count of -v / --verbose tokens.
-verbosity(argv<Vec<String>>)<Int> -> {
+verbosity(argv<their<Vec<String> const>>)<Int> -> {
     n<Int> = 0
     i<Int> = 0
     while (i < argv.len()) {
@@ -493,7 +502,7 @@ verbosity(argv<Vec<String>>)<Int> -> {
 main()<Int> -> {
     argv<Vec<String>> = argv_of()
 
-    if (has(argv, "--help") || has(argv, "-h")) {
+    if (has(view(argv), "--help") || has(view(argv), "-h")) {
         println("run_tests.vyb - Vyb test-suite runner (Vyb implementation)")
         println("usage: vyb test/run_tests.vyb [--test-dir DIR] [--pattern GLOB]")
         println("       [--category C] [--shard K/N] [--list] [--vyb PATH] [--no-execute] [-v|-vv]")
@@ -510,23 +519,23 @@ main()<Int> -> {
     repoRoot<String> = dirname_of(dirname_of(runner))
     if (repoRoot.len() == 0 || !dir_exists(repoRoot + "/test")) { repoRoot = "." }
 
-    vyb<String> = opt(argv, "--vyb")
+    vyb<String> = opt(view(argv), "--vyb")
     if (vyb.len() == 0) { vyb = repoRoot + "/build/vyb" }
 
-    testDir<String> = opt(argv, "--test-dir")
+    testDir<String> = opt(view(argv), "--test-dir")
     if (testDir.len() == 0) { testDir = repoRoot + "/test" }
 
-    pattern<String> = opt(argv, "--pattern")
+    pattern<String> = opt(view(argv), "--pattern")
     if (pattern.len() == 0) { pattern = "*.vyb" }
 
-    category<String> = opt(argv, "--category")
-    jsonOut<String> = opt(argv, "--json")
-    evidenceOut<String> = opt(argv, "--evidence")
-    verbose<Int> = verbosity(argv)
-    jit<Bool> = !has(argv, "--no-execute")
+    category<String> = opt(view(argv), "--category")
+    jsonOut<String> = opt(view(argv), "--json")
+    evidenceOut<String> = opt(view(argv), "--evidence")
+    verbose<Int> = verbosity(view(argv))
+    jit<Bool> = !has(view(argv), "--no-execute")
 
     timeoutSecs<Int> = 300
-    timeoutSpec<String> = opt(argv, "--timeout")
+    timeoutSpec<String> = opt(view(argv), "--timeout")
     if (timeoutSpec.len() > 0) {
         if (!is_all_digits(timeoutSpec)) {
             println("--timeout expects whole seconds (0 = no limit); got '" + timeoutSpec + "'")
@@ -544,7 +553,7 @@ main()<Int> -> {
     # spec is a hard error: silently running a wrong subset would be a false green.
     shardCount<Int> = 1
     shardIndex<Int> = 0
-    shardSpec<String> = opt(argv, "--shard")
+    shardSpec<String> = opt(view(argv), "--shard")
     if (shardSpec.len() > 0) {
         parts<Vec<String>> = shardSpec.split("/")
         if (parts.len() != 2 || !is_all_digits(parts.get(0)) || !is_all_digits(parts.get(1))) {
@@ -600,7 +609,7 @@ main()<Int> -> {
     # --pattern, --shard and --category) and exits without running anything, so CI can
     # prove the shards partition the suite exactly instead of trusting their counts:
     # the union of the shard lists must equal the full list, with no repeats.
-    if (has(argv, "--list")) {
+    if (has(view(argv), "--list")) {
         idx<Int> = 0
         while (idx < files.len()) {
             println(files.get(idx))

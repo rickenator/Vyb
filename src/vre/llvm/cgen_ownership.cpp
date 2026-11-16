@@ -183,6 +183,8 @@ void LLVMCodegen::registerVariable(const std::string& name, llvm::Value* allocaI
     // #384 checkpoint (c): a promoted binding's cell is released at scope exit in place
     // of the ordinary per-type reclaim (cleanupVariable short-circuits on this).
     var.ownedCellBase = ownedCellBase;
+    var.regLoc = pendingRegLoc;
+    pendingRegLoc.clear();
 
     if (var.isVecWithMallocData) {
         VYB_CDBG << "DEBUG: Variable '" << name << "' identified as Vec with malloc'd data" << std::endl;
@@ -373,6 +375,11 @@ void LLVMCodegen::reclaimVecStorage(llvm::Value* vecValue, llvm::Type* vecStruct
 }
 
 void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
+    if (getenv("VYB_STR_TRACE")) {
+        auto* stTy = var.type ? llvm::dyn_cast<llvm::StructType>(var.type) : nullptr;
+        fprintf(stderr, "CLEANUP %s nc=%d type=%s loc=%s\n", var.name.c_str(), var.needsCleanup ? 1 : 0,
+                stTy ? stTy->getStructName().str().c_str() : "nonstruct", var.regLoc.c_str());
+    }
     VYB_CDBG << "DEBUG: Cleaning up variable '" << var.name << "', needsCleanup: "
               << var.needsCleanup << ", isVecWithMallocData: " << var.isVecWithMallocData << std::endl;
 
@@ -484,6 +491,7 @@ void LLVMCodegen::cleanupVariable(const ScopeVariable& var) {
                         // an optional whose payload is a String-bearing struct
                         // leaked the payload's strings at scope exit (the GLM
                         // json_parse header parse leaked ~5,930 strings per call).
+                        if (getenv("VYB_STR_TRACE")) fprintf(stderr, "OPTPAYLOAD %s loc=%s fires\n", var.name.c_str(), var.regLoc.c_str());
                         if (payload && !isOurRefType(payload) && !isMildRefType(payload) &&
                             !vecElementTypeNode(payload)) {
                             if (auto* payloadLLVM = llvm::dyn_cast<llvm::StructType>(
@@ -1031,6 +1039,7 @@ void LLVMCodegen::reclaimStructOwnedFieldsAt(llvm::Value* structPtr,
     std::vector<vyb::ast::TypeNodePtr> fields;
     if (collectStructConcreteFieldTypes(astType, fields)) {
     size_t n = std::min(fields.size(), (size_t)llvmTy->getNumElements());
+    if (getenv("VYB_STR_TRACE")) fprintf(stderr, "RECLAIM-struct %s fields=%zu llvmElems=%u\n", astType->toString().c_str(), fields.size(), (unsigned)llvmTy->getNumElements());
     llvm::PointerType* rawPtr = llvm::PointerType::get(*context, 0);
     llvm::Constant* zero = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 0);
     llvm::Constant* one = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), 1);
@@ -1038,6 +1047,7 @@ void LLVMCodegen::reclaimStructOwnedFieldsAt(llvm::Value* structPtr,
     for (size_t i = 0; i < n; ++i) {
         const vyb::ast::TypeNode* f = fields[i].get();
         llvm::Type* fLLVM = llvmTy->getElementType(i);
+        if (getenv("VYB_STR_TRACE")) fprintf(stderr, "RECLAIM-field %u type=%s ownedStr=%d\n", (unsigned)i, f ? f->toString().c_str() : "null", f && isOwnedFieldString(f) ? 1 : 0);
         if (!f || !fLLVM) continue;
         llvm::Value* fptr = builder->CreateStructGEP(llvmTy, structPtr, i, "reclaim.field");
         if (isVecTypeNode(f)) {
@@ -1081,6 +1091,10 @@ void LLVMCodegen::reclaimStructOwnedFieldsAt(llvm::Value* structPtr,
                                        eAst, elementTypeIsMildHandle(eAst));
                 }
             }
+            if (getenv("VYB_STR_TRACE")) fprintf(stderr, "RECLAIM-vec-elem %s elem=%s known=%d owned=%d\n",
+                f->toString().c_str(), eAst ? eAst->toString().c_str() : "null",
+                eAst ? (isKnownStructTypeNode(eAst) ? 1 : 0) : 0,
+                eAst ? (structTypeHasOwnedFields(eAst) ? 1 : 0) : 0);
             if (eAst && isKnownStructTypeNode(eAst) && structTypeHasOwnedFields(eAst)) {
                 llvm::Type* eLlvm = codegenType(const_cast<vyb::ast::TypeNode*>(eAst));
                 if (eLlvm && llvm::isa<llvm::StructType>(eLlvm)) {
@@ -1600,6 +1614,20 @@ llvm::Value* LLVMCodegen::generateVecDeepCopy(llvm::Value* vecStructValue,
     llvm::Function* mallocFunc = getOrCreateMallocFunction();
     llvm::Value* newDataPtr = builder->CreateCall(mallocFunc, {allocBytes}, "vdc.new_ptr");
 
+    // Diagnostic: the copy's shape under VYB_STR_TRACE.
+    {
+        llvm::Function* probe = module->getFunction("__vyb_vec_copy_probe");
+        if (!probe) {
+            llvm::FunctionType* pft = llvm::FunctionType::get(
+                llvm::Type::getVoidTy(*context),
+                {llvm::Type::getInt64Ty(*context), llvm::Type::getInt64Ty(*context), llvm::Type::getInt64Ty(*context),
+                 llvm::PointerType::get(*context, 0)}, false);
+            probe = llvm::Function::Create(pft, llvm::Function::ExternalLinkage, "__vyb_vec_copy_probe", module.get());
+        }
+        llvm::Value* esz = llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), elemSizeBytes);
+        builder->CreateCall(probe, {vecSize, vecCap, esz, newDataPtr});
+    }
+
     // If the element type is a struct that owns heap data (String buffers, inner
     // Vecs, nested owning structs), a raw memcpy of the element *structs* would copy
     // the pointers to the source's owned fields verbatim. Reclaiming the clone then
@@ -1747,6 +1775,19 @@ llvm::Value* LLVMCodegen::generateVecDeepCopy(llvm::Value* vecStructValue,
         builder->SetInsertPoint(doneBB);
     }
 
+    // Diagnostic: verify the copied contents under VYB_STR_TRACE.
+    {
+        llvm::Function* vf = module->getFunction("__vyb_vec_copy_verify");
+        if (!vf) {
+            llvm::FunctionType* vft = llvm::FunctionType::get(
+                llvm::Type::getVoidTy(*context),
+                {llvm::PointerType::get(*context, 0), llvm::PointerType::get(*context, 0),
+                 llvm::Type::getInt64Ty(*context), llvm::Type::getInt64Ty(*context)}, false);
+            vf = llvm::Function::Create(vft, llvm::Function::ExternalLinkage, "__vyb_vec_copy_verify", module.get());
+        }
+        builder->CreateCall(vf, {srcDataPtr, newDataPtr, vecSize, elemSizeVal});
+    }
+
     // Build a new Vec struct with the cloned data pointer
     llvm::Value* newVecStruct = llvm::UndefValue::get(vecStructType);
     newVecStruct = builder->CreateInsertValue(newVecStruct, newDataPtr, 0, "vdc.new_vec0");
@@ -1816,6 +1857,7 @@ llvm::Value* LLVMCodegen::generateStructDeepCopy(llvm::Value* structValue,
         } else if (isOwnedFieldString(f)) {
             auto* st2 = llvm::dyn_cast<llvm::StructType>(fLLVM);
             if (st2 && isVybStringStructType(st2)) {
+                emitStrSiteMarker(5);
                 retainStringValue(fv);
                 outVal = builder->CreateInsertValue(outVal, fv, i, "sdc.str");
                 continue;
@@ -2621,6 +2663,16 @@ llvm::Function* LLVMCodegen::generateAsyncEnvDtor(
 // overwrite, temporary consumed — calls __vyb_string_release(). Untracked
 // pointers (string literals in .rodata) are runtime no-ops.
 
+void LLVMCodegen::emitStrSiteMarker(int id) {
+    llvm::Function* fn = module->getFunction("__vyb_str_site");
+    if (!fn) {
+        llvm::FunctionType* ft = llvm::FunctionType::get(llvm::Type::getVoidTy(*context),
+            {llvm::Type::getInt64Ty(*context)}, false);
+        fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage, "__vyb_str_site", module.get());
+    }
+    builder->CreateCall(fn, {llvm::ConstantInt::get(llvm::Type::getInt64Ty(*context), id)});
+}
+
 void LLVMCodegen::retainStringValue(llvm::Value* strVal) {
     if (!strVal || !isVybStringStructType(strVal->getType())) return;
     llvm::Value* data = builder->CreateExtractValue(strVal, 0, "str.retain.data");
@@ -2652,6 +2704,7 @@ llvm::Value* LLVMCodegen::copyOwnedValueForBinding(llvm::Value* value,
     if (!value || !astType || !ty) return value;
     // String: `{ ptr, i64 }` is reference counted, so a copy just takes a reference.
     if (isVybStringStructType(ty)) {
+        emitStrSiteMarker(6);
         retainStringValue(value);
         return value;
     }

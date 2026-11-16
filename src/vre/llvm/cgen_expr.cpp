@@ -1110,6 +1110,7 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
     if (stringOverwrite) {
         oldStringVal = builder->CreateLoad(destPointeeType, LHS, "assign.old_string");
         if (!exprIsStringTransfer(node->right.get())) {
+            emitStrSiteMarker(3);
             retainStringValue(RHS);
         }
     }
@@ -1162,6 +1163,23 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
     bool vecHoldsStrings = false;
     if (vecOverwrite && vecDestAst) {
         vecHoldsStrings = isVecOfStringTypeNode(vecDestAst);
+        // A call-result Vec is a fresh temporary the callee's cleanup will
+        // free. A shallow store leaves this binding pointing at the freed
+        // buffer — the GLM prefill's fraw-reads-zeros (the stale pointer now
+        // returns the quarantined page's contents instead of segfaulting).
+        // Clone the buffer so the binding owns storage disjoint from the
+        // temporary's lifetime. A named-variable RHS keeps the shared-pointer
+        // semantics (both holders' frees are pool-absorbed).
+        if (dynamic_cast<ast::CallExpression*>(node->right.get()) && vecElemAst) {
+            if (auto* vt = llvm::dyn_cast_or_null<llvm::StructType>(destPointeeType)) {
+                if (isVecStructType(vt)) {
+                    llvm::Type* elemTy = codegenType(const_cast<vyb::ast::TypeNode*>(vecElemAst));
+                    if (elemTy) {
+                        if (llvm::Value* dc = generateVecDeepCopy(RHS, elemTy, vt, vecElemAst)) RHS = dc;
+                    }
+                }
+            }
+        }
     }
 
     // A `my<Struct>` field (or binding) exclusively owns a heap allocation that
@@ -1240,8 +1258,14 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
         bool borrowedRead =
             dynamic_cast<ast::Identifier*>(node->right.get()) != nullptr ||
             dynamic_cast<ast::MemberExpression*>(node->right.get()) != nullptr ||
+            dynamic_cast<ast::CallExpression*>(node->right.get()) != nullptr ||
             selectAllArmsAreOwnedReads(node->right.get());
         if (borrowedRead) {
+            // The CallExpression arm mirrors the Vec branch above and the
+            // declaration gate in cgen_decl.cpp: a call result is NOT a fresh
+            // single owner — the callee's cleanup reclaims the returned
+            // struct's owned field buffers, so the binding must deep-copy
+            // (the GLM prefill's `g = gx_resolve(...)` re-reads stale fields).
             llvm::Value* dc = generateStructDeepCopy(RHS, ownedStructAst, llvStruct);
             if (dc) RHS = dc;
         }
@@ -2729,6 +2753,7 @@ void LLVMCodegen::visit(ast::ConstructionExpression* node) {
             // each later released it -> premature free / UAF (#176).
             if (isVybStringStructType(payload->getType()) &&
                 !exprIsStringTransfer(node->arguments[0].get())) {
+                emitStrSiteMarker(4);
                 retainStringValue(payload);
             }
         }

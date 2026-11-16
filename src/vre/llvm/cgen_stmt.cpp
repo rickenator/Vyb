@@ -136,7 +136,44 @@ void LLVMCodegen::emitPropagatingErrorReturn(llvm::Value* errorPtr) {
     builder->CreateRet(resultStruct);
 }
 
+// Names whose bindings must stay alive because the return expression hands
+// their data to the caller: direct identifiers (moved) and member-expression
+// bases (the returned view borrows their storage).
+static void collectReturnMoveNames(ast::Expression* expr, std::set<std::string>& out) {
+    if (!expr) return;
+    if (auto* ident = dynamic_cast<ast::Identifier*>(expr)) {
+        out.insert(ident->name);
+        return;
+    }
+    if (auto* sel = dynamic_cast<ast::SelectExpression*>(expr)) {
+        for (const auto& arm : sel->cases) collectReturnMoveNames(arm.second.get(), out);
+        return;
+    }
+    if (auto* mem = dynamic_cast<ast::MemberExpression*>(expr)) {
+        if (mem->object) collectReturnMoveNames(mem->object.get(), out);
+    }
+}
+
 void LLVMCodegen::visit(vyb::ast::ReturnStatement *node) {
+    // Return-path scope cleanup. The enclosing blocks' exits take the
+    // terminated path (pop WITHOUT cleanup) whenever this return terminates
+    // their insert block, and the exitToFunctionBaseline() in the tail below
+    // then finds the scopes already popped empty — so without the cleanup
+    // HERE, every binding owned by the returning scopes strands its heap data
+    // until program exit. Measured: the match-scrutinee temps leaked
+    // json_parse's entire JsonDoc per call (~5,930 strings per st_open; the
+    // 45-layer GLM prefill's registry grew to 33M live strings / 64M table
+    // slots — the resolve-depth drift).
+    // Ownership flowing OUT with the return stays alive: a direct identifier
+    // return moves its binding (excluded); a select's moved arms and member
+    // reads borrow their storage (their bases are excluded via
+    // collectReturnMoveNames). Struct literals and calls produce independent
+    // data (the literal retains/copies its fields), so their source bindings
+    // clean up normally.
+    std::set<std::string> keepAlive;
+    if (node->argument) {
+        collectReturnMoveNames(node->argument.get(), keepAlive);
+    }
     // Emit deferred statements (LIFO) before returning
     emitDeferredStatementsForCurrentFunction();
     // Inside a lambda body, this is an exit: flush mutable-capture snapshots back
@@ -152,6 +189,30 @@ void LLVMCodegen::visit(vyb::ast::ReturnStatement *node) {
         // back into the storage they were captured from (no-op elsewhere).
         flushPendingCaptures();
 
+        // Surgical scope cleanup: free ONLY the match-scrutinee temps on the
+        // return path (the resolve-depth drift's actual source). main() is
+        // exempt (its serialization/exit tail reads the returned storage).
+        //
+        // CRITICAL: this must NOT pop the compile-time scopeStack and must
+        // NOT clear the vars' cleanup flags. Codegen CONTINUES after a
+        // return inside a match arm / conditional (the other arms, the join
+        // blocks) — popping the stack left those paths registering variables
+        // with "No active scope" and their cleanups never emitted (the
+        // __recv_struct_tmp failures: btreemap's `bt.get(10) else "?"`
+        // returned garbage from test_collections_btreemap onward). Restoring
+        // needsCleanup lets every OTHER exit path emit its own free, so each
+        // path frees exactly once. The blanket all-vars form double-freed the
+        // closure escape tests (their bindings have return-visible borrow
+        // shapes collectReturnMoveNames does not cover).
+        const bool isMainReturn = currentFunction && currentFunction->getName() == "main";
+        if (!isMainReturn) for (size_t si = scopeStack.size(); si-- > 1; ) {
+            auto& scopeVars = scopeStack[si];
+            for (auto& var : scopeVars) {
+                if (var.name != "__match_tmp" || !var.needsCleanup) continue;
+                cleanupVariable(var);
+                var.needsCleanup = true;  // restored: sibling codegen paths still clean up
+            }
+        }
         if (returnValue) {
             // Debug output to see what we're returning
             VYB_CDBG << "DEBUG: ReturnStatement - Type: " << getTypeName(returnValue->getType())
@@ -662,6 +723,7 @@ void LLVMCodegen::visit(vyb::ast::ReturnStatement *node) {
                     bool ownedTransfer = node->argument != nullptr &&
                                          exprIsStringTransfer(node->argument.get());
                     if (!ownedTransfer) {
+                        emitStrSiteMarker(7);
                         retainStringValue(returnValue);
                         VYB_CDBG << "DEBUG: String return retained a borrowed buffer" << std::endl;
                     }
@@ -1945,11 +2007,28 @@ void LLVMCodegen::codegenMatch(vyb::ast::MatchStatement* node, llvm::AllocaInst*
         } else if (!pendingOptionalPayload.empty()) {
             // Optional present arm: bind the payload (struct field 0).
             llvm::Value* payload = builder->CreateExtractValue(matchValue, 0, "opt.payload");
+            // #345's rule applies here too: the extracted payload aliases data
+            // the match temp (or the scrutinee's real owner) owns, and this
+            // binding's own reclaim would free the same buffers a second time —
+            // the GLM prefill's aborting double free (the same block freed by
+            // the same JIT'd site twice). Take an owned reference / clone.
+            if (pendingOptionalPayloadType) {
+                payload = copyOwnedValueForBinding(payload, pendingOptionalPayloadType.get(), payload->getType());
+            }
             llvm::AllocaInst* alloca = createEntryBlockAlloca(payload->getType(), pendingOptionalPayload);
             builder->CreateStore(payload, alloca);
             namedValues[pendingOptionalPayload] = alloca;
             if (pendingOptionalPayloadType) {
                 valueTypeMap[alloca] = pendingOptionalPayloadType;
+                // The extraction is a COPY: the match temp's cleanup owns the
+                // original registry refs. A String-typed payload must be
+                // retained here, or the temp's cleanup frees the buffer while
+                // this binding (and anything moved out of it) still references
+                // it — the __vyb_exec_output use-after-free.
+                if (isVybStringStructType(payload->getType())) {
+                    emitStrSiteMarker(8);
+                    retainStringValue(payload);
+                }
             }
         }
 

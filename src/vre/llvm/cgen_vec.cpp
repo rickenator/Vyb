@@ -272,6 +272,7 @@ void LLVMCodegen::handleVecPush(vyb::ast::CallExpression* node, llvm::Value* vec
     // source must be retained (+1) so the element outlives the producing scope.
     if (elementType && isVybStringStructType(elementType) &&
         !exprIsStringTransfer(node->arguments[0].get())) {
+        emitStrSiteMarker(9);
         retainStringValue(valueToAdd);
     }
 
@@ -792,6 +793,7 @@ void LLVMCodegen::handleVecGet(vyb::ast::CallExpression* node, llvm::Value* vecP
         // drops a reference it never took, and the temp-receiver reclaim at the call
         // site cannot run at all because the result would dangle.
         if (isVybStringStructType(elementLLVMType)) {
+            emitStrSiteMarker(10);
             retainStringValue(element);
         }
         // #439 / #427 defects 6/7: a closure element and an `our`/`mild` element are
@@ -912,6 +914,7 @@ void LLVMCodegen::handleVecLast(vyb::ast::CallExpression* node, llvm::Value* vec
         // result aliases the reference the Vec holds. `first`/`last`/`peek` hand a
         // value back, so the caller takes its own reference -- same rule as `get`.
         if (isVybStringStructType(elementLLVMType)) {
+            emitStrSiteMarker(11);
             retainStringValue(element);
         }
         // #439 / #427 defects 6/7: a closure element and an `our`/`mild` element are
@@ -1088,6 +1091,7 @@ void LLVMCodegen::handleVecSet(vyb::ast::CallExpression* node, llvm::Value* vecP
         llvm::Value* oldElem = builder->CreateLoad(elementLLVMType, elementPtr, "vec.set.old_elem");
         releaseStringValue(oldElem);
         if (!exprIsStringTransfer(node->arguments[1].get())) {
+            emitStrSiteMarker(12);
             retainStringValue(value);
         }
     } else if (isClosureElementType(elementLLVMType, typeOfNode(node->arguments[1]).get()) ||

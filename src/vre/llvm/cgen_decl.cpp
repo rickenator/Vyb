@@ -347,6 +347,7 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
         if (initialVal && isVecStructType(varType) && isVecStructType(initialVal->getType()) &&
             node->init &&
             (dynamic_cast<ast::MemberExpression*>(node->init.get()) != nullptr ||
+             dynamic_cast<ast::CallExpression*>(node->init.get()) != nullptr ||
              dynamic_cast<ast::Identifier*>(node->init.get()) != nullptr)) {
             const vyb::ast::TypeNode* elemNode = nullptr;
             if (auto* vt = dynamic_cast<ast::VecType*>(node->typeNode.get())) {
@@ -373,9 +374,16 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
         if (initialVal && varType->isStructTy() && node->typeNode &&
             node->init &&
             (dynamic_cast<ast::MemberExpression*>(node->init.get()) != nullptr ||
+             dynamic_cast<ast::CallExpression*>(node->init.get()) != nullptr ||
              dynamic_cast<ast::Identifier*>(node->init.get()) != nullptr) &&
             isKnownStructTypeNode(node->typeNode.get()) &&
             structTypeHasOwnedFields(node->typeNode.get())) {
+            // A CallExpression RHS is included despite the "fresh single owner"
+            // comment: the callee's cleanup reclaims the returned struct's owned
+            // field buffers (the same stale-binding class the Vec branch's
+            // CallExpression arm fixed — the GLM prefill's `g<GxLoc> =
+            // gx_resolve(...)` read garbage from index 9 onward because the
+            // binding aliased the freed return value).
             initialVal = generateStructDeepCopy(
                 initialVal, node->typeNode.get(), llvm::cast<llvm::StructType>(varType));
         }
@@ -662,6 +670,7 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
         // (cleanupVariable) releases it.
         if (stringVar) {
             if (!exprIsStringTransfer(node->init.get())) {
+                emitStrSiteMarker(1);
                 retainStringValue(initialVal);
                 VYB_CDBG << "DEBUG: String variable '" << node->id->name << "' retained a shared buffer" << std::endl;
             }
@@ -1157,6 +1166,7 @@ void LLVMCodegen::visit(vyb::ast::FunctionDeclaration* node) {
             // exit, so the callee's use is independent of the argument's lifetime.
             bool stringParam = isVybStringStructType(paramTypes[i]);
             if (stringParam) {
+                emitStrSiteMarker(2);
                 retainStringValue(argVal);
                 VYB_CDBG << "DEBUG: Parameter '" << paramNames[i] << "' is a String - retained buffer" << std::endl;
             }
