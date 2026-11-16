@@ -1163,6 +1163,23 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
     bool vecHoldsStrings = false;
     if (vecOverwrite && vecDestAst) {
         vecHoldsStrings = isVecOfStringTypeNode(vecDestAst);
+        // A call-result Vec is a fresh temporary the callee's cleanup will
+        // free. A shallow store leaves this binding pointing at the freed
+        // buffer — the GLM prefill's fraw-reads-zeros (the stale pointer now
+        // returns the quarantined page's contents instead of segfaulting).
+        // Clone the buffer so the binding owns storage disjoint from the
+        // temporary's lifetime. A named-variable RHS keeps the shared-pointer
+        // semantics (both holders' frees are pool-absorbed).
+        if (dynamic_cast<ast::CallExpression*>(node->right.get()) && vecElemAst) {
+            if (auto* vt = llvm::dyn_cast_or_null<llvm::StructType>(destPointeeType)) {
+                if (isVecStructType(vt)) {
+                    llvm::Type* elemTy = codegenType(const_cast<vyb::ast::TypeNode*>(vecElemAst));
+                    if (elemTy) {
+                        if (llvm::Value* dc = generateVecDeepCopy(RHS, elemTy, vt, vecElemAst)) RHS = dc;
+                    }
+                }
+            }
+        }
     }
 
     // A `my<Struct>` field (or binding) exclusively owns a heap allocation that

@@ -347,6 +347,7 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
         if (initialVal && isVecStructType(varType) && isVecStructType(initialVal->getType()) &&
             node->init &&
             (dynamic_cast<ast::MemberExpression*>(node->init.get()) != nullptr ||
+             dynamic_cast<ast::CallExpression*>(node->init.get()) != nullptr ||
              dynamic_cast<ast::Identifier*>(node->init.get()) != nullptr)) {
             const vyb::ast::TypeNode* elemNode = nullptr;
             if (auto* vt = dynamic_cast<ast::VecType*>(node->typeNode.get())) {
