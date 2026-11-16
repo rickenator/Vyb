@@ -696,6 +696,10 @@ VYB_WEAK void __vyb_string_release(void* p) {
         pthread_mutex_lock(&vyb_str_reg_lock);
         vyb_str_ref* home = vyb_str_lookup_slot(p);
         if (home && atomic_load_explicit(&home->p, memory_order_acquire) == p) {
+            if (getenv("VYB_STR_TRACE") && p) {
+                size_t n = strnlen(p, 40);
+                fprintf(stderr, "RETIRE %p len~%zu '%.*s'\n", p, n, (int)n, (char*)p);
+            }
             free(p);
             atomic_store_explicit(&home->refs, 0, memory_order_relaxed);
             atomic_store_explicit(&home->p, VYB_STR_TOMB, memory_order_relaxed);
