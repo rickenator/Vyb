@@ -54,6 +54,35 @@
 #define VYB_WEAK
 #endif
 
+/* ---- retired-buffer quarantine -------------------------------------------
+ * The string registry's release path frees the buffer at refs==0. A stale
+ * pointer (a value-semantics copy held past the free, or a late release)
+ * that lands on the same address after libc reuses it can then corrupt a
+ * live string: the stale release matches the re-registered slot and kills
+ * the new string, and a stale READ segfaults on the unmapped page. The
+ * quarantine holds retired buffers mapped in a bounded ring so both the
+ * stale release and the stale read hit still-valid memory. The registry's
+ * tombstone already absorbs the double release, so a pointer reaches the
+ * quarantine at most once. ~4096 entries; the oldest is freed on overflow.
+ * -------------------------------------------------------------------------- */
+#define VYB_STRQ_CAP 4096
+void*  vyb_strq_ring[VYB_STRQ_CAP];
+size_t vyb_strq_head = 0;
+size_t vyb_strq_count = 0;
+void vyb_strq_push(void* p) {
+    if (!p) return;
+    if (vyb_strq_count == VYB_STRQ_CAP) {
+        void* old = vyb_strq_ring[vyb_strq_head];
+        free(old);
+        vyb_strq_ring[vyb_strq_head] = p;
+        vyb_strq_head = (vyb_strq_head + 1) % VYB_STRQ_CAP;
+        return;
+    }
+    size_t idx = (vyb_strq_head + vyb_strq_count) % VYB_STRQ_CAP;
+    vyb_strq_ring[idx] = p;
+    vyb_strq_count++;
+}
+
 // ============================================================================
 // RAW-IO HELPERS (avoid libc symbol interposition)
 // ============================================================================
@@ -274,6 +303,18 @@ VYB_WEAK void __vyb_pool_free(void* p) {
         // Not born here (registry string, FFI buffer, libc block): libc free,
         // which is what the pre-pool codegen did with every pointer anyway.
         pthread_mutex_unlock(&g_vyb_pool_lock);
+    /* Absorb a quarantined pointer: a registered string that a raw free site
+     * (the error slot, a discarded result) frees directly would otherwise be
+     * freed twice — once here, once when the quarantine evicts it. The
+     * quarantine holds retired registry strings mapped; freeing one here and
+     * again at eviction is the tcache double free. */
+    for (size_t qi = 0; qi < vyb_strq_count; ++qi) {
+        size_t idx = (vyb_strq_head + qi) % VYB_STRQ_CAP;
+        if (vyb_strq_ring[idx] == p) {
+            if (getenv("VYB_STR_TRACE")) fprintf(stderr, "QUAR-ABSORB %p\n", p);
+            return;
+        }
+    }
         free(p);
         return;
     }
@@ -676,7 +717,8 @@ VYB_WEAK void* __vyb_string_retain(void* p) {
 }
 
 // Drop one reference; free the buffer when the last reference is released.
-VYB_WEAK void __vyb_string_release(void* p) {
+VYB_WEAK 
+void __vyb_string_release(void* p) {
     if (!p) return;
     vyb_str_maybe_init();
     vyb_str_rdr_enter();
@@ -700,7 +742,10 @@ VYB_WEAK void __vyb_string_release(void* p) {
                 size_t n = strnlen(p, 40);
                 fprintf(stderr, "RETIRE %p len~%zu '%.*s'\n", p, n, (int)n, (char*)p);
             }
-            free(p);
+            /* The quarantine holds the buffer mapped so a stale pointer (a
+             * value copy past the free, or the slot-reuse kill) cannot fault
+             * or corrupt the next string at this address. */
+            vyb_strq_push(p);
             atomic_store_explicit(&home->refs, 0, memory_order_relaxed);
             atomic_store_explicit(&home->p, VYB_STR_TOMB, memory_order_relaxed);
             vyb_str_tombs++;
@@ -737,7 +782,8 @@ VYB_WEAK void __vyb_string_release_each(void* arr, int64_t n) {
 // Take one reference on each of the first `n` String elements in `arr` (used when
 // the same elements are shallow-copied into an independent buffer that will own
 // its own references).
-VYB_WEAK void __vyb_string_retain_each(void* arr, int64_t n) {
+VYB_WEAK 
+void __vyb_string_retain_each(void* arr, int64_t n) {
     if (!arr || n <= 0) return;
     vyb_str_elem* e = (vyb_str_elem*)arr;
     for (int64_t i = 0; i < n; ++i) __vyb_string_retain(e[i].ptr);
