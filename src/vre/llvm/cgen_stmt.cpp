@@ -714,6 +714,18 @@ void LLVMCodegen::visit(vyb::ast::ReturnStatement *node) {
                 if (currentFunctionAST && returnValue && isVybStringStructType(returnValue->getType())) {
                     bool ownedTransfer = node->argument != nullptr &&
                                          exprIsStringTransfer(node->argument.get());
+                    // A bare identifier returned out of its frame is an owned
+                    // transfer, not a borrow: the return-path cleanup keepAlives
+                    // the moved binding (its scope release is skipped), so the
+                    // borrow's +1 retain would strand one ref per return — the
+                    // ~600K-strand site the site-tagged trace named.
+                    if (!ownedTransfer && node->argument) {
+                        if (auto* ident = dynamic_cast<ast::Identifier*>(node->argument.get())) {
+                            std::set<std::string> moved;
+                            collectReturnMoveNames(node->argument.get(), moved);
+                            if (moved.count(ident->name)) ownedTransfer = true;
+                        }
+                    }
                     if (!ownedTransfer) {
                         emitStrSiteMarker(7);
                         retainStringValue(returnValue);
