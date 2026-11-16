@@ -63,25 +63,119 @@
  * quarantine holds retired buffers mapped in a bounded ring so both the
  * stale release and the stale read hit still-valid memory. The registry's
  * tombstone already absorbs the double release, so a pointer reaches the
- * quarantine at most once. ~4096 entries; the oldest is freed on overflow.
+ * quarantine at most once.
+ *
+ * IDENTITY RULE (the stale-release kill): a quarantined buffer is still
+ * MAPPED, so libc cannot have handed its address to a new string; therefore
+ * any __vyb_string_release of a quarantined pointer is stale by definition
+ * and is absorbed (see __vyb_string_release). This makes the quarantine the
+ * registry's identity record for retired buffers, so it must cover the
+ * window a stale release can arrive in. The ring is bounded by BOTH an
+ * entry count and a held-byte budget (the GLM prefill churns ~646k
+ * strings/layer, mostly tiny, but read-back buffers reach ~1 MB — bytes,
+ * not entries, are what evicts). The oldest buffer is freed on overflow;
+ * a stale release arriving after ITS buffer's eviction AND the address's
+ * reuse is the one case identity cannot see — enlarge VYB_STRQ_MB if a
+ * workload reproduces it.
  * -------------------------------------------------------------------------- */
-#define VYB_STRQ_CAP 4096
+#define VYB_STRQ_CAP 65536
+static size_t vyb_strq_bytes = 0;                 // held-byte total
+static size_t vyb_strq_max_bytes = 0;             // 0 = uninitialized; lazy from VYB_STRQ_MB
+static size_t vyb_strq_budget(void) {
+    if (vyb_strq_max_bytes == 0) {
+        const char* mb = getenv("VYB_STRQ_MB");
+        long v = mb ? atol(mb) : 512;
+        if (v <= 0) v = 512;
+        vyb_strq_max_bytes = (size_t)v * 1024 * 1024;
+    }
+    return vyb_strq_max_bytes;
+}
+// malloc_usable_size gives the true held cost of a quarantined buffer
+// (string buffers are registry-owned libc allocations).
+#if defined(__GLIBC__)
+#include <malloc.h>
+#define VYB_STRQ_USABLE(p) malloc_usable_size(p)
+#else
+#define VYB_STRQ_USABLE(p) ((size_t)strnlen((char*)(p), 4096) + 1)
+#endif
 void*  vyb_strq_ring[VYB_STRQ_CAP];
 size_t vyb_strq_head = 0;
 size_t vyb_strq_count = 0;
+/* Shadow membership set (open addressing, power-of-two capacity) so the hot
+ * release path's identity check is O(1) instead of a 65k-entry scan — the
+ * prefill issues ~646k releases per layer. Tombstones mark evicted slots so
+ * probe chains survive deletion. */
+#define VYB_STRQ_SET_CAP (VYB_STRQ_CAP * 2)          // 131072, power of two
+#define VYB_STRQ_SET_TOMB ((void*)(uintptr_t)1)
+static void* vyb_strq_set[VYB_STRQ_SET_CAP];
+static inline size_t vyb_strq_set_slot(void* p) {
+    // The low bits of a malloc'd pointer are the allocator's; mix to spread.
+    uintptr_t h = (uintptr_t)p >> 4;
+    h ^= h >> 17; h *= (uintptr_t)0x9E3779B97F4A7C15ULL; h ^= h >> 29;
+    return (size_t)h & (VYB_STRQ_SET_CAP - 1);
+}
+static void vyb_strq_set_insert(void* p) {
+    size_t k = vyb_strq_set_slot(p);
+    for (size_t j = 0; j < VYB_STRQ_SET_CAP; ++j) {
+        void* c = vyb_strq_set[k];
+        if (c == NULL || c == VYB_STRQ_SET_TOMB || c == p) { vyb_strq_set[k] = p; return; }
+        k = (k + 1) & (VYB_STRQ_SET_CAP - 1);
+    }
+}
+static void vyb_strq_set_remove(void* p) {
+    size_t k = vyb_strq_set_slot(p);
+    for (size_t j = 0; j < VYB_STRQ_SET_CAP; ++j) {
+        void* c = vyb_strq_set[k];
+        if (c == NULL) return;                       // end of probe chain: absent
+        if (c == p) { vyb_strq_set[k] = VYB_STRQ_SET_TOMB; return; }
+        k = (k + 1) & (VYB_STRQ_SET_CAP - 1);
+    }
+}
+static inline int vyb_strq_holds(void* p) {
+    size_t k = vyb_strq_set_slot(p);
+    for (size_t j = 0; j < VYB_STRQ_SET_CAP; ++j) {
+        void* c = vyb_strq_set[k];
+        if (c == NULL) return 0;
+        if (c == p) return 1;
+        k = (k + 1) & (VYB_STRQ_SET_CAP - 1);
+    }
+    return 0;
+}
+// Caller holds vyb_str_reg_lock (retire) or g_vyb_pool_lock (free paths) —
+// the ring is touched under whichever lock the caller's path already holds;
+// the release-side scan takes the registry lock. Single-threaded correctness
+// per path; cross-lock races are the pre-existing shape of this ring.
 void vyb_strq_push(void* p) {
     if (!p) return;
+    size_t sz = VYB_STRQ_USABLE(p);
     if (vyb_strq_count == VYB_STRQ_CAP) {
         void* old = vyb_strq_ring[vyb_strq_head];
         if (getenv("VYB_STR_TRACE")) fprintf(stderr, "FREE-EVICT %p\n", old);
+        vyb_strq_bytes -= VYB_STRQ_USABLE(old);
+        vyb_strq_set_remove(old);
         free(old);
         vyb_strq_ring[vyb_strq_head] = p;
         vyb_strq_head = (vyb_strq_head + 1) % VYB_STRQ_CAP;
+        vyb_strq_bytes += sz;
+        vyb_strq_set_insert(p);
         return;
+    }
+    // Byte-budget eviction: drop the oldest entries until the new buffer fits.
+    while (vyb_strq_count > 0 && vyb_strq_bytes + sz > vyb_strq_budget()) {
+        void* old = vyb_strq_ring[vyb_strq_head];
+        if (getenv("VYB_STR_TRACE")) fprintf(stderr, "FREE-EVICT %p\n", old);
+        vyb_strq_bytes -= VYB_STRQ_USABLE(old);
+        vyb_strq_set_remove(old);
+        free(old);
+        vyb_strq_ring[vyb_strq_head] = NULL;
+        vyb_strq_head = (vyb_strq_head + 1) % VYB_STRQ_CAP;
+        vyb_strq_count--;
     }
     size_t idx = (vyb_strq_head + vyb_strq_count) % VYB_STRQ_CAP;
     vyb_strq_ring[idx] = p;
     vyb_strq_count++;
+    vyb_strq_bytes += sz;
+    vyb_strq_set_insert(p);
 }
 
 // ============================================================================
@@ -726,10 +820,24 @@ VYB_WEAK void* __vyb_string_retain(void* p) {
 }
 
 // Drop one reference; free the buffer when the last reference is released.
-VYB_WEAK 
+VYB_WEAK
 void __vyb_string_release(void* p) {
     if (!p) return;
     vyb_str_maybe_init();
+    /* IDENTITY CHECK first: a quarantined buffer is retired and still mapped,
+     * so libc cannot have re-registered its address — any release of it is
+     * STALE (a value copy held past the free, or a late release). Without
+     * this the stale release would fall through to the registry, match the
+     * slot of a NEW string registered at the recycled address, and kill it
+     * (the runner's tcache double free; the GLM prefill's stale want-name
+     * strings at layer 1). */
+    pthread_mutex_lock(&vyb_str_reg_lock);
+    int quarantined = vyb_strq_holds(p);
+    pthread_mutex_unlock(&vyb_str_reg_lock);
+    if (quarantined) {
+        if (getenv("VYB_STR_TRACE")) fprintf(stderr, "QUAR-ABSORB-REL %p\n", p);
+        return;
+    }
     vyb_str_rdr_enter();
     vyb_str_ref* s = vyb_str_lookup_slot(p);
     if (!s || atomic_load_explicit(&s->p, memory_order_acquire) != p) {
