@@ -2011,6 +2011,14 @@ void LLVMCodegen::codegenMatch(vyb::ast::MatchStatement* node, llvm::AllocaInst*
         } else if (!pendingOptionalPayload.empty()) {
             // Optional present arm: bind the payload (struct field 0).
             llvm::Value* payload = builder->CreateExtractValue(matchValue, 0, "opt.payload");
+            // #345's rule applies here too: the extracted payload aliases data
+            // the match temp (or the scrutinee's real owner) owns, and this
+            // binding's own reclaim would free the same buffers a second time —
+            // the GLM prefill's aborting double free (the same block freed by
+            // the same JIT'd site twice). Take an owned reference / clone.
+            if (pendingOptionalPayloadType) {
+                payload = copyOwnedValueForBinding(payload, pendingOptionalPayloadType.get(), payload->getType());
+            }
             llvm::AllocaInst* alloca = createEntryBlockAlloca(payload->getType(), pendingOptionalPayload);
             builder->CreateStore(payload, alloca);
             namedValues[pendingOptionalPayload] = alloca;

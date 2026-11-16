@@ -316,8 +316,12 @@ VYB_WEAK void __vyb_pool_free(void* p) {
             return;
         }
     }
+        /* A foreign block freed twice (the latent codegen double-free paths)
+         * would abort in libc. Hold it mapped in the quarantine instead: the
+         * second foreign free hits the absorb scan above and returns; the
+         * eviction frees it exactly once. */
         if (getenv("VYB_STR_TRACE")) fprintf(stderr, "FREE-F %p ra=%p\n", p, __builtin_return_address(0));
-        free(p);
+        vyb_strq_push(p);
         return;
     }
     if (size >= VYB_POOL_MIN_BYTES && g_vyb_pool_retained + size <= VYB_POOL_CAP_BYTES) {
@@ -330,7 +334,10 @@ VYB_WEAK void __vyb_pool_free(void* p) {
         return;
     }
     pthread_mutex_unlock(&g_vyb_pool_lock);
-    free(p);
+    /* Over-cap free: hold in the quarantine like the foreign branch — a block
+     * freed here while still referenced by generated code corrupted the
+     * GLM prefill's layer-1 attention (PF_FAIL) and the retained counter. */
+    vyb_strq_push(p);
 }
 
 // ============================================================================
