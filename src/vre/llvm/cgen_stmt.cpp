@@ -2044,18 +2044,20 @@ void LLVMCodegen::codegenMatch(vyb::ast::MatchStatement* node, llvm::AllocaInst*
                 // this binding (and anything moved out of it) still references
                 // it — the __vyb_exec_output use-after-free.
                 if (isVybStringStructType(payload->getType())) {
-                    emitStrSiteMarker(8);
-                    retainStringValue(payload);
-                    armRetainedStringBindings.push_back(alloca);
-                    // The io-intrinsic scrutinee's temp is never cleaned up by the
-                    // match (no needsCleanup registration on the intrinsic path),
-                    // so the optional's inner-store retain on the original buffer
-                    // has no matching release. The clone above is independent:
-                    // drop the original's reference here.
                     if (scrutineeIsIoIntrinsic) {
+                        // The io-intrinsic scrutinee's buffer is born with refs=1
+                        // (registered owned by __vyb_file_read_at) and the match
+                        // temp holds exactly that reference: TRANSFER it to this
+                        // binding instead of shallow-copy + retain. The binding
+                        // still owns that reference, so its arm-exit release
+                        // below fires and drops it (the previous skip left the
+                        // birth ref unreleased — one leaked buffer per read_at).
                         emitStrSiteMarker(9);
-                        releaseStringValue(originalOptPayload);
+                    } else {
+                        emitStrSiteMarker(8);
+                        retainStringValue(payload);
                     }
+                    armRetainedStringBindings.push_back(alloca);
                 }
             }
         }
