@@ -770,8 +770,9 @@ static void vyb_string_register_refs(void* p, int64_t initial_refs) {
     }
     if (getenv("VYB_STR_TRACE")) {
         void* cp = s ? atomic_load_explicit(&s->p, memory_order_relaxed) : NULL;
-        fprintf(stderr, "REG %p refs=%lld\n", p,
-                s && cp == p ? (long long)atomic_load_explicit(&s->refs, memory_order_relaxed) : -999LL);
+        fprintf(stderr, "REG %p refs=%lld size=%zu\n", p,
+                s && cp == p ? (long long)atomic_load_explicit(&s->refs, memory_order_relaxed) : -999LL,
+                p ? malloc_usable_size(p) : 0);
     }
     pthread_mutex_unlock(&vyb_str_reg_lock);
 
