@@ -1636,6 +1636,26 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
         for (const auto& kv : metadata.sharesByName) {
             exports_[currentKey].insert(kv.first);
         }
+        // extern "C" declarations are foreign-symbol declarations (cu*,
+        // malloc_trim, ...): they have no definition in this module, so they
+        // are leaves in the dependency closure and never reach the export set
+        // through sharesByName — yet an importer's spliced body references
+        // them through this module's functions. Auto-export them: the foreign
+        // symbol names are linkable from any module, and a redeclaration in
+        // the importer resolves to the same C symbol.
+        for (auto& stmt : module->body) {
+            if (auto* ns = dynamic_cast<ast::NamespaceDeclaration*>(stmt.get())) {
+                if (ns->name && ns->name->name == "__extern_C") {
+                    for (auto& member : ns->members) {
+                        std::unordered_set<std::string> declNames;
+                        collectDeclarationNames(member.get(), declNames);
+                        for (const std::string& name : declNames) {
+                            exports_[currentKey].insert(name);
+                        }
+                    }
+                }
+            }
+        }
 
         // Auto-import core::* contracts (core::aspects) unless opted out via the
         // `no_core()` directive, the module is part of the stdlib itself (the stdlib
@@ -2106,7 +2126,7 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
                                 // and break the JIT link. The extern names must
                                 // land exactly as declared.
                                 AstCloner cloner;
-                                cloner.visit(*importedStmt);
+                                importedStmt->accept(cloner);
                                 resolvedBody.push_back(std::move(cloner.take<ast::Statement>()));
                             }
                             continue;
