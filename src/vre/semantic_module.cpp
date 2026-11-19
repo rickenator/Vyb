@@ -47,10 +47,45 @@ void SemanticAnalyzer::visit(ast::Module* node) {
     // First pass: Build registry and visit all declarations
     functionRegistry.clear();
     externalFunctionNames.clear();
+    // Pre-insert the module-level variable declarations (the constants) into
+    // the global scope BEFORE the statement visits: the spliced imported
+    // constants land after main() in the resolved body, so main's body — at
+    // any nesting depth — would otherwise resolve them only after its own
+    // statements were analyzed. The later declaration visits overwrite these
+    // entries with the full symbol info.
+    for (auto& item : node->body) {
+        if (auto varDecl = dynamic_cast<ast::VariableDeclaration*>(item.get())) {
+            if (varDecl->id && varDecl->id->name.size() > 0 && varDecl->typeNode) {
+                SymbolInfo sym;
+                sym.name = varDecl->id->name;
+                sym.type = std::shared_ptr<ast::TypeNode>(varDecl->typeNode->clone());
+                sym.isConst = varDecl->isConst;
+                currentScope->add(sym);
+                preInsertedConstants_.insert(varDecl->id->name);
+            }
+        }
+    }
     for (auto& item : node->body) {
         if (auto funcDecl = dynamic_cast<ast::FunctionDeclaration*>(item.get())) {
             if (funcDecl->id) {
                 functionRegistry[funcDecl->id->name] = funcDecl;
+                // The share'd functions: pre-insert into the global scope so
+                // the importer's NESTED scopes (the while/match bodies — the
+                // http serve loop) resolve the calls. The later declaration
+                // visits overwrite these entries.
+                // Pre-insert every top-level function: the importer's nested
+                // scopes must resolve the calls, and the scope gate handles
+                // the per-module visibility for the unshared ones.
+                SymbolInfo sym;
+                sym.kind = SymbolInfo::Kind::Function;
+                sym.name = funcDecl->id->name;
+                if (funcDecl->returnTypeNode) {
+                    sym.type = std::shared_ptr<ast::TypeNode>(funcDecl->returnTypeNode->clone());
+                }
+                currentScope->add(sym);
+                if (std::getenv("VYB_TRACE_MANGLE")) {
+                    std::fprintf(stderr, "[fnpresert] %s scope=%p\n", funcDecl->id->name.c_str(), (void*)currentScope);
+                }
             }
         } else if (auto namespaceDecl = dynamic_cast<ast::NamespaceDeclaration*>(item.get())) {
             if (namespaceDecl->name && namespaceDecl->name->name == "__extern_C") {

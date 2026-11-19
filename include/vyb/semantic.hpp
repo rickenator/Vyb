@@ -630,6 +630,9 @@ private:
     Driver& driver_;
     SymbolTable* currentScope;
     ModuleScopeGate scopeGate_;
+    // The pass-1 pre-inserted module constants: the declaration visits of the
+    // same names must not trip the same-scope redefinition check.
+    std::unordered_set<std::string> preInsertedConstants_;
     std::string defaultOwner_;  // entry/root module key, used for unnamed top-level code
     std::vector<std::string> ownerStack_;
     std::vector<std::string> errors;

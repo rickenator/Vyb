@@ -1033,7 +1033,8 @@ void SemanticAnalyzer::visit(ast::VariableDeclaration* node) {
         addError("Identifier \\\"" + node->id->name + "\\\" is a reserved word and cannot be used as a variable name.", node->id.get());
     }
 
-    if (currentScope->lookupDirect(node->id->name)) {
+    if (currentScope->lookupDirect(node->id->name) &&
+        preInsertedConstants_.erase(node->id->name) == 0) {
         addError("Redefinition of variable \"" + node->id->name + "\" in the same scope.", node->id.get());
     }
 
