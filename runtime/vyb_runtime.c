@@ -803,6 +803,10 @@ VYB_WEAK void vyb_str_stats(void) {
     size_t cap = vyb_str_capacity();
     vyb_str_ref* reg = vyb_str_table();
     size_t live_bytes = 0, live_big = 0;
+    // VYB_STR_DUMP=1: a per-bucket size histogram of the live set, so a
+    // leaking size class names itself (the ~296KB dump/digest strings).
+    int dump = getenv("VYB_STR_DUMP") != NULL;
+    size_t b[6] = {0,0,0,0,0,0}; size_t bb[6] = {0,0,0,0,0,0};
     for (size_t i = 0; i < cap; ++i) {
         void* p = atomic_load_explicit(&reg[i].p, memory_order_relaxed);
         if (p == NULL || p == VYB_STR_TOMB) continue;
@@ -811,6 +815,15 @@ VYB_WEAK void vyb_str_stats(void) {
         size_t ub = malloc_usable_size(p);
         live_bytes += ub;
         if (ub >= 64 * 1024) live_big++;
+        if (dump) {
+            int k = ub < 1024 ? 0 : ub < 10240 ? 1 : ub < 102400 ? 2 : ub < 1024*1024 ? 3 : ub < 16*1024*1024 ? 4 : 5;
+            b[k]++; bb[k] += ub;
+        }
+    }
+    if (dump) {
+        const char* nm[6] = {"<1K", "<10K", "<100K", "<1M", "<16M", ">=16M"};
+        for (int k = 0; k < 6; ++k)
+            if (b[k]) fprintf(stdout, "  live[%s] n=%zu bytes=%zu\n", nm[k], b[k], bb[k]);
     }
     fflush(stdout); fprintf(stdout, "str_stats: live=%zu tombs=%zu cap=%zu retained_pool=%zu live_bytes=%zu big=%zu\n",
             vyb_str_live, vyb_str_tombs, cap, g_vyb_pool_retained, live_bytes, live_big);

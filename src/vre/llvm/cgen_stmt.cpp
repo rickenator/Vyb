@@ -1586,7 +1586,15 @@ void LLVMCodegen::codegenMatch(vyb::ast::MatchStatement* node, llvm::AllocaInst*
     if (node->expr) {
         if (auto* sc = dynamic_cast<vyb::ast::CallExpression*>(node->expr.get())) {
             if (auto* cid = dynamic_cast<vyb::ast::Identifier*>(sc->callee.get())) {
-                if (cid->name.rfind("vyb_io_", 0) == 0) scrutineeIsIoIntrinsic = true;
+                // The imported io names are read_at/read_all/etc (the vyb_io_ prefix
+            // is only the runtime symbol name): the check must match the SOURCE
+            // names or the transfer never fires in callees (probe7's double
+            // retain: the callee's s = t kept both the stringOverwrite retain
+            // and the payload-bind retain).
+            if (cid->name.rfind("vyb_io_", 0) == 0 ||
+                cid->name == "read_at" || cid->name == "read_all" ||
+                cid->name == "read_bytes" || cid->name == "read_bytes_at")
+                scrutineeIsIoIntrinsic = true;
             }
         }
     }
@@ -2053,6 +2061,13 @@ void LLVMCodegen::codegenMatch(vyb::ast::MatchStatement* node, llvm::AllocaInst*
                         // below fires and drops it (the previous skip left the
                         // birth ref unreleased — one leaked buffer per read_at).
                         emitStrSiteMarker(9);
+                        // The optional's inner-store retain on the original
+                        // buffer has no other release (the io-intrinsic
+                        // scrutinee temp's cleanup never fires): drop it here —
+                        // the binding above took over the birth ref and the
+                        // arm-exit release covers that. Without this the
+                        // optional's ref leaks (probe7's remaining 1-ref leak).
+                        releaseStringValue(originalOptPayload);
                     } else {
                         emitStrSiteMarker(8);
                         retainStringValue(payload);
