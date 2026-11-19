@@ -357,8 +357,28 @@ void LLVMCodegen::visit(vyb::ast::VariableDeclaration* node) {
             }
             if (elemNode) {
                 if (llvm::Type* elemT = codegenType(const_cast<vyb::ast::TypeNode*>(elemNode))) {
+                    llvm::Value* declTempVec = initialVal;
                     initialVal = generateVecDeepCopy(initialVal, elemT,
                         llvm::cast<llvm::StructType>(varType), elemNode);
+                    // A call-result Vec initializer is a fresh temporary with no
+                    // other owner (the clone above is disjoint storage): free its
+                    // payload now or every `v<T> = f()` declaration leaks a whole
+                    // buffer (the GLM chain's ~1.2GB/layer). Borrow initializers
+                    // (member/identifier reads) keep their source's ownership.
+                    if (declTempVec && dynamic_cast<ast::CallExpression*>(node->init.get()) &&
+                        declTempVec->getType() == varType) {
+                        llvm::Value* tData = builder->CreateExtractValue(declTempVec, 0, "decl.calltemp_data");
+                        llvm::PointerType* tPtrTy = llvm::PointerType::get(*context, 0);
+                        llvm::Constant* tNull = llvm::ConstantPointerNull::get(tPtrTy);
+                        llvm::Value* tNN = builder->CreateICmpNE(tData, tNull, "decl.calltemp_nn");
+                        llvm::BasicBlock* tFree = llvm::BasicBlock::Create(*context, "decl.calltemp_free", currentFunction);
+                        llvm::BasicBlock* tCont = llvm::BasicBlock::Create(*context, "decl.calltemp_cont", currentFunction);
+                        builder->CreateCondBr(tNN, tFree, tCont);
+                        builder->SetInsertPoint(tFree);
+                        builder->CreateCall(getOrCreateFreeFunction(), {tData});
+                        builder->CreateBr(tCont);
+                        builder->SetInsertPoint(tCont);
+                    }
                 }
             }
         }

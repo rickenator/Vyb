@@ -1562,6 +1562,10 @@ void LLVMCodegen::visit(vyb::ast::ThrowStatement* node) {
 }
 
 void LLVMCodegen::codegenMatch(vyb::ast::MatchStatement* node, llvm::AllocaInst* resultAlloca) {
+    // True when the scrutinee is a vyb_io_* intrinsic call: those temps are born
+    // without a needsCleanup registration, so the match's own temp cleanup never
+    // releases their inner String buffers (the read_at registry leak).
+    bool scrutineeIsIoIntrinsic = false;
     // Get the current function
     llvm::Function* function = getCurrentFunction();
     if (!function) {
@@ -1579,6 +1583,13 @@ void LLVMCodegen::codegenMatch(vyb::ast::MatchStatement* node, llvm::AllocaInst*
 
     node->expr->accept(*this);
     llvm::Value* matchValue = m_currentLLVMValue;
+    if (node->expr) {
+        if (auto* sc = dynamic_cast<vyb::ast::CallExpression*>(node->expr.get())) {
+            if (auto* cid = dynamic_cast<vyb::ast::Identifier*>(sc->callee.get())) {
+                if (cid->name.rfind("vyb_io_", 0) == 0) scrutineeIsIoIntrinsic = true;
+            }
+        }
+    }
     if (!matchValue) {
         logError(node->expr->loc, "Failed to evaluate match expression");
         m_currentLLVMValue = nullptr;
@@ -1748,6 +1759,7 @@ void LLVMCodegen::codegenMatch(vyb::ast::MatchStatement* node, llvm::AllocaInst*
         std::vector<std::shared_ptr<vyb::ast::TypeNode>> pendingVariantBindTypes;
         std::string pendingOptionalPayload;
         std::shared_ptr<vyb::ast::TypeNode> pendingOptionalPayloadType;
+        std::vector<llvm::AllocaInst*> armRetainedStringBindings;
         llvm::Value* isMatch = nullptr;
         if (matchedOptional) {
             // Native `T?`: branch on the present flag (field 1). `nil` is the
@@ -2006,7 +2018,13 @@ void LLVMCodegen::codegenMatch(vyb::ast::MatchStatement* node, llvm::AllocaInst*
             }
         } else if (!pendingOptionalPayload.empty()) {
             // Optional present arm: bind the payload (struct field 0).
+            // Bindings retained in this arm (see the String retain below) must be
+            // released when the arm falls through: the binding is arm-scoped, and
+            // the scope restore below drops it without emitting its release —
+            // every read_at/match-unwrap String leaked one buffer per binding
+            // (the GLM chain's 80G registry growth).
             llvm::Value* payload = builder->CreateExtractValue(matchValue, 0, "opt.payload");
+            llvm::Value* originalOptPayload = payload;
             // #345's rule applies here too: the extracted payload aliases data
             // the match temp (or the scrutinee's real owner) owns, and this
             // binding's own reclaim would free the same buffers a second time —
@@ -2026,8 +2044,20 @@ void LLVMCodegen::codegenMatch(vyb::ast::MatchStatement* node, llvm::AllocaInst*
                 // this binding (and anything moved out of it) still references
                 // it — the __vyb_exec_output use-after-free.
                 if (isVybStringStructType(payload->getType())) {
-                    emitStrSiteMarker(8);
-                    retainStringValue(payload);
+                    if (scrutineeIsIoIntrinsic) {
+                        // The io-intrinsic scrutinee's buffer is born with refs=1
+                        // (registered owned by __vyb_file_read_at) and the match
+                        // temp holds exactly that reference: TRANSFER it to this
+                        // binding instead of shallow-copy + retain. The binding
+                        // still owns that reference, so its arm-exit release
+                        // below fires and drops it (the previous skip left the
+                        // birth ref unreleased — one leaked buffer per read_at).
+                        emitStrSiteMarker(9);
+                    } else {
+                        emitStrSiteMarker(8);
+                        retainStringValue(payload);
+                    }
+                    armRetainedStringBindings.push_back(alloca);
                 }
             }
         }
@@ -2065,6 +2095,17 @@ void LLVMCodegen::codegenMatch(vyb::ast::MatchStatement* node, llvm::AllocaInst*
                 storeIntoResultSlot(m_currentLLVMValue, resultAlloca, node->loc);
             }
         }
+        // Arm-scoped retained bindings: the optional-payload copies retained on
+        // bind (retainStringValue) must be released when the arm falls through.
+        // The scope restore below drops the binding without a release, so the
+        // retained registry reference leaked one buffer per arm entry.
+        if (!builder->GetInsertBlock()->getTerminator()) {
+            for (llvm::AllocaInst* ab : armRetainedStringBindings) {
+                llvm::Value* v = builder->CreateLoad(ab->getAllocatedType(), ab);
+                releaseStringValue(v);
+            }
+        }
+        armRetainedStringBindings.clear();
         // Scoped destructured field bindings per case arm.
         namedValues = std::move(savedCaseNamedValues);
 

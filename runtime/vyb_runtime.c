@@ -353,7 +353,7 @@ VYB_WEAK void* __vyb_pool_alloc(size_t size) {
         if (cls < VYB_POOL_CLASSES) {
             VybPoolNode* n = g_vyb_pool_buckets[cls];
             g_vyb_pool_buckets[cls] = n->next;
-            g_vyb_pool_retained -= n->size;
+            g_vyb_pool_retained = (g_vyb_pool_retained >= n->size) ? g_vyb_pool_retained - n->size : 0;
             pthread_mutex_unlock(&g_vyb_pool_lock);
             payload = n->size;
             base = (void*)n;
@@ -799,8 +799,20 @@ VYB_WEAK void __vyb_string_register_borrowed(void* p) {
 VYB_WEAK void vyb_str_stats(void) {
     if (getenv("VYB_STR_STATS") == NULL) return;
     pthread_mutex_lock(&vyb_str_reg_lock);
-    fflush(stdout); fprintf(stdout, "str_stats: live=%zu tombs=%zu cap=%zu retained_pool=%zu\n",
-            vyb_str_live, vyb_str_tombs, vyb_str_capacity(), g_vyb_pool_retained);
+    size_t cap = vyb_str_capacity();
+    vyb_str_ref* reg = vyb_str_table();
+    size_t live_bytes = 0, live_big = 0;
+    for (size_t i = 0; i < cap; ++i) {
+        void* p = atomic_load_explicit(&reg[i].p, memory_order_relaxed);
+        if (p == NULL || p == VYB_STR_TOMB) continue;
+        int64_t refs = atomic_load_explicit(&reg[i].refs, memory_order_relaxed);
+        if (refs <= 0) continue;
+        size_t ub = malloc_usable_size(p);
+        live_bytes += ub;
+        if (ub >= 64 * 1024) live_big++;
+    }
+    fflush(stdout); fprintf(stdout, "str_stats: live=%zu tombs=%zu cap=%zu retained_pool=%zu live_bytes=%zu big=%zu\n",
+            vyb_str_live, vyb_str_tombs, cap, g_vyb_pool_retained, live_bytes, live_big);
     pthread_mutex_unlock(&vyb_str_reg_lock);
 }
 
@@ -1618,9 +1630,12 @@ VYB_WEAK int64_t __vyb_file_read_at(int64_t fd, int64_t off, int64_t maxlen, vyb
     ssize_t n = pread((int)fd, buf, (size_t)maxlen, (off_t)off);
     if (n < 0) { vyb_file_err = errno; free(buf); return 0; }
     buf[n] = '\0';
-    // Owned heap buffer: its first holder is the Vyb String built over it, so
-    // register it (refcount 1) and let the String's release free it.
-    __vyb_string_register_borrowed(buf);
+    // Owned heap buffer: register with refcount 1 -- the first transfer hands
+    // this reference to the caller's String, and the binding's release frees it.
+    // (Borrowed registration leaked here: the return-transfer chain never
+    // retains, so the counter went 0 -> -1 on the first release and the entry
+    // never tombstoned.)
+    __vyb_string_register(buf);
     out->ptr = buf;
     out->len = (int64_t)n;
     vyb_file_err = 0;
@@ -2171,8 +2186,11 @@ VYB_WEAK vyb_file_str __vyb_net_recv(int64_t fd, int64_t maxlen) {
     if (!buf) { vyb_net_err = errno; return r; }
     ssize_t n = recv((int)fd, buf, (size_t)maxlen, 0);
     if (n < 0) { vyb_net_err = errno; free(buf); return r; }
-    // Owned heap buffer: its first holder is the Vyb String built over it, so
-    // register it (refcount 1) and let the String's release free it.
+    // Owned heap buffer: register with refcount 1 -- the first transfer hands
+    // this reference to the caller's String, and the binding's release frees it.
+    // (Borrowed registration leaked here: the return-transfer chain never
+    // retains, so the counter went 0 -> -1 on the first release and the entry
+    // never tombstoned.)
     __vyb_string_register(buf);
     r.ptr = buf;
     r.len = (int64_t)n;
