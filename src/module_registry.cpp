@@ -2355,6 +2355,23 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
         // Every name present in the module's (now fully spliced) scope - its own
         // declarations and everything it pulled in - so `smuggle <module>` can
         // grant the whole scope, bypassing export checks.
+        // The spliced imported declarations must PRECEDE the module's own
+        // statements: the semantic visits the body in order, and the importer's
+        // own functions reference the spliced functions — a main() defined
+        // before the spliced site functions would fail with Undefined
+        // identifier. Both groups keep their relative order.
+        {
+            std::unordered_set<size_t> ownSet(ownStmtIndices.begin(), ownStmtIndices.end());
+            std::vector<ast::StmtPtr> splicedFirst, ownAfter;
+            for (size_t idx = 0; idx < resolvedBody.size(); ++idx) {
+                if (ownSet.count(idx)) ownAfter.push_back(std::move(resolvedBody[idx]));
+                else splicedFirst.push_back(std::move(resolvedBody[idx]));
+            }
+            resolvedBody.clear();
+            for (auto& st : splicedFirst) resolvedBody.push_back(std::move(st));
+            for (auto& st : ownAfter) resolvedBody.push_back(std::move(st));
+        }
+
         auto& moduleAll = allNames_[currentKey];
         moduleAll.clear();
         for (auto& stmt : resolvedBody) {
