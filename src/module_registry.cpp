@@ -1779,7 +1779,15 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
                     // `Undefined identifier: <private helper>`.
                     auto exportsIt = exports_.find(importedKey);
                     if (exportsIt != exports_.end()) {
+                        if (std::getenv("VYB_TRACE_MANGLE")) {
+                            std::fprintf(stderr, "[closure-seed] module=%s exports=%zu dsa=%d kda=%d\n",
+                                         importedKey.c_str(), exportsIt->second.size(),
+                                         exportsIt->second.count("dsa_attn_site_c") ? 1 : 0,
+                                         exportsIt->second.count("kda_attn_site_c") ? 1 : 0);
+                        }
                         carryNames.insert(exportsIt->second.begin(), exportsIt->second.end());
+                    } else if (std::getenv("VYB_TRACE_MANGLE")) {
+                        std::fprintf(stderr, "[closure-seed] module=%s NO EXPORTS RECORD\n", importedKey.c_str());
                     }
                 }
                 // Binds (keyed `bind:SelfType:Aspect`) that a carried declaration
@@ -2103,6 +2111,10 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
                     }
                 }
                 for (auto& importedStmt : importedRecord.module->body) {
+                    if (std::getenv("VYB_TRACE_MANGLE")) {
+                        const std::shared_ptr<ast::Statement> dbgPtr = std::shared_ptr<ast::Statement>(importedStmt.get(), [](ast::Statement*){});
+                        std::fprintf(stderr, "[splice] stmt name=%s\n", nsStmtNameOf(dbgPtr).c_str());
+                    }
                     if (isMainFunction(importedStmt)) {
                         throw std::runtime_error("Imported module must not define main(): " + importedRecord.sourcePath.string());
                     }
@@ -2124,10 +2136,29 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
                                 // splice's rename/mangle pass would rewrite the
                                 // foreign C symbols (__pv_..._cuCtxSynchronize)
                                 // and break the JIT link. The extern names must
-                                // land exactly as declared.
+                                // land exactly as declared. Dedup by name: when
+                                // several modules declare the same foreign
+                                // symbol (cuMemAlloc_v2 in tensor, gx, glm_engine
+                                // ...), only the first occurrence is carried —
+                                // the duplicates would be renamed at the JIT
+                                // link and lose the C symbol.
                                 AstCloner cloner;
                                 importedStmt->accept(cloner);
-                                resolvedBody.push_back(std::move(cloner.take<ast::Statement>()));
+                                auto carried = cloner.take<ast::NamespaceDeclaration>();
+                                std::vector<vyb::ast::DeclPtr> keep;
+                                for (auto& mem : carried->members) {
+                                    std::unordered_set<std::string> dn;
+                                    collectDeclarationNames(mem.get(), dn);
+                                    bool dup = false;
+                                    for (const std::string& n : dn) {
+                                        if (seenNames.count(n)) { dup = true; break; }
+                                    }
+                                    if (!dup) keep.push_back(std::move(mem));
+                                }
+                                if (!keep.empty()) {
+                                    carried->members = std::move(keep);
+                                    resolvedBody.push_back(std::move(carried));
+                                }
                             }
                             continue;
                         }
@@ -2188,6 +2219,7 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
                     const std::string originName = name;
 
                     if (closureComputed && carryNames.find(name) == carryNames.end()) {
+                        if (std::getenv("VYB_TRACE_MANGLE")) std::fprintf(stderr, "[splice] SKIP closure: %s\n", name.c_str());
                         continue;
                     }
 
@@ -2201,6 +2233,7 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
                     const bool closureCarry = closureComputed && !requestedNames.count(name);
                     if (!closureCarry &&
                         !declarationVisible(name, importedRecord, metadata.bundles, importDecl)) {
+                        if (std::getenv("VYB_TRACE_MANGLE")) std::fprintf(stderr, "[splice] SKIP visibility: %s\n", name.c_str());
                         continue;
                     }
 
