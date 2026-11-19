@@ -1535,6 +1535,15 @@ ModuleRegistry::ModuleRegistry(ModuleRegistryOptions options)
     configuredSearchPaths_ = buildConfiguredSearchPaths();
 }
 
+static std::string nsStmtNameOf(const std::shared_ptr<ast::Statement>& st) {
+    if (auto* ns = dynamic_cast<ast::NamespaceDeclaration*>(st.get())) {
+        return ns->name ? ns->name->name : std::string("(null)");
+    }
+    if (auto* fn = dynamic_cast<ast::FunctionDeclaration*>(st.get())) {
+        return fn->id ? fn->id->name : std::string("(fn)");
+    }
+    return std::string("(other)");
+}
 std::unique_ptr<ast::Module> ModuleRegistry::resolveRoot(const std::string& source, const std::string& fileName) {
     std::string rootKey = resolveModule(source, fileName, "<root>");
     auto it = records_.find(rootKey);
@@ -1547,6 +1556,7 @@ std::unique_ptr<ast::Module> ModuleRegistry::resolveRoot(const std::string& sour
 std::string ModuleRegistry::resolveModule(const std::string& source,
                                           const fs::path& sourcePath,
                                           const std::string& importSpelling) {
+    std::unordered_set<const ast::NamespaceDeclaration*> carriedExternBlocks;
     fs::path currentPath = normalizePath(sourcePath);
     std::string currentKey = currentPath.string();
     ModuleRecord& currentRecord = records_[currentKey];
@@ -2075,6 +2085,32 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
                 for (auto& importedStmt : importedRecord.module->body) {
                     if (isMainFunction(importedStmt)) {
                         throw std::runtime_error("Imported module must not define main(): " + importedRecord.sourcePath.string());
+                    }
+
+                    // An extern "C" block is a foreign-symbol declaration, not a
+                    // definition: it is a leaf in the dependency closure (nothing
+                    // in the module defines cuMemFree_v2 etc.), so the closure
+                    // carry never promotes it — yet the spliced function bodies
+                    // reference the symbols. Always carry extern blocks with the
+                    // import, deduped by address so a second import path is a
+                    // no-op (the same declaration text reaches the module once).
+                    if (std::getenv("VYB_TRACE_MANGLE")) { const std::shared_ptr<ast::Statement> tmpPtr = std::shared_ptr<ast::Statement>(importedStmt.get(), [](ast::Statement*){}); std::fprintf(stderr, "[extern-carry] stmt in module body, name=%s\n", nsStmtNameOf(tmpPtr).c_str()); }
+                    if (auto* nsStmt = dynamic_cast<ast::NamespaceDeclaration*>(importedStmt.get())) {
+                        if (nsStmt->name && nsStmt->name->name == "__extern_C") {
+                            if (std::getenv("VYB_TRACE_MANGLE")) std::fprintf(stderr, "[extern-carry] carrying extern block\n");
+                            if (carriedExternBlocks.find(nsStmt) == carriedExternBlocks.end()) {
+                                carriedExternBlocks.insert(nsStmt);
+                                // The plain AST clone, NOT cloneSplicedStmt: the
+                                // splice's rename/mangle pass would rewrite the
+                                // foreign C symbols (__pv_..._cuCtxSynchronize)
+                                // and break the JIT link. The extern names must
+                                // land exactly as declared.
+                                AstCloner cloner;
+                                cloner.visit(*importedStmt);
+                                resolvedBody.push_back(std::move(cloner.take<ast::Statement>()));
+                            }
+                            continue;
+                        }
                     }
 
                     // Binds carry impl methods for (target, aspect) pairs. They have no
@@ -2683,6 +2719,7 @@ bool ModuleRegistry::renameDeclaration(ast::StmtPtr& stmt, const std::string& ne
     }
     return false;
 }
+
 
 bool ModuleRegistry::isMainFunction(const ast::StmtPtr& stmt) {
     auto* fn = dynamic_cast<ast::FunctionDeclaration*>(stmt.get());
