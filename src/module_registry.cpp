@@ -2264,18 +2264,30 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
                     // callers (a shared function calling a private helper) would keep naming
                     // the plain name and pick up the other module's definition.
                     if (!isNamespaceImport) {
-                        if (!isPrivateMangledName(name)) {
-                            auto privIt = privateMangled.find(originName);
-                            if (privIt != privateMangled.end()) {
-                                if (!renameDeclaration(copyStmt, privIt->second)) {
-                                    throw std::runtime_error("Cannot give declaration '" + originName +
-                                                             "' from " + importedRecord.sourcePath.string() +
-                                                             " a module-local identity");
-                                }
-                                name = privIt->second;
-                            }
+                        // extern "C" namespace statements are foreign-symbol
+                        // declarations: they must keep their exact C names (the
+                        // JIT links them) — the #432 per-module identity would
+                        // rewrite them (__pv_..._cuCtxSynchronize) and break the
+                        // link. Duplicate declarations skip below as same-name
+                        // re-sees, which is benign for the same C symbol.
+                        bool isExternBlockStmt = false;
+                        if (auto* nsStmt = dynamic_cast<ast::NamespaceDeclaration*>(importedStmt.get())) {
+                            if (nsStmt->name && nsStmt->name->name == "__extern_C") isExternBlockStmt = true;
                         }
-                        mangleBareStmt(copyStmt, privateMangled);
+                        if (!isExternBlockStmt) {
+                            if (!isPrivateMangledName(name)) {
+                                auto privIt = privateMangled.find(originName);
+                                if (privIt != privateMangled.end()) {
+                                    if (!renameDeclaration(copyStmt, privIt->second)) {
+                                        throw std::runtime_error("Cannot give declaration '" + originName +
+                                                                 "' from " + importedRecord.sourcePath.string() +
+                                                                 " a module-local identity");
+                                    }
+                                    name = privIt->second;
+                                }
+                            }
+                            mangleBareStmt(copyStmt, privateMangled);
+                        }
                     }
 
                     if (seenNames.find(name) != seenNames.end()) {
