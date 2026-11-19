@@ -1131,6 +1131,7 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
     // to member Vec destinations too, symmetric with the DECL path which
     // already clones on borrow.)
     bool vecOverwrite = false;
+    llvm::Value* callResultTempVec = nullptr;
     llvm::Value* oldVecVal = nullptr;
     const vyb::ast::TypeNode* vecDestAst = nullptr;
     const vyb::ast::TypeNode* vecElemAst = nullptr;
@@ -1170,7 +1171,8 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
         // Clone the buffer so the binding owns storage disjoint from the
         // temporary's lifetime. A named-variable RHS keeps the shared-pointer
         // semantics (both holders' frees are pool-absorbed).
-        if (dynamic_cast<ast::CallExpression*>(node->right.get()) && vecElemAst) {
+            if (dynamic_cast<ast::CallExpression*>(node->right.get()) && vecElemAst) {
+            callResultTempVec = RHS;
             if (auto* vt = llvm::dyn_cast_or_null<llvm::StructType>(destPointeeType)) {
                 if (isVecStructType(vt)) {
                     llvm::Type* elemTy = codegenType(const_cast<vyb::ast::TypeNode*>(vecElemAst));
@@ -1304,6 +1306,28 @@ void LLVMCodegen::visit(vyb::ast::AssignmentExpression *node) {
         builder->CreateCall(getOrCreateFreeFunction(), {oldData});
         builder->CreateBr(contBB);
         builder->SetInsertPoint(contBB);
+    }
+    if (vecOverwrite && callResultTempVec) {
+        // A call-result Vec temporary was deep-copied into the binding: the
+        // temporary's own payload has no cleanup (the callee's cleanup the
+        // shallow-store comment assumed never runs for a statement-level call
+        // result), so release it here or every call-returned Vec leaks its
+        // payload (the GLM chain's ~1.2GB/layer registry growth).
+        llvm::Value* tmpData = builder->CreateExtractValue(callResultTempVec, 0, "assign.calltemp_vec_data");
+        llvm::Value* tmpLen = builder->CreateExtractValue(callResultTempVec, 1, "assign.calltemp_vec_len");
+        llvm::PointerType* rawPtr2 = llvm::PointerType::get(*context, 0);
+        llvm::Constant* nullPtr2 = llvm::ConstantPointerNull::get(rawPtr2);
+        llvm::Value* tmpNotNull = builder->CreateICmpNE(tmpData, nullPtr2, "assign.calltemp_not_null");
+        llvm::BasicBlock* tmpFreeBB = llvm::BasicBlock::Create(*context, "assign.calltemp_free", currentFunction);
+        llvm::BasicBlock* tmpContBB = llvm::BasicBlock::Create(*context, "assign.calltemp_cont", currentFunction);
+        builder->CreateCondBr(tmpNotNull, tmpFreeBB, tmpContBB);
+        builder->SetInsertPoint(tmpFreeBB);
+        if (vecHoldsStrings) {
+            releaseStringElements(tmpData, tmpLen);
+        }
+        builder->CreateCall(getOrCreateFreeFunction(), {tmpData});
+        builder->CreateBr(tmpContBB);
+        builder->SetInsertPoint(tmpContBB);
     }
     if (myOverwrite && oldMyPtr && myPointeeAst) {
         llvm::PointerType* rawPtrTy = llvm::PointerType::get(*context, 0);
