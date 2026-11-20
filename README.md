@@ -3513,12 +3513,6 @@ compatibility) and reports the same per-test verdicts as the canonical runner.
 - **Coverage Areas**: Language features, control flow, error handling, type system, math, strings, introspection
 - **Test Types**: Feature tests (with `@expect: pass`), future-feature docs (with `@expect: fail`), parser tests
 - **Success Rate**: 100% (1358/1358) on the current suite
-- **Coverage Areas**: Language features, control flow, error handling, type system, math, strings, introspection
-- **Test Types**: Feature tests (with `@expect: pass`), future-feature docs (with `@expect: fail`), parser tests
-- **Coverage Areas**: Language features, control flow, error handling, type system, math, strings, introspection
-- **Test Types**: Feature tests (with `@expect: pass`), future-feature docs (with `@expect: fail`), parser tests
-- **Coverage Areas**: Language features, control flow, error handling, type system, math, strings, introspection
-- **Test Types**: Feature tests (with `@expect: pass`), future-feature docs (with `@expect: fail`), parser tests
 
 ### 🔧 **Syntax Migration Tools**
 
