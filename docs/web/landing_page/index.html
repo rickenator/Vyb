@@ -43,7 +43,7 @@
         "url": "https://vyb-lang.org/",
         "codeRepository": "https://github.com/rickenator/Vyb",
         "programmingLanguage": "Vyb",
-        "softwareVersion": "0.7.7",
+        "softwareVersion": "0.7.8",
         "runtimePlatform": "LLVM / native machine code (JIT and AOT)",
         "targetPlatform": [
           "x86-64 / Linux (release-tested)",
@@ -291,7 +291,7 @@ per-symbol signatures live in the auto-generated pages under <code>docs/refman/<
 </blockquote>
 <hr />
 <h2 id="1-introduction">1. Introduction<a aria-label="Link to 1. Introduction" class="heading-anchor" href="#1-introduction">#</a></h2>
-<p>Welcome to the Vyb programming language version 0.7.7. This overview walks you through what Vyb is and the thinking behind it. Vyb is a systems language built on a simple conviction: you should not have to choose between safety and power. Strong type safety and explicit ownership give your code discipline and predictability, while low-level escape hatches keep raw, machine-near control within reach when you need it. Code runs as fast native executables or through a JIT, so performance stays predictable from first prototype to final program. The syntax is readable and name-first, the abstractions are zero-cost, and the language aims to stay out of your way as your ambitions grow. The rest of this guide shows how those ideas take shape through feature summaries and examples.</p>
+<p>Welcome to the Vyb programming language version 0.7.8. This overview walks you through what Vyb is and the thinking behind it. Vyb is a systems language built on a simple conviction: you should not have to choose between safety and power. Strong type safety and explicit ownership give your code discipline and predictability, while low-level escape hatches keep raw, machine-near control within reach when you need it. Code runs as fast native executables or through a JIT, so performance stays predictable from first prototype to final program. The syntax is readable and name-first, the abstractions are zero-cost, and the language aims to stay out of your way as your ambitions grow. The rest of this guide shows how those ideas take shape through feature summaries and examples.</p>
 <h3 id="11-purpose-audience">1.1 Purpose &amp; Audience<a aria-label="Link to 1.1 Purpose &amp; Audience" class="heading-anchor" href="#11-purpose-audience">#</a></h3>
 <p>This guide is intended for systems programmers, language designers, and developers who want:</p>
 <ul>
@@ -396,7 +396,7 @@ per-symbol signatures live in the auto-generated pages under <code>docs/refman/<
 # vyb-sdk-&lt;version&gt;-linux-x86_64.tar.gz from the release page, unpack it, and
 # put its bin/ on your PATH:
 #   https://github.com/rickenator/Vyb/releases   (all releases)
-#   releases are cut from the version tags: https://github.com/rickenator/Vyb/releases/tag/v0.7.7
+#   releases are cut from the version tags: https://github.com/rickenator/Vyb/releases/tag/v0.7.8
 # The shipped SDK target is Linux x86_64; see docs/sdk/INSTALL.md for the
 # unpack/PATH steps and the exact platform the release workflow builds.
 
@@ -405,7 +405,7 @@ git clone https://github.com/rickenator/Vyb.git
 cd Vyb
 mkdir -p build &amp;&amp; cd build &amp;&amp; LLVM_DIR=/usr/lib/llvm-18/cmake cmake .. &amp;&amp; make -j$(nproc) &amp;&amp; cd ..
 
-# Run the full test suite (1322 .vyb tests) with the canonical Vyb runner
+# Run the full test suite (1358 .vyb tests) with the canonical Vyb runner
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
 
 # Run your first Vyb program
@@ -655,20 +655,26 @@ utils = { git = &quot;https://github.com/user/utils&quot; }  # External, smuggle
 </code></pre>
 <p>This unique <code>import</code>/<code>smuggle</code> distinction makes Vyb's module system both secure and flexible, clearly marking the trust level of your dependencies. See <a href="https://github.com/rickenator/Vyb/blob/main/doc/FEATURE_STATUS.md" rel="noopener noreferrer" target="_blank">doc/FEATURE_STATUS.md</a> for implementation status.</p>
 <h2 id="in-this-release">In This Release<a aria-label="Link to In This Release" class="heading-anchor" href="#in-this-release">#</a></h2>
-<p>Vyb <strong>v0.7.7</strong> (freedom-1.0 series). Highlights of this cycle:</p>
+<p>Vyb <strong>v0.7.8</strong> (freedom-1.0 series). Highlights of this cycle:</p>
 <ul>
-<li><strong>Thread-boundary capability as a structural property</strong> — a closure handed to
-<code>thread_spawn</code> / <code>task_spawn</code> / <code>async_spawn</code> / <code>agent_start</code> must be able to cross an OS
-thread boundary, and the compiler proves it from the type graph instead of testing the
-captured variable's type string. See <a href="#threads-and-concurrency">Threads and concurrency</a>.</li>
-<li><strong>Full closure support</strong> — capture by value, <code>my&lt;T&gt;</code> move, <code>our&lt;T&gt;</code> retention, write-through
-mutable capture, and a reference-counted environment that survives <code>return</code>. See
-<a href="#closures-and-lambdas">Closures and lambdas</a>.</li>
-<li><strong>Refactoring the compiler sources</strong> — the analyzer and the expression emitter are split
-along cohesive seams; no behaviour change.</li>
-<li><strong>Fixed</strong> — <code>borrow(x)</code> / <code>view(x)</code> addressed the operand's slot instead of the object for
-pointer-backed owners (<code>my&lt;T&gt;</code>, <code>their&lt;T&gt;</code>, <code>ptr&lt;T&gt;</code>, <code>our&lt;T&gt;</code>/<code>mild&lt;T&gt;</code> control blocks).</li>
+<li><strong>Faster JIT and kernels</strong> — the JIT inlines at <code>-O2</code>/<code>-O3</code> and tunes for the host CPU, <code>-O</code>
+levels reach the JIT path (#394), call-frame bookkeeping is dropped at <code>-O2</code>/<code>-O3</code>, kernel
+helpers inline by default (<code>@inline</code> / <code>@noinline</code>), and a new <code>prefetch</code> intrinsic lowers to
+<code>llvm.prefetch</code>.</li>
+<li><strong>CUDA kernel intrinsics</strong> — integer and 64-bit warp shuffles, atomics, bit counting and warp
+ballot, register-resident fixed arrays, <code>cuda_launch_args</code>, <code>--kernel-shared</code>, and the
+quantised-inference intrinsics behind the VybForge 27B decode.</li>
+<li><strong>Memory safety</strong> — leak fixes for discarded <code>Vec&lt;scalar&gt;?</code> results, loop-body temporaries,
+closures stored in a <code>Vec</code> or struct field (#439), weak handles (#427) and Vec temporaries
+(#382); narrow integer stores no longer clobber neighbouring memory.</li>
+<li><strong>Ownership handles</strong> — <code>my&lt;String&gt;</code> prints its string, bind methods and iteration work through
+ownership handles, and several invalid <code>our</code>/<code>mild</code>/<code>soft</code> forms are refused instead of
+miscompiling (#427).</li>
+<li><strong>Tooling</strong> — <code>vyb build</code> auto-fetches <code>github:</code> dependencies (#388), <code>vyb mod install</code> names
+packages correctly (#418), debuggers can stop on a Vyb source line (#390), semantic errors carry
+<code>file:line:col</code>, and <code>test/run_tests.vyb</code> has a per-test timeout.</li>
 </ul>
+<p>See <code>CHANGELOG.md</code> §[0.7.8] for the full list.</p>
 <h2 id="feature-highlights">Feature highlights<a aria-label="Link to Feature highlights" class="heading-anchor" href="#feature-highlights">#</a></h2>
 <p>These features are complete and fully tested:</p>
 <ul>
@@ -1621,7 +1627,6 @@ both forms call through one shape.</p>
 </table>
 <pre><code class="language-vyb">counter&lt;Int&gt; = 0
 bump&lt;fn(Int) -&gt; Int&gt; = |u&lt;Int&gt;| -&gt; counter = counter + 1
-bump(0)
 bump(0)
 println(counter.to_string())          // 2 — the outer variable sees both writes
 
@@ -3557,7 +3562,7 @@ cmake --build build --target run-milestone
 <h2 id="test-harness">Test Harness<a aria-label="Link to Test Harness" class="heading-anchor" href="#test-harness">#</a></h2>
 <p>Vyb's canonical test runner is <code>test/run_tests.vyb</code> — a Vyb program, the same
 suite wired into CTest as the <code>run-tests</code> target and used for the full regression
-gate (currently <strong>1322 <code>.vyb</code> tests, all passing</strong>):</p>
+gate (currently <strong>1358 <code>.vyb</code> tests, all passing</strong>):</p>
 <h3 id="quick-testing">Quick Testing<a aria-label="Link to Quick Testing" class="heading-anchor" href="#quick-testing">#</a></h3>
 <pre><code class="language-bash"># Full suite (JIT execution), from the repo root
 build/vyb test/run_tests.vyb --vyb build/vyb --test-dir test
@@ -3596,7 +3601,7 @@ build/vyb triage_tool.vyb results.json --priority critical,high
 </code></pre>
 <h3 id="test-features">Test Features<a aria-label="Link to Test Features" class="heading-anchor" href="#test-features">#</a></h3>
 <ul>
-<li><strong>1322 Tests, All Passing</strong>: The full <code>run_tests.vyb</code> suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area</li>
+<li><strong>1358 Tests, All Passing</strong>: The full <code>run_tests.vyb</code> suite covers parse, semantic, modules, async, agents, tls, qt, and every other feature area</li>
 <li><strong>Harness Reporting</strong>: <code>test_harness.vyb</code> adds JSON/HTML reports and failure triage on top of the runner (sequential execution; <code>--workers</code> is accepted for compatibility)</li>
 <li><strong>Rich Reporting</strong>: HTML, JSON, and console output with detailed metrics</li>
 <li><strong>Smart Categorization</strong>: Automatic test categorization and filtering</li>
@@ -3834,10 +3839,16 @@ compatibility) and reports the same per-test verdicts as the canonical runner.</
 </ul>
 <h4 id="test-statistics"><strong>Test Statistics</strong><a aria-label="Link to Test Statistics" class="heading-anchor" href="#test-statistics">#</a></h4>
 <ul>
-<li><strong>Total Tests</strong>: 1322 <code>.vyb</code> tests (full suite, all passing as of v0.7.7)</li>
+<li><strong>Total Tests</strong>: 1358 <code>.vyb</code> tests (full suite, all passing as of v0.7.8)</li>
 <li><strong>Coverage Areas</strong>: Language features, control flow, error handling, type system, math, strings, introspection</li>
 <li><strong>Test Types</strong>: Feature tests (with <code>@expect: pass</code>), future-feature docs (with <code>@expect: fail</code>), parser tests</li>
-<li><strong>Success Rate</strong>: 100% (1322/1322) on the current suite</li>
+<li><strong>Success Rate</strong>: 100% (1358/1358) on the current suite</li>
+<li><strong>Coverage Areas</strong>: Language features, control flow, error handling, type system, math, strings, introspection</li>
+<li><strong>Test Types</strong>: Feature tests (with <code>@expect: pass</code>), future-feature docs (with <code>@expect: fail</code>), parser tests</li>
+<li><strong>Coverage Areas</strong>: Language features, control flow, error handling, type system, math, strings, introspection</li>
+<li><strong>Test Types</strong>: Feature tests (with <code>@expect: pass</code>), future-feature docs (with <code>@expect: fail</code>), parser tests</li>
+<li><strong>Coverage Areas</strong>: Language features, control flow, error handling, type system, math, strings, introspection</li>
+<li><strong>Test Types</strong>: Feature tests (with <code>@expect: pass</code>), future-feature docs (with <code>@expect: fail</code>), parser tests</li>
 </ul>
 <h3 id="syntax-migration-tools">🔧 <strong>Syntax Migration Tools</strong><a aria-label="Link to 🔧 Syntax Migration Tools" class="heading-anchor" href="#syntax-migration-tools">#</a></h3>
 <p>Automated tools ensure codebase consistency and syntax standardization:</p>
@@ -3948,7 +3959,7 @@ the interface stays responsive.</li>
 </ul>
 </li>
 <li>✅ <strong>Canonical Syntax Unification</strong>: Complete migration to unified <code>my()</code>/<code>our()</code> constructors and <code>view</code>/<code>borrow</code> operators</li>
-<li>✅ <strong>Modern Test Harness</strong>: <code>test/run_tests.vyb</code> running the full suite — 1322 <code>.vyb</code> tests all passing — with an auxiliary parallel/HTML/triage harness</li>
+<li>✅ <strong>Modern Test Harness</strong>: <code>test/run_tests.vyb</code> running the full suite — 1358 <code>.vyb</code> tests all passing — with an auxiliary parallel/HTML/triage harness</li>
 <li>✅ <strong>Syntax Migration Tools</strong>: Automated migration from legacy to canonical syntax with comprehensive reporting</li>
 <li>✅ <strong>Match Statements</strong>: Complete pattern matching with <code>-&gt;</code> arrow syntax and <code>?</code> wildcard; no-match results in NOP</li>
 <li>✅ <strong>Break/Continue</strong>: Loop control flow statements working in all loop types</li>
@@ -4001,7 +4012,7 @@ one grammar home; the appendix also notes which productions are legacy.</p>
 <p>Vyb automatically serializes complex return types from <code>main()</code>:</p>
 <p><strong>Simple Returns:</strong></p>
 <ul>
-<li><code>main()&lt;Int&gt; -&gt; { return 42 }</code> → Exit code 42</li>
+<li><code>main()&lt;Int&gt; -&gt; { return 42 }</code> → Outputs: 42, exit code 42 (low 8 bits)</li>
 <li><code>main()&lt;String&gt; -&gt; { return &quot;hello&quot; }</code> → Outputs: hello</li>
 </ul>
 <p><strong>Complex Returns:</strong></p>
