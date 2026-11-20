@@ -72,6 +72,7 @@ extern "C" {
     // Closure capture-environment reference counting helpers
     void* __vyb_closure_retain(void* env);
     void  __vyb_closure_release(void* env);
+    void  __vyb_async_shutdown(void);
 
     // ToString intrinsic functions for automatic string conversion - all basic types
     char* __vyb_toString_int(int64_t value);
@@ -3171,6 +3172,11 @@ int run_vyb_code(const std::string& source, const std::string& fileName, bool ge
             throw std::runtime_error("Failed to create LLJIT: " + errorMsg);
         }
         auto& jit = *jitOrErr;
+
+        // Reclaim leftover async tasks before LLJIT is destroyed. atexit is too
+        // late: cap_destructors live in JIT memory that this unique_ptr unmaps.
+        struct VybAsyncShutdown { ~VybAsyncShutdown() { __vyb_async_shutdown(); } };
+        VybAsyncShutdown vybAsyncShutdown;
 
         // Register runtime functions with the JIT before adding module
         auto& mainDylib = jit->getMainJITDylib();
