@@ -2106,8 +2106,7 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
                                 // and break the JIT link. The extern names must
                                 // land exactly as declared.
                                 AstCloner cloner;
-                                cloner.visit(*importedStmt);
-                                resolvedBody.push_back(std::move(cloner.take<ast::Statement>()));
+                                resolvedBody.push_back(cloner.cloneStatement(importedStmt.get()));
                             }
                             continue;
                         }

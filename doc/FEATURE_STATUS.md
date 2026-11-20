@@ -1,4 +1,4 @@
-# Vyb Feature Status (v0.7.7)
+# Vyb Feature Status (v0.7.8)
 
 This document tracks the implementation status of Vyb language features.
 

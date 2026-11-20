@@ -19,7 +19,7 @@
 
 ## 1. Introduction
 
-Welcome to the Vyb programming language version 0.7.7. This overview walks you through what Vyb is and the thinking behind it. Vyb is a systems language built on a simple conviction: you should not have to choose between safety and power. Strong type safety and explicit ownership give your code discipline and predictability, while low-level escape hatches keep raw, machine-near control within reach when you need it. Code runs as fast native executables or through a JIT, so performance stays predictable from first prototype to final program. The syntax is readable and name-first, the abstractions are zero-cost, and the language aims to stay out of your way as your ambitions grow. The rest of this guide shows how those ideas take shape through feature summaries and examples.
+Welcome to the Vyb programming language version 0.7.8. This overview walks you through what Vyb is and the thinking behind it. Vyb is a systems language built on a simple conviction: you should not have to choose between safety and power. Strong type safety and explicit ownership give your code discipline and predictability, while low-level escape hatches keep raw, machine-near control within reach when you need it. Code runs as fast native executables or through a JIT, so performance stays predictable from first prototype to final program. The syntax is readable and name-first, the abstractions are zero-cost, and the language aims to stay out of your way as your ambitions grow. The rest of this guide shows how those ideas take shape through feature summaries and examples.
 
 ### 1.1 Purpose & Audience
 
@@ -73,7 +73,7 @@ Vyb is a statically typed, compiled systems language targeting native code via L
 # vyb-sdk-<version>-linux-x86_64.tar.gz from the release page, unpack it, and
 # put its bin/ on your PATH:
 #   https://github.com/rickenator/Vyb/releases   (all releases)
-#   releases are cut from the version tags: https://github.com/rickenator/Vyb/releases/tag/v0.7.7
+#   releases are cut from the version tags: https://github.com/rickenator/Vyb/releases/tag/v0.7.8
 # The shipped SDK target is Linux x86_64; see docs/sdk/INSTALL.md for the
 # unpack/PATH steps and the exact platform the release workflow builds.
 
@@ -343,19 +343,26 @@ This unique `import`/`smuggle` distinction makes Vyb's module system both secure
 
 ## In This Release
 
-Vyb **v0.7.7** (freedom-1.0 series). Highlights of this cycle:
+Vyb **v0.7.8** (freedom-1.0 series). Highlights of this cycle:
 
-- **Thread-boundary capability as a structural property** — a closure handed to
-  `thread_spawn` / `task_spawn` / `async_spawn` / `agent_start` must be able to cross an OS
-  thread boundary, and the compiler proves it from the type graph instead of testing the
-  captured variable's type string. See [Threads and concurrency](#threads-and-concurrency).
-- **Full closure support** — capture by value, `my<T>` move, `our<T>` retention, write-through
-  mutable capture, and a reference-counted environment that survives `return`. See
-  [Closures and lambdas](#closures-and-lambdas).
-- **Refactoring the compiler sources** — the analyzer and the expression emitter are split
-  along cohesive seams; no behaviour change.
-- **Fixed** — `borrow(x)` / `view(x)` addressed the operand's slot instead of the object for
-  pointer-backed owners (`my<T>`, `their<T>`, `ptr<T>`, `our<T>`/`mild<T>` control blocks).
+- **Faster JIT and kernels** — the JIT inlines at `-O2`/`-O3` and tunes for the host CPU, `-O`
+  levels reach the JIT path (#394), call-frame bookkeeping is dropped at `-O2`/`-O3`, kernel
+  helpers inline by default (`@inline` / `@noinline`), and a new `prefetch` intrinsic lowers to
+  `llvm.prefetch`.
+- **CUDA kernel intrinsics** — integer and 64-bit warp shuffles, atomics, bit counting and warp
+  ballot, register-resident fixed arrays, `cuda_launch_args`, `--kernel-shared`, and the
+  quantised-inference intrinsics behind the VybForge 27B decode.
+- **Memory safety** — leak fixes for discarded `Vec<scalar>?` results, loop-body temporaries,
+  closures stored in a `Vec` or struct field (#439), weak handles (#427) and Vec temporaries
+  (#382); narrow integer stores no longer clobber neighbouring memory.
+- **Ownership handles** — `my<String>` prints its string, bind methods and iteration work through
+  ownership handles, and several invalid `our`/`mild`/`soft` forms are refused instead of
+  miscompiling (#427).
+- **Tooling** — `vyb build` auto-fetches `github:` dependencies (#388), `vyb mod install` names
+  packages correctly (#418), debuggers can stop on a Vyb source line (#390), semantic errors carry
+  `file:line:col`, and `test/run_tests.vyb` has a per-test timeout.
+
+See `CHANGELOG.md` §[0.7.8] for the full list.
 
 ## Feature highlights
 
@@ -3502,16 +3509,10 @@ compatibility) and reports the same per-test verdicts as the canonical runner.
 - **Error Context**: Detailed failure information with context and suggestions
 
 #### **Test Statistics**
-- **Total Tests**: 1358 `.vyb` tests (full suite, all passing as of v0.7.7)
+- **Total Tests**: 1358 `.vyb` tests (full suite, all passing as of v0.7.8)
 - **Coverage Areas**: Language features, control flow, error handling, type system, math, strings, introspection
 - **Test Types**: Feature tests (with `@expect: pass`), future-feature docs (with `@expect: fail`), parser tests
 - **Success Rate**: 100% (1358/1358) on the current suite
-- **Coverage Areas**: Language features, control flow, error handling, type system, math, strings, introspection
-- **Test Types**: Feature tests (with `@expect: pass`), future-feature docs (with `@expect: fail`), parser tests
-- **Coverage Areas**: Language features, control flow, error handling, type system, math, strings, introspection
-- **Test Types**: Feature tests (with `@expect: pass`), future-feature docs (with `@expect: fail`), parser tests
-- **Coverage Areas**: Language features, control flow, error handling, type system, math, strings, introspection
-- **Test Types**: Feature tests (with `@expect: pass`), future-feature docs (with `@expect: fail`), parser tests
 
 ### 🔧 **Syntax Migration Tools**
 

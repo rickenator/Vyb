@@ -1692,7 +1692,7 @@ Non-blocking I/O (epoll/kqueue/IOCP) integration is planned for v0.6 alongside `
 
 ---
 
-*Last Updated: 2026-09-29 (v0.7.7 release)*
-*Current Version: Vyb v0.7.7 (freedom-1.0 series)*
+*Last Updated: 2026-11-20 (v0.7.8 release)*
+*Current Version: Vyb v0.7.8 (freedom-1.0 series)*
 *Overall Status: ~60-65% complete toward 1.0 — 1358 tests (documented size enforced against the runner by `test/suite_count_check.vyb`; the full `--execute-jit` sweep runs in `ci.yml`)*
 *SUGGESTIONS.md merged into this document.*
