@@ -5362,9 +5362,13 @@ VYB_WEAK int64_t __vyb_async_recvfrom_opt(int64_t fd, int64_t maxlen, vyb_file_s
     return 1;
 }
 
-// Stop + join the worker pool at process exit, then reclaim any leftover tasks
-// so a forgotten async_run_all never leaks (runs once, before main()).
-static void vyb_async_atexit(void) {
+// Stop + join the worker pool and reclaim leftover tasks. Must run while the
+// LLJIT engine is still alive: leftover task envs may hold JIT-compiled
+// cap_destructors. Idempotent so atexit is a no-op after run_vyb_code.
+void __vyb_async_shutdown(void) {
+    static int done = 0;
+    if (done) return;
+    done = 1;
     pthread_mutex_lock(&g_async_lock);
     g_shutdown = 1;
     g_pump_down = 1;
@@ -5387,6 +5391,7 @@ static void vyb_async_atexit(void) {
     if (g_pump_started) pthread_join(g_pump_thread, NULL);
     async_cleanup_all();
 }
+static void vyb_async_atexit(void) { __vyb_async_shutdown(); }
 // A peer aborting mid-TLS-handshake makes OpenSSL write a fatal alert to a
 // socket that has already RST; without ignoring SIGPIPE that raises SIGPIPE and
 // kills the process instead of surfacing an error the module can trap.
