@@ -2,7 +2,7 @@
 
 <img src="vyb.png" alt="Vyb Image" width="300">
 
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/rickenator/Vyb)
+[![Ask DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-blue)](https://deepwiki.com/rickenator/Vyb)
 
 ## Vyb Programming Guide
 
