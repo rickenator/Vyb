@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.8] - 2026-11-20
+
 ### Added
 - **Kernel helpers are inlined by default.** Device code (`--kernel`) no longer marks every
   user function `noinline`; small helpers are left to the optimizer's inliner, so a wrapper
