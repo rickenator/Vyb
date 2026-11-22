@@ -1633,6 +1633,12 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
                 moduleKeyByName_[name] = currentKey;
             }
         }
+        if (std::getenv("VYB_TRACE_MANGLE")) {
+            std::fprintf(stderr, "[exports] module=%s shares=%zu dsa_share=%d dsa_fn_decl=%d\n",
+                         currentKey.c_str(), metadata.sharesByName.size(),
+                         metadata.sharesByName.count("dsa_attn_site_c") ? 1 : 0,
+                         [&]{ for (auto& st : module->body) if (auto* fd = dynamic_cast<ast::FunctionDeclaration*>(st.get())) if (fd->id && fd->id->name == "dsa_attn_site_c") return 1; return 0; }());
+        }
         for (const auto& kv : metadata.sharesByName) {
             exports_[currentKey].insert(kv.first);
         }
@@ -2072,6 +2078,27 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
                 // keeps one identity however many import hops carry it. Names already carrying
                 // the private prefix were mangled by an earlier hop and stay as they are.
                 NSSymbolMap privateMangled;
+                // Foreign C declarations (an `extern "C"` block) are linkable
+                // from any module by their PLAIN names and must never take a
+                // per-module private identity: a mangled reference has no
+                // definition anywhere and the JIT fails the whole module
+                // (__pv_<tag>_cuMemAlloc_v2 on aarch64 where the hash-order
+                // dedup below drops a different copy than on x86 -- a platform-
+                // sensitive, order-dependent bug class, so exempt by name here
+                // rather than relying on a dedup race).
+                std::unordered_set<std::string> externCarriedNames;
+                for (const auto& bodyStmt : importedRecord.module->body) {
+                    if (!bodyStmt) continue;
+                    if (auto* nsDecl = dynamic_cast<ast::NamespaceDeclaration*>(bodyStmt.get())) {
+                        if (nsDecl->name && nsDecl->name->name == "__extern_C") {
+                            for (auto& mem : nsDecl->members) {
+                                std::unordered_set<std::string> xn;
+                                collectDeclarationNames(mem.get(), xn);
+                                for (const std::string& x : xn) externCarriedNames.insert(x);
+                            }
+                        }
+                    }
+                }
                 if (!isNamespaceImport) {
                     for (const auto& bodyStmt : importedRecord.module->body) {
                         if (!bodyStmt || isMainFunction(bodyStmt)) continue;
@@ -2097,6 +2124,7 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
                             // paths), which the duplicate check below already resolves; giving
                             // those a new name would break aspect and bind dispatch. The first
                             // module to contribute a name keeps the plain one.
+                            if (externCarriedNames.count(n) != 0) continue;
                             if (seenNames.count(n) != 0 && seenOrigins.count(n) != 0 &&
                                 seenOrigins[n] != declaringOrigin(n)) {
                                 privateMangled[n] = privateMangledName(declaringOrigin(n), n);
@@ -2158,6 +2186,20 @@ std::string ModuleRegistry::resolveModule(const std::string& source,
                                 if (!keep.empty()) {
                                     carried->members = std::move(keep);
                                     resolvedBody.push_back(std::move(carried));
+                                }
+                                // The foreign symbols declared by the extern
+                                // block must not take per-module identities:
+                                // they are linkable from any module and this
+                                // module's own body references them by the
+                                // plain names — purge any collision identity
+                                // so mangleBareStmt leaves the references
+                                // plain.
+                                for (auto& mem : nsStmt->members) {
+                                    std::unordered_set<std::string> dn;
+                                    collectDeclarationNames(mem.get(), dn);
+                                    for (const std::string& n : dn) {
+                                        privateMangled.erase(n);
+                                    }
                                 }
                             }
                             continue;
