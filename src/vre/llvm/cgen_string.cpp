@@ -243,7 +243,7 @@ std::string LLVMCodegen::resolveTypeAliasToBaseName(vyb::ast::TypeNode* typeNode
 }
 
 // Helper method to generate toString call for a given value and type
-llvm::Value* LLVMCodegen::generateToStringCall(llvm::Value* value, llvm::Type* valueType, vyb::ast::TypeNode* astType, SourceLocation loc) {
+llvm::Value* LLVMCodegen::generateToStringCall(llvm::Value* value, llvm::Type* valueType, vyb::ast::TypeNode* astType, SourceLocation loc, bool preciseText) {
     if (!value || !valueType) {
         logError(loc, "Invalid value or type for toString conversion");
         return nullptr;
@@ -425,7 +425,7 @@ llvm::Value* LLVMCodegen::generateToStringCall(llvm::Value* value, llvm::Type* v
         toStringFuncName = "__vyb_bool_to_string";
         toStringFuncType = llvm::FunctionType::get(int8PtrType, {int1Type}, false);
     } else if (valueType->isFloatingPointTy() || typeName == "Float" || typeName == "Double") {
-        toStringFuncName = "__vyb_float_to_string";
+        toStringFuncName = preciseText ? "__vyb_float_to_string_precise" : "__vyb_float_to_string";
         toStringFuncType = llvm::FunctionType::get(int8PtrType, {doubleType}, false);
         // Cast to double if needed
         if (valueType != doubleType) {

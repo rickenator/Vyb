@@ -999,6 +999,25 @@ char* __vyb_float_to_string(double value) {
     return r;
 }
 
+// String -> Float via strtod: correctly rounded (Vyb's stdlib to_float is a
+// hand-rolled accumulator that lands 1 ULP off on ~25% of f64 inputs).
+double __vyb_string_to_float(const char* s) {
+    if (!s) return 0.0;
+    return strtod(s, NULL);
+}
+
+// Float to String, ROUND-TRIP precise (shortest %.17g form). The default
+// __vyb_float_to_string prints %g (6 significant digits), which loses value
+// on any wire or dump that needs exactness; use this where the text must
+// parse back to the identical f64 (protocol exchanges, exact digests).
+char* __vyb_float_to_string_precise(double value) {
+    char buffer[64];
+    snprintf(buffer, sizeof(buffer), "%.17g", value);
+    char* r = strdup(buffer);
+    __vyb_string_register(r);
+    return r;
+}
+
 // Bool to String conversion
 char* __vyb_bool_to_string(bool value) {
     char* r = strdup(value ? "true" : "false");

@@ -605,7 +605,9 @@ private:
     llvm::Function* getSprintfFunction();
 
     // ToString conversion helpers for mixed-type string concatenation
-    llvm::Value* generateToStringCall(llvm::Value* value, llvm::Type* valueType, vyb::ast::TypeNode* astType, SourceLocation loc);
+    // preciseText: format Floats with %.17g (round-trip exact) instead of %g —
+    // used by .to_string_precise() wherever text must parse back bit-identically.
+    llvm::Value* generateToStringCall(llvm::Value* value, llvm::Type* valueType, vyb::ast::TypeNode* astType, SourceLocation loc, bool preciseText = false);
     // Serialize one value as JSON for main()'s auto-serialized return. The AST type
     // drives the shape: Vec<T> -> JSON array (elements serialized recursively),
     // a named struct -> the metadata serializer's object, a String -> JSON string

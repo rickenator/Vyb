@@ -95,6 +95,8 @@ extern "C" {
     char* __vyb_int_to_string(int64_t value);
     char* __vyb_uint_to_string(uint64_t value);
     char* __vyb_float_to_string(double value);
+    char* __vyb_float_to_string_precise(double value);
+    double __vyb_string_to_float(const char* s);
     char* __vyb_bool_to_string(bool value);
     char* __vyb_string_to_string(const char* str);
     void __vyb_string_register(void* ptr);
@@ -570,6 +572,8 @@ extern "C" {
 #include <llvm/IR/InstrTypes.h>
 #include <llvm/ExecutionEngine/Orc/ExecutionUtils.h>
 #include <llvm/ExecutionEngine/Orc/LLJIT.h>
+#include <llvm/ExecutionEngine/JITEventListener.h>
+#include <llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h>
 #include <llvm/ExecutionEngine/Orc/ThreadSafeModule.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/TargetSelect.h>
@@ -3172,6 +3176,11 @@ int run_vyb_code(const std::string& source, const std::string& fileName, bool ge
         }
         auto& jit = *jitOrErr;
 
+        // Register the GDB JIT listener: the JIT'd symbols become visible to
+        // gdb (the breakpoints/watchpoints on the module globals and the fns).
+        if (auto* rtLayer = dynamic_cast<llvm::orc::RTDyldObjectLinkingLayer*>(&jit->getObjLinkingLayer()))
+            rtLayer->registerJITEventListener(*llvm::JITEventListener::createGDBRegistrationListener());
+
         // Register runtime functions with the JIT before adding module
         auto& mainDylib = jit->getMainJITDylib();
         llvm::orc::MangleAndInterner mangle(jit->getExecutionSession(), jit->getDataLayout());
@@ -3414,6 +3423,12 @@ int run_vyb_code(const std::string& source, const std::string& fileName, bool ge
             llvm::orc::ExecutorAddr::fromPtr(&__vyb_uint_to_string), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyb_float_to_string")] = llvm::orc::ExecutorSymbolDef(
             llvm::orc::ExecutorAddr::fromPtr(&__vyb_float_to_string), llvm::JITSymbolFlags::Exported);
+
+        runtimeSymbols[mangle("__vyb_float_to_string_precise")] = llvm::orc::ExecutorSymbolDef(
+            llvm::orc::ExecutorAddr::fromPtr(&__vyb_float_to_string_precise), llvm::JITSymbolFlags::Exported);
+
+    runtimeSymbols[mangle("__vyb_string_to_float")] = llvm::orc::ExecutorSymbolDef(
+        llvm::orc::ExecutorAddr::fromPtr(&__vyb_string_to_float), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyb_bool_to_string")] = llvm::orc::ExecutorSymbolDef(
             llvm::orc::ExecutorAddr::fromPtr(&__vyb_bool_to_string), llvm::JITSymbolFlags::Exported);
         runtimeSymbols[mangle("__vyb_string_to_string")] = llvm::orc::ExecutorSymbolDef(

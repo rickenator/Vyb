@@ -26,6 +26,40 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
         return;
     }
 
+    // String.to_float(): correctly-rounded parse via the C library strtod.
+    // The stdlib aspect's hand-rolled digit accumulator lands 1 ULP off on
+    // ~25% of f64 inputs, which silently breaks any exact text wire (the P6
+    // partial-vector exchange, exact digests). Intercept HERE, before generic
+    // aspect-method resolution turns the call into an opaque function call.
+    // Other receivers (Int, custom types) fall through untouched.
+    if (auto* mf = dynamic_cast<vyb::ast::MemberExpression*>(node->callee.get())) {
+        if (auto* mi = dynamic_cast<vyb::ast::Identifier*>(mf->property.get())) {
+            if (mi->name == "to_float" && node->arguments.empty()) {
+                mf->object->accept(*this);
+                llvm::Value* objVal = m_currentLLVMValue;
+                if (objVal && objVal->getType() != int8PtrType) {
+                    if (auto* st = llvm::dyn_cast<llvm::StructType>(objVal->getType())) {
+                        if (st->getNumElements() >= 1 && st->getElementType(0) == int8PtrType) {
+                            objVal = builder->CreateExtractValue(objVal, {0}, "str_ptr");
+                        }
+                    }
+                }
+                if (objVal && objVal->getType() == int8PtrType) {
+                    llvm::FunctionType* ft = llvm::FunctionType::get(doubleType, {int8PtrType}, false);
+                    llvm::Function* fn = module->getFunction("__vyb_string_to_float");
+                    if (!fn) {
+                        fn = llvm::Function::Create(ft, llvm::Function::ExternalLinkage,
+                                                    "__vyb_string_to_float", module.get());
+                    }
+                    m_currentLLVMValue = builder->CreateCall(fn, {objVal}, "to_float");
+                    return;
+                }
+                m_currentLLVMValue = nullptr;
+                return;
+            }
+        }
+    }
+
     // Step (c) of #365: judge a spawn-site closure's captures at their *concrete*
     // types. The semantic pass ran the same structural predicate earlier, but it
     // can only see a generic function's declared type parameter (`T`) and stays
@@ -5040,7 +5074,7 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
             std::string methodName = methodIdent->name;
 
             // Handle to_string method calls
-            if (methodName == "to_string") {
+            if (methodName == "to_string" || methodName == "to_string_precise") {
                 VYB_CDBG << "DEBUG: Processing to_string method call" << std::endl;
 
                 // Evaluate the object (the thing we're calling to_string on)
@@ -5063,7 +5097,7 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                 }
 
                 // Generate the to_string call
-                llvm::Value* result = generateToStringCall(objectValue, objectType, objectASTType, node->loc);
+                llvm::Value* result = generateToStringCall(objectValue, objectType, objectASTType, node->loc, methodName == "to_string_precise");
                 if (result) {
                     // #216: enforce a canonical String result shape at expression
                     // boundaries. `generateToStringCall` returns a raw char* for

@@ -4068,7 +4068,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                             // struct rather than a scalar, so it is not in
                             // primitiveValueTypes, but String.to_string() is a valid
                             // identity conversion and must keep resolving.
-                            if (methodName == "to_string" &&
+                            if ((methodName == "to_string" || methodName == "to_string_precise") &&
                                 (typeStr == "String" || primitiveValueTypes.count(typeStr) > 0)) {
                                 // Return String type for .to_string() on primitives
                                 auto stringType = new ast::TypeName(node->loc,
@@ -4511,7 +4511,7 @@ void SemanticAnalyzer::visit(ast::CallExpression* node) {
                         }
 
                         // Check for primitive type methods (Int.to_string(), Float.to_string(), Bool.to_string())
-                        if (methodName == "to_string") {
+                        if (methodName == "to_string" || methodName == "to_string_precise") {
                             // #309: same canonical scalars set as the early path above,
                             // plus String (a struct, not a scalar) for identity
                             // String.to_string().
