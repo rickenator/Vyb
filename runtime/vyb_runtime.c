@@ -2185,10 +2185,31 @@ VYB_WEAK int64_t __vyb_net_set_timeout(int64_t fd, int64_t ms) {
     return (r1 != 0 || r2 != 0) ? -1 : 0;
 }
 
+#ifdef MSG_NOSIGNAL
+#define VYB_NET_NOSIG MSG_NOSIGNAL
+#else
+#define VYB_NET_NOSIG 0
+#endif
+
+// Send all `len` bytes of `data` on `fd`, looping over short writes and EINTR.
+// (A single send() returns a SHORT COUNT -- not an error -- once the socket
+// buffer fills; returning that count let callers believe 256 MB had gone out
+// while the peer saw only ~16 MiB. The Vec/bytes counterpart below always
+// looped; this String path did not.)
 VYB_WEAK int64_t __vyb_net_send(int64_t fd, const char* data, int64_t len) {
-    ssize_t n = send((int)fd, data, (size_t)len, 0);
-    vyb_net_err = (n < 0) ? errno : 0;
-    return (int64_t)n;
+    if (len < 0) { vyb_net_err = EINVAL; return -1; }
+    int64_t sent = 0;
+    while (sent < len) {
+        ssize_t n = send((int)fd, data + sent, (size_t)(len - sent), VYB_NET_NOSIG);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            vyb_net_err = errno;
+            return -1;
+        }
+        sent += (int64_t)n;
+    }
+    vyb_net_err = 0;
+    return sent;
 }
 
 // Receive up to `maxlen` bytes into a fresh, registry-registered buffer. Returns
@@ -2218,11 +2239,6 @@ VYB_WEAK vyb_file_str __vyb_net_recv(int64_t fd, int64_t maxlen) {
 // bytes (NULs, high-bit) cross unchanged, and received buffers are plain
 // malloc'd blocks owned by the Vec (freed on Vec reclaim), NOT registry-owned.
 // ---------------------------------------------------------------------------
-#ifdef MSG_NOSIGNAL
-#define VYB_NET_NOSIG MSG_NOSIGNAL
-#else
-#define VYB_NET_NOSIG 0
-#endif
 
 // Send exactly `len` bytes starting at `data[off]` (a Vec<UInt8> of `size`
 // live bytes), looping over short writes and EINTR. Returns `len` on success,
