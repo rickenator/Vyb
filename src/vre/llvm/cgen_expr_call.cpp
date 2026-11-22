@@ -776,9 +776,13 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                     // view<Vec<T>>, our<Vec<T>>, borrow): an aspect/bind method bound
                     // to the Vec (VecOps/VecHigherOps in-place forms) is monomorphized
                     // for the *unwrapped* inner Vec type. Normalize concreteType to the
-                    // inner Vec so the bind/mangle/monomorphize lookups succeed, and
-                    // remember that the receiver's alloca holds a Vec* view so we pass
+                    // inner type so the bind/mangle/monomorphize lookups succeed, and
+                    // remember that the receiver's alloca holds a T* view so we pass
                     // the loaded pointer (not the alloca address) to the by-ref self.
+                    // Generalized from Vec-only to any struct inner type (#433): a
+                    // their<HashMap<K,V>> receiver must dispatch its MapOps bind the
+                    // same way a their<Vec<T>> dispatches VecOps — the wrapper alloca
+                    // holds a pointer to the inner struct in both cases.
                     bool ownershipWrappedVec = false;
                     bool isOwnershipKw = concreteType.rfind("their<", 0) == 0 ||
                                          concreteType.rfind("my<", 0) == 0 ||
@@ -791,7 +795,20 @@ void LLVMCodegen::visit(vyb::ast::CallExpression *node) {
                         if (lt != std::string::npos && gt != std::string::npos && gt > lt) {
                             std::string inner = concreteType.substr(lt + 1, gt - lt - 1);
                             bool innerIsVec = inner == "Vec" || inner.rfind("Vec<", 0) == 0;
-                            if (innerIsVec) {
+                            // Unwrap any non-primitive inner type: structs (HashMap,
+                            // HashSet, user binds, String, ...) get the same T*-view
+                            // treatment as Vec. Primitives (Int/Float/Bool/...) keep
+                            // the old behavior (no unwrap) since their wrapper layout
+                            // is not a pointer view.
+                            static const char* prims[] = {"Int", "Int8", "Int16", "Int32", "Int64",
+                                                          "UInt", "UInt8", "UInt16", "UInt32", "UInt64",
+                                                          "Float", "Float32", "Float64", "Bool", "Char",
+                                                          "Byte", "Size", "usize", nullptr};
+                            bool innerIsPrim = false;
+                            for (int pi = 0; prims[pi]; ++pi) {
+                                if (inner == prims[pi]) { innerIsPrim = true; break; }
+                            }
+                            if ((innerIsVec || !innerIsPrim) && !inner.empty()) {
                                 concreteType = inner;
                                 ownershipWrappedVec = true;
                             }
