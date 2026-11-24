@@ -3160,6 +3160,7 @@ int run_vyb_code(const std::string& source, const std::string& fileName, bool ge
         for (const char* lib : {"libsqlite3.so", "libsqlite3.so.0",
                                 "libgit2.so", "libgit2.so.28", "libgit2.so.1.8",
                                 "libcuda.so", "libcuda.so.1",
+                                "libnccl.so", "libnccl.so.2",
                                 "libSDL3.so", "libSDL3.so.0"}) {
             if (void* h = dlopen(lib, RTLD_NOW | RTLD_GLOBAL)) {
                 VYB_CDBG << "FFI binding symbols loaded from " << lib << std::endl;
